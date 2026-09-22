@@ -1,0 +1,231 @@
+{
+  "recorded_at": "2026-09-22T16:30:01.487418+00:00",
+  "results": [
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_config_merge.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-admin_config_merge.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_logic.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-admin_logic.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_runtime.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-admin_runtime.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_flow.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-call_flow.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_heartbeat.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-call_heartbeat.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_media_authority.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-call_media_authority.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_poll_lanes.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-call_poll_lanes.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_recovery_controller.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-call_recovery_controller.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_state_controller.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-call_state_controller.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_tabs.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-call_tabs.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_ua_generation.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-call_ua_generation.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/pairing.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-pairing.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/panel_i18n.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-panel_i18n.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/playback.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-playback.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/request_deadline.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-request_deadline.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/runtime.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-runtime.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/service_worker.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-service_worker.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/settings.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-settings.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-sos_operation.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/theme_notice.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-theme_notice.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/video_session.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-video_session.test.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/gen_i18n.py",
+        "--check"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-gen_i18n.log"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/check_english_source.py"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-check_english_source.log"
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "--",
+        "webui/panel/runtime.js",
+        "webui/panel/call.html",
+        "webui/panel/door.html",
+        "webui/panel/monitor.html",
+        "webui/panel/API.md",
+        "webui/panel/API.ja.md",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/final-diff-check.log"
+    }
+  ]
+}

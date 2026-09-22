@@ -1,0 +1,28 @@
+call flow tests: ok
+✔ webui/tests/call_flow.test.js (75.592ms)
+panel i18n tests: ok
+✔ webui/tests/panel_i18n.test.js (75.669167ms)
+panel runtime tests: ok
+✔ webui/tests/runtime.test.js (74.559917ms)
+T12-01: silent execute reaches a real deadline and exposes an unknown result: PASS
+T12-02: accepted response lost; repeated recovery queries only the original intent: PASS
+T12-03: permission, validation, and authentication failures remain actionable: PASS
+T12-04: double activation and native timeout/watchdog/late success settle once: PASS
+prepared query requires explicit same-handle execution, with no second preparation: PASS
+server 500, network and malformed write replies never imply not started: PASS
+page retirement cancels its request, retains the handle, and ignores late completion: PASS
+all production page integrations visibly render translated SOS outcomes: PASS
+silent preparation never executes or automatically creates another intent: PASS
+only authoritative unstarted states permit a new preparation: PASS
+a denied status query retains the ambiguous original handle: PASS
+assistive button activation shares one intent, and authoritative clear permits a later SOS: PASS
+page reload recovers the persisted handle by query without another SOS: PASS
+✔ webui/tests/sos_operation.test.js (86.896167ms)
+ℹ tests 4
+ℹ suites 0
+ℹ pass 4
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 97.318375

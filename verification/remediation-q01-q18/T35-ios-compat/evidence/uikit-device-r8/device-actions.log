@@ -1,0 +1,25 @@
+/bin/mkdir -p /var/mobile/Library/DoorbellT35UIKit; chown mobile:mobile /var/mobile/Library/DoorbellT35UIKit; /bin/rm -f /var/mobile/Library/DoorbellT35UIKit/result.json
+
+exit=0
+killall DoorbellT35UIKit 2>/dev/null || true; /bin/mkdir -p /Applications/DoorbellT35UIKit.stage
+
+exit=0
+/bin/rm -rf /Applications/DoorbellT35UIKit.app; /bin/mv /Applications/DoorbellT35UIKit.stage/DoorbellT35UIKit.app /Applications/DoorbellT35UIKit.app; /bin/rmdir /Applications/DoorbellT35UIKit.stage
+
+exit=0
+chown -R mobile:mobile /Applications/DoorbellT35UIKit.app; /bin/chmod 755 /Applications/DoorbellT35UIKit.app/DoorbellT35UIKit; su mobile -c /usr/bin/uicache
+No matching processes belonging to you were found
+
+exit=0
+if [ -S /var/run/doorbell-keepalive.sock ]; then /usr/local/libexec/doorbell-keepalive --control begin --seconds 180 --socket /var/run/doorbell-keepalive.sock; fi; su mobile -c "/usr/bin/uiopen doorbell-t35-test://"; /bin/launchctl list | /bin/grep t35 || true
+{"ok":true}
+30535	-	UIKitApplication:jp.ox.doorbell.t35uitest[0xc7a6]
+
+exit=0
+su mobile -c "/usr/bin/uiopen doorbell://"; if [ -S /var/run/doorbell-keepalive.sock ]; then /usr/local/libexec/doorbell-keepalive --control end --socket /var/run/doorbell-keepalive.sock; fi; /bin/launchctl list | /bin/grep -E "doorbell|t35"
+{"ok":true}
+30535	-	UIKitApplication:jp.ox.doorbell.t35uitest[0xc7a6]
+30245	-	UIKitApplication:jp.ox.doorbell[0x1d44]
+19	-	jp.ox.doorbell.keepalive
+
+exit=0

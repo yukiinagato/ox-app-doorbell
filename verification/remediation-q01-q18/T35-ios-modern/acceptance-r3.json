@@ -1,0 +1,68 @@
+{
+  "task_id": "T35-ios-modern",
+  "status": "IMPLEMENTED_PENDING_UI_RUNTIME",
+  "at": "2026-09-22T17:01:46.031513+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r3.json",
+  "source_manifest_sha256": "c68c67452289b426588c570382a4df5d81d5e088f82a71703ed2ec2c0e32e5be",
+  "owned_sources_current_match": true,
+  "all_frozen_inputs_match": true,
+  "builds": {
+    "compile-r3": {
+      "record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/compile-r3.json",
+      "sha256": "ea0a756192d253f624b25811ff0eb59b2822453335c611967737a386df0189d7",
+      "status": "PASS_BUILD_ONLY",
+      "sip_backend": "stub"
+    },
+    "ios9-arm64-r3": {
+      "record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/ios9-arm64-r3.json",
+      "sha256": "559960a03b57c192ce4cdac3100fbb4d025f50a5d796df16761c6c5732c93a96",
+      "status": "PASS_BUILD_ONLY",
+      "sip_backend": "real_pjsip"
+    },
+    "tvos-r3": {
+      "record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/tvos-r3.json",
+      "sha256": "d8303659d16ad6b908290275117a1fc68005c79851eda4d672d7e0f99941cda7",
+      "status": "PASS_BUILD_ONLY",
+      "sip_backend": "real_pjsip"
+    }
+  },
+  "acceptance": [
+    {
+      "id": "T35-01",
+      "status": "NOT_RUN_BLOCKED_ENV",
+      "tests": [
+        "VisitorActionContractTests.testPurposeFirstButtonSendsPurposeAndCancelEndsOnlyThatCall",
+        "VisitorActionContractTests.testRingThenPurposeSkipPreservesCallAndCancelRemainsSeparate"
+      ]
+    },
+    {
+      "id": "T35-02",
+      "status": "NOT_RUN_BLOCKED_ENV",
+      "tests": [
+        "VisitorActionContractTests.testAnsweredCoreRejectsQueuedVisitorCancelBeforeSIPUIArrives",
+        "VisitorActionContractTests.testCancelAndEndKeepTheSamePositionAcrossProfilesAndLargeText"
+      ]
+    },
+    {
+      "id": "T35-03",
+      "status": "NOT_RUN_BLOCKED_ENV",
+      "tests": [
+        "VisitorActionContractTests.testOfflineAndSosAreDifferentLayersWithoutClearingCoreEmergency",
+        "VisitorAccessibleActionTests.testSosAccessibleActivationRequiresReviewAndCanCancelTheSameCountdown",
+        "VisitorAccessibleActionTests.testDetachedSosCannotActivateAndLosesPendingCountdown",
+        "VisitorAccessibleActionTests.testResponsiveReparentingKeepsTheExistingCancellableCountdown"
+      ]
+    },
+    {
+      "id": "T35-04",
+      "status": "NOT_RUN_BLOCKED_ENV",
+      "tests": [
+        "PurposeChoiceLayoutTests.testLongPurposeLabelsAndLargeTextKeepCancelVisibleInBothOrientations"
+      ]
+    }
+  ],
+  "runtime_gate": "Mac locked. No test execution, screenshots, OS accessibility tree or hardware qualification. Baseline source preserved before implementation.",
+  "integration_gate": "T12 verified frozen Core used; latest mainline Core requires later integration build.",
+  "cleanup": "No T35 simulator or device deployment created. No owned runtime servers. Build outputs/source and logs retained.",
+  "independent_review": "pending parent source-only review; not runtime PASS"
+}

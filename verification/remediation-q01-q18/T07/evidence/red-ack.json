@@ -1,0 +1,41 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty; isolated source snapshot; concurrent work preserved",
+  "diff_sha256": "f4abf8aaaa9d0f3e7309457d09cd34de46dd8658b7230418281d19eb89131981",
+  "task_id": "T07",
+  "test_id": "red-ack",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/source-red.json",
+  "source_manifest_sha256": "4bd0d814239e8182f89c71f2412abca2cef9b8214735b0eaae140b97749240b3",
+  "command": [
+    "build/remediation-t07-20260922/red-ack-tests",
+    "-tc=operations ACK:*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T16:12:08.243322+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "unsigned host verification binary",
+  "artifact_sha256": "23e76ce87501bd88911da7f6952358011fb24ccf6e1ba050ed3e47acce8bb881",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/evidence/red-ack.log",
+  "limitations": [
+    "Host production Core/HTTP/authenticated mesh and local MQTT protocol fixture; no physical lock, Home Assistant, actuator firmware or device qualification.",
+    "Reference actuator uses a test-only key and durable simulated deduplication; no physical exactly-once or sensor causality claim.",
+    "T07-03 covers operation state/scope isolation; shipping UI handle migration and presentation remain a T36 acceptance gate."
+  ],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T16:12:16.932262+00:00",
+  "expected_exit_code": 1,
+  "status": "PASS",
+  "observed_result": "Expected RED: preserved pre-T07 T06 production library omitted ACK command metadata and ignored the signed packet; 2 failed assertions in 1 test (565/567 passed), exit 1. This does not claim a physical actuation fault.",
+  "artifact_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/red-ack-tests",
+  "log_sha256": "37b1b6586e63e611263d3516085f955f6fd79e0a22dfba70516f452ef5831e57",
+  "test_cases": 1,
+  "assertions": 567
+}

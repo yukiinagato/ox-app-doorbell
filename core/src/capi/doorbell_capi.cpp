@@ -611,10 +611,32 @@ DB_API char* db_core_config_batch_json(db_core* c, const char* ops_json) {
   return dupString(c->node->configBatchJson(ops_json));
 }
 
+DB_API char* db_core_config_snapshot_json_v2(db_core* c) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->configSnapshotJson());
+}
+
+DB_API char* db_core_config_commit_json_v2(db_core* c, const char* request_json) {
+  if (!c || !c->node || !request_json) return nullptr;
+  return dupString(c->node->configCommitJson(request_json));
+}
+
+DB_API char* db_core_config_import_json_v2(db_core* c, const char* action,
+    const char* request_json, const char* admin_session, const char* csrf_token) {
+  if (!c || !c->node || !action || !request_json || !admin_session || !csrf_token) return nullptr;
+  return dupString(c->node->configImportJson(action, request_json, admin_session, csrf_token));
+}
+
 DB_API int db_core_delete_config_key(db_core* c, const char* key) {
   if (!c || !c->node || !key || !*key) return -1;
   auto result = json::parse(c->node->deleteConfigKeyJson(key));
   return (result && json::getBool(result.get(), "ok")) ? 0 : -2;
+}
+
+DB_API char* db_core_panel_identity_json_v2(db_core* c, const char* action,
+    const char* request_json, const char* admin_session, const char* csrf_token) {
+  if (!c || !c->node || !action || !request_json || !admin_session || !csrf_token) return nullptr;
+  return dupString(c->node->panelIdentityJson(action, request_json, admin_session, csrf_token));
 }
 
 DB_API char* db_core_call_log_json_v2(db_core* c, int64_t since_ms, int64_t before_ms,
@@ -659,6 +681,21 @@ DB_API int db_core_open_door(db_core* c, const char* door) {
   if (!cJSON_IsObject(entry)) return -2;
   if (!json::getBool(json::get(entry, "unlock"), "configured", false)) return -3;
   return c->node->openDoor(door) ? 0 : -3;
+}
+
+DB_API char* db_core_operation_prepare_json_v2(db_core* c, const char* request_json) {
+  if (!c || !c->node || !request_json) return nullptr;
+  return dupString(c->node->operationRequestJson("prepare", request_json));
+}
+
+DB_API char* db_core_operation_execute_json_v2(db_core* c, const char* request_json) {
+  if (!c || !c->node || !request_json) return nullptr;
+  return dupString(c->node->operationRequestJson("execute", request_json));
+}
+
+DB_API char* db_core_operation_query_json_v2(db_core* c, const char* request_json) {
+  if (!c || !c->node || !request_json) return nullptr;
+  return dupString(c->node->operationRequestJson("query", request_json));
 }
 
 DB_API void db_core_set_capabilities_json(db_core* c, const char* capabilities_json) {

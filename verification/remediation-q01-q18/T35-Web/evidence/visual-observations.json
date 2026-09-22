@@ -1,0 +1,18 @@
+{
+  "task_id": "T35-Web",
+  "evidence_kind": "manual_observation",
+  "recorded_at": "2026-09-22T18:06:50.839992+00:00",
+  "source_phase": "final-source-r2 layout; r3/r4 change only state/gesture JavaScript",
+  "browser": "Codex IAB, Chromium 153",
+  "actual_tool_observations": [
+    "Baseline top-level actual screenshots and accessibility trees inspected at 320x480, 844x390, 768x1024 and 1024x768 with long English labels and 150% semantic font scale.",
+    "Final settled screenshots inspected at all four dimensions; main action and bottom Call/Cancel/End/SOS regions remain distinct.",
+    "320x480 English purpose-first: actual CUA Call then Delivery clicks observed call acceptance.",
+    "320x480 Chinese ring-first: actual CUA Call then Skip purpose then Cancel clicks observed translated cancellation acceptance."
+  ],
+  "limitations": [
+    "Screenshots were displayed through the actual browser tool transcript; IAB content.export was unsupported, so no local PNG or exported DOM artifact is claimed.",
+    "Not native Safari, iOS, screen-reader, or OS font-size qualification.",
+    "Production page and callbacks with controlled XHR; no real SIP, lock, SOS or Core network mutations."
+  ]
+}

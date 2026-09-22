@@ -1,0 +1,37 @@
+{
+  "recorded_at": "2026-09-22T16:30:01.494276+00:00",
+  "head": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "dirty": true,
+  "snapshot": "build/remediation-t12-20260923/web-final-source",
+  "files": {
+    "webui/panel/runtime.js": "e9761a77889ddbe69da94254ecbdbb03746aeb8821f787301891dfe2567e697e",
+    "webui/panel/call.html": "35c33d5eae59953723d57149c60cc3899eb9377446db6a4950d466eef4e8cf38",
+    "webui/panel/door.html": "660cc50490a8e5c277a543e9c4e69827cfbc27297caf285ad2344f8f4c48ee5b",
+    "webui/panel/monitor.html": "9b00ea992a44865f042ce90847cf975687fb5b9011ca5f7ca13c3f53ba0cb0e4",
+    "webui/panel/API.md": "9ebce085a85b2f29ac2791be7e28d37ac4d3693d69c73b226878e8e1ef2c89b2",
+    "webui/panel/API.ja.md": "bba3666b53a1b449b5d0a08b1e9af780642f6da57d642ecf641f4dc82d341b4a",
+    "webui/tests/sos_operation.test.js": "3e25f7e5293972a57595d1cdc501eef19045c398c19552dd12436d6e1d3b87fb"
+  },
+  "patch_sha256": "02bc5d229b8904b872585b57b178e19594f26261b651294e218841b8728ac28b",
+  "versions": {
+    "ios/Doorbell/Info.plist": {
+      "version": "0.1.37",
+      "build": "38"
+    },
+    "ios-kiosk/src/Info.plist": {
+      "version": "0.3.49",
+      "build": "52"
+    }
+  },
+  "environment": {
+    "host": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "machine": "arm64",
+    "node": "v25.9.0"
+  },
+  "locale_hashes": {
+    "i18n/strings.yaml": "0605bb37261cb76aea2e91bf290010ae9fc521ff5de794205ba5f1a395b54285",
+    "webui/locale/en.json": "45656fc35591adc822c7b6d82e28339b44d3490653d85cd0aa3c921c4ddb96a1",
+    "webui/locale/ja.json": "456f33e36b5bacd28c2d7fb5849aff289f862dbdd4e4aa01d258a49aaf6f70cb",
+    "webui/locale/zh.json": "f4a4c8ed309f885b8bcaa31213504ec545cb258e481f2ecfe8ea9e64f4b2f181"
+  }
+}

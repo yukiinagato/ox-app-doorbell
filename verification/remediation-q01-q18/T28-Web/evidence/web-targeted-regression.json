@@ -1,0 +1,38 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "c630341c5e901ea50f49a48c8704861c67764f1c1b73286d4cc8c2643a7c1558",
+  "task_id": "T28-Web",
+  "test_id": "web-targeted-regression",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28-Web/source-web-final.json",
+  "source_manifest_sha256": "692c88d4468167d44e0ccb779ce050921b011abce91e09192f92f31142ea89ab",
+  "command": [
+    "node",
+    "--test",
+    "webui/tests/admin_runtime.test.js",
+    "webui/tests/admin_config_merge.test.js",
+    "webui/tests/admin_logic.test.js"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t28-web-20260923/web-final-source",
+  "started_at": "2026-09-22T17:19:27.079606+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_applicable",
+  "signing_state": "not_applicable",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28-Web/evidence/web-targeted-regression.log",
+  "limitations": [
+    "No hardware or native application qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T17:19:27.444614+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "3 Node.js suites passed: admin runtime, typed configuration merge, and admin logic. Controlled host regression; not a browser or Core HTTP test."
+}

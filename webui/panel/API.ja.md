@@ -157,17 +157,30 @@ Body は
 - in-call WebRTC の復元には answered claim を勝ち取った同じ `dialog_id` が必要。別 browser や一般の
   door page はその dialog の復元を確認できない。
 
-## POST /api/panel/emergency
+## SOS の送信と結果
 
-SOS 緊急モードの**発報のみ** (解除は不可)。標準 panel は常時表示する `sos.trigger` を持ち、
-連続 2 秒の長押しが完了した場合だけ送信する。
+標準の door、monitor、call ページは [永続操作 API](../../docs/en/operation-api.md) の
+`action:"sos_start"` を使用する。明示的な発報操作ごとに一つのハンドルを準備して実行する。
+セッション情報や結果照会を含め、各リクエストの期限は4秒。共通UIは準備中、送信中、受理済み、
+未実行が確認された状態、拒否、結果不明を表示する。受理はCore側の受理であり、通知到達の証明ではない。
+緊急表示のactive状態は複製状態または有効なPushだけが決定する。
 
-- Content-Type: `application/x-www-form-urlencoded`、Body: `active=1`。HttpOnly panel session
-  または rolling-upgrade 用の `k=<token>` credential が必要。
-- 応答: `{"ok":true}` / `403` (token 不正)
-- `active=0` (または `active=false`) を付けた解除要求は `403` +
-  `{"ok":false,"err":"cancel not allowed"}` — 解除は kiosk PIN 経由の端末操作
-  (`db_core_emergency(0)`) か管理セッションの `POST /api/emergency` のみ。
+実行結果が不明なときは同じハンドルを保持して照会し、自動で別のハンドルを準備しない。
+照会結果が`prepared`なら同じハンドルを明示的に実行できる。権威側が未実行の終端状態を返した場合のみ、
+明示的な新規準備を許可する。準備応答を失った場合は実行せず、ユーザー操作による再準備だけを許可する。
+利用可能ならハンドルをタブのsession storageに保存する。認証情報は保存しない。通常のページ再読み込み後も
+まず照会する。セッションが変わってもその記録への権限は得られず、Coreが作成者と現在の権限を再確認する。
+
+サーバーが導出する`dbpanel`セッション主体は`SOS start`だけを利用でき、ページ配信ノードの明示的なSOS権限と
+固定authority設定が必要。照会を含む操作リクエストにはセッションCSRFヘッダーを付け、更新時は信頼された
+正確なOriginを確認する。共有Bearerや旧エンドポイントへ戻さない。既存の2秒間のポインター／キーボード長押しを
+維持し、支援技術によるボタン起動と通常の照会／再試行ボタンも同じ単一意図コントローラーを使用する。
+認証・権限・入力の拒否理由と、他の手段で助けを求める案内を表示する。
+
+`POST /api/panel/emergency`は旧クライアント向けの一回限りの互換入口として残る（`active=1`）。
+パネルによる`active=0`または`active=false`の解除は403。解除は既存のkiosk／管理者経路に従い、
+その経路にある管理パスワード未設定時の例外も維持する。
+
 - SOS active/clear 状態は常に全 Core ノードへ複製されるが、表示、音、Push、Telegram、MQTT の
   実行先は有効な rule によって決まる。rule は受信者ゼロまたは Push のみにもでき、保存を妨げない。
 - 管理者 boolean `emergency.web_active_page_alerts` の既定値は true。true なら開いている Web page は、
@@ -290,31 +303,57 @@ monitor.html はページを開いた時に一度だけ呼び、不在着信バ�
 - `doors.<id>.extension` — その door 担当門口機の内線 (`sip.accounts.<node_id>.user`)。
   空 = 通話不可 (映像のみ)。
 - `doors.<id>.station` — 担当門口機の origin (`http://<host>:47180`)。**空文字 = このノード
-  自身が担当** (相対 URL でよい)。`/stream.mjpeg` の表示と `/call-frame` の POST 先に使う。
+  自身が担当** (相対 URL でよい)。映像取得に使い、ブラウザからの直接アップロード先には使わない。
 - `doors.<id>.source_node_id` / `stream_mjpeg` / `stream_mp4` / `playback_profile` — 通話ページが
   monitor と同じ H.264 優先・MJPEG 背景予熱・順方向フォールバックを行うための情報。
 - 担当門口機が devices に無い door は `doors` に載らない。
 
-## POST /call-frame?door=\<id\>  (ブラウザ → 門口機の相手映像)
+## POST /api/panel/media-authorize
 
-網頁通話中のブラウザが自分のカメラ画 (getUserMedia → canvas) を門口機へ流し込む口。
-**担当門口機のノードへ直接 POST する** (`call-info` の `station` origin。CORS 対応 —
-preflight OPTIONS も同パスで応える)。
+同一オリジンの相対 URL に `door`、`call_id`、`stage_revision` を form として送る。
+`GET /api/panel/session` またはログイン応答からランダムな `csrf_token` を取得する。
+認可・フレーム送信・セッションに結び付いた通話更新には HttpOnly の `dbpanel` Cookie、
+`X-Doorbell-CSRF` と完全一致する信頼済み `Origin` が必要。共有 Bearer では送信できない。
+最初の `answered` が独立した Web セッションをサーバーの通話所有者に結び付ける。
+他セッションの `dialog_id` を知っていても送信権は得られない。結び付けのない旧クライアントや、
+再起動で元の Web セッションを失った復旧通話では映像を送信できない。
 
-- Body: JPEG 1 枚そのまま (Content-Type: image/jpeg)。SOI マーカ検査あり (`400 not jpeg`)。
-- 受理条件: panel token 一致 (`403`)、宛先がこのノード担当の door (`404 not this station`)、
-  **SIP 通話中のみ** (`409 not in call` — 通話外の流し込みは捨てる)。
-- 推奨レート 2fps (500ms)。フレームは「peer frame スロット」(FrameBus とは別) に置かれ、
-  最新 1 枚だけ保持される。
+成功応答は `schema_version:1`、`door`、`call_id`、整数の `stage_revision`、サーバー由来の
+`dialog_owner`、小文字16進32文字のランダムな `media_generation`、整数 1..10000 の
+`publish_remaining_ms`、`upload_path:"/call-frame"` を返す。有効期限は通話リースと Web
+セッションの残り時間以下。更新は新しい generation を発行し、古い画像を消去する。
+媒体の更新で通話リースは延びず、バックグラウンド通信ではセッションの対話アイドル期限も延びない。
+再起動および観測した資格情報変更でセッションと認可は失効する。
 
-## GET /peer-frame.jpg  (門口機殻の相手映像輪詢)
+現時点の対応範囲はこのノード自身の門口機。別ノードへの送信は 501
+`media_transport_unsupported`。認証付きで資源に上限のある転送は T16 の検証ゲートに残る。
+直接 peer HTTP へのフォールバックと wildcard CORS は提供せず、これだけでノード間の
+`media_publish_v1` 対応を広告しない。
 
-門口機の殻が通話中画面の「相手映像」に使う。`peer_stream` (UI イベント参照) が解決できた
-通話では不要 — 解決できない相手 (網頁通話・電話) のときに自機のこの URL を輪詢する。
+## POST /call-frame?door=\<id\>&call_id=\<id\>&stage_revision=\<revision\>&media_generation=\<generation\>&frame_sequence=\<sequence\>
 
-- 認証免除 (LAN 公開 — `/snapshot.jpg` と同格)。Cache-Control: no-store。
-- `/call-frame` で最後に受けたフレームを返す。**3 秒より古いと `404`** (相手が送信を
-  止めた/通話終了 — 殻は「映像なし」表示へ戻る)。
+Body は `image/jpeg` 1 枚。識別フィールドはすべて必須。現在の通話、revision、owner、
+セッション/資格情報、認可期限を一時 peer-frame スロットへの書き込み直前にも再検証する。
+`frame_sequence` は 1..9223372036854775807、最大19桁の10進文字列。先頭ゼロ、符号、指数は禁止。
+重複・古い番号や失効 generation は 409、異なるセッション/CSRF/Origin は 403、不正な識別/JPEG は400。
+符号化データは1 MiB以下、JPEGの画素数は307200以下、幅・高さは各1024以下。
+HTTP読み込み時点での厳密な制限とworkerの資源上限は引き続きT16の範囲。
+ブラウザは最大2fpsで、同時送信は1件。成功応答は generation と sequence を返し、
+`acceptance:"remote_core_accepted"` を示す。画面での描画確認ではない。
+
+## GET /peer-frame.jpg?door=\<local-door\>&call_id=\<id\>&stage_revision=\<revision\>
+
+対象はこの門口機が担当する現在の通話のみ。`door` 省略時は自身の担当門。
+`call_id` と `stage_revision` は必須で、省略は409。ネイティブのloopback取得はCookie不要。
+外部取得は有効な `dbpanel` が必要で、loopbackも含めOriginがある場合は完全一致で検証する。
+現在の有効な画像がない場合、および3秒より古い場合は404。wildcard CORSは提供しない。
+
+成功応答は `image/jpeg`、`Cache-Control:no-store` と次のヘッダーを返す：
+`X-Doorbell-Call-Id`、`X-Doorbell-Stage-Revision`、`X-Doorbell-Dialog-Owner`、
+`X-Doorbell-Media-Generation`、`X-Doorbell-Frame-Sequence`。後二者は送信時と同じ
+32文字16進/10進文字列の形式。シェルは要求前にcall/revision/owner、Core世代、自身のpoll世代を
+保存し、描画直前にも現在値と全応答ヘッダーを検証する。poll終了で画像を消して要求をキャンセルし、
+遅い旧応答が新要求のbusyを解除したり古い画像を表示したりしないようにする。
 
 ### UI イベント (殻向け — 対称双方向映像の契約)
 

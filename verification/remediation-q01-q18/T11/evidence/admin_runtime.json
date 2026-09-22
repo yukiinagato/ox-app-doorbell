@@ -1,0 +1,19 @@
+{
+  "task_id": "T11",
+  "test_id": "admin_runtime",
+  "command": [
+    "node",
+    "webui/tests/admin_runtime.test.js"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "start": "2026-09-22T14:36:29.632153+00:00",
+  "end": "2026-09-22T14:36:29.745358+00:00",
+  "exit_code": 0,
+  "source_manifest": "after-source.json",
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "arch": "arm64",
+  "device_or_browser": "Node v25.9.0 VM/host JS; actual production page/modules",
+  "sip_backend": "not_run",
+  "signing_state": "not_applicable",
+  "log_path": "verification/remediation-q01-q18/T11/evidence/admin_runtime.log"
+}

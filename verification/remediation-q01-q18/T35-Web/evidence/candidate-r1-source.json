@@ -1,0 +1,13 @@
+{
+  "frozen_source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-web-20260923/candidate-r1-source",
+  "files": {
+    "webui/panel/door.html": "dea0e9f6ce548b64c955e649537df59d1c68bb66e4ae6332fdf3d428a2cc11a9",
+    "core/src/node/node.cpp": "c9a67f81ade33e0469b3af0baa0bc90eb1202778ebdf6a3973c1861c72b74795",
+    "webui/tests/door_visitor_browser_fixture.js": "7b0d1834826fcef3d024e7d99e7b2c88c187eb120eba955747a68d5829687f96",
+    "webui/tests/door_visitor_cases.js": "dfef90856484b1f073052b337483b16f56055ae2f282bba88fe9071ec5b73393"
+  },
+  "limitations": [
+    "Initial layout assertion checked viewport bounds but did not yet check the scroll-container clip.",
+    "The last AT case inherited a fixture-origin persisted operation from the prior baseline run; production controller correctly queried it instead of creating another operation."
+  ]
+}

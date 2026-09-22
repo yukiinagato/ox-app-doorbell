@@ -1,0 +1,34 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "45f06e9d4d4210da32ca924179445f1d7367c359e4659068ca33c306194be4f7",
+  "diff_scope": [
+    "ios/Doorbell/CoreBridge.swift",
+    "ios/Doorbell/DoorbellClock.swift",
+    "ios/Doorbell/AppDelegate.swift",
+    "ios/Doorbell/MainViewController.swift",
+    "ios/Doorbell/CameraFeeder.swift",
+    "ios/Doorbell/VideoEncoderVT.swift",
+    "ios/DoorbellTV/TVAppDelegate.swift",
+    "ios/DoorbellTests/CoreBridgeLifecycleTests.swift",
+    "ios/Doorbell.xcodeproj/project.pbxproj",
+    "ios-compat/tests/recovery_safe_mode_contract_test.py",
+    "ios/Doorbell/Info.plist",
+    "ios/DoorbellTV/Info.plist"
+  ],
+  "inputs": {
+    "ios/Doorbell/CoreBridge.swift": "6caa9bae6c524e3322fa2d9856f2835e34c39aac0806ec8d190b5775cd6168c8",
+    "ios/Doorbell/DoorbellClock.swift": "a2da2e566099c39fa9dabbc6fb444f4ed9801cf8d09795995be1460fc4c03229",
+    "ios/Doorbell/AppDelegate.swift": "39079fcba1032a43ab73c015384d8c8b8c34e76be122899d79a85890770af0a2",
+    "ios/Doorbell/MainViewController.swift": "8bb5be087fe0786090f16624220e692408d8a76f9a6a9a9167b2edc1463ec66e",
+    "ios/Doorbell/CameraFeeder.swift": "372b1e8999af8630e49713a8146662550f854447006c790939c6c96349481a5e",
+    "ios/Doorbell/VideoEncoderVT.swift": "eb93b92b2db4f5206e15441f2f19430f7be05e8406584e1202c069e8a01babad",
+    "ios/DoorbellTV/TVAppDelegate.swift": "4e4e90647b5fde01ec8b4445b75c925c5cb8c870b4b05ca1662cfac113e7e0ec",
+    "ios/DoorbellTests/CoreBridgeLifecycleTests.swift": "0808f17a19c2d84e565d6e0f23ecca4623f776b1233810a453aaea68bb8fd5bb",
+    "ios/Doorbell.xcodeproj/project.pbxproj": "8a9975ab0805af3574257ca97ec21aa83a4dcc368e0e94d7e6fd0d5449ddf9be",
+    "ios-compat/tests/recovery_safe_mode_contract_test.py": "8d5634a0631edf919fbc2e739af88a8ae8516e32de582ec0719a9fe3b98bef04",
+    "ios/Doorbell/Info.plist": "3acb8f6ab792bfb1d8aece7250a01d17c882bc918ca2ae501b6f27c85548de97",
+    "ios/DoorbellTV/Info.plist": "672883c29e5f251f6241c180396d9ff1895da50f7ddad4335f0a3331dd30a459"
+  },
+  "scope_note": "Shared dirty workspace; tracked diff includes preserved earlier user/batch edits. New test file is independently content-hashed. This manifest identifies sources, not a committed release."
+}

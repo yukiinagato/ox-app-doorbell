@@ -1,0 +1,45 @@
+{
+  "status": "PASS",
+  "observed_at": "2026-09-22T13:47:42.534176+00:00",
+  "source_manifest": "verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json",
+  "checks": [
+    {
+      "uri": "/admin/app.js",
+      "source": "webui/admin/app.js",
+      "http_status": 200,
+      "embedded_sha256": "b0738afbd726c5ef7288a2283437b7e81d8e6205531185513724ae974a950f5b",
+      "source_sha256": "b0738afbd726c5ef7288a2283437b7e81d8e6205531185513724ae974a950f5b",
+      "matches": true
+    },
+    {
+      "uri": "/panel/runtime.js",
+      "source": "webui/panel/runtime.js",
+      "http_status": 200,
+      "embedded_sha256": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+      "source_sha256": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+      "matches": true
+    },
+    {
+      "uri": "/panel/call",
+      "source": "webui/panel/call.html",
+      "http_status": 200,
+      "embedded_sha256": "93c7c88a2cd2a99b695c0512d83e5f28c777e2a5a1949d98aa25b4e526184177",
+      "source_sha256": "93c7c88a2cd2a99b695c0512d83e5f28c777e2a5a1949d98aa25b4e526184177",
+      "matches": true
+    }
+  ],
+  "fixture_pid": 86727,
+  "binary_sha256": "23644f72a221508c1bf4be5c73d41750c473a285f75f11278bd004665225ee63",
+  "limitations": [
+    "Embedded production HTTP resources match exact source bytes; browser UI is not qualified."
+  ],
+  "cleanup": {
+    "fixture_exit_code": 0,
+    "ports_rebound": [
+      "127.0.0.1:28003",
+      "[::1]:28003"
+    ],
+    "database_exclusive_integrity": "ok",
+    "disposable_data_removed": true
+  }
+}

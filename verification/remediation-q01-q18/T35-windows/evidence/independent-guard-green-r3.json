@@ -1,0 +1,25 @@
+{
+  "created_at": "2026-09-22T18:11:16.590210+00:00",
+  "source_manifest": "verification/remediation-q01-q18/T35-windows/source-candidate-r3.json",
+  "source_manifest_sha256": "3d8b165108885f55e030f8f9625de7007b9274a9f09c7ae425417fc27e9165df",
+  "frozen_inputs_verified": 98,
+  "compile_command": [
+    "mcs",
+    "-out:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-review/guard-tests-r3.exe",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r3/win/DoorbellApp/Ui/VisitorActionGuard.cs",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r3/win/tests/VisitorActionGuardTests.cs"
+  ],
+  "compile_exit_code": 0,
+  "run_command": [
+    "mono",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-review/guard-tests-r3.exe"
+  ],
+  "run_exit_code": 0,
+  "inputs": {
+    "build/remediation-t35-windows-20260923/source-r3/win/DoorbellApp/Ui/VisitorActionGuard.cs": "f6c0f0da6e0c4b670f9d09b169997c9ce7b7ac05f153153165284f83aa069319",
+    "build/remediation-t35-windows-20260923/source-r3/win/tests/VisitorActionGuardTests.cs": "a7a571e2436da9d6dda25b78e7eb09fb07bfc11ec86681599c89bdb26d735c1e",
+    "build/remediation-t35-windows-review/guard-tests-r3.exe": "437ab1c64ac273028dda2838b096ee051a3f4c43ef633554a9b8b72e64b4b3fe",
+    "verification/remediation-q01-q18/T35-windows/evidence/independent-guard-green-r3.log": "07eaf58de2728c8b35e1af07af490030ad1779686abf224e16d6fe563b5acc35"
+  },
+  "scope": "Independent execution of actual production guard and all 19 acceptance assertions under Mono; no WPF UI runtime."
+}

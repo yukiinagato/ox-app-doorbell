@@ -1,0 +1,20 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "source_root": "/Users/ox/Documents/project/app-doorbell",
+  "tree_state": "dirty",
+  "diff_sha256": "4b3c164a85fd749fe6640e44c4b8b0b0b8fe3124fe4213fb9866e0763e7c91f0",
+  "command": [
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/browser-fixture",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/browser-data",
+    "28001"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "pid": 70719,
+  "port": 28001,
+  "started_at": "2026-09-22T12:50:17.283401+00:00",
+  "artifact_sha256": "3a4bb7f4988aa6acd269467d0db042e525f19ade43bc6e919fce012ab69b7ed7",
+  "database_dir": "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/browser-data",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/browser-server.log",
+  "exit_code": 0,
+  "finished_at": "2026-09-22T12:55:42.010273+00:00"
+}

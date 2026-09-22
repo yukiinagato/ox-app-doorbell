@@ -1,0 +1,31 @@
+{
+  "phase": "red",
+  "orientation": "portrait",
+  "font_scale": 1,
+  "source_id": "7a37629fa29dc07d3696c10f258c5cac7f9512a6df19930e1f07382506c59c8f",
+  "results": [
+    {
+      "id": "T35-01 purpose_first",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-01 ring_then_purpose",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-02 stable slot and gesture ownership",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-03 neutral recovery and accessible SOS",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-R1 stale SOS confirmation after cancel",
+      "status": "FAIL",
+      "error": "java.lang.IllegalStateException: A queued SOS confirmation survived cancel: triggers=1"
+    }
+  ],
+  "core_started": false,
+  "failure": "java.lang.IllegalStateException: A queued SOS confirmation survived cancel: triggers=1\n\tat jp.ox.doorbell.VisitorUiInstrumentation.onStart$lambda$35$lambda$33(VisitorUiInstrumentation.kt:185)\n\tat jp.ox.doorbell.VisitorUiInstrumentation.$r8$lambda$5fcxR0Pozx8Kz4ZaCt8NKEa2tMo(Unknown Source:0)\n\tat jp.ox.doorbell.VisitorUiInstrumentation$$ExternalSyntheticLambda11.invoke(D8$$SyntheticClass:0)\n\tat jp.ox.doorbell.VisitorUiInstrumentation.ui$lambda$47(VisitorUiInstrumentation.kt:301)\n\tat jp.ox.doorbell.VisitorUiInstrumentation.$r8$lambda$FUS-ZKfq8Yq3BI2EdLoI9_yoTdQ(Unknown Source:0)\n\tat jp.ox.doorbell.VisitorUiInstrumentation$$ExternalSyntheticLambda31.run(D8$$SyntheticClass:0)\n\tat android.app.Instrumentation$SyncRunnable.run(Instrumentation.java:2612)\n\tat android.os.Handler.handleCallback(Handler.java:959)\n\tat android.os.Handler.dispatchMessage(Handler.java:100)\n\tat android.os.Looper.loopOnce(Looper.java:232)\n\tat android.os.Looper.loop(Looper.java:317)\n\tat android.app.ActivityThread.main(ActivityThread.java:8705)\n\tat java.lang.reflect.Method.invoke(Native Method)\n\tat com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)\n\tat com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)\n"
+}

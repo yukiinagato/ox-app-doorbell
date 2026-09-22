@@ -1,0 +1,118 @@
+{
+  "task_id": "T06",
+  "observed_at": "2026-09-22T15:55:18.964186+00:00",
+  "verdict": "REVIEW_COMPLETE_IN_PRODUCTION_TEST_SCOPE",
+  "source_manifest": "source-final.json",
+  "source_manifest_sha256": "5cc445041f114abd9d9abc27fc5dbccbd67578a38a349f55a6b7f6047eac7217",
+  "inputs": [
+    {
+      "path": "core/src/node/node.cpp",
+      "sha256": "7f513a5dafb8b624d7640ba052950aec61f1475b4c3903f3a39a1e89a7496db1",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/node/node.h",
+      "sha256": "853c6a381a0e3b7386182ab59ff2666f21938c435d3f7be0ef1619b3200f7dea",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/node/operation_config.h",
+      "sha256": "64601fe04be202be5a0c9ac8bdddbc9229107345dc25b30a20f6d515d18713c2",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/node/operation_service.inc",
+      "sha256": "ba960369e4909e2234fec11cd14b799262d9a14e32c0d14e6ecbfb2bb10ea216",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/node/operation_dispatcher.h",
+      "sha256": "be0fc6694ba3650cf2cbe63b3011f10ff837b7b5ec674fd5d1b70c15eab9ea62",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/node/operation_dispatcher.cpp",
+      "sha256": "8d95509a4587addaea4474aa6cf3b7d2287498ff1ab5c8bb8ee7d54b47cd8bc5",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/httpd/httpd.h",
+      "sha256": "d82dcd55a8279c2f7ebfce24aa744b5415e78cc8c8f65bb191a5c1658f455e9b",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/httpd/httpd.cpp",
+      "sha256": "bb25e9edae198a51e56438c7ed0d26441e7b3fc6211b4fb3926ab4bbdd30264a",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.h",
+      "sha256": "72e73af0da455ff3cbb09f63aacc5d0d94c823b426cfc983bb2e37d63dbfa240",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.cpp",
+      "sha256": "e7b142df95246781e0e6a4b85f4426830308fe0c38f7b4b62df80e9d5dfea45b",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/bridge/mqtt_client.h",
+      "sha256": "20cae86d3b4568f321a8c00f43cb6e63a77f937e38a112ddd113a9f42f37b0dd",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/bridge/mqtt_client.cpp",
+      "sha256": "1e5a39ab4eec5d5c692620647c021a0beb7b4c48d642489686a3cb6dfb938fa2",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/src/capi/doorbell_capi.cpp",
+      "sha256": "8ba6ab0ec459b903d5aa3be1df20c30ba732e98e78d01d21a7b9d13a95922ea6",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/include/doorbell/doorbell.h",
+      "sha256": "5ac62bdd966176848699973a935a0607fc063cfdcb7c3890715b77242845a13f",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/tests/test_operations_http.cpp",
+      "sha256": "71e270d8af3a1b716d1ee4c82c2a16f852312bdbc9e2121a957871d0cc3ffddd",
+      "frozen_match": true,
+      "live_match_at_review": true
+    },
+    {
+      "path": "core/tests/test_operations_service.cpp",
+      "sha256": "63996d93eeed9da11c3d69c027de99857f243181df25fa3423640f59432e2e09",
+      "frozen_match": true,
+      "live_match_at_review": true
+    }
+  ],
+  "inspection": [
+    "HTTP and native normalizers reject caller-supplied identity and bound request size/depth; authenticated peer identity owns forwarded principals.",
+    "The configured authority is explicit and stable. Disconnection or unsupported capability fails closed without page-node fallback.",
+    "Current grants are checked at page and authority, queried record scope is checked again, and execute remains creator-only. CSRF and live administrator sessions are checked before effects.",
+    "Store durable dispatch acquisition is the only gate into the new door/SOS adapter. Existing operations query without re-enqueue; changed credential/grant/config rejects an unstarted record.",
+    "The MQTT target and broker binding are frozen. The active bridge must match; one bounded packet carries the operation and authority IDs. No new replayable dtmf_action event is created.",
+    "Dispatcher queued expiry/admission shares a mutex, shutdown cancels queued work and wakes workers, and owned Pending state survives late completion. Node joins its state-loop boundary before destruction; adjacent snapshot callback now checks the existing alive token.",
+    "The versioned ABI is additive and owns returned JSON via db_free. Existing shell/rule/legacy one-shot callers are explicitly left weaker in the caller inventory."
+  ],
+  "remaining": [],
+  "pause_condition": "If root reports Codex quota reset, save checkpoint only and stop all actions. Root monitors quota.",
+  "final_review": "review.json",
+  "final_review_sha256": "4f1ad83670ab048f38752bc7f1db14f5d1c2c76616465589a4aaf17ea7867388"
+}

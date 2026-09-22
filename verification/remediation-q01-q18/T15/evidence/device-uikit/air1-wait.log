@@ -1,0 +1,128 @@
+{
+  "version" : "1.0.0",
+  "failed" : 13,
+  "scope" : "Unmodified production CoreBridge and MainViewController; production UIImage delivery on physical UIKit. Only network completions and call snapshot inputs are controlled. No real call\/SOS\/door action.",
+  "system_version" : "12.5.8",
+  "checks" : [
+    {
+      "name" : "Production CoreBridge starts in owned empty directory",
+      "pass" : true
+    },
+    {
+      "name" : "Production CoreBridge running",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "UIKit encodes controlled image"
+    },
+    {
+      "name" : "Call A starts exactly one request",
+      "pass" : true
+    },
+    {
+      "name" : "Request binds call A",
+      "pass" : true
+    },
+    {
+      "name" : "Request binds revision zero",
+      "pass" : true
+    },
+    {
+      "name" : "Call B owns its successor request",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Expected intercepted production request 0"
+    },
+    {
+      "name" : "Production main-queue completion drained",
+      "pass" : false
+    },
+    {
+      "name" : "Late A cannot display in B",
+      "pass" : true
+    },
+    {
+      "name" : "Late A cannot clear B busy",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Expected intercepted production request 1"
+    },
+    {
+      "name" : "Production main-queue completion drained",
+      "pass" : false
+    },
+    {
+      "pass" : true,
+      "name" : "Mismatched owner cannot display"
+    },
+    {
+      "pass" : false,
+      "name" : "Current invalid response settles its own busy"
+    },
+    {
+      "name" : "Expected intercepted production request 2",
+      "pass" : false
+    },
+    {
+      "name" : "Production main-queue completion drained",
+      "pass" : false
+    },
+    {
+      "pass" : false,
+      "name" : "Call B sequence ten displays an actual UIImage"
+    },
+    {
+      "name" : "Accepted UIImage is attached to the actual visible UIKit hierarchy",
+      "pass" : false
+    },
+    {
+      "pass" : false,
+      "name" : "Expected intercepted production request 3"
+    },
+    {
+      "name" : "Production main-queue completion drained",
+      "pass" : false
+    },
+    {
+      "name" : "Duplicate ten cannot redraw",
+      "pass" : true
+    },
+    {
+      "name" : "Expected intercepted production request 4",
+      "pass" : false
+    },
+    {
+      "pass" : false,
+      "name" : "Production main-queue completion drained"
+    },
+    {
+      "pass" : true,
+      "name" : "Out-of-order nine cannot replace ten"
+    },
+    {
+      "name" : "Expected intercepted production request 5",
+      "pass" : false
+    },
+    {
+      "pass" : false,
+      "name" : "Production main-queue completion drained"
+    },
+    {
+      "pass" : true,
+      "name" : "End clears image and rejects late B delivery"
+    },
+    {
+      "name" : "Owned production CoreBridge stopped",
+      "pass" : true
+    }
+  ],
+  "source_manifest" : "92ed542708ffa474244241f9a07ee2933a5c3bd6e74b92204b01f03242d32b7f",
+  "build" : "1",
+  "pid" : 1271,
+  "bundle" : "jp.ox.doorbell.t15uitest"
+}

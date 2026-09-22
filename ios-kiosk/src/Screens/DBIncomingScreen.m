@@ -24,8 +24,6 @@
 // The debug line is remembered per device (spec §5.2).
 static NSString *const kDebugLineHiddenKey = @"DBIncomingDebugLineHidden";
 
-static const NSTimeInterval kLegacyAutoCloseS = 30;
-static const NSTimeInterval kCancelledCloseS = 15;
 
 static BOOL DBSameString(NSString *a, NSString *b) {
   return (a == b) || [a isEqualToString:b];
@@ -35,7 +33,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 - (void)startVideoStatsTimer;
 - (void)updateVideoStats:(NSTimer *)timer;
 - (void)publishVideoRuntime:(DBVideoStats)stats force:(BOOL)force;
-- (void)autoCloseTimerFired:(NSTimer *)timer;
 - (void)startVideoOrientationPolling;
 - (void)pollVideoOrientation:(NSTimer *)timer;
 - (void)updateAdminAddressesFromPeer:(NSDictionary *)peer;
@@ -64,7 +61,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   NSString *_visitorLang;
   NSString *_callID;
   NSInteger _stageRevision;
-  long long _callExpiresAtMs;
   NSString *_nodeId;
 
   NSDictionary *_cfg;
@@ -104,9 +100,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   BOOL _lifecycleEnded;
   BOOL _safeMode;
   BOOL _cancelled;
-  NSTimer *_autoCloseTimer;
-  BOOL _autoCloseTimerForCancelled;
-  long long _autoCloseDeadlineMs;
   NSTimer *_videoStatsTimer;
   CFAbsoluteTime _lastMediaRuntimePublishAt;
   NSString *_lastMediaRuntimeSignature;
@@ -397,6 +390,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 - (void)prepareWithDoor:(NSString *)door purpose:(NSString *)purpose lang:(NSString *)lang
                  callID:(NSString *)callID stageRevision:(NSInteger)stageRevision
             expiresAtMs:(long long)expiresAtMs {
+  (void)expiresAtMs;
   ++_sipActionGen;
   [_router sipHangup];
   _sipMode = @"";
@@ -417,7 +411,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _visitorLang = [lang copy];
   _callID = [callID copy];
   _stageRevision = MAX(0, stageRevision);
-  _callExpiresAtMs = MAX(0LL, expiresAtMs);
   _answerPending = NO;
   _awaitingSupersededIdle = NO;
   _lifecycleAnswered = NO;
@@ -467,7 +460,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [self startVideo:_incomingStreamUrl];
 
   [self applyContent];
-  [self restartAutoClose];
   [self fetchAndApplyCoreSnapshot];
 }
 
@@ -486,7 +478,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _visitorLang = @"";
   _callID = @"";
   _stageRevision = 0;
-  _callExpiresAtMs = 0;
   _answerPending = NO;
   _awaitingSupersededIdle = NO;
   _lifecycleAnswered = NO;
@@ -525,7 +516,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _videoPlayback = @"low_latency";
   [self applyContent];
   [self startVideo:_incomingStreamUrl];
-  [self restartAutoClose];
   [self fetchAndApplyCoreSnapshot];
 }
 
@@ -565,7 +555,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     _lifecycleEnded = YES;
     _inCall = NO;
     _sipMode = @"";
-    [_autoCloseTimer invalidate];
   }
   _purpose = [purpose copy];
   _visitorLang = [lang copy];
@@ -574,7 +563,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [self applyContent];
   _answerButton.enabled = !supersedesAnswer && ([_peerHost length] > 0);
   _hintLabel.hidden = YES;
-  if (!_inCall) [self restartAutoClose];
   if (supersedesAnswer) [_router sipHangup];
   [self fetchAndApplyCoreSnapshot];
 }
@@ -587,7 +575,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _answerButton.enabled = ([_peerHost length] > 0);
   [_answerButton setTitle:[_texts ts:@"ring.answer"] forState:UIControlStateNormal];
   _hintLabel.hidden = YES;
-  [self restartAutoClose];
 }
 
 
@@ -689,7 +676,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       if (!s->_cancelled && (mediaChanged || videoStopped))
         [s startVideo:s->_incomingStreamUrl];
       [s applyContent];
-      [s restartAutoClose];
     });
   });
 }
@@ -1662,61 +1648,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 
 
-- (void)restartAutoClose {
-  // A ringing indoor page is governed by the return countdown (batch 3): the
-  // visitor cancelling must not take the live view away, and the old fixed
-  // auto-close would have done exactly that.
-  if (!_monitorOnly) {
-    [_autoCloseTimer invalidate];
-    _autoCloseTimer = nil;
-    _autoCloseTimerForCancelled = NO;
-    _autoCloseDeadlineMs = 0;
-    return;
-  }
-  if (_monitorOnly) {
-    [_autoCloseTimer invalidate];
-    _autoCloseTimer = nil;
-    _autoCloseTimerForCancelled = NO;
-    _autoCloseDeadlineMs = 0;
-    return;
-  }
-  long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
-  long long deadlineMs = 0;
-  if (_cancelled) {
-    deadlineMs = nowMs + (long long)(kCancelledCloseS * 1000.0);
-  } else if (_callExpiresAtMs > 0) {
-    deadlineMs = _callExpiresAtMs;
-  } else {
-    // Legacy callers that predate schema-v2 have no Core deadline. Keep the
-    // old bounded fallback, but schema-v2 calls always use expires_at_ms.
-    deadlineMs = nowMs + (long long)(kLegacyAutoCloseS * 1000.0);
-  }
-  // Snapshot/config refreshes can arrive several times per second. They must
-  // not keep extending the same ringing/cancelled deadline indefinitely.
-  // Only a real transition into or out of the cancelled state replaces it.
-  if (_autoCloseTimer && [_autoCloseTimer isValid] &&
-      _autoCloseTimerForCancelled == _cancelled &&
-      llabs(_autoCloseDeadlineMs - deadlineMs) < 100)
-    return;
-  [_autoCloseTimer invalidate];
-  _autoCloseTimerForCancelled = _cancelled;
-  _autoCloseDeadlineMs = deadlineMs;
-  NSTimeInterval remaining = MAX(0.01, (deadlineMs - nowMs) / 1000.0);
-  _autoCloseTimer = [NSTimer timerWithTimeInterval:remaining
-                                             target:self
-                                           selector:@selector(autoCloseTimerFired:)
-                                           userInfo:nil
-                                            repeats:NO];
-  [[NSRunLoop mainRunLoop] addTimer:_autoCloseTimer forMode:NSRunLoopCommonModes];
-}
-
-- (void)autoCloseTimerFired:(NSTimer *)timer {
-  if (timer != _autoCloseTimer) return;
-  _autoCloseTimer = nil;
-  _autoCloseDeadlineMs = 0;
-  [self closeSelf];
-}
-
 - (void)handleCallCancelled:(NSDictionary *)ev {
   if (_monitorOnly) return;
   NSString *door = [DBConfigUtil evStr:ev key:@"door"];
@@ -1736,7 +1667,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _statusLabel.layer.cornerRadius = 8;
   _statusLabel.clipsToBounds = YES;
   [self setNeedsLayout];
-  [self restartAutoClose];
   NSLog(@"[doorbell] call cancelled: video retained until the return deadline or resident close");
 }
 
@@ -1752,10 +1682,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)closeSelf {
-  [_autoCloseTimer invalidate];
-  _autoCloseTimer = nil;
-  _autoCloseTimerForCancelled = NO;
-  _autoCloseDeadlineMs = 0;
   [_router closeIncomingAnimated:YES];
 }
 
@@ -1781,9 +1707,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   ++_sipActionGen;
   [self stopReturnTimer];
   [_returnCountdown reset];
-  [_autoCloseTimer invalidate];
-  _autoCloseTimer = nil;
-  _autoCloseDeadlineMs = 0;
   [_videoStatsTimer invalidate];
   _videoStatsTimer = nil;
   [self stopVideoPlayers];
@@ -1860,7 +1783,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   }
   _answerPending = YES;
   _answerButton.enabled = NO;
-  [_autoCloseTimer invalidate];
   if ([_sipMode isEqualToString:@"monitor"]) {
 
     [_router sipHangup];
@@ -1940,7 +1862,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       ? [_texts t:@"reply.sent", (sender.currentTitle ?: @""), nil]
       : [_texts ts:@"reply.failed"];
   _hintLabel.hidden = NO;
-  if (accepted && !_inCall) [self restartAutoClose];
 }
 
 
@@ -1957,7 +1878,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       _lifecycleAnswered = [_core reportCallAnsweredV2:_door callID:_callID
                                         stageRevision:_stageRevision];
     }
-    [_autoCloseTimer invalidate];
     _answerButton.enabled = YES;
     [_answerButton setTitle:[_texts ts:@"incall.end"] forState:UIControlStateNormal];
     _statusLabel.text = [_texts ts:@"incall.title"];

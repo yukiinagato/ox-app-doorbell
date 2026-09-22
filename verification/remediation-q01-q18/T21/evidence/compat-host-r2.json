@@ -1,0 +1,34 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "1c11bdf42d2a5ab0a5a78e53d9ab6722bc866401a09a3195b999a5a6a9760a14",
+  "task_id": "T21",
+  "test_id": "compat-host-r2",
+  "evidence_kind": "host_native",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T21/source-final.json",
+  "source_manifest_sha256": "75a32585cd85efc6787060ded182343c1692eec05fd29a4b423a917eaca6f2a5",
+  "command": [
+    "ios-compat/scripts/test_host.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T14:57:04.829536+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "MiniSIP loopback plus host-only source/Swift/Foundation checks",
+  "signing_state": "host_unsigned",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T21/evidence/compat-host-r2.log",
+  "limitations": [
+    "Host execution and source contracts; no UIKit device, old iOS runtime, or physical media qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T14:57:54.840128+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Full ios-compat host runner exit 0; native Swift CallTiming test and 27 recovery/source contract tests passed. Host Foundation and MiniSIP suites passed; see complete log."
+}

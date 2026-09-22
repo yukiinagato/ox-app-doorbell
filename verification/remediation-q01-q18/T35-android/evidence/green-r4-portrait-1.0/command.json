@@ -1,0 +1,117 @@
+{
+  "started_at": "2026-09-22T17:08:18.324582+00:00",
+  "finished_at": "2026-09-22T17:08:22.179809+00:00",
+  "serial": "emulator-5554",
+  "profile": "API35 / Android15 / arm64-v8a",
+  "app_version": "0.3.21 / build22",
+  "sip_backend": "real_pjsip (linked; Core stays unstarted)",
+  "signing": "Android debug certificate",
+  "apks": [
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r4/android/app/build/outputs/apk/modern/debug/app-modern-debug.apk",
+      "sha256": "eed66b993e83bd061e89207904af2b22d49ae215f3cdfab3e019e0b9cee4453b"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r4/android/app/build/outputs/apk/androidTest/modern/debug/app-modern-debug-androidTest.apk",
+      "sha256": "ce23d76246a7826ba281751d3debdeedf58956d50694856c24a07a96a3957bd4"
+    }
+  ],
+  "commands": [
+    {
+      "arguments": [
+        "install",
+        "-t",
+        "-r",
+        "-g",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r4/android/app/build/outputs/apk/modern/debug/app-modern-debug.apk"
+      ],
+      "exit_code": 0,
+      "output": "Performing Streamed Install\nSuccess\n"
+    },
+    {
+      "arguments": [
+        "install",
+        "-t",
+        "-r",
+        "-g",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r4/android/app/build/outputs/apk/androidTest/modern/debug/app-modern-debug-androidTest.apk"
+      ],
+      "exit_code": 0,
+      "output": "Performing Streamed Install\nSuccess\n"
+    },
+    {
+      "arguments": [
+        "shell",
+        "settings",
+        "put",
+        "secure",
+        "immersive_mode_confirmations",
+        "confirmed"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "rm",
+        "-rf",
+        "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "settings",
+        "put",
+        "system",
+        "font_scale",
+        "1.0"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "am",
+        "force-stop",
+        "jp.ox.doorbell"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "am",
+        "instrument",
+        "-w",
+        "-r",
+        "-e",
+        "phase",
+        "green",
+        "-e",
+        "orientation",
+        "portrait",
+        "jp.ox.doorbell.test/jp.ox.doorbell.VisitorUiInstrumentation"
+      ],
+      "exit_code": 0,
+      "output": "INSTRUMENTATION_RESULT: shortMsg=Process crashed.\nINSTRUMENTATION_CODE: 0\n"
+    },
+    {
+      "arguments": [
+        "pull",
+        "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui/.",
+        "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-android/evidence/green-r4-portrait-1.0"
+      ],
+      "exit_code": 0,
+      "output": "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui/./: 8 files pulled, 0 skipped. 7.2 MB/s (331607 bytes in 0.044s)\n"
+    }
+  ],
+  "scope": "Production MainActivity/View layout and bindings; test recording CallFlowGateway and SOS callback; no physical devices or Core networking.",
+  "observed_result": null,
+  "status": "FAIL"
+}

@@ -1,0 +1,29 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "241c2009661486ec31d40768e5bb4069b75680515490ebdcb7701f8a033acd50",
+  "diff_scope": "webui/panel/door.html relative to HEAD; base Web manifest neutral offline delta separately described",
+  "recorded_at": "2026-09-22T17:50:59.557250+00:00",
+  "frozen_source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-web-20260923/final-source",
+  "files": {
+    "webui/panel/door.html": "cde97793e846ed14e69587b9c9f376b298e7bdbe1d896c02a1c05438b0f1cb25",
+    "webui/panel/runtime.js": "e9761a77889ddbe69da94254ecbdbb03746aeb8821f787301891dfe2567e697e",
+    "webui/panel/call-flow.js": "79c26baacac03b08b8bb393da7d684ae7f9afb8b6457c30f89cfdc4c2abe0311",
+    "webui/locale/en.json": "489e1a715066753681f66da8700c1b748916a7c2daa16502a7595a248108d84c",
+    "webui/locale/ja.json": "d849377fec023ea386247b329fd951e338a176197c0485f4b53565ee03e72c39",
+    "webui/locale/zh.json": "3e403bf23dee9326bd87406293cfccc88944597c7ad559551c456ba740919b43",
+    "i18n/strings.yaml": "0dc9c7eeee15550e11b9ede243b2e5fd53736bf6c1027d751e39bc5cb3bf6aac",
+    "webui/tests/door_visitor_browser_fixture.js": "1217d0b5f7baea93c1f9b5f6a40c64e9ae2f2a3f832a63f0f9267681bc9f632b",
+    "webui/tests/door_visitor_cases.js": "c4b924b97d452f1649d50d5ab8a52e0bf1b09fc6841b07eab31b7ef0d554e6ee",
+    "webui/tests/call_flow.test.js": "d2f03d219363ce9505b3308deb35bb7a3b7e104012fff4d10f0e0a6f7378429e",
+    "webui/tests/panel_i18n.test.js": "8b26879ec828d913e868102cec1ffb61969ac8d36fb6194b14d4247ac8041d50",
+    "webui/tests/runtime.test.js": "12b630cd2e987f3319dec27365b90715f32d5759e5a385d4f55ab4bcedec25e6",
+    "webui/tests/sos_operation.test.js": "3e25f7e5293972a57595d1cdc501eef19045c398c19552dd12436d6e1d3b87fb",
+    "webui/panel/call.html": "35c33d5eae59953723d57149c60cc3899eb9377446db6a4950d466eef4e8cf38",
+    "webui/panel/monitor.html": "9b00ea992a44865f042ce90847cf975687fb5b9011ca5f7ca13c3f53ba0cb0e4",
+    "webui/panel/sw.js": "5a5a2176edc8b1b81ff45f2a291e4e51cbaf2f74f4eb8f4a64d42b7a7beb25eb",
+    "core/src/node/node.cpp": "c9a67f81ade33e0469b3af0baa0bc90eb1202778ebdf6a3973c1861c72b74795"
+  },
+  "core_scope": "Only baseWebUiManifestJson/webOnlyUiElementsJson are extracted as production default JSON by the browser fixture. The frozen Node source is the preserved baseline plus the one neutral offline default; this is not a Core binary compilation or native behavior claim.",
+  "base_web_manifest_function_sha256": "b3e79cb44e7f52a62ecc97f12abdec654f2ca375a45265c238c08e9b9434edbd"
+}

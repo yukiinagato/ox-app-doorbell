@@ -1,0 +1,66 @@
+{
+  "build" : "11",
+  "pid" : 30861,
+  "checks" : [
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 15020032,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Call and cancel share the fixed action area",
+      "resident_bytes" : 15101952,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Ringing touch cannot become connected end",
+      "resident_bytes" : 15155200,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Connected end remains in the same area",
+      "resident_bytes" : 15163392,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17203200,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Fresh connected end works",
+      "resident_bytes" : 17203200,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 25919488,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Nil visitor ID native SIP call can end",
+      "resident_bytes" : 25948160,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Old nil-ID gesture cannot end the next SIP session",
+      "resident_bytes" : 26120192,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 26124288,
+      "case" : "T35-02",
+      "pass" : true
+    }
+  ]
+}

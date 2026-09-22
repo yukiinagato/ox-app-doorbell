@@ -1,0 +1,174 @@
+{
+  "build" : "5",
+  "pid" : 30443,
+  "checks" : [
+    {
+      "name" : "Disabled purpose absent",
+      "resident_bytes" : 15028224,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 15028224,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Purpose-first sends the selected purpose once",
+      "resident_bytes" : 15085568,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Purpose-first enters ringing",
+      "resident_bytes" : 15093760,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17166336,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Visitor cancellation returns idle",
+      "resident_bytes" : 17166336,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 25882624,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Ring-first sends immediately",
+      "resident_bytes" : 28700672,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit skip button dispatched",
+      "resident_bytes" : 28811264,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Skip preserves the call",
+      "resident_bytes" : 28811264,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 28811264,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 37556224,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit purpose button dispatched",
+      "resident_bytes" : 39591936,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Ring-first purpose updates existing call",
+      "resident_bytes" : 39591936,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 39591936,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 16588800,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Call and cancel share the fixed action area",
+      "resident_bytes" : 16588800,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Ringing touch cannot become connected end",
+      "resident_bytes" : 16592896,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Connected end remains in the same area",
+      "resident_bytes" : 16592896,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18448384,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Fresh connected end works",
+      "resident_bytes" : 18448384,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 27070464,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Nil visitor ID native SIP call can end",
+      "resident_bytes" : 27074560,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Old nil-ID gesture cannot end the next SIP session",
+      "resident_bytes" : 27099136,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 27103232,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 16683008,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Ordinary network failure keeps neutral visitor page",
+      "resident_bytes" : 16683008,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Authoritative SOS event shows emergency layer",
+      "resident_bytes" : 18489344,
+      "case" : "T35-03",
+      "pass" : true
+    }
+  ]
+}

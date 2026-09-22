@@ -1,0 +1,5 @@
+T11-01 production heartbeat: PASS
+T11-02 production heartbeat: PASS
+T11-03 production heartbeat: PASS
+T11-04 production heartbeat: PASS
+heartbeat identity bounds, auth, visibility, timeout and late-success guards: PASS

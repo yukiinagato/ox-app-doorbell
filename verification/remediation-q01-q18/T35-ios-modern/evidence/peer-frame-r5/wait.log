@@ -1,0 +1,104 @@
+{
+  "checks" : [
+    {
+      "name" : "Production CoreBridge starts in owned empty directory",
+      "pass" : true
+    },
+    {
+      "name" : "Production CoreBridge running",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit encodes controlled image",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Call A starts exactly one request"
+    },
+    {
+      "name" : "Request binds call A",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Request binds revision zero"
+    },
+    {
+      "name" : "Call B owns its successor request",
+      "pass" : true
+    },
+    {
+      "name" : "Expected intercepted production request 0",
+      "pass" : true
+    },
+    {
+      "name" : "Late A cannot display in B",
+      "pass" : true
+    },
+    {
+      "name" : "Late A cannot clear B busy",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Expected intercepted production request 1"
+    },
+    {
+      "name" : "Mismatched owner cannot display",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Current invalid response settles its own busy"
+    },
+    {
+      "name" : "Expected intercepted production request 2",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Call B sequence ten displays an actual UIImage"
+    },
+    {
+      "pass" : true,
+      "name" : "Accepted UIImage is attached to the actual visible UIKit hierarchy"
+    },
+    {
+      "name" : "Expected intercepted production request 3",
+      "pass" : true
+    },
+    {
+      "name" : "Duplicate ten cannot redraw",
+      "pass" : true
+    },
+    {
+      "name" : "Expected intercepted production request 4",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Out-of-order nine cannot replace ten"
+    },
+    {
+      "pass" : true,
+      "name" : "Expected intercepted production request 5"
+    },
+    {
+      "name" : "End clears image and rejects late B delivery",
+      "pass" : true
+    },
+    {
+      "name" : "Owned production CoreBridge stopped",
+      "pass" : true
+    }
+  ],
+  "failed" : 0,
+  "build" : "3",
+  "version" : "1.0.0",
+  "bundle" : "jp.ox.doorbell.t15uitest",
+  "scope" : "Unmodified production CoreBridge and MainViewController; production UIImage delivery on physical UIKit. Only network completions and call snapshot inputs are controlled. No real call\/SOS\/door action.",
+  "source_manifest" : "26fa4534c1e23978b3a045723c61eb9a3119d40f75e87835843a4dd50002792d",
+  "pid" : 1628,
+  "system_version" : "12.5.8"
+}

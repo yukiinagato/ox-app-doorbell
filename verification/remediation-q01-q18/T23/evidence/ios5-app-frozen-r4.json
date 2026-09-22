@@ -1,0 +1,43 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "7f7dbe4d480046409717883e9478c4b7f3cbe46ddd9dd2fa3ad6e13466a1326d",
+  "task_id": "T23",
+  "test_id": "ios5-app-frozen-r4",
+  "evidence_kind": "historical_sdk_build",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/source-frozen-r4.json",
+  "source_manifest_sha256": "6379fda3e7dc1d973beec486ac30004da3602dd84b0d5ad08a30fd1fe2dc57d3",
+  "command": [
+    "env",
+    "GIT_DIR=/Users/ox/Documents/project/app-doorbell/.git",
+    "GIT_WORK_TREE=/Users/ox/Documents/project/app-doorbell/build/remediation-t23-20260923/frozen-r4",
+    "GIT_OPTIONAL_LOCKS=0",
+    "build/remediation-t23-20260923/frozen-r4/ios-compat/scripts/build_app_ios5.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:31:56.208911+00:00",
+  "platform": "iOS",
+  "os_version": "minimum 5.1 (build only)",
+  "arch": "armv7",
+  "device_or_browser": "historical SDK cross-compile; no device",
+  "app_version": "0.3.49",
+  "build_number": "52",
+  "sip_backend": "ios_compat_minisip_uac_uas",
+  "signing_state": "ldid-jailbreak",
+  "artifact_sha256": "b651b6df3136020768994b9b614b00c77f77e0d01c6a763318a7f9b662fe18c0",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/evidence/ios5-app-frozen-r4.log",
+  "limitations": [
+    "No device installation or execution; locally signed historical SDK artifact only.",
+    "All 1222 frozen inputs are unchanged after both final runs. r4 Core/Web inputs exactly match the clean r3 Core build, whose archive and manifest were retained and reused. Later integration Core changes require a new platform build.",
+    "The shell uses its compatibility MiniSIP UAC/UAS backend; Core PJSIP is disabled by the existing iOS5 profile. This does not qualify the modern real-PJSIP lane.",
+    "Historical SDK and compatibility C++ runtime are ignored local dependencies; no vendor SDK is stored in verification evidence."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:32:07.837675+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Clean App compile/link passed with historical SDK, armv7 minimum iOS5.1 and zero unresolved non-system symbols. Linked the unchanged retained clean r3 Core archive.",
+  "artifacts_record": "evidence/artifacts-final-r4.json",
+  "log_sha256": "7086bd007682e17b0e4b02472e6dd75f2b905f7dc40a98e18e3b9a5dff76d120"
+}

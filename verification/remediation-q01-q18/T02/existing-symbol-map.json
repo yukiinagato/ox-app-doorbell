@@ -1,0 +1,1913 @@
+{
+  "schema_version": 1,
+  "task_id": "T02",
+  "scope": "Production implementation inventory and ADR-aligned ownership map. New protocol fields are planned contracts, not existing API declarations.",
+  "source": {
+    "revision": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "tracked_diff_sha256": "4b3c164a85fd749fe6640e44c4b8b0b0b8fe3124fe4213fb9866e0763e7c91f0",
+    "note": "Line references describe the inspected current working tree, including the prior repair batch; source revision alone does not capture that batch."
+  },
+  "status_definitions": {
+    "existing": "A production implementation with the described limited semantics exists.",
+    "additive": "A real implementation can be extended, but the planned guarantee is not present.",
+    "missing": "No equivalent was found in the inspected production entry points; this is not a runtime capability claim."
+  },
+  "contracts": [
+    {
+      "id": "C01",
+      "items": [
+        {
+          "name": "Native ABI and ownership",
+          "status": "existing",
+          "existing": "Legacy platform layout is frozen; db_platform_v2 uses struct_size/version and appended fields. Returned strings use db_free.",
+          "gap": "Any new operation ABI must be additive; no structure reorder or changed ownership.",
+          "references": [
+            {
+              "path": "core/include/doorbell/doorbell.h",
+              "line": 26,
+              "location": "core/include/doorbell/doorbell.h:26",
+              "anchor": "typedef struct db_platform {"
+            },
+            {
+              "path": "core/include/doorbell/doorbell.h",
+              "line": 45,
+              "location": "core/include/doorbell/doorbell.h:45",
+              "anchor": "#define DB_PLATFORM_V2_VERSION"
+            },
+            {
+              "path": "core/include/doorbell/doorbell.h",
+              "line": 52,
+              "location": "core/include/doorbell/doorbell.h:52",
+              "anchor": "typedef struct db_platform_v2 {"
+            }
+          ]
+        },
+        {
+          "name": "Capability negotiation",
+          "status": "additive",
+          "existing": "effectiveFeaturesDoc and capabilitiesJsonOnLoop publish measured and Core feature flags.",
+          "gap": "ADR defines new object-valued feature entries operations_v1, admin_sessions_v2, web_request_lanes_v1, media_publish_v1, config_cas_v1, config_conflicts_v1, config_import_v1 and panel_identity_v1. They are absent now. Existing capability booleans and their readers retain their types; new adapters must understand the versioned objects.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 5790,
+              "location": "core/src/node/node.cpp:5790",
+              "anchor": "json::Doc effectiveFeaturesDoc()"
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 6061,
+              "location": "core/src/node/node.cpp:6061",
+              "anchor": "std::string capabilitiesJsonOnLoop()"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C02",
+      "items": [
+        {
+          "name": "Layered operation results",
+          "status": "missing",
+          "existing": "HTTP uses ok/err and route-specific HTTP statuses. Open-door C ABI uses integer status; emergency_v2 uses 1/0. Configuration batch already returns a JSON result.",
+          "gap": "No action-level operation_id/request_id/execution_state/retry_mode contract was found in the inspected action paths. Existing call identity and Telegram test request IDs do not provide equivalent physical-action semantics.",
+          "references": [
+            {
+              "path": "core/src/capi/doorbell_capi.cpp",
+              "line": 652,
+              "location": "core/src/capi/doorbell_capi.cpp:652",
+              "anchor": "DB_API int db_core_open_door("
+            },
+            {
+              "path": "core/src/capi/doorbell_capi.cpp",
+              "line": 831,
+              "location": "core/src/capi/doorbell_capi.cpp:831",
+              "anchor": "DB_API int db_core_emergency_v2("
+            },
+            {
+              "path": "core/include/doorbell/doorbell.h",
+              "line": 244,
+              "location": "core/include/doorbell/doorbell.h:244",
+              "anchor": "db_core_config_batch_json applies up to 256"
+            }
+          ]
+        },
+        {
+          "name": "Cookie write protection",
+          "status": "additive",
+          "existing": "Admin and panel login issue HttpOnly SameSite=Strict cookies.",
+          "gap": "The inspected server has no explicit CSRF token or trusted Origin validation. SameSite is not a complete implementation of the proposed cross-surface write contract.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 9394,
+              "location": "core/src/node/node.cpp:9394",
+              "anchor": "\"dbsess=\" + tok"
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 9542,
+              "location": "core/src/node/node.cpp:9542",
+              "anchor": "\"dbpanel=\" + session"
+            },
+            {
+              "path": "core/src/httpd/httpd.cpp",
+              "line": 208,
+              "location": "core/src/httpd/httpd.cpp:208",
+              "anchor": "HttpReq buildReq("
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C03",
+      "items": [
+        {
+          "name": "HTTP queued-request lifecycle",
+          "status": "additive",
+          "existing": "runOnLoop captures a request copy and shared completion state; handler exceptions become HTTP 500; the wait is bounded at 5000 ms.",
+          "gap": "Pending has done only. A timed-out queued handler can still run; there is no atomic QUEUED/RUNNING/EXPIRED distinction or not_started proof.",
+          "references": [
+            {
+              "path": "core/src/httpd/httpd.cpp",
+              "line": 25,
+              "location": "core/src/httpd/httpd.cpp:25",
+              "anchor": "constexpr int64_t kHandlerTimeoutMs"
+            },
+            {
+              "path": "core/src/httpd/httpd.cpp",
+              "line": 427,
+              "location": "core/src/httpd/httpd.cpp:427",
+              "anchor": "HttpResp runOnLoop("
+            },
+            {
+              "path": "core/src/httpd/httpd.cpp",
+              "line": 431,
+              "location": "core/src/httpd/httpd.cpp:431",
+              "anchor": "bool done = false;"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C04",
+      "items": [
+        {
+          "name": "Physical operation prepare/execute/query",
+          "status": "missing",
+          "existing": "openDoorOnLoop appends a durable dtmf_action event. doEmergency appends durable emergency state events. Store has local event transactions and dispatch frontiers.",
+          "gap": "There is no prepared operation ledger, immutable parameter binding, operation query, durable once-only dispatch claim or correlated actuator ACK. Event origin/seq and call_id cannot replace an operation handle.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 3259,
+              "location": "core/src/node/node.cpp:3259",
+              "anchor": "bool openDoorOnLoop("
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 4840,
+              "location": "core/src/node/node.cpp:4840",
+              "anchor": "bool doEmergency("
+            },
+            {
+              "path": "core/src/store/store.h",
+              "line": 56,
+              "location": "core/src/store/store.h:56",
+              "anchor": "eventAppendLocal("
+            },
+            {
+              "path": "core/src/store/store.h",
+              "line": 71,
+              "location": "core/src/store/store.h:71",
+              "anchor": "eventAckDispatched("
+            }
+          ]
+        },
+        {
+          "name": "Execution authority",
+          "status": "additive",
+          "existing": "Current MQTT effects are emitted by the node locally elected mqtt_bridge leader. Mesh CMD has authenticated peer attribution.",
+          "gap": "Local partition leaders are not a unique action authority. ADR defines explicit door-open and independent global SOS authority bindings. The implementation must fail closed for missing/unreachable/ambiguous authority without selecting another executor or inventing a door for global SOS.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 7796,
+              "location": "core/src/node/node.cpp:7796",
+              "anchor": "mesh->isLeader(\"mqtt_bridge\")) bridge->onEvent(ev);"
+            },
+            {
+              "path": "core/src/mesh/mesh.cpp",
+              "line": 1943,
+              "location": "core/src/mesh/mesh.cpp:1943",
+              "anchor": "cbs.on_command(ch->peerId()"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C05",
+      "items": [
+        {
+          "name": "Administrator session revision and expiry",
+          "status": "missing",
+          "existing": "AdminCredential reads the replicated admin.password_hash record; local password changes clear sessions. LwwEntry provides hlc, author and seq metadata.",
+          "gap": "sessions is a set of token strings; no credential revision, issue/interaction time or absolute expiry is stored. Capacity removes the lexicographically first token. Remote credential changes do not have the requested session-version contract.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 8951,
+              "location": "core/src/node/node.cpp:8951",
+              "anchor": "struct AdminCredential {"
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 2307,
+              "location": "core/src/node/node.cpp:2307",
+              "anchor": "std::set<std::string> sessions;"
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 9391,
+              "location": "core/src/node/node.cpp:9391",
+              "anchor": "if (sessions.size() > 64)"
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 9251,
+              "location": "core/src/node/node.cpp:9251",
+              "anchor": "bool checkSession("
+            },
+            {
+              "path": "core/src/crdt/lww_map.h",
+              "line": 22,
+              "location": "core/src/crdt/lww_map.h:22",
+              "anchor": "struct LwwEntry {"
+            }
+          ]
+        },
+        {
+          "name": "Panel credential binding",
+          "status": "existing",
+          "existing": "PanelCredentialBinding stores token_generation plus canonical secret refs and panelTokenOk compares the current binding on each cookie check.",
+          "gap": "The current shared credential does not identify an independently revocable panel or constrain each panel to door grants. Bearer compatibility also exists and must be accounted for.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 2308,
+              "location": "core/src/node/node.cpp:2308",
+              "anchor": "struct PanelCredentialBinding {"
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 2537,
+              "location": "core/src/node/node.cpp:2537",
+              "anchor": "PanelCredentialBinding panelCredentialBinding()"
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 10771,
+              "location": "core/src/node/node.cpp:10771",
+              "anchor": "bool panelTokenOk("
+            }
+          ]
+        },
+        {
+          "name": "Independent panel identity",
+          "status": "missing",
+          "existing": "SIP credentials are resolved from sip.accounts.<node_id> and platform secure storage.",
+          "gap": "No independent authenticated panel_id/grants/revocation/SIP-provisioning protocol was found in panel session creation.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 9528,
+              "location": "core/src/node/node.cpp:9528",
+              "anchor": "httpd->route(\"POST\", \"/api/panel/session\""
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 4854,
+              "location": "core/src/node/node.cpp:4854",
+              "anchor": "SipSettings sipSettings()"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C06",
+      "items": [
+        {
+          "name": "Call ownership and lease",
+          "status": "additive",
+          "existing": "Web lifecycle validates door/call_id/stage_revision/dialog_owner; webDialogOwner derives a node-scoped value from a validated dialog_id; the current lease is 10000 ms.",
+          "gap": "Success returns dialog_owner but no remaining lease. Client-supplied dialog_id is not an independently authenticated panel identity. Heartbeat still runs from the coupled load chain and transient failure ends the call.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 6957,
+              "location": "core/src/node/node.cpp:6957",
+              "anchor": "std::string webDialogOwner("
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 7191,
+              "location": "core/src/node/node.cpp:7191",
+              "anchor": "void armWebDialogLease("
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 10520,
+              "location": "core/src/node/node.cpp:10520",
+              "anchor": "httpd->route(\"POST\", \"/api/panel/call-lifecycle\""
+            },
+            {
+              "path": "webui/panel/call.html",
+              "line": 424,
+              "location": "webui/panel/call.html:424",
+              "anchor": "function heartbeatLifecycle("
+            },
+            {
+              "path": "webui/panel/call.html",
+              "line": 636,
+              "location": "webui/panel/call.html:636",
+              "anchor": "heartbeatLifecycle(activeLifecycle);"
+            }
+          ]
+        },
+        {
+          "name": "Browser request generations",
+          "status": "additive",
+          "existing": "runtime.js and video-session.js contain real shared browser logic, with existing single-settlement and stale-session tests in T01.",
+          "gap": "The planned independent state/locale/config/heartbeat request chains and uniform deadlines are not established by those existing helpers alone.",
+          "references": [
+            {
+              "path": "webui/panel/runtime.js",
+              "line": 286,
+              "location": "webui/panel/runtime.js:286",
+              "anchor": "function sosHoldController("
+            },
+            {
+              "path": "webui/panel/call.html",
+              "line": 81,
+              "location": "webui/panel/call.html:81",
+              "anchor": "let emergencyOverlay = null;"
+            },
+            {
+              "path": "webui/panel/video-session.js",
+              "line": 46,
+              "location": "webui/panel/video-session.js:46",
+              "anchor": "stopTracks(stream);"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C07",
+      "items": [
+        {
+          "name": "Call-bound media authorization",
+          "status": "missing",
+          "existing": "POST /call-frame checks a panel credential, local door-station role, SIP InCall and JPEG signature; peer-frame.jpg exposes a cached frame for 3000 ms.",
+          "gap": "No principal/call/revision/owner/media-generation/frame-sequence authorization or final-write recheck exists here. The upload route currently returns wildcard CORS.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 10726,
+              "location": "core/src/node/node.cpp:10726",
+              "anchor": "httpd->route(\"POST\", \"/call-frame\""
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 10759,
+              "location": "core/src/node/node.cpp:10759",
+              "anchor": "httpd->route(\"GET\", \"/peer-frame.jpg\""
+            }
+          ]
+        },
+        {
+          "name": "Encrypted transport and bounded media dispatch",
+          "status": "additive",
+          "existing": "SecureChannel provides PSK authentication, XChaCha20-Poly1305 protection and replay checks. Mesh sends authenticated CMD messages; existing media proxy infrastructure is present.",
+          "gap": "SecureChannel and transport callbacks run on Runloop. sendCommand is void and drops unavailable-peer requests. There is no demonstrated bounded asynchronous media-forwarding lane, frame authorization forwarding protocol or result correlation.",
+          "references": [
+            {
+              "path": "core/src/mesh/secure_channel.h",
+              "line": 9,
+              "location": "core/src/mesh/secure_channel.h:9",
+              "anchor": "PSK-authenticated encrypted channel"
+            },
+            {
+              "path": "core/src/mesh/secure_channel.cpp",
+              "line": 227,
+              "location": "core/src/mesh/secure_channel.cpp:227",
+              "anchor": "void SecureChannel::sendMessage("
+            },
+            {
+              "path": "core/src/mesh/mesh.cpp",
+              "line": 1697,
+              "location": "core/src/mesh/mesh.cpp:1697",
+              "anchor": "void sendCommand("
+            },
+            {
+              "path": "core/src/httpd/httpd.cpp",
+              "line": 387,
+              "location": "core/src/httpd/httpd.cpp:387",
+              "anchor": "int handleStreamProxyMp4("
+            }
+          ]
+        },
+        {
+          "name": "Resource limits",
+          "status": "additive",
+          "existing": "HTTP body reading has an 8 MiB cap.",
+          "gap": "See current_transport_and_resource_boundaries. Current SNAP is 300 KiB, BLOB/assets 3 MiB, and HTTP/TCP have 8 MiB thresholds with different allocation/enforcement points. None directly implements the ADR 1 MiB frame or 4 MiB staged import contracts.",
+          "references": [
+            {
+              "path": "core/src/httpd/httpd.cpp",
+              "line": 32,
+              "location": "core/src/httpd/httpd.cpp:32",
+              "anchor": "constexpr size_t kMaxBodyBytes"
+            },
+            {
+              "path": "core/src/httpd/httpd.cpp",
+              "line": 208,
+              "location": "core/src/httpd/httpd.cpp:208",
+              "anchor": "HttpReq buildReq("
+            },
+            {
+              "path": "core/src/mesh/mesh.cpp",
+              "line": 32,
+              "location": "core/src/mesh/mesh.cpp:32",
+              "anchor": "constexpr size_t kSnapMaxBytes"
+            },
+            {
+              "path": "core/src/mesh/mesh.cpp",
+              "line": 34,
+              "location": "core/src/mesh/mesh.cpp:34",
+              "anchor": "constexpr size_t kBlobMaxBytes"
+            },
+            {
+              "path": "core/src/mesh/tcp_transport.cpp",
+              "line": 21,
+              "location": "core/src/mesh/tcp_transport.cpp:21",
+              "anchor": "constexpr size_t kMaxFrame"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C08",
+      "items": [
+        {
+          "name": "Local compare-and-commit",
+          "status": "additive",
+          "existing": "configBatchJsonOnLoop is shared by HTTP and native ABI, validates up to 256 operations, commits atomically and returns revision with hlc compatibility alias.",
+          "gap": "No expected_revision comparison occurs. The returned last mutation HLC is not a cluster-wide transaction/CAS version.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 9115,
+              "location": "core/src/node/node.cpp:9115",
+              "anchor": "std::string configBatchJsonOnLoop("
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 9169,
+              "location": "core/src/node/node.cpp:9169",
+              "anchor": "json::set(result.get(), \"revision\""
+            },
+            {
+              "path": "core/src/capi/doorbell_capi.cpp",
+              "line": 609,
+              "location": "core/src/capi/doorbell_capi.cpp:609",
+              "anchor": "DB_API char* db_core_config_batch_json("
+            },
+            {
+              "path": "core/src/crdt/lww_map.cpp",
+              "line": 229,
+              "location": "core/src/crdt/lww_map.cpp:229",
+              "anchor": "std::vector<LwwEntry> LwwMap::mutate("
+            }
+          ]
+        },
+        {
+          "name": "Partition edit intent retention",
+          "status": "missing",
+          "existing": "LwwEntry carries hlc/author/seq; winner selection orders hlc and author and commits through a rollback-capable callback.",
+          "gap": "The map retains effective winners; losing field intentions and parent revisions are not a persistent recoverable conflict ledger.",
+          "references": [
+            {
+              "path": "core/src/crdt/lww_map.h",
+              "line": 22,
+              "location": "core/src/crdt/lww_map.h:22",
+              "anchor": "struct LwwEntry {"
+            },
+            {
+              "path": "core/src/crdt/lww_map.cpp",
+              "line": 22,
+              "location": "core/src/crdt/lww_map.cpp:22",
+              "anchor": "bool wins("
+            },
+            {
+              "path": "core/src/crdt/lww_map.cpp",
+              "line": 85,
+              "location": "core/src/crdt/lww_map.cpp:85",
+              "anchor": "bool LwwMap::commit("
+            }
+          ]
+        },
+        {
+          "name": "Bounded import staging",
+          "status": "missing",
+          "existing": "POST /api/config/import validates supplied entries and calls one LwwMap mutate.",
+          "gap": "No staging token, preflight snapshot, subject/file binding, TTL or expected baseline commit contract exists at this route. Existing import is separate from the ordinary 256-op batch limiter.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 9587,
+              "location": "core/src/node/node.cpp:9587",
+              "anchor": "httpd->route(\"POST\", \"/api/config/import\""
+            },
+            {
+              "path": "core/src/store/store.h",
+              "line": 40,
+              "location": "core/src/store/store.h:40",
+              "anchor": "bool configPutBatch("
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "C09",
+      "items": [
+        {
+          "name": "Evidence provenance",
+          "status": "existing",
+          "existing": "T01 records production baseline/candidate execution, mutation sensitivity, browser behavior, cleanup and corrected environment discovery with source provenance.",
+          "gap": "Evidence scopes remain host/browser/cross-build as recorded; none establishes real actuator success, signed device runtime, legacy hardware budgets or release qualification.",
+          "references": [
+            {
+              "path": "verification/remediation-q01-q18/T01/report.zh.md",
+              "line": 1,
+              "location": "verification/remediation-q01-q18/T01/report.zh.md:1",
+              "anchor": "#"
+            },
+            {
+              "path": "verification/remediation-q01-q18/T01/command-map.json",
+              "line": 1,
+              "location": "verification/remediation-q01-q18/T01/command-map.json:1",
+              "anchor": "{"
+            },
+            {
+              "path": "tools/verification/record_command.py",
+              "line": 3,
+              "location": "tools/verification/record_command.py:3",
+              "anchor": "import"
+            }
+          ]
+        },
+        {
+          "name": "Core call time snapshot",
+          "status": "existing",
+          "existing": "Current dirty-tree active_calls records include expires_at_ms, server_now_ms and remaining_ms in corrected Core time; schema documents their cached-snapshot semantics. No stage_deadline_ms source field was found.",
+          "gap": "Presence does not close T19-T24 platform qualification; never compare the Core deadline with the OS clock or cancel solely from a UI timer.",
+          "references": [
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 8658,
+              "location": "core/src/node/node.cpp:8658",
+              "anchor": "json::set(item, \"expires_at_ms\", call.expires_wall_ms);"
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 8659,
+              "location": "core/src/node/node.cpp:8659",
+              "anchor": "json::set(item, \"server_now_ms\""
+            },
+            {
+              "path": "core/src/node/node.cpp",
+              "line": 8660,
+              "location": "core/src/node/node.cpp:8660",
+              "anchor": "json::set(item, \"remaining_ms\""
+            },
+            {
+              "path": "docs/en/config-schema.md",
+              "line": 584,
+              "location": "docs/en/config-schema.md:584",
+              "anchor": "Each `active_calls` entry"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "entrypoints": {
+    "scope": "Physical unlock, emergency, call lifecycle, related authentication/configuration/media and native shell bridges; this is not a complete inventory of unrelated HTTP routes.",
+    "http": [
+      {
+        "method": "POST",
+        "route": "/api/doors/*",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10020,
+          "location": "core/src/node/node.cpp:10020",
+          "anchor": "httpd->route(\"POST\", \"/api/doors/*\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/emergency",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9998,
+          "location": "core/src/node/node.cpp:9998",
+          "anchor": "httpd->route(\"POST\", \"/api/emergency\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/panel/emergency",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10614,
+          "location": "core/src/node/node.cpp:10614",
+          "anchor": "httpd->route(\"POST\", \"/api/panel/emergency\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/press",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9869,
+          "location": "core/src/node/node.cpp:9869",
+          "anchor": "httpd->route(\"POST\", \"/api/press\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/call/purpose",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9893,
+          "location": "core/src/node/node.cpp:9893",
+          "anchor": "httpd->route(\"POST\", \"/api/call/purpose\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/call/cancel",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9904,
+          "location": "core/src/node/node.cpp:9904",
+          "anchor": "httpd->route(\"POST\", \"/api/call/cancel\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/reply",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9986,
+          "location": "core/src/node/node.cpp:9986",
+          "anchor": "httpd->route(\"POST\", \"/api/reply\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/panel/press",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10433,
+          "location": "core/src/node/node.cpp:10433",
+          "anchor": "httpd->route(\"POST\", \"/api/panel/press\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/panel/purpose",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10458,
+          "location": "core/src/node/node.cpp:10458",
+          "anchor": "httpd->route(\"POST\", \"/api/panel/purpose\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/panel/cancel",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10509,
+          "location": "core/src/node/node.cpp:10509",
+          "anchor": "httpd->route(\"POST\", \"/api/panel/cancel\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/panel/reply",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10476,
+          "location": "core/src/node/node.cpp:10476",
+          "anchor": "httpd->route(\"POST\", \"/api/panel/reply\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/panel/call-lifecycle",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10520,
+          "location": "core/src/node/node.cpp:10520",
+          "anchor": "httpd->route(\"POST\", \"/api/panel/call-lifecycle\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/panel/hangup",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10562,
+          "location": "core/src/node/node.cpp:10562",
+          "anchor": "httpd->route(\"POST\", \"/api/panel/hangup\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/panel/recovery",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10572,
+          "location": "core/src/node/node.cpp:10572",
+          "anchor": "httpd->route(\"POST\", \"/api/panel/recovery\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/config",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9563,
+          "location": "core/src/node/node.cpp:9563",
+          "anchor": "httpd->route(\"POST\", \"/api/config\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/config/batch",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9573,
+          "location": "core/src/node/node.cpp:9573",
+          "anchor": "httpd->route(\"POST\", \"/api/config/batch\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/config/delete",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9579,
+          "location": "core/src/node/node.cpp:9579",
+          "anchor": "httpd->route(\"POST\", \"/api/config/delete\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/config/import",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9587,
+          "location": "core/src/node/node.cpp:9587",
+          "anchor": "httpd->route(\"POST\", \"/api/config/import\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/login",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9370,
+          "location": "core/src/node/node.cpp:9370",
+          "anchor": "httpd->route(\"POST\", \"/api/login\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/api/panel/session",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 9528,
+          "location": "core/src/node/node.cpp:9528",
+          "anchor": "httpd->route(\"POST\", \"/api/panel/session\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      },
+      {
+        "method": "POST",
+        "route": "/call-frame",
+        "reference": {
+          "path": "core/src/node/node.cpp",
+          "line": 10726,
+          "location": "core/src/node/node.cpp:10726",
+          "anchor": "httpd->route(\"POST\", \"/call-frame\""
+        },
+        "operation_handle": "missing",
+        "identity": "Call routes may use call_id/stage_revision/dialog_id; these do not provide physical-operation deduplication.",
+        "authorization": "Route-level admin or panel checks must be read together with registerHttp public-prefix exceptions; no per-panel grants are established."
+      }
+    ],
+    "c_abi": [
+      {
+        "path": "core/include/doorbell/doorbell.h",
+        "line": 347,
+        "location": "core/include/doorbell/doorbell.h:347",
+        "anchor": "DB_API int db_core_open_door("
+      },
+      {
+        "path": "core/include/doorbell/doorbell.h",
+        "line": 578,
+        "location": "core/include/doorbell/doorbell.h:578",
+        "anchor": "DB_API int db_core_emergency_v2("
+      },
+      {
+        "path": "core/include/doorbell/doorbell.h",
+        "line": 154,
+        "location": "core/include/doorbell/doorbell.h:154",
+        "anchor": "DB_API char* db_core_press_v2("
+      },
+      {
+        "path": "core/include/doorbell/doorbell.h",
+        "line": 157,
+        "location": "core/include/doorbell/doorbell.h:157",
+        "anchor": "DB_API int db_core_cancel_call_v2("
+      },
+      {
+        "path": "core/include/doorbell/doorbell.h",
+        "line": 162,
+        "location": "core/include/doorbell/doorbell.h:162",
+        "anchor": "DB_API int db_core_report_call_answered_v2("
+      },
+      {
+        "path": "core/include/doorbell/doorbell.h",
+        "line": 164,
+        "location": "core/include/doorbell/doorbell.h:164",
+        "anchor": "DB_API int db_core_report_call_ended_v2("
+      },
+      {
+        "path": "core/include/doorbell/doorbell.h",
+        "line": 563,
+        "location": "core/include/doorbell/doorbell.h:563",
+        "anchor": "DB_API int db_core_quick_reply_v2("
+      },
+      {
+        "path": "core/include/doorbell/doorbell.h",
+        "line": 260,
+        "location": "core/include/doorbell/doorbell.h:260",
+        "anchor": "DB_API char* db_core_config_batch_json("
+      }
+    ],
+    "native_shells": [
+      {
+        "surface": "android_modern",
+        "targets": [
+          "android_modern"
+        ],
+        "references": [
+          {
+            "path": "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt",
+            "line": 139,
+            "location": "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt:139",
+            "anchor": "fun openDoor("
+          },
+          {
+            "path": "android/app/src/main/cpp/jni_bridge.cpp",
+            "line": 879,
+            "location": "android/app/src/main/cpp/jni_bridge.cpp:879",
+            "anchor": "return db_core_open_door("
+          }
+        ],
+        "identity": "Trusted in-process Core handle; the shell mediates local UI access. The bridge passes door or active without an authenticated operation subject.",
+        "deduplication": "No stable operation handle for unlock/SOS. Existing v2 call IDs are separate.",
+        "authority": "Calls the local Node; MQTT dispatch is subsequently gated by the local mqtt_bridge election.",
+        "limitation": "Bridge availability does not imply every target exposes every control, or that device runtime has been qualified."
+      },
+      {
+        "surface": "android_legacy19",
+        "targets": [
+          "android_api19"
+        ],
+        "references": [
+          {
+            "path": "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt",
+            "line": 139,
+            "location": "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt:139",
+            "anchor": "fun openDoor("
+          },
+          {
+            "path": "android/app/src/main/cpp/jni_bridge.cpp",
+            "line": 879,
+            "location": "android/app/src/main/cpp/jni_bridge.cpp:879",
+            "anchor": "return db_core_open_door("
+          }
+        ],
+        "identity": "Trusted in-process Core handle; the shell mediates local UI access. The bridge passes door or active without an authenticated operation subject.",
+        "deduplication": "No stable operation handle for unlock/SOS. Existing v2 call IDs are separate.",
+        "authority": "Calls the local Node; MQTT dispatch is subsequently gated by the local mqtt_bridge election.",
+        "limitation": "Bridge availability does not imply every target exposes every control, or that device runtime has been qualified."
+      },
+      {
+        "surface": "apple_swift",
+        "targets": [
+          "modern_ios",
+          "ios9_arm64",
+          "tvos"
+        ],
+        "references": [
+          {
+            "path": "ios/Doorbell/CoreBridge.swift",
+            "line": 461,
+            "location": "ios/Doorbell/CoreBridge.swift:461",
+            "anchor": "func openDoor("
+          },
+          {
+            "path": "ios/Doorbell/CoreBridge.swift",
+            "line": 232,
+            "location": "ios/Doorbell/CoreBridge.swift:232",
+            "anchor": "func emergency("
+          }
+        ],
+        "identity": "Trusted in-process Core handle; the shell mediates local UI access. The bridge passes door or active without an authenticated operation subject.",
+        "deduplication": "No stable operation handle for unlock/SOS. Existing v2 call IDs are separate.",
+        "authority": "Calls the local Node; MQTT dispatch is subsequently gated by the local mqtt_bridge election.",
+        "limitation": "Bridge availability does not imply every target exposes every control, or that device runtime has been qualified."
+      },
+      {
+        "surface": "apple_objc_compat",
+        "targets": [
+          "ios5_armv7",
+          "ios9_armv7"
+        ],
+        "references": [
+          {
+            "path": "ios-kiosk/src/Core/DBCoreBridge.m",
+            "line": 1128,
+            "location": "ios-kiosk/src/Core/DBCoreBridge.m:1128",
+            "anchor": "- (int)openDoor:"
+          },
+          {
+            "path": "ios-kiosk/src/Core/DBCoreBridge.m",
+            "line": 610,
+            "location": "ios-kiosk/src/Core/DBCoreBridge.m:610",
+            "anchor": "committed = db_core_emergency_v2("
+          }
+        ],
+        "identity": "Trusted in-process Core handle; the shell mediates local UI access. The bridge passes door or active without an authenticated operation subject.",
+        "deduplication": "No stable operation handle for unlock/SOS. Existing v2 call IDs are separate.",
+        "authority": "Calls the local Node; MQTT dispatch is subsequently gated by the local mqtt_bridge election.",
+        "limitation": "Bridge availability does not imply every target exposes every control, or that device runtime has been qualified."
+      },
+      {
+        "surface": "windows",
+        "targets": [
+          "windows_x86",
+          "windows_x64"
+        ],
+        "references": [
+          {
+            "path": "win/DoorbellApp/Core/CoreClient.cs",
+            "line": 527,
+            "location": "win/DoorbellApp/Core/CoreClient.cs:527",
+            "anchor": "CoreInterop.db_core_open_door("
+          },
+          {
+            "path": "win/DoorbellApp/Core/CoreClient.cs",
+            "line": 310,
+            "location": "win/DoorbellApp/Core/CoreClient.cs:310",
+            "anchor": "CoreInterop.db_core_emergency_v2("
+          }
+        ],
+        "identity": "Trusted in-process Core handle; the shell mediates local UI access. The bridge passes door or active without an authenticated operation subject.",
+        "deduplication": "No stable operation handle for unlock/SOS. Existing v2 call IDs are separate.",
+        "authority": "Calls the local Node; MQTT dispatch is subsequently gated by the local mqtt_bridge election.",
+        "limitation": "Bridge availability does not imply every target exposes every control, or that device runtime has been qualified."
+      }
+    ],
+    "web": [
+      {
+        "surface": "visitor_door",
+        "reference": {
+          "path": "webui/panel/door.html",
+          "line": 252,
+          "location": "webui/panel/door.html:252",
+          "anchor": "xhr(\"POST\", \"/api/panel/press\""
+        },
+        "identity": "Call identity from Core; shared panel credential/session; no physical operation handle."
+      },
+      {
+        "surface": "resident_call",
+        "reference": {
+          "path": "webui/panel/call.html",
+          "line": 398,
+          "location": "webui/panel/call.html:398",
+          "anchor": "fetch(\"/api/panel/call-lifecycle\""
+        },
+        "identity": "call_id, stage_revision and dialog_id; ownership comes from Core lifecycle response."
+      },
+      {
+        "surface": "resident_monitor",
+        "reference": {
+          "path": "webui/panel/monitor.html",
+          "line": 485,
+          "location": "webui/panel/monitor.html:485",
+          "anchor": "xhr(\"POST\", \"/api/panel/reply\""
+        },
+        "identity": "Scoped call reply; monitor must not become call owner."
+      },
+      {
+        "surface": "shared_sos",
+        "reference": {
+          "path": "webui/panel/runtime.js",
+          "line": 682,
+          "location": "webui/panel/runtime.js:682",
+          "anchor": "xhr.open(\"POST\", \"/api/panel/emergency\""
+        },
+        "identity": "Panel session, no prepared operation handle."
+      }
+    ],
+    "mesh": {
+      "references": [
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 1697,
+          "location": "core/src/mesh/mesh.cpp:1697",
+          "anchor": "void sendCommand("
+        },
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 1943,
+          "location": "core/src/mesh/mesh.cpp:1943",
+          "anchor": "cbs.on_command(ch->peerId()"
+        },
+        {
+          "path": "core/src/node/node.cpp",
+          "line": 7845,
+          "location": "core/src/node/node.cpp:7845",
+          "anchor": "void onCommand("
+        }
+      ],
+      "identity": "Authenticated SecureChannel peerId, not browser-supplied from.",
+      "deduplication": "Transport replay rejection is not durable operation deduplication.",
+      "authority": "Targeted existing connection; unavailable target logs and returns; no physical operation query/reply contract."
+    },
+    "ha": {
+      "references": [
+        {
+          "path": "core/src/bridge/ha_bridge.cpp",
+          "line": 366,
+          "location": "core/src/bridge/ha_bridge.cpp:366",
+          "anchor": "void HaBridge::onEvent("
+        },
+        {
+          "path": "core/src/bridge/ha_bridge.cpp",
+          "line": 425,
+          "location": "core/src/bridge/ha_bridge.cpp:425",
+          "anchor": "if (topic == base_ + \"/cmd/ack\")"
+        },
+        {
+          "path": "core/src/bridge/ha_bridge.cpp",
+          "line": 444,
+          "location": "core/src/bridge/ha_bridge.cpp:444",
+          "anchor": "const int revision = static_cast<int>"
+        },
+        {
+          "path": "core/src/node/node.cpp",
+          "line": 7796,
+          "location": "core/src/node/node.cpp:7796",
+          "anchor": "mesh->isLeader(\"mqtt_bridge\")) bridge->onEvent(ev);"
+        }
+      ],
+      "identity": "MQTT unlock payload carries door only. Scoped reply JSON can carry call_id/stage_revision.",
+      "deduplication": "No operation_id in unlock publication and no correlated ACK persistence.",
+      "authority": "Current mqtt_bridge leader invokes HA event dispatch; this is not a unique authority guarantee across network partitions."
+    },
+    "sip_dtmf": {
+      "reference": {
+        "path": "core/src/node/node.cpp",
+        "line": 5441,
+        "location": "core/src/node/node.cpp:5441",
+        "anchor": "void execDtmfAction("
+      },
+      "identity": "Configured feature code in the local SIP path; no stable operation handle.",
+      "effect": "ha_command appends dtmf_action, feeding the same HA publication path."
+    },
+    "target_sharing_evidence": [
+      {
+        "path": "android/app/build.gradle.kts",
+        "line": 56,
+        "location": "android/app/build.gradle.kts:56",
+        "anchor": "val doorbellNdk ="
+      },
+      {
+        "path": "ios/Doorbell.xcodeproj/project.pbxproj",
+        "line": 5,
+        "location": "ios/Doorbell.xcodeproj/project.pbxproj:5",
+        "anchor": "DoorbellIOS9 iOS 9+"
+      },
+      {
+        "path": "ios/Doorbell.xcodeproj/project.pbxproj",
+        "line": 6,
+        "location": "ios/Doorbell.xcodeproj/project.pbxproj:6",
+        "anchor": "DoorbellTV   tvOS"
+      },
+      {
+        "path": "ios-compat/make/ios9-armv7.mk",
+        "line": 2,
+        "location": "ios-compat/make/ios9-armv7.mk:2",
+        "anchor": "SRC_DIR := $(ROOT)/ios-kiosk/src"
+      }
+    ],
+    "frozen_archive": "ios-legacy remains excluded from feature changes."
+  },
+  "field_ownership_recommendations": [
+    {
+      "field_or_semantic_group": "operation_id",
+      "definition_owner_task": "T05",
+      "consumer_tasks": [
+        "T06",
+        "T07",
+        "T12",
+        "T36"
+      ],
+      "note": "New persistent operation identity; not call_id or event origin:seq.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "execution_state",
+      "definition_owner_task": "T05",
+      "consumer_tasks": [
+        "T04",
+        "T06",
+        "T07",
+        "T12",
+        "T36"
+      ],
+      "note": "New physical-operation lifecycle with explicit uncertain outcomes.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "authority_node",
+      "definition_owner_task": "T06",
+      "consumer_tasks": [
+        "T05",
+        "T07",
+        "T36"
+      ],
+      "note": "ADR operation authority field. Door-open binds doors.<id>.operations.authority_node; global SOS binds cluster.operations.sos_authority_node and does not select or invent a door. Neither implicitly chooses a partition-local MQTT leader.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "request_id",
+      "definition_owner_task": "T06",
+      "consumer_tasks": [
+        "T04",
+        "T09",
+        "T16"
+      ],
+      "note": "Proposed correlation field; never an authorization credential.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "error_code",
+      "definition_owner_task": "T06",
+      "consumer_tasks": [
+        "T04",
+        "T05",
+        "T07",
+        "T09",
+        "T15",
+        "T26",
+        "T29"
+      ],
+      "note": "Proposed common error vocabulary with legacy err compatibility.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "retry_mode",
+      "definition_owner_task": "T06",
+      "consumer_tasks": [
+        "T04",
+        "T05",
+        "T09",
+        "T12",
+        "T36"
+      ],
+      "note": "Proposed action retry guidance; server authorization remains mandatory.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "HTTP scheduling",
+      "definition_owner_task": "T04",
+      "consumer_tasks": [
+        "T06"
+      ],
+      "note": "Internal queued/running/completed/expired arbitration, separate from persistent operation state.",
+      "kind": "behavior"
+    },
+    {
+      "field_or_semantic_group": "credential_version",
+      "definition_owner_task": "T08",
+      "consumer_tasks": [
+        "T06",
+        "T15",
+        "T31"
+      ],
+      "note": "ADR server-only credential binding to the persisted LWW tuple {hlc, author, seq}; seq uses a decimal string in new JSON. No independent local counter.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "Administrator session expiry",
+      "definition_owner_task": "T08",
+      "consumer_tasks": [
+        "T09",
+        "T25"
+      ],
+      "note": "Interaction idle and absolute limits, monotonic within a process; restart invalidates in-memory tokens.",
+      "kind": "behavior"
+    },
+    {
+      "field_or_semantic_group": "lease_remaining_ms",
+      "definition_owner_task": "T11",
+      "consumer_tasks": [
+        "T09",
+        "T10",
+        "T17"
+      ],
+      "note": "Proposed server-authoritative remaining Web dialog lease, separate from the ringing-call remaining_ms.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "server_now_ms",
+      "definition_owner_task": "T19",
+      "consumer_tasks": [
+        "T21",
+        "T22",
+        "T23",
+        "T24"
+      ],
+      "note": "Existing corrected Core timestamp in active_calls; consumers must keep its time domain.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "remaining_ms",
+      "definition_owner_task": "T19",
+      "consumer_tasks": [
+        "T21",
+        "T22",
+        "T23",
+        "T24"
+      ],
+      "note": "Existing corrected Core call duration snapshot; no UI-only cancellation authority.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "Media authorization tuple",
+      "definition_owner_task": "T15",
+      "consumer_tasks": [
+        "T16",
+        "T17",
+        "T31"
+      ],
+      "note": "ADR server-derived principal/door/call/revision/owner/publisher/generation binding, in memory for at most 10000 ms, capped by owner lease/Web session. Final frame-bus write revalidates; late frames never renew.",
+      "kind": "behavior"
+    },
+    {
+      "field_or_semantic_group": "media_generation",
+      "definition_owner_task": "T15",
+      "consumer_tasks": [
+        "T16",
+        "T17"
+      ],
+      "note": "ADR 128 secure random bits encoded as 32 lowercase hexadecimal characters. In-memory authorization expires within 10000 ms, never outlives owner lease/Web session, and renewal issues a new generation.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "frame_sequence",
+      "definition_owner_task": "T15",
+      "consumer_tasks": [
+        "T16",
+        "T17"
+      ],
+      "note": "ADR decimal string 1..9223372036854775807, strictly increasing in one media_generation; no leading zero, sign, exponent, wrap or reuse.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "Media transport and resource ceilings",
+      "definition_owner_task": "T16",
+      "consumer_tasks": [
+        "T15",
+        "T17",
+        "T18"
+      ],
+      "note": "Frame bytes/pixels, bounded workers/queues and deadlines; qualification still requires measured budgets.",
+      "kind": "behavior"
+    },
+    {
+      "field_or_semantic_group": "expected_revision",
+      "definition_owner_task": "T26",
+      "consumer_tasks": [
+        "T27",
+        "T29"
+      ],
+      "note": "ADR required local CAS baseline on new endpoints. Uses the same complete-configuration token as config_generation; boot/restore invalidates it, with no cross-node equality or ordering guarantee.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "change_id",
+      "definition_owner_task": "T28",
+      "consumer_tasks": [
+        "T26",
+        "T27",
+        "T29"
+      ],
+      "note": "ADR retained edit-intention identifier, 128 secure random bits encoded as 32 lowercase hexadecimal characters; parents use LWW record identities rather than boot-local revision tokens.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "Import staging/preflight/commit",
+      "definition_owner_task": "T29",
+      "consumer_tasks": [
+        "T30"
+      ],
+      "note": "Proposed subject/file/TTL-bound staging and atomic local commit.",
+      "kind": "behavior"
+    },
+    {
+      "field_or_semantic_group": "panel_id",
+      "definition_owner_task": "T31",
+      "consumer_tasks": [
+        "T15",
+        "T16",
+        "T32"
+      ],
+      "note": "ADR random authenticated panel identity, at most 64 ASCII characters; never inferred from IP/UA.",
+      "kind": "wire_field"
+    },
+    {
+      "field_or_semantic_group": "Panel grants",
+      "definition_owner_task": "T31",
+      "consumer_tasks": [
+        "T06",
+        "T15",
+        "T32"
+      ],
+      "note": "ADR explicit panel door/action grants and separate global SOS start/clear permission. A door grant does not confer global SOS-clear permission; legacy shared credentials remain visibly shared.",
+      "kind": "behavior"
+    },
+    {
+      "field_or_semantic_group": "Provisioned SIP mapping",
+      "definition_owner_task": "T31",
+      "consumer_tasks": [
+        "T32",
+        "T33"
+      ],
+      "note": "Proposed measured configured/ready/provisioning_required outcome; no fabricated PBX provisioning.",
+      "kind": "behavior"
+    },
+    {
+      "field_or_semantic_group": "schema_version",
+      "definition_owner_task": "T06",
+      "consumer_tasks": [
+        "T05",
+        "T07",
+        "T09",
+        "T15",
+        "T26",
+        "T29"
+      ],
+      "kind": "wire_field",
+      "note": "New versioned JSON result envelope uses 2 and preserves legacy ok/err where present."
+    },
+    {
+      "field_or_semantic_group": "unknown_reason",
+      "definition_owner_task": "T06",
+      "consumer_tasks": [
+        "T05",
+        "T07",
+        "T12",
+        "T36"
+      ],
+      "kind": "wire_field",
+      "note": "ADR bounded enum: response_lost, crash_during_dispatch, transport_ambiguous, ack_unavailable."
+    },
+    {
+      "field_or_semantic_group": "config_generation",
+      "definition_owner_task": "T06",
+      "consumer_tasks": [
+        "T05",
+        "T15",
+        "T26"
+      ],
+      "kind": "wire_field",
+      "note": "ADR authority-local complete-configuration token shared with expected_revision, opaque at most 256 bytes, invalidated by boot/restore epoch. It is frozen at operation preparation; execute cannot replace it."
+    },
+    {
+      "field_or_semantic_group": "prepared_remaining_ms",
+      "definition_owner_task": "T05",
+      "consumer_tasks": [
+        "T06",
+        "T12",
+        "T36"
+      ],
+      "kind": "wire_field",
+      "note": "ADR prepare duration, nonnegative integer at most 30000 ms; restart invalidates unexecuted prepared records."
+    },
+    {
+      "field_or_semantic_group": "expires_at_ms",
+      "definition_owner_task": "T19",
+      "consumer_tasks": [
+        "T21",
+        "T22",
+        "T23",
+        "T24"
+      ],
+      "kind": "existing_wire_field",
+      "note": "Actual current Core active_calls deadline field; do not rename to stage_deadline_ms or invent a second deadline API."
+    },
+    {
+      "field_or_semantic_group": "Correlated actuator ACK and sensor evidence",
+      "definition_owner_task": "T07",
+      "consumer_tasks": [
+        "T06",
+        "T36"
+      ],
+      "kind": "behavior",
+      "note": "ADR actuator acknowledgement is distinct from dispatch and observed door state; the observation may carry operation_id only when causally correlated."
+    },
+    {
+      "field_or_semantic_group": "Request deadlines and settle-once behavior",
+      "definition_owner_task": "T09",
+      "consumer_tasks": [
+        "T10",
+        "T11",
+        "T12",
+        "T17",
+        "T25"
+      ],
+      "kind": "behavior",
+      "note": "T09 owns the request primitive; request lane orchestration is separately owned by T10."
+    },
+    {
+      "field_or_semantic_group": "Independent request lane orchestration",
+      "definition_owner_task": "T10",
+      "consumer_tasks": [
+        "T11",
+        "T12",
+        "T17",
+        "T25"
+      ],
+      "kind": "behavior",
+      "note": "T10 owns independent state/call-info/locale/config scheduling; it consumes T09 cancellation and settlement rather than defining another request contract."
+    },
+    {
+      "field_or_semantic_group": "publish_remaining_ms",
+      "definition_owner_task": "T15",
+      "consumer_tasks": [
+        "T16",
+        "T17",
+        "T18"
+      ],
+      "kind": "wire_field",
+      "note": "ADR media authorization duration, exact JSON integer 0..10000, capped by owner lease and Web session. Estimate from monotonic request start; renewal reauthorizes and creates a new media_generation."
+    },
+    {
+      "field_or_semantic_group": "Identity-bound panel Web session expiry",
+      "definition_owner_task": "T31",
+      "consumer_tasks": [
+        "T15",
+        "T16",
+        "T32"
+      ],
+      "kind": "behavior",
+      "note": "ADR random 128-bit in-memory session token; 30-minute interaction idle and 8-hour absolute limits, capacity 128. Background polls never refresh; restart/revocation/credential changes invalidate; renewal requires authenticated identity bootstrap."
+    },
+    {
+      "field_or_semantic_group": "cluster.operations.sos_authority_node",
+      "definition_owner_task": "T06",
+      "consumer_tasks": [
+        "T05",
+        "T12",
+        "T31",
+        "T36"
+      ],
+      "kind": "configuration_field",
+      "note": "ADR explicit authority for cluster-global SOS, independent of configured doors. SOS prepare omits door and rejects a supplied door. Legacy SOS remains available under its weaker contract until operations_v1 is commissioned."
+    }
+  ],
+  "design_gaps": [
+    {
+      "id": "DG-AUTHORITY",
+      "owner": "T06",
+      "gap": "Existing elected MQTT duty does not supply an unambiguous fixed door action authority during partitions.",
+      "required_decision": "ADR binds door-open to doors.<id>.operations.authority_node and cluster-global SOS to cluster.operations.sos_authority_node, without requiring or selecting a door. T06 must implement validation, quiesced changes, authenticated routing and unavailable/ambiguous refusal before operations_v1; legacy SOS availability is preserved until commissioning."
+    },
+    {
+      "id": "DG-MEDIA-TRANSPORT",
+      "owner": "T16",
+      "gap": "Authenticated encrypted transport exists, but the present Runloop transport lacks the required bounded asynchronous media lane.",
+      "required_decision": "ADR keeps cross-node media DESIGN_BLOCKED until T16 validates delegated identity, a separate bounded execution context, worker ownership, shutdown and queue limits. Existing SNAP/BLOB is not the replacement upload lane."
+    },
+    {
+      "id": "DG-BUDGETS",
+      "owner": "T02",
+      "gap": "Plan example limits are not demonstrated legacy-device memory/latency budgets by this inventory.",
+      "required_decision": "ADR admission ceilings are explicit protocol bounds rather than measured historical-device capacity; owning tasks and T40-T48 must prove actual bounded allocation/storage and publish lower target limits when needed."
+    },
+    {
+      "id": "DG-CSRF",
+      "owner": "T06",
+      "gap": "SameSite cookies are the visible current protection; explicit trusted Origin/session-bound CSRF behavior is absent from the inspected HTTP paths.",
+      "required_decision": "ADR requires a session-bound token plus exact configured Origin checks for new Web mutation routes. T06 must implement this without treating absent Origin as native authorization or trusting arbitrary forwarded headers."
+    },
+    {
+      "id": "DG-CONFIG-INTENT",
+      "owner": "T28",
+      "gap": "Current LWW data retains winners rather than losing edit intentions.",
+      "required_decision": "Define a bounded persistent authenticated intent/conflict record that commits with configuration; local CAS alone cannot close partition conflict handling."
+    },
+    {
+      "id": "DG-TRANSPORT-SIZE-MISMATCH",
+      "owner": "T16/T29",
+      "gap": "SNAP admits 300 KiB JPEGs; BLOB/asset paths admit 3 MiB; proposed media frame and import caps are 1 MiB and 4 MiB. HTTP/TCP 8 MiB thresholds do not establish upfront per-route bounds or bounded queues.",
+      "required_decision": "T16 and T29 must implement their own reviewed admission/ownership semantics while reusing eligible authenticated transport/storage primitives. Do not label old SNAP/BLOB as supporting the new sizes or new authorization/atomicity guarantees."
+    }
+  ],
+  "alignment": {
+    "document": "docs/en/remediation-contracts-adr.md",
+    "document_sha256_at_alignment": "8e5f1c0cbab50fd49a96d54b47f3d9a00e1e9e0dd116aab2e23eb1cfe6294781",
+    "meaning": "Planned wire field names follow the ADR. Entries marked behavior are semantic ownership groups, not additional wire fields. Existing production symbol names remain unchanged.",
+    "review_limit": "This source inventory neither implements nor independently approves the ADR."
+  },
+  "capability_ownership": [
+    {
+      "feature": "operations_v1",
+      "implementation_owner": "T06",
+      "shape": "object {version: 1, supported: boolean, limits: object}",
+      "existing_status": "missing",
+      "note": "New key only; existing boolean capability entries must retain their published types. Unsupported/missing/unknown version denies the new semantics."
+    },
+    {
+      "feature": "admin_sessions_v2",
+      "implementation_owner": "T08",
+      "shape": "object {version: 1, supported: boolean, limits: object}",
+      "existing_status": "missing",
+      "note": "New key only; existing boolean capability entries must retain their published types. Unsupported/missing/unknown version denies the new semantics."
+    },
+    {
+      "feature": "web_request_lanes_v1",
+      "implementation_owner": "T10",
+      "shape": "object {version: 1, supported: boolean, limits: object}",
+      "existing_status": "missing",
+      "note": "New key only; existing boolean capability entries must retain their published types. Unsupported/missing/unknown version denies the new semantics."
+    },
+    {
+      "feature": "media_publish_v1",
+      "implementation_owner": "T16",
+      "shape": "object {version: 1, supported: boolean, limits: object}",
+      "existing_status": "missing",
+      "note": "New key only; existing boolean capability entries must retain their published types. Unsupported/missing/unknown version denies the new semantics."
+    },
+    {
+      "feature": "config_cas_v1",
+      "implementation_owner": "T26",
+      "shape": "object {version: 1, supported: boolean, limits: object}",
+      "existing_status": "missing",
+      "note": "New key only; existing boolean capability entries must retain their published types. Unsupported/missing/unknown version denies the new semantics."
+    },
+    {
+      "feature": "config_conflicts_v1",
+      "implementation_owner": "T28",
+      "shape": "object {version: 1, supported: boolean, limits: object}",
+      "existing_status": "missing",
+      "note": "New key only; existing boolean capability entries must retain their published types. Unsupported/missing/unknown version denies the new semantics."
+    },
+    {
+      "feature": "config_import_v1",
+      "implementation_owner": "T29",
+      "shape": "object {version: 1, supported: boolean, limits: object}",
+      "existing_status": "missing",
+      "note": "New key only; existing boolean capability entries must retain their published types. Unsupported/missing/unknown version denies the new semantics."
+    },
+    {
+      "feature": "panel_identity_v1",
+      "implementation_owner": "T31",
+      "shape": "object {version: 1, supported: boolean, limits: object}",
+      "existing_status": "missing",
+      "note": "New key only; existing boolean capability entries must retain their published types. Unsupported/missing/unknown version denies the new semantics."
+    }
+  ],
+  "current_transport_and_resource_boundaries": [
+    {
+      "name": "snapshot_payload",
+      "protocol": "SNAP_REQ/SNAP_RESP",
+      "max_bytes": 307200,
+      "timeout_ms": 5000,
+      "references": [
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 32,
+          "location": "core/src/mesh/mesh.cpp:32",
+          "anchor": "constexpr size_t kSnapMaxBytes"
+        },
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 31,
+          "location": "core/src/mesh/mesh.cpp:31",
+          "anchor": "constexpr int64_t kSnapTimeoutMs"
+        },
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 1718,
+          "location": "core/src/mesh/mesh.cpp:1718",
+          "anchor": "void fetchSnapshot("
+        },
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 1749,
+          "location": "core/src/mesh/mesh.cpp:1749",
+          "anchor": "void handleSnapReq("
+        },
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 1760,
+          "location": "core/src/mesh/mesh.cpp:1760",
+          "anchor": "void handleSnapResp("
+        }
+      ],
+      "enforcement": "Local provider and responding peer clear oversized JPEGs before response. The receiver base64-decodes the JPEG without a corresponding explicit byte/pixel limit in handleSnapResp.",
+      "reuse_limit": "An ADR 1 MiB upload exceeds this 300 KiB snapshot provider ceiling. SNAP does not bind call publisher, sequence or media authorization and runs on the Core loop; it is not the T16 upload lane."
+    },
+    {
+      "name": "blob_payload",
+      "protocol": "BLOB_REQ/BLOB_RESP",
+      "max_bytes": 3145728,
+      "chunk_bytes": 262144,
+      "timeout_ms": 10000,
+      "references": [
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 34,
+          "location": "core/src/mesh/mesh.cpp:34",
+          "anchor": "constexpr size_t kBlobMaxBytes"
+        },
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 35,
+          "location": "core/src/mesh/mesh.cpp:35",
+          "anchor": "constexpr size_t kBlobChunkBytes"
+        },
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 33,
+          "location": "core/src/mesh/mesh.cpp:33",
+          "anchor": "constexpr int64_t kBlobTimeoutMs"
+        },
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 1837,
+          "location": "core/src/mesh/mesh.cpp:1837",
+          "anchor": "void handleBlobReq("
+        },
+        {
+          "path": "core/src/mesh/mesh.cpp",
+          "line": 1866,
+          "location": "core/src/mesh/mesh.cpp:1866",
+          "anchor": "void handleBlobResp("
+        }
+      ],
+      "enforcement": "Provider rejects data above 3 MiB, emits 256 KiB base64 chunks, and receiver rejects accumulated decoded bytes above 3 MiB after decoding a chunk.",
+      "reuse_limit": "This is asset/blob fetching, not a 4 MiB configuration upload/staging transaction. Full-data/chunk allocation and Core-loop processing do not satisfy media worker/queue or import atomicity requirements."
+    },
+    {
+      "name": "asset_upload",
+      "protocol": "POST /api/assets",
+      "max_bytes": 3145728,
+      "references": [
+        {
+          "path": "core/src/node/node.cpp",
+          "line": 156,
+          "location": "core/src/node/node.cpp:156",
+          "anchor": "constexpr size_t kAssetMaxBytes"
+        },
+        {
+          "path": "core/src/node/node.cpp",
+          "line": 9929,
+          "location": "core/src/node/node.cpp:9929",
+          "anchor": "httpd->route(\"POST\", \"/api/assets\""
+        }
+      ],
+      "enforcement": "Asset-specific validation has a 3 MiB ceiling.",
+      "reuse_limit": "An asset ledger is not the transient media frame bus or configuration import staging store."
+    },
+    {
+      "name": "http_request_body",
+      "protocol": "CivetWeb request reader",
+      "threshold_bytes": 8388608,
+      "read_chunk_bytes": 4096,
+      "references": [
+        {
+          "path": "core/src/httpd/httpd.cpp",
+          "line": 32,
+          "location": "core/src/httpd/httpd.cpp:32",
+          "anchor": "constexpr size_t kMaxBodyBytes"
+        },
+        {
+          "path": "core/src/httpd/httpd.cpp",
+          "line": 208,
+          "location": "core/src/httpd/httpd.cpp:208",
+          "anchor": "HttpReq buildReq("
+        }
+      ],
+      "enforcement": "Reader appends each read then stops once accumulated body reaches the threshold; no generic 413 result is produced here. The final read can cross the threshold and the body can be truncated.",
+      "reuse_limit": "The threshold is neither an exact upfront 1 MiB media rejection nor a complete 4 MiB staged-import limit."
+    },
+    {
+      "name": "tcp_encrypted_frame",
+      "protocol": "Framed TCP transport",
+      "threshold_bytes": 8388608,
+      "read_chunk_bytes": 65536,
+      "references": [
+        {
+          "path": "core/src/mesh/tcp_transport.cpp",
+          "line": 21,
+          "location": "core/src/mesh/tcp_transport.cpp:21",
+          "anchor": "constexpr size_t kMaxFrame"
+        },
+        {
+          "path": "core/src/mesh/tcp_transport.cpp",
+          "line": 181,
+          "location": "core/src/mesh/tcp_transport.cpp:181",
+          "anchor": "bool onReadable()"
+        }
+      ],
+      "enforcement": "Declared frame length above 8 MiB closes the connection after socket reads have already appended data to inbuf_.",
+      "reuse_limit": "This per-frame limit is not a queue/global allocation bound; serialized/base64/crypto overhead must be budgeted separately."
+    },
+    {
+      "name": "secure_channel_pending",
+      "protocol": "SecureChannel pre-handshake pending messages",
+      "max_items": null,
+      "references": [
+        {
+          "path": "core/src/mesh/secure_channel.cpp",
+          "line": 227,
+          "location": "core/src/mesh/secure_channel.cpp:227",
+          "anchor": "void SecureChannel::sendMessage("
+        },
+        {
+          "path": "core/src/mesh/secure_channel.h",
+          "line": 94,
+          "location": "core/src/mesh/secure_channel.h:94",
+          "anchor": "std::deque<std::string> pending_;"
+        }
+      ],
+      "enforcement": "sendMessage appends to pending_ before open with no explicit item/byte admission limit in this path.",
+      "reuse_limit": "Cryptographic authentication is reusable; the unbounded pending path and Core-loop ownership are not an already qualified media transport."
+    }
+  ],
+  "adr_alignment_findings": [
+    {
+      "id": "AF-TIME-FIELD",
+      "severity": "must_correct",
+      "observed_adr": "C06 refers to already introduced stage_deadline_ms.",
+      "existing_source_field": "expires_at_ms",
+      "reference": {
+        "path": "core/src/node/node.cpp",
+        "line": 8658,
+        "location": "core/src/node/node.cpp:8658",
+        "anchor": "json::set(item, \"expires_at_ms\", call.expires_wall_ms);"
+      },
+      "resolution": "ADR now references the existing expires_at_ms together with server_now_ms/remaining_ms; no second deadline API is introduced.",
+      "status": "resolved",
+      "resolution_source": {
+        "document": "docs/en/remediation-contracts-adr.md",
+        "section": "C06"
+      },
+      "note": "Historical finding resolved in the aligned ADR; implementation and qualification remain separate."
+    },
+    {
+      "id": "AF-ID-ENCODING",
+      "severity": "clarify_before_implementation",
+      "fields": [
+        "media_generation",
+        "change_id"
+      ],
+      "finding": "ADR fixes 128 random bits, but unlike operation_id does not explicitly freeze string encoding/length for these new wire IDs.",
+      "resolution": "ADR fixes both media_generation and change_id to 128 secure random bits encoded as 32 lowercase hexadecimal characters.",
+      "status": "resolved",
+      "resolution_source": {
+        "document": "docs/en/remediation-contracts-adr.md",
+        "section": "C07/C08"
+      },
+      "note": "Historical finding resolved in the aligned ADR; implementation and qualification remain separate."
+    },
+    {
+      "id": "AF-REVISION-RELATION",
+      "severity": "clarify_before_implementation",
+      "fields": [
+        "config_generation",
+        "expected_revision"
+      ],
+      "finding": "Both are opaque local revision strings bounded at 256 bytes; exact relationship and scope must be unambiguous for prepare binding versus CAS comparison.",
+      "resolution": "ADR specifies the same at-most-256-byte opaque token for config_generation and expected_revision on one authority complete-configuration snapshot; boot/restore epoch invalidates old tokens. Replicated conflict parents retain LWW identities.",
+      "status": "resolved",
+      "resolution_source": {
+        "document": "docs/en/remediation-contracts-adr.md",
+        "section": "C02"
+      },
+      "note": "Historical finding resolved in the aligned ADR; implementation and qualification remain separate."
+    },
+    {
+      "id": "AF-PANEL-SESSION",
+      "severity": "clarify_before_implementation",
+      "finding": "ADR calls panel Web sessions short-lived but only fixes administrator idle/absolute limits. Panel session duration, capacity/eviction and refresh behavior need one owner-defined contract before T15/T31 depend on it.",
+      "resolution": "ADR fixes identity-bound panel sessions to 30-minute interactive idle/8-hour absolute lifetime and capacity 128, memory-only; no background refresh; restart/revocation/observed credential version changes invalidate; renewal requires fresh identity bootstrap.",
+      "status": "resolved",
+      "resolution_source": {
+        "document": "docs/en/remediation-contracts-adr.md",
+        "section": "C05"
+      },
+      "note": "Historical finding resolved in the aligned ADR; implementation and qualification remain separate."
+    }
+  ]
+}

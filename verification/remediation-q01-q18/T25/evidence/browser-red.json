@@ -1,0 +1,53 @@
+{
+  "phase": "red",
+  "source_sha256": "50834004c39680a1649f831de8af0df7c5e5d90842ec6163afaf224c51656978",
+  "case_sha256": "3bcf026f917d757cb4187392e117eea6fb2d552bee9112b2b29cf9e0032f929d",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T15:17:27.674Z",
+  "results": [
+    {
+      "id": "T25-01",
+      "status": "FAIL",
+      "message": "Failed save closed the complex rule editor"
+    },
+    {
+      "id": "T25-02",
+      "status": "FAIL",
+      "message": "Repeated Save submitted the same form more than once"
+    },
+    {
+      "id": "T25-03",
+      "status": "FAIL",
+      "message": "Expired authorization retained the plaintext secret"
+    },
+    {
+      "id": "T25-04",
+      "status": "FAIL",
+      "message": "Old save refreshed configuration underneath the new editor"
+    },
+    {
+      "id": "synchronous validation retains the editor without a request",
+      "status": "PASS"
+    },
+    {
+      "id": "notice API failure retains its dedicated editor",
+      "status": "FAIL",
+      "message": "Notice failure lost its input"
+    },
+    {
+      "id": "retrying a failed preset does not duplicate the draft",
+      "status": "FAIL",
+      "message": "Failed preset retry duplicated the new row"
+    },
+    {
+      "id": "unknown secret config outcome does not delete a possibly live credential",
+      "status": "FAIL",
+      "message": "Unknown commit removed the staged credential"
+    },
+    {
+      "id": "native timeout and late success settle the save once",
+      "status": "FAIL",
+      "message": "Save request lacks the native deadline"
+    }
+  ]
+}

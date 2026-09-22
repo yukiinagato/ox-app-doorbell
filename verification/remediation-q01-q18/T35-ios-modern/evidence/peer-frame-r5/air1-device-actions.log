@@ -1,0 +1,165 @@
+mkdir -p /private/var/containers/Bundle/Application/F1545678-1234-4234-8234-123456789ABC/stage /var/mobile/Library/DoorbellT15UIKit; chown mobile:mobile /var/mobile/Library/DoorbellT15UIKit; rm -f /var/mobile/Library/DoorbellT15UIKit/*.json /var/mobile/Library/DoorbellT15UIKit/*.png
+
+exit=0
+rm -rf /private/var/containers/Bundle/Application/F1545678-1234-4234-8234-123456789ABC/DoorbellIOS9.app; mv /private/var/containers/Bundle/Application/F1545678-1234-4234-8234-123456789ABC/stage/DoorbellIOS9.app /private/var/containers/Bundle/Application/F1545678-1234-4234-8234-123456789ABC/DoorbellIOS9.app; rmdir /private/var/containers/Bundle/Application/F1545678-1234-4234-8234-123456789ABC/stage; chmod 755 /var/mobile/Library/DoorbellT15UIKit/register; chown -R mobile:mobile /private/var/containers/Bundle/Application/F1545678-1234-4234-8234-123456789ABC; /var/mobile/Library/DoorbellT15UIKit/register register /private/var/containers/Bundle/Application/F1545678-1234-4234-8234-123456789ABC/DoorbellIOS9.app
+application_registered=true
+
+exit=0
+/var/mobile/Library/DoorbellT15UIKit/register inspect /private/var/containers/Bundle/Application/F1545678-1234-4234-8234-123456789ABC/DoorbellIOS9.app/Info.plist; /binpack/usr/local/bin/lsdtrip.arm64 launch jp.ox.doorbell.t15uitest
+{
+  "CFBundleVersion" : "3",
+  "CFBundleShortVersionString" : "1.0.0",
+  "CFBundleIdentifier" : "jp.ox.doorbell.t15uitest",
+  "MinimumOSVersion" : "9.0"
+}
+Launched jp.ox.doorbell.t15uitest
+
+exit=0
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do if [ -f /var/mobile/Library/DoorbellT15UIKit/result.json ]; then cat /var/mobile/Library/DoorbellT15UIKit/result.json; exit 0; fi; sleep 2; done; exit 1
+{
+  "checks" : [
+    {
+      "name" : "Production CoreBridge starts in owned empty directory",
+      "pass" : true
+    },
+    {
+      "name" : "Production CoreBridge running",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit encodes controlled image",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Call A starts exactly one request"
+    },
+    {
+      "name" : "Request binds call A",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Request binds revision zero"
+    },
+    {
+      "name" : "Call B owns its successor request",
+      "pass" : true
+    },
+    {
+      "name" : "Expected intercepted production request 0",
+      "pass" : true
+    },
+    {
+      "name" : "Late A cannot display in B",
+      "pass" : true
+    },
+    {
+      "name" : "Late A cannot clear B busy",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Expected intercepted production request 1"
+    },
+    {
+      "name" : "Mismatched owner cannot display",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Current invalid response settles its own busy"
+    },
+    {
+      "name" : "Expected intercepted production request 2",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Call B sequence ten displays an actual UIImage"
+    },
+    {
+      "pass" : true,
+      "name" : "Accepted UIImage is attached to the actual visible UIKit hierarchy"
+    },
+    {
+      "name" : "Expected intercepted production request 3",
+      "pass" : true
+    },
+    {
+      "name" : "Duplicate ten cannot redraw",
+      "pass" : true
+    },
+    {
+      "name" : "Expected intercepted production request 4",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Out-of-order nine cannot replace ten"
+    },
+    {
+      "pass" : true,
+      "name" : "Expected intercepted production request 5"
+    },
+    {
+      "name" : "End clears image and rejects late B delivery",
+      "pass" : true
+    },
+    {
+      "name" : "Owned production CoreBridge stopped",
+      "pass" : true
+    }
+  ],
+  "failed" : 0,
+  "build" : "3",
+  "version" : "1.0.0",
+  "bundle" : "jp.ox.doorbell.t15uitest",
+  "scope" : "Unmodified production CoreBridge and MainViewController; production UIImage delivery on physical UIKit. Only network completions and call snapshot inputs are controlled. No real call\/SOS\/door action.",
+  "source_manifest" : "26fa4534c1e23978b3a045723c61eb9a3119d40f75e87835843a4dd50002792d",
+  "pid" : 1628,
+  "system_version" : "12.5.8"
+}
+exit=0
+ls -l /var/mobile/Library/DoorbellT15UIKit
+total 360
+-rw-r--r--  1 mobile  mobile  15836 Sep 23 03:58 accepted-sequence-ten.json
+-rw-r--r--  1 mobile  mobile  22755 Sep 23 03:58 accepted-sequence-ten.png
+drwxr-xr-x  4 mobile  mobile    128 Sep 23 03:22 core-53DEDC6E-4DEC-426A-AE85-DD7D0DB046F9
+drwxr-xr-x  4 mobile  mobile    128 Sep 23 03:28 core-7EFD6F71-CCDB-4CA9-BB9E-4B23E794BB11
+drwxr-xr-x  4 mobile  mobile    128 Sep 23 03:58 core-FE824962-DE5D-4A77-A60F-8682EA42026D
+-rw-r--r--  1 mobile  mobile  15836 Sep 23 03:58 duplicate-and-nine-rejected.json
+-rw-r--r--  1 mobile  mobile  22755 Sep 23 03:58 duplicate-and-nine-rejected.png
+-rw-r--r--  1 mobile  mobile  15836 Sep 23 03:58 ended-late-eleven-rejected.json
+-rw-r--r--  1 mobile  mobile  19555 Sep 23 03:58 ended-late-eleven-rejected.png
+-rw-r--r--  1 mobile  mobile   2087 Sep 23 03:58 progress.json
+-rwxr-xr-x  1 root    mobile  54752 Sep 23 03:58 register
+-rw-r--r--  1 mobile  mobile   2521 Sep 23 03:58 result.json
+
+exit=0
+/binpack/usr/local/bin/lsdtrip.arm64 launch jp.ox.doorbell
+Launched jp.ox.doorbell
+
+exit=0
+kill 1628 2>/dev/null || true
+
+exit=0
+launchctl list | grep -E "doorbell|Doorbell"; ls -l /var/mobile/Library/DoorbellT15UIKit
+925	0	UIKitApplication:jp.ox.doorbell[0x9f29][63]
+1644	0	jp.ox.doorbell.test-ssh-lan.2223B49B-5EB2-4517-9422-145B07CF0BB5
+-	0	jp.ox.doorbell.test-ssh-lan
+total 360
+-rw-r--r--  1 mobile  mobile  15836 Sep 23 03:58 accepted-sequence-ten.json
+-rw-r--r--  1 mobile  mobile  22755 Sep 23 03:58 accepted-sequence-ten.png
+drwxr-xr-x  4 mobile  mobile    128 Sep 23 03:22 core-53DEDC6E-4DEC-426A-AE85-DD7D0DB046F9
+drwxr-xr-x  4 mobile  mobile    128 Sep 23 03:28 core-7EFD6F71-CCDB-4CA9-BB9E-4B23E794BB11
+drwxr-xr-x  4 mobile  mobile    128 Sep 23 03:58 core-FE824962-DE5D-4A77-A60F-8682EA42026D
+-rw-r--r--  1 mobile  mobile  15836 Sep 23 03:58 duplicate-and-nine-rejected.json
+-rw-r--r--  1 mobile  mobile  22755 Sep 23 03:58 duplicate-and-nine-rejected.png
+-rw-r--r--  1 mobile  mobile  15836 Sep 23 03:58 ended-late-eleven-rejected.json
+-rw-r--r--  1 mobile  mobile  19555 Sep 23 03:58 ended-late-eleven-rejected.png
+-rw-r--r--  1 mobile  mobile   2087 Sep 23 03:58 progress.json
+-rwxr-xr-x  1 root    mobile  54752 Sep 23 03:58 register
+-rw-r--r--  1 mobile  mobile   2521 Sep 23 03:58 result.json
+
+exit=0

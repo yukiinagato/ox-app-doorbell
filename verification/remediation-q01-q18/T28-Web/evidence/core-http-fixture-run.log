@@ -1,0 +1,12 @@
+09-23 02:20:57 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=t28-config-a
+09-23 02:20:57 I [httpd] listening on 18766,[::]:18766
+09-23 02:20:57 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:20:57 I [node] node ef17a5e1 (T28 isolated a) started
+09-23 02:20:57 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=t28-config-b
+09-23 02:20:57 I [httpd] listening on 18767,[::]:18767
+09-23 02:20:57 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:20:57 I [node] node 8d4f97fe (T28 isolated b) started
+Ready: http://127.0.0.1:18766/admin/?lang=en and :18767; production HTTP wildcard listeners, authenticated in-memory mesh only
+Partition edits healed; both production snapshots contain the conflict
+09-23 02:23:26 I [httpd] stopped
+09-23 02:23:27 I [httpd] stopped

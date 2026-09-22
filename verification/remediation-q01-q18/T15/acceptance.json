@@ -1,0 +1,64 @@
+{
+  "task_id": "T15",
+  "status": "VERIFIED_IN_SCOPE",
+  "at": "2026-09-22T18:32:39.063671+00:00",
+  "evidence": {
+    "report.zh.md": "03c30be8a22866508a53f359b192566fd6d01a926ff6f5346c79ade70350edea",
+    "device-uikit-report.zh.md": "ca142a6a7767aaaa9aa611039849fc4d44f097b27bb98883c4f52d8e463e42bc",
+    "evidence/core-final.json": "501c7d1b8206872f896aadb4a6a523a8134036e7d2b5202d646b7c5ed25d6b53",
+    "evidence/web-suite.json": "fffd8481193c504a32749e21d6e1644bd11a78a55f2dd66ee65372880ca1bfb2",
+    "evidence/windows-frame-host.json": "b47bb1168a9e525776b94eb107bb13fa1d9705341b54ea335f47aeb055a29cde",
+    "evidence/root-review-final.json": "ab68fba5f962abeee19dabca48202b437e05dd5d905d59628a5a21e0a2df0744",
+    "evidence/device-uikit/qualification.json": "bb138a077db720a57df8a99761ad3e2b1f41992f10364777dd3bcdbd4360fbe5"
+  },
+  "acceptance": [
+    {
+      "id": "T15-01",
+      "result": "PASS",
+      "evidence": [
+        "evidence/core-final.json",
+        "evidence/device-uikit/qualification.json"
+      ],
+      "behavior": "Late call A cannot upload/display in call B or clear its busy request."
+    },
+    {
+      "id": "T15-02",
+      "result": "PASS",
+      "evidence": [
+        "evidence/core-final.json"
+      ],
+      "behavior": "Another authenticated session cannot acquire the publisher generation or impersonate its owner."
+    },
+    {
+      "id": "T15-03",
+      "result": "PASS",
+      "evidence": [
+        "evidence/core-final.json",
+        "evidence/device-uikit/qualification.json"
+      ],
+      "behavior": "Ended call rejects uploads, cached reads and late image delivery before former TTL."
+    },
+    {
+      "id": "T15-04",
+      "result": "PASS",
+      "evidence": [
+        "evidence/core-final.json",
+        "evidence/device-uikit/qualification.json"
+      ],
+      "behavior": "Duplicate sequence ten and later-arriving sequence nine are rejected; actual production UIImage identity remains unchanged."
+    }
+  ],
+  "ios_final_delta": "Physical Air 1 iOS 12.5.8 build 16H88, independent test bundle 1.0.0 (2), 23/23 actual production UIKit assertions. Unchanged final MainViewController and CoreBridge.",
+  "historical_evidence_preserved": [
+    "evidence/ios-final-qualification.json",
+    "evidence/device-uikit/air1-attempt-r1/"
+  ],
+  "limitations": [
+    "Not full 17-test lifecycle rerun or standard XCTest runner.",
+    "Controlled media network responses and call snapshot boundary; no live media/camera/SIP call or physical action.",
+    "Windows production helper executed; full WPF UI remains untested.",
+    "T16 strict resource/reader/cross-node paths and T31 independent panel provisioning remain separate tasks.",
+    "Frozen T12 Core basis requires final mainline integration build."
+  ],
+  "progress_owner": "root"
+}

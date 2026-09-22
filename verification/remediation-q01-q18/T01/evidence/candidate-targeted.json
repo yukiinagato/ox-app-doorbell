@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "4b3c164a85fd749fe6640e44c4b8b0b0b8fe3124fe4213fb9866e0763e7c91f0",
+  "task_id": "T01",
+  "test_id": "candidate-targeted",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/candidate-source.json",
+  "source_manifest_sha256": "68aa78244213df0b1ebec39fec8eaf2b3e626fcf604e3a5633c56bf67d90514f",
+  "command": [
+    "./build/repair-20260922/doorbell_tests",
+    "--test-case=*runloop manual mode*,httpd: restarts after stop,store: metadata batches roll back atomically on write failure,*time-service offset*,*unregister drains an entered UI callback*,mesh: partitions elect local leaders and heal without event loss or duplication"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T12:58:00.236391+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-targeted.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T12:58:04.550815+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

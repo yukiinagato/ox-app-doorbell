@@ -1,0 +1,13 @@
+AssertionError [ERR_ASSERTION]: a single 503 cannot end a valid leased media session
+
+1 !== 0
+
+    at T11-01 (/Users/ox/Documents/project/app-doorbell/webui/tests/call_heartbeat.test.js:35:12)
+    at async /Users/ox/Documents/project/app-doorbell/webui/tests/call_heartbeat.test.js:89:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

@@ -1,0 +1,36 @@
+{
+  "head": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "files": [
+    {
+      "path": "ios-kiosk/src/Screens/DBDoorScreen.m",
+      "sha256": "26c3359378dc2b414081d89430b42341fc2ef61169299e82b7f3e7979e6b954f"
+    },
+    {
+      "path": "ios-kiosk/src/Screens/DBWidgets.m",
+      "sha256": "fa2e7f5a14caf97af0ffd7aadaef1470135d28ec51ba0a5941d8b61fabbd46eb"
+    },
+    {
+      "path": "ios-kiosk/src/Core/DBSosSlideModel.m",
+      "sha256": "9d042976af7fcf56323e3ca726db78be3a2ab203f8c6f167458e4c37845e54a0"
+    },
+    {
+      "path": "ios-kiosk/src/Core/DBSosSlideModel.h",
+      "sha256": "6690170b96bb0d04662f0c7c9cab86cdd542309f16807e0464d7d1718629a325"
+    }
+  ],
+  "source_semantics": {
+    "onCall": "pressV2(empty purpose); ring_then_purpose opens active chooser",
+    "onPurpose": "purpose_first calls pressV2(selected purpose)",
+    "chooserSkip": "No Core mutation",
+    "chooserCancel": "cancelCallV2(visitor), local hangup, local idle",
+    "onCancel": "ringing => cancelCallV2; in_call => local media hangup only",
+    "emergencyClear": "Core clear only; request admin PIN when current emergency.cancel_requires_password says so"
+  },
+  "baseline_findings": [
+    "Call position depends on announcement, language row, orientation",
+    "Small landscape secondary content can overlap or become unreachable",
+    "SOS has touch drag but no accessibility activation",
+    "Emergency detail incorrectly claims family notified"
+  ],
+  "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-compat/baseline-source"
+}

@@ -1,0 +1,15 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T17:24:04.301256+00:00",
+  "status": "CHANGES_REQUESTED",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-android/source-candidate-r6.json",
+  "source_manifest_sha256": "de545986cd3a23639a4c1336a0f139dfdea5cbeb38abe068aa33868bd3024e30",
+  "findings": [
+    {
+      "id": "R1",
+      "status": "OPEN",
+      "description": "The asynchronous AlertDialog positive callback lacks identity/generation and visible attachment checks. A stale callback after cancel/detach or replacement must not start a countdown or zero-second SOS."
+    }
+  ],
+  "scope": "Independent source and evidence review; target UI qualification is limited to the actual recorded runtime profiles. No physical actuator or deployment validation."
+}

@@ -1,0 +1,31 @@
+{
+  "task_id": "T26",
+  "status": "REVIEW_COMPLETE_R4_IN_PRODUCTION_TEST_SCOPE",
+  "observed_at": "2026-09-22T15:48:57.843779+00:00",
+  "source_manifest": "source-green-r4.json",
+  "source_manifest_sha256": "b2ea794d28ac9581a1ea23d9ac14f44cc49fe4a265f397036f0d2a50fa8c3e8a",
+  "inputs": {
+    "core/src/node/node.cpp": "648c9fcc71543c35573e56b63aec0a82850a3e8155cbd8d95b304cfd8ca93263",
+    "core/src/node/node.h": "c0840ca47c219b5fb62fbfde93791957b13c8b49e14b23c30108edebf84b8b04",
+    "core/src/store/store.cpp": "f8b2ccaa13e109c26c4611e6aaff4e122cce934ceaf510e0d5041be39eeb76ea",
+    "core/src/store/store.h": "6be3d24460012e2ec8b6287834b938a3c18341ed1ad47be3f0de00f506bdbe83",
+    "core/src/store/operation_ledger.cpp": "9cfc69af9a873a8d26210b859a1cefa23e2b0964967d9a484f463a906cc1ec5b",
+    "core/src/capi/doorbell_capi.cpp": "8ba6ab0ec459b903d5aa3be1df20c30ba732e98e78d01d21a7b9d13a95922ea6",
+    "core/include/doorbell/doorbell.h": "5ac62bdd966176848699973a935a0607fc063cfdcb7c3890715b77242845a13f",
+    "core/src/crdt/lww_map.cpp": "012d70f08ea6a8a243e97bfaa4fac375e005503c70583269ba2b10faac671dc4",
+    "core/src/crdt/lww_map.h": "57910440a01c18656f1bd87f338b76877b223f55fa781ed56d2c428664917be5",
+    "core/src/util/runloop.cpp": "fd1efbc28ea434086aac955a3d52ae835aa122d37e6bcf58798f2224f4e93cf1",
+    "core/tests/test_admin_api.cpp": "11a61921ef52f84b45bfb3f12888d2225292344accc77ba1d2fab52aa1bf3eae"
+  },
+  "findings_in_source": {
+    "R1": "Addressed in r2 source by atomic descendant rewrite/tombstone expansion and explicit overlapping-key rejection; awaiting execution.",
+    "R2": "Addressed in r2 source by validating the materialized configuration tree with write-scope restrictions separated from schema validation; awaiting execution.",
+    "R3": "Addressed in r2 source by guards in the new APIs and finite pre-start/post-stop errors; awaiting execution."
+  },
+  "pending": [
+    "Root owns plan closure and final platform integration qualification"
+  ],
+  "pause_condition": "If root reports Codex quota reset, save checkpoint only and stop all actions; root monitors quota.",
+  "final_review": "review.json",
+  "final_review_sha256": "273e40df8d88d06e664ed7c554132d03e91e580db4bb38983c9703c4887d427e"
+}

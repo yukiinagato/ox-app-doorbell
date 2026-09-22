@@ -1,0 +1,25 @@
+{
+  "at": "2026-09-22T17:01:20.072698+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r3.json",
+  "source_manifest_sha256": "c68c67452289b426588c570382a4df5d81d5e088f82a71703ed2ec2c0e32e5be",
+  "binary": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell",
+  "images": {
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell": "UUID: 84C47D61-5530-30AE-A6BB-B4A68D48994A (arm64) /Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/__preview.dylib": "UUID: 6AD9175B-572A-332B-BBB2-F5B8BC9C3DC3 (arm64) /Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/__preview.dylib",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib": "UUID: 0879081E-639B-3ACD-A8D1-70FEFD75EB9F (arm64) /Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/PlugIns/DoorbellTests.xctest/DoorbellTests": "UUID: F022FF8C-471B-31FA-86F8-E2F225DBFBBF (arm64) /Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/PlugIns/DoorbellTests.xctest/DoorbellTests"
+  },
+  "app_version": "0.1.37",
+  "build_number": "38",
+  "target_minimum_os": "12.0",
+  "sip_backend": "stub",
+  "hashes": {
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell": "9d1e5e42104fb7d1557c9e18541fe379c60fad80f5ab699bf8f58c36e4918f24",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/candidate-source-r3/ios/build/core/iphonesimulator/arm64/min-12.0/libdoorbell_all.a": "0848271ee43e8277201aa76bfc1d152a756fb1287e6c342054d028697ae77b79",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/candidate-source-r3/ios/build/core/iphonesimulator/arm64/min-12.0/artifact-manifest.json": "b07efb4af19a1db5bd35ba2ea4149a070d2ec5409ac37cd4bb39edbb5156eded",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/__preview.dylib": "fea0e87885d93f3bb51115fd0c1358e73211c630391de314d5f522390c29c6ef",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib": "6c29398d51a28d332a6a6565f9abe84c631d940fc6688f938698cf6198c7a9e3",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/xcode-r3/Build/Products/Debug-iphonesimulator/Doorbell.app/PlugIns/DoorbellTests.xctest/DoorbellTests": "ab794ccac90c1d585a7c945107124d2f658f508fe659548830497756c8fadeb0"
+  },
+  "scope": "completed build only; no runtime launch or device installation; T12 frozen Core plus T35 r3"
+}

@@ -1,0 +1,13 @@
+{
+  "production_inputs_unchanged_from_r3": {
+    "ios/Doorbell/CallRevisionLifecycle.swift": "75bb01e65dc24d0722b90d0b7fcad77de004eee28d5ac0cc6c8e60c7af05dc84",
+    "ios/Doorbell/CoreBridge.swift": "6fa79deaaa1f8e83d11837769973374074f95122949f7e2a9c8ad5b7666b85f6",
+    "ios/Doorbell/DoorbellClock.swift": "a2da2e566099c39fa9dabbc6fb444f4ed9801cf8d09795995be1460fc4c03229",
+    "ios/Doorbell/MainViewController.swift": "f4ff19560df55918f0d545623c15a5ee6598a6cf56213e27c74515de2e1c3add",
+    "ios/DoorbellTV/TVMainViewController.swift": "4eba1f09256e396733f32d011a9d4b222b8dead7b1855741d72a72f7b8296278"
+  },
+  "ios9_build": "ios9-arm64-r3",
+  "tvos_build": "tvos-build-r3",
+  "r4_only_change": "Old queued timer test compares against the actual post-resume view because a newly published Core generation can legitimately retire the view. The deterministic same-generation foreground test is unchanged.",
+  "final_additional_change": "Foundation-only compatibility host test adopts new CallTiming API; not an iOS app build input."
+}

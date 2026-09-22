@@ -189,6 +189,12 @@ DB_API void db_core_set_visitor_lang(db_core* c, const char* door, const char* l
  * db_core_verify_admin_password (its lockout counters must serialize). Call those off the UI
  * thread, or accept that they can take as long as the loop's current task.
  *
+ * Runtime active_calls use Core-corrected server_now_ms/expires_at_ms and remaining_ms, with
+ * recovery_required/recovery_eligible/recovery_remaining_ms. Root and calls share an opaque
+ * snapshot_generation. Root snapshot_age_ms is monotonic cache age, or -1 if unknown. Subtract
+ * age from a new duration once; repeated generations never restart a client timer. Missing
+ * fields or zero duration require checking with Core, not OS-wall-time expiry or UI cancellation.
+ * Discard timer anchors on foreground/restart. Do not persist monotonic absolute timestamps.
  * Return a JSON snapshot of nodes, leaders, SIP state, and runtime state. Release with db_free. */
 DB_API char* db_core_status_json(db_core* c);
 
@@ -244,7 +250,7 @@ DB_API char* db_core_config_json(db_core* c);
  * db_core_config_batch_json applies up to 256 operations as one atomic commit. ops_json is
  * either the array of operations or the {"ops":[...]} envelope the HTTP endpoint takes; each
  * entry is {"op":"set","key":"…","value":<json>} or {"op":"delete","key":"…"}. Returns
- *   {"ok":true,"n":3,"revision":"<hlc>","hlc":"<hlc>","warnings":[…]}
+ *   {"ok":true,"n":3,"revision":"<opaque local revision>","hlc":"<hlc>","warnings":[…]}
  * or {"ok":false,"err":"…"} where err is one of no ops, too many ops, bad op, bad op or key,
  * duplicate key, set without value, config_persistence_failed, or a validation message. Nothing
  * is written unless every operation validates. Release the result with db_free.
@@ -258,6 +264,27 @@ DB_API char* db_core_config_json(db_core* c);
 DB_API int db_core_set_config_json(db_core* c, const char* key, const char* value_json);
 DB_API char* db_core_last_write_warnings_json(db_core* c);
 DB_API char* db_core_config_batch_json(db_core* c, const char* ops_json);
+
+/* Version 2 configuration reads return {schema_version:2,revision,config}; the snapshot omits
+ * administrator password digests. Commit requires {schema_version:2,expected_revision,ops}.
+ * A stale node-local revision returns config_conflict without any write. Object patches preserve
+ * unknown fields; explicit delete operations remove fields. Both results are owned; use db_free.
+ * Existing batch calls may supply expected_revision for the same atomic compare-and-commit.
+ * The revision is opaque and invalidated at restart/reset; hlc remains the legacy batch field. */
+DB_API char* db_core_config_snapshot_json_v2(db_core* c);
+DB_API char* db_core_config_commit_json_v2(db_core* c, const char* request_json);
+/* Import operations stage/preflight/commit/cancel/query require an active administrator HTTP session
+ * and its CSRF value on every call. Stage tokens alone grant no authority. Request schema is 2;
+ * stage accepts {schema_version,expected_revision,document:{schema_version:2,config}}. Other
+ * operations require {schema_version,stage_token,digest}; commit/query also require a random 128-bit
+ * lowercase hex operation_id. Results are owned; release with db_free. See config-import.md. */
+DB_API char* db_core_config_import_json_v2(db_core* c, const char* action,
+    const char* request_json, const char* admin_session, const char* csrf_token);
+/* Panel identity management shares the HTTP administrator session/CSRF and configuration CAS
+ * boundary. Actions are list/create/update/revoke/rotate. Credentials are provisioned into the
+ * platform secure store separately; requests contain secret references only. Result is owned. */
+DB_API char* db_core_panel_identity_json_v2(db_core* c, const char* action,
+    const char* request_json, const char* admin_session, const char* csrf_token);
 DB_API int db_core_delete_config_key(db_core* c, const char* key);
 
 /* ---- Time service ----
@@ -335,16 +362,27 @@ DB_API int db_core_clear_door_notice(db_core* c, const char* door);
 /* ---- Door unlock ----
  * Trigger the configured unlock action for one door. This is the existing feature-code path: it
  * publishes the same ha_command that a SIP DTMF feature code does, which the MQTT bridge
- * forwards as <base_topic>/cmd/<command>. The command comes from doors.<id>.unlock.command when
- * set, otherwise from the first ha_command in sip.dtmf_actions.
+ * forwards as <base_topic>/cmd/<command>. The command must be explicitly configured at
+ * doors.<id>.unlock.command; unrelated SIP feature codes are never an unlock fallback.
  *
  * Returns 0 when the action was queued, -1 for a null core or empty door, -2 for an unknown
- * door, and -3 when no unlock action is configured anywhere. A shell that shows the control
+ * door, and -3 when that door has no configured unlock action. This legacy one-shot entry point
+ * has no operation ID and must not automatically retry an uncertain result. A shell showing it
  * must say so on -3 rather than reporting a silent success: status.doors.<id>.unlock reports
  * {"configured":bool,"command":"…","show_button":bool,"source":"default"|"admin"} so the button
  * can be hidden before it is ever pressed. show_button defaults to configured and an
  * administrator may force either answer through doors.<id>.unlock.show_button. */
 DB_API int db_core_open_door(db_core* c, const char* door);
+
+/* Durable operation JSON v2. Call on a worker (bounded at four seconds), never a UI or Core
+ * callback thread. Prepare accepts {schema_version:2,action,door?,parameters:{},request_id?}.
+ * Execute/query also require operation_id and authority_node from prepare and the same scope.
+ * Returns an owned JSON result (release with db_free), or NULL for null arguments. The native
+ * node's explicit operation grants apply. A handle is not an authorization credential.
+ * dispatched means adapter admission, never proof that a physical door opened. */
+DB_API char* db_core_operation_prepare_json_v2(db_core* c, const char* request_json);
+DB_API char* db_core_operation_execute_json_v2(db_core* c, const char* request_json);
+DB_API char* db_core_operation_query_json_v2(db_core* c, const char* request_json);
 
 /* ---- Appearance and the automatic theme ----
  * The display contract delivered as {"t":"display",...} and reported as status.display carries

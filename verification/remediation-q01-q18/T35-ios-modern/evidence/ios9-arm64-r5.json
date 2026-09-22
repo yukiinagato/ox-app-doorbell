@@ -1,0 +1,55 @@
+{
+  "command": [
+    "env",
+    "IOS9_DERIVED_DATA=/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/ios9-arm64-r5",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/source-r5/ios/scripts/build_ios9_arm64.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r5-final.json",
+  "source_manifest_sha256": "0d2966e13fbad1a6429cd65d1c8022558b41870d2d6c7719ad4134d4705d9ec9",
+  "started_at": "2026-09-22T18:58:58.406394+00:00",
+  "scope": "Production r5 visitor-action identity fix, frozen T12 real-PJSIP Core, unsigned build only.",
+  "exit_code": 0,
+  "finished_at": "2026-09-22T18:59:57.708292+00:00",
+  "apps": [
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/ios9-arm64-r5/Build/Products/Release-iphoneos/DoorbellIOS9.app",
+      "bundle": "jp.ox.doorbell",
+      "version": "0.1.37",
+      "build": "38",
+      "files": {
+        "Assets.car": "d6486a6b85d5b0e02f89ffafdd9582b9873f4bd35467a672483edc8519304a67",
+        "DoorbellIOS9": "fdf20da6cfb90fc91d9e1000daa54227f5ae49fd18e429fb122dde7223a99d21",
+        "Frameworks/libswiftAVFoundation.dylib": "da2c4beb6c37b8d826e4bb2b54eb92bdf5488ac159ba682f02861af0a19a7d50",
+        "Frameworks/libswiftCore.dylib": "8132e34ef4f79c35f9af5cccb915843102fefff5ac33ce22f82ed9ef333894e3",
+        "Frameworks/libswiftCoreAudio.dylib": "4f787101890a3e4dd38efcea877f8b2ebc2c5801a4fb45ee5177f11d6d9d7639",
+        "Frameworks/libswiftCoreFoundation.dylib": "f460a2c8211efbb9ede527556190f628480efae504bd32d52e51d8168ecf45da",
+        "Frameworks/libswiftCoreGraphics.dylib": "80b5d5e27a471125ce68e0a84c0c0aa0e614794620d0698c0f2d9b3a661687dc",
+        "Frameworks/libswiftCoreImage.dylib": "f3745450b98b296bf55c65da15f6b6bb1c1d5e045423e969d4e5f685b80905b1",
+        "Frameworks/libswiftCoreMedia.dylib": "038bc777529cd51dfc8316608e349992445b1e5ba99913609b449dbcb9f5b2c7",
+        "Frameworks/libswiftDarwin.dylib": "175d1daa7f49a1acbf71be891e625ecb4b1c21f4aa132a6f2c9b760ad84237ee",
+        "Frameworks/libswiftDispatch.dylib": "1ef3484264e78f87d5ea9c2e794d3319a12132bc0d5b92f96ffa56d9c83134bf",
+        "Frameworks/libswiftFoundation.dylib": "bf9cfde7a0e8ea88636a5c25928963dc1f86856c26729484748e17b758007d11",
+        "Frameworks/libswiftMetal.dylib": "7fb87d5e86db4d67ec14fae6b7ed3f0cf06fd294174af02d2e608adbc0eddd70",
+        "Frameworks/libswiftObjectiveC.dylib": "03aa571015475068638a6d2bed36449c6fca5b86fde831a1d5123844853e2863",
+        "Frameworks/libswiftQuartzCore.dylib": "acbfdd609d6468d22a2290e2295466d6cfb52dd066606ea80d8aec2b78c9dbfa",
+        "Frameworks/libswiftUIKit.dylib": "72178aeb59bdb33556d9b4794c6e900e6cbb68c5e79b0f4123373177789d6d64",
+        "Frameworks/libswiftos.dylib": "d972f3397d8704efc19bd03ef7578ace76e7557bc755a5294c8ca193c1264d14",
+        "Frameworks/libswiftsimd.dylib": "fa6eb073c9593690d0980c88140148b29dc229b603835401b9a6e03c6ad296d8",
+        "Info.plist": "99f671037200038853b60e1a0fa162a38d0db8a8d081ad26d66cb55a1de5b200",
+        "LaunchScreen.storyboardc/01J-lp-oVM-view-Ze5-6b-2t3.nib": "0505698385aef0c104e4e635acf8866d0ede8b4bdb586d14045f6c11d220e42f",
+        "LaunchScreen.storyboardc/Info.plist": "1f255d5cc53b531e3f29a9406a8df49a958e2bf9443d3e20bd8374f707f7d5c8",
+        "LaunchScreen.storyboardc/UIViewController-01J-lp-oVM.nib": "54f3637f671feba5f19e82ec4f4a7fb448bb3cfc0fb180f089aa571fc8f053e2",
+        "PkgInfo": "82502191c9484b04d685374f9879a0066069c49b8acae7a04b01d38d07e8eca0",
+        "button_click.mp3": "a540b36b2a546e4e195752b0cbb4413b51dc9e5c9c9f6771f8e80bbdd98e9024",
+        "en.lproj/Localizable.strings": "88890e67e7d140e1bcce19ef86afcf2b61f8d847f37f0241b71b0a42724106c0",
+        "indoor_update.mp3": "48eae246a6c9a98bfb85e513a750a810930a78928395e4d5ec541213618bd532",
+        "ja.lproj/Localizable.strings": "77c56ef6b95a216fa0da7741a88971edc142a18010d01d571eb087d3de5c99c3",
+        "outdoor_call_alert.mp3": "eb9050897ae89bd5d098de9aa010e469665b95e2ed775e8354bca0f4e1572b26",
+        "title_display.mp3": "08561d0c13ee726265654566c185c8a26dee5a23b8d06156c30aa37adc7ca97b",
+        "zh.lproj/Localizable.strings": "3fad3d1e56e03e4f66887ee4df1f8b9f9e586bafc5bd115e1a6d8875dc1bd79f",
+        "\u5b66\u6821\u306e\u30c1\u30e3\u30a4\u30e0.mp3": "e9f579c063cc84abd8e042625ce65122411f8cc30154e11dfe03949fa917574b"
+      }
+    }
+  ]
+}

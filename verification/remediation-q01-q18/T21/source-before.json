@@ -1,0 +1,13 @@
+{
+  "observed_at": "2026-09-22T14:28:49.653728+00:00",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "inputs": {
+    "ios/Doorbell/CallRevisionLifecycle.swift": "9c773821e0894e665f7df387731c52b221b035f2ede8f7b59f2c13861adecace",
+    "ios/Doorbell/CoreBridge.swift": "6caa9bae6c524e3322fa2d9856f2835e34c39aac0806ec8d190b5775cd6168c8",
+    "ios/Doorbell/DoorbellClock.swift": "a2da2e566099c39fa9dabbc6fb444f4ed9801cf8d09795995be1460fc4c03229",
+    "ios/Doorbell/MainViewController.swift": "8bb5be087fe0786090f16624220e692408d8a76f9a6a9a9167b2edc1463ec66e",
+    "ios/DoorbellTests/ClusterAndClockTests.swift": "f33eb47dc3deb0d3bd4af66b145ec0fa91d52126c5896019931b31cbda5e3c3f",
+    "ios/DoorbellTV/TVMainViewController.swift": "4eba1f09256e396733f32d011a9d4b222b8dead7b1855741d72a72f7b8296278"
+  }
+}

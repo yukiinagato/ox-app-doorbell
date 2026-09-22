@@ -1,0 +1,39 @@
+09-23 00:55:18 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:31556
+09-23 00:55:18 I [node] created the missing door entry doors.d_front for this door station
+09-23 00:55:18 I [httpd] listening on 20873,[::]:20873
+09-23 00:55:18 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:18 I [node] node f5ce47b9 (admin-test) started
+09-23 00:55:18 I [node] initialized the cluster administrator password
+09-23 00:55:20 E [node] refused unsafe programmatic config write: media_sources (plaintext secret field media_sources.front.streams.h264.authorization is forbidden; store a secret_ref instead)
+09-23 00:55:20 E [node] refused unsafe programmatic config write: media_sources (credentials in URLs are forbidden at media_sources.front.streams.snapshot.url; use secret_ref)
+09-23 00:55:20 E [node] refused unsafe programmatic config write: custom.integration (plaintext secret field custom.integration.foo_token is forbidden; store a secret_ref instead)
+09-23 00:55:20 E [node] refused unsafe programmatic config write: custom.integration.credential_ref (invalid secret reference at custom.integration.credential_ref)
+09-23 00:55:20 E [node] refused unsafe programmatic config write: custom.integration.basic_auth (plaintext secret field custom.integration.basic_auth is forbidden; store a secret_ref instead)
+09-23 00:55:20 E [node] refused unsafe programmatic config write: custom.fragment (credentials in URLs are forbidden at custom.fragment; use secret_ref)
+09-23 00:55:20 E [node] refused unsafe programmatic config write: devices (the devices container is read-only; write one device or semantic element leaf)
+09-23 00:55:20 E [node] refused unsafe programmatic config write: web_push.subscriptions.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (Web Push subscriptions require a sealed schema version 2 record)
+09-23 00:55:23 I [httpd] stopped
+09-23 00:55:23 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:26684
+09-23 00:55:23 I [httpd] listening on 23680,[::]:23680
+09-23 00:55:23 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:23 I [node] node bbe0139f (panel-rotation-durability) started
+09-23 00:55:23 I [node] initialized the cluster administrator password
+09-23 00:55:23 E [node] config persistence failed; retaining the last-known-good state
+09-23 00:55:25 I [httpd] stopped
+09-23 00:55:25 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:29885
+09-23 00:55:25 I [httpd] listening on 23906,[::]:23906
+09-23 00:55:25 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:25 I [node] node d630928c (panel-primary) started
+09-23 00:55:25 I [node] initialized the cluster administrator password
+09-23 00:55:25 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:27855
+09-23 00:55:25 I [httpd] listening on 25703,[::]:25703
+09-23 00:55:25 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:25 I [node] node c4b252fe (panel-failover) started
+09-23 00:55:27 I [httpd] stopped
+09-23 00:55:29 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   3 |   3 passed | 0 failed | 449 skipped
+[doctest] assertions: 558 | 558 passed | 0 failed |
+[doctest] Status: SUCCESS!

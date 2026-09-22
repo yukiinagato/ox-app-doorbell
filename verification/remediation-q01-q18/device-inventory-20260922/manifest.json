@@ -1,0 +1,12 @@
+{
+  "mode": "read_only_inventory",
+  "status": "COMPLETE_IN_SCOPE",
+  "task_status_mutated": false,
+  "physical_qualification_claimed": false,
+  "files": {
+    "report.md": "31fcc2745fccdd7ce380bb23cec9243b4cbd5dbb0183a859718395dae30658a8",
+    "inventory.json": "c65bf88b24c05867e88caf1be1dd76fc4cb0a79c294d5a7130d96cd4f41014e7",
+    "connection-checks.json": "a9116752a20388f068a07cf0860e77dfb32c479fa5a93f8d31249277909356a0",
+    "collect_readonly.py": "75533ffd3442a7910f1d281d63e8c581ccdcb2cc2c715e3462b177176fbfe74e"
+  }
+}

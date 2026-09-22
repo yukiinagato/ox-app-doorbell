@@ -1,0 +1,13 @@
+== configure ios5-armv7-pjsip-off (build id: remediation-t29-r3) ==
+CMake Error at cmake/ios5-armv7.cmake:24 (message):
+  iOS 5 armv7 libc++ toolchain not found at
+  /Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/ios5-r3-source/tools/toolchain/ios5-armv7
+Call Stack (most recent call first):
+  /opt/homebrew/share/cmake/Modules/CMakeDetermineSystem.cmake:152 (include)
+  CMakeLists.txt:2 (project)
+
+
+CMake Error: CMake was unable to find a build program corresponding to "Unix Makefiles".  CMAKE_MAKE_PROGRAM is not set.  You probably need to select a different build tool.
+CMake Error: CMAKE_C_COMPILER not set, after EnableLanguage
+CMake Error: CMAKE_CXX_COMPILER not set, after EnableLanguage
+-- Configuring incomplete, errors occurred!

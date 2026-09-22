@@ -1,0 +1,31 @@
+{
+  "recorded_at": "2026-09-22T18:11:37.685687+00:00",
+  "source_manifest_sha256": "156362c92f10c47b9da7d8148a4a336846ca5011415465a1cbe3fceeb2b09418",
+  "platform": "Darwin arm64",
+  "toolchain": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.5.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin",
+  "binary": {
+    "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-crash-20260923/normal-r1/doorbell_tests",
+    "sha256": "2fe6a6d907b43690d2be40554d0d27ded19063f543b79c3e227f9d57031d60f5"
+  },
+  "sip_backend": "stub",
+  "signing": "host unsigned",
+  "sanitizer": "None; task covers deterministic process crash atomicity",
+  "build_inputs": [
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-crash-20260923/normal-r1/CMakeCache.txt",
+      "sha256": "54bb6bd32d5e33cee7a9e9f985bee5b309942a401a40475027351f0b361488eb"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-crash-20260923/normal-r1/CMakeFiles/doorbell_core.dir/flags.make",
+      "sha256": "a82d502d022167bf398978b6c90f2d32e567a46d1e71b69219d14548974112a6"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-crash-20260923/normal-r1/CMakeFiles/doorbell_tests.dir/flags.make",
+      "sha256": "e16c26ad13a954fad9526e9ba9ef5ab84f3717890478b90b7b92de3bff6cd4c2"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-crash-20260923/normal-r1/CMakeFiles/doorbell_tests.dir/link.txt",
+      "sha256": "146a688efc37fef56f33c0fddaabc674f8ef5719d4e6cc8c34c719188c06753f"
+    }
+  ]
+}

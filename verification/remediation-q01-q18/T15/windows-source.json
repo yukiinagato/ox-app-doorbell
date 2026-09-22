@@ -1,0 +1,13 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "b99539654fb8cd7795aebff38b14ffd2dfa57a78288117d62edba16d9433790e",
+  "recorded_at": "2026-09-22T15:50:36.925500+00:00",
+  "inputs": {
+    "win/DoorbellApp/Core/CallTiming.cs": "a3ee7ad6489167be490735eb2d829f03d6e4884f9785f6ab476b3dae0898aca5",
+    "win/DoorbellApp/Core/PeerFrameGate.cs": "67aadedd395a0b4e00bbfae44514198b342937fd3de66f00cafef821d9b4927f",
+    "win/DoorbellApp/MainWindow.xaml.cs": "0e6ae9cf2e56c466e41e3b5303b5cea30b28f5995d0297c61274c56d25d2c812",
+    "win/tests/PeerFrameGateTests.cs": "51520fa70512ddbce97180d5394339d18d823222b111457946db5edfaac7a179",
+    "win/DoorbellApp/DoorbellApp.csproj": "e064fef07f36ccac100663a2da0904db7670b372a4fa295c91468f29ad6c2460"
+  }
+}

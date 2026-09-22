@@ -1,0 +1,89 @@
+09-22 23:46:30 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:26075
+09-22 23:46:30 I [httpd] listening on 25494,[::]:25494
+09-22 23:46:30 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:46:30 I [node] node af43c99a (credential-durability) started
+09-22 23:46:30 E [node] config persistence failed; retaining the last-known-good state
+09-22 23:46:30 W [node] administrator password update was not committed
+09-22 23:46:30 I [node] initialized the cluster administrator password
+09-22 23:46:32 I [httpd] stopped
+09-22 23:46:32 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:27772
+09-22 23:46:32 I [httpd] listening on 27579,[::]:27579
+09-22 23:46:32 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:46:32 I [node] node 9ee5207f (doorbell) started
+09-22 23:46:32 I [node] initialized the cluster administrator password
+09-22 23:46:34 I [httpd] stopped
+09-22 23:46:34 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=session-a:1
+09-22 23:46:34 I [httpd] listening on 31641,[::]:31641
+09-22 23:46:34 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:46:34 I [node] node 51c5a0ec (session-a) started
+09-22 23:46:34 I [node] initialized the cluster administrator password
+09-22 23:46:34 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=session-b:1
+09-22 23:46:34 I [httpd] listening on 30354,[::]:30354
+09-22 23:46:34 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:46:34 I [node] node 2ee73d5c (session-b) started
+09-22 23:46:36 I [httpd] stopped
+09-22 23:46:38 I [httpd] stopped
+09-22 23:46:38 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:21553
+09-22 23:46:38 I [httpd] listening on 29343,[::]:29343
+09-22 23:46:38 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:46:38 I [node] node a2b626b9 (doorbell) started
+09-22 23:46:38 I [node] initialized the cluster administrator password
+09-22 23:46:38 E [node] config persistence failed; retaining the last-known-good state
+09-22 23:46:38 W [node] administrator password update was not committed
+09-22 23:46:38 W [node] administrator password update was not committed
+09-22 23:46:40 I [httpd] stopped
+09-22 23:46:40 I [httpd] listening on 28969
+09-22 23:46:45 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:46:46 I [httpd] stopped
+09-22 23:46:46 I [httpd] listening on 31083
+09-22 23:46:51 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:46:52 I [httpd] stopped
+09-22 23:46:52 I [httpd] listening on 30351
+09-22 23:46:57 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:46:58 I [httpd] stopped
+09-22 23:46:58 I [httpd] listening on 30556
+09-22 23:47:03 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:47:04 I [httpd] stopped
+09-22 23:47:04 I [httpd] listening on 24815
+09-22 23:47:09 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:47:10 I [httpd] stopped
+09-22 23:47:10 I [httpd] listening on 30301
+09-22 23:47:15 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:47:16 I [httpd] stopped
+09-22 23:47:16 I [httpd] listening on 30635
+09-22 23:47:22 I [httpd] stopped
+09-22 23:47:22 I [httpd] listening on 24708
+09-22 23:47:24 I [httpd] stopped
+09-22 23:47:24 I [httpd] listening on 27951
+09-22 23:47:26 I [httpd] stopped
+09-22 23:47:26 I [httpd] listening on 30669
+09-22 23:47:28 I [httpd] stopped
+09-22 23:47:28 I [httpd] listening on 23601,[::]:23601
+09-22 23:47:30 I [httpd] stopped
+09-22 23:47:30 I [httpd] listening on 27148,[::]:27148
+09-22 23:47:32 I [httpd] stopped
+09-22 23:47:32 I [httpd] listening on 21398,[::]:21398
+09-22 23:47:34 I [httpd] stopped
+09-22 23:47:35 I [httpd] listening on 24692,[::]:24692
+09-22 23:47:37 I [httpd] stopped
+09-22 23:47:37 I [httpd] listening on 30972,[::]:30972
+09-22 23:47:39 I [httpd] stopped
+09-22 23:47:39 I [httpd] listening on 26111,[::]:26111
+09-22 23:47:41 I [httpd] stopped
+09-22 23:47:41 I [httpd] listening on 28778
+09-22 23:47:43 I [httpd] stopped
+09-22 23:47:43 I [httpd] listening on 21298,[::]:21298
+09-22 23:47:45 I [httpd] stopped
+09-22 23:47:45 W [httpd] civetweb: cannot bind to IPv6 [::]:30981: 48 (Address already in use)
+09-22 23:47:45 W [httpd] civetweb: Failed to setup server ports
+09-22 23:47:45 I [httpd] listening on 30981
+09-22 23:47:47 I [httpd] stopped
+09-22 23:47:47 I [httpd] listening on 21384,[::]:21384
+09-22 23:47:47 I [httpd] suppressed 3 repeated civetweb messages
+09-22 23:47:49 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:  23 |  23 passed | 0 failed | 413 skipped
+[doctest] assertions: 693 | 693 passed | 0 failed |
+[doctest] Status: SUCCESS!

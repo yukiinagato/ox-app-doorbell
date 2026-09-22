@@ -1,0 +1,8 @@
+{
+  "recorded_at": "2026-09-22T14:44:31.534663+00:00",
+  "sources": {
+    "webui/panel/call.html": "0424a27b3c52335fcbe7b1c293f28c5ea9b2d65be11fbb1805c0bef30a1605c6",
+    "webui/tests/call_page_fixture.js": "6cec4c3d396a75f2e6dab53864075845c2cd867f154484cd2b22faa13cf2d51f",
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc"
+  }
+}

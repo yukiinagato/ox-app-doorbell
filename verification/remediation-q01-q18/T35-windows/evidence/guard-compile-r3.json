@@ -1,0 +1,21 @@
+{
+  "started_at": "2026-09-22T18:09:55.370472+00:00",
+  "finished_at": "2026-09-22T18:09:55.454165+00:00",
+  "command": [
+    "mcs",
+    "-sdk:4.8",
+    "-langversion:7.2",
+    "-out:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/VisitorActionGuardTests-r3.exe",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r3/win/DoorbellApp/Ui/VisitorActionGuard.cs",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r3/win/tests/VisitorActionGuardTests.cs"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "exit_code": 0,
+  "source_manifest_sha256": "3d8b165108885f55e030f8f9625de7007b9274a9f09c7ae425417fc27e9165df",
+  "platform": "macOS arm64 / Mono",
+  "sip_backend": "not linked",
+  "signing": "test-only unsigned",
+  "scope": "Compile actual production guard with its host behavioral tests; no WPF runtime.",
+  "observed_result": "PASS",
+  "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

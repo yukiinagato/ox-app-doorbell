@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.CrashLoopStoreTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.042">
+  <properties/>
+  <testcase name="packageReplacementDoesNotCountAsCrash" classname="jp.ox.doorbell.CrashLoopStoreTest" time="0.004"/>
+  <testcase name="oneProcessCanContributeOnlyOneCrashRecord" classname="jp.ox.doorbell.CrashLoopStoreTest" time="0.009"/>
+  <testcase name="openSessionDetectsNativeOrLmkStyleExit" classname="jp.ox.doorbell.CrashLoopStoreTest" time="0.008"/>
+  <testcase name="stableFiveMinuteSessionClearsCrashLoop" classname="jp.ox.doorbell.CrashLoopStoreTest" time="0.012"/>
+  <testcase name="threeCrashesKeepDiagnosticsWithoutDisablingMedia" classname="jp.ox.doorbell.CrashLoopStoreTest" time="0.004"/>
+  <testcase name="generationAndBoundedExitReasonSurviveReload" classname="jp.ox.doorbell.CrashLoopStoreTest" time="0.005"/>
+  <testcase name="recoveryBackoffIsBoundedAndExact" classname="jp.ox.doorbell.CrashLoopStoreTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

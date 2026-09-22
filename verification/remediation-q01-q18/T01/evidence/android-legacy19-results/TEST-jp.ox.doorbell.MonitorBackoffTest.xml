@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.MonitorBackoffTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-09-22T12:59:05" hostname="MacBookPro.local" time="0.001">
+  <properties/>
+  <testcase name="aDeadDialogDoublesTheWaitUpToTheCap" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.001"/>
+  <testcase name="aDoorWithNoAudioIsNeverRetried" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.0"/>
+  <testcase name="aFreshBackoffAllowsTheFirstAttemptImmediately" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.0"/>
+  <testcase name="theToggleDoesNotWipeAnAccumulatedDelay" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.0"/>
+  <testcase name="theStormIsBoundedInsteadOfUnbounded" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.0"/>
+  <testcase name="nothingIsRetriedWhileTheToggleIsOff" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.0"/>
+  <testcase name="aDialogCountsAsAliveWhenEitherDirectionCarriedMedia" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.0"/>
+  <testcase name="theWaitIsMeasuredFromWhenTheDialogFailed" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.0"/>
+  <testcase name="aRefusedDialogIsTreatedLikeADeadOne" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.0"/>
+  <testcase name="mediaFlowingClearsTheBackoff" classname="jp.ox.doorbell.MonitorBackoffTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

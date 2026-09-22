@@ -1,0 +1,26 @@
+{
+  "command": [
+    "xcodebuild",
+    "-project",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-r5-device-uikit/source/ios/Doorbell.xcodeproj",
+    "-scheme",
+    "DoorbellIOS9",
+    "-configuration",
+    "Debug",
+    "-sdk",
+    "iphoneos",
+    "-destination",
+    "generic/platform=iOS",
+    "-derivedDataPath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-r5-device-uikit/xcode",
+    "ARCHS=arm64",
+    "ONLY_ACTIVE_ARCH=YES",
+    "CODE_SIGNING_ALLOWED=NO",
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG IOS9_COMPAT",
+    "build"
+  ],
+  "source_manifest_sha256": "c4dbeeb2811593492d12999634e363d58f948a42c6177c0fe346d53ac51755c5",
+  "started_at": "2026-09-22T18:56:16.017103+00:00",
+  "exit_code": 0,
+  "finished_at": "2026-09-22T18:56:26.683028+00:00"
+}

@@ -1,0 +1,52 @@
+{
+  "at": "2026-09-22T16:36:42.486906+00:00",
+  "status": "PRESERVED_BEFORE_IMPLEMENTATION",
+  "runtime_screenshot_and_AX_tree": "BLOCKED_ENV: Mac locked; no fabricated image or semantic tree",
+  "inputs": [
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "sha256": "9e8037cd358d8127621b47fec763657bbf05b8ce79f66352dffbf2b79d4bcb25",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/baseline/ios/Doorbell/MainViewController.swift"
+    },
+    {
+      "path": "ios/Doorbell/VisitorScreenView.swift",
+      "sha256": "59ef5da43dbd6617b48959925a18261253169fe3dc357a34894e6ca73ec5e7a1",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/baseline/ios/Doorbell/VisitorScreenView.swift"
+    },
+    {
+      "path": "ios/Doorbell/SosSlideControl.swift",
+      "sha256": "7a186d0009e7903c98f796302a261dc0e5b1f82d0d50ba1244afb321bfc6cd12",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/baseline/ios/Doorbell/SosSlideControl.swift"
+    },
+    {
+      "path": "ios/Doorbell/IOSAvailability.swift",
+      "sha256": "6b5e3610c3310114ea38968371010fd220ed639d478c30c52f9e79cf9cc1a096",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/baseline/ios/Doorbell/IOSAvailability.swift"
+    },
+    {
+      "path": "ios/DoorbellTests/VisitorScreenLayoutTests.swift",
+      "sha256": "c28ecfcd5ae92874f36543684f5b6f5323135bd25b495dd1cc3549594c3ea875",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/baseline/ios/DoorbellTests/VisitorScreenLayoutTests.swift"
+    },
+    {
+      "path": "ios/DoorbellTests/CoreBridgeLifecycleTests.swift",
+      "sha256": "cdf68f823c25f8ef093b5b41ff0778b6dad71d0723bce921161fa964f3c8a706",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/baseline/ios/DoorbellTests/CoreBridgeLifecycleTests.swift"
+    },
+    {
+      "path": "ios/Doorbell/Info.plist",
+      "sha256": "8360e5f01a13769cc5e0050114e52caef8e7cf658e37e27efd95e8a5d724f112",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/baseline/ios/Doorbell/Info.plist"
+    },
+    {
+      "path": "ios/Doorbell.xcodeproj/project.pbxproj",
+      "sha256": "8a9975ab0805af3574257ca97ec21aa83a4dcc368e0e94d7e6fd0d5449ddf9be",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/baseline/ios/Doorbell.xcodeproj/project.pbxproj"
+    },
+    {
+      "path": "i18n/strings.yaml",
+      "sha256": "0605bb37261cb76aea2e91bf290010ae9fc521ff5de794205ba5f1a395b54285",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/baseline/i18n/strings.yaml"
+    }
+  ]
+}

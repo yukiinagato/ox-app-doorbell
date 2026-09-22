@@ -1,0 +1,57 @@
+{
+  "phase": "green",
+  "source_sha256": "c79e255147ef018aec84cfcfeb09bb4d8c2e36d37fe00ff860d98aff8d13da4a",
+  "case_sha256": "668877ead3d8610e3911189bd0903b9e92d6956999d5e7a46fc79aeb559f8219",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T16:34:47.585Z",
+  "results": [
+    {
+      "id": "T27-01",
+      "status": "PASS"
+    },
+    {
+      "id": "T27-02",
+      "status": "PASS"
+    },
+    {
+      "id": "T27-03",
+      "status": "PASS"
+    },
+    {
+      "id": "T27-04",
+      "status": "PASS"
+    },
+    {
+      "id": "Login restoration compares the retained base",
+      "status": "PASS"
+    },
+    {
+      "id": "Array edits require a whole-array decision",
+      "status": "PASS"
+    },
+    {
+      "id": "Unselected conflicts retain completed choices",
+      "status": "PASS"
+    },
+    {
+      "id": "Inline settings capture the rendered revision",
+      "status": "PASS"
+    },
+    {
+      "id": "Notice expiry is stamped only by Core",
+      "status": "PASS"
+    },
+    {
+      "id": "Clearing a known field is an explicit delete",
+      "status": "PASS"
+    },
+    {
+      "id": "Semantic reset and edit share one conditional commit",
+      "status": "PASS"
+    },
+    {
+      "id": "Inline login restoration preserves the original base",
+      "status": "PASS"
+    }
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "task_id": "T27",
+  "status": "VERIFIED_IN_SCOPE",
+  "recorded_at": "2026-09-22T16:38:03.189010+00:00",
+  "source_manifest_sha256": "7e74bfc8188686d3c51db1e9a1bb5d728b7f27e8a5fa6efe17e93526c64a26eb",
+  "application_asset_sha256": "c79e255147ef018aec84cfcfeb09bb4d8c2e36d37fe00ff860d98aff8d13da4a",
+  "verification_scope": "Production Admin JS in actual Codex IAB (Chromium) with controlled XHR; Core companions separately use real HTTP/native handlers.",
+  "target_cases": [
+    {
+      "test_id": "T27-01",
+      "status": "PASS",
+      "evidence": "evidence/browser-green.json"
+    },
+    {
+      "test_id": "T27-02",
+      "status": "PASS",
+      "evidence": "evidence/browser-green.json"
+    },
+    {
+      "test_id": "T27-03",
+      "status": "PASS",
+      "evidence": "evidence/browser-green.json"
+    },
+    {
+      "test_id": "T27-04",
+      "status": "PASS",
+      "evidence": "evidence/browser-green.json"
+    }
+  ],
+  "browser_cases": {
+    "passed": 12,
+    "total": 12
+  },
+  "draft_regressions": {
+    "passed": 9,
+    "total": 9
+  },
+  "web_suites": 21,
+  "resource_checks": 2,
+  "core_companion_observed": {
+    "tests": 13,
+    "assertions": 509,
+    "exit_code": 0,
+    "evidence": "evidence/core-companions-green.log"
+  },
+  "artifacts": [
+    {
+      "path": "source-final.json",
+      "sha256": "7e74bfc8188686d3c51db1e9a1bb5d728b7f27e8a5fa6efe17e93526c64a26eb"
+    },
+    {
+      "path": "evidence/browser-red.json",
+      "sha256": "b58fc59614e11b89adb7ad7643f44129fd13652af752d8172e7a1c9c04977341"
+    },
+    {
+      "path": "evidence/browser-green.json",
+      "sha256": "d715b187143092a10b31addd3e1bde01a571cbbd7d737389cc733131d953fbef"
+    },
+    {
+      "path": "evidence/draft-final-green.json",
+      "sha256": "978109e34133436ca7e835dc7c968c42ffaa162f0446229c3b0567a113740cbe"
+    },
+    {
+      "path": "evidence/web-regression-final.json",
+      "sha256": "74ee088feb4670c683c3ac3d89076b2442196131198934315f1a3f2af4fb5790"
+    },
+    {
+      "path": "evidence/web-regression-final.log",
+      "sha256": "62c7a09dac6ff1c49bf92e5450e7aace978eb348855615b99736f3c3e1a2eb0f"
+    },
+    {
+      "path": "core-source-green.json",
+      "sha256": "fa033ca5f5f306b80b20ab195fd5b5d443dd95a204a21fe9496fff8e3e17c7aa"
+    },
+    {
+      "path": "evidence/core-companions-green.log",
+      "sha256": "5d42c70baa364c64f6d1c37e6d94f585d11dd77aa24e9ab5d1d5432e1fb22024"
+    }
+  ],
+  "limitations": [
+    "Controlled XHR models concurrent edits; this is not two deployed devices or real actuator hardware.",
+    "Actual IAB Chromium behavior does not qualify Safari/legacy iOS hardware.",
+    "Local CAS does not implement T28 durable cross-node conflicts.",
+    "Current import caller is conditional, but T29/T30 staged import remains pending.",
+    "T25 original green artifact was accidentally overwritten; genuine revalidation with original source/cases is separately timestamped and root owns the audit correction."
+  ],
+  "review": "evidence/review.json"
+}

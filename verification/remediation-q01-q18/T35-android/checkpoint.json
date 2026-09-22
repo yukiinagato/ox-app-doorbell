@@ -1,0 +1,12 @@
+{
+  "task": "T35-android",
+  "status": "READY_FOR_PARENT_REVIEW_R7",
+  "source": "source-candidate-r7.json",
+  "acceptance": "acceptance.json",
+  "report": "report.zh.md",
+  "ui": "Four actual API35 profiles each 8/8 including three queued SOS R1 regressions; total32. Core stays uncreated.",
+  "build": "modern and legacy19 each386 JVM tests, assemble/lint PASS",
+  "remaining": "Physical/API19 UI, active SOS overlay/clear and final integrated Core build are not qualified.",
+  "pause_rule": "If parent reports quota reset, save and stop.",
+  "recorded_at": "2026-09-22T17:29:30.639917+00:00"
+}

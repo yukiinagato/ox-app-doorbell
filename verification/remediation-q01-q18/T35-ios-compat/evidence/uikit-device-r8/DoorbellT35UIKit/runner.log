@@ -1,0 +1,114 @@
+T35 main entered
+2026-09-23 02:47:35.940 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:36.277 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Disabled purpose absent
+2026-09-23 02:47:36.288 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:47:36.335 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Purpose-first sends the selected purpose once
+2026-09-23 02:47:36.343 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Purpose-first enters ringing
+2026-09-23 02:47:36.938 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:47:36.985 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Visitor cancellation returns idle
+2026-09-23 02:47:37.071 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:37.471 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:47:37.885 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Ring-first sends immediately
+2026-09-23 02:47:38.827 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Actual UIKit skip button dispatched
+2026-09-23 02:47:38.837 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Skip preserves the call
+2026-09-23 02:47:38.846 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:47:38.984 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:39.392 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:47:40.135 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Actual UIKit purpose button dispatched
+2026-09-23 02:47:40.145 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Ring-first purpose updates existing call
+2026-09-23 02:47:40.152 DoorbellT35UIKit[30535:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:47:40.625 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:41.043 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Production UIControl exists
+2026-09-23 02:47:41.133 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Call and cancel share the fixed action area
+2026-09-23 02:47:41.169 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Ringing touch cannot become connected end
+2026-09-23 02:47:41.176 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Connected end remains in the same area
+2026-09-23 02:47:41.764 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Production UIControl exists
+2026-09-23 02:47:41.816 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Fresh connected end works
+2026-09-23 02:47:41.900 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:42.333 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Production UIControl exists
+2026-09-23 02:47:42.368 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Nil visitor ID native SIP call can end
+2026-09-23 02:47:42.500 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Old nil-ID gesture cannot end the next SIP session
+2026-09-23 02:47:42.510 DoorbellT35UIKit[30535:707] T35 T35-02 PASS: Production UIControl exists
+2026-09-23 02:47:42.971 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:43.375 DoorbellT35UIKit[30535:707] T35 T35-03 PASS: Production UIControl exists
+2026-09-23 02:47:43.407 DoorbellT35UIKit[30535:707] T35 T35-03 PASS: Ordinary network failure keeps neutral visitor page
+2026-09-23 02:47:43.919 DoorbellT35UIKit[30535:707] T35 T35-03 PASS: Authoritative SOS event shows emergency layer
+2026-09-23 02:47:44.429 DoorbellT35UIKit[30535:707] T35 T35-03 PASS: Production UIControl exists
+2026-09-23 02:47:44.437 DoorbellT35UIKit[30535:707] T35 T35-03 PASS: Existing SOS clear passes PIN boundary
+2026-09-23 02:47:44.762 DoorbellT35UIKit[30535:707] T35 T35-03 PASS: Accessible activation requires confirmation
+2026-09-23 02:47:45.662 DoorbellT35UIKit[30535:707] T35 T35-03 PASS: Actual UIKit SOS confirmation button dispatched
+2026-09-23 02:47:45.676 DoorbellT35UIKit[30535:707] T35 T35-03 PASS: Confirmed SOS observes countdown
+2026-09-23 02:47:48.110 DoorbellT35UIKit[30535:707] T35 T35-03 PASS: SOS timer delivers once to isolated Core boundary
+2026-09-23 02:47:48.507 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:48.981 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual call remains inside viewport
+2026-09-23 02:47:48.989 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: UIKit hit testing reaches the primary call
+2026-09-23 02:47:48.997 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Actual UIKit font measurement fits long call text
+2026-09-23 02:47:49.520 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:49.614 DoorbellT35UIKit[30535:707] T35 T35-04 FAIL: Large cancel stays fixed and has accessible label
+2026-09-23 02:47:49.623 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:49.668 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual cancellation completes
+2026-09-23 02:47:50.072 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:50.584 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual call remains inside viewport
+2026-09-23 02:47:50.594 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: UIKit hit testing reaches the primary call
+2026-09-23 02:47:50.604 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Actual UIKit font measurement fits long call text
+2026-09-23 02:47:51.142 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:51.222 DoorbellT35UIKit[30535:707] T35 T35-04 FAIL: Large cancel stays fixed and has accessible label
+2026-09-23 02:47:51.229 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:51.269 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual cancellation completes
+2026-09-23 02:47:51.675 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:52.204 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual call remains inside viewport
+2026-09-23 02:47:52.212 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: UIKit hit testing reaches the primary call
+2026-09-23 02:47:52.221 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Actual UIKit font measurement fits long call text
+2026-09-23 02:47:52.838 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:52.986 DoorbellT35UIKit[30535:707] T35 T35-04 FAIL: Large cancel stays fixed and has accessible label
+2026-09-23 02:47:52.993 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:53.033 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual cancellation completes
+2026-09-23 02:47:53.440 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:53.963 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual call remains inside viewport
+2026-09-23 02:47:53.975 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: UIKit hit testing reaches the primary call
+2026-09-23 02:47:53.984 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Actual UIKit font measurement fits long call text
+2026-09-23 02:47:54.521 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:54.644 DoorbellT35UIKit[30535:707] T35 T35-04 FAIL: Large cancel stays fixed and has accessible label
+2026-09-23 02:47:54.655 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:54.694 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual cancellation completes
+2026-09-23 02:47:55.103 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:55.741 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual call remains inside viewport
+2026-09-23 02:47:55.752 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: UIKit hit testing reaches the primary call
+2026-09-23 02:47:55.764 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Actual UIKit font measurement fits long call text
+2026-09-23 02:47:56.687 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:56.801 DoorbellT35UIKit[30535:707] T35 T35-04 FAIL: Large cancel stays fixed and has accessible label
+2026-09-23 02:47:56.812 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:56.864 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual cancellation completes
+2026-09-23 02:47:57.272 DoorbellT35UIKit[30535:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:47:57.802 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual call remains inside viewport
+2026-09-23 02:47:57.812 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: UIKit hit testing reaches the primary call
+2026-09-23 02:47:57.825 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Actual UIKit font measurement fits long call text
+2026-09-23 02:47:58.380 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:58.479 DoorbellT35UIKit[30535:707] T35 T35-04 FAIL: Large cancel stays fixed and has accessible label
+2026-09-23 02:47:58.490 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:47:58.536 DoorbellT35UIKit[30535:707] T35 T35-04 PASS: Large multilingual cancellation completes
+2026-09-23 02:47:58.571 DoorbellT35UIKit[30535:707] T35 COMPLETE: 76 checks, 6 failures

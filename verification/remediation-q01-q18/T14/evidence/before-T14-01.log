@@ -1,0 +1,13 @@
+AssertionError [ERR_ASSERTION]: Idle configuration change must replace the UA
+
+1 !== 2
+
+    at T14-01 (/Users/ox/Documents/project/app-doorbell/webui/tests/call_ua_generation.test.js:41:12)
+    at async /Users/ox/Documents/project/app-doorbell/webui/tests/call_ua_generation.test.js:90:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 2,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

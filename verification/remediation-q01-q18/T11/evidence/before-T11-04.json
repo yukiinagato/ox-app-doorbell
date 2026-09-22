@@ -1,0 +1,17 @@
+{
+  "command": [
+    "node",
+    "webui/tests/call_heartbeat.test.js",
+    "T11-04"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "start": "2026-09-22T14:29:20.362296+00:00",
+  "end": "2026-09-22T14:29:20.443855+00:00",
+  "exit_code": 1,
+  "source_files": {
+    "webui/panel/call.html": "4a6029f179620a8fc5b0e10a2f58dbaf99776f9a4f203aa7a435d4cd46e11fa5",
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/tests/call_heartbeat.test.js": "8108c095e1a6a201847c7458b89ff80ce8846cb420782a81926e67624eecbd7f",
+    "webui/tests/call_page_fixture.js": "6cec4c3d396a75f2e6dab53864075845c2cd867f154484cd2b22faa13cf2d51f"
+  }
+}

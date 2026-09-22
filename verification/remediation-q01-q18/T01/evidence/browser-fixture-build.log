@@ -1,0 +1,7 @@
+In file included from tools/verification/browser_fixture.cpp:6:
+In file included from core/src/node/node.h:14:
+In file included from core/src/events/events.h:16:
+core/src/util/json.h:9:10: fatal error: 'cJSON.h' file not found
+    9 | #include "cJSON.h"
+      |          ^~~~~~~~~
+1 error generated.

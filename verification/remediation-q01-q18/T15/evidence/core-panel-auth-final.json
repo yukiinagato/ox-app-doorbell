@@ -1,0 +1,8 @@
+{
+  "command": [
+    "build/remediation-t15-20260923/green-host/doorbell_tests",
+    "--test-case=admin API: *panel*"
+  ],
+  "exit_code": 0,
+  "duration_s": 11.275593996047974
+}

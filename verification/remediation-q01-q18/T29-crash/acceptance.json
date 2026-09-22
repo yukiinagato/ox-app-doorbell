@@ -1,0 +1,68 @@
+{
+  "recorded_at": "2026-09-22T18:11:37.685687+00:00",
+  "status": "PASS_IN_LOCAL_PERSISTENCE_CRASH_SCOPE",
+  "task_case": "T29-03",
+  "independent_review": "PENDING_PARENT",
+  "source_manifest_sha256": "156362c92f10c47b9da7d8148a4a336846ca5011415465a1cbe3fceeb2b09418",
+  "report_sha256": "f34c5097c3feaaae3b78994895efdbfae0fc94c27451bba68066819840ad6e87",
+  "test_source_sha256": "ab450071994a5cfbfff1ce1e627c69e81c7d1e6bbd8f34ce36511b0e1c0db29b",
+  "result": {
+    "cases": 1,
+    "assertions": 159,
+    "sigkill_barriers": 4
+  },
+  "artifacts": [
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/artifacts-r1.json",
+      "sha256": "2abdd8bb7dfc14e9d98f7f0d0a285b798a9abef98a5528523a24360fba1e2490"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/barrier-results-r1.json",
+      "sha256": "8031b953cdcae6f22e00fabbc7b41187c99027a31eda3f392367293ce0717abc"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/build-r1.json",
+      "sha256": "ccc3ef1715e4fb3f53131979331c0d9ba3a07ca5c0110bdccc743090e5e11e77"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/build-r1.log",
+      "sha256": "aa3c788223f500035765a6176d40bd6bf847e8a0e115b970e165b22286802b66"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/cleanup.json",
+      "sha256": "b48124435d104ffef9e63a350d83737f9109f3f28af47fa696ee3a9a71acb688"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/configure-r1.json",
+      "sha256": "d0355f3cde1e87110efbbc75558de7794f8cec44f5e6c66a457444dfe9513dea"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/configure-r1.log",
+      "sha256": "da877b002f33c69ff9048d3a5ca445d60e6c2e55b744931797c5de91ea7b7e74"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/english-r1.json",
+      "sha256": "7d4fd0b1c9b00a319dd50de62f7080b153972ab3795022b73afc4cd8330e0518"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/english-r1.log",
+      "sha256": "e31b139fc62aa187694c8103481b6e9e3fd40190149c2243857640caccdac6a4"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/normal-r1.json",
+      "sha256": "05262d10c037254953c99a4384708d2d0988885736019383d73d103f79c2fc0b"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/normal-r1.log",
+      "sha256": "135dcced027efac87180e0cc7091a0804431e1540926b48c749d3de66902e4f0"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/whitespace-r1.json",
+      "sha256": "ff9c4cff91d08bf2413471c6f700acb75ca9b8a3098e6f1bb53ca296101dc3fa"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T29-crash/evidence/whitespace-r1.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

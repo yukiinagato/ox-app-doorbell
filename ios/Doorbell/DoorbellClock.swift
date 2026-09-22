@@ -7,7 +7,12 @@ protocol DoorbellClockCore: AnyObject {
     /// False until `db_core_start` has returned successfully. A reading taken before that runs
     /// inline on the caller's thread, beside Core building itself on its own.
     var isRunning: Bool { get }
+    var runningGeneration: UInt64? { get }
     func localTime(wallMs: Int64) -> [String: Any]?
+}
+
+extension DoorbellClockCore {
+    var runningGeneration: UInt64? { return isRunning ? 0 : nil }
 }
 
 extension CoreBridge: DoorbellClockCore {}
@@ -203,6 +208,11 @@ final class DoorbellClockSource {
     private var base: DoorbellClock.Reading?
     private var baseUptime: TimeInterval = 0
     private var refreshing = false
+    private let deliver: (@escaping () -> Void) -> Void
+
+    init(deliver: @escaping (@escaping () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) }) {
+        self.deliver = deliver
+    }
 
     var hasReading: Bool { return base != nil }
 
@@ -228,7 +238,7 @@ final class DoorbellClockSource {
         // thread while Core is still starting. `db_core_local_time_json` is synchronous into
         // Core's run loop, and before that loop is Running it executes the body on the calling
         // thread — here a utility queue, beside `db_core_start` building the node.
-        guard core.isRunning else {
+        guard let generation = core.runningGeneration else {
             waitingForCore = true
             return
         }
@@ -238,9 +248,13 @@ final class DoorbellClockSource {
             let started = ProcessInfo.processInfo.systemUptime
             let fresh = DoorbellClock.read(core)
             let finished = ProcessInfo.processInfo.systemUptime
-            DispatchQueue.main.async {
+            self?.deliver {
                 guard let self = self else { return }
                 self.refreshing = false
+                guard core.runningGeneration == generation else {
+                    self.waitingForCore = true
+                    return
+                }
                 if let fresh = fresh {
                     self.base = fresh
                     // The reading describes the moment Core answered, so the base is timed to the

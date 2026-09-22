@@ -1,0 +1,28 @@
+{
+  "task_id": "T09",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "95b0c5256009eb7fc4f40073c8ee722046c134a1e9bf5083ec39312b4c5a1ea9",
+  "captured_at": "2026-09-22T13:43:56.832499+00:00",
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "arch": "arm64",
+  "node_version": "v25.9.0",
+  "files": {
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/panel/call.html": "93c7c88a2cd2a99b695c0512d83e5f28c777e2a5a1949d98aa25b4e526184177",
+    "webui/tests/admin_logic.test.js": "daeff1201f740706478e0d25f70a380e34e6e735ab84101ce42536d397dd9843",
+    "webui/tests/admin_runtime.test.js": "896764a345523ed229c97def935abe784b01a95aa69e3842e055b783b92f61af",
+    "webui/tests/call_flow.test.js": "d2f03d219363ce9505b3308deb35bb7a3b7e104012fff4d10f0e0a6f7378429e",
+    "webui/tests/call_recovery_controller.test.js": "7ed6f78ba0bd8809294b69bed3771194d129b936a9248ce12da40085dfe9095e",
+    "webui/tests/call_state_controller.test.js": "22a85c1f8b074b61034608d8869b696285c336766c17a4f5929624f326269901",
+    "webui/tests/pairing.test.js": "348a183b700f4832fab2c549771ca3f94fae13b32c00075cd00eb1b1357f60ae",
+    "webui/tests/panel_i18n.test.js": "8b26879ec828d913e868102cec1ffb61969ac8d36fb6194b14d4247ac8041d50",
+    "webui/tests/playback.test.js": "0a8221554f739ac137b9d202fbb4fef37d82e620c1087aa307d356f5b265ec99",
+    "webui/tests/request_deadline.test.js": "b95776ae75014e787be5c18710be68d637de8d78fd46814ea75f149d01f66b82",
+    "webui/tests/runtime.test.js": "12b630cd2e987f3319dec27365b90715f32d5759e5a385d4f55ab4bcedec25e6",
+    "webui/tests/service_worker.test.js": "37425cf664a2c4147cf1bbefbc3e8095dba37a8c997d729bcf24747ef28f6057",
+    "webui/tests/settings.test.js": "b50da3ad2c4497533830abc5626dd2d499beff8c19ef166ddc6bdb4a243d9602",
+    "webui/tests/theme_notice.test.js": "b6ce94ef8145247c1324d2f20cd1b1686ec33d5a3e5064aecd33f3a61af59426",
+    "webui/tests/video_session.test.js": "627b57cf3083bf094cb098c4e67e194c8e405d52c5838920e784dfecc4885bcf"
+  }
+}

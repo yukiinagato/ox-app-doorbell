@@ -1,0 +1,23 @@
+{
+  "base_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r5.json",
+  "base_manifest_sha256": "26fa4534c1e23978b3a045723c61eb9a3119d40f75e87835843a4dd50002792d",
+  "source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-r5-device-uikit/source",
+  "unmodified_media_inputs": {
+    "ios/Doorbell/CoreBridge.swift": "6fa79deaaa1f8e83d11837769973374074f95122949f7e2a9c8ad5b7666b85f6",
+    "ios/Doorbell/MainViewController.swift": "e855a9b23dcc737fa4d46633b8c583aa99cfc4ea30c86ad1c46a59bb38040131",
+    "ios/DoorbellTests/CoreBridgeLifecycleTests.swift": "cdf68f823c25f8ef093b5b41ff0778b6dad71d0723bce921161fa964f3c8a706"
+  },
+  "test_entry": {
+    "/Users/ox/Documents/project/app-doorbell/tools/verification/ios_peer_frame_runner/Runner.swift": "6e4b3d1645179593941fbb8aade1cea042dc90dde421c7947774250a1b13bbcc"
+  },
+  "build_adapters": {
+    "ios/Doorbell/AppDelegate.swift": "72edce6b6356e2fef4bc4ead999ba747392933ad1698a06e58078055f0051f42",
+    "ios/Doorbell.xcodeproj/project.pbxproj": "caf3c50d91b6002a85535363c1ba0bcbee81ecb56ff307165bb45bf8c6b80dd6",
+    "ios/Doorbell/Info.plist": "43236f438a70e7700caf672f553b716abd05f8e1e78a0741c09dbb2a8bc1d695"
+  },
+  "native_archive": "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-r5-device-uikit/source/ios/build/core/iphoneos/arm64/min-9.0/libdoorbell_all.a",
+  "native_archive_sha256": "2cab55041127a1b9b5927ff0fb95f38f26c9a83cdd9db2b76ec262aeea821811",
+  "native_manifest": "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-r5-device-uikit/source/ios/build/core/iphoneos/arm64/min-9.0/artifact-manifest.json",
+  "native_manifest_sha256": "1d9b1446f0a86bc12bb0c90750953709036c2415ffc2be0ae34a8106a32057d1",
+  "scope": "Only UIApplication entry/bundle identity and reuse of verified native archive adapted; production media controller and CoreBridge are unmodified."
+}

@@ -1,0 +1,35 @@
+{
+  "task_id": "T23",
+  "status": "PASS",
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T15:51:20.351620+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/source-final.json",
+  "source_manifest_sha256": "b30f7682ef43fd8d70f858f1486c487a32171e5b01eb8415bac88f9ab00f5b2b",
+  "inputs_match": {
+    "ios-kiosk/src/Core/DBCoreBridge.h": true,
+    "ios-kiosk/src/Core/DBCoreBridge.m": true,
+    "ios-kiosk/src/Core/DBCallEventTracker.h": true,
+    "ios-kiosk/src/Core/DBCallEventTracker.m": true,
+    "ios-kiosk/src/Screens/DBDoorScreen.h": true,
+    "ios-kiosk/src/Screens/DBDoorScreen.m": true,
+    "ios-kiosk/src/Screens/DBRouter.m": true,
+    "ios-kiosk/src/Screens/DBIncomingScreen.m": true,
+    "ios-compat/scripts/test_host.sh": true,
+    "ios-compat/tests/recovery_safe_mode_contract_test.py": true,
+    "ios-kiosk/src/Core/DBCallTiming.h": true,
+    "ios-kiosk/src/Core/DBCallTiming.m": true,
+    "ios-compat/tests/call_timing_test.m": true
+  },
+  "checks": [
+    "Reviewed native Core queue lease and generation on snapshots, monotonic projected remaining durations and foreground fresh-sample barrier.",
+    "Reviewed ordinary targeted live chime and recovery paths using production timing readings, independent per-call anchors, bounded 128 pending identities, fixed ten-second resolution deadline and terminal/revision deduplication.",
+    "Reviewed stale timer/Core/call identity guards and no local cancellation on unknown/zero duration. Removed unreachable wall-clock incoming timeout branch.",
+    "Independently reran frozen r4 production Foundation timing/tracker executable: PASS, root-timing-frozen-r4.json.",
+    "Reviewed clean licensed historical SDK armv7 iOS5.1 link and unresolved symbol gate, frozen input postcheck and explicitly matched r3 Core archive reuse."
+  ],
+  "limitations": [
+    "UIKit integration cross-compiled and inspected, not executed on physical iOS5 here.",
+    "iOS9 armv7 and physical device qualification remain later cards.",
+    "T36 still owns the multi-call coordinator; bounded timing admission is not a completed multi-call UI."
+  ]
+}

@@ -82,6 +82,13 @@ const double DBSosArmFraction = 0.90;
   return YES;
 }
 
+- (BOOL)confirmAccessibilityActivation {
+  if (_phase != DBSosPhaseIdle) return NO;
+  [self beginTouch];
+  [self updateFraction:1];
+  return [self endTouch];
+}
+
 - (BOOL)cancel {
   if (_phase != DBSosPhaseCountdown && _phase != DBSosPhaseSliding) return NO;
   BOOL cancelled = (_phase == DBSosPhaseCountdown);

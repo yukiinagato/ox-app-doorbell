@@ -410,6 +410,20 @@ launcher で supervised kiosk restart 経路を置き換えることはありま
 Core node に ten-minute in-memory lockout が生じる。カウンタはその node の `POST /api/login` と
 `db_core_admin_password_verify` で共有する。他 node へ複製されないため、cluster-wide rate limiter ではない。
 
+管理 Web セッションは有効な認証レコードの CRDT バージョンに結び付く。利用者の操作が
+30 分間ない場合、またはログインから 8 時間経過した場合に失効する。Core の単調時計を
+使うため、OS 時計の変更では延長できない。通常の状態・設定ポーリングは更新しない。
+管理画面は利用者の入力時だけ回数を制限した `POST /api/session/activity` を送り、既存の
+HttpOnly セッションと `X-Requested-With: doorbell-admin` を必須とする。ノードごとに最大
+64 セッションで、失効分を先に削除し、必要なら最終操作・発行順で最も古いものを新規
+挿入前に削除する。永続化せず、プロセス再起動後は再ログインが必要となる。
+
+ローカルの改密、設定インポート、リモート認証レコード受信のいずれでも、新しい版を
+観測すると旧版セッションを失効させる。全ノードでの瞬時失効は保証しない。ネットワーク
+分断中のノードは同期まで古いパスワードで新規ログインを受け付けることもあり、トークン
+の有効期限だけではこの制約を解消しない。認証フィンガープリントは内部に保持し、
+セッション権限や診断情報として返さない。
+
 このキーが無かった頃は各ノードがローカルにダイジェストを持ち、キオスクは別の終了コードを持っていた。
 そのローカルダイジェストは最初の照合成功まで有効で、成功した時点でクラスタのパスワードとして複製する。
 独自の `exit_pin.txt` ダイジェストを持つシェルは、`db_core_admin_password_verify` が成功または「未設定」を
@@ -425,12 +439,25 @@ Core node に ten-minute in-memory lockout が生じる。カウンタはその 
 `notice.presets` は管理者が編集できる最大 8 件の `{id, text}` で、お知らせダイアログはこれを描画する。
 初回に 3 件を seed するが、以後は自由に編集・削除できる。
 
-`doors.<id>.unlock.show_button` は開錠コントロールを表示するかを決める。既定は
-「動作するときだけ表示する」で、`doors.<id>.unlock.command` か `sip.dtmf_actions` の最初の
-`ha_command` があるときだけ true。管理者はどちらにも固定できる。`status.doors.<id>.unlock` は
-`configured` / `command` / `show_button` と、その答えが既定と管理者のどちらに由来するかを返すので、
-押される前に判断できる。`POST /api/doors/<id>/open` と `db_core_open_door` は SIP の特番と同じ
-`ha_command` を送出し、未設定なら黙って何もせず `unlock_not_configured` を返す。
+`doors.<id>.unlock.command` は、そのドアを対応する HA 開錠コマンドに明示的に割り当てる。
+開錠を有効にするのはこのドア固有の項目だけで、`sip.dtmf_actions` への自動フォールバックは行わない。
+コマンドは ASCII 英数字、アンダースコア、ハイフンの 1～32 文字。他のドアや SIP 特番にコマンドが
+残っていても、この割り当てを削除すると当該ドアの開錠は無効になる。SIP 特番の独立した動作は変わらない。
+
+`doors.<id>.unlock.show_button` は表示だけを制御し、既定では当該ドアに明示的なコマンドがある場合のみ true。
+管理者が常時表示にしても、バックエンドの割り当て確認は省略されない。`status.doors.<id>.unlock` は
+`configured` / `command` / `show_button` と表示設定の由来 `source` を返す。未設定の HTTP 開錠要求は
+409 `unlock_not_configured`、`db_core_open_door` は -3 を返す。設定済みの場合は当該ドアの
+`ha_command` 意図を発行するが、受理は実際に錠が開いたことの確認ではない。
+
+最初の SIP HA 操作に依存していた旧設定は、管理者による確認が必要。「門口・建物 → 開錠ボタン」で
+当該ドアの錠を操作するコマンドを確認して保存する。既存の HA コマンドは入力候補にすぎず、自動選択・保存は
+しない。空欄で割り当てを解除できる。例えば開灯用の特番を変更せず、`front_gate` を明示的に割り当てる：
+
+```json
+{"doors":{"d_front":{"unlock":{"command":"front_gate"}}},
+ "sip":{"dtmf_actions":{"*1":{"type":"ha_command","command":"light_on","door":"self"}}}}
+```
 
 `display.appearance` は `auto_system` / `auto_schedule` / `light` / `dark`。
 `display.appearance_schedule = {dark_from, light_from}` は `time.zone` で評価する。どちらも
@@ -537,6 +564,21 @@ anti-entropy は参加したノードにクラスタのイベント履歴をま�
 
 お知らせと SOS は仕組み上これを満たす。どちらも複製された設定と状態なので、参加ノードは
 「現在の値」を 1 度適用するだけで、そこに至る遷移を再演することはない。
+
+実行時状態の各 `active_calls` は、呼出の識別子・状態と `server_now_ms`、`remaining_ms`、
+`expires_at_ms`、`recovery_required`、`recovery_eligible`、`recovery_remaining_ms`（0..10000）を
+含む。Core の同じループで採取し、壁時計値は補正済み Unix ミリ秒、期間は非負のミリ秒で
+JSON の最大精密整数（9007199254740991）に制限する。復旧可否は既存のローカル復旧期限を
+示し、応答権限を意味しない。読み取りで復旧期限を延長しない。
+
+ルートと各呼出は同じ不透明な `snapshot_generation` を持ち、Core の起動ごと・採取ごとに
+変わる。ルートの `snapshot_age_ms` は Core の単調時刻によるキャッシュの経過時間で、
+`-1` は不明を示す。状態取得は Core ループの処理を待たない。クライアントは新しい期間から
+経過時間を一度引き、以後は自身の単調時計を使う。同じ世代を再取得してもタイマーを
+再開始しない。期間がゼロ・不明、または世代・経過時間・期間が欠ける場合は確認中とし、
+OS 壁時計へのフォールバックや自動取消しをしない。復帰時や Core・クライアント再起動時は
+古い計時点を捨て、新しい快照を取得する。単調時計の絶対値を永続化しない。呼出の終了は
+Core のみが判断する。
 
 ### 誰が応答してよいか
 
@@ -837,3 +879,77 @@ App は無料枠を保証しません。サービス側でクォータを設定�
 `ui.call_flow` は門口機の二つの経路を切り替えます。`purpose_first` は有効な用件をホームに表示し、用件を押すとその用件を含む呼出を一度だけ開始します。**直接呼出** ボタンは用件を省略してすぐに呼び出します。呼出後に再度用件画面は開きません。`ring_then_purpose` はホームの用件メニューを非表示にし、呼出ボタンで先に呼び出してから用件画面を開きます。用件の選択は同じ呼出を更新し、省略しても呼出は続き、キャンセルするとその呼出を終了します。有効な用件がなければ、どちらのモードでも空の選択画面を開かず直接呼び出します。
 
 iOS、iOS 5 互換版、Android、Windows のネイティブ門口機がこの経路に従います。Web パネルは最初に宛先のドアを選び、その後に設定された順序で用件選択と呼出を行います。設定の切替はホーム表示のみを更新し、呼出は発生しません。進行中の呼出の識別子と期限は維持されます。保存する値は変更せず、管理メニューには翻訳された名称と選択中のフローの説明を表示します。
+
+管理者資格情報の変更では、CRDT エントリーとローカル資格情報メタデータを単一の SQLite トランザクションで確定します。永続化に失敗した場合、以前のパスワードとセッションを維持します。新しいブラウザー更新 API は、セッション固有のランダムな `X-Doorbell-CSRF` ヘッダーと完全一致する信頼済み `Origin` を必須とします。欠落、null、ワイルドカード、未信頼の Origin は拒否します。`GET /api/session` は操作期限を延長せず、`Cache-Control: no-store` でトークンを返します。現在のローカル IP とループバックのリスナーポート上の HTTP Origin は信頼します。DNS 名やリバースプロキシは、`web.allowed_origins` にパス、ワイルドカード、資格情報を含まない `http://host[:port]` または `https://host[:port]` の完全一致文字列を最大 32 件設定します。`Host` や転送ヘッダーでは信頼を付与しません。不正な項目は拒否します。
+
+### ローカル設定リビジョンと条件付きコミット
+
+`GET /api/config/snapshot` と `db_core_config_snapshot_json_v2` は
+`{schema_version:2,revision,config,edit_conflicts,edit_journal}` を返す。管理者スナップショットから
+`admin.password_hash` を除外し、秘密値はプラットフォームの安全な保管領域に残す。
+HTTP 応答は `Cache-Control: no-store`。リビジョンは全可視 CRDT レコードの版と
+削除記録を含む、単一ノード・実行中 Core に限定した不透明なトークンである。
+再起動またはレプリカ初期化で無効になる。HLC やクラスタ全体のロックではない。
+
+`POST /api/config/commit` と `db_core_config_commit_json_v2` は
+`{schema_version:2,expected_revision,ops,resolves?}` を受け取る。HTTP は管理者セッション、
+その `X-Doorbell-CSRF` と完全一致する信頼済み Origin を必要とする。ネイティブ
+呼び出しも同じ Core 検証・コミット経路を使う。上限は 256 操作、JSON 256 KiB、
+入れ子のコンテナ 32 段。リビジョン欠落、未知の要求・操作フィールド、操作キー重複を
+拒否する。親子の操作キー重複も拒否し、古い子レコードが親の更新を上書きしないための
+既存 CRDT 子レコード更新を含めて 256 操作以内とする。合成した設定全体を共通 schema で
+検証する。Core はこの実装済み API に `config_cas_v1` を広告する。
+比較、オブジェクト合成、検証、永続化は一つの Core ループ／SQLite
+書き込みコンテキスト内で行い、失敗したバッチは設定を公開しない。
+
+オブジェクトの `set` は未指定フィールドを保持する再帰的なフィールド更新である。
+スカラーと配列は全体を置き換える。JSON null は値であり、削除には明示的な
+`delete` が必要。既存のオブジェクト単位 CRDT 保存・複製は変更しない。古い版には
+HTTP 409、`error_code:"config_conflict"`、現在の不透明な版を返し、書き込みも秘密値の
+返却もしない。クライアントは許可された新スナップショットを取得して base/mine/current
+を比較し、管理者に競合解決を求める。新しい版に古い草稿を自動再送してはならない。
+
+互換期間の一世代に限り、`/api/config/batch` と `db_core_config_batch_json` の
+オブジェクト要求に任意の `expected_revision` を付けて同経路を利用できる。応答の
+`revision` は不透明な版となり、別の `hlc` は従来の時刻を保持する。条件なしの旧 batch、
+単一キー更新・削除、既存 import は従来の無条件動作を維持する。管理画面と import の
+移行は別タスクであり、読取時の版を送信するまでは競合保護を提供したと扱わない。
+ローカル CAS 自体はネットワーク分断中の別ノードでの編集競合を検出・解決しない。
+更新版の書込経路は、容量制限付きの変更履歴を設定と原子的に保存し、未解決の実体への
+通常の書込を拒否する。追加の `resolves` は実体全体の明示的な解決に使う。
+複製・秘匿・上限・混在バージョンの動作は[保持する設定競合](config-conflicts.md)を参照。
+旧 import は現在通常の 256 操作上限を共有し、段階的 import は別途定義する。
+
+## 永続操作の担当と権限
+
+`doors.<door>.operations.authority_node` は新しい開錠操作を既存の小文字16進数32桁ノード ID に固定し、`cluster.operations.sos_authority_node` はドアと独立して SOS を割り当てます。省略は新プロトコル無効を意味し、切断時に別ノードへ代行しません。
+
+`devices.<node>.operations` は `doors`（重複なしの最大64ドア）、boolean の `sos_start` と `sos_clear` のみです。省略は空/false。ドア ID は ASCII 英数字、`_`、`-` の1–128文字です。リーフと埋め込みオブジェクトの両方で未知フィールド・重複・型違いを拒否します。ネイティブと管理者 HTTP ページノードの両方に明示的な許可が必要です。構成と権限は永続化・複製され、prepare/execute/query で現在の許可を検証します。保存済みの意図は構成変更で対象を変更しません。主体、CSRF、待機上限、結果と旧 API 移行は[操作 API](operation-api.md)を参照してください。
+
+認証済み実行器 ACK は既定で無効の任意機能です。`doors.<door>.operations.ack`、鍵の失効、形式と結果の意味は[動作 ACK プロトコル](operation-ack-protocol.md)を参照してください。
+
+### 条件付き公告編集と明示的なフィールド削除
+
+条件付き `set` の任意の `remove_fields` は、重複しない1–64個の直接フィールド名（空文字不可、各128バイト以下）です。`value` はオブジェクトで、削除するフィールドを同時に含めてはいけません。Core は既存オブジェクトに変更を合成してから指定項目だけを削除し、未知の項目を保持します。これにより意味要素のスタイルで変更と継承へのリセットを同じ検証済み保存にできます。名前中の点はパスとして解釈しません。`delete` に併用不可、省略や null は削除を意味しません。既存の子レコードも同じ上限付きトランザクションで更新または削除されます。
+
+管理者用 `POST /api/notice` と `POST /api/doors/<id>/notice` は `expected_revision`、`text`、任意の整数 `ttl_s`（0–2147483647、0は無期限）を受け付けます。条件付き要求には有効な管理者cookie、CSRF、正確な信頼済みOriginが必要で、同じ原子的CASを使います。`from_device`・`created_ms`・`expires_ms` はCoreが生成し、クライアントからは指定できません。正のTTLなしの `expiry:"today"` は、Coreの補正済み時計と設定タイムゾーン（対応する夏時間規則を含む）で次の日付境界に失効します。既存の文字数・時刻上限も適用されます。未知・重複メンバーは拒否、成功時は新revision、古いrevisionは書き込まず409 `config_conflict`です。条件なしの旧要求は互換動作を保ちます。
+
+認証付き事前検証・原子的 commit API、snapshot 置換、receipt 保持と容量上限は[設定インポート](config-import.md)を参照してください。旧 import は 256 操作の制限を維持します。
+
+## 独立したパネル ID
+
+`panel.identities.<panel_id>` は個別に失効できるパネル記録です。Core がランダムな 128 ビット ID を 32 桁の小文字 16 進数で生成します。IP、ブラウザ、SIP ユーザー名からは生成せず、最大 128 記録です。必須項目は `credential_ref`（プラットフォームの安全なストレージへの `secret:` 参照）、`credential_generation`（32 桁の小文字 16 進数）、`door_scope`（重複なしの明示的なドア ID、最大 64、ワイルドカード不可）、`grants`、真偽値の `revoked` です。任意の `sip_account_id` は既存の `sip.accounts` にある 32 桁のアカウント記録 ID を参照します。新しい ID のドア範囲と権限は既定で空です。
+
+権限名は `view`、`call.monitor`、`call.answer`、`call.initiate`、`sos.trigger`、`door.open`、`media.publish`、`notice.write` です。ドア操作には対象ドアが範囲内であることも必要です。`sos.trigger` はドア引数のない全体 SOS 開始権限であり、解除権限を含みません。既存のネイティブ・管理者の解除方針は別に維持します。新しい ID は全体告知を変更できません。旧直接解錠 URL でも `door.open` を確認しますが、従来の即時実行であり永続操作レシートではありません。信頼されたローカルのネイティブ操作は Core/デバイスの権限境界を維持し、新しい ID 管理 ABI は管理者を明示的に認証します。
+
+`POST /api/panels/{list,create,update,revoke,rotate}` と `db_core_panel_identity_json_v2` は同じ実装を使用します。有効な管理者セッションと CSRF が常に必要で、HTTP は正確に一致する信頼済み Origin も要求します。list は `{}` を受け付けます。変更には現在のノードの `expected_revision` が必要で、不一致は書き込まず `config_conflict` です。create は `credential_ref` と任意の範囲・権限・SIP アカウントを受け取り、ID と世代は Core が生成します。update/rotate は `panel_id` も必要です。rotate は明示的に準備した認証情報参照が必須です。revoke は `panel_id` と `expected_revision` だけを受け付けます。既存の安全なストレージに先に認証情報を登録し、ローカル値がなければ `credential_provisioning_required` です。変更・ローテーション・失効では世代を更新し、既存の設定 CAS トランザクションで ID ごとの CRDT 記録と編集履歴を保存します。管理応答は参照と公開 ID 情報だけで、bearer 値を返しません。
+
+セッションは実際の認証情報から ID を選択し、要求中の ID 指定を信用しません。認証情報の重複で一意に決まらなければ拒否します。ランダムな 128 ビットセッションは操作なし 30 分、絶対 8 時間、容量 128 を維持し、ポーリングでは延長しません。Core 起動世代、ID、認証世代、ローカル秘密値、ID 単位の `grant_version` に結び付きます。`grant_version` は公開 ID 設定を正規化した 64 桁の小文字 SHA-256 で、認証情報のダイジェストではありません。A の変更を受信しても B のセッションは維持されます。分断中のノードは未受信の失効を反映できません。
+
+状態・履歴・call-info・保護された画像プロキシは `view` とドア範囲で絞ります。既読位置はパネルとドアごとのローカル値で、他パネルやネイティブ/legacy の既読を変更しません。`unread_missed` は返したページ内の件数で、`unread_scope:"returned_page"` を明示します。既存の共有 Push 登録・配信と UI レポートは独立所有に未対応なので、新しい ID は `capabilities.scoped_push:false`、`scoped_ui_report:false` を返し、該当変更は `unsupported_capability` になります。登録成功とは表示できません。認証済み ID は言語や初期化に必要なメタデータを取得できます。
+
+SIP は明示的なアカウントの `user` と安全な `pass_ref` のみを使います。アカウント・ローカル秘密値の不足、重複アカウント/ユーザー名、既存デバイス用アカウント、共有 WebRTC ユーザーは `provisioning_required` です。共有 SIP パスワードにはフォールバックしません。設定済みアカウントでも監視または応答権限がなければ認証情報を返しません。PBX 管理者が実際の内線と PBX 権限を用意します。Core は PBX ユーザーを自動作成せず、設定済みを登録成功とも主張しません。PBX の発信制限は外部の方針です。
+
+旧 `panel.token_refs` とそのセッションは明示的に `legacy_shared` とし、宣言済みのローカル操作と共有 SIP の互換動作を維持します。個別デバイス失効とは呼ばず、独立 ID として遠隔メディアを委譲できません。ID の欠落や不正な委譲を自動で legacy と扱いません。`media.publish` に加え T15 の現在の session/call/revision/owner が必要です。認証された受信側も現在の ID 世代・権限・通話所有権を確認し、ブラウザ Cookie、CSRF、長期 bearer を転送しません。
+
+既存の LAN-public な `/stream.mjpeg`、`/stream.mp4`、`/snapshot.jpg` の玄関カメラ方針は維持します。`view` はパネル API と保護プロキシを制限しますが、明示的に公開された玄関映像を非公開にはしません。住戸からの返信映像には別の発行者/session 認可があります。

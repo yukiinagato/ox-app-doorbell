@@ -1,0 +1,19 @@
+09-22 23:17:37 I [httpd] listening on 23927
+09-22 23:17:42 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:17:43 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:155:
+TEST CASE:  httpd: scheduling expired queued write never reaches handler
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:172: ERROR: CHECK( response.body.find("not_started") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:175: ERROR: CHECK( calls.load() == 0 ) is NOT correct!
+  values: CHECK( 1 == 0 )
+
+===============================================================================
+[doctest] test cases: 1 | 0 passed | 1 failed | 419 skipped
+[doctest] assertions: 9 | 7 passed | 2 failed |
+[doctest] Status: FAILURE!

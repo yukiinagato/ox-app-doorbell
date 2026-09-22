@@ -1,0 +1,447 @@
+{
+  "recorded_at": "2026-09-22T17:59:48.817841+00:00",
+  "source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r2",
+  "git_revision": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "inputs": [
+    {
+      "path": ".github/workflows/release.yml",
+      "sha256": "6308523e63247b3653b06d7f8b3a44a32cd38da3b39e5fd2c588f8d8a11b59db"
+    },
+    {
+      "path": "android/app/src/main/cpp/jni_bridge.cpp",
+      "sha256": "2b7d095de5f009fb322ca0289a21cee6df131183f5718a076f96e491a55a2944"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/App.kt",
+      "sha256": "862380995527d0ebb1a970c940f559e5fe5620a0a7dc095df154892f853d3a4c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/BootConfig.kt",
+      "sha256": "5ffb1be72a5c9a369fa80ff1b99a045a0b42663f409429bea1ccecbfb2f4b760"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt",
+      "sha256": "d1da436d2b61780a9effaf348c103baebc46a96071fdc4acf01703a3efdff72d"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/KioskController.kt",
+      "sha256": "09bc97d5e7ac8fc1a0476427623ea4989b595bfbf24d67387001095dbdc6a961"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/PairingActivity.kt",
+      "sha256": "5402adb9187ece84b16e315f28ac2f747d1ddf39eea1ebf5f65eec455fd1c288"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/RootKeepaliveClient.kt",
+      "sha256": "a4cad7b2cc4b89df8ce8fe99419916d036f8706ee5c2aa2fb234ce110e2b1b22"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/RuntimeSupervisor.kt",
+      "sha256": "28564d6ff174196550ae284208f15fe4ac45c286c4f118299a0f381ab6664301"
+    },
+    {
+      "path": "core/include/doorbell/doorbell.h",
+      "sha256": "577e7bbd0985af4fb520a21a46f89a26524fbf21533b58ef15bd89d6aaafe42a"
+    },
+    {
+      "path": "core/src/mesh/mesh.cpp",
+      "sha256": "b83caf60e58cba42f513320f4dd1a05020dc17d699513cf69c9bb8352ef2854d"
+    },
+    {
+      "path": "core/src/mesh/socket_compat.h",
+      "sha256": "30db5d9ec2873f9c19027eb8b42581c3f537cdc3f38fe19a4a10460af3ac2657"
+    },
+    {
+      "path": "core/src/mesh/udp_beacon.cpp",
+      "sha256": "e0e63b3ffe00bd7829d5579609744925edd516c77c1b44e072255217852a155e"
+    },
+    {
+      "path": "i18n/strings.yaml",
+      "sha256": "0dc9c7eeee15550e11b9ede243b2e5fd53736bf6c1027d751e39bc5cb3bf6aac"
+    },
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "sha256": "215b493176ba05cfba69c7dcca31926835c0a8837974c2960d02ad4a765118fc"
+    },
+    {
+      "path": "win/DoorbellApp/AdminDialog.xaml",
+      "sha256": "034df3e3f9995bd631d3b5709dc63cba90073583a3aa1c8dcb72f2d1e6ffce56"
+    },
+    {
+      "path": "win/DoorbellApp/AdminDialog.xaml.cs",
+      "sha256": "ce864bef3c54953ca5e1e59fcfa295fd14c0c6ec2df11a58da79f3da0faf49d9"
+    },
+    {
+      "path": "win/DoorbellApp/App.xaml",
+      "sha256": "d4c81e5bf18aa79f930d7cbf8e773521aa03058ccccdf0b75a020b2d5a4fc0ba"
+    },
+    {
+      "path": "win/DoorbellApp/App.xaml.cs",
+      "sha256": "bb2387306bfe9b645b12439f5e4b4847c9854b834841381f1525d5c82a67e9b1"
+    },
+    {
+      "path": "win/DoorbellApp/BootConfig.cs",
+      "sha256": "27f851af706a1c8760620dc8576a1e7ef18002cdbe5e4f9615357725b86dd8a4"
+    },
+    {
+      "path": "win/DoorbellApp/BootstrapSetupWindow.cs",
+      "sha256": "2345e8dc553f5faf3ced3435bd8a14a219bc9998afe89e58f1888e9306000e11"
+    },
+    {
+      "path": "win/DoorbellApp/Core/CallTiming.cs",
+      "sha256": "a3ee7ad6489167be490735eb2d829f03d6e4884f9785f6ab476b3dae0898aca5"
+    },
+    {
+      "path": "win/DoorbellApp/Core/CameraProbe.cs",
+      "sha256": "3dd82128d85acd4651fa25240286718b3ec34e4262a363c00c0b77d3479148d9"
+    },
+    {
+      "path": "win/DoorbellApp/Core/CoreClient.cs",
+      "sha256": "4567baac7e693c0ea93eb8bacfbef22ae88f225a0e46632195745a3c256b274e"
+    },
+    {
+      "path": "win/DoorbellApp/Core/CoreInterop.cs",
+      "sha256": "26131886c96172574278a335c11897d89f65180e0cb57d274f7c42318baf62ff"
+    },
+    {
+      "path": "win/DoorbellApp/Core/DeviceInfoProvider.cs",
+      "sha256": "ec8169562a4834d551d960ce4b1cfa089afaa85c3294024e08aafde8ccec31fc"
+    },
+    {
+      "path": "win/DoorbellApp/Core/DpapiSecretStore.cs",
+      "sha256": "0f209f219969b0a68d60b50c1c3827536a5fce0fcbeebcefb16c9625fb096d8b"
+    },
+    {
+      "path": "win/DoorbellApp/Core/H264LiveStreamer.cs",
+      "sha256": "9cb9052cfd21d1a9fcd5cd1225d6ecaee70aea665173df17109df6fbae84de31"
+    },
+    {
+      "path": "win/DoorbellApp/Core/MjpegStreamer.cs",
+      "sha256": "02368db9d838d8cec34cc0a936099d29c9b825f87d11d939b5232ae0c8bcc6cb"
+    },
+    {
+      "path": "win/DoorbellApp/Core/NativeUtf8.cs",
+      "sha256": "c4e846319463f984ff438c1d82c866a3881383c859698115fcec8a9036f1f4e0"
+    },
+    {
+      "path": "win/DoorbellApp/Core/PeerFrameGate.cs",
+      "sha256": "67aadedd395a0b4e00bbfae44514198b342937fd3de66f00cafef821d9b4927f"
+    },
+    {
+      "path": "win/DoorbellApp/Core/RuntimeContracts.cs",
+      "sha256": "d1dc50d24f3701b6389e82301f4679b182276395a53f317726fb3a1786e377f3"
+    },
+    {
+      "path": "win/DoorbellApp/Core/UpdateChecker.cs",
+      "sha256": "7ad6c9ef3037a78e6770493641d5d4b13edbf357df1e14dbe2dcffe07173bde6"
+    },
+    {
+      "path": "win/DoorbellApp/Core/VideoDiagnostics.cs",
+      "sha256": "706932d680b86bb01e1d82030a9ad2934d8ebcb48bd28a3f179342ed9425b4fb"
+    },
+    {
+      "path": "win/DoorbellApp/Core/WinHttpTransport.cs",
+      "sha256": "6ccf997c2e35969fdc86598c52f7614ffbb65e5f3c1a3419d955c212c1cbc8e3"
+    },
+    {
+      "path": "win/DoorbellApp/Core/WindowsFirewall.cs",
+      "sha256": "2b9d7833b9c10524898ae4f58b2790416bbf5715b5f542fa145dd5bb62822bd6"
+    },
+    {
+      "path": "win/DoorbellApp/DeviceAlertNotifier.cs",
+      "sha256": "15a7eddf73ca8a7ee469855b46c88108339672c71636466032a1b755aa162fb2"
+    },
+    {
+      "path": "win/DoorbellApp/DoorbellApp.csproj",
+      "sha256": "e064fef07f36ccac100663a2da0904db7670b372a4fa295c91468f29ad6c2460"
+    },
+    {
+      "path": "win/DoorbellApp/Kiosk/KioskHooks.cs",
+      "sha256": "f5dddb04d1b9306967d5ae0affc625cd3d30c6a5290e00bd4f477f6719e46b2a"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.CallScreen.cs",
+      "sha256": "5016f76c08f9919c2b12cbf3fa61aed63b6032ac410735327d3458c02ae838a5"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.Dashboard.cs",
+      "sha256": "94328c5ecc0127a2184849293c730949fa3136fe77d853697e962a369bc49e9c"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.History.cs",
+      "sha256": "88c4e21f10933e6e7b3aa97e817c526a0479f9b43045f61a0e1d09c08ee1cf84"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.Notice.cs",
+      "sha256": "78e79ef21f30953617f9e38c7aac9d2bf46cc6fe5a49e66da3351a8f98ccc6a9"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.Shell.cs",
+      "sha256": "91af02cfd20a49315ddd4cdf4b81744ecbe067770a9718d0cdc00a2a0cdcc703"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.VisitorActions.cs",
+      "sha256": "9c231e5ff365c6e93e7c56f3783fb3631d55badbac0a4e39bdf2a0c59816a11b"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.xaml",
+      "sha256": "9aa47a9bbb410daf8111dc0432c9c15164b68a772aab6c8cb48ef99c33c786df"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.xaml.cs",
+      "sha256": "50d25e377ad38507ca8a51ae215622ae66597dfcd8f6944fa352b255435e9ff8"
+    },
+    {
+      "path": "win/DoorbellApp/NoticeDialog.xaml",
+      "sha256": "947f286e829492d9a1c9df084806efa6c3a01b3262be05750e188f32b49f33fe"
+    },
+    {
+      "path": "win/DoorbellApp/NoticeDialog.xaml.cs",
+      "sha256": "45182cc432063f84d46efc6b0c29ac63f4cde7e22554bc03a4e546b46f5c746a"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "sha256": "305b776ffe7a8351e56ce7fc96c95c0d9a4336e22c508523d06d6e7266f8f9ed"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml.cs",
+      "sha256": "138b5728509f494e99d76b1f7afc70b704bf673ab15dde969fe137283e3ef6e3"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/PairingCameraFeed.cs",
+      "sha256": "ab0e004ba98adf6549669508fd8357190897e3ed116cfe1c5c5ba59580156c3b"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "sha256": "2e0187ac0aa5ce7e25dc29fe94cea672612a68683fedfa8aae9a89ddd345664e"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/PairingCodeCard.xaml.cs",
+      "sha256": "7695a56c295a0815a61a262ec381e63147f6a487cf043fa990586141237a8800"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/PairingKeypad.xaml",
+      "sha256": "0857173971b8e34dd9a2670ea09c18e441f733f1a1cced06f7d1146e21532a7f"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/PairingKeypad.xaml.cs",
+      "sha256": "1167fac6c538f5dcee549946b62d4c5202a25950d901813aac7290ddd4247f17"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "sha256": "e933848f7dac6b02b932d0ea6d4ce6400cadc55fe2387fccddaed2031b54a7ea"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs",
+      "sha256": "cc00f2aef69d6b0fcbeed9d2ce964d2b707a13bff7518a940d1f21cb2bd27015"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/PairingSnapshot.cs",
+      "sha256": "cf918f446d42c41b5a78313b4456c27284d6e2354689fd4e4e1fc14edd10c65b"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/PendingDeviceRow.cs",
+      "sha256": "e45f9361984efe6326cc7af12cac89e94055b01caf371244c0f3cef745087fc5"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/QrCodeImage.cs",
+      "sha256": "afb0cf5fccb23c660d8546b7aefad66207ac6d966d86e20c6098bcf4f6b834bc"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/QrScanWindow.xaml",
+      "sha256": "5c502c728c5e73e82e4fb47b38b7bd3e0b1780c3190619d6c68d78cbb5a37b43"
+    },
+    {
+      "path": "win/DoorbellApp/Pairing/QrScanWindow.xaml.cs",
+      "sha256": "64cb10478bc3a607f9e583f5877ec4285db2d46e2558168dcd4e0a9cb510e062"
+    },
+    {
+      "path": "win/DoorbellApp/Resources/Icons.xaml",
+      "sha256": "801b5c0891297e8ed91eb6537494d486c0da806e88b83935437010171ca25e35"
+    },
+    {
+      "path": "win/DoorbellApp/Resources/Strings.en.resx",
+      "sha256": "b9fe50e068922459dacef214f18bd19c3105ee569edd1119c29f64b8648a1918"
+    },
+    {
+      "path": "win/DoorbellApp/Resources/Strings.resx",
+      "sha256": "05c5d9aa384410b72b268d076f3142d3e195e12af5496eb62163e3ec1e120f7a"
+    },
+    {
+      "path": "win/DoorbellApp/Resources/Strings.zh.resx",
+      "sha256": "e3ef225188532b6091ac98ee84cb5fb1fa6d5df88b3908430007820c61d48671"
+    },
+    {
+      "path": "win/DoorbellApp/RuntimeProcessState.cs",
+      "sha256": "dd35f39d391446a6d010dca9834be1db27ef1575076e040326129bb32c006a1f"
+    },
+    {
+      "path": "win/DoorbellApp/Ui/Frost.cs",
+      "sha256": "f6455c7dca8e554bfb2160c4c1057892ca6a44a511646d3f5f80c1df17b90995"
+    },
+    {
+      "path": "win/DoorbellApp/Ui/SosSlider.cs",
+      "sha256": "75400042a8fd9618f9e21a25f568b13d7a6c43d4f82ba652b4a5fda0830d338c"
+    },
+    {
+      "path": "win/DoorbellApp/Ui/VisitorActionGuard.cs",
+      "sha256": "07ef1ba8233d869f15c20267ab568985285f215442730eec05106cf779218d4a"
+    },
+    {
+      "path": "win/DoorbellApp/Util/AdminLink.cs",
+      "sha256": "fd0a94339d15f5f02490f7f2cbda907dc97853e385ececfdb53667b3158fd893"
+    },
+    {
+      "path": "win/DoorbellApp/Util/Appearance.cs",
+      "sha256": "3c49112fd8f1ff075baf9f9f8dde3b5532516c9fcaac61f6747bec588baf9547"
+    },
+    {
+      "path": "win/DoorbellApp/Util/L10n.cs",
+      "sha256": "903234264a3489b5ab9058f0e106dd1a9f0807322210bb01400f527f9de60177"
+    },
+    {
+      "path": "win/DoorbellApp/Util/SemanticUiOverrides.cs",
+      "sha256": "5553d4daeafb9e21d5cb7a5d52759f465e8a2f16b13307712510abce60761a86"
+    },
+    {
+      "path": "win/DoorbellApp/Util/Texts.cs",
+      "sha256": "980698f0092d3d1a1c217d9d2bbc67232bb01321188e133d8c24a5563c3ea754"
+    },
+    {
+      "path": "win/DoorbellApp/Util/ThemeContrast.cs",
+      "sha256": "bac959fb0ad60cc075dd54180ff1dd9fc143c3999679e0a34653568d6aa719b5"
+    },
+    {
+      "path": "win/DoorbellApp/WatchdogHeartbeat.cs",
+      "sha256": "e6e80e23956c3d690036828a54db5b1991925b20c74c5dd5127e976270196cb1"
+    },
+    {
+      "path": "win/DoorbellApp/WebAdminWindow.xaml",
+      "sha256": "76c5d7eaa6afaea1cc23a4b239a7dd85015fefee8794507e7aef0219ae08f54f"
+    },
+    {
+      "path": "win/DoorbellApp/WebAdminWindow.xaml.cs",
+      "sha256": "862bb7f71f7e20a679514480bf3e057606c08d47128c15af7188b2d0b8b9842a"
+    },
+    {
+      "path": "win/DoorbellApp/app.manifest",
+      "sha256": "b576dabe9748fa66fa1ad04bea4bda380dcf2673cd80474e07e9814b0490318f"
+    },
+    {
+      "path": "win/DoorbellApp.sln",
+      "sha256": "53c20e3fe90b431322e84f3e3977c981ea38657c37952a6efa69b006e383ac4e"
+    },
+    {
+      "path": "win/README.md",
+      "sha256": "52097b2997328488ac672691274a54e49d68e87fab383826a5672c0e02b7a595"
+    },
+    {
+      "path": "win/abi-probe/CMakeLists.txt",
+      "sha256": "0add5d30e23b39ad492e91b88141bb3c895966d412cc1b83a046e72a67b4e830"
+    },
+    {
+      "path": "win/abi-probe/main.cpp",
+      "sha256": "b2c7621b5ac7969ec8145e7cc998f49029ec51826e553c6882c7dc6892083ad2"
+    },
+    {
+      "path": "win/build.cmd",
+      "sha256": "18ae6e717b597b644aa624226bf24fa979cdff46656fe49704b8709c5aae808b"
+    },
+    {
+      "path": "win/installer/DoorbellSetup.iss",
+      "sha256": "ee942508d647c4848a9681b273a0bbc260075a911a4911628e3519aa98dd19bc"
+    },
+    {
+      "path": "win/tests/CallTimingTests.cs",
+      "sha256": "65a3c399d5ea9327805b77c1048f614bd10738a03f4d59fdddaac9e5d62a2f92"
+    },
+    {
+      "path": "win/tests/PeerFrameGateTests.cs",
+      "sha256": "51520fa70512ddbce97180d5394339d18d823222b111457946db5edfaac7a179"
+    },
+    {
+      "path": "win/tests/VisitorActionGuardTests.cs",
+      "sha256": "ae6581a3640fb8db62dd23fd9c7a69d53dc10a4791202fe3c38bce7c959286d3"
+    },
+    {
+      "path": "win/tests/__pycache__/test_windows_contracts.cpython-314.pyc",
+      "sha256": "07b88712f77de0c1176db665c1f4154779d9a33d801420e857deff430887a9b5"
+    },
+    {
+      "path": "win/tests/test_windows_contracts.py",
+      "sha256": "d10cbf163832550f4998d34ca0938866b7a80ca935598f6db696068d92ac33b9"
+    },
+    {
+      "path": "win/tools/sign-bundle.ps1",
+      "sha256": "aa94ef02191ac47ce6ae2774d38f6217a43e7c43e071d231827e90f33263d19b"
+    },
+    {
+      "path": "win/tools/write-manifest.ps1",
+      "sha256": "a5df5197d1e1e03fe8eba3186bb0604fec1ab583bc546b416478d8ec5d4c7980"
+    },
+    {
+      "path": "win/watchdog/CMakeLists.txt",
+      "sha256": "d9b5a2ce9e2e85e48aa796e08a9a82293950055c4ae8cb5789f9767e3feb0789"
+    },
+    {
+      "path": "win/watchdog/main.cpp",
+      "sha256": "121374d0070ae90dccc449fbc1b31154159a212d4cf46db24457e96b36135ed7"
+    },
+    {
+      "path": "win/watchdog/recovery_policy.h",
+      "sha256": "406dbe96e8d984e2a3eb88ff0f4ab11fc21da801c9c8a1d72ed7f599636a1675"
+    },
+    {
+      "path": "win/watchdog/tests.cpp",
+      "sha256": "928741cf73ee6f5f2aa58608ea4844211f645f343e6347ddf597d07b20e1feb7"
+    }
+  ],
+  "owned_inputs": [
+    {
+      "path": "win/DoorbellApp/MainWindow.xaml",
+      "sha256": "9aa47a9bbb410daf8111dc0432c9c15164b68a772aab6c8cb48ef99c33c786df"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.xaml.cs",
+      "sha256": "50d25e377ad38507ca8a51ae215622ae66597dfcd8f6944fa352b255435e9ff8"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.Shell.cs",
+      "sha256": "91af02cfd20a49315ddd4cdf4b81744ecbe067770a9718d0cdc00a2a0cdcc703"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.VisitorActions.cs",
+      "sha256": "9c231e5ff365c6e93e7c56f3783fb3631d55badbac0a4e39bdf2a0c59816a11b"
+    },
+    {
+      "path": "win/DoorbellApp/Ui/SosSlider.cs",
+      "sha256": "75400042a8fd9618f9e21a25f568b13d7a6c43d4f82ba652b4a5fda0830d338c"
+    },
+    {
+      "path": "win/DoorbellApp/Ui/VisitorActionGuard.cs",
+      "sha256": "07ef1ba8233d869f15c20267ab568985285f215442730eec05106cf779218d4a"
+    },
+    {
+      "path": "win/tests/VisitorActionGuardTests.cs",
+      "sha256": "ae6581a3640fb8db62dd23fd9c7a69d53dc10a4791202fe3c38bce7c959286d3"
+    },
+    {
+      "path": "win/tests/test_windows_contracts.py",
+      "sha256": "d10cbf163832550f4998d34ca0938866b7a80ca935598f6db696068d92ac33b9"
+    }
+  ],
+  "scope": "Windows visitor UI + actual production guard tests; all Windows source and cross-platform inputs read by existing static contracts are frozen. No native Core build or WPF runtime.",
+  "reference_package_sha256": "8a7e348538e7eb91351696911689f49e3d4f63f8bab517432bbe159b8b1104a2",
+  "refinement": {
+    "previous_manifest_sha256": "a3a1f40a2b3777d42f34ca7cebba393a6ceb00c7b51a4b5dd8a63a7b65ad1681",
+    "reason": "Include multiline read() cross-platform contract dependencies; owned production/test inputs are unchanged.",
+    "added_dependencies": [
+      "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt",
+      "android/app/src/main/java/jp/ox/doorbell/BootConfig.kt",
+      "android/app/src/main/java/jp/ox/doorbell/PairingActivity.kt",
+      "android/app/src/main/java/jp/ox/doorbell/RootKeepaliveClient.kt",
+      "android/app/src/main/java/jp/ox/doorbell/RuntimeSupervisor.kt",
+      "android/app/src/main/java/jp/ox/doorbell/KioskController.kt"
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "created_at": "2026-09-22T16:29:16.122845+00:00",
+  "inputs": [
+    {
+      "path": "webui/admin/app.js",
+      "sha256": "ca0f47d8f267d0c5b455b12d3d9c98532ad2da4c2af00a296670cd8c806f8dc4"
+    },
+    {
+      "path": "webui/tests/admin_config_merge.test.js",
+      "sha256": "b4d690956d74c0ecfd59d2dd464c239c04584a4c99a1ee4514790f95fbec51de"
+    },
+    {
+      "path": "webui/tests/admin_conflict_browser_fixture.js",
+      "sha256": "40899bd1c123c84062e81e0aa02a1f2ec0c625cbbcfa6818fc13ef2056a8ddf9"
+    },
+    {
+      "path": "webui/tests/admin_conflict_cases.js",
+      "sha256": "c737cbe3f44e6d41256f2c2d22d20553ad38ea1fbc488e91c8fea05e96944d7b"
+    },
+    {
+      "path": "webui/tests/admin_modal_browser_fixture.js",
+      "sha256": "27b5e5765012ca6fe013b6310475174ea06209743778279b8ec3efd15639640c"
+    },
+    {
+      "path": "webui/tests/admin_modal_cases.js",
+      "sha256": "2330a307564fa4b4a39e4b64c5c3f825672c1c55913bd759d882e1e30cb18a68"
+    },
+    {
+      "path": "webui/tests/admin_runtime.test.js",
+      "sha256": "db6f6ca9ba31b301270aaccc56aa2f436dce6223a86ea80b0236f991665e1219"
+    }
+  ]
+}

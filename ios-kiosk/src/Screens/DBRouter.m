@@ -4,6 +4,7 @@
 #import "../Core/DBCallEventTracker.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBCallTiming.h"
 #import "../Core/DBTexts.h"
 #import "../Media/DBSiren.h"
 #import "../Media/DBSipListener.h"
@@ -65,10 +66,10 @@ static BOOL DBCoreSipBackendCompiled(void) {
 
 @interface DBRouter ()
 - (void)resolveCallRecoveryEvent:(NSDictionary *)event;
-- (void)processCallRecoveryEvent:(NSDictionary *)event status:(NSDictionary *)status;
+- (void)processCallRecoveryEvent:(NSDictionary *)event snapshot:(DBCallTimingSnapshot *)snapshot;
 - (void)persistTargetedIndoorCall:(NSDictionary *)call;
 - (void)clearPersistedIndoorCall:(NSString *)callID;
-- (void)restoreTargetedIndoorCallFromStatus:(NSDictionary *)status;
+- (void)restoreTargetedIndoorCallFromSnapshot:(DBCallTimingSnapshot *)snapshot;
 @end
 
 @implementation DBRouter {
@@ -102,6 +103,13 @@ static BOOL DBCoreSipBackendCompiled(void) {
   DBCallEventTracker *_callEvents;
   NSString *_selfDeviceID;
   NSString *_reportedRecoveryCallID;
+  DBCallTiming *_recoveryTiming;
+  DBCallTiming *_indoorTiming;
+  NSUInteger _recoveryEpoch;
+  BOOL _recoverySuspended;
+  NSTimer *_recoveryTimer;
+  NSTimer *_pendingChimeTimer;
+  BOOL _pendingChimeReadInFlight;
   NSTimer *_emergencyPresentationTimer;
   UILocalNotification *_emergencyNotification;
   NSDictionary *_emergencyReport;
@@ -123,6 +131,8 @@ static BOOL DBCoreSipBackendCompiled(void) {
     _effects = [[DBSiren alloc] init];
     _launchAudio = [[DBSiren alloc] init];
     _callEvents = [[DBCallEventTracker alloc] init];
+    _recoveryTiming = [[DBCallTiming alloc] init];
+    _indoorTiming = [[DBCallTiming alloc] init];
     [_texts setLang:_boot.uiLang];
     _container = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
     _container.backgroundColor = [UIColor blackColor];
@@ -149,6 +159,7 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)dealloc {
+  [_recoveryTimer invalidate];
   [_emergencyPresentationTimer invalidate];
   if (_emergencyNotification)
     [[UIApplication sharedApplication] cancelLocalNotification:_emergencyNotification];
@@ -237,25 +248,36 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)refreshSelfDeviceIdentity {
+  if (_recoverySuspended) return;
   __weak DBRouter *weakSelf = self;
   DBCoreBridge *core = _core;
+  NSUInteger epoch = _recoveryEpoch;
+  NSUInteger coreGeneration = core.lifecycleGeneration;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    NSDictionary *status = [core status];
-    NSString *identifier = [DBConfigUtil str:status path:@"node.id"];
-    if (![identifier length]) return;
+    DBCallTimingSnapshot *snapshot = [core callTimingSnapshot];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBRouter *router = weakSelf;
-      if (router) {
-        router->_selfDeviceID = [identifier copy];
-        [router reportOwnedCallRecoveryFromStatus:status];
+      if (!router || router->_recoverySuspended || epoch != router->_recoveryEpoch ||
+          snapshot.coreGeneration != coreGeneration ||
+          snapshot.coreGeneration != core.lifecycleGeneration) return;
+      NSString *identifier = [DBConfigUtil str:snapshot.document path:@"node.id"];
+      if ([identifier length]) router->_selfDeviceID = [identifier copy];
+      [router processCallRecoveryEvent:nil snapshot:snapshot];
+      [router restoreTargetedIndoorCallFromSnapshot:snapshot];
+      if (router->_recoveryTiming.waitingForFreshSnapshot ||
+          router->_indoorTiming.waitingForFreshSnapshot) {
+        [router->_recoveryTimer invalidate];
+        router->_recoveryTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:router
+            selector:@selector(retryRecovery:) userInfo:@(epoch) repeats:NO];
       }
     });
   });
 }
 
-- (void)reportOwnedCallRecoveryFromStatus:(NSDictionary *)status {
-  [self processCallRecoveryEvent:nil status:status];
-  [self restoreTargetedIndoorCallFromStatus:status];
+- (void)retryRecovery:(NSTimer *)timer {
+  if (timer != _recoveryTimer || [timer.userInfo unsignedIntegerValue] != _recoveryEpoch) return;
+  _recoveryTimer = nil;
+  [self refreshSelfDeviceIdentity];
 }
 
 - (void)persistTargetedIndoorCall:(NSDictionary *)call {
@@ -295,54 +317,29 @@ static BOOL DBCoreSipBackendCompiled(void) {
         savedCallID, (int)synchronized);
 }
 
-- (void)restoreTargetedIndoorCallFromStatus:(NSDictionary *)status {
-  if ([_boot.role isEqualToString:@"door_station"] ||
-      ![status isKindOfClass:[NSDictionary class]]) return;
+- (void)restoreTargetedIndoorCallFromSnapshot:(DBCallTimingSnapshot *)snapshot {
+  if (_recoverySuspended || snapshot.coreGeneration != _core.lifecycleGeneration ||
+      ![_indoorTiming acceptsSnapshot:snapshot] || [_boot.role isEqualToString:@"door_station"])
+    return;
   NSDictionary *saved = [[NSUserDefaults standardUserDefaults]
       objectForKey:DBPendingIndoorCallDefaultsKey];
   if (![saved isKindOfClass:[NSDictionary class]]) return;
   NSString *callID = [DBConfigUtil evStr:saved key:@"call_id"];
-  long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
-  long long savedExpires =
-      [DBConfigUtil longLongVal:saved path:@"expires_at_ms" def:0];
-  if ([callID length] == 0 || savedExpires <= nowMs) {
+  NSString *door = [DBConfigUtil evStr:saved key:@"door"];
+  if (![callID length] || ![door length]) return;
+  if (_current == _incoming && [_callEvents.currentCallID isEqualToString:callID]) return;
+  DBCallTimingReading *reading = [_indoorTiming observeSnapshot:snapshot callID:callID
+      door:door now:DBCallMonotonicTime()];
+  if (reading.disposition != DBCallTimingActive) return;
+  NSDictionary *selected = reading.call;
+  if (![[DBConfigUtil evStr:selected key:@"state"] isEqualToString:@"ringing"]) {
     [self clearPersistedIndoorCall:callID];
     return;
   }
-  // Runtime identity/capability refreshes also call this method. Once the
-  // exact targeted call is already visible, a temporarily incomplete status
-  // snapshot must not delete its crash-recovery marker.
-  if (_current == _incoming &&
-      [_callEvents.currentCallID isEqualToString:callID]) return;
-  NSDictionary *selected = nil;
-  BOOL matchingCallSeen = NO;
-  NSArray *calls = [status objectForKey:@"active_calls"];
-  if ([callID length] > 0 && [calls isKindOfClass:[NSArray class]]) {
-    for (id rawCall in calls) {
-      if (![rawCall isKindOfClass:[NSDictionary class]]) continue;
-      NSDictionary *call = (NSDictionary *)rawCall;
-      if (![[DBConfigUtil evStr:call key:@"call_id"] isEqualToString:callID]) continue;
-      matchingCallSeen = YES;
-      NSString *state = [DBConfigUtil evStr:call key:@"state"];
-      long long expires = [DBConfigUtil longLongVal:call path:@"expires_at_ms" def:0];
-      if (([state isEqualToString:@"ringing"] ||
-           [state isEqualToString:@"purpose_pending"]) && expires > nowMs) {
-        selected = call;
-      }
-      break;
-    }
-  }
-  if (!selected) {
-    // Missing is not terminal: mesh/status convergence can lag the targeted
-    // chime. A matching but non-waiting row is authoritative and may clear.
-    if (matchingCallSeen) [self clearPersistedIndoorCall:callID];
-    return;
-  }
-
+  // Missing/expired duration is a request to check Core again, not to cancel or re-ring.
+  if ([reading.remainingSeconds doubleValue] <= 0) return;
   NSMutableDictionary *chime = [saved mutableCopy];
-  for (NSString *key in @[
-         @"door", @"purpose", @"visitor_lang", @"stage_revision", @"expires_at_ms"
-       ]) {
+  for (NSString *key in @[@"door", @"purpose", @"visitor_lang", @"stage_revision", @"expires_at_ms"]) {
     id value = [selected objectForKey:key];
     if ([value isKindOfClass:[NSString class]] || [value isKindOfClass:[NSNumber class]])
       [chime setObject:value forKey:key];
@@ -350,11 +347,8 @@ static BOOL DBCoreSipBackendCompiled(void) {
   [chime setObject:@2 forKey:@"schema_version"];
   [chime setObject:@"chime" forKey:@"t"];
   [chime setObject:callID forKey:@"call_id"];
-  NSDictionary *accepted = [_callEvents acceptChimeEvent:chime nowMs:nowMs];
-  if (!accepted) {
-    [self clearPersistedIndoorCall:callID];
-    return;
-  }
+  NSDictionary *accepted = [_callEvents acceptChimeEvent:chime timingReading:reading];
+  if (!accepted) return;
   [_home playChime:accepted];
   [self showIncoming:[DBConfigUtil evStr:accepted key:@"door"]
              purpose:[DBConfigUtil evStr:accepted key:@"purpose"]
@@ -365,87 +359,59 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)resolveCallRecoveryEvent:(NSDictionary *)event {
+  if (_recoverySuspended) return;
   NSDictionary *recoveryEvent = [event copy];
   __weak DBRouter *weakSelf = self;
   DBCoreBridge *core = _core;
+  NSUInteger epoch = _recoveryEpoch;
+  NSUInteger coreGeneration = core.lifecycleGeneration;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    NSDictionary *status = [core status];
+    DBCallTimingSnapshot *snapshot = [core callTimingSnapshot];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBRouter *router = weakSelf;
-      if (router) [router processCallRecoveryEvent:recoveryEvent status:status];
+      if (router && !router->_recoverySuspended && epoch == router->_recoveryEpoch &&
+          snapshot.coreGeneration == coreGeneration &&
+          snapshot.coreGeneration == core.lifecycleGeneration)
+        [router processCallRecoveryEvent:recoveryEvent snapshot:snapshot];
     });
   });
 }
 
-- (void)processCallRecoveryEvent:(NSDictionary *)event status:(NSDictionary *)status {
+- (void)processCallRecoveryEvent:(NSDictionary *)event snapshot:(DBCallTimingSnapshot *)snapshot {
+  if (_recoverySuspended || snapshot.coreGeneration != _core.lifecycleGeneration ||
+      ![_recoveryTiming acceptsSnapshot:snapshot]) return;
   NSString *requestedCallID = [DBConfigUtil evStr:event key:@"call_id"];
-  NSString *statusDeviceID = [DBConfigUtil str:status path:@"node.id"];
-  if ([statusDeviceID length] > 0) _selfDeviceID = [statusDeviceID copy];
-  if (![_selfDeviceID length]) {
-    if ([requestedCallID length]) [_core reportCallRecovery:requestedCallID restored:NO];
-    return;
-  }
-
-  NSArray *calls = [status objectForKey:@"active_calls"];
-  NSDictionary *selected = nil;
-  if ([calls isKindOfClass:[NSArray class]]) {
-    for (id rawCall in calls) {
-      if (![rawCall isKindOfClass:[NSDictionary class]]) continue;
-      NSDictionary *call = (NSDictionary *)rawCall;
-      NSString *callID = [DBConfigUtil evStr:call key:@"call_id"];
-      if (![callID length] ||
-          ([requestedCallID length] && ![requestedCallID isEqualToString:callID])) continue;
-      NSString *state = [DBConfigUtil evStr:call key:@"state"];
-      BOOL ownsDialog = [state isEqualToString:@"in_call"] &&
-          [[DBConfigUtil evStr:call key:@"dialog_owner"] isEqualToString:_selfDeviceID];
-      BOOL ownsWaiting = [state isEqualToString:@"ringing"] &&
-          [[DBConfigUtil evStr:call key:@"origin"] isEqualToString:_selfDeviceID] &&
-          [_boot.role isEqualToString:@"door_station"] &&
-          ([[DBConfigUtil evStr:call key:@"door"] length] == 0 ||
-           [[DBConfigUtil evStr:call key:@"door"] isEqualToString:_boot.door]);
-      if ([requestedCallID length] || ownsDialog || ownsWaiting) {
-        selected = call;
-        break;
+  NSString *deviceID = [DBConfigUtil str:snapshot.document path:@"node.id"];
+  if (![deviceID length]) return;
+  _selfDeviceID = [deviceID copy];
+  for (id rawCall in [snapshot.document objectForKey:@"active_calls"]) {
+    if (![rawCall isKindOfClass:[NSDictionary class]]) continue;
+    NSString *callID = [DBConfigUtil evStr:rawCall key:@"call_id"];
+    if (![callID length] || ([requestedCallID length] && ![requestedCallID isEqual:callID])) continue;
+    DBCallTimingReading *reading = [_recoveryTiming observeRecoverySnapshot:snapshot callID:callID
+        role:_boot.role nodeID:deviceID door:_boot.door now:DBCallMonotonicTime()];
+    if (reading.disposition != DBCallTimingActive) continue;
+    NSDictionary *call = reading.call;
+    NSString *identity = [NSString stringWithFormat:@"%lu:%@", (unsigned long)snapshot.coreGeneration, callID];
+    if ([_reportedRecoveryCallID isEqual:identity]) continue;
+    BOOL required = [DBConfigUtil evBool:call key:@"recovery_required"];
+    if ([[DBConfigUtil evStr:call key:@"state"] isEqualToString:@"in_call"]) {
+      if (required && [[DBConfigUtil evStr:call key:@"dialog_owner"] isEqualToString:deviceID]) {
+        // Neither MiniSIP nor Core PJSIP retains a dialog across a process restart.
+        _reportedRecoveryCallID = identity;
+        [_core reportCallRecovery:callID restored:NO expectedGeneration:snapshot.coreGeneration];
       }
+      continue;
+    }
+    if (![_boot.role isEqualToString:@"door_station"] ||
+        ![[DBConfigUtil evStr:call key:@"origin"] isEqualToString:deviceID] ||
+        ![[DBConfigUtil evStr:call key:@"door"] isEqualToString:_boot.door] ||
+        [reading.remainingSeconds doubleValue] <= 0 || (required && !reading.mayRestore)) continue;
+    if ([self.door restoreWaitingCall:callID snapshot:snapshot] && required) {
+      _reportedRecoveryCallID = identity;
+      [_core reportCallRecovery:callID restored:YES expectedGeneration:snapshot.coreGeneration];
     }
   }
-
-  if (!selected) {
-    NSString *eventOwner = [DBConfigUtil evStr:event key:@"dialog_owner"];
-    if ([requestedCallID length] &&
-        ([eventOwner length] == 0 || [eventOwner isEqualToString:_selfDeviceID]) &&
-        ![_reportedRecoveryCallID isEqualToString:requestedCallID]) {
-      _reportedRecoveryCallID = [requestedCallID copy];
-      [_core reportCallRecovery:requestedCallID restored:NO];
-    }
-    return;
-  }
-
-  NSString *callID = [DBConfigUtil evStr:selected key:@"call_id"];
-  if ([_reportedRecoveryCallID isEqualToString:callID]) return;
-  NSString *persistedState = [DBConfigUtil evStr:selected key:@"state"];
-  NSString *eventState = [DBConfigUtil evStr:event key:@"state"];
-  NSString *eventOwner = [DBConfigUtil evStr:event key:@"dialog_owner"];
-  NSString *owner = [eventOwner length] > 0
-      ? eventOwner : [DBConfigUtil evStr:selected key:@"dialog_owner"];
-  if ([persistedState isEqualToString:@"in_call"] ||
-      [eventState isEqualToString:@"in_call"]) {
-    if (![owner isEqualToString:_selfDeviceID]) return;
-    _reportedRecoveryCallID = [callID copy];
-    // Neither MiniSIP nor Core PJSIP keeps a native dialog across process restart.
-    [_core reportCallRecovery:callID restored:NO];
-    return;
-  }
-
-  BOOL ownsWaiting = [_boot.role isEqualToString:@"door_station"] &&
-      [[DBConfigUtil evStr:selected key:@"origin"] isEqualToString:_selfDeviceID] &&
-      ([persistedState isEqualToString:@"ringing"] ||
-       [eventState isEqualToString:@"ringing"] ||
-       [eventState isEqualToString:@"purpose_pending"]);
-  if (!ownsWaiting) return;
-  BOOL restored = [self.door restoreWaitingCall:selected recoveryState:eventState];
-  _reportedRecoveryCallID = [callID copy];
-  [_core reportCallRecovery:callID restored:restored];
 }
 
 - (NSString *)effectiveSipBackend {
@@ -689,7 +655,7 @@ static BOOL DBCoreSipBackendCompiled(void) {
     NSString *door = [_boot.door length] > 0 ? _boot.door : @"d_front";
     [self showIncoming:door purpose:@"" lang:_boot.uiLang callID:@"debug-preview"
          stageRevision:0
-           expiresAtMs:(long long)([[NSDate date] timeIntervalSince1970] * 1000.0) + 600000];
+           expiresAtMs:0];
   } else {
     NSLog(@"[doorbell][debug] unknown start screen '%@'", screen);
   }
@@ -830,11 +796,27 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)suspendMediaForBackground {
+  _recoverySuspended = YES;
+  ++_recoveryEpoch;
+  [_recoveryTimer invalidate];
+  _recoveryTimer = nil;
+  [_pendingChimeTimer invalidate];
+  _pendingChimeTimer = nil;
+  _pendingChimeReadInFlight = NO;
+  DBCallTimingSnapshot *snapshot = [_core callTimingSnapshot];
+  [_recoveryTiming requireFreshSnapshot:snapshot];
+  [_indoorTiming requireFreshSnapshot:snapshot];
+  [_callEvents requireFreshChimeSnapshot:snapshot];
   [_incoming suspendMediaForBackground];
   [_door suspendMediaForBackground];
 }
 
 - (void)resumeMediaAfterBackground {
+  _recoverySuspended = NO;
+  ++_recoveryEpoch;
+  [self refreshSelfDeviceIdentity];
+  [_callEvents requireFreshChimeSnapshot:[_core callTimingSnapshot]];
+  [self resolvePendingChimes];
   [_incoming resumeMediaAfterBackground];
   [_door resumeMediaAfterBackground];
 }
@@ -987,6 +969,57 @@ static BOOL DBCoreSipBackendCompiled(void) {
 
 
 
+- (void)presentAdmittedChime:(NSDictionary *)entry {
+  NSDictionary *chime = [entry objectForKey:@"event"];
+  NSString *callID = [DBConfigUtil evStr:chime key:@"call_id"];
+  [self persistTargetedIndoorCall:chime];
+  [_home playChime:chime];
+  if ([[entry objectForKey:@"previous_call_id"] isEqual:callID] &&
+      _current == _incoming && ![_incoming isActiveMonitor]) {
+    [_incoming refreshPurpose:[DBConfigUtil evStr:chime key:@"purpose"]
+                         lang:[DBConfigUtil evStr:chime key:@"visitor_lang"]
+                stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]];
+    return;
+  }
+  [self showIncoming:[DBConfigUtil evStr:chime key:@"door"]
+             purpose:[DBConfigUtil evStr:chime key:@"purpose"]
+                lang:[DBConfigUtil evStr:chime key:@"visitor_lang"] callID:callID
+       stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]
+          expiresAtMs:[DBConfigUtil longLongVal:chime path:@"expires_at_ms" def:0]];
+}
+
+- (void)resolvePendingChimes {
+  if (_recoverySuspended || _pendingChimeReadInFlight || !_callEvents.pendingChimeCount) return;
+  [_pendingChimeTimer invalidate];
+  _pendingChimeTimer = nil;
+  _pendingChimeReadInFlight = YES;
+  NSUInteger epoch = _recoveryEpoch;
+  NSUInteger generation = _core.lifecycleGeneration;
+  DBCoreBridge *core = _core;
+  __weak DBRouter *weakSelf = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    DBCallTimingSnapshot *snapshot = [core callTimingSnapshot];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBRouter *router = weakSelf;
+      if (!router || router->_recoverySuspended || epoch != router->_recoveryEpoch) return;
+      router->_pendingChimeReadInFlight = NO;
+      DBCallTimingSnapshot *current = generation == core.lifecycleGeneration ? snapshot : nil;
+      NSArray *ready = [router->_callEvents takeReadyChimesFromSnapshot:current
+          coreGeneration:core.lifecycleGeneration now:DBCallMonotonicTime()];
+      for (NSDictionary *entry in ready) [router presentAdmittedChime:entry];
+      if (router->_callEvents.pendingChimeCount)
+        router->_pendingChimeTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:router
+            selector:@selector(retryPendingChimes:) userInfo:@(epoch) repeats:NO];
+    });
+  });
+}
+
+- (void)retryPendingChimes:(NSTimer *)timer {
+  if (timer != _pendingChimeTimer || [timer.userInfo unsignedIntegerValue] != _recoveryEpoch) return;
+  _pendingChimeTimer = nil;
+  [self resolvePendingChimes];
+}
+
 - (void)onCoreEvent:(NSDictionary *)ev {
   NSString *t = [DBConfigUtil evStr:ev key:@"t"];
 
@@ -1102,25 +1135,9 @@ static BOOL DBCoreSipBackendCompiled(void) {
       [_home playChime:ev];
       return;
     }
-    NSString *previousCallID = _callEvents.currentCallID;
-    long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
-    NSDictionary *chime = [_callEvents acceptChimeEvent:ev nowMs:nowMs];
-    if (!chime) return;  // expired, malformed, duplicate, or stale revision
-    [self persistTargetedIndoorCall:chime];
-    [_home playChime:chime];
-    BOOL sameCall = [previousCallID length] > 0 && [previousCallID isEqualToString:callID];
-    if (sameCall && _current == _incoming && ![_incoming isActiveMonitor]) {
-      [_incoming refreshPurpose:[DBConfigUtil evStr:chime key:@"purpose"]
-                           lang:[DBConfigUtil evStr:chime key:@"visitor_lang"]
-                  stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]];
-      return;
-    }
-    [self showIncoming:[DBConfigUtil evStr:chime key:@"door"]
-               purpose:[DBConfigUtil evStr:chime key:@"purpose"]
-                  lang:[DBConfigUtil evStr:chime key:@"visitor_lang"]
-                callID:callID
-         stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]
-            expiresAtMs:[DBConfigUtil longLongVal:chime path:@"expires_at_ms" def:0]];
+    [_callEvents queueChimeEvent:ev coreGeneration:_core.lifecycleGeneration
+                            now:DBCallMonotonicTime()];
+    [self resolvePendingChimes];
   } else if ([t isEqualToString:@"reply"]) {
     if ([_boot.role isEqualToString:@"door_station"]) {
       [_door handleReplyEvent:ev];

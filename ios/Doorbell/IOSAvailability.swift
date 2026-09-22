@@ -51,6 +51,21 @@ enum IOSAvailability {
 #endif
     }
 
+    /// Preserve the iOS 9 font path while allowing visitor controls to follow Dynamic Type.
+    static func visitorFont(size: CGFloat, weight: UIFont.Weight = .regular,
+                            style: UIFont.TextStyle = .body,
+                            traits: UITraitCollection? = nil) -> UIFont {
+        let base = UIFont.systemFont(ofSize: size, weight: weight)
+#if os(iOS)
+        if #available(iOS 11.0, *) {
+            return UIFontMetrics(forTextStyle: style).scaledFont(for: base, compatibleWith: traits)
+        }
+        return base.withSize(size * UIFont.preferredFont(forTextStyle: .body).pointSize / 17)
+#else
+        return base
+#endif
+    }
+
     static func safeAreaLayoutGuide(for view: UIView) -> UILayoutGuide {
         if #available(iOS 11.0, tvOS 11.0, *) {
             return view.safeAreaLayoutGuide

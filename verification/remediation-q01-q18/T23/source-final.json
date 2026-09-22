@@ -1,0 +1,25 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "observed_at": "2026-09-22T15:31:35.896863+00:00",
+  "inputs": {
+    "ios-kiosk/src/Core/DBCoreBridge.h": "1c25243f989f88002a056f885782e9aeabd96d3c193fd1e3cc18fd3c3de5226c",
+    "ios-kiosk/src/Core/DBCoreBridge.m": "ae41cd8c34ab97916d736ee544cb739db22dce5ac2de27792665311f1dcbb9eb",
+    "ios-kiosk/src/Core/DBCallEventTracker.h": "5c59ad309d062f7ac27f54e0e3de42852a21adf3c4185e7f10b6fd9c513f0133",
+    "ios-kiosk/src/Core/DBCallEventTracker.m": "714c836bef85c2d23e2a82e821e5fc70f7bfea7a854ca0f8431bedf6a9df439d",
+    "ios-kiosk/src/Screens/DBDoorScreen.h": "f54114a305d20d51c6849ad004d3fb0fd333897c088645726cddc0e8dc053f84",
+    "ios-kiosk/src/Screens/DBDoorScreen.m": "26c3359378dc2b414081d89430b42341fc2ef61169299e82b7f3e7979e6b954f",
+    "ios-kiosk/src/Screens/DBRouter.m": "e7c6a69abebf1f3e7e2d9e6f0746f14f9af92da1400ecc98d3d04fe8fe4fe424",
+    "ios-kiosk/src/Screens/DBIncomingScreen.m": "074b34ffc730b6ebdc207cca8e9921106d48db0d92d0075e8705e816cac9617e",
+    "ios-compat/scripts/test_host.sh": "dc8778b164327657ea9985ea05fcaa95ba359f403e63b4199a97b456d8724049",
+    "ios-compat/tests/recovery_safe_mode_contract_test.py": "04b2a531d1e4591f0ded904b89a8717291492df09aabe5c8b33d2cafb9526cd3",
+    "ios-kiosk/src/Core/DBCallTiming.h": "5e6b996c90f9821a9b8d0b283f1067a1d62fc27c406bc1dd9b4e6dbd9aa10abc",
+    "ios-kiosk/src/Core/DBCallTiming.m": "05f161974367cb4ab91e5df7714fc921055680b3dcf25160f5f4c6fcee1940e0",
+    "ios-compat/tests/call_timing_test.m": "90a82b9c11598b9a49d40105779f1a96d1eaee1190647afa674e0e659e8fd272"
+  },
+  "diff_sha256": "7f7dbe4d480046409717883e9478c4b7f3cbe46ddd9dd2fa3ad6e13466a1326d",
+  "refinement": "All live and restored targeted chimes use Core time. Bounded per-identity pending admission handles late snapshots; inactive wall-clock autoClose code removed.",
+  "task_delta_patch_sha256": "1ebd54b7769b4e70f46fa8841a8b1f6ce29c704cbe92aeb073763f847b6b76d5",
+  "frozen_source_manifest": "source-frozen-r4.json",
+  "frozen_source_manifest_sha256": "6379fda3e7dc1d973beec486ac30004da3602dd84b0d5ad08a30fd1fe2dc57d3"
+}

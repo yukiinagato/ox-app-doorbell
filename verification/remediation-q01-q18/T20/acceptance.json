@@ -1,0 +1,119 @@
+{
+  "task_id": "T20",
+  "validation_scope": "native_lifecycle",
+  "environment": "iPhone 17 Simulator iOS 26.5 arm64; Debug; SIP stub",
+  "source_manifest": "verification/remediation-q01-q18/T20/source-manifest-final.json",
+  "source_manifest_sha256": "b704fc18ecf4033505343e2431cbaf54d04b99328011fe1a2b0aa6088dc5d13d",
+  "unique_specialist_test_count": 13,
+  "full_regression_test_count": 143,
+  "counting_note": "The same 13 specialist cases run normally and with separate sanitizers. Repetition is not additional unique coverage. The full regression count already includes them.",
+  "acceptance": [
+    {
+      "test_id": "T20-01",
+      "status": "PASS",
+      "production_test_class": "DoorbellTests.CoreBridgeLifecycleTests",
+      "test_methods": [
+        "testLeaseHeldBetweenAcquireAndCReadDelaysDestroy"
+      ],
+      "command_records": [
+        "verification/remediation-q01-q18/T20/evidence/xcode-full-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-tsan-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-asan-final.json"
+      ],
+      "log_sha256": {
+        "xcode-full-final": "3ca4adf5d0cf03261070789b070d04fa2f160f9a27d818e308c9c388f6ae856d",
+        "xcode-tsan-final": "0668d2f2e1cf26ddafa7ee5b095c6ffb13fcfb39f65eaff4b6f7d9f4c12ae213",
+        "xcode-asan-final": "6fc71bb9d58d9feb39345a8b65c6e7fd55151a539479fae779d3c4d8e9ee0385"
+      }
+    },
+    {
+      "test_id": "T20-02",
+      "status": "PASS",
+      "production_test_class": "DoorbellTests.CoreBridgeLifecycleTests",
+      "test_methods": [
+        "testStoppingRejectsNewReadsAndCameraCalls",
+        "testOldCameraAndEncodedFramesCannotAcquireRestartedCore"
+      ],
+      "command_records": [
+        "verification/remediation-q01-q18/T20/evidence/xcode-full-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-tsan-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-asan-final.json"
+      ],
+      "log_sha256": {
+        "xcode-full-final": "3ca4adf5d0cf03261070789b070d04fa2f160f9a27d818e308c9c388f6ae856d",
+        "xcode-tsan-final": "0668d2f2e1cf26ddafa7ee5b095c6ffb13fcfb39f65eaff4b6f7d9f4c12ae213",
+        "xcode-asan-final": "6fc71bb9d58d9feb39345a8b65c6e7fd55151a539479fae779d3c4d8e9ee0385"
+      }
+    },
+    {
+      "test_id": "T20-03",
+      "status": "PASS",
+      "production_test_class": "DoorbellTests.CoreBridgeLifecycleTests",
+      "test_methods": [
+        "testCoreCallbackCanReachMainWhileMainRequestsStop"
+      ],
+      "command_records": [
+        "verification/remediation-q01-q18/T20/evidence/xcode-full-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-tsan-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-asan-final.json"
+      ],
+      "log_sha256": {
+        "xcode-full-final": "3ca4adf5d0cf03261070789b070d04fa2f160f9a27d818e308c9c388f6ae856d",
+        "xcode-tsan-final": "0668d2f2e1cf26ddafa7ee5b095c6ffb13fcfb39f65eaff4b6f7d9f4c12ae213",
+        "xcode-asan-final": "6fc71bb9d58d9feb39345a8b65c6e7fd55151a539479fae779d3c4d8e9ee0385"
+      }
+    },
+    {
+      "test_id": "T20-04",
+      "status": "PASS",
+      "production_test_class": "DoorbellTests.CoreBridgeLifecycleTests",
+      "test_methods": [
+        "testOldCoreUiDeliveryIsRejectedAfterRestart",
+        "testOldClockResultCannotPublishIntoRestartedCoreUi",
+        "testOldCameraAndEncodedFramesCannotAcquireRestartedCore",
+        "testOldEncoderFailureCannotPoisonReplacementInSameCore",
+        "testOldCaptureObserverCannotReportFailureForReplacementInSameCore"
+      ],
+      "command_records": [
+        "verification/remediation-q01-q18/T20/evidence/xcode-full-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-tsan-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-asan-final.json"
+      ],
+      "log_sha256": {
+        "xcode-full-final": "3ca4adf5d0cf03261070789b070d04fa2f160f9a27d818e308c9c388f6ae856d",
+        "xcode-tsan-final": "0668d2f2e1cf26ddafa7ee5b095c6ffb13fcfb39f65eaff4b6f7d9f4c12ae213",
+        "xcode-asan-final": "6fc71bb9d58d9feb39345a8b65c6e7fd55151a539479fae779d3c4d8e9ee0385"
+      }
+    },
+    {
+      "test_id": "T20-05",
+      "status": "PASS",
+      "production_test_class": "DoorbellTests.CoreBridgeLifecycleTests",
+      "test_methods": [
+        "testConcurrentStopCompletionsDestroyOnceAndAllowRestart",
+        "testStopDuringStartNeverPublishesStartingHandle",
+        "testFailedStartIsDrainedBeforeRetry",
+        "testResetSupersedesIdentityRestartBeforeQueuedRestartRuns",
+        "testResetSupersedesIdentityRestartWithStopAlreadyPending"
+      ],
+      "command_records": [
+        "verification/remediation-q01-q18/T20/evidence/xcode-full-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-tsan-final.json",
+        "verification/remediation-q01-q18/T20/evidence/xcode-asan-final.json"
+      ],
+      "log_sha256": {
+        "xcode-full-final": "3ca4adf5d0cf03261070789b070d04fa2f160f9a27d818e308c9c388f6ae856d",
+        "xcode-tsan-final": "0668d2f2e1cf26ddafa7ee5b095c6ffb13fcfb39f65eaff4b6f7d9f4c12ae213",
+        "xcode-asan-final": "6fc71bb9d58d9feb39345a8b65c6e7fd55151a539479fae779d3c4d8e9ee0385"
+      }
+    }
+  ],
+  "limitations": [
+    "Swift/Objective-C sanitizer instrumentation only; native CMake C/CXX flags are empty.",
+    "Physical capture/encoding, real SIP, signing/install and old-device qualification are not asserted.",
+    "No original UAF crash reproduction is claimed."
+  ],
+  "independent_review": "independent-review.json",
+  "independent_review_verdict": "PASS_IN_SCOPE",
+  "independent_review_sha256": "4646665c91b119f7b3e9f089459962e2a035ec863f0380669c27dda0d560c525"
+}

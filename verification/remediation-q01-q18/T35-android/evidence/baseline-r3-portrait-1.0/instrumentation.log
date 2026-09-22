@@ -1,0 +1,15 @@
+INSTRUMENTATION_RESULT: stream={
+  "phase": "baseline",
+  "orientation": "portrait",
+  "font_scale": 1,
+  "source_id": "edf48b3f8fa28cfe9e0487aaf25cfc1daca04bd3fb2de0fbdd0b5ed2f618fca3",
+  "results": [
+    {
+      "id": "baseline_capture",
+      "status": "RECORDED"
+    }
+  ],
+  "core_started": false,
+  "failure": null
+}
+INSTRUMENTATION_CODE: -1

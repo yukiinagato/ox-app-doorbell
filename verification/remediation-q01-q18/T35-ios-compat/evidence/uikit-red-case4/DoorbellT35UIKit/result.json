@@ -1,0 +1,82 @@
+{
+  "selected_case" : 4,
+  "source_manifest" : "f57098ce19961c6e4ec3965f6fd2b53de03dfe5acc9400c96a24a48dc6147af7",
+  "checks" : [
+    {
+      "name" : "Hint ink contrasts with the actual flat background",
+      "resident_bytes" : 15364096,
+      "case" : "T35-04",
+      "pass" : false
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 15368192,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 15368192,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 15372288,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17518592,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays in the fixed area",
+      "resident_bytes" : 17563648,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel has its explicit accessibility label",
+      "resident_bytes" : 17563648,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel is an explicit accessibility button",
+      "resident_bytes" : 17567744,
+      "case" : "T35-04",
+      "pass" : false
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18038784,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 18038784,
+      "case" : "T35-04",
+      "pass" : true
+    }
+  ],
+  "version" : "1.0.0",
+  "machine" : "iPad1,1",
+  "boundary_calls" : [
+    "audio.configured"
+  ],
+  "system_version" : "5.1.1",
+  "accessibility_probe" : {
+    "explicit_button_label" : "Isolated probe",
+    "voice_over_running" : false,
+    "explicit_button_accessible_getter" : true
+  },
+  "bundle_id" : "jp.ox.doorbell.t35uitest",
+  "build" : "9",
+  "pid" : 30736,
+  "failed" : 2,
+  "scope" : "Actual iPad UIKit hierarchy, production target\/actions, dialogs, timers, hit-testing and rendering. UIControl events are programmatically dispatched; no HID injection, physical rotation, VoiceOver speech or external Core action."
+}

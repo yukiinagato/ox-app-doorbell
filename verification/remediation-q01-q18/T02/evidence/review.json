@@ -1,0 +1,46 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "4b3c164a85fd749fe6640e44c4b8b0b0b8fe3124fe4213fb9866e0763e7c91f0",
+  "inputs": {
+    "docs/en/remediation-contracts-adr.md": "d70fe5775a41a890caff859b3f5d1c9cc5f0993a2de5d4275a6c42071bad5ee5",
+    "docs/zh/remediation-contracts-adr.md": "75c7795cef8cf608feea8b221ab37bbc9a5f721113ecfde835942221f41560d3",
+    "verification/remediation-q01-q18/T02/existing-symbol-map.json": "94bfd83ebce810664e3eea00a71b0b61d733753be0a2f4ea0a9b7fcb51e68173",
+    "verification/remediation-q01-q18/T02/protocol-fixtures.json": "bda3cf99337028a63dc233b3edac43bb94dbf013e6754e12844abba7daa25bb6"
+  },
+  "production_manifest": "../T01/source-manifests/candidate-source.json",
+  "task_id": "T02",
+  "evidence_kind": "contract_review",
+  "reviewer": "/root/t01_evidence_review",
+  "status": "PASS",
+  "reviewed_at": "2026-09-22T13:22:18.627281+00:00",
+  "tests": [
+    {
+      "id": "T02-01",
+      "status": "PASS"
+    },
+    {
+      "id": "T02-02",
+      "status": "PASS"
+    },
+    {
+      "id": "T02-03",
+      "status": "PASS"
+    },
+    {
+      "id": "T02-04",
+      "status": "PASS"
+    }
+  ],
+  "findings_resolved": [
+    "Global SOS retains doorless scope and explicit global authority.",
+    "Terminal records have total reservation capacity and no premature eviction.",
+    "Media/panel/configuration field lifetimes are explicit.",
+    "Field naming, publish_remaining_ms ownership and ID encodings agree.",
+    "Capacity fixture explicitly sets eligible_reclaimable_terminal_rows to zero."
+  ],
+  "limitations": [
+    "Contract review only; fixtures are normative examples, not running production API tests.",
+    "Cross-node media worker/delegation, conflict retention and target memory qualification gates remain open."
+  ]
+}

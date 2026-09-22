@@ -1,0 +1,400 @@
+--- before/webui/panel/call.html
++++ after/webui/panel/call.html
+@@ -16,6 +16,7 @@
+   #offlineBand { display: none; background: #ff6b6b; color: #2a0505; text-align: center;
+                  font-size: 22px; font-weight: bold; padding: 10px; }
+   #configBand { display: none; padding: 8px 16px; color: #ffd59a; background: #3a2d19; }
++  #connectionBand { display: none; padding: 8px 16px; color: #ffd59a; background: #3a2d19; }
+   #doorTabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
+   #doorTabs button { font-size: 20px; padding: 10px 22px; border-radius: 10px;
+                      border: 1px solid #2a333d; background: #1a2027; color: #e8edf2;
+@@ -51,6 +52,7 @@
+ <body>
+ <div id="offlineBand" data-semantic-id="status.offline"></div>
+ <div id="configBand" role="status"></div>
++<div id="connectionBand" role="status"></div>
+ <header><h1 id="title" tabindex="-1" data-semantic-id="ring.title"></h1><span id="regState"></span></header>
+ <div id="doorTabs" role="group" aria-labelledby="title"></div>
+ <main>
+@@ -176,12 +178,26 @@
+   reg: document.getElementById("regState"),
+   offline: document.getElementById("offlineBand"),
+   config: document.getElementById("configBand"),
++  connection: document.getElementById("connectionBand"),
+   audio: document.getElementById("remoteAudio"),
+ };
+ let doors = [];        // [{id,label,extension,station,online}]
+ const doorTabNodes = new Map();
+ let selected = null;
+ let webrtc = null;     // {ws_url,sip_user,sip_pass,server}
++let desiredWebrtc = null;
++let appliedWebrtc = null;
++let desiredConfigIdentity = "";
++let desired_config_generation = "";
++let applied_generation = "";
++let ua_generation = 0;
++let localConfigGeneration = 0;
++let uaBinding = null;
++let uaRetirement = null;
++let attemptedConfig = null;
++let failedConfig = null;
++let configurationReceived = false;
++let configurationRevoked = false;
+ let ua = null;         // JsSIP.UA
+ let session = null;
+ let sessionConfirmed = false;
+@@ -255,7 +271,7 @@
+   els.config.textContent = t("panel.config_stale");
+ }
+ 
+-function readPoll(poll, url, apply) {
++function readPoll(poll, url, apply, onFailure) {
+   if (!readsAllowed() || poll.pending) return;
+   clearTimeout(poll.timer);
+   poll.timer = null;
+@@ -273,6 +289,7 @@
+         }
+       } else {
+         poll.failed = true;
++        if (onFailure && contextCurrent(request)) onFailure(result);
+         if (result.status === 403 && K && !sessionRefreshPending) {
+           sessionRefreshPending = true;
+           DoorbellPanelRuntime.establishSession(response => {
+@@ -300,7 +317,7 @@
+ function renderRegistration() {
+   if (registrationState.state === "registered") {
+     els.reg.textContent = t(registrationState.mock ? "panel.mock_registered" :
+-      "panel.registered", { extension: webrtc && webrtc.sip_user || "" });
++      "panel.registered", { extension: registrationState.extension || webrtc && webrtc.sip_user || "" });
+   } else if (registrationState.state === "unregistered") {
+     els.reg.textContent = t("panel.unregistered");
+   } else if (registrationState.state === "failed") {
+@@ -310,6 +327,21 @@
+   } else {
+     els.reg.textContent = "";
+   }
++}
++
++function renderConnection() {
++  let message = "";
++  if (configurationRevoked) message = t("panel.config_revoked");
++  else if (session && desiredWebrtc && (!uaBinding || uaBinding.config !== desiredWebrtc))
++    message = t("panel.config_pending");
++  else if (failedConfig && failedConfig === desiredWebrtc)
++    message = t("panel.config_apply_failed", { target: desiredWebrtc.sip_user || "—",
++      current: appliedWebrtc && appliedWebrtc.sip_user || "—" });
++  else if (desiredWebrtc && desiredWebrtc.ws_url && desiredWebrtc.sip_user &&
++      desiredWebrtc !== appliedWebrtc)
++    message = t("panel.config_applying", { target: desiredWebrtc.sip_user });
++  if (els.connection.textContent !== message) els.connection.textContent = message;
++  els.connection.style.display = message ? "block" : "none";
+ }
+ 
+ function applyI18n() {
+@@ -323,6 +355,7 @@
+     selected.call_state === "ringing" || selected.call_state === "purpose_pending") ?
+     t("ring.answer") : t("panel.call");
+   renderRegistration();
++  renderConnection();
+   renderTabs();
+   applyEmergencyI18n();
+ }
+@@ -451,30 +484,143 @@
+   els.call.disabled = !registered && !MOCK;
+ }
+ 
+-// ---------- JsSIP ----------
++function receiveWebrtc(value) {
++  const input = value || {};
++  const next = Object.freeze({ ws_url: String(input.ws_url || ""), sip_user: String(input.sip_user || ""),
++    sip_pass: String(input.sip_pass || ""), sip_pass_ref: String(input.sip_pass_ref || ""),
++    server: String(input.server || ""), config_generation: String(input.config_generation || "") });
++  // The credential participates only in this private in-memory comparison, never a log or URL.
++  const identity = JSON.stringify(next);
++  configurationReceived = true;
++  configurationRevoked = false;
++  if (identity !== desiredConfigIdentity) {
++    desiredConfigIdentity = identity;
++    desiredWebrtc = next;
++    desired_config_generation = next.config_generation || "local:" + (++localConfigGeneration);
++    failedConfig = uaRetirement && uaRetirement.blocked ? next : null;
++  }
++  initUa();
++  renderConnection();
++}
++
++function currentUa(binding) {
++  return pageActive && uaBinding === binding && ua === binding.ua && ua_generation === binding.generation;
++}
++
++function retireUa(force) {
++  if (uaRetirement) {
++    if (force) uaRetirement.finish(true);
++    return;
++  }
++  const binding = uaBinding;
++  if (!binding) return;
++  ua = null; uaBinding = null; ua_generation++;
++  registered = false;
++  clearTimeout(binding.timer);
++  binding.listeners.forEach(item => binding.ua.removeListener(item[0], item[1]));
++  const retirement = { timer: null, done: false, finish: null };
++  uaRetirement = retirement;
++  const finish = disconnect => {
++    if (retirement.done) return;
++    retirement.done = true;
++    clearTimeout(retirement.timer);
++    binding.ua.removeListener("disconnected", disconnected);
++    let closed = true;
++    try {
++      if (disconnect && binding.ua.transport) binding.ua.transport.disconnect();
++      if (binding.ua.transport && binding.ua.transport.isConnected()) closed = false;
++    } catch (_) { closed = false; }
++    if (closed) uaRetirement = null;
++    else {
++      retirement.blocked = true; retirement.done = false;
++      failedConfig = desiredWebrtc; attemptedConfig = desiredWebrtc;
++    }
++    if (closed && pageActive && !force) initUa();
++    renderConnection();
++  };
++  const disconnected = () => finish(false);
++  retirement.finish = finish;
++  binding.ua.on("disconnected", disconnected);
++  retirement.timer = setTimeout(() => finish(true), 2200);
++  try { binding.ua.unregister(); } catch (_) { }
++  try { binding.ua.stop(); } catch (_) { finish(true); }
++  if (force) finish(true);
++  else if (uaRetirement === retirement && binding.ua.transport && !binding.ua.transport.isConnected()) finish(false);
++}
++
++function revokeCalling() {
++  configurationRevoked = true;
++  configurationReceived = false;
++  desiredConfigIdentity = "";
++  attemptedConfig = null;
++  if (session) endCall("permission_revoked");
++  retireUa(true);
++  renderConnection();
++  updateCallButton();
++}
++
+ function initUa() {
+-  if (MOCK || !webrtc || !webrtc.ws_url || !webrtc.sip_user) return;
++  if (MOCK || !pageActive || !configurationReceived || configurationRevoked || session || uaRetirement) return;
++  if (uaBinding && uaBinding.config === desiredWebrtc && !uaBinding.failed) return;
++  if (uaBinding) { retireUa(false); return; }
++  if (!desiredWebrtc || attemptedConfig === desiredWebrtc) return;
++  const config = desiredWebrtc;
++  attemptedConfig = config;
++  webrtc = config;
++  registered = false;
++  registrationState = { state: "unregistered", reason: "" };
++  renderRegistration();
++  if (!config.ws_url || !config.sip_user) { updateCallButton(); return; }
++  const binding = { config, generation: ++ua_generation, configGeneration: desired_config_generation,
++    ua: null, listeners: [], timer: null };
+   try {
+-    const socket = new JsSIP.WebSocketInterface(webrtc.ws_url);
+-    ua = new JsSIP.UA({
++    const socket = new JsSIP.WebSocketInterface(config.ws_url);
++    const instance = new JsSIP.UA({
+       sockets: [socket],
+-      uri: "sip:" + webrtc.sip_user + "@" + (webrtc.server || location.hostname),
+-      password: webrtc.sip_pass || "",
++      uri: "sip:" + config.sip_user + "@" + (config.server || location.hostname),
++      password: config.sip_pass,
+       register: true,
+     });
+-    ua.on("registered", () => { registered = true;
+-        registrationState = { state: "registered", reason: "" };
+-        renderRegistration(); updateCallButton(); });
+-    ua.on("unregistered", () => { registered = false;
+-        registrationState = { state: "unregistered", reason: "" };
+-        renderRegistration(); updateCallButton(); });
+-    ua.on("registrationFailed", (e) => { registered = false;
+-        registrationState = { state: "failed", reason: e.cause || "?" };
+-        renderRegistration(); updateCallButton(); });
+-    ua.start();
+-  } catch (e) {
+-    setStatus(t("panel.jssip_init_failed", { reason: e }), true);
+-  }
++    binding.ua = instance; uaBinding = binding; ua = instance;
++    const listen = (name, fn) => {
++      const guarded = event => { if (currentUa(binding)) fn(event || {}); };
++      binding.listeners.push([name, guarded]); instance.on(name, guarded);
++    };
++    const fail = () => {
++      if (!currentUa(binding)) return;
++      failedConfig = config;
++      binding.failed = true;
++      clearTimeout(binding.timer);
++      registered = false;
++      registrationState = { state: "unregistered", reason: "" };
++      if (!session) retireUa(false);
++      renderRegistration(); renderConnection(); updateCallButton();
++    };
++    listen("connected", () => { renderConnection(); });
++    listen("registered", () => {
++      clearTimeout(binding.timer);
++      registered = true; appliedWebrtc = config; applied_generation = binding.configGeneration;
++      failedConfig = null;
++      registrationState = { state: "registered", reason: "", extension: config.sip_user };
++      renderRegistration(); renderConnection(); updateCallButton();
++    });
++    listen("unregistered", () => {
++      registered = false; registrationState = { state: "unregistered", reason: "" };
++      renderRegistration(); updateCallButton();
++    });
++    listen("registrationFailed", fail);
++    listen("disconnected", () => {
++      registered = false; registrationState = { state: "unregistered", reason: "" };
++      renderRegistration(); updateCallButton();
++    });
++    binding.timer = setTimeout(fail, 10000);
++    instance.start();
++  } catch (_) {
++    failedConfig = config;
++    if (uaBinding === binding) retireUa(true);
++    renderConnection();
++  }
++  updateCallButton();
+ }
+ 
+ function startCall() {
+@@ -695,6 +841,8 @@
+   reportLifecycleEnd(binding, reason || "local_hangup");
+   stopSendingVideo();
+   els.call.classList.remove("hang");
++  initUa();
++  renderConnection();
+   updateCallButton();
+   return true;
+ }
+@@ -720,10 +868,14 @@
+   pageActive = false;
+   pageRevision++;
+   retireReads();
++  configurationReceived = false;
++  attemptedConfig = null;
+   if (playback) { playback.stop(); playback = null; }
+   stopSendingVideo();
+   const binding = activeLifecycle;
+-  if (!binding || !binding.answered || binding.ended || MOCK) { endCall("page_closed"); return; }
++  if (!binding || !binding.answered || binding.ended || MOCK) {
++    endCall("page_closed"); retireUa(true); return;
++  }
+   binding.ended = true;
+   try {
+     fetch("/api/panel/call-lifecycle", {
+@@ -735,6 +887,7 @@
+     });
+   } catch (e) { }
+   endCall("page_closed");
++  retireUa(true);
+ });
+ 
+ window.addEventListener("pageshow", () => {
+@@ -879,7 +1032,7 @@
+         ci.doors && (typeof ci.doors !== "object" || Array.isArray(ci.doors)))
+       throw new Error("invalid call-info");
+     latestCallInfo = ci;
+-    webrtc = ci.webrtc || null;
++    receiveWebrtc(ci.webrtc);
+     // Configuration only reprojects the latest state; it never replays call lifecycle effects.
+     if (latestPanelState && latestStateContext && contextCurrent(latestStateContext)) {
+       refreshDoors(latestPanelState);
+@@ -888,6 +1041,8 @@
+     if (!ua) initUa();
+     updateCallButton();
+     return true;
++  }, failure => {
++    if (failure.status === 401 || failure.status === 403) revokeCalling();
+   });
+ }
+ 
+--- before/core/src/node/node.cpp
++++ after/core/src/node/node.cpp
+@@ -2122,6 +2122,8 @@
+     unsigned retry_step = 0;
+   };
+   std::map<std::string, WebDialogLease> web_dialog_timers;  // call_id -> authority lease
++  std::string web_call_config_identity;
++  std::string web_call_config_generation;
+   std::set<std::string> cancelled_call_ids;
+   std::deque<std::string> cancelled_call_order;
+   std::set<std::string> presented_reply_event_ids;
+@@ -9460,23 +9490,38 @@
+       const std::string version = adminCredentialVersionOnLoop();
+       sessions.publishCredential(version);
+       std::string tok;
++      const std::string csrf = genTokenHex(16);
+       for (int attempt = 0; attempt < 4; ++attempt) {
+         tok = genTokenHex(16);
+-        if (sessions.issue(tok, version, clock->monoMs())) break;
++        if (sessions.issue(tok, version, clock->monoMs(), csrf)) break;
+         tok.clear();
+       }
+       if (tok.empty()) return HttpResp::json("{\"ok\":false,\"error_code\":\"session_unavailable\"}", 503);
+-      HttpResp r = HttpResp::json("{\"ok\":true}");
++      auto result = json::obj();
++      json::setBool(result.get(), "ok", true);
++      json::set(result.get(), "csrf_token", csrf);
++      HttpResp r = HttpResp::json(json::dump(result.get()));
++      r.headers["Cache-Control"] = "no-store";
+       r.headers["Set-Cookie"] = "dbsess=" + tok + "; Path=/; HttpOnly; SameSite=Strict";
+       return r;
+     });
+ 
++    httpd->route("GET", "/api/session", [this](const HttpReq& req) {
++      const auto csrf = sessions.csrfToken(req.cookie("dbsess"), clock->monoMs());
++      if (csrf.empty()) return HttpResp::json("{\"error_code\":\"auth_required\"}", 401);
++      auto result = json::obj();
++      json::set(result.get(), "csrf_token", csrf);
++      HttpResp response = HttpResp::json(json::dump(result.get()));
++      response.headers["Cache-Control"] = "no-store";
++      return response;
++    });
++
+     httpd->route("POST", "/api/session/activity", [this](const HttpReq& req) {
+-      const auto header = req.headers.find("x-requested-with");
+-      if (header == req.headers.end() || header->second != "doorbell-admin")
++      const auto csrf = req.headers.find("x-doorbell-csrf");
++      if (!trustedWebOrigin(req) || csrf == req.headers.end())
+         return HttpResp::json("{\"ok\":false,\"error_code\":\"permission_denied\"}", 403);
+-      if (!sessions.check(req.cookie("dbsess"), clock->monoMs(), true))
+-        return HttpResp::json("{\"ok\":false,\"error_code\":\"auth_required\"}", 401);
++      if (!sessions.interact(req.cookie("dbsess"), csrf->second, clock->monoMs()))
++        return HttpResp::json("{\"ok\":false,\"error_code\":\"permission_denied\"}", 403);
+       return HttpResp::json("{\"ok\":true}");
+     });
+ 
+@@ -10790,8 +10835,17 @@
+       cJSON* wc = cfgAt("integrations.webrtc");
+       json::set(w, "ws_url", json::getString(wc, "ws_url"));
+       json::set(w, "sip_user", json::getString(wc, "sip_user"));
++      json::set(w, "sip_pass_ref", json::getString(wc, "sip_pass_ref"));
+       json::set(w, "sip_pass", referencedSecret(wc, "sip_pass_ref"));
+       json::set(w, "server", json::getString(json::get(cfg.get(), "sip"), "server"));
++      // This private identity includes resolved credentials so same-reference rotations count.
++      // The public generation is random and exposes neither a credential digest nor its input.
++      const std::string identity = snapshot_epoch + ":" + json::dump(w);
++      if (web_call_config_generation.empty() || web_call_config_identity != identity) {
++        web_call_config_identity = identity;
++        web_call_config_generation = genTokenHex(16);
++      }
++      json::set(w, "config_generation", web_call_config_generation);
+       cJSON* doors = json::addObj(o.get(), "doors");
+       cJSON* dcfg = json::get(cfg.get(), "doors");
+       cJSON* it = nullptr;
+@@ -10834,7 +10888,9 @@
+           }
+         }
+       }
+-      return HttpResp::json(json::dump(o.get()));
++      auto response = HttpResp::json(json::dump(o.get()));
++      response.headers["Cache-Control"] = "no-store";
++      return response;
+     });
+ 
+ 

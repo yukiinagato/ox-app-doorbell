@@ -1,0 +1,45 @@
+== configure ios5-armv7-pjsip-off (build id: b26e0d3-t01-20260922) ==
+-- PJSIP: disabled (using the sipctl stub)
+-- Configuring done (0.2s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/ox/Documents/project/app-doorbell/build/ios-compat/ios5-armv7-pjsip-off
+== build core ==
+[ 25%] Built target db_third_party
+[ 27%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/ha_bridge.cpp.o
+[ 31%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/mqtt_client.cpp.o
+[ 31%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/telegram.cpp.o
+[ 34%] Building CXX object CMakeFiles/doorbell_core.dir/src/capi/doorbell_capi.cpp.o
+[ 36%] Building CXX object CMakeFiles/doorbell_core.dir/src/crdt/lww_map.cpp.o
+[ 38%] Building CXX object CMakeFiles/doorbell_core.dir/src/events/event_log.cpp.o
+[ 40%] Building CXX object CMakeFiles/doorbell_core.dir/src/events/rule_engine.cpp.o
+[ 42%] Building CXX object CMakeFiles/doorbell_core.dir/src/httpd/httpd.cpp.o
+[ 44%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/fmp4.cpp.o
+[ 46%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/fmp4_demux.cpp.o
+[ 48%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/frame_bus.cpp.o
+[ 51%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/motion_detector.cpp.o
+[ 53%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/qr_scanner.cpp.o
+[ 55%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/video_track.cpp.o
+[ 57%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/inmem_net.cpp.o
+[ 59%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/mesh.cpp.o
+[ 61%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/secure_channel.cpp.o
+[ 63%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/tcp_transport.cpp.o
+[ 65%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/udp_beacon.cpp.o
+[ 68%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+[ 70%] Building CXX object CMakeFiles/doorbell_core.dir/src/sipctl/sipctl_stub.cpp.o
+[ 72%] Building CXX object CMakeFiles/doorbell_core.dir/src/store/store.cpp.o
+[ 74%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/color.cpp.o
+[ 76%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/common.cpp.o
+[ 78%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/hlc.cpp.o
+[ 80%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/ids.cpp.o
+[ 82%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/json.cpp.o
+[ 85%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/log.cpp.o
+[ 87%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/pair_uri.cpp.o
+[ 89%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/runloop.cpp.o
+[ 91%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/sntp.cpp.o
+[ 93%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/tz.cpp.o
+[ 95%] Building CXX object CMakeFiles/doorbell_core.dir/gen/webui_assets.cpp.o
+[ 97%] Linking CXX static library libdoorbell_core.a
+[100%] Built target doorbell_core
+artifact: /Users/ox/Documents/project/app-doorbell/build/ios-compat/artifacts/ios5-armv7-pjsip-off/libdoorbell_all.a
+58b94074c6111316bf271ac0813250be883380e9da8041a091a7a69c914c4c2b  /Users/ox/Documents/project/app-doorbell/build/ios-compat/artifacts/ios5-armv7-pjsip-off/libdoorbell_all.a
+installed: /Users/ox/Documents/project/app-doorbell/ios-kiosk/lib/libdoorbell_all.a

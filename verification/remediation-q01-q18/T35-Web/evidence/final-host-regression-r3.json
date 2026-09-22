@@ -1,0 +1,39 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "d0a6e9c52b271b2acea3ecb1add49372548028ee5d212c391db7a50aba7e9704",
+  "task_id": "T35-Web",
+  "test_id": "final-host-regression-r3",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/source-final-r3.json",
+  "source_manifest_sha256": "2e7e7cc46bd81b9adc2a5cfcbcfbd56e344abef16ab3596d9bef025ba558c0a8",
+  "command": [
+    "node",
+    "--test",
+    "webui/tests/call_flow.test.js",
+    "webui/tests/panel_i18n.test.js",
+    "webui/tests/runtime.test.js",
+    "webui/tests/sos_operation.test.js"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-web-20260923/final-source-r3",
+  "started_at": "2026-09-22T17:56:13.644853+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_applicable",
+  "signing_state": "not_applicable",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/final-host-regression-r3.log",
+  "limitations": [
+    "Node.js host behavior checks; no native Core, SIP, browser rendering, or device qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T17:56:13.844066+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Four existing production Web regression suites passed: call flow, panel i18n, runtime, and SOS operation (including 13 existing SOS cases)."
+}

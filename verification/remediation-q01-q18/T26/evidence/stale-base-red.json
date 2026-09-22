@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "d6e9211a3c41056075a41012e8dd7f1542c2862451944a288af2d35f17507a51",
+  "task_id": "T26",
+  "test_id": "stale-base-red",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T26/source-red.json",
+  "source_manifest_sha256": "0d6fd84397455ac86b6a15e51601a29863712ccfab1a7841347aa6c862f5da8d",
+  "command": [
+    "build/remediation-t26-20260923/red-build/doorbell_tests",
+    "--test-case=admin API: configuration conditional batch*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:23:37.154014+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T26/evidence/stale-base-red.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T15:23:39.867550+00:00",
+  "expected_exit_code": 1,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

@@ -1,0 +1,63 @@
+{
+  "observed_at": "2026-09-22T14:21:24.002525+00:00",
+  "air1_expanded_ssh_config": {
+    "user": "root",
+    "hostname": "10.10.38.199",
+    "port": "44",
+    "batchmode": "yes",
+    "identitiesonly": "yes",
+    "stricthostkeychecking": "true",
+    "hostkeyalias": "doorbell-ipad-air1",
+    "identityfile": "~/.ssh/doorbell_ipad_air1_ed25519",
+    "userknownhostsfile": "/Users/ox/.ssh/known_hosts_doorbell"
+  },
+  "saved_host_pin_checks": [
+    {
+      "host": "10.10.38.147",
+      "known_hosts_file": "/Users/ox/.ssh/known_hosts",
+      "exit_code": 0,
+      "entries": 1
+    },
+    {
+      "host": "10.10.38.79",
+      "known_hosts_file": "/Users/ox/.ssh/known_hosts",
+      "exit_code": 0,
+      "entries": 1
+    },
+    {
+      "host": "[10.10.38.79]:44",
+      "known_hosts_file": "/Users/ox/.ssh/known_hosts",
+      "exit_code": 0,
+      "entries": 1
+    }
+  ],
+  "air1_current_bundle_resolution": {
+    "exit_code": 0,
+    "output": "Information for jp.ox.doorbell\nState: jp.ox.doorbell <installed >\nPath: /private/var/containers/Bundle/Application/64FD671A-D11A-464E-8D6B-C2A35A9F31F0/Doorbell.app\nContainer Path: /var/mobile"
+  },
+  "coredevice_list_exit_code": 0,
+  "coredevice_devices": [
+    {
+      "identifier": "18FF449D-D84A-5415-AB06-5056CB9574C5",
+      "name": "ZeonfungのiPhone",
+      "model": "iPhone14,7",
+      "connection": {
+        "pairingState": "paired",
+        "tunnelState": "unavailable",
+        "transportType": null
+      },
+      "availability": "default"
+    },
+    {
+      "identifier": "54DB00FE-62A0-5739-9679-B7C513DFCEC4",
+      "name": "nagato",
+      "model": "iPhone18,3",
+      "connection": {
+        "pairingState": "paired",
+        "tunnelState": "disconnected",
+        "transportType": "localNetwork"
+      },
+      "availability": "default"
+    }
+  ]
+}

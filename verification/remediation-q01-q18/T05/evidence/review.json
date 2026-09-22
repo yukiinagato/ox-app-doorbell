@@ -1,0 +1,27 @@
+{
+  "task_id": "T05",
+  "status": "PASS",
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T15:11:27.121837+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T05/source-candidate-r2.json",
+  "source_manifest_sha256": "33cd8ebc98797d5b813cc4d7a1de4dd9a68c00a995d7024fa8362dba60e58874",
+  "inputs_match": {
+    "core/src/store/store.cpp": true,
+    "core/src/store/store.h": true,
+    "core/src/store/operation_ledger.cpp": true,
+    "core/src/store/operation_ledger.h": true,
+    "core/tests/test_operations.cpp": true,
+    "core/tests/test_operations_disk.cpp": true
+  },
+  "checks": [
+    "Reviewed actual SQLite BEGIN IMMEDIATE/COMMIT and irreversible dispatch grant ordering: failed COMMIT cannot return a grant.",
+    "Reviewed restart fencing, accepted/prepared invalidation, dispatching/dispatched unknown recovery and no replay, authenticated late ACK identity binding.",
+    "Reviewed current authorization/version rejection, same-ID parameter comparison, unknown ID non-creation and terminal pruning limits.",
+    "Reviewed SQL capacity/pagination, 32 lowercase operation ID, fixed boot metadata keys, schema migration and FULL synchronization.",
+    "Reviewed actual twenty-thread race, fork/_exit markers, real VFS SQLITE_FULL injection, rollback trigger and capacity tests; normal and native ASan each 33 tests / 17124 assertions passed."
+  ],
+  "limitations": [
+    "Store scope only; T06 must resolve and recheck current per-door/action permissions before exposing each record and authorize ACK adapters.",
+    "Physical exactly-once is not claimed; unresolved SOS dispatched records remain bounded and non-evictable under the current contract."
+  ]
+}

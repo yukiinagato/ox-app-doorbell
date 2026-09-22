@@ -1,0 +1,35 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "1fc651eeb12a6402ba4f01aeeaaade997ba7b018593f89a982f151f6a875d2e5",
+  "task_id": "T23",
+  "test_id": "compat-host-frozen-r3",
+  "evidence_kind": "host_native",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/source-frozen-host-r3.json",
+  "source_manifest_sha256": "4f97eedec48e79d07349e2a6cff7ca0fd76a78b4a1cc60a37b00d7311a990b63",
+  "command": [
+    "build/remediation-t23-20260923/frozen-r3/ios-compat/scripts/test_host.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:17:18.775229+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "host_timing_plus_MiniSIP_loopback",
+  "signing_state": "host_unsigned",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/evidence/compat-host-frozen-r3.log",
+  "limitations": [
+    "Host production-helper or historical-SDK build evidence; no physical device clock, installation, SIP/media hardware, or iOS9 armv7 qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:18:09.128522+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Full compatibility host runner, including production timing/targeted-chime/callback checks, passed.",
+  "artifact_provenance": "verification/remediation-q01-q18/T23/evidence/artifacts-final-r3.json"
+}

@@ -1,0 +1,46 @@
+{
+  "task_id": "T08",
+  "scope": "production_test",
+  "source_manifest": "../source-final-r4.json",
+  "recorded_at": "2026-09-22T15:04:47.661300+00:00",
+  "cases": [
+    {
+      "id": "T08-01",
+      "status": "PASS",
+      "evidence": "final-core-r4.log"
+    },
+    {
+      "id": "T08-02",
+      "status": "PASS",
+      "evidence": "final-core-r4.log"
+    },
+    {
+      "id": "T08-03",
+      "status": "PASS",
+      "evidence": "final-core-r4.log"
+    },
+    {
+      "id": "T08-04",
+      "status": "PASS",
+      "evidence": "final-core-r4.log"
+    },
+    {
+      "id": "T08-05",
+      "status": "PASS",
+      "evidence": "final-core-r4.log"
+    }
+  ],
+  "additional_evidence": {
+    "csrf_origin_atomic_persistence_queued_reauth": "final-core-r4.log",
+    "production_browser_interaction": "final-web-r4.log",
+    "independent_review": "review.json"
+  },
+  "counts": {
+    "core_test_cases": 23,
+    "core_assertions": 736
+  },
+  "limitations": [
+    "Partitioned nodes revoke only after credential convergence.",
+    "No hardware or production deployment qualification."
+  ]
+}

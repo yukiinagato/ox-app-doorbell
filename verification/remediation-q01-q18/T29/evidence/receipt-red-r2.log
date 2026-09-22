@@ -1,0 +1,75 @@
+09-23 03:14:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23881
+09-23 03:14:42 I [httpd] listening on 30722,[::]:30722
+09-23 03:14:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:14:42 I [node] node 3fcf06ff (doorbell) started
+09-23 03:14:42 I [node] initialized the cluster administrator password
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:275:
+TEST CASE:  config import: receipt recovery is validated and admission problems appear in preflight
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  invalid receipt content fails closed
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:307: ERROR: CHECK_FALSE( json::getBool(report.get(), "can_commit") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:308: ERROR: CHECK( cJSON_GetArraySize(json::get(report.get(), "problems")) > 0 ) is NOT correct!
+  values: CHECK( 0 >  0 )
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:309: ERROR: CHECK_FALSE( json::getBool(f.action("commit", stage.get(), std::string(32, 'b')).get(), "ok") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:310: ERROR: CHECK( f.node->configSnapshotJson() == before ) is NOT correct!
+  values: CHECK( {"schema_version":2,"revision":"eac19a391c9ec12de5405904a1c1287e:cdfa0454d1a92de4b7d2222eedc1b9e6d8b9e81a4da5005420a633277d52e2c5","edit_conflicts":[],"edit_journal":{"records":2,"local_record_limit":512,"entity_record_limit":64,"capacity_available":true,"blocked_entities":[]},"config":{"admin":{},"audio":{"volume":{"call":80,"idle":60,"sos":100}},"devices":{"3fcf06ff56cfce94e5eca8d42a7a18ca":{"name":"doorbell","role":"door_station"}},"emergency":{"trigger":{"countdown_s":3,"mode":"slide"}},"import_fixture":{"leaf_0":0,"leaf_1":1},"integrations":{"tz_offset_min":540},"notice":{"presets":[{"id":"np_absent","text":"不在です。荷物は玄関前へお願いします"},{"id":"np_back_door","text":"裏口へお回りください"},{"id":"np_construction","text":"工事中です。足元にご注意ください"}]},"quick_replies":{"qr_away":{"label":{"ja":"ただいま留守にしています","en":"We are away right now","zh":"现在不在家"},"speak":true,"order":1},"qr_no":{"label":{"ja":"結構です","en":"Not interested","zh":"不需要，谢谢"},"speak":true,"order":2},"qr_wait":{"label":{"ja":"少々お待ちください","en":"One moment please","zh":"请稍等"},"speak":true,"order":4},"qr_wrong":{"label":{"ja":"お間違いのようです","en":"Wrong address","zh":"您可能找错地方了"},"speak":true,"order":3}},"reply":{"display_ttl_s":30},"schema_version":1,"time":{"ntp":{"enabled":false,"interval_s":86400,"servers":["ntp.nict.jp","time.google.com"]},"zone":"Asia/Tokyo"},"trigger_rules":{"r_missed_call_default":{"enabled":true,"when":{"type":"call_missed"},"actions":[{"type":"device_alert","targets":{"roles":["indoor_panel"],"web_profiles":"all"},"channels":["in_app","system_notification","web_push"],"presentation":{"visual":true,"sticky":false,"ttl_s":30}}]},"r_sos_default_off":{"enabled":true,"when":{"type":"emergency_off"},"actions":[{"type":"device_alert","targets":{"roles":"all","web_profiles":"all"},"channels":["in_app","system_notification","web_push"],"never_suppress":true,"presentation":{"visual":true,"sticky":false,"ttl_s":10}},{"type":"telegram","never_suppress":true,"households":"all"}]},"r_sos_default_on":{"enabled":true,"when":{"type":"emergency_on"},"actions":[{"type":"device_alert","targets":{"roles":"all","web_profiles":"all"},"channels":["in_app","system_notification","web_push"],"never_suppress":true,"presentation":{"visual":true,"sticky":true,"ttl_s":0}},{"type":"telegram","never_suppress":true,"households":"all"}]}},"ui":{"button_sound":"button_click","call_flow":"purpose_first","call_sound":"outdoor_call_alert","call_sound_loop":false,"call_ttl_s":60,"languages":["ja","en","zh"],"launch_sound":"title_display","ringtone":"school_chime","update_sound":"indoor_update","visitor_lang_revert_s":60},"visit_purposes":{"p_delivery":{"label":{"ja":"宅配便","en":"Delivery","zh":"快递"},"icon":"📦","order":209-23 03:14:44 I [httpd] stopped
+09-23 03:14:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29262
+09-23 03:14:44 I [httpd] listening on 20884,[::]:20884
+09-23 03:14:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:14:44 I [node] node af7b5cea (doorbell) started
+09-23 03:14:44 I [node] initialized the cluster administrator password
+},"p_mail":{"label":{"ja":"郵便","en":"Mail","zh":"邮件"},"icon":"✉️","order":3},"p_other":{"label":{"ja":"その他","en":"Other","zh":"其他"},"icon":"❓","order":6},"p_sales":{"label":{"ja":"営業・集金","en":"Sales","zh":"推销/收费"},"icon":"💼","order":4},"p_visit":{"label":{"ja":"訪問","en":"Visit","zh":"访客"},"icon":"🏠","order":1},"p_work":{"label":{"ja":"検針・工事","en":"Utility","zh":"检修/施工"},"icon":"🔧","order":5}}}} == {"schema_version":2,"revision":"eac19a391c9ec12de5405904a1c1287e:4106fa9dc473bf5077fbdac6914896248fb0f8aba2c950c275bf246b09b2abf1","edit_conflicts":[],"edit_journal":{"records":1,"local_record_limit":512,"entity_record_limit":64,"capacity_available":true,"blocked_entities":[]},"config":{"admin":{},"audio":{"volume":{"call":80,"idle":60,"sos":100}},"devices":{"3fcf06ff56cfce94e5eca8d42a7a18ca":{"name":"doorbell","role":"door_station"}},"emergency":{"trigger":{"countdown_s":3,"mode":"slide"}},"import_fixture":{"leaf_0":0},"integrations":{"tz_offset_min":540},"notice":{"presets":[{"id":"np_absent","text":"不在です。荷物は玄関前へお願いします"},{"id":"np_back_door","text":"裏口へお回りください"},{"id":"np_construction","text":"工事中です。足元にご注意ください"}]},"quick_replies":{"qr_away":{"label":{"ja":"ただいま留守にしています","en":"We are away right now","zh":"现在不在家"},"speak":true,"order":1},"qr_no":{"label":{"ja":"結構です","en":"Not interested","zh":"不需要，谢谢"},"speak":true,"order":2},"qr_wait":{"label":{"ja":"少々お待ちください","en":"One moment please","zh":"请稍等"},"speak":true,"order":4},"qr_wrong":{"label":{"ja":"お間違いのようです","en":"Wrong address","zh":"您可能找错地方了"},"speak":true,"order":3}},"reply":{"display_ttl_s":30},"schema_version":1,"time":{"ntp":{"enabled":false,"interval_s":86400,"servers":["ntp.nict.jp","time.google.com"]},"zone":"Asia/Tokyo"},"trigger_rules":{"r_missed_call_default":{"enabled":true,"when":{"type":"call_missed"},"actions":[{"type":"device_alert","targets":{"roles":["indoor_panel"],"web_profiles":"all"},"channels":["in_app","system_notification","web_push"],"presentation":{"visual":true,"sticky":false,"ttl_s":30}}]},"r_sos_default_off":{"enabled":true,"when":{"type":"emergency_off"},"actions":[{"type":"device_alert","targets":{"roles":"all","web_profiles":"all"},"channels":["in_app","system_notification","web_push"],"never_suppress":true,"presentation":{"visual":true,"sticky":false,"ttl_s":10}},{"type":"telegram","never_suppress":true,"households":"all"}]},"r_sos_default_on":{"enabled":true,"when":{"type":"emergency_on"},"actions":[{"type":"device_alert","targets":{"roles":"all","web_profiles":"all"},"channels":["in_app","system_notification","web_push"],"never_suppress":true,"presentation":{"visual":true,"sticky":true,"ttl_s":0}},{"type":"telegram","never_suppress":true,"households":"all"}]}},"ui":{"button_sound":"button_click","call_flow":"purpose_first","call_sound":"outdoor_call_alert","call_sound_loop":false,"call_ttl_s":60,"languages":["ja","en","zh"],"launch_sound":"title_display","ringtone":"school_chime","update_sound":"indoor_update","visitor_lang_revert_s":60},"visit_purposes":{"p_delivery":{"label":{"ja":"宅配便","en":"Delivery","zh":"快递"},"icon":"📦","order":2},"p_mail":{"label":{"ja":"郵便","en":"Mail","zh":"邮件"},"icon":"✉️","order":3},"p_other":{"label":{"ja":"その他","en":"Other","zh":"其他"},"icon":"❓","order":6},"p_sales":{"label":{"ja":"営業・集金","en":"Sales","zh":"推销/收费"},"icon":"💼","order":4},"p_visit":{"label":{"ja":"訪問","en":"Visit","zh":"访客"},"icon":"🏠","order":1},"p_work":{"label":{"ja":"検針・工事","en":"Utility","zh":"检修/施工"},"icon":"🔧","order":5}}}} )
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:311: ERROR: CHECK( json::getBool(f.action("cancel", stage.get()).get(), "ok") ) is NOT correct!
+  values: CHECK( false )
+
+=================================================================09-23 03:14:46 I [httpd] stopped
+09-23 03:14:46 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23283
+09-23 03:14:46 I [httpd] listening on 20001,[::]:20001
+09-23 03:14:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:14:46 I [node] node f9ea506a (doorbell) started
+09-23 03:14:46 I [node] initialized the cluster administrator password
+09-23 03:14:48 I [httpd] stopped
+==============
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:275:
+TEST CASE:  config import: receipt recovery is validated and admission problems appear in preflight
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  unparseable receipt metadata cannot prevent cancellation
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:307: ERROR: CHECK( json::getBool(report.get(), "ok") ) is NOT correct!
+  values: CHECK( false )
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:308: ERROR: CHECK( cJSON_GetArraySize(json::get(report.get(), "problems")) > 0 ) is NOT correct!
+  values: CHECK( 0 >  0 )
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:311: ERROR: CHECK( json::getBool(f.action("cancel", stage.get()).get(), "ok") ) is NOT correct!
+  values: CHECK( false )
+
+===============================================================================
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:275:
+TEST CASE:  config import: receipt recovery is validated and admission problems appear in preflight
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  full durable receipt capacity is reported before commit
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:307: ERROR: CHECK_FALSE( json::getBool(report.get(), "can_commit") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp:308: ERROR: CHECK( cJSON_GetArraySize(json::get(report.get(), "problems")) > 0 ) is NOT correct!
+  values: CHECK( 0 >  0 )
+
+===============================================================================
+[doctest] test cases:   1 |   0 passed |  1 failed | 7 skipped
+[doctest] assertions: 113 | 103 passed | 10 failed |
+[doctest] Status: FAILURE!

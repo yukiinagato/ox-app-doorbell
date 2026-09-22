@@ -1,0 +1,7 @@
+{
+  "task": "T15",
+  "status": "VERIFIED_IN_SCOPE",
+  "final_acceptance": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T15/acceptance.json",
+  "sha256": "dbf69ec2ac0a46fb6b8ed01b444b1b71fac5a1c23de77ed3fe4537cb9a633788",
+  "prior_record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T15/evidence/acceptance-before-device.json"
+}

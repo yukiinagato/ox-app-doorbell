@@ -1,0 +1,44 @@
+{
+  "task": "T07",
+  "run": "asan-final",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/source-final.json",
+  "source_manifest_sha256": "c8d50870fb7cfe4776f131f28b78386cc5fb74dca660c9e41397e58928e06d24",
+  "command_record_sha256": "f01247e5feb073ce98abc0c70c9e8a62161ab92aada171b00b31f759458cf128",
+  "binary_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/asan-final-doorbell_tests",
+  "binary_sha256": "db177adf55fab6032bf54a7cb4f07436a9e1b7db97133c77ba8e2093fd7d40f2",
+  "compile_commands_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/asan/compile_commands.json",
+  "compile_commands_sha256": "2dbf8d4ce16450a95a11be630c26d52d6720774d4d8d1d69e5a51f15543c81b6",
+  "representative_compile_commands": [
+    {
+      "directory": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/asan",
+      "command": "/usr/bin/cc -DNO_CACHING -DNO_CGI -DNO_SSL -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 -DSQLITE_DQS=0 -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=1 -DUSE_IPV6 -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/sqlite -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/civetweb -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/cjson -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/monocypher -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/qrcodegen -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/quirc -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/stb -fsanitize=address -fno-omit-frame-pointer -O2 -g -DNDEBUG -std=gnu99 -arch arm64 -fPIC -o CMakeFiles/db_third_party.dir/third_party/sqlite/sqlite3.c.o -c /Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/sqlite/sqlite3.c",
+      "file": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/sqlite/sqlite3.c",
+      "output": "CMakeFiles/db_third_party.dir/third_party/sqlite/sqlite3.c.o"
+    },
+    {
+      "directory": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/asan",
+      "command": "/usr/bin/c++ -DDB_HTTPD_TEST_HOOKS=1 -DNO_CACHING -DNO_CGI -DNO_SSL -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 -DSQLITE_DQS=0 -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=1 -DUSE_IPV6 -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/include -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/sqlite -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/civetweb -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/cjson -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/monocypher -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/qrcodegen -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/quirc -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/stb -fsanitize=address -fno-omit-frame-pointer -O2 -g -DNDEBUG -std=gnu++17 -arch arm64 -fPIC -Wall -Wextra -Wno-unused-parameter -o CMakeFiles/doorbell_core.dir/src/node/node.cpp.o -c /Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src/node/node.cpp",
+      "file": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src/node/node.cpp",
+      "output": "CMakeFiles/doorbell_core.dir/src/node/node.cpp.o"
+    },
+    {
+      "directory": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/asan",
+      "command": "/usr/bin/c++ -DDB_HTTPD_TEST_HOOKS=1 -DNO_CACHING -DNO_CGI -DNO_SSL -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 -DSQLITE_DQS=0 -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=1 -DUSE_IPV6 -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/doctest -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/include -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/sqlite -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/civetweb -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/cjson -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/monocypher -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/qrcodegen -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/quirc -I/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/third_party/stb -fsanitize=address -fno-omit-frame-pointer -O2 -g -DNDEBUG -std=gnu++17 -arch arm64 -fPIE -o CMakeFiles/doorbell_tests.dir/tests/test_operations_ack.cpp.o -c /Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/tests/test_operations_ack.cpp",
+      "file": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/tests/test_operations_ack.cpp",
+      "output": "CMakeFiles/doorbell_tests.dir/tests/test_operations_ack.cpp.o"
+    }
+  ],
+  "dynamic_libraries": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/asan-final-doorbell_tests:\n\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1356.0.0)\n\t/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2100.43.0)\n\t@rpath/libclang_rt.asan_osx_dynamic.dylib (compatibility version 0.0.0, current version 0.0.0)\n",
+  "sip_backend": "stub",
+  "sanitizer": "address",
+  "archives": [
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/asan/libdoorbell_core.a",
+      "sha256": "1fef1c1710afed110463b54f944e3788d2014e54bde1712ed3610d72dfb42c42"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/asan/libdb_third_party.a",
+      "sha256": "307a29a34ab9ca453ac5ee369043c99195efe915488426cd5217a8f315e55d5a"
+    }
+  ]
+}

@@ -1,0 +1,83 @@
+09-23 01:27:46 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:24440
+09-23 01:27:46 I [node] created the missing door entry doors.front for this door station
+09-23 01:27:46 I [httpd] listening on 31469,[::]:31469
+09-23 01:27:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:46 I [node] node c255b413 (operation-authority) started
+09-23 01:27:46 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:28053
+09-23 01:27:46 I [httpd] listening on 22208,[::]:22208
+09-23 01:27:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:46 I [node] node 2a8f96ed (operation-page) started
+09-23 01:27:46 I [node] initialized the cluster administrator password
+09-23 01:27:48 I [httpd] stopped
+09-23 01:27:50 I [httpd] stopped
+09-23 01:27:50 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:25802
+09-23 01:27:50 I [node] created the missing door entry doors.front for this door station
+09-23 01:27:50 I [httpd] listening on 23532,[::]:23532
+09-23 01:27:50 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:50 I [node] node 529ac623 (operation-authority) started
+09-23 01:27:50 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:20250
+09-23 01:27:50 I [httpd] listening on 31087,[::]:31087
+09-23 01:27:50 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:50 I [node] node 59a3bee8 (operation-page) started
+09-23 01:27:50 I [node] initialized the cluster administrator password
+09-23 01:27:52 I [httpd] stopped
+09-23 01:27:54 I [httpd] stopped
+09-23 01:27:54 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:24986
+09-23 01:27:54 I [node] created the missing door entry doors.front for this door station
+09-23 01:27:54 I [httpd] listening on 27731,[::]:27731
+09-23 01:27:54 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:54 I [node] node 4fcf8dfd (operation-authority) started
+09-23 01:27:54 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:24905
+09-23 01:27:54 I [httpd] listening on 23714,[::]:23714
+09-23 01:27:54 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:54 I [node] node ca5f7383 (operation-page) started
+09-23 01:27:54 I [node] initialized the cluster administrator password
+09-23 01:27:56 I [httpd] stopped
+09-23 01:27:58 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:39:
+TEST CASE:  panel operations: remote SOS response loss preserves one session-owned intent
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:50: FATAL ERROR: REQUIRE( prepared.status == 200 ) is NOT correct!
+  values: REQUIRE( 401 == 200 )
+  logged: prepared.body := {"schema_version":2,"ok":false,"error_code":"auth_required","err":"auth_required","request_id":"896ae059719f55cde9137cdb822bc9e0","retry_mode":"none"}
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:75:
+TEST CASE:  panel operations: only SOS start with current session CSRF origin and grant is allowed
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:81: ERROR: CHECK( operationHttp(fleet.a_opts.http_port, "POST", "/api/operations/prepare", fleet.request(action), owner.cookie, csrf).status == 403 ) is NOT correct!
+  values: CHECK( 401 == 403 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:81: ERROR: CHECK( operationHttp(fleet.a_opts.http_port, "POST", "/api/operations/prepare", fleet.request(action), owner.cookie, csrf).status == 403 ) is NOT correct!
+  values: CHECK( 401 == 403 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:85: ERROR: CHECK( operationHttp(fleet.a_opts.http_port, "POST", "/api/operations/prepare", body, owner.cookie).status == 403 ) is NOT correct!
+  values: CHECK( 401 == 403 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:87: ERROR: CHECK( operationHttp(fleet.a_opts.http_port, "POST", "/api/operations/prepare", body, owner.cookie, "wrong-csrf").status == 403 ) is NOT correct!
+  values: CHECK( 401 == 403 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:89: ERROR: CHECK( operationHttp(fleet.a_opts.http_port, "POST", "/api/operations/prepare", body, owner.cookie, csrf, false, "").status == 403 ) is NOT correct!
+  values: CHECK( 401 == 403 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:91: ERROR: CHECK( operationHttp(fleet.a_opts.http_port, "POST", "/api/operations/prepare", body, owner.cookie, csrf, false, "https://untrusted.invalid").status == 403 ) is NOT correct!
+  values: CHECK( 401 == 403 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:94: FATAL ERROR: REQUIRE( prepared.status == 200 ) is NOT correct!
+  values: REQUIRE( 401 == 200 )
+  logged: prepared.body := {"schema_version":2,"ok":false,"error_code":"auth_required","err":"auth_required","request_id":"976efd2a8bc88d17346da9ca0223eb3c","retry_mode":"none"}
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:112:
+TEST CASE:  panel operations: credential generation changes invalidate old operation sessions
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t12-20260923/red-source/core/tests/test_panel_operations.cpp:116: FATAL ERROR: REQUIRE( prepared.status == 200 ) is NOT correct!
+  values: REQUIRE( 401 == 200 )
+
+===============================================================================
+[doctest] test cases:  3 |  0 passed | 3 failed | 475 skipped
+[doctest] assertions: 90 | 81 passed | 9 failed |
+[doctest] Status: FAILURE!

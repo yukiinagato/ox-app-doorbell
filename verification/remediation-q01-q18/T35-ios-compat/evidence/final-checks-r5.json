@@ -1,0 +1,38 @@
+{
+  "checked_at": "2026-09-22T17:24:18.257458+00:00",
+  "checks": [
+    {
+      "command": [
+        "python3",
+        "tools/gen_i18n.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T35-ios-compat/evidence/i18n-r5.log",
+      "log_sha256": "260f741e918f6a280e7b455528427e841f7352cc53f0c199e5703ee0aa0c69bf"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/check_english_source.py"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T35-ios-compat/evidence/english-r5.log",
+      "log_sha256": "e31b139fc62aa187694c8103481b6e9e3fd40190149c2243857640caccdac6a4"
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "--",
+        "ios-kiosk/src/Screens/DBDoorScreen.m",
+        "ios-compat/tests/door_visitor_actions_host.m",
+        "ios-compat/tests/run_door_visitor_actions_host.py"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T35-ios-compat/evidence/diff-r5.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

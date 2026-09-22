@@ -1,0 +1,9 @@
+Executable=/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-build/doorbell_tests
+Identifier=doorbell_tests
+Format=Mach-O thin (arm64)
+CodeDirectory v=20400 size=206759 flags=0x20002(adhoc,linker-signed) hashes=6458+0 location=embedded
+Signature=adhoc
+Info.plist=not bound
+TeamIdentifier=not set
+Sealed Resources=none
+Internal requirements=none

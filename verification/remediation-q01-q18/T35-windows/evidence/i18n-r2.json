@@ -1,0 +1,18 @@
+{
+  "started_at": "2026-09-22T17:59:51.766006+00:00",
+  "finished_at": "2026-09-22T17:59:51.841873+00:00",
+  "command": [
+    "python3",
+    "tools/gen_i18n.py",
+    "--check"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "exit_code": 0,
+  "source_manifest_sha256": "7bedd6a1e5ace48ccb04c644a2ea5598b70de03f176985e0d09ce72092fc782e",
+  "platform": "macOS arm64 / Mono",
+  "sip_backend": "not linked",
+  "signing": "test-only unsigned",
+  "scope": "Generated resource currency check; no new keys in this task.",
+  "observed_result": "PASS",
+  "log_sha256": "260f741e918f6a280e7b455528427e841f7352cc53f0c199e5703ee0aa0c69bf"
+}

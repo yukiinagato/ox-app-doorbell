@@ -1,0 +1,24 @@
+admin logic tests: ok
+admin runtime tests: ok
+call flow tests: ok
+T11-01 production heartbeat: PASS
+T11-02 production heartbeat: PASS
+T11-03 production heartbeat: PASS
+T11-04 production heartbeat: PASS
+heartbeat identity bounds, auth, visibility, timeout and late-success guards: PASS
+T10-01 production page: PASS
+T10-02 production page: PASS
+T10-03 production page: PASS
+AssertionError [ERR_ASSERTION]: closed page has no polling/watchdog timers
+
+1 !== 0
+
+    at T10-04 (/Users/ox/Documents/project/app-doorbell/webui/tests/call_poll_lanes.test.js:80:36)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/call_poll_lanes.test.js:108:11 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 0,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

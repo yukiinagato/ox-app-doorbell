@@ -1,0 +1,34 @@
+{
+  "observed_at": "2026-09-22T17:03:36.858933+00:00",
+  "checks": [
+    {
+      "command": [
+        "python3",
+        "tools/gen_i18n.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "output": "gen_i18n: 15 generated files are current\n"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/check_english_source.py"
+      ],
+      "exit_code": 0,
+      "output": "check_english_source: no violations\n"
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "--",
+        "ios-kiosk",
+        "ios-compat"
+      ],
+      "exit_code": 0,
+      "output": ""
+    }
+  ]
+}

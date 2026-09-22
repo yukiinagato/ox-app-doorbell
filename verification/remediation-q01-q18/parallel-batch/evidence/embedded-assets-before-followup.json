@@ -1,0 +1,36 @@
+{
+  "status": "PASS",
+  "observed_at": "2026-09-22T13:41:24.403313+00:00",
+  "kind": "production_embedded_http_assets",
+  "checks": [
+    {
+      "uri": "/admin/app.js",
+      "source": "webui/admin/app.js",
+      "http_status": 200,
+      "embedded_sha256": "b0738afbd726c5ef7288a2283437b7e81d8e6205531185513724ae974a950f5b",
+      "source_sha256": "b0738afbd726c5ef7288a2283437b7e81d8e6205531185513724ae974a950f5b",
+      "matches": true
+    },
+    {
+      "uri": "/panel/runtime.js",
+      "source": "webui/panel/runtime.js",
+      "http_status": 200,
+      "embedded_sha256": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+      "source_sha256": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+      "matches": true
+    },
+    {
+      "uri": "/panel/call",
+      "source": "webui/panel/call.html",
+      "http_status": 200,
+      "embedded_sha256": "09295e3590193c4f1d52c98203598b54e56ee6376ca42ecdc06c71192b541eba",
+      "source_sha256": "09295e3590193c4f1d52c98203598b54e56ee6376ca42ecdc06c71192b541eba",
+      "matches": true
+    }
+  ],
+  "browser_ui": "NOT_RUN: Chrome automation is blocked by an open extension UI; the IAB backend is unavailable.",
+  "limitations": [
+    "Source bytes served by the production fixture are checked; no browser interaction or device qualification is implied.",
+    "T09 page boundary revision is pending; this is the pre-followup artifact."
+  ]
+}

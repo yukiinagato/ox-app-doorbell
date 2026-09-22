@@ -1,0 +1,42 @@
+{
+  "phase": "green",
+  "orientation": "landscape",
+  "font_scale": 1,
+  "source_id": "b2bfa44cd4f3a372210b01f06d25c8b91ed723a3f23ef8072a5d2fc0233785d5",
+  "results": [
+    {
+      "id": "T35-01 purpose_first",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-01 ring_then_purpose",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-02 stable slot and gesture ownership",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-03 neutral recovery and accessible SOS",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-R1 stale SOS confirmation after cancel",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-R1 stale SOS confirmation after detach",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-R1 stale SOS confirmation after replace",
+      "status": "PASS"
+    },
+    {
+      "id": "T35-04 long text and scaled primary actions",
+      "status": "PASS"
+    }
+  ],
+  "core_started": false,
+  "failure": null
+}

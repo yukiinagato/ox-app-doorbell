@@ -1,0 +1,324 @@
+{
+  "schema_version": 1,
+  "task_id": "T20",
+  "reviewer": "/root/t02_contract_inventory",
+  "independence": "Did not implement T20. Read production changes and production-linked tests, independently inspected completed logs, and recomputed source, app-binary and preserved-archive hashes. Wrote review artifacts only.",
+  "reviewed_at": "2026-09-22T14:06:14.761578+00:00",
+  "status": "PASS_IN_SCOPE",
+  "verdict": "PASS_IN_SCOPE",
+  "scope": "native_lifecycle on iOS Simulator; shared tvOS consumer build verification only",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "0202f65a8b2f6c4943aaae606dd7089ade16f08564ae9a6d86a5925037ee673f",
+  "source_manifest": "verification/remediation-q01-q18/T20/source-manifest-final.json",
+  "source_manifest_sha256": "b704fc18ecf4033505343e2431cbaf54d04b99328011fe1a2b0aa6088dc5d13d",
+  "source_input_comparison": {
+    "expected": 12,
+    "matched": 12,
+    "mismatches": []
+  },
+  "source_files": {
+    "ios/Doorbell/CoreBridge.swift": "6caa9bae6c524e3322fa2d9856f2835e34c39aac0806ec8d190b5775cd6168c8",
+    "ios/Doorbell/DoorbellClock.swift": "a2da2e566099c39fa9dabbc6fb444f4ed9801cf8d09795995be1460fc4c03229",
+    "ios/Doorbell/AppDelegate.swift": "39079fcba1032a43ab73c015384d8c8b8c34e76be122899d79a85890770af0a2",
+    "ios/Doorbell/MainViewController.swift": "8bb5be087fe0786090f16624220e692408d8a76f9a6a9a9167b2edc1463ec66e",
+    "ios/Doorbell/CameraFeeder.swift": "6dcaf67b32f5cf3489dc19e98c00b40ae3263d53e7e9572ffc16edbdba450a56",
+    "ios/Doorbell/VideoEncoderVT.swift": "f9acb00c1b1ebe792f42dde88c17b2bab9b09c459e6a21db1c6d3b6f0b76a5f4",
+    "ios/DoorbellTV/TVAppDelegate.swift": "4e4e90647b5fde01ec8b4445b75c925c5cb8c870b4b05ca1662cfac113e7e0ec",
+    "ios/DoorbellTests/CoreBridgeLifecycleTests.swift": "5845ac5c7f0d5094d01bc4e05de7c1c61a634d03fb311ef03d0b0bf1faa0a254",
+    "ios/Doorbell.xcodeproj/project.pbxproj": "8a9975ab0805af3574257ca97ec21aa83a4dcc368e0e94d7e6fd0d5449ddf9be",
+    "ios-compat/tests/recovery_safe_mode_contract_test.py": "00bf74e117c51977678ccca2bfd3426c446238f9ee3d9c5603453e96d5a2a17e",
+    "ios/Doorbell/Info.plist": "3acb8f6ab792bfb1d8aece7250a01d17c882bc918ca2ae501b6f27c85548de97",
+    "ios/DoorbellTV/Info.plist": "672883c29e5f251f6241c180396d9ff1895da50f7ddad4335f0a3331dd30a459"
+  },
+  "report": "verification/remediation-q01-q18/T20/independent-review.md",
+  "report_sha256": "1a399c81e52f93fa640d570331fd37018011c29743148cbd9b66b99fcee6de91",
+  "initial_verdict": "CHANGES_REQUESTED",
+  "blocking_findings_resolved": [
+    {
+      "id": "R1",
+      "problem": "Old camera/encoded data could acquire a replacement Core handle after a stop/start gap.",
+      "resolution": "Media ingress requires expected Core generation and compares it atomically with lease acquisition; capture output identity and original frame generation are retained.",
+      "tests": [
+        "testOldCameraAndEncodedFramesCannotAcquireRestartedCore"
+      ],
+      "positive_control": "Old raw and encoded admissions equal zero; current-generation admissions equal two."
+    },
+    {
+      "id": "R2",
+      "problem": "Queued identity restart and its stop continuation could outlive pairing reset and restart over setup.",
+      "resolution": "Application transition token retires queued and pending identity restart when reset begins; repeated reset remains guarded.",
+      "tests": [
+        "testResetSupersedesIdentityRestartBeforeQueuedRestartRuns",
+        "testResetSupersedesIdentityRestartWithStopAlreadyPending"
+      ]
+    },
+    {
+      "id": "R3",
+      "problem": "Retired camera/encoder status could poison replacement producer state in the same Core generation.",
+      "resolution": "Captured session generation validates mutation and final main delivery, paired with Core generation; capture stop and begin use distinct session generations.",
+      "tests": [
+        "testOldEncoderFailureCannotPoisonReplacementInSameCore",
+        "testOldCaptureObserverCannotReportFailureForReplacementInSameCore"
+      ]
+    }
+  ],
+  "open_blocking_findings": [],
+  "acceptance_review": [
+    {
+      "id": "T20-01",
+      "status": "PASS_IN_SCOPE",
+      "evidence": "Real production withCore barrier delays exactly-once native destruction until acquired call exits."
+    },
+    {
+      "id": "T20-02",
+      "status": "PASS_IN_SCOPE",
+      "evidence": "Stopping rejects new real reads and frame entries."
+    },
+    {
+      "id": "T20-03",
+      "status": "PASS_IN_SCOPE",
+      "evidence": "Real Core callback reaches main while main requests nonblocking stop; teardown finishes."
+    },
+    {
+      "id": "T20-04",
+      "status": "PASS_IN_SCOPE",
+      "evidence": "Old Core UI/clock results, old raw/encoded frames and retired producer state are rejected; current work remains admitted."
+    },
+    {
+      "id": "T20-05",
+      "status": "PASS_IN_SCOPE",
+      "evidence": "Concurrent stop, cancelled/failed startup and both actual AppDelegate reset/identity orderings preserve exactly-once destruction and valid restart semantics."
+    }
+  ],
+  "targeted_normal_evidence": {
+    "log": "verification/remediation-q01-q18/T20/evidence/xcode-normal-r7.log",
+    "log_sha256": "d9e9c7ddf211390bd930303b2956b90a0b5007f54b6be510a0bbb470dc923955",
+    "tests": 13,
+    "failures": 0,
+    "observed_result": "TEST SUCCEEDED"
+  },
+  "final_runs": [
+    {
+      "id": "xcode-full-final",
+      "scope": "ios_simulator_tests",
+      "status": "PASS",
+      "test_count": 143,
+      "failed_tests": 0,
+      "command_record": "verification/remediation-q01-q18/T20/evidence/xcode-full-final.json",
+      "command_record_sha256": "933147bc9c21f11bea3bd5319a2991882e6d1001765b100b9900d64d1fef53ee",
+      "command": [
+        "env",
+        "DB_ALLOW_SIP_STUB=1",
+        "xcodebuild",
+        "-project",
+        "ios/Doorbell.xcodeproj",
+        "-scheme",
+        "Doorbell",
+        "-configuration",
+        "Debug",
+        "-destination",
+        "platform=iOS Simulator,id=5675591C-491D-4232-9887-B2ECBB030C10",
+        "-derivedDataPath",
+        "build/remediation-t20-20260922/xcode-normal",
+        "-resultBundlePath",
+        "build/remediation-t20-20260922/full-final.xcresult",
+        "CODE_SIGNING_ALLOWED=NO",
+        "test"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T20/evidence/xcode-full-final.log",
+      "log_sha256": "3ca4adf5d0cf03261070789b070d04fa2f160f9a27d818e308c9c388f6ae856d",
+      "artifact_record": "verification/remediation-q01-q18/T20/evidence/xcode-full-final-artifacts.json",
+      "artifact_record_sha256": "14899450ab13cdfc15a4649b8eb5e6c1b1f998c45c032f9ba44af9b016873cfd",
+      "app_binaries": {
+        "build/remediation-t20-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell": {
+          "sha256": "9d1e5e42104fb7d1557c9e18541fe379c60fad80f5ab699bf8f58c36e4918f24",
+          "uuid": "UUID: 84C47D61-5530-30AE-A6BB-B4A68D48994A (arm64) build/remediation-t20-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell"
+        },
+        "build/remediation-t20-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib": {
+          "sha256": "45b9c17db2012d9ccca04f9fedb11ca3bdc1d7462be5078344d48c46ebb24f39",
+          "uuid": "UUID: 35C61B2E-2A50-3D8A-9EE7-0F3A324E9C48 (arm64) build/remediation-t20-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib"
+        }
+      },
+      "native_archive_copy": "build/remediation-t20-20260922/artifact-snapshots/xcode-full-final/libdoorbell_all.a",
+      "native_archive_sha256": "063b3fcfa14efc5d61fd63b773570367822a202af34017f8fef90bd4a8ef3b1d",
+      "sip_backend": "stub",
+      "native_cmake_flags": [
+        "CMAKE_CXX_FLAGS:STRING=",
+        "CMAKE_C_FLAGS:STRING="
+      ],
+      "artifact_checks": "Recomputed app binary and retained archive hashes; all matched."
+    },
+    {
+      "id": "xcode-tsan-final",
+      "scope": "ios_simulator_tsan_swift_objc",
+      "status": "PASS",
+      "test_count": 13,
+      "failed_tests": 0,
+      "command_record": "verification/remediation-q01-q18/T20/evidence/xcode-tsan-final.json",
+      "command_record_sha256": "bb90bde462a55220aa8bd0b26d04fa261fe0fcc35a439ec29c0271a505d46aae",
+      "command": [
+        "env",
+        "DB_ALLOW_SIP_STUB=1",
+        "xcodebuild",
+        "-project",
+        "ios/Doorbell.xcodeproj",
+        "-scheme",
+        "Doorbell",
+        "-configuration",
+        "Debug",
+        "-destination",
+        "platform=iOS Simulator,id=5675591C-491D-4232-9887-B2ECBB030C10",
+        "-derivedDataPath",
+        "build/remediation-t20-20260922/xcode-tsan",
+        "-resultBundlePath",
+        "build/remediation-t20-20260922/tsan-final.xcresult",
+        "-only-testing:DoorbellTests/CoreBridgeLifecycleTests",
+        "-enableThreadSanitizer",
+        "YES",
+        "CODE_SIGNING_ALLOWED=NO",
+        "test"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T20/evidence/xcode-tsan-final.log",
+      "log_sha256": "0668d2f2e1cf26ddafa7ee5b095c6ffb13fcfb39f65eaff4b6f7d9f4c12ae213",
+      "artifact_record": "verification/remediation-q01-q18/T20/evidence/xcode-tsan-final-artifacts.json",
+      "artifact_record_sha256": "7d7325839d67e2c0db686d95eca1a45779749532eba63a5317b29a67e433fa75",
+      "app_binaries": {
+        "build/remediation-t20-20260922/xcode-tsan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell": {
+          "sha256": "28bc4db2665ed6124b1f0783f3c182da42c83181ce5b4808895ccc9bf74bc338",
+          "uuid": "UUID: D1690855-6411-3F45-844B-22C749AFBBBA (arm64) build/remediation-t20-20260922/xcode-tsan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell"
+        },
+        "build/remediation-t20-20260922/xcode-tsan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib": {
+          "sha256": "5a5f53bc9166520602cfd072b08a3a5ddf3da46471d90964dba6f813f7733ba8",
+          "uuid": "UUID: 995C63F3-5B34-3652-AF05-06A0B5C37142 (arm64) build/remediation-t20-20260922/xcode-tsan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib"
+        }
+      },
+      "native_archive_copy": "build/remediation-t20-20260922/artifact-snapshots/xcode-tsan-final/libdoorbell_all.a",
+      "native_archive_sha256": "c2b1f9adeb7ddbc0414a47435d67bd7f488f356d1c1fac4972e3ed736aab6055",
+      "sip_backend": "stub",
+      "native_cmake_flags": [
+        "CMAKE_CXX_FLAGS:STRING=",
+        "CMAKE_C_FLAGS:STRING="
+      ],
+      "artifact_checks": "Recomputed app binary and retained archive hashes; all matched."
+    },
+    {
+      "id": "xcode-asan-final",
+      "scope": "ios_simulator_asan_swift_objc",
+      "status": "PASS",
+      "test_count": 13,
+      "failed_tests": 0,
+      "command_record": "verification/remediation-q01-q18/T20/evidence/xcode-asan-final.json",
+      "command_record_sha256": "ebfab5c6f978ce1345ed7cca7af9fd694ca9d0c933f81a65745c1f447c39a5ef",
+      "command": [
+        "env",
+        "DB_ALLOW_SIP_STUB=1",
+        "xcodebuild",
+        "-project",
+        "ios/Doorbell.xcodeproj",
+        "-scheme",
+        "Doorbell",
+        "-configuration",
+        "Debug",
+        "-destination",
+        "platform=iOS Simulator,id=5675591C-491D-4232-9887-B2ECBB030C10",
+        "-derivedDataPath",
+        "build/remediation-t20-20260922/xcode-asan",
+        "-resultBundlePath",
+        "build/remediation-t20-20260922/asan-final.xcresult",
+        "-only-testing:DoorbellTests/CoreBridgeLifecycleTests",
+        "-enableAddressSanitizer",
+        "YES",
+        "CODE_SIGNING_ALLOWED=NO",
+        "test"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T20/evidence/xcode-asan-final.log",
+      "log_sha256": "6fc71bb9d58d9feb39345a8b65c6e7fd55151a539479fae779d3c4d8e9ee0385",
+      "artifact_record": "verification/remediation-q01-q18/T20/evidence/xcode-asan-final-artifacts.json",
+      "artifact_record_sha256": "a7390889eca6e714beb8eb57bfbfb4d817f7c7bcbbaf8a370eec7bf216fa729e",
+      "app_binaries": {
+        "build/remediation-t20-20260922/xcode-asan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell": {
+          "sha256": "09c2fdcbb1372a9cba715f83b3a8ad7bcc8cd873da6d12988cdd41b9a72f44ed",
+          "uuid": "UUID: 486E67B0-9754-3123-B89B-A19CFF0E5C50 (arm64) build/remediation-t20-20260922/xcode-asan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell"
+        },
+        "build/remediation-t20-20260922/xcode-asan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib": {
+          "sha256": "06036598abb9b06421c13a5ae618d82a7dfe3b1feca1223ad9c922ef9f5c82df",
+          "uuid": "UUID: A3A02B03-0433-3899-B740-E67D65D2375B (arm64) build/remediation-t20-20260922/xcode-asan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib"
+        }
+      },
+      "native_archive_copy": "build/remediation-t20-20260922/artifact-snapshots/xcode-asan-final/libdoorbell_all.a",
+      "native_archive_sha256": "d60c8e4b021691b9956b39de835f40882d59c8572bab56f288d740f458d4101a",
+      "sip_backend": "stub",
+      "native_cmake_flags": [
+        "CMAKE_CXX_FLAGS:STRING=",
+        "CMAKE_C_FLAGS:STRING="
+      ],
+      "artifact_checks": "Recomputed app binary and retained archive hashes; all matched."
+    },
+    {
+      "id": "xcode-tvos-final",
+      "scope": "tvos_simulator_build_only",
+      "status": "PASS",
+      "test_count": null,
+      "failed_tests": null,
+      "command_record": "verification/remediation-q01-q18/T20/evidence/xcode-tvos-final.json",
+      "command_record_sha256": "98a614b3a08ebb73a5a46ed0255f8cf8918251424a717735ba8562c0882113b5",
+      "command": [
+        "env",
+        "DB_ALLOW_SIP_STUB=1",
+        "xcodebuild",
+        "-project",
+        "ios/Doorbell.xcodeproj",
+        "-scheme",
+        "DoorbellTV",
+        "-configuration",
+        "Debug",
+        "-destination",
+        "generic/platform=tvOS Simulator",
+        "-derivedDataPath",
+        "build/remediation-t20-20260922/xcode-tvos",
+        "CODE_SIGNING_ALLOWED=NO",
+        "build"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T20/evidence/xcode-tvos-final.log",
+      "log_sha256": "6ed88daf8d19d3287eaabe9ce44374f1906f5180c857f2496fa9cab15d0be768",
+      "artifact_record": "verification/remediation-q01-q18/T20/evidence/xcode-tvos-final-artifacts.json",
+      "artifact_record_sha256": "21f6f2740f974bc1350275e4917a1b39667ccaa9c7baa411d1797265322130fd",
+      "app_binaries": {
+        "build/remediation-t20-20260922/xcode-tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV": {
+          "sha256": "7b91369603f42f7299c11d632075bc510a9655827bd643f8c40a1e46bf2757a6",
+          "uuid": "UUID: 9D04DCDF-E005-337F-B500-AC4BB177D508 (arm64) build/remediation-t20-20260922/xcode-tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV"
+        },
+        "build/remediation-t20-20260922/xcode-tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV.debug.dylib": {
+          "sha256": "8462145a7fedb095106be99173c7a5f60b2fae0444e8732ecf0eda4f2dbc4728",
+          "uuid": "UUID: 2BBA7374-6968-3788-9497-12B75A5E960B (arm64) build/remediation-t20-20260922/xcode-tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV.debug.dylib"
+        }
+      },
+      "native_archive_copy": "build/remediation-t20-20260922/artifact-snapshots/xcode-tvos-final/libdoorbell_all.a",
+      "native_archive_sha256": "ac04bdd65dae98c6db973d2be5d39c345dd7d2c9ee572d258e6fdcb24ee13ad1",
+      "sip_backend": "real_pjsip",
+      "native_cmake_flags": [
+        "CMAKE_CXX_FLAGS:STRING=",
+        "CMAKE_C_FLAGS:STRING="
+      ],
+      "artifact_checks": "Recomputed app binary and retained archive hashes; all matched."
+    }
+  ],
+  "archive_identity_clarification": {
+    "status": "RESOLVED",
+    "meaning": "source-manifest-final.json native_archives is a pre-run observation only. Completed run artifact records identify actual app Mach-O hashes/UUIDs and preserve run-specific native archive copies. Historical hashes were retained, not backfilled with later archive contents."
+  },
+  "limitations": [
+    "iOS Simulator Debug test runs use the SIP stub; no real SIP dialog, physical lock, SOS, hardware capture or deployment is qualified.",
+    "ThreadSanitizer and AddressSanitizer instrument Xcode Swift/Objective-C targets; custom C/C++ native archive flags are empty. This is not full C++ race or UAF coverage.",
+    "Final tvOS simulator build uses real PJSIP but is build-only evidence, not tvOS runtime or device qualification.",
+    "Camera notifications and encoder-state tests drive production status code with simulated boundaries, not physical capture or successful hardware codec output.",
+    "No previously observed device UAF is claimed. Base HEAD is not a clean source identity; the dirty-tree source hashes and per-run artifacts identify the reviewed snapshot.",
+    "No standalone incoming T20 file copy was supplied; earlier shared UI edits were preserved and excluded from T20 change attribution."
+  ],
+  "task_status_mutated": false
+}

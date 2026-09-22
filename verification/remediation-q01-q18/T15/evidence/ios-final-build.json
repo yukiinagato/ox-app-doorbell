@@ -1,0 +1,25 @@
+{
+  "command": [
+    "env",
+    "DB_ALLOW_SIP_STUB=1",
+    "xcodebuild",
+    "-project",
+    "ios/Doorbell.xcodeproj",
+    "-scheme",
+    "Doorbell",
+    "-configuration",
+    "Debug",
+    "-destination",
+    "generic/platform=iOS Simulator",
+    "-derivedDataPath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/xcode",
+    "CODE_SIGNING_ALLOWED=NO",
+    "build-for-testing",
+    "ARCHS=arm64",
+    "ONLY_ACTIVE_ARCH=YES"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green",
+  "exit_code": 0,
+  "duration_s": 5.086091995239258,
+  "qualification": "Compile only; final execution blocked by Mac lock screen"
+}

@@ -12,6 +12,7 @@ namespace DoorbellApp.Core
     public sealed class UiEvent
     {
         public string T;
+        public long CoreGeneration;
         public Dictionary<string, object> Data;
         public string Str(string key) =>
             Data != null && Data.TryGetValue(key, out var v) && v != null ? v.ToString() : "";
@@ -33,6 +34,8 @@ namespace DoorbellApp.Core
     public sealed class CoreClient : IDisposable
     {
         private IntPtr _core;
+        private long _generation;
+        public long Generation => Interlocked.Read(ref _generation);
         // Native Core retains callback pointers for the client's lifetime, so every delegate must
         // remain strongly rooted until Core is stopped and destroyed.
         private CoreInterop.UiEventCb _uiCb;
@@ -174,13 +177,15 @@ namespace DoorbellApp.Core
             _core = CoreInterop.db_core_create_v2(ref plat, dataDir, bootJson);
             if (_core == IntPtr.Zero) return false;
 
+            long generation = Interlocked.Increment(ref _generation);
             _uiCb = (user, ev) =>
             {
                 try
                 {
                     string s = CoreInterop.ReadUtf8(ev);
                     var d = _json.Deserialize<Dictionary<string, object>>(s);
-                    var e = new UiEvent { T = d != null && d.ContainsKey("t") ? d["t"] as string : "", Data = d };
+                    if (generation != Generation) return;
+                    var e = new UiEvent { CoreGeneration = generation, T = d != null && d.ContainsKey("t") ? d["t"] as string : "", Data = d };
                     if (e.T == "call_recovery_required")
                         lock (_eventLock) _pendingRecovery = e;
                     UiEventReceived?.Invoke(e);
@@ -192,6 +197,7 @@ namespace DoorbellApp.Core
             };
             CoreInterop.db_core_set_ui_callback(_core, _uiCb, IntPtr.Zero);
             if (CoreInterop.db_core_start(_core) == 0) return true;
+            Interlocked.Increment(ref _generation);
             CoreInterop.db_core_destroy(_core);
             _core = IntPtr.Zero;
             return false;
@@ -249,11 +255,11 @@ namespace DoorbellApp.Core
                     _core, doorId ?? "", callId, reason ?? "visitor") == 0;
         }
 
-        public void ReportCallRecovery(string callId, bool restored)
+        public void ReportCallRecovery(string callId, bool restored, long expectedGeneration)
         {
             if (string.IsNullOrEmpty(callId)) return;
             lock (_nativeLock)
-                if (_core != IntPtr.Zero) CoreInterop.db_core_report_call_recovery(
+                if (_core != IntPtr.Zero && expectedGeneration == Generation) CoreInterop.db_core_report_call_recovery(
                     _core, callId, restored ? 1 : 0);
         }
 
@@ -625,15 +631,22 @@ namespace DoorbellApp.Core
 
         public bool SipAvailable => string.Equals(SipBackend, "pjsip", StringComparison.Ordinal);
 
-        public Dictionary<string, object> Status()
+        public CallTiming.Snapshot CallTimingSnapshot()
         {
-            if (_core == IntPtr.Zero) return null;
-            string s;
-            lock (_nativeLock) s = CoreInterop.TakeUtf8(CoreInterop.db_core_status_json(_core));
-            if (s == null) return null;
-            try { return _json.Deserialize<Dictionary<string, object>>(s); }
-            catch { return null; }
+            lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
+                double requested = CallTiming.MonotonicMs;
+                string json = CoreInterop.TakeUtf8(CoreInterop.db_core_status_json(_core));
+                if (json == null) return null;
+                try { return new CallTiming.Snapshot {
+                    Document = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json),
+                    CoreGeneration = Generation, RequestedAtMs = requested }; }
+                catch { return null; }
+            }
         }
+
+        public Dictionary<string, object> Status() => CallTimingSnapshot()?.Document;
 
         public Dictionary<string, object> Config()
         {
@@ -902,13 +915,21 @@ namespace DoorbellApp.Core
 
         public void Dispose()
         {
-            if (_core != IntPtr.Zero)
+            IntPtr retired;
+            lock (_nativeLock)
             {
-                CoreInterop.db_core_set_ui_callback(_core, null, IntPtr.Zero);
-                CoreInterop.db_core_stop(_core);
-                CoreInterop.db_core_destroy(_core);
+                Interlocked.Increment(ref _generation);
+                retired = _core;
                 _core = IntPtr.Zero;
             }
+            // Drain in-flight native work before detaching; callbacks may need managed locks.
+            if (retired != IntPtr.Zero)
+            {
+                CoreInterop.db_core_set_ui_callback(retired, null, IntPtr.Zero);
+                CoreInterop.db_core_stop(retired);
+                CoreInterop.db_core_destroy(retired);
+            }
+            lock (_eventLock) _pendingRecovery = null;
             _tts?.Dispose();
         }
     }

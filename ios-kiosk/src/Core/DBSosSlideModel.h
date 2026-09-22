@@ -26,6 +26,9 @@ FOUNDATION_EXPORT const double DBSosArmFraction;  // 0.90
 - (void)updateFraction:(double)fraction;
 // Returns YES when releasing armed the countdown or fired immediately.
 - (BOOL)endTouch;
+// Called only after the shell's explicit accessibility confirmation. It uses
+// the same countdown, including the configured zero-second case.
+- (BOOL)confirmAccessibilityActivation;
 // One second elapsed. Returns YES exactly once, when the countdown reaches zero.
 - (BOOL)tick;
 // A tap during the countdown cancels it. Returns YES when something was cancelled.

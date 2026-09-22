@@ -1,0 +1,41 @@
+{
+  "reviewer": "t02_translation",
+  "status": "PASS_IN_REVIEWED_CORE_SCOPE",
+  "completed_at": "2026-09-22T17:24:16.037973+00:00",
+  "source_manifest": "verification/remediation-q01-q18/T28/source-green-r5.json",
+  "source_manifest_sha256": "de307f12ae1e0257de42e595276fbbc6644ca64cd041057edd307c3c43b00f80",
+  "reviewed_files": {
+    "core/src/node/config_edit_journal.h": "9d9153932f33bb46401917e71e3b8ce77aee463454a4121b302c3f2a013df11e",
+    "core/src/node/config_edit_journal.cpp": "d8ff4f7de762a9c7ff946ed5c6d15af03890d1d29552f73711b605c290c9e120",
+    "core/src/node/node.cpp": "575e76aa0987cd08efccd228ed676498b9e7c791850d8e98a333ad4c50ed42d0",
+    "core/src/crdt/lww_map.cpp": "62f9fdc0a34f357a0ca6444ef82f31077edf43b47c6bdcfcbd151b71714b38a9",
+    "core/src/store/store.cpp": "f8b2ccaa13e109c26c4611e6aaff4e122cce934ceaf510e0d5041be39eeb76ea",
+    "core/tests/test_config_conflicts.cpp": "e65d769ae6eea2632e792f6707cbaeb1672fa3c5f30ccabb8a49909bbfa074e0"
+  },
+  "independent_test_source_sha256": "e3cd80d312690f29f3db626e509d148c6777d913cbb48f502e65bdb30e448573",
+  "resolved_findings": [
+    "R1 strict remote record metadata/schema/parent/operation bounds",
+    "R2 public native setter, native notices and legacy import share journal transaction",
+    "R3 devices collection root delete rejected; root set was already rejected",
+    "R4 partial delete cannot retire full entity conflict heads",
+    "Strict secret references and URL scrub boundaries"
+  ],
+  "independent_green": {
+    "path": "verification/remediation-q01-q18/T28/evidence/independent-review-green-r5.json",
+    "sha256": "9ad8feb89de619a0aa988a34053a62a3780029a4ce04fdf676d797b317a2b3ee",
+    "cases": 8,
+    "assertions": 168,
+    "exit_code": 0
+  },
+  "root_targeted_green": {
+    "path": "verification/remediation-q01-q18/T28/evidence/green-r5.json",
+    "cases": 26,
+    "assertions": 836,
+    "exit_code": 0
+  },
+  "limitations": [
+    "The root full Core regression was still running at this review signature.",
+    "Admin conflict DOM/browser behavior and native target integration are outside this Core-only review.",
+    "Mixed-fleet edits and bounded capacity policy retain the documented implementation limits."
+  ]
+}

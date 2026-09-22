@@ -1,0 +1,77 @@
+== configure ios5-armv7-pjsip-off (build id: remediation-t23-20260923-frozen-r3) ==
+-- The C compiler identification is AppleClang 21.0.0.21000101
+-- The CXX compiler identification is AppleClang 21.0.0.21000101
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- PJSIP: disabled (using the sipctl stub)
+-- Found Python3: /opt/homebrew/Frameworks/Python.framework/Versions/3.14/bin/python3.14 (found version "3.14.6") found components: Interpreter
+-- Configuring done (0.7s)
+-- Generating done (0.0s)
+-- Build files have been written to: /Users/ox/Documents/project/app-doorbell/build/remediation-t23-20260923/frozen-r3/build/ios-compat/ios5-armv7-pjsip-off
+== build core ==
+[  8%] Building C object CMakeFiles/db_third_party.dir/third_party/cjson/cJSON.c.o
+[  8%] Building C object CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher.c.o
+[  8%] Building C object CMakeFiles/db_third_party.dir/third_party/sqlite/sqlite3.c.o
+[  8%] Building C object CMakeFiles/db_third_party.dir/third_party/civetweb/civetweb.c.o
+/Users/ox/Documents/project/app-doorbell/build/remediation-t23-20260923/frozen-r3/core/third_party/sqlite/sqlite3.c:40328:8: warning: "gethostuuid() is disabled." [-W#warnings]
+ 40328 | #      warning "gethostuuid() is disabled."
+       |        ^
+[ 10%] Building C object CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher-ed25519.c.o
+[ 12%] Building C object CMakeFiles/db_third_party.dir/third_party/qrcodegen/qrcodegen.c.o
+[ 14%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/quirc.c.o
+[ 16%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/identify.c.o
+[ 18%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/decode.c.o
+[ 20%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/version_db.c.o
+[ 22%] Building C object CMakeFiles/db_third_party.dir/third_party/stb/stb_image_impl.c.o
+1 warning generated.
+[ 25%] Linking C static library libdb_third_party.a
+[ 25%] Built target db_third_party
+[ 27%] Embedding webui assets
+embed_webui: 23 assets, 1893068 bytes -> /Users/ox/Documents/project/app-doorbell/build/remediation-t23-20260923/frozen-r3/build/ios-compat/ios5-armv7-pjsip-off/gen/webui_assets.cpp
+[ 35%] Building CXX object CMakeFiles/doorbell_core.dir/src/capi/doorbell_capi.cpp.o
+[ 35%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/mqtt_client.cpp.o
+[ 35%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/ha_bridge.cpp.o
+[ 35%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/telegram.cpp.o
+[ 37%] Building CXX object CMakeFiles/doorbell_core.dir/src/crdt/lww_map.cpp.o
+[ 39%] Building CXX object CMakeFiles/doorbell_core.dir/src/events/event_log.cpp.o
+[ 41%] Building CXX object CMakeFiles/doorbell_core.dir/src/events/rule_engine.cpp.o
+[ 43%] Building CXX object CMakeFiles/doorbell_core.dir/src/httpd/httpd.cpp.o
+[ 45%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/fmp4.cpp.o
+[ 47%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/fmp4_demux.cpp.o
+[ 50%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/frame_bus.cpp.o
+[ 52%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/motion_detector.cpp.o
+[ 54%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/qr_scanner.cpp.o
+[ 56%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/video_track.cpp.o
+[ 58%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/inmem_net.cpp.o
+[ 60%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/mesh.cpp.o
+[ 62%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/secure_channel.cpp.o
+[ 64%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/tcp_transport.cpp.o
+[ 66%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/udp_beacon.cpp.o
+[ 68%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+[ 70%] Building CXX object CMakeFiles/doorbell_core.dir/src/sipctl/sipctl_stub.cpp.o
+[ 72%] Building CXX object CMakeFiles/doorbell_core.dir/src/store/operation_ledger.cpp.o
+[ 75%] Building CXX object CMakeFiles/doorbell_core.dir/src/store/store.cpp.o
+[ 77%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/color.cpp.o
+[ 79%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/common.cpp.o
+[ 81%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/hlc.cpp.o
+[ 83%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/ids.cpp.o
+[ 85%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/json.cpp.o
+[ 87%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/log.cpp.o
+[ 89%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/pair_uri.cpp.o
+[ 91%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/runloop.cpp.o
+[ 93%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/sntp.cpp.o
+[ 95%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/tz.cpp.o
+[ 97%] Building CXX object CMakeFiles/doorbell_core.dir/gen/webui_assets.cpp.o
+[100%] Linking CXX static library libdoorbell_core.a
+[100%] Built target doorbell_core
+artifact: /Users/ox/Documents/project/app-doorbell/build/remediation-t23-20260923/frozen-r3/build/ios-compat/artifacts/ios5-armv7-pjsip-off/libdoorbell_all.a
+567353487b2721a3508daa69a80b6f384e9ecfd1d0fc44b502e3b48f289ecacb  /Users/ox/Documents/project/app-doorbell/build/remediation-t23-20260923/frozen-r3/build/ios-compat/artifacts/ios5-armv7-pjsip-off/libdoorbell_all.a
+installed: /Users/ox/Documents/project/app-doorbell/build/remediation-t23-20260923/frozen-r3/ios-kiosk/lib/libdoorbell_all.a

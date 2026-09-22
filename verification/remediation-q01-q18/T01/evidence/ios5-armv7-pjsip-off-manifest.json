@@ -1,0 +1,24 @@
+{
+  "architectures": [
+    "armv7"
+  ],
+  "artifact": "libdoorbell_all.a",
+  "build_id": "b26e0d3-t01-20260922",
+  "core_source_sha256": "f3612efc701899ffff97374b62e03e370958a4ae06eb15795a9d748692aad35d",
+  "minimum_os": "5.1",
+  "profile": "ios5-armv7-pjsip-off",
+  "schema_version": 1,
+  "sha256": "58b94074c6111316bf271ac0813250be883380e9da8041a091a7a69c914c4c2b",
+  "sip_backend": "core_pjsip_off_ios_compat_minisip",
+  "source_dirty": true,
+  "source_revision": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "toolchain": {
+    "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+    "cmake": "cmake version 4.4.3",
+    "libcxx_sha256": "030046e3e9795be3a813269bddf40862de3f6d19e96b384d806201826b109e49",
+    "libcxxabi_sha256": "f20a625547e5ce5eaf7ecb3e43ae1be27e96baf041fa125c0b36c2de8ed50b6f",
+    "libunwind_sha256": "94196093d8a803b3927bd7255c0938f2d9bab9c71165f950f36db602f873d4c0",
+    "sdk": "iPhoneOS7.1.sdk",
+    "sdk_settings_sha256": "2a743d65834fb21c0256c6c3c66e1d943cd01c7ac87f78235bc8c78165a88593"
+  }
+}

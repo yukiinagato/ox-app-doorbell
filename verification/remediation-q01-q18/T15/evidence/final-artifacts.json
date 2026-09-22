@@ -1,0 +1,13 @@
+{
+  "recorded_at": "2026-09-22T16:07:08.688729+00:00",
+  "source_revision": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "patch_sha256": "dd34191170651e9fca4753925a6d6cb43fcd8dbf8dee9774538acf2d19b41b90",
+  "frozen_manifest_sha256": "fa1db5bbcdde06f985c77c98ba544fa07fd9eb7f97f84cf5cb1128ff4c5a3ba1",
+  "artifact_hashes": {
+    "build/remediation-t15-20260923/green-host/doorbell_tests": "7b89f01874f0080432fbd00c9ffe607bd8865e353fb8190953b03f382676da97",
+    "build/remediation-t15-20260923/green-host/libdoorbell_core.a": "e2db5c3483ea38fd33836e21c1f0081eb373bd77d74ff31f94cb99b6d953806b",
+    "build/remediation-t15-20260923/xcode/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib": "c8757cbdcfbd35a47819cf1be4114e6063fc4ed5c03cf0273f7bf71b027e055a",
+    "build/remediation-t15-20260923/xcode/Build/Products/Debug-iphonesimulator/Doorbell.app/PlugIns/DoorbellTests.xctest/DoorbellTests": "afd4d4f27a20b9d3015bad060808fa98d6d056e2484de788542e3b7abfd6f4c2"
+  },
+  "qualification": "Core host and unsigned iOS simulator SIP stub; final iOS execution blocked by Mac lock screen; Windows has separate source/evidence records."
+}

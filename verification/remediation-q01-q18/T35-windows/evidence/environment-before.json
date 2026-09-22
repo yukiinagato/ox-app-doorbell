@@ -1,0 +1,53 @@
+{
+  "recorded_at": "2026-09-22T17:40:09.274860+00:00",
+  "quota_before_work": {
+    "weekly_used_percent": 88,
+    "resets_at": 1790416443,
+    "reset_observed": false
+  },
+  "known_device": "doorbell-win / ox-nas.local",
+  "runbook": "Claude project-device-role-rotation.md, Windows node paragraph; credentials not copied",
+  "known_ip": "10.10.38.43",
+  "resolved_hostname": "10.10.38.43",
+  "ports": [
+    {
+      "port": 22,
+      "connected": false,
+      "error": "TimeoutError"
+    },
+    {
+      "port": 3389,
+      "connected": true
+    },
+    {
+      "port": 445,
+      "connected": true
+    },
+    {
+      "port": 5985,
+      "connected": false,
+      "error": "TimeoutError"
+    },
+    {
+      "port": 5986,
+      "connected": false,
+      "error": "TimeoutError"
+    },
+    {
+      "port": 47180,
+      "connected": false,
+      "error": "TimeoutError"
+    }
+  ],
+  "host_tools": {
+    "dotnet": null,
+    "mono": "/opt/homebrew/bin/mono",
+    "msbuild": null,
+    "xbuild": "/opt/homebrew/bin/xbuild",
+    "mcs": "/opt/homebrew/bin/mcs",
+    "wine": null,
+    "xfreerdp": null,
+    "wlfreerdp": null
+  },
+  "scope": "Read-only probes of the single runbook-listed device; no subnet scan or security setting changes."
+}

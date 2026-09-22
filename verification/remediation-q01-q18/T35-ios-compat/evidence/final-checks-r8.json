@@ -1,0 +1,38 @@
+{
+  "checked_at": "2026-09-22T18:05:20.291400+00:00",
+  "checks": [
+    {
+      "command": [
+        "python3",
+        "tools/gen_i18n.py",
+        "--check"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T35-ios-compat/evidence/i18n-r8.log",
+      "log_sha256": "260f741e918f6a280e7b455528427e841f7352cc53f0c199e5703ee0aa0c69bf"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/check_english_source.py"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T35-ios-compat/evidence/english-r8.log",
+      "log_sha256": "e31b139fc62aa187694c8103481b6e9e3fd40190149c2243857640caccdac6a4"
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "--",
+        "ios-kiosk/src/Screens/DBDoorScreen.m",
+        "ios-kiosk/src/Screens/DBWidgets.m",
+        "ios-compat/tests/uikit_visitor_runner"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T35-ios-compat/evidence/diff-r8.log",
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

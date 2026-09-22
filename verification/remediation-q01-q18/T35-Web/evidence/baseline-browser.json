@@ -1,0 +1,179 @@
+{
+  "scope": "Production DOM and callbacks with controlled XHR; not Core/device qualification",
+  "phase": "baseline",
+  "door_sha256": "660cc50490a8e5c277a543e9c4e69827cfbc27297caf285ad2344f8f4c48ee5b",
+  "case_sha256": "c4b924b97d452f1649d50d5ab8a52e0bf1b09fc6841b07eab31b7ef0d554e6ee",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T17:52:03.312Z",
+  "results": [
+    {
+      "id": "Purpose-first waits for a choice and sends the chosen purpose with the call",
+      "status": "PASS"
+    },
+    {
+      "id": "Purpose-first Back survives background snapshots and never rings",
+      "status": "FAIL",
+      "message": "Idle snapshot disabled preflight Back"
+    },
+    {
+      "id": "Ring-then-purpose starts once and Skip does not cancel",
+      "status": "PASS"
+    },
+    {
+      "id": "Answered state retires purpose actions and the stable action ends only the call",
+      "status": "FAIL",
+      "message": "Answered title still says Calling"
+    },
+    {
+      "id": "Layout 320x480 en semantic font 100%",
+      "status": "FAIL",
+      "message": "Primary call is clipped or below minimum touch size"
+    },
+    {
+      "id": "Layout 320x480 en semantic font 150%",
+      "status": "FAIL",
+      "message": "Primary call is clipped or below minimum touch size"
+    },
+    {
+      "id": "Layout 320x480 zh semantic font 100%",
+      "status": "FAIL",
+      "message": "Back/cancel is clipped during purpose choice"
+    },
+    {
+      "id": "Layout 320x480 zh semantic font 150%",
+      "status": "FAIL",
+      "message": "Primary call is clipped or below minimum touch size"
+    },
+    {
+      "id": "Layout 844x390 en semantic font 100%",
+      "status": "FAIL",
+      "message": "Back/cancel is clipped during purpose choice"
+    },
+    {
+      "id": "Layout 844x390 en semantic font 150%",
+      "status": "FAIL",
+      "message": "Primary call is clipped or below minimum touch size"
+    },
+    {
+      "id": "Layout 844x390 zh semantic font 100%",
+      "status": "FAIL",
+      "message": "Back/cancel is clipped during purpose choice"
+    },
+    {
+      "id": "Layout 844x390 zh semantic font 150%",
+      "status": "FAIL",
+      "message": "Primary call is clipped or below minimum touch size"
+    },
+    {
+      "id": "Layout 768x1024 en semantic font 100%",
+      "status": "FAIL",
+      "message": "Action moved when call connected"
+    },
+    {
+      "id": "Layout 768x1024 en semantic font 150%",
+      "status": "FAIL",
+      "message": "Action moved when call connected"
+    },
+    {
+      "id": "Layout 768x1024 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 298,
+          "top": 588.6953125,
+          "right": 470,
+          "bottom": 673.6953125
+        }
+      }
+    },
+    {
+      "id": "Layout 768x1024 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 283,
+          "top": 597.046875,
+          "right": 485,
+          "bottom": 704.546875
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 en semantic font 100%",
+      "status": "FAIL",
+      "message": "Action moved when call connected"
+    },
+    {
+      "id": "Layout 1024x768 en semantic font 150%",
+      "status": "FAIL",
+      "message": "Back/cancel is clipped during purpose choice"
+    },
+    {
+      "id": "Layout 1024x768 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 426,
+          "top": 460.6953125,
+          "right": 598,
+          "bottom": 545.6953125
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 411,
+          "top": 469.046875,
+          "right": 613,
+          "bottom": 576.546875
+        }
+      }
+    },
+    {
+      "id": "Ordinary offline status is neutral while the existing SOS overlay stays separate",
+      "status": "FAIL",
+      "message": "Ordinary outage still uses a red alarm background"
+    },
+    {
+      "id": "Keyboard cancellation and assistive activation retain the existing SOS operation path",
+      "status": "PASS"
+    },
+    {
+      "id": "Language remains secondary and updates the visible purpose choices",
+      "status": "FAIL",
+      "message": "Language choice missing"
+    },
+    {
+      "id": "Recovery and no-answer titles keep the existing call identity and terminal permissions",
+      "status": "FAIL",
+      "message": "Recovery title missing"
+    }
+  ]
+}

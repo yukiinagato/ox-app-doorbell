@@ -1,0 +1,919 @@
+{
+  "source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-baseline-r5",
+  "base_native_manifest": "source-candidate-r5.json",
+  "ui_before": "source-before.json",
+  "inputs": [
+    {
+      "path": "android/KEEPALIVE_HELPER.md",
+      "sha256": "56f5effbf4ac60a53cab8a58ad8a377193691c61e9b4b774118a5245b36f4e95"
+    },
+    {
+      "path": "android/README.md",
+      "sha256": "a88b509705e74b7968e394ac284782a406a09894c4dac63584a9f54151896a7c"
+    },
+    {
+      "path": "android/app/build.gradle.kts",
+      "sha256": "bea48363950113b41a08a6d000a12fb39c696a641be58fe032e3dac45f4acfd1"
+    },
+    {
+      "path": "android/app/src/androidTest/java/jp/ox/doorbell/VisitorUiInstrumentation.kt",
+      "sha256": "dab4c1bfb0ecf29da22f7a19d73a90a430f3b51041c39e9cb2072e336a73f4bd"
+    },
+    {
+      "path": "android/app/src/legacy19/assets/api19-h264-qualified.json",
+      "sha256": "406e9052d7c5782d0e70febbe2a12d5a9e72046854bdac2684c4c7909900ddc3"
+    },
+    {
+      "path": "android/app/src/main/AndroidManifest.xml",
+      "sha256": "a0cf91b3450bf9fb026684edd5e64fb0f18724b4023fe04d67642334c47cd17c"
+    },
+    {
+      "path": "android/app/src/main/cpp/CMakeLists.txt",
+      "sha256": "1c9b46b60df621870202c521a23e6410405ed5fb07d0ff22746dbf1ca2d0bdef"
+    },
+    {
+      "path": "android/app/src/main/cpp/jni_bridge.cpp",
+      "sha256": "2b7d095de5f009fb322ca0289a21cee6df131183f5718a076f96e491a55a2944"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AdaptiveVideoPlayer.kt",
+      "sha256": "f8d81d71a857bbf3f6f46b8c4e2313305337eb6dcc2201d5eb897ace40005673"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AddDeviceActivity.kt",
+      "sha256": "e20efbc1dea02c5d640668437e311e7586a82c7ee5af40f904307421b51cf196"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AdminGate.kt",
+      "sha256": "cc335d8ac8a13732e348009c49e16f51b0994555011628e7ea07075eb5e222ca"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AdminLink.kt",
+      "sha256": "bfa4be72f2addc1a9404d2acc9f36b8ce8efeacf988ca7a104e9534f65cb819c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AdminReceiver.kt",
+      "sha256": "f3ac6f272e4e979a89715305676de67120e7266135e04ad1b761c52e601ae82e"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AdminSession.kt",
+      "sha256": "0ba071d32034354af3bb4af96d069301ca1e454c5feba5f984a98376b2795b1e"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AndroidDeviceInfo.kt",
+      "sha256": "8e6289b64b3cfdda6119191e2b6ed36465595f31e5ac3287bfc78436572706a9"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AndroidHttpsClient.kt",
+      "sha256": "0443124ea132a2ec362dd5f0dfbfebcbdab197180c2dd91165f6370358329e18"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AndroidRuntimeContracts.kt",
+      "sha256": "be8808c6e521853e77fb3a6af9673d7236561732ae2e83dff77d04b0935d0906"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AndroidSecureStore.kt",
+      "sha256": "1ed4af161709249ffcc36e43f9095f8f4708e0386217c80c5add713fc76df834"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/Api19ReleaseQualification.kt",
+      "sha256": "952d52716cd891e315c3aafe133026a8d1953486e06fbacf8e4789de795b8ae2"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/Api21CodecBufferAccess.kt",
+      "sha256": "55b628b7293fb2966fdd66f7a6b9c3fbbb44dc2a257f0bccfded6fe3124321fe"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/App.kt",
+      "sha256": "862380995527d0ebb1a970c940f559e5fe5620a0a7dc095df154892f853d3a4c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/Appearance.kt",
+      "sha256": "fda5f1a423fcf051c74e2915fce9c631822aa582ad7bebf977da6c8e7a03f421"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/AvcByteStream.kt",
+      "sha256": "e82fddd48e448dc48a60c34ef95ba1eaab1c9faa8c97be121310cfcee1c5926f"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/BootConfig.kt",
+      "sha256": "5ffb1be72a5c9a369fa80ff1b99a045a0b42663f409429bea1ccecbfb2f4b760"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/BootReceiver.kt",
+      "sha256": "610723650b0024b8710db3aa0b4729652e970b7c5c5f3f255e01e855c039294c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/BootSetupActivity.kt",
+      "sha256": "351abb371c73f1aa92374736528f022741e28f398e3e5e55b0b95ed31b910a96"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/BoundedBitmapDecoder.kt",
+      "sha256": "53c365a68c88c4f75b3caea6565e68e5ddcbaad4a031c7e4a8293bbbb4762560"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/CallFlowController.kt",
+      "sha256": "a3dd6f629f6f6b313b7d2864aeb07fccf79993233dc9db365003ce1fed0134df"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/CallHistoryModel.kt",
+      "sha256": "fa2118cf9dcd22d306f11a4763bdfe9644f7c99a1d48551f900b50594e1d03a9"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/CallRevisionLifecycle.kt",
+      "sha256": "f33ae9fd7c4ade86f9df92fa76dcb5a48b725f0309dffcbaf4265b68f7dfca67"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/CameraFeeder.kt",
+      "sha256": "bb684306bdf7f4f0e69afb3ec7fba334b5c196b5fd0ae8980c7177afef63850e"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ChimeGate.kt",
+      "sha256": "470d9f0b2ee24dbded779cd760000e7f296240ccc6a19c2e0c0f8a74417659b9"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ClusterClock.kt",
+      "sha256": "ea3ce424fe8de3972243c327d4992cbbb4e37d4d2522e50d0408dd8d89bfebca"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ClusterDateText.kt",
+      "sha256": "ce92120c961a81c942a11d236a63ea6700095131d1565edbda7c739d343d8b97"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/CodecApi21.kt",
+      "sha256": "8f6b0e0526a7cc122291925ab2d942cbadf15ae8ffec088dd27630db2933b4a3"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/CodecBufferAccess.kt",
+      "sha256": "8b5ca1269f2e20029b53272b9aa8b1b5cb4031b865bcb3489fd3e1fca938786c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ConfigWriter.kt",
+      "sha256": "c66dd6217fd7babc9b2c2d4c2747f27b83eb09dedf25116a63c62832788b5204"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/CoreDisplay.kt",
+      "sha256": "f5cdd9caa724f63089a7d11d4f4246e76f2c1afcf8387a5443fcaa3791cbe77b"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/CoreExports.kt",
+      "sha256": "e3812d3448dd680afbf5bf69b127135e8091f622dc707d0185a3e08050d9324f"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/CrashLoopStore.kt",
+      "sha256": "e85b610bf8a7cb199faf8e62c7e603537b58373878a23a8d4cde9d026b97b308"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DashboardView.kt",
+      "sha256": "1b2f1c1ba017c3e7611105dcc46353512309149bccfaf1fd4b4c116306b4b442"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DeviceAlertChannelContract.kt",
+      "sha256": "42c25a328c349eb695234832f92f7f48ec6510701abcce74e4707e6dffd91f80"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DeviceInfoActivity.kt",
+      "sha256": "927b1fcaadf11dc8524e84044840cdc87046b16a8682a819e6450686491eb597"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DeviceOwnerPolicies.kt",
+      "sha256": "409d20f0eb019cff2e7250094406aa69c81b159256b7a370471857dd8e9cacbd"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DeviceOwnerPoliciesApi21.kt",
+      "sha256": "ce799161b0045f633eebba52f54eebc669ce7aadcbc310e0762a09ec296f65d2"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DeviceOwnerPoliciesApi23.kt",
+      "sha256": "97b4e2f8688eaf27ced89a6a4eeb6f988da71d5d58306ead1e4a8bfb11ec2a0e"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DoorStations.kt",
+      "sha256": "704918958a35e1f7553b1570104091f82b90abf64e9e8d9b619cfdc7f3c3bbd6"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DoorUnlock.kt",
+      "sha256": "33e4fcdb0235079b0cb46e1172650f584290220f2f96b623a2824a980f36945d"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt",
+      "sha256": "d1da436d2b61780a9effaf348c103baebc46a96071fdc4acf01703a3efdff72d"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DoorbellService.kt",
+      "sha256": "f4e64ba3b70c50099b6d8255dabdc0c8e52b54b253de2ff3694aa7511530cb78"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/EmergencyActivity.kt",
+      "sha256": "9f150b58695f43c78df1425e1222581d9b29bf08d4f07d3af23571e4dbf823bf"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/EmergencyAlertController.kt",
+      "sha256": "3c56d9e1812966cd1ce02538053e2a0df3ad7451f9be9764cd8fd15448817f55"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/EmergencyNotificationApi26.kt",
+      "sha256": "570580592822cfab3fcf226f8ce302862f1905134f3576a4b832e0b818d77154"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/EmergencyPresentation.kt",
+      "sha256": "e88d8467006f747ef030b24a60885895884016740cb90c152559bb61847b03c6"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/FleetCounts.kt",
+      "sha256": "c48ba48fd68b1028280186f1b873a67da558967cfd20012b0eb44ce0197ae61a"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/Fmp4StreamReader.kt",
+      "sha256": "10f9d498aee2ab1bb8d40e2de04b198574e1e3b842aeda9cef645d9ac741f48f"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ForegroundListenerRegistry.kt",
+      "sha256": "8c2738c4e60132cda7a528b55a82fe9f5e965a87ac587f141694a0355d0c559c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/FrostedBlur.kt",
+      "sha256": "59a4e199cc3f17d97e0a69476c541abdadb8ab9af128d437e0c929d59e2fd1ca"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/H264Commissioning.kt",
+      "sha256": "1d6efada7f807c680159368bdb650336cf1ff4b01cd76ed3cf93a350711205e8"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/H264DecoderPool.kt",
+      "sha256": "733852f1c866158bbd4d18c8ae127a6d8d86402265ffbba6772f2c09202193e1"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/H264LivePlayer.kt",
+      "sha256": "29d053e88510dffc8b0cc257ad9d38dfd9fa5fdb46821d52b71d2455c1a17ca5"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/HelperModePolicy.kt",
+      "sha256": "f6433d64fa3c21981f321eeda6c7ac3a1569f8cdf45953be63842c1077046781"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/HistoryActivity.kt",
+      "sha256": "bc4d902da6e966784c842d036e985cfced35670514d5fb54a6b117dc35cf79a4"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/HomeRefresh.kt",
+      "sha256": "ec5cc46d9a45636f4697bfbf56da64b68b86b81e9b8bcc4d10e2f23878074308"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/IncomingActivity.kt",
+      "sha256": "c1aeaf72c0010eb6e9faaf05bd17077ef30a437c2497e8f527ecb511cfa7aef1"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/IncomingWindowApi27.kt",
+      "sha256": "a35512c00da12c47f4a607ad0b030cb328a749154b57c0dd2c38ee33ce439a2c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/JoinTokenMinting.kt",
+      "sha256": "161fc7e0e13444660d2c0e923f3b3a5a38429bab218a4481589e511bb6fd379f"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/KioskController.kt",
+      "sha256": "09bc97d5e7ac8fc1a0476427623ea4989b595bfbf24d67387001095dbdc6a961"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/MainActivity.kt",
+      "sha256": "4822cba436fce63348a20b45aa3c840f5b329afe51f42f415cefa398a94f529e"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ManualSipCallLifecycle.kt",
+      "sha256": "90867c309e238e0371815f61e225db37b78568c561205c728addd270e03e6ee1"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/MjpegStreamer.kt",
+      "sha256": "9733905790d5272f939dd93b06bd119c914311d5a3ae4f6ee9bcaf689963fdb5"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/MonitorBackoff.kt",
+      "sha256": "4ccc8fe7f21a658ccd473e4e009e3d46831cd6e812d065afbaff12193a4fcc68"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/NativeLockTaskApi21.kt",
+      "sha256": "c6852b6285ca11358659db03375302cae85a4600c47a0acad7eec46a8930dff1"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/NoticeDialog.kt",
+      "sha256": "99e37a58718d1c417c8ce2d00763d18c7b35543a32c4b01a3a256618d44520a4"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/NoticeModel.kt",
+      "sha256": "0fd2dddfa5d13019c6cf9420fbae41decba7fe3af137212da006ab1cf79d2d97"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/OriginatedCallStore.kt",
+      "sha256": "44f745293cd83ea193e877468abdbf9f64da583dbbcaf212dd4c8300aada7dca"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/PairUri.kt",
+      "sha256": "b997f5dfe28354c89fa0fd104a7d088da0dca81fe3d1e5c3d6d1d627741656c7"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/PairingActivity.kt",
+      "sha256": "5402adb9187ece84b16e315f28ac2f747d1ddf39eea1ebf5f65eec455fd1c288"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/PairingModel.kt",
+      "sha256": "6212a92b280df071e2834aff5fb37ee98e8bf3ae6ca58c211a1f693f425fe369"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/PairingPersistenceGate.kt",
+      "sha256": "4096edb2b196048d79465304a2677011c3eb5cdfe8bf9a062971b10431de20f9"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/PairingUi.kt",
+      "sha256": "60266d4bcb9c9f77bbacb3feebb0fcceaf53db2f1ff597679ed5ca763edbca94"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ProcessRecovery.kt",
+      "sha256": "30f30cb1a3f0695129262366f0e502906c3141f773d559f9ea1748dd035f8b9d"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/QrScanActivity.kt",
+      "sha256": "f1902ec194883444e2c576630dcbb8f0b25a70c32bedf65c91795ec151067b9a"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/RecoveryPendingIntentApi26.kt",
+      "sha256": "4e0860bd9b280ed5c7e8c965453ecdea948303c6b7b72c8dc2d36e37eda7043c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/RegionInk.kt",
+      "sha256": "51735f6a71a919038316bcf550ef52f9eebab5c93527998217f870e6b49bea0c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ResidentNotificationApi26.kt",
+      "sha256": "71b4bfc1ab8320c08baae92f1480ddc3a60ae473675fb240a7f7164e95fca290"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ReturnCountdown.kt",
+      "sha256": "94a377d48323671aa70803ee6e178bbc09cd1dd69b3079a79fdd59273206705b"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/RootKeepaliveClient.kt",
+      "sha256": "a4cad7b2cc4b89df8ce8fe99419916d036f8706ee5c2aa2fb234ce110e2b1b22"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/RuntimeStatusStore.kt",
+      "sha256": "ca77b87cc5be6178e85a8ce03f38c686e7c9872e92ef53fc3ca5b6b91a1305a0"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/RuntimeSupervisor.kt",
+      "sha256": "28564d6ff174196550ae284208f15fe4ac45c286c4f118299a0f381ab6664301"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/SemanticUi.kt",
+      "sha256": "78e4ccf8a4da00a28bb29a1773365d058742b7af0d8844dcfa85f8646832ce8c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ServiceStartApi26.kt",
+      "sha256": "8a4bd8df806e9679c68587a883305726c8bfdec09d5417ea48b2febf32897363"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/SettingsActivity.kt",
+      "sha256": "e574197e6994546b9d94f927fe1f1864a6a64b35b1e7d7e154ad9dd08d4460d8"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ShellUi.kt",
+      "sha256": "a7d7b4fd981adb7fd4b5371fb8d570739214035cfc6b88550ce0c2a64da084e4"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/SosSlideState.kt",
+      "sha256": "1e2f1ef169b0f13ae275c544261643e73b2d16d8bd9cf564435009604a449d78"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/SosSlideView.kt",
+      "sha256": "b136c8e3ed5616fc41c4f784d7122479753efc2a56a38e3a3d7dfbb99b49992e"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/Texts.kt",
+      "sha256": "8dc229cd2f4626777e74c4b45d668dc247440ff556f3511a31871962ad8a0d17"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/ThemeBackdrop.kt",
+      "sha256": "fd427dfbfe3ec329166ac5b0cc741501ae9fd89f0cb5ca61e428d360187fd55c"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/TwoPartLabel.kt",
+      "sha256": "026f0b2f281bff7b74acfb285adabd56ec072c6c402def01f2d85217beb9ae40"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/UiContrast.kt",
+      "sha256": "cfe807f9b21b141cd9e7bd26548d22836b5ae9064051695adf75181595728cb2"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/UiStyleLkgStore.kt",
+      "sha256": "188aeb7505372b1ac0053d703e2d01f2c1c6e8d914e0e4ccc43bc285bde4c8e8"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/UiStylePolicy.kt",
+      "sha256": "8b4f5d3372cde8c2c7bbef1aa6df9610e6cf84f93eb9de41731d8ca83e6ce4f1"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/VideoEncoder.kt",
+      "sha256": "57c252d00e4ebadf05f8cd6c12e8a1f8d8a8e3bbddde6be1a130171abab36d3a"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/VideoOrientationTracker.kt",
+      "sha256": "77e36d4ef0ec065c8169d9b7bdb3a6d260fc9c88f813105b7d4034cb4414a37b"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/VideoStats.kt",
+      "sha256": "8fa1b2575addede2a006a00015fd1abcd59fea563b5b80cc5dddc9b1175e2533"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/VisitPurposes.kt",
+      "sha256": "b4da39ffd7d56308082a61adc046780e9b381990887e9358ad96cb4397918c85"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/VisitorActionLatch.kt",
+      "sha256": "6e57f3d46993877cfb9ebf524f6b7fd6f5d54fa42d7c2a02c1715e02924ea88b"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/VisitorLayout.kt",
+      "sha256": "b7421839fa8b35c481f1aeb763a0c68dcece7eba60043ea77e8d37ea084841e2"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/WriteWarnings.kt",
+      "sha256": "474ad688440241afc6c849230abef964abed90431a673a47cbb2a6ea0a44e459"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/banner_tv.xml",
+      "sha256": "9fd3e9e026d0222c7d80b74a930077d9f048cb38ec311d53277177c8a983e89d"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/bg_badge.xml",
+      "sha256": "6d9b642e74ef864e6ddd62e5e6fd412c7be46067c2b5f5a07210d38d7f267c82"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/bg_big_button.xml",
+      "sha256": "422373418937896bbf65f259f4d8300180da6c679b90ae2c3a3e16ebc41fe080"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/bg_card_button.xml",
+      "sha256": "b7221f18d82b0534e9f1b17a5928f13d12e505aa34cba1663c75958f35095f01"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/bg_reply_card.xml",
+      "sha256": "d8971f612505eb7bdc4af384c19262083562a9f009e9de2feacffb04dd304b21"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/bg_tv_button.xml",
+      "sha256": "6956e6c3ef355b2a313542eb5ed3e10abc1e964ae1a07d0744cd05421ecbea5c"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_doorbell.xml",
+      "sha256": "3836f164eeddc94b39e2a14cfc6b1bfff5fd251068f76bb66d5e6ce8e485a5e6"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_adjustments.xml",
+      "sha256": "793697249f059eb976c0111950f506f598e8201b3dfd879c694d6c92daf7b0e9"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_backspace.xml",
+      "sha256": "2ef23ab13e06c54df20b90ef79bc6406ae1e32e16338d37b5c56d224d7c80232"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_battery.xml",
+      "sha256": "8d1262b5579875067ac91a9a4c789c064d9861f4225e9659aa58862872d3aadf"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_battery_charging.xml",
+      "sha256": "e459c9f681f96d814c9725242dbfa7204c4f9c7f11f2e82f25b9532f83ca47ec"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_bell.xml",
+      "sha256": "a4559f7ae5485193dfcd5180390d171599e49af94e5578ad7eff5acf28f0b591"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_brush.xml",
+      "sha256": "cc7d9cd87e234195bc559e3dd92f6334d57daf95c9e56f9628675a8b91ba2602"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_building_community.xml",
+      "sha256": "916a3375529a6c74f86ffcd5a447d37df93d15eda9fce881db10623314fb390a"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_calendar_time.xml",
+      "sha256": "808390fc9bdd8d252c20222cdb8aa6b90878391c054bc49a03d92fce82b38d78"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_camera_off.xml",
+      "sha256": "0f01afd0c7a7c0a931c085fb32a7bb1c8c1d8dbcb3f129b916fddefa62d056df"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_check.xml",
+      "sha256": "d3a41440df5a154a547216d370600dd673970f243320ce7c247117f5d698391a"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_chevron_down.xml",
+      "sha256": "1f4d9152cbd05ca9a5ad7b24f26c35feb5a392e298646cfd7e905603070d1c3e"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_chevron_right.xml",
+      "sha256": "58e660bdd9cf7187b2f56b1a37a056222e3fefe856763520a8c883ba730ba3d1"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_chevrons_right.xml",
+      "sha256": "b1e56bc29bb87bb0c88873f719799ae6ae405767d269584fad03f2f54f478833"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_clock.xml",
+      "sha256": "4ca3e3ef0a5693a855acc09bbc86ed9a7f617926b1c0259276836073441a486a"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_copy.xml",
+      "sha256": "296f66746d2ebd5782376f56b6c5bdc9f889e523b07436ea3119eec9cac9490c"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_device_tablet.xml",
+      "sha256": "bdfe1dbe095ff1e7c8ac2dfdb405d833149c55faf9011a56eed4338b0f1a74ff"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_door.xml",
+      "sha256": "1030d85943abe6c6d8b4d261361871a498754feb7e5a5dd5ad622c07c8c315b5"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_download.xml",
+      "sha256": "e551301be71facd914fa8c1c8ef0ea982ca4ae2c1460cfea18b507459fa13ddd"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_eye.xml",
+      "sha256": "4b321828c2fbcf2e9e60985caff8afd7886698619a26035ba0ee618e0dd3addf"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_eye_off.xml",
+      "sha256": "c88a40824f7fa5b95c9c6c454aad4029ca4bfc540cff346b7eb177991256bdfe"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_home.xml",
+      "sha256": "700221d811505219057ec1659bb686a3d4a2c63540b65c7da04780483d370791"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_info_circle.xml",
+      "sha256": "1890c5f1e00ecd549bc17b80c7e6a434984bb2668e74250b06979e3ad35c196a"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_link.xml",
+      "sha256": "83bc5abc7b7cd279c67070c80b023869567762dc83b2de4603c3ad538bff1dc6"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_list.xml",
+      "sha256": "a76cfa97e68fed1fcee39d6112cf5de141f5cd9421a520566aea9fab1ff4dd3e"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_mail.xml",
+      "sha256": "cf5b5d68cd5039721934581e3c6bc043420654fcf6e66a892a959951df515c1b"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_message_reply.xml",
+      "sha256": "6581e839a48dda709c81a93d30d9436149a26daaed2c976cc879df5bdc4dba25"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_microphone.xml",
+      "sha256": "1185fe631c24ac9ffc0fba788db72786971d61ca4aa6d57a80f91ac397153ec3"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_microphone_off.xml",
+      "sha256": "0ee01e82fb232e7a6e28465bf4adbda7d36b26831b47bdab443d425aca3441e2"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_note.xml",
+      "sha256": "29c8e06ca467e658f29b7352439c3abfdf02be040b75b016da481bee1d50ae1c"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_package.xml",
+      "sha256": "06afe54661cd62560d0b7beed03658b49b5c1a5feaa61c43873a0dcf030cdf50"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_palette.xml",
+      "sha256": "13cc6054dcbb56e3d86233633dbb1bef4d493ffa1721e2fd327ec8eda6a3604d"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_phone.xml",
+      "sha256": "ab688708eb474ce87748c308e8ddc690a408a1d11a59da20e120b31be1b60b02"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_phone_off.xml",
+      "sha256": "9f2768ec1d204c0f2d76d5bcdf52156c961f082ba150d5781a8233c12d7546a8"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_photo.xml",
+      "sha256": "4975455540fdc5a508d5216327c4dab00defd5045e147aaae03b05045ec351e0"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_plus.xml",
+      "sha256": "c971d45c3b517d7bba24b0bf80fa6354a81ef29cb1fade0b30604d09224c45ca"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_reload.xml",
+      "sha256": "c0ede8bc06ae4c78107fd0ab40858c3c8da1e4d40d4e89cc2a3aa9a2e7ab9214"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_settings.xml",
+      "sha256": "da68dd81fcd870cfe1791f976b643283d4025783150077fba57865715f0dbf69"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_shield_lock.xml",
+      "sha256": "b2a1d1fa89478775562d4f1f3a1beaf7611a363ae3c2cb9e93eeba7d39e49c74"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_topology_star_3.xml",
+      "sha256": "52d5ca8d51db8cfee6651ef7221b8d2277541d1072c8ae6d830fea420df55061"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_trash.xml",
+      "sha256": "c774aca0f12a7d211cf388679eb64577619764b1bfb4f230a1f7b39e31dbdbfc"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_upload.xml",
+      "sha256": "64a9867f08af68f6987ce9f2dcd581a4f4c551bc797880aede3d0bf591f4955b"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_users.xml",
+      "sha256": "34f0c5f70a22c7ae96c363754ac6148a9335589b8bc9ee03042183c700c49041"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_video_off.xml",
+      "sha256": "56e0b2470eeda85ea9b03704a29845e28898949103a79b9ef43334413adeca61"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_volume.xml",
+      "sha256": "a9e038b90e8a128f6a2d43aa1b3237e2ee34f63b7f77a80ccd20c7154f53759a"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_world.xml",
+      "sha256": "474384be68ad04ef4c9f15e2703942c99a1b8971c66d6fb07afb872b8ffdb56b"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/ic_tabler_x.xml",
+      "sha256": "a7ebf6430335870569c9bcbcb10c266e9da167cd2270b6f7dead0ff1a8fd7e2b"
+    },
+    {
+      "path": "android/app/src/main/res/drawable/pulse_circle.xml",
+      "sha256": "75cea8bd546cf2c26d43b1955a879d207d0f62ec06bf9d8f1da05bfce9908622"
+    },
+    {
+      "path": "android/app/src/main/res/layout/activity_emergency.xml",
+      "sha256": "6c1b8252029e42b056749a61d6384187362e0a55003cf3904bd45b9f881a293c"
+    },
+    {
+      "path": "android/app/src/main/res/layout/activity_incoming.xml",
+      "sha256": "1ab4a35a7f666dcb22fdd265188f4e627d19903066a69e2821bb911dc226ab63"
+    },
+    {
+      "path": "android/app/src/main/res/layout/activity_main.xml",
+      "sha256": "badac3b32eb7bd5fd20d491144a4f904b53d7885933f5df3c1f1cb2f7b041d16"
+    },
+    {
+      "path": "android/app/src/main/res/values/colors.xml",
+      "sha256": "4248fec385d20451bdfb269d0e55eb8b2170948f09d8b211a9fa9fcd2e9042c5"
+    },
+    {
+      "path": "android/app/src/main/res/values/strings.xml",
+      "sha256": "12f673af25f798c4f62370dccd02346e9e4202fa135eef2099ddaf63b0f475d6"
+    },
+    {
+      "path": "android/app/src/main/res/values/themes.xml",
+      "sha256": "95b5770d5a1c0e180ed41cee80e736fad530fb81a742bbb1d60a8670ecbafdb3"
+    },
+    {
+      "path": "android/app/src/main/res/values-ja/strings.xml",
+      "sha256": "28279bda1c686263b4f68980985b07fe49a27d412be06fc3039286d96d46c312"
+    },
+    {
+      "path": "android/app/src/main/res/values-v21/themes.xml",
+      "sha256": "fb5ef1a388c4718df895994c6a67a3019f457e7bb7c806380ebfe5f0115eda86"
+    },
+    {
+      "path": "android/app/src/main/res/values-zh/strings.xml",
+      "sha256": "2f26ccb9305a1807048666bc3384a339466bf0c86472a7180956079cc40d2204"
+    },
+    {
+      "path": "android/app/src/main/res/xml/device_admin.xml",
+      "sha256": "9112383ebee36ebbb72e9b6a2a3fa8b0e0a46287aa9e457688d3ec74812303d9"
+    },
+    {
+      "path": "android/app/src/main/res/xml/network_security_config.xml",
+      "sha256": "04bcc0dc2906679595363aa582b53d867708f672def6d30e37e2b099636e1a08"
+    },
+    {
+      "path": "android/app/src/modern/AndroidManifest.xml",
+      "sha256": "0dcdf54de6f2c81fdd3b3b07362a033c80a70d3acf9d7e07854828d2c91c1055"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/AndroidUiManifestTest.kt",
+      "sha256": "44e17725286765df83a3e5c61d81b38d860299690805db2a58b5567a7c85f4bf"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/Api19ReleaseQualificationTest.kt",
+      "sha256": "6cd33fe2118f5a5ce6038b3b34b3eb5592bb398062d4f4ad8c81f572bb0cc2f0"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/AvcByteStreamTest.kt",
+      "sha256": "e0bad22ae27f75c2b28a8f87fae2975def8ba58235ffafde973639006750cf02"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/BackdropOverlayTest.kt",
+      "sha256": "dac2523fbabb3708ff949ffce636e3523358cb8ca08eaf38ae4967c72de81aa2"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/BatchTwoModelTest.kt",
+      "sha256": "29fcce27536193d6eb7f18797d732b611f6a8e83399c3fb945440ee036726896"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/BootConfigFactoryResetTest.kt",
+      "sha256": "1a6392bb2929c5ac112e95c8085eb6525c74117cc9040b23b990279cf52ef220"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/BootConfigPairingTest.kt",
+      "sha256": "3fde3d736ac9a99e45f2c4846377c9216e576369f175fba1e84f3abab5d95dc9"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/CallFlowControllerTest.kt",
+      "sha256": "2d075012aedb50bd5787f913f9b40be429427b9041b1a774f24eae7de68cf37c"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/CallRevisionLifecycleTest.kt",
+      "sha256": "1695c161e7c40138fe577d77ec6d60031bc692ba6a73696c9083a9b3c521a3de"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/ChimeGateTest.kt",
+      "sha256": "eb376276c15bf5c479480d204aee88c21a9127c248a03b626d4a698e0a9f89ff"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/ClusterClockMathTest.kt",
+      "sha256": "c2c96bd0322f73953587ae74bf060a61f11106b8b941b8830fda38e4112ca829"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/ClusterDateTextTest.kt",
+      "sha256": "cd3644031f047ade35e792e77fb3da787938c63882ada56ecaa447f5e5ae1d7c"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/CoreDisplayTest.kt",
+      "sha256": "870bf72af44b892532542c812179562d17481bedd790fc798ff5abca21246952"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/CoreExportsTest.kt",
+      "sha256": "1ca54d7a043155bd72a8fa9698436e8cd7604c4900d112a4b877a8a0bc23306a"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/CrashLoopStoreTest.kt",
+      "sha256": "b6ed12b142a42d582b861806b17303239c55f00a8511a6fb0048b55616c68cad"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/DeviceAlertChannelContractTest.kt",
+      "sha256": "c38ca8c91d31ac31bdb3a4148955bb476fb009dd8bd36d32af0fe2269e35b735"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/DoorStationsTest.kt",
+      "sha256": "40ac5bb28574fa9a421b3943a67ae01a04a3c191ac47da4d92e606fc4983b3ef"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/EmergencyProjectionTest.kt",
+      "sha256": "70de5b0bd9a22f45626a99b4372f1a7c2292969c13f7aa652a71c2a0f7435c0f"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/FleetCountsTest.kt",
+      "sha256": "b895ed2095c44103098baca1776165aa6e88179e9ab42be2ed46b2abb0aabab2"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/Fmp4StreamReaderTest.kt",
+      "sha256": "998e967fd29915817bf5a4cf4932fc3df7f0e0c2f9122823da9b65ef36ee36d9"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/ForegroundListenerRegistryTest.kt",
+      "sha256": "16a3aa959eeb01488ee5bf8b10db75408c9ddb49d00192fd351aa0aaa831654e"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/H264CommissioningTest.kt",
+      "sha256": "8fdb24d2cfb8c52f46a31381545ffb1050f5c8c67459e7494358bfe6aac9a40b"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/HelperModePolicyTest.kt",
+      "sha256": "70205e04befe550a434f93fb00d74c138bfd5d94f2b401a7057422d1d6566588"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/HistoryPagingTest.kt",
+      "sha256": "381fa623577ee4d05acd336cde8afccbbb41a633c201bd1deeb965d19fdb460f"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/HomeRefreshPolicyTest.kt",
+      "sha256": "4aaaca7dd6baee1d05841bce98bc23164d8f34927aeeb089b97d5e36fce19573"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/ManualSipCallLifecycleTest.kt",
+      "sha256": "415e2d45169c4ac22449d8447c8bea833dd1183fe5ce6d82c99d70bbb25bf17f"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/MonitorBackoffTest.kt",
+      "sha256": "a891b9e4441697427bd9f1787fbd72922c13a64cc32e186abcc7dd22c00b112b"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/OperationalCapabilityMeasurementTest.kt",
+      "sha256": "8cc19c3a4e09e037787495426c43493231fb492689aa58e2d5059f6625cd1c61"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/OriginatedCallFileStoreTest.kt",
+      "sha256": "0f90782b17cd07feea55cffd4d3c4150b6eaad09c2e7589d21a23f94b55c9444"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/PairUriTest.kt",
+      "sha256": "c24adfd7de6f8b8280abdea13e188ec4127566825417e43aa5e8aa9ac746afed"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/PairingModelTest.kt",
+      "sha256": "30924053ee637d06df137403ab6025d300bc8df30d0a6c0519390ecc06ae2dde"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/PairingPersistenceGateTest.kt",
+      "sha256": "ef7d4ac5a8ca9ce96580a247cd232c84b332adf282a9455de7392703e80b39f0"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/RegionInkTest.kt",
+      "sha256": "4836a6142f06739c26bcd1fe6fef0589ff45ff62b567616962d743cd69c437b6"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/ReturnCountdownTest.kt",
+      "sha256": "4a9d58cdb2a251007df2cd13db2fbea1920d9be75c93dde91cdd80e32fa9e390"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/RootKeepaliveProtocolTest.kt",
+      "sha256": "6c18c98a95870157c5f1ee4c82af41c1272554d355310ccabc192fc94688253f"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/RuntimeStatusStoreTest.kt",
+      "sha256": "030722acd8256a92a32412803307796e9a961cc0ab854d57b627659f9ac419ee"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/SosVisibilityTest.kt",
+      "sha256": "d7b1469d7c05182ec1f2d6b159f972190ab32506773d0848d4e72ff89a2c0376"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/SurfacePaletteTest.kt",
+      "sha256": "cc1e1b500211534ee49540062225f393ce7d2f1b02d0d548c6ae7ecd5e246bf0"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/ThemeBackdropTest.kt",
+      "sha256": "3c6f29886ce6bef2f60b963d45d098b7e61a9b390eb9f4f3eee0a2d3f65654c9"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/UiContrastTest.kt",
+      "sha256": "d4305b0735e2f116ceaade47fdc0a63685d24fe8f43f729790ba14f50b2627bb"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/UiStyleLkgStoreTest.kt",
+      "sha256": "b91fd7ebd3f147493cd083db646424fb41b49327f2394acb76c92eaa85d25d0b"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/UiStylePolicyTest.kt",
+      "sha256": "da7e2c3146a99d7f8a132aff7d7820906ab478ef81700f24f08387e5ec6f67dc"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/VideoOrientationTrackerTest.kt",
+      "sha256": "48736bd7a496f25e91214263c6be9c8ebb6ca7b50849db18aebc4cd3438aebb4"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/VisitPurposesTest.kt",
+      "sha256": "864a2d9a160f9e3e65a6b790eb79e498badcde24725675d7adaeaeabbff31c12"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/VisitorActionLatchTest.kt",
+      "sha256": "808d3c1d1a414bfd7175586f9bd74d06ca4a1406f25bd2c4a3be85406324a05b"
+    },
+    {
+      "path": "android/build.gradle.kts",
+      "sha256": "f1df4157ce7a3b075a9b2ce452099757015c1d8190884b2fc0c0d0f06ce64dc0"
+    },
+    {
+      "path": "android/gradle/wrapper/gradle-wrapper.jar",
+      "sha256": "7a9ce74cff467ca1bf60a4fcd9f05185acceda4d0f382434d393e17864262c5d"
+    },
+    {
+      "path": "android/gradle/wrapper/gradle-wrapper.properties",
+      "sha256": "ad8aae83783da405b1acb1d39069787f8de5fd64ae5dbf1480f8ced80956c433"
+    },
+    {
+      "path": "android/gradle.properties",
+      "sha256": "e81209e86861e61550f2d2e184031e2e4e3a12aee0625bf9edd32d05e75fa3b6"
+    },
+    {
+      "path": "android/gradlew",
+      "sha256": "a5a5c199ba02189ae8c46a334223371a20599d9c298ef65e7540ede4a3f72d59"
+    },
+    {
+      "path": "android/gradlew.bat",
+      "sha256": "d539676c48b596afda64c963ec8f7ee56c7b3fe7e3b81d1dbe2d1a1e3dd9e9f8"
+    },
+    {
+      "path": "android/local.properties",
+      "sha256": "52c8a4aba16c31c563332a8fb84cac21548227f42bbe3f15e138442bd26769ee"
+    },
+    {
+      "path": "android/settings.gradle.kts",
+      "sha256": "ed730d782da708d2a0d28cdf8b104a94d3eca2ac0b27c37488b66dc6bc51928d"
+    }
+  ]
+}

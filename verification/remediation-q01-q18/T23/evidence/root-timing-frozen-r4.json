@@ -1,0 +1,32 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "7f7dbe4d480046409717883e9478c4b7f3cbe46ddd9dd2fa3ad6e13466a1326d",
+  "task_id": "T23",
+  "test_id": "root-timing-frozen-r4",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/source-final.json",
+  "source_manifest_sha256": "b30f7682ef43fd8d70f858f1486c487a32171e5b01eb8415bac88f9ab00f5b2b",
+  "command": [
+    "build/remediation-t23-20260923/frozen-r4/build/ios-compat/host-tests/call_timing_test"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:50:37.459226+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/evidence/root-timing-frozen-r4.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:50:37.474941+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

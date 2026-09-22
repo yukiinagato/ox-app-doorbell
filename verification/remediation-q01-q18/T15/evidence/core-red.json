@@ -1,0 +1,8 @@
+{
+  "command": [
+    "build/remediation-t15-20260923/red-host/doorbell_tests",
+    "--test-case=media publishing*"
+  ],
+  "exit_code": 1,
+  "duration_s": 2.535112142562866
+}

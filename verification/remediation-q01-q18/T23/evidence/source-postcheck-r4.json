@@ -1,0 +1,10 @@
+{
+  "observed_at": "2026-09-22T15:38:02.777949+00:00",
+  "frozen_inputs_checked": 1222,
+  "all_match": true,
+  "own_source_inputs_checked": 13,
+  "own_source_inputs_match": true,
+  "unchanged_core_web_inputs_checked": 193,
+  "unchanged_core_web_inputs_match_r3": true,
+  "manifest_sha256": "6379fda3e7dc1d973beec486ac30004da3602dd84b0d5ad08a30fd1fe2dc57d3"
+}

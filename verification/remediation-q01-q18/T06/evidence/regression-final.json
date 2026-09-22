@@ -1,0 +1,42 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty; isolated source snapshot; concurrent work preserved",
+  "diff_sha256": "f4abf8aaaa9d0f3e7309457d09cd34de46dd8658b7230418281d19eb89131981",
+  "task_id": "T06",
+  "test_id": "regression-final",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/source-final.json",
+  "source_manifest_sha256": "5cc445041f114abd9d9abc27fc5dbccbd67578a38a349f55a6b7f6047eac7217",
+  "command": [
+    "build/remediation-t06-20260922/normal-final-doorbell_tests",
+    "-tc=httpd:*,runloop:*,runloop manual*,runloop threaded*,store:*,operations ledger:*,capi:*,admin sessions:*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:53:44.506683+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "unsigned host verification binary",
+  "artifact_sha256": "6436ff2ed3439574a7487ef1745d399c0741b5f397e24e1a6b762fee514e740e",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/evidence/regression-final.log",
+  "limitations": [
+    "Host production paths with local TCP/HTTP/authenticated mesh; not hardware qualification.",
+    "MQTT output is observed by a local protocol fixture; no real lock, Home Assistant or actuator ACK.",
+    "SOS response-loss fixture discards an HTTP result after reading it; it does not claim a wire-level network fault.",
+    "Legacy callers are recorded separately and are not claimed migrated."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:55:05.442957+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "62/62 test cases and 1191 assertions passed.",
+  "artifact_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/normal-final-doorbell_tests",
+  "log_sha256": "2a06375f9f06e3c708ef2706899072a564e1d36bb98c1d950743137d64203dc2",
+  "test_cases": 62,
+  "assertions": 1191
+}

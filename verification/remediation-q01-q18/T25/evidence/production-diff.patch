@@ -1,0 +1,487 @@
+--- before/webui/admin/app.js
++++ after/webui/admin/app.js
+@@ -3366,15 +3366,19 @@
+       finish(x.status, j, { reason: "http", request: x });
+     };
+     x.onerror = function () { finish(0, null, { reason: "network", request: x }); };
++    x.ontimeout = function () { finish(0, null, { reason: "timeout", request: x }); };
+     x.onabort = function () {
+       finish(0, null, { reason: abortReason || "abort", request: x });
+     };
+-    if (options.timeout_ms) timer = setTimeout(function () {
+-      if (settled) return;
+-      abortReason = "timeout";
+-      finish(0, null, { reason: abortReason, request: x });
+-      try { x.abort(); } catch (e) {}
+-    }, options.timeout_ms);
++    if (options.timeout_ms) {
++      try { x.timeout = options.timeout_ms; } catch (e) {}
++      timer = setTimeout(function () {
++        if (settled) return;
++        abortReason = "timeout";
++        finish(0, null, { reason: abortReason, request: x });
++        try { x.abort(); } catch (e) {}
++      }, options.timeout_ms);
++    }
+     // Native XHR may deliver DONE/status=0 synchronously inside abort(). Record the caller's
+     // intent before invoking the native method so that this terminal path remains "abort".
+     var nativeAbort = x.abort;
+@@ -3397,8 +3401,10 @@
+     api("POST", "/api/config/batch", { ops: ops }, function (st, j) {
+       if (st === 200 && j && j.ok === true) { cb(true, j); return; }
+       cb(false, { unavailable: st === 404 || st === 501, status: st,
++                  unknown: st === 0 || st === 202 || st >= 500 || (st === 200 && !j) ||
++                    !!(j && j.error_code === "outcome_unknown"),
+                   err: (j && j.err) || ("HTTP " + st) });
+-    });
++    }, { timeout_ms: 10000 });
+   }
+ 
+   function postSecrets(writes, cb) {
+@@ -3411,8 +3417,9 @@
+         if (st === 200 && j && j.ok === true) {
+           written.push(write.secret_ref); next(); return;
+         }
+-        cb(false, { status: st, err: (j && j.err) || ("HTTP " + st), written: written });
+-      });
++        cb(false, { status: st, unknown: st === 0 || (st === 200 && !j),
++                    err: (j && j.err) || ("HTTP " + st), written: written });
++      }, { timeout_ms: 10000 });
+     }
+     next();
+   }
+@@ -3426,14 +3433,25 @@
+       api("DELETE", "/api/secrets", { secret_ref: ref }, function (st, j) {
+         if (!(st === 200 && j && j.ok === true)) failed.push(ref);
+         next();
+-      });
++      }, { timeout_ms: 10000 });
+     }
+     next();
+   }
+ 
+-  function showSaveResult(ok, result, cleanupFailed) {
++  function saveContextCurrent(done) { return !done || !done.current || done.current(); }
++
++  function refreshAfterSave(done) {
++    var epoch = AUTH.pageEpoch;
++    refreshConfig(function () {
++      if (pageCurrent(epoch) && (!done || !done.relevant || done.relevant())) renderTab();
++    });
++  }
++
++  function showSaveResult(ok, result, cleanupFailed, done) {
++    if (!saveContextCurrent(done)) return;
+     var text = t("admin.save_failed");
+     if (ok) text = t("admin.saved");
++    else if (result && result.unknown) text = t("admin.save_unknown");
+     else if (result && result.unavailable)
+       text = t("admin.atomic_batch_unavailable");
+     else if (result && result.err) text += ": " + result.err;
+@@ -3441,22 +3459,24 @@
+       text += " (" + t("admin.secret_cleanup_deferred")
+         .replace("{n}", String(cleanupFailed.length)) + ")";
+     msg(text);
+-    refreshConfig(function () { renderTab(); });
+-  }
+-
+-  function savePlanAndRefresh(plan) {
++    if (done) done(ok, text);
++    if (ok) refreshAfterSave(done);
++  }
++
++  function savePlanAndRefresh(plan, done) {
+     postSecrets(plan.secrets, function (secretsOk, secretResult) {
+       if (!secretsOk) {
+         deleteSecrets(secretResult.written || [], function (_, failed) {
+-          showSaveResult(false, secretResult, failed);
++          showSaveResult(false, secretResult, failed, done);
+         });
+         return;
+       }
+       postEntries(plan.entries, plan.dels || null, function (ok, result) {
+-        // New material is written under a fresh ref. A failed config transaction therefore leaves
+-        // the live account on its old credential; only the unreferenced staged value is removed.
+-        var cleanup = ok ? (plan.retire_secret_refs || []) : (secretResult.written || []);
+-        deleteSecrets(cleanup, function (_, failed) { showSaveResult(ok, result, failed); });
++        // Only known rejection permits rollback: an unknown commit may already reference the
++        // staged credential. Retain it until the authoritative configuration can be checked.
++        var cleanup = ok ? (plan.retire_secret_refs || []) :
++          result && result.unknown ? [] : (secretResult.written || []);
++        deleteSecrets(cleanup, function (_, failed) { showSaveResult(ok, result, failed, done); });
+       });
+     });
+   }
+@@ -3473,22 +3493,26 @@
+ 
+   function saveAndRefresh(entries, dels, done) {
+     postEntries(entries, dels, function (ok, result) {
++      if (!saveContextCurrent(done)) return;
+       var text = t("admin.save_failed");
+       if (ok) {
+         text = t("admin.saved");
+         var warnings = L.writeWarnings(result);
+         if (warnings.length) text += " — " + warningText(warnings);
+-      } else if (result && result.unavailable)
++      } else if (result && result.unknown) text = t("admin.save_unknown");
++      else if (result && result.unavailable)
+         text = t("admin.atomic_batch_unavailable");
+       else if (result && result.err) text += ": " + result.err;
+       msg(text);
+-      refreshConfig(function () { renderTab(); if (done) done(ok); });
++      if (done) done(ok, text);
++      if (ok) refreshAfterSave(done);
+     });
+   }
+ 
+ 
+ 
+   var S = { cfg: {}, status: {}, events: [], tab: "dash", locales: {}, panelToken: "" };
++  var activeModal = null, modalRevision = 0;
+   var AUTH = { generation: 0, pageEpoch: 0, authenticated: false, booting: false, runtime: null,
+                probe: null, loginAttempt: null, initRetryTimer: 0, initFailures: 0,
+                pollTimer: 0, pollBusy: false, loginPending: false, activityTimer: 0, csrf: "" };
+@@ -3513,6 +3537,7 @@
+   }
+ 
+   function stopAdminRuntime() {
++    suspendModal();
+     AUTH.pageEpoch++;
+     AUTH.generation++;
+     AUTH.authenticated = false;
+@@ -3674,27 +3699,96 @@
+ 
+   function openModal(title, bodyHtml, onSave) {
+     var m = $("#modal");
++    var state = { id: ++modalRevision, root: m, phase: "editing", attempt: 0,
++                  pageEpoch: AUTH.pageEpoch, suspended: false, disabledFields: [] };
++    activeModal = state;
+     m.innerHTML =
+       "<div class='mbox card'><h2>" + esc(title) + "</h2><div class='mbody'>" + bodyHtml +
+-      "</div><div class='mbtns'>" +
++      "</div><div id='mSaveState' class='dim fhint' role='status'></div><div class='mbtns'>" +
+       "<button class='btn' id='mSave'>" + esc(t("admin.save")) + "</button>" +
+       "<button class='btn ghost' id='mCancel'>" + esc(t("admin.cancel")) +
+       "</button></div></div>";
+     show(m, true);
+-    $("#mCancel").onclick = function () { show(m, false); };
++    $("#mCancel").onclick = function () {
++      if (activeModal !== state || state.phase === "submitting") return;
++      activeModal = null; show(m, false);
++    };
+     $("#mSave").onclick = function () {
+-      var err = onSave(m);
+-      if (err) { msg(err); return; }
+-      show(m, false);
++      if (activeModal !== state || state.phase === "submitting" || state.suspended) return;
++      state.phase = "submitting";
++      var attempt = ++state.attempt;
++      state.focus = document.activeElement;
++      state.scrollTop = m.scrollTop; state.scrollLeft = m.scrollLeft;
++      state.disabledFields = $all("input,select,textarea,button", m).map(function (field) {
++        var wasDisabled = field.disabled; field.disabled = true; return [field, wasDisabled];
++      });
++      m.setAttribute("aria-busy", "true");
++      $("#mSaveState").textContent = t("admin.saving");
++      function complete(ok, text) {
++        if (!complete.current()) return;
++        unlockModal(state);
++        state.phase = ok ? "succeeded" : "failed";
++        if (ok) { activeModal = null; show(m, false); return; }
++        $("#mSaveState").textContent = text || t("admin.save_failed");
++        $("#mSaveState").className = "err fhint";
++        restoreModalFocus(state);
++      }
++      complete.current = function () {
++        return activeModal === state && state.attempt === attempt &&
++          !state.suspended && pageCurrent(state.pageEpoch);
++      };
++      complete.relevant = function () { return modalRevision === state.id && pageCurrent(state.pageEpoch); };
++      try {
++        var err = onSave(m, complete);
++        if (typeof err === "string" && err) complete(false, err);
++      } catch (error) { complete(false, error.message || t("admin.save_failed")); }
+     };
+     return m;
++  }
++
++  function unlockModal(state) {
++    state.disabledFields.forEach(function (field) { field[0].disabled = field[1]; });
++    state.disabledFields = [];
++    state.root.setAttribute("aria-busy", "false");
++  }
++
++  function restoreModalFocus(state) {
++    if (state.focus && document.body.contains(state.focus)) {
++      try { state.focus.focus({ preventScroll: true }); } catch (_) { state.focus.focus(); }
++    }
++    state.root.scrollTop = state.scrollTop || 0; state.root.scrollLeft = state.scrollLeft || 0;
++  }
++
++  function suspendModal() {
++    $all("input[type='password'],[data-sensitive]").forEach(function (field) { field.value = ""; });
++    S.panelToken = "";
++    if (!activeModal || activeModal.suspended) return;
++    var state = activeModal;
++    if (state.phase !== "submitting") {
++      state.focus = document.activeElement;
++      state.scrollTop = state.root.scrollTop; state.scrollLeft = state.root.scrollLeft;
++    }
++    state.attempt++;
++    state.suspended = true; state.phase = "failed";
++    unlockModal(state);
++    show(state.root, false);
++    msg(t("admin.draft_sign_in"));
++  }
++
++  function restoreModalDraft() {
++    if (!activeModal || !activeModal.suspended) return;
++    var state = activeModal;
++    state.pageEpoch = AUTH.pageEpoch; state.suspended = false;
++    show(state.root, true);
++    $("#mSaveState").textContent = t("admin.draft_restored");
++    restoreModalFocus(state);
+   }
+ 
+   function openForm(title, fields, onSave) {
+     var html = "";
+     for (var i = 0; i < fields.length; i++) html += fieldHtml(fields[i]);
+-    return openModal(title, html, function (m) {
+-      return onSave(collectFields(m, fields));
++    return openModal(title, html, function (m, complete) {
++      return onSave(collectFields(m, fields), complete);
+     });
+   }
+ 
+@@ -4089,10 +4183,10 @@
+       { id: "ja", label: t("admin.label_ja"), value: lb.ja },
+       { id: "en", label: t("admin.label_en"), value: lb.en },
+       { id: "zh", label: t("admin.label_zh"), value: lb.zh }];
+-    openForm(t("admin.buildings"), fields, function (v) {
++    openForm(t("admin.buildings"), fields, function (v, done) {
+       var bid = isNew ? L.safeId(v.bid) : id;
+       if (!bid) return "ID?";
+-      saveAndRefresh(L.buildingEntries(bid, v, cur), null);
++      saveAndRefresh(L.buildingEntries(bid, v, cur), null, done);
+     });
+   }
+ 
+@@ -4108,10 +4202,10 @@
+       { id: "zh", label: t("admin.label_zh"), value: lb.zh },
+       { id: "building", label: t("admin.building_assign"), type: "select",
+         value: cur.building || "", options: buildingOptions() }];
+-    openForm(t("admin.door_list"), fields, function (v) {
++    openForm(t("admin.door_list"), fields, function (v, done) {
+       var did = isNew ? L.safeId(v.did) : id;
+       if (!L.validDoorId(did)) return "ID?";
+-      saveAndRefresh(L.doorEntries(did, v, cur), null);
++      saveAndRefresh(L.doorEntries(did, v, cur), null, done);
+     });
+   }
+ 
+@@ -4146,17 +4240,17 @@
+     var presets = L.noticePresetList(S.cfg);
+     if (presets.length >= L.NOTICE_PRESET_MAX) { msg(t("notice.presets_full")); return; }
+     openForm(t("notice.preset_add"),
+-             [{ id: "text", label: t("notice.text"), type: "textarea" }], function (v) {
++             [{ id: "text", label: t("notice.text"), type: "textarea" }], function (v, done) {
+       var text = String(v.text || "").replace(/^\s+|\s+$/g, "");
+       if (!text) return t("notice.empty");
+       if (L.countCharacters(text) > L.NOTICE_MAX_CHARS)
+         return fmt(t("notice.too_long"), { n: L.countCharacters(text) });
+-      presets.push({ id: L.newId("np", presetIdMap(presets)), text: text });
++      var nextPresets = presets.slice();
++      nextPresets.push({ id: L.newId("np", presetIdMap(presets)), text: text });
+       var entries;
+-      try { entries = L.noticePresetEntries(presets); }
++      try { entries = L.noticePresetEntries(nextPresets); }
+       catch (e) { return t("notice.preset_invalid"); }
+-      saveAndRefresh(entries, null);
+-      return "";
++      saveAndRefresh(entries, null, done);
+     });
+   }
+ 
+@@ -4184,11 +4278,11 @@
+         options: L.doorUnlockOptions(S.cfg), hint: t("unlock.binding_hint") }];
+     if (!current.command) fields.push({ id: "migration", label: t("unlock.not_configured"),
+       type: "static", value: t("unlock.binding_required") });
+-    openForm(doorLabel(door), fields, function (v) {
++    openForm(doorLabel(door), fields, function (v, done) {
+       var plan;
+       try { plan = L.doorUnlockEntries(door, v.mode, current, v.command); }
+       catch (e) { return t("unlock.command_invalid"); }
+-      saveAndRefresh(plan.entries, plan.dels);
++      saveAndRefresh(plan.entries, plan.dels, done);
+     });
+   }
+ 
+@@ -4228,7 +4322,7 @@
+       "<div id='noticePreview' style='padding:10px 14px;border-radius:8px;" +
+       "background:#101418;border:1px solid var(--line);white-space:pre-wrap'></div>";
+ 
+-    var modal = openModal(t("notice.title"), body, function (m) {
++    var modal = openModal(t("notice.title"), body, function (m, done) {
+       var offsetMin = L.timeStatusModel(S.status).zone ?
+         ((S.status.time || {}).offset_min || 0) : 0;
+       var plan = L.noticePayload({ text: m.querySelector("#noticeText").value,
+@@ -4242,12 +4336,12 @@
+                                 : "/api/doors/" + encodeURIComponent(target) + "/notice";
+       api("POST", path, plan.body,
+           function (st, result) {
++            if (!done.current()) return;
+             if (st === 200 && result && result.ok) {
+               msg(t("notice.saved"));
+-              refreshConfig(function () { renderTab(); });
+-            } else msg(t("notice.failed"));
+-          });
+-      return "";
++              done(true); refreshAfterSave(done);
++            } else done(false, t(st === 0 ? "admin.save_unknown" : "notice.failed"));
++          }, { timeout_ms: 10000 });
+     });
+     var root = modal || document.querySelector("#modal");
+     var text = root.querySelector("#noticeText");
+@@ -4470,7 +4564,7 @@
+         type: "number", value: mo.min_interval_s !== undefined ? mo.min_interval_s : 30 },
+       { id: "caps_override", label: t("admin.caps_override"),
+         type: "textarea", value: d.caps_override ? JSON.stringify(d.caps_override) : "" }];
+-    openForm(t("admin.devices"), fields, function (v) {
++    openForm(t("admin.devices"), fields, function (v, done) {
+       var caps = null;
+       var ct = (v.caps_override || "").replace(/^\s+|\s+$/g, "");
+       if (ct) {
+@@ -4489,7 +4583,7 @@
+         return e.message === "door_required" ? t("admin.door_required") :
+                e.message === "role_invalid" ? t("admin.save_failed") : e.message;
+       }
+-      saveAndRefresh(identityEntries.concat(plan.entries), plan.dels);
++      saveAndRefresh(identityEntries.concat(plan.entries), plan.dels, done);
+     });
+   }
+ 
+@@ -4623,16 +4717,15 @@
+ 
+     var modal = openModal(deviceName(id) + " — " +
+       (web ? t("admin.web_ui") : t("admin.native_ui")), h,
+-      function (modal) {
++      function (modal, done) {
+       var values = collectUiValues(modal);
+       var changes;
+       try { changes = L.uiElementChanges(id, manifest, values); }
+       catch (e) { return e.message; }
+       if (!changes.entries.length && !changes.dels.length) {
+-        msg(t("admin.no_changes")); return "";
+-      }
+-      saveAndRefresh(changes.entries, changes.dels);
+-      return "";
++        msg(t("admin.no_changes")); done(true); return;
++      }
++      saveAndRefresh(changes.entries, changes.dels, done);
+       });
+     $all("[data-ui-on], [data-ui-value]", modal).forEach(function (input) {
+       input.addEventListener("input", function () { renderUiPreview(modal); });
+@@ -4751,12 +4844,12 @@
+       "<label class='frow-check'><input type='checkbox' id='volInherit'" +
+       (inherits ? " checked" : "") + "> " + esc(t("volume.inherit")) + "</label>" +
+       "<div id='volRows'>" + volumeRowsHtml("devvol", effective, cluster) + "</div>";
+-    var modal = openModal(t("volume.device_title"), body, function (m) {
++    var modal = openModal(t("volume.device_title"), body, function (m, done) {
+       var inherit = m.querySelector("#volInherit").checked;
+       var values = collectVolumeRows(m, "devvol");
+       values.inherit = inherit;
+       var plan = L.deviceVolumeEntries(id, values);
+-      saveAndRefresh(plan.entries, plan.dels);
++      saveAndRefresh(plan.entries, plan.dels, done);
+     });
+     var root = modal || document.querySelector("#modal");
+     bindVolumeRows(root, "devvol");
+@@ -5442,14 +5535,14 @@
+       }
+     }
+ 
+-    var m = openModal(t("admin.rules") + " — " + rid, bodyHtml(), function (mm) {
++    var m = openModal(t("admin.rules") + " — " + rid, bodyHtml(), function (mm, done) {
+       collectState(mm);
+       for (var ai = 0; ai < st.actions.length; ai++) {
+         if (!st.actions[ai] || st.actions[ai].type !== "device_alert") continue;
+         var validation = L.validateAlertPresentation(st.actions[ai].presentation);
+         if (!validation.ok) return validation.errors[0];
+       }
+-      saveAndRefresh(L.ruleEntries(rid, st, cur), null);
++      saveAndRefresh(L.ruleEntries(rid, st, cur), null, done);
+     });
+     bindDynamic(m);
+   }
+@@ -5603,7 +5696,7 @@
+       fields.push({ id: "audio_" + lg, label: t("admin.audio") + " — " + langName(lg), type: "audio",
+                     value: au[lg] || "", options: opts });
+     });
+-    var m = openForm(t("admin.quick_replies"), fields, function (v) {
++    var m = openForm(t("admin.quick_replies"), fields, function (v, done) {
+       var qid = isNew ? L.safeId(v.qid) : id;
+       if (!qid) return "ID?";
+       v.order = isNew ? sortedQrIds().length + 1 : (cur.order || 1);
+@@ -5612,7 +5705,7 @@
+       for (var k in au) next[k] = au[k];
+       langs.forEach(function (lg) { next[lg] = v["audio_" + lg] || ""; });
+       v.audio = next;
+-      saveAndRefresh(L.quickReplyEntries(qid, v, cur), null);
++      saveAndRefresh(L.quickReplyEntries(qid, v, cur), null, done);
+     });
+     bindAudioPlay(m);
+   }
+@@ -5630,7 +5723,7 @@
+       { id: "rate", label: t("speech.rate"), type: "number", value: current.speaking_rate || 1 },
+       { id: "auto_cache", label: t("speech.auto_cache"), type: "check", value: current.auto_cache !== false }
+     ];
+-    openForm(t("speech.settings"), fields, function (v) {
++    openForm(t("speech.settings"), fields, function (v, done) {
+       var rate = Number(v.rate);
+       if (!isFinite(rate) || rate < 0.25 || rate > 4) return t("speech.rate_invalid");
+       var node = S.status && ((S.status.self && S.status.self.id) || (S.status.node && S.status.node.id));
+@@ -5654,7 +5747,7 @@
+       ["provider", "voices", "speaking_rate", "auto_cache", "generator_node", "google_key_ref"].forEach(function (key) {
+         if (next[key] !== undefined) plan.entries.push({key:"speech." + key, value:next[key]});
+       });
+-      savePlanAndRefresh(plan);
++      savePlanAndRefresh(plan, done);
+     });
+   }
+ 
+@@ -5789,10 +5882,10 @@
+         value: (cur.telegram_chat_ids || []).join(", "), ph: "123456789, -100200300" },
+       { id: "sip_ext", label: t("admin.sip_extensions"),
+         value: (cur.sip_extensions || []).join(", "), ph: "201, 202" }];
+-    openForm(t("admin.households"), fields, function (v) {
++    openForm(t("admin.households"), fields, function (v, done) {
+       var hid = isNew ? L.safeId(v.hid) : id;
+       if (!hid) return "ID?";
+-      saveAndRefresh(L.householdEntries(hid, v, cur), null);
++      saveAndRefresh(L.householdEntries(hid, v, cur), null, done);
+     });
+   }
+ 
+@@ -7104,12 +7197,12 @@
+       { id: "ja", label: t("admin.label_ja"), value: lb.ja },
+       { id: "en", label: t("admin.label_en"), value: lb.en },
+       { id: "zh", label: t("admin.label_zh"), value: lb.zh }];
+-    var m = openForm(t("admin.purposes"), fields, function (v) {
++    var m = openForm(t("admin.purposes"), fields, function (v, done) {
+       var pid = isNew ? L.safeId(v.pid) : id;
+       if (!pid) return "ID?";
+       if (!v.ja && !v.en && !v.zh) return t("admin.label_ja") + "?";
+       v.order = isNew ? sortedPurposeIds().length + 1 : (cur.order || 1);
+-      saveAndRefresh(L.purposeEntries(pid, v, cur), null);
++      saveAndRefresh(L.purposeEntries(pid, v, cur), null, done);
+     });
+     bindIconPick(m);
+   }
+@@ -8165,6 +8258,7 @@
+         AUTH.booting = false;
+         AUTH.authenticated = true;
+         switchTab("dash");
++        restoreModalDraft();
+         schedulePoll(generation);
+       }, generation);
+     }, generation);

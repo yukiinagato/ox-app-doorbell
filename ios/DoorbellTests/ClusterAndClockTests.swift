@@ -472,3 +472,192 @@ final class CameraFrameRotationTests: XCTestCase {
         XCTAssertNil(IOSAvailability.cameraFrameRotation(for: .faceDown))
     }
 }
+
+final class CallTimingSnapshotTests: XCTestCase {
+    private func sample(generation: String = "epoch:1", core: UInt64 = 1,
+                        requestedAt: TimeInterval = 100, age: Any = 0,
+                        remaining: Any = 10000, recovery: Any = 8000,
+                        wallOffset: Double = 0) -> CallTiming.Snapshot {
+        let call: [String: Any] = ["call_id": "call-a", "door": "front", "state": "ringing",
+            "stage_revision": 0, "snapshot_generation": generation, "remaining_ms": remaining,
+            "server_now_ms": 1000000 + wallOffset, "expires_at_ms": 1010000 + wallOffset,
+            "recovery_required": true, "recovery_eligible": true,
+            "recovery_remaining_ms": recovery]
+        return CallTiming.Snapshot(document: ["snapshot_generation": generation,
+            "snapshot_age_ms": age, "active_calls": [call]], coreGeneration: core,
+            requestedAt: requestedAt)
+    }
+
+    private func reading(_ timing: inout CallTiming, _ snapshot: CallTiming.Snapshot,
+                         now: TimeInterval, file: StaticString = #file, line: UInt = #line)
+        -> CallTiming.Reading? {
+        guard case .active(let value) = timing.observe(snapshot, callId: "call-a", door: "front",
+                                                       now: now) else {
+            XCTFail("Expected the matching authoritative call", file: file, line: line)
+            return nil
+        }
+        return value
+    }
+
+    func testWallClockPlusOrMinusFiveMinutesDoesNotChangeCallDuration() {
+        for offset: Double in [-300000, 0, 300000] {
+            var timing = CallTiming()
+            let value = reading(&timing, sample(wallOffset: offset), now: 102)
+            XCTAssertEqual(value?.remainingSeconds, 8)
+            XCTAssertEqual(value?.recoveryRemainingSeconds, 6)
+        }
+    }
+
+    func testCachedSnapshotAgeAndReadLatencyAreSubtracted() {
+        var timing = CallTiming()
+        let value = reading(&timing, sample(age: 5000), now: 101)
+        XCTAssertEqual(value?.remainingSeconds, 4)
+        XCTAssertEqual(value?.recoveryRemainingSeconds, 2)
+        XCTAssertEqual(value?.mayRestore, true)
+    }
+
+    func testRepeatedSampleCannotRestartEitherDeadlineEvenWithYoungerReportedAge() {
+        var timing = CallTiming()
+        _ = reading(&timing, sample(), now: 100)
+        let value = reading(&timing, sample(requestedAt: 106, age: 0), now: 106)
+        XCTAssertEqual(value?.remainingSeconds, 4)
+        XCTAssertEqual(value?.recoveryRemainingSeconds, 2)
+        let expired = reading(&timing, sample(requestedAt: 112), now: 112)
+        XCTAssertEqual(expired?.remainingSeconds, 0)
+        XCTAssertEqual(expired?.recoveryRemainingSeconds, 0)
+        XCTAssertEqual(expired?.mayRestore, false)
+    }
+
+    func testIncompleteRepeatedDurationDoesNotForgetTheOriginalDeadline() {
+        var timing = CallTiming()
+        _ = reading(&timing, sample(), now: 100)
+        XCTAssertNil(reading(&timing, sample(requestedAt: 102, remaining: "missing"),
+                             now: 102)?.remainingSeconds)
+        XCTAssertEqual(reading(&timing, sample(requestedAt: 106), now: 106)?.remainingSeconds, 4)
+    }
+
+    func testFreshCoreSampleCanChangeDurationButOldGenerationCannotBeItsAnchor() {
+        var timing = CallTiming()
+        _ = reading(&timing, sample(), now: 100)
+        XCTAssertEqual(reading(&timing, sample(generation: "epoch:2", requestedAt: 106),
+                               now: 106)?.remainingSeconds, 10)
+        XCTAssertEqual(reading(&timing, sample(generation: "epoch:2", core: 2,
+                                              requestedAt: 120), now: 120)?.remainingSeconds, 10)
+    }
+
+    func testForegroundRetakesAgeInsteadOfPersistingASuspendedMonotonicAnchor() {
+        var timing = CallTiming()
+        _ = reading(&timing, sample(), now: 100)
+        timing.requireFreshSnapshot()
+        guard case .unavailable = timing.observe(sample(requestedAt: 100, age: 0),
+            callId: "call-a", door: "front", now: 100) else {
+            return XCTFail("An unchanged cache and clock after sleep cannot renew the call")
+        }
+        XCTAssertTrue(timing.waitingForFreshSnapshot)
+        XCTAssertEqual(reading(&timing, sample(generation: "epoch:2", requestedAt: 900,
+                                              age: 11000), now: 900)?.remainingSeconds, 0)
+        XCTAssertFalse(timing.waitingForFreshSnapshot)
+    }
+
+    func testForegroundWithoutPreviousReadUsesFirstSnapshotOnlyAsBaseline() {
+        var timing = CallTiming()
+        timing.requireFreshSnapshot()
+        for _ in 0..<3 {
+            guard case .unavailable = timing.observe(sample(), callId: "call-a", door: "front",
+                                                     now: 100) else {
+                return XCTFail("The first cached sample must not establish a resumed deadline")
+            }
+        }
+        XCTAssertEqual(reading(&timing, sample(generation: "epoch:2"), now: 100)?.remainingSeconds, 10)
+    }
+
+    func testNewCoreGenerationReleasesForegroundBarrierWithoutWallClockFallback() {
+        var timing = CallTiming()
+        _ = reading(&timing, sample(), now: 100)
+        timing.requireFreshSnapshot()
+        XCTAssertEqual(reading(&timing, sample(core: 2), now: 100)?.remainingSeconds, 10)
+        XCTAssertFalse(timing.waitingForFreshSnapshot)
+    }
+
+    func testForeignRecoveryCandidatesCannotReplaceTheOwnedCallAnchor() {
+        var timing = CallTiming()
+        var document = sample().document
+        var local = (document["active_calls"] as! [[String: Any]])[0]
+        local["origin"] = "self"
+        var otherDoor = local
+        otherDoor["call_id"] = "other-door"
+        otherDoor["door"] = "back"
+        var otherOwner = local
+        otherOwner["call_id"] = "other-owner"
+        otherOwner["origin"] = "peer"
+        var foreignDialog = local
+        foreignDialog["call_id"] = "foreign-dialog"
+        foreignDialog["state"] = "in_call"
+        foreignDialog["dialog_owner"] = "peer"
+        document["active_calls"] = [otherDoor, otherOwner, foreignDialog, local]
+        func snapshot(_ now: TimeInterval) -> CallTiming.Snapshot {
+            return CallTiming.Snapshot(document: document, coreGeneration: 1, requestedAt: now)
+        }
+        guard case .active(let initial) = timing.observeRecovery(snapshot(100), callId: "call-a",
+            role: "door_station", nodeId: "self", door: "front", now: 100) else {
+            return XCTFail("The owned candidate must establish its anchor")
+        }
+        for id in ["other-door", "other-owner", "foreign-dialog"] {
+            guard case .unavailable = timing.observeRecovery(snapshot(105), callId: id,
+                role: "door_station", nodeId: "self", door: "front", now: 105) else {
+                return XCTFail("A foreign candidate must not affect recovery timing")
+            }
+        }
+        guard case .active(let repeated) = timing.observeRecovery(snapshot(105), callId: "call-a",
+            role: "door_station", nodeId: "self", door: "front", now: 105) else {
+            return XCTFail("The owned candidate remains readable")
+        }
+        XCTAssertEqual(repeated.remainingSeconds, max(0, initial.remainingSeconds! - 5))
+        XCTAssertEqual(repeated.recoveryRemainingSeconds,
+                       max(0, initial.recoveryRemainingSeconds! - 5))
+    }
+
+    func testMissingOrUnknownAgeRequiresCheckingAndNeverUsesWallDeadline() {
+        for age: Any in [-1, true, Double.nan, 0.5, "0"] {
+            var timing = CallTiming()
+            guard case .unavailable = timing.observe(sample(age: age), callId: "call-a",
+                                                     door: "front", now: 100) else {
+                return XCTFail("Invalid age must not establish a deadline")
+            }
+        }
+        var timing = CallTiming()
+        let missing = CallTiming.Snapshot(document: ["active_calls": []], coreGeneration: 1,
+                                          requestedAt: 100)
+        guard case .unavailable = timing.observe(missing, callId: "call-a", door: "front",
+                                                 now: 100) else {
+            return XCTFail("An incomplete old-Core status cannot prove that a call ended")
+        }
+    }
+
+    func testUnknownDurationAndExpiredRecoveryDoNotRestoreTheCall() {
+        var timing = CallTiming()
+        XCTAssertNil(reading(&timing, sample(remaining: "10000"), now: 100)?.remainingSeconds)
+        XCTAssertEqual(reading(&timing, sample(generation: "epoch:2", age: 8000),
+                               now: 100)?.mayRestore, false)
+        XCTAssertNil(reading(&timing, sample(generation: "epoch:3", recovery: 10001),
+                             now: 100)?.recoveryRemainingSeconds)
+    }
+
+    func testCompleteEmptySnapshotRetiresCallAndMismatchedGenerationDoesNot() {
+        var timing = CallTiming()
+        var document = sample().document
+        var calls = document["active_calls"] as! [[String: Any]]
+        calls[0]["snapshot_generation"] = "other:1"
+        document["active_calls"] = calls
+        let inconsistent = CallTiming.Snapshot(document: document, coreGeneration: 1,
+                                               requestedAt: 100)
+        guard case .unavailable = timing.observe(inconsistent, callId: "call-a", door: "front",
+                                                 now: 100) else {
+            return XCTFail("Call identity and time must come from one sample")
+        }
+        document["active_calls"] = [[String: Any]]()
+        let terminal = CallTiming.Snapshot(document: document, coreGeneration: 1, requestedAt: 101)
+        guard case .absent = timing.observe(terminal, callId: "call-a", door: "front", now: 101)
+        else { return XCTFail("A complete empty active-call snapshot must retire the display") }
+    }
+}

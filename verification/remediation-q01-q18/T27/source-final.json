@@ -1,0 +1,51 @@
+{
+  "candidate": "r2",
+  "recorded_at": "2026-09-22T16:34:20.320489+00:00",
+  "baseline_app_sha256": "ecfa4cac230ac7091c9cf6fb6e467590122bc5f7be9c3f2c827ae4065a669005",
+  "inputs": [
+    {
+      "path": "webui/admin/app.js",
+      "sha256": "c79e255147ef018aec84cfcfeb09bb4d8c2e36d37fe00ff860d98aff8d13da4a"
+    },
+    {
+      "path": "webui/tests/admin_config_merge.test.js",
+      "sha256": "43e0132d1df887f3b6abdf6e074ed53b97059918fa16e38124beb11a4fe5b4a0"
+    },
+    {
+      "path": "webui/tests/admin_conflict_browser_fixture.js",
+      "sha256": "be522a87cdeecefc0ec1fb87706c657a01c87a6637ff037b23dd47e66c6c00ad"
+    },
+    {
+      "path": "webui/tests/admin_conflict_cases.js",
+      "sha256": "668877ead3d8610e3911189bd0903b9e92d6956999d5e7a46fc79aeb559f8219"
+    },
+    {
+      "path": "webui/tests/admin_modal_browser_fixture.js",
+      "sha256": "27b5e5765012ca6fe013b6310475174ea06209743778279b8ec3efd15639640c"
+    },
+    {
+      "path": "webui/tests/admin_modal_cases.js",
+      "sha256": "2330a307564fa4b4a39e4b64c5c3f825672c1c55913bd759d882e1e30cb18a68"
+    },
+    {
+      "path": "webui/tests/admin_runtime.test.js",
+      "sha256": "db6f6ca9ba31b301270aaccc56aa2f436dce6223a86ea80b0236f991665e1219"
+    },
+    {
+      "path": "i18n/strings.yaml",
+      "sha256": "0605bb37261cb76aea2e91bf290010ae9fc521ff5de794205ba5f1a395b54285"
+    },
+    {
+      "path": "webui/locale/en.json",
+      "sha256": "45656fc35591adc822c7b6d82e28339b44d3490653d85cd0aa3c921c4ddb96a1"
+    },
+    {
+      "path": "webui/locale/zh.json",
+      "sha256": "f4a4c8ed309f885b8bcaa31213504ec545cb258e481f2ecfe8ea9e64f4b2f181"
+    },
+    {
+      "path": "webui/locale/ja.json",
+      "sha256": "456f33e36b5bacd28c2d7fb5849aff289f862dbdd4e4aa01d258a49aaf6f70cb"
+    }
+  ]
+}

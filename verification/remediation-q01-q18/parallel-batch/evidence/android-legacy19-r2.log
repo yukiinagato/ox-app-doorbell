@@ -1,0 +1,76 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.11.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+
+> Configure project :app
+WARNING: [CXX5202] This app only has 32-bit [armeabi-v7a] native libraries. Beginning August 1, 2019 Google Play store requires that all apps that include native libraries must provide 64-bit versions. For more information, visit https://g.co/64-bit-requirement
+[CXX5202] This app only has 32-bit [armeabi-v7a] native libraries. Beginning August 1, 2019 Google Play store requires that all apps that include native libraries must provide 64-bit versions. For more information, visit https://g.co/64-bit-requirement
+WARNING: [CXX5202] This app only has 32-bit [armeabi-v7a] native libraries. Beginning August 1, 2019 Google Play store requires that all apps that include native libraries must provide 64-bit versions. For more information, visit https://g.co/64-bit-requirement
+[CXX5202] This app only has 32-bit [armeabi-v7a] native libraries. Beginning August 1, 2019 Google Play store requires that all apps that include native libraries must provide 64-bit versions. For more information, visit https://g.co/64-bit-requirement
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preLegacy19DebugBuild UP-TO-DATE
+> Task :app:mergeLegacy19DebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateLegacy19DebugBuildConfig UP-TO-DATE
+> Task :app:checkLegacy19DebugAarMetadata UP-TO-DATE
+> Task :app:generateLegacy19DebugResValues UP-TO-DATE
+> Task :app:mapLegacy19DebugSourceSetPaths UP-TO-DATE
+> Task :app:generateLegacy19DebugResources UP-TO-DATE
+> Task :app:mergeLegacy19DebugResources UP-TO-DATE
+> Task :app:packageLegacy19DebugResources UP-TO-DATE
+> Task :app:parseLegacy19DebugLocalResources UP-TO-DATE
+> Task :app:createLegacy19DebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksLegacy19Debug UP-TO-DATE
+> Task :app:processLegacy19DebugMainManifest UP-TO-DATE
+> Task :app:processLegacy19DebugManifest UP-TO-DATE
+> Task :app:processLegacy19DebugManifestForPackage UP-TO-DATE
+> Task :app:processLegacy19DebugResources UP-TO-DATE
+> Task :app:compileLegacy19DebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileLegacy19Debug UP-TO-DATE
+> Task :app:compileLegacy19DebugJavaWithJavac UP-TO-DATE
+> Task :app:mergeLegacy19DebugShaders UP-TO-DATE
+> Task :app:compileLegacy19DebugShaders NO-SOURCE
+> Task :app:generateLegacy19DebugAssets UP-TO-DATE
+> Task :app:mergeLegacy19DebugAssets UP-TO-DATE
+> Task :app:compressLegacy19DebugAssets UP-TO-DATE
+> Task :app:checkLegacy19DebugDuplicateClasses UP-TO-DATE
+> Task :app:dexBuilderLegacy19Debug UP-TO-DATE
+> Task :app:desugarLegacy19DebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexLegacy19Debug UP-TO-DATE
+> Task :app:mergeDexLegacy19Debug UP-TO-DATE
+> Task :app:processLegacy19DebugJavaRes UP-TO-DATE
+> Task :app:mergeLegacy19DebugJavaResource UP-TO-DATE
+> Task :app:configureCMakeDebug[armeabi-v7a]
+> Task :app:buildCMakeDebug[armeabi-v7a][doorbell]
+> Task :app:mergeLegacy19DebugJniLibFolders UP-TO-DATE
+> Task :app:validateSigningLegacy19Debug UP-TO-DATE
+> Task :app:writeLegacy19DebugAppMetadata UP-TO-DATE
+> Task :app:writeLegacy19DebugSigningConfigVersions UP-TO-DATE
+> Task :app:bundleLegacy19DebugClassesToRuntimeJar UP-TO-DATE
+> Task :app:bundleLegacy19DebugClassesToCompileJar UP-TO-DATE
+> Task :app:compileLegacy19DebugUnitTestKotlin UP-TO-DATE
+> Task :app:preLegacy19DebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileLegacy19DebugUnitTest UP-TO-DATE
+> Task :app:compileLegacy19DebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processLegacy19DebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testLegacy19DebugUnitTest UP-TO-DATE
+> Task :app:preLegacy19DebugAndroidTestBuild SKIPPED
+> Task :app:generateLegacy19DebugAndroidTestResValues UP-TO-DATE
+> Task :app:generateLegacy19DebugAndroidTestLintModel UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:generateLegacy19DebugLintReportModel UP-TO-DATE
+> Task :app:generateLegacy19DebugUnitTestLintModel UP-TO-DATE
+> Task :app:lintAnalyzeLegacy19Debug UP-TO-DATE
+> Task :app:lintAnalyzeLegacy19DebugAndroidTest UP-TO-DATE
+> Task :app:lintAnalyzeLegacy19DebugUnitTest UP-TO-DATE
+> Task :app:lintReportLegacy19Debug UP-TO-DATE
+> Task :app:lintLegacy19Debug
+> Task :app:mergeLegacy19DebugNativeLibs
+> Task :app:stripLegacy19DebugDebugSymbols
+> Task :app:packageLegacy19Debug
+> Task :app:createLegacy19DebugApkListingFileRedirect UP-TO-DATE
+> Task :app:assembleLegacy19Debug
+
+BUILD SUCCESSFUL in 19s
+53 actionable tasks: 6 executed, 47 up-to-date

@@ -1,0 +1,13 @@
+AssertionError [ERR_ASSERTION]: state/SOS applies before hung call-info settles
+
+0 !== 1
+
+    at T10-01 (/Users/ox/Documents/project/app-doorbell/webui/tests/call_poll_lanes.test.js:18:12)
+    at async /Users/ox/Documents/project/app-doorbell/webui/tests/call_poll_lanes.test.js:84:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 0,
+  expected: 1,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

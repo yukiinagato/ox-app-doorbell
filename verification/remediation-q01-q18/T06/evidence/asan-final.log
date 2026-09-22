@@ -1,0 +1,91 @@
+09-23 00:54:56 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:23516
+09-23 00:54:56 I [node] created the missing door entry doors.front for this door station
+09-23 00:54:56 I [httpd] listening on 28718,[::]:28718
+09-23 00:54:56 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:54:56 I [node] node 675c2a63 (operation-authority) started
+09-23 00:54:56 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:22680
+09-23 00:54:56 I [httpd] listening on 25135,[::]:25135
+09-23 00:54:56 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:54:56 I [node] node 7e6357c7 (operation-page) started
+09-23 00:54:56 I [node] initialized the cluster administrator password
+09-23 00:54:58 I [httpd] stopped
+09-23 00:55:00 I [httpd] stopped
+09-23 00:55:00 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:28166
+09-23 00:55:00 I [node] created the missing door entry doors.front for this door station
+09-23 00:55:00 I [httpd] listening on 23524,[::]:23524
+09-23 00:55:00 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:00 I [node] node 12251e02 (operation-authority) started
+09-23 00:55:00 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:29900
+09-23 00:55:00 I [httpd] listening on 29333,[::]:29333
+09-23 00:55:00 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:00 I [node] node 3cd7324a (operation-page) started
+09-23 00:55:00 I [node] initialized the cluster administrator password
+09-23 00:55:01 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 00:55:01 I [ha_bridge] bridge started at 127.0.0.1:27802
+09-23 00:55:01 I [mqtt] connected to 127.0.0.1:27802
+09-23 00:55:02 I [httpd] stopped
+09-23 00:55:04 I [httpd] stopped
+09-23 00:55:05 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:21024
+09-23 00:55:05 I [node] created the missing door entry doors.front for this door station
+09-23 00:55:05 I [httpd] listening on 22649,[::]:22649
+09-23 00:55:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:05 I [node] node 32fb22bd (operation-authority) started
+09-23 00:55:05 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:31306
+09-23 00:55:05 I [httpd] listening on 29265,[::]:29265
+09-23 00:55:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:05 I [node] node a2984b38 (operation-page) started
+09-23 00:55:05 I [node] initialized the cluster administrator password
+09-23 00:55:07 I [httpd] stopped
+09-23 00:55:09 I [httpd] stopped
+09-23 00:55:09 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:26922
+09-23 00:55:09 I [node] created the missing door entry doors.front for this door station
+09-23 00:55:09 I [httpd] listening on 26479,[::]:26479
+09-23 00:55:09 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:09 I [node] node 6835f4b0 (operation-authority) started
+09-23 00:55:09 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:20963
+09-23 00:55:09 I [httpd] listening on 24693,[::]:24693
+09-23 00:55:09 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:09 I [node] node 1f773b5b (operation-page) started
+09-23 00:55:09 I [node] initialized the cluster administrator password
+09-23 00:55:11 I [httpd] stopped
+09-23 00:55:13 I [httpd] stopped
+09-23 00:55:13 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:27361
+09-23 00:55:13 I [node] created the missing door entry doors.front for this door station
+09-23 00:55:13 I [httpd] listening on 23955,[::]:23955
+09-23 00:55:13 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:13 I [node] node a7356bd3 (operation-authority) started
+09-23 00:55:13 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:24751
+09-23 00:55:13 I [httpd] listening on 30941,[::]:30941
+09-23 00:55:13 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:13 I [node] node 0e1acaa3 (operation-page) started
+09-23 00:55:13 I [node] initialized the cluster administrator password
+09-23 00:55:15 I [httpd] stopped
+09-23 00:55:17 I [httpd] stopped
+09-23 00:55:17 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:23780
+09-23 00:55:17 I [node] created the missing door entry doors.front for this door station
+09-23 00:55:17 I [httpd] listening on 22342,[::]:22342
+09-23 00:55:17 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:17 I [node] node 1ed9e3c6 (operation-authority) started
+09-23 00:55:17 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:23043
+09-23 00:55:17 I [httpd] listening on 28383,[::]:28383
+09-23 00:55:17 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:17 I [node] node 48edb277 (operation-page) started
+09-23 00:55:17 I [node] initialized the cluster administrator password
+09-23 00:55:19 I [httpd] stopped
+09-23 00:55:21 I [httpd] stopped
+09-23 00:55:21 I [ha_bridge] bridge started at 127.0.0.1:22826
+09-23 00:55:21 I [mqtt] connected to 127.0.0.1:22826
+09-23 00:55:21 I [ha_bridge] bridge started at 127.0.0.1:22826
+09-23 00:55:21 I [mqtt] connected to 127.0.0.1:22826
+09-23 00:55:29 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:29846
+09-23 00:55:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:29 I [node] node 391d5a31 (doorbell) started
+09-23 00:55:29 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:27296
+09-23 00:55:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:29 I [node] node 302019ac (doorbell) started
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:  14 |  14 passed | 0 failed | 452 skipped
+[doctest] assertions: 306 | 306 passed | 0 failed |
+[doctest] Status: SUCCESS!

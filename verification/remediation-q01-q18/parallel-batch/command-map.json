@@ -1,0 +1,364 @@
+[
+  {
+    "test_id": "android-legacy19-r2",
+    "command": [
+      "env",
+      "JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+      "ANDROID_HOME=/Users/ox/Library/Android/sdk",
+      "PATH=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "android/gradlew",
+      "-p",
+      "android",
+      "--no-daemon",
+      "-PdoorbellTier=legacy19",
+      "assembleLegacy19Debug",
+      "testLegacy19DebugUnitTest",
+      "lintLegacy19Debug"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/android-legacy19-r2.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json"
+  },
+  {
+    "test_id": "android-legacy19",
+    "command": [
+      "env",
+      "JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+      "ANDROID_HOME=/Users/ox/Library/Android/sdk",
+      "PATH=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "android/gradlew",
+      "-p",
+      "android",
+      "--no-daemon",
+      "-PdoorbellTier=legacy19",
+      "assembleLegacy19Debug",
+      "testLegacy19DebugUnitTest",
+      "lintLegacy19Debug"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/android-legacy19.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  },
+  {
+    "test_id": "android-modern-r2",
+    "command": [
+      "env",
+      "JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+      "ANDROID_HOME=/Users/ox/Library/Android/sdk",
+      "PATH=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "android/gradlew",
+      "-p",
+      "android",
+      "--no-daemon",
+      "-PdoorbellTier=modern",
+      "assembleModernDebug",
+      "testModernDebugUnitTest",
+      "lintModernDebug"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/android-modern-r2.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json"
+  },
+  {
+    "test_id": "android-modern",
+    "command": [
+      "env",
+      "JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+      "ANDROID_HOME=/Users/ox/Library/Android/sdk",
+      "PATH=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+      "android/gradlew",
+      "-p",
+      "android",
+      "--no-daemon",
+      "-PdoorbellTier=modern",
+      "assembleModernDebug",
+      "testModernDebugUnitTest",
+      "lintModernDebug"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/android-modern.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  },
+  {
+    "test_id": "core-all",
+    "command": [
+      "build/repair-20260922/doorbell_tests"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/core-all.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  },
+  {
+    "test_id": "core-build-r2",
+    "command": [
+      "cmake",
+      "--build",
+      "build/repair-20260922",
+      "-j4"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/core-build-r2.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json"
+  },
+  {
+    "test_id": "core-build",
+    "command": [
+      "cmake",
+      "--build",
+      "build/repair-20260922",
+      "-j4"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/core-build.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  },
+  {
+    "test_id": "core-configure",
+    "command": [
+      "cmake",
+      "-S",
+      "core",
+      "-B",
+      "build/repair-20260922",
+      "-DDB_WITH_PJSIP=OFF",
+      "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/core-configure.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  },
+  {
+    "test_id": "core-t03-r2",
+    "command": [
+      "build/repair-20260922/doorbell_tests",
+      "--test-case=*unlock*,*open-door*"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/core-t03-r2.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json"
+  },
+  {
+    "test_id": "ios-compat-host-r3",
+    "command": [
+      "ios-compat/scripts/test_host.sh"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/ios-compat-host-r3.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r3.json"
+  },
+  {
+    "test_id": "ios-compat-host-r4",
+    "command": [
+      "ios-compat/scripts/test_host.sh"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/ios-compat-host-r4.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r4.json"
+  },
+  {
+    "test_id": "ios-compat-host",
+    "command": [
+      "ios-compat/scripts/test_host.sh"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 1,
+    "status": "FAIL",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/ios-compat-host.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  },
+  {
+    "test_id": "ios5-app-r2",
+    "command": [
+      "ios-compat/scripts/build_app_ios5.sh"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/ios5-app-r2.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json"
+  },
+  {
+    "test_id": "ios5-app",
+    "command": [
+      "ios-compat/scripts/build_app_ios5.sh"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/ios5-app.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  },
+  {
+    "test_id": "ios5-core-r2",
+    "command": [
+      "env",
+      "DB_ALLOW_DIRTY=1",
+      "DB_BUILD_ID=b26e0d3-parallel-r2-20260922",
+      "DB_BUILD_JOBS=4",
+      "ios-compat/scripts/build_core_ios5.sh",
+      "--install"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/ios5-core-r2.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json"
+  },
+  {
+    "test_id": "ios5-core",
+    "command": [
+      "env",
+      "DB_ALLOW_DIRTY=1",
+      "DB_BUILD_ID=b26e0d3-parallel-20260922",
+      "DB_BUILD_JOBS=4",
+      "ios-compat/scripts/build_core_ios5.sh",
+      "--install"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/ios5-core.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  },
+  {
+    "test_id": "ios9-arm64-release-r4",
+    "command": [
+      "env",
+      "IOS9_DERIVED_DATA=/Users/ox/Documents/project/app-doorbell/build/remediation-parallel-20260922/ios9-arm64",
+      "DB_ALLOW_DIRTY=1",
+      "ios/scripts/build_ios9_arm64.sh"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/ios9-arm64-release-r4.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r4.json"
+  },
+  {
+    "test_id": "ios9-arm64-release",
+    "command": [
+      "env",
+      "IOS9_DERIVED_DATA=/Users/ox/Documents/project/app-doorbell/build/remediation-parallel-20260922/ios9-arm64",
+      "DB_ALLOW_DIRTY=1",
+      "ios/scripts/build_ios9_arm64.sh"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/ios9-arm64-release.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r3.json"
+  },
+  {
+    "test_id": "source-checks-final",
+    "command": [
+      "python3",
+      "-c",
+      "import subprocess; [subprocess.run(c,check=True) for c in [[\"python3\",\"tools/gen_i18n.py\",\"--check\"],[\"python3\",\"tools/check_english_source.py\"],[\"git\",\"diff\",\"--check\"]]]"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/source-checks-final.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-final.json"
+  },
+  {
+    "test_id": "source-checks-r2",
+    "command": [
+      "python3",
+      "-c",
+      "import subprocess; [subprocess.run(c,check=True) for c in [[\"python3\",\"tools/gen_i18n.py\",\"--check\"],[\"python3\",\"tools/check_english_source.py\"],[\"git\",\"diff\",\"--check\"]]]"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/source-checks-r2.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json"
+  },
+  {
+    "test_id": "source-checks-r3",
+    "command": [
+      "python3",
+      "-c",
+      "import subprocess; [subprocess.run(c,check=True) for c in [[\"python3\",\"tools/gen_i18n.py\",\"--check\"],[\"python3\",\"tools/check_english_source.py\"],[\"git\",\"diff\",\"--check\"]]]"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/source-checks-r3.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r3.json"
+  },
+  {
+    "test_id": "source-checks-r4",
+    "command": [
+      "python3",
+      "-c",
+      "import subprocess; [subprocess.run(c,check=True) for c in [[\"python3\",\"tools/gen_i18n.py\",\"--check\"],[\"python3\",\"tools/check_english_source.py\"],[\"git\",\"diff\",\"--check\"]]]"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/source-checks-r4.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r4.json"
+  },
+  {
+    "test_id": "source-checks",
+    "command": [
+      "python3",
+      "-c",
+      "import subprocess; [subprocess.run(c,check=True) for c in [[\"python3\",\"tools/gen_i18n.py\",\"--check\"],[\"python3\",\"tools/check_english_source.py\"],[\"git\",\"diff\",\"--check\"]]]"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/source-checks.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  },
+  {
+    "test_id": "web-all-r2",
+    "command": [
+      "python3",
+      "-c",
+      "import pathlib,subprocess; tests=sorted(pathlib.Path(\"webui/tests\").glob(\"*.test.js\")); [subprocess.run([\"node\",str(t)],check=True) for t in tests]; print(\"Web suites:\",len(tests))"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/web-all-r2.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json"
+  },
+  {
+    "test_id": "web-all",
+    "command": [
+      "python3",
+      "-c",
+      "import pathlib,subprocess; tests=sorted(pathlib.Path(\"webui/tests\").glob(\"*.test.js\")); [subprocess.run([\"node\",str(t)],check=True) for t in tests]; print(\"Web suites:\",len(tests))"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0,
+    "status": "PASS",
+    "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/web-all.log",
+    "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-before-integration.json"
+  }
+]

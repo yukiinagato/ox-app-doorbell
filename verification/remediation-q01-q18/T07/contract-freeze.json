@@ -1,0 +1,28 @@
+{
+  "task": "T07",
+  "status": "CONTRACT_FROZEN_BEFORE_IMPLEMENTATION",
+  "at": "2026-09-22T16:07:00.736087+00:00",
+  "authorization": "Parent approved optional default-off Ed25519 authenticated ACK with current and frozen source/target validation; no physical unlock success claim.",
+  "documents": [
+    {
+      "path": "docs/en/operation-ack-protocol.md",
+      "sha256": "7b0ba8daa99d3ea9698240dd6d73cc806a7a4655d3cff80c4abb155b58d566bb"
+    },
+    {
+      "path": "docs/ja/operation-ack-protocol.md",
+      "sha256": "4f2d36dda2d9a443a9c55cf54e5663091c3689b74afd1662f872963e5eb9379a"
+    },
+    {
+      "path": "docs/zh/operation-ack-protocol.md",
+      "sha256": "720ffe11428320536ba1f314333cf7876941c47725b38e35538d2d88e9118f48"
+    }
+  ],
+  "limits": {
+    "ack_bytes": 2048,
+    "feedback_watches": 2048,
+    "ack_timeout_ms": 4000,
+    "disconnect_updates_per_turn": 32
+  },
+  "implementation_state": "NOT_IMPLEMENTED_YET",
+  "actual_hardware_qualification": "NOT_RUN"
+}

@@ -1,0 +1,18 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "689c6d5b947c0a4c273c5c6cb82f07a7b864ce335f089233c9fd6d053e26b6d5",
+  "production_base_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/source-green-r4.json",
+  "production_base_manifest_sha256": "4a4db9bdd50789476fadb64fc25b07438cd0f707bfa8f45d67efc43a55c1e9e0",
+  "overrides": {
+    "core/tests/test_media_http_bounds.cpp": {
+      "frozen_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/body-green-r1/test_media_http_bounds.cpp",
+      "sha256": "7c9196acc23fd27e48ab7aa8ed92caaaf81b06333273c51b596b4f8a11f68108"
+    },
+    "core/src/httpd/httpd.cpp": {
+      "frozen_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/body-green-r1/httpd.cpp",
+      "sha256": "bfdb50e46e84cc413b07a3db279d1ff2bfb743a78e2a8216903218547ba48a99"
+    }
+  },
+  "core_archive_sha256": "d482f25bd84785e2cfd9d1c5076dd763df6d532bcf8d7a51bd405cc10423c3e9"
+}

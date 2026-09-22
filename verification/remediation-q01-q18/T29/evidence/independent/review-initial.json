@@ -1,0 +1,26 @@
+{
+  "recorded_at": "2026-09-22T18:20:16.339755+00:00",
+  "verdict": "CHANGES_REQUESTED",
+  "findings": [
+    {
+      "id": "R1",
+      "status": "OPEN",
+      "evidence": "red-r1-run.log",
+      "type": "production HTTP reproduction"
+    },
+    {
+      "id": "R2",
+      "status": "OPEN",
+      "evidence": "red-r1-run.log",
+      "type": "production HTTP reproduction"
+    },
+    {
+      "id": "R3",
+      "status": "OPEN",
+      "type": "source finding; SIP status probe rejected"
+    }
+  ],
+  "report_sha256": "ac47f1dca290fd190e5a6c3bf15c35139fe632f58260627063f241e65e197b2d",
+  "independent_test_source_sha256": "12a6572cd623b3764c9e41f26cc38452e4db174bdca7c428f6586e7faada8116",
+  "crash_review": "Excluded from self-review; assigned to parent"
+}

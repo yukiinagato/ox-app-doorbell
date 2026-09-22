@@ -1,0 +1,6 @@
+{
+  "file": "ios/DoorbellTests/VisitorScreenLayoutTests.swift",
+  "before_sha256": "76d3bb87b747b4b60b2ae4c933983313d837f9de079938240d10357a7fddef22",
+  "after_sha256": "7bcada0c467ac96f2dc0070679270e55d0aadfc59cf72bdf43f42d7ecb20298c",
+  "scope": "Test fixture only: explicit safety_critical:false required by actual Core manifest validator. Production r4 source remains unchanged. XCTest source updated; device runner replays actual production actions with same corrected manifest."
+}

@@ -1,0 +1,37 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "faf75deb307309fd7ec39381650870381a028eeb2f2c139d7fc68421aef3a298",
+  "task_id": "T04",
+  "test_id": "red-queued-expiry",
+  "evidence_kind": "production_test",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T04/source-before.json",
+  "source_manifest_sha256": "7dcd994adf96d573074cc7de3707d661f52fe47ed47d2d55bef68e9e1e941c43",
+  "command": [
+    "build/remediation-t04-20260922/normal/doorbell_tests",
+    "--test-case=httpd: scheduling expired queued write never reaches handler",
+    "--no-skip"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T14:17:36.364131+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "host_unsigned",
+  "artifact_sha256": "337090092fd81a1a051f8f73d50fc1b7179d4e58d3556ef28711389ae1153832",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T04/evidence/red-queued-expiry.log",
+  "limitations": [
+    "Recorder status PASS means expected exit 1 matched; the production test itself failed as required for RED.",
+    "No UAF was observed or claimed in this reproduction."
+  ],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T14:17:43.170499+00:00",
+  "expected_exit_code": 1,
+  "status": "PASS",
+  "observed_result": "Expected RED reproduced: actual exit 1, 1 failing case, 2 business assertions failed. The expired queued handler ran once after timeout; response had no not_started marker."
+}

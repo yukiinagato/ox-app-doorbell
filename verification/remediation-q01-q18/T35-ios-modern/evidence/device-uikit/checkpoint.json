@@ -1,0 +1,18 @@
+{
+  "status": "R5_UIKIT_GREEN_285_285_PEER_REGRESSION_INSTALLING",
+  "red": "device-uikit/held-red/results/result.json",
+  "red_checks": 281,
+  "red_failures": 3,
+  "source_manifest_sha256": "26fa4534c1e23978b3a045723c61eb9a3119d40f75e87835843a4dd50002792d",
+  "production_sha256": "e855a9b23dcc737fa4d46633b8c583aa99cfc4ea30c86ad1c46a59bb38040131",
+  "next": [
+    "Run exact device runner against r5 source",
+    "Run T15 UIImage strict-sequence receiver regression on r5 MainViewController",
+    "Final production build/source/evidence report and root review"
+  ],
+  "device": "T35 build6 stopped, formal foreground restored; independent T15 r5 test bundle installing next",
+  "quota": "Root observed99% used, reset unchanged. No reset notice received.",
+  "green_manifest_sha256": "1c59f80e511147eaf3b80f5f2b73243f6d872124a222e2f806154faad5d00433",
+  "peer_receiver": "Unchanged T15 runner r5 device app building independently; no device operation yet",
+  "green_result_sha256": "d716b737df41066c9a8d07890ceefe210732c2c9fad301cfc3ce813339b9057f"
+}

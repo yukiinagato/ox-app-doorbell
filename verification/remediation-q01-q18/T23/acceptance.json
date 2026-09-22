@@ -1,0 +1,58 @@
+{
+  "task_id": "T23",
+  "status": "VERIFIED_IN_SCOPE",
+  "source_manifest_sha256": "b30f7682ef43fd8d70f858f1486c487a32171e5b01eb8415bac88f9ab00f5b2b",
+  "acceptance": [
+    {
+      "id": "T23-01",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "assertion": "Actual original tracker fails with device wall +5min. Final production Core-duration helper and both ordinary targeted live-chime and persisted recovery admission accept valid calls with snapshot wall +/-5min. Late snapshots wait for a new Core generation without a wall-clock gate.",
+      "scope": "host production Foundation helper + native source",
+      "command_record": "evidence/compat-host-frozen-r4.json",
+      "command_record_sha256": "321011e51b46e0de1a33d7e3b5edac324f757be4c7ccc0e1aa19088237c9986e",
+      "log_sha256": "42ce3484bf004e1411a8ec3f698583faac908be0912b41c83033526bdefdb184"
+    },
+    {
+      "id": "T23-02",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "assertion": "Expired or unknown Core duration cannot admit a chime; accepted revisions and terminal call identities do not re-ring. A duplicate pending event does not renew the ten-second admission TTL; the queue is bounded to 128 identities and cannot issue cancellation.",
+      "scope": "host production timing/tracker + native source",
+      "command_record": "evidence/compat-host-frozen-r4.json",
+      "command_record_sha256": "321011e51b46e0de1a33d7e3b5edac324f757be4c7ccc0e1aa19088237c9986e",
+      "log_sha256": "42ce3484bf004e1411a8ec3f698583faac908be0912b41c83033526bdefdb184"
+    },
+    {
+      "id": "T23-03",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "assertion": "Production callback identity rejects old Core/call/timer revisions; foreground identical generation/age remains blocked. Old Core results cannot admit pending chimes from a replacement Core, while a current result admits them. Foreign recovery candidates cannot replace the owned call anchor.",
+      "scope": "host production helper; UIKit dispatch inspected and cross-compiled",
+      "command_record": "evidence/compat-host-frozen-r4.json",
+      "command_record_sha256": "321011e51b46e0de1a33d7e3b5edac324f757be4c7ccc0e1aa19088237c9986e",
+      "log_sha256": "42ce3484bf004e1411a8ec3f698583faac908be0912b41c83033526bdefdb184"
+    },
+    {
+      "id": "T23-04",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "assertion": "Clean final r4 App compiles and links armv7 minimum iOS5.1 using the licensed local historical SDK, with zero unresolved non-system symbols. The retained clean r3 Core archive is reused only after exact Core/Web source hash equality; no post-iOS5 clock API is added.",
+      "scope": "historical SDK build/symbol gate",
+      "command_record": "evidence/ios5-app-frozen-r4.json",
+      "command_record_sha256": "a3be708766108122110f9340a6e0d7520ced74a29fab62e498e1268072ef9110",
+      "log_sha256": "7086bd007682e17b0e4b02472e6dd75f2b905f7dc40a98e18e3b9a5dff76d120"
+    }
+  ],
+  "historical_records_note": "Non-frozen Core/app r2/r3 are development only. r3 frozen host/app results remain history; r4 host/app are final. The clean r3 frozen Core build is explicitly reused with matching source and archive hashes.",
+  "artifacts_sha256": "15d65b1a33e0e96db564e7d96e939d343d4853da52645ec4f77fd9053dd4a28a",
+  "red_evidence": {
+    "record": "evidence/timing-original-red.json",
+    "sha256": "5d49247061bbd9fbd7ca9d4aa433421e993745355dbe523e0dae0e7da413c05c",
+    "log_sha256": "1d67726d4d3218092ea430e7261f24bb498cb7ad65f945b0168fdef6d310fb90",
+    "scope": "Retained original production tracker method rejects the Core-valid call at device wall +5min; expected failing business assertion, exit1."
+  },
+  "core_build_record": {
+    "record": "evidence/ios5-core-frozen-r3.json",
+    "sha256": "bfd2921cbf731b174b0595d9e97c1681d5450360863806350f273cc947ee6790",
+    "log_sha256": "f54a8387c1d55ca49c511ffedabfa8c5d06415548e7cc6a710290ef85387bd48"
+  },
+  "postcheck_sha256": "083ff220c24ea23f3e934c4017fdc9feac316eb2a983092a60aebe93c7108972",
+  "independent_review": "evidence/review.json"
+}

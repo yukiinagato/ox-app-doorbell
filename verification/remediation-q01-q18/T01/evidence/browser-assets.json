@@ -1,0 +1,30 @@
+{
+  "assets": {
+    "admin/app.js": {
+      "bytes": 387708,
+      "sha256": "36f8889c5dc786cd23373bc29203c3b1800eac2228c7ce5c1f6508caa730821f",
+      "matches_source": true
+    },
+    "panel/runtime.js": {
+      "bytes": 45713,
+      "sha256": "982a879309c5b0f346d534288e360ba10d3025b9b85e2ceb3a262c4c0a98470e",
+      "matches_source": true
+    },
+    "panel/video-session.js": {
+      "bytes": 3185,
+      "sha256": "24ee1a814e42de5b21b50eae28c4deda17ae284e32c6965f34a7d45c6901344a",
+      "matches_source": true
+    },
+    "panel/call.html": {
+      "http_status": 404,
+      "comparison_note": "Incorrect probe URL. The production embedding maps call.html to /panel/call; call page controller is exercised by the Node suite."
+    },
+    "locale/en.json": {
+      "bytes": 54386,
+      "sha256": "f6639b5bfb339c24204bef750feabc40545ed8157f3543aafe4397a36dff7751",
+      "matches_source": false,
+      "matches_generated_bytes": true,
+      "comparison_note": "Embedded locales are minified directly from strings.yaml; source JSON formatting differs."
+    }
+  }
+}

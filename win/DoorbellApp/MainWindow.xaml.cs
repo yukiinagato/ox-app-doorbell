@@ -24,10 +24,12 @@ namespace DoorbellApp
     {
         private readonly DispatcherTimer _clock = new DispatcherTimer();
         private readonly DispatcherTimer _callTimeout = new DispatcherTimer();
+        private EventHandler _callTimeoutHandler;
         private readonly DispatcherTimer _replyTimeout = new DispatcherTimer();
         private readonly DispatcherTimer _pixelShift = new DispatcherTimer();
         private readonly DispatcherTimer _saverDrift = new DispatcherTimer();
-        private readonly DispatcherTimer _sosCountdown = new DispatcherTimer();
+        private DispatcherTimer _sosCountdown;
+        private long _sosCountdownRevision;
         private readonly DispatcherTimer _tileRefresh = new DispatcherTimer();
         private readonly DispatcherTimer _statsRefresh = new DispatcherTimer();
         private readonly DispatcherTimer _emergencyPresentationTimeout = new DispatcherTimer();
@@ -84,13 +86,20 @@ namespace DoorbellApp
         private readonly Queue<string> _acceptedChimeOrder = new Queue<string>();
         private const int AcceptedChimeCapacity = 128;
         private string _activeCallId = "";
-        private long _activeCallExpiresAtMs;
+        private readonly CallTiming _callTiming = new CallTiming();
+        private string _timedCallId = "";
+        private long _timedCoreGeneration;
+        private long _callViewRevision;
+        private CallTiming.Snapshot _suspendedCallSample;
         private string _reportedRecoveryCallId = "";
         private string _callFlow = "purpose_first";
         private bool _monitorOnly;
         private string _sipMode = "";
         private bool _inCall;
         private bool _peerPollBusy;
+        private long _peerFrameView;
+        private System.Net.HttpWebRequest _peerFrameRequest;
+        private readonly PeerFrameGate _peerFrameGate = new PeerFrameGate();
         private int _directPort = 47190;
         private int _secretTaps;
         private DateTime _secretFirst = DateTime.MinValue;
@@ -234,12 +243,7 @@ namespace DoorbellApp
             SyncClockBase();
             UpdateClock();
 
-            _callTimeout.Tick += (s, e) =>
-            {
-                _callTimeout.Stop();
-                if (CancelActiveCall("timeout")) ShowIdle(Texts.T("calling.no_answer"));
-                else CallingText.Text = Texts.T("calling.cancel_failed");
-            };
+            _callTimeout.Interval = TimeSpan.FromSeconds(1);
             _replyTimeout.Tick += (s, e) => { _replyTimeout.Stop(); ReplyBanner.Visibility = Visibility.Collapsed; };
 
             _pixelShift.Tick += (s, e) =>
@@ -249,9 +253,12 @@ namespace DoorbellApp
             };
             _saverDrift.Interval = TimeSpan.FromSeconds(30);
             _saverDrift.Tick += (s, e) => MoveSaverClock();
-            _sosCountdown.Interval = TimeSpan.FromSeconds(1);
-            _sosCountdown.Tick += (s, e) => OnSosCountdownTick();
             SosSlide.Armed += OnSosArmed;
+            SosSlide.ReviewRequested += OnSosReviewRequested;
+            SosSlide.Unloaded += (s, e) => StopSosCountdown();
+            SosSlide.IsVisibleChanged += (s, e) => { if (!SosSlide.IsVisible) StopSosCountdown(); };
+            BindVisitorAction(CancelButton, Ui.VisitorActionKind.Cancel);
+            BindVisitorAction(EndCallButton, Ui.VisitorActionKind.End);
             _tileRefresh.Interval = TimeSpan.FromSeconds(5);
             _tileRefresh.Tick += (s, e) => RefreshDoorTileStills();
             _statsRefresh.Interval = TimeSpan.FromSeconds(1);
@@ -345,7 +352,25 @@ namespace DoorbellApp
                         SoundValue("button_sound", "button_click"), false, null, _volumeIdle);
             }));
 
-            App.Core.UiEventReceived += ev => Dispatcher.BeginInvoke(new Action(() => OnUiEvent(ev)));
+            App.Core.UiEventReceived += ev => {
+                long viewRevision = System.Threading.Interlocked.Read(ref _callViewRevision);
+                Dispatcher.BeginInvoke(new Action(() => {
+                    if (ev.CoreGeneration != App.Core.Generation ||
+                        (ev.T == "state" && viewRevision != _callViewRevision)) return;
+                    OnUiEvent(ev);
+                }));
+            };
+            Microsoft.Win32.SystemEvents.PowerModeChanged += OnPowerModeChanged;
+            StateChanged += (s, e) => {
+                if (WindowState == WindowState.Minimized) SuspendCallTiming();
+                else ResumeCallTiming();
+            };
+            Closed += (s, e) => {
+                Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
+                StopSosCountdown();
+                _callTimeout.Stop();
+                System.Threading.Interlocked.Increment(ref _callViewRevision);
+            };
 
             PairingOverlay.DismissRequested += OnPairingDismissed;
             _pairingPoll.Interval = TimeSpan.FromSeconds(2);
@@ -395,6 +420,8 @@ namespace DoorbellApp
             PurposeHint.Text = Texts.T("idle.choose_purpose");
             CallingText.Text = Texts.T("calling.title");
             CancelButton.Content = Texts.T("calling.cancel");
+            CallingPurposeSkip.Content = Texts.T("purpose.skip");
+            OfflineAction.Content = Texts.T(string.IsNullOrEmpty(_activeCallId) ? "idle.call" : "calling.cancel");
             ReplyCaption.Text = Texts.T("reply.banner");
             OfflineTitle.Text = Texts.T("offline.title");
             OfflineBody.Text = Texts.T("offline.body");
@@ -412,7 +439,7 @@ namespace DoorbellApp
             IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Danger"));
             IncomingNoVideo.Text = Texts.T("ring.no_video");
             InCallTitle.Text = Texts.T("incall.title");
-            EndCallButton.Content = IconStack("IconPhoneOff", Texts.T("incall.end_call"), Brushes.White);
+            EndCallButton.Content = Texts.T("incall.end_call");
             QuickReplyToggle.Content = IconStack("IconMessageReply", Texts.T("ring.quick_replies"));
             NoticeChipText.Text = Texts.T("notice.chip");
             NoticeEditButton.Content = Texts.T("notice.edit");
@@ -993,8 +1020,9 @@ namespace DoorbellApp
             var b = new Button
             {
                 Content = panel,
-                MinWidth = 190,
-                MinHeight = 110,
+                MinWidth = 0,
+                MinHeight = 96,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 Margin = new Thickness(8),
                 Padding = new Thickness(12, 10, 12, 10),
                 Background = (Brush)FindResource("Card"),
@@ -1011,6 +1039,7 @@ namespace DoorbellApp
 
         private void OnPurposeClick(object sender, RoutedEventArgs e)
         {
+            if (_inCall) return;
             if (!string.IsNullOrEmpty(_activeCallId) && !ShowsCallingPurposes()) return;
             if (string.IsNullOrEmpty(_activeCallId) && !ShowsHomePurposes()) return;
             var b = sender as Button;
@@ -1025,7 +1054,7 @@ namespace DoorbellApp
             {
                 if (!App.Core.SelectPurpose(App.Boot.Door, _activeCallId, id))
                 {
-                    CallingText.Text = Texts.T("purpose.select_failed");
+                    CallingDetail.Text = Texts.T("purpose.select_failed");
                     return;
                 }
                 CallingPurposeSection.Visibility = Visibility.Collapsed;
@@ -1040,8 +1069,7 @@ namespace DoorbellApp
                     ShowOffline();
                     return;
                 }
-                _activeCallExpiresAtMs = ResolveActiveCallExpiryMs();
-            }
+                }
             ShowCalling(Texts.T("purpose.sent", label));
         }
 
@@ -1407,6 +1435,8 @@ namespace DoorbellApp
 
         private void RefreshSosConfig(Dictionary<string, object> cfg)
         {
+            bool previousVisibility = SosButton.Visibility == Visibility.Visible;
+            int previousCountdown = _sosCountdownS;
             bool show = App.Boot.Role == "indoor_panel";
             var roles = CoreClient.Dig(cfg, "emergency.button_on_roles") as System.Collections.IEnumerable;
             if (roles != null && !(roles is string))
@@ -1417,8 +1447,8 @@ namespace DoorbellApp
             }
             SosButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
 
-            // Slide mode is the only trigger; "hold" stays accepted so an older configuration
-            // keeps validating, and the cancellable countdown is what it configures.
+            // Sliding and confirmed accessible activation use the same cancellable countdown.
+            // Legacy "hold" remains an accepted configuration spelling.
             var countdown = CoreClient.Dig(cfg, "emergency.trigger.countdown_s");
             _sosCountdownS = 3;
             if (countdown != null)
@@ -1427,6 +1457,7 @@ namespace DoorbellApp
                 if (int.TryParse(countdown.ToString(), out seconds) &&
                     seconds >= 0 && seconds <= 10) _sosCountdownS = seconds;
             }
+            if (previousVisibility != show || previousCountdown != _sosCountdownS) _sosReview.Revoke();
             ApplySosLabel();
 
             // status.emergency.cancel_requires_password is cancel_requires_pin AND a password
@@ -1446,6 +1477,8 @@ namespace DoorbellApp
         // break is authored in the catalog rather than produced by wrapping.
         private void ApplySosLabel()
         {
+            System.Windows.Automation.AutomationProperties.SetName(SosSlide, Texts.T("sos.accessibility_start"));
+            System.Windows.Automation.AutomationProperties.SetHelpText(SosSlide, Texts.T("sos.accessibility_hint"));
             string label = Texts.T("sos.slide_label", _sosCountdownS);
             int split = label.IndexOf('\n');
             SosText.Text = split >= 0 ? label.Substring(0, split) : label;
@@ -1454,10 +1487,12 @@ namespace DoorbellApp
                 Visibility.Collapsed : Visibility.Visible;
         }
 
-        /// <summary>The thumb was released past 90 %: start the cancellable countdown.</summary>
+        /// <summary>A complete slide or reviewed activation starts the same cancellable countdown.</summary>
         private void OnSosArmed()
         {
-            if (_emergencyActive) return;
+            if (_emergencyActive || _sosCountdownLeft > 0 || !SosSlide.IsLoaded ||
+                !SosSlide.IsVisible || !SosSlide.IsEnabled) return;
+            _sosReview.Revoke();
             if (_sosCountdownS <= 0)
             {
                 CommitEmergency();
@@ -1466,12 +1501,20 @@ namespace DoorbellApp
             _sosCountdownLeft = _sosCountdownS;
             SosCountdownText.Text = Texts.T("sos.countdown", _sosCountdownLeft);
             SosCountdownView.Visibility = Visibility.Visible;
-            _sosCountdown.Stop();
-            _sosCountdown.Start();
+            long revision = ++_sosCountdownRevision, generation = App.Core.Generation;
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+            _sosCountdown = timer;
+            timer.Tick += (s, e) => {
+                if (_sosCountdown != timer || revision != _sosCountdownRevision) return;
+                if (generation != App.Core.Generation) { StopSosCountdown(); return; }
+                OnSosCountdownTick();
+            };
+            timer.Start();
         }
 
         private void OnSosCountdownTick()
         {
+            if (_sosCountdownLeft <= 0 || SosCountdownView.Visibility != Visibility.Visible) return;
             _sosCountdownLeft--;
             if (_sosCountdownLeft > 0)
             {
@@ -1493,7 +1536,10 @@ namespace DoorbellApp
 
         private void StopSosCountdown()
         {
-            _sosCountdown.Stop();
+            _sosReview.Revoke();
+            ++_sosCountdownRevision;
+            _sosCountdown?.Stop();
+            _sosCountdown = null;
             _sosCountdownLeft = 0;
             SosCountdownView.Visibility = Visibility.Collapsed;
             SosSlide.Reset();
@@ -1821,53 +1867,104 @@ namespace DoorbellApp
             CallingPurposeSection.Visibility = Visibility.Collapsed;
             OfflineView.Visibility = Visibility.Collapsed;
             IdleView.Visibility = Visibility.Visible;
-            if (string.IsNullOrEmpty(_activeCallId)) _activeCallExpiresAtMs = 0;
-            if (hint != null) TouchHint.Text = hint;
+            _callTimeout.Stop();
+            System.Threading.Interlocked.Increment(ref _callViewRevision);
+            VisitorStatus.Text = hint ?? "";
+            VisitorStatus.Visibility = string.IsNullOrEmpty(hint) ? Visibility.Collapsed : Visibility.Visible;
+            TouchHint.Text = Texts.T("idle.touch_to_call");
+            VisitorContentScroll.ScrollToTop();
+            UpdateVisitorActionHeights(ActualWidth);
         }
 
         private void ShowOffline()
         {
+            StopSosCountdown();
             ExitScreensaver();
+            OfflineTitle.Text = Texts.T(string.IsNullOrEmpty(_activeCallId) ? "offline.title" : "visitor.restoring");
+            OfflineAction.Visibility = App.Boot.Role == "door_station" ? Visibility.Visible : Visibility.Collapsed;
+            OfflineAction.Content = Texts.T(string.IsNullOrEmpty(_activeCallId) ? "idle.call" : "calling.cancel");
+            UpdateVisitorActionHeights(ActualWidth);
             IdleView.Visibility = Visibility.Collapsed;
             CallingView.Visibility = Visibility.Collapsed;
             OfflineView.Visibility = Visibility.Visible;
         }
 
-        private long ResolveActiveCallExpiryMs()
+        private void SuspendCallTiming()
         {
-            if (string.IsNullOrEmpty(_activeCallId)) return 0;
-            var status = App.Core.Status();
-            var calls = status != null && status.ContainsKey("active_calls")
-                ? status["active_calls"] as System.Collections.IEnumerable : null;
-            if (calls == null) return 0;
-            foreach (var item in calls)
-            {
-                var call = item as Dictionary<string, object>;
-                if (call != null && DictStr(call, "call_id") == _activeCallId)
-                    return DictLong(call, "expires_at_ms", 0);
-            }
-            return 0;
+            StopSosCountdown();
+            _suspendedCallSample = App.Core.CallTimingSnapshot();
+            _callTiming.RequireFresh(_suspendedCallSample);
+            _callTimeout.Stop();
+            System.Threading.Interlocked.Increment(ref _callViewRevision);
         }
 
-        private void ShowCalling(string title = null, long expiresAtMs = 0)
+        private void ResumeCallTiming()
         {
+            _callTiming.RequireFresh(_suspendedCallSample);
+            _timedCoreGeneration = App.Core.Generation;
+            _timedCallId = _activeCallId;
+            System.Threading.Interlocked.Increment(ref _callViewRevision);
+            ArmCallTiming();
+            RefreshCallTiming(_timedCoreGeneration, _timedCallId, _callViewRevision);
+        }
+
+        private void OnPowerModeChanged(object sender, Microsoft.Win32.PowerModeChangedEventArgs args)
+        {
+            long generation = App.Core.Generation;
+            Dispatcher.BeginInvoke(new Action(() => {
+                if (generation != App.Core.Generation) return;
+                if (args.Mode == Microsoft.Win32.PowerModes.Suspend) SuspendCallTiming();
+                else if (args.Mode == Microsoft.Win32.PowerModes.Resume) ResumeCallTiming();
+            }));
+        }
+
+        private void ArmCallTiming()
+        {
+            _callTimeout.Stop();
+            if (_callTimeoutHandler != null) _callTimeout.Tick -= _callTimeoutHandler;
+            long generation = _timedCoreGeneration, revision = _callViewRevision;
+            string callId = _timedCallId;
+            _callTimeoutHandler = (sender, args) => RefreshCallTiming(generation, callId, revision);
+            _callTimeout.Tick += _callTimeoutHandler;
+            _callTimeout.Start();
+        }
+
+        private void RefreshCallTiming(long generation, string callId, long revision)
+        {
+            if (!CallTiming.CallbackMatches(generation, callId, revision,
+                App.Core.Generation, _activeCallId, _callViewRevision)) return;
+            if (string.IsNullOrEmpty(callId)) { RecoverActiveCall(); return; }
+            var reading = _callTiming.Observe(App.Core.CallTimingSnapshot(), callId, CallTiming.MonotonicMs);
+            if (reading != null && reading.Absent)
+            {
+                _activeCallId = "";
+                ShowIdle(Texts.T("calling.no_answer"));
+            }
+            else if (!_inCall && CallingView.Visibility == Visibility.Visible)
+                CallingText.Text = reading == null || !reading.RemainingMs.HasValue || reading.RemainingMs.Value <= 0
+                    ? Texts.T("visitor.restoring") : Texts.T("calling.title");
+        }
+
+        private void ShowCalling(string title = null)
+        {
+            StopSosCountdown();
             ExitScreensaver();
             if (title != null) _callTitleOverride = title;
-            CallingText.Text = _callTitleOverride ?? Texts.T("calling.title");
+            CallingText.Text = Texts.T("calling.title");
+            CallingDetail.Text = _callTitleOverride ?? "";
+            OfflineView.Visibility = Visibility.Collapsed;
+            UpdateVisitorActionHeights(ActualWidth);
             IdleView.Visibility = Visibility.Collapsed;
             CallingView.Visibility = Visibility.Visible;
             CallingPurposeSection.Visibility = ShowsCallingPurposes() ? Visibility.Visible : Visibility.Collapsed;
-            _callTimeout.Stop();
-            if (expiresAtMs > 0) _activeCallExpiresAtMs = expiresAtMs;
-            if (_activeCallExpiresAtMs <= 0)
-                _activeCallExpiresAtMs = ResolveActiveCallExpiryMs();
-            if (_activeCallExpiresAtMs > 0)
+            if (_timedCallId != _activeCallId || _timedCoreGeneration != App.Core.Generation)
             {
-                long remainingMs = _activeCallExpiresAtMs -
-                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-                _callTimeout.Interval = TimeSpan.FromMilliseconds(Math.Max(1, remainingMs));
-                _callTimeout.Start();
+                _callTiming.RequireFresh(App.Core.CallTimingSnapshot());
+                _timedCallId = _activeCallId;
+                _timedCoreGeneration = App.Core.Generation;
+                System.Threading.Interlocked.Increment(ref _callViewRevision);
             }
+            ArmCallTiming();
             if (App.SafeMode)
             {
                 Pulse.BeginAnimation(OpacityProperty, null);
@@ -1912,16 +2009,8 @@ namespace DoorbellApp
                         if (App.Boot.Role == "door_station" &&
                             (string.IsNullOrEmpty(ev.Str("door")) || ev.Str("door") == App.Boot.Door) &&
                             string.IsNullOrEmpty(_activeCallId)) _activeCallId = ev.Str("call_id");
-                        if (ev.Str("call_id") == _activeCallId)
-                        {
-                            long expiry = DictLong(ev.Data, "expires_at_ms", 0);
-                            if (expiry > 0)
-                            {
-                                _activeCallExpiresAtMs = expiry;
-                                if (CallingView.Visibility == Visibility.Visible)
-                                    ShowCalling();
-                            }
-                        }
+                        if (ev.Str("call_id") == _activeCallId &&
+                            CallingView.Visibility == Visibility.Visible) ShowCalling();
                         if (App.Boot.Role == "indoor_panel") UpdateIncomingCallData(ev);
                     }
                     else if (eventType == "reply" && !_inCall &&
@@ -1971,7 +2060,7 @@ namespace DoorbellApp
                                         _activeCallId, App.Boot.Door))
                         {
                             _activeCallId = "";
-                            _activeCallExpiresAtMs = 0;
+                            System.Threading.Interlocked.Increment(ref _callViewRevision);
                             _callTimeout.Stop();
                             if (App.Boot.Role == "door_station") ShowIdle();
                         }
@@ -2178,113 +2267,83 @@ namespace DoorbellApp
 
         private void RecoverActiveCall()
         {
-            UiEvent pending = App.Core.TakePendingRecovery();
-            if (pending != null)
-            {
-                RecoverCall(pending);
-                return;
-            }
-            var status = App.Core.Status();
-            var calls = status != null && status.ContainsKey("active_calls")
+            var snapshot = App.Core.CallTimingSnapshot();
+            if (!_callTiming.Accepts(snapshot)) return;
+            var status = snapshot.Document;
+            if (string.IsNullOrEmpty(_nodeId))
+                _nodeId = DictStr(CoreClient.Dig(status, "node") as Dictionary<string, object>, "id");
+            var calls = status.ContainsKey("active_calls")
                 ? status["active_calls"] as System.Collections.IEnumerable : null;
             if (calls == null) return;
             foreach (var item in calls)
             {
                 var call = item as Dictionary<string, object>;
-                if (call == null) continue;
-                string state = DictStr(call, "state");
-                bool ownsDialog = state == "in_call" &&
-                                  DictStr(call, "dialog_owner") == _nodeId;
-                bool ownsWaiting = state == "ringing" && App.Boot.Role == "door_station" &&
-                                   DictStr(call, "origin") == _nodeId &&
-                                   (string.IsNullOrEmpty(DictStr(call, "door")) ||
-                                    DictStr(call, "door") == App.Boot.Door);
-                if (!ownsDialog && !ownsWaiting) continue;
-                var data = new Dictionary<string, object>(call) { { "t", "call_recovery_required" } };
-                RecoverCall(new UiEvent { T = "call_recovery_required", Data = data });
-                return;
+                if (!IsOwnedRecovery(call)) continue;
+                RecoverCall(new UiEvent { T = "call_recovery_required", Data = call,
+                    CoreGeneration = snapshot.CoreGeneration });
             }
+        }
+
+        private bool IsOwnedRecovery(Dictionary<string, object> call)
+        {
+            return CallTiming.OwnedRecovery(call, _nodeId, App.Boot.Role, App.Boot.Door);
         }
 
         private void RecoverCall(UiEvent ev)
         {
-            string callId = ev == null ? "" : ev.Str("call_id");
-            if (string.IsNullOrEmpty(callId) || callId == _reportedRecoveryCallId) return;
-            var status = App.Core.Status();
+            if (ev == null || ev.CoreGeneration != App.Core.Generation) return;
+            string callId = ev.Str("call_id");
+            var snapshot = App.Core.CallTimingSnapshot();
+            if (snapshot == null || snapshot.CoreGeneration != ev.CoreGeneration) return;
             if (string.IsNullOrEmpty(_nodeId))
-                _nodeId = DictStr(CoreClient.Dig(status, "node") as Dictionary<string, object>, "id");
+                _nodeId = DictStr(CoreClient.Dig(snapshot.Document, "node") as Dictionary<string, object>, "id");
+            var calls = snapshot.Document.ContainsKey("active_calls")
+                ? snapshot.Document["active_calls"] as System.Collections.IEnumerable : null;
+            Dictionary<string, object> candidate = null;
+            if (calls != null) foreach (var item in calls)
+            {
+                var current = item as Dictionary<string, object>;
+                if (DictStr(current, "call_id") == callId) { candidate = current; break; }
+            }
+            if (!IsOwnedRecovery(candidate)) return;
+            var reading = _callTiming.Observe(snapshot, callId, CallTiming.MonotonicMs);
+            if (reading == null || reading.Absent) return;
+            var active = reading.Call;
+            if (!active.ContainsKey("recovery_required") || !Equals(active["recovery_required"], true) ||
+                !active.ContainsKey("recovery_eligible") || !Equals(active["recovery_eligible"], true) ||
+                !reading.RecoveryRemainingMs.HasValue || reading.RecoveryRemainingMs.Value <= 0) return;
             if (string.IsNullOrEmpty(_nodeId))
+                _nodeId = DictStr(CoreClient.Dig(snapshot.Document, "node") as Dictionary<string, object>, "id");
+            if (string.IsNullOrEmpty(_nodeId)) return;
+            if (DictStr(active, "state") == "in_call")
             {
-                ReportRecoveryOnce(callId, false);
+                // A process restart cannot restore the old PJSIP dialog.
+                if (DictStr(active, "dialog_owner") == _nodeId)
+                    ReportRecoveryOnce(callId, false, snapshot.CoreGeneration);
                 return;
             }
-
-            Dictionary<string, object> active = null;
-            var calls = status != null && status.ContainsKey("active_calls")
-                ? status["active_calls"] as System.Collections.IEnumerable : null;
-            if (calls != null)
-                foreach (var item in calls)
-                {
-                    var call = item as Dictionary<string, object>;
-                    if (call != null && DictStr(call, "call_id") == callId)
-                    {
-                        active = call;
-                        break;
-                    }
-                }
-            if (active == null)
-            {
-                string eventOwner = ev == null ? "" : ev.Str("dialog_owner");
-                if (string.IsNullOrEmpty(eventOwner) || eventOwner == _nodeId)
-                    ReportRecoveryOnce(callId, false);
-                return;
-            }
-
-            string persistedState = DictStr(active, "state");
-            string eventState = ev == null ? "" : ev.Str("state");
-            string owner = ev == null ? "" : ev.Str("dialog_owner");
-            if (string.IsNullOrEmpty(owner)) owner = DictStr(active, "dialog_owner");
-            if (persistedState == "in_call" || eventState == "in_call")
-            {
-                if (owner != _nodeId) return;
-                // A WPF process restart destroys the PJSIP dialog; rebuilding controls alone is
-                // never evidence that the established audio call survived.
-                ReportRecoveryOnce(callId, false);
-                return;
-            }
-
-            bool waiting = persistedState == "ringing" || eventState == "ringing" ||
-                           eventState == "purpose_pending";
-            bool localDoor = App.Boot.Role == "door_station" &&
-                             DictStr(active, "origin") == _nodeId &&
-                             (string.IsNullOrEmpty(DictStr(active, "door")) ||
-                              DictStr(active, "door") == App.Boot.Door);
-            if (!waiting || !localDoor) return;
-            long expiry = DictLong(active, "expires_at_ms", 0);
-            if (expiry <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
-            {
-                ReportRecoveryOnce(callId, false);
-                return;
-            }
-
+            bool waiting = DictStr(active, "state") == "ringing" || DictStr(active, "state") == "purpose_pending";
+            if (!waiting || App.Boot.Role != "door_station" || DictStr(active, "origin") != _nodeId ||
+                (DictStr(active, "door") != "" && DictStr(active, "door") != App.Boot.Door) ||
+                !reading.RemainingMs.HasValue || reading.RemainingMs.Value <= 0) return;
+            if (_reportedRecoveryCallId == snapshot.CoreGeneration + ":" + callId) return;
             _activeCallId = callId;
-            _activeCallExpiresAtMs = expiry;
             if (!string.IsNullOrEmpty(DictStr(active, "purpose"))) _purposeChosenCallId = callId;
-            string callFlow = DictStr(active, "call_flow");
-            if (callFlow == "ring_then_purpose" || callFlow == "purpose_first")
-                _activeCallFlow = callFlow;
-            _callFeedback = PlayConfigured(_callFeedback,
-                SoundValue("call_sound", "outdoor_call_alert"),
+            string flow = DictStr(active, "call_flow");
+            if (flow == "ring_then_purpose" || flow == "purpose_first") _activeCallFlow = flow;
+            _callFeedback = PlayConfigured(_callFeedback, SoundValue("call_sound", "outdoor_call_alert"),
                 ConfigBool("ui.call_sound_loop", false), null, _volumeCall);
-            ShowCalling(null, expiry);
-            ReportRecoveryOnce(callId, true);
+            ShowCalling();
+            ReportRecoveryOnce(callId, true, snapshot.CoreGeneration);
         }
 
-        private void ReportRecoveryOnce(string callId, bool restored)
+        private void ReportRecoveryOnce(string callId, bool restored, long generation)
         {
-            if (string.IsNullOrEmpty(callId) || callId == _reportedRecoveryCallId) return;
-            _reportedRecoveryCallId = callId;
-            App.Core.ReportCallRecovery(callId, restored);
+            string identity = generation + ":" + callId;
+            if (string.IsNullOrEmpty(callId) || identity == _reportedRecoveryCallId ||
+                generation != App.Core.Generation) return;
+            _reportedRecoveryCallId = identity;
+            App.Core.ReportCallRecovery(callId, restored, generation);
         }
 
         private static Dictionary<string, object> FindDoorPeer(Dictionary<string, object> st, string door)
@@ -2975,6 +3034,7 @@ namespace DoorbellApp
 
         private void OnEndCallClick(object sender, RoutedEventArgs e)
         {
+            if (!AllowVisitorAction(Ui.VisitorActionKind.End)) return;
             App.Core.SipHangup();
             ReportLifecycleEndedIfNeeded();
             OnSipIdle();
@@ -2982,6 +3042,8 @@ namespace DoorbellApp
 
         private void OnSipInCall(UiEvent ev)
         {
+            System.Threading.Interlocked.Increment(ref _callViewRevision);
+            RetirePeerFrame();
             _inCall = true;
             BuildQuickReplies();
             _incomingTimeout.Stop();
@@ -3106,6 +3168,9 @@ namespace DoorbellApp
 
         private void ShowInCall(string streamUrl)
         {
+            StopSosCountdown();
+            OfflineView.Visibility = Visibility.Collapsed;
+            UpdateVisitorActionHeights(ActualWidth);
             ExitScreensaver();
             IdleView.Visibility = Visibility.Collapsed;
             CallingView.Visibility = Visibility.Collapsed;
@@ -3237,6 +3302,7 @@ namespace DoorbellApp
 
         private void CloseInCall()
         {
+            RetirePeerFrame();
             _peerPoll.Stop();
             _peerH264Retry.Stop();
             StopInCallNative();
@@ -3257,24 +3323,69 @@ namespace DoorbellApp
             if (IncomingView.Visibility != Visibility.Visible) HideCallOverlay();
         }
 
+        private void RetirePeerFrame()
+        {
+            ++_peerFrameView;
+            var request = _peerFrameRequest;
+            _peerFrameRequest = null;
+            _peerPollBusy = false;
+            _peerFrameGate.Reset();
+            try { request?.Abort(); } catch { }
+        }
+
         private void PollPeerFrame()
         {
             if (!_inCall || _peerPollBusy) return;
+            var identity = PeerFrameGate.Capture(App.Core.CallTimingSnapshot(), App.Boot.Door,
+                                                  _activeCallId, _peerFrameView);
+            if (identity == null || identity.CoreGeneration != App.Core.Generation) return;
+            var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(
+                "http://127.0.0.1:47180/peer-frame.jpg" + identity.Query);
+            request.Timeout = 2000;
+            request.ReadWriteTimeout = 1500;
+            request.AllowAutoRedirect = false;
+            request.CachePolicy = new System.Net.Cache.RequestCachePolicy(System.Net.Cache.RequestCacheLevel.NoCacheNoStore);
+            _peerFrameRequest = request;
             _peerPollBusy = true;
             Task.Run(() =>
             {
                 byte[] jpg = null;
+                System.Net.WebHeaderCollection headers = null;
                 try
                 {
-                    using (var wc = new System.Net.WebClient())
-                        jpg = wc.DownloadData("http://127.0.0.1:47180/peer-frame.jpg");
+                    using (var deadline = new System.Threading.Timer(_ =>
+                           { try { request.Abort(); } catch { } }, null, 2000, System.Threading.Timeout.Infinite))
+                    using (var response = (System.Net.HttpWebResponse)request.GetResponse())
+                    using (var stream = response.GetResponseStream())
+                    using (var bytes = new MemoryStream())
+                    {
+                        if (response.StatusCode != System.Net.HttpStatusCode.OK ||
+                            response.ContentLength > 1024 * 1024) throw new IOException("Invalid frame response");
+                        headers = response.Headers;
+                        var buffer = new byte[8192];
+                        int count;
+                        while ((count = stream.Read(buffer, 0, buffer.Length)) > 0)
+                        {
+                            if (bytes.Length + count > 1024 * 1024) throw new IOException("Frame exceeds limit");
+                            bytes.Write(buffer, 0, count);
+                        }
+                        jpg = bytes.ToArray();
+                    }
                 }
                 catch {  }
-                var bmp = jpg != null ? MjpegStreamer.Decode(jpg, App.SafeMode ? 640 : 0) : null;
+                var bmp = jpg != null && headers != null ? MjpegStreamer.Decode(jpg, App.SafeMode ? 640 : 0) : null;
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
+                    if (_peerFrameRequest != request) return;
+                    _peerFrameRequest = null;
                     _peerPollBusy = false;
                     if (!_inCall || bmp == null) return;
+                    var current = PeerFrameGate.Capture(App.Core.CallTimingSnapshot(), App.Boot.Door,
+                                                        _activeCallId, _peerFrameView);
+                    if (identity.CoreGeneration != App.Core.Generation || !_peerFrameGate.Accept(identity,
+                        current, headers["X-Doorbell-Call-Id"], headers["X-Doorbell-Stage-Revision"],
+                        headers["X-Doorbell-Dialog-Owner"], headers["X-Doorbell-Media-Generation"],
+                        headers["X-Doorbell-Frame-Sequence"])) return;
                     if (InCallView.Visibility != Visibility.Visible) ShowInCall(null);
                     PeerVideo.Source = bmp;
                 }));
@@ -3294,12 +3405,12 @@ namespace DoorbellApp
                 ShowOffline();
                 return;
             }
-            _activeCallExpiresAtMs = ResolveActiveCallExpiryMs();
             ShowCalling();
         }
 
         private void OnCancelClick(object sender, RoutedEventArgs e)
         {
+            if (!AllowVisitorAction(Ui.VisitorActionKind.Cancel)) return;
             if (CancelActiveCall("visitor"))
             {
                 _callTimeout.Stop();
@@ -3307,19 +3418,20 @@ namespace DoorbellApp
             }
             else
             {
-                CallingText.Text = Texts.T("calling.cancel_failed");
+                CallingDetail.Text = Texts.T("calling.cancel_failed");
             }
         }
 
         private bool CancelActiveCall(string reason)
         {
+            if (_inCall) return false;
             string callId = _activeCallId;
             if (string.IsNullOrEmpty(callId)) return false;
             bool ok = App.Core.CancelCall(App.Boot.Door, callId, reason);
             if (ok)
             {
                 _activeCallId = "";
-                _activeCallExpiresAtMs = 0;
+                System.Threading.Interlocked.Increment(ref _callViewRevision);
             }
             return ok;
         }

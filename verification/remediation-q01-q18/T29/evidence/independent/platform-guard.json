@@ -1,0 +1,7 @@
+{
+  "recorded_at": "2026-09-22T18:24:14.126021+00:00",
+  "path": "core/tests/test_config_import_review.cpp",
+  "before_sha256": "12a6572cd623b3764c9e41f26cc38452e4db174bdca7c428f6586e7faada8116",
+  "after_sha256": "0b3e465f9dc5529febab7c0df91e7dc04cd344eae5adbe13f6d6c891b8f35a9f",
+  "change": "Wrap entire POSIX HTTP review test file in !defined(_WIN32), matching crash test platform restriction. Test bodies unchanged."
+}

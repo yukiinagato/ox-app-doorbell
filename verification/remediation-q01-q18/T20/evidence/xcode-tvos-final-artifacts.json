@@ -1,0 +1,44 @@
+{
+  "test_id": "xcode-tvos-final",
+  "captured_after": "completed Xcode command, before another build in this platform/architecture/minimum-OS key",
+  "app_version": "0.1.13",
+  "build": "14",
+  "minimum_os": "15.0",
+  "app_binaries": {
+    "build/remediation-t20-20260922/xcode-tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV": {
+      "sha256": "7b91369603f42f7299c11d632075bc510a9655827bd643f8c40a1e46bf2757a6",
+      "uuid": "UUID: 9D04DCDF-E005-337F-B500-AC4BB177D508 (arm64) build/remediation-t20-20260922/xcode-tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV"
+    },
+    "build/remediation-t20-20260922/xcode-tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV.debug.dylib": {
+      "sha256": "8462145a7fedb095106be99173c7a5f60b2fae0444e8732ecf0eda4f2dbc4728",
+      "uuid": "UUID: 2BBA7374-6968-3788-9497-12B75A5E960B (arm64) build/remediation-t20-20260922/xcode-tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV.debug.dylib"
+    }
+  },
+  "native_artifact_manifest": {
+    "architectures": [
+      "arm64"
+    ],
+    "archive_sha256": "ac04bdd65dae98c6db973d2be5d39c345dd7d2c9ee572d258e6fdcb24ee13ad1",
+    "artifact": "doorbell-core-bundle",
+    "minimum_os": "15.0",
+    "pjsip_manifest_sha256": "cc1c1a16fb0ad6b664faa6a3829ce53c58ece2f53d378360a56ab943b3075e16",
+    "platform": "appletvsimulator",
+    "schema_version": 1,
+    "signing_identity": "unsigned-static-library",
+    "sip_backend": "real_pjsip",
+    "source_dirty": true,
+    "source_revision": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "toolchain": {
+      "cmake": "cmake version 4.4.3",
+      "sdk_version": "26.5",
+      "xcode": "Xcode 26.6 Build version 17F113"
+    }
+  },
+  "native_archive_copy": "build/remediation-t20-20260922/artifact-snapshots/xcode-tvos-final/libdoorbell_all.a",
+  "native_archive_sha256": "ac04bdd65dae98c6db973d2be5d39c345dd7d2c9ee572d258e6fdcb24ee13ad1",
+  "native_cmake_flags": [
+    "CMAKE_CXX_FLAGS:STRING=",
+    "CMAKE_C_FLAGS:STRING="
+  ],
+  "source_manifest_native_archives_note": "The native_archives field in source-manifest-final.json is a PRE-RUN observation only, not the archive linked by this command; this per-command capture identifies the completed artifact."
+}

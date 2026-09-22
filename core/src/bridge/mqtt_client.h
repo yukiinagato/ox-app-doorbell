@@ -103,6 +103,8 @@ class MqttClient {
 
 
   void publish(const std::string& topic, const std::string& payload, bool retain);
+  // Admission to the connected socket queue only; this is neither a broker nor actuator ACK.
+  bool tryPublish(const std::string& topic, const std::string& payload);
   void subscribe(const std::string& topic_filter);
   bool connected() const;
 

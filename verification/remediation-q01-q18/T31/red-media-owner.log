@@ -1,0 +1,23 @@
+09-23 03:54:26 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28881
+09-23 03:54:26 I [node] created the missing door entry doors.front for this door station
+09-23 03:54:26 I [httpd] listening on 22934,[::]:22934
+09-23 03:54:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:54:26 I [node] node e4e0a616 (doorbell) started
+09-23 03:54:26 I [node] initialized the cluster administrator password
+09-23 03:54:28 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t31-20260923/red-buildable-source/core/tests/test_panel_identity.cpp:118:
+TEST CASE:  panel identity: current owner without media publish grant is denied
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t31-20260923/red-buildable-source/core/tests/test_panel_identity.cpp:125: ERROR: CHECK( authorization.status == 403 ) is NOT correct!
+  values: CHECK( 200 == 403 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t31-20260923/red-buildable-source/core/tests/test_panel_identity.cpp:131: ERROR: CHECK( identityUpload(fixture.options.http_port, "/call-frame?" + identityTuple(call) + "&media_generation=" + generation + "&frame_sequence=1", session) == 403 ) is NOT correct!
+  values: CHECK( 200 == 403 )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 525 skipped
+[doctest] assertions: 32 | 30 passed | 2 failed |
+[doctest] Status: FAILURE!

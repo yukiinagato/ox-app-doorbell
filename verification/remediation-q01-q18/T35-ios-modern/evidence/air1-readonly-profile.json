@@ -1,0 +1,14 @@
+{
+  "at": "2026-09-22T16:35:16.079692+00:00",
+  "read_only": true,
+  "files_copied_or_backed_up": false,
+  "version": {
+    "CFBundleShortVersionString": "0.1.36",
+    "CFBundleVersion": "37",
+    "MinimumOSVersion": "12.0"
+  },
+  "profile": {
+    "exit_code": 1,
+    "error": "cat: /var/mobile/Documents/boot.json: No such file or directory\n"
+  }
+}

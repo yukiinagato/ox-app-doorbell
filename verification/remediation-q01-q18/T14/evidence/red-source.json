@@ -1,0 +1,17 @@
+{
+  "note": "Production sources preserved before editing. Original four-case Web test reconstructed from the recorded patch; later supplemental cases are excluded. Core red used the first config_generation assertion (before later synchronization and supplemental field assertions). The Node start snapshot predates concurrent unrelated T08 authentication edits; the red call-info production path was unchanged. Final green sources are fully hashed in after-source.json.",
+  "sources": {
+    "production_page": {
+      "path": "build/remediation-t14-20260922/before-call.html",
+      "sha256": "01f1bfb5d9d547e74b87c25f9de2228035cf06911a0adf4da0cde60d49e9ae40"
+    },
+    "node": {
+      "path": "build/remediation-t14-20260922/before-node.cpp",
+      "sha256": "fabb9e95d128db735376dd6b6d5cc599764282fd6db21edfeae1ce8383126f5a"
+    },
+    "four_case_web_test": {
+      "path": "verification/remediation-q01-q18/T14/evidence/red-call_ua_generation.test.js.txt",
+      "sha256": "dd45dce28a4cafdf54132ab63f1c745486c1367461d0f116824ce6de56c3bd0b"
+    }
+  }
+}

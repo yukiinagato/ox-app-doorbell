@@ -1,0 +1,36 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "43687623f44a3ef4613305523c1fa539f423fc61d80c67c884e993027ad4c617",
+  "task_id": "T26",
+  "test_id": "config-cas-r3",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T26/source-green-r3.json",
+  "source_manifest_sha256": "01dece412c0ee39582cee041071ec58068b18c3580ff1e4ee0583133a042d1f3",
+  "command": [
+    "build/remediation-t26-20260923/green-build-r3/doorbell_tests",
+    "--test-case=*config CAS*,*configuration conditional batch*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:51:29.941074+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": "macOS arm64 host; real local Node HTTP, C ABI and SQLite",
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub (host protocol tests only)",
+  "signing_state": "host_unsigned",
+  "artifact_sha256": "2a0699e6413822ab21cb865789cd9dccad1f920f4c5bf6bc6beaea2b48d76520",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T26/evidence/config-cas-r3.log",
+  "limitations": [
+    "Not device runtime or release qualification.",
+    "Parallel in-progress T06 and T15 inputs are identified in the frozen manifest, not declared complete by this test."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:51:47.125268+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "10/10 production tests and 332/332 assertions PASS, including deterministic SQLite trigger barrier after revision compare and before commit."
+}

@@ -1,0 +1,26 @@
+{
+  "modern": {
+    "path": "/Users/ox/Documents/project/app-doorbell/core/third_party/pjsip/android/api21",
+    "present": true
+  },
+  "legacy19": {
+    "path": "/Users/ox/Documents/project/app-doorbell/core/third_party/pjsip/android/api19",
+    "present": true
+  },
+  "ios5_sdk": {
+    "path": "/Users/ox/Documents/project/app-doorbell/tools/sdk/iPhoneOS7.1.sdk/SDKSettings.plist",
+    "sha256": "2a743d65834fb21c0256c6c3c66e1d943cd01c7ac87f78235bc8c78165a88593"
+  },
+  "ios5_libcxx": {
+    "path": "/Users/ox/Documents/project/app-doorbell/tools/toolchain/ios5-armv7/lib/libc++.a",
+    "sha256": "030046e3e9795be3a813269bddf40862de3f6d19e96b384d806201826b109e49"
+  },
+  "known_test_simulator": [
+    {
+      "runtime": "com.apple.CoreSimulator.SimRuntime.iOS-26-5",
+      "name": "Doorbell Repair QA 20260922",
+      "udid": "4DBD5E0E-CB59-4130-824A-13EB6AAD17EA",
+      "state": "Shutdown"
+    }
+  ]
+}

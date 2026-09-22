@@ -1,0 +1,1010 @@
+[
+  {
+    "traits" : 0,
+    "hidden" : false,
+    "accessibility_element" : false,
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "class" : "UIView",
+    "alpha" : 1
+  },
+  {
+    "traits" : 0,
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "hidden" : true,
+    "accessibility_element" : false,
+    "class" : "DoorbellIOS9.ThemeBackgroundView",
+    "alpha" : 1
+  },
+  {
+    "traits" : 0,
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "alpha" : 1,
+    "class" : "UIView",
+    "hidden" : true,
+    "accessibility_element" : false
+  },
+  {
+    "class" : "UIView",
+    "hidden" : true,
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "traits" : 0
+  },
+  {
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "frame" : "{{20, 14}, {728, 998}}",
+    "alpha" : 1,
+    "class" : "DoorbellIOS9.VisitorScreenView"
+  },
+  {
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "class" : "UIScrollView",
+    "frame" : "{{20, 14}, {728, 966}}",
+    "content_size" : "{728, 966}",
+    "hidden" : false
+  },
+  {
+    "traits" : 0,
+    "alpha" : 1,
+    "frame" : "{{20, 14}, {728, 966}}",
+    "class" : "UIStackView",
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "frame" : "{{20, 14}, {728, 8}}",
+    "hidden" : false,
+    "class" : "UIStackView",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "traits" : 0
+  },
+  {
+    "frame" : "{{20, 14}, {728, 0}}",
+    "class" : "DoorbellIOS9.HaloLabel",
+    "identifier" : "visitor_clock",
+    "text" : "",
+    "alpha" : 1,
+    "traits" : 0,
+    "hidden" : false,
+    "accessibility_element" : false,
+    "font_size" : 96
+  },
+  {
+    "accessibility_element" : false,
+    "text" : "",
+    "traits" : 0,
+    "frame" : "{{20, 22}, {728, 0}}",
+    "font_size" : 62,
+    "class" : "DoorbellIOS9.HaloLabel",
+    "hidden" : false,
+    "alpha" : 1
+  },
+  {
+    "frame" : "{{20, 34}, {728, 0}}",
+    "traits" : 0,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "hidden" : true,
+    "class" : "UIStackView"
+  },
+  {
+    "class" : "UIStackView",
+    "alpha" : 1,
+    "hidden" : true,
+    "frame" : "{{20, 34}, {24, 0}}",
+    "accessibility_element" : false,
+    "traits" : 0
+  },
+  {
+    "hidden" : false,
+    "accessibility_element" : false,
+    "identifier" : "visitor_notice",
+    "frame" : "{{20, 34}, {24, 0}}",
+    "class" : "DoorbellIOS9.HaloLabel",
+    "alpha" : 1,
+    "text" : "",
+    "traits" : 0,
+    "font_size" : 62
+  },
+  {
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "class" : "UIButton",
+    "hidden" : true,
+    "title" : "▾",
+    "enabled" : true,
+    "accessibility_label" : "Show full notice",
+    "traits" : 0,
+    "frame" : "{{44, 12}, {0, 44}}",
+    "identifier" : "visitor_notice_expand"
+  },
+  {
+    "accessibility_element" : false,
+    "hidden" : false,
+    "font_size" : 22,
+    "alpha" : 1,
+    "frame" : "{{44, 21}, {0, 26.5}}",
+    "text" : "▾",
+    "traits" : 0,
+    "class" : "UIButtonLabel"
+  },
+  {
+    "accessibility_element" : false,
+    "class" : "DoorbellIOS9.PaddedLabel",
+    "frame" : "{{20, 34}, {24, 0}}",
+    "alpha" : 1,
+    "hidden" : true,
+    "traits" : 0,
+    "identifier" : "visitor_camera_warning",
+    "text" : "",
+    "font_size" : 17
+  },
+  {
+    "hidden" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "class" : "UIStackView",
+    "frame" : "{{20, 46}, {728, 639}}"
+  },
+  {
+    "frame" : "{{20, 46}, {728, 181}}",
+    "traits" : 0,
+    "class" : "UIStackView",
+    "accessibility_element" : false,
+    "hidden" : false,
+    "alpha" : 1
+  },
+  {
+    "class" : "UIView",
+    "alpha" : 1,
+    "frame" : "{{20, 136.5}, {73, 0}}",
+    "accessibility_element" : false,
+    "hidden" : false,
+    "traits" : 0
+  },
+  {
+    "accessibility_element" : false,
+    "frame" : "{{93, 46}, {582, 181}}",
+    "alpha" : 1,
+    "class" : "UIButton",
+    "identifier" : "call_primary",
+    "title" : "Direct call",
+    "hidden" : false,
+    "enabled" : true,
+    "traits" : 0
+  },
+  {
+    "traits" : 0,
+    "class" : "UIButtonLabel",
+    "alpha" : 1,
+    "frame" : "{{163.5, 76}, {441, 121}}",
+    "hidden" : false,
+    "text" : "Direct call",
+    "font_size" : 101,
+    "accessibility_element" : false
+  },
+  {
+    "accessibility_element" : false,
+    "traits" : 0,
+    "frame" : "{{675, 136.5}, {73, 0}}",
+    "class" : "UIView",
+    "hidden" : false,
+    "alpha" : 1
+  },
+  {
+    "traits" : 0,
+    "hidden" : false,
+    "class" : "DoorbellIOS9.HaloLabel",
+    "text" : "Choose a purpose below, or call directly",
+    "identifier" : "visitor_hint",
+    "frame" : "{{20, 247}, {728, 122}}",
+    "font_size" : 51,
+    "accessibility_element" : false,
+    "alpha" : 1
+  },
+  {
+    "frame" : "{{20, 389}, {728, 232}}",
+    "hidden" : false,
+    "traits" : 0,
+    "class" : "UIStackView",
+    "accessibility_element" : false,
+    "alpha" : 1
+  },
+  {
+    "font_size" : 20,
+    "class" : "UILabel",
+    "text" : "",
+    "frame" : "{{384, 389}, {0, 0}}",
+    "hidden" : true,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "alpha" : 1
+  },
+  {
+    "accessibility_element" : false,
+    "traits" : 0,
+    "hidden" : false,
+    "frame" : "{{108, 389}, {552, 232}}",
+    "alpha" : 1,
+    "class" : "UIStackView"
+  },
+  {
+    "alpha" : 1,
+    "class" : "UIStackView",
+    "traits" : 0,
+    "frame" : "{{108, 389}, {552, 110}}",
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "identifier" : "purpose_p_visit",
+    "class" : "DoorbellIOS9.PurposeButton",
+    "accessibility_element" : false,
+    "enabled" : true,
+    "alpha" : 1,
+    "title" : "Visit",
+    "hidden" : false,
+    "frame" : "{{108, 389}, {176, 110}}",
+    "traits" : 0
+  },
+  {
+    "frame" : "{{184, 403}, {24, 24}}",
+    "hidden" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "class" : "UIImageView"
+  },
+  {
+    "traits" : 0,
+    "hidden" : false,
+    "frame" : "{{114, 433}, {164, 60}}",
+    "alpha" : 1,
+    "text" : "Visit",
+    "accessibility_element" : false,
+    "class" : "UIButtonLabel",
+    "font_size" : 45
+  },
+  {
+    "alpha" : 1,
+    "enabled" : true,
+    "frame" : "{{296, 389}, {176, 110}}",
+    "accessibility_element" : false,
+    "class" : "DoorbellIOS9.PurposeButton",
+    "traits" : 0,
+    "identifier" : "purpose_p_delivery",
+    "hidden" : false,
+    "title" : "Delivery"
+  },
+  {
+    "hidden" : false,
+    "traits" : 0,
+    "frame" : "{{372, 403}, {24, 24}}",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "class" : "UIImageView"
+  },
+  {
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "class" : "UIButtonLabel",
+    "traits" : 0,
+    "hidden" : false,
+    "frame" : "{{302, 433}, {164, 60}}",
+    "text" : "Delivery",
+    "font_size" : 45
+  },
+  {
+    "frame" : "{{484, 389}, {176, 110}}",
+    "title" : "Mail",
+    "traits" : 0,
+    "alpha" : 1,
+    "identifier" : "purpose_p_mail",
+    "enabled" : true,
+    "accessibility_element" : false,
+    "hidden" : false,
+    "class" : "DoorbellIOS9.PurposeButton"
+  },
+  {
+    "class" : "UIImageView",
+    "frame" : "{{560, 403}, {24, 24}}",
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "hidden" : false,
+    "traits" : 0
+  },
+  {
+    "frame" : "{{490, 433}, {164, 60}}",
+    "accessibility_element" : false,
+    "hidden" : false,
+    "text" : "Mail",
+    "traits" : 0,
+    "class" : "UIButtonLabel",
+    "font_size" : 45,
+    "alpha" : 1
+  },
+  {
+    "hidden" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "frame" : "{{108, 511}, {552, 110}}",
+    "accessibility_element" : false,
+    "class" : "UIStackView"
+  },
+  {
+    "frame" : "{{108, 511}, {176, 110}}",
+    "alpha" : 1,
+    "identifier" : "purpose_p_sales",
+    "accessibility_element" : false,
+    "class" : "DoorbellIOS9.PurposeButton",
+    "hidden" : false,
+    "enabled" : true,
+    "title" : "Sales",
+    "traits" : 0
+  },
+  {
+    "alpha" : 1,
+    "class" : "UIImageView",
+    "hidden" : false,
+    "traits" : 0,
+    "frame" : "{{184, 525}, {24, 24}}",
+    "accessibility_element" : false
+  },
+  {
+    "font_size" : 45,
+    "hidden" : false,
+    "accessibility_element" : false,
+    "frame" : "{{114, 555}, {164, 60}}",
+    "class" : "UIButtonLabel",
+    "alpha" : 1,
+    "traits" : 0,
+    "text" : "Sales"
+  },
+  {
+    "alpha" : 1,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "frame" : "{{296, 511}, {176, 110}}",
+    "title" : "Utility",
+    "enabled" : true,
+    "identifier" : "purpose_p_work",
+    "hidden" : false,
+    "class" : "DoorbellIOS9.PurposeButton"
+  },
+  {
+    "class" : "UIImageView",
+    "accessibility_element" : false,
+    "hidden" : false,
+    "frame" : "{{372, 525}, {24, 24}}",
+    "alpha" : 1,
+    "traits" : 0
+  },
+  {
+    "frame" : "{{302, 555}, {164, 60}}",
+    "hidden" : false,
+    "traits" : 0,
+    "class" : "UIButtonLabel",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "text" : "Utility",
+    "font_size" : 45
+  },
+  {
+    "identifier" : "purpose_p_other",
+    "class" : "DoorbellIOS9.PurposeButton",
+    "traits" : 0,
+    "hidden" : false,
+    "enabled" : true,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "title" : "Other",
+    "frame" : "{{484, 511}, {176, 110}}"
+  },
+  {
+    "class" : "UIImageView",
+    "frame" : "{{560, 525}, {24, 24}}",
+    "traits" : 0,
+    "alpha" : 1,
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "traits" : 0,
+    "text" : "Other",
+    "class" : "UIButtonLabel",
+    "font_size" : 45,
+    "hidden" : false,
+    "frame" : "{{490, 555}, {164, 60}}",
+    "accessibility_element" : false,
+    "alpha" : 1
+  },
+  {
+    "frame" : "{{20, 641}, {728, 44}}",
+    "class" : "UIStackView",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "hidden" : false
+  },
+  {
+    "class" : "UIButton",
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "enabled" : true,
+    "identifier" : "lang_ja",
+    "hidden" : false,
+    "title" : "",
+    "frame" : "{{20, 641}, {234.5, 44}}",
+    "traits" : 1,
+    "accessibility_label" : "日本語"
+  },
+  {
+    "text" : "日本語",
+    "accessibility_element" : false,
+    "font_size" : 17,
+    "alpha" : 1,
+    "class" : "UIButtonLabel",
+    "hidden" : false,
+    "traits" : 0,
+    "frame" : "{{113.5, 653}, {48, 20.5}}"
+  },
+  {
+    "accessibility_element" : false,
+    "frame" : "{{266.5, 641}, {235, 44}}",
+    "alpha" : 1,
+    "hidden" : false,
+    "title" : "",
+    "class" : "UIButton",
+    "accessibility_label" : "English",
+    "enabled" : true,
+    "traits" : 9,
+    "identifier" : "lang_en"
+  },
+  {
+    "font_size" : 17,
+    "text" : "English",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "class" : "UIButtonLabel",
+    "traits" : 0,
+    "frame" : "{{355, 653}, {58.5, 20.5}}",
+    "alpha" : 1
+  },
+  {
+    "enabled" : true,
+    "title" : "",
+    "class" : "UIButton",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "accessibility_label" : "中文",
+    "frame" : "{{513.5, 641}, {234.5, 44}}",
+    "alpha" : 1,
+    "traits" : 1,
+    "identifier" : "lang_zh"
+  },
+  {
+    "class" : "UIButtonLabel",
+    "accessibility_element" : false,
+    "frame" : "{{615, 653}, {32, 20.5}}",
+    "hidden" : false,
+    "text" : "中文",
+    "traits" : 0,
+    "alpha" : 1,
+    "font_size" : 17
+  },
+  {
+    "accessibility_element" : false,
+    "frame" : "{{20, 709}, {728, 271}}",
+    "alpha" : 1,
+    "traits" : 0,
+    "class" : "UIView",
+    "hidden" : false
+  },
+  {
+    "frame" : "{{742.5, -25}, {2.5, 36}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "class" : "UIImageView",
+    "hidden" : false,
+    "alpha" : 0
+  },
+  {
+    "frame" : "{{-19, 974.5}, {36, 2.5}}",
+    "alpha" : 0,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "class" : "UIImageView",
+    "hidden" : false
+  },
+  {
+    "class" : "UIStackView",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "hidden" : false,
+    "frame" : "{{20, 996}, {728, 16}}",
+    "alpha" : 1
+  },
+  {
+    "text" : "front · core v0.2.0+b26e0d3 · app v1.0.0+b26e0d3 · 100%",
+    "traits" : 0,
+    "class" : "DoorbellIOS9.HaloLabel",
+    "identifier" : "app_version",
+    "frame" : "{{20, 996}, {728, 16}}",
+    "accessibility_element" : false,
+    "hidden" : false,
+    "font_size" : 13,
+    "alpha" : 1
+  },
+  {
+    "traits" : 0,
+    "alpha" : 1,
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "accessibility_element" : false,
+    "class" : "UIView",
+    "hidden" : true
+  },
+  {
+    "title" : "Cancel",
+    "hidden" : false,
+    "frame" : "{{174, 809}, {420, 191}}",
+    "alpha" : 1,
+    "identifier" : "calling_cancel",
+    "enabled" : true,
+    "accessibility_element" : false,
+    "class" : "UIButton",
+    "traits" : 0
+  },
+  {
+    "traits" : 0,
+    "hidden" : false,
+    "frame" : "{{278.5, 864}, {211, 81.5}}",
+    "accessibility_element" : false,
+    "class" : "UIButtonLabel",
+    "alpha" : 1,
+    "text" : "Cancel",
+    "font_size" : 68
+  },
+  {
+    "traits" : 0,
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "hidden" : false,
+    "frame" : "{{20, 16}, {728, 773}}",
+    "class" : "UIScrollView",
+    "content_size" : "{728, 773}"
+  },
+  {
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "class" : "UIView",
+    "frame" : "{{20, 16}, {728, 773}}"
+  },
+  {
+    "frame" : "{{20, 265}, {728, 275}}",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "class" : "UIStackView",
+    "alpha" : 1
+  },
+  {
+    "frame" : "{{344, 265}, {80, 80}}",
+    "alpha" : 1,
+    "class" : "UIView",
+    "accessibility_element" : false,
+    "hidden" : false,
+    "traits" : 0
+  },
+  {
+    "hidden" : false,
+    "class" : "UIImageView",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "frame" : "{{366, 287}, {36, 36}}",
+    "alpha" : 1
+  },
+  {
+    "text" : "In call",
+    "alpha" : 1,
+    "font_size" : 85,
+    "frame" : "{{20, 363}, {728, 101.5}}",
+    "accessibility_element" : false,
+    "traits" : 65536,
+    "identifier" : "calling_status",
+    "class" : "UILabel",
+    "hidden" : false
+  },
+  {
+    "class" : "UILabel",
+    "frame" : "{{20, 482.5}, {728, 57.5}}",
+    "hidden" : false,
+    "font_size" : 48,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "identifier" : "calling_detail",
+    "alpha" : 1,
+    "text" : "Please wait for a resident to answer"
+  },
+  {
+    "frame" : "{{742.5, -23}, {2.5, 36}}",
+    "accessibility_element" : false,
+    "class" : "UIImageView",
+    "alpha" : 0,
+    "hidden" : false,
+    "traits" : 0
+  },
+  {
+    "hidden" : false,
+    "class" : "UIImageView",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 0,
+    "frame" : "{{-19, 783.5}, {36, 2.5}}"
+  },
+  {
+    "alpha" : 1,
+    "traits" : 0,
+    "hidden" : false,
+    "class" : "UIView",
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "accessibility_element" : false
+  },
+  {
+    "traits" : 0,
+    "class" : "UIImageView",
+    "hidden" : false,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "frame" : "{{0, 0}, {768, 1024}}"
+  },
+  {
+    "frame" : "{{174, 809}, {420, 191}}",
+    "title" : "End",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "class" : "UIButton",
+    "identifier" : "incall_end",
+    "enabled" : true,
+    "alpha" : 1,
+    "traits" : 0
+  },
+  {
+    "frame" : "{{326, 864}, {116.5, 81.5}}",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "hidden" : false,
+    "font_size" : 68,
+    "traits" : 0,
+    "text" : "End",
+    "class" : "UIButtonLabel"
+  },
+  {
+    "hidden" : false,
+    "content_size" : "{728, 710.5}",
+    "frame" : "{{20, 18}, {728, 771}}",
+    "traits" : 0,
+    "accessibility_element" : false,
+    "class" : "UIScrollView",
+    "identifier" : "incall_status_scroll",
+    "alpha" : 1
+  },
+  {
+    "accessibility_element" : false,
+    "traits" : 65536,
+    "class" : "UILabel",
+    "alpha" : 1,
+    "font_size" : 85,
+    "frame" : "{{20, 18}, {728, 710.5}}",
+    "hidden" : false,
+    "text" : "Scheduled delivery and building maintenance visit. Please confirm the visitor purpose and connection with the resident.",
+    "identifier" : "incall_status"
+  },
+  {
+    "alpha" : 0,
+    "frame" : "{{742.5, -21}, {2.5, 36}}",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "class" : "UIImageView"
+  },
+  {
+    "alpha" : 0,
+    "traits" : 0,
+    "frame" : "{{-19, 783.5}, {36, 2.5}}",
+    "accessibility_element" : false,
+    "class" : "UIImageView",
+    "hidden" : false
+  },
+  {
+    "traits" : 0,
+    "frame" : "{{263.5, 20}, {241.5, 61.5}}",
+    "hidden" : true,
+    "alpha" : 1,
+    "class" : "UIView",
+    "accessibility_element" : false
+  },
+  {
+    "traits" : 0,
+    "class" : "UIStackView",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "frame" : "{{291.5, 36}, {185.5, 29.5}}",
+    "alpha" : 1
+  },
+  {
+    "hidden" : false,
+    "traits" : 0,
+    "text" : "Message from resident",
+    "accessibility_element" : false,
+    "frame" : "{{291.5, 36}, {185.5, 21.5}}",
+    "alpha" : 1,
+    "class" : "UILabel",
+    "font_size" : 18
+  },
+  {
+    "text" : "",
+    "font_size" : 34,
+    "traits" : 0,
+    "hidden" : false,
+    "alpha" : 1,
+    "class" : "UILabel",
+    "accessibility_element" : false,
+    "frame" : "{{384, 65.5}, {0, 0}}"
+  },
+  {
+    "hidden" : true,
+    "class" : "UIView",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "traits" : 0
+  },
+  {
+    "class" : "UIScrollView",
+    "frame" : "{{20, 16}, {728, 988}}",
+    "alpha" : 1,
+    "content_size" : "{728, 988}",
+    "traits" : 0,
+    "accessibility_element" : false,
+    "hidden" : false
+  },
+  {
+    "class" : "UIView",
+    "hidden" : false,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "frame" : "{{20, 16}, {728, 988}}"
+  },
+  {
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "class" : "UIStackView",
+    "hidden" : false,
+    "frame" : "{{20, 371.5}, {728, 277}}"
+  },
+  {
+    "text" : "System offline",
+    "frame" : "{{20, 371.5}, {728, 115}}",
+    "traits" : 65536,
+    "class" : "UILabel",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "identifier" : "visitor_offline_status",
+    "font_size" : 96
+  },
+  {
+    "traits" : 0,
+    "accessibility_element" : false,
+    "class" : "UILabel",
+    "hidden" : false,
+    "text" : "Calling unavailable. Please knock.",
+    "font_size" : 62,
+    "alpha" : 1,
+    "frame" : "{{20, 500.5}, {728, 148}}"
+  },
+  {
+    "class" : "UIImageView",
+    "frame" : "{{742.5, -23}, {2.5, 36}}",
+    "traits" : 0,
+    "accessibility_element" : false,
+    "hidden" : false,
+    "alpha" : 0
+  },
+  {
+    "hidden" : false,
+    "accessibility_element" : false,
+    "frame" : "{{-19, 998.5}, {36, 2.5}}",
+    "traits" : 0,
+    "alpha" : 0,
+    "class" : "UIImageView"
+  },
+  {
+    "identifier" : "pairing_banner",
+    "title" : "Not set up — tap to add",
+    "hidden" : false,
+    "traits" : 0,
+    "class" : "UIButton",
+    "accessibility_element" : false,
+    "frame" : "{{262.5, 12}, {243, 46}}",
+    "enabled" : true,
+    "alpha" : 1
+  },
+  {
+    "hidden" : false,
+    "text" : "Not set up — tap to add",
+    "alpha" : 1,
+    "frame" : "{{284.5, 24.5}, {199, 21.5}}",
+    "class" : "UIButtonLabel",
+    "accessibility_element" : false,
+    "font_size" : 18,
+    "traits" : 0
+  },
+  {
+    "hidden" : true,
+    "alpha" : 1,
+    "traits" : 0,
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "class" : "UIView",
+    "accessibility_element" : false
+  },
+  {
+    "frame" : "{{176, 479.5}, {416, 65.5}}",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "class" : "UIStackView",
+    "traits" : 0
+  },
+  {
+    "accessibility_element" : false,
+    "font_size" : 64,
+    "hidden" : false,
+    "traits" : 0,
+    "frame" : "{{384, 479.5}, {0, 0}}",
+    "text" : "",
+    "alpha" : 1,
+    "class" : "UILabel"
+  },
+  {
+    "hidden" : false,
+    "text" : "",
+    "traits" : 0,
+    "accessibility_element" : false,
+    "frame" : "{{384, 495.5}, {0, 0}}",
+    "class" : "UILabel",
+    "font_size" : 20,
+    "alpha" : 1
+  },
+  {
+    "accessibility_element" : false,
+    "frame" : "{{176, 511.5}, {416, 33.5}}",
+    "alpha" : 1,
+    "hidden" : false,
+    "font_size" : 28,
+    "text" : "Doorbell · Touch to wake and ring",
+    "class" : "UILabel",
+    "traits" : 0
+  },
+  {
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "class" : "UIView",
+    "hidden" : true
+  },
+  {
+    "class" : "UIView",
+    "hidden" : true,
+    "identifier" : "visitor_sos_screen",
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "alpha" : 1,
+    "traits" : 0,
+    "accessibility_element" : false
+  },
+  {
+    "class" : "UIButton",
+    "alpha" : 1,
+    "frame" : "{{174, 809}, {420, 191}}",
+    "hidden" : false,
+    "enabled" : true,
+    "title" : "Cancel alarm",
+    "identifier" : "visitor_sos_clear",
+    "accessibility_element" : false,
+    "traits" : 0
+  },
+  {
+    "class" : "UIButtonLabel",
+    "font_size" : 68,
+    "traits" : 0,
+    "frame" : "{{272, 823}, {224.5, 162.5}}",
+    "text" : "Cancel alarm",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "hidden" : false
+  },
+  {
+    "hidden" : false,
+    "content_size" : "{728, 773}",
+    "accessibility_element" : false,
+    "frame" : "{{20, 16}, {728, 773}}",
+    "alpha" : 1,
+    "traits" : 0,
+    "class" : "UIScrollView"
+  },
+  {
+    "frame" : "{{20, 16}, {728, 773}}",
+    "class" : "UIView",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "hidden" : false,
+    "alpha" : 1
+  },
+  {
+    "class" : "UIStackView",
+    "alpha" : 1,
+    "hidden" : false,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "frame" : "{{20, 205.5}, {728, 394}}"
+  },
+  {
+    "class" : "UILabel",
+    "traits" : 65536,
+    "hidden" : false,
+    "alpha" : 1,
+    "text" : "EMERGENCY",
+    "frame" : "{{20, 205.5}, {728, 296}}",
+    "identifier" : "visitor_sos_status",
+    "accessibility_element" : false,
+    "font_size" : 124
+  },
+  {
+    "class" : "UILabel",
+    "text" : "Family has been notified",
+    "frame" : "{{20, 525.5}, {728, 74}}",
+    "accessibility_element" : false,
+    "hidden" : false,
+    "traits" : 0,
+    "font_size" : 62,
+    "alpha" : 1
+  },
+  {
+    "class" : "UIImageView",
+    "accessibility_element" : false,
+    "frame" : "{{742.5, -23}, {2.5, 36}}",
+    "hidden" : false,
+    "alpha" : 0,
+    "traits" : 0
+  },
+  {
+    "class" : "UIImageView",
+    "frame" : "{{-19, 783.5}, {36, 2.5}}",
+    "alpha" : 0,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "hidden" : false
+  },
+  {
+    "title" : "",
+    "class" : "UIButton",
+    "alpha" : 1,
+    "traits" : 0,
+    "enabled" : true,
+    "hidden" : false,
+    "frame" : "{{648, 0}, {120, 120}}",
+    "accessibility_element" : false
+  }
+]

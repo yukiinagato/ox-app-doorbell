@@ -1,0 +1,11 @@
+--- /Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/node/node.cpp	2026-09-23 00:51:21
++++ /Users/ox/Documents/project/app-doorbell/core/src/node/node.cpp	2026-09-23 00:56:12
+@@ -5875,7 +5875,7 @@
+     auto features = json::obj();
+     for (const char* feature : {"emergency_rules_v1", "config_batch_v1",
+                                 "sip_dtmf_v1", "media_sources_v1",
+-                                "web_push_subscriptions_v1", "operations_v1"})
++                                "web_push_subscriptions_v1", "operations_v1", "config_cas_v1"})
+       json::setBool(features.get(), feature, true);
+     for (const char* feature : {"platform_v2", "call_flow_v2", "call_cancel_v2",
+                                 "call_lifecycle_v2", "device_alert_v1", "runtime_recovery_v1",

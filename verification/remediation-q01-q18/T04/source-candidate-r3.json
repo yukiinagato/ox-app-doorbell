@@ -1,0 +1,14 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "7ef16201d73f3a7bdb2d296fe85da04cd8a1aed2d5c49e0937584293690e3d98",
+  "inputs": {
+    "core/src/httpd/httpd.cpp": "38a0242857b563885f71902c4cb0cf9f92117eb91072a021c4432f3842567eeb",
+    "core/src/httpd/httpd.h": "68ba88ebd39ea4d8efbdf85a9aa7e8ddd3ce28dd9388338fc928c7bf80e8106e",
+    "core/src/util/runloop.cpp": "fd1efbc28ea434086aac955a3d52ae835aa122d37e6bcf58798f2224f4e93cf1",
+    "core/src/util/runloop.h": "61c3909fdb0f47161dfcd5b8d72b241f7c214684504365f44f434bdabb483913",
+    "core/tests/test_httpd.cpp": "907212f61202666c1fe27467523972b051b059e286f70700014a64a89acd8a8e",
+    "core/CMakeLists.txt": "b57bef6fd1fb3de16b16d6cd7ff55a5be6c243166357ff20d1ce1e622482e4cd"
+  },
+  "scope_note": "T04-owned files plus shared CMake input. CMake pre-existing changes retained; T04 adds only DB_HTTPD_TEST_HOOKS within DB_BUILD_TESTS. Test-only before-wait barrier does not replace production state machine. Native host tests use real HTTP/Runloop/handler paths and SIP stub unrelated to dispatch."
+}

@@ -1,0 +1,31 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "227d6e639873da6594919090ed0d0b3740ed41f4911ebaede16b232d1d1f613e",
+  "task_id": "T06",
+  "kind": "real RED against preserved pre-T06 production Core library",
+  "baseline_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T05/source-candidate-r2.json",
+  "baseline_manifest_sha256": "33cd8ebc98797d5b813cc4d7a1de4dd9a68c00a995d7024fa8362dba60e58874",
+  "inputs": [
+    {
+      "path": "build/remediation-t05-20260922/normal/libdoorbell_core.a",
+      "sha256": "31a5192850fdf83ad4cec49acf72a64a92593d5bcbe5299f9997c5c8a0b200fb"
+    },
+    {
+      "path": "build/remediation-t05-20260922/normal/libdb_third_party.a",
+      "sha256": "18f86595784afbbbe334bb2b0002a08c3b73f95077c3d4a08ec6bbbb57e2b4d5"
+    },
+    {
+      "path": "build/remediation-t06-20260922/red-http-test.cpp",
+      "sha256": "323062aaa00140834eb4e0bb613a8e3e25d3993e51214604a4d735424f7903cb"
+    },
+    {
+      "path": "build/remediation-t06-20260922/red-http-tests",
+      "sha256": "274e1edbc56b7cfb8d09195d9f4cc066fc95c3043357b25c4c2669d5cea05767"
+    }
+  ],
+  "limitations": [
+    "The observed RED is a real HTTP 404 for the required missing safe operation route; it is not a reproduced physical duplicate actuation.",
+    "The RED runner links preserved T05 production archives and the same first HTTP test fixture; it does not compile a copied protocol model."
+  ]
+}

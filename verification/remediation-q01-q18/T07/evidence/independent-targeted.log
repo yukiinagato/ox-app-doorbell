@@ -1,0 +1,36 @@
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   3 |   3 passed | 0 failed | 490 skipped
+[doctest] assertions: 160 | 160 passed | 0 failed |
+[doctest] Status: SUCCESS!
+09-23 01:31:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:29023
+09-23 01:31:24 I [node] created the missing door entry doors.front for this door station
+09-23 01:31:24 I [httpd] listening on 31066,[::]:31066
+09-23 01:31:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:31:24 I [node] node acb6872d (operation-authority) started
+09-23 01:31:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:20885
+09-23 01:31:24 I [httpd] listening on 20752,[::]:20752
+09-23 01:31:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:31:24 I [node] node c54e55ef (operation-page) started
+09-23 01:31:24 I [node] initialized the cluster administrator password
+09-23 01:31:24 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:31:25 I [ha_bridge] bridge started at 127.0.0.1:29153
+09-23 01:31:25 I [mqtt] connected to 127.0.0.1:29153
+09-23 01:31:27 I [httpd] stopped
+09-23 01:31:28 I [httpd] stopped
+09-23 01:31:28 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:31730
+09-23 01:31:28 I [node] created the missing door entry doors.front for this door station
+09-23 01:31:28 I [httpd] listening on 28909,[::]:28909
+09-23 01:31:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:31:28 I [node] node b57957de (operation-authority) started
+09-23 01:31:28 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:20390
+09-23 01:31:28 I [httpd] listening on 21882,[::]:21882
+09-23 01:31:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:31:28 I [node] node 1864185b (operation-page) started
+09-23 01:31:28 I [node] initialized the cluster administrator password
+09-23 01:31:28 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:31:29 I [ha_bridge] bridge started at 127.0.0.1:28937
+09-23 01:31:29 I [mqtt] connected to 127.0.0.1:28937
+09-23 01:31:31 I [httpd] stopped
+09-23 01:31:32 I [httpd] stopped

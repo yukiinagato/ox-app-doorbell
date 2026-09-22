@@ -1,0 +1,37 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "6b1519783ff722d253e6dacbf097443b8c7be24caf5333334c5efe3f3c2f371f",
+  "task_id": "T21",
+  "test_id": "ios9-arm64-r5",
+  "evidence_kind": "native_build",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T21/source-candidate-r5.json",
+  "source_manifest_sha256": "956a7154e093d34fce290502e7b6829f7159bcb1ec24e7caacfda98cff655797",
+  "command": [
+    "env",
+    "IOS9_DERIVED_DATA=/Users/ox/Documents/project/app-doorbell/build/remediation-t21-20260922/ios9-arm64",
+    "ios/scripts/build_ios9_arm64.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:10:09.476644+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": "0.1.37",
+  "build_number": "38",
+  "sip_backend": "real_pjsip",
+  "signing_state": "CODE_SIGNING_ALLOWED=NO",
+  "artifact_sha256": "cba3026fa946c85ace27c16e84f1a4093217971c923ee28172ca8830160cf9d6",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T21/evidence/ios9-arm64-r5.log",
+  "limitations": [
+    "Simulator or unsigned build, not hardware qualification. Shared Core includes parallel authorized changes."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:10:58.900054+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Actual arm64 target build and artifact gate passed.",
+  "artifact_provenance": "verification/remediation-q01-q18/T21/evidence/ios9-arm64-r5-artifacts.json"
+}

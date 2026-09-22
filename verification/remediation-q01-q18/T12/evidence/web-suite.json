@@ -1,0 +1,173 @@
+{
+  "recorded_at": "2026-09-22T16:19:40.571652+00:00",
+  "results": [
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_config_merge.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-admin_config_merge.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_logic.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-admin_logic.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_runtime.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-admin_runtime.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_flow.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-call_flow.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_heartbeat.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-call_heartbeat.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_media_authority.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-call_media_authority.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_poll_lanes.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-call_poll_lanes.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_recovery_controller.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-call_recovery_controller.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_state_controller.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-call_state_controller.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_tabs.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-call_tabs.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_ua_generation.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-call_ua_generation.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/pairing.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-pairing.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/panel_i18n.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-panel_i18n.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/playback.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-playback.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/request_deadline.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-request_deadline.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/runtime.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-runtime.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/service_worker.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-service_worker.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/settings.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-settings.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-sos_operation.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/theme_notice.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-theme_notice.test.log"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/video_session.test.js"
+      ],
+      "exit_code": 0,
+      "log": "verification/remediation-q01-q18/T12/evidence/regression-video_session.test.log"
+    }
+  ]
+}

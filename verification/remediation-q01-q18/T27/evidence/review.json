@@ -1,0 +1,23 @@
+{
+  "status": "PASS",
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T16:42:20.198409+00:00",
+  "source_manifest_sha256": "7e74bfc8188686d3c51db1e9a1bb5d728b7f27e8a5fa6efe17e93526c64a26eb",
+  "findings": [
+    {
+      "id": "R1",
+      "status": "RESOLVED",
+      "description": "Non-object ancestors retain typed values, so missing/null, different scalar and different array ancestors conflict rather than automatically rebase."
+    }
+  ],
+  "verification": [
+    "All 11 final source inputs matched recorded hashes before T35 additive localization changes.",
+    "All acceptance artifact hashes matched.",
+    "Read production intent/rebase/commit/editor lifecycle and independently ran admin_config_merge.test.js: PASS.",
+    "Read actual IAB 12-case and 9-case regression records and native Core 13-case/509-assertion companion evidence."
+  ],
+  "limitations": [
+    "Controlled browser XHR plus real Core HTTP tests are separate layers; no deployed device, Safari or physical actuator qualification.",
+    "Cross-node persistent conflicts remain T28."
+  ]
+}

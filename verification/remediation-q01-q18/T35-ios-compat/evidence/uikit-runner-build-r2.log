@@ -1,0 +1,8 @@
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:167:21: warning: 'atomic' attribute on property 'window' does not match the property inherited from 'UIApplicationDelegate' [-Wproperty-attribute-mismatch]
+  167 | @property UIWindow *window;
+      |                     ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t35-compat/frozen-r6/tools/sdk/iPhoneOS7.1.sdk/System/Library/Frameworks/UIKit.framework/Headers/UIApplication.h:401:41: note: property declared here
+  401 | @property (nonatomic, retain) UIWindow *window NS_AVAILABLE_IOS(5_0);
+      |                                         ^
+1 warning generated.
+/Users/ox/Documents/project/app-doorbell/build/remediation-t35-compat/uikit-runner-r2/DoorbellT35UIKit.app

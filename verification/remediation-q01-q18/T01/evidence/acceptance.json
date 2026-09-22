@@ -1,0 +1,55 @@
+{
+  "task_id": "T01",
+  "scope": "host_harness",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tests": [
+    {
+      "id": "T01-01",
+      "status": "PASS",
+      "evidence": [
+        "baseline-core.json",
+        "baseline-core.log",
+        "candidate-ctest.json",
+        "candidate-ctest.log",
+        "../command-map.json"
+      ],
+      "observation": "Pristine HEAD archive and the incoming dirty candidate tested separately. Product regressions, initial harness mistakes and environment setup failures are classified separately."
+    },
+    {
+      "id": "T01-02",
+      "status": "PASS",
+      "evidence": [
+        "mutation-sensitivity.json",
+        "mutation-sensitivity.log"
+      ],
+      "observation": "Original production module passed, injected missing stream cleanup failed the existing business assertion, restored module passed."
+    },
+    {
+      "id": "T01-03",
+      "status": "PASS",
+      "evidence": [
+        "cleanup.json",
+        "runner-cleanup.json",
+        "runner-timeout.json",
+        "cache-isolation.json",
+        "source-preservation.json"
+      ],
+      "observation": "Owned fixture process/threads ended, IPv4/IPv6 ports rebound, SQLite reopened exclusively and passed integrity_check, owned database and mutation trees removed, caches separate, starting source files unchanged."
+    },
+    {
+      "id": "T01-04",
+      "status": "PASS",
+      "evidence": [
+        "../environment.json",
+        "../command-map.json",
+        "ios9-armv7-preflight.json",
+        "windows-dotnet.json",
+        "android-modern-configured.json",
+        "android-legacy19-configured.json",
+        "ios5-core.json",
+        "ios5-app.json"
+      ],
+      "observation": "Uncommissioned iOS9 armv7 and unavailable local Windows execution remain BLOCKED_ENV. Installed Java and iOS5 SDK were located in project memory and verified by successful configured builds."
+    }
+  ]
+}

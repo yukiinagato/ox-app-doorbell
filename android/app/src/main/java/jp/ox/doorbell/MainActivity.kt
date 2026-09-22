@@ -21,6 +21,8 @@ import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.View
+import android.view.KeyEvent
+import android.view.MotionEvent
 import android.view.WindowManager
 import android.view.animation.AlphaAnimation
 import android.view.animation.Animation
@@ -47,12 +49,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private lateinit var themeBg: ImageView
     private lateinit var nightTint: View
     private lateinit var idleView: View
+    private lateinit var visitorShell: View
     private lateinit var idleHeader: View
     private lateinit var callSection: View
     private lateinit var clockText: TextView
     private lateinit var dateText: TextView
     private lateinit var callButton: Button
     private lateinit var touchHint: TextView
+    private lateinit var visitorStatus: TextView
     private lateinit var nodeInfo: TextView
     private lateinit var pairingBanner: TextView
     private lateinit var purposeSection: View
@@ -189,8 +193,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
         callButton.setOnClickListener { onCallClick() }
         purposeSkipButton.setOnClickListener { continueWithoutPurpose(true) }
-        purposeCancelButton.setOnClickListener { cancelActiveCall("visitor") }
-        cancelButton.setOnClickListener { endOrCancelCall() }
+        bindCallAction(purposeCancelButton)
+        bindCallAction(cancelButton)
         sosSlider.enabledProvider = { app.coreOk }
         sosSlider.onTrigger = { app.commitEmergency(true) }
         // Hidden maintenance entry: seven taps in the top-right corner within five seconds.
@@ -414,12 +418,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         themeBg = findViewById(R.id.theme_bg)
         nightTint = findViewById(R.id.night_tint)
         idleView = findViewById(R.id.idle_view)
+        visitorShell = findViewById(R.id.visitor_shell)
         idleHeader = findViewById(R.id.idle_header)
         callSection = findViewById(R.id.call_section)
         clockText = findViewById(R.id.clock_text)
         dateText = findViewById(R.id.date_text)
         callButton = findViewById(R.id.call_button)
         touchHint = findViewById(R.id.touch_hint)
+        visitorStatus = findViewById(R.id.visitor_status)
         nodeInfo = findViewById(R.id.node_info)
         pairingBanner = findViewById(R.id.pairing_banner)
         purposeSection = findViewById(R.id.purpose_section)
@@ -451,7 +457,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             sosSlider,
             android.widget.FrameLayout.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
-                dp(56),
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
             ),
         )
     }
@@ -492,14 +498,10 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             lastClockText = clockValue
             clockText.text = clockValue
         }
-        if (now.date == lastClockDate) return
-        lastClockDate = now.date
-        val parts = now.date.split("-")
-        dateText.text = if (parts.size != 3) now.date else String.format(
-            Locale.US, "%s年%s月%s日 (%s)",
-            parts[0], parts[1].trimStart('0'), parts[2].trimStart('0'),
-            YOBI.getOrElse(now.weekdayNum) { "" },
-        )
+        val dateValue = texts.dateLine(now)
+        if (dateValue == lastClockDate) return
+        lastClockDate = dateValue
+        dateText.text = dateValue
     }
 
     /** An indoor panel replaces the visitor screen with the dashboard; a door station keeps it. */
@@ -515,6 +517,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             ),
         )
         dashboardHost.visibility = View.VISIBLE
+        visitorShell.visibility = View.GONE
         idleView.visibility = View.GONE
         // The hidden 7-tap corner is the door station's only way into settings. An indoor panel
         // has a visible 管理 button, and the invisible 200 dp target sat on top of the dashboard's
@@ -541,9 +544,11 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         clockText.textSize = VisitorLayout.clockTextSizeSp(widthDp, heightDp)
         touchHint.textSize = VisitorLayout.hintTextSizeSp(widthDp)
         callButton.minHeight = dp(VisitorLayout.callButtonHeightDp(widthDp))
+        cancelButton.minHeight = callButton.minHeight
+        purposeCancelButton.minHeight = callButton.minHeight
         VisitorLayout.apply(
             visitorSplit, visitorColumnA, visitorColumnB,
-            idleHeader, noticeCard, langBar, callSection,
+            idleHeader, noticeCard, langBar,
             notice != null, widthDp, heightDp,
         )
         applyFooterLayout(widthDp, heightDp)
@@ -849,6 +854,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             texts.t("sos.slide_sub", R.string.sos_slide_sub, countdown.toString()),
             texts.t("sos.countdown_cancel", R.string.sos_countdown_cancel),
             countdown,
+            texts.t("sos.accessibility_start", R.string.sos_accessibility_start),
+            texts.t("sos.accessibility_hint", R.string.sos_accessibility_hint),
+            texts.t("sos.accessibility_confirm", R.string.sos_accessibility_confirm),
         ) { seconds -> texts.t("sos.countdown", R.string.sos_countdown, seconds.toString()) }
         sosSlot.visibility = if (sosVisibleForRole()) View.VISIBLE else View.GONE
     }
@@ -866,7 +874,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         SemanticUi.apply(callButton, "call.primary", styleConfig, nodeId)
         SemanticUi.apply(purposeSkipButton, "call.primary", styleConfig, nodeId)
         SemanticUi.apply(purposeCancelButton, "cancel.call", styleConfig, nodeId)
-        SemanticUi.apply(cancelButton, "cancel.call", styleConfig, nodeId)
+        SemanticUi.apply(cancelButton, if (callUiPhase == CallUiPhase.ESTABLISHED)
+            "call.end" else "cancel.call", styleConfig, nodeId)
         for (index in 0 until purposeGrid.childCount)
             SemanticUi.apply(purposeGrid.getChildAt(index), "purpose.button", styleConfig, nodeId)
         SemanticUi.apply(offlineTitle, "status.offline", styleConfig, nodeId)
@@ -886,10 +895,12 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         purposeAutoHint.text = texts.t("calling.title", R.string.calling_title)
         purposeSkipButton.text = texts.t("purpose.skip", R.string.purpose_skip)
         purposeCancelButton.text = texts.t("purpose.cancel_call", R.string.purpose_cancel_call)
-        callingText.text = texts.t("calling.title", R.string.calling_title)
+        updateCallingTitle()
         updateCallActionLabel()
         replyCaption.text = texts.t("reply.banner", R.string.reply_banner)
-        offlineTitle.text = texts.t("offline.title", R.string.offline_title)
+        offlineTitle.text = if (uiCallId.isNotEmpty())
+            texts.t("visitor.restoring", R.string.visitor_restoring)
+        else texts.t("offline.title", R.string.offline_title)
         offlineBody.text = texts.t("offline.body", R.string.offline_body)
     }
 
@@ -921,6 +932,15 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         cancelButton.text = if (callUiPhase == CallUiPhase.ESTABLISHED)
             texts.t("incall.end", R.string.incall_end)
         else texts.t("calling.cancel", R.string.calling_cancel)
+        SemanticUi.apply(cancelButton, if (callUiPhase == CallUiPhase.ESTABLISHED)
+            "call.end" else "cancel.call", if (app.safeMode) null else cfg, nodeId)
+    }
+
+    private fun updateCallingTitle() {
+        callingText.text = if (callUiPhase == CallUiPhase.ESTABLISHED)
+            texts.t("incall.title", R.string.incall_title)
+        else texts.t("calling.title", R.string.calling_title) +
+            (callTitleOverride?.let { "\n$it" } ?: "")
     }
 
     /** Resolve device-local theme values before fleet defaults. */
@@ -1023,7 +1043,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         }
         val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
         val columns = when {
-            ids.size <= 1 -> 1
+            ids.size <= 1 || resources.configuration.fontScale > 1.3f -> 1
             widthDp < 520f -> 2
             else -> minOf(3, ids.size)
         }
@@ -1042,7 +1062,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             b.textSize = textSize
             b.isAllCaps = false
             b.setSingleLine(false)
-            b.maxLines = 2
+            b.maxLines = 4
+            b.minHeight = dp(buttonHeight)
             b.gravity = android.view.Gravity.CENTER
             b.setPadding(dp(8), 0, dp(8), 0)
             @Suppress("DEPRECATION")
@@ -1054,8 +1075,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             val lp = GridLayout.LayoutParams()
             lp.rowSpec = GridLayout.spec(index / columns)
             lp.columnSpec = GridLayout.spec(index % columns)
-            lp.width = (resources.displayMetrics.widthPixels - dp(32)) / columns - dp(8)
-            lp.height = dp(buttonHeight)
+            lp.width = (resources.displayMetrics.widthPixels - dp(48)) / columns - dp(8)
+            lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
             lp.setMargins(dp(4), dp(3), dp(4), dp(3))
             purposeGrid.addView(b, lp)
         }
@@ -1158,9 +1179,12 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         if (visitorLang == l) return
         visitorLang = l
         texts.setLang(l)
+        lastClockDate = ""
+        updateClock()
         applyStrings()
         buildPurposeButtons()
         updateLangBarSelection()
+        configureSos()
     }
 
     // ---------- Call state transitions ----------
@@ -1175,6 +1199,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     /** Put the dashboard back in front after any call-flow transition. */
     private fun restoreRoleHome() {
+        visitorShell.visibility = View.GONE
         idleView.visibility = View.GONE
         callingView.visibility = View.GONE
         dashboardHost.visibility = View.VISIBLE
@@ -1194,21 +1219,32 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             return
         }
         callingView.visibility = View.GONE
+        cancelButton.visibility = View.GONE
         idleView.visibility = View.VISIBLE
         idleHeader.visibility = View.VISIBLE
         callSection.visibility = View.VISIBLE
+        callButton.isEnabled = app.coreOk
+        cancelButton.isEnabled = app.coreOk
+        purposeCancelButton.isEnabled = app.coreOk
         updatePurposeVisibility()
         langBar.visibility = if (langBar.childCount > 0) View.VISIBLE else View.GONE
         purposeCancelButton.visibility = View.GONE
-        touchHint.text = hint ?: homeCallHint()
+        touchHint.visibility = View.VISIBLE
+        touchHint.text = homeCallHint()
+        visitorStatus.text = hint.orEmpty()
+        visitorStatus.visibility = if (hint.isNullOrEmpty()) View.GONE else View.VISIBLE
+        idleView.scrollTo(0, 0)
         updateCallActionLabel()
     }
 
     private fun showPurposeChooser() {
         if (showsDashboard) return
         choosingPurpose = true
+        visitorStatus.visibility = View.GONE
+        touchHint.visibility = View.GONE
         idleView.visibility = View.VISIBLE
         callingView.visibility = View.GONE
+        cancelButton.visibility = View.GONE
         offlineView.visibility = View.GONE
         idleHeader.visibility = View.GONE
         callSection.visibility = View.GONE
@@ -1219,6 +1255,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             if (uiCallId.isNotEmpty()) View.VISIBLE else View.GONE
         purposeCancelButton.visibility =
             if (uiCallId.isNotEmpty()) View.VISIBLE else View.GONE
+        purposeCancelButton.isEnabled = app.coreOk
         langBar.visibility = if (langBar.childCount > 0) View.VISIBLE else View.GONE
         ui.removeCallbacks(purposeTimeout)
         ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
@@ -1229,12 +1266,19 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private fun showCalling(title: String? = null) {
         if (showsDashboard) return
         choosingPurpose = false
+        visitorStatus.visibility = View.GONE
         ui.removeCallbacks(purposeTimeout)
         if (title != null) callTitleOverride = title
-        callingText.text = callTitleOverride ?: texts.t("calling.title", R.string.calling_title)
+        updateCallingTitle()
         updateCallActionLabel()
         idleView.visibility = View.GONE
+        callSection.visibility = View.GONE
+        purposeCancelButton.visibility = View.GONE
+        cancelButton.visibility = View.VISIBLE
+        cancelButton.isEnabled = app.coreOk
+        offlineView.visibility = View.GONE
         callingView.visibility = View.VISIBLE
+        callingView.scrollTo(0, 0)
         scheduleCallTimeout()
         if (app.safeMode) pulse.clearAnimation()
         else pulse.startAnimation(AlphaAnimation(0.25f, 1.0f).apply {
@@ -1247,14 +1291,20 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private fun showEstablished() {
         if (showsDashboard) return
         choosingPurpose = false
+        visitorStatus.visibility = View.GONE
         ui.removeCallbacks(purposeTimeout)
         ui.removeCallbacks(callTimeout)
         stopCallFeedback()
         pulse.clearAnimation()
         callingText.text = texts.t("incall.title", R.string.incall_title)
         idleView.visibility = View.GONE
+        callSection.visibility = View.GONE
+        purposeCancelButton.visibility = View.GONE
+        cancelButton.visibility = View.VISIBLE
+        cancelButton.isEnabled = app.coreOk
         offlineView.visibility = View.GONE
         callingView.visibility = View.VISIBLE
+        callingView.scrollTo(0, 0)
         updateCallActionLabel()
     }
 
@@ -1330,6 +1380,17 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun showOffline() {
+        visitorStatus.visibility = View.GONE
+        if (showsDashboard) {
+            visitorShell.visibility = View.VISIBLE
+            findViewById<View>(R.id.visitor_action_dock).visibility = View.GONE
+        }
+        offlineTitle.text = if (uiCallId.isNotEmpty())
+            texts.t("visitor.restoring", R.string.visitor_restoring)
+        else texts.t("offline.title", R.string.offline_title)
+        callButton.isEnabled = false
+        cancelButton.isEnabled = false
+        purposeCancelButton.isEnabled = false
         offlineView.visibility = View.VISIBLE
     }
 
@@ -1730,11 +1791,36 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         renderCancellationResult(app.callFlow.cancel(reason))
     }
 
-    private fun endOrCancelCall() {
+    private fun visitorCallAction(): VisitorCallAction? =
+        uiCallId.takeIf { it.isNotEmpty() }?.let { VisitorCallAction(it, callUiPhase) }
+
+    @android.annotation.SuppressLint("ClickableViewAccessibility")
+    private fun bindCallAction(button: Button) {
+        val latch = VisitorActionLatch()
+        button.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> latch.begin(visitorCallAction())
+                MotionEvent.ACTION_CANCEL -> latch.cancel()
+            }
+            false
+        }
+        button.setOnKeyListener { _, key, event ->
+            if ((key == KeyEvent.KEYCODE_ENTER || key == KeyEvent.KEYCODE_DPAD_CENTER ||
+                    key == KeyEvent.KEYCODE_SPACE) && event.action == KeyEvent.ACTION_DOWN &&
+                    event.repeatCount == 0) latch.begin(visitorCallAction())
+            false
+        }
+        button.setOnClickListener {
+            latch.consume(visitorCallAction())?.let { endOrCancelCall(it) }
+        }
+    }
+
+    private fun endOrCancelCall(action: VisitorCallAction) {
+        val active = app.callFlow.current() ?: return
+        if (active.callId != action.callId || active.phase != action.phase) return
         playButtonSound()
         ui.removeCallbacks(callTimeout)
-        val active = app.callFlow.current()
-        val transition = if (active?.phase == CallUiPhase.ESTABLISHED)
+        val transition = if (action.phase == CallUiPhase.ESTABLISHED)
             app.callFlow.endEstablished() else app.callFlow.cancel("visitor")
         renderCancellationResult(transition)
     }
@@ -1793,7 +1879,6 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     companion object {
         private const val TAG = "doorbell-ui"
-        private val YOBI = arrayOf("日", "月", "火", "水", "木", "金", "土")
 
         private const val PURPOSE_TIMEOUT_MS = 15_000L
         private const val CANCEL_RECONCILE_MS = 500L

@@ -1,0 +1,9 @@
+{
+  "command": [
+    "node",
+    "webui/tests/call_ua_generation.test.js",
+    "T14-02"
+  ],
+  "exit_code": 1,
+  "recorded_at": "2026-09-22T14:51:45.877944+00:00"
+}

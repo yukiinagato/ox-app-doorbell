@@ -1,0 +1,51 @@
+{
+  "command": [
+    "xcodebuild",
+    "-project",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/source-r5/ios/Doorbell.xcodeproj",
+    "-scheme",
+    "DoorbellTV",
+    "-configuration",
+    "Debug",
+    "-sdk",
+    "appletvsimulator",
+    "-destination",
+    "generic/platform=tvOS Simulator",
+    "-derivedDataPath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/tvos-r5",
+    "ARCHS=arm64",
+    "CODE_SIGNING_ALLOWED=NO",
+    "build"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r5-final.json",
+  "source_manifest_sha256": "0d2966e13fbad1a6429cd65d1c8022558b41870d2d6c7719ad4134d4705d9ec9",
+  "started_at": "2026-09-22T18:58:58.406614+00:00",
+  "scope": "Production r5 visitor-action identity fix, frozen T12 real-PJSIP Core, unsigned build only.",
+  "exit_code": 0,
+  "finished_at": "2026-09-22T18:59:48.549632+00:00",
+  "apps": [
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/tvos-r5/Build/Products/Debug-appletvsimulator/DoorbellTV.app",
+      "bundle": "jp.ox.doorbell.tv",
+      "version": "0.1.14",
+      "build": "15",
+      "files": {
+        "Assets.car": "b82160953a6acfdcbb78a70602157fb49d2d93ae93124eda1498522756ef0adc",
+        "DoorbellTV": "7b91369603f42f7299c11d632075bc510a9655827bd643f8c40a1e46bf2757a6",
+        "DoorbellTV.debug.dylib": "9761a99dfc7e7a2269cb499a6c2f164f8bbf079e2fabba74dcbf4f8032a840ee",
+        "Info.plist": "b3d8714dbb7bff499839e2e724435e6eaadea85296d2b5c01f9794374a15833b",
+        "PkgInfo": "82502191c9484b04d685374f9879a0066069c49b8acae7a04b01d38d07e8eca0",
+        "__preview.dylib": "3d7e91c9d71765adbd0b9beadff77d993d28ce1bd403302ac853ee545373f45f",
+        "button_click.mp3": "a540b36b2a546e4e195752b0cbb4413b51dc9e5c9c9f6771f8e80bbdd98e9024",
+        "en.lproj/Localizable.strings": "88890e67e7d140e1bcce19ef86afcf2b61f8d847f37f0241b71b0a42724106c0",
+        "indoor_update.mp3": "48eae246a6c9a98bfb85e513a750a810930a78928395e4d5ec541213618bd532",
+        "ja.lproj/Localizable.strings": "77c56ef6b95a216fa0da7741a88971edc142a18010d01d571eb087d3de5c99c3",
+        "outdoor_call_alert.mp3": "eb9050897ae89bd5d098de9aa010e469665b95e2ed775e8354bca0f4e1572b26",
+        "title_display.mp3": "08561d0c13ee726265654566c185c8a26dee5a23b8d06156c30aa37adc7ca97b",
+        "zh.lproj/Localizable.strings": "3fad3d1e56e03e4f66887ee4df1f8b9f9e586bafc5bd115e1a6d8875dc1bd79f",
+        "\u5b66\u6821\u306e\u30c1\u30e3\u30a4\u30e0.mp3": "e9f579c063cc84abd8e042625ce65122411f8cc30154e11dfe03949fa917574b"
+      }
+    }
+  ]
+}

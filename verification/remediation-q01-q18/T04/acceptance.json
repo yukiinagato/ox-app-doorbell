@@ -1,0 +1,88 @@
+{
+  "task_id": "T04",
+  "status": "VERIFIED_IN_SCOPE",
+  "scope": "production_test",
+  "source_manifest": "source-candidate-r3.json",
+  "source_manifest_sha256": "566cff597986a0e27ddd44e39453e1dfa08866e79affb5c33f03fe1e1a1c929a",
+  "independent_review": "evidence/review.json",
+  "independent_review_sha256": "b8e4bb2fd34aebbc463b4e44dba2117604d151fe0e66073647dd352f9e4d9b79",
+  "acceptance": [
+    {
+      "id": "T04-01",
+      "status": "PASS",
+      "tests": [
+        "httpd: scheduling expired queued write never reaches handler"
+      ],
+      "evidence": [
+        "green-httpd-r3",
+        "asan-httpd-r3"
+      ],
+      "observed": "503 not_started then zero handler calls after barrier release; queued work removed."
+    },
+    {
+      "id": "T04-02",
+      "status": "PASS",
+      "tests": [
+        "httpd: scheduling running timeout reports unknown and completes once"
+      ],
+      "evidence": [
+        "green-httpd-r3",
+        "asan-httpd-r3"
+      ],
+      "observed": "Running timeout returns outcome_unknown, never not_started; exactly one completion after barrier release."
+    },
+    {
+      "id": "T04-03",
+      "status": "PASS",
+      "tests": [
+        "httpd: scheduling boundary orders permit only expired or running",
+        "httpd: scheduling loop rejects elapsed deadline before waiter expires"
+      ],
+      "evidence": [
+        "green-httpd-r3",
+        "asan-httpd-r3"
+      ],
+      "observed": "Both deterministic scheduling orders repeat; separate barrier makes loop check its own elapsed deadline before the waiter can expire it."
+    },
+    {
+      "id": "T04-04",
+      "status": "PASS",
+      "tests": [
+        "httpd: scheduling shutdown expires queued work and releases its owner",
+        "httpd: scheduling shutdown preserves an already running owned request",
+        "httpd: scheduling a stopped runloop fails without waiting for deadline"
+      ],
+      "evidence": [
+        "green-httpd-r3",
+        "asan-httpd-r3"
+      ],
+      "observed": "Stop completes while loop/handler remains held, queued owner is released, running owner stays alive until one completion, no ASan diagnostics."
+    }
+  ],
+  "commands": {
+    "red-queued-expiry": {
+      "record": "evidence/red-queued-expiry.json",
+      "sha256": "e31e8d43d4c0a9dd3d994a463ae69f62f87b0fb6fd18676c60848d66a09097d7",
+      "exit_code": 1
+    },
+    "green-httpd-r3": {
+      "record": "evidence/green-httpd-r3.json",
+      "sha256": "88bb3f9156e46b46c5b19c138ecba0cf1aff0fb3ed8e30acd636e940e0808b39",
+      "exit_code": 0
+    },
+    "asan-httpd-r3": {
+      "record": "evidence/asan-httpd-r3.json",
+      "sha256": "370dc63554cfaeef6708b429ef4a62949f8a7ff86662fd068462c6d5870d14eb",
+      "exit_code": 0
+    }
+  },
+  "artifacts": "evidence/artifacts-r3.json",
+  "artifacts_sha256": "a52df17f33d9cf503d95b06263d780c55bf9e0f9a228a2fa55a61dd30661debc",
+  "limitations": [
+    "Host Darwin arm64 only; no device deployment or actual lock/SOS.",
+    "ASan covers native Core and dependencies; ownership assertions cover request cleanup, not a global LeakSanitizer qualification.",
+    "Shutdown transport disconnect is outcome unknown; not evidence of not_started.",
+    "Versions/build/progress coordinated by root; no deployment claimed."
+  ],
+  "cleanup": "All task HTTP servers, loops and command processes exited. No background service, simulator, device session or temporary pairing was created; retained normal/ASan/RED binaries remain in the dedicated ignored build directory."
+}

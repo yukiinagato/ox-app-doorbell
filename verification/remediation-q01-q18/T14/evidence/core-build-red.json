@@ -1,0 +1,11 @@
+{
+  "command": [
+    "cmake",
+    "--build",
+    "build/remediation-t14-20260922/host",
+    "-j4"
+  ],
+  "exit_code": 0,
+  "started_at": "2026-09-22T14:55:32.717915+00:00",
+  "ended_at": "2026-09-22T14:56:20.361204+00:00"
+}

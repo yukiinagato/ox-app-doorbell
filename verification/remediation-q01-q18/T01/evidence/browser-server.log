@@ -1,0 +1,6 @@
+09-22 21:50:17 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:1
+09-22 21:50:17 I [httpd] listening on 28001,[::]:28001
+09-22 21:50:17 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 21:50:17 I [node] node efa42771 (T01 isolated fixture) started
+Ready: http://127.0.0.1:28001/admin/?lang=en
+09-22 21:55:41 I [httpd] stopped

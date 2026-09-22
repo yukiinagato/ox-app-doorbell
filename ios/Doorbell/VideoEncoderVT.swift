@@ -16,6 +16,7 @@ final class VideoEncoderVT {
     private var started = false
     private var forceNextKeyframe = false
     private var sessionGeneration: UInt64 = 0
+    private var sourceCoreGeneration: UInt64?
     private let lock = NSRecursiveLock()
     private let measurementLock = NSLock()
     private var lastMeasurement = ""
@@ -50,10 +51,15 @@ final class VideoEncoderVT {
         forceNextKeyframe = false
         started = true
         sessionGeneration &+= 1
+        let generation = sessionGeneration
+        sourceCoreGeneration = core.runningGeneration
+        measurementLock.lock()
+        lastMeasurement = ""
+        measurementLock.unlock()
         lock.unlock()
         invalidateRetiredSession(retired)
         IOSAvailability.logDebug("h264 start fps=\(self.fps) bitrate_kbps=\(self.bitrateKbps)")
-        reportRuntime(available: false, state: "testing")
+        reportRuntime(available: false, state: "testing", generation: generation)
     }
 
     func stop() {
@@ -86,7 +92,7 @@ final class VideoEncoderVT {
         VTCompressionSessionInvalidate(retired)
     }
 
-    func feed(pixelBuffer: CVPixelBuffer, tsMs: Int64) {
+    func feed(pixelBuffer: CVPixelBuffer, tsMs: Int64, coreGeneration: UInt64) {
         lock.lock()
         guard started, !failed else {
             lock.unlock()
@@ -125,7 +131,7 @@ final class VideoEncoderVT {
                 failed = true
                 lock.unlock()
                 invalidateRetiredSession(created.retired)
-                reportRuntime(available: false, state: "session_failed")
+                reportRuntime(available: false, state: "session_failed", generation: transition)
                 return
             }
             session = createdSession
@@ -145,13 +151,13 @@ final class VideoEncoderVT {
             guard let self = self else { return }
             guard self.isCurrentGeneration(generation) else { return }
             guard status == noErr, let sbuf = sbuf else {
-                self.markTerminalFailure("encode_failed")
+                self.markTerminalFailure("encode_failed", generation: generation)
                 return
             }
-            if self.emit(sampleBuffer: sbuf) {
-                self.reportRuntime(available: true, state: "verified")
+            if self.emit(sampleBuffer: sbuf, coreGeneration: coreGeneration) {
+                self.reportRuntime(available: true, state: "verified", generation: generation)
             } else {
-                self.markTerminalFailure("invalid_output")
+                self.markTerminalFailure("invalid_output", generation: generation)
             }
         }
         if rc != noErr {
@@ -200,28 +206,48 @@ final class VideoEncoderVT {
         return (sess, nil)
     }
 
-    private func markTerminalFailure(_ state: String) {
+    private func markTerminalFailure(_ state: String, generation: UInt64) {
         lock.lock()
+        guard started && sessionGeneration == generation else { lock.unlock(); return }
         failed = true
         lock.unlock()
         IOSAvailability.logDebug("h264 terminal failure state=\(state)")
-        reportRuntime(available: false, state: state)
+        reportRuntime(available: false, state: state, generation: generation)
     }
 
-    private func reportRuntime(available: Bool, state: String) {
+    private func reportRuntime(available: Bool, state: String, generation: UInt64? = nil) {
+        lock.lock()
+        guard generation == nil || generation == sessionGeneration else { lock.unlock(); return }
+        let expectedGeneration = sessionGeneration
+        let coreGeneration = sourceCoreGeneration
         measurementLock.lock()
         guard lastMeasurement != state else {
             measurementLock.unlock()
+            lock.unlock()
             return
         }
         lastMeasurement = state
         let handler = runtimeStatus
         measurementLock.unlock()
+        lock.unlock()
         IOSAvailability.logDebug("h264 state=\(state) available=\(available)")
-        DispatchQueue.main.async { handler?(available, state) }
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.isCurrentGeneration(expectedGeneration),
+                  coreGeneration != nil, self.core.runningGeneration == coreGeneration else { return }
+            handler?(available, state)
+        }
     }
 
-    private func emit(sampleBuffer: CMSampleBuffer) -> Bool {
+    #if DEBUG
+    func failureCallbackForTesting() -> () -> Void {
+        lock.lock()
+        let generation = sessionGeneration
+        lock.unlock()
+        return { [weak self] in self?.markTerminalFailure("encode_failed", generation: generation) }
+    }
+    #endif
+
+    private func emit(sampleBuffer: CMSampleBuffer, coreGeneration: UInt64) -> Bool {
         guard let dataBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else {
             IOSAvailability.logDebug("h264 output missing data buffer")
             return false
@@ -291,7 +317,8 @@ final class VideoEncoderVT {
         let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
         let tsMs = pts.isValid ? Int64(CMTimeGetSeconds(pts) * 1000)
                                : Int64(Date().timeIntervalSince1970 * 1000)
-        core.onEncodedFrame(annexb, isKeyframe: isKey, tsMs: tsMs)
+        core.onEncodedFrame(annexb, isKeyframe: isKey, tsMs: tsMs,
+                            coreGeneration: coreGeneration)
         return true
     }
 }

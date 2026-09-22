@@ -1,0 +1,23 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T17:31:09.716479+00:00",
+  "status": "PASS_R1_CORRECTION_IN_REVIEWED_SCOPE",
+  "source_manifest_sha256": "bec71ff30ef893027577a1afdde61c4e4fc15a21e60e4b4a8267ffed44fcb199",
+  "findings": [
+    {
+      "id": "R1",
+      "status": "RESOLVED",
+      "description": "Pending positive callbacks require the captured dialog identity and revision plus visible window attachment. Cancel/configure/detach revoke that revision; an old dismiss cannot clear a replacement dialog."
+    }
+  ],
+  "verification": [
+    "Read the production dialog callback and cancellation ownership paths.",
+    "Reviewed real API35 queued cancel/detach/replacement red-to-green cases and four profiles with 32 passing cases.",
+    "Viewed actual landscape large-text calling and portrait large-text idle screenshots; primary actions remain readable and visible."
+  ],
+  "verified_artifact_count": 85,
+  "limitations": [
+    "No independent rerun of the complete Android build; reviewed frozen source and recorded device-run evidence.",
+    "API19 UI, physical device, active Core SOS overlay/clear, SIP and physical actuator qualification remain outside this scope."
+  ]
+}

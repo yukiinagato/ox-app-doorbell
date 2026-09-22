@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.CoreDisplayTest" tests="14" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.008">
+  <properties/>
+  <testcase name="theCallButtonAndItsTextComeFromCoreRatherThanBeingRederived" classname="jp.ox.doorbell.CoreDisplayTest" time="0.001"/>
+  <testcase name="aThemeWithoutTheAutomaticBlockStillYieldsItsBackgroundColour" classname="jp.ox.doorbell.CoreDisplayTest" time="0.0"/>
+  <testcase name="autoSystemConsultsThePlatformAndFallsBackToCoresAnswer" classname="jp.ox.doorbell.CoreDisplayTest" time="0.0"/>
+  <testcase name="aColourBackedThemeIsNotSecondGuessedByASample" classname="jp.ox.doorbell.CoreDisplayTest" time="0.003"/>
+  <testcase name="anOlderCorePublishesNothingAndTheShellComputesTheSameRuleLocally" classname="jp.ox.doorbell.CoreDisplayTest" time="0.001"/>
+  <testcase name="theAutomaticInkIsTakenPerRegionAndAnOverrideWins" classname="jp.ox.doorbell.CoreDisplayTest" time="0.0"/>
+  <testcase name="aDarkButtonInkTokenIsHonouredEvenWhereWhiteWouldScoreHigher" classname="jp.ox.doorbell.CoreDisplayTest" time="0.001"/>
+  <testcase name="aThemeWithNoPictureIsAFlatColourWhateverSourceSays" classname="jp.ox.doorbell.CoreDisplayTest" time="0.0"/>
+  <testcase name="everyPublishedRegionIsRead" classname="jp.ox.doorbell.CoreDisplayTest" time="0.0"/>
+  <testcase name="aPictureConfiguredButNotDrawnYetIsItsOwnCase" classname="jp.ox.doorbell.CoreDisplayTest" time="0.001"/>
+  <testcase name="theAppearanceCoreResolvedIsUsedDirectly" classname="jp.ox.doorbell.CoreDisplayTest" time="0.0"/>
+  <testcase name="anImageBackedThemeLetsTheShellRefineCoresWholeImageAverage" classname="jp.ox.doorbell.CoreDisplayTest" time="0.0"/>
+  <testcase name="aPictureCoreDeclinedToSampleIsNotMistakenForAFlatColour" classname="jp.ox.doorbell.CoreDisplayTest" time="0.0"/>
+  <testcase name="anAppearanceWithoutAnEffectiveValueIsIgnored" classname="jp.ox.doorbell.CoreDisplayTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

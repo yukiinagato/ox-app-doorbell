@@ -1,0 +1,16 @@
+{
+  "recorded_at": "2026-09-22T18:11:37.685687+00:00",
+  "command": [
+    "cmake",
+    "--build",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-crash-20260923/normal-r1",
+    "-j4"
+  ],
+  "exit_code": 0,
+  "timestamp_note": "Recorded after completed tool call; original command output log preserved.",
+  "source_manifest_sha256": "156362c92f10c47b9da7d8148a4a336846ca5011415465a1cbe3fceeb2b09418",
+  "platform": "macOS arm64",
+  "sip_backend": "stub",
+  "signing": "host unsigned",
+  "log_sha256": "aa3c788223f500035765a6176d40bd6bf847e8a0e115b970e165b22286802b66"
+}

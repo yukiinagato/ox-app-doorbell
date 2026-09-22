@@ -26,10 +26,34 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private var lastPairingFingerprint = ""
     private var screenshots: ScreenshotResponder?
     private var identityRestartPending = false
+    private var pairingResetPending = false
+    private var lifecycleTransition: UInt64 = 0
+
+    #if DEBUG
+    struct LifecycleTransitionTestHooks {
+        var identityWillStop: (() -> Void)?
+        var identityDidStop: (() -> Void)?
+        var resetDidStop: (() -> Void)?
+    }
+    var lifecycleTransitionTestHooks = LifecycleTransitionTestHooks()
+    func requestIdentityRestartForTesting() { scheduleIdentityRestart() }
+    func resetLocalPairingForTesting() { resetLocalPairing() }
+    #endif
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
                         [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
+        #if DEBUG
+        // Hosted unit tests construct production views with fixtures; they must not start
+        // discovery, camera capture, or system permission prompts on the test host.
+        if NSClassFromString("XCTestCase") != nil {
+            let host = UIWindow(frame: UIScreen.main.bounds)
+            host.rootViewController = UIViewController()
+            window = host
+            host.makeKeyAndVisible()
+            return true
+        }
+        #endif
         boot = BootConfig.load()
         // Bootstrap setup can remain on screen while an opted-in root helper starts. Announce the
         // main run loop before setup so the helper adopts this process instead of waiting for a
@@ -295,7 +319,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
     /// A remotely edited devices.<self> identity becomes the next local bootstrap identity.
     private func applyReplicatedIdentity() -> Bool {
-        guard !identityRestartPending,
+        guard !identityRestartPending, !pairingResetPending,
               let node = core.status()?["node"] as? [String: Any],
               let nodeID = node["id"] as? String, !nodeID.isEmpty,
               let devices = core.config()?["devices"] as? [String: Any],
@@ -313,13 +337,23 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             return false
         }
         boot = updated
-        identityRestartPending = true
-        DispatchQueue.main.async { [weak self] in self?.restartForIdentityChange() }
+        scheduleIdentityRestart()
         return true
     }
 
-    private func restartForIdentityChange() {
-        guard identityRestartPending, let win = window as? ActivityWindow else { return }
+    private func scheduleIdentityRestart() {
+        guard !identityRestartPending, !pairingResetPending else { return }
+        identityRestartPending = true
+        lifecycleTransition &+= 1
+        let transition = lifecycleTransition
+        DispatchQueue.main.async { [weak self] in
+            self?.restartForIdentityChange(transition: transition)
+        }
+    }
+
+    private func restartForIdentityChange(transition: UInt64) {
+        guard identityRestartPending, !pairingResetPending,
+              lifecycleTransition == transition, let win = window as? ActivityWindow else { return }
         pairingGateTimer?.invalidate()
         pairingGateTimer = nil
         pairingGate?.dismiss(animated: false)
@@ -337,13 +371,23 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         win.rootViewController = UIViewController()
         runtime?.stop(clean: true)
         runtime = nil
-        core.stop()
-        soundConfig = nil
-        lastPairingFingerprint = ""
-        appStarted = false
-        identityRestartPending = false
-        DispatchQueue.main.async { [weak self, weak win] in
-            guard let self = self, let win = win else { return }
+        #if DEBUG
+        lifecycleTransitionTestHooks.identityWillStop?()
+        #endif
+        core.stop { [weak self, weak win] in
+            guard let self = self, let win = win,
+                  self.lifecycleTransition == transition else { return }
+            self.soundConfig = nil
+            self.lastPairingFingerprint = ""
+            self.appStarted = false
+            self.identityRestartPending = false
+            guard !self.pairingResetPending else { return }
+            #if DEBUG
+            if let didStop = self.lifecycleTransitionTestHooks.identityDidStop {
+                didStop()
+                return
+            }
+            #endif
             self.startConfiguredApplication(UIApplication.shared, window: win)
         }
     }
@@ -447,6 +491,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     private func resetLocalPairing() {
+        guard !pairingResetPending else { return }
+        pairingResetPending = true
+        lifecycleTransition &+= 1
+        identityRestartPending = false
         pairingGate?.dismiss(animated: false)
         pairingGate = nil
         pairingDeferred = false
@@ -455,7 +503,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         (window?.rootViewController as? MainViewController)?.prepareForCoreShutdown()
         runtime?.stop(clean: false)
         runtime = nil
-        core.stop()
+        core.stop { [weak self] in self?.finishLocalPairingReset() }
+    }
+
+    private func finishLocalPairingReset() {
+        defer { pairingResetPending = false }
+        #if DEBUG
+        if let didStop = lifecycleTransitionTestHooks.resetDidStop { didStop(); return }
+        #endif
         ShellLog.note("core.stop reason=resetLocalPairing")
         guard Keychain.removeAll(), BootConfig.clearPersistedState(),
               let win = window as? ActivityWindow else {

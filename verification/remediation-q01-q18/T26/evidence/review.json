@@ -1,0 +1,170 @@
+{
+  "task_id": "T26",
+  "reviewer": "t02_contract_inventory",
+  "reviewed_at": "2026-09-22T16:01:15.509920+00:00",
+  "verdict": "PASS_IN_PRODUCTION_TEST_SCOPE",
+  "scope": "Independent read-only review of the frozen T26 r3 conditional-config implementation, real Node/HTTP/C ABI/SQLite tests and operation-ledger regression. This is not a complete repository or device/release qualification verdict.",
+  "source_manifest": "source-green-r4.json",
+  "source_manifest_sha256": "138384b7fc207802285bb19c6e557521ccf2c4d5988725879b7146b1e5115853",
+  "inputs": {
+    "core/src/node/node.cpp": "218f40354113274ee87fa8e7334f7c118031f6589d29dd0d4ca57709b6276907",
+    "core/src/node/node.h": "853c6a381a0e3b7386182ab59ff2666f21938c435d3f7be0ef1619b3200f7dea",
+    "core/src/store/store.cpp": "f8b2ccaa13e109c26c4611e6aaff4e122cce934ceaf510e0d5041be39eeb76ea",
+    "core/src/store/store.h": "6be3d24460012e2ec8b6287834b938a3c18341ed1ad47be3f0de00f506bdbe83",
+    "core/src/store/operation_ledger.cpp": "9cfc69af9a873a8d26210b859a1cefa23e2b0964967d9a484f463a906cc1ec5b",
+    "core/src/capi/doorbell_capi.cpp": "8ba6ab0ec459b903d5aa3be1df20c30ba732e98e78d01d21a7b9d13a95922ea6",
+    "core/include/doorbell/doorbell.h": "5ac62bdd966176848699973a935a0607fc063cfdcb7c3890715b77242845a13f",
+    "core/src/crdt/lww_map.cpp": "012d70f08ea6a8a243e97bfaa4fac375e005503c70583269ba2b10faac671dc4",
+    "core/src/crdt/lww_map.h": "57910440a01c18656f1bd87f338b76877b223f55fa781ed56d2c428664917be5",
+    "core/src/util/runloop.cpp": "fd1efbc28ea434086aac955a3d52ae835aa122d37e6bcf58798f2224f4e93cf1",
+    "core/tests/test_admin_api.cpp": "7208196e4fcee51a589cdac784e6a148cac4c91461e62a0023eb2c3a731a63bd"
+  },
+  "all_reviewed_inputs_match_frozen_manifest": true,
+  "production_inputs_identical_to_r2": false,
+  "initial_review": {
+    "path": "evidence/independent-review-r1.json",
+    "sha256": "ecfe4f21e4c6e5dfe94cde5cf6a5e3f1086cdf16f233444bf7db9d0030c626ce",
+    "verdict": "CHANGES_REQUESTED",
+    "preserved": true
+  },
+  "findings": [
+    {
+      "id": "R1",
+      "severity": "high",
+      "status": "RESOLVED",
+      "path": "core/src/node/node.cpp",
+      "line": 9429,
+      "related_path": "core/src/crdt/lww_map.cpp:445",
+      "title": "A parent object patch can succeed while an existing scalar descendant silently wins",
+      "reproduction": "Set cas.document.name=\"old\" through the production legacy setter, read the local revision, then conditionally set cas.document={\"name\":\"new\"}. The merge produces new in the parent record, but materializeJson replays the existing scalar child record afterwards. Its newer-parent exception applies only to object leaves, so the effective value remains old.",
+      "required_change": "Compose field intent against the existing owning CRDT records, including null/array replacement and deletion, or reject a genuinely ambiguous overlap explicitly. Do not change the distributed storage model silently. Add real production parent/child tests.",
+      "resolution": "The conditional layer rewrites affected existing scalar/object descendants and tombstones hidden descendants for null/scalar/array replacement. Explicit overlapping request keys are rejected and expansion remains bounded to 256. Tests cover old scalar child ownership, unknown sibling preservation, null, delete and reconstruction. The distributed materializer is unchanged."
+    },
+    {
+      "id": "R2",
+      "severity": "high",
+      "status": "RESOLVED",
+      "path": "core/src/node/node.cpp",
+      "line": 9453,
+      "title": "The preview is not actually validated as a complete effective candidate",
+      "reproduction": "With call.indoor.return_s=30, set call.indoor.return_s.inner=1 through the conditional API. The existing per-key validator recognizes the exact return_s path and known containers but not this deeper path, while materialization turns the numeric field into an object. The temporary cfg does not help because the loop still validates the original mutation key/value only. doors.front.unlock.command.inner has the same shape.",
+      "required_change": "Validate affected known schema roots against the actual materialized candidate, preserving unrelated unknown extensions and the existing secret contract. Include a rejected deep-leaf injection test and assert no config or revision publication.",
+      "resolution": "configCandidateValid walks the actual materialized candidate using shared schema and secret validation. Its separate write-scope mode avoids treating valid stored containers as new whole-container writes. Tests reject the deep numeric/command child injection and invalid whole-door content without changing configuration or revision."
+    },
+    {
+      "id": "R3",
+      "severity": "medium",
+      "status": "RESOLVED",
+      "path": "core/src/node/node.cpp",
+      "line": 12109,
+      "title": "New configuration C ABI methods can dereference an uninitialized Core before start",
+      "reproduction": "db_core_create_v2 followed by snapshot/commit before db_core_start runs callSync inline in Manual state. config is only initialized in startOnLoop, but both new paths dereference it, including the commit error formatter. After stop snapshot produces an empty string.",
+      "required_change": "Guard the new APIs against unstarted/unavailable Core and return an explicit finite not_started result. Add actual C ABI before-start and after-stop cases without broadening unrelated legacy methods.",
+      "resolution": "Both new APIs return finite not_started results before startup and after stop; the revision helper does not dereference absent config. Actual C ABI tests create/start/stop/free the Core and exercise both methods at each unavailable boundary."
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "T26-01",
+      "verdict": "PASS",
+      "evidence": "Conditional stale-baseline batch and simultaneous HTTP/native production writers admit one winner; stale callers receive config_conflict and cannot overwrite the winner."
+    },
+    {
+      "id": "T26-02",
+      "verdict": "PASS",
+      "evidence": "Real invalid schema, parent/child composition, explicit delete/null, unknown siblings and SQLite failure cases leave either the complete committed new state or old state; invalid/persistence-failed writes do not publish a new revision."
+    },
+    {
+      "id": "T26-03",
+      "verdict": "PASS",
+      "evidence": "The real SQLite BEFORE INSERT trigger pauses the Core after comparison and before commit using a condition variable. A competing native call is explicitly queued on the borrowed production loop; it cannot run or change the published old snapshot until release, then returns config_conflict. No sleep-based window assumption."
+    },
+    {
+      "id": "T26-04",
+      "verdict": "PASS",
+      "evidence": "Real HTTP and native Node writers use the same compare/merge/validate/Store commit service; additive C ABI ownership and lifecycle cases also execute."
+    }
+  ],
+  "final_targeted_run": {
+    "command_record": "evidence/config-cas-r4.json",
+    "command_record_sha256": "fd9520d9ede2e9c32f97bcbd7510accd21ec081f73e6122ada53ce1d3d1e4883",
+    "log": "evidence/config-cas-r4.log",
+    "log_sha256": "3eda4ac22836a5a8d20c4b8cf759405edfb02dcb79843d7149cf380e12acff28",
+    "exit_code": 0,
+    "test_cases": 10,
+    "assertions": 333,
+    "artifacts": "artifacts-r4.json",
+    "artifacts_sha256": "afdc5999c4585e24ad8854c5618270baeda7009c052a12c2c6921efa8dcebd53",
+    "binary_sha256": "47b417e28f523f248717f2f07d7e1740c20b7f38599c400c9c715e369099517c",
+    "sip_backend": "stub",
+    "signing_state": "host_unsigned",
+    "platform": "macOS arm64 host"
+  },
+  "ledger_regression": {
+    "command": "build/remediation-t26-20260923/green-build-r3/doorbell_tests --test-case=operations:*",
+    "log": "evidence/operations-store-regression-r3.log",
+    "log_sha256": "7547b27a930f9daf27cf5d129a9a95c074c81e9d975f74ffd6661f96165f0ed6",
+    "exit_code": 0,
+    "test_cases": 14,
+    "assertions": 16823,
+    "binary_sha256": "2a0699e6413822ab21cb865789cd9dccad1f920f4c5bf6bc6beaea2b48d76520",
+    "note": "Independently read completed log; generic command metadata may be supplemented by the root without changing this log identity."
+  },
+  "limits": [
+    "Local-node CAS only; no global transaction, distributed conflict resolution, editor/import migration or hardware claim.",
+    "SIP stub and unsigned host binary; no iOS/Android/Windows target build or physical door/SOS action in this review.",
+    "The Store lock is recursive to preserve the commit-hook ownership chain. The same connection lock still serializes ledger transactions; the completed 14-case ledger regression is separate evidence.",
+    "Later shared-source integration changes require matching final source manifests and required platform checks; this review cannot substitute for those runs."
+  ],
+  "r4_delta_review": {
+    "prior_review": "evidence/independent-review-r3.json",
+    "prior_review_sha256": "0b912b05c2f45a31da61b773515e951bf27f4fec76df3b2a0155a2f6f5fc499c",
+    "inherited_findings": "R1-R3 remain resolved; the T26 conditional service and Store transaction code are unchanged from r3.",
+    "own_production_delta": "effectiveFeaturesDoc now advertises the implemented config_cas_v1; the actual status response is asserted by the production test.",
+    "adjacent_changes": "Frozen Node additionally includes independently owned T06 weak snapshot lifetime / operation worker admission changes and T15 panel activity renewal. These are not attributed to T26; T06 has a separate independent review.",
+    "fixture_review": "The panel fixture now waits for one credential to replicate before creating the second session. The unpair fixture explicitly asserts the old session is 401, then logs in again for the original pairing-state assertions. This matches T08 invalidation instead of bypassing it."
+  },
+  "historical_targeted_run_r3": {
+    "command_record": "evidence/config-cas-r3.json",
+    "command_record_sha256": "263aa614d1076b06e895122fd5a2483cb71108eb9b53d08c309cb876162eb29a",
+    "log": "evidence/config-cas-r3.log",
+    "log_sha256": "1e83ed26ec7116eff7112bca675674688a0a4ee0aedb3bc9b5687dea69754ebf",
+    "exit_code": 0,
+    "test_cases": 10,
+    "assertions": 332,
+    "artifacts": "artifacts-r3.json",
+    "artifacts_sha256": "7d39cd9f907f8f57717b3b74134f03fa8d7c1ff526ed6f6a3d23c0cc7dbd33a3",
+    "binary_sha256": "2a0699e6413822ab21cb865789cd9dccad1f920f4c5bf6bc6beaea2b48d76520",
+    "sip_backend": "stub",
+    "signing_state": "host_unsigned",
+    "platform": "macOS arm64 host"
+  },
+  "historical_broad_regression_r3": {
+    "log": "evidence/admin-ledger-regression-r3.log",
+    "log_sha256": "07b65dab8d6048b686cab3ca5b2b74275ed323992a0e60bc26b17d94ec62c4c3",
+    "test_cases_passed": 47,
+    "test_cases_failed": 2,
+    "assertions_passed": 2416,
+    "assertions_failed": 3,
+    "status": "FAILED_HISTORICAL_RUN_FIXED_AND_REEXECUTED_IN_R4",
+    "observed_cases": [
+      "admin API: panel sessions follow replicated rotation and per-node provisioning",
+      "admin API: pairing routes expose state, PIN, deny, scan, retry, and unpair"
+    ],
+    "reported_followup": "The two auth fixtures were corrected without changing their intended credential-revocation assertions. The frozen r4 broad regression completes successfully; the failed r3 log is preserved."
+  },
+  "broad_regression_r4": {
+    "command": [
+      "build/remediation-t26-20260923/green-build-r4/doorbell_tests",
+      "--test-case=*admin API*,*admin session*,*store*,operations:*"
+    ],
+    "log": "evidence/admin-store-regression-r4.log",
+    "log_sha256": "9e92557a736769de2133ad7cb43206fc15a5e2d72df166f7d01442b3644bc865",
+    "exit_code": 0,
+    "test_cases": 63,
+    "assertions": 19357,
+    "binary_sha256": "47b417e28f523f248717f2f07d7e1740c20b7f38599c400c9c715e369099517c",
+    "source_manifest_sha256": "138384b7fc207802285bb19c6e557521ccf2c4d5988725879b7146b1e5115853",
+    "note": "Final log independently read. Generic command metadata may be supplemented by root; log and binary identity are recorded directly."
+  }
+}

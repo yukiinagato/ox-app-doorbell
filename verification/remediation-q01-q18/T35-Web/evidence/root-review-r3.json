@@ -1,0 +1,15 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T17:59:42.538849+00:00",
+  "status": "CHANGES_REQUESTED",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/source-final-r3.json",
+  "source_manifest_sha256": "2e7e7cc46bd81b9adc2a5cfcbcfbd56e344abef16ab3596d9bef025ba558c0a8",
+  "findings": [
+    {
+      "id": "R1",
+      "description": "A held Cancel gesture can become Hang up when the call becomes answered before click. Freeze the call and action identity at gesture start and reject a stale release; verify mouse, keyboard, touch and AT behavior in actual DOM.",
+      "status": "FIX_IN_PROGRESS"
+    }
+  ],
+  "scope": "Independent production source review; existing 24 browser cases do not cover the held gesture transition."
+}

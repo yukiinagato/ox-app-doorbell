@@ -1,0 +1,30 @@
+{
+  "task": "T35-ios-modern",
+  "lane": "ios9-arm64-r4",
+  "started_at": "2026-09-22T17:32:20.474315+00:00",
+  "command": [
+    "env",
+    "IOS9_DERIVED_DATA=/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/ios9-arm64-r4",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/source-r4/ios/scripts/build_ios9_arm64.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r4.json",
+  "source_manifest_sha256": "92ed542708ffa474244241f9a07ee2933a5c3bd6e74b92204b01f03242d32b7f",
+  "platform": "macOS arm64 host / iOS9 arm64",
+  "signing": "CODE_SIGNING_ALLOWED=NO",
+  "sip_backend": "real_pjsip",
+  "scope": "Parent R1 scrolling in-call title above end button; T12 frozen Core, production UIKit tests use temporary local Core and disabled media. No physical devices.",
+  "exit_code": 0,
+  "timed_out": false,
+  "finished_at": "2026-09-22T17:33:26.907976+00:00",
+  "status": "PASS",
+  "app_version": "0.1.37",
+  "build_number": "38",
+  "artifact_sha256": "37048848ab81f5cd491b6aa9a1056c86b4c29c1aa18e45541971d3be7414cc3c",
+  "artifact_provenance": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/ios9-arm64-r4-artifacts.json",
+  "observed_result": "BUILD SUCCEEDED; unsigned target built.",
+  "limitations": [
+    "Frozen r3 basis plus R1 title boundary; later mainline Core integration needs rebuild.",
+    "Build is not simulator execution or physical UI qualification."
+  ]
+}

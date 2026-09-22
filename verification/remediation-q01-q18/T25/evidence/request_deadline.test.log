@@ -1,0 +1,5 @@
+T09-01: silent production XHR times out once and releases its lane: PASS
+T09-02: native timeout and watchdog settle once in both orders with no timers: PASS
+T09-03: late cancelled success/error cannot replace or release the successor: PASS
+T09-04: no AbortController, Promise or fetch; legacy XHR watchdog remains bounded: PASS
+request deadline classifications, headers/body, frozen generation and no write retry: PASS

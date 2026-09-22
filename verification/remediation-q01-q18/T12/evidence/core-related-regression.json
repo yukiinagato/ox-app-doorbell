@@ -1,0 +1,35 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "28471a68a44ccea047f1c7db4a19fced86f38eb0490c0ee0e156edb4f8366ce3",
+  "task_id": "T12",
+  "test_id": "core-related-regression",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T12/core-source-green.json",
+  "source_manifest_sha256": "fa033ca5f5f306b80b20ab195fd5b5d443dd95a204a21fe9496fff8e3e17c7aa",
+  "command": [
+    "build/remediation-t12-20260923/green-build/doorbell_tests",
+    "--test-case=admin API:*,operations HTTP:*,operations native:*,operations dispatcher:*,media publishing*,panel*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T16:29:14.450972+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": "macOS host arm64; two local production Nodes for HTTP/mesh cases",
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "unsigned host tests",
+  "artifact_sha256": "e54551fdff9538fc3ca488e3283b0e4f0ba5846497a56e7ec9478135b3683851",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T12/evidence/core-related-regression.log",
+  "limitations": [
+    "Host production tests only; no physical recipient or actuator, no signed app/device qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T16:31:20.433374+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

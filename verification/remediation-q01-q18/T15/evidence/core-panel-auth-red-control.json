@@ -1,0 +1,9 @@
+{
+  "command": [
+    "build/remediation-t15-20260923/red-host/doorbell_tests",
+    "--test-case=admin API: panel sessions follow replicated rotation and per-node provisioning"
+  ],
+  "exit_code": 1,
+  "duration_s": 4.035649061203003,
+  "purpose": "unchanged baseline comparison for pre-panel-session admin credential convergence failure"
+}

@@ -1,0 +1,51 @@
+{
+  "observed_at": "2026-09-22T15:38:02.777949+00:00",
+  "app_version": "0.3.49",
+  "build_number": "52",
+  "minimum_os": "5.1",
+  "architecture": "armv7",
+  "sdk_headers": "licensed local iPhoneOS7.1.sdk",
+  "signing": "ldid-jailbreak",
+  "sip_backend": "ios_compat_minisip_uac_uas",
+  "core_backend": "core_pjsip_off_ios_compat_minisip",
+  "artifacts": {
+    "app_executable": {
+      "path": "build/remediation-t23-20260923/frozen-r4/ios-kiosk/build/Doorbell.app/Doorbell",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r4/app_executable",
+      "sha256": "b651b6df3136020768994b9b614b00c77f77e0d01c6a763318a7f9b662fe18c0"
+    },
+    "app_manifest": {
+      "path": "build/remediation-t23-20260923/frozen-r4/build/ios-compat/artifacts/ios5-armv7-app/manifest.json",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r4/app_manifest.json",
+      "sha256": "81792b45cecaec11e55c0da967b71444d8e79b2b853207767332725f1ffef1f4"
+    },
+    "core_archive": {
+      "path": "build/remediation-t23-20260923/frozen-r4/build/ios-compat/artifacts/ios5-armv7-pjsip-off/libdoorbell_all.a",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r4/core_archive.a",
+      "sha256": "567353487b2721a3508daa69a80b6f384e9ecfd1d0fc44b502e3b48f289ecacb"
+    },
+    "core_manifest": {
+      "path": "build/remediation-t23-20260923/frozen-r4/build/ios-compat/artifacts/ios5-armv7-pjsip-off/manifest.json",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r4/core_manifest.json",
+      "sha256": "806f887ea08acdf42db8a44b9932399444cea2992a2de8c6d3ffc343306d293f"
+    },
+    "timing_host_executable": {
+      "path": "build/remediation-t23-20260923/frozen-r4/build/ios-compat/host-tests/call_timing_test",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r4/timing_host_executable",
+      "sha256": "9fa20e5c0dc58b347577efcbf9551537660e38f37857c7c20fb91a7b57d0bfcd"
+    }
+  },
+  "limits": [
+    "No device installation or execution; locally signed historical SDK artifact only.",
+    "All 1222 frozen inputs are unchanged after both final runs. r4 Core/Web inputs exactly match the clean r3 Core build, whose archive and manifest were retained and reused. Later integration Core changes require a new platform build.",
+    "The shell uses its compatibility MiniSIP UAC/UAS backend; Core PJSIP is disabled by the existing iOS5 profile. This does not qualify the modern real-PJSIP lane.",
+    "Historical SDK and compatibility C++ runtime are ignored local dependencies; no vendor SDK is stored in verification evidence."
+  ],
+  "core_reuse": {
+    "source_manifest": "source-frozen-r3.json",
+    "source_manifest_sha256": "f2184b8f0d3e7c5abc6e48351056c4e23c84712df6ae5733e7c79237ce7b6436",
+    "build_command_record": "evidence/ios5-core-frozen-r3.json",
+    "archive_sha256": "567353487b2721a3508daa69a80b6f384e9ecfd1d0fc44b502e3b48f289ecacb",
+    "reason": "r4 changes only shell Foundation/UI/tests; every frozen Core/Web/tool input is identical to the clean r3 build. Shared live Node changes are intentionally excluded."
+  }
+}

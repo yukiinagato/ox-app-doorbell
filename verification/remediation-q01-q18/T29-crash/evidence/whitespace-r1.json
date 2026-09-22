@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-09-22T18:11:37.685687+00:00",
+  "command": [
+    "git",
+    "diff",
+    "--check",
+    "--",
+    "core/tests/test_config_import_crash.cpp"
+  ],
+  "exit_code": 0,
+  "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

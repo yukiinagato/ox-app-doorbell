@@ -1,0 +1,35 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "72d72fa26541100f58196a3b5dab7c5ad3d2e93dc35d8ca9543acad2db8388e6",
+  "task_id": "T26",
+  "test_id": "config-cas-r4",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T26/source-green-r4.json",
+  "source_manifest_sha256": "138384b7fc207802285bb19c6e557521ccf2c4d5988725879b7146b1e5115853",
+  "command": [
+    "build/remediation-t26-20260923/green-build-r4/doorbell_tests",
+    "--test-case=*config CAS*,*configuration conditional batch*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:57:53.755876+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": "macOS arm64 host; actual local HTTP, C ABI and SQLite",
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub (host protocol tests only)",
+  "signing_state": "host_unsigned",
+  "artifact_sha256": "47b417e28f523f248717f2f07d7e1740c20b7f38599c400c9c715e369099517c",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T26/evidence/config-cas-r4.log",
+  "limitations": [
+    "Local CAS only; no distributed conflict resolution, editor/import migration or device qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:58:10.745344+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "10/10 tests, 333/333 assertions PASS; deterministic compare/commit barrier and advertised config_cas_v1 included."
+}

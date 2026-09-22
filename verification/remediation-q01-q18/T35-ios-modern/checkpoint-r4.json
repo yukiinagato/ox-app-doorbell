@@ -1,0 +1,10 @@
+{
+  "status": "IMPLEMENTED_PENDING_UI_RUNTIME",
+  "scope": "R1 scroll title fix and actual UIKit test added; two owned files stable",
+  "source": "source-r4.json",
+  "runtime": "NOT_RUN_STARTUP_TIMEOUT after240s; no tests entered",
+  "builds": "All three r4 builds PASS",
+  "resume": "evidence/resume-r4.json",
+  "cleanup": "Task simulator shutdown requested; no physical deployment",
+  "pause_rule": "On parent quota reset notice save checkpoint and stop."
+}

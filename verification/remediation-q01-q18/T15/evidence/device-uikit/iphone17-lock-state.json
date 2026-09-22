@@ -1,0 +1,26 @@
+{
+  "info" : {
+    "arguments" : [
+      "devicectl",
+      "device",
+      "info",
+      "lockState",
+      "--device",
+      "54DB00FE-62A0-5739-9679-B7C513DFCEC4",
+      "--json-output",
+      "verification/remediation-q01-q18/T15/evidence/device-uikit/iphone17-lock-state.json"
+    ],
+    "commandType" : "devicectl.device.info.lockState",
+    "environment" : {
+      "TERM" : "dumb"
+    },
+    "jsonVersion" : 3,
+    "outcome" : "success",
+    "version" : "518.33"
+  },
+  "result" : {
+    "deviceIdentifier" : "54DB00FE-62A0-5739-9679-B7C513DFCEC4",
+    "passcodeRequired" : true,
+    "unlockedSinceBoot" : true
+  }
+}

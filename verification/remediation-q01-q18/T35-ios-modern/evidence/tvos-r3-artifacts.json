@@ -1,0 +1,23 @@
+{
+  "at": "2026-09-22T17:01:20.159596+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r3.json",
+  "source_manifest_sha256": "c68c67452289b426588c570382a4df5d81d5e088f82a71703ed2ec2c0e32e5be",
+  "binary": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV",
+  "images": {
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV": "UUID: 9D04DCDF-E005-337F-B500-AC4BB177D508 (arm64) /Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV.debug.dylib": "UUID: C6848C7F-537C-30E8-84D4-99C9D21A0A6B (arm64) /Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV.debug.dylib",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/__preview.dylib": "UUID: 9869C51C-9624-37B0-90F5-D9A4209F650E (arm64) /Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/__preview.dylib"
+  },
+  "app_version": "0.1.14",
+  "build_number": "15",
+  "target_minimum_os": "15.0",
+  "sip_backend": "real_pjsip",
+  "hashes": {
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV": "7b91369603f42f7299c11d632075bc510a9655827bd643f8c40a1e46bf2757a6",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/candidate-source-r3/ios/build/core/appletvsimulator/arm64/min-15.0/libdoorbell_all.a": "0a5b33da2bad29fa2f631b0baecb32f790993cff0a753fa57cf0f507d3bc2ca8",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/candidate-source-r3/ios/build/core/appletvsimulator/arm64/min-15.0/artifact-manifest.json": "633e3921b74604e577a356918e2a3b0dfe03ac9850d3285aad0a76c4b79b65db",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV.debug.dylib": "caad1e921fd5e4ca20b0a3a5bfc015a9f1e942f99b6adb9a90cf3403253720f3",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/tvos-r3/Build/Products/Debug-appletvsimulator/DoorbellTV.app/__preview.dylib": "3d7e91c9d71765adbd0b9beadff77d993d28ce1bd403302ac853ee545373f45f"
+  },
+  "scope": "completed build only; no runtime launch or device installation; T12 frozen Core plus T35 r3"
+}

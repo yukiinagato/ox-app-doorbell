@@ -1,0 +1,30 @@
+{
+  "started_at": "2026-09-22T18:07:00.763299+00:00",
+  "finished_at": "2026-09-22T18:07:10.349243+00:00",
+  "command": [
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-crash-20260923/normal-r1/doorbell_tests",
+    "--test-case=config import crash:*",
+    "--no-colors=true"
+  ],
+  "exit_code": 0,
+  "source_manifest_sha256": "156362c92f10c47b9da7d8148a4a336846ca5011415465a1cbe3fceeb2b09418",
+  "binary_sha256": "2fe6a6d907b43690d2be40554d0d27ded19063f543b79c3e227f9d57031d60f5",
+  "platform": "macOS arm64",
+  "sip_backend": "stub",
+  "signing": "host unsigned",
+  "scope": "Actual HTTP/Node/SQLite import and external SIGKILL of four child processes; not physical power-loss or remote-node atomicity",
+  "log_sha256": "135dcced027efac87180e0cc7091a0804431e1540926b48c749d3de66902e4f0",
+  "result": {
+    "status": "PASS",
+    "cases": 1,
+    "assertions": 159,
+    "child_processes_killed_by_parent": 4,
+    "restarted_real_nodes": 4
+  },
+  "limitations": [
+    "SimClock with production HTTP/Node/Store/SQLite on-disk I/O",
+    "Host macOS arm64 SIP stub; not a device or release SIP qualification",
+    "SIGKILL process loss with operating system alive; not physical storage power-cut durability or storage controller fault testing",
+    "No cross-node atomicity claim"
+  ]
+}

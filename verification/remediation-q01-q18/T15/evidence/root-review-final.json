@@ -1,0 +1,40 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T18:31:10.236997+00:00",
+  "status": "PASS_IN_T15_MEDIA_AUTHORITY_AND_RENDERER_SCOPE",
+  "production_diff_sha256": "dd34191170651e9fca4753925a6d6cb43fcd8dbf8dee9774538acf2d19b41b90",
+  "reviewed_production": [
+    "Node panel session/CSRF/Origin binding and server-derived WebDialogLease publisher session",
+    "Media authorization call/revision/owner/session/generation/expiry and final frame bus recheck",
+    "Current peer cache read identity and sequence validation; no global SIP InCall authority substitution",
+    "MainViewController request generation, call/Core identity, header tuple, strict increasing sequence and UIImage delivery",
+    "Web same-origin authorized upload and cancelled request handles"
+  ],
+  "independent_findings": [
+    {
+      "id": "ios-duplicate-sequence",
+      "status": "FIXED",
+      "description": "Require strictly greater sequence within one media generation; final physical UIKit 23 checks exercise duplicate ten and late nine."
+    }
+  ],
+  "device_addendum": {
+    "qualification": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T15/evidence/device-uikit/qualification.json",
+    "sha256": "bb138a077db720a57df8a99761ad3e2b1f41992f10364777dd3bcdbd4360fbe5",
+    "all_evidence_hashes_match": true,
+    "unmodified_media_inputs_match": [
+      "ios/Doorbell/CoreBridge.swift",
+      "ios/Doorbell/MainViewController.swift",
+      "ios/DoorbellTests/CoreBridgeLifecycleTests.swift"
+    ],
+    "runner_review": "Inspected owned UIApplication entry, actual production controller methods, queued main-thread completion order, real UIImage and visible UIWindow hierarchy. Actual captured red image viewed; no production controller replacement.",
+    "result": "23/23 checks pass on iPad Air1 iOS12.5.8 test app1.0.0/build2",
+    "final_metadata_rechecked_at": "2026-09-22T18:33:24.294342+00:00"
+  },
+  "windows_independent_review": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T15/windows-independent-review.md",
+  "limitations": [
+    "Controlled network completions and call snapshots on actual UIKit; not real SIP/media network or physical camera qualification",
+    "Original 17-test simulator lifecycle run predates final sequence comparison; this final device test validates the changed path, not a claimed complete new 17-test run",
+    "Shared panel credential transition and nonloopback reader scope remain explicitly assigned to T16/T31",
+    "Final integrated app builds and platform hardware release qualification remain later gates"
+  ]
+}

@@ -1,0 +1,707 @@
+{
+  "bounds" : "{{0, 0}, {768, 1024}}",
+  "accessible" : false,
+  "children" : [
+    {
+      "bounds" : "{{0, 0}, {768, 1024}}",
+      "accessible" : false,
+      "children" : [
+
+      ],
+      "class" : "UIImageView",
+      "traits" : 0,
+      "frame" : "{{0, 0}, {768, 1024}}",
+      "hidden" : true
+    },
+    {
+      "bounds" : "{{0, 0}, {768, 1024}}",
+      "accessible" : false,
+      "id" : "door_camera_local_preview",
+      "children" : [
+
+      ],
+      "class" : "UIImageView",
+      "traits" : 0,
+      "frame" : "{{0, 0}, {768, 1024}}",
+      "hidden" : true
+    },
+    {
+      "text" : "Choose a purpose below, or call directly",
+      "bounds" : "{{0, 0}, {712, 60}}",
+      "accessible" : false,
+      "children" : [
+
+      ],
+      "class" : "UILabel",
+      "traits" : 0,
+      "frame" : "{{28, 634}, {712, 60}}",
+      "hidden" : false
+    },
+    {
+      "content_size" : "{768, 582}",
+      "bounds" : "{{0, 0}, {768, 594}}",
+      "accessible" : false,
+      "id" : "door_secondary_content",
+      "children" : [
+        {
+          "text" : "Direct call Direct call Direct call Direct call",
+          "bounds" : "{{0, 0}, {712, 44}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{28, 122}, {712, 44}}",
+          "hidden" : false
+        },
+        {
+          "text" : " No video from door station ",
+          "bounds" : "{{0, 0}, {712, 44}}",
+          "accessible" : false,
+          "id" : "door_media_source",
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{28, 526}, {712, 44}}",
+          "hidden" : false
+        },
+        {
+          "text" : "",
+          "bounds" : "{{0, 0}, {0, 0}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{0, 0}, {0, 0}}",
+          "hidden" : true
+        },
+        {
+          "content_size" : "{712, 272}",
+          "bounds" : "{{0, 0}, {712, 272}}",
+          "accessible" : false,
+          "children" : [
+            {
+              "id" : "purpose_p_delivery",
+              "touch_up_actions" : [
+                "onPurpose:"
+              ],
+              "frame" : "{{0, 0}, {229.333, 260}}",
+              "accessible" : true,
+              "font_size" : 44,
+              "label" : "Direct call Direct call Direct call Direct call",
+              "title" : "Direct call Direct call Direct call Direct call",
+              "hidden" : false,
+              "children" : [
+                {
+                  "text" : "Direct call Direct call Direct call Direct call",
+                  "bounds" : "{{0, 0}, {211, 208}}",
+                  "accessible" : false,
+                  "children" : [
+
+                  ],
+                  "class" : "UIButtonLabel",
+                  "traits" : 0,
+                  "frame" : "{{9, 44}, {211, 208}}",
+                  "hidden" : false
+                },
+                {
+                  "bounds" : "{{0, 0}, {28, 28}}",
+                  "accessible" : false,
+                  "children" : [
+
+                  ],
+                  "class" : "UIImageView",
+                  "traits" : 0,
+                  "frame" : "{{100.667, 8}, {28, 28}}",
+                  "hidden" : false
+                }
+              ],
+              "bounds" : "{{0, 0}, {229.333, 260}}",
+              "traits" : 1,
+              "class" : "UIButton"
+            },
+            {
+              "id" : "purpose_p_visit",
+              "touch_up_actions" : [
+                "onPurpose:"
+              ],
+              "frame" : "{{241.333, 0}, {229.333, 260}}",
+              "accessible" : true,
+              "font_size" : 44,
+              "label" : "Direct call Direct call Direct call Direct call",
+              "title" : "Direct call Direct call Direct call Direct call",
+              "hidden" : false,
+              "children" : [
+                {
+                  "text" : "Direct call Direct call Direct call Direct call",
+                  "bounds" : "{{0, 0}, {211, 208}}",
+                  "accessible" : false,
+                  "children" : [
+
+                  ],
+                  "class" : "UIButtonLabel",
+                  "traits" : 0,
+                  "frame" : "{{9, 44}, {211, 208}}",
+                  "hidden" : false
+                },
+                {
+                  "bounds" : "{{0, 0}, {28, 28}}",
+                  "accessible" : false,
+                  "children" : [
+
+                  ],
+                  "class" : "UIImageView",
+                  "traits" : 0,
+                  "frame" : "{{100.667, 8}, {28, 28}}",
+                  "hidden" : false
+                }
+              ],
+              "bounds" : "{{0, 0}, {229.333, 260}}",
+              "traits" : 1,
+              "class" : "UIButton"
+            }
+          ],
+          "class" : "UIScrollView",
+          "traits" : 0,
+          "frame" : "{{28, 242}, {712, 272}}",
+          "hidden" : false
+        },
+        {
+          "content_size" : "{712, 52}",
+          "bounds" : "{{0, 0}, {712, 52}}",
+          "accessible" : false,
+          "children" : [
+            {
+              "font_size" : 19,
+              "bounds" : "{{0, 0}, {100, 52}}",
+              "accessible" : true,
+              "id" : "language_en",
+              "children" : [
+                {
+                  "text" : "English",
+                  "bounds" : "{{0, 0}, {69, 23}}",
+                  "accessible" : false,
+                  "children" : [
+
+                  ],
+                  "class" : "UIButtonLabel",
+                  "traits" : 0,
+                  "frame" : "{{15, 14}, {69, 23}}",
+                  "hidden" : false
+                }
+              ],
+              "touch_up_actions" : [
+                "onLanguage:"
+              ],
+              "class" : "UIButton",
+              "traits" : 9,
+              "frame" : "{{0, 0}, {100, 52}}",
+              "hidden" : false,
+              "title" : "English"
+            },
+            {
+              "font_size" : 19,
+              "bounds" : "{{0, 0}, {100, 52}}",
+              "accessible" : true,
+              "id" : "language_ja",
+              "children" : [
+                {
+                  "text" : "日本語",
+                  "bounds" : "{{0, 0}, {58, 23}}",
+                  "accessible" : false,
+                  "children" : [
+
+                  ],
+                  "class" : "UIButtonLabel",
+                  "traits" : 0,
+                  "frame" : "{{21, 14}, {58, 23}}",
+                  "hidden" : false
+                }
+              ],
+              "touch_up_actions" : [
+                "onLanguage:"
+              ],
+              "class" : "UIButton",
+              "traits" : 1,
+              "frame" : "{{112, 0}, {100, 52}}",
+              "hidden" : false,
+              "title" : "日本語"
+            },
+            {
+              "font_size" : 19,
+              "bounds" : "{{0, 0}, {100, 52}}",
+              "accessible" : true,
+              "id" : "language_zh",
+              "children" : [
+                {
+                  "text" : "中文",
+                  "bounds" : "{{0, 0}, {39, 23}}",
+                  "accessible" : false,
+                  "children" : [
+
+                  ],
+                  "class" : "UIButtonLabel",
+                  "traits" : 0,
+                  "frame" : "{{30, 14}, {39, 23}}",
+                  "hidden" : false
+                }
+              ],
+              "touch_up_actions" : [
+                "onLanguage:"
+              ],
+              "class" : "UIButton",
+              "traits" : 1,
+              "frame" : "{{224, 0}, {100, 52}}",
+              "hidden" : false,
+              "title" : "中文"
+            }
+          ],
+          "class" : "UIScrollView",
+          "traits" : 0,
+          "frame" : "{{28, 178}, {712, 52}}",
+          "hidden" : false
+        },
+        {
+          "font_size" : 18,
+          "bounds" : "{{0, 0}, {0, 0}}",
+          "accessible" : true,
+          "id" : "door_pair_banner",
+          "children" : [
+            {
+              "text" : "クラスタ未設定 — タップして追加",
+              "bounds" : "{{0, 0}, {0, 66}}",
+              "accessible" : false,
+              "children" : [
+
+              ],
+              "class" : "UIButtonLabel",
+              "traits" : 0,
+              "frame" : "{{0, -33}, {0, 66}}",
+              "hidden" : false
+            }
+          ],
+          "touch_up_actions" : [
+            "onPairBanner"
+          ],
+          "class" : "UIButton",
+          "traits" : 1,
+          "frame" : "{{0, 0}, {0, 0}}",
+          "hidden" : true,
+          "title" : "クラスタ未設定 — タップして追加"
+        },
+        {
+          "bounds" : "{{0, 0}, {712, 80}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{28, 0}, {712, 80}}",
+          "hidden" : false
+        },
+        {
+          "bounds" : "{{0, 0}, {712, 30}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{28, 80}, {712, 30}}",
+          "hidden" : false
+        },
+        {
+          "text" : "",
+          "bounds" : "{{0, 0}, {0, 0}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{0, 0}, {0, 0}}",
+          "hidden" : true
+        },
+        {
+          "font_size" : 18,
+          "bounds" : "{{0, 0}, {0, 0}}",
+          "accessible" : false,
+          "children" : [
+            {
+              "bounds" : "{{0, 0}, {0, 0}}",
+              "accessible" : false,
+              "children" : [
+
+              ],
+              "class" : "UIButtonLabel",
+              "traits" : 0,
+              "frame" : "{{0, 0}, {0, 0}}",
+              "hidden" : true
+            }
+          ],
+          "touch_up_actions" : [
+            "onToggleNotice"
+          ],
+          "class" : "UIButton",
+          "traits" : 0,
+          "frame" : "{{0, 0}, {0, 0}}",
+          "hidden" : true
+        }
+      ],
+      "class" : "UIScrollView",
+      "traits" : 0,
+      "frame" : "{{0, 28}, {768, 594}}",
+      "hidden" : false
+    },
+    {
+      "id" : "door_call",
+      "touch_up_actions" : [
+        "onCall"
+      ],
+      "frame" : "{{104, 706}, {560, 192}}",
+      "accessible" : true,
+      "font_size" : 54,
+      "label" : "Direct call Direct call Direct call Direct call",
+      "title" : "Direct call Direct call Direct call Direct call",
+      "hidden" : false,
+      "children" : [
+        {
+          "text" : "Direct call Direct call Direct call Direct call",
+          "bounds" : "{{0, 0}, {532, 128}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UIButtonLabel",
+          "traits" : 0,
+          "frame" : "{{14, 32}, {532, 128}}",
+          "hidden" : false
+        }
+      ],
+      "bounds" : "{{0, 0}, {560, 192}}",
+      "traits" : 1,
+      "class" : "UIButton"
+    },
+    {
+      "font_size" : 18,
+      "bounds" : "{{0, 0}, {64, 64}}",
+      "accessible" : false,
+      "id" : "door_admin_corner",
+      "children" : [
+        {
+          "bounds" : "{{0, 0}, {0, 0}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UIButtonLabel",
+          "traits" : 0,
+          "frame" : "{{0, 0}, {0, 0}}",
+          "hidden" : true
+        }
+      ],
+      "touch_up_actions" : [
+        "onAdminCorner"
+      ],
+      "class" : "UIButton",
+      "traits" : 0,
+      "frame" : "{{704, 0}, {64, 64}}",
+      "hidden" : false
+    },
+    {
+      "text" : "T35 isolated UIKit · core vISOLATED-UI-BOUNDARY · app v1.0.0 · 80% ⚡",
+      "bounds" : "{{0, 0}, {712, 18}}",
+      "accessible" : false,
+      "children" : [
+
+      ],
+      "class" : "UILabel",
+      "traits" : 0,
+      "frame" : "{{28, 978}, {712, 18}}",
+      "hidden" : false
+    },
+    {
+      "bounds" : "{{0, 0}, {380, 56}}",
+      "accessible" : true,
+      "id" : "sos_slider",
+      "label" : "Start emergency SOS",
+      "children" : [
+        {
+          "bounds" : "{{0, 0}, {380, 56}}",
+          "accessible" : false,
+          "children" : [
+            {
+              "bounds" : "{{0, 0}, {28, 56}}",
+              "accessible" : false,
+              "children" : [
+
+              ],
+              "class" : "UIView",
+              "traits" : 0,
+              "frame" : "{{0, 0}, {28, 56}}",
+              "hidden" : false
+            },
+            {
+              "bounds" : "{{0, 0}, {46, 46}}",
+              "accessible" : false,
+              "children" : [
+                {
+                  "bounds" : "{{0, 0}, {46, 46}}",
+                  "accessible" : false,
+                  "children" : [
+
+                  ],
+                  "class" : "UIImageView",
+                  "traits" : 0,
+                  "frame" : "{{0, 0}, {46, 46}}",
+                  "hidden" : false
+                }
+              ],
+              "class" : "UIView",
+              "traits" : 0,
+              "frame" : "{{5, 5}, {46, 46}}",
+              "hidden" : false
+            },
+            {
+              "text" : "Slide for SOS",
+              "bounds" : "{{0, 0}, {308, 23}}",
+              "accessible" : false,
+              "children" : [
+
+              ],
+              "class" : "UILabel",
+              "traits" : 0,
+              "frame" : "{{59, 7.5}, {308, 23}}",
+              "hidden" : false
+            },
+            {
+              "text" : "Alarm after 2s",
+              "bounds" : "{{0, 0}, {308, 18}}",
+              "accessible" : false,
+              "children" : [
+
+              ],
+              "class" : "UILabel",
+              "traits" : 0,
+              "frame" : "{{59, 30.5}, {308, 18}}",
+              "hidden" : false
+            }
+          ],
+          "class" : "UIView",
+          "traits" : 0,
+          "frame" : "{{0, 0}, {380, 56}}",
+          "hidden" : false
+        },
+        {
+          "bounds" : "{{0, 0}, {364, 28}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{8, 4}, {364, 28}}",
+          "hidden" : true
+        },
+        {
+          "bounds" : "{{0, 0}, {364, 24}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{8, 28}, {364, 24}}",
+          "hidden" : true
+        },
+        {
+          "font_size" : 18,
+          "bounds" : "{{0, 0}, {380, 56}}",
+          "accessible" : true,
+          "id" : "sos_accessible_action",
+          "label" : "Start emergency SOS",
+          "children" : [
+            {
+              "bounds" : "{{0, 0}, {0, 0}}",
+              "accessible" : false,
+              "children" : [
+
+              ],
+              "class" : "UIButtonLabel",
+              "traits" : 0,
+              "frame" : "{{0, 0}, {0, 0}}",
+              "hidden" : true
+            }
+          ],
+          "touch_up_actions" : [
+            "onAccessibleButton"
+          ],
+          "class" : "UIButton",
+          "traits" : 1,
+          "frame" : "{{0, 0}, {380, 56}}",
+          "hidden" : true
+        }
+      ],
+      "class" : "DBSosSlider",
+      "traits" : 1,
+      "frame" : "{{194, 910}, {380, 56}}",
+      "hidden" : false
+    },
+    {
+      "bounds" : "{{0, 0}, {712, 110}}",
+      "accessible" : false,
+      "children" : [
+        {
+          "bounds" : "{{0, 0}, {688, 94}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{12, 8}, {688, 94}}",
+          "hidden" : false
+        }
+      ],
+      "class" : "UIView",
+      "traits" : 0,
+      "frame" : "{{28, 28}, {712, 110}}",
+      "hidden" : true
+    },
+    {
+      "bounds" : "{{0, 0}, {768, 1024}}",
+      "accessible" : false,
+      "children" : [
+        {
+          "text" : "EMERGENCY",
+          "bounds" : "{{0, 0}, {712, 120}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{28, 28}, {712, 120}}",
+          "hidden" : false
+        },
+        {
+          "text" : "Emergency mode is active",
+          "bounds" : "{{0, 0}, {712, 728}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{28, 160}, {712, 728}}",
+          "hidden" : false
+        },
+        {
+          "font_size" : 24,
+          "bounds" : "{{0, 0}, {560, 96}}",
+          "accessible" : true,
+          "id" : "door_sos_clear",
+          "children" : [
+            {
+              "text" : "Cancel alarm",
+              "bounds" : "{{0, 0}, {150, 29}}",
+              "accessible" : false,
+              "children" : [
+
+              ],
+              "class" : "UIButtonLabel",
+              "traits" : 0,
+              "frame" : "{{205, 33}, {150, 29}}",
+              "hidden" : false
+            }
+          ],
+          "touch_up_actions" : [
+            "onEmergencyCancel"
+          ],
+          "class" : "UIButton",
+          "traits" : 1,
+          "frame" : "{{104, 900}, {560, 96}}",
+          "hidden" : false,
+          "title" : "Cancel alarm"
+        }
+      ],
+      "class" : "UIView",
+      "traits" : 0,
+      "frame" : "{{0, 0}, {768, 1024}}",
+      "hidden" : true
+    },
+    {
+      "bounds" : "{{0, 0}, {768, 1024}}",
+      "accessible" : false,
+      "children" : [
+        {
+          "bounds" : "{{0, 0}, {110, 110}}",
+          "accessible" : false,
+          "children" : [
+
+          ],
+          "class" : "UIView",
+          "traits" : 0,
+          "frame" : "{{329, 56}, {110, 110}}",
+          "hidden" : false
+        },
+        {
+          "text" : "Calling…",
+          "bounds" : "{{0, 0}, {712, 508}}",
+          "accessible" : false,
+          "id" : "door_call_status",
+          "children" : [
+
+          ],
+          "class" : "UILabel",
+          "traits" : 0,
+          "frame" : "{{28, 186}, {712, 508}}",
+          "hidden" : false
+        },
+        {
+          "id" : "door_cancel_call",
+          "touch_up_actions" : [
+            "onCancel"
+          ],
+          "frame" : "{{104, 706}, {560, 192}}",
+          "accessible" : true,
+          "font_size" : 56,
+          "label" : "Cancel",
+          "title" : "Cancel",
+          "hidden" : false,
+          "children" : [
+            {
+              "text" : "Cancel",
+              "bounds" : "{{0, 0}, {184, 66}}",
+              "accessible" : false,
+              "children" : [
+
+              ],
+              "class" : "UIButtonLabel",
+              "traits" : 0,
+              "frame" : "{{188, 63}, {184, 66}}",
+              "hidden" : false
+            }
+          ],
+          "bounds" : "{{0, 0}, {560, 192}}",
+          "traits" : 1,
+          "class" : "UIButton"
+        }
+      ],
+      "class" : "UIView",
+      "traits" : 0,
+      "frame" : "{{0, 0}, {768, 1024}}",
+      "hidden" : false
+    }
+  ],
+  "class" : "DBDoorScreen",
+  "traits" : 0,
+  "frame" : "{{0, 0}, {768, 1024}}",
+  "hidden" : false
+}

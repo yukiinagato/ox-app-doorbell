@@ -1,0 +1,44 @@
+{
+  "inputs": [
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/MainActivity.kt",
+      "sha256": "aa6db01e9638298e8981fb747c9fb1134c952f4cefdbbb393ae38ce7d95c5770"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DashboardView.kt",
+      "sha256": "e6b18c308e4f48e61a436642deb6ac51d448b217d2a7a4dce0573e6682467472"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/VisitorLayout.kt",
+      "sha256": "120af665e9e5f95590f915cf0011a5648a51ecaa667368488239e863fff2fe16"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/VisitorActionLatch.kt",
+      "sha256": "6e57f3d46993877cfb9ebf524f6b7fd6f5d54fa42d7c2a02c1715e02924ea88b"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/SosSlideView.kt",
+      "sha256": "8ca438cbefa264f1b37beffd11ac05d0d4e858ff1ab38c43da8cc5dbfa4d751b"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/SosSlideState.kt",
+      "sha256": "b30c2c5c5b7d82932ba24bb63162e118a7298b9a39792ec6815e54a7e48ababb"
+    },
+    {
+      "path": "android/app/src/main/res/layout/activity_main.xml",
+      "sha256": "619098a28da98a1175ebd1dd60476db284cccbbf16b6d9273d5582cbffe9959d"
+    },
+    {
+      "path": "android/app/build.gradle.kts",
+      "sha256": "bea48363950113b41a08a6d000a12fb39c696a641be58fe032e3dac45f4acfd1"
+    },
+    {
+      "path": "android/app/src/test/java/jp/ox/doorbell/VisitorActionLatchTest.kt",
+      "sha256": "808d3c1d1a414bfd7175586f9bd74d06ca4a1406f25bd2c4a3be85406324a05b"
+    },
+    {
+      "path": "android/app/src/androidTest/java/jp/ox/doorbell/VisitorUiInstrumentation.kt",
+      "sha256": "7f30f9ff200c1d090821693c1739d17aed4cf87c41ebc4a1d66c68056c9060f7"
+    }
+  ]
+}

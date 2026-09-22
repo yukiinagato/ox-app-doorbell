@@ -1,0 +1,39 @@
+{
+  "scope": "production_test",
+  "cases": [
+    {
+      "id": "T14-01",
+      "status": "PASS",
+      "red": "before-T14-01.log",
+      "green": "call_ua_generation.log"
+    },
+    {
+      "id": "T14-02",
+      "status": "PASS",
+      "red": "before-T14-02.log",
+      "green": "call_ua_generation.log"
+    },
+    {
+      "id": "T14-03",
+      "status": "PASS",
+      "red": "before-T14-03.log",
+      "green": "call_ua_generation.log"
+    },
+    {
+      "id": "T14-04",
+      "status": "PASS",
+      "red": "before-T14-04.log",
+      "green": "call_ua_generation.log"
+    }
+  ],
+  "core_red": "core-red.log",
+  "core_green": "core-panel.log",
+  "core_result": "6 cases, 477 assertions PASS",
+  "web_result": "18 scripts PASS",
+  "source_manifest": "after-source.json",
+  "limitations": [
+    "JsSIP event boundaries are controlled test doubles; production page lifecycle and generation handlers execute unchanged.",
+    "Core host uses SIP stub, not actual WebRTC/PBX/media qualification.",
+    "Final application embedding, signing and target runtime qualification belong to integrated candidate gates."
+  ]
+}

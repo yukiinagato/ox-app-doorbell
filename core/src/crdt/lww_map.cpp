@@ -409,7 +409,7 @@ std::string LwwMap::materializeJson(const std::string& prefix) const {
   for (auto it = map_.lower_bound(prefix); it != map_.end(); ++it) {
     if (it->first.compare(0, prefix.size(), prefix) != 0) break;
     const LwwEntry& e = it->second;
-    if (e.deleted) continue;
+    if (e.deleted || e.key == "_config_changes" || e.key.rfind("_config_changes.", 0) == 0) continue;
     bool hidden = false;
     for (size_t dot = e.key.find('.'); dot != std::string::npos;
          dot = e.key.find('.', dot + 1)) {

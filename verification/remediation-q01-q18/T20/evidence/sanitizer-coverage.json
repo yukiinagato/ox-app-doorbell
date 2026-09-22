@@ -1,0 +1,37 @@
+{
+  "scope": "Swift/Objective-C Xcode app/test targets only; CMake Core static archives not instrumented",
+  "lanes": [
+    {
+      "lane": "tsan",
+      "compiler_flag": "-sanitize\\=thread",
+      "compiler_flag_log_lines": [
+        664,
+        713,
+        721
+      ],
+      "runtime_dependencies": [
+        "@rpath/libclang_rt.tsan_iossim_dynamic.dylib (compatibility version 0.0.0, current version 0.0.0)"
+      ],
+      "native_archive_flags": [
+        "CMAKE_C_FLAGS:STRING=",
+        "CMAKE_CXX_FLAGS:STRING="
+      ]
+    },
+    {
+      "lane": "asan",
+      "compiler_flag": "-sanitize\\=address",
+      "compiler_flag_log_lines": [
+        604,
+        652,
+        660
+      ],
+      "runtime_dependencies": [
+        "@rpath/libclang_rt.asan_iossim_dynamic.dylib (compatibility version 0.0.0, current version 0.0.0)"
+      ],
+      "native_archive_flags": [
+        "CMAKE_C_FLAGS:STRING=",
+        "CMAKE_CXX_FLAGS:STRING="
+      ]
+    }
+  ]
+}

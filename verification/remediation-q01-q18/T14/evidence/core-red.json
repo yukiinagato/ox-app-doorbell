@@ -1,0 +1,8 @@
+{
+  "command": [
+    "build/remediation-t14-20260922/host/doorbell_tests",
+    "--test-case=panel API: call-frame / peer-frame.jpg / call-info web call contract"
+  ],
+  "exit_code": 1,
+  "recorded_at": "2026-09-22T14:56:22.885752+00:00"
+}

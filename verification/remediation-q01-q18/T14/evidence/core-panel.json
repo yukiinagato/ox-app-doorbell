@@ -1,0 +1,9 @@
+{
+  "command": [
+    "build/remediation-t14-20260922/host/doorbell_tests",
+    "--test-case=panel*"
+  ],
+  "exit_code": 0,
+  "recorded_at": "2026-09-22T14:59:40.705648+00:00",
+  "binary_sha256": "d3572efd21eaa5ccb414eb44726d442a7f6117091f70a8d276fb5789295b9210"
+}

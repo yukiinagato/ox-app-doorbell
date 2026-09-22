@@ -1,0 +1,41 @@
+{
+  "started_at": "2026-09-22T17:25:56.173320+00:00",
+  "command": [
+    "./gradlew",
+    "--no-daemon",
+    "--max-workers=4",
+    "-PdoorbellTier=modern",
+    "assembleModernDebug",
+    "assembleModernDebugAndroidTest",
+    "testModernDebugUnitTest",
+    "lintModernDebug"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r7/android",
+  "java_home": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+  "ndk": "27.1.12297006",
+  "source_manifest_sha256": "bec71ff30ef893027577a1afdde61c4e4fc15a21e60e4b4a8267ffed44fcb199",
+  "sip_backend": "real_pjsip",
+  "scope": "Cross compile, host JVM unit tests and lint; UI runtime recorded separately.",
+  "exit_code": 0,
+  "finished_at": "2026-09-22T17:27:35.659193+00:00",
+  "platform": "macOS arm64 host",
+  "target_min_sdk": 21,
+  "app_version": "0.3.21+b26e0d3",
+  "build_number": "22",
+  "signing_state": "Android debug certificate; signature verified",
+  "artifact_sha256": "72410049a50fcff0a9bb28b2c67047aeb2684e3744259123d897014ea31f0bfa",
+  "observed_result": {
+    "unit_tests": {
+      "tests": 386,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "apk_assemble": "PASS",
+    "lint": "PASS"
+  },
+  "limitations": [
+    "API35 arm64 UI qualification is separate; no physical Android hardware or API19 UI runtime was exercised.",
+    "Core is the frozen T12 green source with an explicit int64_t notice-expiry cast; parent owns final integration with subsequent Core work."
+  ]
+}

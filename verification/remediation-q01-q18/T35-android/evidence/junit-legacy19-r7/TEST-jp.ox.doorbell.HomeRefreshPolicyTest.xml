@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.HomeRefreshPolicyTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.001">
+  <properties/>
+  <testcase name="theFirstRefreshRunsImmediately" classname="jp.ox.doorbell.HomeRefreshPolicyTest" time="0.001"/>
+  <testcase name="theWindowIsConfigurable" classname="jp.ox.doorbell.HomeRefreshPolicyTest" time="0.0"/>
+  <testcase name="aReadingThatWentBackwardsIsDue" classname="jp.ox.doorbell.HomeRefreshPolicyTest" time="0.0"/>
+  <testcase name="aRefreshAfterTheWindowRunsImmediately" classname="jp.ox.doorbell.HomeRefreshPolicyTest" time="0.0"/>
+  <testcase name="aRefreshInsideTheWindowWaitsForTheRestOfIt" classname="jp.ox.doorbell.HomeRefreshPolicyTest" time="0.0"/>
+  <testcase name="aBurstOfEventsAsksForOneRefreshAtTheSameInstant" classname="jp.ox.doorbell.HomeRefreshPolicyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,201 @@
+{
+  "recorded_at": "2026-09-22T18:01:07.307818+00:00",
+  "status": "IMPLEMENTED_PENDING_WPF_RUNTIME",
+  "source_manifest": "source-candidate-r2.json",
+  "source_manifest_sha256": "7bedd6a1e5ace48ccb04c644a2ea5598b70de03f176985e0d09ce72092fc782e",
+  "report_sha256": "689913de7d54f9b46e795038ff00a82fc08d95eb857a02e513abd911f3d8f431",
+  "owned_source_delta": "candidate-r1.patch",
+  "owned_source_delta_sha256": "e4594b43e890539833f5588b14a6246bfa0010207a79b36b3618581ca156c82b",
+  "host_validation": {
+    "production_guard_assertions": 15,
+    "source_contract_tests": 70,
+    "api_reference_compile": "PASS_COMPILE_ONLY",
+    "english": "PASS",
+    "generated_i18n": "PASS",
+    "whitespace": "PASS"
+  },
+  "acceptance": [
+    {
+      "id": "T35-01",
+      "status": "NOT_RUN",
+      "scope": "Actual Windows WPF visitor UI",
+      "reason": "No WPF execution environment accessible; host source/guard checks do not qualify this UI acceptance."
+    },
+    {
+      "id": "T35-02",
+      "status": "NOT_RUN",
+      "scope": "Actual Windows WPF visitor UI",
+      "reason": "No WPF execution environment accessible; host source/guard checks do not qualify this UI acceptance."
+    },
+    {
+      "id": "T35-03",
+      "status": "NOT_RUN",
+      "scope": "Actual Windows WPF visitor UI",
+      "reason": "No WPF execution environment accessible; host source/guard checks do not qualify this UI acceptance."
+    },
+    {
+      "id": "T35-04",
+      "status": "NOT_RUN",
+      "scope": "Actual Windows WPF visitor UI",
+      "reason": "No WPF execution environment accessible; host source/guard checks do not qualify this UI acceptance."
+    }
+  ],
+  "hardware_actions": {
+    "deployments": 0,
+    "door_unlocks": 0,
+    "real_sos": 0,
+    "device_configuration_changes": 0
+  },
+  "limitations": [
+    "No real WPF baseline or final screenshot/accessibility tree",
+    "No XAML compiler or full WPF application build",
+    "No Windows native SIP artifact qualification",
+    "No physical/Windows runtime action dispatch or layout assertions"
+  ],
+  "artifacts": [
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/artifacts-r2.json",
+      "sha256": "df900226c916937a15753eda4c89c26864b584cc4a1050cb24fc3a95c587f0c5"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/contracts-development-r1.log",
+      "sha256": "cedc9ae50e07a2f8b27ac0b4a4a999bb101f55d6f760afc4d2f9da0e9283b89d"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/contracts-development-r2.log",
+      "sha256": "604a398cf63f9dfb742ce79761297c70d2ed0d3a8428589c779958a774689808"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/contracts-development-r3.log",
+      "sha256": "604a398cf63f9dfb742ce79761297c70d2ed0d3a8428589c779958a774689808"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/contracts-development-r4.log",
+      "sha256": "604a398cf63f9dfb742ce79761297c70d2ed0d3a8428589c779958a774689808"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/contracts-r1-fixture-note.json",
+      "sha256": "25deae422a82c5db93354361c0022320b55f21074a3c8e1030e3afe18f5f9ab9"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/contracts-r1.json",
+      "sha256": "6addeecdfaed29b84e35090ba21c8d812314ef14e3b274fdee6c99e625d744c3"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/contracts-r1.log",
+      "sha256": "0b5cbabaa35e8d33be726beb155c383c353e6338663a329538414e5743ee9e03"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/contracts-r2.json",
+      "sha256": "2dc3684bc021aa596fbe227474f1b3bddbb9e758abd6187e9acf7a08e8339fd4"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/contracts-r2.log",
+      "sha256": "c854732d6a0f8fbe8218e5063fa5aabd91a50a0a462950c459b01c4b74917998"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/english-development.log",
+      "sha256": "e31b139fc62aa187694c8103481b6e9e3fd40190149c2243857640caccdac6a4"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/english-r2.json",
+      "sha256": "f5c06c57a23f24c716263050ae5fcd33ed8b3ec833dd7aecc835a80653f2885e"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/english-r2.log",
+      "sha256": "e31b139fc62aa187694c8103481b6e9e3fd40190149c2243857640caccdac6a4"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/environment-before.json",
+      "sha256": "f3d6fcb1661f73e4045103cd46abc03e5f812a8ef43521a08e2881bf3583738e"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/guard-compile-r1.json",
+      "sha256": "edc1ba036f3bc27016f92bf18f7304e8025321f9215777c3af1736de2594fae6"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/guard-compile-r1.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/guard-compile-r2.json",
+      "sha256": "a57c763545cdf045aafb94996ca4fdbddddac03bca0c0c603cf28f1c5c88026c"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/guard-compile-r2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/guard-runtime-r1.json",
+      "sha256": "fdd3d91f04f7e12a1d1a0f31d32e45043ba77bbe8ca0d0500616fa8249680750"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/guard-runtime-r1.log",
+      "sha256": "d26f5e48a57584e4bbbe1f8113efaca47468ee6ed5576b55ed4c80c35f6c0e7a"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/guard-runtime-r2.json",
+      "sha256": "826b23de4143437ffaa299bc6c4393342ad5566c1edcf1b6088e18b2f67c0b07"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/guard-runtime-r2.log",
+      "sha256": "d26f5e48a57584e4bbbe1f8113efaca47468ee6ed5576b55ed4c80c35f6c0e7a"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/i18n-r2.json",
+      "sha256": "b114911c9f01200cf965ed55013722178b119b10a172ca70a509c83337e9ab3f"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/i18n-r2.log",
+      "sha256": "260f741e918f6a280e7b455528427e841f7352cc53f0c199e5703ee0aa0c69bf"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/mac-ui-environment.json",
+      "sha256": "061a5b0d84f7f1e4f9959a774d1f25c6a076e7d6e77e52da12afced56ad188d2"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/managed-api-compile-development.json",
+      "sha256": "a94084b2c4f6c9d528026fd599376b39bc3a062d6f3370b93db56e7f47684fb1"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/managed-api-compile-development.log",
+      "sha256": "e36951c4a8a52fe941c2a5fdeb80b8317bff908b4e2c8edc453ae94d6f677ccd"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/managed-api-compile-r1.json",
+      "sha256": "543b1a6845ea4eff84a229202c304e71bbc9d529c925ff19c10f9ae6960db80f"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/managed-api-compile-r1.log",
+      "sha256": "c00808d24c79b5f8a3230ee5213eefb4a6ba6d0703044ba7d7f8ce7891693e4d"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/managed-api-compile-r2.json",
+      "sha256": "a56dea64cd34917ca367f7e3f8589baca0da32a0718b839a5c3de605600e2fc2"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/managed-api-compile-r2.log",
+      "sha256": "40d5b43e97da8080dc12f9eb66a6976c46015d303566071b69b82418accaf58c"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/reference-package.json",
+      "sha256": "f56958eb43326857d3e02fe61867e7d3e8b8ec92c698c9853f7837d117bcfa1b"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/source-match-r2.json",
+      "sha256": "eed06fe91b604c4ec3cdbe414bee00ba35e8d97e42650c67507f10261389fff5"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/source-only-baseline-tree.json",
+      "sha256": "1b7e6120220e06a328de863714c54acfa67a81e9041745ff7513772398d95de9"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/whitespace-r2.json",
+      "sha256": "c90956b70be3db9093996808749b6f7d1a7bd3f8e508f4d7e5a02a74dcc35458"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-windows/evidence/whitespace-r2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ]
+}

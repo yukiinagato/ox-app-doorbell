@@ -1,0 +1,50 @@
+09-23 00:50:00 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:24048
+09-23 00:50:00 I [node] created the missing door entry doors.d_front for this door station
+09-23 00:50:00 I [httpd] listening on 24109,[::]:24109
+09-23 00:50:00 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:50:00 I [node] node d39bb353 (admin-test) started
+09-23 00:50:00 I [node] initialized the cluster administrator password
+09-23 00:50:02 E [node] refused unsafe programmatic config write: media_sources (plaintext secret field media_sources.front.streams.h264.authorization is forbidden; store a secret_ref instead)
+09-23 00:50:02 E [node] refused unsafe programmatic config write: media_sources (credentials in URLs are forbidden at media_sources.front.streams.snapshot.url; use secret_ref)
+09-23 00:50:02 E [node] refused unsafe programmatic config write: custom.integration (plaintext secret field custom.integration.foo_token is forbidden; store a secret_ref instead)
+09-23 00:50:02 E [node] refused unsafe programmatic config write: custom.integration.credential_ref (invalid secret reference at custom.integration.credential_ref)
+09-23 00:50:02 E [node] refused unsafe programmatic config write: custom.integration.basic_auth (plaintext secret field custom.integration.basic_auth is forbidden; store a secret_ref instead)
+09-23 00:50:02 E [node] refused unsafe programmatic config write: custom.fragment (credentials in URLs are forbidden at custom.fragment; use secret_ref)
+09-23 00:50:02 E [node] refused unsafe programmatic config write: devices (the devices container is read-only; write one device or semantic element leaf)
+09-23 00:50:02 E [node] refused unsafe programmatic config write: web_push.subscriptions.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa (Web Push subscriptions require a sealed schema version 2 record)
+09-23 00:50:04 I [httpd] stopped
+09-23 00:50:04 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:26291
+09-23 00:50:04 I [httpd] listening on 31871,[::]:31871
+09-23 00:50:04 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:50:04 I [node] node 8e36bc82 (panel-rotation-durability) started
+09-23 00:50:04 I [node] initialized the cluster administrator password
+09-23 00:50:04 E [node] config persistence failed; retaining the last-known-good state
+09-23 00:50:06 I [httpd] stopped
+09-23 00:50:06 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:26383
+09-23 00:50:06 I [httpd] listening on 25612,[::]:25612
+09-23 00:50:06 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:50:06 I [node] node 42869f41 (panel-primary) started
+09-23 00:50:06 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:20260
+09-23 00:50:06 I [httpd] listening on 29715,[::]:29715
+09-23 00:50:06 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:50:06 I [node] node 638712d7 (panel-failover) started
+09-23 00:50:06 I [node] initialized the cluster administrator password
+09-23 00:50:06 I [node] initialized the cluster administrator password
+09-23 00:50:09 I [httpd] stopped
+09-23 00:50:11 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/core/tests/test_admin_api.cpp:1010:
+TEST CASE:  admin API: panel sessions follow replicated rotation and per-node provisioning
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/core/tests/test_admin_api.cpp:1076: ERROR: CHECK( adminReq(http_a, "POST", "/api/config", R"({"key":"panel.token_generation","value":"\"invalid\""})", admin_a) .find("HTTP/1.1 400") == 0 ) is NOT correct!
+  values: CHECK( 18446744073709551615 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/core/tests/test_admin_api.cpp:1098: FATAL ERROR: REQUIRE( first_rotation ) is NOT correct!
+  values: REQUIRE( 0 )
+
+===============================================================================
+[doctest] test cases:   3 |   2 passed | 1 failed | 449 skipped
+[doctest] assertions: 464 | 462 passed | 2 failed |
+[doctest] Status: FAILURE!

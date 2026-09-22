@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "89912ecd82ee0d131eba37d211ce5255a5b2879626695868253469f6f015fb75",
+  "task_id": "T22",
+  "test_id": "existing-contracts",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T22/source-final.json",
+  "source_manifest_sha256": "f32240bb70b7c29c606bf5f2fafac9924a26e5cc47081ed65ba3001f1c914058",
+  "command": [
+    "python3",
+    "win/tests/test_windows_contracts.py"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:06:11.628852+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T22/evidence/existing-contracts.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:06:11.753044+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

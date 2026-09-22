@@ -1,0 +1,9 @@
+
+application_registered=true
+{
+  "CFBundleVersion" : "6",
+  "CFBundleShortVersionString" : "1.0.0",
+  "CFBundleIdentifier" : "jp.ox.doorbell.t35modernuitest",
+  "MinimumOSVersion" : "9.0"
+}
+Launched jp.ox.doorbell.t35modernuitest

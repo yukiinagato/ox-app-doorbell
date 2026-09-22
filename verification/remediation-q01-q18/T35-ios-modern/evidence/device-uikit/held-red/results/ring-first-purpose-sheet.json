@@ -1,0 +1,334 @@
+[
+  {
+    "class" : "UIView",
+    "hidden" : false,
+    "identifier" : "purpose_choice_screen",
+    "traits" : 0,
+    "frame" : "{{0, 0}, {1024, 768}}",
+    "accessibility_element" : false,
+    "alpha" : 1
+  },
+  {
+    "traits" : 0,
+    "accessibility_element" : false,
+    "content_size" : "{952, 419.5}",
+    "hidden" : false,
+    "class" : "UIScrollView",
+    "alpha" : 1,
+    "frame" : "{{36, 16}, {952, 644}}"
+  },
+  {
+    "text" : "Please choose your purpose",
+    "accessibility_element" : false,
+    "font_size" : 38,
+    "frame" : "{{36, 16}, {952, 45.5}}",
+    "hidden" : false,
+    "alpha" : 1,
+    "traits" : 65536,
+    "class" : "UILabel"
+  },
+  {
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "text" : "Calling now. Let us know what brings you here.",
+    "class" : "UILabel",
+    "font_size" : 20,
+    "traits" : 0,
+    "frame" : "{{36, 71.5}, {952, 24}}",
+    "hidden" : false
+  },
+  {
+    "accessibility_element" : true,
+    "enabled" : true,
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "hidden" : false,
+    "frame" : "{{36, 119.5}, {306.66666666666669, 150}}",
+    "traits" : 1,
+    "title" : "",
+    "identifier" : "purpose_choice_p_visit",
+    "accessibility_label" : "Visit",
+    "alpha" : 1
+  },
+  {
+    "alpha" : 1,
+    "traits" : 0,
+    "hidden" : false,
+    "accessibility_element" : false,
+    "frame" : "{{58, 139.5}, {56, 56}}",
+    "class" : "UIView"
+  },
+  {
+    "frame" : "{{70, 151.5}, {32, 32}}",
+    "hidden" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "class" : "UIImageView",
+    "accessibility_element" : false
+  },
+  {
+    "accessibility_element" : false,
+    "frame" : "{{58, 205.5}, {262.66666666666669, 48}}",
+    "alpha" : 1,
+    "traits" : 0,
+    "text" : "Visit",
+    "font_size" : 26,
+    "hidden" : false,
+    "class" : "UILabel"
+  },
+  {
+    "traits" : 1,
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "title" : "",
+    "alpha" : 1,
+    "hidden" : false,
+    "frame" : "{{358.66666666666663, 119.5}, {306.66666666666663, 150}}",
+    "identifier" : "purpose_choice_p_delivery",
+    "enabled" : true,
+    "accessibility_element" : true,
+    "accessibility_label" : "Delivery"
+  },
+  {
+    "hidden" : false,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "class" : "UIView",
+    "alpha" : 1,
+    "frame" : "{{380.66666666666663, 139.5}, {56, 56}}"
+  },
+  {
+    "hidden" : false,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "class" : "UIImageView",
+    "frame" : "{{392.66666666666663, 151.5}, {32, 32}}"
+  },
+  {
+    "font_size" : 26,
+    "text" : "Delivery",
+    "accessibility_element" : false,
+    "class" : "UILabel",
+    "hidden" : false,
+    "alpha" : 1,
+    "frame" : "{{380.66666666666663, 205.5}, {262.66666666666663, 48}}",
+    "traits" : 0
+  },
+  {
+    "accessibility_element" : true,
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "hidden" : false,
+    "enabled" : true,
+    "frame" : "{{681.33333333333337, 119.5}, {306.66666666666663, 150}}",
+    "title" : "",
+    "traits" : 1,
+    "accessibility_label" : "Mail",
+    "alpha" : 1,
+    "identifier" : "purpose_choice_p_mail"
+  },
+  {
+    "class" : "UIView",
+    "frame" : "{{703.33333333333337, 139.5}, {56, 56}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "hidden" : false,
+    "alpha" : 1
+  },
+  {
+    "frame" : "{{715.33333333333337, 151.5}, {32, 32}}",
+    "alpha" : 1,
+    "class" : "UIImageView",
+    "traits" : 0,
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "font_size" : 26,
+    "hidden" : false,
+    "text" : "Mail",
+    "frame" : "{{703.33333333333337, 205.5}, {262.66666666666663, 48}}",
+    "class" : "UILabel"
+  },
+  {
+    "frame" : "{{36, 285.5}, {306.66666666666669, 150}}",
+    "identifier" : "purpose_choice_p_sales",
+    "traits" : 1,
+    "accessibility_label" : "Sales",
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "hidden" : false,
+    "alpha" : 1,
+    "enabled" : true,
+    "accessibility_element" : true,
+    "title" : ""
+  },
+  {
+    "accessibility_element" : false,
+    "frame" : "{{58, 305.5}, {56, 56}}",
+    "alpha" : 1,
+    "traits" : 0,
+    "class" : "UIView",
+    "hidden" : false
+  },
+  {
+    "frame" : "{{70, 317.5}, {32, 32}}",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "class" : "UIImageView",
+    "hidden" : false
+  },
+  {
+    "accessibility_element" : false,
+    "text" : "Sales",
+    "frame" : "{{58, 371.5}, {262.66666666666669, 48}}",
+    "traits" : 0,
+    "alpha" : 1,
+    "font_size" : 26,
+    "class" : "UILabel",
+    "hidden" : false
+  },
+  {
+    "accessibility_element" : true,
+    "hidden" : false,
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "title" : "",
+    "traits" : 1,
+    "enabled" : true,
+    "frame" : "{{358.66666666666663, 285.5}, {306.66666666666663, 150}}",
+    "alpha" : 1,
+    "identifier" : "purpose_choice_p_work",
+    "accessibility_label" : "Utility"
+  },
+  {
+    "traits" : 0,
+    "frame" : "{{380.66666666666663, 305.5}, {56, 56}}",
+    "hidden" : false,
+    "alpha" : 1,
+    "class" : "UIView",
+    "accessibility_element" : false
+  },
+  {
+    "class" : "UIImageView",
+    "accessibility_element" : false,
+    "frame" : "{{392.66666666666663, 317.5}, {32, 32}}",
+    "traits" : 0,
+    "alpha" : 1,
+    "hidden" : false
+  },
+  {
+    "alpha" : 1,
+    "traits" : 0,
+    "hidden" : false,
+    "text" : "Utility",
+    "class" : "UILabel",
+    "accessibility_element" : false,
+    "font_size" : 26,
+    "frame" : "{{380.66666666666663, 371.5}, {262.66666666666663, 48}}"
+  },
+  {
+    "title" : "",
+    "identifier" : "purpose_choice_p_other",
+    "alpha" : 1,
+    "accessibility_label" : "Other",
+    "frame" : "{{681.33333333333337, 285.5}, {306.66666666666663, 150}}",
+    "traits" : 1,
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "hidden" : false,
+    "accessibility_element" : true,
+    "enabled" : true
+  },
+  {
+    "traits" : 0,
+    "accessibility_element" : false,
+    "frame" : "{{703.33333333333337, 305.5}, {56, 56}}",
+    "class" : "UIView",
+    "alpha" : 1,
+    "hidden" : false
+  },
+  {
+    "traits" : 0,
+    "accessibility_element" : false,
+    "hidden" : false,
+    "alpha" : 1,
+    "frame" : "{{715.33333333333337, 317.5}, {32, 32}}",
+    "class" : "UIImageView"
+  },
+  {
+    "accessibility_element" : false,
+    "text" : "Other",
+    "hidden" : false,
+    "class" : "UILabel",
+    "frame" : "{{703.33333333333337, 371.5}, {262.66666666666663, 48}}",
+    "font_size" : 26,
+    "traits" : 0,
+    "alpha" : 1
+  },
+  {
+    "class" : "UIImageView",
+    "alpha" : 0,
+    "traits" : 0,
+    "frame" : "{{982.5, -23}, {2.5, 36}}",
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "alpha" : 0,
+    "class" : "UIImageView",
+    "frame" : "{{-3, 654.5}, {36, 2.5}}",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0
+  },
+  {
+    "hidden" : false,
+    "alpha" : 1,
+    "frame" : "{{36, 676}, {952, 68}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "class" : "UIView"
+  },
+  {
+    "title" : "Cancel call",
+    "enabled" : true,
+    "frame" : "{{36, 676}, {468, 68}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "hidden" : false,
+    "alpha" : 1,
+    "class" : "UIButton",
+    "identifier" : "purpose_choice_cancel"
+  },
+  {
+    "alpha" : 1,
+    "class" : "UIButtonLabel",
+    "font_size" : 22,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "hidden" : false,
+    "text" : "Cancel call",
+    "frame" : "{{215.5, 697}, {109.5, 26.5}}"
+  },
+  {
+    "hidden" : false,
+    "identifier" : "purpose_choice_skip",
+    "title" : "Skip purpose",
+    "class" : "UIButton",
+    "alpha" : 1,
+    "enabled" : true,
+    "frame" : "{{520, 676}, {468, 68}}",
+    "traits" : 0,
+    "accessibility_element" : false
+  },
+  {
+    "text" : "Skip purpose",
+    "font_size" : 22,
+    "class" : "UIButtonLabel",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "frame" : "{{688.5, 697}, {131.5, 26.5}}",
+    "hidden" : false
+  }
+]

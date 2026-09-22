@@ -1,0 +1,17 @@
+{
+  "scope": "Actual IAB screenshot and DOM manual inspection, synthetic controlled-XHR fixture; screenshot is in tool transcript, not an exported file",
+  "time": "2026-09-22T18:59:47.507716+00:00",
+  "url": "http://127.0.0.1:18770/?lang=en",
+  "source_sha256": "144af4de97ab5950911a0e8397ff0335ef4cbe8a32d0293fe6f596315cc0da97",
+  "observed": [
+    "Export scope warning visible",
+    "Target node and recovery reference visible",
+    "Changed count and collapsible differences visible",
+    "Explicit deletion-count checkbox before commit",
+    "Preview and discard controls visible without clipping at 1280x720"
+  ],
+  "limitations": [
+    "No screenshot PNG exported: backend screenshot was displayed in the tool transcript",
+    "Does not qualify native iOS UI or real Core HTTP"
+  ]
+}

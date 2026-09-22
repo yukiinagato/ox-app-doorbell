@@ -1,0 +1,36 @@
+[
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check",
+      "--",
+      "webui/panel/call.html",
+      "webui/panel/runtime.js",
+      "webui/tests/call_page_fixture.js",
+      "webui/tests/call_tabs.test.js",
+      "webui/tests/call_tabs_cases.js",
+      "webui/tests/call_tabs_browser_fixture.js"
+    ],
+    "exit_code": 0,
+    "output": ""
+  },
+  {
+    "command": [
+      "python3",
+      "tools/gen_i18n.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "output": "gen_i18n: 15 generated files are current\n"
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "webui/tests/call_tabs_browser_fixture.js"
+    ],
+    "exit_code": 0,
+    "output": ""
+  }
+]

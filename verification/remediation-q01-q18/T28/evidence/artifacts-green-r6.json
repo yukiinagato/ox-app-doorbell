@@ -1,0 +1,13 @@
+{
+  "recorded_at": "2026-09-22T17:37:31.177999+00:00",
+  "source_manifest_sha256": "80e4a932021f714dc94b4306d0bed8430823c5f151d6535df7e9c46506a5a7ef",
+  "artifacts": {
+    "build/remediation-t28-20260923/green-r6-build/doorbell_tests": "417635a70016b8fda6224c2e01f39b714f71381ec8895ec317d2f3c799a94cb5",
+    "build/remediation-t28-20260923/green-r6-build/libdoorbell_core.a": "051231a9c258f4e14a6f14e7a02bb7f7030e00a4ec11f55055e02efd7917733c",
+    "build/remediation-t28-20260923/green-r6-build/libdb_third_party.a": "8b470c24f25dabd93e5ca353cce15e763828883e9bbb426b87691361f16d3828",
+    "build/remediation-t28-20260923/green-r6-build/CMakeCache.txt": "5f937ba951d7e4722507d2318c7c4277bd053e9abe0b6e3fd3df83d1eaf5e00b",
+    "build/remediation-t28-20260923/ios5-r6-source/build/ios-compat/artifacts/ios5-armv7-pjsip-off/libdoorbell_all.a": "35ee0933ef2d882924eaafd1b7c491c9e319ec0e006d35508cf5513e0e54b498",
+    "build/remediation-t28-20260923/ios5-r6-source/build/ios-compat/artifacts/ios5-armv7-pjsip-off/manifest.json": "5d23812a4efa7e46c0e292660aa20d1fcdf19f819abf1f0f9211732537955645"
+  },
+  "qualification": "macOS arm64 production Core host tests with SIP stub, plus iOS5.1 armv7 static build; not device runtime."
+}

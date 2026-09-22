@@ -1,0 +1,55 @@
+[
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check",
+      "--",
+      "webui/admin/app.js",
+      "webui/admin/index.html",
+      "webui/tests/admin_modal_cases.js",
+      "webui/tests/admin_modal_browser_fixture.js",
+      "i18n/strings.yaml",
+      "webui/locale/en.json",
+      "webui/locale/ja.json",
+      "webui/locale/zh.json"
+    ],
+    "exit_code": 0,
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "webui/admin/app.js"
+    ],
+    "exit_code": 0,
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "webui/tests/admin_modal_browser_fixture.js"
+    ],
+    "exit_code": 0,
+    "output": ""
+  },
+  {
+    "command": [
+      "python3",
+      "tools/gen_i18n.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "output": "gen_i18n: 15 generated files are current\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tools/check_english_source.py"
+    ],
+    "exit_code": 0,
+    "output": "check_english_source: no violations\n"
+  }
+]

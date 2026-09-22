@@ -1,0 +1,31 @@
+{
+  "recorded_at": "2026-09-22T14:48:32.046854+00:00",
+  "scope": "production_test",
+  "browser": "Codex IAB, Chromium 153, macOS",
+  "test_path": "Complete production page with only automatic startup suppressed; browser-native DOM and real renderTabs/selectDoor; local transport and media stubs",
+  "red": "browser-red.json",
+  "green": "browser-green.json",
+  "web_regressions": "web-suite.json",
+  "cases": [
+    {
+      "id": "T13-01",
+      "status": "PASS"
+    },
+    {
+      "id": "T13-02",
+      "status": "PASS"
+    },
+    {
+      "id": "T13-03",
+      "status": "PASS"
+    },
+    {
+      "id": "T13-04",
+      "status": "PASS"
+    }
+  ],
+  "limitations": [
+    "No hardware, physical action, SIP registration or media qualification.",
+    "Browser fixture served directly from webui rather than an embedded Core binary."
+  ]
+}

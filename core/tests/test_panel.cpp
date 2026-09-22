@@ -7,6 +7,7 @@
 #include <cstdio>
 #include <map>
 #include <memory>
+#include <mutex>
 #include <random>
 #include <string>
 #include <vector>
@@ -26,20 +27,28 @@ namespace {
 const std::string kPanelCredential = "test-panel-credential";
 std::string panel_auth;
 
-void installPanelSecret(Node& node) {
-  auto values = std::make_shared<std::map<std::string, std::string>>();
-  (*values)["panel.test"] = kPanelCredential;
-  (*values)["webrtc.test"] = "pw";
+struct PanelSecrets {
+  std::mutex mutex;
+  std::map<std::string, std::string> values;
+};
+
+std::shared_ptr<PanelSecrets> installPanelSecret(Node& node) {
+  auto values = std::make_shared<PanelSecrets>();
+  values->values["panel.test"] = kPanelCredential;
+  values->values["webrtc.test"] = "pw";
   node.setSecureStore(
       [values](const std::string& key) {
-        auto it = values->find(key);
-        return it == values->end() ? std::string() : it->second;
+        std::lock_guard<std::mutex> lock(values->mutex);
+        auto it = values->values.find(key);
+        return it == values->values.end() ? std::string() : it->second;
       },
       [values](const std::string& key, const std::string& value) {
-        if (value.empty()) values->erase(key);
-        else (*values)[key] = value;
+        std::lock_guard<std::mutex> lock(values->mutex);
+        if (value.empty()) values->values.erase(key);
+        else values->values[key] = value;
         return true;
       });
+  return values;
 }
 
 void stripTestCredential(std::string* value) {
@@ -335,6 +344,16 @@ TEST_CASE("panel API: token auth / state / press / snapshot proxy / motion detec
                  "door=d_front&call_id=" + first_call_id +
                      "&stage_revision=0&state=heartbeat&dialog_id=" + losing_dialog + "&k=" + k,
                  "application/x-www-form-urlencoded").find("409") != std::string::npos);
+  {
+    auto losing_end = panelBodyJson(panelReq(http_port, "POST", "/api/panel/call-lifecycle",
+        "door=d_front&call_id=" + first_call_id +
+        "&stage_revision=0&state=ended&dialog_id=" + losing_dialog,
+        "application/x-www-form-urlencoded"));
+    REQUIRE(losing_end);
+    CHECK(json::getString(losing_end.get(), "error_code") == "stale_owner");
+    CHECK(panelReq(http_port, "GET", "/api/panel/state").find("\"call_state\":\"in_call\"") !=
+          std::string::npos);
+  }
   CHECK(panelReq(http_port, "POST", "/api/panel/cancel",
                  "door=d_front&call_id=" + first_call_id + "&k=" + k,
                  "application/x-www-form-urlencoded").find("409") != std::string::npos);
@@ -551,12 +570,42 @@ TEST_CASE("panel dialog lease retries a failed durable recovery cancellation") {
   const std::string call_id = json::getString(pressed.get(), "call_id");
   REQUIRE(!call_id.empty());
   const std::string dialog_id = "0123456789abcdef0123456789abcdef";
-  CHECK(panelReq(http_port, "POST", "/api/panel/call-lifecycle",
+  auto answer = panelBodyJson(panelReq(http_port, "POST", "/api/panel/call-lifecycle",
                  "door=d_front&call_id=" + call_id +
                      "&stage_revision=0&state=answered&dialog_id=" + dialog_id +
                      "&k=" + kPanelCredential,
-                 "application/x-www-form-urlencoded").find("\"ok\":true") !=
-        std::string::npos);
+                 "application/x-www-form-urlencoded"));
+  REQUIRE(answer);
+  CHECK(json::getBool(answer.get(), "ok"));
+  CHECK(json::getString(answer.get(), "call_id") == call_id);
+  CHECK(json::getInt(answer.get(), "stage_revision", -1) == 0);
+  const std::string owner = json::getString(answer.get(), "dialog_owner");
+  REQUIRE(!owner.empty());
+  CHECK(json::getInt(answer.get(), "lease_remaining_ms", -1) == 10'000);
+  auto heartbeat = [&](const std::string& dialog, int revision) {
+    return panelReq(http_port, "POST", "/api/panel/call-lifecycle",
+        "door=d_front&call_id=" + call_id + "&stage_revision=" + std::to_string(revision) +
+        "&state=heartbeat&dialog_id=" + dialog, "application/x-www-form-urlencoded");
+  };
+  auto rejected = panelBodyJson(heartbeat("fedcba9876543210fedcba9876543210", 0));
+  REQUIRE(rejected);
+  CHECK(json::getString(rejected.get(), "error_code") == "stale_owner");
+  rejected = panelBodyJson(heartbeat(dialog_id, 1));
+  REQUIRE(rejected);
+  CHECK(json::getString(rejected.get(), "error_code") == "stale_revision");
+  panel_auth.clear();
+  rejected = panelBodyJson(heartbeat(dialog_id, 0));
+  REQUIRE(rejected);
+  CHECK(json::getString(rejected.get(), "error_code") == "auth_required");
+  panel_auth = kPanelCredential;
+  clock.advance(1'234);
+  clock.setWall(clock.systemWallMs() - 86'400'000);
+  auto renewed = panelBodyJson(heartbeat(dialog_id, 0));
+  REQUIRE(renewed);
+  CHECK(json::getString(renewed.get(), "call_id") == call_id);
+  CHECK(json::getString(renewed.get(), "dialog_owner") == owner);
+  CHECK(json::getInt(renewed.get(), "stage_revision", -1) == 0);
+  CHECK(json::getInt(renewed.get(), "lease_remaining_ms", -1) == 10'000);
 
   REQUIRE(setPanelEventProjectionFailure(db_path, true));
   clock.advance(9'999);
@@ -566,6 +615,11 @@ TEST_CASE("panel dialog lease retries a failed durable recovery cancellation") {
   clock.advance(1);
   state = panelReq(http_port, "GET", "/api/panel/state?k=" + kPanelCredential);
   CHECK(state.find("\"call_state\":\"in_call\"") != std::string::npos);
+  // A pending durable cancellation cannot let a late heartbeat resurrect an expired lease.
+  rejected = panelBodyJson(heartbeat(dialog_id, 0));
+  REQUIRE(rejected);
+  CHECK_FALSE(json::getBool(rejected.get(), "ok"));
+  CHECK(json::getString(rejected.get(), "error_code") == "call_ended");
 
   REQUIRE(setPanelEventProjectionFailure(db_path, false));
   clock.advance(1'999);
@@ -812,7 +866,7 @@ TEST_CASE("panel API: call-frame / peer-frame.jpg / call-info web call contract"
   o.enable_beacon = false;
   o.http_port = http_port;
   Node node(o);
-  installPanelSecret(node);
+  const auto secret_values = installPanelSecret(node);
   REQUIRE(node.start());
   node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
   node.setConfigKey("panel.token_refs", "[\"secret:panel.test\"]");
@@ -829,23 +883,22 @@ TEST_CASE("panel API: call-frame / peer-frame.jpg / call-info web call contract"
   panel_auth.clear();
   std::string r = panelReq(http_port, "POST", "/call-frame?door=d_front", jpg, "image/jpeg");
   CHECK(r.find("403") != std::string::npos);
-  CHECK(r.find("Access-Control-Allow-Origin: *") != std::string::npos);
+  CHECK(r.find("Access-Control-Allow-Origin") == std::string::npos);
   panel_auth = k;
 
   r = panelReq(http_port, "POST", "/call-frame?door=d_front&k=" + k, jpg, "image/jpeg");
-  CHECK(r.find("409") != std::string::npos);
-  CHECK(r.find("not in call") != std::string::npos);
+  CHECK(r.find("403") != std::string::npos);
+  CHECK(r.find("permission_denied") != std::string::npos);
 
   r = panelReq(http_port, "POST", "/call-frame?door=d_other&k=" + k, jpg, "image/jpeg");
-  CHECK(r.find("404") != std::string::npos);
-  // CORS preflight
+  CHECK(r.find("403") != std::string::npos);
   r = panelReq(http_port, "OPTIONS", "/call-frame");
-  CHECK(r.find("204") != std::string::npos);
-  CHECK(r.find("Access-Control-Allow-Methods: POST, OPTIONS") != std::string::npos);
+  CHECK(r.find("404") != std::string::npos);
+  CHECK(r.find("Access-Control-Allow-Origin") == std::string::npos);
 
 
   r = panelReq(http_port, "GET", "/peer-frame.jpg");
-  CHECK(r.find("404") != std::string::npos);
+  CHECK(r.find("409") != std::string::npos);
 
 
   r = panelReq(http_port, "GET", "/api/panel/call-info?k=" + k);
@@ -856,6 +909,44 @@ TEST_CASE("panel API: call-frame / peer-frame.jpg / call-info web call contract"
   CHECK(r.find("\"online\":true") != std::string::npos);
   CHECK(r.find("\"stream_mjpeg\":\"/stream.mjpeg\"") != std::string::npos);
   CHECK(r.find("\"playback_profile\"") != std::string::npos);
+  auto info = panelBodyJson(r);
+  REQUIRE(info);
+  const std::string generation = json::getString(json::get(info.get(), "webrtc"), "config_generation");
+  REQUIRE(generation.size() == 32);
+  CHECK(generation.find_first_not_of("0123456789abcdef") == std::string::npos);
+  CHECK(json::getString(json::get(info.get(), "webrtc"), "sip_pass_ref") == "secret:webrtc.test");
+  CHECK(r.find("Cache-Control: no-store") != std::string::npos);
+  auto repeated = panelBodyJson(panelReq(http_port, "GET", "/api/panel/call-info"));
+  CHECK(json::getString(json::get(repeated.get(), "webrtc"), "config_generation") == generation);
+  node.setConfigKey("doors.d_front", "{\"label\":{\"en\":\"Renamed door\"}}");
+  auto unrelated = panelBodyJson(panelReq(http_port, "GET", "/api/panel/call-info"));
+  CHECK(json::getString(json::get(unrelated.get(), "webrtc"), "config_generation") == generation);
+  {
+    std::lock_guard<std::mutex> lock(secret_values->mutex);
+    secret_values->values["webrtc.test"] = "rotated-test-password";
+    secret_values->values["webrtc.replacement"] = "rotated-test-password";
+  }
+  auto rotated = panelBodyJson(panelReq(http_port, "GET", "/api/panel/call-info"));
+  const std::string rotated_generation = json::getString(json::get(rotated.get(), "webrtc"), "config_generation");
+  CHECK(rotated_generation.size() == 32);
+  CHECK(rotated_generation != generation);
+  CHECK(json::getString(json::get(rotated.get(), "webrtc"), "sip_pass") == "rotated-test-password");
+  node.setConfigKey("integrations.webrtc.sip_user", "\"261\"");
+  auto updated = panelBodyJson(panelReq(http_port, "GET", "/api/panel/call-info"));
+  const std::string user_generation = json::getString(json::get(updated.get(), "webrtc"), "config_generation");
+  CHECK(user_generation != rotated_generation);
+  node.setConfigKey("integrations.webrtc.sip_pass_ref", "\"secret:webrtc.replacement\"");
+  auto new_ref = panelBodyJson(panelReq(http_port, "GET", "/api/panel/call-info"));
+  const std::string ref_generation = json::getString(json::get(new_ref.get(), "webrtc"), "config_generation");
+  CHECK(ref_generation != user_generation);
+  CHECK(json::getString(json::get(new_ref.get(), "webrtc"), "sip_pass") == "rotated-test-password");
+  node.setConfigKey("integrations.webrtc.ws_url", "\"ws://replacement-gateway:8088/ws\"");
+  auto new_gateway = panelBodyJson(panelReq(http_port, "GET", "/api/panel/call-info"));
+  const std::string gateway_generation = json::getString(json::get(new_gateway.get(), "webrtc"), "config_generation");
+  CHECK(gateway_generation != ref_generation);
+  node.setConfigKey("sip.server", "\"replacement-sip-server\"");
+  auto new_server = panelBodyJson(panelReq(http_port, "GET", "/api/panel/call-info"));
+  CHECK(json::getString(json::get(new_server.get(), "webrtc"), "config_generation") != gateway_generation);
 
   panel_auth.clear();
   CHECK(panelReq(http_port, "GET", "/api/panel/call-info").find("403") != std::string::npos);

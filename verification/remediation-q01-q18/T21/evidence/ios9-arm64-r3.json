@@ -1,0 +1,38 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "1c11bdf42d2a5ab0a5a78e53d9ab6722bc866401a09a3195b999a5a6a9760a14",
+  "task_id": "T21",
+  "test_id": "ios9-arm64-r3",
+  "evidence_kind": "native_build",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T21/source-candidate-r3.json",
+  "source_manifest_sha256": "7d96de0e4b92e50a4b9757b66ef4273e401ad85368c1694dd9ff1e4b7ca1df8e",
+  "command": [
+    "env",
+    "IOS9_DERIVED_DATA=/Users/ox/Documents/project/app-doorbell/build/remediation-t21-20260922/ios9-arm64",
+    "ios/scripts/build_ios9_arm64.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T14:49:09.524541+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": "0.1.37",
+  "build_number": "38",
+  "sip_backend": "real_pjsip",
+  "signing_state": "CODE_SIGNING_ALLOWED=NO",
+  "artifact_sha256": "b13779ee0fb030e75b366c2d4cbf362020fb417d3bbf8079a425da5d3cab9d82",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T21/evidence/ios9-arm64-r3.log",
+  "limitations": [
+    "Simulator/unsigned build evidence; no physical installation, hardware, media, or SIP qualification.",
+    "No system wall clock was changed. Offset projections use controlled production-helper snapshots."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T14:49:58.265830+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Unsigned arm64 Release artifact passed minimum iOS 9.0, ABI v2 and real PJSIP release verification.",
+  "artifact_provenance": "verification/remediation-q01-q18/T21/evidence/ios9-arm64-r3-artifacts.json"
+}

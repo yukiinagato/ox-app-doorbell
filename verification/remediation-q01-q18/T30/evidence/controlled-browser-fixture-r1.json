@@ -1,0 +1,79 @@
+{
+  "scope": "actual production DOM with controlled XHR; not Core HTTP end-to-end",
+  "source_sha256": "1711323100ef43e5887b75d20d299c81aa444e4ced967ace785e6da9462e8355",
+  "cases_sha256": "65dda9d4f9eee4929f4de9060c487e8fb1dacca9e41821aa2f266eec0b742cdf",
+  "recorded_at": "2026-09-22T18:52:24.200Z",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "id": "257 legacy entries preview and commit through staged APIs",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Full replacement explicitly previews deletions before confirmation",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Missing secret blocks commit and explains separate reprovisioning",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Missing asset blocks commit and exposes upload recovery",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Preflight response must bind the exact staged digest",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Malformed and unsupported documents cannot create a stage",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Oversized input is rejected locally without a request",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "A stale revision never automatically restages or commits",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Lost commit response queries the original operation only",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Unknown query remains unknown without automatic import",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Repeated confirmation cannot submit a second operation",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "401 discards sensitive input and keeps only recovery handle",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Reload recovery offers query without creating a stage",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    },
+    {
+      "id": "Export excludes synthetic passwords tokens private keys and credential URLs",
+      "status": "FAIL",
+      "message": "Timed out waiting for UI"
+    }
+  ]
+}

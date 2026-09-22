@@ -1,0 +1,8 @@
+{
+  "at": "2026-09-22T16:34:37.871391+00:00",
+  "tool": "cua.getApp(\"Simulator\")",
+  "observed_result": "The Mac is locked and automatic unlock could not unlock it. Ask the user to unlock the Mac manually before continuing.",
+  "status": "BLOCKED_ENV_FOR_INTERACTIVE_UI",
+  "bypass_attempted": false,
+  "implementation_can_continue": true
+}

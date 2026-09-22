@@ -1,0 +1,8 @@
+[ 13%] Built target db_third_party
+[ 55%] Built target doorbell_core
+[ 58%] Built target doorbell
+[ 61%] Built target doorbell_host
+[ 61%] Built target doorbell_video_decode_probe
+[ 62%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_admin_api.cpp.o
+[ 64%] Linking CXX executable doorbell_tests
+[100%] Built target doorbell_tests

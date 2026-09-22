@@ -1,0 +1,42 @@
+30245	-	UIKitApplication:jp.ox.doorbell[0x1d44]
+19	-	jp.ox.doorbell.keepalive
+total 1104
+-rw-r--r-- 1 mobile mobile  19110 Sep 23 02:56 01-purpose-first-ringing.json
+-rw-r--r-- 1 mobile mobile  33911 Sep 23 02:56 01-purpose-first-ringing.png
+-rw-r--r-- 1 mobile mobile  33649 Sep 23 02:56 01-ring-first-chooser.json
+-rw-r--r-- 1 mobile mobile  53099 Sep 23 02:56 01-ring-first-chooser.png
+-rw-r--r-- 1 mobile mobile  19082 Sep 23 02:56 02-connected.json
+-rw-r--r-- 1 mobile mobile  26499 Sep 23 02:56 02-connected.png
+-rw-r--r-- 1 mobile mobile  19091 Sep 23 02:47 03-emergency.json
+-rw-r--r-- 1 mobile mobile  30102 Sep 23 02:47 03-emergency.png
+-rw-r--r-- 1 mobile mobile  19090 Sep 23 02:47 03-network-failure.json
+-rw-r--r-- 1 mobile mobile  49452 Sep 23 02:47 03-network-failure.png
+-rw-r--r-- 1 mobile mobile  31598 Sep 23 02:47 03-sos-confirmation.json
+-rw-r--r-- 1 mobile mobile  71251 Sep 23 02:47 03-sos-confirmation.png
+-rw-r--r-- 1 mobile mobile  19470 Sep 23 02:47 04-en-landscape-size-large.json
+-rw-r--r-- 1 mobile mobile  54543 Sep 23 02:47 04-en-landscape-size-large.png
+-rw-r--r-- 1 mobile mobile  19465 Sep 23 02:47 04-en-portrait-size-large.json
+-rw-r--r-- 1 mobile mobile  82714 Sep 23 02:47 04-en-portrait-size-large.png
+-rw-r--r-- 1 mobile mobile  19571 Sep 23 02:47 04-ja-landscape-size-large.json
+-rw-r--r-- 1 mobile mobile  63969 Sep 23 02:47 04-ja-landscape-size-large.png
+-rw-r--r-- 1 mobile mobile  19568 Sep 23 02:47 04-ja-portrait-size-large.json
+-rw-r--r-- 1 mobile mobile 101445 Sep 23 02:47 04-ja-portrait-size-large.png
+-rw-r--r-- 1 mobile mobile  19507 Sep 23 02:47 04-zh-landscape-size-large.json
+-rw-r--r-- 1 mobile mobile  61943 Sep 23 02:47 04-zh-landscape-size-large.png
+-rw-r--r-- 1 mobile mobile  19504 Sep 23 02:47 04-zh-portrait-size-large.json
+-rw-r--r-- 1 mobile mobile  98993 Sep 23 02:47 04-zh-portrait-size-large.png
+-rw-r--r-- 1 mobile mobile    126 Sep 23 02:56 accessibility-probe.json
+-rw-r--r-- 1 mobile mobile      0 Sep 23 02:41 launch.log
+-rw-r--r-- 1 mobile mobile   3955 Sep 23 02:56 progress.json
+-rw-r--r-- 1 mobile mobile   3575 Sep 23 02:56 runner.log
+Traceback (most recent call last):
+  File "/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/device.py", line 28, in <module>
+    ssh('/bin/launchctl list | /bin/grep -E "doorbell|t35"; /bin/ls -l /var/mobile/Library/DoorbellT35UIKit; /bin/cat /var/mobile/Library/DoorbellT35UIKit/result.json /var/mobile/Library/DoorbellT35UIKit/launch.log')
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/device.py", line 10, in ssh
+    print(result.stdout.strip()); result.check_returncode(); return result.stdout
+                                  ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 509, in check_returncode
+    raise CalledProcessError(self.returncode, self.args, self.stdout,
+                             self.stderr)
+subprocess.CalledProcessError: Command '['sshpass', '-e', 'ssh', '-o', 'ConnectTimeout=8', '-o', 'StrictHostKeyChecking=yes', '-o', 'HostKeyAlgorithms=+ssh-rsa', '-o', 'KexAlgorithms=+diffie-hellman-group1-sha1,diffie-hellman-group14-sha1', '-o', 'Ciphers=+aes128-cbc,3des-cbc', '-o', 'PubkeyAuthentication=no', 'root@10.10.38.147', '/bin/launchctl list | /bin/grep -E "doorbell|t35"; /bin/ls -l /var/mobile/Library/DoorbellT35UIKit; /bin/cat /var/mobile/Library/DoorbellT35UIKit/result.json /var/mobile/Library/DoorbellT35UIKit/launch.log']' returned non-zero exit status 1.

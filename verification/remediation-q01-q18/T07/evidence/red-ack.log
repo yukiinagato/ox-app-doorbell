@@ -1,0 +1,33 @@
+09-23 01:12:08 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:20737
+09-23 01:12:08 I [node] created the missing door entry doors.front for this door station
+09-23 01:12:08 I [httpd] listening on 28674,[::]:28674
+09-23 01:12:08 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:12:08 I [node] node 912c4166 (operation-authority) started
+09-23 01:12:08 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:24800
+09-23 01:12:08 I [httpd] listening on 22690,[::]:22690
+09-23 01:12:08 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:12:08 I [node] node b08f5ca3 (operation-page) started
+09-23 01:12:08 I [node] initialized the cluster administrator password
+09-23 01:12:08 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:12:08 E [node] refused unsafe programmatic config write: doors.front.operations.ack (invalid operation authority or device grant)
+09-23 01:12:09 I [ha_bridge] bridge started at 127.0.0.1:23832
+09-23 01:12:09 I [mqtt] connected to 127.0.0.1:23832
+09-23 01:12:09 I [ha_bridge] cmd ack: {"protocol":"ed25519-v1","operation_id":"091301a1f6fe4346a025d8a7021ba4ff","authority_node":"912c4166189719314bf058e34b2ca93b","actuator_id":"","door":"front","command_digest":"","result":"command_processed","signature":"b414eadd1ca6fa31e135d21143a1a584efdec83c6bd9cff12460ee3d390e1a772ab201a8fee7daabf7b785900dcb451ac4c760a5f43fc74d05d33a50516db70c"}
+09-23 01:12:16 I [httpd] stopped
+09-23 01:12:16 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_ack.cpp:59:
+TEST CASE:  operations ACK: signed correlated packet settles the production ledger
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_ack.cpp:66: ERROR: CHECK( json::getString(command.get(), "ack_protocol") == "ed25519-v1" ) is NOT correct!
+  values: CHECK(  == ed25519-v1 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_ack.cpp:70: FATAL ERROR: REQUIRE( operationWait([&] { return operationField(fleet.query("door_open", id), "execution_state") == "actuator_ack"; }, 5000) ) is NOT correct!
+  values: REQUIRE( false )
+
+===============================================================================
+[doctest] test cases:   1 |   0 passed | 1 failed | 0 skipped
+[doctest] assertions: 567 | 565 passed | 2 failed |
+[doctest] Status: FAILURE!

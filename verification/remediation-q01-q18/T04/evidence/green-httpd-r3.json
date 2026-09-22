@@ -1,0 +1,38 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "7ef16201d73f3a7bdb2d296fe85da04cd8a1aed2d5c49e0937584293690e3d98",
+  "task_id": "T04",
+  "test_id": "green-httpd-r3",
+  "evidence_kind": "production_test",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T04/source-candidate-r3.json",
+  "source_manifest_sha256": "566cff597986a0e27ddd44e39453e1dfa08866e79affb5c33f03fe1e1a1c929a",
+  "command": [
+    "build/remediation-t04-20260922/normal/doorbell_tests",
+    "--test-case=httpd:*,runloop*",
+    "--no-skip"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T14:31:19.497760+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "host_unsigned",
+  "artifact_sha256": "ed0979aa1ae0f58efd382c689234708a2ee547f83ad18c6bdf7ad4a11168c8c4",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T04/evidence/green-httpd-r3.log",
+  "limitations": [
+    "Darwin arm64 host production_test; no device, network deployment, or physical actuator qualification.",
+    "Shutdown may close the HTTP socket before a 503 body is sent; empty transport is unknown, not not_started.",
+    "A DB_BUILD_TESTS-only barrier holds the HTTP waiter but leaves the production state and deadline logic intact."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T14:32:26.411315+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "20/20 real HTTP and Runloop test cases; 289/289 assertions passed. Includes all 4 T04 acceptance sequences and 6 pre-existing Runloop regressions."
+}

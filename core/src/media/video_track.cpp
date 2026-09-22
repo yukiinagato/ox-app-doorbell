@@ -69,6 +69,7 @@ struct VideoTrack::State {
   uint64_t base_dt = 0;
   bool keyframe_request_pending = false;
   bool keyframe_request_in_flight = false;
+  bool source_waiting_for_key = false;
 
   // Counters for the debug line. They are cumulative for the life of the track and are not
   // cleared by resetLocked(), so a mid-stream SPS change does not look like a restart.
@@ -95,6 +96,7 @@ struct VideoTrack::State {
     key_frag.clear();
     keyframe_request_pending = false;
     keyframe_request_in_flight = false;
+    source_waiting_for_key = false;
     base_dt = 0;
   }
 
@@ -102,6 +104,15 @@ struct VideoTrack::State {
     if (keyframe_request_pending || keyframe_request_in_flight) return;
     keyframe_request_pending = true;
     keyframe_requests++;
+  }
+
+  void rejectReferenceChainLocked() {
+    source_waiting_for_key = true;
+    // Rejected source frames have no fragment sequence. Every reader must still observe the
+    // discontinuity, including a reader subscribing after the rejection.
+    frag.clear();
+    key_frag.clear();
+    requestKeyframeLocked();
   }
 };
 
@@ -137,6 +148,7 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   fmp4::Sample sample = fmp4::toSample(annexb, len, &next_sps, &next_pps);
   const bool config_changed = next_sps != s.sps || next_pps != s.pps;
   if (config_changed && !fmp4::validParameterSets(next_sps, next_pps)) {
+    if (!sample.data.empty()) s.rejectReferenceChainLocked();
     DB_LOGW(kTag, "discarded an invalid H.264 parameter-set update");
     return;
   }
@@ -147,7 +159,10 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   if (!s.pending_sps.empty() || !s.pending_pps.empty()) {
     // Do not publish a sample from the update access unit under the prior configuration. A
     // matching IDR is the only safe point to replace avcC and begin the next generation.
-    if (!fmp4::idrReferencesPps(annexb, len, s.pending_pps)) return;
+    if (!fmp4::idrReferencesPps(annexb, len, s.pending_pps)) {
+      if (!sample.data.empty()) s.rejectReferenceChainLocked();
+      return;
+    }
     Bytes new_sps = std::move(s.pending_sps), new_pps = std::move(s.pending_pps);
     const bool had_init = !s.init.empty();
     if (had_init) s.resetLocked();
@@ -162,6 +177,11 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
     DB_LOGI(kTag, "generated H.264 init segment (" + s.codec_str + ")");
   }
   if (sample.data.empty()) return;
+  if (s.source_waiting_for_key) {
+    if (!fmp4::idrReferencesPps(annexb, len, s.pps)) return;
+    s.source_waiting_for_key = false;
+    s.have_last_ts = false;
+  }
   // A producer hint is useful for telemetry, but only an IDR parsed from the access unit is a
   // safe recovery point after a reader has missed reference frames.
   const bool is_idr = sample.key;
@@ -271,6 +291,7 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
   auto ready = [&] {
     if (s.stopped || s.generation != generation_ || !s.enabled) return true;
     if (!init_sent_) return !s.init.empty();
+    if (s.source_waiting_for_key) return false;
     if (key_pending_) return !s.key_frag.empty();
     if (waiting_for_fresh_key_) return s.key_frag_seq > resume_after_seq_;
     return s.frag_seq > last_frag_;
@@ -285,6 +306,7 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
     init_sent_ = true;
     return s.init;
   }
+  if (s.source_waiting_for_key) return {};
   if (key_pending_) {
     if (s.key_frag.empty()) return {};
     key_pending_ = false;

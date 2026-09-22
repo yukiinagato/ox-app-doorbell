@@ -1,0 +1,37 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "03f23474c04f2a3132184f9ebb58d846891cba0111a268de10bca078d8566281",
+  "task_id": "T28",
+  "test_id": "green-r4",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/source-green-r4.json",
+  "source_manifest_sha256": "a4d0ad8fd9d4142e28f51d49ef1ba4075444363c1d156ae2ecdebf058809acb0",
+  "command": [
+    "build/remediation-t28-20260923/green-r4-build/doorbell_tests",
+    "--test-case=config conflicts:*,config CAS:*,notice CAS:*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T16:57:36.501263+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": "macOS arm64 production Core host fixture",
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "unsigned host binary",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/evidence/green-r4.log",
+  "limitations": [
+    "Host qualification only; no real device, physical actuator or SIP backend behavior."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T16:58:08.024419+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "All selected production test cases passed; see log for behavioral assertions.",
+  "test_cases": 18,
+  "assertions": 660
+}

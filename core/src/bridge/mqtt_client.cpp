@@ -618,6 +618,22 @@ void MqttClient::subscribe(const std::string& topic_filter) {
   impl_->wakeIo();
 }
 
+bool MqttClient::tryPublish(const std::string& topic, const std::string& payload) {
+  if (topic.empty() || topic.size() > 512 || payload.size() > 4096) return false;
+  const auto packet = mqtt::encodePublish(topic, payload, false);
+  {
+    std::lock_guard<std::mutex> lock(impl_->mu);
+    if (!impl_->is_connected || impl_->stop_req || impl_->abort_req ||
+        impl_->outbox.size() >= 256) return false;
+    size_t bytes = packet.size();
+    for (const auto& queued : impl_->outbox) bytes += queued.size();
+    if (bytes > 1024 * 1024) return false;
+    impl_->outbox.push_back(packet);
+  }
+  impl_->wakeIo();
+  return true;
+}
+
 bool MqttClient::connected() const {
   std::lock_guard<std::mutex> lk(impl_->mu);
   return impl_->is_connected;

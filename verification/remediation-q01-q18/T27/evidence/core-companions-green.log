@@ -1,0 +1,72 @@
+09-23 01:27:46 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29673
+09-23 01:27:46 I [httpd] listening on 31795,[::]:31795
+09-23 01:27:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:46 I [node] node 73b5d4c2 (doorbell) started
+09-23 01:27:48 I [httpd] stopped
+09-23 01:27:48 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29968
+09-23 01:27:48 I [httpd] listening on 27592,[::]:27592
+09-23 01:27:48 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:48 I [node] node 04483c88 (doorbell) started
+09-23 01:27:48 E [node] config persistence failed; retaining the last-known-good state
+09-23 01:27:50 I [httpd] stopped
+09-23 01:27:50 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29320
+09-23 01:27:50 I [httpd] listening on 29978,[::]:29978
+09-23 01:27:50 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:50 I [node] node fef9e98e (doorbell) started
+09-23 01:27:50 I [node] initialized the cluster administrator password
+09-23 01:27:53 I [httpd] stopped
+09-23 01:27:53 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28312
+09-23 01:27:53 I [httpd] listening on 23570,[::]:23570
+09-23 01:27:53 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:53 I [node] node e05c9f6a (doorbell) started
+09-23 01:27:53 I [node] initialized the cluster administrator password
+09-23 01:27:55 I [httpd] stopped
+09-23 01:27:55 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 01:27:55 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:55 I [node] node 951265dc (doorbell) started
+09-23 01:27:55 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24404
+09-23 01:27:55 I [httpd] listening on 24088,[::]:24088
+09-23 01:27:55 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:55 I [node] node 51339798 (doorbell) started
+09-23 01:27:57 I [httpd] stopped
+09-23 01:27:57 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26600
+09-23 01:27:57 I [httpd] listening on 26087,[::]:26087
+09-23 01:27:57 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:57 I [node] node 1da772b6 (doorbell) started
+09-23 01:27:59 I [httpd] stopped
+09-23 01:27:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 01:27:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:59 I [node] node a95606ca (doorbell) started
+09-23 01:27:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27605
+09-23 01:27:59 I [httpd] listening on 21952,[::]:21952
+09-23 01:27:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:59 I [node] node 4a345d37 (doorbell) started
+09-23 01:28:01 I [httpd] stopped
+09-23 01:28:01 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29289
+09-23 01:28:01 I [httpd] listening on 20054,[::]:20054
+09-23 01:28:01 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:28:01 I [node] node 79570ccb (doorbell) started
+09-23 01:28:01 I [node] initialized the cluster administrator password
+09-23 01:28:03 I [httpd] stopped
+09-23 01:28:03 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21965
+09-23 01:28:03 I [httpd] listening on 21449,[::]:21449
+09-23 01:28:03 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:28:03 I [node] node a98f6272 (doorbell) started
+09-23 01:28:03 I [node] initialized the cluster administrator password
+09-23 01:28:05 I [httpd] stopped
+09-23 01:28:05 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22266
+09-23 01:28:05 I [httpd] listening on 20908,[::]:20908
+09-23 01:28:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:28:05 I [node] node 3af1eb50 (doorbell) started
+09-23 01:28:07 I [httpd] stopped
+09-23 01:28:07 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21726
+09-23 01:28:07 I [httpd] listening on 28366,[::]:28366
+09-23 01:28:07 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:28:07 I [node] node b97461a1 (doorbell) started
+09-23 01:28:09 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:  13 |  13 passed | 0 failed | 480 skipped
+[doctest] assertions: 509 | 509 passed | 0 failed |
+[doctest] Status: SUCCESS!

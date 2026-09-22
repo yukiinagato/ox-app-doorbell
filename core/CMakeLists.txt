@@ -261,7 +261,10 @@ endif()
 
 # ---------- tests ----------
 if(DB_BUILD_TESTS)
+  target_compile_definitions(doorbell_core PUBLIC DB_HTTPD_TEST_HOOKS=1)
   enable_testing()
+  add_executable(doorbell_video_decode_probe tests/integration/video_track_decode_probe.cpp)
+  target_link_libraries(doorbell_video_decode_probe PRIVATE doorbell_core)
   file(GLOB DB_TEST_SRC CONFIGURE_DEPENDS tests/*.cpp)
   if(DB_TEST_SRC)
     add_executable(doorbell_tests ${DB_TEST_SRC})

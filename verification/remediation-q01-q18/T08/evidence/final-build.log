@@ -1,0 +1,58 @@
+[ 14%] Built target db_third_party
+[ 16%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/telegram.cpp.o
+[ 16%] Building CXX object CMakeFiles/doorbell_core.dir/src/capi/doorbell_capi.cpp.o
+[ 17%] Building CXX object CMakeFiles/doorbell_core.dir/src/events/event_log.cpp.o
+[ 19%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/mesh.cpp.o
+[ 20%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+[ 21%] Building CXX object CMakeFiles/doorbell_core.dir/src/store/store.cpp.o
+[ 22%] Linking CXX static library libdoorbell_core.a
+[ 55%] Built target doorbell_core
+[ 57%] Linking CXX executable doorbell_video_decode_probe
+[ 58%] Building CXX object CMakeFiles/doorbell.dir/src/capi/doorbell_capi.cpp.o
+[ 59%] Building CXX object CMakeFiles/doorbell_host.dir/host/main.cpp.o
+[ 60%] Built target doorbell_video_decode_probe
+[ 63%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_admin_api.cpp.o
+[ 63%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_assets.cpp.o
+[ 64%] Linking CXX executable doorbell_host
+Undefined symbols for architecture arm64:
+  "db::Store::migrateOperationsLocked()", referenced from:
+      db::Store::migrate() in libdoorbell_core.a[23](store.cpp.o)
+ld: symbol(s) not found for architecture arm64
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)
+make[2]: *** [doorbell_host] Error 1
+make[1]: *** [CMakeFiles/doorbell_host.dir/all] Error 2
+make[1]: *** Waiting for unfinished jobs....
+[ 65%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_call_log.cpp.o
+[ 66%] Linking CXX shared library libdoorbell.dylib
+Undefined symbols for architecture arm64:
+  "db::Store::migrateOperationsLocked()", referenced from:
+      db::Store::migrate() in libdoorbell_core.a[23](store.cpp.o)
+ld: symbol(s) not found for architecture arm64
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)
+make[2]: *** [libdoorbell.dylib] Error 1
+make[1]: *** [CMakeFiles/doorbell.dir/all] Error 2
+[ 67%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_contracts_v2.cpp.o
+[ 69%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_display.cpp.o
+[ 70%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_emergency.cpp.o
+[ 71%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_event_log.cpp.o
+[ 72%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_fmp4.cpp.o
+[ 73%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_media.cpp.o
+[ 75%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_mesh.cpp.o
+[ 76%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_mqtt.cpp.o
+[ 77%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_node.cpp.o
+[ 78%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_panel.cpp.o
+[ 79%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_settings.cpp.o
+[ 80%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_sip.cpp.o
+[ 82%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_store.cpp.o
+[ 83%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_telegram.cpp.o
+[ 84%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_time.cpp.o
+[ 85%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_visitor.cpp.o
+[ 86%] Linking CXX executable doorbell_tests
+Undefined symbols for architecture arm64:
+  "db::Store::migrateOperationsLocked()", referenced from:
+      db::Store::migrate() in libdoorbell_core.a[23](store.cpp.o)
+ld: symbol(s) not found for architecture arm64
+clang++: error: linker command failed with exit code 1 (use -v to see invocation)
+make[2]: *** [doorbell_tests] Error 1
+make[1]: *** [CMakeFiles/doorbell_tests.dir/all] Error 2
+make: *** [all] Error 2

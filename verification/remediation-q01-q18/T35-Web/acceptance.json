@@ -1,0 +1,68 @@
+{
+  "task_id": "T35-Web",
+  "status": "PASS_IN_WEB_UI_PROFILE_SCOPE",
+  "independent_review": {
+    "status": "APPROVED_IN_RECORDED_WEB_UI_SCOPE",
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/root-review-r7.json",
+    "sha256": "97da73abaf2efbe8e843bf2a41965bb2d26d1ed4d028afff02e24beb765c276a"
+  },
+  "qualification_scope": "Real IAB Chromium production DOM/layout/callbacks with controlled XHR; not native Core, SIP, Safari, physical device, or screen-reader qualification. Does not close whole multi-shell T35.",
+  "source_manifest": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/source-final.json",
+    "sha256": "9f0fea603c9e300a01dab5571bc6350a177ffc2a72bc6dd6fd27432d7e0f6a8b"
+  },
+  "browser": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/final-browser.json",
+    "sha256": "adb19f00a3828b8de1198febcf510ca629d97be57a1fa2973f4300ff4cf2f83f"
+  },
+  "host": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/final-host-regression-r7.json",
+    "sha256": "abd63d95224c0f8932ef44ed4587090bbdeaa6e12e5bed04b1471603f7cc06d8"
+  },
+  "host_log": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/final-host-regression-r7.log",
+    "sha256": "54223cb1e1e16088cef435c680b82a452110eafb57fc12fc57fa7cec946b3a62"
+  },
+  "visual_observations": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/visual-observations.json",
+    "sha256": "0f5915662b1a91199c88e98e80434f0486dbb2c6b87706d01cbf57fd36a27784"
+  },
+  "cleanup": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/cleanup.json",
+    "sha256": "3fd12ed8b5969378f4f200b573c0ca14239eead9f02f83d2fb9d6f678c069c37"
+  },
+  "acceptance": [
+    {
+      "id": "T35-01",
+      "status": "PASS_IN_SCOPE",
+      "coverage": "Both purpose flows, selected purpose with call identity, Back and Skip preserve call semantics."
+    },
+    {
+      "id": "T35-02",
+      "status": "PASS_IN_SCOPE",
+      "coverage": "Stable Call/Cancel/End positions; no unlock; 16 gesture transition/retirement/disabled-release cases plus same-input positive paths, terminal permissions and late purpose actions."
+    },
+    {
+      "id": "T35-03",
+      "status": "PASS_IN_SCOPE",
+      "coverage": "Ordinary offline neutral, separate SOS alert without visitor clear, keyboard cancellation and existing operation path assistive activation."
+    },
+    {
+      "id": "T35-04",
+      "status": "PASS_IN_SCOPE",
+      "coverage": "16 real layout combinations: 320x480,844x390,768x1024,1024x768 x English/Chinese x 100/150% semantic font scale; viewport/scroll clip minimum size and separation."
+    }
+  ],
+  "historical_results": [
+    "baseline-browser.json: 7/24 pass",
+    "gesture-red-browser.json: 24/31 pass (R1 plus terminal timer)",
+    "gesture-retirement-red-browser.json: 1/4 pass (R2 touch was not reproduced)",
+    "final-r5-browser.json: 34/35 pass (fixture keyup missing key; production unchanged in r6)",
+    "release-without-click-red-browser.json: 0/5 pass against frozen r6 page (disabled release without click and held old keyboard retirement)"
+  ],
+  "version_management": "Parent owns shared application version/resource updates.",
+  "independent_review_record": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/root-review-r7.json",
+    "sha256": "97da73abaf2efbe8e843bf2a41965bb2d26d1ed4d028afff02e24beb765c276a"
+  }
+}

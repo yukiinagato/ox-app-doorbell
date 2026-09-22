@@ -1,0 +1,359 @@
+{
+  "schema_version": 1,
+  "task_id": "T02",
+  "evidence_kind": "contract_review",
+  "status": "reviewed normative examples; not executed production APIs",
+  "identifiers": "All identities are synthetic fixtures, not credentials.",
+  "cases": [
+    {
+      "id": "operation_shared_identity",
+      "acceptance": [
+        "T02-01"
+      ],
+      "context": {
+        "principal": "fixture-panel",
+        "authority_node": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "door": "front",
+        "capability": "operations_v1",
+        "permission": "door_open"
+      },
+      "prepare": {
+        "method": "POST",
+        "path": "/api/operations/prepare",
+        "body": {
+          "schema_version": 2,
+          "action": "door_open",
+          "door": "front",
+          "parameters": {}
+        }
+      },
+      "expected_prepare": {
+        "http": 200,
+        "body": {
+          "schema_version": 2,
+          "operation_id": "0123456789abcdef0123456789abcdef",
+          "authority_node": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "execution_state": "prepared",
+          "prepared_remaining_ms": 30000,
+          "config_generation": "fixture-boot-A-rev-7",
+          "retry_mode": "same_operation_execute"
+        }
+      },
+      "execute": {
+        "method": "POST",
+        "path": "/api/operations/0123456789abcdef0123456789abcdef/execute",
+        "body": {
+          "schema_version": 2
+        }
+      },
+      "expected_execute": {
+        "http": 202,
+        "body": {
+          "schema_version": 2,
+          "operation_id": "0123456789abcdef0123456789abcdef",
+          "authority_node": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "execution_state": "accepted",
+          "retry_mode": "same_operation_query"
+        }
+      },
+      "invariants": [
+        "T05, T06, T07, T12 and T36 use the same operation ID and authority.",
+        "A duplicate execute returns current state and cannot acquire a second dispatch.",
+        "request_id is correlation only and may change per HTTP attempt."
+      ]
+    },
+    {
+      "id": "global_sos_without_doors",
+      "acceptance": [
+        "T02-01",
+        "T02-02"
+      ],
+      "context": {
+        "configured_doors": [],
+        "configured_recipients": [],
+        "global_sos_authority": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "permission": "global_sos_start"
+      },
+      "prepare": {
+        "schema_version": 2,
+        "action": "sos_start",
+        "parameters": {}
+      },
+      "expected": {
+        "scope": "global",
+        "authority_node": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "door_field": "absent",
+        "preserve_zero_recipient_configuration": true,
+        "extra_confirmation_wait": false
+      },
+      "invariants": [
+        "No door is invented or selected.",
+        "Global emergency event remains distinct from presentation and external delivery.",
+        "No permission to clear global SOS is inferred from a door-only grant."
+      ]
+    },
+    {
+      "id": "duplicate_id_changed_target",
+      "acceptance": [
+        "T02-01"
+      ],
+      "context": {
+        "operation_id": "0123456789abcdef0123456789abcdef",
+        "frozen_action": "door_open",
+        "frozen_door": "front"
+      },
+      "execute_full_intent": {
+        "schema_version": 2,
+        "action": "door_open",
+        "door": "back",
+        "parameters": {}
+      },
+      "expected": {
+        "http": 409,
+        "error_code": "idempotency_conflict",
+        "retry_mode": "none",
+        "additional_dispatches": 0
+      }
+    },
+    {
+      "id": "unknown_execute_cannot_prepare",
+      "acceptance": [
+        "T02-01",
+        "T02-02"
+      ],
+      "context": {
+        "operation_id": "0123456789abcdef0123456789abcdef",
+        "record_present": false
+      },
+      "expected": {
+        "http": 404,
+        "error_code": "operation_not_found",
+        "retry_mode": "none",
+        "created_records": 0,
+        "dispatches": 0
+      }
+    },
+    {
+      "id": "queued_timeout_not_started",
+      "acceptance": [
+        "T02-01"
+      ],
+      "context": {
+        "operation_id": "0123456789abcdef0123456789abcdef",
+        "http_state": "QUEUED",
+        "operation_state": "prepared",
+        "prepare_still_valid": true
+      },
+      "event": "deadline wins atomic QUEUED -> EXPIRED",
+      "expected": {
+        "http": 503,
+        "error_code": "not_started",
+        "execution_state": "prepared",
+        "retry_mode": "same_operation_execute",
+        "late_handler_count": 0
+      }
+    },
+    {
+      "id": "running_timeout_is_unknown",
+      "acceptance": [
+        "T02-01",
+        "T02-03"
+      ],
+      "context": {
+        "operation_id": "0123456789abcdef0123456789abcdef",
+        "http_state": "RUNNING",
+        "operation_state": "dispatching"
+      },
+      "event": "HTTP wait deadline expires",
+      "expected": {
+        "http": 503,
+        "error_code": "outcome_unknown",
+        "retry_mode": "same_operation_query",
+        "replacement_operation_prepared": false
+      },
+      "invariants": [
+        "Timeout cannot roll back an already running side effect.",
+        "After a crash at an ambiguous dispatch boundary, query returns unknown_after_dispatch without resending."
+      ]
+    },
+    {
+      "id": "legacy_missing_safe_capability",
+      "acceptance": [
+        "T02-02"
+      ],
+      "context": {
+        "peer_features": {},
+        "request_feature": "media_publish_v1"
+      },
+      "expected": {
+        "http": 501,
+        "error_code": "unsupported_capability",
+        "retry_mode": "none",
+        "bare_http_fallback": false,
+        "missing_identity_authorizes_upload": false
+      }
+    },
+    {
+      "id": "legacy_one_shot_compatibility",
+      "acceptance": [
+        "T02-02",
+        "T02-03"
+      ],
+      "context": {
+        "entrypoint": "db_core_open_door",
+        "stable_operation_id": false
+      },
+      "expected": {
+        "abi_layout_changed": false,
+        "unknown_result_auto_retry": false,
+        "deduplicates_separate_legacy_calls": false,
+        "claim_physical_open_on_return_zero": false
+      }
+    },
+    {
+      "id": "actuator_without_ack_or_dedupe",
+      "acceptance": [
+        "T02-03"
+      ],
+      "context": {
+        "operation_id": "0123456789abcdef0123456789abcdef",
+        "actuator_deduplicates_operation": false,
+        "correlated_ack_supported": false,
+        "sensor_supported": false
+      },
+      "expected": {
+        "execution_state": "dispatched",
+        "display_claim": "command sent",
+        "physical_open_proven": false,
+        "exactly_once_proven": false
+      },
+      "after_ambiguous_transport": {
+        "execution_state": "unknown_after_dispatch",
+        "unknown_reason": "transport_ambiguous",
+        "retry_mode": "same_operation_query",
+        "automatic_resend": false
+      }
+    },
+    {
+      "id": "partitioned_password_change",
+      "acceptance": [
+        "T02-04"
+      ],
+      "context": {
+        "nodes": [
+          "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+        ],
+        "partitioned": true,
+        "credential_changed_at": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "B_knows_new_record": false
+      },
+      "expected": {
+        "A_rejects_old_session": true,
+        "B_global_revocation_proven": false,
+        "old_password_relogin_at_B_prevented_by_token_expiry_alone": false,
+        "status": "revocation pending propagation"
+      },
+      "after_authenticated_sync": {
+        "B_rejects_old_session": true
+      }
+    },
+    {
+      "id": "local_cas_not_global_consensus",
+      "acceptance": [
+        "T02-04"
+      ],
+      "context": {
+        "node": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "expected_revision": "fixture-boot-A-rev-7",
+        "current_revision": "fixture-boot-A-rev-8"
+      },
+      "expected": {
+        "http": 409,
+        "error_code": "config_conflict",
+        "local_writes": 0,
+        "global_serialization_claim": false,
+        "retain_draft": true
+      },
+      "partitioned_edit": {
+        "local_CAS_success_can_occur_on_both_nodes": true,
+        "losing_intent_retained": true,
+        "automatic_merge_rewrite_loop": false
+      }
+    },
+    {
+      "id": "media_generation_stale_after_queue",
+      "acceptance": [
+        "T02-02"
+      ],
+      "context": {
+        "media_generation": "fedcba9876543210fedcba9876543210",
+        "frame_sequence": "17",
+        "entry_authorized": true,
+        "owner_changes_before_frame_bus_write": true
+      },
+      "expected": {
+        "final_write_permitted": false,
+        "old_frame_cache_retained": false,
+        "remote_display_ack_claim": false
+      }
+    },
+    {
+      "id": "terminal_capacity_preserves_retention",
+      "acceptance": [
+        "T02-01"
+      ],
+      "context": {
+        "reserved_operation_rows": 4096,
+        "eligible_reclaimable_terminal_rows": 0
+      },
+      "expected": {
+        "new_prepare_http": 503,
+        "error_code": "capacity_exceeded",
+        "evict_young_completed_record": false,
+        "evict_unresolved_unknown": false,
+        "existing_query_available": true
+      }
+    },
+    {
+      "id": "restart_rejects_old_snapshot_and_lease",
+      "acceptance": [
+        "T02-02",
+        "T02-04"
+      ],
+      "context": {
+        "authority_restart": true,
+        "old_prepared_operation": "0123456789abcdef0123456789abcdef",
+        "old_config_token": "fixture-boot-A-rev-7",
+        "old_media_generation": "fedcba9876543210fedcba9876543210"
+      },
+      "expected": {
+        "prepared_may_execute": false,
+        "old_expected_revision_accepted": false,
+        "old_media_generation_accepted": false,
+        "old_panel_cookie_accepted": false,
+        "dispatching_record_auto_resent": false
+      }
+    },
+    {
+      "id": "import_is_atomic_local_only",
+      "acceptance": [
+        "T02-04"
+      ],
+      "context": {
+        "expanded_mutations": 257,
+        "ordinary_batch_limit": 256,
+        "staging_authorized": true,
+        "staging_base_matches": true
+      },
+      "expected": {
+        "ordinary_batch_accepts_257": false,
+        "versioned_staging_may_accept": true,
+        "live_chunk_writes": false,
+        "commit_outcome": "complete old or complete new local snapshot",
+        "global_simultaneous_switch": false,
+        "secret_plaintext_exported": false
+      }
+    }
+  ]
+}

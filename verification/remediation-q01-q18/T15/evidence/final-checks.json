@@ -1,0 +1,40 @@
+[
+  {
+    "command": [
+      "python3",
+      "tools/gen_i18n.py",
+      "--check"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "python3",
+      "tools/check_english_source.py"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check",
+      "--",
+      "core/src/node/node.cpp",
+      "core/tests/test_media_publish.cpp",
+      "core/tests/test_panel.cpp",
+      "core/tests/test_admin_api.cpp",
+      "webui/panel/call.html",
+      "webui/panel/video-session.js",
+      "webui/panel/API.md",
+      "webui/panel/API.ja.md",
+      "webui/tests/call_media_authority.test.js",
+      "ios/Doorbell/MainViewController.swift",
+      "ios/DoorbellTests/CoreBridgeLifecycleTests.swift"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "exit_code": 0
+  }
+]

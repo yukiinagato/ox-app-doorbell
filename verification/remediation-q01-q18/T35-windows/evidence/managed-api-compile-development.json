@@ -1,0 +1,1575 @@
+{
+  "started_at": "2026-09-22T17:54:44.981214+00:00",
+  "finished_at": "2026-09-22T17:54:45.301876+00:00",
+  "command": [
+    "mcs",
+    "-nostdlib",
+    "-langversion:7.2",
+    "-target:library",
+    "-out:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/DoorbellSourceCompileOnly.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/mscorlib.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Core.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Xml.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Xaml.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/WindowsBase.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/PresentationCore.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/PresentationFramework.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/UIAutomationTypes.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/UIAutomationProvider.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/UIAutomationClient.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Web.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Web.Extensions.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Speech.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Management.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/Microsoft.CSharp.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Security.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Drawing.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Windows.Forms.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Net.Http.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Configuration.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Data.dll",
+    "-r:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/System.Runtime.Serialization.dll",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/AdminDialog.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/App.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/BootConfig.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/BootstrapSetupWindow.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/CallTiming.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/CameraProbe.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/CoreClient.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/CoreInterop.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/DeviceInfoProvider.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/DpapiSecretStore.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/H264LiveStreamer.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/MjpegStreamer.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/NativeUtf8.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/PeerFrameGate.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/RuntimeContracts.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/UpdateChecker.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/VideoDiagnostics.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/WinHttpTransport.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Core/WindowsFirewall.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/DeviceAlertNotifier.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Kiosk/KioskHooks.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/MainWindow.CallScreen.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/MainWindow.Dashboard.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/MainWindow.History.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/MainWindow.Notice.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/MainWindow.Shell.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/MainWindow.VisitorActions.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/MainWindow.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/NoticeDialog.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Pairing/AddDeviceWindow.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Pairing/PairingCameraFeed.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Pairing/PairingCodeCard.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Pairing/PairingKeypad.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Pairing/PairingSnapshot.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Pairing/PendingDeviceRow.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Pairing/QrCodeImage.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Pairing/QrScanWindow.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/RuntimeProcessState.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Ui/Frost.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Ui/SosSlider.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Ui/VisitorActionGuard.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Util/AdminLink.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Util/Appearance.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Util/L10n.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Util/SemanticUiOverrides.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Util/Texts.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/Util/ThemeContrast.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/WatchdogHeartbeat.cs",
+    "/Users/ox/Documents/project/app-doorbell/win/DoorbellApp/WebAdminWindow.xaml.cs",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/CompileOnlyXamlFields.cs"
+  ],
+  "exit_code": 0,
+  "scope": "Compile-only all production C# against actual .NET Framework4.8/WPF reference assemblies with generated named-field declarations. No XAML compiler, resource embedding, WPF runtime or product application build.",
+  "fields": [
+    {
+      "source": "win/DoorbellApp/AdminDialog.xaml",
+      "name": "Prompt",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/AdminDialog.xaml",
+      "name": "PasswordEntry",
+      "type": "System.Windows.Controls.PasswordBox"
+    },
+    {
+      "source": "win/DoorbellApp/AdminDialog.xaml",
+      "name": "ErrorText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/AdminDialog.xaml",
+      "name": "OkPadBtn",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/AdminDialog.xaml",
+      "name": "CancelBtn",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/App.xaml",
+      "name": "PART_Track",
+      "type": "System.Windows.Controls.Primitives.Track"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ThemeBgImage",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ThemeBackdrop",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IdleView",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IdleShift",
+      "type": "System.Windows.Media.TranslateTransform"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SecretCorner",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorHome",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorContentScroll",
+      "type": "System.Windows.Controls.ScrollViewer"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorLeftColumn",
+      "type": "System.Windows.Controls.ColumnDefinition"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorRightColumn",
+      "type": "System.Windows.Controls.ColumnDefinition"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorClockBlock",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ClockText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DateText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorNoticeCard",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorNoticeText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "LangBar",
+      "type": "System.Windows.Controls.WrapPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "TouchHint",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PurposeSection",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PurposeHint",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PurposeGrid",
+      "type": "System.Windows.Controls.Primitives.UniformGrid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorFooter",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorVersionLine",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorSosHost",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorCallBlock",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VisitorStatus",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardHome",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashClock",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashClockSeconds",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashDate",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardChips",
+      "type": "System.Windows.Controls.WrapPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MissedBadge",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MissedBadgeText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticeGlobalButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "OpenMonitorButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "AdminEntryButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MembershipStatus",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ClusterCounter",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ClusterCountText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ClusterOnlineText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DoorCounter",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DoorCounterLabel",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DoorCountText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PanelCounter",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PanelCounterLabel",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PanelCountText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "BatteryCounter",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "BatteryIcon",
+      "type": "System.Windows.Shapes.Path"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "BatteryText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MeshDot",
+      "type": "System.Windows.Shapes.Ellipse"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardTitleLeftColumn",
+      "type": "System.Windows.Controls.ColumnDefinition"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardTitleRightColumn",
+      "type": "System.Windows.Controls.ColumnDefinition"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DoorsSectionTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "RecentCallsTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SeeAllCallsButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardContent",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardLeftColumn",
+      "type": "System.Windows.Controls.ColumnDefinition"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardRightColumn",
+      "type": "System.Windows.Controls.ColumnDefinition"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardTopRow",
+      "type": "System.Windows.Controls.RowDefinition"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardBottomRow",
+      "type": "System.Windows.Controls.RowDefinition"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DoorTilesPanel",
+      "type": "System.Windows.Controls.ScrollViewer"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DoorTileGrid",
+      "type": "System.Windows.Controls.Primitives.UniformGrid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "RecentCallsPanel",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "RecentCallsList",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardFooter",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "DashboardSosColumn",
+      "type": "System.Windows.Controls.ColumnDefinition"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "AdminLinkCard",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "AdminQrImage",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "AdminLinkTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "AdminAddressCount",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "AdminUrlText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NodeInfo",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SosButton",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SosText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SosHint",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SosSlide",
+      "type": "DoorbellApp.Ui.SosSlider"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallingView",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallingText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallingDetail",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "Pulse",
+      "type": "System.Windows.Shapes.Ellipse"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallingPurposeSection",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallingPurposeHint",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallingPurposeGrid",
+      "type": "System.Windows.Controls.Primitives.UniformGrid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallingPurposeSkip",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CancelButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ReplyBanner",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ReplyCaption",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ReplyText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "OfflineView",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "OfflineTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "OfflineBody",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "OfflineAction",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingView",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ReturnCountdown",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ReturnCountdownText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PurposeSlot",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PurposeBadge",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PurposeBadgeContent",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "LangBadge",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "LangBadgeText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingHint",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingVideoFrame",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingVideoArea",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingH264",
+      "type": "System.Windows.Controls.MediaElement"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingLive",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingH264Image",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingNoVideo",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "QuickReplyPanel",
+      "type": "System.Windows.Controls.WrapPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IncomingControlRow",
+      "type": "System.Windows.Controls.WrapPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MonitorButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "AnswerButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MicButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "OpenDoorButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "QuickReplyToggle",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "IgnoreButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "InCallView",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "InCallHeaderScroll",
+      "type": "System.Windows.Controls.ScrollViewer"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "InCallTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "InCallPurposeSlot",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "InCallPurposeBadge",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "InCallPurposeContent",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PeerH264",
+      "type": "System.Windows.Controls.MediaElement"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PeerVideo",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PeerH264Image",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "InCallMicButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "InCallOpenDoorButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "EndCallButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallOverlay",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticeChip",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticeChipDot",
+      "type": "System.Windows.Shapes.Ellipse"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticeChipText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallAdminQrCard",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "CallAdminQrImage",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VideoStatsCard",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "VideoStatsText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticePopover",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticePopoverTarget",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticePopoverText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticeEditButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticeClearButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NoticePopoverClose",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MonitorPickerView",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MonitorPickerTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MonitorDoorList",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "MonitorPickerClose",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryView",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryCloseButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryFilterRow",
+      "type": "System.Windows.Controls.WrapPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryFilterAll",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryFilterMissed",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryDoorFilters",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryMarkSeenButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryList",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryMoreButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "HistoryNote",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "ScreensaverView",
+      "type": "System.Windows.Controls.Canvas"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SaverBlock",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SaverClock",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SaverDate",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SaverHint",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SosCountdownView",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SosCountdownText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "SosCountdownCancel",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "EmergencyView",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "EmergencyTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "EmergencyNote",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "EmergencyCancelButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "NightTint",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PairBanner",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PairBannerText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/MainWindow.xaml",
+      "name": "PairingOverlay",
+      "type": "DoorbellApp.Pairing.PairingOnboardingView"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "TitleText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "HintText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "QrImage",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "UrlText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "OtherAddresses",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "ErrorText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "UpdateCard",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "UpdateTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "UpdateStatus",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "UpdateCheckButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "UpdateApplyButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "OpenButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/WebAdminWindow.xaml",
+      "name": "CloseButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "TitleText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "TargetRow",
+      "type": "System.Windows.Controls.WrapPanel"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "BodyBox",
+      "type": "System.Windows.Controls.TextBox"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "PresetRow",
+      "type": "System.Windows.Controls.WrapPanel"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "ExpiryLabel",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "ExpiryRow",
+      "type": "System.Windows.Controls.WrapPanel"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "LimitText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "CustomHoursRow",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "CustomHoursLabel",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "CustomHoursBox",
+      "type": "System.Windows.Controls.TextBox"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "ErrorText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "ClearButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "CancelButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/NoticeDialog.xaml",
+      "name": "PublishButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingKeypad.xaml",
+      "name": "ClearButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "AddressLabel",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "AddressValue",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "AddressCopyButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "AddressExample",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "CodeLabel",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "CodeValue",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "CodeCopyButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "CountdownText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "AttemptsText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "Instructions",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "ExpiredPanel",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "ExpiredText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingCodeCard.xaml",
+      "name": "NewCodeButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/QrScanWindow.xaml",
+      "name": "PreviewImage",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/QrScanWindow.xaml",
+      "name": "Viewfinder",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/QrScanWindow.xaml",
+      "name": "MessagePanel",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/QrScanWindow.xaml",
+      "name": "MessageText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/QrScanWindow.xaml",
+      "name": "HintText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/QrScanWindow.xaml",
+      "name": "StatusText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/QrScanWindow.xaml",
+      "name": "StatusDetail",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/QrScanWindow.xaml",
+      "name": "CancelButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "MembershipText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "ConnectedText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "CreatedBadge",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "CreatedBadgeText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "SelfLine",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "CloseButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "UnpairedPanel",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "UnpairedText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "UnpairedCreateButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "UnpairedJoinButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "PairedPanel",
+      "type": "System.Windows.Controls.Grid"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "NearbyTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "NearbyEmptyPanel",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "NearbyEmptyText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "NearbyList",
+      "type": "System.Windows.Controls.ItemsControl"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "AddWithCodeButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "CodeCard",
+      "type": "DoorbellApp.Pairing.PairingCodeCard"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "AddAllTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "AddAllWarning",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "AddAllButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "ScanQrButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "OwnQrTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "OwnQrImage",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "OwnQrPlaceholder",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "ClearTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "ClearButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "ClearConfirmPanel",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "ClearConfirmText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "ClearConfirmYes",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/AddDeviceWindow.xaml",
+      "name": "ClearConfirmNo",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "TitleText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "IdentityText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "StatusPanel",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "StatusSpinner",
+      "type": "System.Windows.Controls.ProgressBar"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "StatusText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "StatusHint",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "ActionsPanel",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "JoinWithCodeButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreateHomeButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "LaterButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreateConfirmPanel",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreateConfirmText",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreateError",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreateErrorDetail",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreateConfirmYes",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreateConfirmNo",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CodeEntryPanel",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "EntryAddressLabel",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "AddressBox",
+      "type": "System.Windows.Controls.TextBox"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "EntryAddressExample",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "EntryCodeLabel",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CodeDisplay",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "Keypad",
+      "type": "DoorbellApp.Pairing.PairingKeypad"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "EntryError",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "EntryErrorDetail",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "JoinButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "JoinBackButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreatedPanel",
+      "type": "System.Windows.Controls.StackPanel"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreatedTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreatedNext",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreatedCodeCard",
+      "type": "DoorbellApp.Pairing.PairingCodeCard"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "CreatedLaterButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "PersistErrorPanel",
+      "type": "System.Windows.Controls.Border"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "PersistErrorTitle",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "PersistErrorBody",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "RetryButton",
+      "type": "System.Windows.Controls.Button"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "RetryResult",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "QrImage",
+      "type": "System.Windows.Controls.Image"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "QrPlaceholder",
+      "type": "System.Windows.Controls.TextBlock"
+    },
+    {
+      "source": "win/DoorbellApp/Pairing/PairingOnboardingView.xaml",
+      "name": "QrCaption",
+      "type": "System.Windows.Controls.TextBlock"
+    }
+  ],
+  "generated_fields_sha256": "4bc57c14069f65cab6cdecf933a96ce451cb397e62a9aee28f6ba7835cb41408"
+}

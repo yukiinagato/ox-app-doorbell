@@ -1,0 +1,18 @@
+{
+  "kind": "expected_red",
+  "exit_code": 1,
+  "tests": 1,
+  "assertions": 32,
+  "failed_assertions": 2,
+  "observation": "Real independent current call owner without media.publish obtained authorization (HTTP 200) and published a real FrameBus-generated JPEG (HTTP 200); both expected HTTP 403",
+  "command": [
+    "build/remediation-t31-20260923/red-build/doorbell_tests",
+    "--test-case=panel identity: current owner without media publish grant is denied",
+    "--no-colors=true"
+  ],
+  "log_sha256": "07576d8996087bc34aae15c1a7cad700439dd50d6449e52ebecfaaac91b28538",
+  "artifact_sha256": "ca2107949e23945dae76e47010c864ef081ba909fab1a2bf8c276886bd61735a",
+  "source_manifest": "source-red-buildable.json",
+  "source_manifest_sha256": "a893655249301970c54245ed9779225d271e5b211e4f932f03220ddf51961ec0",
+  "scope": "macOS arm64 host Core, development SIP stub; no physical hardware actuation"
+}

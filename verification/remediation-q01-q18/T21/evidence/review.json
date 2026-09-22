@@ -1,0 +1,26 @@
+{
+  "task_id": "T21",
+  "status": "PASS",
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T15:04:47.661300+00:00",
+  "manifest_sha256": "75a32585cd85efc6787060ded182343c1692eec05fd29a4b423a917eaca6f2a5",
+  "inputs_match": {
+    "ios/Doorbell/CallRevisionLifecycle.swift": true,
+    "ios/Doorbell/CoreBridge.swift": true,
+    "ios/Doorbell/DoorbellClock.swift": true,
+    "ios/Doorbell/MainViewController.swift": true,
+    "ios/DoorbellTests/ClusterAndClockTests.swift": true,
+    "ios/DoorbellTests/CoreBridgeLifecycleTests.swift": true,
+    "ios/DoorbellTV/TVMainViewController.swift": true,
+    "ios-compat/tests/modern_call_revision_test.swift": true,
+    "ios-compat/tests/recovery_safe_mode_contract_test.py": true
+  },
+  "findings": [
+    "Root requested a foreground barrier against identical cached Core sample on historical sleep-excluding monotonic clocks; final source implements it.",
+    "Reviewed generation-fenced native snapshot lease, same-sample nonrenewal, unknown/zero display-only behavior, current Core recovery eligibility and owner matching.",
+    "Reviewed real MainViewController frozen-cache and retired timer tests; final 157/157 full suite and iOS9 arm64/tvOS builds pass."
+  ],
+  "limitations": [
+    "Simulator tests and target builds do not establish hardware qualification."
+  ]
+}

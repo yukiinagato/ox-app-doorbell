@@ -1,0 +1,636 @@
+--- build/remediation-t27-20260923/before-app.js	2026-09-23 01:07:20
++++ webui/admin/app.js	2026-09-23 01:33:28
+@@ -108,7 +108,7 @@
+     var out = isObj(existing) ? cloneJson(existing) : {};
+     ["ja", "en", "zh"].forEach(function (lang) {
+       if (f[lang]) out[lang] = f[lang];
+-      else delete out[lang];
++      else if (out[lang] !== "" && out[lang] !== null) delete out[lang];
+     });
+     return out;
+   }
+@@ -508,6 +508,7 @@
+     entries = entries || []; dels = dels || [];
+     for (i = 0; i < entries.length; i++) {
+       key = String((entries[i] && entries[i].key) || "");
++      if (/(^|\.)(__proto__|prototype|constructor)(\.|$)/.test(key)) throw new Error("invalid config path");
+       if (!key || seen[key]) throw new Error("duplicate or empty config key: " + key);
+       validateUiConfigMutation(key, entries[i].value, false);
+       seen[key] = true;
+@@ -515,14 +516,130 @@
+     }
+     for (i = 0; i < dels.length; i++) {
+       key = String(dels[i] || "");
++      if (/(^|\.)(__proto__|prototype|constructor)(\.|$)/.test(key)) throw new Error("invalid config path");
+       if (!key || seen[key]) throw new Error("duplicate or empty config key: " + key);
+       validateUiConfigMutation(key, undefined, true);
+       seen[key] = true;
+       ops.push({ op: "delete", key: key });
+     }
++    return ops;
++  }
++
++  function configAt(document, path) {
++    var node = document, parts = path instanceof Array ? path : path.split(".");
++    for (var i = 0; i < parts.length; i++) {
++      if (!isObj(node) || !own(node, parts[i])) return undefined;
++      node = node[parts[i]];
++    }
++    return node;
++  }
++
++  // Object entries are patches: omitted fields are not deletion. Only explicit delete ops
++  // remove data; null and arrays remain typed whole values. Preserve the original write root
++  // so semantic UI objects still pass the Core's whole-element validation boundary.
++  function configParents(base, parts) {
++    var parents = [];
++    for (var i = 1; i < parts.length; i++) {
++      var path = parts.slice(0, i), value = configAt(base, path);
++      parents.push({ path: path, object: isObj(value), value: isObj(value) ? undefined : cloneJson(value) });
++    }
++    return parents;
++  }
++
++  function configIntents(base, ops, editedObjects) {
++    var changes = [];
++    function diff(key, path, before, mine) {
++      if (sameJson(before, mine)) return;
++      if (isObj(before) && isObj(mine)) {
++        for (var field in mine) if (own(mine, field)) {
++          if (field === "__proto__" || field === "constructor" || field === "prototype") throw new Error("invalid config path");
++          diff(key, path.concat([field]), own(before, field) ? before[field] : undefined, mine[field]);
++        }
++        // These editor builders clone their complete original objects before clearing known
++        // fields. Raw import/JSON patches never enable this explicit removal conversion.
++        if (editedObjects) for (var previous in before) if (own(before, previous) && !own(mine, previous))
++          changes.push({ key: key, path: path.concat([previous]), before: cloneJson(before[previous]), op: "delete" });
++      } else changes.push({ key: key, path: path, before: cloneJson(before), value: cloneJson(mine), op: "set" });
++    }
++    ops.forEach(function (op) {
++      var before = configAt(base, op.key);
++      if (op.op === "delete") {
++        if (before !== undefined) changes.push({ key: op.key, path: [], before: cloneJson(before), op: "delete" });
++      } else diff(op.key, [], before, op.value);
++    });
++    changes.forEach(function (change) {
++      change.parents = configParents(base, change.key.split(".").concat(change.path));
++    });
++    return changes;
++  }
++
++  function configRebase(changes, current) {
++    var safe = [], conflicts = [];
++    changes.forEach(function (change) {
++      var now = configAt(current, change.key.split(".").concat(change.path));
++      var mine = change.op === "delete" ? undefined : change.value;
++      if (sameJson(now, mine)) return;
++      var next = { key: change.key, path: change.path.slice(), op: change.op,
++                   before: cloneJson(now), value: cloneJson(change.value),
++                   parents: configParents(current, change.key.split(".").concat(change.path)) };
++      var structureChanged = (change.parents || []).some(function (parent) {
++        var value = configAt(current, parent.path);
++        return parent.object !== isObj(value) || (!parent.object && !sameJson(parent.value, value));
++      });
++      if (!structureChanged && sameJson(change.before, now)) safe.push(next);
++      else conflicts.push({ change: next, base: cloneJson(change.before), current: cloneJson(now) });
++    });
++    return { changes: safe, conflicts: conflicts };
++  }
++
++  function configIntentOps(changes) {
++    var ops = [], groups = {}, deleted = [];
++    function groupFor(key) {
++      var group = groups["$" + key];
++      if (!group) { group = { op: "set", key: key, value: {} }; groups["$" + key] = group; ops.push(group); }
++      return group;
++    }
++    changes.forEach(function (change) {
++      if (change.op === "delete") deleted.push(change.key + (change.path.length ? "." + change.path.join(".") : ""));
++    });
++    changes.forEach(function (change) {
++      var key = change.key + (change.path.length ? "." + change.path.join(".") : "");
++      var semantic = change.key.indexOf(".local.ui.elements.") >= 0;
++      if (semantic && change.path.length && change.op === "delete") {
++        if (change.path.length !== 1) throw new Error("ambiguous_config_removal");
++        var removal = groupFor(change.key);
++        (removal.remove_fields || (removal.remove_fields = [])).push(change.path[0]);
++        return;
++      }
++      var split = !semantic && deleted.some(function (removed) { return removed.indexOf(change.key + ".") === 0; });
++      if (change.op === "delete" || !change.path.length || split) {
++        if (split && change.path.some(function (part) { return part.indexOf(".") >= 0; }))
++          throw new Error("ambiguous_config_removal");
++        var whole = { op: change.op, key: key };
++        if (change.op === "set") whole.value = cloneJson(change.value);
++        ops.push(whole); return;
++      }
++      var value = groupFor(change.key).value;
++      for (var i = 0; i < change.path.length - 1; i++) {
++        if (!own(value, change.path[i])) value[change.path[i]] = {};
++        value = value[change.path[i]];
++      }
++      value[change.path[change.path.length - 1]] = cloneJson(change.value);
++    });
+     return ops;
+   }
+ 
++  function configComparisonValue(path, value) {
++    function redact(v, key) {
++      if (/password|secret|token|credential|(?:^|[_.])key(?:$|[_.])/i.test(key) ||
++          (typeof v === "string" && v.indexOf("secret:") === 0)) return "••••";
++      if (v instanceof Array) return v.map(function (item) { return redact(item, key); });
++      if (isObj(v)) { var result = {}; for (var k in v) if (own(v, k)) result[k] = redact(v[k], k); return result; }
++      return v;
++    }
++    return value === undefined ? undefined : JSON.stringify(redact(value, path));
++  }
++
+   // Write semantic UI overrides only as whole element objects. Raw import/editor paths may not
+   // create legacy styles, writable manifests, or scalar leaves that bypass server validation.
+   function validateUiConfigMutation(key, value, deleting) {
+@@ -1290,6 +1407,20 @@
+   }
+ 
+   /* The POST body for /api/doors/<id>/notice, or {error:"..."} for a message the form refuses. */
++  function noticeCommitPayload(f) {
++    var text = String(f.text == null ? "" : f.text).replace(/^\s+|\s+$/g, "");
++    var length = countCharacters(text), body = { text: text };
++    if (!length) return { error: "notice.empty" };
++    if (length > NOTICE_MAX_CHARS) return { error: "notice.too_long", n: length };
++    if (f.expiry === "today") body.expiry = "today";
++    else if (f.expiry === "until_cleared") body.ttl_s = 0;
++    else if (f.expiry === "1h") body.ttl_s = 3600;
++    else if (f.expiry === "custom" && +f.custom_hours >= 1 && +f.custom_hours <= 8760 &&
++             Math.floor(+f.custom_hours) === +f.custom_hours) body.ttl_s = +f.custom_hours * 3600;
++    else return { error: "notice.expiry_custom" };
++    return { body: body };
++  }
++
+   function noticePayload(f, nowMs, offsetMin) {
+     var text = String(f.text == null ? "" : f.text).replace(/^\s+|\s+$/g, "");
+     var length = countCharacters(text);
+@@ -2641,6 +2772,8 @@
+     uiElementValue: uiElementValue, uiElementChanges: uiElementChanges,
+     uiPreviewModel: uiPreviewModel,
+     colorOk: colorOk, contrast: contrast, isPlainObject: isObj, configBatchOps: configBatchOps,
++    configAt: configAt, configIntents: configIntents, configRebase: configRebase,
++    configIntentOps: configIntentOps, configComparisonValue: configComparisonValue,
+     mqttEntries: mqttEntries, telegramEntries: telegramEntries, sipEntries: sipEntries,
+     webPushEntries: webPushEntries,
+     mqttPlan: mqttPlan, telegramPlan: telegramPlan, webPushPlan: webPushPlan,
+@@ -2657,7 +2790,7 @@
+     effectiveVolumes: effectiveVolumes,
+     NOTICE_MAX_CHARS: NOTICE_MAX_CHARS, NOTICE_PRESET_KEYS: NOTICE_PRESET_KEYS,
+     NOTICE_EXPIRY_PRESETS: NOTICE_EXPIRY_PRESETS, noticeExpiryMs: noticeExpiryMs,
+-    noticePayload: noticePayload, noticeModel: noticeModel, countCharacters: countCharacters,
++    noticePayload: noticePayload, noticeCommitPayload: noticeCommitPayload, noticeModel: noticeModel, countCharacters: countCharacters,
+     SOS_TRIGGER_MODES: SOS_TRIGGER_MODES, sosEntries: sosEntries, powerModel: powerModel,
+     INK_REGIONS: INK_REGIONS, APPEARANCE_MODES: APPEARANCE_MODES,
+     autoInk: autoInk, autoAccent: autoAccent, themeAutoModel: themeAutoModel,
+@@ -3080,12 +3213,21 @@
+     }
+   }
+ 
++  function mockConfigMerge(before, patch) {
++    if (!isObj(patch)) return patch;
++    var out = isObj(before) ? JSON.parse(JSON.stringify(before)) : {};
++    for (var key in patch) if (Object.prototype.hasOwnProperty.call(patch, key))
++      out[key] = mockConfigMerge(out[key], patch[key]);
++    return out;
++  }
++  var mockConfigRevision = 1;
+   function mockApi(method, path, body, cb) {
+     var p = path.split("?")[0];
+     function ok(j) { setTimeout(function () { cb(200, j); }, 0); }
+     if (method === "GET") {
+       if (p === "/api/status") return ok(MOCK_STATUS);
+       if (p === "/api/config") return ok(MOCK_CFG);
++      if (p === "/api/config/snapshot") return ok({ schema_version: 2, revision: "mock-" + mockConfigRevision, config: MOCK_CFG });
+       if (p === "/api/events") return ok({ events: MOCK_EVENTS });
+       if (p === "/api/logs") return ok({ logs: ["I mock: this is a mock log entry"] });
+       if (p === "/api/pairing") return ok(mockPairSnapshot());
+@@ -3185,14 +3327,22 @@
+                                 wall_ms: new Date().getTime() };
+       return ok({ ok: true });
+     }
+-    if (p === "/api/config/batch") {
++    if (p === "/api/config/batch" || p === "/api/config/commit") {
++      if (p === "/api/config/commit" && (!body || body.expected_revision !== "mock-" + mockConfigRevision))
++        return setTimeout(function () { cb(409, { ok: false, error_code: "config_conflict" }); }, 0);
++      mockConfigRevision++;
+       var ops = (body && body.ops) || [], nextCfg, oi;
+       try { nextCfg = JSON.parse(JSON.stringify(MOCK_CFG)); }
+       catch (cloneErr) { return setTimeout(function () { cb(500, { ok: false, err: "clone" }); }, 0); }
+       for (oi = 0; oi < ops.length; oi++) {
+         if (!ops[oi].key || (ops[oi].op !== "set" && ops[oi].op !== "delete"))
+           return setTimeout(function () { cb(400, { ok: false, err: "bad op" }); }, 0);
+-        if (ops[oi].op === "set") L.applyKey(nextCfg, ops[oi].key, JSON.stringify(ops[oi].value));
++        if (ops[oi].op === "set") {
++          var proposed = ops[oi].value;
++          if (p === "/api/config/commit") proposed = mockConfigMerge(L.configAt(nextCfg, ops[oi].key), proposed);
++          (ops[oi].remove_fields || []).forEach(function (field) { delete proposed[field]; });
++          L.applyKey(nextCfg, ops[oi].key, JSON.stringify(proposed));
++        }
+         else L.deleteKey(nextCfg, ops[oi].key);
+       }
+       MOCK_CFG = nextCfg;
+@@ -3391,22 +3541,133 @@
+     return x;
+   }
+ 
+-  // Commit every set/delete in one request and preserve values as JSON. The server validates
+-  // before an all-or-nothing commit; never fall back to legacy sequential partial writes.
+-  function postEntries(entries, dels, cb) {
+-    var ops;
+-    try { ops = L.configBatchOps(entries, dels); }
+-    catch (e) { cb(false, { err: e.message }); return; }
+-    if (!ops.length) { cb(true, { ok: true, n: 0 }); return; }
+-    api("POST", "/api/config/batch", { ops: ops }, function (st, j) {
+-      if (st === 200 && j && j.ok === true) { cb(true, j); return; }
+-      cb(false, { unavailable: st === 404 || st === 501, status: st,
+-                  unknown: st === 0 || st === 202 || st >= 500 || (st === 200 && !j) ||
+-                    !!(j && j.error_code === "outcome_unknown"),
+-                  err: (j && j.err) || ("HTTP " + st) });
+-    }, { timeout_ms: 10000 });
++  function configEditor() {
++    return { config: JSON.parse(JSON.stringify(S.cfg)), revision: S.configRevision,
++             epoch: AUTH.pageEpoch, tab: S.tab, busy: false };
+   }
+ 
++  function lockInlineEditor(editor) {
++    if (!editor.root || editor.lockedFields) return;
++    editor.lockedFields = $all("input,select,textarea,button", editor.root).map(function (field) {
++      var disabled = field.disabled; field.disabled = true; return [field, disabled];
++    });
++    editor.root.setAttribute("aria-busy", "true");
++  }
++
++  function unlockInlineEditor(editor) {
++    (editor.lockedFields || []).forEach(function (field) { field[0].disabled = field[1]; });
++    editor.lockedFields = null;
++    if (editor.root) editor.root.setAttribute("aria-busy", "false");
++  }
++
++  function validConfigSnapshot(result) {
++    return result && result.schema_version === 2 && isObj(result.config) &&
++      typeof result.revision === "string" && result.revision.length > 0 && result.revision.length <= 256;
++  }
++
++  function postEntries(entries, dels, cb, done, notice, editedObjects, capturedEditor) {
++    var editor = capturedEditor || (done && done.editor ? done.editor : S.editorBase);
++    if (!editor || !editor.revision) {
++      if (editor && !done) unlockInlineEditor(editor);
++      cb(false, { unavailable: true }); return;
++    }
++    if (editor.busy || editor.staging) return;
++    var changes;
++    try { changes = notice ? [{ key: notice.key, path: [], before: L.configAt(editor.config, notice.key), value: notice.body, op: "set" }] :
++      L.configIntents(editor.config, L.configBatchOps(entries, dels), editedObjects); }
++    catch (e) { if (!done) unlockInlineEditor(editor); cb(false, { err: e.message }); return; }
++    editor.busy = true;
++    if (!done) lockInlineEditor(editor);
++    var attempts = 0, automatic = 0, panel = null, keptCurrent = false;
++    function current() {
++      return done ? saveContextCurrent(done) : editor === S.editorBase && pageCurrent(editor.epoch);
++    }
++    function clearPanel() { if (panel && panel.parentNode) panel.parentNode.removeChild(panel); panel = null; }
++    function finish(ok, result) {
++      editor.busy = false; clearPanel();
++      if (!done) unlockInlineEditor(editor);
++      if (ok && result) result.kept_current = keptCurrent;
++      if (current()) cb(ok, result);
++    }
++    function failure(st, j) {
++      finish(false, { unavailable: st === 404 || st === 501, status: st,
++        unknown: st === 0 || st === 202 || st >= 500 || st === 200 ||
++          !!(j && j.error_code === "outcome_unknown"), err: (j && (j.error_code || j.err)) || ("HTTP " + st) });
++    }
++    function compare(snapshot) {
++      var comparison = L.configRebase(changes, snapshot.config);
++      if (!comparison.conflicts.length && automatic < 1) {
++        automatic++; changes = comparison.changes; commit(snapshot.revision); return;
++      }
++      if (attempts >= 3) { finish(false, { err: t("admin.conflict_retry_limit") }); return; }
++      clearPanel();
++      panel = document.createElement("section"); panel.className = "card";
++      panel.setAttribute("data-config-conflict", ""); panel.setAttribute("role", "region");
++      panel.setAttribute("aria-label", t("admin.conflict_title"));
++      var html = "<h3>" + esc(t("admin.conflict_title")) + "</h3><p>" + esc(t("admin.conflict_hint")) + "</p>";
++      function shown(path, value) { var text = L.configComparisonValue(path, value); return text === undefined ? t("admin.conflict_missing") : text; }
++      comparison.conflicts.forEach(function (conflict, index) {
++        var change = conflict.change, path = change.key + (change.path.length ? "." + change.path.join(".") : "");
++        html += "<fieldset style='margin:12px 0;padding:12px;min-width:0'><legend>" + esc(path) + "</legend>" +
++          "<div class='dim'>" + esc(t("admin.conflict_base")) + ": <span style='overflow-wrap:anywhere'>" + esc(shown(path, conflict.base)) + "</span></div>" +
++          "<label style='display:block;margin:10px 0;overflow-wrap:anywhere'><input type='radio' name='config-choice-" + index + "' data-conflict-choice='mine' data-conflict-index='" + index + "'> " + esc(t("admin.conflict_mine")) + ": " + esc(change.op === "delete" ? t("admin.conflict_delete") : shown(path, change.value)) + "</label>" +
++          "<label style='display:block;overflow-wrap:anywhere'><input type='radio' name='config-choice-" + index + "' data-conflict-choice='current' data-conflict-index='" + index + "'> " + esc(t("admin.conflict_current")) + ": " + esc(shown(path, conflict.current)) + "</label></fieldset>";
++      });
++      if (comparison.changes.length) {
++        html += "<p>" + esc(t("admin.conflict_merged")) + "</p><ul>";
++        comparison.changes.forEach(function (change) { html += "<li>" + esc(change.key + (change.path.length ? "." + change.path.join(".") : "")) + "</li>"; });
++        html += "</ul>";
++      }
++      html += "<p data-conflict-status role='status'></p><button class='btn' data-conflict-submit>" + esc(t("admin.conflict_save")) + "</button> " +
++        "<button class='btn ghost' data-conflict-back>" + esc(t("admin.conflict_back")) + "</button>";
++      panel.innerHTML = html;
++      var host = done && activeModal ? activeModal.root.querySelector(".mbody") : $("#tab-" + editor.tab);
++      host.appendChild(panel);
++      if (done && activeModal) {
++        activeModal.root.setAttribute("aria-busy", "false");
++        $("#mSaveState").textContent = t("admin.conflict_title");
++      }
++      panel.querySelector("[data-conflict-submit]").onclick = function () {
++        if (!current()) return;
++        var selected = comparison.changes.slice();
++        for (var i = 0; i < comparison.conflicts.length; i++) {
++          var choice = panel.querySelector("[data-conflict-index='" + i + "']:checked");
++          if (!choice) { panel.querySelector("[data-conflict-status]").textContent = t("admin.conflict_choose"); return; }
++          if (choice.getAttribute("data-conflict-choice") === "mine") selected.push(comparison.conflicts[i].change);
++          else keptCurrent = true;
++        }
++        changes = selected; clearPanel(); commit(snapshot.revision);
++      };
++      panel.querySelector("[data-conflict-back]").onclick = function () { finish(false, { err: t("admin.conflict_back_hint") }); };
++      if (panel.scrollIntoView) panel.scrollIntoView(false);
++    }
++    function commit(revision) {
++      if (!current()) { editor.busy = false; return; }
++      if (!changes.length) { finish(true, { ok: true, n: 0 }); return; }
++      attempts++;
++      if (done && activeModal) {
++        activeModal.root.setAttribute("aria-busy", "true");
++        $("#mSaveState").textContent = t("admin.saving");
++      }
++      var body;
++      try { body = notice ? mockConfigMerge(notice.body, { expected_revision: revision }) :
++        { schema_version: 2, expected_revision: revision, ops: L.configIntentOps(changes) }; }
++      catch (error) { finish(false, { err: error.message }); return; }
++      api("POST", notice ? notice.path : "/api/config/commit", body, function (st, j) {
++        if (!current()) { editor.busy = false; return; }
++        if (st === 200 && j && j.ok === true) { finish(true, j); return; }
++        if (st === 409 && j && j.error_code === "config_conflict") {
++          api("GET", "/api/config/snapshot", null, function (status, snapshot) {
++            if (!current()) { editor.busy = false; return; }
++            if (status === 200 && validConfigSnapshot(snapshot)) compare(snapshot);
++            else failure(status, snapshot);
++          }, { timeout_ms: 10000 });
++        } else failure(st, j);
++      }, { timeout_ms: 10000 });
++    }
++    commit(editor.revision);
++  }
++
+   function postSecrets(writes, cb) {
+     writes = writes || [];
+     var i = 0, written = [];
+@@ -3453,7 +3714,7 @@
+     if (ok) text = t("admin.saved");
+     else if (result && result.unknown) text = t("admin.save_unknown");
+     else if (result && result.unavailable)
+-      text = t("admin.atomic_batch_unavailable");
++      text = t("admin.config_cas_unavailable");
+     else if (result && result.err) text += ": " + result.err;
+     if (cleanupFailed && cleanupFailed.length)
+       text += " (" + t("admin.secret_cleanup_deferred")
+@@ -3464,8 +3725,15 @@
+   }
+ 
+   function savePlanAndRefresh(plan, done) {
++    var editor = done && done.editor ? done.editor : S.editorBase;
++    if (!editor || !editor.revision) { showSaveResult(false, { unavailable: true }, [], done); return; }
++    if (editor.busy || editor.staging || !saveContextCurrent(done)) return;
++    editor.staging = true;
++    if (!done) lockInlineEditor(editor);
+     postSecrets(plan.secrets, function (secretsOk, secretResult) {
++      editor.staging = false;
+       if (!secretsOk) {
++        if (!done) unlockInlineEditor(editor);
+         deleteSecrets(secretResult.written || [], function (_, failed) {
+           showSaveResult(false, secretResult, failed, done);
+         });
+@@ -3474,10 +3742,13 @@
+       postEntries(plan.entries, plan.dels || null, function (ok, result) {
+         // Only known rejection permits rollback: an unknown commit may already reference the
+         // staged credential. Retain it until the authoritative configuration can be checked.
+-        var cleanup = ok ? (plan.retire_secret_refs || []) :
++        var cleanup = ok ? (result && result.kept_current ? [] : (plan.retire_secret_refs || [])) :
+           result && result.unknown ? [] : (secretResult.written || []);
+-        deleteSecrets(cleanup, function (_, failed) { showSaveResult(ok, result, failed, done); });
+-      });
++        deleteSecrets(cleanup, function (_, failed) {
++          if (ok && result && result.kept_current) failed = failed.concat(plan.retire_secret_refs || [], secretResult.written || []);
++          showSaveResult(ok, result, failed, done);
++        });
++      }, done, null, true, editor);
+     });
+   }
+ 
+@@ -3501,18 +3772,18 @@
+         if (warnings.length) text += " — " + warningText(warnings);
+       } else if (result && result.unknown) text = t("admin.save_unknown");
+       else if (result && result.unavailable)
+-        text = t("admin.atomic_batch_unavailable");
++        text = t("admin.config_cas_unavailable");
+       else if (result && result.err) text += ": " + result.err;
+       msg(text);
+       if (done) done(ok, text);
+       if (ok) refreshAfterSave(done);
+-    });
++    }, done, null, true);
+   }
+ 
+ 
+ 
+-  var S = { cfg: {}, status: {}, events: [], tab: "dash", locales: {}, panelToken: "" };
+-  var activeModal = null, modalRevision = 0;
++  var S = { cfg: {}, configRevision: "", editorBase: null, status: {}, events: [], tab: "dash", locales: {}, panelToken: "" };
++  var activeModal = null, modalRevision = 0, inlineDraft = null;
+   var AUTH = { generation: 0, pageEpoch: 0, authenticated: false, booting: false, runtime: null,
+                probe: null, loginAttempt: null, initRetryTimer: 0, initFailures: 0,
+                pollTimer: 0, pollBusy: false, loginPending: false, activityTimer: 0, csrf: "" };
+@@ -3538,6 +3809,7 @@
+ 
+   function stopAdminRuntime() {
+     suspendModal();
++    suspendInlineDraft();
+     AUTH.pageEpoch++;
+     AUTH.generation++;
+     AUTH.authenticated = false;
+@@ -3572,8 +3844,10 @@
+   function refreshConfig(cb, generation) {
+     if (generation === undefined && AUTH.runtime) generation = AUTH.generation;
+     var runtime = AUTH.runtime && AUTH.runtime.generation === generation ? AUTH.runtime : null;
+-    return api("GET", "/api/config", null, function (st, j) {
+-      if (generationCurrent(generation) && st === 200 && j) S.cfg = j;
++    return api("GET", "/api/config/snapshot", null, function (st, j) {
++      if (generationCurrent(generation) && st === 200 && validConfigSnapshot(j)) {
++        S.cfg = j.config; S.configRevision = j.revision;
++      } else if (generationCurrent(generation)) S.configRevision = "";
+       if (cb) cb(st, j);
+     }, { authenticated: generation !== undefined, generation: generation, context: runtime,
+           timeout_ms: 10000 });
+@@ -3700,7 +3974,7 @@
+   function openModal(title, bodyHtml, onSave) {
+     var m = $("#modal");
+     var state = { id: ++modalRevision, root: m, phase: "editing", attempt: 0,
+-                  pageEpoch: AUTH.pageEpoch, suspended: false, disabledFields: [] };
++                  pageEpoch: AUTH.pageEpoch, suspended: false, disabledFields: [], editor: configEditor() };
+     activeModal = state;
+     m.innerHTML =
+       "<div class='mbox card'><h2>" + esc(title) + "</h2><div class='mbody'>" + bodyHtml +
+@@ -3737,6 +4011,7 @@
+         return activeModal === state && state.attempt === attempt &&
+           !state.suspended && pageCurrent(state.pageEpoch);
+       };
++      complete.editor = state.editor;
+       complete.relevant = function () { return modalRevision === state.id && pageCurrent(state.pageEpoch); };
+       try {
+         var err = onSave(m, complete);
+@@ -3760,7 +4035,7 @@
+   }
+ 
+   function suspendModal() {
+-    $all("input[type='password'],[data-sensitive]").forEach(function (field) { field.value = ""; });
++    $all("input[type='password'],[data-sensitive],#cfgVal,#sysImport").forEach(function (field) { field.value = ""; });
+     S.panelToken = "";
+     if (!activeModal || activeModal.suspended) return;
+     var state = activeModal;
+@@ -3769,6 +4044,8 @@
+       state.scrollTop = state.root.scrollTop; state.scrollLeft = state.root.scrollLeft;
+     }
+     state.attempt++;
++    state.editor.busy = false; state.editor.staging = false;
++    $all("[data-config-conflict]", state.root).forEach(function (panel) { panel.parentNode.removeChild(panel); });
+     state.suspended = true; state.phase = "failed";
+     unlockModal(state);
+     show(state.root, false);
+@@ -3784,6 +4061,32 @@
+     restoreModalFocus(state);
+   }
+ 
++  function suspendInlineDraft() {
++    var editor = S.editorBase;
++    if (editor) unlockInlineEditor(editor);
++    if (activeModal || inlineDraft || !editor || !editor.root || !editor.fields) return;
++    var changed = editor.fields.some(function (field) {
++      return field.element.value !== field.value || field.element.checked !== field.checked;
++    });
++    if (!changed) return;
++    $all("[data-config-conflict]", editor.root).forEach(function (panel) { panel.parentNode.removeChild(panel); });
++    inlineDraft = { editor: editor, nodes: Array.prototype.slice.call(editor.root.childNodes),
++                    focus: document.activeElement, scroll: document.documentElement.scrollTop || document.body.scrollTop };
++    editor.busy = false; editor.staging = false;
++  }
++
++  function restoreInlineDraft() {
++    if (!inlineDraft || activeModal || inlineDraft.editor.tab !== S.tab) return;
++    var draft = inlineDraft, root = draft.editor.root;
++    inlineDraft = null;
++    while (root.firstChild) root.removeChild(root.firstChild);
++    draft.nodes.forEach(function (node) { root.appendChild(node); });
++    draft.editor.epoch = AUTH.pageEpoch; S.editorBase = draft.editor;
++    if (draft.focus && document.body.contains(draft.focus)) draft.focus.focus();
++    document.documentElement.scrollTop = draft.scroll; document.body.scrollTop = draft.scroll;
++    msg(t("admin.draft_restored"));
++  }
++
+   function openForm(title, fields, onSave) {
+     var html = "";
+     for (var i = 0; i < fields.length; i++) html += fieldHtml(fields[i]);
+@@ -4323,25 +4626,19 @@
+       "background:#101418;border:1px solid var(--line);white-space:pre-wrap'></div>";
+ 
+     var modal = openModal(t("notice.title"), body, function (m, done) {
+-      var offsetMin = L.timeStatusModel(S.status).zone ?
+-        ((S.status.time || {}).offset_min || 0) : 0;
+-      var plan = L.noticePayload({ text: m.querySelector("#noticeText").value,
+-                                   expiry: m.querySelector("#noticeExpiry").value,
+-                                   custom_hours: m.querySelector("#noticeHours").value },
+-                                 new Date().getTime(), offsetMin);
++      var plan = L.noticeCommitPayload({ text: m.querySelector("#noticeText").value,
++                                         expiry: m.querySelector("#noticeExpiry").value,
++                                         custom_hours: m.querySelector("#noticeHours").value });
+       if (plan.error) return plan.n === undefined ? t(plan.error) :
+         fmt(t(plan.error), { n: plan.n });
+       var target = m.querySelector("#noticeTarget").value;
+       var path = target === "*" ? "/api/notice"
+                                 : "/api/doors/" + encodeURIComponent(target) + "/notice";
+-      api("POST", path, plan.body,
+-          function (st, result) {
+-            if (!done.current()) return;
+-            if (st === 200 && result && result.ok) {
+-              msg(t("notice.saved"));
+-              done(true); refreshAfterSave(done);
+-            } else done(false, t(st === 0 ? "admin.save_unknown" : "notice.failed"));
+-          }, { timeout_ms: 10000 });
++      postEntries(null, null, function (ok, result) {
++        if (!done.current()) return;
++        if (ok) { msg(t("notice.saved")); done(true); refreshAfterSave(done); }
++        else done(false, t(result && result.unknown ? "admin.save_unknown" : "notice.failed"));
++      }, done, { path: path, body: plan.body, key: target === "*" ? "notice.global" : "doors." + target + ".notice" });
+     });
+     var root = modal || document.querySelector("#modal");
+     var text = root.querySelector("#noticeText");
+@@ -6571,7 +6868,7 @@
+           msg(fmt(t("admin.imported"), { n: j.n || entries.length }));
+           refreshConfig(function () { renderTab(); });
+         } else if (j && j.unavailable)
+-          msg(t("admin.atomic_batch_unavailable"));
++          msg(t("admin.config_cas_unavailable"));
+         else msg(t("admin.save_failed") + ((j && j.err) ? ": " + j.err : ""));
+       });
+     };
+@@ -6613,9 +6910,9 @@
+       try { jsonValue = JSON.parse(val); } catch (e) { msg(t("admin.valid_json_required")); return; }
+       postEntries([{ key: key, value: jsonValue }], null, function (ok, result) {
+         msg(ok ? "OK" : ((result && result.unavailable) ?
+-          t("admin.atomic_batch_unavailable") : "NG" +
++          t("admin.config_cas_unavailable") : "NG" +
+           ((result && result.err) ? " (" + result.err + ")" : "")));
+-        refreshConfig(function () { renderTab(); });
++        if (ok) refreshConfig(function () { renderTab(); });
+       });
+     };
+     $("#logBtn").onclick = function () {
+@@ -8112,11 +8409,17 @@
+   };
+ 
+   function renderTab() {
++    S.editorBase = configEditor();
+     var f = TABS[S.tab];
+     if (f) f();
++    S.editorBase.root = $("#tab-" + S.tab);
++    S.editorBase.fields = $all("input,select,textarea", S.editorBase.root).filter(function (field) {
++      return field.type !== "password" && field.type !== "file" && !field.readOnly &&
++        !field.hasAttribute("data-sensitive") && field.id !== "cfgVal" && field.id !== "sysImport";
++    }).map(function (field) { return { element: field, value: field.value, checked: field.checked }; });
+   }
+ 
+-  function switchTab(name) {
++  function switchTab(name, afterRender) {
+     var was = S.tab;
+     S.tab = name;
+     $all("nav button").forEach(function (b) {
+@@ -8127,8 +8430,9 @@
+     // new visit. Retire the previous visit's poll/scan state before issuing its replacement.
+     if (was === "pair") pairTabLeave();
+     if (name === "pair") { pairTabEnter(); return; }
+-    if (name === "events") refreshEvents(renderTab);
+-    else refreshConfig(function () { refreshStatus(renderTab); });
++    function rendered() { renderTab(); if (afterRender) afterRender(); }
++    if (name === "events") refreshEvents(rendered);
++    else refreshConfig(function () { refreshStatus(rendered); });
+   }
+ 
+   $all("nav button").forEach(function (b) {
+@@ -8257,8 +8561,9 @@
+         info.textContent = (n.name || n.id || "") + " · v" + (n.version || "?");
+         AUTH.booting = false;
+         AUTH.authenticated = true;
+-        switchTab("dash");
+-        restoreModalDraft();
++        switchTab(inlineDraft ? inlineDraft.editor.tab : "dash", function () {
++          restoreModalDraft(); restoreInlineDraft();
++        });
+         schedulePoll(generation);
+       }, generation);
+     }, generation);

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.SosVisibilityTest" tests="8" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:14:56" hostname="MacBookPro.local" time="0.001">
+  <properties/>
+  <testcase name="anEmergencyBlockWithoutTheKeyStillDefaultsToTheIndoorPanel" classname="jp.ox.doorbell.SosVisibilityTest" time="0.0"/>
+  <testcase name="aClusterMayPutTheBarOnBothRoles" classname="jp.ox.doorbell.SosVisibilityTest" time="0.001"/>
+  <testcase name="anUnknownRoleNeverGetsTheBar" classname="jp.ox.doorbell.SosVisibilityTest" time="0.0"/>
+  <testcase name="aListNamingARoleShowsTheBarOnThatRoleOnly" classname="jp.ox.doorbell.SosVisibilityTest" time="0.0"/>
+  <testcase name="anEmptyListHidesTheBarOnEveryRole" classname="jp.ox.doorbell.SosVisibilityTest" time="0.0"/>
+  <testcase name="anAbsentKeyShowsTheBarOnTheIndoorPanelOnly" classname="jp.ox.doorbell.SosVisibilityTest" time="0.0"/>
+  <testcase name="coreDefaultRoleIsTheIndoorPanel" classname="jp.ox.doorbell.SosVisibilityTest" time="0.0"/>
+  <testcase name="aNonListValueFallsBackToTheDefault" classname="jp.ox.doorbell.SosVisibilityTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

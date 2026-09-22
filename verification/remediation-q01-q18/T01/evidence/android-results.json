@@ -1,0 +1,34 @@
+{
+  "modern": {
+    "unit_suites": 43,
+    "unit_counts": {
+      "tests": 377,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lint_errors": 0,
+    "apk": "/Users/ox/Documents/project/app-doorbell/android/app/build/outputs/apk/modern/debug/app-modern-debug.apk",
+    "apk_sha256": "98e91e73b31558f2b33ec778fa07e2a3af6d77f130b05907b304f0b1a5f275d1",
+    "modified_at": "2026-09-22T12:58:05.864537+00:00",
+    "version_name": "0.3.19+b26e0d3",
+    "version_code": 20,
+    "evidence_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-modern-results"
+  },
+  "legacy19": {
+    "unit_suites": 43,
+    "unit_counts": {
+      "tests": 377,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lint_errors": 0,
+    "apk": "/Users/ox/Documents/project/app-doorbell/android/app/build/outputs/apk/legacy19/debug/app-legacy19-debug.apk",
+    "apk_sha256": "02cdc66d4e65587b72a3791e553c6d2307582b7a526a6ad7b5d02d4015569582",
+    "modified_at": "2026-09-22T12:59:05.139280+00:00",
+    "version_name": "0.3.19+b26e0d3-legacy19",
+    "version_code": 20,
+    "evidence_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-legacy19-results"
+  }
+}

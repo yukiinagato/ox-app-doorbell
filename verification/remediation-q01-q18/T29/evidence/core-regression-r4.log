@@ -1,0 +1,1211 @@
+09-23 03:27:33 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27672
+09-23 03:27:33 I [httpd] listening on 27218,[::]:27218
+09-23 03:27:33 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:33 I [node] node 97819d91 (credential-durability) started
+09-23 03:27:33 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:27:33 W [node] administrator password update was not committed
+09-23 03:27:33 I [node] initialized the cluster administrator password
+09-23 03:27:35 I [httpd] stopped
+09-23 03:27:35 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26481
+09-23 03:27:35 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:27:35 I [httpd] listening on 21968,[::]:21968
+09-23 03:27:35 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:35 I [node] node a6ee0ff5 (config-durability) started
+09-23 03:27:35 I [node] initialized the cluster administrator password
+09-23 03:27:35 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:27:35 E [events] local event persistence failed; event was not emitted
+09-23 03:27:35 E [events] local event persistence failed; event was not emitted
+09-23 03:27:37 I [httpd] stopped
+09-23 03:27:37 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30996
+09-23 03:27:37 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:27:37 I [httpd] listening on 21227,[::]:21227
+09-23 03:27:37 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:37 I [node] node 0f156d70 (admin-test) started
+09-23 03:27:37 I [node] initialized the cluster administrator password
+09-23 03:27:39 W [node] programmatic configuration edit rejected: media_sources
+09-23 03:27:39 W [node] programmatic configuration edit rejected: media_sources
+09-23 03:27:39 W [node] programmatic configuration edit rejected: custom.integration
+09-23 03:27:39 W [node] programmatic configuration edit rejected: custom.integration.credential_ref
+09-23 03:27:39 W [node] programmatic configuration edit rejected: custom.integration.basic_auth
+09-23 03:27:39 W [node] programmatic configuration edit rejected: custom.fragment
+09-23 03:27:39 W [node] programmatic configuration edit rejected: devices
+09-23 03:27:39 W [node] programmatic configuration edit rejected: web_push.subscriptions.aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+09-23 03:27:41 I [httpd] stopped
+09-23 03:27:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26654
+09-23 03:27:41 I [httpd] listening on 22885,[::]:22885
+09-23 03:27:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:41 I [node] node e3b9b9ac (panel-rotation-durability) started
+09-23 03:27:41 I [node] initialized the cluster administrator password
+09-23 03:27:41 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:27:43 I [httpd] stopped
+09-23 03:27:43 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:25692
+09-23 03:27:43 I [httpd] listening on 27173,[::]:27173
+09-23 03:27:43 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:43 I [node] node 93052e8a (panel-primary) started
+09-23 03:27:43 I [node] initialized the cluster administrator password
+09-23 03:27:43 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:24180
+09-23 03:27:43 I [httpd] listening on 21422,[::]:21422
+09-23 03:27:43 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:43 I [node] node 2feaa89e (panel-failover) started
+09-23 03:27:46 I [httpd] stopped
+09-23 03:27:48 I [httpd] stopped
+09-23 03:27:48 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22423
+09-23 03:27:48 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:27:48 I [httpd] listening on 20729,[::]:20729
+09-23 03:27:48 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:48 I [node] node 5adba451 (tg-admin) started
+09-23 03:27:48 I [node] initialized the cluster administrator password
+09-23 03:27:48 I [telegram] bridge started as Telegram leader
+09-23 03:27:50 I [httpd] stopped
+09-23 03:27:50 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28251
+09-23 03:27:50 I [httpd] listening on 30955,[::]:30955
+09-23 03:27:50 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:50 I [node] node cb463b2e (tg-nolead) started
+09-23 03:27:50 I [node] initialized the cluster administrator password
+09-23 03:27:52 I [httpd] stopped
+09-23 03:27:52 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29817
+09-23 03:27:52 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:27:52 I [httpd] listening on 26686,[::]:26686
+09-23 03:27:52 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:52 I [node] node 9bcdb583 (pairing-http) started
+09-23 03:27:52 I [node] initialized the cluster administrator password
+09-23 03:27:52 I [node] left the cluster: configuration replica and 0 cached peer contract(s) dropped
+09-23 03:27:52 I [node] migrated the local administrator digest to replicated configuration
+09-23 03:27:54 I [httpd] stopped
+09-23 03:27:54 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29831
+09-23 03:27:54 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:27:54 I [httpd] listening on 24192,[::]:24192
+09-23 03:27:54 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:54 I [node] node 0f5280c2 (notice-api) started
+09-23 03:27:54 I [node] initialized the cluster administrator password
+09-23 03:27:54 W [node] rejected door notice for d_front (announcement text must be between 1 and 200 characters)
+09-23 03:27:56 I [httpd] stopped
+09-23 03:27:56 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21924
+09-23 03:27:56 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:27:56 I [httpd] listening on 25311,[::]:25311
+09-23 03:27:56 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:56 I [node] node c7add42a (T03-unlock-test) started
+09-23 03:27:56 I [node] initialized the cluster administrator password
+09-23 03:27:58 I [httpd] stopped
+09-23 03:27:58 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27142
+09-23 03:27:58 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:27:58 I [httpd] listening on 26888,[::]:26888
+09-23 03:27:58 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:27:58 I [node] node 40b6d8c3 (T03-unlock-test) started
+09-23 03:27:58 I [node] initialized the cluster administrator password
+09-23 03:28:00 I [httpd] stopped
+09-23 03:28:00 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22471
+09-23 03:28:00 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:28:00 I [httpd] listening on 26428,[::]:26428
+09-23 03:28:00 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:00 I [node] node d5abbb16 (T03-unlock-test) started
+09-23 03:28:00 I [node] initialized the cluster administrator password
+09-23 03:28:02 I [httpd] stopped
+09-23 03:28:02 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30012
+09-23 03:28:02 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:28:02 I [httpd] listening on 20935,[::]:20935
+09-23 03:28:02 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:02 I [node] node d8a480cc (T03-unlock-test) started
+09-23 03:28:02 I [node] initialized the cluster administrator password
+09-23 03:28:04 I [httpd] stopped
+09-23 03:28:04 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:28:04 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:04 I [node] node 3cc27bba (T03-native-test) started
+09-23 03:28:04 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27226
+09-23 03:28:04 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:28:04 I [httpd] listening on 30958,[::]:30958
+09-23 03:28:04 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:04 I [node] node 8839fcf7 (round4-api) started
+09-23 03:28:04 I [node] initialized the cluster administrator password
+09-23 03:28:04 W [node] rejected door notice for * (announcement text must be between 1 and 200 characters)
+09-23 03:28:06 I [httpd] stopped
+09-23 03:28:06 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30405
+09-23 03:28:06 I [node] created the missing door entry doors.door-ipad1 for this door station
+09-23 03:28:06 I [httpd] listening on 28322,[::]:28322
+09-23 03:28:06 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:06 I [node] node 71d4b00d (no-camera) started
+09-23 03:28:06 I [node] initialized the cluster administrator password
+09-23 03:28:08 I [httpd] stopped
+09-23 03:28:08 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:29660
+09-23 03:28:08 I [httpd] listening on 29719,[::]:29719
+09-23 03:28:08 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:08 I [node] node 7c71f118 (qr-host) started
+09-23 03:28:08 I [node] initialized the cluster administrator password
+09-23 03:28:10 I [httpd] stopped
+09-23 03:28:10 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:30620
+09-23 03:28:10 I [httpd] listening on 31502,[::]:31502
+09-23 03:28:10 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:10 I [node] node f788bf93 (telegram-source) started
+09-23 03:28:10 I [telegram] bridge started as Telegram leader
+09-23 03:28:10 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:21735
+09-23 03:28:10 I [httpd] listening on 26444,[::]:26444
+09-23 03:28:10 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:10 I [node] node 11494f5a (telegram-follower) started
+09-23 03:28:10 I [node] initialized the cluster administrator password
+09-23 03:28:13 I [httpd] stopped
+09-23 03:28:14 I [httpd] stopped
+09-23 03:28:14 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30226
+09-23 03:28:14 I [httpd] listening on 20530,[::]:20530
+09-23 03:28:14 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:14 I [node] node ba5fe4ef (doorbell) started
+09-23 03:28:14 I [node] initialized the cluster administrator password
+09-23 03:28:16 I [httpd] stopped
+09-23 03:28:16 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21272
+09-23 03:28:16 I [node] created the missing door entry doors.front for this door station
+09-23 03:28:16 I [httpd] listening on 30644,[::]:30644
+09-23 03:28:16 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:16 I [node] node 6c2f6c12 (doorbell) started
+09-23 03:28:16 I [node] initialized the cluster administrator password
+09-23 03:28:25 I [httpd] stopped
+09-23 03:28:25 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28755
+09-23 03:28:25 I [httpd] listening on 27529,[::]:27529
+09-23 03:28:25 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:25 I [node] node 9487e232 (doorbell) started
+09-23 03:28:25 I [node] initialized the cluster administrator password
+09-23 03:28:27 I [httpd] stopped
+09-23 03:28:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=session-a:1
+09-23 03:28:27 I [httpd] listening on 28773,[::]:28773
+09-23 03:28:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:27 I [node] node c287b7a0 (session-a) started
+09-23 03:28:27 I [node] initialized the cluster administrator password
+09-23 03:28:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=session-b:1
+09-23 03:28:27 I [httpd] listening on 28030,[::]:28030
+09-23 03:28:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:27 I [node] node 3747a39b (session-b) started
+09-23 03:28:29 I [httpd] stopped
+09-23 03:28:31 I [httpd] stopped
+09-23 03:28:31 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24137
+09-23 03:28:31 I [httpd] listening on 24605,[::]:24605
+09-23 03:28:31 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:31 I [node] node ec57c07e (doorbell) started
+09-23 03:28:31 I [node] initialized the cluster administrator password
+09-23 03:28:31 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:28:31 W [node] administrator password update was not committed
+09-23 03:28:31 W [node] administrator password update was not committed
+09-23 03:28:33 I [httpd] stopped
+09-23 03:28:33 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26641
+09-23 03:28:34 I [httpd] listening on 31094,[::]:31094
+09-23 03:28:34 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:34 I [node] node bf24edda (doorbell) started
+09-23 03:28:34 I [node] initialized the cluster administrator password
+09-23 03:28:36 I [httpd] stopped
+09-23 03:28:36 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24017
+09-23 03:28:36 I [httpd] listening on 20069,[::]:20069
+09-23 03:28:36 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:36 I [node] node 29374bfa (doorbell) started
+09-23 03:28:38 I [httpd] stopped
+09-23 03:28:38 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:31564
+09-23 03:28:38 I [httpd] listening on 28352,[::]:28352
+09-23 03:28:38 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:38 I [node] node 75968e2d (doorbell) started
+09-23 03:28:38 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:28:40 I [httpd] stopped
+09-23 03:28:40 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26277
+09-23 03:28:40 I [httpd] listening on 27123,[::]:27123
+09-23 03:28:40 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:40 I [node] node e66b62b3 (doorbell) started
+09-23 03:28:40 I [node] initialized the cluster administrator password
+09-23 03:28:42 I [httpd] stopped
+09-23 03:28:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28936
+09-23 03:28:42 I [httpd] listening on 25881,[::]:25881
+09-23 03:28:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:42 I [node] node 52153607 (doorbell) started
+09-23 03:28:42 I [node] initialized the cluster administrator password
+09-23 03:28:44 I [httpd] stopped
+09-23 03:28:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:28:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:44 I [node] node 9d95f5b1 (doorbell) started
+09-23 03:28:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24039
+09-23 03:28:44 I [httpd] listening on 26118,[::]:26118
+09-23 03:28:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:44 I [node] node 59a1ca5b (doorbell) started
+09-23 03:28:46 I [httpd] stopped
+09-23 03:28:46 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21339
+09-23 03:28:46 I [httpd] listening on 23118,[::]:23118
+09-23 03:28:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:46 I [node] node baa65ab4 (doorbell) started
+09-23 03:28:48 I [httpd] stopped
+09-23 03:28:48 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:28:48 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:48 I [node] node 5ff491e1 (doorbell) started
+09-23 03:28:48 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:31523
+09-23 03:28:48 I [httpd] listening on 31665,[::]:31665
+09-23 03:28:48 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:48 I [node] node 33385bbc (doorbell) started
+09-23 03:28:50 I [httpd] stopped
+09-23 03:28:50 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29774
+09-23 03:28:50 I [httpd] listening on 24179,[::]:24179
+09-23 03:28:50 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:50 I [node] node 59b7a34b (doorbell) started
+09-23 03:28:50 I [node] initialized the cluster administrator password
+09-23 03:28:52 I [httpd] stopped
+09-23 03:28:52 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:20528
+09-23 03:28:52 I [httpd] listening on 28583,[::]:28583
+09-23 03:28:52 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:52 I [node] node 56ef14ec (doorbell) started
+09-23 03:28:52 I [node] initialized the cluster administrator password
+09-23 03:28:54 I [httpd] stopped
+09-23 03:28:54 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:31145
+09-23 03:28:54 I [httpd] listening on 30794,[::]:30794
+09-23 03:28:54 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:54 I [node] node 193304c4 (doorbell) started
+09-23 03:28:56 I [httpd] stopped
+09-23 03:28:56 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28415
+09-23 03:28:56 I [httpd] listening on 21240,[::]:21240
+09-23 03:28:56 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:56 I [node] node b0a6407d (doorbell) started
+09-23 03:28:59 I [httpd] stopped
+09-23 03:28:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:28:59 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:28:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:59 I [node] node c200d724 (front) started
+09-23 03:28:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=B:1
+09-23 03:28:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:59 I [node] node 26fdcb9d (kitchen) started
+09-23 03:28:59 I [node] asset cached: e8bf523c8521… (23B)
+09-23 03:28:59 W [node] background image e8bf523c not sampled (decode_failed); shells must sample it locally
+09-23 03:28:59 W [node] background image e8bf523c not sampled (decode_failed); shells must sample it locally
+09-23 03:28:59 W [node] background image e8bf523c not sampled (decode_failed); shells must sample it locally
+09-23 03:28:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:28:59 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:28:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:59 I [node] node 937d6dae (front) started
+09-23 03:28:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=B:1
+09-23 03:28:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:59 I [node] node 9d6ac302 (kitchen) started
+09-23 03:28:59 W [node] background image 314e2475 not sampled (missing); shells must sample it locally
+09-23 03:28:59 W [node] background image 314e2475 not sampled (missing); shells must sample it locally
+09-23 03:28:59 W [mesh] fetchBlob: no peer has 314e24755e55
+09-23 03:28:59 W [mesh] fetchBlob: no peer has 314e24755e55
+09-23 03:28:59 I [node] asset cached: 314e24755e55… (70B)
+09-23 03:28:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:28:59 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:28:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:59 I [node] node 3f87c9b1 (front) started
+09-23 03:28:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=B:1
+09-23 03:28:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:59 I [node] node da9aabd4 (kitchen) started
+09-23 03:28:59 I [node] asset cached: 21029346ee84… (1048699B)
+09-23 03:28:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21080
+09-23 03:28:59 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:28:59 I [httpd] listening on 21734,[::]:21734
+09-23 03:28:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:28:59 I [node] node dc4d8d5e (asset-http) started
+09-23 03:28:59 I [node] initialized the cluster administrator password
+09-23 03:29:01 I [httpd] stopped
+09-23 03:29:01 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=library:1
+09-23 03:29:01 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:29:01 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:01 I [node] node 28c7280a (source) started
+09-23 03:29:01 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=new:1
+09-23 03:29:01 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:29:01 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:01 I [node] node 5840a1a1 (new) started
+09-23 03:29:01 I [node] asset cached: 58322d95fe4c… (70B)
+09-23 03:29:01 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:01 I [store] pruned 3 replicated events
+09-23 03:29:01 I [store] pruned 2 replicated events
+09-23 03:29:01 I [store] pruned 3 replicated events
+09-23 03:29:01 I [store] pruned 2 replicated events
+09-23 03:29:01 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29814
+09-23 03:29:01 I [httpd] listening on 24613,[::]:24613
+09-23 03:29:01 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:01 I [node] node 06284131 (call-history) started
+09-23 03:29:03 I [httpd] stopped
+09-23 03:29:03 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21334
+09-23 03:29:03 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:29:04 I [httpd] listening on 29976,[::]:29976
+09-23 03:29:04 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:04 I [node] node 0f771255 (call-history) started
+09-23 03:29:06 I [httpd] stopped
+09-23 03:29:06 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:20028
+09-23 03:29:06 I [httpd] listening on 24268,[::]:24268
+09-23 03:29:06 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:06 I [node] node c9701b99 (call-history) started
+09-23 03:29:06 I [node] initialized the cluster administrator password
+09-23 03:29:08 I [httpd] stopped
+09-23 03:29:08 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28519
+09-23 03:29:08 I [httpd] listening on 24905,[::]:24905
+09-23 03:29:08 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:08 I [node] node 64b81885 (call-history) started
+09-23 03:29:08 I [node] initialized the cluster administrator password
+09-23 03:29:10 I [httpd] stopped
+09-23 03:29:10 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27072
+09-23 03:29:10 I [httpd] listening on 28555,[::]:28555
+09-23 03:29:10 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:10 I [node] node 902ac031 (call-history) started
+09-23 03:29:10 I [node] initialized the cluster administrator password
+09-23 03:29:12 I [httpd] stopped
+09-23 03:29:12 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21145
+09-23 03:29:12 I [httpd] listening on 20524,[::]:20524
+09-23 03:29:12 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:12 I [node] node c7f91c6f (call-history) started
+09-23 03:29:12 I [node] initialized the cluster administrator password
+09-23 03:29:14 I [httpd] stopped
+09-23 03:29:14 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:14 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:14 I [node] node b9784acb (power-capi) started
+09-23 03:29:14 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:14 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:14 I [node] node f69cd7fd (capi-reply) started
+09-23 03:29:14 W [node] quick reply rejected because the call identity is stale on door d_front
+09-23 03:29:14 W [node] quick reply rejected because the call identity is stale on door d_front
+09-23 03:29:14 W [node] quick reply rejected because the call is no longer active
+09-23 03:29:14 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:14 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:14 I [node] node aeaa3883 (capi-lifecycle) started
+09-23 03:29:14 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:14 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:14 I [node] node 73149ac8 (device-info-test) started
+09-23 03:29:14 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:14 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:14 I [node] node 3d2b4124 (config-abi) started
+09-23 03:29:15 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:15 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:15 I [node] node 086fba2d (admin-pw) started
+09-23 03:29:15 W [node] administrator password locked out for ten minutes after repeated failures
+09-23 03:29:15 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:15 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:15 I [node] node 5d7da39a (auth-serial) started
+09-23 03:29:15 W [node] administrator password verification was not scheduled
+09-23 03:29:15 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:15 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:15 I [node] node a9fd6253 (callback-drain) started
+09-23 03:29:15 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:15 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:15 I [node] node 6b964ada (callback-self-unregister) started
+09-23 03:29:15 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 03:29:16 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:16 I [node] node 2a1045c7 (round7) started
+09-23 03:29:16 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-a
+09-23 03:29:16 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:16 I [node] node fadfd075 (config-race-a) started
+09-23 03:29:16 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-b
+09-23 03:29:16 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:16 I [node] node 6fde41e8 (config-race-b) started
+09-23 03:29:16 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-observer
+09-23 03:29:16 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:16 I [node] node e2978fbb (config-race-observer) started
+09-23 03:29:19 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-a
+09-23 03:29:19 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:19 I [node] node ceb74967 (config-race-a) started
+09-23 03:29:19 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-b
+09-23 03:29:19 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:19 I [node] node 69fb2b08 (config-race-b) started
+09-23 03:29:19 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-observer
+09-23 03:29:19 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:19 I [node] node 7546f359 (config-race-observer) started
+09-23 03:29:23 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-a
+09-23 03:29:23 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:23 I [node] node 8a484912 (config-race-a) started
+09-23 03:29:23 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-b
+09-23 03:29:23 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:23 I [node] node 3125558d (config-race-b) started
+09-23 03:29:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-a
+09-23 03:29:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:24 I [node] node 3b0f2a8e (config-race-a) started
+09-23 03:29:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-b
+09-23 03:29:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:24 I [node] node b311afb6 (config-race-b) started
+09-23 03:29:24 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:29:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-a
+09-23 03:29:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:24 I [node] node 03f99bec (config-race-a) started
+09-23 03:29:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-b
+09-23 03:29:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:24 I [node] node 87d0e154 (config-race-b) started
+09-23 03:29:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-a
+09-23 03:29:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:24 I [node] node 611f17cd (config-race-a) started
+09-23 03:29:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-b
+09-23 03:29:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:24 I [node] node 0986f035 (config-race-b) started
+09-23 03:29:25 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 03:29:25 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:25 I [node] node e6120f58 (review-a) started
+09-23 03:29:25 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 03:29:25 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:25 I [node] node a7b0d67b (review-b) started
+09-23 03:29:25 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 03:29:25 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:25 I [node] node 617bdd2c (review-a) started
+09-23 03:29:25 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 03:29:25 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:25 I [node] node 7c8b63eb (review-b) started
+09-23 03:29:25 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30362
+09-23 03:29:25 I [httpd] listening on 26607,[::]:26607
+09-23 03:29:25 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:25 I [node] node c34672bd (doorbell) started
+09-23 03:29:25 I [node] initialized the cluster administrator password
+09-23 03:29:27 I [httpd] stopped
+09-23 03:29:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 03:29:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:27 I [node] node 8cdfa759 (review-a) started
+09-23 03:29:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 03:29:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:27 I [node] node 32bf9260 (review-b) started
+09-23 03:29:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 03:29:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:27 I [node] node 439bf54c (review-a) started
+09-23 03:29:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 03:29:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:27 I [node] node 61a9e30c (review-b) started
+09-23 03:29:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 03:29:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:27 I [node] node 18c1da4e (review-a) started
+09-23 03:29:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 03:29:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:27 I [node] node 59d915e1 (review-b) started
+09-23 03:29:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 03:29:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:27 I [node] node 6bb927b6 (review-a) started
+09-23 03:29:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 03:29:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:27 I [node] node 67baa8e0 (review-b) started
+09-23 03:29:28 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 W [mesh] rejected malformed sync response from 67baa8e0cc3bacb47da59bc9ab193797
+09-23 03:29:28 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 03:29:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:28 I [node] node 4c3b8885 (review-a) started
+09-23 03:29:28 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 03:29:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:28 I [node] node cacf7701 (review-b) started
+09-23 03:29:28 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 03:29:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:28 I [node] node 01d7deb1 (review-a) started
+09-23 03:29:28 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 03:29:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:28 I [node] node 494d91c9 (review-b) started
+09-23 03:29:28 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26299
+09-23 03:29:28 I [httpd] listening on 20268,[::]:20268
+09-23 03:29:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:28 I [node] node 24624ccd (doorbell) started
+09-23 03:29:28 I [node] initialized the cluster administrator password
+09-23 03:29:30 I [httpd] stopped
+09-23 03:29:30 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26931
+09-23 03:29:30 I [httpd] listening on 29583,[::]:29583
+09-23 03:29:30 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:30 I [node] node a3d39d66 (doorbell) started
+09-23 03:29:30 I [node] initialized the cluster administrator password
+09-23 03:29:32 I [httpd] stopped
+09-23 03:29:32 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24297
+09-23 03:29:32 I [httpd] listening on 21709,[::]:21709
+09-23 03:29:32 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:32 I [node] node 66458791 (doorbell) started
+09-23 03:29:32 I [node] initialized the cluster administrator password
+09-23 03:29:34 I [httpd] stopped
+09-23 03:29:34 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23685
+09-23 03:29:34 I [httpd] listening on 22468,[::]:22468
+09-23 03:29:34 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:34 I [node] node da76958a (doorbell) started
+09-23 03:29:34 I [node] initialized the cluster administrator password
+09-23 03:29:36 I [httpd] stopped
+09-23 03:29:36 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:25810
+09-23 03:29:36 I [httpd] listening on 21952,[::]:21952
+09-23 03:29:36 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:36 I [node] node 93e442b0 (doorbell) started
+09-23 03:29:36 I [node] initialized the cluster administrator password
+09-23 03:29:38 I [httpd] stopped
+09-23 03:29:38 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26410
+09-23 03:29:38 I [httpd] listening on 28914,[::]:28914
+09-23 03:29:38 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:38 I [node] node c18b0e04 (doorbell) started
+09-23 03:29:38 I [node] initialized the cluster administrator password
+09-23 03:29:40 I [httpd] stopped
+09-23 03:29:40 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28014
+09-23 03:29:40 I [httpd] listening on 31744,[::]:31744
+09-23 03:29:40 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:40 I [node] node a3f431de (doorbell) started
+09-23 03:29:40 I [node] initialized the cluster administrator password
+09-23 03:29:42 I [httpd] stopped
+09-23 03:29:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30352
+09-23 03:29:42 I [httpd] listening on 28070,[::]:28070
+09-23 03:29:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:42 I [node] node e8cd664e (doorbell) started
+09-23 03:29:42 I [node] initialized the cluster administrator password
+09-23 03:29:44 I [httpd] stopped
+09-23 03:29:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27852
+09-23 03:29:44 I [httpd] listening on 23761,[::]:23761
+09-23 03:29:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:44 I [node] node 58f0f7c9 (doorbell) started
+09-23 03:29:44 I [node] initialized the cluster administrator password
+09-23 03:29:46 I [httpd] stopped
+09-23 03:29:46 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:25794
+09-23 03:29:46 I [httpd] listening on 29628,[::]:29628
+09-23 03:29:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:46 I [node] node 835c1b57 (doorbell) started
+09-23 03:29:46 I [node] initialized the cluster administrator password
+09-23 03:29:49 I [httpd] stopped
+09-23 03:29:49 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28458
+09-23 03:29:49 I [httpd] listening on 29767,[::]:29767
+09-23 03:29:49 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:49 I [node] node 352921f7 (doorbell) started
+09-23 03:29:49 I [node] initialized the cluster administrator password
+09-23 03:29:51 I [httpd] stopped
+09-23 03:29:51 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:25377
+09-23 03:29:51 I [httpd] listening on 31599,[::]:31599
+09-23 03:29:51 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:51 I [node] node ba430260 (doorbell) started
+09-23 03:29:51 I [node] initialized the cluster administrator password
+09-23 03:29:53 I [httpd] stopped
+09-23 03:29:53 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29904
+09-23 03:29:53 I [httpd] listening on 30883,[::]:30883
+09-23 03:29:53 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:53 I [node] node 062b5258 (doorbell) started
+09-23 03:29:53 I [node] initialized the cluster administrator password
+09-23 03:29:55 I [httpd] stopped
+09-23 03:29:55 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29818
+09-23 03:29:55 I [httpd] listening on 31701,[::]:31701
+09-23 03:29:55 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:55 I [node] node 25181688 (doorbell) started
+09-23 03:29:55 I [node] initialized the cluster administrator password
+09-23 03:29:57 I [httpd] stopped
+09-23 03:29:57 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23188
+09-23 03:29:57 I [httpd] listening on 31997,[::]:31997
+09-23 03:29:57 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:57 I [node] node 8bee30f1 (doorbell) started
+09-23 03:29:57 I [node] initialized the cluster administrator password
+09-23 03:29:59 I [httpd] stopped
+09-23 03:29:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22355
+09-23 03:29:59 I [httpd] listening on 24855,[::]:24855
+09-23 03:29:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:29:59 I [node] node 63ba8020 (doorbell) started
+09-23 03:29:59 I [node] initialized the cluster administrator password
+09-23 03:30:01 I [httpd] stopped
+09-23 03:30:01 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:31590
+09-23 03:30:01 I [httpd] listening on 29846,[::]:29846
+09-23 03:30:01 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:01 I [node] node 429b9b00 (doorbell) started
+09-23 03:30:01 I [node] initialized the cluster administrator password
+09-23 03:30:03 I [httpd] stopped
+09-23 03:30:03 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23789
+09-23 03:30:03 I [httpd] listening on 23248,[::]:23248
+09-23 03:30:03 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:03 I [node] node ce0af58a (doorbell) started
+09-23 03:30:03 I [node] initialized the cluster administrator password
+09-23 03:30:03 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:30:05 I [httpd] stopped
+09-23 03:30:05 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26419
+09-23 03:30:05 I [httpd] listening on 27395,[::]:27395
+09-23 03:30:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:05 I [node] node ce0af58a (doorbell) started
+09-23 03:30:07 I [httpd] stopped
+09-23 03:30:07 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24758
+09-23 03:30:07 I [httpd] listening on 28822,[::]:28822
+09-23 03:30:07 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:07 I [node] node f3681f47 (doorbell) started
+09-23 03:30:07 I [node] initialized the cluster administrator password
+09-23 03:30:09 I [httpd] stopped
+09-23 03:30:09 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24656
+09-23 03:30:09 I [httpd] listening on 26707,[::]:26707
+09-23 03:30:09 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:09 I [node] node 944991bb (doorbell) started
+09-23 03:30:09 I [node] initialized the cluster administrator password
+09-23 03:30:11 I [httpd] stopped
+09-23 03:30:11 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28943
+09-23 03:30:11 I [httpd] listening on 22780,[::]:22780
+09-23 03:30:11 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:11 I [node] node b4e1885a (doorbell) started
+09-23 03:30:11 I [node] initialized the cluster administrator password
+09-23 03:30:13 I [httpd] stopped
+09-23 03:30:13 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22777
+09-23 03:30:13 I [httpd] listening on 23714,[::]:23714
+09-23 03:30:13 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:13 I [node] node 735e9132 (doorbell) started
+09-23 03:30:13 I [node] initialized the cluster administrator password
+09-23 03:30:16 I [httpd] stopped
+09-23 03:30:16 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:20645
+09-23 03:30:16 I [httpd] listening on 28036,[::]:28036
+09-23 03:30:16 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:16 I [node] node 7a5fd10d (doorbell) started
+09-23 03:30:16 I [node] initialized the cluster administrator password
+09-23 03:30:18 I [httpd] stopped
+09-23 03:30:18 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23074
+09-23 03:30:18 I [httpd] listening on 26747,[::]:26747
+09-23 03:30:18 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:18 I [node] node 218d2ec7 (doorbell) started
+09-23 03:30:18 I [node] initialized the cluster administrator password
+09-23 03:30:20 I [httpd] stopped
+09-23 03:30:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27083
+09-23 03:30:20 I [httpd] listening on 21151,[::]:21151
+09-23 03:30:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:20 I [node] node 1212503d (doorbell) started
+09-23 03:30:20 I [node] initialized the cluster administrator password
+09-23 03:30:22 I [httpd] stopped
+09-23 03:30:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28786
+09-23 03:30:22 I [httpd] listening on 30003,[::]:30003
+09-23 03:30:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:22 I [node] node f8800a95 (doorbell) started
+09-23 03:30:22 I [node] initialized the cluster administrator password
+09-23 03:30:24 I [httpd] stopped
+09-23 03:30:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26085
+09-23 03:30:24 I [httpd] listening on 27199,[::]:27199
+09-23 03:30:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:24 I [node] node 4f93c386 (doorbell) started
+09-23 03:30:24 I [node] initialized the cluster administrator password
+09-23 03:30:26 I [httpd] stopped
+09-23 03:30:26 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22319
+09-23 03:30:26 I [httpd] listening on 20695,[::]:20695
+09-23 03:30:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:26 I [node] node 4f93c386 (doorbell) started
+09-23 03:30:28 I [httpd] stopped
+09-23 03:30:28 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29010
+09-23 03:30:28 I [httpd] listening on 28924,[::]:28924
+09-23 03:30:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:28 I [node] node e360634c (doorbell) started
+09-23 03:30:28 I [node] initialized the cluster administrator password
+09-23 03:30:28 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23721
+09-23 03:30:28 I [httpd] listening on 22656,[::]:22656
+09-23 03:30:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:28 I [node] node e360634c (doorbell) started
+09-23 03:30:30 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+[import-crash] phase=before_commit signal=SIGKILL barrier={"phase":"before_commit","autocommit":1,"new_rows":0,"receipt_rows":0} recovered=complete_old new_rows=0 receipt=absent replay=stage_expired
+09-23 03:30:30 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21138
+09-23 03:30:30 I [httpd] listening on 26549,[::]:26549
+09-23 03:30:30 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:30 I [node] node 44739c97 (doorbell) started
+09-23 03:30:30 I [node] initialized the cluster administrator password
+09-23 03:30:30 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26348
+09-23 03:30:30 I [httpd] listening on 26182,[::]:26182
+09-23 03:30:30 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:30 I [node] node 44739c97 (doorbell) started
+09-23 03:30:32 I [httpd] stopped
+[import-crash] phase=before_receipt signal=SIGKILL barrier={"phase":"before_receipt","autocommit":0,"new_rows":16,"receipt_rows":0} recovered=complete_old new_rows=0 receipt=absent replay=stage_expired
+09-23 03:30:32 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22430
+09-23 03:30:32 I [httpd] listening on 29681,[::]:29681
+09-23 03:30:32 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:32 I [node] node 0d07e20d (doorbell) started
+09-23 03:30:32 I [node] initialized the cluster administrator password
+09-23 03:30:33 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:20143
+09-23 03:30:33 I [httpd] listening on 31627,[::]:31627
+09-23 03:30:33 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:33 I [node] node 0d07e20d (doorbell) started
+09-23 03:30:35 I [httpd] stopped
+[import-crash] phase=after_receipt signal=SIGKILL barrier={"phase":"after_receipt","autocommit":0,"new_rows":16,"receipt_rows":1} recovered=complete_old new_rows=0 receipt=absent replay=stage_expired
+09-23 03:30:35 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24448
+09-23 03:30:35 I [httpd] listening on 22116,[::]:22116
+09-23 03:30:35 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:35 I [node] node f9bf1752 (doorbell) started
+09-23 03:30:35 I [node] initialized the cluster administrator password
+09-23 03:30:35 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28872
+09-23 03:30:35 I [httpd] listening on 21290,[::]:21290
+09-23 03:30:35 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:35 I [node] node f9bf1752 (doorbell) started
+09-23 03:30:37 I [httpd] stopped
+[import-crash] phase=after_commit signal=SIGKILL barrier={"phase":"after_commit","autocommit":1,"new_rows":16,"receipt_rows":1} recovered=complete_new new_rows=16 receipt=present replay=original_result
+09-23 03:30:37 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24167
+09-23 03:30:37 I [httpd] listening on 25633,[::]:25633
+09-23 03:30:37 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:37 I [node] node dc81cc7c (doorbell) started
+09-23 03:30:37 I [node] initialized the cluster administrator password
+09-23 03:30:39 I [httpd] stopped
+09-23 03:30:39 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21234
+09-23 03:30:39 I [httpd] listening on 29946,[::]:29946
+09-23 03:30:39 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:39 I [node] node 02369483 (doorbell) started
+09-23 03:30:39 I [node] initialized the cluster administrator password
+09-23 03:30:41 I [httpd] stopped
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node 01234567 (contract-v2) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 W [node] removed a legacy mqtt credential from replicated config; secure_store_failed
+09-23 03:30:41 W [node] removed a legacy telegram credential from replicated config; secure_store_failed
+09-23 03:30:41 W [node] removed a legacy webrtc credential from replicated config; secure_store_failed
+09-23 03:30:41 W [node] removed a legacy sip credential from replicated config; secure_store_failed
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node fedcba98 (contract-v2) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:30:41 E [node] legacy secret scrub could not be persisted; refusing startup
+09-23 03:30:41 E [node] configuration credential migration failed closed
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node abcddcba (contract-v2) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node 7cb7f744 (contract-v2) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node aea573e5 (contract-v2) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node c02610e7 (contract-v2) started
+09-23 03:30:41 E [events] local event persistence failed; event was not emitted
+09-23 03:30:41 E [events] local event persistence failed; event was not emitted
+09-23 03:30:41 E [events] local event persistence failed; event was not emitted
+09-23 03:30:41 E [events] local event persistence failed; event was not emitted
+09-23 03:30:41 E [events] local event persistence failed; event was not emitted
+09-23 03:30:41 E [events] local event persistence failed; event was not emitted
+09-23 03:30:41 E [events] local event persistence failed; event was not emitted
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=purpose-race-door
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node 5d403c27 (purpose-race-door) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=purpose-race-indoor
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node 56e6509c (purpose-race-indoor) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=answer-race-a
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node d35ee975 (answer-race-a) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=answer-race-b
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:41 I [node] node 7f136d7e (answer-race-b) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:41 I [node] node contract (contract-v2) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 I [node] node contract (contract-v2) started
+09-23 03:30:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:41 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 I [node] node contract (contract-v2) started
+09-23 03:30:42 E [events] local event persistence failed; event was not emitted
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:42 I [node] node contract (contract-v2) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=contract-v2:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 I [node] node contract (contract-v2) started
+09-23 03:30:42 E [events] local event persistence failed; event was not emitted
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node 2682ad89 (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node 914e9c17 (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node 04440c50 (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node c4dcd7d5 (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node f30142de (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node 9c4246ee (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node 7295cdd4 (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=B:1
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node ea57f9c0 (kitchen) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node 07653fdb (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node e8a18a2a (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node e8a18a2a (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node e8a18a2a (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:42 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node a9e8cc63 (front) started
+09-23 03:30:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21415
+09-23 03:30:42 I [httpd] listening on 28678,[::]:28678
+09-23 03:30:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:42 I [node] node 461f8d1c (em-test) started
+09-23 03:30:42 I [node] initialized the cluster administrator password
+09-23 03:30:44 I [httpd] stopped
+09-23 03:30:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:44 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:44 I [node] node d3d39db7 (front) started
+09-23 03:30:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=B:1
+09-23 03:30:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:44 I [node] node 7e2b0245 (kitchen) started
+09-23 03:30:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=C:1
+09-23 03:30:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:44 I [node] node ddf4e684 (bedroom) started
+09-23 03:30:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=A:1
+09-23 03:30:44 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:44 I [node] node e00fafa9 (front) started
+09-23 03:30:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=B:1
+09-23 03:30:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:44 I [node] node 3e73fddc (kitchen) started
+09-23 03:30:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=C:1
+09-23 03:30:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:44 I [node] node ad65de55 (bedroom) started
+09-23 03:30:45 E [events] local event persistence failed; event was not emitted
+09-23 03:30:45 E [events] local event persistence failed; event was not emitted
+09-23 03:30:45 E [events] local event persistence failed; event was not emitted
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 I [video] H.264 track disabled because codec=mjpeg
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 I [video] H.264 parameter sets changed; restarting the stream
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 W [video] discarded an invalid H.264 parameter-set update
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 W [video] discarded an invalid H.264 parameter-set update
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 W [video] discarded an invalid H.264 parameter-set update
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26789
+09-23 03:30:45 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:30:45 I [httpd] listening on 27903,[::]:27903
+09-23 03:30:45 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:45 I [node] node 8eafa938 (h264cam) started
+09-23 03:30:45 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:45 I [video] H.264 track disabled because codec=mjpeg
+09-23 03:30:47 I [httpd] stopped
+09-23 03:30:47 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:21745
+09-23 03:30:47 I [node] created the missing door entry doors.d_proxy for this door station
+09-23 03:30:47 I [httpd] listening on 47180,[::]:47180
+09-23 03:30:47 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:47 I [node] node 14c23101 (proxy-door) started
+09-23 03:30:47 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:22238
+09-23 03:30:47 I [httpd] listening on 22020,[::]:22020
+09-23 03:30:47 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:30:47 I [node] node e518f72d (proxy-panel) started
+09-23 03:30:47 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:49 I [httpd] stopped
+09-23 03:30:51 I [httpd] stopped
+09-23 03:30:51 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:51 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:51 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:51 I [video] generated H.264 init segment (avc1.42001E)
+09-23 03:30:51 I [httpd] listening on 20947
+09-23 03:30:56 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 03:30:57 I [httpd] stopped
+09-23 03:30:57 I [httpd] listening on 21944
+09-23 03:31:02 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 03:31:03 I [httpd] stopped
+09-23 03:31:03 I [httpd] listening on 28468
+09-23 03:31:08 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 03:31:09 I [httpd] stopped
+09-23 03:31:09 I [httpd] listening on 28306
+09-23 03:31:14 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 03:31:15 I [httpd] stopped
+09-23 03:31:15 I [httpd] listening on 23936
+09-23 03:31:20 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 03:31:21 I [httpd] stopped
+09-23 03:31:21 I [httpd] listening on 21720
+09-23 03:31:26 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 03:31:27 I [httpd] stopped
+09-23 03:31:27 I [httpd] listening on 31491
+09-23 03:31:33 I [httpd] stopped
+09-23 03:31:33 I [httpd] listening on 28495
+09-23 03:31:35 I [httpd] stopped
+09-23 03:31:35 I [httpd] listening on 21723
+09-23 03:31:37 I [httpd] stopped
+09-23 03:31:37 I [httpd] listening on 25186
+09-23 03:31:39 I [httpd] stopped
+09-23 03:31:39 I [httpd] listening on 30677,[::]:30677
+09-23 03:31:41 I [httpd] stopped
+09-23 03:31:41 I [httpd] listening on 25179,[::]:25179
+09-23 03:31:43 I [httpd] stopped
+09-23 03:31:43 I [httpd] listening on 22848,[::]:22848
+09-23 03:31:45 I [httpd] stopped
+09-23 03:31:45 I [httpd] listening on 23113,[::]:23113
+09-23 03:31:47 I [httpd] stopped
+09-23 03:31:47 I [httpd] listening on 26039,[::]:26039
+09-23 03:31:49 I [httpd] stopped
+09-23 03:31:49 I [httpd] listening on 27251,[::]:27251
+09-23 03:31:51 I [httpd] stopped
+09-23 03:31:51 I [httpd] listening on 24049
+09-23 03:31:53 I [httpd] stopped
+09-23 03:31:53 I [httpd] listening on 29980,[::]:29980
+09-23 03:31:55 I [httpd] stopped
+09-23 03:31:55 W [httpd] civetweb: cannot bind to IPv6 [::]:27466: 48 (Address already in use)
+09-23 03:31:55 W [httpd] civetweb: Failed to setup server ports
+09-23 03:31:55 I [httpd] listening on 27466
+09-23 03:31:57 I [httpd] stopped
+09-23 03:31:57 I [httpd] listening on 31814,[::]:31814
+09-23 03:31:57 I [httpd] suppressed 3 repeated civetweb messages
+09-23 03:31:59 I [httpd] stopped
+09-23 03:32:00 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29070
+09-23 03:32:00 I [node] created the missing door entry doors.d_front for this door station
+09-23 03:32:00 I [httpd] listening on 26555,[::]:26555
+09-23 03:32:00 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:32:00 I [node] node cad83a88 (cam) started
+09-23 03:32:02 I [httpd] stopped
+09-23 03:32:02 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28685
+09-23 03:32:02 I [node] created the missing door entry doors.front for this door station
+09-23 03:32:02 I [httpd] listening on 25638,[::]:25638
+09-23 03:32:02 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:32:02 I [node] node d4abdbc9 (doorbell) started
+09-23 03:32:04 I [httpd] stopped
+09-23 03:32:04 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:20890
+09-23 03:32:04 I [node] created the missing door entry doors.front for this door station
+09-23 03:32:04 I [httpd] listening on 23572,[::]:23572
+09-23 03:32:04 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:32:04 I [node] node a5ce6b0d (doorbell) started
+09-23 03:32:06 I [httpd] stopped
+09-23 03:32:06 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29599
+09-23 03:32:06 I [node] created the missing door entry doors.front for this door station
+09-23 03:32:06 I [httpd] listening on 20173,[::]:20173
+09-23 03:32:06 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:32:06 I [node] node 2a5975f2 (doorbell) started
+09-23 03:32:08 I [httpd] stopped
+09-23 03:32:08 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21224
+09-23 03:32:08 I [node] created the missing door entry doors.front for this door station
+09-23 03:32:08 I [httpd] listening on 26536,[::]:26536
+09-23 03:32:08 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:32:08 I [node] node 71940e82 (doorbell) started
+09-23 03:32:10 I [httpd] stopped
+09-23 03:32:10 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27436
+09-23 03:32:10 I [node] created the missing door entry doors.front for this door station
+09-23 03:32:10 I [httpd] listening on 21860,[::]:21860
+09-23 03:32:10 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:32:10 I [node] node 24c17c99 (doorbell) started
+09-23 03:32:12 I [httpd] stopped
+09-23 03:32:12 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:31346
+09-23 03:32:12 I [node] created the missing door entry doors.front for this door station
+09-23 03:32:12 I [httpd] listening on 22734,[::]:22734
+09-23 03:32:12 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:32:12 I [node] node b07b6445 (doorbell) started
+09-23 03:32:14 I [httpd] stopped
+09-23 03:32:14 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21874
+09-23 03:32:14 I [node] created the missing door entry doors.front for this door station
+09-23 03:32:14 I [httpd] listening on 31392,[::]:31392
+09-23 03:32:14 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:32:14 I [node] node 959982b3 (doorbell) started
+09-23 03:32:16 I [httpd] stopped
+09-23 03:32:16 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:31696
+09-23 03:32:16 I [node] created the missing door entry doors.front for this door station
+09-23 03:32:16 I [httpd] listening on 25427,[::]:25427
+09-23 03:32:16 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:32:16 I [node] node 225fc872 (doorbell) started
+09-23 03:32:18 I [httpd] stopped
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync request from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed event from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] rejected malformed sync response from cccccccccccccccccccccccccccccccc
+09-23 03:32:18 W [mesh] fetchBlob: no peer has 000000000000
+09-23 03:32:25 E [node] config persistence failed; retaining the last-known-good state
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [mesh] rejected malformed sync response from 3e36afec635a7f7f91cdb1f371a56cad
+09-23 03:32:25 W [node] invalid video playback profile ignored: video_playback.pairs.1ef655da3c8566a6cab26cfc76b942a5.d0099defe778a01444698b4bcdbb3c6b
+09-23 03:32:25 E [node] rejected ui_manifest: ui_manifest elements require properties, defaults, and safety_critical
+09-23 03:32:25 W [node] programmatic configuration edit rejected: devices.294f6d20438f2099f58f7f08b1754407.local.ui.elements.cancel.call
+09-23 03:32:25 W [node] programmatic configuration edit rejected: devices.294f6d20438f2099f58f7f08b1754407.local.ui.elements.cancel.call
+09-23 03:32:25 W [node] programmatic configuration edit rejected: devices.294f6d20438f2099f58f7f08b1754407.local.ui.elements.cancel.call
+09-23 03:32:25 E [events] local event persistence failed; event was not emitted
+09-23 03:32:26 E [node] paired: secure storage failed; refusing to expose the mesh PSK
+09-23 03:32:26 W [node] sip_call -> 600 skipped because SIP is not registered; degrading
+09-23 03:32:26 W [node] quick reply rejected because the call identity is stale on door d_front
+09-23 03:32:26 W [node] quick reply rejected because the call identity is stale on door d_front
+09-23 03:32:28 E [node] paired: secure storage failed; refusing to expose the mesh PSK
+09-23 03:32:28 E [node] paired: secure storage failed; refusing to expose the mesh PSK
+09-23 03:32:28 E [node] paired: secure storage failed; refusing to expose the mesh PSK
+09-23 03:32:28 E [node] paired: secure storage failed; refusing to expose the mesh PSK
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:29 W [sipctl] call(sip:127.0.0.1:47190): PJSIP is disabled; ignoring call
+09-23 03:32:53 W [mqtt] disconnected; reconnecting with backoff
+09-23 03:33:58 E [events] local event persistence failed; event was not emitted
+09-23 03:34:27 W [rules] cannot parse config JSON; treating it as empty config
+09-23 03:34:27 W [rules] cannot parse config JSON; treating it as empty config
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.zone
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.zone
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.ntp.interval_s
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.ntp.interval_s
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.ntp.interval_s
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.ntp.interval_s
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.ntp.servers
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.ntp.servers
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.ntp.servers
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.ntp.servers
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time
+09-23 03:34:27 W [node] programmatic configuration edit rejected: time.ntp
+09-23 03:34:27 W [node] programmatic configuration edit rejected: audio.volume.call
+09-23 03:34:27 W [node] programmatic configuration edit rejected: audio.volume.call
+09-23 03:34:27 W [node] programmatic configuration edit rejected: audio.volume.call
+09-23 03:34:27 W [node] programmatic configuration edit rejected: audio.volume
+09-23 03:34:27 W [node] programmatic configuration edit rejected: audio.volume
+09-23 03:34:27 W [node] programmatic configuration edit rejected: audio
+09-23 03:34:27 W [node] programmatic configuration edit rejected: devices.727811f0f0de55f270cf7d5efa09eac4.local.audio.volume.call
+09-23 03:34:27 W [node] programmatic configuration edit rejected: devices.727811f0f0de55f270cf7d5efa09eac4.local.audio
+09-23 03:34:27 W [node] programmatic configuration edit rejected: emergency.trigger.countdown_s
+09-23 03:34:27 W [node] programmatic configuration edit rejected: emergency.trigger.mode
+09-23 03:34:27 W [node] programmatic configuration edit rejected: emergency.hold_to_trigger_s
+09-23 03:34:27 W [node] rejected door notice for d_front (announcement text must be between 1 and 200 characters)
+09-23 03:34:27 W [node] rejected door notice for d_front (announcement text must be between 1 and 200 characters)
+09-23 03:34:27 W [node] programmatic configuration edit rejected: notice.presets
+09-23 03:34:27 W [node] programmatic configuration edit rejected: notice.presets
+09-23 03:34:27 W [node] programmatic configuration edit rejected: notice.presets
+09-23 03:34:27 W [node] programmatic configuration edit rejected: notice.presets
+09-23 03:34:27 W [node] programmatic configuration edit rejected: notice.presets
+09-23 03:34:27 W [node] programmatic configuration edit rejected: notice.presets
+09-23 03:34:27 W [node] programmatic configuration edit rejected: doors.d_front.unlock.command
+09-23 03:34:27 W [node] programmatic configuration edit rejected: doors.d_front.unlock.show_button
+09-23 03:34:27 W [node] programmatic configuration edit rejected: display.appearance
+09-23 03:34:27 W [node] programmatic configuration edit rejected: display.appearance_schedule
+09-23 03:34:27 W [node] programmatic configuration edit rejected: display.theme.ink_override.nonsense
+09-23 03:34:27 W [node] programmatic configuration edit rejected: display.theme.ink_override.date
+09-23 03:34:27 W [node] programmatic configuration edit rejected: display.theme.auto_accent
+09-23 03:34:27 W [node] programmatic configuration edit rejected: display.theme.auto_ink
+09-23 03:34:27 W [node] programmatic configuration edit rejected: visit_purposes.p_sales.enabled
+09-23 03:34:27 W [node] background image aaaaaaaa not sampled (missing); shells must sample it locally
+09-23 03:34:27 W [node] background image aaaaaaaa not sampled (missing); shells must sample it locally
+09-23 03:34:27 W [node] background image aaaaaaaa not sampled (decode_failed); shells must sample it locally
+09-23 03:34:28 W [node] programmatic configuration edit rejected: call.indoor.return_s
+09-23 03:34:28 W [node] programmatic configuration edit rejected: call.indoor.return_s
+09-23 03:34:28 W [node] programmatic configuration edit rejected: call.indoor.return_s
+09-23 03:34:28 W [node] programmatic configuration edit rejected: call.indoor.return_s
+09-23 03:34:28 W [node] programmatic configuration edit rejected: devices.b7d078d7ef290c948e1ca45a2d3962d7.local.call.return_s
+09-23 03:34:28 W [node] programmatic configuration edit rejected: call
+09-23 03:34:28 W [node] programmatic configuration edit rejected: call
+09-23 03:34:28 W [node] programmatic configuration edit rejected: call.indoor
+09-23 03:34:28 W [node] programmatic configuration edit rejected: display.theme.backdrop.opacity
+09-23 03:34:28 W [node] programmatic configuration edit rejected: display.theme.backdrop.opacity
+09-23 03:34:28 W [node] programmatic configuration edit rejected: display.theme.backdrop.color
+09-23 03:34:28 W [node] programmatic configuration edit rejected: display.theme.backdrop.enabled
+09-23 03:34:28 W [node] programmatic configuration edit rejected: display.theme.backdrop.nonsense
+09-23 03:34:28 W [node] programmatic configuration edit rejected: devices.d96ef9467b8e5b240e76cf3aa13ebb9f.local.theme.glass.blur_radius
+09-23 03:34:28 W [node] programmatic configuration edit rejected: display.theme.glass.blur_radius
+09-23 03:34:29 E [store] SQL failed: file is not a database
+09-23 03:34:29 W [store] database could not be opened; backed up and recreated: /tmp/doorbell_store_w0X0qb/db.sqlite.corrupt-1790102069
+09-23 03:34:32 E [store] SQL failed: database is locked
+09-23 03:34:32 E [store] database open failed without confirmed corruption; refusing to replace it
+09-23 03:34:32 W [telegram] message delivery failed (status=500, attempt=1); retrying after 30s
+09-23 03:34:32 W [telegram] message delivery failed (status=500, attempt=1); retrying after 30s
+09-23 03:34:33 W [telegram] edit delivery failed (status=503, attempt=1); retrying after 30s
+09-23 03:34:33 W [telegram] edit delivery failed (status=503, attempt=1); retrying after 30s
+[operation-storage] rows=1 reserved_bytes=12288 database_bytes=4096 wal_bytes=263712 full_writes=1
+===============================================================================
+[doctest] test cases:   518 |   518 passed | 0 failed | 1 skipped
+[doctest] assertions: 32294 | 32294 passed | 0 failed |
+[doctest] Status: SUCCESS!

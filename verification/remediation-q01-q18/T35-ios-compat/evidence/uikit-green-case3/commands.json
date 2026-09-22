@@ -1,0 +1,44 @@
+[
+  {
+    "command": [
+      "python3",
+      "/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/device.py",
+      "install",
+      "--out",
+      "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-compat/evidence/uikit-green-case3",
+      "--bundle",
+      "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-compat/uikit-runner-green-case3/DoorbellT35UIKit.app"
+    ],
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "python3",
+      "/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/device.py",
+      "wait",
+      "--out",
+      "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-compat/evidence/uikit-green-case3"
+    ],
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "python3",
+      "/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/device.py",
+      "collect",
+      "--out",
+      "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-compat/evidence/uikit-green-case3"
+    ],
+    "exit_code": 0
+  },
+  {
+    "command": [
+      "python3",
+      "/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/device.py",
+      "restore",
+      "--out",
+      "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-compat/evidence/uikit-green-case3"
+    ],
+    "exit_code": 0
+  }
+]

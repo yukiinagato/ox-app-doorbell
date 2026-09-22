@@ -1,0 +1,20 @@
+09-23 03:58:43 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23818
+09-23 03:58:43 I [node] created the missing door entry doors.front for this door station
+09-23 03:58:43 I [httpd] listening on 25998,[::]:25998
+09-23 03:58:43 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:58:43 I [node] node e3b80249 (doorbell) started
+09-23 03:58:45 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/reader-red-r1/test_media_publish.cpp:103:
+TEST CASE:  media publishing binds session call owner generation and ordered frame
+  T16 another authenticated panel cannot read the publisher return video
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/reader-red-r1/test_media_publish.cpp:165: ERROR: CHECK( mediaRequest(port, "GET", read, "", stranger).status == 403 ) is NOT correct!
+  values: CHECK( 200 == 403 )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 0 skipped
+[doctest] assertions: 40 | 39 passed | 1 failed |
+[doctest] Status: FAILURE!

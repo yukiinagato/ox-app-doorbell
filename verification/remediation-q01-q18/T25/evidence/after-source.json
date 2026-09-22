@@ -1,0 +1,14 @@
+{
+  "recorded_at": "2026-09-22T15:18:33.255461+00:00",
+  "head": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "sources": {
+    "webui/admin/app.js": "ecfa4cac230ac7091c9cf6fb6e467590122bc5f7be9c3f2c827ae4065a669005",
+    "webui/admin/index.html": "5b409284dd42cdea4e66c480777474cd49ba269bf82ae2e6b20a5d023bb2863d",
+    "webui/tests/admin_modal_cases.js": "3bcf026f917d757cb4187392e117eea6fb2d552bee9112b2b29cf9e0032f929d",
+    "webui/tests/admin_modal_browser_fixture.js": "8a6e647122a85bdfbec6ba6dbe40e2d890aa80fe29a0df8891b71d9b8781e2f7",
+    "i18n/strings.yaml": "4031d50c44b23c5688ae7de969c7aaa7135d7dc3db22167bceaff5691a502bcb",
+    "webui/locale/en.json": "d2c9522269e320c82df518a6653822cd86025f02ec3b37cae81f4c174a34d1ba",
+    "webui/locale/ja.json": "360a245dea07c87df1f890b3a59d8ff3b8086eba18117cdf8e4f147b79d511d7",
+    "webui/locale/zh.json": "25228c5001614de085b70119afc37af69bf5ccad99a7575b901654864163a5f3"
+  }
+}

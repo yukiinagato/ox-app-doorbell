@@ -1,0 +1,45 @@
+[  3%] Building C object CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher.c.o
+[  3%] Building C object CMakeFiles/db_third_party.dir/third_party/sqlite/sqlite3.c.o
+[  3%] Building C object CMakeFiles/db_third_party.dir/third_party/civetweb/civetweb.c.o
+[  4%] Building C object CMakeFiles/db_third_party.dir/third_party/cjson/cJSON.c.o
+[  5%] Building C object CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher-ed25519.c.o
+[  6%] Building C object CMakeFiles/db_third_party.dir/third_party/qrcodegen/qrcodegen.c.o
+[  7%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/quirc.c.o
+[  8%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/identify.c.o
+[  9%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/decode.c.o
+[ 11%] Building C object CMakeFiles/db_third_party.dir/third_party/stb/stb_image_impl.c.o
+[ 11%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/version_db.c.o
+[ 12%] Linking C static library libdb_third_party.a
+[ 12%] Built target db_third_party
+[ 13%] Embedding webui assets
+embed_webui: 23 assets, 1941221 bytes -> /Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/green-r1-build/gen/webui_assets.cpp
+[ 15%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/mqtt_client.cpp.o
+[ 16%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/telegram.cpp.o
+[ 16%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/ha_bridge.cpp.o
+[ 17%] Building CXX object CMakeFiles/doorbell_core.dir/src/capi/doorbell_capi.cpp.o
+[ 18%] Building CXX object CMakeFiles/doorbell_core.dir/src/crdt/lww_map.cpp.o
+[ 20%] Building CXX object CMakeFiles/doorbell_core.dir/src/events/event_log.cpp.o
+[ 21%] Building CXX object CMakeFiles/doorbell_core.dir/src/events/rule_engine.cpp.o
+[ 22%] Building CXX object CMakeFiles/doorbell_core.dir/src/httpd/httpd.cpp.o
+[ 23%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/fmp4.cpp.o
+[ 24%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/fmp4_demux.cpp.o
+[ 25%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/frame_bus.cpp.o
+[ 26%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/motion_detector.cpp.o
+[ 27%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/qr_scanner.cpp.o
+[ 28%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/video_track.cpp.o
+[ 29%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/inmem_net.cpp.o
+[ 30%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/mesh.cpp.o
+[ 31%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/secure_channel.cpp.o
+[ 32%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/tcp_transport.cpp.o
+[ 33%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/udp_beacon.cpp.o
+[ 34%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/config_edit_journal.cpp.o
+[ 35%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/green-r1-source/core/src/node/config_edit_journal.cpp:216:48: error: use of undeclared identifier 'genTokenHex'
+  216 |     auto record = json::obj(); const auto id = genTokenHex(16);
+      |                                                ^~~~~~~~~~~
+[ 36%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/operation_dispatcher.cpp.o
+1 error generated.
+make[2]: *** [CMakeFiles/doorbell_core.dir/src/node/config_edit_journal.cpp.o] Error 1
+make[2]: *** Waiting for unfinished jobs....
+make[1]: *** [CMakeFiles/doorbell_core.dir/all] Error 2
+make: *** [all] Error 2

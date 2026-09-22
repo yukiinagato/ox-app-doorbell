@@ -1,0 +1,24 @@
+{
+  "command": [
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/normal-final-doorbell_tests",
+    "-tc=operations ACK: strict*,operations ACK: unsigned*,operations ACK: duplicate*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T16:31:24.657930+00:00",
+  "finished_at": "2026-09-22T16:31:32.744753+00:00",
+  "exit_code": 0,
+  "binary_sha256": "495a650e477ae684466dd4bd777131a55776484eac03288d1e07cf9e47c4bddc",
+  "source_manifest_sha256": "c8d50870fb7cfe4776f131f28b78386cc5fb74dca660c9e41397e58928e06d24",
+  "verified_input_hashes": {
+    "core/src/node/node.cpp": "50c8adc056cb18270ba3512f4d416eafbe9b0575a887dad17773bb83b8698ef2",
+    "core/src/node/operation_ack.h": "e8263f860b098e134ee4cfff1d3db5b3c1409838b8d6fee1c39f968fb93b854c",
+    "core/src/node/operation_config.h": "86daf49fa392ca191759c5c7c4d566b289999e9f97c0b1b1a88dc4051a712a04",
+    "core/src/node/operation_service.inc": "4a2fe28d1f6591dc25b7619a3516a079f0d6b90d1372fd7709825aee943048c5",
+    "core/src/bridge/ha_bridge.h": "d4c55997a7affba50f4d947e4d8a2d9de525309c18aff21e1cff8f4e006ad6e4",
+    "core/src/bridge/ha_bridge.cpp": "dfbbbc44694b23b75829ef217152c5211acbc03add5cdba3dde7682b65555f6b",
+    "core/tests/test_operations_http.cpp": "9388d315a18acd2b2a9b881971b9f88f878178cb2dd9ebfeb6a70d4dc171a77d",
+    "core/tests/operation_test_fixture.h": "2cbb6a27f5580114d5ccc621ba7faae088d7bdc8ad2de984e9de3dd9fac5a4c6",
+    "core/tests/test_operations_ack.cpp": "4960b5b829986296d376b41193003daecf5cbb3b4771b4dfbf0b1668c0bd617e"
+  },
+  "log": "verification/remediation-q01-q18/T07/evidence/independent-targeted.log"
+}

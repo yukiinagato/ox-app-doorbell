@@ -1,0 +1,132 @@
+
+COMMAND node webui/tests/admin_logic.test.js
+admin logic tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/admin_runtime.test.js
+AssertionError [ERR_ASSERTION]: pending request for /api/config
+    at Object.respond (/Users/ox/Documents/project/app-doorbell/webui/tests/admin_runtime.test.js:103:14)
+    at main (/Users/ox/Documents/project/app-doorbell/webui/tests/admin_runtime.test.js:142:13)
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/admin_runtime.test.js:330:3)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+
+EXIT 1
+
+COMMAND node webui/tests/call_flow.test.js
+call flow tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/call_heartbeat.test.js
+T11-01 production heartbeat: PASS
+T11-02 production heartbeat: PASS
+T11-03 production heartbeat: PASS
+T11-04 production heartbeat: PASS
+heartbeat identity bounds, auth, visibility, timeout and late-success guards: PASS
+
+EXIT 0
+
+COMMAND node webui/tests/call_media_authority.test.js
+T15 production page media authority, same-origin requests and stale callbacks: PASS
+
+EXIT 0
+
+COMMAND node webui/tests/call_poll_lanes.test.js
+T10-01 production page: PASS
+T10-02 production page: PASS
+T10-03 production page: PASS
+T10-04 production page: PASS
+
+EXIT 0
+
+COMMAND node webui/tests/call_recovery_controller.test.js
+call recovery controller tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/call_state_controller.test.js
+T09 retained read deadline under independent scheduling: PASS
+T09 retained early state failure recovery: PASS
+call state controller tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/call_tabs.test.js
+T13-01: PASS
+T13-02: PASS
+T13-03: PASS
+T13-04: PASS
+Door tabs execute the production page renderer; native browser focus is verified separately.
+
+EXIT 0
+
+COMMAND node webui/tests/call_ua_generation.test.js
+T14-01 production UA generation: PASS
+T14-02 production UA generation: PASS
+T14-03 production UA generation: PASS
+T14-04 production UA generation: PASS
+registration failures remain bounded production UA generation: PASS
+explicit revocation overrides active-call deferral production UA generation: PASS
+registration error preserves an existing call production UA generation: PASS
+credential and reference changes participate in identity production UA generation: PASS
+failed transport retirement never overlaps a successor production UA generation: PASS
+
+EXIT 0
+
+COMMAND node webui/tests/pairing.test.js
+pairing tests: ok
+pairing uri tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/panel_i18n.test.js
+panel i18n tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/playback.test.js
+playback policy tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/request_deadline.test.js
+T09-01: silent production XHR times out once and releases its lane: PASS
+T09-02: native timeout and watchdog settle once in both orders with no timers: PASS
+T09-03: late cancelled success/error cannot replace or release the successor: PASS
+T09-04: no AbortController, Promise or fetch; legacy XHR watchdog remains bounded: PASS
+request deadline classifications, headers/body, frozen generation and no write retry: PASS
+
+EXIT 0
+
+COMMAND node webui/tests/runtime.test.js
+panel runtime tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/service_worker.test.js
+service worker tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/settings.test.js
+settings tests: ok
+call return tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/theme_notice.test.js
+theme and notice tests: ok
+
+EXIT 0
+
+COMMAND node webui/tests/video_session.test.js
+video session tests: ok
+
+EXIT 0

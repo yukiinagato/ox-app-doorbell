@@ -1,0 +1,1679 @@
+--- before/android/app/src/main/java/jp/ox/doorbell/MainActivity.kt
++++ after/android/app/src/main/java/jp/ox/doorbell/MainActivity.kt
+@@ -21,6 +21,8 @@
+ import android.speech.tts.TextToSpeech
+ import android.util.Log
+ import android.view.View
++import android.view.KeyEvent
++import android.view.MotionEvent
+ import android.view.WindowManager
+ import android.view.animation.AlphaAnimation
+ import android.view.animation.Animation
+@@ -47,12 +49,14 @@
+     private lateinit var themeBg: ImageView
+     private lateinit var nightTint: View
+     private lateinit var idleView: View
++    private lateinit var visitorShell: View
+     private lateinit var idleHeader: View
+     private lateinit var callSection: View
+     private lateinit var clockText: TextView
+     private lateinit var dateText: TextView
+     private lateinit var callButton: Button
+     private lateinit var touchHint: TextView
++    private lateinit var visitorStatus: TextView
+     private lateinit var nodeInfo: TextView
+     private lateinit var pairingBanner: TextView
+     private lateinit var purposeSection: View
+@@ -189,8 +193,8 @@
+ 
+         callButton.setOnClickListener { onCallClick() }
+         purposeSkipButton.setOnClickListener { continueWithoutPurpose(true) }
+-        purposeCancelButton.setOnClickListener { cancelActiveCall("visitor") }
+-        cancelButton.setOnClickListener { endOrCancelCall() }
++        bindCallAction(purposeCancelButton)
++        bindCallAction(cancelButton)
+         sosSlider.enabledProvider = { app.coreOk }
+         sosSlider.onTrigger = { app.commitEmergency(true) }
+         // Hidden maintenance entry: seven taps in the top-right corner within five seconds.
+@@ -414,12 +418,14 @@
+         themeBg = findViewById(R.id.theme_bg)
+         nightTint = findViewById(R.id.night_tint)
+         idleView = findViewById(R.id.idle_view)
++        visitorShell = findViewById(R.id.visitor_shell)
+         idleHeader = findViewById(R.id.idle_header)
+         callSection = findViewById(R.id.call_section)
+         clockText = findViewById(R.id.clock_text)
+         dateText = findViewById(R.id.date_text)
+         callButton = findViewById(R.id.call_button)
+         touchHint = findViewById(R.id.touch_hint)
++        visitorStatus = findViewById(R.id.visitor_status)
+         nodeInfo = findViewById(R.id.node_info)
+         pairingBanner = findViewById(R.id.pairing_banner)
+         purposeSection = findViewById(R.id.purpose_section)
+@@ -451,7 +457,7 @@
+             sosSlider,
+             android.widget.FrameLayout.LayoutParams(
+                 android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+-                dp(56),
++                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+             ),
+         )
+     }
+@@ -511,6 +517,7 @@
+             ),
+         )
+         dashboardHost.visibility = View.VISIBLE
++        visitorShell.visibility = View.GONE
+         idleView.visibility = View.GONE
+         // The hidden 7-tap corner is the door station's only way into settings. An indoor panel
+         // has a visible 管理 button, and the invisible 200 dp target sat on top of the dashboard's
+@@ -537,9 +544,11 @@
+         clockText.textSize = VisitorLayout.clockTextSizeSp(widthDp, heightDp)
+         touchHint.textSize = VisitorLayout.hintTextSizeSp(widthDp)
+         callButton.minHeight = dp(VisitorLayout.callButtonHeightDp(widthDp))
++        cancelButton.minHeight = callButton.minHeight
++        purposeCancelButton.minHeight = callButton.minHeight
+         VisitorLayout.apply(
+             visitorSplit, visitorColumnA, visitorColumnB,
+-            idleHeader, noticeCard, langBar, callSection,
++            idleHeader, noticeCard, langBar,
+             notice != null, widthDp, heightDp,
+         )
+         applyFooterLayout(widthDp, heightDp)
+@@ -845,6 +854,9 @@
+             texts.t("sos.slide_sub", R.string.sos_slide_sub, countdown.toString()),
+             texts.t("sos.countdown_cancel", R.string.sos_countdown_cancel),
+             countdown,
++            texts.t("sos.accessibility_start", R.string.sos_accessibility_start),
++            texts.t("sos.accessibility_hint", R.string.sos_accessibility_hint),
++            texts.t("sos.accessibility_confirm", R.string.sos_accessibility_confirm),
+         ) { seconds -> texts.t("sos.countdown", R.string.sos_countdown, seconds.toString()) }
+         sosSlot.visibility = if (sosVisibleForRole()) View.VISIBLE else View.GONE
+     }
+@@ -862,7 +874,8 @@
+         SemanticUi.apply(callButton, "call.primary", styleConfig, nodeId)
+         SemanticUi.apply(purposeSkipButton, "call.primary", styleConfig, nodeId)
+         SemanticUi.apply(purposeCancelButton, "cancel.call", styleConfig, nodeId)
+-        SemanticUi.apply(cancelButton, "cancel.call", styleConfig, nodeId)
++        SemanticUi.apply(cancelButton, if (callUiPhase == CallUiPhase.ESTABLISHED)
++            "call.end" else "cancel.call", styleConfig, nodeId)
+         for (index in 0 until purposeGrid.childCount)
+             SemanticUi.apply(purposeGrid.getChildAt(index), "purpose.button", styleConfig, nodeId)
+         SemanticUi.apply(offlineTitle, "status.offline", styleConfig, nodeId)
+@@ -882,10 +895,12 @@
+         purposeAutoHint.text = texts.t("calling.title", R.string.calling_title)
+         purposeSkipButton.text = texts.t("purpose.skip", R.string.purpose_skip)
+         purposeCancelButton.text = texts.t("purpose.cancel_call", R.string.purpose_cancel_call)
+-        callingText.text = texts.t("calling.title", R.string.calling_title)
++        updateCallingTitle()
+         updateCallActionLabel()
+         replyCaption.text = texts.t("reply.banner", R.string.reply_banner)
+-        offlineTitle.text = texts.t("offline.title", R.string.offline_title)
++        offlineTitle.text = if (uiCallId.isNotEmpty())
++            texts.t("visitor.restoring", R.string.visitor_restoring)
++        else texts.t("offline.title", R.string.offline_title)
+         offlineBody.text = texts.t("offline.body", R.string.offline_body)
+     }
+ 
+@@ -917,6 +932,15 @@
+         cancelButton.text = if (callUiPhase == CallUiPhase.ESTABLISHED)
+             texts.t("incall.end", R.string.incall_end)
+         else texts.t("calling.cancel", R.string.calling_cancel)
++        SemanticUi.apply(cancelButton, if (callUiPhase == CallUiPhase.ESTABLISHED)
++            "call.end" else "cancel.call", if (app.safeMode) null else cfg, nodeId)
++    }
++
++    private fun updateCallingTitle() {
++        callingText.text = if (callUiPhase == CallUiPhase.ESTABLISHED)
++            texts.t("incall.title", R.string.incall_title)
++        else texts.t("calling.title", R.string.calling_title) +
++            (callTitleOverride?.let { "\n$it" } ?: "")
+     }
+ 
+     /** Resolve device-local theme values before fleet defaults. */
+@@ -1019,7 +1043,7 @@
+         }
+         val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
+         val columns = when {
+-            ids.size <= 1 -> 1
++            ids.size <= 1 || resources.configuration.fontScale > 1.3f -> 1
+             widthDp < 520f -> 2
+             else -> minOf(3, ids.size)
+         }
+@@ -1038,7 +1062,8 @@
+             b.textSize = textSize
+             b.isAllCaps = false
+             b.setSingleLine(false)
+-            b.maxLines = 2
++            b.maxLines = 4
++            b.minHeight = dp(buttonHeight)
+             b.gravity = android.view.Gravity.CENTER
+             b.setPadding(dp(8), 0, dp(8), 0)
+             @Suppress("DEPRECATION")
+@@ -1050,8 +1075,8 @@
+             val lp = GridLayout.LayoutParams()
+             lp.rowSpec = GridLayout.spec(index / columns)
+             lp.columnSpec = GridLayout.spec(index % columns)
+-            lp.width = (resources.displayMetrics.widthPixels - dp(32)) / columns - dp(8)
+-            lp.height = dp(buttonHeight)
++            lp.width = (resources.displayMetrics.widthPixels - dp(48)) / columns - dp(8)
++            lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+             lp.setMargins(dp(4), dp(3), dp(4), dp(3))
+             purposeGrid.addView(b, lp)
+         }
+@@ -1159,6 +1184,7 @@
+         applyStrings()
+         buildPurposeButtons()
+         updateLangBarSelection()
++        configureSos()
+     }
+ 
+     // ---------- Call state transitions ----------
+@@ -1173,6 +1199,7 @@
+ 
+     /** Put the dashboard back in front after any call-flow transition. */
+     private fun restoreRoleHome() {
++        visitorShell.visibility = View.GONE
+         idleView.visibility = View.GONE
+         callingView.visibility = View.GONE
+         dashboardHost.visibility = View.VISIBLE
+@@ -1192,21 +1219,32 @@
+             return
+         }
+         callingView.visibility = View.GONE
++        cancelButton.visibility = View.GONE
+         idleView.visibility = View.VISIBLE
+         idleHeader.visibility = View.VISIBLE
+         callSection.visibility = View.VISIBLE
++        callButton.isEnabled = app.coreOk
++        cancelButton.isEnabled = app.coreOk
++        purposeCancelButton.isEnabled = app.coreOk
+         updatePurposeVisibility()
+         langBar.visibility = if (langBar.childCount > 0) View.VISIBLE else View.GONE
+         purposeCancelButton.visibility = View.GONE
+-        touchHint.text = hint ?: homeCallHint()
++        touchHint.visibility = View.VISIBLE
++        touchHint.text = homeCallHint()
++        visitorStatus.text = hint.orEmpty()
++        visitorStatus.visibility = if (hint.isNullOrEmpty()) View.GONE else View.VISIBLE
++        idleView.scrollTo(0, 0)
+         updateCallActionLabel()
+     }
+ 
+     private fun showPurposeChooser() {
+         if (showsDashboard) return
+         choosingPurpose = true
++        visitorStatus.visibility = View.GONE
++        touchHint.visibility = View.GONE
+         idleView.visibility = View.VISIBLE
+         callingView.visibility = View.GONE
++        cancelButton.visibility = View.GONE
+         offlineView.visibility = View.GONE
+         idleHeader.visibility = View.GONE
+         callSection.visibility = View.GONE
+@@ -1217,6 +1255,7 @@
+             if (uiCallId.isNotEmpty()) View.VISIBLE else View.GONE
+         purposeCancelButton.visibility =
+             if (uiCallId.isNotEmpty()) View.VISIBLE else View.GONE
++        purposeCancelButton.isEnabled = app.coreOk
+         langBar.visibility = if (langBar.childCount > 0) View.VISIBLE else View.GONE
+         ui.removeCallbacks(purposeTimeout)
+         ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
+@@ -1227,12 +1266,19 @@
+     private fun showCalling(title: String? = null) {
+         if (showsDashboard) return
+         choosingPurpose = false
++        visitorStatus.visibility = View.GONE
+         ui.removeCallbacks(purposeTimeout)
+         if (title != null) callTitleOverride = title
+-        callingText.text = callTitleOverride ?: texts.t("calling.title", R.string.calling_title)
++        updateCallingTitle()
+         updateCallActionLabel()
+         idleView.visibility = View.GONE
++        callSection.visibility = View.GONE
++        purposeCancelButton.visibility = View.GONE
++        cancelButton.visibility = View.VISIBLE
++        cancelButton.isEnabled = app.coreOk
++        offlineView.visibility = View.GONE
+         callingView.visibility = View.VISIBLE
++        callingView.scrollTo(0, 0)
+         scheduleCallTimeout()
+         if (app.safeMode) pulse.clearAnimation()
+         else pulse.startAnimation(AlphaAnimation(0.25f, 1.0f).apply {
+@@ -1245,14 +1291,20 @@
+     private fun showEstablished() {
+         if (showsDashboard) return
+         choosingPurpose = false
++        visitorStatus.visibility = View.GONE
+         ui.removeCallbacks(purposeTimeout)
+         ui.removeCallbacks(callTimeout)
+         stopCallFeedback()
+         pulse.clearAnimation()
+         callingText.text = texts.t("incall.title", R.string.incall_title)
+         idleView.visibility = View.GONE
++        callSection.visibility = View.GONE
++        purposeCancelButton.visibility = View.GONE
++        cancelButton.visibility = View.VISIBLE
++        cancelButton.isEnabled = app.coreOk
+         offlineView.visibility = View.GONE
+         callingView.visibility = View.VISIBLE
++        callingView.scrollTo(0, 0)
+         updateCallActionLabel()
+     }
+ 
+@@ -1328,6 +1380,17 @@
+     }
+ 
+     private fun showOffline() {
++        visitorStatus.visibility = View.GONE
++        if (showsDashboard) {
++            visitorShell.visibility = View.VISIBLE
++            findViewById<View>(R.id.visitor_action_dock).visibility = View.GONE
++        }
++        offlineTitle.text = if (uiCallId.isNotEmpty())
++            texts.t("visitor.restoring", R.string.visitor_restoring)
++        else texts.t("offline.title", R.string.offline_title)
++        callButton.isEnabled = false
++        cancelButton.isEnabled = false
++        purposeCancelButton.isEnabled = false
+         offlineView.visibility = View.VISIBLE
+     }
+ 
+@@ -1728,11 +1791,36 @@
+         renderCancellationResult(app.callFlow.cancel(reason))
+     }
+ 
+-    private fun endOrCancelCall() {
++    private fun visitorCallAction(): VisitorCallAction? =
++        uiCallId.takeIf { it.isNotEmpty() }?.let { VisitorCallAction(it, callUiPhase) }
++
++    @android.annotation.SuppressLint("ClickableViewAccessibility")
++    private fun bindCallAction(button: Button) {
++        val latch = VisitorActionLatch()
++        button.setOnTouchListener { _, event ->
++            when (event.actionMasked) {
++                MotionEvent.ACTION_DOWN -> latch.begin(visitorCallAction())
++                MotionEvent.ACTION_CANCEL -> latch.cancel()
++            }
++            false
++        }
++        button.setOnKeyListener { _, key, event ->
++            if ((key == KeyEvent.KEYCODE_ENTER || key == KeyEvent.KEYCODE_DPAD_CENTER ||
++                    key == KeyEvent.KEYCODE_SPACE) && event.action == KeyEvent.ACTION_DOWN &&
++                    event.repeatCount == 0) latch.begin(visitorCallAction())
++            false
++        }
++        button.setOnClickListener {
++            latch.consume(visitorCallAction())?.let { endOrCancelCall(it) }
++        }
++    }
++
++    private fun endOrCancelCall(action: VisitorCallAction) {
++        val active = app.callFlow.current() ?: return
++        if (active.callId != action.callId || active.phase != action.phase) return
+         playButtonSound()
+         ui.removeCallbacks(callTimeout)
+-        val active = app.callFlow.current()
+-        val transition = if (active?.phase == CallUiPhase.ESTABLISHED)
++        val transition = if (action.phase == CallUiPhase.ESTABLISHED)
+             app.callFlow.endEstablished() else app.callFlow.cancel("visitor")
+         renderCancellationResult(transition)
+     }
+--- before/android/app/src/main/java/jp/ox/doorbell/DashboardView.kt
++++ after/android/app/src/main/java/jp/ox/doorbell/DashboardView.kt
+@@ -855,6 +855,9 @@
+             texts.t("sos.slide_sub", R.string.sos_slide_sub, countdown.toString()),
+             texts.t("sos.countdown_cancel", R.string.sos_countdown_cancel),
+             countdown,
++            texts.t("sos.accessibility_start", R.string.sos_accessibility_start),
++            texts.t("sos.accessibility_hint", R.string.sos_accessibility_hint),
++            texts.t("sos.accessibility_confirm", R.string.sos_accessibility_confirm),
+         ) { seconds -> texts.t("sos.countdown", R.string.sos_countdown, seconds.toString()) }
+         sosSlider.visibility = if (sosVisible()) View.VISIBLE else View.GONE
+     }
+--- before/android/app/src/main/java/jp/ox/doorbell/VisitorLayout.kt
++++ after/android/app/src/main/java/jp/ox/doorbell/VisitorLayout.kt
+@@ -1,9 +1,4 @@
+-// Responsive door-station visitor layout (spec §4.2, §5.1).
+-//
+-// Portrait stacks clock → announcement → language row (in the middle) → call button → hint →
+-// footer. Landscape splits into two columns and, when an announcement exists, the language row
+-// sits directly above the call button on the right while the announcement occupies the left.
+-// The arrangement is computed from the window size at runtime, never fixed to one orientation.
++// Responsive secondary content; the primary action stays in the Activity's separate dock.
+ package jp.ox.doorbell
+ 
+ import android.view.View
+@@ -117,7 +112,6 @@
+         header: View,
+         noticeCard: View,
+         langBar: View,
+-        callSection: View,
+         hasNotice: Boolean,
+         widthDp: Int,
+         heightDp: Int,
+@@ -126,7 +120,6 @@
+         detach(header)
+         detach(noticeCard)
+         detach(langBar)
+-        detach(callSection)
+         columnA.removeAllViews()
+         columnB.removeAllViews()
+ 
+@@ -138,7 +131,6 @@
+             columnA.addView(header, wrap())
+             columnA.addView(noticeCard, wrap())
+             columnA.addView(langBar, wrapCentered())
+-            columnA.addView(callSection, wrap())
+             return
+         }
+ 
+@@ -149,10 +141,7 @@
+         weight(columnB, 1f, vertical = false)
+         columnA.addView(header, wrap())
+         if (hasNotice) columnA.addView(noticeCard, wrap())
+-        // The language buttons sit directly above the call button so a visitor changes language
+-        // and calls without moving across the screen.
+         columnB.addView(langBar, wrapCentered())
+-        columnB.addView(callSection, wrap())
+         if (!hasNotice) noticeCard.visibility = View.GONE
+     }
+ 
+@@ -167,10 +156,10 @@
+             )
+         if (vertical) {
+             params.width = ViewGroup.LayoutParams.MATCH_PARENT
+-            params.height = 0
++            params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+         } else {
+             params.width = 0
+-            params.height = ViewGroup.LayoutParams.MATCH_PARENT
++            params.height = ViewGroup.LayoutParams.WRAP_CONTENT
+         }
+         params.weight = value
+         column.layoutParams = params
+--- before/android/app/src/main/java/jp/ox/doorbell/VisitorActionLatch.kt
++++ after/android/app/src/main/java/jp/ox/doorbell/VisitorActionLatch.kt
+@@ -0,0 +1,25 @@
++package jp.ox.doorbell
++
++internal data class VisitorCallAction(val callId: String, val phase: CallUiPhase)
++
++/** A touch or key gesture cannot acquire a different action while its button is relabelled. */
++internal class VisitorActionLatch {
++    private var held: VisitorCallAction? = null
++    private var tracking = false
++
++    fun begin(action: VisitorCallAction?) {
++        held = action
++        tracking = true
++    }
++
++    fun cancel() {
++        held = null
++        tracking = false
++    }
++
++    fun consume(current: VisitorCallAction?): VisitorCallAction? {
++        val requested = if (tracking) held else current
++        cancel()
++        return requested?.takeIf { it == current }
++    }
++}
+--- before/android/app/src/main/java/jp/ox/doorbell/SosSlideView.kt
++++ after/android/app/src/main/java/jp/ox/doorbell/SosSlideView.kt
+@@ -5,6 +5,7 @@
+ package jp.ox.doorbell
+ 
+ import android.annotation.SuppressLint
++import android.app.AlertDialog
+ import android.content.Context
+ import android.graphics.Canvas
+ import android.graphics.Color
+@@ -17,6 +18,7 @@
+ import android.view.KeyEvent
+ import android.view.MotionEvent
+ import android.view.View
++import android.view.accessibility.AccessibilityNodeInfo
+ 
+ @SuppressLint("ViewConstructor")
+ internal class SosSlideView(
+@@ -49,7 +51,11 @@
+     private var palette: Palette = Palette.DARK
+     private var label = TwoPartLabel("", "")
+     private var countdownFormatter: (Int) -> String = { it.toString() }
+-    private var cancelText = ""
++    private var cancelText = context.getString(R.string.sos_countdown_cancel)
++    private var accessibleStart = context.getString(R.string.sos_accessibility_start)
++    private var accessibleHint = context.getString(R.string.sos_accessibility_hint)
++    private var accessibleConfirm = context.getString(R.string.sos_accessibility_confirm)
++    private var confirmation: AlertDialog? = null
+ 
+     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
+     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
+@@ -77,13 +83,20 @@
+         secondary: String,
+         cancelLabel: String,
+         countdownSeconds: Int,
++        startLabel: String = context.getString(R.string.sos_accessibility_start),
++        hintLabel: String = context.getString(R.string.sos_accessibility_hint),
++        confirmLabel: String = context.getString(R.string.sos_accessibility_confirm),
+         countdownText: (Int) -> String,
+     ) {
+         label = TwoPartLabels.of(primary, secondary)
+         cancelText = cancelLabel
++        accessibleStart = startLabel
++        accessibleHint = hintLabel
++        accessibleConfirm = confirmLabel
+         countdownFormatter = countdownText
+         state.configure(countdownSeconds)
+-        contentDescription = TwoPartLabels.flatten(label)
++        updateDescription(state.snapshot())
++        requestLayout()
+         invalidate()
+     }
+ 
+@@ -94,6 +107,8 @@
+ 
+     /** Cancel an armed countdown, for example when the owning screen goes away. */
+     fun cancelCountdown() {
++        confirmation?.dismiss()
++        confirmation = null
+         handler.removeCallbacks(tick)
+         publish(state.cancel())
+     }
+@@ -101,24 +116,24 @@
+     fun isArmed(): Boolean = state.armed
+ 
+     override fun onDetachedFromWindow() {
+-        handler.removeCallbacks(tick)
++        cancelCountdown()
+         super.onDetachedFromWindow()
+     }
+ 
+     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+         val width = resolveSize(dp(240), widthMeasureSpec)
+-        val height = resolveSize(dp(56), heightMeasureSpec)
++        val height = resolveSize(maxOf(dp(56), (40 * resources.displayMetrics.scaledDensity).toInt()), heightMeasureSpec)
+         setMeasuredDimension(width, height)
+     }
+ 
+     @SuppressLint("ClickableViewAccessibility")
+     override fun onTouchEvent(event: MotionEvent): Boolean {
+-        if (!isEnabled) return false
++        if (!isEnabled || !enabledProvider()) return false
+         // A tap anywhere during the countdown cancels it, which is the documented escape hatch.
+         if (state.armed) {
+             if (event.actionMasked == MotionEvent.ACTION_UP) {
+                 cancelCountdown()
+-                performClick()
++                super.performClick()
+             }
+             return true
+         }
+@@ -132,7 +147,7 @@
+             MotionEvent.ACTION_UP -> {
+                 publish(state.drag(progressFor(event.x)))
+                 finishSlide()
+-                performClick()
++                super.performClick()
+             }
+             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_OUTSIDE ->
+                 publish(state.cancel())
+@@ -143,28 +158,44 @@
+ 
+     override fun performClick(): Boolean {
+         super.performClick()
+-        return true
+-    }
+-
+-    /**
+-     * D-pad path: holding the centre key sweeps the thumb so a remote can reach the same armed
+-     * state, and pressing it during a countdown cancels, matching the touch behaviour.
+-     */
+-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+-        if (!isEnabled || !isTriggerKey(keyCode)) return super.onKeyDown(keyCode, event)
++        if (!isEnabled || !enabledProvider()) return false
+         if (state.armed) {
+             cancelCountdown()
+             return true
+         }
+-        if (event.repeatCount == 0) publish(state.begin())
+-        val steps = (event.repeatCount + 1).coerceAtMost(DPAD_STEPS)
+-        publish(state.drag(steps.toFloat() / DPAD_STEPS))
++        if (confirmation != null) return true
++        confirmation = AlertDialog.Builder(context)
++            .setTitle(accessibleStart)
++            .setMessage(accessibleConfirm)
++            .setNegativeButton(cancelText, null)
++            .setPositiveButton(accessibleStart) { _, _ ->
++                if (isEnabled && enabledProvider()) {
++                    val snapshot = state.confirm()
++                    publish(snapshot)
++                    if (snapshot.phase == SosPhase.COUNTDOWN) handler.postDelayed(tick, 1000L)
++                }
++            }
++            .create().also { dialog ->
++                dialog.setOnDismissListener { confirmation = null }
++                dialog.show()
++            }
++        return true
++    }
++
++    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
++        super.onInitializeAccessibilityNodeInfo(info)
++        info.className = android.widget.Button::class.java.name
++        info.isClickable = isEnabled && enabledProvider()
++    }
++
++    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
++        if (!isEnabled || !isTriggerKey(keyCode)) return super.onKeyDown(keyCode, event)
+         return true
+     }
+ 
+     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+         if (!isEnabled || !isTriggerKey(keyCode)) return super.onKeyUp(keyCode, event)
+-        finishSlide()
++        if (!event.isCanceled) performClick()
+         return true
+     }
+ 
+@@ -179,12 +210,19 @@
+     }
+ 
+     private fun publish(snapshot: SosSnapshot) {
++        updateDescription(snapshot)
+         invalidate()
+         onStateChanged?.invoke(snapshot)
+         if (!snapshot.fireNow) return
+         handler.removeCallbacks(tick)
+         if (enabledProvider()) onTrigger?.invoke()
+         publish(state.reset())
++    }
++
++    private fun updateDescription(snapshot: SosSnapshot) {
++        contentDescription = if (snapshot.phase == SosPhase.COUNTDOWN)
++            TwoPartLabels.flatten(TwoPartLabel(countdownFormatter(snapshot.secondsLeft), cancelText))
++        else TwoPartLabels.flatten(TwoPartLabel(accessibleStart, accessibleHint))
+     }
+ 
+     private fun progressFor(x: Float): Float {
+@@ -275,7 +313,4 @@
+ 
+     private fun dp(value: Int): Int = (value * density).toInt()
+ 
+-    private companion object {
+-        const val DPAD_STEPS = 6
+-    }
+ }
+--- before/android/app/src/main/java/jp/ox/doorbell/SosSlideState.kt
++++ after/android/app/src/main/java/jp/ox/doorbell/SosSlideState.kt
+@@ -72,6 +72,14 @@
+         return snapshot()
+     }
+ 
++    /** Explicit accessibility confirmation enters the same cancellable countdown as a slide. */
++    fun confirm(): SosSnapshot {
++        if (phase == SosPhase.COUNTDOWN || phase == SosPhase.FIRED) return snapshot()
++        begin()
++        drag(1f)
++        return release()
++    }
++
+     /** One second of the countdown elapsed; fires when it reaches zero. */
+     fun tick(): SosSnapshot {
+         if (phase != SosPhase.COUNTDOWN) return snapshot()
+--- before/android/app/src/main/res/layout/activity_main.xml
++++ after/android/app/src/main/res/layout/activity_main.xml
+@@ -1,289 +1,348 @@
+-<?xml version="1.0" encoding="utf-8"?>
+-<!-- Door-station visitor screen (idle, purpose, ringing, reply, offline) and the host container
+-     for the indoor dashboard. Camera capture is service-owned.
+-
+-     The visitor screen is responsive: the two columns below are filled at runtime by
+-     VisitorLayout, which stacks them in portrait and splits them in landscape. -->
++<?xml version='1.0' encoding='utf-8'?>
+ <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+     android:id="@+id/root_view"
+     android:layout_width="match_parent"
+     android:layout_height="match_parent"
+     android:background="@color/bg">
+-
+-    <!-- Theme background. -->
+     <ImageView
+         android:id="@+id/theme_bg"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+         android:contentDescription="@null"
+         android:scaleType="centerCrop"
+-        android:visibility="gone"/>
+-
+-    <!-- Indoor dashboard host; filled by DashboardView on an indoor panel. -->
++        android:visibility="gone" />
+     <FrameLayout
+         android:id="@+id/dashboard_host"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+-        android:visibility="gone"/>
+-
++        android:visibility="gone" />
+     <LinearLayout
+-        android:id="@+id/idle_view"
++        android:id="@+id/visitor_shell"
+         android:layout_width="match_parent"
+         android:layout_height="match_parent"
+-        android:orientation="vertical"
+-        android:paddingLeft="12dp"
+-        android:paddingTop="6dp"
+-        android:paddingRight="12dp"
+-        android:paddingBottom="6dp">
+-
+-        <!-- Two responsive columns. VisitorLayout owns their orientation and their children. -->
+-        <LinearLayout
+-            android:id="@+id/visitor_split"
++        android:orientation="vertical">
++        <FrameLayout
+             android:layout_width="match_parent"
+             android:layout_height="0dp"
+-            android:layout_weight="1"
+-            android:baselineAligned="false"
+-            android:orientation="vertical">
+-            <LinearLayout
+-                android:id="@+id/visitor_col_a"
+-                android:layout_width="match_parent"
+-                android:layout_height="0dp"
+-                android:layout_weight="1"
+-                android:gravity="center"
+-                android:orientation="vertical"/>
+-            <LinearLayout
+-                android:id="@+id/visitor_col_b"
+-                android:layout_width="match_parent"
+-                android:layout_height="0dp"
+-                android:layout_weight="1"
+-                android:gravity="center"
+-                android:orientation="vertical"
+-                android:visibility="gone"/>
+-        </LinearLayout>
+-
+-        <!-- Clock: large HH:MM:SS with the date on every size. -->
+-        <LinearLayout
+-            android:id="@+id/idle_header"
++            android:layout_weight="1">
++            <ScrollView
++                android:id="@+id/idle_view"
++                android:layout_width="match_parent"
++                android:layout_height="match_parent"
++                android:paddingLeft="12dp"
++                android:paddingTop="6dp"
++                android:paddingRight="12dp"
++                android:paddingBottom="6dp"
++                android:fillViewport="true">
++                <LinearLayout
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:orientation="vertical">
++                    <LinearLayout
++                        android:id="@+id/visitor_split"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:baselineAligned="false"
++                        android:orientation="vertical">
++                        <LinearLayout
++                            android:id="@+id/visitor_col_a"
++                            android:layout_width="match_parent"
++                            android:layout_height="0dp"
++                            android:layout_weight="1"
++                            android:gravity="center"
++                            android:orientation="vertical" />
++                        <LinearLayout
++                            android:id="@+id/visitor_col_b"
++                            android:layout_width="match_parent"
++                            android:layout_height="0dp"
++                            android:layout_weight="1"
++                            android:gravity="center"
++                            android:orientation="vertical"
++                            android:visibility="gone" />
++                    </LinearLayout>
++                    <TextView
++                        android:id="@+id/touch_hint"
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:layout_marginTop="6dp"
++                        android:gravity="center"
++                        android:maxLines="2"
++                        android:text="@string/door_hint_call"
++                        android:textColor="@color/dim"
++                        android:textSize="15sp" />
++                    <LinearLayout
++                        android:id="@+id/idle_header"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:gravity="center"
++                        android:orientation="vertical">
++                        <TextView
++                            android:id="@+id/clock_text"
++                            android:layout_width="wrap_content"
++                            android:layout_height="wrap_content"
++                            android:fontFamily="sans-serif-light"
++                            android:maxLines="1"
++                            android:textColor="@color/fg"
++                            android:textSize="52sp" />
++                        <TextView
++                            android:id="@+id/date_text"
++                            android:layout_width="wrap_content"
++                            android:layout_height="wrap_content"
++                            android:maxLines="1"
++                            android:textColor="@color/dim"
++                            android:textSize="15sp" />
++                    </LinearLayout>
++                    <TextView
++                        android:id="@+id/notice_card"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:layout_marginLeft="8dp"
++                        android:layout_marginTop="8dp"
++                        android:layout_marginRight="8dp"
++                        android:ellipsize="end"
++                        android:maxLines="2"
++                        android:paddingLeft="12dp"
++                        android:paddingTop="6dp"
++                        android:paddingRight="12dp"
++                        android:paddingBottom="6dp"
++                        android:textColor="@color/fg"
++                        android:textSize="15sp"
++                        android:visibility="gone" />
++                    <LinearLayout
++                        android:id="@+id/lang_bar"
++                        android:layout_width="wrap_content"
++                        android:layout_height="wrap_content"
++                        android:layout_gravity="center_horizontal"
++                        android:baselineAligned="false"
++                        android:orientation="horizontal"
++                        android:visibility="gone" />
++                    <LinearLayout
++                        android:id="@+id/purpose_section"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:gravity="center"
++                        android:orientation="vertical"
++                        android:visibility="gone">
++                        <TextView
++                            android:id="@+id/purpose_hint"
++                            android:layout_width="wrap_content"
++                            android:layout_height="wrap_content"
++                            android:layout_marginBottom="2dp"
++                            android:maxLines="4"
++                            android:text="@string/idle_choose_purpose"
++                            android:textColor="@color/dim"
++                            android:textSize="14sp"
++                            android:gravity="center" />
++                        <TextView
++                            android:id="@+id/purpose_auto_hint"
++                            android:layout_width="wrap_content"
++                            android:layout_height="wrap_content"
++                            android:layout_marginBottom="4dp"
++                            android:maxLines="4"
++                            android:text="@string/calling_title"
++                            android:textColor="@color/accent"
++                            android:textSize="13sp"
++                            android:gravity="center" />
++                        <GridLayout
++                            android:id="@+id/purpose_grid"
++                            android:layout_width="match_parent"
++                            android:layout_height="wrap_content"
++                            android:alignmentMode="alignMargins"
++                            android:columnCount="3"
++                            android:paddingLeft="12dp"
++                            android:paddingRight="12dp"
++                            android:useDefaultMargins="false" />
++                        <LinearLayout
++                            style="?android:attr/buttonBarStyle"
++                            android:layout_width="match_parent"
++                            android:layout_height="wrap_content"
++                            android:layout_marginLeft="16dp"
++                            android:layout_marginTop="10dp"
++                            android:layout_marginRight="16dp"
++                            android:baselineAligned="false"
++                            android:orientation="horizontal">
++                            <Button
++                                android:id="@+id/purpose_skip_button"
++                                style="?android:attr/buttonBarButtonStyle"
++                                android:layout_width="match_parent"
++                                android:layout_height="wrap_content"
++                                android:layout_marginEnd="4dp"
++                                android:background="@drawable/bg_big_button"
++                                android:maxLines="2"
++                                android:text="@string/purpose_skip"
++                                android:textColor="@color/fg"
++                                android:textSize="18sp"
++                                android:textStyle="bold"
++                                android:minHeight="48dp" />
++                        </LinearLayout>
++                    </LinearLayout>
++                    <LinearLayout
++                        android:id="@+id/visitor_footer"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:baselineAligned="false"
++                        android:orientation="vertical"
++                        android:paddingTop="6dp">
++                        <TextView
++                            android:id="@+id/node_info"
++                            android:layout_width="match_parent"
++                            android:layout_height="wrap_content"
++                            android:maxLines="2"
++                            android:textColor="@color/dim"
++                            android:textSize="12sp" />
++                        <FrameLayout
++                            android:id="@+id/sos_slot"
++                            android:layout_width="match_parent"
++                            android:layout_height="wrap_content"
++                            android:layout_marginTop="6dp"
++                            android:minWidth="200dp" />
++                    </LinearLayout>
++                </LinearLayout>
++            </ScrollView>
++            <ScrollView
++                android:id="@+id/calling_view"
++                android:layout_width="match_parent"
++                android:layout_height="match_parent"
++                android:background="@color/bg"
++                android:visibility="gone"
++                android:fillViewport="true">
++                <LinearLayout
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:orientation="vertical"
++                    android:gravity="center"
++                    android:padding="24dp">
++                    <TextView
++                        android:id="@+id/calling_text"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:gravity="center"
++                        android:text="@string/calling_title"
++                        android:textColor="@color/fg"
++                        android:textSize="28sp"
++                        android:textStyle="bold" />
++                    <View
++                        android:id="@+id/pulse"
++                        android:layout_width="72dp"
++                        android:layout_height="72dp"
++                        android:layout_marginTop="16dp"
++                        android:layout_marginBottom="16dp"
++                        android:background="@drawable/pulse_circle" />
++                </LinearLayout>
++            </ScrollView>
++            <ScrollView
++                android:id="@+id/offline_view"
++                android:layout_width="match_parent"
++                android:layout_height="match_parent"
++                android:background="@color/bg"
++                android:visibility="gone"
++                android:fillViewport="true">
++                <LinearLayout
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:orientation="vertical"
++                    android:gravity="center"
++                    android:padding="24dp">
++                    <TextView
++                        android:id="@+id/offline_title"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:text="@string/offline_title"
++                        android:textColor="@color/fg"
++                        android:textSize="28sp"
++                        android:textStyle="bold"
++                        android:gravity="center" />
++                    <TextView
++                        android:id="@+id/offline_body"
++                        android:layout_width="match_parent"
++                        android:layout_height="wrap_content"
++                        android:layout_marginTop="14dp"
++                        android:text="@string/offline_body"
++                        android:textColor="@color/dim"
++                        android:textSize="18sp"
++                        android:gravity="center" />
++                </LinearLayout>
++            </ScrollView>
++        </FrameLayout>
++        <TextView
++            android:id="@+id/visitor_status"
+             android:layout_width="match_parent"
+             android:layout_height="wrap_content"
++            android:accessibilityLiveRegion="polite"
++            android:background="@color/card"
+             android:gravity="center"
+-            android:orientation="vertical">
+-            <TextView
+-                android:id="@+id/clock_text"
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:fontFamily="sans-serif-light"
+-                android:maxLines="1"
+-                android:textColor="@color/fg"
+-                android:textSize="52sp"/>
+-            <TextView
+-                android:id="@+id/date_text"
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:maxLines="1"
+-                android:textColor="@color/dim"
+-                android:textSize="15sp"/>
+-        </LinearLayout>
+-
+-        <!-- Announcement: the text only, no source and no expiry (§5.1). -->
+-        <TextView
+-            android:id="@+id/notice_card"
++            android:maxLines="3"
++            android:padding="12dp"
++            android:textColor="@color/fg"
++            android:textSize="18sp"
++            android:visibility="gone" />
++        <FrameLayout
++            android:id="@+id/visitor_action_dock"
+             android:layout_width="match_parent"
+             android:layout_height="wrap_content"
+-            android:layout_marginLeft="8dp"
+-            android:layout_marginTop="8dp"
+-            android:layout_marginRight="8dp"
+-            android:ellipsize="end"
+-            android:maxLines="2"
+-            android:paddingLeft="12dp"
+-            android:paddingTop="6dp"
+-            android:paddingRight="12dp"
+-            android:paddingBottom="6dp"
+-            android:textColor="@color/fg"
+-            android:textSize="15sp"
+-            android:visibility="gone"/>
+-
+-        <!-- Visitor-language controls. -->
+-        <LinearLayout
+-            android:id="@+id/lang_bar"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:layout_gravity="center_horizontal"
+-            android:baselineAligned="false"
+-            android:orientation="horizontal"
+-            android:visibility="gone"/>
+-
+-        <!-- Primary call action and the single-sentence hint. -->
+-        <LinearLayout
+-            android:id="@+id/call_section"
+-            android:layout_width="match_parent"
+-            android:layout_height="wrap_content"
+-            android:gravity="center"
+-            android:orientation="vertical">
++            android:paddingLeft="16dp"
++            android:paddingRight="16dp"
++            android:paddingTop="8dp"
++            android:paddingBottom="12dp">
++            <LinearLayout
++                android:id="@+id/call_section"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:gravity="center"
++                android:orientation="vertical">
++                <Button
++                    android:id="@+id/call_button"
++                    android:layout_width="match_parent"
++                    android:layout_height="wrap_content"
++                    android:background="@drawable/bg_big_button"
++                    android:maxLines="4"
++                    android:maxWidth="560dp"
++                    android:minHeight="72dp"
++                    android:textColor="@color/fg"
++                    android:textSize="24sp"
++                    android:textStyle="bold"
++                    android:paddingLeft="16dp"
++                    android:paddingRight="16dp"
++                    android:paddingTop="12dp"
++                    android:paddingBottom="12dp"
++                    android:gravity="center"
++                    android:visibility="visible" />
++            </LinearLayout>
+             <Button
+-                android:id="@+id/call_button"
++                android:id="@+id/purpose_cancel_button"
++                style="?android:attr/buttonBarButtonStyle"
+                 android:layout_width="match_parent"
+                 android:layout_height="wrap_content"
+-                android:layout_marginLeft="24dp"
+-                android:layout_marginRight="24dp"
+-                android:background="@drawable/bg_big_button"
+-                android:maxLines="2"
+-                android:maxWidth="560dp"
++                android:background="@drawable/bg_card_button"
++                android:maxLines="4"
++                android:text="@string/purpose_cancel_call"
++                android:textColor="@color/fg"
++                android:textSize="24sp"
++                android:visibility="gone"
+                 android:minHeight="72dp"
++                android:paddingLeft="16dp"
++                android:paddingRight="16dp"
++                android:paddingTop="12dp"
++                android:paddingBottom="12dp"
++                android:gravity="center" />
++            <Button
++                android:id="@+id/cancel_button"
++                android:layout_width="match_parent"
++                android:layout_height="wrap_content"
++                android:background="@drawable/bg_card_button"
++                android:paddingLeft="16dp"
++                android:paddingTop="12dp"
++                android:paddingRight="16dp"
++                android:paddingBottom="12dp"
++                android:text="@string/calling_cancel"
+                 android:textColor="@color/fg"
+-                android:textSize="28sp"
+-                android:textStyle="bold"/>
+-            <TextView
+-                android:id="@+id/touch_hint"
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:layout_marginTop="6dp"
++                android:textSize="24sp"
++                android:minHeight="72dp"
++                android:maxLines="4"
+                 android:gravity="center"
+-                android:maxLines="2"
+-                android:text="@string/door_hint_call"
+-                android:textColor="@color/dim"
+-                android:textSize="15sp"/>
+-        </LinearLayout>
+-
+-        <!-- Visit-purpose actions. -->
+-        <LinearLayout
+-            android:id="@+id/purpose_section"
+-            android:layout_width="match_parent"
+-            android:layout_height="wrap_content"
+-            android:gravity="center"
+-            android:orientation="vertical"
+-            android:visibility="gone">
+-            <TextView
+-                android:id="@+id/purpose_hint"
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:layout_marginBottom="2dp"
+-                android:maxLines="1"
+-                android:text="@string/idle_choose_purpose"
+-                android:textColor="@color/dim"
+-                android:textSize="14sp"/>
+-            <TextView
+-                android:id="@+id/purpose_auto_hint"
+-                android:layout_width="wrap_content"
+-                android:layout_height="wrap_content"
+-                android:layout_marginBottom="4dp"
+-                android:maxLines="1"
+-                android:text="@string/calling_title"
+-                android:textColor="@color/accent"
+-                android:textSize="13sp"/>
+-            <GridLayout
+-                android:id="@+id/purpose_grid"
+-                android:layout_width="match_parent"
+-                android:layout_height="wrap_content"
+-                android:alignmentMode="alignMargins"
+-                android:columnCount="3"
+-                android:paddingLeft="12dp"
+-                android:paddingRight="12dp"
+-                android:useDefaultMargins="false"/>
+-            <LinearLayout
+-                style="?android:attr/buttonBarStyle"
+-                android:layout_width="match_parent"
+-                android:layout_height="52dp"
+-                android:layout_marginLeft="16dp"
+-                android:layout_marginTop="10dp"
+-                android:layout_marginRight="16dp"
+-                android:baselineAligned="false"
+-                android:orientation="horizontal">
+-                <Button
+-                    android:id="@+id/purpose_skip_button"
+-                    style="?android:attr/buttonBarButtonStyle"
+-                    android:layout_width="0dp"
+-                    android:layout_height="match_parent"
+-                    android:layout_marginEnd="4dp"
+-                    android:layout_weight="1"
+-                    android:background="@drawable/bg_big_button"
+-                    android:maxLines="2"
+-                    android:text="@string/purpose_skip"
+-                    android:textColor="@color/fg"
+-                    android:textSize="18sp"
+-                    android:textStyle="bold"/>
+-                <Button
+-                    android:id="@+id/purpose_cancel_button"
+-                    style="?android:attr/buttonBarButtonStyle"
+-                    android:layout_width="0dp"
+-                    android:layout_height="match_parent"
+-                    android:layout_marginStart="4dp"
+-                    android:layout_weight="1"
+-                    android:background="@drawable/bg_card_button"
+-                    android:maxLines="2"
+-                    android:text="@string/purpose_cancel_call"
+-                    android:textColor="@color/fg"
+-                    android:textSize="18sp"
+-                    android:visibility="gone"/>
+-            </LinearLayout>
+-        </LinearLayout>
+-
+-        <!-- Footer: door label, core and app versions, battery, and the optional SOS slider.
+-             Stacked by default so a portrait phone never clips the version line behind the
+-             slider; VisitorLayout puts them side by side only on a wide landscape window. -->
+-        <LinearLayout
+-            android:id="@+id/visitor_footer"
+-            android:layout_width="match_parent"
+-            android:layout_height="wrap_content"
+-            android:baselineAligned="false"
+-            android:orientation="vertical"
+-            android:paddingTop="6dp">
+-            <TextView
+-                android:id="@+id/node_info"
+-                android:layout_width="match_parent"
+-                android:layout_height="wrap_content"
+-                android:maxLines="2"
+-                android:textColor="@color/dim"
+-                android:textSize="12sp"/>
+-            <FrameLayout
+-                android:id="@+id/sos_slot"
+-                android:layout_width="match_parent"
+-                android:layout_height="wrap_content"
+-                android:layout_marginTop="6dp"
+-                android:minWidth="200dp"/>
+-        </LinearLayout>
++                android:visibility="gone" />
++        </FrameLayout>
+     </LinearLayout>
+-
+-    <!-- Ringing. -->
+-    <LinearLayout
+-        android:id="@+id/calling_view"
+-        android:layout_width="match_parent"
+-        android:layout_height="match_parent"
+-        android:background="@color/bg"
+-        android:gravity="center"
+-        android:orientation="vertical"
+-        android:visibility="gone">
+-        <TextView
+-            android:id="@+id/calling_text"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:gravity="center"
+-            android:text="@string/calling_title"
+-            android:textColor="@color/fg"
+-            android:textSize="44sp"
+-            android:textStyle="bold"/>
+-        <View
+-            android:id="@+id/pulse"
+-            android:layout_width="120dp"
+-            android:layout_height="120dp"
+-            android:layout_marginTop="40dp"
+-            android:layout_marginBottom="40dp"
+-            android:background="@drawable/pulse_circle"/>
+-        <Button
+-            android:id="@+id/cancel_button"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:background="@drawable/bg_card_button"
+-            android:paddingLeft="40dp"
+-            android:paddingTop="14dp"
+-            android:paddingRight="40dp"
+-            android:paddingBottom="14dp"
+-            android:text="@string/calling_cancel"
+-            android:textColor="@color/fg"
+-            android:textSize="26sp"/>
+-    </LinearLayout>
+-
+-    <!-- Quick-reply overlay. -->
+     <LinearLayout
+         android:id="@+id/reply_banner"
+         android:layout_width="wrap_content"
+@@ -301,7 +360,7 @@
+             android:layout_height="wrap_content"
+             android:text="@string/reply_banner"
+             android:textColor="@color/dim"
+-            android:textSize="20sp"/>
++            android:textSize="20sp" />
+         <TextView
+             android:id="@+id/reply_text"
+             android:layout_width="wrap_content"
+@@ -310,45 +369,14 @@
+             android:gravity="center"
+             android:textColor="@color/fg"
+             android:textSize="40sp"
+-            android:textStyle="bold"/>
++            android:textStyle="bold" />
+     </LinearLayout>
+-
+-    <!-- Offline. -->
+-    <LinearLayout
+-        android:id="@+id/offline_view"
+-        android:layout_width="match_parent"
+-        android:layout_height="match_parent"
+-        android:background="@color/offline_bg"
+-        android:gravity="center"
+-        android:orientation="vertical"
+-        android:visibility="gone">
+-        <TextView
+-            android:id="@+id/offline_title"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:text="@string/offline_title"
+-            android:textColor="#FFFFFF"
+-            android:textSize="44sp"
+-            android:textStyle="bold"/>
+-        <TextView
+-            android:id="@+id/offline_body"
+-            android:layout_width="wrap_content"
+-            android:layout_height="wrap_content"
+-            android:layout_marginTop="14dp"
+-            android:text="@string/offline_body"
+-            android:textColor="#FFE9D5"
+-            android:textSize="24sp"/>
+-    </LinearLayout>
+-
+-    <!-- Hidden maintenance tap target; the door station's only way into settings. -->
+     <View
+         android:id="@+id/secret_corner"
+-        android:layout_width="200dp"
+-        android:layout_height="200dp"
++        android:layout_width="48dp"
++        android:layout_height="48dp"
+         android:layout_gravity="top|end"
+-        android:background="@android:color/transparent"/>
+-
+-    <!-- Non-interactive night tint above theme imagery. -->
++        android:background="@android:color/transparent" />
+     <View
+         android:id="@+id/night_tint"
+         android:layout_width="match_parent"
+@@ -356,19 +384,16 @@
+         android:background="#33FF2200"
+         android:clickable="false"
+         android:focusable="false"
+-        android:visibility="gone"/>
+-
+-    <!-- Persistent "not set up" banner; visible until the cluster state is ready. -->
++        android:visibility="gone" />
+     <TextView
+         android:id="@+id/pairing_banner"
+         android:layout_width="wrap_content"
+         android:layout_height="wrap_content"
+-        android:layout_gravity="bottom|start"
++        android:layout_gravity="top|start"
+         android:layout_marginStart="16dp"
+         android:layout_marginLeft="16dp"
+         android:layout_marginEnd="130dp"
+         android:layout_marginRight="130dp"
+-        android:layout_marginBottom="16dp"
+         android:background="#243244"
+         android:clickable="true"
+         android:focusable="true"
+@@ -381,5 +406,6 @@
+         android:text="@string/pair_not_set_up_banner"
+         android:textColor="#FFFFFF"
+         android:textSize="15sp"
+-        android:visibility="gone"/>
++        android:visibility="gone"
++        android:layout_marginTop="8dp" />
+ </FrameLayout>
+--- before/android/app/build.gradle.kts
++++ after/android/app/build.gradle.kts
+@@ -66,6 +66,7 @@
+     applicationId = "jp.ox.doorbell"
+     minSdk = 19
+     targetSdk = 35
++    testInstrumentationRunner = "jp.ox.doorbell.VisitorUiInstrumentation"
+     versionCode = 22
+     versionName = "0.3.21+${doorbellGitRevision.take(7)}"
+     buildConfigField("String", "DOORBELL_SOURCE_ID", "\"$doorbellSourceIdentity\"")
+--- before/android/app/src/test/java/jp/ox/doorbell/VisitorActionLatchTest.kt
++++ after/android/app/src/test/java/jp/ox/doorbell/VisitorActionLatchTest.kt
+@@ -0,0 +1,44 @@
++package jp.ox.doorbell
++
++import org.junit.Assert.*
++import org.junit.Test
++
++class VisitorActionLatchTest {
++    @Test fun aHeldCancelNeverBecomesAnEndAction() {
++        val latch = VisitorActionLatch()
++        latch.begin(VisitorCallAction("one", CallUiPhase.RINGING))
++        assertNull(latch.consume(VisitorCallAction("one", CallUiPhase.ESTABLISHED)))
++    }
++
++    @Test fun aHeldActionCannotAddressAReplacementCall() {
++        val latch = VisitorActionLatch()
++        latch.begin(VisitorCallAction("one", CallUiPhase.RINGING))
++        assertNull(latch.consume(VisitorCallAction("two", CallUiPhase.RINGING)))
++    }
++
++    @Test fun accessibilityActivationUsesTheCurrentlyDisplayedAction() {
++        val latch = VisitorActionLatch()
++        val action = VisitorCallAction("one", CallUiPhase.ESTABLISHED)
++        assertEquals(action, latch.consume(action))
++        latch.begin(action)
++        assertEquals(action, latch.consume(action))
++    }
++
++    @Test fun confirmedSosUsesTheSlideCountdownAndCanBeCancelled() {
++        val slide = SosSlideState(3)
++        slide.begin(); slide.drag(1f)
++        val accessible = SosSlideState(3)
++        assertEquals(slide.release(), accessible.confirm())
++        assertEquals(accessible.snapshot(), accessible.confirm())
++        assertFalse(accessible.tick().fireNow)
++        assertEquals(SosPhase.IDLE, accessible.cancel().phase)
++        repeat(5) { assertFalse(accessible.tick().fireNow) }
++    }
++
++    @Test fun confirmedZeroCountdownFiresOnceJustLikeACompletedSlide() {
++        val state = SosSlideState(0)
++        assertTrue(state.confirm().fireNow)
++        assertFalse(state.confirm().fireNow)
++        assertFalse(state.tick().fireNow)
++    }
++}
+--- before/android/app/src/androidTest/java/jp/ox/doorbell/VisitorUiInstrumentation.kt
++++ after/android/app/src/androidTest/java/jp/ox/doorbell/VisitorUiInstrumentation.kt
+@@ -0,0 +1,300 @@
++package jp.ox.doorbell
++
++import android.app.Activity
++import android.app.Application
++import android.app.AlertDialog
++import android.app.Instrumentation
++import android.content.Intent
++import android.content.pm.ActivityInfo
++import android.graphics.Rect
++import android.graphics.drawable.ColorDrawable
++import android.os.Bundle
++import android.os.Handler
++import android.os.Looper
++import android.os.SystemClock
++import android.view.MotionEvent
++import android.view.View
++import android.view.ViewGroup
++import android.widget.Button
++import android.widget.TextView
++import org.json.JSONArray
++import org.json.JSONObject
++import java.io.File
++import java.util.concurrent.CountDownLatch
++import java.util.concurrent.TimeUnit
++
++/** Runs the production Activity with an inert Core and a recording call gateway. */
++class VisitorUiInstrumentation : Instrumentation() {
++    private lateinit var args: Bundle
++    private lateinit var activity: MainActivity
++    private lateinit var app: App
++    private var callClockMs = System.currentTimeMillis()
++    private lateinit var gateway: Gateway
++    private val results = JSONArray()
++    private lateinit var output: File
++    private val applicationReady = CountDownLatch(1)
++
++    override fun callApplicationOnCreate(application: Application) {
++        super.callApplicationOnCreate(application)
++        applicationReady.countDown()
++    }
++
++    override fun onCreate(arguments: Bundle?) {
++        args = arguments ?: Bundle()
++        start()
++    }
++
++    override fun onStart() {
++        var failure: Throwable? = null
++        try {
++            check(applicationReady.await(15, TimeUnit.SECONDS)) { "Application initialization did not finish" }
++            app = targetContext.applicationContext as App
++            check(!app.core.isCreated) { "The UI fixture must never start Core" }
++            set(app, "bootSetupRequired", false)
++            app.deferPairing()
++            set(app.runtime, "isCoreReady", true)
++            set(app.runtime, "handler", Handler(Looper.getMainLooper()))
++            output = File(targetContext.getExternalFilesDir(null), "t35-ui").apply { mkdirs() }
++            activity = startActivitySync(Intent(targetContext, MainActivity::class.java)
++                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) as MainActivity
++            uiAutomation.rootInActiveWindow?.findAccessibilityNodeInfosByText("Got it")?.firstOrNull()
++                ?.performAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK)
++            ui { activity.requestedOrientation = if (args.getString("orientation") == "landscape")
++                ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE else ActivityInfo.SCREEN_ORIENTATION_PORTRAIT }
++            val expected = if (args.getString("orientation") == "landscape") 2 else 1
++            val deadline = SystemClock.uptimeMillis() + 5000
++            while (activity.resources.configuration.orientation != expected && SystemClock.uptimeMillis() < deadline)
++                Thread.sleep(50)
++            settle()
++            if (args.getString("phase") == "baseline") {
++                prepare("purpose_first")
++                capture("idle")
++                ui { button(R.id.call_button).performClick() }
++                capture("ringing")
++                results.put(JSONObject().put("id", "baseline_capture").put("status", "RECORDED"))
++            } else {
++                case("T35-01 purpose_first") {
++                    prepare("purpose_first")
++                    ui { button(R.id.call_button).performClick() }
++                    check(gateway.presses == listOf(""))
++                    ui { button(R.id.cancel_button).performClick() }
++                    check(gateway.cancels == 1 && gateway.hangups == 0)
++                    prepare("purpose_first")
++                    ui { (activity.findViewById<ViewGroup>(R.id.purpose_grid).getChildAt(0) as Button).performClick() }
++                    check(gateway.presses == listOf("delivery"))
++                }
++                case("T35-01 ring_then_purpose") {
++                    prepare("ring_then_purpose")
++                    ui { button(R.id.call_button).performClick() }
++                    check(gateway.presses == listOf(""))
++                    check(button(R.id.purpose_cancel_button).visibility == View.VISIBLE)
++                    ui { (activity.findViewById<ViewGroup>(R.id.purpose_grid).getChildAt(0) as Button).performClick() }
++                    check(gateway.selections == listOf("delivery"))
++                    ui { button(R.id.cancel_button).performClick() }
++                    check(gateway.cancels == 1)
++                    prepare("ring_then_purpose")
++                    ui { button(R.id.call_button).performClick(); button(R.id.purpose_skip_button).performClick() }
++                    check(gateway.presses.size == 1 && gateway.selections.isEmpty())
++                }
++                case("T35-02 stable slot and gesture ownership") {
++                    prepare("purpose_first")
++                    ui { button(R.id.call_button).performClick() }
++                    capture("ringing")
++                    val before = bounds(button(R.id.cancel_button))
++                    val now = SystemClock.uptimeMillis()
++                    ui {
++                        val b = button(R.id.cancel_button)
++                        b.dispatchTouchEvent(MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, b.width / 2f, b.height / 2f, 0))
++                        invoke("applyCallProjection", app.callFlow.markEstablished())
++                        invoke("showEstablished")
++                        b.dispatchTouchEvent(MotionEvent.obtain(now, now + 20, MotionEvent.ACTION_UP, b.width / 2f, b.height / 2f, 0))
++                    }
++                    settle()
++                    check(gateway.cancels == 0 && gateway.hangups == 0) { "A held cancel changed semantics" }
++                    check(before == bounds(button(R.id.cancel_button))) { "The primary action moved" }
++                    capture("established")
++                    ui { button(R.id.cancel_button).performClick() }
++                    check(gateway.hangups == 1 && gateway.cancels == 0)
++                }
++                case("T35-03 neutral recovery and accessible SOS") {
++                    prepare("purpose_first")
++                    ui { button(R.id.call_button).performClick(); invoke("showOffline") }
++                    val pane = activity.findViewById<View>(R.id.offline_view)
++                    @Suppress("DEPRECATION")
++                    check((pane.background as ColorDrawable).color == activity.resources.getColor(R.color.bg))
++                    check(!button(R.id.cancel_button).isEnabled)
++                    capture("recovering")
++                    prepare("purpose_first")
++                    val slider = get(activity, "sosSlider") as SosSlideView
++                    var fired = 0
++                    ui {
++                        slider.onTrigger = { fired++ }
++                        slider.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK, null)
++                        check(!slider.isArmed() && fired == 0)
++                    }
++                    capture("sos-confirm")
++                    ui {
++                        (get(slider, "confirmation") as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE).performClick()
++                    }
++                    ui {
++                        check(slider.isArmed() && fired == 0)
++                        slider.performClick()
++                        check(!slider.isArmed() && fired == 0)
++                        val time = SystemClock.uptimeMillis()
++                        slider.dispatchTouchEvent(MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 4f, slider.height / 2f, 0))
++                        slider.dispatchTouchEvent(MotionEvent.obtain(time, time + 20, MotionEvent.ACTION_UP, slider.width.toFloat(), slider.height / 2f, 0))
++                        check(slider.isArmed() && fired == 0)
++                        slider.cancelCountdown()
++                        slider.onKeyDown(android.view.KeyEvent.KEYCODE_ENTER,
++                            android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ENTER))
++                        slider.onKeyUp(android.view.KeyEvent.KEYCODE_ENTER,
++                            android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_ENTER))
++                        check(get(slider, "confirmation") != null && !slider.isArmed())
++                        (get(slider, "confirmation") as AlertDialog).getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
++                    }
++                    ui { check(!slider.isArmed() && fired == 0) }
++                }
++                case("T35-04 long text and scaled primary actions") {
++                    prepare("purpose_first")
++                    ui { button(R.id.call_button).text = "Call the resident at the main entrance / 呼叫主入口的住户" }
++                    settle()
++                    assertFullyVisible(button(R.id.call_button))
++                    capture("long-idle")
++                    tap(button(R.id.call_button))
++                    ui { button(R.id.cancel_button).text = "Cancel this visitor call / 取消本次访客呼叫" }
++                    settle()
++                    assertFullyVisible(button(R.id.cancel_button))
++                    capture("long-calling")
++                    tap(button(R.id.cancel_button))
++                    check(gateway.cancels == 1)
++                    prepare("purpose_first")
++                    tap(button(R.id.call_button))
++                    ui {
++                        callClockMs += 120_000
++                        (get(activity, "callTimeout") as Runnable).run()
++                    }
++                    val status = activity.findViewById<TextView>(R.id.visitor_status)
++                    check(status.visibility == View.VISIBLE && status.text.isNotEmpty())
++                    val area = bounds(status)
++                    check(area.height() == status.height)
++                    assertFullyVisible(button(R.id.call_button))
++                    check(gateway.cancels == 1)
++                    capture("no-answer")
++                }
++            }
++            check(!app.core.isCreated) { "Fixture started Core unexpectedly" }
++        } catch (t: Throwable) { failure = t }
++        val report = JSONObject().put("phase", args.getString("phase", "green"))
++            .put("orientation", args.getString("orientation", "portrait"))
++            .put("font_scale", targetContext.resources.configuration.fontScale)
++            .put("source_id", BuildConfig.DOORBELL_SOURCE_ID).put("results", results)
++            .put("core_started", app.core.isCreated).put("failure", failure?.stackTraceToString() ?: JSONObject.NULL)
++        if (::output.isInitialized) File(output, "result.json").writeText(report.toString(2))
++        if (::activity.isInitialized) ui { activity.finish() }
++        finish(if (failure == null) Activity.RESULT_OK else Activity.RESULT_CANCELED,
++            Bundle().apply { putString("stream", report.toString(2)) })
++    }
++
++    private fun prepare(mode: String) {
++        gateway = Gateway()
++        val store = object : OriginatedCallPersistence {
++            override fun load(): OriginatedCall? = null
++            override fun save(call: OriginatedCall) = true
++            override fun clear() { }
++        }
++        set(app, "callFlow", CallFlowController(gateway, store) { callClockMs })
++        ui {
++            (get(activity, "ui") as Handler).removeCallbacksAndMessages(null)
++            set(activity, "homeHandler", null)
++            val config = JSONObject().put("ui", JSONObject().put("call_flow", mode)
++                .put("call_sound", "").put("button_sound", "").put("launch_sound", ""))
++                .put("visit_purposes", JSONObject().put("delivery", JSONObject().put("label", JSONObject()
++                    .put("en", "Delivery at the main entrance / 主入口配送").put("ja", "配送 / Delivery"))))
++                .put("emergency", JSONObject().put("button_on_roles", JSONArray().put("door_station"))
++                    .put("trigger", JSONObject().put("countdown_s", 3)))
++            invoke("applyConfigCache", config)
++            invoke("clearCallProjection")
++            invoke("buildPurposeButtons")
++            invoke("applyStrings")
++            invoke("configureSos")
++            invoke("applyVisitorLayout")
++            invoke("showIdle", null)
++            activity.findViewById<View>(R.id.pairing_banner).visibility = View.GONE
++        }
++        settle()
++    }
++
++    private fun case(name: String, body: () -> Unit) {
++        try { body(); results.put(JSONObject().put("id", name).put("status", "PASS")) }
++        catch (t: Throwable) { results.put(JSONObject().put("id", name).put("status", "FAIL").put("error", t.toString())); throw t }
++    }
++    private fun settle(frames: Int = 2) {
++        val frame = CountDownLatch(1)
++        var remaining = frames
++        val callback = object : Runnable {
++            override fun run() {
++                if (--remaining == 0) frame.countDown()
++                else activity.window.decorView.postOnAnimation(this)
++            }
++        }
++        runOnMainSync { activity.window.decorView.postOnAnimation(callback) }
++        check(frame.await(5, TimeUnit.SECONDS)) { "UI frames did not advance" }
++    }
++    private fun tap(view: View) {
++        val rect = bounds(view)
++        val now = SystemClock.uptimeMillis()
++        for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
++            val event = MotionEvent.obtain(now, SystemClock.uptimeMillis(), action,
++                rect.exactCenterX(), rect.exactCenterY(), 0)
++            sendPointerSync(event)
++            event.recycle()
++        }
++        settle()
++    }
++    private fun button(id: Int) = activity.findViewById<Button>(id)
++    private fun ui(body: () -> Unit) {
++        var failure: Throwable? = null
++        runOnMainSync { try { body() } catch (t: Throwable) { failure = t } }
++        failure?.let { throw it }
++        settle()
++    }
++    private fun invoke(name: String, vararg values: Any?) = MainActivity::class.java.declaredMethods
++        .first { it.name == name && it.parameterTypes.size == values.size }
++        .apply { isAccessible = true }.invoke(activity, *values)
++    private fun get(owner: Any, name: String): Any? = owner.javaClass.getDeclaredField(name)
++        .apply { isAccessible = true }.get(owner)
++    private fun set(owner: Any, name: String, value: Any?) = owner.javaClass.getDeclaredField(name)
++        .apply { isAccessible = true }.set(owner, value)
++    private fun bounds(view: View) = Rect().also { check(view.getGlobalVisibleRect(it)) }
++    private fun assertFullyVisible(view: View) {
++        val area = bounds(view)
++        check(area.height() == view.height && area.width() == view.width && view.height >= 48 * activity.resources.displayMetrics.density)
++        check(view.isEnabled && view.isFocusable)
++    }
++    private fun capture(name: String) {
++        settle(20)
++        uiAutomation.takeScreenshot()?.let { bitmap ->
++            File(output, "$name.png").outputStream().use { bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
++            bitmap.recycle()
++        }
++        fun tree(view: View): JSONObject {
++            val area = Rect(); view.getGlobalVisibleRect(area)
++            val o = JSONObject().put("class", view.javaClass.simpleName).put("visibility", view.visibility)
++                .put("enabled", view.isEnabled).put("bounds", area.toShortString())
++                .put("id", if (view.id == View.NO_ID) "" else try { view.resources.getResourceEntryName(view.id) } catch (_: Exception) { "" })
++            if (view is TextView) o.put("text", view.text.toString())
++            if (view is ViewGroup) o.put("children", JSONArray().also { a -> for (i in 0 until view.childCount) a.put(tree(view.getChildAt(i))) })
++            return o
++        }
++        ui { File(output, "$name-tree.json").writeText(tree(activity.window.decorView).toString(2)) }
++    }
++    private class Gateway : CallFlowGateway {
++        val presses = mutableListOf<String>(); val selections = mutableListOf<String>()
++        var cancels = 0; var hangups = 0
++        override fun press(door: String, purpose: String): String { presses.add(purpose); return "fixture-call-${presses.size}" }
++        override fun selectPurpose(door: String, callId: String, purpose: String): Boolean { selections.add(purpose); return true }
++        override fun cancel(door: String, callId: String, reason: String): Boolean { cancels++; return true }
++        override fun reportRecovery(callId: String, restored: Boolean) { }
++        override fun hangup() { hangups++ }
++    }
++}

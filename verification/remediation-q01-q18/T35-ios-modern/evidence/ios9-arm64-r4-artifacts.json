@@ -1,0 +1,18 @@
+{
+  "recorded_at": "2026-09-22T17:34:45.337667+00:00",
+  "source_manifest_sha256": "92ed542708ffa474244241f9a07ee2933a5c3bd6e74b92204b01f03242d32b7f",
+  "binary": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/ios9-arm64-r4/Build/Products/Release-iphoneos/DoorbellIOS9.app/DoorbellIOS9",
+  "hashes": {
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/ios9-arm64-r4/Build/Products/Release-iphoneos/DoorbellIOS9.app/DoorbellIOS9": "37048848ab81f5cd491b6aa9a1056c86b4c29c1aa18e45541971d3be7414cc3c",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/source-r4/ios/build/core/iphoneos/arm64/min-9.0/libdoorbell_all.a": "2cab55041127a1b9b5927ff0fb95f38f26c9a83cdd9db2b76ec262aeea821811",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/source-r4/ios/build/core/iphoneos/arm64/min-9.0/artifact-manifest.json": "1d9b1446f0a86bc12bb0c90750953709036c2415ffc2be0ae34a8106a32057d1"
+  },
+  "images": {
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/ios9-arm64-r4/Build/Products/Release-iphoneos/DoorbellIOS9.app/DoorbellIOS9": "UUID: 77CF10E0-D936-33BB-8034-75D16FE6709E (arm64) /Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/ios9-arm64-r4/Build/Products/Release-iphoneos/DoorbellIOS9.app/DoorbellIOS9"
+  },
+  "app_version": "0.1.37",
+  "build_number": "38",
+  "target_minimum_os": "9.0",
+  "sip_backend": "real_pjsip",
+  "scope": "Completed build identity only. Separate test-r4 command records actual XCTest attempt; no hardware qualification."
+}

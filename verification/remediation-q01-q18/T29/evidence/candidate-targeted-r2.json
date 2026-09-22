@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "8a9552daedc45aa1fea48a7483341bbef5adec0dee81c8103ced4b5cc194e26f",
+  "task_id": "T29",
+  "test_id": "candidate-targeted-r2",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/source-green-r2.json",
+  "source_manifest_sha256": "98874fc1c29356f965247f0245bea470a3aa8431ad2673d55d2b3886b9ab1ec5",
+  "command": [
+    "build/remediation-t29-20260923/green-r2-build/doorbell_tests",
+    "--test-case=config import:*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T18:02:08.832567+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/evidence/candidate-targeted-r2.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T18:02:48.811470+00:00",
+  "expected_exit_code": 0,
+  "status": "FAIL",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

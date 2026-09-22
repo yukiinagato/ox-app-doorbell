@@ -1,0 +1,253 @@
+{
+  "task_id": "T06",
+  "reviewer": "t02_contract_inventory",
+  "reviewed_at": "2026-09-22T16:00:06.383759+00:00",
+  "verdict": "PASS_IN_PRODUCTION_TEST_SCOPE",
+  "scope": "Independent source, test and evidence review of the frozen production host HTTP/native/authenticated-mesh operation service. No reviewer production edits or rerun; no hardware/actuator/target-platform qualification.",
+  "source_manifest": "source-final.json",
+  "source_manifest_sha256": "5cc445041f114abd9d9abc27fc5dbccbd67578a38a349f55a6b7f6047eac7217",
+  "full_snapshot_manifest_sha256": "2028c2151d1b821cdcfb3e1847a7df18cb19b571deb936009ce1774007ed118f",
+  "inputs": [
+    {
+      "path": "core/src/node/node.cpp",
+      "frozen_sha256": "7f513a5dafb8b624d7640ba052950aec61f1475b4c3903f3a39a1e89a7496db1",
+      "current_sha256": "218f40354113274ee87fa8e7334f7c118031f6589d29dd0d4ca57709b6276907"
+    },
+    {
+      "path": "core/src/node/node.h",
+      "frozen_sha256": "853c6a381a0e3b7386182ab59ff2666f21938c435d3f7be0ef1619b3200f7dea",
+      "current_sha256": "853c6a381a0e3b7386182ab59ff2666f21938c435d3f7be0ef1619b3200f7dea"
+    },
+    {
+      "path": "core/src/node/operation_config.h",
+      "frozen_sha256": "64601fe04be202be5a0c9ac8bdddbc9229107345dc25b30a20f6d515d18713c2",
+      "current_sha256": "64601fe04be202be5a0c9ac8bdddbc9229107345dc25b30a20f6d515d18713c2"
+    },
+    {
+      "path": "core/src/node/operation_service.inc",
+      "frozen_sha256": "ba960369e4909e2234fec11cd14b799262d9a14e32c0d14e6ecbfb2bb10ea216",
+      "current_sha256": "ba960369e4909e2234fec11cd14b799262d9a14e32c0d14e6ecbfb2bb10ea216"
+    },
+    {
+      "path": "core/src/node/operation_dispatcher.h",
+      "frozen_sha256": "be0fc6694ba3650cf2cbe63b3011f10ff837b7b5ec674fd5d1b70c15eab9ea62",
+      "current_sha256": "be0fc6694ba3650cf2cbe63b3011f10ff837b7b5ec674fd5d1b70c15eab9ea62"
+    },
+    {
+      "path": "core/src/node/operation_dispatcher.cpp",
+      "frozen_sha256": "8d95509a4587addaea4474aa6cf3b7d2287498ff1ab5c8bb8ee7d54b47cd8bc5",
+      "current_sha256": "8d95509a4587addaea4474aa6cf3b7d2287498ff1ab5c8bb8ee7d54b47cd8bc5"
+    },
+    {
+      "path": "core/src/httpd/httpd.h",
+      "frozen_sha256": "d82dcd55a8279c2f7ebfce24aa744b5415e78cc8c8f65bb191a5c1658f455e9b",
+      "current_sha256": "d82dcd55a8279c2f7ebfce24aa744b5415e78cc8c8f65bb191a5c1658f455e9b"
+    },
+    {
+      "path": "core/src/httpd/httpd.cpp",
+      "frozen_sha256": "bb25e9edae198a51e56438c7ed0d26441e7b3fc6211b4fb3926ab4bbdd30264a",
+      "current_sha256": "bb25e9edae198a51e56438c7ed0d26441e7b3fc6211b4fb3926ab4bbdd30264a"
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.h",
+      "frozen_sha256": "72e73af0da455ff3cbb09f63aacc5d0d94c823b426cfc983bb2e37d63dbfa240",
+      "current_sha256": "72e73af0da455ff3cbb09f63aacc5d0d94c823b426cfc983bb2e37d63dbfa240"
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.cpp",
+      "frozen_sha256": "e7b142df95246781e0e6a4b85f4426830308fe0c38f7b4b62df80e9d5dfea45b",
+      "current_sha256": "e7b142df95246781e0e6a4b85f4426830308fe0c38f7b4b62df80e9d5dfea45b"
+    },
+    {
+      "path": "core/src/bridge/mqtt_client.h",
+      "frozen_sha256": "20cae86d3b4568f321a8c00f43cb6e63a77f937e38a112ddd113a9f42f37b0dd",
+      "current_sha256": "20cae86d3b4568f321a8c00f43cb6e63a77f937e38a112ddd113a9f42f37b0dd"
+    },
+    {
+      "path": "core/src/bridge/mqtt_client.cpp",
+      "frozen_sha256": "1e5a39ab4eec5d5c692620647c021a0beb7b4c48d642489686a3cb6dfb938fa2",
+      "current_sha256": "1e5a39ab4eec5d5c692620647c021a0beb7b4c48d642489686a3cb6dfb938fa2"
+    },
+    {
+      "path": "core/src/capi/doorbell_capi.cpp",
+      "frozen_sha256": "8ba6ab0ec459b903d5aa3be1df20c30ba732e98e78d01d21a7b9d13a95922ea6",
+      "current_sha256": "8ba6ab0ec459b903d5aa3be1df20c30ba732e98e78d01d21a7b9d13a95922ea6"
+    },
+    {
+      "path": "core/include/doorbell/doorbell.h",
+      "frozen_sha256": "5ac62bdd966176848699973a935a0607fc063cfdcb7c3890715b77242845a13f",
+      "current_sha256": "5ac62bdd966176848699973a935a0607fc063cfdcb7c3890715b77242845a13f"
+    },
+    {
+      "path": "core/tests/test_operations_http.cpp",
+      "frozen_sha256": "71e270d8af3a1b716d1ee4c82c2a16f852312bdbc9e2121a957871d0cc3ffddd",
+      "current_sha256": "71e270d8af3a1b716d1ee4c82c2a16f852312bdbc9e2121a957871d0cc3ffddd"
+    },
+    {
+      "path": "core/tests/test_operations_service.cpp",
+      "frozen_sha256": "63996d93eeed9da11c3d69c027de99857f243181df25fa3423640f59432e2e09",
+      "current_sha256": "63996d93eeed9da11c3d69c027de99857f243181df25fa3423640f59432e2e09"
+    }
+  ],
+  "all_16_frozen_inputs_match": true,
+  "current_worktree_delta": "Only core/src/node/node.cpp differs from the frozen tested Node: the separately owned T26 config_cas_v1 feature advertisement was added after this snapshot. All 15 other owned files match. This later delta is not backfilled into historical tested hashes.",
+  "findings": [],
+  "inspected_contracts": [
+    {
+      "area": "Authorization and scope",
+      "source": "core/src/node/operation_service.inc:117",
+      "conclusion": "Page-side session and CSRF checks repeat on the state loop. The authenticated SecureChannel peer supplies identity; current authority-side credential/grant versions and explicit door/global-SOS grants are required. Query checks the actual stored target before details; execute remains creator-only. Shared legacy panel credentials do not use these routes."
+    },
+    {
+      "area": "Fixed authority and routing",
+      "source": "core/src/node/operation_service.inc:44",
+      "conclusion": "Door and global SOS have separate configured authority nodes. The page cannot supply an alternate URL or become an implicit failover executor. Outgoing RPCs match authenticated authority and random request identity, with bounded capacity and expiry."
+    },
+    {
+      "area": "Durable dispatch and immutable target",
+      "source": "core/src/node/operation_service.inc:165",
+      "conclusion": "The Store durable acquisition is the sole permission to enqueue an adapter action. Repeated handles query the same state; changed credential/grant/config invalidates unstarted records. The command and broker binding are frozen, the active adapter is checked, and new door operations never append replayable dtmf_action events."
+    },
+    {
+      "area": "Waiter and Node lifetime",
+      "source": "core/src/node/operation_dispatcher.cpp:82",
+      "conclusion": "Admission/expiry share a mutex. Queued cancellation physically removes work, Running timeout is unknown, stop wakes waiters, and owned Pending data survives late completions. Node stop crosses the loop cleanup boundary before destruction. The adjacent snapshot callback uses the existing weak alive token on a surviving borrowed loop."
+    },
+    {
+      "area": "Compatibility and API shape",
+      "source": "core/include/doorbell/doorbell.h",
+      "conclusion": "The new C functions are additive, db_free owns results, and the platform struct layout is unchanged. The caller map explicitly lists unmigrated legacy shell, rule and SIP callers instead of claiming they gained cross-invocation deduplication."
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "T06-01",
+      "verdict": "PASS",
+      "evidence": "Two real Nodes communicate through TCP/SecureChannel. Page A prepares and executes on fixed authority B. Real MqttClient sends one matching operation packet to a local broker fixture while repeated execute/query retain the same result."
+    },
+    {
+      "id": "T06-02",
+      "verdict": "PASS",
+      "evidence": "A second authenticated native node with target grants still cannot query/execute the creator handle. Denial contains no execution_state/config_generation; missing CSRF and current grant revocation are also tested."
+    },
+    {
+      "id": "T06-03",
+      "verdict": "PASS",
+      "evidence": "After the fixed authority B stops, A returns unavailable and does not take over; the already dispatched operation packet count remains one."
+    },
+    {
+      "id": "T06-04",
+      "verdict": "PASS",
+      "evidence": "The client fixture deliberately discards the already-read SOS response. Query and repeat execute of its original handle leave the real authority emergency-intent count at one. This is application-layer result loss, not a physical network fault injection."
+    }
+  ],
+  "runs": {
+    "normal-final": {
+      "record": "evidence/normal-final.json",
+      "record_sha256": "701212628ca5f77d3bc97460889672d6e0e60220c70235ee465bf4c84c923a33",
+      "log_sha256": "877f11ce5c251d8e575412e9d7693811eb3c1165ce92e57baa6822ed5778d844",
+      "binary_sha256": "6436ff2ed3439574a7487ef1745d399c0741b5f397e24e1a6b762fee514e740e",
+      "exit_code": 0,
+      "test_cases": 14,
+      "assertions": 306
+    },
+    "asan-final": {
+      "record": "evidence/asan-final.json",
+      "record_sha256": "11319a810c64270b2805708fe5415b8c109fd7fe033c451ac5c89516eb0f2411",
+      "log_sha256": "5fdf7e8b38f4cd5228d69a82a68174969886fb735491dc2326dec47ad0e82314",
+      "binary_sha256": "60a63491f078bddfb5d19108abe6dc7acb5d93c00569921d966189d8f01fd78c",
+      "exit_code": 0,
+      "test_cases": 14,
+      "assertions": 306
+    },
+    "regression-final": {
+      "record": "evidence/regression-final.json",
+      "record_sha256": "5b4e1797ec565ce26c89908c8c61d5d2674e2c18f7b91dcec642a76b09466923",
+      "log_sha256": "2a06375f9f06e3c708ef2706899072a564e1d36bb98c1d950743137d64203dc2",
+      "binary_sha256": "6436ff2ed3439574a7487ef1745d399c0741b5f397e24e1a6b762fee514e740e",
+      "exit_code": 0,
+      "test_cases": 62,
+      "assertions": 1191
+    }
+  },
+  "artifact_record": {
+    "path": "evidence/artifacts-final.json",
+    "sha256": "58bec1042c3d1a6e5af47d2df66e1cf7f2e11406612ae9d1fdf99c4e33ac544a",
+    "verified": {
+      "normal": {
+        "binary_sha256": "6436ff2ed3439574a7487ef1745d399c0741b5f397e24e1a6b762fee514e740e",
+        "compile_commands_sha256": "9f1d68ef5d02e6aa3c1587798b28f4d90739ec735f28fbf721fce9c2a83faad5",
+        "representative_instrumentation_files": [
+          "core/src/bridge/ha_bridge.cpp",
+          "core/src/bridge/mqtt_client.cpp",
+          "core/src/capi/doorbell_capi.cpp",
+          "core/src/node/node.cpp",
+          "core/src/node/operation_dispatcher.cpp",
+          "core/tests/test_node.cpp",
+          "core/tests/test_operations_http.cpp",
+          "core/tests/test_operations_service.cpp",
+          "core/third_party/civetweb/civetweb.c",
+          "core/third_party/sqlite/sqlite3.c"
+        ]
+      },
+      "asan": {
+        "binary_sha256": "60a63491f078bddfb5d19108abe6dc7acb5d93c00569921d966189d8f01fd78c",
+        "compile_commands_sha256": "42f3cecd2f75e4c1d471c572fc791c7085ee6a12a2f52036de5d860d7f079ed6",
+        "representative_instrumentation_files": [
+          "core/src/bridge/ha_bridge.cpp",
+          "core/src/bridge/mqtt_client.cpp",
+          "core/src/capi/doorbell_capi.cpp",
+          "core/src/node/node.cpp",
+          "core/src/node/operation_dispatcher.cpp",
+          "core/tests/test_node.cpp",
+          "core/tests/test_operations_http.cpp",
+          "core/tests/test_operations_service.cpp",
+          "core/third_party/civetweb/civetweb.c",
+          "core/third_party/sqlite/sqlite3.c"
+        ]
+      }
+    }
+  },
+  "sanitizer": {
+    "scope": "C/C++ Core, relevant third-party C libraries and production-path tests include -fsanitize=address. The retained binary links libclang_rt.asan; final run has no ASan diagnostics.",
+    "linked_libraries_log_sha256": "a953634b423ca197d5a649724bcac2f91393350380eeca9b16bc3820b6b786f6",
+    "limits": [
+      "LeakSanitizer disabled",
+      "No ThreadSanitizer claim",
+      "No old-iOS/Android/Windows instrumentation or device execution claim"
+    ]
+  },
+  "historical_evidence": {
+    "missing_api_red": {
+      "record_sha256": "72225171730f0deb35de4b1fdb76f2a758fdacf4e25d070709bc1305520623d7",
+      "log_sha256": "da562c828e001187f0c74276e4df31abc9819c6316093baceb3a9e4bf28b61b1",
+      "exit_code": 1,
+      "meaning": "The earlier real production HTTP route returned 404. This proves missing protocol, not an observed duplicated physical side effect."
+    },
+    "borrowed_loop_failure": {
+      "source_manifest": "source-candidate-r5.json",
+      "source_manifest_sha256": "a28d623e43cfb6e1f2e0f1b8aa7db9902f1b496464afdc52f490c2a50f93d0ca",
+      "log": "evidence/green-dev-r5.log",
+      "log_sha256": "7d38654814b98583db5e6a1e2ffdd50edc4e6cd77da26bc5d47daec7a3fa7355",
+      "meaning": "13/14 passed, actual Node destruction followed by borrowed-loop pump exposed invalid mutex access. No usable debug stack or historical ASan UAF diagnosis is claimed."
+    },
+    "borrowed_loop_green": {
+      "log": "evidence/borrowed-loop-r6.log",
+      "log_sha256": "9269f9580760a67f0bbb5ad09eb362334bb0586efc164ef2412b858920a99efd",
+      "meaning": "The same production Node lifecycle path passes after the weak-lifetime fix and is included in final normal/ASan runs."
+    }
+  },
+  "documentation": {
+    "docs/en/operation-api.md": "acf660911aaf5c72847f9b98638b533ef2b000b244cc1864700e3152d0c61b41",
+    "docs/zh/operation-api.md": "14552d8612987a75230ae5082ee3b8b2a62ee6704ab3e55559514f80b33c6c1d",
+    "docs/ja/operation-api.md": "69edeb0fa6339da389b0ad01fa33cd415c4fab2e417022a91552b28b199dfc9f"
+  },
+  "caller_map_sha256": "80f4fb2e5487245bc1a337a8f9f9dd49f15f102fb3a1de7b44a99fb759d967ca",
+  "limits": [
+    "All tested binaries use the SIP stub and are unsigned macOS arm64 host binaries.",
+    "The broker is a local protocol recorder; no real lock, Home Assistant service, actuator ACK or actual SOS notification recipient was used.",
+    "One durable adapter enqueue does not establish physical exactly-once execution. End-to-end deduplication and acknowledgement qualification remain separate.",
+    "Legacy one-shot caller migration, panel identity, SOS UI and native UI remain in their owning tasks.",
+    "Later integrated source changes require their own input-matched builds."
+  ]
+}

@@ -1,0 +1,8 @@
+[doctest] listing all test case names
+===============================================================================
+T03: unlock requires the selected door's explicit command
+T03: native ABI unlock rejects feature codes and shares the explicit binding
+admin API: the cluster-wide notice, the unlock trigger, and PIN minting
+doors: the unlock control appears only when an unlock action exists
+===============================================================================
+[doctest] unskipped test cases passing the current filters: 4

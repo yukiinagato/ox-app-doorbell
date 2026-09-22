@@ -1,0 +1,56 @@
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:516:
+TEST CASE:  panel dialog lease retries a failed durable recovery cancellation
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:561: ERROR: CHECK( json::getString(answer.get(), "call_id") == call_id ) is NOT correct!
+  values: CHECK(  == 1560cbcbae6e517011e36ef8a900dc52 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:562: ERROR: CHECK( json::getInt(answer.get(), "stage_revision", -1) == 0 ) is NOT correct!
+  values: CHECK( -1 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:565: ERROR: CHECK( json::getInt(answer.get(), "lease_remaining_ms", -1) == 10'000 ) is NOT correct!
+  values: CHECK( -1 == 10000 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:573: ERROR: CHECK( json::getString(rejected.get(), "error_code") == "stale_owner" ) is NOT correct!
+  values: CHECK(  == stale_owner )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:576: ERROR: CHECK( json::getString(rejected.get(), "error_code") == "stale_revision" ) is NOT correct!
+  values: CHECK(  == stale_revision )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:579: ERROR: CHECK( json::getString(renewed.get(), "call_id") == call_id ) is NOT correct!
+  values: CHECK(  == 1560cbcbae6e517011e36ef8a900dc52 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:581: ERROR: CHECK( json::getInt(renewed.get(), "stage_revision", -1) == 0 ) is NOT correct!
+  values: CHECK( -1 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:582: ERROR: CHECK( json::getInt(renewed.get(), "lease_remaining_ms", -1) == 10'000 ) is NOT correct!
+  values: CHECK( -1 == 10000 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:595: ERROR: CHECK_FALSE( json::getBool(rejected.get(), "ok") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:596: ERROR: CHECK( json::getString(rejected.get(), "error_code") == "call_ended" ) is NOT correct!
+  values: CHECK(  == call_ended )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:605: ERROR: CHECK( state.find("\"call_state\":\"cancelled\"") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:606: ERROR: CHECK( state.find("\"terminal_reason\":\"recovery_timeout\"") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:614: ERROR: CHECK( store.countEventsOfType("call_cancelled") == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed |  1 failed | 430 skipped
+[doctest] assertions: 65 | 52 passed | 13 failed |
+[doctest] Status: FAILURE!
+09-22 23:31:37 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:23529
+09-22 23:31:37 I [node] created the missing door entry doors.d_front for this door station
+09-22 23:31:37 I [httpd] listening on 31324,[::]:31324
+09-22 23:31:37 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:31:37 I [node] node 27ede157 (panel-lease-retry) started
+09-22 23:31:37 E [events] local event persistence failed; event was not emitted
+09-22 23:31:39 I [httpd] stopped

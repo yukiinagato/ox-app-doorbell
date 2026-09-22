@@ -1,0 +1,46 @@
+T35 main entered
+2026-09-23 02:56:05.605 DoorbellT35UIKit[30660:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:56:05.945 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Disabled purpose absent
+2026-09-23 02:56:05.958 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:56:06.043 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Purpose-first sends the selected purpose once
+2026-09-23 02:56:06.065 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Purpose-first enters ringing
+2026-09-23 02:56:06.705 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:56:06.768 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Visitor cancellation returns idle
+2026-09-23 02:56:06.897 DoorbellT35UIKit[30660:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:56:07.315 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:56:07.728 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Ring-first sends immediately
+2026-09-23 02:56:08.760 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Actual UIKit skip button dispatched
+2026-09-23 02:56:08.774 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Skip preserves the call
+2026-09-23 02:56:08.783 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:56:08.970 DoorbellT35UIKit[30660:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:56:09.380 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:56:10.150 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Actual UIKit purpose button dispatched
+2026-09-23 02:56:10.162 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Ring-first purpose updates existing call
+2026-09-23 02:56:10.172 DoorbellT35UIKit[30660:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 02:56:10.671 DoorbellT35UIKit[30660:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:56:11.064 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Production UIControl exists
+2026-09-23 02:56:11.146 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Call and cancel share the fixed action area
+2026-09-23 02:56:11.182 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Ringing touch cannot become connected end
+2026-09-23 02:56:11.189 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Connected end remains in the same area
+2026-09-23 02:56:11.822 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Production UIControl exists
+2026-09-23 02:56:11.917 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Fresh connected end works
+2026-09-23 02:56:11.999 DoorbellT35UIKit[30660:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:56:12.451 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Production UIControl exists
+2026-09-23 02:56:12.488 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Nil visitor ID native SIP call can end
+2026-09-23 02:56:12.633 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Old nil-ID gesture cannot end the next SIP session
+2026-09-23 02:56:12.643 DoorbellT35UIKit[30660:707] T35 T35-02 PASS: Production UIControl exists
+2026-09-23 02:56:13.099 DoorbellT35UIKit[30660:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:56:13.512 DoorbellT35UIKit[30660:707] T35 T35-03 PASS: Production UIControl exists
+2026-09-23 02:56:13.544 DoorbellT35UIKit[30660:707] T35 T35-03 PASS: Ordinary network failure keeps neutral visitor page

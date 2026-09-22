@@ -1,0 +1,17 @@
+{
+  "started_at": "2026-09-22T17:56:53.475515+00:00",
+  "finished_at": "2026-09-22T17:56:53.497601+00:00",
+  "command": [
+    "mono",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/VisitorActionGuardTests-r1.exe"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "exit_code": 0,
+  "source_manifest_sha256": "a3a1f40a2b3777d42f34ca7cebba393a6ceb00c7b51a4b5dd8a63a7b65ad1681",
+  "platform": "macOS arm64 / Mono",
+  "sip_backend": "not linked",
+  "signing": "test-only unsigned",
+  "scope": "Actual production VisitorActionGuard and SosReviewGuard behavior; no WPF runtime, Core or physical actions.",
+  "observed_result": "15 assertions passed",
+  "log_sha256": "d26f5e48a57584e4bbbe1f8113efaca47468ee6ed5576b55ed4c80c35f6c0e7a"
+}

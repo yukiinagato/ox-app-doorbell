@@ -17,7 +17,7 @@ namespace db {
 namespace {
 
 constexpr const char* kTag = "store";
-constexpr int kSchemaVersion = 7;
+constexpr int kSchemaVersion = 8;
 
 bool isCorruptionCode(int code) {
   const int primary = code & 0xff;
@@ -117,7 +117,7 @@ constexpr const char* kEventCols =
 Store::~Store() { close(); }
 
 bool Store::open(const std::string& path) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   closeLocked();
 
   int failure_code = SQLITE_OK;
@@ -130,7 +130,7 @@ bool Store::open(const std::string& path) {
       return false;
     }
     sqlite3_busy_timeout(db_, 3000);
-    if (!exec("PRAGMA journal_mode=WAL;") || !migrate()) {
+    if (!exec("PRAGMA journal_mode=WAL;") || !exec("PRAGMA synchronous=FULL;") || !migrate()) {
       failure_code = sqlite3_extended_errcode(db_);
       confirmed_corruption = corruptionConfirmed(db_);
       return false;
@@ -175,12 +175,14 @@ bool Store::open(const std::string& path) {
 }
 
 void Store::close() {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   closeLocked();
 }
 
 
 void Store::closeLocked() {
+  operation_authority_.clear();
+  operation_boot_.clear();
   if (db_) {
     sqlite3_close(db_);
     db_ = nullptr;
@@ -229,7 +231,7 @@ bool Store::migrate() {
       "  ON call_projection(state, door);"
       "CREATE TABLE IF NOT EXISTS call_door_fence("
       "  door TEXT PRIMARY KEY, call_id TEXT NOT NULL, hlc TEXT NOT NULL);";
-  if (!exec(ddl)) return false;
+  if (!exec(ddl) || !migrateOperationsLocked()) return false;
 
 
 
@@ -406,19 +408,19 @@ bool Store::metaSetLocked(const std::string& key, const std::string& value) {
 }
 
 std::optional<std::string> Store::metaGet(const std::string& key) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   return metaGetLocked(key);
 }
 
 bool Store::metaSet(const std::string& key, const std::string& value) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   return metaSetLocked(key, value);
 }
 
 bool Store::metaSetBatch(
     const std::vector<std::pair<std::string, std::string>>& entries) {
   if (entries.empty()) return true;
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_ || !exec("BEGIN IMMEDIATE")) return false;
   for (const auto& entry : entries) {
     if (!metaSetLocked(entry.first, entry.second)) {
@@ -436,7 +438,7 @@ bool Store::metaSetBatch(
 // --- config ---
 
 bool Store::configPut(const LwwEntry& e) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_,
           "INSERT OR REPLACE INTO config(key,value_json,deleted,hlc,author,seq)"
           " VALUES(?1,?2,?3,?4,?5,?6)");
@@ -450,10 +452,35 @@ bool Store::configPut(const LwwEntry& e) {
   return st.step() == SQLITE_DONE;
 }
 
+bool Store::configWriteTransaction(const std::function<bool()>& operation) {
+  std::lock_guard<std::recursive_mutex> lock(mu_);
+  if (!db_ || config_transaction_scope_ || !exec("BEGIN IMMEDIATE")) return false;
+  config_transaction_scope_ = config_transaction_open_ = true;
+  config_transaction_committed_ = false;
+  bool accepted = false;
+  try { accepted = operation(); }
+  catch (...) {
+    if (config_transaction_open_) exec("ROLLBACK");
+    config_transaction_scope_ = config_transaction_open_ = false;
+    throw;
+  }
+  if (config_transaction_open_) exec("ROLLBACK");
+  const bool committed = config_transaction_committed_;
+  config_transaction_scope_ = config_transaction_open_ = config_transaction_committed_ = false;
+  return accepted && committed;
+}
+
 bool Store::configPutBatch(const std::vector<LwwEntry>& entries) {
-  if (entries.empty()) return true;
-  std::lock_guard<std::mutex> lk(mu_);
-  if (!db_ || !exec("BEGIN IMMEDIATE")) return false;
+  return configPutBatchWithMeta(entries, {});
+}
+
+bool Store::configPutBatchWithMeta(
+    const std::vector<LwwEntry>& entries,
+    const std::vector<std::pair<std::string, std::string>>& metadata) {
+  if (entries.empty() && metadata.empty()) return true;
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+  const bool inherited = config_transaction_scope_ && config_transaction_open_;
+  if (!db_ || (!inherited && !exec("BEGIN IMMEDIATE"))) return false;
   bool ok = true;
   for (const auto& e : entries) {
     Stmt st(db_,
@@ -474,19 +501,33 @@ bool Store::configPutBatch(const std::vector<LwwEntry>& entries) {
       break;
     }
   }
+  if (ok) {
+    for (const auto& entry : metadata) {
+      if (!metaSetLocked(entry.first, entry.second)) {
+        ok = false;
+        break;
+      }
+    }
+  }
   if (!ok) {
     exec("ROLLBACK");
+    if (inherited) config_transaction_open_ = false;
     return false;
   }
   if (!exec("COMMIT")) {
     exec("ROLLBACK");
+    if (inherited) config_transaction_open_ = false;
     return false;
+  }
+  if (inherited) {
+    config_transaction_open_ = false;
+    config_transaction_committed_ = true;
   }
   return true;
 }
 
 void Store::configDelete(const std::string& key) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "DELETE FROM config WHERE key=?1");
   if (!st.ok()) return;
   st.bind(1, key);
@@ -494,13 +535,13 @@ void Store::configDelete(const std::string& key) {
 }
 
 bool Store::configDeleteAll() {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "DELETE FROM config");
   return st.ok() && st.step() == SQLITE_DONE;
 }
 
 size_t Store::metaDeletePrefix(const std::string& prefix) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (prefix.empty()) return 0;
   // GLOB rather than LIKE: the pattern is a literal key prefix and LIKE would treat an
   // underscore in it as a wildcard, which every one of these prefixes contains.
@@ -520,7 +561,7 @@ size_t Store::metaDeletePrefix(const std::string& prefix) {
 }
 
 std::vector<LwwEntry> Store::configLoadAll() {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   std::vector<LwwEntry> out;
   Stmt st(db_, "SELECT key,value_json,deleted,hlc,author,seq FROM config ORDER BY key");
   if (!st.ok()) return out;
@@ -591,7 +632,7 @@ bool Store::persistEventLocked(const EventRecord& e, bool allow_existing, bool* 
 
 std::optional<EventRecord> Store::eventAppendLocal(
     EventRecord e, std::vector<EventRecord>* newly_applied) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (newly_applied) newly_applied->clear();
   if (!db_ || e.origin.empty() || !exec("BEGIN IMMEDIATE")) return std::nullopt;
 
@@ -637,7 +678,7 @@ std::optional<EventRecord> Store::eventAppendLocal(
 }
 
 bool Store::eventIngest(const EventRecord& e) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_ || e.origin.empty() || e.seq == 0 ||
       e.seq > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
     return false;
@@ -703,7 +744,7 @@ Store::EventApplyResult Store::eventApplyNextLocked(const std::string& origin,
 }
 
 std::optional<EventRecord> Store::eventApplyNext(const std::string& origin) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_ || origin.empty() || !exec("BEGIN IMMEDIATE")) return std::nullopt;
   EventRecord applied;
   const EventApplyResult result = eventApplyNextLocked(origin, &applied);
@@ -1207,7 +1248,7 @@ bool Store::applyCallProjectionLocked(const EventRecord& e) {
 }
 
 bool Store::eventExists(const std::string& origin, uint64_t seq) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "SELECT 1 FROM events WHERE origin=?1 AND seq=?2");
   if (!st.ok()) return false;
   st.bind(1, origin);
@@ -1217,7 +1258,7 @@ bool Store::eventExists(const std::string& origin, uint64_t seq) {
 
 void Store::eventSetNotify(const std::string& origin, uint64_t seq,
                            const std::string& notify_json) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "UPDATE events SET notify_json=?3 WHERE origin=?1 AND seq=?2");
   if (!st.ok()) return;
   st.bind(1, origin);
@@ -1227,7 +1268,7 @@ void Store::eventSetNotify(const std::string& origin, uint64_t seq,
 }
 
 std::optional<EventRecord> Store::eventGet(const std::string& origin, uint64_t seq) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, ("SELECT " + std::string(kEventCols) +
                 " FROM events WHERE origin=?1 AND seq=?2").c_str());
   if (!st.ok()) return std::nullopt;
@@ -1238,7 +1279,7 @@ std::optional<EventRecord> Store::eventGet(const std::string& origin, uint64_t s
 }
 
 std::map<std::string, uint64_t> Store::eventHeads() {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   std::map<std::string, uint64_t> out;
   Stmt st(db_, "SELECT origin,frontier FROM event_origin_state ORDER BY origin ASC");
   if (!st.ok()) return out;
@@ -1247,7 +1288,7 @@ std::map<std::string, uint64_t> Store::eventHeads() {
 }
 
 uint64_t Store::eventFrontier(const std::string& origin) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "SELECT frontier FROM event_origin_state WHERE origin=?1");
   if (!st.ok()) return 0;
   st.bind(1, origin);
@@ -1256,7 +1297,7 @@ uint64_t Store::eventFrontier(const std::string& origin) {
 }
 
 uint64_t Store::eventMaxSeq(const std::string& origin) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "SELECT max_seq FROM event_origin_state WHERE origin=?1");
   if (!st.ok()) return 0;
   st.bind(1, origin);
@@ -1265,7 +1306,7 @@ uint64_t Store::eventMaxSeq(const std::string& origin) {
 }
 
 std::vector<EventRecord> Store::pendingEventDispatches(size_t limit) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   std::vector<EventRecord> out;
   if (!db_ || limit == 0) return out;
   Stmt st(db_,
@@ -1282,7 +1323,7 @@ std::vector<EventRecord> Store::pendingEventDispatches(size_t limit) {
 }
 
 bool Store::eventAckDispatched(const std::string& origin, uint64_t seq) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_ || origin.empty() || seq == 0 ||
       seq > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
     return false;
@@ -1297,7 +1338,7 @@ bool Store::eventAckDispatched(const std::string& origin, uint64_t seq) {
 }
 
 uint64_t Store::eventDispatchFrontier(const std::string& origin) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "SELECT dispatch_frontier FROM event_origin_state WHERE origin=?1");
   if (!st.ok()) return 0;
   st.bind(1, origin);
@@ -1307,7 +1348,7 @@ uint64_t Store::eventDispatchFrontier(const std::string& origin) {
 
 std::vector<EventRecord> Store::eventsSince(const std::map<std::string, uint64_t>& remote_heads,
                                             size_t limit) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
 
   std::vector<EventRecord> out;
   if (!db_ || limit == 0 ||
@@ -1339,7 +1380,7 @@ std::vector<EventRecord> Store::eventsSince(const std::map<std::string, uint64_t
 }
 
 size_t Store::countEventsOfType(const std::string& type) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   return countEventsOfTypeLocked(type);
 }
 
@@ -1357,7 +1398,7 @@ size_t Store::countEventsOfTypeLocked(const std::string& type) {
 }
 
 std::vector<EventRecord> Store::recentEvents(size_t limit) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   std::vector<EventRecord> out;
   Stmt st(db_,
           "SELECT e.origin,e.seq,e.type,e.door,e.device,e.hlc,e.wall_ms,"
@@ -1372,7 +1413,7 @@ std::vector<EventRecord> Store::recentEvents(size_t limit) {
 
 std::optional<EventRecord> Store::latestEventOfTypes(const std::string& t1,
                                                     const std::string& t2) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_,
           "SELECT e.origin,e.seq,e.type,e.door,e.device,e.hlc,e.wall_ms,"
           " e.payload_json,e.notify_json FROM events e"
@@ -1387,7 +1428,7 @@ std::optional<EventRecord> Store::latestEventOfTypes(const std::string& t1,
 }
 
 std::vector<Store::CallProjection> Store::activeCallProjections() {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   std::vector<CallProjection> out;
   Stmt st(db_,
           "SELECT call_id,door,origin,purpose,state,stage_revision,expires_wall_ms,updated_hlc,"
@@ -1420,7 +1461,7 @@ std::vector<Store::CallProjection> Store::activeCallProjections() {
 }
 
 std::optional<Store::CallProjection> Store::callProjection(const std::string& call_id) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_,
           "SELECT call_id,door,origin,purpose,state,stage_revision,expires_wall_ms,updated_hlc,"
           " terminal_reason,dialog_owner,answered_hlc,press_wall_ms,answered_wall_ms,"
@@ -1468,7 +1509,7 @@ constexpr const char* kCallLogVisibleSql =
 }  // namespace
 
 std::vector<Store::CallLogRow> Store::callLog(const CallLogQuery& query) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   std::vector<CallLogRow> out;
   if (!db_ || query.limit == 0) return out;
   const std::string seen_hlc = metaGetLocked(kCallLogSeenKey).value_or("");
@@ -1523,7 +1564,7 @@ std::vector<Store::CallLogRow> Store::callLog(const CallLogQuery& query) {
 }
 
 size_t Store::unreadMissedCount() {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_) return 0;
   const std::string seen_hlc = metaGetLocked(kCallLogSeenKey).value_or("");
   const std::string sql = "SELECT COUNT(*) FROM call_projection WHERE " +
@@ -1537,12 +1578,12 @@ size_t Store::unreadMissedCount() {
 }
 
 std::string Store::callLogSeenHlc() {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   return metaGetLocked(kCallLogSeenKey).value_or("");
 }
 
 bool Store::callLogMarkSeen(const std::string& up_to_hlc) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_) return false;
   std::string target = up_to_hlc;
   if (target.empty()) {
@@ -1559,7 +1600,7 @@ bool Store::callLogMarkSeen(const std::string& up_to_hlc) {
 }
 
 bool Store::eventCoverageSet(const std::map<std::string, uint64_t>& coverage) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_) return false;
   auto o = json::obj();
   for (const auto& item : coverage)
@@ -1570,7 +1611,7 @@ bool Store::eventCoverageSet(const std::map<std::string, uint64_t>& coverage) {
 }
 
 std::map<std::string, uint64_t> Store::eventCoverage() {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   std::map<std::string, uint64_t> out;
   auto raw = metaGetLocked(kEventCoverageKey);
   if (!raw) return out;
@@ -1587,7 +1628,7 @@ std::map<std::string, uint64_t> Store::eventCoverage() {
 }
 
 size_t Store::pruneEvents(size_t max_events, int64_t cutoff_wall_ms) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_) return 0;
   std::map<std::string, uint64_t> coverage;
   {
@@ -1663,7 +1704,7 @@ constexpr const char* kTgCols = "id,kind,chat_id,payload,snapshot,attempts,next_
 }  // namespace
 
 int64_t Store::tgQueuePut(const TgQueueItem& item) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_) return 0;
   Stmt st(db_,
           "INSERT INTO tg_queue(kind,chat_id,payload,snapshot,attempts,next_retry_ms,created_ms)"
@@ -1681,7 +1722,7 @@ int64_t Store::tgQueuePut(const TgQueueItem& item) {
 }
 
 std::vector<Store::TgQueueItem> Store::tgQueueDue(int64_t now_ms, size_t limit) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   std::vector<TgQueueItem> out;
   Stmt st(db_, ("SELECT " + std::string(kTgCols) +
                 " FROM tg_queue WHERE next_retry_ms<=?1 ORDER BY id ASC LIMIT ?2").c_str());
@@ -1693,7 +1734,7 @@ std::vector<Store::TgQueueItem> Store::tgQueueDue(int64_t now_ms, size_t limit) 
 }
 
 void Store::tgQueueRetry(int64_t id, int attempts, int64_t next_retry_ms) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "UPDATE tg_queue SET attempts=?2, next_retry_ms=?3 WHERE id=?1");
   if (!st.ok()) return;
   st.bind(1, id);
@@ -1703,7 +1744,7 @@ void Store::tgQueueRetry(int64_t id, int attempts, int64_t next_retry_ms) {
 }
 
 void Store::tgQueueDelete(int64_t id) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "DELETE FROM tg_queue WHERE id=?1");
   if (!st.ok()) return;
   st.bind(1, id);
@@ -1711,7 +1752,7 @@ void Store::tgQueueDelete(int64_t id) {
 }
 
 size_t Store::tgQueuePrune(int64_t cutoff_created_ms) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_) return 0;
   Stmt st(db_, "DELETE FROM tg_queue WHERE created_ms<?1");
   if (!st.ok()) return 0;
@@ -1721,7 +1762,7 @@ size_t Store::tgQueuePrune(int64_t cutoff_created_ms) {
 }
 
 size_t Store::tgQueueCount() {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   Stmt st(db_, "SELECT COUNT(*) FROM tg_queue");
   if (!st.ok() || st.step() != SQLITE_ROW) return 0;
   return static_cast<size_t>(st.colInt(0));
@@ -1729,7 +1770,7 @@ size_t Store::tgQueueCount() {
 
 // --- net_probe ---
 void Store::netProbePut(const NetProbe& p) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_) return;
   Stmt st(db_, "INSERT INTO net_probe(ts_ms,target,host,ok,rtt_ms) VALUES(?1,?2,?3,?4,?5)");
   if (!st.ok()) return;
@@ -1742,7 +1783,7 @@ void Store::netProbePut(const NetProbe& p) {
 }
 
 std::vector<Store::NetProbe> Store::netProbesSince(int64_t since_ms, size_t limit) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   std::vector<NetProbe> out;
   if (!db_) return out;
   Stmt st(db_, "SELECT ts_ms,target,host,ok,rtt_ms FROM net_probe"
@@ -1763,7 +1804,7 @@ std::vector<Store::NetProbe> Store::netProbesSince(int64_t since_ms, size_t limi
 }
 
 size_t Store::netProbePrune(int64_t cutoff_ms) {
-  std::lock_guard<std::mutex> lk(mu_);
+  std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_) return 0;
   Stmt st(db_, "DELETE FROM net_probe WHERE ts_ms<?1");
   if (!st.ok()) return 0;

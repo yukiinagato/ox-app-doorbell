@@ -327,7 +327,11 @@ class ReadabilityContracts(unittest.TestCase):
         self.assertIn('[[footer objectForKey:@"height"] doubleValue]', home)
 
         # The door station stacks them with an explicit gap.
-        self.assertIn("sosTop = versionTop - footerGap - sosHeight", door)
+        # The host layout test measures separation at every supported size;
+        # this check retains the UIKit-to-production-layout wiring contract.
+        self.assertIn("DBDoorVisitorLayoutMake(size, !_sos.hidden, actionScale)", door)
+        self.assertIn("_versionLabel.frame = layout.version", door)
+        self.assertIn("_sos.frame = layout.sos", door)
 
 
 if __name__ == "__main__":

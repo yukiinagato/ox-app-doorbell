@@ -1,0 +1,40 @@
+09-22 23:30:01 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:30090
+09-22 23:30:01 I [httpd] listening on 28158,[::]:28158
+09-22 23:30:01 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:30:01 I [node] node 5ddb3829 (doorbell) started
+09-22 23:30:01 I [node] initialized the cluster administrator password
+09-22 23:30:03 I [httpd] stopped
+09-22 23:30:03 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=session-a:1
+09-22 23:30:03 I [httpd] listening on 29888,[::]:29888
+09-22 23:30:03 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:30:03 I [node] node b8634467 (session-a) started
+09-22 23:30:03 I [node] initialized the cluster administrator password
+09-22 23:30:03 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=session-b:1
+09-22 23:30:03 I [httpd] listening on 20804,[::]:20804
+09-22 23:30:03 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:30:03 I [node] node 0f75dc5f (session-b) started
+09-22 23:30:05 I [httpd] stopped
+09-22 23:30:05 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:2095:
+TEST CASE:  admin sessions: background reads expire despite raw clock rollback
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:2115: ERROR: CHECK( adminReq(options.http_port, "GET", "/api/status", "", token) .find("HTTP/1.1 401") == 0 ) is NOT correct!
+  values: CHECK( 18446744073709551615 == 0 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:2119:
+TEST CASE:  admin sessions: replicated credentials revoke after partition healing
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:2180: ERROR: CHECK( adminReq(port_b, "GET", "/api/status", "", token_b).find("HTTP/1.1 401") == 0 ) is NOT correct!
+  values: CHECK( 18446744073709551615 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:2181: ERROR: CHECK( adminReq(port_b, "GET", "/api/status", "", partition_login).find("HTTP/1.1 401") == 0 ) is NOT correct!
+  values: CHECK( 18446744073709551615 == 0 )
+
+===============================================================================
+[doctest] test cases:   2 |   0 passed | 2 failed | 429 skipped
+[doctest] assertions: 174 | 171 passed | 3 failed |
+[doctest] Status: FAILURE!

@@ -1,0 +1,9 @@
+{
+  "files": {
+    "tools/verification/browser_fixture.cpp": "53d6ed09225b00e34ff9d1e8f69d0282859d9de27ef246ec043a361a0db42cba",
+    "tools/verification/check_mutation_sensitivity.py": "970e49d7bee1b1bbd00a05d4ab3e19fbbd55af7480a55688fc10bf0bd8cdefe7",
+    "tools/verification/README.md": "82090a5b2f85cd5049432a2be9bd289f7a710f279e81036d0e8e19591e99545e",
+    "tools/verification/record_command.py": "e893205d97305b5505cf8a757b3871fc30563c8e723daac4c504e16c960e6fb8"
+  },
+  "note": "Documents added after command execution do not change tested production inputs."
+}

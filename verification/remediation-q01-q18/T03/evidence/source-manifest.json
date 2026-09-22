@@ -1,0 +1,42 @@
+{
+  "task_id": "T03",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "1eecaae3d3d9368f64c0669e62677594ebbc52c78c7952d6418ca8b7f82961fe",
+  "recorded_at": "2026-09-22T13:36:10.244705+00:00",
+  "files": {
+    "core/src/node/node.cpp": "8c110ca3f4199ab121da9c06784fc1d59a847a60d94427da1c721ed1da8f719e",
+    "core/tests/test_admin_api.cpp": "7754ddf047811c17a59ac78e4c086409344ab2149f73fe4e339e96a385cd6d41",
+    "core/tests/test_settings.cpp": "5a7bdd1dbe7dda9f798f2bcff234be6706149fd7a2d3d338daf870b6f603f129",
+    "webui/admin/app.js": "b0738afbd726c5ef7288a2283437b7e81d8e6205531185513724ae974a950f5b",
+    "webui/tests/theme_notice.test.js": "b6ce94ef8145247c1324d2f20cd1b1686ec33d5a3e5064aecd33f3a61af59426",
+    "i18n/strings.yaml": "6db958d561364a1a16852c90c5c11c17129183a41312a4f39f2462fe022e88e5",
+    "docs/en/config-schema.md": "cdd3ae89a3a6393fa14ccd5cd056afae8804f98962eb2321d8dfbe7b749cefbd",
+    "docs/zh/config-schema.md": "596cc3a6915559b267d485d6cd695b849b2dac6bcafcbac7c81cb91d733a112f",
+    "docs/ja/config-schema.md": "50123fa67ac9625a199cfaab693e1241ac6725161fe161fccfb2c6e23a95465f"
+  },
+  "preservation": {
+    "sip_dtmf_handler_matches_HEAD": true,
+    "sip_dtmf_sha256": "e42a12ec5ea79caffe11dbf6239b34a2c82c796a7aa5313fe13cd32fa87bb462",
+    "public_abi_changed_by_this_task": false,
+    "ios_legacy_changed_by_this_task": false
+  },
+  "versions_observed_parent_managed": {
+    "ios/Doorbell/Info.plist": {
+      "version": "0.1.36",
+      "build": "37"
+    },
+    "ios-kiosk/src/Info.plist": {
+      "version": "0.3.48",
+      "build": "51"
+    },
+    "ios-compat/profiles/ios9-armv7.Info.plist": {
+      "version": "0.4.2",
+      "build": "402"
+    }
+  },
+  "limitations": [
+    "Concurrent T04/T09 and main-agent version/resource work share this dirty tree. Per-command source hashes bind the production inputs used by each run.",
+    "Only T03-owned changes are described; the whole dirty diff includes prior user work and other authorized tasks."
+  ]
+}

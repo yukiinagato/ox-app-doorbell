@@ -1,0 +1,24 @@
+{
+  "architectures": [
+    "armv7"
+  ],
+  "artifact": "Doorbell.app",
+  "bundle_identifier": "jp.ox.doorbell",
+  "bundle_sha256": "f5f24e9e963fcf2f6d30341dcb535788b3f3718ae2c4544bc8831418e2d7f5be",
+  "bundle_version": "50",
+  "core_manifest_sha256": "65d56c819f136bf7cac4565017a85839a6754bd10b1ff8acf674d6e19a6b1bad",
+  "core_sha256": "58b94074c6111316bf271ac0813250be883380e9da8041a091a7a69c914c4c2b",
+  "minimum_os": "5.1",
+  "profile": "ios5-armv7-jailbreak",
+  "schema_version": 1,
+  "short_version": "0.3.47",
+  "signing": "ldid-jailbreak",
+  "sip_backend": "ios_compat_minisip_uac_uas",
+  "source_dirty": true,
+  "source_revision": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "source_sha256": "9d54532aa27a090408c8596124c5a6f5c8a6f3d9a510ccce6d7095e89b7ce5ef",
+  "toolchain": {
+    "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+    "sdk": "iPhoneOS7.1.sdk"
+  }
+}

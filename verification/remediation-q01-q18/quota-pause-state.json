@@ -1,0 +1,17 @@
+{
+  "instruction": "If the Codex quota resets, save all ongoing work and then pause all actions, including parallel agents.",
+  "requested_at_local_date": "2026-09-23",
+  "baseline_checked_at": "2026-09-22T15:30:58Z",
+  "limit_id": "codex",
+  "window_duration_minutes": 10080,
+  "used_percent": 64,
+  "resets_at_unix": 1790416443,
+  "resets_at_jst": "2026-09-26T18:54:03+09:00",
+  "secondary_window": null,
+  "reset_observed": false,
+  "state": "continue_until_reset_observed",
+  "reset_response": "Stop starting work; ask every active agent to save its current changes, evidence and checkpoint; save the root checkpoint and terminate active task processes safely; then pause all actions. Do not redeem credits or resume automatically.",
+  "last_checked_at": "2026-09-22T18:57:27.631193+00:00",
+  "last_used_percent": 100,
+  "last_resets_at_unix": 1790416443
+}

@@ -1,0 +1,144 @@
+[
+  {
+    "traits" : 0,
+    "frame" : "{{0, 0}, {844, 390}}",
+    "class" : "UIView",
+    "accessibility_element" : false,
+    "identifier" : "purpose_choice_screen",
+    "hidden" : false,
+    "alpha" : 1
+  },
+  {
+    "frame" : "{{36, 16}, {772, 166}}",
+    "traits" : 0,
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "content_size" : "{772, 1745.5}",
+    "class" : "UIScrollView",
+    "hidden" : false
+  },
+  {
+    "hidden" : false,
+    "class" : "UILabel",
+    "font_size" : 107,
+    "alpha" : 1,
+    "frame" : "{{36, 16}, {772, 255.5}}",
+    "traits" : 65536,
+    "accessibility_element" : false,
+    "text" : "Please choose your purpose"
+  },
+  {
+    "alpha" : 1,
+    "frame" : "{{36, 281.5}, {772, 134}}",
+    "text" : "Calling now. Let us know what brings you here.",
+    "font_size" : 56,
+    "traits" : 0,
+    "class" : "UILabel",
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "title" : "",
+    "alpha" : 1,
+    "identifier" : "purpose_choice_long",
+    "accessibility_element" : true,
+    "accessibility_label" : "Scheduled delivery and building maintenance visit. Please confirm the visitor purpose and connection with the resident.",
+    "hidden" : false,
+    "traits" : 1,
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "enabled" : true,
+    "frame" : "{{36, 439.5}, {378, 1322}}"
+  },
+  {
+    "frame" : "{{58, 459.5}, {56, 56}}",
+    "class" : "UIView",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "traits" : 0
+  },
+  {
+    "hidden" : false,
+    "frame" : "{{70, 471.5}, {32, 32}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "class" : "UIImageView"
+  },
+  {
+    "traits" : 0,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "text" : "Scheduled delivery and building maintenance visit. Please confirm the visitor purpose and connection with the resident.",
+    "font_size" : 73,
+    "frame" : "{{58, 525.5}, {334, 1220}}",
+    "class" : "UILabel",
+    "hidden" : false
+  },
+  {
+    "class" : "UIImageView",
+    "alpha" : 0,
+    "accessibility_element" : false,
+    "frame" : "{{802.5, -23}, {2.5, 36}}",
+    "traits" : 0,
+    "hidden" : false
+  },
+  {
+    "hidden" : false,
+    "class" : "UIImageView",
+    "frame" : "{{-3, 176.5}, {36, 2.5}}",
+    "traits" : 0,
+    "alpha" : 0,
+    "accessibility_element" : false
+  },
+  {
+    "frame" : "{{36, 198}, {772, 168}}",
+    "class" : "UIView",
+    "traits" : 0,
+    "alpha" : 1,
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "traits" : 0,
+    "alpha" : 1,
+    "title" : "Cancel call",
+    "frame" : "{{36, 198}, {378, 168}}",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "class" : "UIButton",
+    "enabled" : true,
+    "identifier" : "purpose_choice_cancel"
+  },
+  {
+    "traits" : 0,
+    "frame" : "{{75, 245}, {300.5, 74}}",
+    "alpha" : 1,
+    "class" : "UIButtonLabel",
+    "accessibility_element" : false,
+    "hidden" : false,
+    "font_size" : 62,
+    "text" : "Cancel call"
+  },
+  {
+    "enabled" : true,
+    "hidden" : false,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "title" : "Skip purpose",
+    "frame" : "{{430, 198}, {378, 168}}",
+    "identifier" : "purpose_choice_skip",
+    "class" : "UIButton",
+    "traits" : 0
+  },
+  {
+    "traits" : 0,
+    "text" : "Skip purpose",
+    "frame" : "{{505, 208}, {228, 148}}",
+    "hidden" : false,
+    "alpha" : 1,
+    "class" : "UIButtonLabel",
+    "font_size" : 62,
+    "accessibility_element" : false
+  }
+]

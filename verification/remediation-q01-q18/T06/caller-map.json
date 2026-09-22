@@ -1,0 +1,174 @@
+{
+  "task": "T06",
+  "scope": "Inspected production caller mapping; legacy callers remain explicitly weaker.",
+  "callers": [
+    {
+      "caller": "Versioned HTTP routes",
+      "path": "core/src/node/node.cpp",
+      "line": 9727,
+      "protocol": "operations_v1",
+      "migration_owner": "T06",
+      "limits": "Current session, CSRF and explicit device grants; fixed authority; bounded worker; durable ID"
+    },
+    {
+      "caller": "Authenticated mesh operations",
+      "path": "core/src/node/operation_service.inc",
+      "line": 274,
+      "protocol": "operations_v1",
+      "migration_owner": "T06",
+      "limits": "Peer-derived principal, current local grants and credential versions; no client principal or URL"
+    },
+    {
+      "caller": "Versioned native ABI",
+      "path": "core/src/capi/doorbell_capi.cpp",
+      "line": 674,
+      "protocol": "operations_v1",
+      "migration_owner": "T06",
+      "limits": "Additive methods, db_free ownership, worker invocation"
+    },
+    {
+      "caller": "Legacy door HTTP",
+      "path": "core/src/node/node.cpp",
+      "line": 10573,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Legacy administrator SOS HTTP",
+      "path": "core/src/node/node.cpp",
+      "line": 10551,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T12/T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Legacy shared-panel SOS HTTP",
+      "path": "core/src/node/node.cpp",
+      "line": 11209,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T31/T12/T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Legacy native door ABI",
+      "path": "core/src/capi/doorbell_capi.cpp",
+      "line": 662,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Legacy native SOS ABI",
+      "path": "core/src/capi/doorbell_capi.cpp",
+      "line": 856,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T12/T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Web administrator SOS clear",
+      "path": "webui/admin/app.js",
+      "line": 4064,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T12/T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "SIP feature-code HA action",
+      "path": "core/src/node/node.cpp",
+      "line": 5526,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T07/T36 inventory; rule identity migration needs a defined originating-event identity",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Legacy HA event consumer",
+      "path": "core/src/bridge/ha_bridge.cpp",
+      "line": 425,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T07/T36 inventory; new operations never append this event",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Automatic rule action engine",
+      "path": "core/src/events/rule_engine.cpp",
+      "line": 222,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T07/T36 inventory; no fabricated rule IDs",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Android JNI door",
+      "path": "android/app/src/main/cpp/jni_bridge.cpp",
+      "line": 879,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Android JNI SOS",
+      "path": "android/app/src/main/cpp/jni_bridge.cpp",
+      "line": 511,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T12/T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Modern iOS / shared tvOS door",
+      "path": "ios/Doorbell/CoreBridge.swift",
+      "line": 664,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Modern iOS / shared tvOS SOS",
+      "path": "ios/Doorbell/CoreBridge.swift",
+      "line": 400,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T12/T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "iOS 5 compatibility door",
+      "path": "ios-kiosk/src/Core/DBCoreBridge.m",
+      "line": 1159,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "iOS 5 compatibility SOS",
+      "path": "ios-kiosk/src/Core/DBCoreBridge.m",
+      "line": 623,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T12/T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Windows door",
+      "path": "win/DoorbellApp/Core/CoreClient.cs",
+      "line": 533,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Windows SOS",
+      "path": "win/DoorbellApp/Core/CoreClient.cs",
+      "line": 316,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T12/T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    },
+    {
+      "caller": "Web panel direct /api/panel/emergency",
+      "path": "webui/panel/runtime.js",
+      "line": 779,
+      "protocol": "legacy_one_shot",
+      "migration_owner": "T31/T12/T36",
+      "limits": "One submission per invocation; no stable intent ID or cross-invocation deduplication; no automatic retry of unknown results; not covered by operations_v1"
+    }
+  ]
+}

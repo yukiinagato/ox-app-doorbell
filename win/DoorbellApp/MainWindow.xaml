@@ -6,6 +6,21 @@
         Title="ドアホン" Background="{DynamicResource Bg}"
         WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
         Topmost="False" Cursor="Arrow" FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI">
+    <Window.Resources>
+        <Style x:Key="VisitorPrimaryAction" TargetType="Button" BasedOn="{StaticResource BigButton}">
+            <Setter Property="FontSize" Value="28"/>
+            <Setter Property="Padding" Value="20,16"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="96"/>
+            <Setter Property="MaxWidth" Value="620"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="ContentTemplate">
+                <Setter.Value>
+                    <DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center"/></DataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid ClipToBounds="True">
         <Image x:Name="ThemeBgImage" Stretch="UniformToFill" Visibility="Collapsed"
                IsHitTestVisible="False"/>
@@ -22,13 +37,17 @@
 
             <!-- Hidden 7-tap corner, drawn first so the dashboard chips above it still take
                  their own taps; panels without a background never steal one. -->
-            <Border x:Name="SecretCorner" Width="200" Height="200" Background="Transparent"
+            <Border x:Name="SecretCorner" Width="48" Height="48" Background="Transparent"
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     MouseLeftButtonDown="OnSecretCorner"/>
 
             <!-- B · door-station visitor screen. Row and column placement is recomputed from the
                  window size, so the same elements serve portrait and landscape. -->
-            <Grid x:Name="VisitorHome" Margin="26,22,26,18" Visibility="Collapsed">
+            <Grid x:Name="VisitorHome" Margin="20,18,20,18" Visibility="Collapsed">
+                <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <ScrollViewer x:Name="VisitorContentScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,12">
+                    <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition x:Name="VisitorLeftColumn" Width="*"/>
                     <ColumnDefinition x:Name="VisitorRightColumn" Width="1.2*"/>
@@ -37,7 +56,8 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -59,15 +79,9 @@
                                Foreground="{DynamicResource Fg}"/>
                 </Border>
 
-                <StackPanel x:Name="LangBar" Grid.Row="2" Grid.Column="1"
+                <WrapPanel x:Name="LangBar" Grid.Row="2" Grid.Column="1"
                             Orientation="Horizontal" HorizontalAlignment="Center"
                             Margin="0,10,0,10" Visibility="Collapsed"/>
-
-                <StackPanel x:Name="VisitorCallBlock" Grid.Row="3" Grid.Column="1"
-                            VerticalAlignment="Center">
-                    <Button x:Name="CallButton" Style="{StaticResource BigButton}"
-                            MinWidth="360" MinHeight="150" Click="OnCallClick"/>
-                </StackPanel>
 
                 <TextBlock x:Name="TouchHint" Grid.Row="4" Grid.Column="1" FontSize="20"
                            TextWrapping="Wrap" TextAlignment="Center"
@@ -78,10 +92,10 @@
                     <TextBlock x:Name="PurposeHint" FontSize="18"
                                Foreground="{DynamicResource Dim}"
                                HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
                                   VerticalScrollBarVisibility="Disabled">
                         <UniformGrid x:Name="PurposeGrid" Columns="3"
-                                     HorizontalAlignment="Center"/>
+                                     HorizontalAlignment="Stretch"/>
                     </ScrollViewer>
                 </StackPanel>
 
@@ -91,6 +105,15 @@
                                Foreground="{DynamicResource Dim}" HorizontalAlignment="Left"
                                VerticalAlignment="Center"/>
                 </Grid>
+                <Grid x:Name="VisitorSosHost" Grid.Row="7" Grid.ColumnSpan="2" Margin="0,16,0,0"/>
+                    </Grid>
+                </ScrollViewer>
+                <StackPanel x:Name="VisitorCallBlock" Grid.Row="1">
+                    <TextBlock x:Name="VisitorStatus" Visibility="Collapsed" FontSize="22"
+                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,12"
+                               Foreground="{DynamicResource Fg}" AutomationProperties.LiveSetting="Polite"/>
+                    <Button x:Name="CallButton" Style="{StaticResource VisitorPrimaryAction}" Click="OnCallClick"/>
+                </StackPanel>
             </Grid>
 
             <!-- A · indoor dashboard, after the iPad 1 layout: clock with small seconds, action
@@ -333,23 +356,28 @@
         </Grid>
 
         <Grid x:Name="CallingView" Visibility="Collapsed" Background="{DynamicResource Bg}">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock x:Name="CallingText" FontSize="56" FontWeight="Bold"
-                           Foreground="{DynamicResource Fg}" HorizontalAlignment="Center"/>
-                <Ellipse x:Name="Pulse" Width="140" Height="140" Margin="0,50"
-                         Stroke="{DynamicResource Accent}" StrokeThickness="6"
-                         HorizontalAlignment="Center"/>
-                <StackPanel x:Name="CallingPurposeSection" Visibility="Collapsed" Margin="20,0,20,24">
-                    <TextBlock x:Name="CallingPurposeHint" FontSize="20"
-                               Foreground="{DynamicResource Dim}" HorizontalAlignment="Center"
-                               Margin="0,0,0,8"/>
-                    <UniformGrid x:Name="CallingPurposeGrid" Columns="3"
-                                 HorizontalAlignment="Center"/>
+            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <ScrollViewer Grid.Row="0" Margin="20,18,20,0" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="CallingText" FontSize="42" FontWeight="Bold" TextWrapping="Wrap"
+                               TextAlignment="Center" Foreground="{DynamicResource Fg}"/>
+                    <TextBlock x:Name="CallingDetail" FontSize="22" TextWrapping="Wrap" Margin="0,12,0,0"
+                               TextAlignment="Center" Foreground="{DynamicResource Dim}"/>
+                    <Ellipse x:Name="Pulse" Width="100" Height="100" Margin="0,24"
+                             Stroke="{DynamicResource Accent}" StrokeThickness="6" HorizontalAlignment="Center"/>
+                    <StackPanel x:Name="CallingPurposeSection" Visibility="Collapsed" Margin="0,0,0,24">
+                        <TextBlock x:Name="CallingPurposeHint" FontSize="20" TextWrapping="Wrap"
+                                   Foreground="{DynamicResource Dim}" TextAlignment="Center" Margin="0,0,0,8"/>
+                        <UniformGrid x:Name="CallingPurposeGrid" Columns="3" HorizontalAlignment="Stretch"/>
+                        <Button x:Name="CallingPurposeSkip" MinHeight="48" FontSize="22" Padding="16,10"
+                                Margin="0,12,0,0" Click="OnPurposeSkipClick"/>
+                    </StackPanel>
                 </StackPanel>
-                <Button x:Name="CancelButton" FontSize="28" Padding="40,16"
-                        Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
-                        BorderBrush="{DynamicResource Line}" Click="OnCancelClick"/>
-            </StackPanel>
+            </ScrollViewer>
+            <Button x:Name="CancelButton" Grid.Row="1" Style="{StaticResource VisitorPrimaryAction}"
+                    Margin="20,12,20,18" Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
+                    BorderBrush="{DynamicResource Line}" Click="OnCancelClick"/>
         </Grid>
 
         <Border x:Name="ReplyBanner" Visibility="Collapsed" VerticalAlignment="Center"
@@ -364,14 +392,21 @@
             </StackPanel>
         </Border>
 
-        <Border x:Name="OfflineView" Visibility="Collapsed" Background="#B5A21B00">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
-                <TextBlock x:Name="OfflineTitle" FontSize="52" FontWeight="Bold"
-                           Foreground="#FFF" HorizontalAlignment="Center"/>
-                <TextBlock x:Name="OfflineBody" FontSize="28" Foreground="#FFE9D5"
-                           HorizontalAlignment="Center" Margin="0,16,0,0"/>
-            </StackPanel>
-        </Border>
+        <Grid x:Name="OfflineView" Visibility="Collapsed" Background="{DynamicResource Bg}">
+            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+            <ScrollViewer Grid.Row="0" Margin="20,18,20,0" VerticalScrollBarVisibility="Auto"
+                          HorizontalScrollBarVisibility="Disabled">
+                <StackPanel VerticalAlignment="Center">
+                    <TextBlock x:Name="OfflineTitle" FontSize="42" FontWeight="Bold" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Fg}" TextAlignment="Center"/>
+                    <TextBlock x:Name="OfflineBody" FontSize="24" Foreground="{DynamicResource Dim}"
+                               TextAlignment="Center" TextWrapping="Wrap" Margin="0,16,0,0"/>
+                </StackPanel>
+            </ScrollViewer>
+            <Button x:Name="OfflineAction" Grid.Row="1" Style="{StaticResource VisitorPrimaryAction}"
+                    Margin="20,12,20,18" IsEnabled="False" Background="{DynamicResource Card}"
+                    Foreground="{DynamicResource Dim}"/>
+        </Grid>
 
         <!-- A2 · incoming / monitor screen. -->
         <!-- Incoming / monitor screen, after the iPad 1 layout: title with the return countdown at
@@ -475,9 +510,11 @@
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <StackPanel Grid.Row="0" Margin="24,18,24,8" HorizontalAlignment="Left">
+            <ScrollViewer x:Name="InCallHeaderScroll" Grid.Row="0" Margin="24,18,24,8"
+                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel HorizontalAlignment="Stretch">
                 <TextBlock x:Name="InCallTitle" FontSize="30" FontWeight="Bold"
-                           Foreground="{DynamicResource Fg}"/>
+                           Foreground="{DynamicResource Fg}" TextWrapping="Wrap"/>
                 <Grid x:Name="InCallPurposeSlot" Height="34" Margin="0,6,0,0">
                     <Border x:Name="InCallPurposeBadge" Visibility="Collapsed"
                             Background="{DynamicResource Pill}" CornerRadius="8" Padding="12,6"
@@ -487,6 +524,7 @@
                     </Border>
                 </Grid>
             </StackPanel>
+            </ScrollViewer>
             <Grid Grid.Row="1" Margin="24,4,24,0">
                 <Border CornerRadius="16" Background="#000000" ClipToBounds="True"
                         HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -499,18 +537,18 @@
                     </Grid>
                 </Border>
             </Grid>
-            <WrapPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"
-                       Margin="20,12,20,18">
-                <Button x:Name="EndCallButton" Style="{StaticResource ActionButton}"
-                        Background="{DynamicResource Danger}"
-                        Foreground="{DynamicResource OnDanger}"
-                        BorderBrush="{DynamicResource Danger}" Click="OnEndCallClick"/>
+            <StackPanel Grid.Row="2" Margin="20,12,20,18">
+                <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
                 <Button x:Name="InCallMicButton" Style="{StaticResource ActionButton}"
                         Visibility="Collapsed" Click="OnMicClick"/>
                 <Button x:Name="InCallOpenDoorButton" Style="{StaticResource ActionButton}"
                         Background="#B7791F" Foreground="#FFFFFF" BorderBrush="#B7791F"
                         Click="OnOpenDoorClick"/>
-            </WrapPanel>
+                </WrapPanel>
+                <Button x:Name="EndCallButton" Style="{StaticResource VisitorPrimaryAction}"
+                        Background="{DynamicResource Danger}" Foreground="{DynamicResource OnDanger}"
+                        BorderBrush="{DynamicResource Danger}" Click="OnEndCallClick"/>
+            </StackPanel>
         </Grid>
 
         <!-- Shared overlay for both call screens: the announcement chip, this node's admin QR and

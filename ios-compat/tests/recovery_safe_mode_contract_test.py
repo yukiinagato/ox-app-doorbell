@@ -238,33 +238,31 @@ class RecoverySafeModeContracts(unittest.TestCase):
 
     def test_ios5_call_deadline_is_not_extended_by_snapshot_refresh(self):
         incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
-        timer = incoming[incoming.index("- (void)restartAutoClose"):
-                         incoming.index("- (void)handleCallCancelled:")]
-        self.assertIn("[_autoCloseTimer isValid]", timer)
-        self.assertIn("_autoCloseTimerForCancelled == _cancelled", timer)
-        self.assertIn("_callExpiresAtMs", timer)
-        self.assertIn("deadlineMs = _callExpiresAtMs", timer)
-        self.assertIn("(deadlineMs - nowMs) / 1000.0", timer)
-        self.assertNotIn("kAutoCloseS", timer)
-        self.assertIn("@selector(autoCloseTimerFired:)", timer)
-        self.assertIn("forMode:NSRunLoopCommonModes", timer)
+        self.assertNotIn("restartAutoClose", incoming)
+        self.assertNotIn("_callExpiresAtMs", incoming)
+        self.assertIn("[_returnCountdown tick]", incoming)
+        self.assertIn("[_returnCountdown pauseForAnsweredCall]", incoming)
+        self.assertIn("[_returnCountdown resumeAfterCall]", incoming)
+        door = read("ios-kiosk/src/Screens/DBDoorScreen.m")
+        self.assertIn("acceptsCallback:timer.userInfo", door)
+        self.assertIn("MIN(1.0, MAX(0.25, [reading.remainingSeconds doubleValue]))", door)
 
     def test_ios5_restores_only_a_previously_targeted_unexpired_indoor_call(self):
         router = read("ios-kiosk/src/Screens/DBRouter.m")
-        restore = router[router.index("- (void)restoreTargetedIndoorCallFromStatus:"):
+        restore = router[router.index("- (void)restoreTargetedIndoorCallFromSnapshot:"):
                          router.index("- (NSString *)effectiveSipBackend")]
         self.assertIn('DBPendingIndoorCallDefaultsKey', router)
         self.assertIn('[self persistTargetedIndoorCall:chime]', router)
         self.assertIn('objectForKey:DBPendingIndoorCallDefaultsKey', restore)
         self.assertIn('isEqualToString:callID', restore)
         self.assertIn('isEqualToString:@"ringing"', restore)
-        self.assertIn('isEqualToString:@"purpose_pending"', restore)
-        self.assertIn('expires > nowMs', restore)
-        self.assertIn('longLongVal:call path:@"expires_at_ms"', restore)
+        self.assertIn('[reading.remainingSeconds doubleValue] <= 0', restore)
+        self.assertNotIn('NSDate', restore)
+        self.assertIn('observeSnapshot:snapshot callID:callID', restore)
         self.assertNotIn('intVal:call path:@"expires_at_ms"', restore)
         self.assertIn('_callEvents.currentCallID isEqualToString:callID', restore)
-        self.assertIn('if (matchingCallSeen) [self clearPersistedIndoorCall:callID]', restore)
-        self.assertIn('acceptChimeEvent:chime nowMs:nowMs', restore)
+        self.assertIn('reading.disposition != DBCallTimingActive', restore)
+        self.assertIn('acceptChimeEvent:chime timingReading:reading', restore)
         self.assertIn('[self clearPersistedIndoorCall:callID]', restore)
         self.assertIn('[self clearPersistedIndoorCall:_callEvents.currentCallID]', router)
 
@@ -394,7 +392,7 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn("[_router sipHangup]", compat_refresh)
         self.assertIn("!s->_awaitingSupersededIdle", compat)
         self.assertIn("_answerButton.enabled = ([_peerHost length] > 0)", compat_idle)
-        self.assertIn("[self restartAutoClose]", compat_idle)
+        self.assertNotIn("closeSelf", compat_idle)
         self.assertIn("consumeSupersededIdleForCurrentCall", router)
         self.assertIn("handleSupersededSipIdle", router)
 
@@ -404,18 +402,20 @@ class RecoverySafeModeContracts(unittest.TestCase):
         compat = read("ios-kiosk/src/Screens/DBRouter.m")
         door = read("ios-kiosk/src/Screens/DBDoorScreen.m")
         self.assertIn("handleCallRecovery(ev)", delegate)
-        self.assertIn('persistedState == "in_call" || eventState == "in_call"', modern)
-        self.assertIn("reportRecovery(callId, restored: false)", modern)
-        self.assertIn('persistedState == "ringing"', modern)
-        self.assertIn("expiry > nowMs", modern)
+        self.assertIn('ConfigUtil.evStr(call, "state") == "in_call"', modern)
+        self.assertNotIn('eventState == "in_call"', modern)
+        self.assertIn("reportRecovery(callId, restored: false, generation: reading.coreGeneration)", modern)
+        self.assertIn("guard callTiming.accepts(snapshot)", modern)
+        self.assertIn("(reading.remainingSeconds ?? 0) > 0", modern)
+        self.assertIn("!recoveryRequired || reading.mayRestore", modern)
         self.assertIn("showPurposeChoice(afterRing: true)", modern)
-        self.assertIn("reportRecovery(callId, restored: true)", modern)
+        self.assertIn("reportRecovery(callId, restored: true, generation: reading.coreGeneration)", modern)
         self.assertIn('@"dialog_owner"', compat)
         self.assertIn('isEqualToString:@"in_call"', compat)
-        self.assertIn("reportCallRecovery:callID restored:NO", compat)
-        self.assertIn("restoreWaitingCall:selected recoveryState:eventState", compat)
-        self.assertIn("reportCallRecovery:callID restored:restored", compat)
-        self.assertIn("expires <= nowMs", door)
+        self.assertIn("reportCallRecovery:callID restored:NO expectedGeneration:snapshot.coreGeneration", compat)
+        self.assertIn("restoreWaitingCall:callID snapshot:snapshot", compat)
+        self.assertIn("reportCallRecovery:callID restored:YES expectedGeneration:snapshot.coreGeneration", compat)
+        self.assertIn("[reading.remainingSeconds doubleValue] <= 0", door)
         self.assertIn("presentPurposeAlertForActiveCall:YES", door)
 
     def test_emergency_colors_are_contrast_checked_and_report_fallback(self):
@@ -503,40 +503,53 @@ class RecoverySafeModeContracts(unittest.TestCase):
         self.assertIn("return false", availability)
 
         self.assertIn("CMSampleBufferGetImageBuffer", camera)
-        self.assertIn('reportRuntime(active: true, state: "active")', camera)
+        self.assertIn('reportRuntime(active: true, state: "active", generation: token.session)', camera)
         self.assertIn("AVCaptureSessionRuntimeError", camera)
-        self.assertIn('reportRuntime(active: false, state: "runtime_failed")', camera)
+        self.assertIn('reportRuntime(active: false, state: "runtime_failed", generation: generation)', camera)
         self.assertIn("VTCompressionSessionPrepareToEncodeFrames", encoder)
-        self.assertIn('reportRuntime(available: true, state: "verified")', encoder)
-        self.assertIn('markTerminalFailure("encode_failed")', encoder)
-        self.assertIn('markTerminalFailure("invalid_output")', encoder)
+        self.assertIn('reportRuntime(available: true, state: "verified", generation: generation)', encoder)
+        self.assertIn('markTerminalFailure("encode_failed", generation: generation)', encoder)
+        self.assertIn('markTerminalFailure("invalid_output", generation: generation)', encoder)
+        self.assertIn('guard started && sessionGeneration == generation', encoder)
 
-        expiry = main[main.index("private func coreExpiryForActiveCall"):
+        expiry = main[main.index("private func refreshCallingDeadline"):
                       main.index("private func onUiEvent")]
-        self.assertIn('call["expires_at_ms"]', expiry)
-        self.assertIn("coreExpiryForActiveCall()", expiry)
-        self.assertIn("activeCallExpiresAtMs) / 1000", expiry)
+        self.assertIn("callTiming.observe(currentSnapshot", expiry)
+        self.assertIn("callTiming.waitingForFreshSnapshot", expiry)
+        self.assertIn("self.activeCallId == expectedCall", expiry)
+        self.assertNotIn("Date().timeIntervalSince1970", expiry)
+        self.assertNotIn("self.core.cancelCall", expiry)
         self.assertNotIn("TimeInterval = 60", expiry)
         self.assertNotIn("60_000", main)
 
-    def test_modern_identity_restart_quiesces_camera_before_core_destroy(self):
+    def test_modern_identity_restart_drains_core_without_blocking_main(self):
         delegate = read("ios/Doorbell/AppDelegate.swift")
         main = read("ios/Doorbell/MainViewController.swift")
         camera = read("ios/Doorbell/CameraFeeder.swift")
+        bridge = read("ios/Doorbell/CoreBridge.swift")
+        lifecycle_tests = read("ios/DoorbellTests/CoreBridgeLifecycleTests.swift")
 
         restart = delegate[delegate.index("private func restartForIdentityChange"):
                            delegate.index("private func onUiEvent")]
         self.assertLess(restart.index("prepareForCoreShutdown()"),
-                        restart.index("core.stop()"))
+                        restart.index("core.stop {"))
         self.assertLess(restart.index("win.rootViewController = UIViewController()"),
-                        restart.index("core.stop()"))
-        self.assertIn("DispatchQueue.main.async", restart)
+                        restart.index("core.stop {"))
+        self.assertLess(restart.index("core.stop {"),
+                        restart.index("self.startConfiguredApplication"))
         shutdown = main[main.index("func prepareForCoreShutdown"):
                         main.index("private func buildUi")]
-        self.assertIn("camera.stopAndWait()", shutdown)
+        self.assertIn("camera.stop()", shutdown)
         self.assertIn("videoEncoder.stop()", shutdown)
-        self.assertIn("queue.sync { s?.stopRunning() }", camera)
+        self.assertNotIn("queue.sync", camera)
+        self.assertIn("queue.async { s?.stopRunning() }", camera)
         self.assertGreaterEqual(camera.count("guard isAcceptingFrames()"), 2)
+        # These source checks preserve the shutdown wiring; actual ordering is exercised through
+        # production Bridge barriers in the hosted XCTest target, including a real C callback.
+        self.assertIn("teardownQueue.async { self.finishStop() }", bridge)
+        self.assertIn("while starting || inFlight != 0 { lifecycle.wait() }", bridge)
+        self.assertIn("testLeaseHeldBetweenAcquireAndCReadDelaysDestroy", lifecycle_tests)
+        self.assertIn("testCoreCallbackCanReachMainWhileMainRequestsStop", lifecycle_tests)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

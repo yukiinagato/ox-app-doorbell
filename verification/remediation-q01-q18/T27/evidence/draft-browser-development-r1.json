@@ -1,0 +1,46 @@
+{
+  "phase": "green",
+  "source_sha256": "0bcf18548ae5058d4e7ac7836d0cf2244f9a419b3c0ab23a75b6d0d07c6dd708",
+  "case_sha256": "2c1d64d97a2854f358aecaf5dae1b7e729cbdd313f7603a18d54429b1895e9b2",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T16:17:52.577Z",
+  "results": [
+    {
+      "id": "T25-01",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-02",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-03",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-04",
+      "status": "PASS"
+    },
+    {
+      "id": "synchronous validation retains the editor without a request",
+      "status": "PASS"
+    },
+    {
+      "id": "notice API failure retains its dedicated editor",
+      "status": "PASS"
+    },
+    {
+      "id": "retrying a failed preset does not duplicate the draft",
+      "status": "PASS"
+    },
+    {
+      "id": "unknown secret config outcome does not delete a possibly live credential",
+      "status": "PASS"
+    },
+    {
+      "id": "native timeout and late success settle the save once",
+      "status": "FAIL",
+      "message": "Cannot read properties of undefined (reading 'timeout')"
+    }
+  ]
+}

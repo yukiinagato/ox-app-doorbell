@@ -1,0 +1,330 @@
+{
+  "scope": "Production DOM and callbacks with controlled XHR; not Core/device qualification",
+  "phase": "candidate",
+  "door_sha256": "d63840ffeacb09222b96a1cf33c98908eb3793fec682c91ceb75cbc41641a744",
+  "case_sha256": "c4b924b97d452f1649d50d5ab8a52e0bf1b09fc6841b07eab31b7ef0d554e6ee",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T17:47:32.200Z",
+  "results": [
+    {
+      "id": "Purpose-first waits for a choice and sends the chosen purpose with the call",
+      "status": "PASS"
+    },
+    {
+      "id": "Purpose-first Back survives background snapshots and never rings",
+      "status": "PASS"
+    },
+    {
+      "id": "Ring-then-purpose starts once and Skip does not cancel",
+      "status": "PASS"
+    },
+    {
+      "id": "Answered state retires purpose actions and the stable action ends only the call",
+      "status": "PASS"
+    },
+    {
+      "id": "Layout 320x480 en semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          320,
+          480
+        ],
+        "language": "en",
+        "font_scale": 1,
+        "action": {
+          "left": 16,
+          "top": 380,
+          "right": 204,
+          "bottom": 468
+        }
+      }
+    },
+    {
+      "id": "Layout 320x480 en semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          320,
+          480
+        ],
+        "language": "en",
+        "font_scale": 1.5,
+        "action": {
+          "left": 16,
+          "top": 380,
+          "right": 204,
+          "bottom": 468
+        }
+      }
+    },
+    {
+      "id": "Layout 320x480 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          320,
+          480
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 16,
+          "top": 380,
+          "right": 204,
+          "bottom": 468
+        }
+      }
+    },
+    {
+      "id": "Layout 320x480 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          320,
+          480
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 16,
+          "top": 380,
+          "right": 204,
+          "bottom": 468
+        }
+      }
+    },
+    {
+      "id": "Layout 844x390 en semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          844,
+          390
+        ],
+        "language": "en",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 290,
+          "right": 712,
+          "bottom": 378
+        }
+      }
+    },
+    {
+      "id": "Layout 844x390 en semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          844,
+          390
+        ],
+        "language": "en",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 290,
+          "right": 712,
+          "bottom": 378
+        }
+      }
+    },
+    {
+      "id": "Layout 844x390 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          844,
+          390
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 290,
+          "right": 712,
+          "bottom": 378
+        }
+      }
+    },
+    {
+      "id": "Layout 844x390 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          844,
+          390
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 290,
+          "right": 712,
+          "bottom": 378
+        }
+      }
+    },
+    {
+      "id": "Layout 768x1024 en semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "en",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 924,
+          "right": 636,
+          "bottom": 1012
+        }
+      }
+    },
+    {
+      "id": "Layout 768x1024 en semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "en",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 924,
+          "right": 636,
+          "bottom": 1012
+        }
+      }
+    },
+    {
+      "id": "Layout 768x1024 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 924,
+          "right": 636,
+          "bottom": 1012
+        }
+      }
+    },
+    {
+      "id": "Layout 768x1024 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 924,
+          "right": 636,
+          "bottom": 1012
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 en semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "en",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 668,
+          "right": 892,
+          "bottom": 756
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 en semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "en",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 668,
+          "right": 892,
+          "bottom": 756
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 668,
+          "right": 892,
+          "bottom": 756
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 668,
+          "right": 892,
+          "bottom": 756
+        }
+      }
+    },
+    {
+      "id": "Ordinary offline status is neutral while the existing SOS overlay stays separate",
+      "status": "PASS"
+    },
+    {
+      "id": "Keyboard cancellation and assistive activation retain the existing SOS operation path",
+      "status": "PASS"
+    },
+    {
+      "id": "Language remains secondary and updates the visible purpose choices",
+      "status": "PASS"
+    },
+    {
+      "id": "Recovery and no-answer titles keep the existing call identity and terminal permissions",
+      "status": "PASS"
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+09-23 00:54:36 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:22078
+09-23 00:54:36 I [node] created the missing door entry doors.front for this door station
+09-23 00:54:36 I [httpd] listening on 26607,[::]:26607
+09-23 00:54:36 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:54:36 I [node] node bac10a74 (operation-authority) started
+09-23 00:54:36 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=127.0.0.1:26712
+09-23 00:54:36 I [httpd] listening on 24169,[::]:24169
+09-23 00:54:36 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:54:36 I [node] node 8999a75f (operation-page) started
+09-23 00:54:36 I [node] initialized the cluster administrator password
+09-23 00:54:38 I [httpd] stopped
+09-23 00:54:40 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+core/tests/test_operations_http.cpp:239:
+TEST CASE:  operations HTTP: prepare uses the configured remote authority
+
+core/tests/test_operations_http.cpp:243: FATAL ERROR: REQUIRE( prepared.status == 200 ) is NOT correct!
+  values: REQUIRE( 404 == 200 )
+  logged: prepared.body := not found
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 3 skipped
+[doctest] assertions: 13 | 12 passed | 1 failed |
+[doctest] Status: FAILURE!

@@ -1,0 +1,2 @@
+Production cached remaining seconds: 10.0
+Core reports snapshot_age_ms=5000; remaining must be <=5, not a renewed ten seconds.

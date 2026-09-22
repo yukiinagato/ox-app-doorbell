@@ -1,0 +1,8 @@
+{
+  "core/src/node/node.cpp": "06ed79c1b3ec092c9865ea6d56ba8e56ca373fb912f1c0eb314704a25013e458",
+  "core/src/httpd/httpd.cpp": "bb25e9edae198a51e56438c7ed0d26441e7b3fc6211b4fb3926ab4bbdd30264a",
+  "core/tests/test_panel.cpp": "713eabf6754909b7e9ae8ea67ebaab60acd26cda72f03cb8f707271a8a30c480",
+  "webui/panel/call.html": "5aad5a5d646982411eed7dd9952608f906ac37b721e4693b839b7baa603d6953",
+  "webui/panel/video-session.js": "24ee1a814e42de5b21b50eae28c4deda17ae284e32c6965f34a7d45c6901344a",
+  "ios/Doorbell/MainViewController.swift": "f665e16433c6e344367cbd1b3f1db5899020eacf7b75c7e528c3f351496369e7"
+}

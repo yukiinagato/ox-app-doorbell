@@ -1,0 +1,311 @@
+09-23 02:18:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:18:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:20 I [node] node 044d9c21 (review-a) started
+09-23 02:18:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:18:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:20 I [node] node 3208761a (review-b) started
+09-23 02:18:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:18:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:20 I [node] node 854915a3 (review-a) started
+09-23 02:18:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:18:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:20 I [node] node 937911e9 (review-b) started
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  unknown record payload cannot leak into candidate history
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:100: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  unknown operation payload cannot bypass scrubbing
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:106: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  each field has at most two typed base versions
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:114: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  base versions cannot be an arbitrary string
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:120: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  changed fields remain bounded
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:128: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:132:
+TEST CASE:  config conflict review: legacy public native setters retain partitioned intent
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:138: ERROR: CHECK( text.find("A native intent") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:139: ERROR: CHECK( text.find("B native intent") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+===============================================================================
+/Users/ox/Documents/proje09-23 02:18:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27492
+09-23 02:18:20 I [httpd] listening on 23005,[::]:23005
+09-23 02:18:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:20 I [node] node 2d5533f5 (doorbell) started
+09-23 02:18:20 I [node] initialized the cluster administrator password
+09-23 02:18:22 I [httpd] stopped
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node a92167c0 (review-a) started
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node 7075cd1b (review-b) started
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node fddd122b (review-a) started
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node 18ba5103 (review-b) started
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node d3276993 (review-a) started
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node dfb1efce (review-b) started
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node c6c373fe (review-a) started
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node 303635f6 (review-b) started
+09-23 02:18:22 E [node] config persistence failed; retaining the last-known-good state
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 W [mesh] rejected malformed sync response from 303635f61e488f5bc10928c3d82b1252
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node 690fa1df (review-a) started
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node 704bd1a0 (review-b) started
+ct/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:143:
+TEST CASE:  config conflict review: native notices retain both branches and block a blind clear
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:149: ERROR: CHECK( before.find("A notice intent") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:150: ERROR: CHECK( before.find("B notice intent") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:151: ERROR: CHECK_FALSE( f.a->clearDoorNotice("*") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:154:
+TEST CASE:  config conflict review: legacy HTTP import commits an edit record atomically
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:169: ERROR: CHECK( journalCount(node) == before + 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:173:
+TEST CASE:  config conflict review: collection root mutations are explicitly rejected
+  legacy delete must not create a different collection entity
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:185: ERROR: CHECK_FALSE( json::getBool(result.get(), "ok") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:173:
+TEST CASE:  config conflict review: collection root mutations are explicitly rejected
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  legacy delete must not create a different collection entity
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:195: ERROR: CHECK( journalCount(*f.a) == before ) is NOT correct!
+  values: CHECK( 5 == 1 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:173:
+TEST CASE:  config conflict review: collection root mutations are explicitly rejected
+  CAS delete follows the same collection restriction
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:193: ERROR: CHECK_FALSE( json::getBool(json::parse(f.a->configCommitJson(json::dump(body.get()))).get(), "ok") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:173:
+TEST CASE:  config conflict review: collection root mutations are explicitly rejected
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  CAS delete follows the same collection restriction
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:195: ERROR: CHECK( journalCount(*f.a) == before ) is NOT correct!
+  values: CHECK( 5 == 1 )
+
+===09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node 92fad190 (review-a) started
+09-23 02:18:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:18:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:18:22 I [node] node 1b27c25b (review-b) started
+============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:222:
+TEST CASE:  config conflict review: explicit resolution deletion must cover the whole entity
+  partial delete cannot retire all entity heads
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:240: ERROR: CHECK_FALSE( json::getBool(result.get(), "ok") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:240: ERROR: CHECK( conflictText(*f.a) == before ) is NOT correct!
+  values: CHECK( [] == [{"entity":"settings","state":"unresolved","heads":["a3dd0360228c690443204fdf0862dbec","aa9d9aa4c8252f3131f32b02f5378955"],"effective_exists":true,"effective":{"review":"B intent"},"effective_requires_reentry":false,"candidates":[{"change_id":"1c3feb38a7cc4d35e4eb7ba804d4d639","author_node":"690fa1dfc2e9051677f31975b623063a","entity":"settings","parents":[],"base_entity_version":"4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945","ops":[{"key":"settings.review","op":"set","value":"base"}],"candidate_exists":true,"candidate":{"review":"base"},"requires_reentry":false,"is_head":false},{"change_id":"a3dd0360228c690443204fdf0862dbec","author_node":"704bd1a0c144ba79cff9901ab4feeea0","entity":"settings","parents":["1c3feb38a7cc4d35e4eb7ba804d4d639"],"base_entity_version":"c7a503167e6952e02af925d9628e499979aca77743b97d719822fdeb506c35db","ops":[{"key":"settings.review","op":"set","value":"B intent"}],"candidate_exists":true,"candidate":{"review":"B intent"},"requires_reentry":false,"is_head":true},{"change_id":"aa9d9aa4c8252f3131f32b02f5378955","author_node":"690fa1dfc2e9051677f31975b623063a","entity":"settings","parents":["1c3feb38a7cc4d35e4eb7ba804d4d639"],"base_entity_version":"c7a503167e6952e02af925d9628e499979aca77743b97d719822fdeb506c35db","ops":[{"key":"settings.review","op":"set","value":"A intent"}],"candidate_exists":true,"candidate":{"review":"A intent"},"requires_reentry":false,"is_head":true}]}] )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:250:
+TEST CASE:  config conflict review: only bounded secret references survive candidate scrubbing
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:277: ERROR: CHECK( json::getBool(record.get(), "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:280: ERROR: CHECK( json::getBool(candidate, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:281: ERROR: CHECK( json::getBool(operation, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:282: ERROR: CHECK( json::dump(record.get()).find(value) == std::string::npos ) is NOT correct!
+  values: CHECK( 274 == 18446744073709551615 )
+  logged: secret:
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:277: ERROR: CHECK( json::getBool(record.get(), "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:280: ERROR: CHECK( json::getBool(candidate, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:281: ERROR: CHECK( json::getBool(operation, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:282: ERROR: CHECK( json::dump(record.get()).find(value) == std::string::npos ) is NOT correct!
+  values: CHECK( 274 == 18446744073709551615 )
+  logged: secret:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:277: ERROR: CHECK( json::getBool(record.get(), "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:plaintext secret
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:280: ERROR: CHECK( json::getBool(candidate, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:plaintext secret
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:281: ERROR: CHECK( json::getBool(operation, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:plaintext secret
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:282: ERROR: CHECK( json::dump(record.get()).find(value) == std::string::npos ) is NOT correct!
+  values: CHECK( 274 == 18446744073709551615 )
+  logged: secret:plaintext secret
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:277: ERROR: CHECK( json::getBool(record.get(), "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:invalid/@path
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:280: ERROR: CHECK( json::getBool(candidate, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:invalid/@path
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:281: ERROR: CHECK( json::getBool(operation, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: secret:invalid/@path
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:282: ERROR: CHECK( json::dump(record.get()).find(value) == std::string::npos ) is NOT correct!
+  values: CHECK( 274 == 18446744073709551615 )
+  logged: secret:invalid/@path
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:277: ERROR: CHECK( json::getBool(record.get(), "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: https://example.invalid/#test-only-fragment-token
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:280: ERROR: CHECK( json::getBool(candidate, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: https://example.invalid/#test-only-fragment-token
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:281: ERROR: CHECK( json::getBool(operation, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: https://example.invalid/#test-only-fragment-token
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:282: ERROR: CHECK( json::dump(record.get()).find(value) == std::string::npos ) is NOT correct!
+  values: CHECK( 274 == 18446744073709551615 )
+  logged: https://example.invalid/#test-only-fragment-token
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:277: ERROR: CHECK( json::getBool(record.get(), "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: https://example.invalid/%74est-only-encoded-token
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:280: ERROR: CHECK( json::getBool(candidate, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: https://example.invalid/%74est-only-encoded-token
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:281: ERROR: CHECK( json::getBool(operation, "requires_reentry") ) is NOT correct!
+  values: CHECK( false )
+  logged: https://example.invalid/%74est-only-encoded-token
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/independent-review-red-r3/test_config_conflicts_review.cpp:282: ERROR: CHECK( json::dump(record.get()).find(value) == std::string::npos ) is NOT correct!
+  values: CHECK( 274 == 18446744073709551615 )
+  logged: https://example.invalid/%74est-only-encoded-token
+
+===============================================================================
+[doctest] test cases:   8 |   1 passed |  7 failed | 0 skipped
+[doctest] assertions: 168 | 127 passed | 41 failed |
+[doctest] Status: FAILURE!

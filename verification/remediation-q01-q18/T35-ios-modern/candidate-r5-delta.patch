@@ -1,0 +1,131 @@
+--- r4/ios/Doorbell/MainViewController.swift
++++ r5/ios/Doorbell/MainViewController.swift
+@@ -63,6 +63,14 @@
+     }
+     private weak var purposeChoice: PurposeChoiceViewController?
+     private var activeCallId = ""
++    private var visitorActionRevision: UInt64 = 0
++    private struct VisitorActionIdentity: Equatable {
++        let call: String
++        let core: UInt64?
++        let revision: UInt64
++        let inCall: Bool
++    }
++    private var heldVisitorActions: [ObjectIdentifier: VisitorActionIdentity] = [:]
+     private var reportedRecoveryCallId = ""
+     private var callTiming = CallTiming()
+     private var callTimingGeneration: UInt64?
+@@ -332,6 +340,7 @@
+     /// Stop admission without waiting on capture callbacks from the main queue. CoreBridge
+     /// drains any already acquired leases before destroying the native instance.
+     func prepareForCoreShutdown() {
++        visitorActionRevision &+= 1
+         suspendCallTiming()
+         camera.stop()
+         camera.encoder = nil
+@@ -602,6 +611,7 @@
+         cancelButton.layer.cornerRadius = 12
+         cancelButton.contentEdgeInsets = UIEdgeInsets(top: 14, left: 40, bottom: 14, right: 40)
+         cancelButton.addTarget(self, action: #selector(onCancelClick), for: .touchUpInside)
++        bindVisitorActionInput(cancelButton)
+         cancelButton.accessibilityIdentifier = "calling_cancel"
+         callingView.addSubview(cancelButton)
+         pinVisitorAction(cancelButton, in: callingView)
+@@ -693,6 +703,7 @@
+         endCallButton.layer.cornerRadius = 12
+         endCallButton.contentEdgeInsets = UIEdgeInsets(top: 14, left: 44, bottom: 14, right: 44)
+         endCallButton.addTarget(self, action: #selector(onEndCallClick), for: .touchUpInside)
++        bindVisitorActionInput(endCallButton)
+         endCallButton.accessibilityIdentifier = "incall_end"
+         inCallView.addSubview(endCallButton)
+         pinVisitorAction(endCallButton, in: inCallView)
+@@ -1466,6 +1477,7 @@
+     }
+ 
+     private func showIdle(hint: String? = nil) {
++        visitorActionRevision &+= 1
+         dismissPurposeChoice()
+         callFeedbackAudio.stop()
+         callTitleOverride = nil
+@@ -1496,6 +1508,7 @@
+     }
+ 
+     private func suspendCallTiming() {
++        visitorActionRevision &+= 1
+         callTimingSuspended = true
+         resetCallTiming()
+         callTiming.requireFreshSnapshot(readCallTimingSnapshot())
+@@ -1718,6 +1731,7 @@
+ 
+ 
+     private func onSipInCall(_ ev: [String: Any]) {
++        visitorActionRevision &+= 1
+         dismissPurposeChoice()
+         inCall = true
+         callingText.text = texts.t("incall.title")
+@@ -1736,6 +1750,7 @@
+     }
+ 
+     private func onSipIdle() {
++        visitorActionRevision &+= 1
+         inCall = false
+         closeInCall()
+         if boot.role == "door_station" { showIdle() }
+@@ -1785,8 +1800,36 @@
+         inCallView.isHidden = true
+     }
+ 
++    private func bindVisitorActionInput(_ button: UIButton) {
++        button.addTarget(self, action: #selector(onVisitorActionDown(_:)), for: .touchDown)
++        button.addTarget(self, action: #selector(onVisitorActionCancelled(_:)),
++                         for: [.touchCancel, .touchUpOutside])
++    }
++
++    private func visitorActionIdentity() -> VisitorActionIdentity {
++        return VisitorActionIdentity(call: activeCallId, core: core.runningGeneration,
++                                     revision: visitorActionRevision, inCall: inCall)
++    }
++
++    @objc private func onVisitorActionDown(_ sender: UIButton) {
++        heldVisitorActions[ObjectIdentifier(sender)] = visitorActionIdentity()
++    }
++
++    @objc private func onVisitorActionCancelled(_ sender: UIButton) {
++        heldVisitorActions.removeValue(forKey: ObjectIdentifier(sender))
++    }
++
++    private func consumeVisitorAction(_ button: UIButton) -> Bool {
++        // Assistive activation has no held touch. A physical release must retain the identity
++        // captured before any intervening call, Core or nil-ID SIP UI session transition.
++        guard let captured = heldVisitorActions.removeValue(forKey: ObjectIdentifier(button)) else {
++            return true
++        }
++        return captured == visitorActionIdentity()
++    }
++
+     @objc private func onEndCallClick() {
+-        guard inCall, !inCallView.isHidden else { return }
++        guard consumeVisitorAction(endCallButton), inCall, !inCallView.isHidden else { return }
+         core.sipHangup()
+         onSipIdle()
+     }
+@@ -1946,7 +1989,7 @@
+     }
+ 
+     @objc private func onCancelClick() {
+-        guard !inCall, !activeCallId.isEmpty else { return }
++        guard consumeVisitorAction(cancelButton), !inCall, !activeCallId.isEmpty else { return }
+         // A queued touch may arrive after Core has answered. Only an accepted visitor cancel
+         // may dismiss this call; a rejection keeps the authoritative call visible.
+         guard core.cancelCall(door: boot.door, callId: activeCallId, reason: "visitor") else {
+--- r4/ios/DoorbellTests/VisitorScreenLayoutTests.swift
++++ r5/ios/DoorbellTests/VisitorScreenLayoutTests.swift
+@@ -511,7 +511,7 @@
+             "call_cancel_v2": true, "call_lifecycle_v2": true, "ui_manifest_v1": true]])
+         core.setUiManifest(["schema_version": 1, "units": "pt",
+             "viewport": ["minimum_touch": 44, "scale_min": 0.75, "scale_max": 2.0],
+-            "elements": ["purpose.button": ["properties": ["scale"], "defaults": ["scale": 1]],
++            "elements": ["purpose.button": ["properties": ["scale"], "defaults": ["scale": 1], "safety_critical": false],
+                          "cancel.call": ["properties": ["scale"], "defaults": ["scale": 1], "safety_critical": true]]])
+         try configure(core, "ui.call_flow", mode)
+         try configure(core, "ui.call_sound", "")

@@ -1,0 +1,150 @@
+{
+  "started_at": "2026-09-22T17:24:59.715375+00:00",
+  "finished_at": "2026-09-22T17:25:05.422837+00:00",
+  "serial": "emulator-5554",
+  "profile": "API35 / Android15 / arm64-v8a",
+  "app_version": "0.3.21 / build22",
+  "sip_backend": "real_pjsip (linked; Core stays unstarted)",
+  "signing": "Android debug certificate",
+  "apks": [
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/build/outputs/apk/modern/debug/app-modern-debug.apk",
+      "sha256": "8c8d28d25d127957b4b0cd3a36cc93ac22e3389ca722a808237e352e6d125578"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/build/outputs/apk/androidTest/modern/debug/app-modern-debug-androidTest.apk",
+      "sha256": "88799dc2357d9afe770e2b50dae49c827ce1a258744020a3a983b44210df92dd"
+    }
+  ],
+  "commands": [
+    {
+      "arguments": [
+        "install",
+        "-t",
+        "-r",
+        "-g",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/build/outputs/apk/modern/debug/app-modern-debug.apk"
+      ],
+      "exit_code": 0,
+      "output": "Performing Streamed Install\nSuccess\n"
+    },
+    {
+      "arguments": [
+        "install",
+        "-t",
+        "-r",
+        "-g",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/build/outputs/apk/androidTest/modern/debug/app-modern-debug-androidTest.apk"
+      ],
+      "exit_code": 0,
+      "output": "Performing Streamed Install\nSuccess\n"
+    },
+    {
+      "arguments": [
+        "shell",
+        "settings",
+        "put",
+        "secure",
+        "immersive_mode_confirmations",
+        "confirmed"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "rm",
+        "-rf",
+        "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "settings",
+        "put",
+        "system",
+        "font_scale",
+        "1.0"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "am",
+        "force-stop",
+        "jp.ox.doorbell"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "am",
+        "instrument",
+        "-w",
+        "-r",
+        "-e",
+        "phase",
+        "red",
+        "-e",
+        "orientation",
+        "portrait",
+        "jp.ox.doorbell.test/jp.ox.doorbell.VisitorUiInstrumentation"
+      ],
+      "exit_code": 0,
+      "output": "INSTRUMENTATION_RESULT: stream={\n  \"phase\": \"red\",\n  \"orientation\": \"portrait\",\n  \"font_scale\": 1,\n  \"source_id\": \"7a37629fa29dc07d3696c10f258c5cac7f9512a6df19930e1f07382506c59c8f\",\n  \"results\": [\n    {\n      \"id\": \"T35-01 purpose_first\",\n      \"status\": \"PASS\"\n    },\n    {\n      \"id\": \"T35-01 ring_then_purpose\",\n      \"status\": \"PASS\"\n    },\n    {\n      \"id\": \"T35-02 stable slot and gesture ownership\",\n      \"status\": \"PASS\"\n    },\n    {\n      \"id\": \"T35-03 neutral recovery and accessible SOS\",\n      \"status\": \"PASS\"\n    },\n    {\n      \"id\": \"T35-R1 stale SOS confirmation after cancel\",\n      \"status\": \"FAIL\",\n      \"error\": \"java.lang.IllegalStateException: A queued SOS confirmation survived cancel: triggers=1\"\n    }\n  ],\n  \"core_started\": false,\n  \"failure\": \"java.lang.IllegalStateException: A queued SOS confirmation survived cancel: triggers=1\\n\\tat jp.ox.doorbell.VisitorUiInstrumentation.onStart$lambda$35$lambda$33(VisitorUiInstrumentation.kt:185)\\n\\tat jp.ox.doorbell.VisitorUiInstrumentation.$r8$lambda$5fcxR0Pozx8Kz4ZaCt8NKEa2tMo(Unknown Source:0)\\n\\tat jp.ox.doorbell.VisitorUiInstrumentation$$ExternalSyntheticLambda11.invoke(D8$$SyntheticClass:0)\\n\\tat jp.ox.doorbell.VisitorUiInstrumentation.ui$lambda$47(VisitorUiInstrumentation.kt:301)\\n\\tat jp.ox.doorbell.VisitorUiInstrumentation.$r8$lambda$FUS-ZKfq8Yq3BI2EdLoI9_yoTdQ(Unknown Source:0)\\n\\tat jp.ox.doorbell.VisitorUiInstrumentation$$ExternalSyntheticLambda31.run(D8$$SyntheticClass:0)\\n\\tat android.app.Instrumentation$SyncRunnable.run(Instrumentation.java:2612)\\n\\tat android.os.Handler.handleCallback(Handler.java:959)\\n\\tat android.os.Handler.dispatchMessage(Handler.java:100)\\n\\tat android.os.Looper.loopOnce(Looper.java:232)\\n\\tat android.os.Looper.loop(Looper.java:317)\\n\\tat android.app.ActivityThread.main(ActivityThread.java:8705)\\n\\tat java.lang.reflect.Method.invoke(Native Method)\\n\\tat com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)\\n\\tat com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)\\n\"\n}\nINSTRUMENTATION_CODE: 0\n"
+    },
+    {
+      "arguments": [
+        "pull",
+        "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui/.",
+        "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-android/evidence/red-r7-portrait-1.0"
+      ],
+      "exit_code": 0,
+      "output": "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui/./: 9 files pulled, 0 skipped. 4.0 MB/s (340196 bytes in 0.082s)\n"
+    }
+  ],
+  "scope": "Production MainActivity/View layout and bindings; test recording CallFlowGateway and SOS callback; no physical devices or Core networking.",
+  "observed_result": {
+    "phase": "red",
+    "orientation": "portrait",
+    "font_scale": 1,
+    "source_id": "7a37629fa29dc07d3696c10f258c5cac7f9512a6df19930e1f07382506c59c8f",
+    "results": [
+      {
+        "id": "T35-01 purpose_first",
+        "status": "PASS"
+      },
+      {
+        "id": "T35-01 ring_then_purpose",
+        "status": "PASS"
+      },
+      {
+        "id": "T35-02 stable slot and gesture ownership",
+        "status": "PASS"
+      },
+      {
+        "id": "T35-03 neutral recovery and accessible SOS",
+        "status": "PASS"
+      },
+      {
+        "id": "T35-R1 stale SOS confirmation after cancel",
+        "status": "FAIL",
+        "error": "java.lang.IllegalStateException: A queued SOS confirmation survived cancel: triggers=1"
+      }
+    ],
+    "core_started": false,
+    "failure": "java.lang.IllegalStateException: A queued SOS confirmation survived cancel: triggers=1\n\tat jp.ox.doorbell.VisitorUiInstrumentation.onStart$lambda$35$lambda$33(VisitorUiInstrumentation.kt:185)\n\tat jp.ox.doorbell.VisitorUiInstrumentation.$r8$lambda$5fcxR0Pozx8Kz4ZaCt8NKEa2tMo(Unknown Source:0)\n\tat jp.ox.doorbell.VisitorUiInstrumentation$$ExternalSyntheticLambda11.invoke(D8$$SyntheticClass:0)\n\tat jp.ox.doorbell.VisitorUiInstrumentation.ui$lambda$47(VisitorUiInstrumentation.kt:301)\n\tat jp.ox.doorbell.VisitorUiInstrumentation.$r8$lambda$FUS-ZKfq8Yq3BI2EdLoI9_yoTdQ(Unknown Source:0)\n\tat jp.ox.doorbell.VisitorUiInstrumentation$$ExternalSyntheticLambda31.run(D8$$SyntheticClass:0)\n\tat android.app.Instrumentation$SyncRunnable.run(Instrumentation.java:2612)\n\tat android.os.Handler.handleCallback(Handler.java:959)\n\tat android.os.Handler.dispatchMessage(Handler.java:100)\n\tat android.os.Looper.loopOnce(Looper.java:232)\n\tat android.os.Looper.loop(Looper.java:317)\n\tat android.app.ActivityThread.main(ActivityThread.java:8705)\n\tat java.lang.reflect.Method.invoke(Native Method)\n\tat com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)\n\tat com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)\n"
+  },
+  "status": "PASS_EXPECTED_RED",
+  "expected_result": "FAIL with one stale zero-second SOS trigger after cancellation",
+  "product_apk_source": "Unmodified r6 APK; runner-only build has a different BuildConfig source ID because the new tests change sourceIdentity.",
+  "source_manifest": "source-red-r7.json"
+}

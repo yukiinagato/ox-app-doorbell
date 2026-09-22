@@ -1,0 +1,99 @@
+--- before/webui/panel/call.html
++++ after/webui/panel/call.html
+@@ -21,6 +21,8 @@
+                      border: 1px solid #2a333d; background: #1a2027; color: #e8edf2;
+                      cursor: pointer; }
+   #doorTabs button.sel { background: #274261; border-color: #4da3ff; }
++  #doorTabs button:focus { outline: 2px solid #8bc5ff; outline-offset: 3px; }
++  #doorTabs button:disabled { cursor: default; opacity: 0.65; }
+   #doorTabs button .st { font-size: 13px; color: #8a97a5; display: block; }
+   main { flex: 1; display: flex; flex-direction: column; align-items: center;
+          padding: 8px 16px 16px; min-height: 0; }
+@@ -49,8 +51,8 @@
+ <body>
+ <div id="offlineBand" data-semantic-id="status.offline"></div>
+ <div id="configBand" role="status"></div>
+-<header><h1 id="title" data-semantic-id="ring.title"></h1><span id="regState"></span></header>
+-<div id="doorTabs"></div>
++<header><h1 id="title" tabindex="-1" data-semantic-id="ring.title"></h1><span id="regState"></span></header>
++<div id="doorTabs" role="group" aria-labelledby="title"></div>
+ <main>
+   <div id="videoBox">
+     <img id="liveImg" alt="">
+@@ -177,6 +179,7 @@
+   audio: document.getElementById("remoteAudio"),
+ };
+ let doors = [];        // [{id,label,extension,station,online}]
++const doorTabNodes = new Map();
+ let selected = null;
+ let webrtc = null;     // {ws_url,sip_user,sip_pass,server}
+ let ua = null;         // JsSIP.UA
+@@ -338,20 +341,57 @@
+ 
+ 
+ function renderTabs() {
+-  els.tabs.innerHTML = "";
++  const previous = Array.from(els.tabs.children);
++  const focused = document.activeElement;
++  const focusIndex = previous.indexOf(focused);
++  const scrollLeft = els.tabs.scrollLeft, scrollTop = els.tabs.scrollTop;
++  const present = new Set();
+   for (const d of doors) {
+-    const b = document.createElement("button");
+-    b.textContent = d.label;
+-    const st = document.createElement("span");
+-    st.className = "st";
+-    st.textContent = (d.calling || d.call_state === "ringing" || d.call_state === "purpose_pending") ?
++    if (present.has(d.id)) continue;
++    present.add(d.id);
++    let entry = doorTabNodes.get(d.id);
++    if (!entry) {
++      const button = document.createElement("button");
++      button.type = "button";
++      const label = document.createElement("span"), status = document.createElement("span");
++      status.className = "st";
++      button.appendChild(label); button.appendChild(status);
++      entry = { button, label, status, door: d };
++      button.onclick = () => selectDoor(entry.door);
++      doorTabNodes.set(d.id, entry);
++    }
++    entry.door = d;
++    const status = (d.calling || d.call_state === "ringing" || d.call_state === "purpose_pending") ?
+       t("panel.visitor_calling") : (d.extension ?
+         t("panel.extension", { extension: d.extension }) : t("panel.no_extension"));
+-    b.appendChild(st);
+-    if (selected && selected.id === d.id) b.classList.add("sel");
+-    b.onclick = () => selectDoor(d);
+-    els.tabs.appendChild(b);
+-  }
++    if (entry.label.textContent !== d.label) entry.label.textContent = d.label;
++    if (entry.status.textContent !== status) entry.status.textContent = status;
++    const chosen = !!selected && selected.id === d.id;
++    const className = chosen ? "sel" : "";
++    if (entry.button.className !== className) entry.button.className = className;
++    const pressed = chosen ? "true" : "false";
++    if (entry.button.getAttribute("aria-pressed") !== pressed) entry.button.setAttribute("aria-pressed", pressed);
++    const disabled = !!session && !chosen;
++    if (entry.button.disabled !== disabled) entry.button.disabled = disabled;
++    const index = present.size - 1;
++    if (els.tabs.children[index] !== entry.button)
++      els.tabs.insertBefore(entry.button, els.tabs.children[index] || null);
++  }
++  doorTabNodes.forEach((entry, id) => {
++    if (present.has(id)) return;
++    els.tabs.removeChild(entry.button);
++    doorTabNodes.delete(id);
++  });
++  if (focusIndex >= 0) {
++    const available = button => button.parentNode === els.tabs && !button.disabled;
++    let target = available(focused) ? focused : previous.slice(focusIndex + 1).find(available);
++    if (!target) target = previous.slice(0, focusIndex).reverse().find(available);
++    if (!target) target = Array.from(els.tabs.children).find(available) || els.title;
++    if (document.activeElement !== target) {
++      try { target.focus({ preventScroll: true }); } catch (_) { target.focus(); }
++    }
++  }
++  els.tabs.scrollLeft = scrollLeft; els.tabs.scrollTop = scrollTop;
+ }
+ 
+ function playbackKey(d) {

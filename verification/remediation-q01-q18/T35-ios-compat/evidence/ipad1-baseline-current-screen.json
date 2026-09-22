@@ -1,0 +1,11 @@
+{
+  "host": "10.10.38.147",
+  "capture_utc": "2026-09-22T16:38:57Z",
+  "capture_hook_exit": 0,
+  "fetch_exit": 0,
+  "png_bytes": 721908,
+  "version": "0.3.23",
+  "build": "26",
+  "screen": "Current installed app; no navigation/action/installation was performed",
+  "limitations": "Current device screen may be monitor rather than visitor; no semantic accessibility tree endpoint was available."
+}

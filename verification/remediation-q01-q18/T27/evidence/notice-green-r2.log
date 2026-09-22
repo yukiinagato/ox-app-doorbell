@@ -1,0 +1,62 @@
+09-23 01:18:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30112
+09-23 01:18:29 I [httpd] listening on 21412,[::]:21412
+09-23 01:18:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:29 I [node] node 147c64e5 (doorbell) started
+09-23 01:18:31 I [httpd] stopped
+09-23 01:18:31 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27156
+09-23 01:18:31 I [httpd] listening on 29750,[::]:29750
+09-23 01:18:31 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:31 I [node] node 7e2c9503 (doorbell) started
+09-23 01:18:31 E [node] config persistence failed; retaining the last-known-good state
+09-23 01:18:33 I [httpd] stopped
+09-23 01:18:33 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:31353
+09-23 01:18:33 I [httpd] listening on 27196,[::]:27196
+09-23 01:18:33 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:33 I [node] node 7aa9809d (doorbell) started
+09-23 01:18:33 I [node] initialized the cluster administrator password
+09-23 01:18:35 I [httpd] stopped
+09-23 01:18:35 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24626
+09-23 01:18:35 I [httpd] listening on 21805,[::]:21805
+09-23 01:18:35 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:35 I [node] node e4d3746d (doorbell) started
+09-23 01:18:35 I [node] initialized the cluster administrator password
+09-23 01:18:37 I [httpd] stopped
+09-23 01:18:37 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 01:18:37 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:37 I [node] node 3dbe87ad (doorbell) started
+09-23 01:18:38 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27021
+09-23 01:18:38 I [httpd] listening on 31915,[::]:31915
+09-23 01:18:38 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:38 I [node] node 60a91374 (doorbell) started
+09-23 01:18:40 I [httpd] stopped
+09-23 01:18:40 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24197
+09-23 01:18:40 I [httpd] listening on 29320,[::]:29320
+09-23 01:18:40 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:40 I [node] node c33c449e (doorbell) started
+09-23 01:18:42 I [httpd] stopped
+09-23 01:18:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 01:18:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:42 I [node] node 7a464d5d (doorbell) started
+09-23 01:18:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22687
+09-23 01:18:42 I [httpd] listening on 20013,[::]:20013
+09-23 01:18:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:42 I [node] node 30bcc160 (doorbell) started
+09-23 01:18:44 I [httpd] stopped
+09-23 01:18:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26187
+09-23 01:18:44 I [httpd] listening on 31823,[::]:31823
+09-23 01:18:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:44 I [node] node db43c18e (doorbell) started
+09-23 01:18:44 I [node] initialized the cluster administrator password
+09-23 01:18:46 I [httpd] stopped
+09-23 01:18:46 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22610
+09-23 01:18:46 I [httpd] listening on 21103,[::]:21103
+09-23 01:18:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:18:46 I [node] node c6859e80 (doorbell) started
+09-23 01:18:46 I [node] initialized the cluster administrator password
+09-23 01:18:48 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:  11 |  11 passed | 0 failed | 466 skipped
+[doctest] assertions: 475 | 475 passed | 0 failed |
+[doctest] Status: SUCCESS!

@@ -1,0 +1,49 @@
+{
+  "task": "T07",
+  "status": "CONTRACT_FROZEN_BEFORE_IMPLEMENTATION",
+  "at": "2026-09-22T16:07:00.736087+00:00",
+  "authorization": "Parent approved optional default-off Ed25519 authenticated ACK with current and frozen source/target validation; no physical unlock success claim.",
+  "documents": [
+    {
+      "path": "docs/en/operation-ack-protocol.md",
+      "sha256": "7b0ba8daa99d3ea9698240dd6d73cc806a7a4655d3cff80c4abb155b58d566bb"
+    },
+    {
+      "path": "docs/ja/operation-ack-protocol.md",
+      "sha256": "4f2d36dda2d9a443a9c55cf54e5663091c3689b74afd1662f872963e5eb9379a"
+    },
+    {
+      "path": "docs/zh/operation-ack-protocol.md",
+      "sha256": "720ffe11428320536ba1f314333cf7876941c47725b38e35538d2d88e9118f48"
+    }
+  ],
+  "limits": {
+    "ack_bytes": 2048,
+    "feedback_watches": 2048,
+    "ack_timeout_ms": 4000,
+    "disconnect_updates_per_turn": 32
+  },
+  "implementation_state": "NOT_IMPLEMENTED_YET",
+  "actual_hardware_qualification": "NOT_RUN",
+  "amendments": [
+    {
+      "at": "2026-09-22T16:21:47.949793+00:00",
+      "reason": "Bundled Monocypher cofactored verification accepts low-order public keys; canonical encoding and all eight low-order points are now explicitly rejected. No new cryptographic primitive.",
+      "source": "https://github.com/jedisct1/libsodium/blob/1.0.18/src/libsodium/crypto_core/ed25519/ref10/ed25519_ref10.c#L966",
+      "documents": [
+        {
+          "path": "docs/en/operation-ack-protocol.md",
+          "sha256": "8fa605138fca7b1aac0888b228225c856223e409bf1395e7d74cf4f6f46be012"
+        },
+        {
+          "path": "docs/ja/operation-ack-protocol.md",
+          "sha256": "8407df8a1049779dc02e1c912fa3d0e4ca065e560b8d4156663863e1bcf91f74"
+        },
+        {
+          "path": "docs/zh/operation-ack-protocol.md",
+          "sha256": "7796c9b614d28237b30d46fc76f70193d49255d1b4f48e0efc0a04a5ea51643f"
+        }
+      ]
+    }
+  ]
+}

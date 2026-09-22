@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "e88698c62a946cf284a3413510c2a75d9cc71297c2fd3aae2a4309b8d8d161dd",
+  "task_id": "T29",
+  "test_id": "baseline-red-r2",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/source-red-r2.json",
+  "source_manifest_sha256": "25b60e0c0e35acc4143798f4d2183f6ccd38153218501b8b26b80431bf3048bc",
+  "command": [
+    "build/remediation-t29-20260923/red-r2-build/doorbell_tests",
+    "--test-case=config import:*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T17:55:32.470625+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/evidence/baseline-red-r2.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T17:55:35.406283+00:00",
+  "expected_exit_code": 1,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

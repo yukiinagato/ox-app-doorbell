@@ -1,0 +1,93 @@
+{
+  "task_id": "T21",
+  "recorded_at": "2026-09-22T14:58:11.437276+00:00",
+  "source_manifest": "source-final.json",
+  "source_manifest_sha256": "e210967fe0c6edc2abe792c5368fd8dd74ff62507901919e8239b1b7d0c68e98",
+  "implementation_status": "IMPLEMENTED_AND_TESTED",
+  "independent_review": "Pending root review; no plan progress modified by this subagent.",
+  "acceptance": [
+    {
+      "id": "T21-01",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "scope": "native_source + iOS Simulator XCTest",
+      "tests": [
+        "CallTimingSnapshotTests.testWallClockPlusOrMinusFiveMinutesDoesNotChangeCallDuration",
+        "CallTimingSnapshotTests.testCachedSnapshotAgeAndReadLatencyAreSubtracted",
+        "CallTimingSnapshotTests.testRepeatedSampleCannotRestartEitherDeadlineEvenWithYoungerReportedAge",
+        "CallTimingSnapshotTests.testUnknownDurationAndExpiredRecoveryDoNotRestoreTheCall"
+      ],
+      "evidence": "evidence/xcode-targeted-r5.json",
+      "assertion": "Controlled corrected-wall snapshot fields shifted \u00b1300000 ms do not change monotonic remaining duration. Cache age and elapsed duration reach zero without calling cancel or inferring failure. Core authority and actual clock correction are separately tested by T19.",
+      "limitation": "No operating-system wall clock or physical test device was modified.",
+      "evidence_sha256": "c9c012cedbfa4d7411938512f2da5778f49451ab9ecbd062236a1d6931c41db4",
+      "log_sha256": "9df24334e291c5baff2fe89d8b9b13ee4f662953d9f2744d4e2c2e69ea7d8fcf"
+    },
+    {
+      "id": "T21-02",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "scope": "native_source + actual MainViewController/real Core status XCTest",
+      "tests": [
+        "CoreBridgeLifecycleTests.testForegroundRefreshRetiresVisibleCallMissingFromRealCoreSnapshot",
+        "CallTimingSnapshotTests.testForegroundRetakesAgeInsteadOfPersistingASuspendedMonotonicAnchor",
+        "CallTimingSnapshotTests.testCompleteEmptySnapshotRetiresCallAndMismatchedGenerationDoesNot",
+        "CallTimingSnapshotTests.testForegroundWithoutPreviousReadUsesFirstSnapshotOnlyAsBaseline",
+        "CallTimingSnapshotTests.testNewCoreGenerationReleasesForegroundBarrierWithoutWallClockFallback"
+      ],
+      "evidence": "evidence/xcode-targeted-r5.json",
+      "assertion": "Actual MainViewController foreground test freezes a real Core cache including unchanged generation and age: repeated reads keep the stale view in Checking. Only a later real Core generation clears the absent call. With no previous sample, the first read is only a baseline; a second distinct generation or restarted Core is required.",
+      "limitation": "The app foreground transition entry is invoked in XCTest; device suspension/UI qualification remains a separate gate.",
+      "evidence_sha256": "c9c012cedbfa4d7411938512f2da5778f49451ab9ecbd062236a1d6931c41db4",
+      "log_sha256": "9df24334e291c5baff2fe89d8b9b13ee4f662953d9f2744d4e2c2e69ea7d8fcf"
+    },
+    {
+      "id": "T21-03",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "scope": "native_source + actual MainViewController/real Core lifecycle XCTest",
+      "tests": [
+        "CoreBridgeLifecycleTests.testQueuedCallTimerCannotMutateRestartedCoreOrNewCall",
+        "CoreBridgeLifecycleTests.testTimingSnapshotHoldsLeaseAndDropsResultWhenCoreStops"
+      ],
+      "evidence": "evidence/xcode-targeted-r5.json",
+      "assertion": "An actual production timer callback captured before stop cannot mutate a restarted Core even with unchanged call ID; replacement call and invalidated revision also stay unchanged. Snapshot acquisition keeps the real C lease and drops the result after stop.",
+      "evidence_sha256": "c9c012cedbfa4d7411938512f2da5778f49451ab9ecbd062236a1d6931c41db4",
+      "log_sha256": "9df24334e291c5baff2fe89d8b9b13ee4f662953d9f2744d4e2c2e69ea7d8fcf"
+    },
+    {
+      "id": "T21-04",
+      "status": "PASS_IN_BUILD_SCOPE",
+      "scope": "actual iOS9 arm64 unsigned Release build and artifact verification",
+      "tests": [
+        "ios/scripts/build_ios9_arm64.sh"
+      ],
+      "evidence": "evidence/ios9-arm64-r5.json",
+      "assertion": "Shared Swift compiles to arm64, minimum iOS9.0, ABI v2, real PJSIP; repository release artifact gate passes.",
+      "limitation": "Current Xcode warns iOS9 deployment target is outside its supported target range. This is an unsigned compile/artifact gate, not historical-device runtime qualification.",
+      "evidence_sha256": "fb6e507242f4793f823fc8fcc97bafc8089d71bdaf22af497cdeae1bac7c6760",
+      "log_sha256": "05c85c19c4106874a63d2be9ca444b9ae99c7f23bd2c9c350d800bd59258d30a"
+    }
+  ],
+  "regressions": {
+    "command": "evidence/xcode-full-r4.json",
+    "passed": 157,
+    "failed": 0,
+    "new_tests": 14
+  },
+  "shared_tvos_build": {
+    "command": "evidence/tvos-build-r5.json",
+    "exit_code": 0,
+    "sip_backend": "real_pjsip",
+    "scope": "build only"
+  },
+  "host_regression": {
+    "command": "evidence/compat-host-r2.json",
+    "exit_code": 0,
+    "sha256": "87a95b785ca09e00463248a14ad2f8235bedb321f9a8196516fed0215d1bc8b5",
+    "log_sha256": "610b6aef46a0434752bd4ed8bdbd4b209deeff681273c1f9de001cfebd582776"
+  },
+  "final_targeted_regression": {
+    "command": "evidence/xcode-targeted-r5.json",
+    "passed": 28,
+    "failed": 0,
+    "new_test": "CallTimingSnapshotTests.testForeignRecoveryCandidatesCannotReplaceTheOwnedCallAnchor"
+  }
+}

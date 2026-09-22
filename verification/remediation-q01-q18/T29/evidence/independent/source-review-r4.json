@@ -1,0 +1,74 @@
+{
+  "recorded_at": "2026-09-22T18:27:41.452729+00:00",
+  "source_manifest_sha256": "4a4db9bdd50789476fadb64fc25b07438cd0f707bfa8f45d67efc43a55c1e9e0",
+  "frozen_source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source",
+  "all_manifest_files_checked": 12633,
+  "mismatches": [],
+  "reviewed_inputs": [
+    {
+      "path": "core/src/node/config_import.cpp",
+      "sha256": "6a82035fed4c3c7d16da71926892729cc2c989a90b4c94f4c24a92b4e06dd3b0",
+      "canonical_matches": true
+    },
+    {
+      "path": "core/src/node/config_import.h",
+      "sha256": "77c968bedb1e8065b4ad4e341a9837e434a0eb163c7bb677bc3d1e4b494e07cc",
+      "canonical_matches": true
+    },
+    {
+      "path": "core/src/node/config_import_service.inc",
+      "sha256": "89bf1a4bb3f9378122ca6819eeb80afcc441b419eb68cfd483fb4dfa89d2f4be",
+      "canonical_matches": true
+    },
+    {
+      "path": "core/src/node/node.cpp",
+      "sha256": "5dad1e482a63b47a146dbcfd760ac3353d133c0b053786a3ce146217d76a45e4",
+      "canonical_matches": true
+    },
+    {
+      "path": "core/src/node/node.h",
+      "sha256": "4a8ba89b0c8e73f9fb254069c6669e05a78cf9ac7cb4e84a782127d8c143b752",
+      "canonical_matches": true
+    },
+    {
+      "path": "core/src/store/store.cpp",
+      "sha256": "f8b2ccaa13e109c26c4611e6aaff4e122cce934ceaf510e0d5041be39eeb76ea",
+      "canonical_matches": true
+    },
+    {
+      "path": "core/src/capi/doorbell_capi.cpp",
+      "sha256": "e19b1f6384675f8227de411d76202c649b993ea2154ff73980bcd60661d25c98",
+      "canonical_matches": true
+    },
+    {
+      "path": "core/include/doorbell/doorbell.h",
+      "sha256": "3cc5ffdfcc6aad8427f69aa8b484d940c88923c17610649a0b21a2bd81d16f48",
+      "canonical_matches": true
+    },
+    {
+      "path": "core/tests/test_config_import.cpp",
+      "sha256": "09d2c7c23c592bfb1a1db4d3d937e0e0c9872db44f4744972928c13f9d25918d",
+      "canonical_matches": true
+    },
+    {
+      "path": "core/tests/test_config_import_review.cpp",
+      "sha256": "0b3e465f9dc5529febab7c0df91e7dc04cd344eae5adbe13f6d6c891b8f35a9f",
+      "canonical_matches": true
+    },
+    {
+      "path": "docs/en/config-import.md",
+      "sha256": "6034fddeb41b9e2fac316f2f6698c6cf740c7bc96beaa765c06811a5c6f6d25d",
+      "canonical_matches": true
+    },
+    {
+      "path": "docs/zh/config-import.md",
+      "sha256": "247ce2ad91cb0327690c18085aeecd81e454efb94161253557eced54e6b35fc5",
+      "canonical_matches": true
+    },
+    {
+      "path": "docs/ja/config-import.md",
+      "sha256": "aa3736e70d6012ac308b3697f26a9a98d9252c6906c54d291b9cfade7ed5b8e4",
+      "canonical_matches": true
+    }
+  ]
+}

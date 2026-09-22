@@ -1,0 +1,297 @@
+{
+  "capabilities" : {
+    "runtime" : {
+
+    },
+    "web_ui" : {
+      "device_id" : "b196d91c9c49561011fbe0b1cfa2a5c7",
+      "manifest" : {
+        "elements" : {
+          "reply.button" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#E8EDF2",
+              "background" : "#1A2027",
+              "scale" : 1
+            }
+          },
+          "monitor.close" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#FFFFFF",
+              "background" : "#274261",
+              "scale" : 1
+            }
+          },
+          "purpose.button" : {
+            "defaults" : {
+              "scale" : 1
+            },
+            "properties" : [
+              "scale"
+            ],
+            "safety_critical" : false
+          },
+          "call.primary" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#E8EDF2",
+              "background" : "#1A2027",
+              "scale" : 1
+            }
+          },
+          "cancel.call" : {
+            "safety_critical" : true,
+            "properties" : [
+              "scale"
+            ],
+            "defaults" : {
+              "scale" : 1
+            }
+          },
+          "ring.action" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#E8EDF2",
+              "background" : "#1A2027",
+              "scale" : 1
+            }
+          },
+          "call.end" : {
+            "safety_critical" : true,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#FFFFFF",
+              "border" : "#FFFFFF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#FFFFFF",
+              "background" : "#8D2932",
+              "scale" : 1
+            }
+          },
+          "ring.title" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#E8EDF2",
+              "background" : "#1A2027",
+              "scale" : 1
+            }
+          },
+          "status.offline" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#FFFFFF",
+              "border" : "#FFFFFF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#FFFFFF",
+              "background" : "#8D2932",
+              "scale" : 1
+            }
+          },
+          "sos.trigger" : {
+            "safety_critical" : true,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#FFD166",
+              "border" : "#FFFFFF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#FFFFFF",
+              "background" : "#8F1010",
+              "scale" : 1
+            }
+          }
+        },
+        "units" : "effective_px",
+        "viewport" : {
+          "scale_max" : 2,
+          "scale_min" : 0.75,
+          "minimum_touch" : 44
+        },
+        "schema_version" : 1
+      }
+    },
+    "features" : {
+      "operations_v1" : true,
+      "runtime_recovery_v1" : false,
+      "helper_policy_v1" : false,
+      "emergency_rules_v1" : true,
+      "call_cancel_v2" : true,
+      "call_lifecycle_v2" : true,
+      "ui_manifest_v1" : true,
+      "sip_dtmf_v1" : true,
+      "config_batch_v1" : true,
+      "media_sources_v1" : true,
+      "call_flow_v2" : true,
+      "device_alert_v1" : false,
+      "config_cas_v1" : true,
+      "web_push_subscriptions_v1" : true,
+      "platform_v2" : true
+    },
+    "caps" : {
+      "mqtt_reachability_source" : "unmeasured",
+      "features" : {
+        "operations_v1" : true,
+        "runtime_recovery_v1" : false,
+        "helper_policy_v1" : false,
+        "emergency_rules_v1" : true,
+        "call_cancel_v2" : true,
+        "call_lifecycle_v2" : true,
+        "ui_manifest_v1" : true,
+        "sip_dtmf_v1" : true,
+        "config_batch_v1" : true,
+        "media_sources_v1" : true,
+        "call_flow_v2" : true,
+        "device_alert_v1" : false,
+        "config_cas_v1" : true,
+        "web_push_subscriptions_v1" : true,
+        "platform_v2" : true
+      },
+      "mqtt_ready" : false,
+      "telegram_ready" : false,
+      "telegram_reachable" : false,
+      "mains_power" : true,
+      "tls12" : false,
+      "web_push_ready" : false
+    },
+    "schema_version" : 2,
+    "ui_manifest" : {
+      "elements" : {
+        "purpose.button" : {
+          "safety_critical" : false,
+          "properties" : [
+            "scale"
+          ],
+          "defaults" : {
+            "scale" : 1
+          }
+        },
+        "cancel.call" : {
+          "defaults" : {
+            "scale" : 1
+          },
+          "properties" : [
+            "scale"
+          ],
+          "safety_critical" : true
+        }
+      },
+      "units" : "pt",
+      "viewport" : {
+        "scale_min" : 0.75,
+        "scale_max" : 2,
+        "minimum_touch" : 44
+      },
+      "schema_version" : 1
+    }
+  },
+  "calls" : [
+    {
+      "server_now_ms" : 1790103186446,
+      "origin" : "b196d91c9c49561011fbe0b1cfa2a5c7",
+      "call_id" : "fe9fd205e6b6eeb9ebdfea5081ae0f98",
+      "expires_at_ms" : 1790103246428,
+      "door" : "front",
+      "remaining_ms" : 59982,
+      "call_flow" : "ring_then_purpose",
+      "snapshot_generation" : "692b9997d28fbfb87f94f1aba685e259:34",
+      "recovery_eligible" : false,
+      "recovery_required" : false,
+      "stage_revision" : 0,
+      "state" : "ringing",
+      "recovery_remaining_ms" : 0
+    }
+  ]
+}

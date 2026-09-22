@@ -1,0 +1,20 @@
+09-23 00:35:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28545
+09-23 00:35:29 I [node] created the missing door entry doors.front for this door station
+09-23 00:35:29 I [httpd] listening on 28474,[::]:28474
+09-23 00:35:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:35:29 I [node] node 12e970d5 (doorbell) started
+09-23 00:35:31 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/core/tests/test_media_publish.cpp:103:
+TEST CASE:  media publishing binds session call owner generation and ordered frame
+  T15-01 delayed A frame cannot appear in B
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/core/tests/test_media_publish.cpp:145: FATAL ERROR: REQUIRE( node.cancelCallV2("front", call_a) ) is NOT correct!
+  values: REQUIRE( false )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 451 skipped
+[doctest] assertions: 33 | 32 passed | 1 failed |
+[doctest] Status: FAILURE!

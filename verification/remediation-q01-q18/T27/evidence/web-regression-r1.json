@@ -1,0 +1,152 @@
+{
+  "recorded_at": "2026-09-22T16:29:17.853953+00:00",
+  "results": [
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_config_merge.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_logic.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_runtime.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_flow.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_heartbeat.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_media_authority.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_poll_lanes.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_recovery_controller.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_state_controller.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_tabs.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_ua_generation.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/pairing.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/panel_i18n.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/playback.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/request_deadline.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/runtime.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/service_worker.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/settings.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/theme_notice.test.js"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/video_session.test.js"
+      ],
+      "exit_code": 0
+    }
+  ]
+}

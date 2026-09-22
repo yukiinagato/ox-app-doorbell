@@ -21,6 +21,7 @@
 		AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */; };
 		AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000017 /* SosVisibilityTests.swift */; };
 		AC000000000000000000001A /* ClusterAndClockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000019 /* ClusterAndClockTests.swift */; };
+		AC000000000000000000001C /* CoreBridgeLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC000000000000000000001B /* CoreBridgeLifecycleTests.swift */; };
 		FB0000000000000000000021 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
 		FB00000000000000000000C0 /* CoreEventDispatchGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000C0 /* CoreEventDispatchGate.swift */; };
 		FB00000000000000000000C2 /* ConfigBatchFallbackPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000C1 /* ConfigBatchFallbackPolicy.swift */; };
@@ -188,6 +189,7 @@
 		AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorRetryPolicyTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000017 /* SosVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SosVisibilityTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000019 /* ClusterAndClockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterAndClockTests.swift; sourceTree = "<group>"; };
+		AC000000000000000000001B /* CoreBridgeLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridgeLifecycleTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000001 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
 		FA0000000000000000000002 /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
 		FA00000000000000000000C0 /* CoreEventDispatchGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreEventDispatchGate.swift; sourceTree = "<group>"; };
@@ -370,6 +372,7 @@
 				AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */,
 				AC0000000000000000000017 /* SosVisibilityTests.swift */,
 				AC0000000000000000000019 /* ClusterAndClockTests.swift */,
+				AC000000000000000000001B /* CoreBridgeLifecycleTests.swift */,
 			);
 			path = DoorbellTests;
 			sourceTree = "<group>";
@@ -659,6 +662,7 @@
 				AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */,
 				AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */,
 				AC000000000000000000001A /* ClusterAndClockTests.swift in Sources */,
+				AC000000000000000000001C /* CoreBridgeLifecycleTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

@@ -1,0 +1,10 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "52856c6c579bff29b00c2c58e05f91a75c6be756a15d6e697677edee4c6d53c6",
+  "files": {
+    "core/src/node/node.cpp": "01e7a2075f7428bed8e34bb31bf443b0c475df7f6cf108833a9e1cad6c7251ee",
+    "core/tests/test_visitor.cpp": "0fda0b1d84777769ea401d52f935d65e52f41b2c6db157b5f533ee559471a584",
+    "core/include/doorbell/doorbell.h": "c531840d57afcf0023f00679f27c2e61e0c4207d7b0449fa0fc7927b2ff843bf"
+  }
+}

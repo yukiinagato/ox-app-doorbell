@@ -1,0 +1,15 @@
+AssertionError [ERR_ASSERTION]: new lease comes from its own server snapshot
++ actual - expected
+
++ undefined
+- 6000
+
+    at T11-04 (/Users/ox/Documents/project/app-doorbell/webui/tests/call_heartbeat.test.js:78:12)
+    at async /Users/ox/Documents/project/app-doorbell/webui/tests/call_heartbeat.test.js:89:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: undefined,
+  expected: 6000,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

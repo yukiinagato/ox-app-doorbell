@@ -1,0 +1,14 @@
+{
+  "recorded_at": "2026-09-22T14:48:31.891151+00:00",
+  "sources": {
+    "webui/panel/call.html": "01f1bfb5d9d547e74b87c25f9de2228035cf06911a0adf4da0cde60d49e9ae40",
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/tests/call_page_fixture.js": "49a22bc62318559a4837b6193240730c36b320de2674cfdbba5b49cc8fc93489",
+    "webui/tests/call_tabs.test.js": "e065dd851d07627d975b2c525bd6af2a5e9acbea7fdd8ab0e86200e978ec09d1",
+    "webui/tests/call_tabs_cases.js": "174f126d881f4ce0a1576a97170d1339e6ab7c1fc4f7eba83fe64e4d8bde5068",
+    "webui/tests/call_tabs_browser_fixture.js": "ac36f3827e41eedf1943dec37b44b813dec26250df60a02e1efd281bfc5b67bc"
+  },
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "86f3e236d21d3599a0837a95287d29c58886ce41d23a09f2a09f68bf369e1493"
+}

@@ -1,0 +1,29 @@
+{
+  "phase": "red",
+  "source_sha256": "0424a27b3c52335fcbe7b1c293f28c5ea9b2d65be11fbb1805c0bef30a1605c6",
+  "case_sha256": "fe5d4bd396a73a6274a1621510e1936d2985c7cb6b0763541923d3adc0b08dd0",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T14:44:41.693Z",
+  "results": [
+    {
+      "id": "T13-01",
+      "status": "FAIL",
+      "message": "Unchanged polls lost keyboard focus"
+    },
+    {
+      "id": "T13-02",
+      "status": "FAIL",
+      "message": "Reorder recreated door nodes"
+    },
+    {
+      "id": "T13-03",
+      "status": "FAIL",
+      "message": "Removed B must focus its next available neighbor C"
+    },
+    {
+      "id": "T13-04",
+      "status": "FAIL",
+      "message": "Repeated add/remove replaced retained button"
+    }
+  ]
+}

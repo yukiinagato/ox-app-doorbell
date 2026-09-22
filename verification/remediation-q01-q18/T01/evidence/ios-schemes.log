@@ -1,0 +1,20 @@
+{
+  "project" : {
+    "configurations" : [
+      "Debug",
+      "Release"
+    ],
+    "name" : "Doorbell",
+    "schemes" : [
+      "Doorbell",
+      "DoorbellIOS9",
+      "DoorbellTV"
+    ],
+    "targets" : [
+      "Doorbell",
+      "DoorbellTV",
+      "DoorbellIOS9",
+      "DoorbellTests"
+    ]
+  }
+}

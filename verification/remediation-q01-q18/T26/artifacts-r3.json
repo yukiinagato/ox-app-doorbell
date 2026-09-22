@@ -1,0 +1,9 @@
+{
+  "binary": "/Users/ox/Documents/project/app-doorbell/build/remediation-t26-20260923/green-build-r3/doorbell_tests",
+  "sha256": "2a0699e6413822ab21cb865789cd9dccad1f920f4c5bf6bc6beaea2b48d76520",
+  "toolchain": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+  "target": "Darwin arm64 host",
+  "source_manifest": "source-green-r3.json",
+  "source_manifest_sha256": "01dece412c0ee39582cee041071ec58068b18c3580ff1e4ee0583133a042d1f3",
+  "qualification": "host only, SIP stub, unsigned"
+}

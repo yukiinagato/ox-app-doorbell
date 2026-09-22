@@ -1,9 +1,4 @@
-// Responsive door-station visitor layout (spec §4.2, §5.1).
-//
-// Portrait stacks clock → announcement → language row (in the middle) → call button → hint →
-// footer. Landscape splits into two columns and, when an announcement exists, the language row
-// sits directly above the call button on the right while the announcement occupies the left.
-// The arrangement is computed from the window size at runtime, never fixed to one orientation.
+// Responsive secondary content; the primary action stays in the Activity's separate dock.
 package jp.ox.doorbell
 
 import android.view.View
@@ -117,7 +112,6 @@ internal object VisitorLayout {
         header: View,
         noticeCard: View,
         langBar: View,
-        callSection: View,
         hasNotice: Boolean,
         widthDp: Int,
         heightDp: Int,
@@ -126,7 +120,6 @@ internal object VisitorLayout {
         detach(header)
         detach(noticeCard)
         detach(langBar)
-        detach(callSection)
         columnA.removeAllViews()
         columnB.removeAllViews()
 
@@ -138,7 +131,6 @@ internal object VisitorLayout {
             columnA.addView(header, wrap())
             columnA.addView(noticeCard, wrap())
             columnA.addView(langBar, wrapCentered())
-            columnA.addView(callSection, wrap())
             return
         }
 
@@ -149,10 +141,7 @@ internal object VisitorLayout {
         weight(columnB, 1f, vertical = false)
         columnA.addView(header, wrap())
         if (hasNotice) columnA.addView(noticeCard, wrap())
-        // The language buttons sit directly above the call button so a visitor changes language
-        // and calls without moving across the screen.
         columnB.addView(langBar, wrapCentered())
-        columnB.addView(callSection, wrap())
         if (!hasNotice) noticeCard.visibility = View.GONE
     }
 
@@ -167,10 +156,10 @@ internal object VisitorLayout {
             )
         if (vertical) {
             params.width = ViewGroup.LayoutParams.MATCH_PARENT
-            params.height = 0
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT
         } else {
             params.width = 0
-            params.height = ViewGroup.LayoutParams.MATCH_PARENT
+            params.height = ViewGroup.LayoutParams.WRAP_CONTENT
         }
         params.weight = value
         column.layoutParams = params

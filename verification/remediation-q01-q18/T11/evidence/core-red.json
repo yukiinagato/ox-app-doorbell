@@ -1,0 +1,14 @@
+{
+  "command": [
+    "build/remediation-t11-20260922/host/doorbell_tests",
+    "--test-case=panel dialog lease retries a failed durable recovery cancellation"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "start": "2026-09-22T14:31:37.030574+00:00",
+  "end": "2026-09-22T14:31:39.536604+00:00",
+  "exit_code": 1,
+  "binary_sha256": "07703c1feeea369fbc6f56f64da8f513b3d881e8424c50d5153cb746e6ae5acc",
+  "node_snapshot_sha256": "b92748ee20da97928d9e1363e8501c3fb65646997ef4c0367a9be7cd0c308313",
+  "test_source_sha256": "a7a1bbb087c6a38303b3b1664a4ea6ab9b69cd6242f8dfa8d26d48ede2084abe",
+  "note": "Before T11 Node edits. Root concurrently owns separate credential/auth sections; T11 lease sections match incoming source."
+}

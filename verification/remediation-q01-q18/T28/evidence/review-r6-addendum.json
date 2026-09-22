@@ -1,0 +1,17 @@
+{
+  "reviewer": "t02_translation",
+  "status": "PASS_IN_REVIEWED_CORE_SCOPE",
+  "at": "2026-09-22T17:35:01.712397+00:00",
+  "source_manifest_sha256": "80e4a932021f714dc94b4306d0bed8430823c5f151d6535df7e9c46506a5a7ef",
+  "files": {
+    "core/src/node/node.cpp": "609ebd9649507df81498da94b8c0cfe2f2c80e2095dae1b35ef56d30af0b6a31",
+    "core/tests/test_call_log.cpp": "09fce0107a431b83dfc18bc9ff96f41ad93916db96af6669b9cc66b4256e1ef0",
+    "core/src/node/config_edit_journal.cpp": "d8ff4f7de762a9c7ff946ed5c6d15af03890d1d29552f73711b605c290c9e120",
+    "core/src/crdt/lww_map.cpp": "62f9fdc0a34f357a0ca6444ef82f31077edf43b47c6bdcfcbd151b71714b38a9"
+  },
+  "changes_reviewed": [
+    "deleteConfigKeyJsonOnLoop preserves existing success response exactly while forwarding the actual journal transaction status and error body.",
+    "Two call-log migration assertions move from schema 7 to already-implemented schema 8; row reconstruction assertions remain unchanged."
+  ],
+  "validation": "Read-only diff from reviewed r5; no repeated test execution. Root full r6 regression pending."
+}

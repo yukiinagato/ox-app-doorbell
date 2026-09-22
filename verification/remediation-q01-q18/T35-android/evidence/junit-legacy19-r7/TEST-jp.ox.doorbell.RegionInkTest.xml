@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.RegionInkTest" tests="29" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.003">
+  <properties/>
+  <testcase name="aPictureArrivingAfterTheFirstLayoutFlipsTheInk" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="theGapAlwaysComesFromTheDocumentedScale" classname="jp.ox.doorbell.RegionInkTest" time="0.001"/>
+  <testcase name="anEvenRegionKeepsNoShadow" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="summarisingKeepsBothTheAverageAndTheExtremes" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="twoRegionsOnOneImageCanDisagree" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="aPictureConfiguredButNotYetPaintedUsesWhatIsActuallyOnScreen" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="overrideWinsOverEveryOtherRow" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="breathingRoomIsAddedOnlyOutOfRealSlack" classname="jp.ox.doorbell.RegionInkTest" time="0.001"/>
+  <testcase name="aTileFitsWholeInTheSpaceAboveTheFooter" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="oneGroupNeedsNoGapAndSlackIsNeverFullySpent" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="aPictureCoreAveragedIsStillDecidedLocallyWhereTheShellCanMeasure" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="theCaptionRowIsNeverWhatGivesUpHeight" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="theShadowIsTheOppositeInkAtFortyPercent" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="onlyAWideLandscapeWindowPutsTheSliderBesideTheVersionLine" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="theWorstPatchIsMeasuredAgainstWhicheverSideTheInkSitsOn" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="aPortraitWindowNeverPutsTheClockBesideTheHeaderButtons" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="onlyAWideLandscapeWindowKeepsTheSingleRowHeader" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="aSurfaceTheShellPaintedIgnoresCoresThemeMeasurement" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="theSampledAreaIsAveragedAtSixteenBySixteen" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="theShadowIsAddedOnlyWhenEvenTheBetterInkMissesTheTextRatio" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="aRegionCrossingLightAndDarkGetsTheShadowEvenThoughItsAverageIsFine" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="aPictureOnScreenIsDecidedByTheLocalSample" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="everyVisitorRegionFlipsTogetherWhenThePictureLands" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="anOverrideThatIsHardToReadStillGetsTheShadowRatherThanBeingReplaced" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="thePreviewNeverShrinksBelowItsFloorOrPastItsCeiling" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="aMostlyLightRegionResolvesToDarkInkAndTheReverse" classname="jp.ox.doorbell.RegionInkTest" time="0.001"/>
+  <testcase name="aPictureCoreDeclinedToSampleIsNeverTrusted" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="aFlatColourLeavesCoresAnswerStanding" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <testcase name="aPortraitPhoneStacksTheVersionLineAboveTheSlider" classname="jp.ox.doorbell.RegionInkTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

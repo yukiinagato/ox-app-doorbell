@@ -1,0 +1,15 @@
+admin logic tests: ok
+admin runtime tests: ok
+call flow tests: ok
+call recovery controller tests: ok
+pairing tests: ok
+pairing uri tests: ok
+panel i18n tests: ok
+playback policy tests: ok
+panel runtime tests: ok
+service worker tests: ok
+settings tests: ok
+call return tests: ok
+theme and notice tests: ok
+video session tests: ok
+Web suites: 12

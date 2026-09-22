@@ -1,0 +1,119 @@
+09-23 00:53:44 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:20254
+09-23 00:53:44 I [httpd] listening on 27195,[::]:27195
+09-23 00:53:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:44 I [node] node 88a71cc8 (doorbell) started
+09-23 00:53:44 I [node] initialized the cluster administrator password
+09-23 00:53:46 I [httpd] stopped
+09-23 00:53:46 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=session-a:1
+09-23 00:53:46 I [httpd] listening on 29435,[::]:29435
+09-23 00:53:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:46 I [node] node c37c5beb (session-a) started
+09-23 00:53:46 I [node] initialized the cluster administrator password
+09-23 00:53:46 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=session-b:1
+09-23 00:53:46 I [httpd] listening on 31858,[::]:31858
+09-23 00:53:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:46 I [node] node f3e4bd15 (session-b) started
+09-23 00:53:48 I [httpd] stopped
+09-23 00:53:50 I [httpd] stopped
+09-23 00:53:50 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:29156
+09-23 00:53:50 I [httpd] listening on 21984,[::]:21984
+09-23 00:53:50 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:50 I [node] node 5acf2fb2 (doorbell) started
+09-23 00:53:50 I [node] initialized the cluster administrator password
+09-23 00:53:50 E [node] config persistence failed; retaining the last-known-good state
+09-23 00:53:50 W [node] administrator password update was not committed
+09-23 00:53:50 W [node] administrator password update was not committed
+09-23 00:53:52 I [httpd] stopped
+09-23 00:53:52 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:52 I [store] pruned 3 replicated events
+09-23 00:53:52 I [store] pruned 2 replicated events
+09-23 00:53:52 I [store] pruned 3 replicated events
+09-23 00:53:52 I [store] pruned 2 replicated events
+09-23 00:53:52 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 00:53:52 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:52 I [node] node 967dddd9 (power-capi) started
+09-23 00:53:52 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 00:53:52 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:52 I [node] node a8c837cd (capi-reply) started
+09-23 00:53:52 W [node] quick reply rejected because the call identity is stale on door d_front
+09-23 00:53:52 W [node] quick reply rejected because the call identity is stale on door d_front
+09-23 00:53:52 W [node] quick reply rejected because the call is no longer active
+09-23 00:53:52 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 00:53:52 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:52 I [node] node 9b2a6c6b (capi-lifecycle) started
+09-23 00:53:53 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 00:53:53 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:53 I [node] node 92331cd3 (device-info-test) started
+09-23 00:53:53 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 00:53:53 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:53 I [node] node 04627bf4 (config-abi) started
+09-23 00:53:53 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 00:53:53 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:53 I [node] node bd152746 (admin-pw) started
+09-23 00:53:53 W [node] administrator password locked out for ten minutes after repeated failures
+09-23 00:53:53 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 00:53:53 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:53:53 I [node] node f1eb7d5f (round7) started
+09-23 00:53:53 I [httpd] listening on 24108
+09-23 00:53:58 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 00:53:59 I [httpd] stopped
+09-23 00:53:59 I [httpd] listening on 31973
+09-23 00:54:04 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 00:54:05 I [httpd] stopped
+09-23 00:54:05 I [httpd] listening on 22277
+09-23 00:54:10 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 00:54:11 I [httpd] stopped
+09-23 00:54:11 I [httpd] listening on 31219
+09-23 00:54:16 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 00:54:17 I [httpd] stopped
+09-23 00:54:17 I [httpd] listening on 20012
+09-23 00:54:22 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 00:54:23 I [httpd] stopped
+09-23 00:54:23 I [httpd] listening on 25443
+09-23 00:54:28 W [httpd] handler timed out after 5000ms: /api/test-write
+09-23 00:54:29 I [httpd] stopped
+09-23 00:54:29 I [httpd] listening on 29096
+09-23 00:54:35 I [httpd] stopped
+09-23 00:54:35 I [httpd] listening on 25969
+09-23 00:54:37 I [httpd] stopped
+09-23 00:54:37 I [httpd] listening on 27899
+09-23 00:54:39 I [httpd] stopped
+09-23 00:54:39 I [httpd] listening on 25274
+09-23 00:54:41 I [httpd] stopped
+09-23 00:54:41 I [httpd] listening on 21811,[::]:21811
+09-23 00:54:43 I [httpd] stopped
+09-23 00:54:43 I [httpd] listening on 21229,[::]:21229
+09-23 00:54:45 I [httpd] stopped
+09-23 00:54:45 I [httpd] listening on 21721,[::]:21721
+09-23 00:54:47 I [httpd] stopped
+09-23 00:54:47 I [httpd] listening on 22999,[::]:22999
+09-23 00:54:49 I [httpd] stopped
+09-23 00:54:49 I [httpd] listening on 28662,[::]:28662
+09-23 00:54:51 I [httpd] stopped
+09-23 00:54:51 I [httpd] listening on 27742,[::]:27742
+09-23 00:54:53 I [httpd] stopped
+09-23 00:54:53 I [httpd] listening on 23576
+09-23 00:54:55 I [httpd] stopped
+09-23 00:54:55 I [httpd] listening on 22036,[::]:22036
+09-23 00:54:57 I [httpd] stopped
+09-23 00:54:57 W [httpd] civetweb: cannot bind to IPv6 [::]:24088: 48 (Address already in use)
+09-23 00:54:57 W [httpd] civetweb: Failed to setup server ports
+09-23 00:54:57 I [httpd] listening on 24088
+09-23 00:54:59 I [httpd] stopped
+09-23 00:54:59 I [httpd] listening on 24143,[::]:24143
+09-23 00:54:59 I [httpd] suppressed 3 repeated civetweb messages
+09-23 00:55:01 I [httpd] stopped
+09-23 00:55:02 E [store] SQL failed: file is not a database
+09-23 00:55:02 W [store] database could not be opened; backed up and recreated: /tmp/doorbell_store_UOhI1P/db.sqlite.corrupt-1790092502
+09-23 00:55:05 E [store] SQL failed: database is locked
+09-23 00:55:05 E [store] database open failed without confirmed corruption; refusing to replace it
+09-23 00:55:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:55:05 D [store] event pruning refused because no replicated coverage snapshot exists
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   62 |   62 passed | 0 failed | 404 skipped
+[doctest] assertions: 1191 | 1191 passed | 0 failed |
+[doctest] Status: SUCCESS!

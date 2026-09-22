@@ -1,0 +1,16 @@
+{
+  "observed_at": "2026-09-22T15:38:02.777949+00:00",
+  "checks": {
+    "english-check-r4": {
+      "command": "python3 tools/check_english_source.py",
+      "exit_code": 0,
+      "log_sha256": "e31b139fc62aa187694c8103481b6e9e3fd40190149c2243857640caccdac6a4"
+    },
+    "i18n-check-r4": {
+      "command": "python3 tools/gen_i18n.py --check",
+      "exit_code": 0,
+      "log_sha256": "260f741e918f6a280e7b455528427e841f7352cc53f0c199e5703ee0aa0c69bf"
+    }
+  },
+  "scope": "Final live worktree checks after the T23 r4 source changes; generated resources were checked, not regenerated."
+}

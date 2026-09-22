@@ -18,6 +18,7 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
     private var pairingGateTimer: Timer?
     private var openPairingObserver: NSObjectProtocol?
     private var resetObserver: NSObjectProtocol?
+    private var pairingResetPending = false
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
@@ -113,6 +114,8 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
     /// the stored key, the pairing fields and its own identity all go, and the pairing gate is
     /// what comes back.
     private func resetLocalPairing() {
+        guard !pairingResetPending else { return }
+        pairingResetPending = true
         pairingGate?.dismiss(animated: false)
         pairingGate = nil
         pairingDeferred = false
@@ -120,7 +123,11 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         pairingGateTimer = nil
         runtime?.stop(clean: false)
         runtime = nil
-        core.stop()
+        core.stop { [weak self] in self?.finishLocalPairingReset() }
+    }
+
+    private func finishLocalPairingReset() {
+        defer { pairingResetPending = false }
         guard Keychain.removeAll(), BootConfig.clearPersistedState() else {
             IOSAvailability.logDebug("local pairing reset failed")
             return

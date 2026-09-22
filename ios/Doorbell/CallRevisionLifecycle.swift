@@ -1,4 +1,164 @@
 import Foundation
+import CoreFoundation
+
+struct CallTiming {
+    struct Snapshot {
+        let document: [String: Any]
+        let coreGeneration: UInt64
+        let requestedAt: TimeInterval
+    }
+
+    struct Reading {
+        let call: [String: Any]
+        let coreGeneration: UInt64
+        let remainingSeconds: TimeInterval?
+        let recoveryRemainingSeconds: TimeInterval?
+
+        var mayRestore: Bool {
+            return call["recovery_required"] as? Bool == true &&
+                call["recovery_eligible"] as? Bool == true &&
+                (remainingSeconds ?? 0) > 0 && (recoveryRemainingSeconds ?? 0) > 0
+        }
+    }
+
+    enum Observation {
+        case unavailable
+        case absent
+        case active(Reading)
+    }
+
+    private struct Identity: Equatable {
+        let core: UInt64
+        let snapshot: String
+        let call: String
+        let door: String
+        let revision: Double
+        let owner: String
+        let state: String
+    }
+
+    private var identity: Identity?
+    private var deadline: TimeInterval?
+    private var recoveryDeadline: TimeInterval?
+    private struct SampleIdentity: Equatable {
+        let core: UInt64
+        let snapshot: String
+    }
+    private var lastSample: SampleIdentity?
+    private var refreshBaseline: SampleIdentity?
+    private(set) var waitingForFreshSnapshot = false
+
+    mutating func reset() {
+        identity = nil
+        deadline = nil
+        recoveryDeadline = nil
+    }
+
+    /// Historical monotonic clocks may stop during system sleep. A foreground read of the old
+    /// cache therefore cannot prove freshness even when its reported age remains small.
+    mutating func requireFreshSnapshot(_ snapshot: Snapshot? = nil) {
+        if !waitingForFreshSnapshot {
+            refreshBaseline = snapshot.flatMap { value in
+                guard let generation = value.document["snapshot_generation"] as? String,
+                      !generation.isEmpty else { return nil }
+                return SampleIdentity(core: value.coreGeneration, snapshot: generation)
+            } ?? lastSample
+        }
+        waitingForFreshSnapshot = true
+        reset()
+    }
+
+    mutating func accepts(_ snapshot: Snapshot?) -> Bool {
+        guard let snapshot = snapshot,
+              snapshot.requestedAt.isFinite,
+              let generation = snapshot.document["snapshot_generation"] as? String,
+              !generation.isEmpty,
+              Self.milliseconds(snapshot.document["snapshot_age_ms"]) != nil,
+              snapshot.document["active_calls"] is [[String: Any]] else { return false }
+        let sample = SampleIdentity(core: snapshot.coreGeneration, snapshot: generation)
+        lastSample = sample
+        if waitingForFreshSnapshot {
+            guard let baseline = refreshBaseline else {
+                refreshBaseline = sample
+                return false
+            }
+            guard sample != baseline else { return false }
+            waitingForFreshSnapshot = false
+            refreshBaseline = nil
+        }
+        return true
+    }
+
+    /// A repeated cached sample may only shorten its existing anchor. Reading an unchanged
+    /// duration again cannot renew either the call or Core's recovery window.
+    mutating func observeRecovery(_ snapshot: Snapshot?, callId: String, role: String,
+                                  nodeId: String, door: String, now: TimeInterval) -> Observation {
+        guard !nodeId.isEmpty, let calls = snapshot?.document["active_calls"] as? [[String: Any]],
+              let call = calls.first(where: { $0["call_id"] as? String == callId }) else {
+            return .unavailable
+        }
+        let state = call["state"] as? String
+        let ownsDialog = state == "in_call" && call["dialog_owner"] as? String == nodeId
+        let ownsWaiting = state == "ringing" && role == "door_station" &&
+            call["origin"] as? String == nodeId && call["door"] as? String == door
+        guard ownsDialog || ownsWaiting else { return .unavailable }
+        return observe(snapshot, callId: callId, door: call["door"] as? String ?? "", now: now)
+    }
+
+    mutating func observe(_ snapshot: Snapshot?, callId: String, door: String,
+                          now: TimeInterval) -> Observation {
+        guard accepts(snapshot), let snapshot = snapshot, !callId.isEmpty,
+              snapshot.requestedAt.isFinite, now.isFinite, now >= snapshot.requestedAt,
+              let generation = snapshot.document["snapshot_generation"] as? String,
+              !generation.isEmpty,
+              let age = Self.milliseconds(snapshot.document["snapshot_age_ms"]),
+              let calls = snapshot.document["active_calls"] as? [[String: Any]] else {
+            return .unavailable
+        }
+        guard let call = calls.first(where: {
+            $0["call_id"] as? String == callId && $0["door"] as? String == door
+        }) else {
+            reset()
+            return .absent
+        }
+        guard call["snapshot_generation"] as? String == generation,
+              let revision = Self.milliseconds(call["stage_revision"]),
+              let state = call["state"] as? String,
+              state == "ringing" || state == "in_call" else { return .unavailable }
+        let key = Identity(core: snapshot.coreGeneration, snapshot: generation, call: callId,
+                           door: door, revision: revision,
+                           owner: call["dialog_owner"] as? String ?? "", state: state)
+        let freshDeadline = Self.milliseconds(call["remaining_ms"]).map {
+            snapshot.requestedAt + max(0, $0 - age) / 1000
+        }
+        let freshRecovery = Self.milliseconds(call["recovery_remaining_ms"]).flatMap {
+            $0 <= 10000 ? snapshot.requestedAt + max(0, $0 - age) / 1000 : nil
+        }
+        if identity == key {
+            if let fresh = freshDeadline { deadline = deadline.map { min($0, fresh) } ?? fresh }
+            if let fresh = freshRecovery {
+                recoveryDeadline = recoveryDeadline.map { min($0, fresh) } ?? fresh
+            }
+        } else {
+            identity = key
+            deadline = freshDeadline
+            recoveryDeadline = freshRecovery
+        }
+        return .active(Reading(call: call, coreGeneration: snapshot.coreGeneration,
+            remainingSeconds: freshDeadline == nil ? nil : deadline.map { max(0, $0 - now) },
+            recoveryRemainingSeconds: freshRecovery == nil ? nil :
+                recoveryDeadline.map { max(0, $0 - now) }))
+    }
+
+    private static func milliseconds(_ value: Any?) -> Double? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let value = number.doubleValue
+        guard value.isFinite, value >= 0, value <= 9007199254740991,
+              value.rounded(.towardZero) == value else { return nil }
+        return value
+    }
+}
 
 enum CallRevisionUpdate: Equatable {
     case stale

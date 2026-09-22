@@ -1,0 +1,71 @@
+09-23 03:53:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:20358
+09-23 03:53:24 I [node] created the missing door entry doors.front for this door station
+09-23 03:53:25 I [httpd] listening on 24349,[::]:24349
+09-23 03:53:25 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:53:25 I [node] node e1a9d40a (doorbell) started
+09-23 03:53:25 I [node] initialized the cluster administrator password
+09-23 03:53:27 I [httpd] stopped
+09-23 03:53:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30380
+09-23 03:53:27 I [node] created the missing door entry doors.front for this door station
+09-23 03:53:27 I [httpd] listening on 26509,[::]:26509
+09-23 03:53:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:53:27 I [node] node 9461fef3 (doorbell) started
+09-23 03:53:27 I [node] initialized the cluster administrator password
+09-23 03:53:29 I [httpd] stopped
+09-23 03:53:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30288
+09-23 03:53:29 I [node] created the missing door entry doors.front for this door station
+09-23 03:53:29 I [httpd] listening on 21449,[::]:21449
+09-23 03:53:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:53:29 I [node] node 281b2dec (doorbell) started
+09-23 03:53:29 I [node] initialized the cluster administrator password
+09-23 03:53:31 I [httpd] stopped
+09-23 03:53:31 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21033
+09-23 03:53:31 I [node] created the missing door entry doors.front for this door station
+09-23 03:53:31 I [httpd] listening on 28422,[::]:28422
+09-23 03:53:31 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:53:31 I [node] node 709ca1fe (doorbell) started
+09-23 03:53:31 I [node] initialized the cluster administrator password
+09-23 03:53:33 I [httpd] stopped
+09-23 03:53:33 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23453
+09-23 03:53:33 I [node] created the missing door entry doors.front for this door station
+09-23 03:53:33 I [httpd] listening on 23371,[::]:23371
+09-23 03:53:33 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:53:33 I [node] node 4f142536 (doorbell) started
+09-23 03:53:33 I [node] initialized the cluster administrator password
+09-23 03:53:35 I [httpd] stopped
+09-23 03:53:35 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:28569
+09-23 03:53:35 I [node] created the missing door entry doors.front for this door station
+09-23 03:53:35 I [httpd] listening on 29829,[::]:29829
+09-23 03:53:35 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:53:35 I [node] node 2eb543d8 (operation-authority) started
+09-23 03:53:35 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:26411
+09-23 03:53:35 I [httpd] listening on 23913,[::]:23913
+09-23 03:53:35 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:53:35 I [node] node 061d52ba (operation-page) started
+09-23 03:53:35 I [node] initialized the cluster administrator password
+09-23 03:53:37 I [httpd] stopped
+09-23 03:53:39 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel_identity.cpp:118:
+TEST CASE:  panel identity: current owner without media publish grant is denied
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel_identity.cpp:125: ERROR: CHECK( authorization.status == 403 ) is NOT correct!
+  values: CHECK( 200 == 403 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel_identity.cpp:131: ERROR: CHECK( identityUpload(fixture.options.http_port, "/call-frame?" + identityTuple(call) + "&media_generation=" + generation + "&frame_sequence=1", session) == 403 ) is NOT correct!
+  values: CHECK( 200 == 403 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel_identity.cpp:227:
+TEST CASE:  panel identity: replicated revocation fences only the observed identity
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel_identity.cpp:251: FATAL ERROR: REQUIRE( prepare.status == 200 ) is NOT correct!
+  values: REQUIRE( 403 == 200 )
+  logged: prepare.body := {"schema_version":2,"ok":false,"error_code":"permission_denied","err":"permission_denied","request_id":"8e79bcb2a51797c41b4bd673c7649a28","retry_mode":"none"}
+
+===============================================================================
+[doctest] test cases:   6 |   4 passed | 2 failed | 520 skipped
+[doctest] assertions: 289 | 286 passed | 3 failed |
+[doctest] Status: FAILURE!

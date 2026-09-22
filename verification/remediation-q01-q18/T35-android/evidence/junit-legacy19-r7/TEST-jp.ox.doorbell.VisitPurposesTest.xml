@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.VisitPurposesTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.007">
+  <properties/>
+  <testcase name="aDisabledPurposeStillResolvesItsLabelForACallInFlightAndForTheHistory" classname="jp.ox.doorbell.VisitPurposesTest" time="0.0"/>
+  <testcase name="labelsFallBackToJapaneseThenToTheIdentifier" classname="jp.ox.doorbell.VisitPurposesTest" time="0.0"/>
+  <testcase name="theToggleWriteIsAPlainBooleanTheConfigWriterCanSend" classname="jp.ox.doorbell.VisitPurposesTest" time="0.001"/>
+  <testcase name="theFlagIsReadWhenItIsPresent" classname="jp.ox.doorbell.VisitPurposesTest" time="0.0"/>
+  <testcase name="theIconPrefixesTheLabelOnlyWhenOneIsConfigured" classname="jp.ox.doorbell.VisitPurposesTest" time="0.0"/>
+  <testcase name="theSettingsToggleWritesTheCrossPlatformKey" classname="jp.ox.doorbell.VisitPurposesTest" time="0.0"/>
+  <testcase name="bothListsAreOrderedByConfiguredOrderThenIdentifier" classname="jp.ox.doorbell.VisitPurposesTest" time="0.005"/>
+  <testcase name="theSettingsListKeepsDisabledPurposesSoTheyCanBeTurnedBackOn" classname="jp.ox.doorbell.VisitPurposesTest" time="0.0"/>
+  <testcase name="theVisitorChooserOffersOnlyEnabledPurposes" classname="jp.ox.doorbell.VisitPurposesTest" time="0.001"/>
+  <testcase name="anAbsentFlagMeansEnabledSoAnOlderInstallationKeepsEveryPurpose" classname="jp.ox.doorbell.VisitPurposesTest" time="0.0"/>
+  <testcase name="anAbsentOrEmptyConfigurationYieldsNoPurposes" classname="jp.ox.doorbell.VisitPurposesTest" time="0.0"/>
+  <testcase name="disablingEveryPurposeLeavesTheChooserEmptyRatherThanShowingDisabledOnes" classname="jp.ox.doorbell.VisitPurposesTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

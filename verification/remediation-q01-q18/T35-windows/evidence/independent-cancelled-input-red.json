@@ -1,0 +1,22 @@
+{
+  "created_at": "2026-09-22T18:08:46.062401+00:00",
+  "compile_command": [
+    "mcs",
+    "-out:/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-review/cancelled-input-r2.exe",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r2/win/DoorbellApp/Ui/VisitorActionGuard.cs",
+    "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-windows/tools/CancelledInputReview.cs"
+  ],
+  "compile_exit_code": 0,
+  "run_command": [
+    "mono",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-review/cancelled-input-r2.exe"
+  ],
+  "run_exit_code": 1,
+  "inputs": {
+    "build/remediation-t35-windows-20260923/source-r2/win/DoorbellApp/Ui/VisitorActionGuard.cs": "07ef1ba8233d869f15c20267ab568985285f215442730eec05106cf779218d4a",
+    "verification/remediation-q01-q18/T35-windows/tools/CancelledInputReview.cs": "b1823ff0612746d33c41e548a75bf44fcd05fbf077236e273e6cd9f73a83210b",
+    "build/remediation-t35-windows-review/cancelled-input-r2.exe": "6db56a0e6f8a42a8dacb8cc71d97dc080e87feee1f7db645a1cfb2f655109d5b",
+    "verification/remediation-q01-q18/T35-windows/evidence/independent-cancelled-input-red.log": "8ca1d12a555934415035eb90e5357f5103c9b8c887be44e2017c443bae44666f"
+  },
+  "scope": "Actual production guard executed under Mono; cancelled-pointer and current UIA dispatch sequence inferred from production bindings, no WPF runtime."
+}

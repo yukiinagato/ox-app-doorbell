@@ -1,0 +1,27 @@
+{
+  "task_id": "T10",
+  "test_id": "T10-01",
+  "command": [
+    "node",
+    "webui/tests/call_poll_lanes.test.js",
+    "T10-01"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "start": "2026-09-22T14:15:37.345175+00:00",
+  "end": "2026-09-22T14:15:37.429509+00:00",
+  "exit_code": 1,
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "files": {
+    "webui/panel/call.html": "93c7c88a2cd2a99b695c0512d83e5f28c777e2a5a1949d98aa25b4e526184177",
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/tests/call_page_fixture.js": "19fce4c3b611b25212a0e88fdaca796ce85ab238907fa9510e85c01419f4f477",
+    "webui/tests/call_poll_lanes.test.js": "fd13b30067ccf2d4242c75f00d831b05cdd2a8378e97d2e540a084b2c34c89b2"
+  },
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "arch": "arm64",
+  "device_or_browser": "Node VM with controlled DOM/XHR/time; actual production page and runtime",
+  "signing_state": "not_applicable",
+  "sip_backend": "not_run",
+  "log_path": "verification/remediation-q01-q18/T10/evidence/before-T10-01.log"
+}

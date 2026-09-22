@@ -1,0 +1,11 @@
+--- r4/ios/DoorbellTests/VisitorScreenLayoutTests.swift
++++ mainline/ios/DoorbellTests/VisitorScreenLayoutTests.swift
+@@ -511,7 +511,7 @@
+             "call_cancel_v2": true, "call_lifecycle_v2": true, "ui_manifest_v1": true]])
+         core.setUiManifest(["schema_version": 1, "units": "pt",
+             "viewport": ["minimum_touch": 44, "scale_min": 0.75, "scale_max": 2.0],
+-            "elements": ["purpose.button": ["properties": ["scale"], "defaults": ["scale": 1]],
++            "elements": ["purpose.button": ["properties": ["scale"], "defaults": ["scale": 1], "safety_critical": false],
+                          "cancel.call": ["properties": ["scale"], "defaults": ["scale": 1], "safety_critical": true]]])
+         try configure(core, "ui.call_flow", mode)
+         try configure(core, "ui.call_sound", "")

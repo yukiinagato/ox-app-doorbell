@@ -1,0 +1,12 @@
+{
+  "at": "2026-09-22T16:30:27.586483+00:00",
+  "changed_shared_inputs": [
+    {
+      "path": "core/src/node/operation_service.inc",
+      "tested_sha256": "4a2fe28d1f6591dc25b7619a3516a079f0d6b90d1372fd7709825aee943048c5",
+      "current_sha256": "ce565d423fee1c1eb6598c64978ba86960c08fe08b1a8e800fc505a443dfe28b"
+    }
+  ],
+  "patch_sha256": "edbeabe4477c6dddc132dcdd58d1c71e601859e5a57972d0c4ccd912d465e756",
+  "note": "Concurrent parent T12/T27 work; these later deltas are not represented as T07-tested source."
+}

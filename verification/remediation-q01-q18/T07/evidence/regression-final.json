@@ -1,0 +1,41 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty; isolated source snapshot; concurrent work preserved",
+  "diff_sha256": "adf9094c443b8ca2efccf1ddf02cc8fc1a4a3bc9a59ae685dccdcb790f508991",
+  "task_id": "T07",
+  "test_id": "regression-final",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/source-final.json",
+  "source_manifest_sha256": "c8d50870fb7cfe4776f131f28b78386cc5fb74dca660c9e41397e58928e06d24",
+  "command": [
+    "build/remediation-t07-20260922/normal-final-doorbell_tests",
+    "-tc=operations:*,operations HTTP:*,operations native:*,operations dispatcher:*,operations config:*,operations ABI:*,operations Node:*,operations bridge:*,mqtt:*,httpd:*,store:*,capi:*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T16:26:35.431110+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "unsigned host verification binary",
+  "artifact_sha256": "495a650e477ae684466dd4bd777131a55776484eac03288d1e07cf9e47c4bddc",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/evidence/regression-final.log",
+  "limitations": [
+    "Host production Core/HTTP/authenticated mesh and local MQTT protocol fixture; no physical lock, Home Assistant, actuator firmware or device qualification.",
+    "Reference actuator uses a test-only key and durable simulated deduplication; no physical exactly-once or sensor causality claim.",
+    "T07-03 covers operation state/scope isolation; shipping UI handle migration and presentation remain a T36 acceptance gate."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T16:28:22.685301+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "86/86 test cases and 17953 assertions passed.",
+  "artifact_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/normal-final-doorbell_tests",
+  "log_sha256": "0c8131cd70a1daf9f8867714b57af6e1c3050c03d9c3437a3e49071aab8c871c",
+  "test_cases": 86,
+  "assertions": 17953
+}

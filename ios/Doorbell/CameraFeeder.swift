@@ -15,8 +15,15 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     private var reportedActive = false
     private var reportedState = "not_started"
     private var acceptingFrames = false
+    private var captureCoreGeneration: UInt64?
+    private var sessionGeneration: UInt64 = 0
+    private weak var currentOutput: AVCaptureOutput?
 
-    var encoder: VideoEncoderVT?
+    private var currentEncoder: VideoEncoderVT?
+    var encoder: VideoEncoderVT? {
+        get { runtimeLock.lock(); defer { runtimeLock.unlock() }; return currentEncoder }
+        set { runtimeLock.lock(); currentEncoder = newValue; runtimeLock.unlock() }
+    }
 
     init(core: CoreBridge, runtimeStatus: @escaping (Bool, String) -> Void = { _, _ in }) {
         self.core = core
@@ -29,6 +36,8 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     @discardableResult
     func start(targetW: Int, targetH: Int) -> Bool {
         stop()
+        guard let coreGeneration = core.runningGeneration else { return false }
+        let generation = beginSession(coreGeneration: coreGeneration)
         IOSAvailability.logDebug("camera start target=\(targetW)x\(targetH)")
         guard case .authorized = AVCaptureDevice.authorizationStatus(for: .video) else {
             reportRuntime(active: false, state: "permission_denied")
@@ -85,30 +94,21 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
 
         previewLayer = AVCaptureVideoPreviewLayer(session: s)
         session = s
-        setAcceptingFrames(true)
+        runtimeLock.lock()
+        currentOutput = out
+        acceptingFrames = true
+        runtimeLock.unlock()
         reportRuntime(active: false, state: "starting")
-        runtimeErrorObserver = NotificationCenter.default.addObserver(
-            forName: .AVCaptureSessionRuntimeError, object: s, queue: nil
-        ) { [weak self] _ in
-            self?.reportRuntime(active: false, state: "runtime_failed")
-        }
+        installRuntimeErrorObserver(session: s, generation: generation)
         queue.async { s.startRunning() }
         return true
     }
 
     func stop() {
-        stop(waitUntilIdle: false)
-    }
-
-    /// Stops capture and waits for every queued sample-buffer callback to leave Core.
-    /// Call this before destroying Core; the ordinary stop path stays asynchronous so a camera
-    /// restart does not block the main thread on AVCaptureSession.
-    func stopAndWait() {
-        stop(waitUntilIdle: true)
-    }
-
-    private func stop(waitUntilIdle: Bool) {
-        setAcceptingFrames(false)
+        runtimeLock.lock()
+        acceptingFrames = false
+        sessionGeneration &+= 1
+        runtimeLock.unlock()
         if let observer = runtimeErrorObserver {
             NotificationCenter.default.removeObserver(observer)
             runtimeErrorObserver = nil
@@ -116,22 +116,19 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         let s = session
         session = nil
         previewLayer = nil
-        if waitUntilIdle {
-            queue.sync { s?.stopRunning() }
-        } else {
-            queue.async { s?.stopRunning() }
-        }
+        queue.async { s?.stopRunning() }
         if s != nil { reportRuntime(active: false, state: "stopped") }
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer,
                        from connection: AVCaptureConnection) {
         guard isAcceptingFrames() else { return }
+        guard let token = frameGeneration(output: output) else { return }
         guard let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
-        reportRuntime(active: true, state: "active")
+        reportRuntime(active: true, state: "active", generation: token.session)
         let tsMs = Int64(Date().timeIntervalSince1970 * 1000)
 
-        encoder?.feed(pixelBuffer: pb, tsMs: tsMs)
+        encoder?.feed(pixelBuffer: pb, tsMs: tsMs, coreGeneration: token.core)
 
         CVPixelBufferLockBaseAddress(pb, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pb, .readOnly) }
@@ -164,12 +161,16 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         nv12.withUnsafeBufferPointer { p in
             guard isAcceptingFrames(), let base = p.baseAddress else { return }
             core.onCameraFrame(base, format: 1, width: Int32(w), height: Int32(h),
-                               stride: Int32(w), tsMs: tsMs)
+                               stride: Int32(w), tsMs: tsMs, coreGeneration: token.core)
         }
     }
 
-    private func reportRuntime(active: Bool, state: String) {
+    private func reportRuntime(active: Bool, state: String, generation: UInt64? = nil) {
         runtimeLock.lock()
+        guard generation == nil || generation == sessionGeneration else {
+            runtimeLock.unlock()
+            return
+        }
         if active && !acceptingFrames {
             runtimeLock.unlock()
             return
@@ -180,15 +181,29 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         }
         reportedActive = active
         reportedState = state
+        let expectedGeneration = sessionGeneration
+        let coreGeneration = captureCoreGeneration
         runtimeLock.unlock()
         IOSAvailability.logDebug("camera state=\(state) active=\(active)")
-        runtimeStatus(active, state)
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            self.runtimeLock.lock()
+            let current = self.sessionGeneration == expectedGeneration
+            self.runtimeLock.unlock()
+            guard current, coreGeneration != nil,
+                  self.core.runningGeneration == coreGeneration else { return }
+            self.runtimeStatus(active, state)
+        }
     }
 
-    private func setAcceptingFrames(_ value: Bool) {
+    private func beginSession(coreGeneration: UInt64) -> UInt64 {
         runtimeLock.lock()
-        acceptingFrames = value
-        runtimeLock.unlock()
+        defer { runtimeLock.unlock() }
+        sessionGeneration &+= 1
+        captureCoreGeneration = coreGeneration
+        reportedActive = false
+        reportedState = "not_started"
+        return sessionGeneration
     }
 
     private func isAcceptingFrames() -> Bool {
@@ -196,4 +211,38 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         defer { runtimeLock.unlock() }
         return acceptingFrames
     }
+
+    private func frameGeneration(output: AVCaptureOutput) -> (core: UInt64, session: UInt64)? {
+        runtimeLock.lock()
+        defer { runtimeLock.unlock() }
+        guard acceptingFrames, currentOutput === output, let core = captureCoreGeneration else {
+            return nil
+        }
+        return (core, sessionGeneration)
+    }
+
+    private func runtimeErrorHandler(generation: UInt64) -> () -> Void {
+        return { [weak self] in
+            self?.reportRuntime(active: false, state: "runtime_failed", generation: generation)
+        }
+    }
+
+    private func installRuntimeErrorObserver(session: AVCaptureSession, generation: UInt64) {
+        let handler = runtimeErrorHandler(generation: generation)
+        runtimeErrorObserver = NotificationCenter.default.addObserver(
+            forName: .AVCaptureSessionRuntimeError, object: session, queue: nil
+        ) { _ in handler() }
+    }
+
+    #if DEBUG
+    // Use real AVCaptureSession notifications without requiring camera hardware or permission.
+    func beginSessionForTesting(_ session: AVCaptureSession) -> () -> Void {
+        stop()
+        guard let coreGeneration = core.runningGeneration else { return {} }
+        let generation = beginSession(coreGeneration: coreGeneration)
+        self.session = session
+        installRuntimeErrorObserver(session: session, generation: generation)
+        return runtimeErrorHandler(generation: generation)
+    }
+    #endif
 }

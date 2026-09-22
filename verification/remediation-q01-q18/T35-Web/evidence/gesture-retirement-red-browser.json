@@ -1,0 +1,29 @@
+{
+  "scope": "Production DOM and callbacks with controlled XHR; not Core/device qualification",
+  "phase": "candidate",
+  "door_sha256": "956d7a555f958aa8f9d2173b3efafe8af1df09c41cd5d8995b539b173a59b335",
+  "case_sha256": "0cf064accb3d7860ccddf8ade8ab13fb3eb53cf33b3d7c3abe9dbf620bddc2ef",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T18:09:36.629Z",
+  "results": [
+    {
+      "id": "Gesture retirement: outside mouse allows the next call first assistive activation",
+      "status": "FAIL",
+      "message": "First new-call assistive activation was swallowed"
+    },
+    {
+      "id": "Gesture retirement: cancelled touch allows the next call first assistive activation",
+      "status": "PASS"
+    },
+    {
+      "id": "Gesture retirement: cancelled pointer allows the next call first assistive activation",
+      "status": "FAIL",
+      "message": "First new-call assistive activation was swallowed"
+    },
+    {
+      "id": "Gesture retirement: cancelled keyboard release cannot become a new End action",
+      "status": "FAIL",
+      "message": "Cancelled key release retained browser default activation"
+    }
+  ]
+}

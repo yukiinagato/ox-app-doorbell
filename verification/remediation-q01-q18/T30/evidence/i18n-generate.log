@@ -1,0 +1,14 @@
+generated android/app/src/main/res/values-ja/strings.xml
+generated android/app/src/main/res/values-zh/strings.xml
+generated android/app/src/main/res/values/strings.xml
+generated ios-kiosk/src/Core/DBGeneratedStrings.m
+generated ios/Doorbell/en.lproj/Localizable.strings
+generated ios/Doorbell/ja.lproj/Localizable.strings
+generated ios/Doorbell/zh.lproj/Localizable.strings
+generated webui/locale/en.json
+generated webui/locale/ja.json
+generated webui/locale/zh.json
+generated win/DoorbellApp/Resources/Strings.en.resx
+generated win/DoorbellApp/Resources/Strings.resx
+generated win/DoorbellApp/Resources/Strings.zh.resx
+gen_i18n: 13 of 15 files updated

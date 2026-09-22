@@ -1,0 +1,110 @@
+{
+  "task_id": "T35-ios-modern",
+  "status": "IMPLEMENTED_PENDING_UI_RUNTIME",
+  "at": "2026-09-22T17:01:46.031513+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r3.json",
+  "source_manifest_sha256": "c68c67452289b426588c570382a4df5d81d5e088f82a71703ed2ec2c0e32e5be",
+  "owned_sources_current_match": true,
+  "all_frozen_inputs_match": true,
+  "builds": {
+    "compile-r3": {
+      "record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/compile-r3.json",
+      "sha256": "ea0a756192d253f624b25811ff0eb59b2822453335c611967737a386df0189d7",
+      "status": "PASS_BUILD_ONLY",
+      "sip_backend": "stub"
+    },
+    "ios9-arm64-r3": {
+      "record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/ios9-arm64-r3.json",
+      "sha256": "559960a03b57c192ce4cdac3100fbb4d025f50a5d796df16761c6c5732c93a96",
+      "status": "PASS_BUILD_ONLY",
+      "sip_backend": "real_pjsip"
+    },
+    "tvos-r3": {
+      "record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/tvos-r3.json",
+      "sha256": "d8303659d16ad6b908290275117a1fc68005c79851eda4d672d7e0f99941cda7",
+      "status": "PASS_BUILD_ONLY",
+      "sip_backend": "real_pjsip"
+    }
+  },
+  "acceptance": [
+    {
+      "id": "T35-01",
+      "status": "NOT_RUN_BLOCKED_ENV",
+      "tests": [
+        "VisitorActionContractTests.testPurposeFirstButtonSendsPurposeAndCancelEndsOnlyThatCall",
+        "VisitorActionContractTests.testRingThenPurposeSkipPreservesCallAndCancelRemainsSeparate"
+      ]
+    },
+    {
+      "id": "T35-02",
+      "status": "NOT_RUN_BLOCKED_ENV",
+      "tests": [
+        "VisitorActionContractTests.testAnsweredCoreRejectsQueuedVisitorCancelBeforeSIPUIArrives",
+        "VisitorActionContractTests.testCancelAndEndKeepTheSamePositionAcrossProfilesAndLargeText"
+      ]
+    },
+    {
+      "id": "T35-03",
+      "status": "NOT_RUN_BLOCKED_ENV",
+      "tests": [
+        "VisitorActionContractTests.testOfflineAndSosAreDifferentLayersWithoutClearingCoreEmergency",
+        "VisitorAccessibleActionTests.testSosAccessibleActivationRequiresReviewAndCanCancelTheSameCountdown",
+        "VisitorAccessibleActionTests.testDetachedSosCannotActivateAndLosesPendingCountdown",
+        "VisitorAccessibleActionTests.testResponsiveReparentingKeepsTheExistingCancellableCountdown"
+      ]
+    },
+    {
+      "id": "T35-04",
+      "status": "NOT_RUN_BLOCKED_ENV",
+      "tests": [
+        "PurposeChoiceLayoutTests.testLongPurposeLabelsAndLargeTextKeepCancelVisibleInBothOrientations"
+      ]
+    }
+  ],
+  "runtime_gate": "Mac locked. No test execution, screenshots, OS accessibility tree or hardware qualification. Baseline source preserved before implementation.",
+  "integration_gate": "T12 verified frozen Core used; latest mainline Core requires later integration build.",
+  "cleanup": "No T35 simulator or device deployment created. No owned runtime servers. Build outputs/source and logs retained.",
+  "independent_review": "pending parent source-only review; not runtime PASS",
+  "r4_followup": {
+    "status": "IMPLEMENTED_PENDING_UI_RUNTIME",
+    "finding": "R1 title/end overlap",
+    "source": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r4.json",
+    "source_sha256": "92ed542708ffa474244241f9a07ee2933a5c3bd6e74b92204b01f03242d32b7f",
+    "delta": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/candidate-r4-delta.patch",
+    "delta_sha256": "ed706dd44efff040d9f941b81b43cd67753c3e78bb60f84e0cb37e66eeff216a",
+    "test_name": "VisitorActionContractTests.testInCallStatusScrollNeverCoversEndAtLargestTextAcrossProfiles",
+    "test_status": "COMPILED_NOT_RUN",
+    "builds": [
+      {
+        "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/compile-r4.json",
+        "sha256": "046549e38ecfd4466d21a89c57e949634ec8b2414c15459029254b8766cebb05",
+        "artifact_record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/compile-r4-artifacts.json",
+        "artifact_record_sha256": "f60a1cc4eaebc3089a44d9ebbeace3a6fe2d75615bc244cb06e25172b1436407"
+      },
+      {
+        "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/ios9-arm64-r4.json",
+        "sha256": "422540d134b8bf8136fa6f91e8a246d5a928bdd03fdb3f799ceb3dc3fb040485",
+        "artifact_record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/ios9-arm64-r4-artifacts.json",
+        "artifact_record_sha256": "2e12f2776efb2541728b7131c9e0acb8f5c3c5640f78f37e01b808360626db06"
+      },
+      {
+        "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/tvos-r4.json",
+        "sha256": "3a39ae3dd58a37c72e003d32909088d1fbba4f5f9883f1d0685e90effae48150",
+        "artifact_record": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/tvos-r4-artifacts.json",
+        "artifact_record_sha256": "528e82f4dbe9363b0951a1f694ff4347674e3e0a3759bc0632fecc0021fb9be0"
+      }
+    ],
+    "runtime": {
+      "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/test-r4.json",
+      "sha256": "f95ca69c77af8eb56cd924b367482e37ac6d45fb0f04180e2ebf9f4960876531",
+      "log_sha256": "6f5899481f43f40db2535362216186c6fdab6e5b37768e9f273f3e2b632463a5",
+      "result": "NOT_RUN_STARTUP_TIMEOUT"
+    },
+    "source_check_sha256": "f1343de3666d78b0dc3ad6382a35f26f541c531d01fb77450746b7a28730eabf",
+    "limits": [
+      "No runtime nonintersection claim before actual XCTest runs.",
+      "Frozen r3/T12 Core basis requires later mainline integration build.",
+      "Physical iPhone/iPad/iOS9 and tvOS UI remain NOT_RUN."
+    ]
+  }
+}

@@ -94,9 +94,23 @@
   <data name="admin_clear_pairing" xml:space="preserve"><value>清除此设备的配对</value></data>
   <data name="admin_clock_warn" xml:space="preserve"><value>时钟未同步</value></data>
   <data name="admin_codec_auto" xml:space="preserve"><value>自动 (支持则 H.264)</value></data>
+  <data name="admin_config_cas_unavailable" xml:space="preserve"><value>此节点不支持安全的同时编辑。草稿已保留。</value></data>
   <data name="admin_config_value_placeholder" xml:space="preserve"><value>{&quot;zh&quot;:&quot;正门&quot;}</value></data>
   <data name="admin_configured" xml:space="preserve"><value>已配置</value></data>
   <data name="admin_confirm_delete" xml:space="preserve"><value>要删除 {0} 吗？</value></data>
+  <data name="admin_conflict_back" xml:space="preserve"><value>返回编辑</value></data>
+  <data name="admin_conflict_back_hint" xml:space="preserve"><value>草稿已保留。请检查后再次保存。</value></data>
+  <data name="admin_conflict_base" xml:space="preserve"><value>开始编辑时的值</value></data>
+  <data name="admin_conflict_choose" xml:space="preserve"><value>请为每个冲突选择一个值。</value></data>
+  <data name="admin_conflict_current" xml:space="preserve"><value>保留当前值</value></data>
+  <data name="admin_conflict_delete" xml:space="preserve"><value>删除</value></data>
+  <data name="admin_conflict_hint" xml:space="preserve"><value>编辑期间部分设置发生了变化。请为每个冲突选择要保留的值。</value></data>
+  <data name="admin_conflict_merged" xml:space="preserve"><value>以下修改可以合并保存：</value></data>
+  <data name="admin_conflict_mine" xml:space="preserve"><value>保留我的修改</value></data>
+  <data name="admin_conflict_missing" xml:space="preserve"><value>未设置</value></data>
+  <data name="admin_conflict_retry_limit" xml:space="preserve"><value>设置发生了多次变化。草稿已保留；再次保存时会与最新版本比较。</value></data>
+  <data name="admin_conflict_save" xml:space="preserve"><value>保存所选修改</value></data>
+  <data name="admin_conflict_title" xml:space="preserve"><value>检查同时发生的修改</value></data>
   <data name="admin_copied" xml:space="preserve"><value>已复制</value></data>
   <data name="admin_copy" xml:space="preserve"><value>复制</value></data>
   <data name="admin_copy_failed" xml:space="preserve"><value>复制失败</value></data>
@@ -115,6 +129,8 @@
   <data name="admin_door_required" xml:space="preserve"><value>请为门口机选择负责门口</value></data>
   <data name="admin_door_unconfigured" xml:space="preserve"><value>未配置</value></data>
   <data name="admin_doors" xml:space="preserve"><value>门口/建筑</value></data>
+  <data name="admin_draft_restored" xml:space="preserve"><value>草稿已恢复。保存前请重新输入密码和密钥。</value></data>
+  <data name="admin_draft_sign_in" xml:space="preserve"><value>请重新登录后继续。草稿已保留，密码和密钥已清除。</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>将文件拖放到此处或点击选择</value></data>
   <data name="admin_duty" xml:space="preserve"><value>职责</value></data>
   <data name="admin_edit" xml:space="preserve"><value>编辑</value></data>
@@ -133,6 +149,7 @@
   <data name="admin_helper_mode" xml:space="preserve"><value>恢复助手</value></data>
   <data name="admin_helper_off" xml:space="preserve"><value>关闭</value></data>
   <data name="admin_helper_on" xml:space="preserve"><value>始终启用</value></data>
+  <data name="admin_history_capacity" xml:space="preserve"><value>部分设置的编辑记录已满。为保留已有候选内容，这些设置暂时无法继续修改。</value></data>
   <data name="admin_host" xml:space="preserve"><value>主机</value></data>
   <data name="admin_households" xml:space="preserve"><value>通知对象</value></data>
   <data name="admin_image_read_failed" xml:space="preserve"><value>读取图片失败</value></data>
@@ -143,7 +160,44 @@
   <data name="admin_image_resized" xml:space="preserve"><value>图片已从 {0} 缩放至 {1}</value></data>
   <data name="admin_image_resizing" xml:space="preserve"><value>正在缩放图片（{0}）…</value></data>
   <data name="admin_import" xml:space="preserve"><value>导入</value></data>
+  <data name="admin_import_ack" xml:space="preserve"><value>我已检查全部更改（包括 {0} 项删除），并确认应用到此节点。</value></data>
+  <data name="admin_import_auth" xml:space="preserve"><value>请重新登录。文件内容已清除，已有恢复记录仍保留。</value></data>
+  <data name="admin_import_blocked" xml:space="preserve"><value>此导入存在待处理问题，暂不能应用。</value></data>
+  <data name="admin_import_changes" xml:space="preserve"><value>{0} 个字段将更改</value></data>
+  <data name="admin_import_clear" xml:space="preserve"><value>结束结果查看</value></data>
+  <data name="admin_import_commit" xml:space="preserve"><value>应用已确认的导入</value></data>
+  <data name="admin_import_connection" xml:space="preserve"><value>观察到的连接：已知 {0} 个节点中 {1} 个在线</value></data>
+  <data name="admin_import_crypto" xml:space="preserve"><value>此浏览器无法生成安全的导入标识，请使用受支持的浏览器。</value></data>
+  <data name="admin_import_dependencies" xml:space="preserve"><value>请通过现有集成或安全存储设置将秘密值恢复到此节点，并在资源页上传缺少的文件；然后丢弃此预览并重新预检。请勿把秘密值粘贴到配置中。</value></data>
+  <data name="admin_import_discard" xml:space="preserve"><value>丢弃此预览</value></data>
+  <data name="admin_import_error" xml:space="preserve"><value>请求未能完成，请先查看下面的信息再尝试。</value></data>
+  <data name="admin_import_excluded" xml:space="preserve"><value>导出已排除 {0} 个敏感字段</value></data>
+  <data name="admin_import_file" xml:space="preserve"><value>配置文件</value></data>
   <data name="admin_import_hint" xml:space="preserve"><value>粘贴导出的 JSON（拆平后逐项写入）</value></data>
+  <data name="admin_import_invalid" xml:space="preserve"><value>配置文件无效或存在歧义，尚未开始导入。</value></data>
+  <data name="admin_import_json" xml:space="preserve"><value>或粘贴配置 JSON</value></data>
+  <data name="admin_import_local_done" xml:space="preserve"><value>配置已保存到此节点。</value></data>
+  <data name="admin_import_missing_assets" xml:space="preserve"><value>缺失的资源文件</value></data>
+  <data name="admin_import_missing_secrets" xml:space="preserve"><value>缺失的秘密引用</value></data>
+  <data name="admin_import_new_preview" xml:space="preserve"><value>预检新的导入</value></data>
+  <data name="admin_import_no_preview" xml:space="preserve"><value>应用配置前请重新生成预览。</value></data>
+  <data name="admin_import_not_found" xml:space="preserve"><value>未找到已保存的结果，这并不表示导入失败。请保留记录并再次查询。</value></data>
+  <data name="admin_import_omitted" xml:space="preserve"><value>此导出已排除以下敏感字段；请检查并按需单独恢复</value></data>
+  <data name="admin_import_preparing" xml:space="preserve"><value>正在准备预览…</value></data>
+  <data name="admin_import_preview" xml:space="preserve"><value>预览导入</value></data>
+  <data name="admin_import_query" xml:space="preserve"><value>查询此次导入结果</value></data>
+  <data name="admin_import_ready" xml:space="preserve"><value>应用前请检查全部更改。</value></data>
+  <data name="admin_import_reference" xml:space="preserve"><value>恢复记录</value></data>
+  <data name="admin_import_refresh_status" xml:space="preserve"><value>刷新连接状态</value></data>
+  <data name="admin_import_replace" xml:space="preserve"><value>替换完整配置，并删除文件中缺少的字段</value></data>
+  <data name="admin_import_schema" xml:space="preserve"><value>此文件使用了不支持的配置版本。</value></data>
+  <data name="admin_import_scope" xml:space="preserve"><value>仅包含配置，不包含秘密值和资源文件，并非完整的灾难恢复备份。</value></data>
+  <data name="admin_import_size" xml:space="preserve"><value>导入超过大小或条目上限（完整请求最大 4 MiB）。</value></data>
+  <data name="admin_import_sync_unverified" xml:space="preserve"><value>尚未验证其他节点的配置同步；连接在线不代表已同步。</value></data>
+  <data name="admin_import_target" xml:space="preserve"><value>目标节点：{0}</value></data>
+  <data name="admin_import_unknown" xml:space="preserve"><value>结果未知。请保留此恢复记录并查询同一次导入，不要重复提交。</value></data>
+  <data name="admin_import_unknown_ack" xml:space="preserve"><value>我已保存恢复记录，并理解上次导入结果仍未知；我明确选择重新预检另一次导入。</value></data>
+  <data name="admin_import_wrong_node" xml:space="preserve"><value>此恢复记录属于其他节点，请在原节点查询结果。</value></data>
   <data name="admin_imported" xml:space="preserve"><value>已写入 {0} 项</value></data>
   <data name="admin_indoor_ringtone" xml:space="preserve"><value>室内机铃声</value></data>
   <data name="admin_integrations" xml:space="preserve"><value>集成</value></data>
@@ -203,6 +257,17 @@
   <data name="admin_pair_secure_failed" xml:space="preserve"><value>无法安全保存配对密钥。请检查存储空间和权限。</value></data>
   <data name="admin_pair_self_unpaired" xml:space="preserve"><value>此设备尚未加入集群。若是第一台，请在此新建。</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>面板 token</value></data>
+  <data name="admin_partition_changed" xml:space="preserve"><value>设置又发生了变化。请刷新候选内容，重新查看后再保存。</value></data>
+  <data name="admin_partition_choice" xml:space="preserve"><value>选择要保留的设置</value></data>
+  <data name="admin_partition_conflict_hint" xml:space="preserve"><value>设备断网期间发生了并发编辑。当前生效的设置可能已经变化；请查看保留的候选内容，再继续修改。</value></data>
+  <data name="admin_partition_conflicts" xml:space="preserve"><value>有编辑冲突需要处理</value></data>
+  <data name="admin_partition_custom" xml:space="preserve"><value>编辑最终设置</value></data>
+  <data name="admin_partition_custom_hint" xml:space="preserve"><value>如需自行合并，请用有效 JSON 填入此部分的完整设置。省略的字段将被删除。</value></data>
+  <data name="admin_partition_effective" xml:space="preserve"><value>当前生效的设置</value></data>
+  <data name="admin_partition_reentry" xml:space="preserve"><value>受保护的值已隐藏。含隐藏值的候选内容，需要重新填入安全存储引用后才能保存。</value></data>
+  <data name="admin_partition_refresh" xml:space="preserve"><value>刷新候选内容</value></data>
+  <data name="admin_partition_resolved" xml:space="preserve"><value>此冲突已处理。请关闭此窗口，查看当前设置。</value></data>
+  <data name="admin_partition_review" xml:space="preserve"><value>查看并处理</value></data>
   <data name="admin_pass" xml:space="preserve"><value>密码</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理密码</value></data>
   <data name="admin_password_set_failed" xml:space="preserve"><value>无法设置管理密码</value></data>
@@ -249,7 +314,9 @@
   <data name="admin_save" xml:space="preserve"><value>保存</value></data>
   <data name="admin_save_failed" xml:space="preserve"><value>保存失败</value></data>
   <data name="admin_save_pair_override" xml:space="preserve"><value>保存配对覆盖</value></data>
+  <data name="admin_save_unknown" xml:space="preserve"><value>暂时无法确认保存结果。草稿已保留，请检查当前配置后再重试。</value></data>
   <data name="admin_saved" xml:space="preserve"><value>已保存</value></data>
+  <data name="admin_saving" xml:space="preserve"><value>正在保存…</value></data>
   <data name="admin_schedule" xml:space="preserve"><value>时间表</value></data>
   <data name="admin_secret_cleanup_deferred" xml:space="preserve"><value>有 {0} 个旧 secret 仍被引用或无法删除，清理已延后</value></data>
   <data name="admin_secret_configured" xml:space="preserve"><value>已配置（留空保持不变）</value></data>
@@ -369,6 +436,7 @@
   <data name="calling_cancel_failed" xml:space="preserve"><value>无法取消呼叫</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>无人应答</value></data>
   <data name="calling_title" xml:space="preserve"><value>呼叫中…</value></data>
+  <data name="calling_wait_hint" xml:space="preserve"><value>请稍候，等待住户接听</value></data>
   <data name="cluster_devices_a11y" xml:space="preserve"><value>集群设备 {0} 台</value></data>
   <data name="cluster_door_stations_a11y" xml:space="preserve"><value>门口机 {0}/{1} 台在线</value></data>
   <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>室内机 {0}/{1} 台在线</value></data>
@@ -434,6 +502,22 @@
   <data name="emergency_notified" xml:space="preserve"><value>已通知家人</value></data>
   <data name="emergency_notify_off" xml:space="preserve"><value>✅ 警报已解除</value></data>
   <data name="emergency_notify_on" xml:space="preserve"><value>🚨 紧急情况 — 由 {0} 触发 ({1})</value></data>
+  <data name="emergency_sos_accepted" xml:space="preserve"><value>系统已受理呼救，尚未确认通知送达。</value></data>
+  <data name="emergency_sos_alternative" xml:space="preserve"><value>如需紧急帮助，请通过其他方式联系附近人员或当地紧急服务。</value></data>
+  <data name="emergency_sos_auth_required" xml:space="preserve"><value>会话已失效，请重新登录后继续。</value></data>
+  <data name="emergency_sos_invalid" xml:space="preserve"><value>呼救请求无效，请联系管理员。</value></data>
+  <data name="emergency_sos_not_started" xml:space="preserve"><value>本次呼救尚未发送。</value></data>
+  <data name="emergency_sos_permission_denied" xml:space="preserve"><value>此面板没有发送呼救的权限，请联系管理员。</value></data>
+  <data name="emergency_sos_prepare_unknown" xml:space="preserve"><value>未能确认呼救准备结果，尚未发出发送请求。重试会重新准备一次呼救。</value></data>
+  <data name="emergency_sos_preparing" xml:space="preserve"><value>正在准备呼救…</value></data>
+  <data name="emergency_sos_query" xml:space="preserve"><value>查询状态</value></data>
+  <data name="emergency_sos_querying" xml:space="preserve"><value>正在查询本次呼救…</value></data>
+  <data name="emergency_sos_rejected" xml:space="preserve"><value>呼救请求被拒绝。</value></data>
+  <data name="emergency_sos_retry" xml:space="preserve"><value>重试</value></data>
+  <data name="emergency_sos_send_same" xml:space="preserve"><value>发送本次呼救</value></data>
+  <data name="emergency_sos_sending" xml:space="preserve"><value>正在发送呼救…</value></data>
+  <data name="emergency_sos_unavailable" xml:space="preserve"><value>呼救服务暂不可用。</value></data>
+  <data name="emergency_sos_unknown" xml:space="preserve"><value>呼救结果未知，请先查询状态再尝试。</value></data>
   <data name="emergency_title" xml:space="preserve"><value>紧急情况</value></data>
   <data name="event_motion" xml:space="preserve"><value>{0} 检测到活动（{1}）</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} 离线（最后在线：{1}）</value></data>
@@ -539,10 +623,12 @@
   <data name="notice_chip" xml:space="preserve"><value>公告</value></data>
   <data name="notice_clear" xml:space="preserve"><value>撤下</value></data>
   <data name="notice_cleared" xml:space="preserve"><value>公告已撤下</value></data>
+  <data name="notice_collapse" xml:space="preserve"><value>收起公告</value></data>
   <data name="notice_dialog_title" xml:space="preserve"><value>在门口机显示公告</value></data>
   <data name="notice_door_button" xml:space="preserve"><value>为此门口发布公告</value></data>
   <data name="notice_edit" xml:space="preserve"><value>编辑</value></data>
   <data name="notice_empty" xml:space="preserve"><value>请输入内容</value></data>
+  <data name="notice_expand" xml:space="preserve"><value>展开完整公告</value></data>
   <data name="notice_expires_at" xml:space="preserve"><value>截止时间</value></data>
   <data name="notice_expiry" xml:space="preserve"><value>显示期限</value></data>
   <data name="notice_expiry_1h" xml:space="preserve"><value>1 小时</value></data>
@@ -710,6 +796,12 @@
   <data name="panel_cancel_missing_id" xml:space="preserve"><value>缺少 call_id，无法使用安全取消 API</value></data>
   <data name="panel_cancel_sending" xml:space="preserve"><value>正在发送取消请求…</value></data>
   <data name="panel_cancel_unavailable" xml:space="preserve"><value>此节点无法使用安全取消 API</value></data>
+  <data name="panel_config_apply_failed" xml:space="preserve"><value>无法连接分机 {0}。上次注册的分机：{1}。</value></data>
+  <data name="panel_config_applying" xml:space="preserve"><value>正在连接分机 {0}…</value></data>
+  <data name="panel_config_pending" xml:space="preserve"><value>通话结束后将应用新的连接设置。</value></data>
+  <data name="panel_config_revoked" xml:space="preserve"><value>通话权限已撤销。</value></data>
+  <data name="panel_config_stale" xml:space="preserve"><value>通话设置暂未更新，正在重试…</value></data>
+  <data name="panel_control_reconnecting" xml:space="preserve"><value>通话控制连接中断，正在恢复…</value></data>
   <data name="panel_deadline_reached" xml:space="preserve"><value>已到呼叫期限 — 正在确认结束状态</value></data>
   <data name="panel_dialog_identity_missing" xml:space="preserve"><value>无法创建安全的浏览器通话标识，通话未开始</value></data>
   <data name="panel_event_auto_reply" xml:space="preserve"><value>自动回复</value></data>
@@ -743,6 +835,8 @@
   <data name="panel_lifecycle_end_sync_failed" xml:space="preserve"><value>SIP 通话已结束，但生命周期同步失败</value></data>
   <data name="panel_lifecycle_heartbeat_failed" xml:space="preserve"><value>通话生命周期心跳失败，将安全结束通话</value></data>
   <data name="panel_lifecycle_identity_missing" xml:space="preserve"><value>呼叫缺少生命周期标识，无法安全接听</value></data>
+  <data name="panel_lifecycle_lease_expired" xml:space="preserve"><value>通话控制授权已到期。</value></data>
+  <data name="panel_lifecycle_lease_unavailable" xml:space="preserve"><value>此节点无法确认通话控制授权期限。</value></data>
   <data name="panel_mock_incall" xml:space="preserve"><value>通话中 (mock)</value></data>
   <data name="panel_mock_registered" xml:space="preserve"><value>分机 {0} 已注册 (mock)</value></data>
   <data name="panel_monitor_title" xml:space="preserve"><value>来电监控</value></data>
@@ -775,9 +869,12 @@
   <data name="panel_resident_notified_no_cancel" xml:space="preserve"><value>已通知住户 — 此节点不支持使用 call_id 安全取消</value></data>
   <data name="panel_send_video" xml:space="preserve"><value>同时发送视频</value></data>
   <data name="panel_sending" xml:space="preserve"><value>发送中…</value></data>
+  <data name="panel_state_stale" xml:space="preserve"><value>连接中断，上次更新在 {0} 秒前。</value></data>
+  <data name="panel_state_waiting" xml:space="preserve"><value>正在连接，等待最新状态…</value></data>
   <data name="panel_tap_sound" xml:space="preserve"><value>点按以启用声音</value></data>
   <data name="panel_title" xml:space="preserve"><value>呼叫面板</value></data>
   <data name="panel_unregistered" xml:space="preserve"><value>未注册</value></data>
+  <data name="panel_video_unavailable" xml:space="preserve"><value>当前通话无法发送视频。</value></data>
   <data name="panel_visitor_calling" xml:space="preserve"><value>访客呼叫中</value></data>
   <data name="panel_webrtc_required" xml:space="preserve"><value>通话需要配置 Asterisk WebRTC (integrations.webrtc.ws_url) — 请参阅 deploy/asterisk/webrtc.md</value></data>
   <data name="power_charging" xml:space="preserve"><value>充电中</value></data>
@@ -961,6 +1058,9 @@ PIN：{1}</value></data>
   <data name="setup_title" xml:space="preserve"><value>设置此设备</value></data>
   <data name="sip_unavailable" xml:space="preserve"><value>通话功能当前不可用</value></data>
   <data name="sos_abort" xml:space="preserve"><value>取消</value></data>
+  <data name="sos_accessibility_confirm" xml:space="preserve"><value>要开始紧急呼救倒计时吗？</value></data>
+  <data name="sos_accessibility_hint" xml:space="preserve"><value>激活后查看说明，再确认发起。</value></data>
+  <data name="sos_accessibility_start" xml:space="preserve"><value>发起紧急呼救</value></data>
   <data name="sos_alarm_sound" xml:space="preserve"><value>警报声</value></data>
   <data name="sos_alarm_volume" xml:space="preserve"><value>警报音量</value></data>
   <data name="sos_button_on_roles" xml:space="preserve"><value>显示 SOS 的设备</value></data>
@@ -1083,13 +1183,17 @@ PIN：{1}</value></data>
   <data name="time_zone" xml:space="preserve"><value>时区</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>此设置用于整个集群的时钟、呼叫记录与规则时段</value></data>
   <data name="unlock_auto" xml:space="preserve"><value>已配置时显示</value></data>
+  <data name="unlock_binding_hint" xml:space="preserve"><value>请输入或选择控制此门锁的命令。留空可解除绑定。</value></data>
+  <data name="unlock_binding_required" xml:space="preserve"><value>通用 HA 动作不再自动用于开锁。请确认并保存此门锁对应的命令。</value></data>
   <data name="unlock_command" xml:space="preserve"><value>发送的命令</value></data>
+  <data name="unlock_command_invalid" xml:space="preserve"><value>命令需为 1–32 个英文字母、数字、下划线或连字符。</value></data>
   <data name="unlock_hide" xml:space="preserve"><value>不显示</value></data>
   <data name="unlock_not_configured" xml:space="preserve"><value>尚未配置开锁动作</value></data>
   <data name="unlock_show" xml:space="preserve"><value>始终显示</value></data>
   <data name="unlock_title" xml:space="preserve"><value>开锁按钮</value></data>
   <data name="version_line" xml:space="preserve"><value>core {0} · app {1}</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
+  <data name="visitor_restoring" xml:space="preserve"><value>正在恢复通话状态…</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼叫</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>集群默认 {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>此设备的音量</value></data>

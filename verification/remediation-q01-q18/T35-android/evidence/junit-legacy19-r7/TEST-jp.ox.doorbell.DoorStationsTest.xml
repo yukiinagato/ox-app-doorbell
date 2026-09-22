@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.DoorStationsTest" tests="28" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.175">
+  <properties/>
+  <testcase name="aStationCoreHasNotNamedAsServingStillLosesItsTileWithoutACamera" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="anAlivePeerWithNoServedByIsOfflineToo" classname="jp.ox.doorbell.DoorStationsTest" time="0.162"/>
+  <testcase name="aServedByNamingAStationThePeerListCallsDeadIsOffline" classname="jp.ox.doorbell.DoorStationsTest" time="0.008"/>
+  <testcase name="aServedDoorReportsServed" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="anIndoorPanelIsNeverAStation" classname="jp.ox.doorbell.DoorStationsTest" time="0.001"/>
+  <testcase name="anOfflineStationWithACameraKeepsItsTile" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aStationConfiguredButNeverSeenIsOfflineNotAbsent" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="servedByTreatsNullAndTheTextNullAsUnserved" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="theAlivePeerForADoorIsFoundByRoleAndDoor" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aDoorWithNoStationKeepsItsTile" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="liveAdvertisementOverridesStaleConfiguredIdentity" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aStationOnAnotherDoorDoesNotCount" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="anEmptyDoorIdIsNeverServed" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="anExplicitSnapshotFieldWins" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="configuredIdentityFillsFieldsMissingFromAnOlderPeer" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aDeadStationIsNotAskedForAPicture" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aStationThatAppearsAfterItsTileIsPickedUpOnTheNextPass" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aStationWithNoAddressYetHasNoStill" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="theServedDoorFromTheDeviceKeepsItsTile" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aStationWithACameraKeepsItsTile" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aNullServedByWithNoStationAnywhereIsNoStation" classname="jp.ox.doorbell.DoorStationsTest" time="0.001"/>
+  <testcase name="aStationThatSaysNothingAboutACameraKeepsItsTile" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aStationThatReportsNoCameraGetsNoTile" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="theStillSitsBesideTheMjpegStream" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="theDoorSetUnionsCoresLiveDoorsWithConfiguration" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="withoutStatusDoorsThePeerListDecides" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="anAlivePeerWinsOverAStaleDuplicateForTheSameDoor" classname="jp.ox.doorbell.DoorStationsTest" time="0.0"/>
+  <testcase name="aNullServedByWithAKnownStationIsOffline" classname="jp.ox.doorbell.DoorStationsTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1219,6 +1219,7 @@ TEST_CASE("call flow v2: answered calls recover as in-call and ended calls stay 
 
 TEST_CASE("call recovery uses the durable projection beyond the recent-event window") {
   const std::string dir = contractTempDir();
+  std::string first_generation;
   {
     Store store;
     REQUIRE(store.open(dir + "/doorbell.db"));
@@ -1250,6 +1251,17 @@ TEST_CASE("call recovery uses the durable projection beyond the recent-event win
     REQUIRE(node.start());
     CHECK(node.statusJson().find("durable-call") != std::string::npos);
     {
+      auto snapshot = json::parse(node.statusJson());
+      first_generation = json::getString(snapshot.get(), "snapshot_generation");
+      REQUIRE_FALSE(first_generation.empty());
+      auto* call = cJSON_GetArrayItem(json::get(snapshot.get(), "active_calls"), 0);
+      REQUIRE(call);
+      CHECK(json::getBool(call, "recovery_required"));
+      CHECK(json::getBool(call, "recovery_eligible"));
+      CHECK(json::getInt(call, "recovery_remaining_ms") == 10'000);
+      CHECK(json::getString(call, "snapshot_generation") == first_generation);
+    }
+    {
       std::lock_guard<std::mutex> lock(sink.mu);
       bool requested = false;
       for (const auto& raw : sink.events) {
@@ -1270,6 +1282,12 @@ TEST_CASE("call recovery uses the durable projection beyond the recent-event win
     clock.advance(9'999);
     loop.pumpDue();
     CHECK(sink.countEventType("call_cancelled") == 0);
+    {
+      auto snapshot = json::parse(node.statusJson());
+      auto* call = cJSON_GetArrayItem(json::get(snapshot.get(), "active_calls"), 0);
+      REQUIRE(call);
+      CHECK(json::getInt(call, "recovery_remaining_ms") <= 1);
+    }
     clock.advance(1);
     loop.pumpDue();
     CHECK(sink.countEventType("call_cancelled") == 0);
@@ -1305,6 +1323,9 @@ TEST_CASE("call recovery uses the durable projection beyond the recent-event win
     Node node(options, std::move(deps));
     REQUIRE(node.start());
     CHECK(node.statusJson().find("durable-call") == std::string::npos);
+    auto restarted = json::parse(node.statusJson());
+    CHECK(json::getString(restarted.get(), "snapshot_generation") != first_generation);
+    for (int i = 0; i < 10; ++i) node.reportCallRecovery("durable-call", true);
     clock.advance(10'000);
     loop.pumpDue();
     node.stop();

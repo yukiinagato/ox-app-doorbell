@@ -1,0 +1,87 @@
+[
+  {
+    "class" : "UIView",
+    "alpha" : 1,
+    "hidden" : false,
+    "frame" : "{{0, 0}, {1024, 768}}",
+    "accessibility_element" : false,
+    "traits" : 0
+  },
+  {
+    "frame" : "{{0, 0}, {181.5, 78}}",
+    "accessibility_label" : "Start emergency SOS",
+    "accessibility_element" : true,
+    "hidden" : false,
+    "traits" : 1,
+    "class" : "DoorbellIOS9.SosSlideControl",
+    "identifier" : "sos_slider",
+    "alpha" : 1
+  },
+  {
+    "hidden" : false,
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "class" : "UIView",
+    "frame" : "{{0, 0}, {181.5, 78}}"
+  },
+  {
+    "frame" : "{{68, 20.5}, {101.5, 37}}",
+    "alpha" : 1,
+    "traits" : 0,
+    "text" : "Slide for SOS\nSends in 3s",
+    "class" : "UILabel",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "font_size" : 17
+  },
+  {
+    "class" : "UILabel",
+    "alpha" : 1,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "text" : "",
+    "frame" : "{{5, 13}, {52, 52}}",
+    "hidden" : false,
+    "font_size" : 17
+  },
+  {
+    "class" : "UIImageView",
+    "frame" : "{{17, 25}, {28, 28}}",
+    "hidden" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "accessibility_element" : false
+  },
+  {
+    "hidden" : true,
+    "text" : "",
+    "class" : "UILabel",
+    "frame" : "{{14, 39}, {51.5, 0}}",
+    "traits" : 0,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "font_size" : 22
+  },
+  {
+    "identifier" : "sos_cancel_countdown",
+    "traits" : 0,
+    "alpha" : 1,
+    "class" : "UIButton",
+    "title" : "Cancel",
+    "frame" : "{{77.5, 17}, {96, 44}}",
+    "hidden" : true,
+    "enabled" : true,
+    "accessibility_element" : false
+  },
+  {
+    "text" : "Cancel",
+    "traits" : 0,
+    "hidden" : false,
+    "frame" : "{{93.5, 27}, {64, 24}}",
+    "accessibility_element" : false,
+    "font_size" : 20,
+    "alpha" : 1,
+    "class" : "UIButtonLabel"
+  }
+]

@@ -2,9 +2,17 @@ import AudioToolbox
 import AVFoundation
 import UIKit
 
-private final class PurposeButton: UIButton {
+final class PurposeButton: UIButton {
+    var contentHeight: NSLayoutConstraint?
+
     override func layoutSubviews() {
         super.layoutSubviews()
+        if let height = contentHeight, let label = titleLabel, bounds.width > 12 {
+            let measured = ceil(label.sizeThatFits(CGSize(width: bounds.width - 12,
+                height: .greatestFiniteMagnitude)).height) + 56
+            let required = max(88, measured)
+            if height.constant != required { height.constant = required }
+        }
         let iconSize: CGFloat = 24
         imageView?.frame = CGRect(x: (bounds.width - iconSize) / 2, y: 14,
                                   width: iconSize, height: iconSize)
@@ -43,10 +51,37 @@ final class MainViewController: UIViewController {
 
     private var inCall = false
     private var peerPollBusy = false
+    private var peerPollGeneration: UInt64 = 0
+    private var peerPollTask: URLSessionDataTask?
+    private var peerMediaGeneration = ""
+    private var peerFrameSequence: UInt64 = 0
+    private struct PeerFrameIdentity: Equatable {
+        let core: UInt64
+        let call: String
+        let revision: Int
+        let owner: String
+    }
     private weak var purposeChoice: PurposeChoiceViewController?
     private var activeCallId = ""
-    private var activeCallExpiresAtMs: Int64 = 0
+    private var visitorActionRevision: UInt64 = 0
+    private struct VisitorActionIdentity: Equatable {
+        let call: String
+        let core: UInt64?
+        let revision: UInt64
+        let inCall: Bool
+    }
+    private var heldVisitorActions: [ObjectIdentifier: VisitorActionIdentity] = [:]
     private var reportedRecoveryCallId = ""
+    private var callTiming = CallTiming()
+    private var callTimingGeneration: UInt64?
+    private var callTimerRevision: UInt64 = 0
+    private var callTimingSuspended = false
+#if DEBUG
+    private(set) var callTimerCallbackForTesting: (() -> Void)?
+    var callTimingSnapshotForTesting: (() -> CallTiming.Snapshot?)?
+    var suppressVisitorMediaForTesting = false
+    var peerFrameLoadForTesting: ((URLRequest, @escaping (Data?, URLResponse?) -> Void) -> Void)?
+#endif
     private let safeMode = false
     private var chimeGate = CallChimeRevisionGate()
     private var h264EncoderFailed = false
@@ -89,6 +124,8 @@ final class MainViewController: UIViewController {
     private var lastHomeRefreshUptime: TimeInterval = 0
     private var wakeObserver: NSObjectProtocol?
     private var inviteObserver: NSObjectProtocol?
+    private var activeObserver: NSObjectProtocol?
+    private var backgroundObserver: NSObjectProtocol?
 
     private var clockTimer: Timer?
     private var callTimeoutTimer: Timer?
@@ -129,11 +166,13 @@ final class MainViewController: UIViewController {
     private let callingView = UIView()
     private let pulse = UIView()
     private let callingText = UILabel()
+    private let callingDetail = UILabel()
     private let cancelButton = UIButton(type: .system)
     private let inCallView = UIView()
     private let peerVideo = UIImageView()
     private let inCallTitle = UILabel()
     private let endCallButton = UIButton(type: .system)
+    private var visitorActionHeights: [NSLayoutConstraint] = []
     private let replyBanner = UIView()
     private let replyCaption = UILabel()
     private let replyText = UILabel()
@@ -149,6 +188,7 @@ final class MainViewController: UIViewController {
     private let emergencyTitle = UILabel()
     private let emergencyNote = UILabel()
     private let emergencyCancel = UIButton(type: .system)
+    private var purposeColumns = 3
 
     private static let bgColor = UIColor(red: 0.063, green: 0.078, blue: 0.094, alpha: 1)
     private static let fgColor = UIColor(white: 0.94, alpha: 1)
@@ -171,7 +211,9 @@ final class MainViewController: UIViewController {
     required init?(coder: NSCoder) { fatalError("not supported") }
 
     deinit {
-        for observer in [pairingObserver, wakeObserver, inviteObserver] {
+        callTimeoutTimer?.invalidate()
+        for observer in [pairingObserver, wakeObserver, inviteObserver, activeObserver,
+                         backgroundObserver] {
             guard let observer = observer else { continue }
             NotificationCenter.default.removeObserver(observer)
         }
@@ -201,6 +243,12 @@ final class MainViewController: UIViewController {
         inviteObserver = NotificationCenter.default.addObserver(
             forName: .doorbellPairInvitation, object: nil, queue: .main
         ) { [weak self] _ in self?.onActivity() }
+        activeObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.resumeCallTiming() }
+        backgroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main
+        ) { [weak self] _ in self?.suspendCallTiming() }
         refreshPairingStatus()
 
         clockTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -211,6 +259,9 @@ final class MainViewController: UIViewController {
             withTimeInterval: DoorbellClockSource.refreshIntervalS, repeats: true
         ) { [weak self] _ in self?.refreshClockBase() }
         updateClock()
+#if DEBUG
+        if suppressVisitorMediaForTesting { return }
+#endif
         encoderPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.1, repeats: true) { [weak self] _ in
             self?.encoderPoll()
         }
@@ -221,6 +272,46 @@ final class MainViewController: UIViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         applySemanticStyles()
+        updateVisitorActionMetrics()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        guard isViewLoaded else { return }
+        applyVisitorTypography()
+        buildPurposeButtons()
+    }
+
+    private func applyVisitorTypography() {
+        for label in [callingText, inCallTitle, offlineTitle, emergencyTitle] {
+            let size: CGFloat = label === emergencyTitle ? 44 : (label === offlineTitle ? 34 : 30)
+            label.font = IOSAvailability.visitorFont(size: size,
+                weight: .semibold, traits: traitCollection)
+        }
+        for label in [callingDetail, offlineBody, emergencyNote] {
+            label.font = IOSAvailability.visitorFont(size: label === callingDetail ? 17 : 22,
+                                                     traits: traitCollection)
+        }
+        for button in [cancelButton, endCallButton, emergencyCancel] {
+            button.titleLabel?.font = IOSAvailability.visitorFont(size: 24, weight: .semibold,
+                                                                  traits: traitCollection)
+        }
+        updateVisitorActionMetrics()
+    }
+
+    private func updateVisitorActionMetrics() {
+        let line = max(cancelButton.titleLabel?.font.lineHeight ?? 0,
+                       endCallButton.titleLabel?.font.lineHeight ?? 0)
+        var height = max(56, ceil(line * 2 + 28))
+        for button in [cancelButton, endCallButton, emergencyCancel] {
+            let width = max(1, min(420, view.bounds.width - 40) - button.contentEdgeInsets.left -
+                            button.contentEdgeInsets.right)
+            let textHeight = button.titleLabel?.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height ?? 0
+            height = max(height, ceil(textHeight + 28))
+        }
+        for constraint in visitorActionHeights where constraint.constant != height {
+            constraint.constant = height
+        }
     }
 
     func onActivity() {
@@ -237,6 +328,7 @@ final class MainViewController: UIViewController {
         // decoder/image state; the user can continue a pure-audio established call or hang it up.
         peerPollTimer?.invalidate()
         peerPollTimer = nil
+        retirePeerFrameRequest()
         inCallStreamer?.stop()
         inCallStreamer = nil
         peerVideo.image = nil
@@ -245,9 +337,12 @@ final class MainViewController: UIViewController {
         maybeStartCamera()
     }
 
-    /// No producer may retain or call Core after this returns.
+    /// Stop admission without waiting on capture callbacks from the main queue. CoreBridge
+    /// drains any already acquired leases before destroying the native instance.
     func prepareForCoreShutdown() {
-        camera.stopAndWait()
+        visitorActionRevision &+= 1
+        suspendCallTiming()
+        camera.stop()
         camera.encoder = nil
         videoEncoder.stop()
     }
@@ -272,6 +367,7 @@ final class MainViewController: UIViewController {
         addFull(nightTint)
 
         buildEmergencyView()
+        applyVisitorTypography()
 
         let secret = UIButton(type: .custom)
         secret.translatesAutoresizingMaskIntoConstraints = false
@@ -412,6 +508,7 @@ final class MainViewController: UIViewController {
         gridWidth.isActive = true
         purposeSection.addArrangedSubview(purposeHint)
         purposeSection.addArrangedSubview(purposeGrid)
+        purposeGrid.widthAnchor.constraint(lessThanOrEqualTo: purposeSection.widthAnchor).isActive = true
 
         langBar.axis = .horizontal
         langBar.spacing = 12
@@ -461,6 +558,11 @@ final class MainViewController: UIViewController {
     /// Both home screens are laid out from the size they are about to have, so a rotation or a
     /// split-screen resize re-flows instead of keeping a layout that only suits one orientation.
     private func applyIdleLayout(for size: CGSize) {
+        let columns = VisitorScreenView.purposeColumnCount(for: size)
+        if columns != purposeColumns {
+            purposeColumns = columns
+            buildPurposeButtons()
+        }
         dashboard?.applyLayout(for: size)
         visitorScreen?.applyLayout(for: size)
     }
@@ -477,13 +579,31 @@ final class MainViewController: UIViewController {
         addFull(callingView)
 
         pulse.backgroundColor = MainViewController.accentColor
-        pulse.layer.cornerRadius = 60
+        pulse.layer.cornerRadius = 40
         pulse.translatesAutoresizingMaskIntoConstraints = false
+        let bell = UIImageView(image: TablerIcon.image("TablerBell"))
+        bell.tintColor = .black
+        bell.contentMode = .scaleAspectFit
+        bell.translatesAutoresizingMaskIntoConstraints = false
+        pulse.addSubview(bell)
+        NSLayoutConstraint.activate([
+            bell.centerXAnchor.constraint(equalTo: pulse.centerXAnchor),
+            bell.centerYAnchor.constraint(equalTo: pulse.centerYAnchor),
+            bell.widthAnchor.constraint(equalToConstant: 36),
+            bell.heightAnchor.constraint(equalToConstant: 36),
+        ])
 
-        callingText.font = .systemFont(ofSize: 34, weight: .semibold)
+        callingText.font = .systemFont(ofSize: 30, weight: .semibold)
         callingText.textColor = MainViewController.fgColor
         callingText.textAlignment = .center
         callingText.numberOfLines = 0
+        callingText.accessibilityIdentifier = "calling_status"
+        callingText.accessibilityTraits = .header
+        callingDetail.font = .systemFont(ofSize: 17)
+        callingDetail.textColor = MainViewController.dimColor
+        callingDetail.numberOfLines = 0
+        callingDetail.accessibilityIdentifier = "calling_detail"
+        callingDetail.textAlignment = .center
 
         cancelButton.titleLabel?.font = .systemFont(ofSize: 24)
         cancelButton.setTitleColor(MainViewController.fgColor, for: .normal)
@@ -491,18 +611,72 @@ final class MainViewController: UIViewController {
         cancelButton.layer.cornerRadius = 12
         cancelButton.contentEdgeInsets = UIEdgeInsets(top: 14, left: 40, bottom: 14, right: 40)
         cancelButton.addTarget(self, action: #selector(onCancelClick), for: .touchUpInside)
-
-        let stack = UIStackView(arrangedSubviews: [pulse, callingText, cancelButton])
+        bindVisitorActionInput(cancelButton)
+        cancelButton.accessibilityIdentifier = "calling_cancel"
+        callingView.addSubview(cancelButton)
+        pinVisitorAction(cancelButton, in: callingView)
+        let stack = UIStackView(arrangedSubviews: [pulse, callingText, callingDetail])
         stack.axis = .vertical
-        stack.spacing = 30
+        stack.spacing = 18
         stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        callingView.addSubview(stack)
+        addVisitorStatus(stack, in: callingView, above: cancelButton)
         NSLayoutConstraint.activate([
-            pulse.widthAnchor.constraint(equalToConstant: 120),
-            pulse.heightAnchor.constraint(equalToConstant: 120),
-            stack.centerXAnchor.constraint(equalTo: callingView.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: callingView.centerYAnchor),
+            pulse.widthAnchor.constraint(equalToConstant: 80),
+            pulse.heightAnchor.constraint(equalToConstant: 80),
+            callingText.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            callingDetail.widthAnchor.constraint(equalTo: stack.widthAnchor),
+        ])
+    }
+
+    private func pinVisitorAction(_ button: UIButton, in container: UIView) {
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.titleLabel?.numberOfLines = 0
+        button.titleLabel?.textAlignment = .center
+        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
+        let width = button.widthAnchor.constraint(equalToConstant: 420)
+        width.priority = UILayoutPriority(750)
+        let height = button.heightAnchor.constraint(greaterThanOrEqualToConstant: 56)
+        visitorActionHeights.append(height)
+        NSLayoutConstraint.activate([
+            button.centerXAnchor.constraint(equalTo: container.centerXAnchor),
+            button.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -24),
+            button.leadingAnchor.constraint(greaterThanOrEqualTo: guide.leadingAnchor, constant: 20),
+            button.trailingAnchor.constraint(lessThanOrEqualTo: guide.trailingAnchor, constant: -20),
+            width, height,
+        ])
+    }
+
+    private func addVisitorStatus(_ stack: UIStackView, in container: UIView,
+                                   above action: UIView? = nil) {
+        let scroll = UIScrollView()
+        let content = UIView()
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        content.translatesAutoresizingMaskIntoConstraints = false
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        scroll.alwaysBounceVertical = false
+        container.addSubview(scroll)
+        scroll.addSubview(content)
+        content.addSubview(stack)
+        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
+        let fill = content.heightAnchor.constraint(greaterThanOrEqualTo: scroll.heightAnchor)
+        fill.priority = UILayoutPriority(250)
+        NSLayoutConstraint.activate([
+            scroll.topAnchor.constraint(equalTo: guide.topAnchor, constant: 16),
+            scroll.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 20),
+            scroll.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -20),
+            scroll.bottomAnchor.constraint(equalTo: action?.topAnchor ?? guide.bottomAnchor,
+                                             constant: -20),
+            content.topAnchor.constraint(equalTo: scroll.topAnchor),
+            content.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
+            content.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
+            content.widthAnchor.constraint(equalTo: scroll.widthAnchor),
+            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
+            stack.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: 16),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -16),
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            fill,
         ])
     }
 
@@ -516,8 +690,12 @@ final class MainViewController: UIViewController {
 
         inCallTitle.font = .systemFont(ofSize: 24, weight: .semibold)
         inCallTitle.textColor = MainViewController.fgColor
+        inCallTitle.textAlignment = .center
+        inCallTitle.numberOfLines = 0
+        inCallTitle.accessibilityIdentifier = "incall_status"
+        inCallTitle.accessibilityTraits = .header
+        inCallTitle.backgroundColor = UIColor.black.withAlphaComponent(0.65)
         inCallTitle.translatesAutoresizingMaskIntoConstraints = false
-        inCallView.addSubview(inCallTitle)
 
         endCallButton.titleLabel?.font = .systemFont(ofSize: 24, weight: .semibold)
         endCallButton.setTitleColor(.white, for: .normal)
@@ -525,15 +703,28 @@ final class MainViewController: UIViewController {
         endCallButton.layer.cornerRadius = 12
         endCallButton.contentEdgeInsets = UIEdgeInsets(top: 14, left: 44, bottom: 14, right: 44)
         endCallButton.addTarget(self, action: #selector(onEndCallClick), for: .touchUpInside)
-        endCallButton.translatesAutoresizingMaskIntoConstraints = false
+        bindVisitorActionInput(endCallButton)
+        endCallButton.accessibilityIdentifier = "incall_end"
         inCallView.addSubview(endCallButton)
+        pinVisitorAction(endCallButton, in: inCallView)
 
+        let statusScroll = UIScrollView()
+        statusScroll.accessibilityIdentifier = "incall_status_scroll"
+        statusScroll.translatesAutoresizingMaskIntoConstraints = false
+        statusScroll.clipsToBounds = true
+        inCallView.addSubview(statusScroll)
+        statusScroll.addSubview(inCallTitle)
         let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
-            inCallTitle.topAnchor.constraint(equalTo: g.topAnchor, constant: 18),
-            inCallTitle.centerXAnchor.constraint(equalTo: inCallView.centerXAnchor),
-            endCallButton.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -24),
-            endCallButton.centerXAnchor.constraint(equalTo: inCallView.centerXAnchor),
+            statusScroll.topAnchor.constraint(equalTo: g.topAnchor, constant: 18),
+            statusScroll.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 20),
+            statusScroll.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -20),
+            statusScroll.bottomAnchor.constraint(equalTo: endCallButton.topAnchor, constant: -20),
+            inCallTitle.topAnchor.constraint(equalTo: statusScroll.topAnchor),
+            inCallTitle.bottomAnchor.constraint(equalTo: statusScroll.bottomAnchor),
+            inCallTitle.leadingAnchor.constraint(equalTo: statusScroll.leadingAnchor),
+            inCallTitle.trailingAnchor.constraint(equalTo: statusScroll.trailingAnchor),
+            inCallTitle.widthAnchor.constraint(equalTo: statusScroll.widthAnchor),
         ])
     }
 
@@ -577,6 +768,9 @@ final class MainViewController: UIViewController {
         offlineTitle.font = .systemFont(ofSize: 34, weight: .bold)
         offlineTitle.textColor = MainViewController.fgColor
         offlineTitle.textAlignment = .center
+        offlineTitle.numberOfLines = 0
+        offlineTitle.accessibilityIdentifier = "visitor_offline_status"
+        offlineTitle.accessibilityTraits = .header
         offlineBody.font = .systemFont(ofSize: 22)
         offlineBody.textColor = MainViewController.dimColor
         offlineBody.textAlignment = .center
@@ -585,12 +779,9 @@ final class MainViewController: UIViewController {
         stack.axis = .vertical
         stack.spacing = 14
         stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        offlineView.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: offlineView.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: offlineView.centerYAnchor),
-        ])
+        addVisitorStatus(stack, in: offlineView)
+        offlineTitle.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        offlineBody.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
     }
 
     private func buildScreensaver() {
@@ -628,6 +819,10 @@ final class MainViewController: UIViewController {
         emergencyTitle.font = .systemFont(ofSize: 64, weight: .heavy)
         emergencyTitle.textColor = .white
         emergencyTitle.textAlignment = .center
+        emergencyTitle.numberOfLines = 0
+        emergencyTitle.accessibilityIdentifier = "visitor_sos_status"
+        emergencyTitle.accessibilityTraits = .header
+        emergencyView.accessibilityIdentifier = "visitor_sos_screen"
         emergencyNote.font = .systemFont(ofSize: 26)
         emergencyNote.textColor = UIColor(white: 1, alpha: 0.85)
         emergencyNote.textAlignment = .center
@@ -639,16 +834,14 @@ final class MainViewController: UIViewController {
         emergencyCancel.layer.cornerRadius = 14
         emergencyCancel.contentEdgeInsets = UIEdgeInsets(top: 16, left: 48, bottom: 16, right: 48)
         emergencyCancel.addTarget(self, action: #selector(onEmergencyCancel), for: .touchUpInside)
-        let stack = UIStackView(arrangedSubviews: [emergencyTitle, emergencyNote, emergencyCancel])
+        emergencyCancel.accessibilityIdentifier = "visitor_sos_clear"
+        emergencyView.addSubview(emergencyCancel)
+        pinVisitorAction(emergencyCancel, in: emergencyView)
+        let stack = UIStackView(arrangedSubviews: [emergencyTitle, emergencyNote])
         stack.axis = .vertical
-        stack.spacing = 30
-        stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        emergencyView.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: emergencyView.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: emergencyView.centerYAnchor),
-        ])
+        stack.spacing = 24
+        stack.alignment = .fill
+        addVisitorStatus(stack, in: emergencyView, above: emergencyCancel)
     }
 
 
@@ -661,6 +854,7 @@ final class MainViewController: UIViewController {
         touchHint.text = texts.t("idle.touch_to_call")
         monitorButton.setTitle(texts.t("monitor.open"), for: .normal)
         callingText.text = callTitleOverride ?? texts.t("calling.title")
+        callingDetail.text = texts.t("calling.wait_hint")
         cancelButton.setTitle(texts.t("calling.cancel"), for: .normal)
         replyCaption.text = texts.t("reply.banner")
         offlineTitle.text = texts.t("offline.title")
@@ -690,6 +884,10 @@ final class MainViewController: UIViewController {
             IOSAvailability.PerfProbe.record("clock.tick", now - lastClockTickUptime)
         }
         lastClockTickUptime = now
+        if !callTimingSuspended, core.runningGeneration != callTimingGeneration {
+            resetCallTiming()
+            refreshCallingDeadline()
+        }
         // A base that was refused because Core had not started yet is retried here rather than at
         // the next half minute, so a late start still puts a time on screen within a second of
         // Core being ready. The retry costs one boolean while Core is down.
@@ -877,75 +1075,62 @@ final class MainViewController: UIViewController {
     }
 
     private func restoreActiveCallIfNeeded(recoveryEvent: [String: Any]?) {
+        guard !callTimingSuspended, !nodeId.isEmpty,
+              let snapshot = readCallTimingSnapshot(),
+              core.runningGeneration == snapshot.coreGeneration,
+              let calls = snapshot.document["active_calls"] as? [[String: Any]] else { return }
+        if callTimingGeneration != snapshot.coreGeneration { resetCallTiming() }
+        guard callTiming.accepts(snapshot) else { return }
         let requestedCallId = recoveryEvent.map { ConfigUtil.evStr($0, "call_id") } ?? ""
-        guard !nodeId.isEmpty,
-              let calls = core.status()?["active_calls"] as? [[String: Any]] else {
-            if !requestedCallId.isEmpty { reportRecovery(requestedCallId, restored: false) }
-            return
-        }
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        for call in calls {
-            let callDoor = ConfigUtil.evStr(call, "door")
-            let callId = ConfigUtil.evStr(call, "call_id")
+        for candidate in calls {
+            let callId = ConfigUtil.evStr(candidate, "call_id")
             if !requestedCallId.isEmpty && callId != requestedCallId { continue }
-            let origin = ConfigUtil.evStr(call, "origin")
-            let eventOwner = recoveryEvent.map { ConfigUtil.evStr($0, "dialog_owner") } ?? ""
-            let owner = eventOwner.isEmpty ? ConfigUtil.evStr(call, "dialog_owner") : eventOwner
-            let expiry = (call["expires_at_ms"] as? NSNumber)?.int64Value ?? 0
-            guard !callId.isEmpty else { continue }
-
-            let persistedState = ConfigUtil.evStr(call, "state")
-            let eventState = recoveryEvent.map { ConfigUtil.evStr($0, "state") } ?? ""
-            if persistedState == "in_call" || eventState == "in_call" {
-                if owner != nodeId {
-                    if !requestedCallId.isEmpty { return }
-                    continue
+            let door = ConfigUtil.evStr(candidate, "door")
+            guard case .active(let reading) = callTiming.observeRecovery(snapshot, callId: callId,
+                role: boot.role, nodeId: nodeId, door: boot.door,
+                now: ProcessInfo.processInfo.systemUptime) else { continue }
+            let call = reading.call
+            let owner = ConfigUtil.evStr(call, "dialog_owner")
+            let recoveryRequired = ConfigUtil.evBool(call, "recovery_required")
+            if ConfigUtil.evStr(call, "state") == "in_call" {
+                // A snapshot cannot recreate PJSIP media after Core restart.
+                if owner == nodeId && recoveryRequired {
+                    reportRecovery(callId, restored: false, generation: reading.coreGeneration)
+                    return
                 }
-                // Native PJSIP dialogs do not survive a process/Core restart. A restored view is
-                // not proof of an established audio dialog, so the owning node fails closed.
-                reportRecovery(callId, restored: false)
-                return
-            }
-
-            guard persistedState == "ringing" || eventState == "ringing" ||
-                    eventState == "purpose_pending" else { continue }
-            guard boot.role == "door_station", origin == nodeId,
-                  (callDoor.isEmpty || callDoor == boot.door) else {
-                if !requestedCallId.isEmpty { return }
                 continue
             }
-            guard expiry > nowMs else {
-                reportRecovery(callId, restored: false)
+            guard boot.role == "door_station", ConfigUtil.evStr(call, "origin") == nodeId,
+                  door == boot.door else { continue }
+            guard (reading.remainingSeconds ?? 0) > 0,
+                  !recoveryRequired || reading.mayRestore else {
+                // A zero, stale or incomplete timing sample is not a cancellation instruction.
                 return
             }
-
             activeCallId = callId
-            activeCallExpiresAtMs = expiry
-            let sound = (ConfigUtil.dig(cfg, "ui.call_sound") as? String) ??
-                "outdoor_call_alert"
+            let sound = (ConfigUtil.dig(cfg, "ui.call_sound") as? String) ?? "outdoor_call_alert"
             callFeedbackAudio.playConfigured(sound,
                 loops: ConfigUtil.bool(cfg, "ui.call_sound_loop", false))
             showCalling()
-
-            let callFlow = ConfigUtil.evStr(call, "call_flow")
-            let revision = ConfigUtil.int(call, "stage_revision", 0)
-            let purposePending = eventState == "purpose_pending" ||
-                (callFlow == "ring_then_purpose" && revision == 0 &&
-                 ConfigUtil.evStr(call, "purpose").isEmpty)
+            let purposePending = ConfigUtil.evStr(call, "call_flow") == "ring_then_purpose" &&
+                ConfigUtil.int(call, "stage_revision", 0) == 0 &&
+                ConfigUtil.evStr(call, "purpose").isEmpty
             if purposePending && !emergencyActive && !availablePurposeIds().isEmpty {
                 showPurposeChoice(afterRing: true)
             }
-            reportRecovery(callId, restored: true)
+            if recoveryRequired {
+                reportRecovery(callId, restored: true, generation: reading.coreGeneration)
+            }
             return
         }
-
-        if !requestedCallId.isEmpty { reportRecovery(requestedCallId, restored: false) }
     }
 
-    private func reportRecovery(_ callId: String, restored: Bool) {
-        guard !callId.isEmpty, reportedRecoveryCallId != callId else { return }
-        reportedRecoveryCallId = callId
-        core.reportCallRecovery(callId: callId, restored: restored)
+    private func reportRecovery(_ callId: String, restored: Bool, generation: UInt64) {
+        guard !callId.isEmpty, core.runningGeneration == generation else { return }
+        let identity = "\(generation):\(callId)"
+        guard reportedRecoveryCallId != identity else { return }
+        reportedRecoveryCallId = identity
+        core.reportCallRecovery(callId: callId, restored: restored, coreGeneration: generation)
     }
 
     private func refreshConfigCache() {
@@ -977,7 +1162,7 @@ final class MainViewController: UIViewController {
         }
         var row: UIStackView?
         for (i, id) in ids.enumerated() {
-            if i % 3 == 0 {
+            if i % purposeColumns == 0 {
                 row = UIStackView()
                 row!.axis = .horizontal
                 row!.spacing = 12
@@ -994,26 +1179,28 @@ final class MainViewController: UIViewController {
             b.imageView?.contentMode = .scaleAspectFit
             b.setTitle(TablerIcon.purpose(id) != nil || icon.isEmpty ? label : "\(icon) \(label)",
                        for: .normal)
-            b.titleLabel?.font = .systemFont(ofSize: 16, weight: .medium)
-            b.titleLabel?.numberOfLines = 2
+            b.titleLabel?.font = IOSAvailability.visitorFont(size: 16, weight: .medium,
+                                                            traits: traitCollection)
+            b.titleLabel?.numberOfLines = 0
             b.titleLabel?.textAlignment = .center
             b.setTitleColor(idleSkin.cardInk("tile_label"), for: .normal)
             b.backgroundColor = idleSkin.surface
             b.layer.cornerRadius = 14
-            // The row divides its width equally, so a button only needs a floor it may not
-            // shrink below and a fixed height.
+            // Width comes from the equal-width row; wrapped content determines its height.
             let minimum = b.widthAnchor.constraint(greaterThanOrEqualToConstant: 96)
             minimum.priority = UILayoutPriority(999)
             minimum.isActive = true
-            b.heightAnchor.constraint(equalToConstant: 88).isActive = true
+            let height = b.heightAnchor.constraint(greaterThanOrEqualToConstant: 88)
+            b.contentHeight = height
+            height.isActive = true
             b.accessibilityIdentifier = "purpose_\(id)"
             b.addTarget(self, action: #selector(onPurposeClick(_:)), for: .touchUpInside)
             row!.addArrangedSubview(b)
         }
         // A last row with one or two purposes in it keeps the column width of a full row rather
         // than stretching its buttons across the grid.
-        if let last = row, last.arrangedSubviews.count % 3 != 0 {
-            for _ in last.arrangedSubviews.count..<3 { last.addArrangedSubview(UIView()) }
+        if let last = row, last.arrangedSubviews.count < purposeColumns {
+            for _ in last.arrangedSubviews.count..<purposeColumns { last.addArrangedSubview(UIView()) }
         }
         purposeSection.isHidden = false
     }
@@ -1045,8 +1232,9 @@ final class MainViewController: UIViewController {
             let b = UIButton(type: .system)
             b.layer.cornerRadius = 10
             #if !os(tvOS)
-            b.contentEdgeInsets = UIEdgeInsets(top: 8, left: 22, bottom: 8, right: 22)
+            b.contentEdgeInsets = UIEdgeInsets(top: 10, left: 8, bottom: 10, right: 8)
             #endif
+            b.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
             b.accessibilityIdentifier = "lang_\(lang)"
             b.addTarget(self, action: #selector(onLangClick(_:)), for: .primaryActionTriggered)
             langBar.addArrangedSubview(b)
@@ -1065,10 +1253,11 @@ final class MainViewController: UIViewController {
                   let lang = b.accessibilityIdentifier?.dropFirst("lang_".count) else { continue }
             let code = String(lang)
             let on = code == visitorLang
+            b.accessibilityTraits = on ? [.button, .selected] : .button
             let fill = on ? idleSkin.palette.accent : idleSkin.surface
             b.backgroundColor = fill
             let ink = on ? idleSkin.palette.onAccent : idleSkin.cardMuted("hint")
-            DoorbellTheme.twoPartTitle(Texts.langDisplayName(code), on: b, primarySize: 20,
+            DoorbellTheme.twoPartTitle(Texts.langDisplayName(code), on: b, primarySize: 17,
                                        color: ink, focusColor: idleSkin.palette.onAccent,
                                        bold: on)
         }
@@ -1236,7 +1425,7 @@ final class MainViewController: UIViewController {
         }
         emergencyActive = true
         exitScreensaver()
-        callTimeoutTimer?.invalidate()
+        invalidateCallTimer()
         callingView.isHidden = true
         replyBanner.isHidden = true
         if visual {
@@ -1288,60 +1477,136 @@ final class MainViewController: UIViewController {
     }
 
     private func showIdle(hint: String? = nil) {
+        visitorActionRevision &+= 1
         dismissPurposeChoice()
         callFeedbackAudio.stop()
         callTitleOverride = nil
-        callTimeoutTimer?.invalidate()
+        invalidateCallTimer()
         pulse.layer.removeAllAnimations()
         callingView.isHidden = true
         offlineView.isHidden = true
         idleView.isHidden = false
         activeCallId = ""
-        activeCallExpiresAtMs = 0
         if let h = hint {
             touchHint.text = h
             visitorScreen?.updateHint(h)
         }
     }
 
-    private func coreExpiryForActiveCall() -> Int64 {
-        guard !activeCallId.isEmpty,
-              let calls = core.status()?["active_calls"] as? [[String: Any]] else { return 0 }
-        for call in calls where ConfigUtil.evStr(call, "call_id") == activeCallId {
-            if let number = call["expires_at_ms"] as? NSNumber {
-                return number.int64Value
-            }
-            if let value = call["expires_at_ms"] as? String {
-                return Int64(value) ?? 0
+    private func invalidateCallTimer() {
+        callTimerRevision &+= 1
+        callTimeoutTimer?.invalidate()
+        callTimeoutTimer = nil
+    }
+
+    private func resetCallTiming() {
+        invalidateCallTimer()
+        callTiming.reset()
+        let generation = core.runningGeneration
+        if generation != callTimingGeneration { reportedRecoveryCallId = "" }
+        callTimingGeneration = generation
+    }
+
+    private func suspendCallTiming() {
+        visitorActionRevision &+= 1
+        callTimingSuspended = true
+        resetCallTiming()
+        callTiming.requireFreshSnapshot(readCallTimingSnapshot())
+    }
+
+    private func resumeCallTiming() {
+        callTimingSuspended = false
+        resetCallTiming()
+        callTiming.requireFreshSnapshot(readCallTimingSnapshot())
+        refreshClockBase()
+        refreshCallingDeadline()
+    }
+
+    private func readCallTimingSnapshot() -> CallTiming.Snapshot? {
+#if DEBUG
+        if let provider = callTimingSnapshotForTesting { return provider() }
+#endif
+        return core.callTimingSnapshot()
+    }
+
+    private func refreshCallingDeadline() {
+        if core.runningGeneration != callTimingGeneration { resetCallTiming() }
+        invalidateCallTimer()
+        guard !callTimingSuspended else { return }
+        if activeCallId.isEmpty {
+            guard callTiming.waitingForFreshSnapshot else { return }
+            restoreActiveCallIfNeeded()
+            if !callTiming.waitingForFreshSnapshot { return }
+        } else if callingView.isHidden && !inCall { return }
+        let snapshot = readCallTimingSnapshot()
+        let currentSnapshot = snapshot.flatMap {
+            core.runningGeneration == $0.coreGeneration ? $0 : nil
+        }
+        let observation = callTiming.observe(currentSnapshot, callId: activeCallId, door: boot.door,
+                                              now: ProcessInfo.processInfo.systemUptime)
+        var delay: TimeInterval = 1
+        switch observation {
+        case .absent:
+            if inCall { onSipIdle() }
+            else { showIdle(hint: texts.t("calling.no_answer")) }
+            return
+        case .unavailable:
+            callingDetail.text = texts.t("visitor.restoring")
+        case .active(let reading):
+            if ConfigUtil.evStr(reading.call, "state") == "in_call" {
+                if inCall { return }
+                callingDetail.text = texts.t("visitor.restoring")
+            } else if let remaining = reading.remainingSeconds, remaining > 0 {
+                callingDetail.text = texts.t("calling.wait_hint")
+                delay = min(1, max(0.25, remaining))
+            } else {
+                callingDetail.text = texts.t("visitor.restoring")
             }
         }
-        return 0
+        let expectedCall = activeCallId
+        let expectedGeneration = core.runningGeneration
+        let expectedTimer = callTimerRevision
+        let callback: () -> Void = { [weak self] in
+            guard let self = self, !self.callTimingSuspended,
+                  self.callTimerRevision == expectedTimer,
+                  self.core.runningGeneration == expectedGeneration,
+                  self.activeCallId == expectedCall else { return }
+            self.refreshCallingDeadline()
+        }
+#if DEBUG
+        callTimerCallbackForTesting = callback
+#endif
+        callTimeoutTimer = IOSAvailability.scheduledTimer(withTimeInterval: delay, repeats: false) {
+            _ in callback()
+        }
     }
+
+#if DEBUG
+    func setVisibleCallForTimingTest(_ callId: String) {
+        activeCallId = callId
+        callingView.isHidden = false
+    }
+
+    func refreshVisitorForTesting() { refreshNodeInfo() }
+    func visitorEventForTesting(_ event: [String: Any]) { onUiEvent(event) }
+    func refreshCallTimingForTesting() { refreshCallingDeadline() }
+    func suspendCallTimingForTesting() { suspendCallTiming() }
+    func resumeCallTimingForTesting() { resumeCallTiming() }
+    var visibleCallForTimingTest: String { return activeCallId }
+    var callTimerRevisionForTesting: UInt64 { return callTimerRevision }
+    var callDetailForTimingTest: String? { return callingDetail.text }
+#endif
 
     private func showCalling(title: String? = nil) {
         exitScreensaver()
         if let t = title { callTitleOverride = t }
         callingText.text = callTitleOverride ?? texts.t("calling.title")
+        callingDetail.text = texts.t("calling.wait_hint")
         idleView.isHidden = true
         callingView.isHidden = false
-        callTimeoutTimer?.invalidate()
-        if activeCallExpiresAtMs <= 0 { activeCallExpiresAtMs = coreExpiryForActiveCall() }
-        if activeCallExpiresAtMs > 0 {
-            let timeout = max(0.001,
-                Double(activeCallExpiresAtMs) / 1000 - Date().timeIntervalSince1970)
-            callTimeoutTimer = IOSAvailability.scheduledTimer(
-                withTimeInterval: timeout, repeats: false
-            ) { [weak self] _ in
-                guard let self = self else { return }
-                if !self.activeCallId.isEmpty {
-                    _ = self.core.cancelCall(door: self.boot.door, callId: self.activeCallId,
-                                             reason: "timeout")
-                }
-                self.showIdle(hint: self.texts.t("calling.no_answer"))
-            }
-        }
+        refreshCallingDeadline()
         pulse.layer.removeAllAnimations()
-        if safeMode {
+        if safeMode || UIAccessibility.isReduceMotionEnabled {
             pulse.alpha = 1
             return
         }
@@ -1398,7 +1663,7 @@ final class MainViewController: UIViewController {
             replyTimer = IOSAvailability.scheduledTimer(withTimeInterval: ttl, repeats: false) { [weak self] _ in
                 self?.replyBanner.isHidden = true
             }
-            callTimeoutTimer?.invalidate()
+            invalidateCallTimer()
             showIdle()
         case "wake_screen":
             if boot.role == "door_station" { onActivity() }
@@ -1414,9 +1679,7 @@ final class MainViewController: UIViewController {
                 let door = ConfigUtil.evStr(ev, "door")
                 if door.isEmpty || door == boot.door { onActivity() }
             }
-            if type == "press", !activeCallId.isEmpty, eventCall == activeCallId,
-               let expiry = ev["expires_at_ms"] as? NSNumber, expiry.int64Value > 0 {
-                activeCallExpiresAtMs = expiry.int64Value
+            if type == "press", !activeCallId.isEmpty, eventCall == activeCallId {
                 if !callingView.isHidden { showCalling() }
             }
             if (type == "call_cancelled" || type == "call_ended") &&
@@ -1468,11 +1731,12 @@ final class MainViewController: UIViewController {
 
 
     private func onSipInCall(_ ev: [String: Any]) {
+        visitorActionRevision &+= 1
         dismissPurposeChoice()
         inCall = true
         callingText.text = texts.t("incall.title")
         guard boot.role == "door_station" else { return }
-        callTimeoutTimer?.invalidate()
+        invalidateCallTimer()
         let stream = ConfigUtil.evStr(ev, "peer_stream")
         peerPollTimer?.invalidate()
         peerPollTimer = nil
@@ -1486,6 +1750,7 @@ final class MainViewController: UIViewController {
     }
 
     private func onSipIdle() {
+        visitorActionRevision &+= 1
         inCall = false
         closeInCall()
         if boot.role == "door_station" { showIdle() }
@@ -1494,6 +1759,7 @@ final class MainViewController: UIViewController {
     private var inCallStreamer: MjpegClient?
 
     private func showInCall(streamUrl: String?) {
+        retirePeerFrameRequest()
         exitScreensaver()
         idleView.isHidden = true
         callingView.isHidden = true
@@ -1524,6 +1790,7 @@ final class MainViewController: UIViewController {
     }
 
     private func closeInCall() {
+        retirePeerFrameRequest()
         peerPollTimer?.invalidate()
         peerPollTimer = nil
         inCallStreamer?.stop()
@@ -1533,27 +1800,128 @@ final class MainViewController: UIViewController {
         inCallView.isHidden = true
     }
 
+    private func bindVisitorActionInput(_ button: UIButton) {
+        button.addTarget(self, action: #selector(onVisitorActionDown(_:)), for: .touchDown)
+        button.addTarget(self, action: #selector(onVisitorActionCancelled(_:)),
+                         for: [.touchCancel, .touchUpOutside])
+    }
+
+    private func visitorActionIdentity() -> VisitorActionIdentity {
+        return VisitorActionIdentity(call: activeCallId, core: core.runningGeneration,
+                                     revision: visitorActionRevision, inCall: inCall)
+    }
+
+    @objc private func onVisitorActionDown(_ sender: UIButton) {
+        heldVisitorActions[ObjectIdentifier(sender)] = visitorActionIdentity()
+    }
+
+    @objc private func onVisitorActionCancelled(_ sender: UIButton) {
+        heldVisitorActions.removeValue(forKey: ObjectIdentifier(sender))
+    }
+
+    private func consumeVisitorAction(_ button: UIButton) -> Bool {
+        // Assistive activation has no held touch. A physical release must retain the identity
+        // captured before any intervening call, Core or nil-ID SIP UI session transition.
+        guard let captured = heldVisitorActions.removeValue(forKey: ObjectIdentifier(button)) else {
+            return true
+        }
+        return captured == visitorActionIdentity()
+    }
+
     @objc private func onEndCallClick() {
+        guard consumeVisitorAction(endCallButton), inCall, !inCallView.isHidden else { return }
         core.sipHangup()
         onSipIdle()
     }
 
     private func pollPeerFrame() {
-        guard inCall, !safeMode, !peerPollBusy else { return }
+        guard inCall, !safeMode, !peerPollBusy,
+              let identity = currentPeerFrameIdentity() else { return }
+        let generation = peerPollGeneration
         peerPollBusy = true
-        let url = URL(string: "http://127.0.0.1:\(boot.httpPort)/peer-frame.jpg")!
-        URLSession.shared.dataTask(with: url) { [weak self] data, resp, _ in
+        var components = URLComponents(string: "http://127.0.0.1:\(boot.httpPort)/peer-frame.jpg")!
+        components.queryItems = [URLQueryItem(name: "door", value: boot.door),
+            URLQueryItem(name: "call_id", value: identity.call),
+            URLQueryItem(name: "stage_revision", value: String(identity.revision))]
+        guard let url = components.url else { peerPollBusy = false; return }
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 3
+        let complete: (Data?, URLResponse?) -> Void = { [weak self] data, resp in
             DispatchQueue.main.async {
-                guard let self = self else { return }
+                guard let self = self, self.peerPollGeneration == generation else { return }
                 self.peerPollBusy = false
-                guard self.inCall, let data = data,
-                      (resp as? HTTPURLResponse)?.statusCode == 200,
+                self.peerPollTask = nil
+                guard self.currentPeerFrameIdentity() == identity, self.inCall else { return }
+                guard let response = resp as? HTTPURLResponse else { return }
+                // The convenience header accessor requires iOS 13; this shell also supports iOS 9.
+                func header(_ name: String) -> String? {
+                    for (key, value) in response.allHeaderFields {
+                        if String(describing: key).caseInsensitiveCompare(name) == .orderedSame {
+                            return value as? String
+                        }
+                    }
+                    return nil
+                }
+                guard response.statusCode == 200,
+                      header("X-Doorbell-Call-Id") == identity.call,
+                      header("X-Doorbell-Dialog-Owner") == identity.owner,
+                      header("X-Doorbell-Stage-Revision") == String(identity.revision),
+                      let media = header("X-Doorbell-Media-Generation"),
+                      media.count == 32, media.range(of: "^[0-9a-f]{32}$", options: .regularExpression) != nil,
+                      let text = header("X-Doorbell-Frame-Sequence"),
+                      text.count <= 19, text.range(of: "^[1-9][0-9]*$", options: .regularExpression) != nil,
+                      let sequence = UInt64(text), sequence <= UInt64(Int64.max),
+                      media != self.peerMediaGeneration || sequence > self.peerFrameSequence,
+                      let data = data, data.count <= 1024 * 1024,
                       let img = UIImage(data: data) else { return }
-                if self.inCallView.isHidden { self.showInCall(streamUrl: nil) }
+                self.peerMediaGeneration = media
+                self.peerFrameSequence = sequence
                 self.peerVideo.image = img
             }
-        }.resume()
+        }
+#if DEBUG
+        if let load = peerFrameLoadForTesting { load(request, complete); return }
+#endif
+        let task = URLSession.shared.dataTask(with: request) { data, response, _ in complete(data, response) }
+        peerPollTask = task
+        task.resume()
     }
+
+    private func currentPeerFrameIdentity() -> PeerFrameIdentity? {
+        guard let snapshot = readCallTimingSnapshot(), snapshot.coreGeneration == core.runningGeneration,
+              !activeCallId.isEmpty,
+              let calls = snapshot.document["active_calls"] as? [[String: Any]],
+              let call = calls.first(where: { ConfigUtil.evStr($0, "call_id") == activeCallId &&
+                  ConfigUtil.evStr($0, "door") == boot.door && ConfigUtil.evStr($0, "state") == "in_call" }),
+              let revision = call["stage_revision"] as? NSNumber,
+              CFGetTypeID(revision) != CFBooleanGetTypeID(), revision.doubleValue >= 0,
+              revision.doubleValue <= Double(Int32.max), revision.doubleValue.rounded(.down) == revision.doubleValue
+        else { return nil }
+        let owner = ConfigUtil.evStr(call, "dialog_owner")
+        guard !owner.isEmpty else { return nil }
+        return PeerFrameIdentity(core: snapshot.coreGeneration, call: activeCallId,
+                                 revision: revision.intValue, owner: owner)
+    }
+
+    private func retirePeerFrameRequest() {
+        peerPollGeneration &+= 1
+        peerPollTask?.cancel()
+        peerPollTask = nil
+        peerPollBusy = false
+        peerMediaGeneration = ""
+        peerFrameSequence = 0
+    }
+
+#if DEBUG
+    func setPeerCallForTesting(_ callId: String) {
+        activeCallId = callId
+        inCall = !callId.isEmpty
+        if inCall { showInCall(streamUrl: nil) } else { closeInCall() }
+    }
+    func pollPeerFrameForTesting() { pollPeerFrame() }
+    var peerFrameForTesting: UIImage? { peerVideo.image }
+    var peerPollBusyForTesting: Bool { peerPollBusy }
+#endif
 
 
     @objc private func onCallClick() {
@@ -1574,7 +1942,6 @@ final class MainViewController: UIViewController {
             return
         }
         activeCallId = callId
-        activeCallExpiresAtMs = coreExpiryForActiveCall()
         showCalling(title: title)
     }
 
@@ -1622,9 +1989,12 @@ final class MainViewController: UIViewController {
     }
 
     @objc private func onCancelClick() {
-        callTimeoutTimer?.invalidate()
-        if !activeCallId.isEmpty {
-            _ = core.cancelCall(door: boot.door, callId: activeCallId, reason: "visitor")
+        guard consumeVisitorAction(cancelButton), !inCall, !activeCallId.isEmpty else { return }
+        // A queued touch may arrive after Core has answered. Only an accepted visitor cancel
+        // may dismiss this call; a rejection keeps the authoritative call visible.
+        guard core.cancelCall(door: boot.door, callId: activeCallId, reason: "visitor") else {
+            refreshCallingDeadline()
+            return
         }
         showIdle()
     }
@@ -1857,16 +2227,16 @@ final class PurposeChoiceViewController: UIViewController {
         view.accessibilityIdentifier = "purpose_choice_screen"
         heading.text = texts.t("idle.choose_purpose")
         heading.textColor = colors.ink
-        heading.numberOfLines = 2
+        heading.numberOfLines = 0
         heading.accessibilityTraits = .header
         hint.text = texts.t(afterRing ? "purpose.waiting_hint" : "purpose.choose_hint")
         hint.textColor = colors.inkMuted
-        hint.numberOfLines = 2
-        view.addSubview(heading)
-        view.addSubview(hint)
+        hint.numberOfLines = 0
         scroll.alwaysBounceVertical = false
         scroll.delaysContentTouches = false
         view.addSubview(scroll)
+        scroll.addSubview(heading)
+        scroll.addSubview(hint)
         view.addSubview(footer)
         for (index, item) in items.enumerated() {
             let card = PurposeChoiceCard(type: .custom)
@@ -1890,7 +2260,7 @@ final class PurposeChoiceViewController: UIViewController {
         for button in [cancel, skip] {
             button.layer.cornerRadius = 18
             button.titleLabel?.font = .systemFont(ofSize: 22, weight: .semibold)
-            button.titleLabel?.numberOfLines = 2
+            button.titleLabel?.numberOfLines = 0
             button.titleLabel?.textAlignment = .center
             button.contentEdgeInsets = UIEdgeInsets(top: 10, left: 18, bottom: 10, right: 18)
             footer.addSubview(button)
@@ -1905,33 +2275,49 @@ final class PurposeChoiceViewController: UIViewController {
         let margin: CGFloat = bounds.width < 500 ? 20 : 36
         let width = min(1100, bounds.width - margin * 2)
         let left = bounds.midX - width / 2
-        heading.font = .systemFont(ofSize: bounds.width < 500 ? 30 : 38, weight: .semibold)
-        hint.font = .systemFont(ofSize: 20, weight: .regular)
-        let headingHeight = heading.sizeThatFits(CGSize(width: width, height: 120)).height
-        heading.frame = CGRect(x: left, y: bounds.minY + 28, width: width, height: headingHeight)
-        let hintHeight = hint.sizeThatFits(CGSize(width: width, height: 80)).height
-        hint.frame = CGRect(x: left, y: heading.frame.maxY + 10, width: width, height: hintHeight)
-        let footerHeight: CGFloat = 68
-        footer.frame = CGRect(x: left, y: bounds.maxY - footerHeight - 24,
-                              width: width, height: footerHeight)
+        heading.font = IOSAvailability.visitorFont(size: bounds.width < 500 ? 30 : 38,
+                                                    weight: .semibold, traits: traitCollection)
+        hint.font = IOSAvailability.visitorFont(size: 20, traits: traitCollection)
         let gap: CGFloat = 16
-        let actionWidth = afterRing ? (width - gap) / 2 : width
-        cancel.frame = CGRect(x: 0, y: 0, width: actionWidth, height: footerHeight)
-        skip.frame = CGRect(x: actionWidth + gap, y: 0, width: actionWidth, height: footerHeight)
-        let top = hint.frame.maxY + 28
-        scroll.frame = CGRect(x: left, y: top, width: width,
-                              height: max(0, footer.frame.minY - top - 24))
+        let scrollingSkip = afterRing && width < 440
+        let actionWidth = afterRing && !scrollingSkip ? (width - gap) / 2 : width
+        var actionHeight: CGFloat = 68
+        for button in [cancel, skip] {
+            button.titleLabel?.font = IOSAvailability.visitorFont(size: 22, weight: .semibold,
+                                                                  traits: traitCollection)
+            let height = button.titleLabel?.sizeThatFits(CGSize(width: max(1, actionWidth - 36),
+                height: .greatestFiniteMagnitude)).height ?? 0
+            actionHeight = max(actionHeight, ceil(height + 20))
+        }
+        footer.frame = CGRect(x: left, y: bounds.maxY - actionHeight - 24,
+                              width: width, height: actionHeight)
+        cancel.frame = CGRect(x: 0, y: 0, width: actionWidth, height: actionHeight)
+        let skipParent = scrollingSkip ? scroll : footer
+        if skip.superview !== skipParent { skipParent.addSubview(skip) }
+        if !scrollingSkip {
+            skip.frame = CGRect(x: actionWidth + gap, y: 0, width: actionWidth, height: actionHeight)
+        }
+        scroll.frame = CGRect(x: left, y: bounds.minY + 16, width: width,
+                              height: max(0, footer.frame.minY - bounds.minY - 32))
+        let headingHeight = heading.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        heading.frame = CGRect(x: 0, y: 0, width: width, height: headingHeight)
+        let hintHeight = hint.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height
+        hint.frame = CGRect(x: 0, y: heading.frame.maxY + 10, width: width, height: hintHeight)
         let columns = width >= 820 ? 3 : (width >= 440 ? 2 : 1)
         let rows = max(1, (items.count + columns - 1) / columns)
         let cardWidth = (width - CGFloat(columns - 1) * gap) / CGFloat(columns)
-        let cardHeight = max(150, min(210,
-            (scroll.bounds.height - CGFloat(rows - 1) * gap) / CGFloat(rows)))
+        let cardHeight = cards.reduce(CGFloat(150)) { max($0, $1.requiredHeight(width: cardWidth)) }
+        var top = hint.frame.maxY + 24
+        if scrollingSkip {
+            skip.frame = CGRect(x: 0, y: top, width: width, height: actionHeight)
+            top = skip.frame.maxY + 24
+        }
         for (index, card) in cards.enumerated() {
             card.frame = CGRect(x: CGFloat(index % columns) * (cardWidth + gap),
-                                y: CGFloat(index / columns) * (cardHeight + gap),
+                                y: top + CGFloat(index / columns) * (cardHeight + gap),
                                 width: cardWidth, height: cardHeight)
         }
-        scroll.contentSize = CGSize(width: width, height: CGFloat(rows) * (cardHeight + gap) - gap)
+        scroll.contentSize = CGSize(width: width, height: top + CGFloat(rows) * (cardHeight + gap) - gap)
     }
 
     // A remote reply may arrive during presentation or before a queued touch callback.
@@ -1982,10 +2368,8 @@ private final class PurposeChoiceCard: UIButton {
         glyph.contentMode = .scaleAspectFit
         label.text = item.title
         label.textColor = colors.ink
-        label.font = .systemFont(ofSize: 26, weight: .medium)
-        label.numberOfLines = 3
-        label.adjustsFontSizeToFitWidth = true
-        label.minimumScaleFactor = 0.7
+        label.font = IOSAvailability.visitorFont(size: 26, weight: .medium, traits: traitCollection)
+        label.numberOfLines = 0
         addSubview(badge)
         badge.addSubview(glyph)
         addSubview(label)
@@ -1993,6 +2377,12 @@ private final class PurposeChoiceCard: UIButton {
         accessibilityLabel = item.title
         accessibilityIdentifier = "purpose_choice_" + item.id
         accessibilityTraits = .button
+    }
+
+    func requiredHeight(width: CGFloat) -> CGFloat {
+        label.font = IOSAvailability.visitorFont(size: 26, weight: .medium, traits: traitCollection)
+        return 102 + ceil(label.sizeThatFits(CGSize(width: max(1, width - 44),
+                                                  height: .greatestFiniteMagnitude)).height)
     }
 
     override func layoutSubviews() {

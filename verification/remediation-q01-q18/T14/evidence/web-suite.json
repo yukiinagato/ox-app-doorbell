@@ -1,0 +1,182 @@
+[
+  {
+    "command": [
+      "node",
+      "webui/tests/admin_logic.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.068688+00:00",
+    "ended_at": "2026-09-22T14:58:16.159637+00:00",
+    "exit_code": 0,
+    "log": "admin_logic.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/admin_runtime.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.159667+00:00",
+    "ended_at": "2026-09-22T14:58:16.278962+00:00",
+    "exit_code": 0,
+    "log": "admin_runtime.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/call_flow.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.278997+00:00",
+    "ended_at": "2026-09-22T14:58:16.350932+00:00",
+    "exit_code": 0,
+    "log": "call_flow.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/call_heartbeat.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.350956+00:00",
+    "ended_at": "2026-09-22T14:58:16.439676+00:00",
+    "exit_code": 0,
+    "log": "call_heartbeat.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/call_poll_lanes.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.439702+00:00",
+    "ended_at": "2026-09-22T14:58:16.517875+00:00",
+    "exit_code": 0,
+    "log": "call_poll_lanes.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/call_recovery_controller.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.517906+00:00",
+    "ended_at": "2026-09-22T14:58:16.590007+00:00",
+    "exit_code": 0,
+    "log": "call_recovery_controller.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/call_state_controller.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.590035+00:00",
+    "ended_at": "2026-09-22T14:58:16.678317+00:00",
+    "exit_code": 0,
+    "log": "call_state_controller.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/call_tabs.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.678346+00:00",
+    "ended_at": "2026-09-22T14:58:16.756753+00:00",
+    "exit_code": 0,
+    "log": "call_tabs.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/call_ua_generation.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.756776+00:00",
+    "ended_at": "2026-09-22T14:58:16.841665+00:00",
+    "exit_code": 0,
+    "log": "call_ua_generation.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/pairing.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.841692+00:00",
+    "ended_at": "2026-09-22T14:58:16.951090+00:00",
+    "exit_code": 0,
+    "log": "pairing.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/panel_i18n.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:16.951117+00:00",
+    "ended_at": "2026-09-22T14:58:17.027618+00:00",
+    "exit_code": 0,
+    "log": "panel_i18n.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/playback.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:17.027645+00:00",
+    "ended_at": "2026-09-22T14:58:17.104430+00:00",
+    "exit_code": 0,
+    "log": "playback.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/request_deadline.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:17.104455+00:00",
+    "ended_at": "2026-09-22T14:58:17.186411+00:00",
+    "exit_code": 0,
+    "log": "request_deadline.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/runtime.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:17.186447+00:00",
+    "ended_at": "2026-09-22T14:58:17.261163+00:00",
+    "exit_code": 0,
+    "log": "runtime.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/service_worker.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:17.261201+00:00",
+    "ended_at": "2026-09-22T14:58:17.339553+00:00",
+    "exit_code": 0,
+    "log": "service_worker.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/settings.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:17.339583+00:00",
+    "ended_at": "2026-09-22T14:58:17.424125+00:00",
+    "exit_code": 0,
+    "log": "settings.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/theme_notice.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:17.424159+00:00",
+    "ended_at": "2026-09-22T14:58:17.508879+00:00",
+    "exit_code": 0,
+    "log": "theme_notice.test.log"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/video_session.test.js"
+    ],
+    "started_at": "2026-09-22T14:58:17.508905+00:00",
+    "ended_at": "2026-09-22T14:58:17.582349+00:00",
+    "exit_code": 0,
+    "log": "video_session.test.log"
+  }
+]

@@ -1,0 +1,26 @@
+{
+  "command": [
+    "xcodebuild",
+    "-project",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-modern-device-candidate/source/ios/Doorbell.xcodeproj",
+    "-scheme",
+    "DoorbellIOS9",
+    "-configuration",
+    "Debug",
+    "-sdk",
+    "iphoneos",
+    "-destination",
+    "generic/platform=iOS",
+    "-derivedDataPath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-modern-device-candidate/xcode",
+    "ARCHS=arm64",
+    "ONLY_ACTIVE_ARCH=YES",
+    "CODE_SIGNING_ALLOWED=NO",
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG IOS9_COMPAT",
+    "build"
+  ],
+  "source_manifest_sha256": "1c59f80e511147eaf3b80f5f2b73243f6d872124a222e2f806154faad5d00433",
+  "started_at": "2026-09-22T18:55:38.446777+00:00",
+  "exit_code": 0,
+  "finished_at": "2026-09-22T18:55:42.400629+00:00"
+}

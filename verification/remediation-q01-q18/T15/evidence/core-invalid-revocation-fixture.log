@@ -1,0 +1,121 @@
+09-23 00:44:37 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24828
+09-23 00:44:37 I [node] created the missing door entry doors.front for this door station
+09-23 00:44:37 I [httpd] listening on 21138,[::]:21138
+09-23 00:44:37 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:37 I [node] node 5e80e8a3 (doorbell) started
+09-23 00:44:39 I [httpd] stopped
+09-23 00:44:39 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:20129
+09-23 00:44:39 I [node] created the missing door entry doors.front for this door station
+09-23 00:44:39 I [httpd] listening on 21526,[::]:21526
+09-23 00:44:39 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:39 I [node] node fd0d600d (doorbell) started
+09-23 00:44:41 I [httpd] stopped
+09-23 00:44:41 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23062
+09-23 00:44:41 I [node] created the missing door entry doors.front for this door station
+09-23 00:44:41 I [httpd] listening on 31093,[::]:31093
+09-23 00:44:41 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:41 I [node] node bfb0a878 (doorbell) started
+09-23 00:44:43 I [httpd] stopped
+09-23 00:44:43 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27540
+09-23 00:44:43 I [node] created the missing door entry doors.front for this door station
+09-23 00:44:43 I [httpd] listening on 27538,[::]:27538
+09-23 00:44:43 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:43 I [node] node d1712212 (doorbell) started
+09-23 00:44:45 I [httpd] stopped
+09-23 00:44:45 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22106
+09-23 00:44:45 I [node] created the missing door entry doors.front for this door station
+09-23 00:44:45 I [httpd] listening on 23042,[::]:23042
+09-23 00:44:45 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:45 I [node] node 4414e804 (doorbell) started
+09-23 00:44:47 I [httpd] stopped
+09-23 00:44:47 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:20557
+09-23 00:44:47 I [node] created the missing door entry doors.front for this door station
+09-23 00:44:47 I [httpd] listening on 26069,[::]:26069
+09-23 00:44:47 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:47 I [node] node 02221a7f (doorbell) started
+09-23 00:44:49 I [httpd] stopped
+09-23 00:44:49 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:31257
+09-23 00:44:49 I [node] created the missing door entry doors.front for this door station
+09-23 00:44:49 I [httpd] listening on 30053,[::]:30053
+09-23 00:44:49 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:49 I [node] node 90002650 (doorbell) started
+09-23 00:44:49 E [node] refused unsafe programmatic config write: panel.token_generation (panel token generation must be 32 lowercase hexadecimal characters)
+09-23 00:44:51 I [httpd] stopped
+09-23 00:44:51 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28541
+09-23 00:44:51 I [node] created the missing door entry doors.front for this door station
+09-23 00:44:51 I [httpd] listening on 25663,[::]:25663
+09-23 00:44:51 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:51 I [node] node 7d31886c (doorbell) started
+09-23 00:44:53 I [httpd] stopped
+09-23 00:44:53 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26490
+09-23 00:44:53 I [node] created the missing door entry doors.d_front for this door station
+09-23 00:44:53 I [httpd] listening on 21099,[::]:21099
+09-23 00:44:53 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:53 I [node] node 3dad4aaa (panel-test) started
+09-23 00:44:55 I [httpd] stopped
+09-23 00:44:55 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30133
+09-23 00:44:55 I [node] created the missing door entry doors.d_front for this door station
+09-23 00:44:55 I [httpd] listening on 23301,[::]:23301
+09-23 00:44:55 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:55 I [node] node d729037f (panel-lease-retry) started
+09-23 00:44:55 E [events] local event persistence failed; event was not emitted
+09-23 00:44:57 I [httpd] stopped
+09-23 00:44:57 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30428
+09-23 00:44:57 I [node] created the missing door entry doors.d_front for this door station
+09-23 00:44:57 I [httpd] listening on 24544,[::]:24544
+09-23 00:44:57 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:57 I [node] node 8e8cbdfd (panel-terminal) started
+09-23 00:44:59 I [httpd] stopped
+09-23 00:44:59 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:30428
+09-23 00:44:59 I [httpd] listening on 24544,[::]:24544
+09-23 00:44:59 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:44:59 I [node] node 8e8cbdfd (panel-terminal) started
+09-23 00:45:01 I [httpd] stopped
+09-23 00:45:01 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:25896
+09-23 00:45:01 I [node] created the missing door entry doors.d_front for this door station
+09-23 00:45:01 I [httpd] listening on 31048,[::]:31048
+09-23 00:45:01 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:45:01 I [node] node fefaa65a (panel-recovery) started
+09-23 00:45:03 I [httpd] stopped
+09-23 00:45:03 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:25896
+09-23 00:45:03 I [httpd] listening on 31048,[::]:31048
+09-23 00:45:03 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:45:03 I [node] node fefaa65a (panel-recovery) started
+09-23 00:45:05 I [httpd] stopped
+09-23 00:45:05 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29954
+09-23 00:45:05 I [node] created the missing door entry doors.d_front for this door station
+09-23 00:45:05 I [httpd] listening on 26528,[::]:26528
+09-23 00:45:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:45:05 I [node] node 765909d7 (panel-native-recovery) started
+09-23 00:45:07 I [httpd] stopped
+09-23 00:45:07 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29954
+09-23 00:45:07 I [httpd] listening on 26528,[::]:26528
+09-23 00:45:07 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:45:07 I [node] node 765909d7 (panel-native-recovery) started
+09-23 00:45:09 I [httpd] stopped
+09-23 00:45:09 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:26663
+09-23 00:45:09 I [node] created the missing door entry doors.d_front for this door station
+09-23 00:45:09 I [httpd] listening on 26320,[::]:26320
+09-23 00:45:09 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:45:09 I [node] node a9f9049e (callframe-test) started
+09-23 00:45:11 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/core/tests/test_media_publish.cpp:103:
+TEST CASE:  media publishing binds session call owner generation and ordered frame
+  credential revocation clears publication and cached frames
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/core/tests/test_media_publish.cpp:212: ERROR: CHECK( mediaRequest(port, "POST", upload + "2", jpeg, owner, "image/jpeg").status == 403 ) is NOT correct!
+  values: CHECK( 200 == 403 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/core/tests/test_media_publish.cpp:213: ERROR: CHECK( mediaRequest(port, "GET", read).status == 404 ) is NOT correct!
+  values: CHECK( 200 == 404 )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/core/tests/test_media_publish.cpp:214: ERROR: CHECK( mediaRequest(port, "GET", "/api/panel/session", "", owner).status == 403 ) is NOT correct!
+  values: CHECK( 200 == 403 )
+
+===============================================================================
+[doctest] test cases:   7 |   6 passed | 1 failed | 445 skipped
+[doctest] assertions: 849 | 846 passed | 3 failed |
+[doctest] Status: FAILURE!

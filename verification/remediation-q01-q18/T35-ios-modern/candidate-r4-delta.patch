@@ -1,0 +1,91 @@
+--- a/ios/Doorbell/MainViewController.swift
++++ b/ios/Doorbell/MainViewController.swift
+@@ -686,7 +686,6 @@
+         inCallTitle.accessibilityTraits = .header
+         inCallTitle.backgroundColor = UIColor.black.withAlphaComponent(0.65)
+         inCallTitle.translatesAutoresizingMaskIntoConstraints = false
+-        inCallView.addSubview(inCallTitle)
+ 
+         endCallButton.titleLabel?.font = .systemFont(ofSize: 24, weight: .semibold)
+         endCallButton.setTitleColor(.white, for: .normal)
+@@ -698,12 +697,23 @@
+         inCallView.addSubview(endCallButton)
+         pinVisitorAction(endCallButton, in: inCallView)
+ 
++        let statusScroll = UIScrollView()
++        statusScroll.accessibilityIdentifier = "incall_status_scroll"
++        statusScroll.translatesAutoresizingMaskIntoConstraints = false
++        statusScroll.clipsToBounds = true
++        inCallView.addSubview(statusScroll)
++        statusScroll.addSubview(inCallTitle)
+         let g = IOSAvailability.safeAreaLayoutGuide(for: view)
+         NSLayoutConstraint.activate([
+-            inCallTitle.topAnchor.constraint(equalTo: g.topAnchor, constant: 18),
+-            inCallTitle.centerXAnchor.constraint(equalTo: inCallView.centerXAnchor),
+-            inCallTitle.leadingAnchor.constraint(greaterThanOrEqualTo: g.leadingAnchor, constant: 20),
+-            inCallTitle.trailingAnchor.constraint(lessThanOrEqualTo: g.trailingAnchor, constant: -20),
++            statusScroll.topAnchor.constraint(equalTo: g.topAnchor, constant: 18),
++            statusScroll.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 20),
++            statusScroll.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -20),
++            statusScroll.bottomAnchor.constraint(equalTo: endCallButton.topAnchor, constant: -20),
++            inCallTitle.topAnchor.constraint(equalTo: statusScroll.topAnchor),
++            inCallTitle.bottomAnchor.constraint(equalTo: statusScroll.bottomAnchor),
++            inCallTitle.leadingAnchor.constraint(equalTo: statusScroll.leadingAnchor),
++            inCallTitle.trailingAnchor.constraint(equalTo: statusScroll.trailingAnchor),
++            inCallTitle.widthAnchor.constraint(equalTo: statusScroll.widthAnchor),
+         ])
+     }
+ 
+--- a/ios/DoorbellTests/VisitorScreenLayoutTests.swift
++++ b/ios/DoorbellTests/VisitorScreenLayoutTests.swift
+@@ -637,6 +637,50 @@
+             XCTAssertLessThanOrEqual(cancel.titleLabel?.sizeThatFits(CGSize(
+                 width: cancel.bounds.width - cancel.contentEdgeInsets.left - cancel.contentEdgeInsets.right,
+                 height: .greatestFiniteMagnitude)).height ?? 0, cancel.bounds.height)
++        }
++    }
++
++    func testInCallStatusScrollNeverCoversEndAtLargestTextAcrossProfiles() throws {
++        let profiles = [CGSize(width: 320, height: 480), CGSize(width: 480, height: 320),
++                        CGSize(width: 844, height: 390), CGSize(width: 768, height: 1024),
++                        CGSize(width: 1024, height: 768)]
++        for size in profiles {
++            let (_, screen) = try screen(size: size, category: .accessibilityExtraExtraExtraLarge)
++            let title = try XCTUnwrap(descendants(screen.view).first {
++                $0.accessibilityIdentifier == "incall_status"
++            } as? UILabel)
++            let scroll = try XCTUnwrap(descendants(screen.view).first {
++                $0.accessibilityIdentifier == "incall_status_scroll"
++            } as? UIScrollView)
++            let end = try button("incall_end", in: screen)
++            // This is a controlled SIP UI input; media remains disabled by the real screen fixture.
++            screen.visitorEventForTesting(["t": "state", "state": "in_call", "call_id": "layout-call"])
++            title.text = "Connected to the resident at the main entrance. 已接通主入口住户，请继续通话。"
++            end.setTitle(size.width < size.height ? "End this call" : "结束通话", for: .normal)
++            screen.view.setNeedsLayout()
++            screen.view.layoutIfNeeded()
++            screen.view.layoutIfNeeded()
++            let actionFrame = end.convert(end.bounds, to: screen.view)
++            let scrollFrame = scroll.convert(scroll.bounds, to: screen.view)
++            XCTAssertGreaterThan(scrollFrame.height, 0)
++            XCTAssertLessThanOrEqual(scrollFrame.maxY + 19, actionFrame.minY)
++            XCTAssertTrue(scroll.clipsToBounds)
++            XCTAssertFalse(end.isHidden)
++            XCTAssertGreaterThanOrEqual(actionFrame.minY, 0)
++            XCTAssertLessThanOrEqual(actionFrame.maxY, size.height)
++            XCTAssertGreaterThanOrEqual(actionFrame.height, 56)
++            XCTAssertEqual(title.bounds.width, scroll.bounds.width, accuracy: 1)
++            for offset in [CGFloat(0), max(0, scroll.contentSize.height - scroll.bounds.height)] {
++                scroll.contentOffset = CGPoint(x: 0, y: offset)
++                let visibleTitle = title.convert(title.bounds, to: screen.view).intersection(scrollFrame)
++                XCTAssertFalse(visibleTitle.isNull)
++                XCTAssertFalse(visibleTitle.intersects(actionFrame),
++                               "Visible title must not overlap the fixed end action at \(size)")
++            }
++            if size.height == 320 {
++                XCTAssertGreaterThan(scroll.contentSize.height, scroll.bounds.height,
++                                     "The short landscape must expose overflowing status by scrolling")
++            }
+         }
+     }
+ 

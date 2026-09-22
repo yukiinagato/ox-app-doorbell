@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
 #include <cstdio>
 #include <functional>
 #include <mutex>
@@ -21,9 +22,12 @@
 #include <sqlite3.h>
 
 #include "doctest.h"
+#include "doorbell/doorbell.h"
 #include "test_env.h"
 #include "node/node.h"
+#include "node/admin_sessions.h"
 #include "util/json.h"
+#include "util/clock.h"
 
 using namespace db;
 
@@ -36,7 +40,8 @@ int adminFreePort(std::mt19937& /*rng*/) {
 
 
 std::string adminReq(int port, const std::string& method, const std::string& path,
-                     const std::string& body = "", const std::string& cookie = "") {
+                     const std::string& body = "", const std::string& cookie = "",
+                     const std::string& extra_headers = "") {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   REQUIRE(fd >= 0);
   sockaddr_in sa{};
@@ -45,6 +50,7 @@ std::string adminReq(int port, const std::string& method, const std::string& pat
   sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   REQUIRE(::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0);
   std::string r = method + " " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
+  r += extra_headers;
   if (!cookie.empty())
     r += "Cookie: " + (cookie.find('=') == std::string::npos ? "dbsess=" + cookie : cookie) +
          "\r\n";
@@ -1063,13 +1069,7 @@ TEST_CASE("admin API: panel sessions follow replicated rotation and per-node pro
   installSecureStore(a, secure_a);
   installSecureStore(b, secure_b);
   REQUIRE(a.start());
-  REQUIRE(b.start());
   const std::string admin_a = adminLogin(http_a);
-  const std::string admin_b = adminLogin(http_b);
-  CHECK(adminReq(http_a, "POST", "/api/config",
-                 R"({"key":"panel.token_generation","value":"\"invalid\""})", admin_a)
-            .find("HTTP/1.1 400") == 0);
-
   auto waitFor = [](const std::function<bool()>& ready, int timeout_ms = 8'000) {
     const auto deadline = std::chrono::steady_clock::now() +
         std::chrono::milliseconds(timeout_ms);
@@ -1079,6 +1079,22 @@ TEST_CASE("admin API: panel sessions follow replicated rotation and per-node pro
     }
     return ready();
   };
+  const auto initial_config = json::parse(a.configJson());
+  const auto initial_password = json::dump(json::get(json::get(initial_config.get(), "admin"),
+                                                    "password_hash"));
+  REQUIRE(initial_password != "null");
+  REQUIRE(b.start());
+  // Initialize one cluster credential before issuing sessions on the second node. Otherwise
+  // concurrent first logins can correctly revoke the losing credential version's session.
+  REQUIRE(waitFor([&] {
+    const auto replicated = json::parse(b.configJson());
+    return json::dump(json::get(json::get(replicated.get(), "admin"), "password_hash")) ==
+        initial_password;
+  }));
+  const std::string admin_b = adminLogin(http_b);
+  CHECK(adminReq(http_a, "POST", "/api/config",
+                 R"({"key":"panel.token_generation","value":"\"invalid\""})", admin_a)
+            .find("HTTP/1.1 400") == 0);
   auto panelRef = [](const std::string& config_json) {
     auto config = json::parse(config_json);
     const cJSON* refs = config ? json::get(json::get(config.get(), "panel"), "token_refs")
@@ -1424,8 +1440,10 @@ TEST_CASE("admin API: pairing routes expose state, PIN, deny, scan, retry, and u
   CHECK(json::getBool(bodyJson(adminReq(http_port, "POST", "/api/pairing/unpair", "{}", sess)).get(),
                       "ok"));
   CHECK(deleted == std::vector<std::string>{"mesh.psk"});
+  CHECK(adminReq(http_port, "GET", "/api/pairing", "", sess).find("401") != std::string::npos);
+  const std::string unpaired_session = adminLogin(http_port);
   {
-    auto d = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", sess));
+    auto d = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", unpaired_session));
     REQUIRE(d);
     CHECK(json::getString(d.get(), "state") == "unpaired");
     CHECK(json::getString(d.get(), "psk_source") == "none");
@@ -1433,10 +1451,10 @@ TEST_CASE("admin API: pairing routes expose state, PIN, deny, scan, retry, and u
   }
 
   // クラスタ未参加の端末は「追加」できない。旧 /mode も新 /start も 409 で断る。
-  CHECK(adminReq(http_port, "POST", "/api/pairing/mode", "{\"seconds\":600}", sess)
+  CHECK(adminReq(http_port, "POST", "/api/pairing/mode", "{\"seconds\":600}", unpaired_session)
             .find("HTTP/1.1 409") == 0);
   const std::string refused =
-      adminReq(http_port, "POST", "/api/pairing/start", "{\"seconds\":600}", sess);
+      adminReq(http_port, "POST", "/api/pairing/start", "{\"seconds\":600}", unpaired_session);
   CHECK(refused.find("HTTP/1.1 409") == 0);
   CHECK(refused.find("host_unpaired") != std::string::npos);
   node.stop();
@@ -1539,6 +1557,137 @@ TEST_CASE("admin API: announcements and the manual time sync enforce their own c
   node.stop();
 }
 
+TEST_CASE("T03: unlock requires the selected door's explicit command") {
+  std::mt19937 rng(0x703u);
+  const int http_port = adminFreePort(rng);
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "T03-unlock-test";
+  options.role = "door_station";
+  options.door = "d_front";
+  options.listen_addr = "127.0.0.1:" + std::to_string(adminFreePort(rng));
+  options.psk.fill(0x73);
+  options.enable_beacon = false;
+  options.http_port = http_port;
+  Node node(options);
+  REQUIRE(node.start());
+  const std::string session = adminLogin(http_port);
+  node.setConfigKey("time.ntp.enabled", "false");
+  node.setConfigKey("doors.d_front", "{\"label\":{\"en\":\"Front\"}}");
+  node.setConfigKey("doors.d_back", "{\"label\":{\"en\":\"Back\"}}");
+  node.setConfigKey("sip.dtmf_actions",
+      "{\"*1\":{\"type\":\"ha_command\",\"command\":\"light_on\",\"door\":\"self\"}}");
+
+  auto unlock = [&] {
+    auto status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+    REQUIRE(status);
+    return json::Doc(cJSON_Duplicate(json::get(
+        json::get(json::get(status.get(), "doors"), "d_front"), "unlock"), 1));
+  };
+  auto commands = [&] {
+    auto events = bodyJson(adminReq(http_port, "GET", "/api/events?type=dtmf_action",
+                                    "", session));
+    REQUIRE(events);
+    return json::Doc(cJSON_Duplicate(json::get(events.get(), "events"), 1));
+  };
+  auto rejected = [&] {
+    const auto response = adminReq(http_port, "POST", "/api/doors/d_front/open", "{}",
+                                   session);
+    CHECK(response.find("HTTP/1.1 409") == 0);
+    const auto body = bodyJson(response);
+    REQUIRE(body);
+    CHECK_FALSE(json::getBool(body.get(), "ok"));
+    CHECK(json::getString(body.get(), "err") == "unlock_not_configured");
+    CHECK(cJSON_GetArraySize(commands().get()) == 0);
+  };
+
+  SUBCASE("T03-01: a light feature code is not an unlock binding") {
+    CHECK_FALSE(json::getBool(unlock().get(), "configured"));
+    CHECK_FALSE(json::getBool(unlock().get(), "show_button"));
+    CHECK_FALSE(node.openDoor("d_front"));
+    rejected();
+  }
+  SUBCASE("T03-02: removing front binding never selects back or a feature code") {
+    node.setConfigKey("doors.d_front.unlock.command", "\"front_gate\"");
+    node.setConfigKey("doors.d_back.unlock.command", "\"back_gate\"");
+    auto removed = json::parse(node.deleteConfigKeyJson("doors.d_front.unlock.command"));
+    REQUIRE(removed);
+    REQUIRE(json::getBool(removed.get(), "ok"));
+    CHECK_FALSE(json::getBool(unlock().get(), "configured"));
+    rejected();
+  }
+  SUBCASE("T03-03: one request emits only the selected door command once") {
+    node.setConfigKey("doors.d_front.unlock.command", "\"front_gate\"");
+    node.setConfigKey("doors.d_back.unlock.command", "\"back_gate\"");
+    CHECK(json::getBool(unlock().get(), "configured"));
+    CHECK(json::getString(unlock().get(), "command") == "front_gate");
+    const auto response = adminReq(http_port, "POST", "/api/doors/d_front/open", "{}",
+                                   session);
+    CHECK(response.find("HTTP/1.1 200") == 0);
+    const auto emitted = commands();
+    REQUIRE(cJSON_GetArraySize(emitted.get()) == 1);
+    const auto event = cJSON_GetArrayItem(emitted.get(), 0);
+    CHECK(json::getString(event, "door") == "d_front");
+    const auto payload = json::parse(json::getString(event, "payload"));
+    REQUIRE(payload);
+    CHECK(json::getString(payload.get(), "command") == "front_gate");
+  }
+  SUBCASE("T03-04: forced visibility never authorizes an unconfigured unlock") {
+    node.setConfigKey("doors.d_front.unlock.show_button", "true");
+    CHECK(json::getBool(unlock().get(), "show_button"));
+    CHECK_FALSE(json::getBool(unlock().get(), "configured"));
+    rejected();
+  }
+  auto config = json::parse(node.configJson());
+  REQUIRE(config);
+  CHECK(json::getString(json::get(json::get(json::get(config.get(), "sip"),
+      "dtmf_actions"), "*1"), "command") == "light_on");
+  node.stop();
+}
+
+TEST_CASE("T03: native ABI unlock rejects feature codes and shares the explicit binding") {
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(&platform, ":memory:",
+      "{\"name\":\"T03-native-test\",\"role\":\"indoor_panel\","
+      "\"listen_port\":0,\"http_port\":0}");
+  REQUIRE(core != nullptr);
+  std::atomic<int> dispatches{0};
+  db_core_set_ui_callback(core, [](void* context, const char* raw) {
+    auto event = json::parse(raw);
+    if (event && json::getString(event.get(), "t") == "event" &&
+        json::getString(event.get(), "type") == "dtmf_action")
+      static_cast<std::atomic<int>*>(context)->fetch_add(1);
+  }, &dispatches);
+  REQUIRE(db_core_start(core) == 0);
+  REQUIRE(db_core_set_config_json(core, "time.ntp.enabled", "false") == 0);
+  REQUIRE(db_core_set_config_json(core, "doors.d_front",
+      "{\"label\":{\"en\":\"Front\"},\"unlock\":{\"show_button\":true}}") == 0);
+  REQUIRE(db_core_set_config_json(core, "sip.dtmf_actions",
+      "{\"*1\":{\"type\":\"ha_command\",\"command\":\"light_on\",\"door\":\"self\"}}") == 0);
+  auto snapshotBarrier = [&] {
+    // This synchronous read queues after the config change's published-snapshot update.
+    char* snapshot = db_core_pairing_json(core);
+    REQUIRE(snapshot != nullptr);
+    db_free(snapshot);
+  };
+  snapshotBarrier();
+  CHECK(db_core_open_door(core, "d_front") == -3);
+  CHECK(dispatches.load() == 0);
+  REQUIRE(db_core_set_config_json(core, "doors.d_front.unlock.command", "\"front_gate\"") == 0);
+  snapshotBarrier();
+  CHECK(db_core_open_door(core, "d_front") == 0);
+  CHECK(dispatches.load() == 1);
+  REQUIRE(db_core_delete_config_key(core, "doors.d_front.unlock.command") == 0);
+  snapshotBarrier();
+  CHECK(db_core_open_door(core, "d_front") == -3);
+  CHECK(dispatches.load() == 1);
+  db_core_set_ui_callback(core, nullptr, nullptr);
+  db_core_stop(core);
+  db_core_destroy(core);
+}
+
 TEST_CASE("admin API: the cluster-wide notice, the unlock trigger, and PIN minting") {
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x51a2u);
   const int mesh_port = adminFreePort(rng);
@@ -1605,6 +1754,9 @@ TEST_CASE("admin API: the cluster-wide notice, the unlock trigger, and PIN minti
   node.setConfigKey(
       "sip.dtmf_actions",
       "{\"*1\":{\"type\":\"ha_command\",\"command\":\"unlock\",\"door\":\"self\"}}");
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session)
+            .find("HTTP/1.1 409") == 0);
+  node.setConfigKey("doors.d_front.unlock.command", "\"unlock\"");
   CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session)
             .find("HTTP/1.1 200") == 0);
   auto with_unlock = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
@@ -1953,5 +2105,794 @@ TEST_CASE("admin API: cloud speech caches, deduplicates and invalidates generate
   CHECK(status().find("Changed reply.") == std::string::npos);
   CHECK(status().find("\"state\":\"failed\"") == std::string::npos);
   CHECK(requests == failed_count + 1);
+  node.stop();
+}
+
+TEST_CASE("admin sessions: background reads expire despite raw clock rollback") {
+  SimClock clock;
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.listen_addr = "127.0.0.1:" + std::to_string(db::testing::freeListenPort());
+  options.http_port = db::testing::freeListenPort();
+  options.enable_beacon = false;
+  options.psk.fill(0x31);
+  NodeDeps deps;
+  deps.clock = &clock;
+  Node node(options, std::move(deps));
+  REQUIRE(node.start());
+  const std::string token = adminLogin(options.http_port);
+  for (int minute = 0; minute < 30; ++minute) {
+    CHECK(adminReq(options.http_port, "GET", "/api/status", "", token)
+              .find("HTTP/1.1 200") == 0);
+    clock.advance(60'000);
+    clock.setWall(clock.systemWallMs() - 300'000);
+  }
+  CHECK(adminReq(options.http_port, "GET", "/api/status", "", token)
+            .find("HTTP/1.1 401") == 0);
+  const std::string active = adminLogin(options.http_port);
+  const auto session_response = adminReq(options.http_port, "GET", "/api/session", "", active);
+  REQUIRE(session_response.find("Cache-Control: no-store") != std::string::npos);
+  auto session_json = bodyJson(session_response);
+  const std::string csrf = json::getString(session_json.get(), "csrf_token");
+  REQUIRE(csrf.size() == 32);
+  const std::string origin = "http://127.0.0.1:" + std::to_string(options.http_port);
+  const std::string activity_headers = "Origin: " + origin + "\r\nX-Doorbell-CSRF: " + csrf + "\r\n";
+  const std::string second = adminLogin(options.http_port);
+  CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", second,
+                 activity_headers).find("HTTP/1.1 403") == 0);
+  for (const std::string& bad : std::vector<std::string>{"", "null", "https://untrusted.example", origin + ".evil", origin + "/"}) {
+    CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", active,
+                   "Origin: " + bad + "\r\nX-Doorbell-CSRF: " + csrf +
+                   "\r\nX-Forwarded-Host: 127.0.0.1\r\n").find("HTTP/1.1 403") == 0);
+  }
+  CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", active,
+                 "Origin: " + origin + "\r\nX-Doorbell-CSRF: wrong\r\n")
+            .find("HTTP/1.1 403") == 0);
+  node.setConfigKey("web.allowed_origins", "[\"https://admin.example\"]");
+  CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", active,
+                 "Origin: https://admin.example\r\nX-Doorbell-CSRF: " + csrf + "\r\n")
+            .find("HTTP/1.1 200") == 0);
+  clock.advance(20 * 60'000);
+  CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", active)
+            .find("HTTP/1.1 403") == 0);
+  CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", active,
+                 activity_headers).find("HTTP/1.1 200") == 0);
+  clock.advance(20 * 60'000);
+  CHECK(adminReq(options.http_port, "GET", "/api/status", "", active)
+            .find("HTTP/1.1 200") == 0);
+  clock.advance(10 * 60'000);
+  CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", active,
+                 activity_headers).find("HTTP/1.1 401") == 0);
+  node.stop();
+}
+
+TEST_CASE("admin sessions: replicated credentials revoke after partition healing") {
+  SimClock clock;
+  Runloop loop(clock);
+  InMemNet net(loop);
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.name = "session-a";
+  options.role = "indoor_panel";
+  options.listen_addr = "session-a:1";
+  options.advertise_addr = options.listen_addr;
+  options.http_port = db::testing::freeListenPort();
+  options.psk.fill(0x43);
+  options.enable_beacon = false;
+  options.mesh_timing_template = adminTiming();
+  options.use_mesh_timing_template = true;
+  NodeDeps da;
+  da.clock = &clock; da.loop = &loop;
+  da.transport = net.makeTransport(options.listen_addr);
+  da.discovery = net.makeDiscovery(options.listen_addr);
+  const int port_a = options.http_port;
+  Node a(options, std::move(da));
+  options.name = "session-b";
+  options.listen_addr = "session-b:1";
+  options.advertise_addr = options.listen_addr;
+  options.seed_peers = {"session-a:1"};
+  options.http_port = db::testing::freeListenPort();
+  options.seed_default_config = false;
+  NodeDeps db;
+  db.clock = &clock; db.loop = &loop;
+  db.transport = net.makeTransport(options.listen_addr);
+  db.discovery = net.makeDiscovery(options.listen_addr);
+  const int port_b = options.http_port;
+  Node b(options, std::move(db));
+  loop.start();
+  REQUIRE(a.start());
+  const std::string token_a = adminLogin(port_a);
+  REQUIRE(b.start());
+  auto credential = [](Node& node) {
+    auto cfg = json::parse(node.configJson());
+    auto* value = json::get(json::get(cfg.get(), "admin"), "password_hash");
+    return value ? json::dump(value) : "";
+  };
+  auto awaitSync = [&] {
+    for (int i = 0; i < 200; ++i) {
+      clock.advance(50);
+      loop.callSync([] {});
+      if (!credential(a).empty() && credential(a) == credential(b)) return true;
+      std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    return false;
+  };
+  REQUIRE(awaitSync());
+  const std::string token_b = adminLogin(port_b);
+  REQUIRE(adminReq(port_b, "GET", "/api/status", "", token_b).find("HTTP/1.1 200") == 0);
+  loop.callSync([&] { net.partition({{"session-a:1"}, {"session-b:1"}}); });
+  REQUIRE(a.setAdminPassword("testpw", "next-password") == 0);
+  CHECK(adminReq(port_a, "GET", "/api/status", "", token_a).find("HTTP/1.1 401") == 0);
+  CHECK(adminReq(port_b, "GET", "/api/status", "", token_b).find("HTTP/1.1 200") == 0);
+  const std::string partition_login = adminLogin(port_b);
+  loop.callSync([&] { net.heal(); });
+  REQUIRE(awaitSync());
+  CHECK(adminReq(port_b, "GET", "/api/status", "", token_b).find("HTTP/1.1 401") == 0);
+  CHECK(adminReq(port_b, "GET", "/api/status", "", partition_login).find("HTTP/1.1 401") == 0);
+  CHECK(adminReq(port_b, "POST", "/api/login", R"({"password":"next-password"})")
+            .find("HTTP/1.1 200") == 0);
+  a.stop(); b.stop(); loop.stop();
+}
+
+TEST_CASE("admin sessions: capacity retains a new low-sorting token and uses interaction order") {
+  AdminSessions sessions;
+  sessions.publishCredential("credential-v1");
+  for (int i = 0; i < 64; ++i)
+    REQUIRE(sessions.issue("old-" + std::to_string(i), "credential-v1", 0));
+  REQUIRE(sessions.check("old-0", 1, true));
+  REQUIRE(sessions.issue("000-new", "credential-v1", 2));
+  CHECK(sessions.check("000-new", 2));
+  CHECK(sessions.check("old-0", 2));
+  CHECK_FALSE(sessions.check("old-1", 2));
+  for (int i = 2; i < 64; ++i) CHECK(sessions.check("old-" + std::to_string(i), 2));
+  CHECK_FALSE(sessions.issue("000-new", "credential-v1", 3));
+  sessions.publishCredential("credential-v2");
+  CHECK_FALSE(sessions.check("000-new", 3));
+  CHECK_FALSE(sessions.issue("stale", "credential-v1", 3));
+  CHECK(sessions.issue("current", "credential-v2", 3));
+}
+
+TEST_CASE("admin sessions: interaction cannot extend eight hours or reverse monotonic age") {
+  AdminSessions sessions;
+  sessions.publishCredential("credential");
+  REQUIRE(sessions.issue("active", "credential", 0));
+  for (int64_t minute = 20; minute < 480; minute += 20)
+    CHECK(sessions.check("active", minute * 60'000, true));
+  CHECK_FALSE(sessions.check("active", AdminSessions::kAbsoluteMs, true));
+  REQUIRE(sessions.issue("rollback", "credential", 1'000));
+  CHECK_FALSE(sessions.check("rollback", 999, true));
+  REQUIRE(sessions.issue("idle", "credential", 10'000));
+  CHECK(sessions.check("idle", 10'000 + AdminSessions::kIdleMs - 1));
+  CHECK_FALSE(sessions.check("idle", 10'000 + AdminSessions::kIdleMs));
+}
+
+TEST_CASE("admin sessions: credential and version roll back together on either storage failure") {
+  const std::string dir = adminTempDir();
+  NodeOptions options;
+  options.data_dir = dir;
+  options.listen_addr = "127.0.0.1:" + std::to_string(db::testing::freeListenPort());
+  options.http_port = db::testing::freeListenPort();
+  options.enable_beacon = false;
+  options.psk.fill(0x38);
+  {
+    Node node(options);
+    REQUIRE(node.start());
+    const std::string token = adminLogin(options.http_port);
+    const std::string before = node.configJson();
+    REQUIRE(setAdminMetaWriteFailure(dir + "/doorbell.db", true));
+    CHECK(node.setAdminPassword("testpw", "not-committed-meta") == -4);
+    CHECK(node.configJson() == before);
+    CHECK(node.verifyAdminPassword("testpw") == 1);
+    CHECK(node.verifyAdminPassword("not-committed-meta") == 0);
+    CHECK(adminReq(options.http_port, "GET", "/api/status", "", token).find("HTTP/1.1 200") == 0);
+    REQUIRE(setAdminMetaWriteFailure(dir + "/doorbell.db", false));
+    REQUIRE(setAdminConfigWriteFailure(dir + "/doorbell.db", true));
+    CHECK(node.setAdminPassword("testpw", "not-committed-config") == -4);
+    CHECK(node.configJson() == before);
+    CHECK(node.verifyAdminPassword("testpw") == 1);
+    REQUIRE(setAdminConfigWriteFailure(dir + "/doorbell.db", false));
+    REQUIRE(node.setAdminPassword("testpw", "committed-password") == 0);
+    CHECK(adminReq(options.http_port, "GET", "/api/status", "", token).find("HTTP/1.1 401") == 0);
+    node.stop();
+  }
+  {
+    Store store;
+    REQUIRE(store.open(dir + "/doorbell.db"));
+    SimClock clock;
+    HlcClock hlc(clock, "reopen");
+    LwwMap config("test-reopen", hlc);
+    config.load(store.configLoadAll());
+    auto document = json::parse(config.materializeJson());
+    auto* credential = json::get(json::get(document.get(), "admin"), "password_hash");
+    REQUIRE(credential);
+    CHECK(store.metaGet("admin_pw_salt").value_or("") == json::getString(credential, "salt"));
+    CHECK(store.metaGet("admin_pw_hash").value_or("") == json::getString(credential, "hash"));
+  }
+  for (const char* file : {"doorbell.db", "doorbell.db-wal", "doorbell.db-shm"})
+    std::remove((dir + "/" + file).c_str());
+  ::rmdir((dir + "/assets").c_str());
+  ::rmdir(dir.c_str());
+}
+
+TEST_CASE("admin API: configuration conditional batch rejects a stale shared base") {
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.listen_addr = "127.0.0.1:" + std::to_string(db::testing::freeListenPort());
+  options.http_port = db::testing::freeListenPort();
+  options.enable_beacon = false;
+  Node node(options);
+  REQUIRE(node.start());
+  const std::string session = adminLogin(options.http_port);
+  auto protection = bodyJson(adminReq(options.http_port, "GET", "/api/session", "", session));
+  const std::string headers = "Origin: http://127.0.0.1:" + std::to_string(options.http_port) +
+      "\r\nX-Doorbell-CSRF: " + json::getString(protection.get(), "csrf_token") + "\r\n";
+  auto baseline = json::parse(node.configBatchJson(
+      R"({"ops":[{"op":"set","key":"cas.document","value":{"name":"base","future":42}}]})"));
+  REQUIRE(json::getBool(baseline.get(), "ok"));
+  const std::string revision = json::getString(baseline.get(), "revision");
+  REQUIRE_FALSE(revision.empty());
+  auto mutation = [&](const char* name) {
+    auto request = json::obj();
+    json::set(request.get(), "expected_revision", revision);
+    auto* op = json::pushObj(json::addArr(request.get(), "ops"));
+    json::set(op, "op", "set");
+    json::set(op, "key", "cas.document.name");
+    json::set(op, "value", name);
+    return json::dump(request.get());
+  };
+  auto first = json::parse(node.configBatchJson(mutation("first")));
+  REQUIRE(json::getBool(first.get(), "ok"));
+  const auto second = adminReq(options.http_port, "POST", "/api/config/batch",
+                               mutation("second"), session, headers);
+  CHECK(second.find("HTTP/1.1 409") == 0);
+  CHECK(second.find("config_conflict") != std::string::npos);
+  auto current = json::parse(node.configJson());
+  const auto* document = json::get(json::get(current.get(), "cas"), "document");
+  CHECK(json::getString(document, "name") == "first");
+  CHECK(json::getInt(document, "future") == 42);
+  node.stop();
+}
+
+namespace {
+std::string casRequest(const std::string& revision, const std::string& operations) {
+  auto request = json::obj();
+  json::set(request.get(), "schema_version", int64_t{2});
+  json::set(request.get(), "expected_revision", revision);
+  json::setItem(request.get(), "ops", json::parse(operations));
+  return json::dump(request.get());
+}
+std::string casRevision(Node& node) {
+  auto snapshot = json::parse(node.configSnapshotJson());
+  REQUIRE(json::getInt(snapshot.get(), "schema_version") == 2);
+  return json::getString(snapshot.get(), "revision");
+}
+NodeOptions casOptions() {
+  NodeOptions options;
+  options.data_dir = ":memory:";
+  options.listen_addr = "127.0.0.1:" + std::to_string(db::testing::freeListenPort());
+  options.http_port = db::testing::freeListenPort();
+  options.enable_beacon = false;
+  return options;
+}
+}
+
+TEST_CASE("config CAS: object intent preserves unknown fields and distinguishes null from delete") {
+  Node node(casOptions());
+  REQUIRE(node.start());
+  node.setConfigKey("cas.document", R"({"name":"base","future":{"flag":true},"nullable":"old","items":[1,2]})");
+  const auto initial = casRevision(node);
+  auto result = json::parse(node.configCommitJson(casRequest(initial,
+      R"([{"op":"set","key":"cas.document","value":{"name":"mine","nullable":null,"items":[3]}}])")));
+  REQUIRE(json::getBool(result.get(), "ok"));
+  CHECK(json::getString(result.get(), "revision") != initial);
+  auto document = json::parse(node.configJson());
+  const auto* value = json::get(json::get(document.get(), "cas"), "document");
+  CHECK(json::getString(value, "name") == "mine");
+  CHECK(json::getBool(json::get(value, "future"), "flag"));
+  CHECK(cJSON_IsNull(json::get(value, "nullable")));
+  REQUIRE(cJSON_GetArraySize(json::get(value, "items")) == 1);
+  CHECK(cJSON_GetArrayItem(json::get(value, "items"), 0)->valuedouble == 3);
+  result = json::parse(node.configCommitJson(casRequest(casRevision(node),
+      R"([{"op":"delete","key":"cas.document.nullable"}])")));
+  REQUIRE(json::getBool(result.get(), "ok"));
+  document = json::parse(node.configJson());
+  value = json::get(json::get(document.get(), "cas"), "document");
+  CHECK(json::get(value, "nullable") == nullptr);
+  CHECK(json::getBool(json::get(value, "future"), "flag"));
+  node.stop();
+}
+
+TEST_CASE("config CAS: invalid batches and failed durable commits publish nothing") {
+  auto options = casOptions();
+  options.data_dir = adminTempDir();
+  {
+    Node node(options);
+    REQUIRE(node.start());
+    node.setConfigKey("cas.document", R"({"name":"base","future":42})");
+    const auto before = node.configJson();
+    const auto revision = casRevision(node);
+    const auto invalid = casRequest(revision,
+        R"([{"op":"set","key":"cas.document","value":{"name":"invalid"}},{"op":"set","key":"call.indoor.return_s","value":-1}])");
+    auto rejected = json::parse(node.configCommitJson(invalid));
+    CHECK_FALSE(json::getBool(rejected.get(), "ok"));
+    CHECK(json::getString(rejected.get(), "error_code") == "invalid_request");
+    CHECK(node.configJson() == before);
+    CHECK(casRevision(node) == revision);
+    REQUIRE(setAdminConfigWriteFailure(options.data_dir + "/doorbell.db", true));
+    const auto valid = casRequest(revision,
+        R"([{"op":"set","key":"cas.document","value":{"name":"committed"}},{"op":"set","key":"cas.other","value":true}])");
+    rejected = json::parse(node.configCommitJson(valid));
+    CHECK_FALSE(json::getBool(rejected.get(), "ok"));
+    CHECK(json::getString(rejected.get(), "error_code") == "config_persistence_failed");
+    CHECK(node.configJson() == before);
+    CHECK(casRevision(node) == revision);
+    REQUIRE(setAdminConfigWriteFailure(options.data_dir + "/doorbell.db", false));
+    auto accepted = json::parse(node.configCommitJson(valid));
+    CHECK(json::getBool(accepted.get(), "ok"));
+    CHECK(casRevision(node) != revision);
+    node.stop();
+  }
+  {
+    Store store;
+    REQUIRE(store.open(options.data_dir + "/doorbell.db"));
+    SimClock clock;
+    HlcClock hlc(clock, "reopen-cas");
+    LwwMap restored("reopen-cas", hlc);
+    restored.load(store.configLoadAll());
+    auto document = json::parse(restored.materializeJson());
+    const auto* cas = json::get(document.get(), "cas");
+    CHECK(json::getBool(cas, "other"));
+    CHECK(json::getString(json::get(cas, "document"), "name") == "committed");
+    CHECK(json::getInt(json::get(cas, "document"), "future") == 42);
+  }
+  removeAdminTempDir(options.data_dir);
+}
+
+TEST_CASE("config CAS: concurrent HTTP and native writers share one compare and commit") {
+  auto options = casOptions();
+  Node node(options);
+  REQUIRE(node.start());
+  const auto session = adminLogin(options.http_port);
+  auto protection = bodyJson(adminReq(options.http_port, "GET", "/api/session", "", session));
+  const std::string headers = "Origin: http://127.0.0.1:" + std::to_string(options.http_port) +
+      "\r\nX-Doorbell-CSRF: " + json::getString(protection.get(), "csrf_token") + "\r\n";
+  node.setConfigKey("cas.document", R"({"name":"base","future":42})");
+  for (int round = 0; round < 4; ++round) {
+    const auto revision = casRevision(node);
+    std::atomic<int> ready{0};
+    std::atomic<bool> go{false};
+    std::vector<std::string> results(12);
+    std::vector<std::thread> writers;
+    for (int i = 0; i < 12; ++i) {
+      writers.emplace_back([&, i] {
+        const auto request = casRequest(revision,
+            "[{\"op\":\"set\",\"key\":\"cas.document\",\"value\":{\"name\":\"writer-" +
+            std::to_string(i) + "\"}}]");
+        ++ready;
+        while (!go.load()) std::this_thread::yield();
+        if (i % 2) {
+          const auto raw = adminReq(options.http_port, "POST", "/api/config/commit", request,
+                                     session, headers);
+          auto body = bodyJson(raw);
+          results[i] = json::dump(body.get());
+          CHECK(raw.find(json::getBool(body.get(), "ok") ? "HTTP/1.1 200" : "HTTP/1.1 409") == 0);
+        } else results[i] = node.configCommitJson(request);
+      });
+    }
+    while (ready.load() != 12) std::this_thread::yield();
+    go = true;
+    for (auto& writer : writers) writer.join();
+    int committed = 0;
+    int winner = -1;
+    for (int i = 0; i < 12; ++i) {
+      auto result = json::parse(results[i]);
+      if (json::getBool(result.get(), "ok")) { ++committed; winner = i; }
+      else CHECK(json::getString(result.get(), "error_code") == "config_conflict");
+    }
+    REQUIRE(committed == 1);
+    auto document = json::parse(node.configJson());
+    const auto* value = json::get(json::get(document.get(), "cas"), "document");
+    CHECK(json::getString(value, "name") == "writer-" + std::to_string(winner));
+    CHECK(json::getInt(value, "future") == 42);
+  }
+  node.stop();
+}
+
+TEST_CASE("config CAS: snapshots omit digests and commits require authenticated intent") {
+  auto options = casOptions();
+  Node node(options);
+  REQUIRE(node.start());
+  auto capabilities = json::parse(node.statusJson());
+  CHECK(json::getBool(json::get(capabilities.get(), "features"), "config_cas_v1"));
+  const auto session = adminLogin(options.http_port);
+  const auto revision = casRevision(node);
+  const auto request = casRequest(revision, R"([{"op":"set","key":"cas.value","value":1}])");
+  CHECK(adminReq(options.http_port, "GET", "/api/config/snapshot").find("HTTP/1.1 401") == 0);
+  auto snapshot = adminReq(options.http_port, "GET", "/api/config/snapshot", "", session);
+  CHECK(snapshot.find("Cache-Control: no-store") != std::string::npos);
+  auto body = bodyJson(snapshot);
+  CHECK(json::get(json::get(json::get(body.get(), "config"), "admin"), "password_hash") == nullptr);
+  CHECK(adminReq(options.http_port, "POST", "/api/config/commit", request, session)
+            .find("HTTP/1.1 403") == 0);
+  auto protection = bodyJson(adminReq(options.http_port, "GET", "/api/session", "", session));
+  const auto wrong_origin = "Origin: http://untrusted.invalid\r\nX-Doorbell-CSRF: " +
+      json::getString(protection.get(), "csrf_token") + "\r\n";
+  CHECK(adminReq(options.http_port, "POST", "/api/config/commit", request, session, wrong_origin)
+            .find("HTTP/1.1 403") == 0);
+  CHECK(casRevision(node) == revision);
+  for (const auto& invalid : {std::string("{}"),
+      std::string("{\"schema_version\":2,\"expected_revision\":\"x\",\"ops\":[]}"),
+      casRequest(revision, R"([{"op":"set","key":"cas.value","value":1},{"op":"delete","key":"cas.value"}])"),
+      casRequest(revision, R"([{"op":"delete","key":"cas.value","value":null}])")}) {
+    auto result = json::parse(node.configCommitJson(invalid));
+    CHECK_FALSE(json::getBool(result.get(), "ok"));
+    CHECK(casRevision(node) == revision);
+  }
+  const auto before = node.configJson();
+  auto oversized = json::parse(node.configCommitJson(std::string(256 * 1024 + 1, ' ')));
+  CHECK(json::getString(oversized.get(), "error_code") == "capacity_exceeded");
+  CHECK(node.configJson() == before);
+  node.setConfigKey("cas.legacy", "true");
+  auto stale = json::parse(node.configCommitJson(request));
+  CHECK(json::getString(stale.get(), "error_code") == "config_conflict");
+  node.stop();
+}
+
+TEST_CASE("config CAS: versioned C ABI returns owned snapshots and rejects stale commits") {
+  auto boot = json::obj();
+  json::set(boot.get(), "data_dir", ":memory:");
+  json::set(boot.get(), "http_port", int64_t{0});
+  json::set(boot.get(), "listen_port", int64_t{0});
+  json::setBool(boot.get(), "enable_beacon", false);
+  db_platform_v2 platform{};
+  platform.version = DB_PLATFORM_V2_VERSION;
+  platform.struct_size = sizeof(platform);
+  db_core* core = db_core_create_v2(&platform, ":memory:", json::dump(boot.get()).c_str());
+  REQUIRE(core != nullptr);
+  REQUIRE(db_core_start(core) == 0);
+  char* raw = db_core_config_snapshot_json_v2(core);
+  REQUIRE(raw != nullptr);
+  auto snapshot = json::parse(raw);
+  db_free(raw);
+  const auto request = casRequest(json::getString(snapshot.get(), "revision"),
+      R"([{"op":"set","key":"cas.native","value":{"preserved":true}}])");
+  raw = db_core_config_commit_json_v2(core, request.c_str());
+  REQUIRE(raw != nullptr);
+  auto result = json::parse(raw);
+  db_free(raw);
+  CHECK(json::getBool(result.get(), "ok"));
+  raw = db_core_config_commit_json_v2(core, request.c_str());
+  REQUIRE(raw != nullptr);
+  result = json::parse(raw);
+  db_free(raw);
+  CHECK(json::getString(result.get(), "error_code") == "config_conflict");
+  db_core_stop(core);
+  db_core_destroy(core);
+}
+
+TEST_CASE("config CAS: parent patches update existing child records without reviving removed fields") {
+  Node node(casOptions());
+  REQUIRE(node.start());
+  node.setConfigKey("cas.document", R"({"future":42,"nested":{"unknown":true}})");
+  node.setConfigKey("cas.document.name", R"("old")");
+  node.setConfigKey("cas.document.nested.value", "1");
+  node.setConfigKey("cas.document.removed", "true");
+  REQUIRE(json::getBool(json::parse(node.deleteConfigKeyJson("cas.document.removed")).get(), "ok"));
+  auto result = json::parse(node.configCommitJson(casRequest(casRevision(node),
+      R"([{"op":"set","key":"cas.document","value":{"name":"new","nested":{"value":2}}}])")));
+  REQUIRE(json::getBool(result.get(), "ok"));
+  auto document = json::parse(node.configJson());
+  auto* value = json::get(json::get(document.get(), "cas"), "document");
+  CHECK(json::getString(value, "name") == "new");
+  CHECK(json::getInt(value, "future") == 42);
+  CHECK(json::getInt(json::get(value, "nested"), "value") == 2);
+  CHECK(json::getBool(json::get(value, "nested"), "unknown"));
+  CHECK(json::get(value, "removed") == nullptr);
+  result = json::parse(node.configCommitJson(casRequest(casRevision(node),
+      R"([{"op":"set","key":"cas.document.nested","value":null}])")));
+  REQUIRE(json::getBool(result.get(), "ok"));
+  document = json::parse(node.configJson());
+  value = json::get(json::get(document.get(), "cas"), "document");
+  CHECK(cJSON_IsNull(json::get(value, "nested")));
+  result = json::parse(node.configCommitJson(casRequest(casRevision(node),
+      R"([{"op":"set","key":"cas.document","value":{"name":"overlap"}},{"op":"set","key":"cas.document.name","value":"conflicting"}])")));
+  CHECK(json::getString(result.get(), "error_code") == "overlapping_keys");
+  result = json::parse(node.configCommitJson(casRequest(casRevision(node),
+      R"([{"op":"delete","key":"cas.document"}])")));
+  REQUIRE(json::getBool(result.get(), "ok"));
+  document = json::parse(node.configJson());
+  CHECK(json::get(json::get(document.get(), "cas"), "document") == nullptr);
+  result = json::parse(node.configCommitJson(casRequest(casRevision(node),
+      R"([{"op":"set","key":"cas.document","value":{"fresh":true}}])")));
+  REQUIRE(json::getBool(result.get(), "ok"));
+  document = json::parse(node.configJson());
+  value = json::get(json::get(document.get(), "cas"), "document");
+  CHECK(json::getBool(value, "fresh"));
+  CHECK(json::get(value, "name") == nullptr);
+  node.stop();
+}
+
+TEST_CASE("config CAS: materialized schema rejects child writes that corrupt typed parents") {
+  Node node(casOptions());
+  REQUIRE(node.start());
+  node.setConfigKey("call.indoor.return_s", "30");
+  node.setConfigKey("doors.front.unlock.command", R"("front_gate")");
+  const auto before = node.configJson();
+  const auto revision = casRevision(node);
+  for (const char* operations : {
+      R"([{"op":"set","key":"call.indoor.return_s.inner","value":1}])",
+      R"([{"op":"set","key":"doors.front.unlock.command.inner","value":1}])",
+      R"([{"op":"set","key":"doors","value":{"back":{"unlock":{"command":false}}}}])"}) {
+    auto rejected = json::parse(node.configCommitJson(casRequest(revision, operations)));
+    CHECK_FALSE(json::getBool(rejected.get(), "ok"));
+    CHECK(json::getString(rejected.get(), "error_code") == "invalid_request");
+    CHECK(node.configJson() == before);
+    CHECK(casRevision(node) == revision);
+  }
+  node.stop();
+}
+
+TEST_CASE("config CAS: versioned ABI is defined before start and after stop") {
+  db_platform_v2 platform{};
+  platform.struct_size = sizeof(platform);
+  platform.version = DB_PLATFORM_V2_VERSION;
+  db_core* core = db_core_create_v2(&platform, ":memory:",
+      R"({"listen_port":0,"http_port":0,"enable_beacon":false})");
+  REQUIRE(core != nullptr);
+  auto unavailable = [&] {
+    for (bool commit : {false, true}) {
+      char* raw = commit ? db_core_config_commit_json_v2(core, "{}") : db_core_config_snapshot_json_v2(core);
+      REQUIRE(raw != nullptr);
+      auto result = json::parse(raw);
+      db_free(raw);
+      CHECK(json::getString(result.get(), "error_code") == "not_started");
+    }
+  };
+  unavailable();
+  REQUIRE(db_core_start(core) == 0);
+  db_core_stop(core);
+  unavailable();
+  db_core_destroy(core);
+}
+
+namespace {
+struct CasCommitBarrier {
+  std::mutex mutex;
+  std::condition_variable changed;
+  bool entered = false;
+  bool released = false;
+};
+CasCommitBarrier* casCommitBarrier = nullptr;
+void waitAtCasCommit(sqlite3_context* context, int, sqlite3_value**) {
+  auto* barrier = casCommitBarrier;
+  if (!barrier) { sqlite3_result_int(context, 1); return; }
+  std::unique_lock<std::mutex> lock(barrier->mutex);
+  barrier->entered = true;
+  barrier->changed.notify_all();
+  if (!barrier->changed.wait_for(lock, std::chrono::seconds(10), [&] { return barrier->released; }))
+    sqlite3_result_error(context, "test commit barrier timeout", -1);
+  else sqlite3_result_int(context, 1);
+}
+int installCasCommitBarrier(sqlite3* database, char**, const sqlite3_api_routines*) {
+  return sqlite3_create_function(database, "t26_commit_barrier", 0, SQLITE_UTF8, nullptr,
+                                  waitAtCasCommit, nullptr, nullptr);
+}
+}
+
+TEST_CASE("config CAS: a competing native write queued inside persistence cannot cross the compare boundary") {
+  REQUIRE(sqlite3_auto_extension(reinterpret_cast<void(*)()>(installCasCommitBarrier)) == SQLITE_OK);
+  auto options = casOptions();
+  options.data_dir = adminTempDir();
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  NodeDeps dependencies;
+  dependencies.clock = &clock;
+  dependencies.loop = &loop;
+  {
+    Node node(options, std::move(dependencies));
+    REQUIRE(node.start());
+    node.setConfigKey("cas.document", R"({"name":"base","future":42})");
+    const auto revision = casRevision(node);
+    sqlite3* database = nullptr;
+    REQUIRE(sqlite3_open((options.data_dir + "/doorbell.db").c_str(), &database) == SQLITE_OK);
+    REQUIRE(sqlite3_exec(database, "CREATE TRIGGER t26_pause_commit BEFORE INSERT ON config "
+        "WHEN NEW.key='cas.document' BEGIN SELECT t26_commit_barrier(); END", nullptr, nullptr, nullptr) == SQLITE_OK);
+    sqlite3_close(database);
+    CasCommitBarrier barrier;
+    casCommitBarrier = &barrier;
+    std::string first, second;
+    std::atomic<bool> competing_entered{false};
+    std::thread writer([&] {
+      first = node.configCommitJson(casRequest(revision,
+          R"([{"op":"set","key":"cas.document","value":{"name":"first"}}])"));
+    });
+    bool entered = false;
+    {
+      std::unique_lock<std::mutex> lock(barrier.mutex);
+      entered = barrier.changed.wait_for(lock, std::chrono::seconds(10), [&] { return barrier.entered; });
+    }
+    CHECK(entered);
+    const bool queued = loop.post([&] {
+      competing_entered = true;
+      second = node.configCommitJson(casRequest(revision,
+          R"([{"op":"set","key":"cas.document","value":{"name":"second"}}])"));
+    });
+    CHECK(queued);
+    CHECK_FALSE(competing_entered.load());
+    auto published = json::parse(node.configJson());
+    CHECK(json::getString(json::get(json::get(published.get(), "cas"), "document"), "name") == "base");
+    {
+      std::lock_guard<std::mutex> lock(barrier.mutex);
+      barrier.released = true;
+    }
+    barrier.changed.notify_all();
+    writer.join();
+    loop.callSync([] {});
+    casCommitBarrier = nullptr;
+    CHECK(competing_entered.load());
+    CHECK(json::getBool(json::parse(first).get(), "ok"));
+    CHECK(json::getString(json::parse(second).get(), "error_code") == "config_conflict");
+    auto current = json::parse(node.configJson());
+    CHECK(json::getString(json::get(json::get(current.get(), "cas"), "document"), "name") == "first");
+    node.stop();
+  }
+  loop.stop();
+  sqlite3_cancel_auto_extension(reinterpret_cast<void(*)()>(installCasCommitBarrier));
+  removeAdminTempDir(options.data_dir);
+}
+
+TEST_CASE("notice CAS: stale administrators cannot replace a newer notice and Core owns its time") {
+  auto options = casOptions();
+  Node node(options);
+  REQUIRE(node.start());
+  node.setConfigKey("doors.front", R"({"name":"Front"})");
+  node.setConfigKey("time.zone", R"("Asia/Kolkata")");
+  const auto session = adminLogin(options.http_port);
+  auto protection = bodyJson(adminReq(options.http_port, "GET", "/api/session", "", session));
+  const std::string headers = "Origin: http://127.0.0.1:" + std::to_string(options.http_port) +
+      "\r\nX-Doorbell-CSRF: " + json::getString(protection.get(), "csrf_token") + "\r\n";
+  for (const auto& path : {std::string("/api/notice"), std::string("/api/doors/front/notice")}) {
+    const auto base = casRevision(node);
+    auto body = json::obj();
+    json::set(body.get(), "expected_revision", base);
+    json::set(body.get(), "text", "First administrator");
+    json::set(body.get(), "ttl_s", int64_t{60});
+    const auto first = adminReq(options.http_port, "POST", path, json::dump(body.get()), session, headers);
+    INFO(first);
+    REQUIRE(first.find("HTTP/1.1 200") == 0);
+    auto result = bodyJson(first);
+    CHECK(json::getBool(result.get(), "ok"));
+    CHECK(json::getString(result.get(), "revision") == casRevision(node));
+    CHECK(casRevision(node) != base);
+    auto snapshot = json::parse(node.configJson());
+    const auto* notice = path == "/api/notice"
+        ? json::get(json::get(snapshot.get(), "notice"), "global")
+        : json::get(json::get(json::get(snapshot.get(), "doors"), "front"), "notice");
+    REQUIRE(cJSON_IsObject(notice));
+    CHECK(json::getString(notice, "text") == "First administrator");
+    CHECK_FALSE(json::getString(notice, "from_device").empty());
+    CHECK(json::getInt(notice, "created_ms") > 0);
+    CHECK(json::getInt(notice, "expires_ms") - json::getInt(notice, "created_ms") == 60000);
+    const auto before = node.configJson();
+    json::set(body.get(), "text", "Stale administrator");
+    auto stale = adminReq(options.http_port, "POST", path, json::dump(body.get()), session, headers);
+    CHECK(stale.find("HTTP/1.1 409") == 0);
+    CHECK(json::getString(bodyJson(stale).get(), "error_code") == "config_conflict");
+    CHECK(node.configJson() == before);
+    json::set(body.get(), "expected_revision", casRevision(node));
+    json::set(body.get(), "ttl_s", int64_t{0});
+    json::set(body.get(), "expiry", "today");
+    auto today = adminReq(options.http_port, "POST", path, json::dump(body.get()), session, headers);
+    INFO(today);
+    REQUIRE(today.find("HTTP/1.1 200") == 0);
+    auto after = json::parse(node.configJson());
+    const auto* final_notice = path == "/api/notice"
+        ? json::get(json::get(after.get(), "notice"), "global")
+        : json::get(json::get(json::get(after.get(), "doors"), "front"), "notice");
+    const auto created = json::getInt(final_notice, "created_ms");
+    const auto expires = json::getInt(final_notice, "expires_ms");
+    const int64_t zone = 330;
+    CHECK(expires > created);
+    CHECK(expires - created <= 86'400'000LL);
+    CHECK((expires + zone * 60'000LL) % 86'400'000LL == 0);
+  }
+  node.stop();
+}
+
+TEST_CASE("notice CAS: conditional writes require admin intent and reject client timestamps") {
+  auto options = casOptions();
+  Node node(options);
+  REQUIRE(node.start());
+  node.setConfigKey("doors.front", R"({"name":"Front"})");
+  const auto session = adminLogin(options.http_port);
+  auto protection = bodyJson(adminReq(options.http_port, "GET", "/api/session", "", session));
+  const std::string csrf = json::getString(protection.get(), "csrf_token");
+  const std::string headers = "Origin: http://127.0.0.1:" + std::to_string(options.http_port) +
+      "\r\nX-Doorbell-CSRF: " + csrf + "\r\n";
+  const auto revision = casRevision(node);
+  for (const auto& path : {std::string("/api/notice"), std::string("/api/doors/front/notice")}) {
+    auto body = json::obj();
+    json::set(body.get(), "expected_revision", revision);
+    json::set(body.get(), "text", "Protected notice");
+    CHECK(adminReq(options.http_port, "POST", path, json::dump(body.get()), session)
+              .find("HTTP/1.1 403") == 0);
+    CHECK(adminReq(options.http_port, "POST", path, json::dump(body.get()), session,
+              "Origin: http://untrusted.invalid\r\nX-Doorbell-CSRF: " + csrf + "\r\n")
+              .find("HTTP/1.1 403") == 0);
+    for (const char* field : {"created_ms", "expires_ms", "from_device"}) {
+      json::set(body.get(), field, int64_t{1});
+      CHECK(adminReq(options.http_port, "POST", path, json::dump(body.get()), session, headers)
+                .find("HTTP/1.1 400") == 0);
+      cJSON_DeleteItemFromObjectCaseSensitive(body.get(), field);
+    }
+    for (const char* invalid : {"-1", "1.5", "2147483648", "\"60\"", "null"}) {
+      json::setItem(body.get(), "ttl_s", json::parse(invalid));
+      CHECK(adminReq(options.http_port, "POST", path, json::dump(body.get()), session, headers)
+                .find("HTTP/1.1 400") == 0);
+    }
+    CHECK(casRevision(node) == revision);
+  }
+  node.stop();
+}
+
+TEST_CASE("config CAS: explicit object field removal combines with updates without losing unknown fields") {
+  Node node(casOptions());
+  REQUIRE(node.start());
+  node.setConfigKey("cas.document", R"({"name":"before","nullable":null,"removed":1,"future":{"v":42}})");
+  node.setConfigKey("cas.document.removed", "2");
+  auto result = json::parse(node.configCommitJson(casRequest(casRevision(node),
+      R"([{"op":"set","key":"cas.document","value":{"name":"after"},"remove_fields":["removed"]}])")));
+  REQUIRE(json::getBool(result.get(), "ok"));
+  auto snapshot = json::parse(node.configJson());
+  const auto* document = json::get(json::get(snapshot.get(), "cas"), "document");
+  CHECK(json::getString(document, "name") == "after");
+  CHECK(cJSON_IsNull(json::get(document, "nullable")));
+  CHECK(json::get(document, "removed") == nullptr);
+  CHECK(json::getInt(json::get(document, "future"), "v") == 42);
+  const auto base = casRevision(node);
+  for (const auto& operations : {
+      R"([{"op":"set","key":"cas.document","value":{"name":"conflict"},"remove_fields":["name"]}])",
+      R"([{"op":"set","key":"cas.document","value":1,"remove_fields":["name"]}])",
+      R"([{"op":"set","key":"cas.document","value":{},"remove_fields":["name","name"]}])",
+      R"([{"op":"delete","key":"cas.document","remove_fields":["name"]}])",
+      R"([{"op":"set","key":"cas.document","value":{},"remove_fields":[]}])"}) {
+    auto rejected = json::parse(node.configCommitJson(casRequest(base, operations)));
+    CHECK_FALSE(json::getBool(rejected.get(), "ok"));
+    CHECK(casRevision(node) == base);
+  }
+  node.stop();
+}
+
+TEST_CASE("config CAS: semantic style reset and update share one validated operation") {
+  Node node(casOptions());
+  REQUIRE(node.start());
+  const auto key = "devices." + node.nodeId() + ".local.ui.elements.call.primary";
+  auto seed = json::obj();
+  auto* operation = json::pushObj(json::addArr(seed.get(), "ops"));
+  json::set(operation, "op", "set");
+  json::set(operation, "key", key);
+  json::setItem(operation, "value", json::parse(R"({"radius":8,"foreground":"#FFFFFF"})"));
+  auto established = json::parse(node.configCommitJson(casRequest(casRevision(node),
+      json::dump(json::get(seed.get(), "ops")))));
+  REQUIRE(json::getBool(established.get(), "ok"));
+  json::setItem(operation, "value", json::parse(R"({"radius":12})"));
+  json::setItem(operation, "remove_fields", json::parse(R"(["foreground"] )"));
+  auto updated = json::parse(node.configCommitJson(casRequest(casRevision(node),
+      json::dump(json::get(seed.get(), "ops")))));
+  REQUIRE(json::getBool(updated.get(), "ok"));
+  auto snapshot = json::parse(node.configJson());
+  const auto* elements = json::get(json::get(json::get(json::get(json::get(snapshot.get(), "devices"),
+      node.nodeId().c_str()), "local"), "ui"), "elements");
+  const auto* style = json::get(json::get(elements, "call"), "primary");
+  CHECK(json::getInt(style, "radius") == 12);
+  CHECK(json::get(style, "foreground") == nullptr);
+  json::setItem(operation, "value", json::parse(R"({"radius":200})"));
+  json::setItem(operation, "remove_fields", json::parse(R"(["scale"] )"));
+  const auto base = casRevision(node);
+  auto invalid = json::parse(node.configCommitJson(casRequest(base,
+      json::dump(json::get(seed.get(), "ops")))));
+  CHECK_FALSE(json::getBool(invalid.get(), "ok"));
+  CHECK(casRevision(node) == base);
   node.stop();
 }

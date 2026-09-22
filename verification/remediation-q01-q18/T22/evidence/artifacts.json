@@ -1,0 +1,16 @@
+{
+  "recorded_at": "2026-09-22T15:07:31.884741+00:00",
+  "artifacts": {
+    "build/remediation-t22-20260923/CallTimingTests-x86.exe": "f2ccda6cf14cbb3e2895a6c145bb95edc315e388a25e8a23bfcddbc8e41abd4a",
+    "build/remediation-t22-20260923/CallTimingTests.exe": "7cb9a65876064d0b11c3769681558c39259cd591530239f3f81c255ec26cc8bb",
+    "build/remediation-t22-20260923/CallTimingTests-x64.exe": "f4801374339b60f16994ea0bbb861911510f1a418986b4c3a9377394a1207952",
+    "build/remediation-continuation-20260922/t08-candidate-r4/build/libdoorbell.dylib": "560424de26b2e7101f6b8b71d53d761a59e018854c936d7cc67985dd133d6090"
+  },
+  "architecture_headers": "/Users/ox/Documents/project/app-doorbell/build/remediation-t22-20260923/CallTimingTests-x86.exe: PE32 executable (console) Intel 80386 Mono/.Net assembly, for MS Windows\n/Users/ox/Documents/project/app-doorbell/build/remediation-t22-20260923/CallTimingTests.exe:     PE32 executable (console) Intel 80386 Mono/.Net assembly, for MS Windows\n/Users/ox/Documents/project/app-doorbell/build/remediation-t22-20260923/CallTimingTests-x64.exe: PE32+ executable (console) x86-64 Mono/.Net assembly, for MS Windows\n",
+  "toolchain": "Mono JIT compiler version 6.14.1 (tarball Tue Apr 29 17:43:02 UTC 2025)\nCopyright (C) Novell, Inc, Xamarin Inc and Contributors. www.mono-project.com\n\tTLS:           \n\tSIGSEGV:       normal\n\tNotification:  kqueue\n\tArchitecture:  arm64\n\tDisabled:      none\n\tMisc:          softdebug \n\tInterpreter:   yes\n\tLLVM:          supported, not enabled.\n\tSuspend:       preemptive\n\tGC:            sgen\n",
+  "native_source_manifest": "../../T08/source-final-r4.json",
+  "limitations": [
+    "x86/x64 are compiled PE artifacts; actual managed/native execution was arm64 macOS with 64-bit pointers.",
+    "Full WPF application build and Windows runtime/device tests remain platform gates."
+  ]
+}

@@ -108,7 +108,7 @@ var AdminLogic = (function () {
     var out = isObj(existing) ? cloneJson(existing) : {};
     ["ja", "en", "zh"].forEach(function (lang) {
       if (f[lang]) out[lang] = f[lang];
-      else delete out[lang];
+      else if (out[lang] !== "" && out[lang] !== null) delete out[lang];
     });
     return out;
   }
@@ -508,6 +508,7 @@ var AdminLogic = (function () {
     entries = entries || []; dels = dels || [];
     for (i = 0; i < entries.length; i++) {
       key = String((entries[i] && entries[i].key) || "");
+      if (/(^|\.)(__proto__|prototype|constructor)(\.|$)/.test(key)) throw new Error("invalid config path");
       if (!key || seen[key]) throw new Error("duplicate or empty config key: " + key);
       validateUiConfigMutation(key, entries[i].value, false);
       seen[key] = true;
@@ -515,12 +516,128 @@ var AdminLogic = (function () {
     }
     for (i = 0; i < dels.length; i++) {
       key = String(dels[i] || "");
+      if (/(^|\.)(__proto__|prototype|constructor)(\.|$)/.test(key)) throw new Error("invalid config path");
       if (!key || seen[key]) throw new Error("duplicate or empty config key: " + key);
       validateUiConfigMutation(key, undefined, true);
       seen[key] = true;
       ops.push({ op: "delete", key: key });
     }
     return ops;
+  }
+
+  function configAt(document, path) {
+    var node = document, parts = path instanceof Array ? path : path.split(".");
+    for (var i = 0; i < parts.length; i++) {
+      if (!isObj(node) || !own(node, parts[i])) return undefined;
+      node = node[parts[i]];
+    }
+    return node;
+  }
+
+  // Object entries are patches: omitted fields are not deletion. Only explicit delete ops
+  // remove data; null and arrays remain typed whole values. Preserve the original write root
+  // so semantic UI objects still pass the Core's whole-element validation boundary.
+  function configParents(base, parts) {
+    var parents = [];
+    for (var i = 1; i < parts.length; i++) {
+      var path = parts.slice(0, i), value = configAt(base, path);
+      parents.push({ path: path, object: isObj(value), value: isObj(value) ? undefined : cloneJson(value) });
+    }
+    return parents;
+  }
+
+  function configIntents(base, ops, editedObjects) {
+    var changes = [];
+    function diff(key, path, before, mine) {
+      if (sameJson(before, mine)) return;
+      if (isObj(before) && isObj(mine)) {
+        for (var field in mine) if (own(mine, field)) {
+          if (field === "__proto__" || field === "constructor" || field === "prototype") throw new Error("invalid config path");
+          diff(key, path.concat([field]), own(before, field) ? before[field] : undefined, mine[field]);
+        }
+        // These editor builders clone their complete original objects before clearing known
+        // fields. Raw import/JSON patches never enable this explicit removal conversion.
+        if (editedObjects) for (var previous in before) if (own(before, previous) && !own(mine, previous))
+          changes.push({ key: key, path: path.concat([previous]), before: cloneJson(before[previous]), op: "delete" });
+      } else changes.push({ key: key, path: path, before: cloneJson(before), value: cloneJson(mine), op: "set" });
+    }
+    ops.forEach(function (op) {
+      var before = configAt(base, op.key);
+      if (op.op === "delete") {
+        if (before !== undefined) changes.push({ key: op.key, path: [], before: cloneJson(before), op: "delete" });
+      } else diff(op.key, [], before, op.value);
+    });
+    changes.forEach(function (change) {
+      change.parents = configParents(base, change.key.split(".").concat(change.path));
+    });
+    return changes;
+  }
+
+  function configRebase(changes, current) {
+    var safe = [], conflicts = [];
+    changes.forEach(function (change) {
+      var now = configAt(current, change.key.split(".").concat(change.path));
+      var mine = change.op === "delete" ? undefined : change.value;
+      if (sameJson(now, mine)) return;
+      var next = { key: change.key, path: change.path.slice(), op: change.op,
+                   before: cloneJson(now), value: cloneJson(change.value),
+                   parents: configParents(current, change.key.split(".").concat(change.path)) };
+      var structureChanged = (change.parents || []).some(function (parent) {
+        var value = configAt(current, parent.path);
+        return parent.object !== isObj(value) || (!parent.object && !sameJson(parent.value, value));
+      });
+      if (!structureChanged && sameJson(change.before, now)) safe.push(next);
+      else conflicts.push({ change: next, base: cloneJson(change.before), current: cloneJson(now) });
+    });
+    return { changes: safe, conflicts: conflicts };
+  }
+
+  function configIntentOps(changes) {
+    var ops = [], groups = {}, deleted = [];
+    function groupFor(key) {
+      var group = groups["$" + key];
+      if (!group) { group = { op: "set", key: key, value: {} }; groups["$" + key] = group; ops.push(group); }
+      return group;
+    }
+    changes.forEach(function (change) {
+      if (change.op === "delete") deleted.push(change.key + (change.path.length ? "." + change.path.join(".") : ""));
+    });
+    changes.forEach(function (change) {
+      var key = change.key + (change.path.length ? "." + change.path.join(".") : "");
+      var semantic = change.key.indexOf(".local.ui.elements.") >= 0;
+      if (semantic && change.path.length && change.op === "delete") {
+        if (change.path.length !== 1) throw new Error("ambiguous_config_removal");
+        var removal = groupFor(change.key);
+        (removal.remove_fields || (removal.remove_fields = [])).push(change.path[0]);
+        return;
+      }
+      var split = !semantic && deleted.some(function (removed) { return removed.indexOf(change.key + ".") === 0; });
+      if (change.op === "delete" || !change.path.length || split) {
+        if (split && change.path.some(function (part) { return part.indexOf(".") >= 0; }))
+          throw new Error("ambiguous_config_removal");
+        var whole = { op: change.op, key: key };
+        if (change.op === "set") whole.value = cloneJson(change.value);
+        ops.push(whole); return;
+      }
+      var value = groupFor(change.key).value;
+      for (var i = 0; i < change.path.length - 1; i++) {
+        if (!own(value, change.path[i])) value[change.path[i]] = {};
+        value = value[change.path[i]];
+      }
+      value[change.path[change.path.length - 1]] = cloneJson(change.value);
+    });
+    return ops;
+  }
+
+  function configComparisonValue(path, value) {
+    function redact(v, key) {
+      if (/password|secret|token|credential|(?:^|[_.])key(?:$|[_.])/i.test(key) ||
+          (typeof v === "string" && v.indexOf("secret:") === 0)) return "••••";
+      if (v instanceof Array) return v.map(function (item) { return redact(item, key); });
+      if (isObj(v)) { var result = {}; for (var k in v) if (own(v, k)) result[k] = redact(v[k], k); return result; }
+      return v;
+    }
+    return value === undefined ? undefined : JSON.stringify(redact(value, path));
   }
 
   // Write semantic UI overrides only as whole element objects. Raw import/editor paths may not
@@ -1290,6 +1407,20 @@ var AdminLogic = (function () {
   }
 
   /* The POST body for /api/doors/<id>/notice, or {error:"..."} for a message the form refuses. */
+  function noticeCommitPayload(f) {
+    var text = String(f.text == null ? "" : f.text).replace(/^\s+|\s+$/g, "");
+    var length = countCharacters(text), body = { text: text };
+    if (!length) return { error: "notice.empty" };
+    if (length > NOTICE_MAX_CHARS) return { error: "notice.too_long", n: length };
+    if (f.expiry === "today") body.expiry = "today";
+    else if (f.expiry === "until_cleared") body.ttl_s = 0;
+    else if (f.expiry === "1h") body.ttl_s = 3600;
+    else if (f.expiry === "custom" && +f.custom_hours >= 1 && +f.custom_hours <= 8760 &&
+             Math.floor(+f.custom_hours) === +f.custom_hours) body.ttl_s = +f.custom_hours * 3600;
+    else return { error: "notice.expiry_custom" };
+    return { body: body };
+  }
+
   function noticePayload(f, nowMs, offsetMin) {
     var text = String(f.text == null ? "" : f.text).replace(/^\s+|\s+$/g, "");
     var length = countCharacters(text);
@@ -1823,14 +1954,36 @@ var AdminLogic = (function () {
 
   /* doors.<id>.unlock.show_button is a three-way choice: leave it to core (show the control when
    * an unlock action exists), always show it, or always hide it. */
-  function doorUnlockEntries(door, mode, existing) {
+  function doorUnlockEntries(door, mode, existing, command) {
     var key = "doors." + door + ".unlock";
     var value = editableClone(existing);
+    if (command !== undefined) {
+      command = String(command).replace(/^\s+|\s+$/g, "");
+      if (command && !/^[A-Za-z0-9_-]{1,32}$/.test(command))
+        throw new Error("invalid_unlock_command");
+      if (command) value.command = command;
+      else delete value.command;
+    }
     if (mode === "show") value.show_button = true;
     else if (mode === "hide") value.show_button = false;
     else delete value.show_button;
     if (!hasOwnKeys(value)) return { entries: [], dels: [key] };
     return { entries: [{ key: key, value: value }], dels: [] };
+  }
+
+  function doorUnlockOptions(cfg) {
+    var actions = isObj(cfg) && isObj(cfg.sip) && isObj(cfg.sip.dtmf_actions)
+      ? cfg.sip.dtmf_actions : {};
+    var result = [], seen = {};
+    for (var code in actions) {
+      if (!Object.prototype.hasOwnProperty.call(actions, code)) continue;
+      var action = actions[code], command = action && action.command;
+      if (!action || action.type !== "ha_command" || typeof command !== "string" ||
+          !/^[A-Za-z0-9_-]{1,32}$/.test(command) || seen["$" + command]) continue;
+      seen["$" + command] = true;
+      result.push({ v: command, label: command + " (" + code + ")" });
+    }
+    return result;
   }
 
   function doorUnlockModel(door, cfg, status) {
@@ -2059,6 +2212,107 @@ var AdminLogic = (function () {
   }
 
 
+
+  var CONFIG_IMPORT_MAX_BYTES = 4 * 1024 * 1024;
+  function configImportBytes(text) {
+    try { return unescape(encodeURIComponent(text)).length; }
+    catch (_) { throw new Error("invalid_document"); }
+  }
+  function configImportParse(text) {
+    if (configImportBytes(text) > CONFIG_IMPORT_MAX_BYTES) throw new Error("capacity_exceeded");
+    var at = 0, nodes = 0;
+    function skip() { while (/\s/.test(text.charAt(at)) && at < text.length) at++; }
+    function string() {
+      var start = at++;
+      while (at < text.length) {
+        var ch = text.charAt(at++);
+        if (ch === "\\") at++;
+        else if (ch === '"') return JSON.parse(text.slice(start, at));
+      }
+      throw new Error("invalid_document");
+    }
+    function value(depth) {
+      if (depth > 20 || ++nodes > 65536) throw new Error("capacity_exceeded");
+      skip(); var ch = text.charAt(at), seen, key;
+      if (ch === '"') { string(); return; }
+      if (ch === "{" || ch === "[") {
+        var object = ch === "{", end = object ? "}" : "]"; at++; skip(); seen = Object.create(null);
+        if (text.charAt(at) === end) { at++; return; }
+        for (;;) {
+          skip();
+          if (object) {
+            if (text.charAt(at) !== '"') throw new Error("invalid_document");
+            key = string();
+            if (seen[key] || key === "__proto__" || key === "constructor" || key === "prototype" || /[\x00-\x1f\x7f]/.test(key)) throw new Error("invalid_document");
+            seen[key] = true; skip(); if (text.charAt(at++) !== ":") throw new Error("invalid_document");
+          }
+          value(depth + 1); skip(); ch = text.charAt(at++);
+          if (ch === end) return;
+          if (ch !== ",") throw new Error("invalid_document");
+        }
+      }
+      var match = /^(?:true|false|null|-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?)/.exec(text.slice(at));
+      if (!match) throw new Error("invalid_document"); at += match[0].length;
+    }
+    value(0); skip(); if (at !== text.length) throw new Error("invalid_document");
+    return JSON.parse(text);
+  }
+  function configExportDocument(config, source) {
+    var excluded = [];
+    function copy(value, path) {
+      if (typeof value === "string" && /^secret:[A-Za-z0-9_.-]{1,128}$/.test(value)) return value;
+      if (value instanceof Array) {
+        var items = value.map(function (item, index) { return copy(item, path + "." + index); });
+        return items.some(function (item) { return item === undefined; }) ? undefined : items;
+      }
+      var name = path.toLowerCase().replace(/[_-]/g, "");
+      var publicGeneration = /(?:^|\.)tokengeneration$/.test(name);
+      if ((!publicGeneration && /password|passwd|passphrase|secret|token|credential|privatekey|authorization|apikey|(?:^|\.)(?:auth|bearer|pass|pin|psk|key)(?:\.|$)/.test(name)) ||
+          (typeof value === "string" && /:\/\//.test(value) && /[@?#%]/.test(value.slice(value.indexOf("://") + 3)))) {
+        excluded.push(path); return undefined;
+      }
+      if (isObj(value)) {
+        var result = {};
+        for (var key in value) if (own(value, key)) {
+          if (key === "__proto__" || key === "constructor" || key === "prototype") { excluded.push(path + "." + key); continue; }
+          var child = copy(value[key], path ? path + "." + key : key);
+          if (child !== undefined) result[key] = child;
+        }
+        return result;
+      }
+      return value;
+    }
+    return { schema_version: 2, format: "doorbell-config", content_scope: "configuration_without_secrets_or_assets",
+             source: { node_id: String((source || {}).id || ""), app_version: String((source || {}).version || "") },
+             config: copy(config, ""), excluded_paths: excluded };
+  }
+  function configImportDocument(text, base, replace) {
+    var parsed = configImportParse(text), input = parsed, entries;
+    if (isObj(parsed) && own(parsed, "schema_version")) {
+      if (parsed.schema_version !== 2 || !isObj(parsed.config)) throw new Error("unsupported_schema");
+      input = parsed.config;
+    } else if (parsed instanceof Array) entries = parsed;
+    else if (isObj(parsed) && parsed.entries instanceof Array) entries = parsed.entries;
+    if (entries) {
+      input = {}; var entryKeys = Object.create(null);
+      entries.forEach(function (entry) {
+        if (!isObj(entry) || typeof entry.key !== "string" || !entry.key || !own(entry, "value") ||
+            entry.key.length > 512 || /(^\.|\.$|\.\.|[\x00-\x1f\x7f])/.test(entry.key) ||
+            entry.key.split(".").some(function (key) { return key === "__proto__" || key === "constructor" || key === "prototype"; })) throw new Error("invalid_document");
+        if (entryKeys[entry.key]) throw new Error("invalid_document");
+        entryKeys[entry.key] = true;
+        applyKey(input, entry.key, JSON.stringify(entry.value));
+      });
+    }
+    if (!isObj(input)) throw new Error("invalid_document");
+    function merge(previous, next) {
+      if (!isObj(previous) || !isObj(next)) return JSON.parse(JSON.stringify(next));
+      var output = JSON.parse(JSON.stringify(previous));
+      for (var key in next) if (own(next, key)) output[key] = merge(previous[key], next[key]);
+      return output;
+    }
+    return { schema_version: 2, config: replace ? input : merge(base || {}, input) };
+  }
 
   function flattenConfig(cfg) {
     var out = [];
@@ -2619,6 +2873,8 @@ var AdminLogic = (function () {
     uiElementValue: uiElementValue, uiElementChanges: uiElementChanges,
     uiPreviewModel: uiPreviewModel,
     colorOk: colorOk, contrast: contrast, isPlainObject: isObj, configBatchOps: configBatchOps,
+    configAt: configAt, configIntents: configIntents, configRebase: configRebase,
+    configIntentOps: configIntentOps, configComparisonValue: configComparisonValue,
     mqttEntries: mqttEntries, telegramEntries: telegramEntries, sipEntries: sipEntries,
     webPushEntries: webPushEntries,
     mqttPlan: mqttPlan, telegramPlan: telegramPlan, webPushPlan: webPushPlan,
@@ -2635,7 +2891,7 @@ var AdminLogic = (function () {
     effectiveVolumes: effectiveVolumes,
     NOTICE_MAX_CHARS: NOTICE_MAX_CHARS, NOTICE_PRESET_KEYS: NOTICE_PRESET_KEYS,
     NOTICE_EXPIRY_PRESETS: NOTICE_EXPIRY_PRESETS, noticeExpiryMs: noticeExpiryMs,
-    noticePayload: noticePayload, noticeModel: noticeModel, countCharacters: countCharacters,
+    noticePayload: noticePayload, noticeCommitPayload: noticeCommitPayload, noticeModel: noticeModel, countCharacters: countCharacters,
     SOS_TRIGGER_MODES: SOS_TRIGGER_MODES, sosEntries: sosEntries, powerModel: powerModel,
     INK_REGIONS: INK_REGIONS, APPEARANCE_MODES: APPEARANCE_MODES,
     autoInk: autoInk, autoAccent: autoAccent, themeAutoModel: themeAutoModel,
@@ -2650,12 +2906,15 @@ var AdminLogic = (function () {
     NOTICE_PRESET_MAX: NOTICE_PRESET_MAX, noticePresetEntries: noticePresetEntries,
     noticePresetList: noticePresetList, effectiveNoticeModel: effectiveNoticeModel,
     doorUnlockEntries: doorUnlockEntries, doorUnlockModel: doorUnlockModel,
+    doorUnlockOptions: doorUnlockOptions,
     doorRows: doorRows,
     CALL_RETURN_DEFAULT: CALL_RETURN_DEFAULT, CALL_RETURN_MIN: CALL_RETURN_MIN,
     CALL_RETURN_MAX: CALL_RETURN_MAX, callReturnSeconds: callReturnSeconds,
     callReturnEntries: callReturnEntries, deviceCallReturnEntries: deviceCallReturnEntries,
     writeWarnings: writeWarnings,
     webSosEntries: webSosEntries, runtimeHealthRows: runtimeHealthRows,
+    configExportDocument: configExportDocument, configImportDocument: configImportDocument,
+    configImportBytes: configImportBytes, CONFIG_IMPORT_MAX_BYTES: CONFIG_IMPORT_MAX_BYTES,
     flattenConfig: flattenConfig, applyKey: applyKey, deleteKey: deleteKey,
     newId: newId, safeId: safeId,
 
@@ -3040,12 +3299,13 @@ if (typeof document !== "undefined") (function () {
   function mockRefreshDoorStatus() {
     var doors = MOCK_STATUS.doors || {};
     for (var id in doors) {
-      var configured = doors[id].unlock ? doors[id].unlock.configured === true : false;
       var override = ((MOCK_CFG.doors || {})[id] || {}).unlock;
+      var command = override && typeof override.command === "string" ? override.command : "";
+      var configured = !!command;
       var forced = override && typeof override.show_button === "boolean"
         ? override.show_button : null;
       doors[id].unlock = { configured: configured,
-                           command: configured ? "unlock" : "",
+                           command: command,
                            show_button: forced === null ? configured : forced,
                            source: forced === null ? "default" : "admin" };
       // Core reports a door as configured once an entry exists, however it came to exist.
@@ -3056,12 +3316,21 @@ if (typeof document !== "undefined") (function () {
     }
   }
 
+  function mockConfigMerge(before, patch) {
+    if (!isObj(patch)) return patch;
+    var out = isObj(before) ? JSON.parse(JSON.stringify(before)) : {};
+    for (var key in patch) if (Object.prototype.hasOwnProperty.call(patch, key))
+      out[key] = mockConfigMerge(out[key], patch[key]);
+    return out;
+  }
+  var mockConfigRevision = 1;
   function mockApi(method, path, body, cb) {
     var p = path.split("?")[0];
     function ok(j) { setTimeout(function () { cb(200, j); }, 0); }
     if (method === "GET") {
       if (p === "/api/status") return ok(MOCK_STATUS);
       if (p === "/api/config") return ok(MOCK_CFG);
+      if (p === "/api/config/snapshot") return ok({ schema_version: 2, revision: "mock-" + mockConfigRevision, config: MOCK_CFG });
       if (p === "/api/events") return ok({ events: MOCK_EVENTS });
       if (p === "/api/logs") return ok({ logs: ["I mock: this is a mock log entry"] });
       if (p === "/api/pairing") return ok(mockPairSnapshot());
@@ -3161,14 +3430,22 @@ if (typeof document !== "undefined") (function () {
                                 wall_ms: new Date().getTime() };
       return ok({ ok: true });
     }
-    if (p === "/api/config/batch") {
+    if (p === "/api/config/batch" || p === "/api/config/commit") {
+      if (p === "/api/config/commit" && (!body || body.expected_revision !== "mock-" + mockConfigRevision))
+        return setTimeout(function () { cb(409, { ok: false, error_code: "config_conflict" }); }, 0);
+      mockConfigRevision++;
       var ops = (body && body.ops) || [], nextCfg, oi;
       try { nextCfg = JSON.parse(JSON.stringify(MOCK_CFG)); }
       catch (cloneErr) { return setTimeout(function () { cb(500, { ok: false, err: "clone" }); }, 0); }
       for (oi = 0; oi < ops.length; oi++) {
         if (!ops[oi].key || (ops[oi].op !== "set" && ops[oi].op !== "delete"))
           return setTimeout(function () { cb(400, { ok: false, err: "bad op" }); }, 0);
-        if (ops[oi].op === "set") L.applyKey(nextCfg, ops[oi].key, JSON.stringify(ops[oi].value));
+        if (ops[oi].op === "set") {
+          var proposed = ops[oi].value;
+          if (p === "/api/config/commit") proposed = mockConfigMerge(L.configAt(nextCfg, ops[oi].key), proposed);
+          (ops[oi].remove_fields || []).forEach(function (field) { delete proposed[field]; });
+          L.applyKey(nextCfg, ops[oi].key, JSON.stringify(proposed));
+        }
         else L.deleteKey(nextCfg, ops[oi].key);
       }
       MOCK_CFG = nextCfg;
@@ -3310,6 +3587,8 @@ if (typeof document !== "undefined") (function () {
     function callback(status, json, detail) {
       if (options.pageEpoch !== undefined && !pageCurrent(options.pageEpoch)) return;
       if (options.context && !runtimeCurrent(options.context)) return;
+      if (status === 200 && json && typeof json.csrf_token === "string" &&
+          (path === "/api/login" || path === "/api/session")) AUTH.csrf = json.csrf_token;
       cb(status, json, detail);
     }
     if (MOCK && path.indexOf("/locale/") !== 0) return mockApi(method, path, body, callback);
@@ -3324,6 +3603,7 @@ if (typeof document !== "undefined") (function () {
     try {
       x.open(method, path, true);
       x.setRequestHeader("X-Requested-With", "doorbell-admin");
+      if (AUTH.csrf && method !== "GET") x.setRequestHeader("X-Doorbell-CSRF", AUTH.csrf);
       if (body) x.setRequestHeader("Content-Type", "application/json");
     } catch (e) {
       finish(0, null, { reason: "open", request: x });
@@ -3339,15 +3619,19 @@ if (typeof document !== "undefined") (function () {
       finish(x.status, j, { reason: "http", request: x });
     };
     x.onerror = function () { finish(0, null, { reason: "network", request: x }); };
+    x.ontimeout = function () { finish(0, null, { reason: "timeout", request: x }); };
     x.onabort = function () {
       finish(0, null, { reason: abortReason || "abort", request: x });
     };
-    if (options.timeout_ms) timer = setTimeout(function () {
-      if (settled) return;
-      abortReason = "timeout";
-      finish(0, null, { reason: abortReason, request: x });
-      try { x.abort(); } catch (e) {}
-    }, options.timeout_ms);
+    if (options.timeout_ms) {
+      try { x.timeout = options.timeout_ms; } catch (e) {}
+      timer = setTimeout(function () {
+        if (settled) return;
+        abortReason = "timeout";
+        finish(0, null, { reason: abortReason, request: x });
+        try { x.abort(); } catch (e) {}
+      }, options.timeout_ms);
+    }
     // Native XHR may deliver DONE/status=0 synchronously inside abort(). Record the caller's
     // intent before invoking the native method so that this terminal path remains "abort".
     var nativeAbort = x.abort;
@@ -3360,18 +3644,132 @@ if (typeof document !== "undefined") (function () {
     return x;
   }
 
-  // Commit every set/delete in one request and preserve values as JSON. The server validates
-  // before an all-or-nothing commit; never fall back to legacy sequential partial writes.
-  function postEntries(entries, dels, cb) {
-    var ops;
-    try { ops = L.configBatchOps(entries, dels); }
-    catch (e) { cb(false, { err: e.message }); return; }
-    if (!ops.length) { cb(true, { ok: true, n: 0 }); return; }
-    api("POST", "/api/config/batch", { ops: ops }, function (st, j) {
-      if (st === 200 && j && j.ok === true) { cb(true, j); return; }
-      cb(false, { unavailable: st === 404 || st === 501, status: st,
-                  err: (j && j.err) || ("HTTP " + st) });
+  function configEditor() {
+    return { config: JSON.parse(JSON.stringify(S.cfg)), revision: S.configRevision,
+             epoch: AUTH.pageEpoch, tab: S.tab, busy: false };
+  }
+
+  function lockInlineEditor(editor) {
+    if (!editor.root || editor.lockedFields) return;
+    editor.lockedFields = $all("input,select,textarea,button", editor.root).map(function (field) {
+      var disabled = field.disabled; field.disabled = true; return [field, disabled];
     });
+    editor.root.setAttribute("aria-busy", "true");
+  }
+
+  function unlockInlineEditor(editor) {
+    (editor.lockedFields || []).forEach(function (field) { field[0].disabled = field[1]; });
+    editor.lockedFields = null;
+    if (editor.root) editor.root.setAttribute("aria-busy", "false");
+  }
+
+  function validConfigSnapshot(result) {
+    return result && result.schema_version === 2 && isObj(result.config) &&
+      typeof result.revision === "string" && result.revision.length > 0 && result.revision.length <= 256;
+  }
+
+  function postEntries(entries, dels, cb, done, notice, editedObjects, capturedEditor) {
+    var editor = capturedEditor || (done && done.editor ? done.editor : S.editorBase);
+    if (!editor || !editor.revision) {
+      if (editor && !done) unlockInlineEditor(editor);
+      cb(false, { unavailable: true }); return;
+    }
+    if (editor.busy || editor.staging) return;
+    var changes;
+    try { changes = notice ? [{ key: notice.key, path: [], before: L.configAt(editor.config, notice.key), value: notice.body, op: "set" }] :
+      L.configIntents(editor.config, L.configBatchOps(entries, dels), editedObjects); }
+    catch (e) { if (!done) unlockInlineEditor(editor); cb(false, { err: e.message }); return; }
+    editor.busy = true;
+    if (!done) lockInlineEditor(editor);
+    var attempts = 0, automatic = 0, panel = null, keptCurrent = false;
+    function current() {
+      return done ? saveContextCurrent(done) : editor === S.editorBase && pageCurrent(editor.epoch);
+    }
+    function clearPanel() { if (panel && panel.parentNode) panel.parentNode.removeChild(panel); panel = null; }
+    function finish(ok, result) {
+      editor.busy = false; clearPanel();
+      if (!done) unlockInlineEditor(editor);
+      if (ok && result) result.kept_current = keptCurrent;
+      if (current()) cb(ok, result);
+    }
+    function failure(st, j) {
+      if (j && (j.error_code === "unresolved_config_conflict" || j.error_code === "config_history_capacity_exceeded")) refreshConfig();
+      finish(false, { unavailable: st === 404 || st === 501, status: st,
+        unknown: st === 0 || st === 202 || st >= 500 || st === 200 ||
+          !!(j && j.error_code === "outcome_unknown"), err: (j && (j.error_code || j.err)) || ("HTTP " + st) });
+    }
+    function compare(snapshot) {
+      var comparison = L.configRebase(changes, snapshot.config);
+      if (!comparison.conflicts.length && automatic < 1) {
+        automatic++; changes = comparison.changes; commit(snapshot.revision); return;
+      }
+      if (attempts >= 3) { finish(false, { err: t("admin.conflict_retry_limit") }); return; }
+      clearPanel();
+      panel = document.createElement("section"); panel.className = "card";
+      panel.setAttribute("data-config-conflict", ""); panel.setAttribute("role", "region");
+      panel.setAttribute("aria-label", t("admin.conflict_title"));
+      var html = "<h3>" + esc(t("admin.conflict_title")) + "</h3><p>" + esc(t("admin.conflict_hint")) + "</p>";
+      function shown(path, value) { var text = L.configComparisonValue(path, value); return text === undefined ? t("admin.conflict_missing") : text; }
+      comparison.conflicts.forEach(function (conflict, index) {
+        var change = conflict.change, path = change.key + (change.path.length ? "." + change.path.join(".") : "");
+        html += "<fieldset style='margin:12px 0;padding:12px;min-width:0'><legend>" + esc(path) + "</legend>" +
+          "<div class='dim'>" + esc(t("admin.conflict_base")) + ": <span style='overflow-wrap:anywhere'>" + esc(shown(path, conflict.base)) + "</span></div>" +
+          "<label style='display:block;margin:10px 0;overflow-wrap:anywhere'><input type='radio' name='config-choice-" + index + "' data-conflict-choice='mine' data-conflict-index='" + index + "'> " + esc(t("admin.conflict_mine")) + ": " + esc(change.op === "delete" ? t("admin.conflict_delete") : shown(path, change.value)) + "</label>" +
+          "<label style='display:block;overflow-wrap:anywhere'><input type='radio' name='config-choice-" + index + "' data-conflict-choice='current' data-conflict-index='" + index + "'> " + esc(t("admin.conflict_current")) + ": " + esc(shown(path, conflict.current)) + "</label></fieldset>";
+      });
+      if (comparison.changes.length) {
+        html += "<p>" + esc(t("admin.conflict_merged")) + "</p><ul>";
+        comparison.changes.forEach(function (change) { html += "<li>" + esc(change.key + (change.path.length ? "." + change.path.join(".") : "")) + "</li>"; });
+        html += "</ul>";
+      }
+      html += "<p data-conflict-status role='status'></p><button class='btn' data-conflict-submit>" + esc(t("admin.conflict_save")) + "</button> " +
+        "<button class='btn ghost' data-conflict-back>" + esc(t("admin.conflict_back")) + "</button>";
+      panel.innerHTML = html;
+      var host = done && activeModal ? activeModal.root.querySelector(".mbody") : $("#tab-" + editor.tab);
+      host.appendChild(panel);
+      if (done && activeModal) {
+        activeModal.root.setAttribute("aria-busy", "false");
+        $("#mSaveState").textContent = t("admin.conflict_title");
+      }
+      panel.querySelector("[data-conflict-submit]").onclick = function () {
+        if (!current()) return;
+        var selected = comparison.changes.slice();
+        for (var i = 0; i < comparison.conflicts.length; i++) {
+          var choice = panel.querySelector("[data-conflict-index='" + i + "']:checked");
+          if (!choice) { panel.querySelector("[data-conflict-status]").textContent = t("admin.conflict_choose"); return; }
+          if (choice.getAttribute("data-conflict-choice") === "mine") selected.push(comparison.conflicts[i].change);
+          else keptCurrent = true;
+        }
+        changes = selected; clearPanel(); commit(snapshot.revision);
+      };
+      panel.querySelector("[data-conflict-back]").onclick = function () { finish(false, { err: t("admin.conflict_back_hint") }); };
+      if (panel.scrollIntoView) panel.scrollIntoView(false);
+    }
+    function commit(revision) {
+      if (!current()) { editor.busy = false; return; }
+      if (!changes.length) { finish(true, { ok: true, n: 0 }); return; }
+      attempts++;
+      if (done && activeModal) {
+        activeModal.root.setAttribute("aria-busy", "true");
+        $("#mSaveState").textContent = t("admin.saving");
+      }
+      var body;
+      try { body = notice ? mockConfigMerge(notice.body, { expected_revision: revision }) :
+        { schema_version: 2, expected_revision: revision, ops: L.configIntentOps(changes) }; }
+      catch (error) { finish(false, { err: error.message }); return; }
+      api("POST", notice ? notice.path : "/api/config/commit", body, function (st, j) {
+        if (!current()) { editor.busy = false; return; }
+        if (st === 200 && j && j.ok === true) { finish(true, j); return; }
+        if (st === 409 && j && j.error_code === "config_conflict") {
+          api("GET", "/api/config/snapshot", null, function (status, snapshot) {
+            if (!current()) { editor.busy = false; return; }
+            if (status === 200 && validConfigSnapshot(snapshot)) compare(snapshot);
+            else failure(status, snapshot);
+          }, { timeout_ms: 10000 });
+        } else failure(st, j);
+      }, { timeout_ms: 10000 });
+    }
+    commit(editor.revision);
   }
 
   function postSecrets(writes, cb) {
@@ -3384,8 +3782,9 @@ if (typeof document !== "undefined") (function () {
         if (st === 200 && j && j.ok === true) {
           written.push(write.secret_ref); next(); return;
         }
-        cb(false, { status: st, err: (j && j.err) || ("HTTP " + st), written: written });
-      });
+        cb(false, { status: st, unknown: st === 0 || (st === 200 && !j),
+                    err: (j && j.err) || ("HTTP " + st), written: written });
+      }, { timeout_ms: 10000 });
     }
     next();
   }
@@ -3399,38 +3798,61 @@ if (typeof document !== "undefined") (function () {
       api("DELETE", "/api/secrets", { secret_ref: ref }, function (st, j) {
         if (!(st === 200 && j && j.ok === true)) failed.push(ref);
         next();
-      });
+      }, { timeout_ms: 10000 });
     }
     next();
   }
 
-  function showSaveResult(ok, result, cleanupFailed) {
+  function saveContextCurrent(done) { return !done || !done.current || done.current(); }
+
+  function refreshAfterSave(done) {
+    var epoch = AUTH.pageEpoch;
+    refreshConfig(function () {
+      if (pageCurrent(epoch) && (!done || !done.relevant || done.relevant())) renderTab();
+    });
+  }
+
+  function showSaveResult(ok, result, cleanupFailed, done) {
+    if (!saveContextCurrent(done)) return;
     var text = t("admin.save_failed");
     if (ok) text = t("admin.saved");
+    else if (result && result.unknown) text = t("admin.save_unknown");
     else if (result && result.unavailable)
-      text = t("admin.atomic_batch_unavailable");
-    else if (result && result.err) text += ": " + result.err;
+      text = t("admin.config_cas_unavailable");
+    else if (result && result.err) text += ": " + configConflictError(result.err);
     if (cleanupFailed && cleanupFailed.length)
       text += " (" + t("admin.secret_cleanup_deferred")
         .replace("{n}", String(cleanupFailed.length)) + ")";
     msg(text);
-    refreshConfig(function () { renderTab(); });
+    if (done) done(ok, text);
+    if (ok) refreshAfterSave(done);
   }
 
-  function savePlanAndRefresh(plan) {
+  function savePlanAndRefresh(plan, done) {
+    var editor = done && done.editor ? done.editor : S.editorBase;
+    if (!editor || !editor.revision) { showSaveResult(false, { unavailable: true }, [], done); return; }
+    if (editor.busy || editor.staging || !saveContextCurrent(done)) return;
+    editor.staging = true;
+    if (!done) lockInlineEditor(editor);
     postSecrets(plan.secrets, function (secretsOk, secretResult) {
+      editor.staging = false;
       if (!secretsOk) {
+        if (!done) unlockInlineEditor(editor);
         deleteSecrets(secretResult.written || [], function (_, failed) {
-          showSaveResult(false, secretResult, failed);
+          showSaveResult(false, secretResult, failed, done);
         });
         return;
       }
       postEntries(plan.entries, plan.dels || null, function (ok, result) {
-        // New material is written under a fresh ref. A failed config transaction therefore leaves
-        // the live account on its old credential; only the unreferenced staged value is removed.
-        var cleanup = ok ? (plan.retire_secret_refs || []) : (secretResult.written || []);
-        deleteSecrets(cleanup, function (_, failed) { showSaveResult(ok, result, failed); });
-      });
+        // Only known rejection permits rollback: an unknown commit may already reference the
+        // staged credential. Retain it until the authoritative configuration can be checked.
+        var cleanup = ok ? (result && result.kept_current ? [] : (plan.retire_secret_refs || [])) :
+          result && result.unknown ? [] : (secretResult.written || []);
+        deleteSecrets(cleanup, function (_, failed) {
+          if (ok && result && result.kept_current) failed = failed.concat(plan.retire_secret_refs || [], secretResult.written || []);
+          showSaveResult(ok, result, failed, done);
+        });
+      }, done, null, true, editor);
     });
   }
 
@@ -3446,25 +3868,29 @@ if (typeof document !== "undefined") (function () {
 
   function saveAndRefresh(entries, dels, done) {
     postEntries(entries, dels, function (ok, result) {
+      if (!saveContextCurrent(done)) return;
       var text = t("admin.save_failed");
       if (ok) {
         text = t("admin.saved");
         var warnings = L.writeWarnings(result);
         if (warnings.length) text += " — " + warningText(warnings);
-      } else if (result && result.unavailable)
-        text = t("admin.atomic_batch_unavailable");
+      } else if (result && result.unknown) text = t("admin.save_unknown");
+      else if (result && result.unavailable)
+        text = t("admin.config_cas_unavailable");
       else if (result && result.err) text += ": " + result.err;
       msg(text);
-      refreshConfig(function () { renderTab(); if (done) done(ok); });
-    });
+      if (done) done(ok, text);
+      if (ok) refreshAfterSave(done);
+    }, done, null, true);
   }
 
 
 
-  var S = { cfg: {}, status: {}, events: [], tab: "dash", locales: {}, panelToken: "" };
+  var S = { cfg: {}, configRevision: "", editorBase: null, status: {}, events: [], tab: "dash", locales: {}, panelToken: "" };
+  var activeModal = null, modalRevision = 0, inlineDraft = null;
   var AUTH = { generation: 0, pageEpoch: 0, authenticated: false, booting: false, runtime: null,
                probe: null, loginAttempt: null, initRetryTimer: 0, initFailures: 0,
-               pollTimer: 0, pollBusy: false, loginPending: false };
+               pollTimer: 0, pollBusy: false, loginPending: false, activityTimer: 0, csrf: "" };
 
   function pageCurrent(epoch) { return AUTH.pageEpoch === epoch; }
 
@@ -3486,18 +3912,24 @@ if (typeof document !== "undefined") (function () {
   }
 
   function stopAdminRuntime() {
+    suspendConfigImport();
+    suspendModal();
+    suspendInlineDraft();
     AUTH.pageEpoch++;
     AUTH.generation++;
     AUTH.authenticated = false;
     AUTH.booting = false;
     AUTH.runtime = null;
     AUTH.probe = null;
+    if (AUTH.loginAttempt) $("#loginBtn").disabled = false;
     AUTH.loginAttempt = null;
     AUTH.loginPending = false;
     AUTH.initFailures = 0;
     AUTH.pollBusy = false;
     if (AUTH.pollTimer) { clearTimeout(AUTH.pollTimer); AUTH.pollTimer = 0; }
     if (AUTH.initRetryTimer) { clearTimeout(AUTH.initRetryTimer); AUTH.initRetryTimer = 0; }
+    if (AUTH.activityTimer) { clearTimeout(AUTH.activityTimer); AUTH.activityTimer = 0; }
+    AUTH.csrf = "";
     pairTabLeave();
   }
 
@@ -3517,12 +3949,129 @@ if (typeof document !== "undefined") (function () {
   function refreshConfig(cb, generation) {
     if (generation === undefined && AUTH.runtime) generation = AUTH.generation;
     var runtime = AUTH.runtime && AUTH.runtime.generation === generation ? AUTH.runtime : null;
-    return api("GET", "/api/config", null, function (st, j) {
-      if (generationCurrent(generation) && st === 200 && j) S.cfg = j;
+    return api("GET", "/api/config/snapshot", null, function (st, j) {
+      if (generationCurrent(generation) && st === 200 && validConfigSnapshot(j)) {
+        S.cfg = j.config; S.configRevision = j.revision;
+        S.editConflicts = j.edit_conflicts instanceof Array ? j.edit_conflicts : [];
+        S.editJournal = j.edit_journal || null;
+        renderConfigConflictBanner();
+      } else if (generationCurrent(generation)) S.configRevision = "";
       if (cb) cb(st, j);
     }, { authenticated: generation !== undefined, generation: generation, context: runtime,
           timeout_ms: 10000 });
   }
+  function configConflictError(code) {
+    if (code === "unresolved_config_conflict") return t("admin.partition_conflict_hint");
+    if (code === "config_history_capacity_exceeded") return t("admin.history_capacity");
+    if (code === "stale_config_resolution" || code === "config_conflict") return t("admin.partition_changed");
+    return code;
+  }
+
+  function renderConfigConflictBanner() {
+    var banner = $("#configConflicts");
+    if (!banner) {
+      var main = $("main"); if (!main) return;
+      banner = document.createElement("section"); banner.id = "configConflicts";
+      banner.className = "card hidden"; banner.setAttribute("role", "status");
+      main.insertBefore(banner, main.firstChild);
+    }
+    var conflicts = S.editConflicts || [], journal = S.editJournal;
+    var full = journal && (journal.capacity_available === false ||
+      (journal.blocked_entities instanceof Array && journal.blocked_entities.length));
+    show(banner, conflicts.length > 0 || !!full);
+    var html = conflicts.length ? "<h2>" + esc(t("admin.partition_conflicts")) + "</h2><p>" +
+      esc(t("admin.partition_conflict_hint")) + "</p>" : "";
+    if (full) html += "<p class='warn'>" + esc(t("admin.history_capacity")) + "</p>";
+    conflicts.forEach(function (conflict, index) {
+      html += "<button class='btn2' style='margin:4px' data-edit-conflict='" + index +
+        "' data-edit-entity='" + esc(conflict.entity) + "'>" +
+        esc(t("admin.partition_review")) + ": " + esc(conflict.entity) + "</button>";
+    });
+    if (banner._conflictMarkup === html) return;
+    var focused = document.activeElement;
+    var focusedEntity = focused && banner.contains(focused) ? focused.getAttribute("data-edit-entity") : null;
+    banner.innerHTML = html; banner._conflictMarkup = html;
+    $all("[data-edit-conflict]", banner).forEach(function (button) {
+      var entity = button.getAttribute("data-edit-entity");
+      button.onclick = function () {
+        var latest = (S.editConflicts || []).filter(function (item) { return item.entity === entity; })[0];
+        if (latest) reviewConfigConflict(latest);
+      };
+      if (entity === focusedEntity) button.focus();
+    });
+  }
+
+  function reviewConfigConflict(initial) {
+    var conflict = JSON.parse(JSON.stringify(initial)), revision = S.configRevision;
+    var body = "<p>" + esc(t("admin.partition_conflict_hint")) + "</p>" +
+      "<div data-edit-candidates></div><label class='flab'>" + esc(t("admin.partition_choice")) +
+      "</label><select data-edit-choice aria-label='" + esc(t("admin.partition_choice")) +
+      "'></select><p>" + esc(t("admin.partition_custom_hint")) +
+      "</p><textarea data-edit-value data-sensitive style='min-height:150px' aria-label='" +
+      esc(t("admin.partition_custom")) + "'></textarea><label><input type='checkbox' data-edit-delete> " +
+      esc(t("admin.conflict_delete")) + "</label><p data-edit-warning class='warn'></p>" +
+      "<button class='btn2' type='button' data-edit-refresh>" + esc(t("admin.partition_refresh")) + "</button>";
+    var modal = openModal(t("admin.partition_conflicts") + ": " + conflict.entity, body, function (root, done) {
+      var choice = root.querySelector("[data-edit-choice]").value, value, exists = true;
+      if (choice === "current") {
+        if (conflict.effective_requires_reentry) return t("admin.partition_reentry");
+        value = conflict.effective; exists = conflict.effective_exists;
+      } else if (choice === "custom") {
+        exists = !root.querySelector("[data-edit-delete]").checked;
+        if (exists) { try { value = JSON.parse(root.querySelector("[data-edit-value]").value); }
+          catch (_) { return t("admin.partition_custom_hint"); } }
+      } else {
+        var selected = (conflict.candidates || []).filter(function (candidate) { return candidate.change_id === choice && candidate.is_head; })[0];
+        if (!selected) return t("admin.conflict_choose");
+        if (selected.requires_reentry) return t("admin.partition_reentry");
+        value = selected.candidate; exists = selected.candidate_exists;
+      }
+      var operation = { op: exists ? "set" : "delete", key: conflict.entity };
+      if (exists) operation.value = value;
+      var resolves = {}; resolves[conflict.entity] = conflict.heads.slice();
+      api("POST", "/api/config/commit", { schema_version: 2, expected_revision: revision,
+          ops: [operation], resolves: resolves }, function (status, result) {
+        if (!done.current()) return;
+        if (status === 200 && result && result.ok) { done(true); refreshAfterSave(done); return; }
+        var text = status === 0 || status === 202 || status >= 500 ? t("admin.save_unknown") :
+          configConflictError(result && (result.error_code || result.err)) || t("admin.save_failed");
+        done(false, text);
+      }, { timeout_ms: 10000 });
+    });
+    function draw(keepCustom) {
+      var select = modal.querySelector("[data-edit-choice]"), old = select.value;
+      var options = "<option value=''>" + esc(t("admin.conflict_choose")) + "</option><option value='current'" +
+        (conflict.effective_requires_reentry ? " disabled" : "") + ">" + esc(t("admin.partition_effective")) + "</option>";
+      var html = "<h3>" + esc(t("admin.partition_effective")) + "</h3><pre style='white-space:pre-wrap;overflow-wrap:anywhere'>" +
+        esc(JSON.stringify(conflict.effective, null, 2)) + "</pre>";
+      (conflict.candidates || []).forEach(function (candidate) {
+        var label = deviceName(candidate.author_node) + " · " + candidate.change_id.slice(0, 8);
+        if (candidate.is_head) options += "<option value='" + esc(candidate.change_id) + "'" +
+          (candidate.requires_reentry ? " disabled" : "") + ">" + esc(label) + "</option>";
+        html += "<details><summary>" + esc(label) + "</summary><pre style='white-space:pre-wrap;overflow-wrap:anywhere'>" +
+          esc(JSON.stringify(candidate, null, 2)) + "</pre></details>";
+      });
+      options += "<option value='custom'>" + esc(t("admin.partition_custom")) + "</option>";
+      select.innerHTML = options; if (keepCustom && old === "custom") select.value = old;
+      modal.querySelector("[data-edit-candidates]").innerHTML = html;
+      modal.querySelector("[data-edit-warning]").textContent = t("admin.partition_reentry");
+      if (!keepCustom) modal.querySelector("[data-edit-value]").value = JSON.stringify(conflict.effective, null, 2);
+    }
+    draw(false);
+    modal.querySelector("[data-edit-refresh]").onclick = function () {
+      var state = activeModal;
+      refreshConfig(function (status, snapshot) {
+        if (activeModal !== state || !state || state.suspended) return;
+        if (status !== 200 || !validConfigSnapshot(snapshot)) {
+          modal.querySelector("[data-edit-warning]").textContent = t("admin.save_failed"); return;
+        }
+        var latest = (snapshot.edit_conflicts || []).filter(function (item) { return item.entity === conflict.entity; })[0];
+        if (!latest) { modal.querySelector("[data-edit-warning]").textContent = t("admin.partition_resolved"); return; }
+        conflict = JSON.parse(JSON.stringify(latest)); revision = snapshot.revision; draw(true);
+      });
+    };
+  }
+
   function refreshStatus(cb, generation) {
     if (generation === undefined && AUTH.runtime) generation = AUTH.generation;
     var runtime = AUTH.runtime && AUTH.runtime.generation === generation ? AUTH.runtime : null;
@@ -3644,27 +4193,126 @@ if (typeof document !== "undefined") (function () {
 
   function openModal(title, bodyHtml, onSave) {
     var m = $("#modal");
+    var state = { id: ++modalRevision, root: m, phase: "editing", attempt: 0,
+                  pageEpoch: AUTH.pageEpoch, suspended: false, disabledFields: [], editor: configEditor() };
+    activeModal = state;
     m.innerHTML =
       "<div class='mbox card'><h2>" + esc(title) + "</h2><div class='mbody'>" + bodyHtml +
-      "</div><div class='mbtns'>" +
+      "</div><div id='mSaveState' class='dim fhint' role='status'></div><div class='mbtns'>" +
       "<button class='btn' id='mSave'>" + esc(t("admin.save")) + "</button>" +
       "<button class='btn ghost' id='mCancel'>" + esc(t("admin.cancel")) +
       "</button></div></div>";
     show(m, true);
-    $("#mCancel").onclick = function () { show(m, false); };
+    $("#mCancel").onclick = function () {
+      if (activeModal !== state || state.phase === "submitting") return;
+      activeModal = null; show(m, false);
+    };
     $("#mSave").onclick = function () {
-      var err = onSave(m);
-      if (err) { msg(err); return; }
-      show(m, false);
+      if (activeModal !== state || state.phase === "submitting" || state.suspended) return;
+      state.phase = "submitting";
+      var attempt = ++state.attempt;
+      state.focus = document.activeElement;
+      state.scrollTop = m.scrollTop; state.scrollLeft = m.scrollLeft;
+      state.disabledFields = $all("input,select,textarea,button", m).map(function (field) {
+        var wasDisabled = field.disabled; field.disabled = true; return [field, wasDisabled];
+      });
+      m.setAttribute("aria-busy", "true");
+      $("#mSaveState").textContent = t("admin.saving");
+      function complete(ok, text) {
+        if (!complete.current()) return;
+        unlockModal(state);
+        state.phase = ok ? "succeeded" : "failed";
+        if (ok) { activeModal = null; show(m, false); return; }
+        $("#mSaveState").textContent = text || t("admin.save_failed");
+        $("#mSaveState").className = "err fhint";
+        restoreModalFocus(state);
+      }
+      complete.current = function () {
+        return activeModal === state && state.attempt === attempt &&
+          !state.suspended && pageCurrent(state.pageEpoch);
+      };
+      complete.editor = state.editor;
+      complete.relevant = function () { return modalRevision === state.id && pageCurrent(state.pageEpoch); };
+      try {
+        var err = onSave(m, complete);
+        if (typeof err === "string" && err) complete(false, err);
+      } catch (error) { complete(false, error.message || t("admin.save_failed")); }
     };
     return m;
+  }
+
+  function unlockModal(state) {
+    state.disabledFields.forEach(function (field) { field[0].disabled = field[1]; });
+    state.disabledFields = [];
+    state.root.setAttribute("aria-busy", "false");
+  }
+
+  function restoreModalFocus(state) {
+    if (state.focus && document.body.contains(state.focus)) {
+      try { state.focus.focus({ preventScroll: true }); } catch (_) { state.focus.focus(); }
+    }
+    state.root.scrollTop = state.scrollTop || 0; state.root.scrollLeft = state.scrollLeft || 0;
+  }
+
+  function suspendModal() {
+    $all("input[type='password'],[data-sensitive],#cfgVal,#sysImport").forEach(function (field) { field.value = ""; });
+    S.panelToken = "";
+    if (!activeModal || activeModal.suspended) return;
+    var state = activeModal;
+    if (state.phase !== "submitting") {
+      state.focus = document.activeElement;
+      state.scrollTop = state.root.scrollTop; state.scrollLeft = state.root.scrollLeft;
+    }
+    state.attempt++;
+    state.editor.busy = false; state.editor.staging = false;
+    $all("[data-config-conflict]", state.root).forEach(function (panel) { panel.parentNode.removeChild(panel); });
+    state.suspended = true; state.phase = "failed";
+    unlockModal(state);
+    show(state.root, false);
+    msg(t("admin.draft_sign_in"));
+  }
+
+  function restoreModalDraft() {
+    if (!activeModal || !activeModal.suspended) return;
+    var state = activeModal;
+    state.pageEpoch = AUTH.pageEpoch; state.suspended = false;
+    show(state.root, true);
+    $("#mSaveState").textContent = t("admin.draft_restored");
+    restoreModalFocus(state);
+  }
+
+  function suspendInlineDraft() {
+    var editor = S.editorBase;
+    if (editor) unlockInlineEditor(editor);
+    if (activeModal || inlineDraft || !editor || !editor.root || !editor.fields) return;
+    var changed = editor.fields.some(function (field) {
+      return field.element.value !== field.value || field.element.checked !== field.checked;
+    });
+    if (!changed) return;
+    $all("[data-config-conflict]", editor.root).forEach(function (panel) { panel.parentNode.removeChild(panel); });
+    inlineDraft = { editor: editor, nodes: Array.prototype.slice.call(editor.root.childNodes),
+                    focus: document.activeElement, scroll: document.documentElement.scrollTop || document.body.scrollTop };
+    editor.busy = false; editor.staging = false;
+  }
+
+  function restoreInlineDraft() {
+    if (!inlineDraft || activeModal || inlineDraft.editor.tab !== S.tab) return;
+    var draft = inlineDraft, root = draft.editor.root;
+    inlineDraft = null;
+    while (root.firstChild) root.removeChild(root.firstChild);
+    draft.nodes.forEach(function (node) { root.appendChild(node); });
+    draft.editor.epoch = AUTH.pageEpoch; S.editorBase = draft.editor;
+    if (draft.focus && document.body.contains(draft.focus)) draft.focus.focus();
+    document.documentElement.scrollTop = draft.scroll; document.body.scrollTop = draft.scroll;
+    if (S.tab === "system") paintConfigImport();
+    msg(t("admin.draft_restored"));
   }
 
   function openForm(title, fields, onSave) {
     var html = "";
     for (var i = 0; i < fields.length; i++) html += fieldHtml(fields[i]);
-    return openModal(title, html, function (m) {
-      return onSave(collectFields(m, fields));
+    return openModal(title, html, function (m, complete) {
+      return onSave(collectFields(m, fields), complete);
     });
   }
 
@@ -4059,10 +4707,10 @@ if (typeof document !== "undefined") (function () {
       { id: "ja", label: t("admin.label_ja"), value: lb.ja },
       { id: "en", label: t("admin.label_en"), value: lb.en },
       { id: "zh", label: t("admin.label_zh"), value: lb.zh }];
-    openForm(t("admin.buildings"), fields, function (v) {
+    openForm(t("admin.buildings"), fields, function (v, done) {
       var bid = isNew ? L.safeId(v.bid) : id;
       if (!bid) return "ID?";
-      saveAndRefresh(L.buildingEntries(bid, v, cur), null);
+      saveAndRefresh(L.buildingEntries(bid, v, cur), null, done);
     });
   }
 
@@ -4078,10 +4726,10 @@ if (typeof document !== "undefined") (function () {
       { id: "zh", label: t("admin.label_zh"), value: lb.zh },
       { id: "building", label: t("admin.building_assign"), type: "select",
         value: cur.building || "", options: buildingOptions() }];
-    openForm(t("admin.door_list"), fields, function (v) {
+    openForm(t("admin.door_list"), fields, function (v, done) {
       var did = isNew ? L.safeId(v.did) : id;
       if (!L.validDoorId(did)) return "ID?";
-      saveAndRefresh(L.doorEntries(did, v, cur), null);
+      saveAndRefresh(L.doorEntries(did, v, cur), null, done);
     });
   }
 
@@ -4116,17 +4764,17 @@ if (typeof document !== "undefined") (function () {
     var presets = L.noticePresetList(S.cfg);
     if (presets.length >= L.NOTICE_PRESET_MAX) { msg(t("notice.presets_full")); return; }
     openForm(t("notice.preset_add"),
-             [{ id: "text", label: t("notice.text"), type: "textarea" }], function (v) {
+             [{ id: "text", label: t("notice.text"), type: "textarea" }], function (v, done) {
       var text = String(v.text || "").replace(/^\s+|\s+$/g, "");
       if (!text) return t("notice.empty");
       if (L.countCharacters(text) > L.NOTICE_MAX_CHARS)
         return fmt(t("notice.too_long"), { n: L.countCharacters(text) });
-      presets.push({ id: L.newId("np", presetIdMap(presets)), text: text });
+      var nextPresets = presets.slice();
+      nextPresets.push({ id: L.newId("np", presetIdMap(presets)), text: text });
       var entries;
-      try { entries = L.noticePresetEntries(presets); }
+      try { entries = L.noticePresetEntries(nextPresets); }
       catch (e) { return t("notice.preset_invalid"); }
-      saveAndRefresh(entries, null);
-      return "";
+      saveAndRefresh(entries, null, done);
     });
   }
 
@@ -4149,11 +4797,16 @@ if (typeof document !== "undefined") (function () {
         options: [{ v: "auto", label: t("unlock.auto") },
                   { v: "show", label: t("unlock.show") },
                   { v: "hide", label: t("unlock.hide") }] },
-      { id: "state", label: t("unlock.command"), type: "static",
-        value: model.configured ? model.command : t("unlock.not_configured") }];
-    openForm(doorLabel(door), fields, function (v) {
-      var plan = L.doorUnlockEntries(door, v.mode, current);
-      saveAndRefresh(plan.entries, plan.dels);
+      { id: "command", label: t("unlock.command"), type: "textlist",
+        value: typeof current.command === "string" ? current.command : "",
+        options: L.doorUnlockOptions(S.cfg), hint: t("unlock.binding_hint") }];
+    if (!current.command) fields.push({ id: "migration", label: t("unlock.not_configured"),
+      type: "static", value: t("unlock.binding_required") });
+    openForm(doorLabel(door), fields, function (v, done) {
+      var plan;
+      try { plan = L.doorUnlockEntries(door, v.mode, current, v.command); }
+      catch (e) { return t("unlock.command_invalid"); }
+      saveAndRefresh(plan.entries, plan.dels, done);
     });
   }
 
@@ -4193,26 +4846,20 @@ if (typeof document !== "undefined") (function () {
       "<div id='noticePreview' style='padding:10px 14px;border-radius:8px;" +
       "background:#101418;border:1px solid var(--line);white-space:pre-wrap'></div>";
 
-    var modal = openModal(t("notice.title"), body, function (m) {
-      var offsetMin = L.timeStatusModel(S.status).zone ?
-        ((S.status.time || {}).offset_min || 0) : 0;
-      var plan = L.noticePayload({ text: m.querySelector("#noticeText").value,
-                                   expiry: m.querySelector("#noticeExpiry").value,
-                                   custom_hours: m.querySelector("#noticeHours").value },
-                                 new Date().getTime(), offsetMin);
+    var modal = openModal(t("notice.title"), body, function (m, done) {
+      var plan = L.noticeCommitPayload({ text: m.querySelector("#noticeText").value,
+                                         expiry: m.querySelector("#noticeExpiry").value,
+                                         custom_hours: m.querySelector("#noticeHours").value });
       if (plan.error) return plan.n === undefined ? t(plan.error) :
         fmt(t(plan.error), { n: plan.n });
       var target = m.querySelector("#noticeTarget").value;
       var path = target === "*" ? "/api/notice"
                                 : "/api/doors/" + encodeURIComponent(target) + "/notice";
-      api("POST", path, plan.body,
-          function (st, result) {
-            if (st === 200 && result && result.ok) {
-              msg(t("notice.saved"));
-              refreshConfig(function () { renderTab(); });
-            } else msg(t("notice.failed"));
-          });
-      return "";
+      postEntries(null, null, function (ok, result) {
+        if (!done.current()) return;
+        if (ok) { msg(t("notice.saved")); done(true); refreshAfterSave(done); }
+        else done(false, t(result && result.unknown ? "admin.save_unknown" : "notice.failed"));
+      }, done, { path: path, body: plan.body, key: target === "*" ? "notice.global" : "doors." + target + ".notice" });
     });
     var root = modal || document.querySelector("#modal");
     var text = root.querySelector("#noticeText");
@@ -4435,7 +5082,7 @@ if (typeof document !== "undefined") (function () {
         type: "number", value: mo.min_interval_s !== undefined ? mo.min_interval_s : 30 },
       { id: "caps_override", label: t("admin.caps_override"),
         type: "textarea", value: d.caps_override ? JSON.stringify(d.caps_override) : "" }];
-    openForm(t("admin.devices"), fields, function (v) {
+    openForm(t("admin.devices"), fields, function (v, done) {
       var caps = null;
       var ct = (v.caps_override || "").replace(/^\s+|\s+$/g, "");
       if (ct) {
@@ -4454,7 +5101,7 @@ if (typeof document !== "undefined") (function () {
         return e.message === "door_required" ? t("admin.door_required") :
                e.message === "role_invalid" ? t("admin.save_failed") : e.message;
       }
-      saveAndRefresh(identityEntries.concat(plan.entries), plan.dels);
+      saveAndRefresh(identityEntries.concat(plan.entries), plan.dels, done);
     });
   }
 
@@ -4588,16 +5235,15 @@ if (typeof document !== "undefined") (function () {
 
     var modal = openModal(deviceName(id) + " — " +
       (web ? t("admin.web_ui") : t("admin.native_ui")), h,
-      function (modal) {
+      function (modal, done) {
       var values = collectUiValues(modal);
       var changes;
       try { changes = L.uiElementChanges(id, manifest, values); }
       catch (e) { return e.message; }
       if (!changes.entries.length && !changes.dels.length) {
-        msg(t("admin.no_changes")); return "";
+        msg(t("admin.no_changes")); done(true); return;
       }
-      saveAndRefresh(changes.entries, changes.dels);
-      return "";
+      saveAndRefresh(changes.entries, changes.dels, done);
       });
     $all("[data-ui-on], [data-ui-value]", modal).forEach(function (input) {
       input.addEventListener("input", function () { renderUiPreview(modal); });
@@ -4716,12 +5362,12 @@ if (typeof document !== "undefined") (function () {
       "<label class='frow-check'><input type='checkbox' id='volInherit'" +
       (inherits ? " checked" : "") + "> " + esc(t("volume.inherit")) + "</label>" +
       "<div id='volRows'>" + volumeRowsHtml("devvol", effective, cluster) + "</div>";
-    var modal = openModal(t("volume.device_title"), body, function (m) {
+    var modal = openModal(t("volume.device_title"), body, function (m, done) {
       var inherit = m.querySelector("#volInherit").checked;
       var values = collectVolumeRows(m, "devvol");
       values.inherit = inherit;
       var plan = L.deviceVolumeEntries(id, values);
-      saveAndRefresh(plan.entries, plan.dels);
+      saveAndRefresh(plan.entries, plan.dels, done);
     });
     var root = modal || document.querySelector("#modal");
     bindVolumeRows(root, "devvol");
@@ -5407,14 +6053,14 @@ if (typeof document !== "undefined") (function () {
       }
     }
 
-    var m = openModal(t("admin.rules") + " — " + rid, bodyHtml(), function (mm) {
+    var m = openModal(t("admin.rules") + " — " + rid, bodyHtml(), function (mm, done) {
       collectState(mm);
       for (var ai = 0; ai < st.actions.length; ai++) {
         if (!st.actions[ai] || st.actions[ai].type !== "device_alert") continue;
         var validation = L.validateAlertPresentation(st.actions[ai].presentation);
         if (!validation.ok) return validation.errors[0];
       }
-      saveAndRefresh(L.ruleEntries(rid, st, cur), null);
+      saveAndRefresh(L.ruleEntries(rid, st, cur), null, done);
     });
     bindDynamic(m);
   }
@@ -5568,7 +6214,7 @@ if (typeof document !== "undefined") (function () {
       fields.push({ id: "audio_" + lg, label: t("admin.audio") + " — " + langName(lg), type: "audio",
                     value: au[lg] || "", options: opts });
     });
-    var m = openForm(t("admin.quick_replies"), fields, function (v) {
+    var m = openForm(t("admin.quick_replies"), fields, function (v, done) {
       var qid = isNew ? L.safeId(v.qid) : id;
       if (!qid) return "ID?";
       v.order = isNew ? sortedQrIds().length + 1 : (cur.order || 1);
@@ -5577,7 +6223,7 @@ if (typeof document !== "undefined") (function () {
       for (var k in au) next[k] = au[k];
       langs.forEach(function (lg) { next[lg] = v["audio_" + lg] || ""; });
       v.audio = next;
-      saveAndRefresh(L.quickReplyEntries(qid, v, cur), null);
+      saveAndRefresh(L.quickReplyEntries(qid, v, cur), null, done);
     });
     bindAudioPlay(m);
   }
@@ -5595,7 +6241,7 @@ if (typeof document !== "undefined") (function () {
       { id: "rate", label: t("speech.rate"), type: "number", value: current.speaking_rate || 1 },
       { id: "auto_cache", label: t("speech.auto_cache"), type: "check", value: current.auto_cache !== false }
     ];
-    openForm(t("speech.settings"), fields, function (v) {
+    openForm(t("speech.settings"), fields, function (v, done) {
       var rate = Number(v.rate);
       if (!isFinite(rate) || rate < 0.25 || rate > 4) return t("speech.rate_invalid");
       var node = S.status && ((S.status.self && S.status.self.id) || (S.status.node && S.status.node.id));
@@ -5619,7 +6265,7 @@ if (typeof document !== "undefined") (function () {
       ["provider", "voices", "speaking_rate", "auto_cache", "generator_node", "google_key_ref"].forEach(function (key) {
         if (next[key] !== undefined) plan.entries.push({key:"speech." + key, value:next[key]});
       });
-      savePlanAndRefresh(plan);
+      savePlanAndRefresh(plan, done);
     });
   }
 
@@ -5754,10 +6400,10 @@ if (typeof document !== "undefined") (function () {
         value: (cur.telegram_chat_ids || []).join(", "), ph: "123456789, -100200300" },
       { id: "sip_ext", label: t("admin.sip_extensions"),
         value: (cur.sip_extensions || []).join(", "), ph: "201, 202" }];
-    openForm(t("admin.households"), fields, function (v) {
+    openForm(t("admin.households"), fields, function (v, done) {
       var hid = isNew ? L.safeId(v.hid) : id;
       if (!hid) return "ID?";
-      saveAndRefresh(L.householdEntries(hid, v, cur), null);
+      saveAndRefresh(L.householdEntries(hid, v, cur), null, done);
     });
   }
 
@@ -6215,6 +6861,247 @@ if (typeof document !== "undefined") (function () {
     return h;
   }
 
+  var configImportState = { phase: "idle", raw: "", replace: false, attempt: 0, busy: false };
+  var importStorageKey = "doorbell.admin.import.v2";
+  function importHandleValid(value) {
+    return value && Object.keys(value).sort().join(",") === "digest,node_id,operation_id,schema_version,stage_token" &&
+      value.schema_version === 2 && typeof value.operation_id === "string" && /^[a-f0-9]{32}$/.test(value.operation_id) &&
+      /^[a-f0-9]{32}$/.test(value.stage_token) && /^[a-f0-9]{64}$/.test(value.digest) &&
+      typeof value.node_id === "string" && value.node_id.length > 0 && value.node_id.length <= 128;
+  }
+  try {
+    var recoveredImport = JSON.parse(sessionStorage.getItem(importStorageKey) || "null");
+    if (importHandleValid(recoveredImport)) {
+      configImportState.handle = recoveredImport; configImportState.commitAttempted = true;
+      configImportState.phase = "unknown";
+    }
+  } catch (_) {}
+  function persistConfigImport() {
+    try {
+      if (configImportState.commitAttempted) sessionStorage.setItem(importStorageKey, JSON.stringify(configImportState.handle));
+      else sessionStorage.removeItem(importStorageKey);
+    } catch (_) {}
+  }
+  function suspendConfigImport() {
+    var state = configImportState;
+    state.attempt++; state.busy = false; state.raw = ""; state.ready = false;
+    if (state.commitAttempted && state.phase !== "committed") state.phase = "unknown";
+    else if (state.handle && state.phase !== "committed") state.phase = "interrupted";
+    state.message = "admin.import_auth";
+  }
+  function importEnvelope(state, operation) {
+    var handle = state.handle;
+    var value = { schema_version: 2, stage_token: handle.stage_token, digest: handle.digest };
+    if (operation) value.operation_id = handle.operation_id;
+    return value;
+  }
+  function validImportResult(result, state) {
+    return result && result.ok === true && result.schema_version === 2 &&
+      result.operation_id === state.handle.operation_id && result.digest === state.handle.digest &&
+      typeof result.committed_revision === "string" && result.committed_revision.length > 0 &&
+      result.committed_revision.length <= 256 && result.atomicity === "local_persistence" &&
+      typeof result.n === "number" && result.n >= 0 && result.n <= 4096 && Math.floor(result.n) === result.n;
+  }
+  function configImportHtml() {
+    var state = configImportState, report = state.report, handle = state.handle;
+    var h = "<h2>" + esc(t("admin.export")) + " / " + esc(t("admin.import")) + "</h2>" +
+      "<p>" + esc(t("admin.import_scope")) + "</p><button class='btn small' id='sysExport'>" +
+      icon("download") + " " + esc(t("admin.export")) + "</button>";
+    if (!handle) h += "<label class='flab' for='sysImportFile'>" + esc(t("admin.import_file")) +
+      "</label><input id='sysImportFile' type='file' accept='.json,application/json'>" +
+      "<label class='flab' for='sysImport'>" + esc(t("admin.import_json")) + "</label>" +
+      "<textarea id='sysImport' data-sensitive style='min-height:110px'>" + esc(state.raw) + "</textarea>" +
+      "<label style='display:block;margin:12px 0'><input type='checkbox' id='sysImportReplace'" +
+      (state.replace ? " checked" : "") + "> " + esc(t("admin.import_replace")) + "</label>" +
+      "<button class='btn' id='sysImportBtn'>" + esc(t("admin.import_preview")) + "</button>";
+    var message = state.message ? t(state.message) : state.phase === "committed" ? t("admin.import_local_done") :
+      state.phase === "unknown" ? t("admin.import_unknown") : state.ready ? t("admin.import_ready") : "";
+    h += "<p id='sysImportState' role='status' style='overflow-wrap:anywhere'>" + esc(message) + "</p>";
+    if (state.previousHandle) h += "<p class='warn'>" + esc(t("admin.import_unknown")) + "</p><details><summary>" +
+      esc(t("admin.import_reference")) + "</summary><pre style='white-space:pre-wrap;overflow-wrap:anywhere'>" +
+      esc(JSON.stringify(state.previousHandle,null,2)) + "</pre></details>";
+    if ((state.omitted || []).length) h += "<h3>" + esc(t("admin.import_omitted")) + "</h3><ul>" +
+      state.omitted.map(function (path) { return "<li>" + esc(path) + "</li>"; }).join("") + "</ul><p>" +
+      esc(t("admin.import_dependencies")) + "</p>";
+    if (handle) {
+      h += "<p>" + esc(fmt(t("admin.import_target"), {node:handle.node_id})) + "</p>" +
+        "<details><summary>" + esc(t("admin.import_reference")) + "</summary><pre style='white-space:pre-wrap;overflow-wrap:anywhere'>" +
+        esc(JSON.stringify(handle, null, 2)) + "</pre></details>";
+    }
+    if (report) {
+      var differences = report.differences || [], deletions = differences.filter(function (item) { return item.op === "delete"; }).length;
+      h += "<h3>" + esc(fmt(t("admin.import_changes"), {count:report.expanded_leaf_mutations || 0})) + "</h3>";
+      [ ["missing_secret_refs", "admin.import_missing_secrets"], ["missing_assets", "admin.import_missing_assets"] ].forEach(function (row) {
+        var items = report[row[0]] || [];
+        if (items.length) h += "<h4>" + esc(t(row[1])) + "</h4><ul>" + items.map(function (item) { return "<li>" + esc(item) + "</li>"; }).join("") + "</ul>";
+      });
+      if ((report.missing_secret_refs || []).length || (report.missing_assets || []).length)
+        h += "<p>" + esc(t("admin.import_dependencies")) + "</p>";
+      if ((report.problems || []).length) h += "<p class='warn'>" + esc(t("admin.import_blocked")) +
+        "</p><pre style='white-space:pre-wrap'>" + esc(JSON.stringify(report.problems, null, 2)) + "</pre>";
+      h += "<details><summary>" + esc(t("admin.import_preview")) + "</summary><div style='max-height:360px;overflow:auto'>";
+      differences.forEach(function (difference) {
+        h += "<details><summary>" + esc((difference.op === "delete" ? "− " : "+ ") + difference.path) +
+          "</summary><pre style='white-space:pre-wrap;overflow-wrap:anywhere'>" + esc(JSON.stringify(difference, null, 2)) + "</pre></details>";
+      });
+      h += "</div></details>";
+      if (!state.commitAttempted && state.ready) h += "<label style='display:block;margin:12px 0'><input id='sysImportAck' type='checkbox'> " +
+        esc(fmt(t("admin.import_ack"), {count:deletions})) + "</label><button class='btn' id='sysImportCommit' disabled>" + esc(t("admin.import_commit")) + "</button> ";
+    }
+    if (handle && !state.commitAttempted) h += "<button class='btn ghost' id='sysImportDiscard'>" + esc(t("admin.import_discard")) + "</button>";
+    if (state.commitAttempted && state.phase !== "committed") h += "<p>" + esc(t("admin.import_unknown")) +
+      "</p><button class='btn' id='sysImportQuery'>" + esc(t("admin.import_query")) + "</button>";
+    if (state.queryNotFound && state.phase !== "committed") h += "<label style='display:block;margin:12px 0'><input id='sysImportUnknownAck' type='checkbox'> " +
+      esc(t("admin.import_unknown_ack")) + "</label><button class='btn2' id='sysImportNewPreview' disabled>" +
+      esc(t("admin.import_new_preview")) + "</button>";
+    if (state.phase === "committed") {
+      h += "<p>" + esc(t("admin.import_sync_unverified")) + "</p>";
+      if (state.connections) h += "<p>" + esc(fmt(t("admin.import_connection"), state.connections)) + "</p>";
+      h += "<button class='btn2' id='sysImportStatus'>" + esc(t("admin.import_refresh_status")) +
+        "</button> <button class='btn ghost' id='sysImportClear'>" + esc(t("admin.import_clear")) + "</button>";
+    }
+    return h;
+  }
+  function paintConfigImport() {
+    var root = $("#sysImportWorkflow"); if (!root) return;
+    root.innerHTML = configImportHtml(); bindConfigImport(root);
+  }
+  function requestConfigImport(action, payload, callback) {
+    var state = configImportState, attempt = ++state.attempt, runtime = AUTH.runtime;
+    state.busy = true; paintConfigImport();
+    api("POST", "/api/config/import/" + action, payload, function (status, result) {
+      if (configImportState !== state || state.attempt !== attempt || !runtimeCurrent(runtime)) return;
+      state.busy = false; callback(status, result); paintConfigImport();
+    }, {timeout_ms:10000, context:runtime});
+  }
+  function prepareConfigImport() {
+    var state = configImportState;
+    if (state.busy || state.handle) return;
+    state.raw = $("#sysImport").value; state.replace = $("#sysImportReplace").checked;
+    try { L.configImportDocument(state.raw, {}, state.replace); }
+    catch (error) { state.message = error.message === "unsupported_schema" ? "admin.import_schema" : error.message === "capacity_exceeded" ? "admin.import_size" : "admin.import_invalid"; paintConfigImport(); return; }
+    var sourceDocument = JSON.parse(state.raw);
+    state.omitted = sourceDocument && sourceDocument.format === "doorbell-config" && sourceDocument.excluded_paths instanceof Array ?
+      sourceDocument.excluded_paths.filter(function (path) { return typeof path === "string" && path.length <= 512; }).slice(0,4096) : [];
+    state.busy = true; state.message = "admin.import_preparing";
+    var runtime = AUTH.runtime, attempt = ++state.attempt; paintConfigImport();
+    refreshConfig(function (status, snapshot) {
+      if (state !== configImportState || state.attempt !== attempt || !runtimeCurrent(runtime)) return;
+      state.busy = false;
+      if (status !== 200 || !validConfigSnapshot(snapshot)) { state.message = "admin.import_error"; paintConfigImport(); return; }
+      var payload;
+      try {
+        payload = {schema_version:2, expected_revision:snapshot.revision,
+          document:L.configImportDocument(state.raw, snapshot.config, state.replace)};
+        if (L.configImportBytes(JSON.stringify(payload)) > L.CONFIG_IMPORT_MAX_BYTES) throw new Error("capacity_exceeded");
+      } catch (error) { state.message = error.message === "capacity_exceeded" ? "admin.import_size" : "admin.import_invalid"; paintConfigImport(); return; }
+      requestConfigImport("stage", payload, function (code, result) {
+        if (code !== 200 || !result || result.ok !== true || result.schema_version !== 2 ||
+            result.expected_revision !== payload.expected_revision || !/^[a-f0-9]{32}$/.test(result.stage_token) || !/^[a-f0-9]{64}$/.test(result.digest)) {
+          state.message = "admin.import_error"; return;
+        }
+        state.handle = {schema_version:2,stage_token:result.stage_token,digest:result.digest,node_id:String((S.status.node || {}).id || "")};
+        state.expectedRevision = payload.expected_revision;
+        state.message = "admin.import_preparing";
+        requestConfigImport("preflight", importEnvelope(state, false), function (status, report) {
+          var valid = status === 200 && report && report.ok === true && report.schema_version === 2 &&
+            report.stage_token === state.handle.stage_token && report.digest === state.handle.digest &&
+            report.expected_revision === state.expectedRevision && report.atomicity === "local_persistence" &&
+            report.differences instanceof Array && report.problems instanceof Array &&
+            report.missing_secret_refs instanceof Array && report.missing_assets instanceof Array;
+          state.ready = valid && report.can_commit === true;
+          state.report = valid ? report : null;
+          state.message = state.ready ? "admin.import_ready" : "admin.import_blocked";
+        });
+      });
+    });
+  }
+  function commitConfigImport() {
+    var state = configImportState;
+    if (state.busy || !state.ready || state.commitAttempted || !$("#sysImportAck") || !$("#sysImportAck").checked) return;
+    var bytes = new Uint8Array(16);
+    if (!window.crypto || !window.crypto.getRandomValues) { state.message = "admin.import_crypto"; paintConfigImport(); return; }
+    window.crypto.getRandomValues(bytes);
+    state.handle.operation_id = Array.prototype.map.call(bytes, function (b) { return ("0" + b.toString(16)).slice(-2); }).join("");
+    state.commitAttempted = true; state.phase = "unknown"; state.ready = false;
+    state.message = "admin.import_unknown"; state.raw = ""; persistConfigImport();
+    requestConfigImport("commit", importEnvelope(state, true), function (status, result) {
+      if (status === 200 && validImportResult(result, state)) {
+        state.phase = "committed"; state.message = "admin.import_local_done"; state.result = result;
+        refreshConfig(); refreshImportConnections();
+      } else { state.phase = "unknown"; state.message = "admin.import_unknown"; }
+    });
+  }
+  function queryConfigImport() {
+    var state = configImportState;
+    if (state.busy || !state.commitAttempted) return;
+    if (state.handle.node_id !== String((S.status.node || {}).id || "")) { state.message = "admin.import_wrong_node"; paintConfigImport(); return; }
+    requestConfigImport("query", importEnvelope(state, true), function (status, result) {
+      if (status === 200 && result && result.state === "committed" && validImportResult(result.result, state)) {
+        state.phase = "committed"; state.message = "admin.import_local_done"; state.result = result.result;
+        refreshConfig(); refreshImportConnections();
+      } else {
+        state.queryNotFound = status === 404 && result && result.error_code === "operation_not_found";
+        state.message = state.queryNotFound ? "admin.import_not_found" : "admin.import_unknown";
+      }
+    });
+  }
+  function refreshImportConnections() {
+    var state = configImportState;
+    refreshStatus(function (status, value) {
+      if (state !== configImportState || state.phase !== "committed") return;
+      if (status === 200 && value && value.peers instanceof Array) state.connections = {
+        total:value.peers.length, online:value.peers.filter(function (peer) { return peer.status === "alive"; }).length};
+      else state.connections = null;
+      paintConfigImport();
+    });
+  }
+  function bindConfigImport(root) {
+    var state = configImportState;
+    $("#sysExport").onclick = function () {
+      var doc = L.configExportDocument(S.cfg, S.status.node || {});
+      var blob = new Blob([JSON.stringify(doc, null, 2)], {type:"application/json"});
+      var url = URL.createObjectURL(blob), link = document.createElement("a");
+      link.href = url; link.download = "doorbell-config-v2.json"; document.body.appendChild(link); link.click(); document.body.removeChild(link);
+      setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      if (doc.excluded_paths.length) msg(fmt(t("admin.import_excluded"), {count:doc.excluded_paths.length}));
+    };
+    if ($("#sysImportBtn")) $("#sysImportBtn").onclick = prepareConfigImport;
+    if ($("#sysImportFile")) $("#sysImportFile").onchange = function () {
+      var file = this.files && this.files[0], attempt = ++state.attempt;
+      if (!file) return;
+      if (file.size > L.CONFIG_IMPORT_MAX_BYTES) { state.message = "admin.import_size"; paintConfigImport(); return; }
+      var reader = new FileReader(); reader.onload = function () {
+        if (state !== configImportState || attempt !== state.attempt) return;
+        state.raw = String(reader.result || ""); paintConfigImport();
+      }; reader.onerror = function () { if (state === configImportState && attempt === state.attempt) { state.message = "admin.import_invalid"; paintConfigImport(); } };
+      reader.readAsText(file);
+    };
+    if ($("#sysImportAck")) $("#sysImportAck").onchange = function () { $("#sysImportCommit").disabled = !this.checked || state.busy; };
+    if ($("#sysImportCommit")) $("#sysImportCommit").onclick = commitConfigImport;
+    if ($("#sysImportQuery")) $("#sysImportQuery").onclick = queryConfigImport;
+    if ($("#sysImportDiscard")) $("#sysImportDiscard").onclick = function () {
+      if (state.busy || state.commitAttempted) return;
+      requestConfigImport("cancel", importEnvelope(state, false), function (status, result) {
+        if (status === 200 && result && result.ok === true || status === 410) configImportState = {phase:"idle",raw:"",replace:false,attempt:0,busy:false};
+        else state.message = "admin.import_error";
+      });
+    };
+    if ($("#sysImportClear")) $("#sysImportClear").onclick = function () {
+      if (state.busy || state.phase !== "committed") return;
+      configImportState = {phase:"idle",raw:"",replace:false,attempt:0,busy:false}; persistConfigImport(); paintConfigImport();
+    };
+    if ($("#sysImportUnknownAck")) $("#sysImportUnknownAck").onchange = function () { $("#sysImportNewPreview").disabled = !this.checked || state.busy; };
+    if ($("#sysImportNewPreview")) $("#sysImportNewPreview").onclick = function () {
+      if (state.busy || !state.queryNotFound || !$("#sysImportUnknownAck").checked) return;
+      configImportState = {phase:"idle",raw:"",replace:false,attempt:0,busy:false,previousHandle:state.handle};
+      paintConfigImport();
+    };
+    if ($("#sysImportStatus")) $("#sysImportStatus").onclick = refreshImportConnections;
+    root.setAttribute("aria-busy", state.busy ? "true" : "false");
+    if (state.busy) $all("input,textarea,button", root).forEach(function (field) { field.disabled = true; });
+  }
+
   function renderSystem() {
     var el = $("#tab-system");
     var tok = S.panelToken || "";
@@ -6314,14 +7201,7 @@ if (typeof document !== "undefined") (function () {
          "</div><button class='btn small' id='webSosSave' style='margin-top:8px'>" +
          esc(t("admin.save")) + "</button></div>";
 
-    h += "<div class='card'><h2>" + esc(t("admin.export")) + " / " +
-         esc(t("admin.import")) + "</h2>" +
-         "<button class='btn small' id='sysExport'>" + icon("download") + " " + esc(t("admin.export")) +
-         "</button><div class='dim fhint' style='margin:10px 0 4px'>" +
-         esc(t("admin.import_hint")) + "</div>" +
-         "<textarea id='sysImport' style='min-height:110px' placeholder='{ \"doors\": … }'></textarea>" +
-         "<button class='btn small' id='sysImportBtn' style='margin-top:8px'>" +
-         esc(t("admin.import")) + "</button></div>";
+    h += "<div class='card' id='sysImportWorkflow'>" + configImportHtml() + "</div>";
 
     h += "<div class='card'><h2>" + esc(t("admin.panel_token")) + "</h2>" +
          "<div class='mono' id='panelTok'>" + esc(tok || "—") + "</div>";
@@ -6420,33 +7300,7 @@ if (typeof document !== "undefined") (function () {
     $("#webSosSave").onclick = function () {
       saveAndRefresh(L.webSosEntries($("#webSosEnabled").checked), null);
     };
-    $("#sysExport").onclick = function () {
-      var blob = new Blob([JSON.stringify(S.cfg, null, 2)], { type: "application/json" });
-      var a = document.createElement("a");
-      a.href = URL.createObjectURL(blob);
-      a.download = "doorbell-config.json";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    };
-    $("#sysImportBtn").onclick = function () {
-      var txt = $("#sysImport").value.replace(/^\s+|\s+$/g, "");
-      if (!txt) return;
-      var parsed;
-      try { parsed = JSON.parse(txt); } catch (e) { msg("JSON?"); return; }
-      var entries;
-      if (parsed instanceof Array) entries = parsed;
-      else if (parsed && parsed.entries instanceof Array) entries = parsed.entries;
-      else entries = L.flattenConfig(parsed);
-      postEntries(entries, null, function (ok, j) {
-        if (ok) {
-          msg(fmt(t("admin.imported"), { n: j.n || entries.length }));
-          refreshConfig(function () { renderTab(); });
-        } else if (j && j.unavailable)
-          msg(t("admin.atomic_batch_unavailable"));
-        else msg(t("admin.save_failed") + ((j && j.err) ? ": " + j.err : ""));
-      });
-    };
+    bindConfigImport($("#sysImportWorkflow"));
     $("#tokRotate").onclick = function () {
       if (!window.confirm(t("admin.rotate_confirm")))
         return;
@@ -6485,9 +7339,9 @@ if (typeof document !== "undefined") (function () {
       try { jsonValue = JSON.parse(val); } catch (e) { msg(t("admin.valid_json_required")); return; }
       postEntries([{ key: key, value: jsonValue }], null, function (ok, result) {
         msg(ok ? "OK" : ((result && result.unavailable) ?
-          t("admin.atomic_batch_unavailable") : "NG" +
+          t("admin.config_cas_unavailable") : "NG" +
           ((result && result.err) ? " (" + result.err + ")" : "")));
-        refreshConfig(function () { renderTab(); });
+        if (ok) refreshConfig(function () { renderTab(); });
       });
     };
     $("#logBtn").onclick = function () {
@@ -7022,13 +7876,19 @@ if (typeof document !== "undefined") (function () {
     var visit = ++PAIR.visit;
     PAIR.runtime = runtime;
     renderPair();
-    refreshPairing(null, runtime, visit);
-    // Peers come along for the ride: a pending device that has left the list and turned into a
-    // peer is the confirmation the row shows as "Added".
-    if (!PAIR.poll) PAIR.poll = setInterval(function () {
-      if (!pairRuntimeCurrent(runtime, visit)) return;
-      refreshStatus(function () { refreshPairing(null, runtime, visit); }, runtime.generation);
-    }, 2000);
+    var busy = false;
+    function refresh() {
+      if (busy || !pairRuntimeCurrent(runtime, visit)) return;
+      busy = true;
+      api("GET", "/api/status", null, function (st, j) {
+        if (!pairRuntimeCurrent(runtime, visit)) return;
+        if (st === 200 && j) S.status = j;
+        refreshPairing(function () { busy = false; }, runtime, visit);
+      }, { authenticated: true, generation: runtime.generation, context: runtime, timeout_ms: 10000 });
+    }
+    refresh();
+    if (!pairRuntimeCurrent(runtime, visit)) return;
+    if (!PAIR.poll) PAIR.poll = setInterval(refresh, 2000);
     if (!PAIR.tick) PAIR.tick = setInterval(pairTick, 1000);
   }
 
@@ -7063,12 +7923,12 @@ if (typeof document !== "undefined") (function () {
       { id: "ja", label: t("admin.label_ja"), value: lb.ja },
       { id: "en", label: t("admin.label_en"), value: lb.en },
       { id: "zh", label: t("admin.label_zh"), value: lb.zh }];
-    var m = openForm(t("admin.purposes"), fields, function (v) {
+    var m = openForm(t("admin.purposes"), fields, function (v, done) {
       var pid = isNew ? L.safeId(v.pid) : id;
       if (!pid) return "ID?";
       if (!v.ja && !v.en && !v.zh) return t("admin.label_ja") + "?";
       v.order = isNew ? sortedPurposeIds().length + 1 : (cur.order || 1);
-      saveAndRefresh(L.purposeEntries(pid, v, cur), null);
+      saveAndRefresh(L.purposeEntries(pid, v, cur), null, done);
     });
     bindIconPick(m);
   }
@@ -7978,11 +8838,17 @@ if (typeof document !== "undefined") (function () {
   };
 
   function renderTab() {
+    S.editorBase = configEditor();
     var f = TABS[S.tab];
     if (f) f();
+    S.editorBase.root = $("#tab-" + S.tab);
+    S.editorBase.fields = $all("input,select,textarea", S.editorBase.root).filter(function (field) {
+      return field.type !== "password" && field.type !== "file" && !field.readOnly &&
+        !field.hasAttribute("data-sensitive") && field.id !== "cfgVal" && field.id !== "sysImport";
+    }).map(function (field) { return { element: field, value: field.value, checked: field.checked }; });
   }
 
-  function switchTab(name) {
+  function switchTab(name, afterRender) {
     var was = S.tab;
     S.tab = name;
     $all("nav button").forEach(function (b) {
@@ -7992,9 +8858,10 @@ if (typeof document !== "undefined") (function () {
     // A second activation of Pair (including a click on its already-selected nav item) is a
     // new visit. Retire the previous visit's poll/scan state before issuing its replacement.
     if (was === "pair") pairTabLeave();
-    if (name === "pair") { refreshStatus(pairTabEnter); return; }
-    if (name === "events") refreshEvents(renderTab);
-    else refreshConfig(function () { refreshStatus(renderTab); });
+    if (name === "pair") { pairTabEnter(); return; }
+    function rendered() { renderTab(); if (afterRender) afterRender(); }
+    if (name === "events") refreshEvents(rendered);
+    else refreshConfig(function () { refreshStatus(rendered); });
   }
 
   $all("nav button").forEach(function (b) {
@@ -8005,7 +8872,7 @@ if (typeof document !== "undefined") (function () {
   function poll(generation) {
     if (!generationCurrent(generation) || AUTH.pollBusy) return;
     AUTH.pollBusy = true;
-    var remaining = S.tab === "events" ? 2 : 1;
+    var remaining = S.tab === "events" ? 3 : 2;
     function complete() {
       if (--remaining) return;
       AUTH.pollBusy = false;
@@ -8018,6 +8885,7 @@ if (typeof document !== "undefined") (function () {
       }
       complete();
     }, generation);
+    refreshConfig(complete, generation);
     if (S.tab === "events") refreshEvents(function () {
       if (generationCurrent(generation)) renderEvents();
       complete();
@@ -8077,6 +8945,7 @@ if (typeof document !== "undefined") (function () {
   /* ---- login ---- */
   $("#loginBtn").onclick = function () {
     if (AUTH.loginPending) return;
+    AUTH.probe = null;
     var pageEpoch = AUTH.pageEpoch;
     var attempt = { pageEpoch: pageEpoch };
     AUTH.loginPending = true;
@@ -8110,6 +8979,7 @@ if (typeof document !== "undefined") (function () {
     var generation = ++AUTH.generation;
     var runtime = { generation: generation, pageEpoch: pageEpoch };
     AUTH.runtime = runtime;
+    api("GET", "/api/session", null, function () {}, { timeout_ms: 4000, context: runtime });
     var info = $("#nodeInfo");
     refreshConfig(function (configStatus) {
       if (!runtimeCurrent(runtime)) return;
@@ -8121,7 +8991,9 @@ if (typeof document !== "undefined") (function () {
         info.textContent = (n.name || n.id || "") + " · v" + (n.version || "?");
         AUTH.booting = false;
         AUTH.authenticated = true;
-        switchTab("dash");
+        switchTab(inlineDraft ? inlineDraft.editor.tab : "dash", function () {
+          restoreModalDraft(); restoreInlineDraft();
+        });
         schedulePoll(generation);
       }, generation);
     }, generation);
@@ -8146,7 +9018,7 @@ if (typeof document !== "undefined") (function () {
   }
 
   function recoverAdminRuntime() {
-    if (AUTH.authenticated || AUTH.booting) return;
+    if (AUTH.authenticated || AUTH.booting || AUTH.loginPending) return;
     var pageEpoch = AUTH.pageEpoch;
     if (AUTH.probe && AUTH.probe.pageEpoch === pageEpoch) return;
     var probe = { pageEpoch: pageEpoch };
@@ -8166,6 +9038,15 @@ if (typeof document !== "undefined") (function () {
   }
 
 
+  function recordInteraction(event) {
+    if (!event || event.isTrusted === false || !AUTH.authenticated ||
+        !AUTH.runtime || !AUTH.csrf || document.hidden || AUTH.activityTimer) return;
+    AUTH.activityTimer = setTimeout(function () { AUTH.activityTimer = 0; }, 60000);
+    api("POST", "/api/session/activity", {}, function () {}, { timeout_ms: 4000 });
+  }
+  window.addEventListener("mousedown", recordInteraction);
+  window.addEventListener("touchstart", recordInteraction);
+  window.addEventListener("keydown", recordInteraction);
   window.addEventListener("pagehide", stopAdminRuntime);
   window.addEventListener("pageshow", recoverAdminRuntime);
 

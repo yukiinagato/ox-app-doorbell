@@ -1,0 +1,58 @@
+{
+  "task": "T07",
+  "status": "VERIFIED_IN_PRODUCTION_TEST_SCOPE",
+  "source_manifest_sha256": "c8d50870fb7cfe4776f131f28b78386cc5fb74dca660c9e41397e58928e06d24",
+  "commands": [
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/evidence/red-ack.json",
+      "sha256": "0605c8bdf3aff3f8877c846de3e5f321572d638f26ec725692486296888eb71d"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/evidence/normal-final.json",
+      "sha256": "066a4be5c599f0cc26d4e9919bc4f4f07e488987c18ec147a2589cd7008c7cef"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/evidence/asan-final.json",
+      "sha256": "f01247e5feb073ce98abc0c70c9e8a62161ab92aada171b00b31f759458cf128"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/evidence/regression-final.json",
+      "sha256": "bd7dd8e3eee5a32b3bcdc7fd570be306d63ae6269c9d45014041f43b3e5e3acf"
+    }
+  ],
+  "cases": [
+    {
+      "id": "T07-01",
+      "status": "PASS_IN_PRODUCTION_TEST_SCOPE",
+      "test": "operations ACK: no commissioned feedback stays sent and reconnect never resends",
+      "assertion": "Real MQTT send is dispatched, ack_unavailable and physical_state unconfirmed; no automatic retry."
+    },
+    {
+      "id": "T07-02",
+      "status": "PASS_IN_PRODUCTION_TEST_SCOPE",
+      "test": "operations ACK: duplicate and out of order packets update only their durable IDs",
+      "assertion": "Authenticated matching IDs alone settle ledger records; repeated execute emits no second packet."
+    },
+    {
+      "id": "T07-03",
+      "status": "PASS_OPERATION_STATE_SCOPE_UI_GATE_OPEN",
+      "test": "operations ACK: late front result cannot replace the rear operation after a door switch",
+      "assertion": "Late front ACK does not alter rear ID/state; incorrect target scope is rejected.",
+      "remaining_gate": "T36 shipping UI migration and rendered-state correlation for each shell are NOT_RUN here."
+    },
+    {
+      "id": "T07-04",
+      "status": "PASS_IN_PRODUCTION_TEST_SCOPE",
+      "test": "operations ACK: no commissioned feedback stays sent and reconnect never resends",
+      "assertion": "Actual socket disconnect/reconnect changes the result to unknown and does not cause a second command."
+    }
+  ],
+  "independent_review": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T07/evidence/review.json",
+    "sha256": "d3baaf824a7d06495ccf9dde63fd2d1c405e8008c143386b6a28b594a4ddbc10",
+    "status": "PASS_IN_PRODUCTION_TEST_SCOPE"
+  },
+  "physical_hardware_qualification": "NOT_RUN",
+  "shipping_UI_migration": "T36_REQUIRED",
+  "cleanup_sha256": "1f1e17be7d021e6c7e4efccf05b672e2f6f84a9d72158fa643d7e8032e531077"
+}

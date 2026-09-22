@@ -1,0 +1,75 @@
+{
+  "task_id": "T21",
+  "scope": "Swift call timing and recovery; actual current source includes earlier partial remaining_ms migration. This task fixes cache age/repeated sample renewal and lifecycle invalidation.",
+  "entrypoints": [
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "line": 943,
+      "purpose": "Call recovery",
+      "review": "Reads one leased Core snapshot. Event selects only call ID; state, owner, duration and recovery eligibility come from that snapshot. Unknown or zero duration never sends a failure recovery report."
+    },
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "line": 1384,
+      "purpose": "Call display deadline",
+      "review": "Subtracts snapshot age and monotonic elapsed time. Zero/unknown shows existing localized Checking text. Only an authoritative complete missing-call snapshot retires the view; no timer invokes cancelCall."
+    },
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "line": 1371,
+      "purpose": "Background / stop",
+      "review": "Invalidates timer revision and anchors while preserving the sample freshness barrier. prepareForCoreShutdown retains T20 camera/encoder behavior."
+    },
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "line": 1376,
+      "purpose": "Foreground",
+      "review": "Retains the pre-suspension Core/sample identity and waits in Checking until a different sample or Core generation arrives. With no prior sample, first read only establishes the barrier baseline. Cached getters remain non-blocking."
+    },
+    {
+      "path": "ios/Doorbell/CoreBridge.swift",
+      "line": 429,
+      "purpose": "Native ownership",
+      "review": "Acquires a T20 expected-generation lease around the real C getter, JSON copy and free; refuses results after stop/generation change. Uses request-start monotonic uptime."
+    },
+    {
+      "path": "ios/Doorbell/CoreBridge.swift",
+      "line": 357,
+      "purpose": "Recovery mutation",
+      "review": "Optional expected generation is checked atomically in withCore; MainViewController always supplies it."
+    },
+    {
+      "path": "ios/Doorbell/CallRevisionLifecycle.swift",
+      "line": 52,
+      "purpose": "Duration projection",
+      "review": "Core generation, snapshot generation, call/door/revision/owner/state form an anchor identity; repeated cache samples cannot extend an anchor."
+    },
+    {
+      "path": "ios/Doorbell/IncomingViewController.swift",
+      "line": 648,
+      "purpose": "Local unattended return",
+      "review": "Existing local return-to-home display timeout, not a comparison against Core expires_at_ms; unchanged."
+    },
+    {
+      "path": "ios/DoorbellTV/TVMainViewController.swift",
+      "line": 219,
+      "purpose": "tvOS shared consumer",
+      "review": "No business call-expiry wall-clock comparison or CallTiming duration consumer in TVMainViewController. Shared CoreBridge and CallRevisionLifecycle compile in tvOS target."
+    },
+    {
+      "path": "ios/Doorbell/DoorbellClock.swift",
+      "line": 190,
+      "purpose": "Non-call wall timestamps",
+      "review": "Date fallback is used by unrelated notice/configuration timestamp paths; call countdown/recovery does not invoke this helper. Calendar formatting and idle/secret-tap Date uses remain outside T21 call authority."
+    }
+  ],
+  "authority_rule": "Core alone terminates calls. Native timeout is a display observation, never a cancellation command.",
+  "availability": "ProcessInfo.systemUptime, Foundation/CoreFoundation operations and existing IOSAvailability.scheduledTimer adapter; no new OS concurrency/time API or minimum OS increase.",
+  "preserved": [
+    "T20 lifecycle withCore lease and expected-generation admission",
+    "T20 camera/VT producer generations",
+    "Existing explicit user cancel and native unrecoverable in-call fail-closed report",
+    "Existing 10-second Core recovery window",
+    "T36 concurrency prerequisites and MC NOT_RUN statuses"
+  ]
+}

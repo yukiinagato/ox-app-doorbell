@@ -1,0 +1,14 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "43853540ef6da6056e8ae1c57cba149f4cf9e5db54b123039424e007aa3ac01b",
+  "files": {
+    "core/src/node/node.cpp": "7aa6de13ab9d26fb74c93935c7c66033a75fb377e5c5d4817100d5d2c40d6101",
+    "core/tests/test_visitor.cpp": "010fb8435a14ce16765b6d118ba037e57bfb295a7ffb71f57deab0d1ce8fd8cb",
+    "core/tests/test_contracts_v2.cpp": "abb127b94ffe067bc5d6357993b58fbd19ba12d72e176b9822324c535a2ce25a",
+    "core/include/doorbell/doorbell.h": "13884ecb5e6cfa59f3c84c2cd6aef928a8b3da8957d39d18ec6604e159b21b3b",
+    "docs/en/config-schema.md": "24f77ef32cc605f1f0c5438df08299773e0cd60ce3abb66a19efcea831a02795",
+    "docs/ja/config-schema.md": "7cd37423b296524549432dcc695899239d4e7dff489c029f072806fdf3bdbe54",
+    "docs/zh/config-schema.md": "137ae873baa52876f916e0ff5e95dc403ba28951dc40c8dea9b5fad2059ea2c1"
+  }
+}

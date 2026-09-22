@@ -47,14 +47,15 @@ function makeRuntime(options) {
     if (url === "/locale/en.json") return [200, JSON.parse(
       fs.readFileSync(path.join(__dirname, "../locale/en.json"), "utf8"))];
     if (url === "/api/login") return [server.login.status, server.login.body];
-    if (url === "/api/config") return [server.config, {}];
+    if (url === "/api/session") return [server.status, { csrf_token: "test-csrf" }];
+    if (url === "/api/config/snapshot") return [server.config, { schema_version: 2, revision: "fixture-revision", config: {} }];
     if (url === "/api/status") return [server.status, { node: { id: "test" } }];
     if (url === "/api/pairing") return [200, { state: "unpaired", pending: { devices: [] } }];
     return [200, { ok: true }];
   }
   class Xhr {
     open(method, url) { this.method = method; this.url = url; }
-    setRequestHeader() {}
+    setRequestHeader(key, value) { (this.headers || (this.headers = {}))[key] = value; }
     send() {
       server.requests.push({ method: this.method, url: this.url, xhr: this });
       if (server.throwSend.has(this.url)) throw new Error("send failed");
@@ -102,7 +103,7 @@ function makeRuntime(options) {
       assert.notStrictEqual(index, -1, `pending request for ${url}`);
       server.pending.splice(index, 1)[0].respond(status, body);
     },
-    fire(name) { (listeners[name] || []).slice().forEach((fn) => fn()); },
+    fire(name, event) { (listeners[name] || []).slice().forEach((fn) => fn(event)); },
     runOneTimer() {
       const entry = timers.entries().next().value;
       assert(entry, "expected a pending timer");
@@ -135,16 +136,16 @@ function enterPair(runtime) { runtime.hooks.adminRuntime.switchTab("pair"); }
   }
 
   {
-    const runtime = makeRuntime({ deferred: ["/api/config"] });
+    const runtime = makeRuntime({ deferred: ["/api/config/snapshot"] });
     assert.strictEqual(runtime.timers.size, 1,
       "only the in-flight initialization timeout exists before config/status initialize");
-    runtime.respond("/api/config", 500, {});
+    runtime.respond("/api/config/snapshot", 500, {});
     assert(runtime.timers.size >= 1, "failed initialization schedules a bounded retry");
     assert(runtime.elements.get("#msg").textContent,
       "failed initialization leaves an operator-visible server error");
-    runtime.server.deferred.delete("/api/config");
+    runtime.server.deferred.delete("/api/config/snapshot");
     runtime.runLastTimer();
-    assert(runtime.server.requests.filter((r) => r.url === "/api/config").length >= 2,
+    assert(runtime.server.requests.filter((r) => r.url === "/api/config/snapshot").length >= 2,
       "the bounded retry re-enters the production boot path");
     runtime.hooks.adminRuntime.stop();
   }
@@ -155,9 +156,9 @@ function enterPair(runtime) { runtime.hooks.adminRuntime.switchTab("pair"); }
     runtime.fire("pagehide");
     runtime.server.deferred.delete("/api/status");
     runtime.fire("pageshow");
-    const beforeStale = runtime.server.requests.filter((r) => r.url === "/api/config").length;
+    const beforeStale = runtime.server.requests.filter((r) => r.url === "/api/config/snapshot").length;
     runtime.respond("/api/status", 401, {});
-    assert.strictEqual(runtime.server.requests.filter((r) => r.url === "/api/config").length, beforeStale,
+    assert.strictEqual(runtime.server.requests.filter((r) => r.url === "/api/config/snapshot").length, beforeStale,
       "a stale auth probe cannot hide the new page or start another boot");
     assert.strictEqual(initialProbes, 1, "the initial activation creates one effective probe");
   }
@@ -168,8 +169,75 @@ function enterPair(runtime) { runtime.hooks.adminRuntime.switchTab("pair"); }
     runtime.fire("pagehide");
     runtime.fire("pageshow");
     runtime.respond("/api/login", 200, { ok: true });
-    assert.strictEqual(runtime.server.requests.filter((r) => r.url === "/api/config").length, 0,
+    assert.strictEqual(runtime.server.requests.filter((r) => r.url === "/api/config/snapshot").length, 0,
       "a login response from an old page activation cannot boot the new page");
+    assert.strictEqual(runtime.elements.get("#loginBtn").disabled, false,
+      "retiring a login attempt restores the retained form");
+    runtime.elements.get("#loginBtn").onclick();
+    assert.strictEqual(runtime.server.requests.filter((r) => r.url === "/api/login").length, 2);
+  }
+
+  for (const probeStatus of [200, 401]) {
+    const runtime = makeRuntime({ status: 401 });
+    runtime.fire("pagehide");
+    runtime.server.deferred.add("/api/status");
+    runtime.fire("pageshow");
+    const probe = runtime.server.pending.shift();
+    runtime.server.deferred.delete("/api/status");
+    runtime.server.status = 200;
+    runtime.server.login = { status: probeStatus === 401 ? 200 : 401,
+      body: { ok: probeStatus === 401 } };
+    runtime.elements.get("#loginBtn").onclick();
+    const before = runtime.server.requests.filter((r) => r.url === "/api/config/snapshot").length;
+    probe.respond(probeStatus, {});
+    assert.strictEqual(runtime.server.requests.filter((r) => r.url === "/api/config/snapshot").length, before,
+      "a retired probe cannot boot after a newer login decision");
+    assert.strictEqual(runtime.elements.get("#app").classList.contains("hidden"),
+      probeStatus !== 401, "a retired probe cannot override login visibility");
+  }
+
+  {
+    const runtime = makeRuntime({ deferred: ["/api/login"], status: 401 });
+    const button = runtime.elements.get("#loginBtn");
+    button.onclick();
+    runtime.fire("pagehide");
+    runtime.fire("pageshow");
+    button.onclick();
+    runtime.respond("/api/login", 401, {});
+    assert.strictEqual(button.disabled, true, "old completion cannot enable the new attempt");
+    runtime.respond("/api/login", 401, {});
+    assert.strictEqual(button.disabled, false);
+  }
+
+  for (const reverse of [false, true]) {
+    const runtime = makeRuntime();
+    runtime.server.deferred.add("/api/status");
+    enterPair(runtime);
+    enterPair(runtime);
+    const entries = runtime.server.pending.splice(0);
+    assert.strictEqual(entries.length, 2);
+    if (reverse) entries.reverse();
+    entries.forEach(xhr => xhr.respond(200, { peers: [] }));
+    const before = runtime.server.requests.filter(r => r.url === "/api/pairing").length;
+    runtime.server.deferred.delete("/api/status");
+    Array.from(runtime.timers.values()).filter(timer => timer.repeat).forEach(timer => timer.fn());
+    assert.strictEqual(runtime.server.requests.filter(r => r.url === "/api/pairing").length, before + 1,
+      "only the current Pair visit polls after overlapping entry responses");
+    runtime.hooks.adminRuntime.switchTab("dash");
+    assert.strictEqual(Array.from(runtime.timers.values()).filter(timer => timer.repeat).length, 0);
+  }
+
+  {
+    const runtime = makeRuntime();
+    runtime.server.deferred.add("/api/status");
+    enterPair(runtime);
+    const entry = runtime.server.pending.shift();
+    runtime.hooks.adminRuntime.switchTab("dash");
+    const before = runtime.server.requests.filter(r => r.url === "/api/pairing").length;
+    entry.respond(200, { peers: [] });
+    assert.strictEqual(runtime.server.requests.filter(r => r.url === "/api/pairing").length, before);
+    assert.strictEqual(Array.from(runtime.timers.values()).filter(timer => timer.repeat).length, 0,
+      "late Pair entry cannot restart timers after navigation");
   }
 
   {
@@ -240,6 +308,22 @@ function enterPair(runtime) { runtime.hooks.adminRuntime.switchTab("pair"); }
     runtime.runLastTimer();
     assert.strictEqual(track.stopped, true,
       "three detector failures close the scanner instead of leaving a busy retry loop");
+  }
+
+  {
+    const runtime = makeRuntime();
+    const count = () => runtime.server.requests.filter(r => r.url === "/api/session/activity").length;
+    assert.strictEqual(count(), 0, "boot and automatic polling do not report interaction");
+    runtime.fire("keydown", { isTrusted: false });
+    assert.strictEqual(count(), 0, "synthetic events cannot keep a session active");
+    runtime.fire("keydown", { isTrusted: true });
+    assert.strictEqual(count(), 1, "an authenticated user interaction renews the idle window");
+    assert.strictEqual(runtime.server.requests.find(r => r.url === "/api/session/activity").xhr.headers["X-Doorbell-CSRF"], "test-csrf");
+    runtime.fire("mousedown", { isTrusted: true });
+    assert.strictEqual(count(), 1, "interaction notifications are bounded");
+    runtime.fire("pagehide");
+    runtime.fire("keydown", { isTrusted: true });
+    assert.strictEqual(count(), 1, "a retired page cannot renew a session");
   }
 
   console.log("admin runtime tests: ok");

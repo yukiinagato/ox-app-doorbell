@@ -58,7 +58,7 @@
             canvas.getContext("2d").drawImage(deps.preview, 0, 0, canvas.width, canvas.height);
             canvas.toBlob(function (blob) {
               if (!blob || !stillCurrent(state)) { state.busy = false; return; }
-              Promise.resolve(deps.postFrame(state.binding.target, blob)).then(function () {
+              Promise.resolve(deps.postFrame(state.binding.target, blob, state.binding)).then(function () {
                 state.busy = false;
               }, function () { state.busy = false; });
             }, "image/jpeg", 0.7);

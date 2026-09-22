@@ -1,0 +1,101 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.11.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preModernDebugBuild UP-TO-DATE
+> Task :app:generateModernDebugBuildConfig
+> Task :app:checkModernDebugAarMetadata
+> Task :app:generateModernDebugResValues
+> Task :app:mapModernDebugSourceSetPaths
+> Task :app:generateModernDebugResources
+> Task :app:mergeModernDebugResources
+> Task :app:packageModernDebugResources
+> Task :app:createModernDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksModernDebug
+> Task :app:processModernDebugMainManifest
+> Task :app:parseModernDebugLocalResources
+> Task :app:processModernDebugManifest
+> Task :app:preModernDebugAndroidTestBuild SKIPPED
+> Task :app:javaPreCompileModernDebug
+> Task :app:processModernDebugAndroidTestManifest
+> Task :app:generateModernDebugAndroidTestBuildConfig
+> Task :app:checkModernDebugAndroidTestAarMetadata
+> Task :app:processModernDebugManifestForPackage
+> Task :app:generateModernDebugAndroidTestResValues
+> Task :app:mapModernDebugAndroidTestSourceSetPaths
+> Task :app:generateModernDebugAndroidTestResources
+> Task :app:javaPreCompileModernDebugAndroidTest
+> Task :app:mergeModernDebugAndroidTestResources
+> Task :app:mergeModernDebugAndroidTestShaders
+> Task :app:compileModernDebugAndroidTestShaders NO-SOURCE
+> Task :app:generateModernDebugAndroidTestAssets UP-TO-DATE
+> Task :app:mergeModernDebugAndroidTestAssets
+> Task :app:compressModernDebugAndroidTestAssets
+> Task :app:checkModernDebugAndroidTestDuplicateClasses
+> Task :app:processModernDebugAndroidTestResources
+> Task :app:processModernDebugResources
+> Task :app:desugarModernDebugAndroidTestFileDependencies
+> Task :app:mergeModernDebugAndroidTestJniLibFolders
+> Task :app:mergeExtDexModernDebugAndroidTest
+> Task :app:mergeLibDexModernDebugAndroidTest
+> Task :app:configureCMakeDebug[arm64-v8a]
+
+> Task :app:compileModernDebugKotlin
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/AndroidSecureStore.kt:4:8 'class KeyPairGeneratorSpec : Any, AlgorithmParameterSpec' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/App.kt:635:58 'static field TRIM_MEMORY_RUNNING_CRITICAL: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/App.kt:645:68 'static field TRIM_MEMORY_COMPLETE: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/AvcByteStream.kt:12:42 'static field COLOR_FormatYUV420Planar: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/AvcByteStream.kt:13:42 'static field COLOR_FormatYUV420PackedPlanar: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/AvcByteStream.kt:14:42 'static field COLOR_FormatYUV420SemiPlanar: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/AvcByteStream.kt:15:42 'static field COLOR_FormatYUV420PackedSemiPlanar: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/AvcByteStream.kt:19:51 'static field COLOR_FormatYUV420Planar: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/AvcByteStream.kt:20:55 'static field COLOR_FormatYUV420PackedPlanar: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/BoundedBitmapDecoder.kt:50:13 'field inDither: Boolean' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/BoundedBitmapDecoder.kt:80:17 'field inDither: Boolean' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/CameraFeeder.kt:8:8 'class Camera : Any' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/EmergencyActivity.kt:76:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Please add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/EmergencyAlertController.kt:209:14 'fun setPriority(p0: Int): Notification.Builder!' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/EmergencyAlertController.kt:209:39 'static field PRIORITY_MAX: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/EmergencyAlertController.kt:212:14 'fun setDefaults(p0: Int): Notification.Builder!' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/EmergencyAlertController.kt:429:21 'fun setAudioStreamType(p0: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/H264Commissioning.kt:191:58 'field versionCode: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/H264LivePlayer.kt:205:45 'static field INFO_OUTPUT_BUFFERS_CHANGED: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/IncomingActivity.kt:95:40 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/MainActivity.kt:413:53 'fun onBackPressed(): Unit' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/MainActivity.kt:1433:79 'static field TRIM_MEMORY_RUNNING_LOW: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/PairingActivity.kt:93:60 'static field SOFT_INPUT_ADJUST_RESIZE: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/ProcessRecovery.kt:89:47 'field versionCode: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/RuntimeSupervisor.kt:89:31 'static field CPU_ABI: String!' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/RuntimeSupervisor.kt:214:62 'static field TRIM_MEMORY_RUNNING_CRITICAL: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/SosSlideView.kt:125:79 'field scaledDensity: Float' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/SosSlideView.kt:288:18 'fun setColorFilter(p0: Int, p1: PorterDuff.Mode): Unit' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/VideoEncoder.kt:265:45 'static field INFO_OUTPUT_BUFFERS_CHANGED: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-red-r7/android/app/src/main/java/jp/ox/doorbell/VideoEncoder.kt:311:57 'static field BUFFER_FLAG_SYNC_FRAME: Int' is deprecated. Deprecated in Java.
+
+> Task :app:buildCMakeDebug[arm64-v8a][doorbell]
+> Task :app:compileModernDebugJavaWithJavac
+> Task :app:bundleModernDebugClassesToCompileJar
+> Task :app:configureCMakeDebug[armeabi-v7a]
+> Task :app:compileModernDebugAndroidTestKotlin
+> Task :app:buildCMakeDebug[armeabi-v7a][doorbell]
+> Task :app:compileModernDebugAndroidTestJavaWithJavac
+> Task :app:dexBuilderModernDebugAndroidTest
+> Task :app:mergeModernDebugAndroidTestGlobalSynthetics
+> Task :app:processModernDebugAndroidTestJavaRes
+> Task :app:mergeModernDebugAndroidTestJavaResource
+> Task :app:mergeProjectDexModernDebugAndroidTest
+> Task :app:configureCMakeDebug[x86_64]
+> Task :app:buildCMakeDebug[x86_64][doorbell]
+> Task :app:mergeModernDebugJniLibFolders
+> Task :app:validateSigningModernDebugAndroidTest
+> Task :app:writeModernDebugAndroidTestSigningConfigVersions
+> Task :app:mergeModernDebugNativeLibs
+> Task :app:mergeModernDebugAndroidTestNativeLibs NO-SOURCE
+> Task :app:stripModernDebugAndroidTestDebugSymbols NO-SOURCE
+> Task :app:packageModernDebugAndroidTest
+> Task :app:createModernDebugAndroidTestApkListingFileRedirect
+> Task :app:assembleModernDebugAndroidTest
+
+BUILD SUCCESSFUL in 1m 8s
+54 actionable tasks: 54 executed

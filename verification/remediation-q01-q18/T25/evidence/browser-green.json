@@ -1,0 +1,6 @@
+{
+  "status": "SUPERSEDED_EVIDENCE",
+  "reason": "Original browser-green.json was overwritten by the old development fixture during T27. Its replacement is a newly timestamped real-browser rerun using the exact frozen T25 source and cases, not a reconstruction of the original log.",
+  "replacement": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T27/evidence/t25-revalidation-green.json",
+  "overwriting_run_preserved_at": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T27/evidence/draft-browser-development-r1.json"
+}

@@ -469,7 +469,7 @@ TEST_CASE("call log: a schema v6 database is migrated and backfilled by replay")
     Store store;
     REQUIRE(store.open(path));
     seedOutcomeFixture(store);
-    CHECK(store.metaGet("schema_version") == std::string("7"));
+    CHECK(store.metaGet("schema_version") == std::string("8"));
   }
   // Rebuild the projection with the schema v6 column set, drop one row entirely, and roll the
   // recorded version back. The upgrade must recreate every column and every row from the events.
@@ -492,7 +492,7 @@ TEST_CASE("call log: a schema v6 database is migrated and backfilled by replay")
 
   Store upgraded;
   REQUIRE(upgraded.open(path));
-  CHECK(upgraded.metaGet("schema_version") == std::string("7"));
+  CHECK(upgraded.metaGet("schema_version") == std::string("8"));
   const auto rows = upgraded.callLog({});
   REQUIRE(rows.size() == 5);
   const Store::CallLogRow* answered = findRow(rows, "c_answered");

@@ -1,0 +1,199 @@
+[  3%] Building C object CMakeFiles/db_third_party.dir/third_party/sqlite/sqlite3.c.o
+[  3%] Building C object CMakeFiles/db_third_party.dir/third_party/civetweb/civetweb.c.o
+[  3%] Building C object CMakeFiles/db_third_party.dir/third_party/cjson/cJSON.c.o
+[  4%] Building C object CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher.c.o
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/cjson/cJSON.c:127:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  127 |     sprintf(version, "%i.%i.%i", CJSON_VERSION_MAJOR, CJSON_VERSION_MINOR, CJSON_VERSION_PATCH);
+      |     ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/cjson/cJSON.c:571:18: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  571 |         length = sprintf((char*)number_buffer, "null");
+      |                  ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/cjson/cJSON.c:575:12: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  575 |                 length = sprintf((char*)number_buffer, "%d", item->valueint);
+      |                          ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/cjson/cJSON.c:580:18: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  580 |         length = sprintf((char*)number_buffer, "%1.15g", d);
+      |                  ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/cjson/cJSON.c:586:22: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+  586 |             length = sprintf((char*)number_buffer, "%1.17g", d);
+      |                      ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/cjson/cJSON.c:1020:21: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 1020 |                     sprintf((char*)output_pointer, "u%04x", *input_pointer);
+      |                     ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/civetweb/civetweb.c:3702:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 3702 |                                 sprintf(portstr, ":%u", (unsigned)port);
+      |                                 ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/civetweb/civetweb.c:6870:2: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 6870 |         sprintf(lenbuf, "%x\r\n", chunk_len);
+      |         ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/civetweb/civetweb.c:9153:10: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 9153 |                                         i = sprintf(temp_file + temp_file_offs,
+      |                                             ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/civetweb/civetweb.c:9168:9: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 9168 |                                 i = sprintf(temp_file + temp_file_offs, "%s:%s:%s\n", u, d, h);
+      |                                     ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/third_party/civetweb/civetweb.c:12858:5: warning: 'sprintf' is deprecated: This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead. [-Wdeprecated-declarations]
+ 12858 |                                 sprintf(s, "%" UINT64_FMT, (uint64_t)dav_lock[i].locktime);
+       |                                 ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/_stdio.h:278:1: note: 'sprintf' has been explicitly marked deprecated here
+  278 | __deprecated_msg("This function is provided for compatibility reasons only.  Due to security concerns inherent in the design of sprintf(3), it is highly recommended that you use snprintf(3) instead.")
+      | ^
+/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/sys/cdefs.h:227:48: note: expanded from macro '__deprecated_msg'
+  227 |         #define __deprecated_msg(_msg) __attribute__((__deprecated__(_msg)))
+      |                                                       ^
+6 warnings generated.
+[  5%] Building C object CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher-ed25519.c.o
+[  6%] Building C object CMakeFiles/db_third_party.dir/third_party/qrcodegen/qrcodegen.c.o
+[  7%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/quirc.c.o
+[  8%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/identify.c.o
+[  9%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/decode.c.o
+[ 12%] Building C object CMakeFiles/db_third_party.dir/third_party/quirc/version_db.c.o
+[ 12%] Building C object CMakeFiles/db_third_party.dir/third_party/stb/stb_image_impl.c.o
+5 warnings generated.
+[ 13%] Linking C static library libdb_third_party.a
+[ 13%] Built target db_third_party
+[ 14%] Embedding webui assets
+embed_webui: 23 assets, 1893076 bytes -> /Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/asan-final/gen/webui_assets.cpp
+[ 15%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/telegram.cpp.o
+[ 18%] Building CXX object CMakeFiles/doorbell_core.dir/src/capi/doorbell_capi.cpp.o
+[ 18%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/mqtt_client.cpp.o
+[ 18%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/ha_bridge.cpp.o
+[ 19%] Building CXX object CMakeFiles/doorbell_core.dir/src/crdt/lww_map.cpp.o
+[ 20%] Building CXX object CMakeFiles/doorbell_core.dir/src/events/event_log.cpp.o
+[ 21%] Building CXX object CMakeFiles/doorbell_core.dir/src/events/rule_engine.cpp.o
+[ 23%] Building CXX object CMakeFiles/doorbell_core.dir/src/httpd/httpd.cpp.o
+[ 24%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/fmp4.cpp.o
+[ 25%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/fmp4_demux.cpp.o
+[ 26%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/frame_bus.cpp.o
+[ 27%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/motion_detector.cpp.o
+[ 28%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/qr_scanner.cpp.o
+[ 29%] Building CXX object CMakeFiles/doorbell_core.dir/src/media/video_track.cpp.o
+[ 30%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/inmem_net.cpp.o
+[ 31%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/mesh.cpp.o
+[ 32%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/secure_channel.cpp.o
+[ 34%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/tcp_transport.cpp.o
+[ 35%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/udp_beacon.cpp.o
+[ 36%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+[ 37%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/operation_dispatcher.cpp.o
+[ 38%] Building CXX object CMakeFiles/doorbell_core.dir/src/sipctl/sipctl_stub.cpp.o
+[ 39%] Building CXX object CMakeFiles/doorbell_core.dir/src/store/operation_ledger.cpp.o
+[ 40%] Building CXX object CMakeFiles/doorbell_core.dir/src/store/store.cpp.o
+[ 41%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/color.cpp.o
+[ 42%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/common.cpp.o
+[ 43%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/hlc.cpp.o
+[ 45%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/ids.cpp.o
+[ 46%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/json.cpp.o
+[ 47%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/log.cpp.o
+[ 48%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/pair_uri.cpp.o
+[ 49%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/runloop.cpp.o
+[ 50%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/sntp.cpp.o
+[ 51%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/tz.cpp.o
+[ 52%] Building CXX object CMakeFiles/doorbell_core.dir/gen/webui_assets.cpp.o
+[ 53%] Linking CXX static library libdoorbell_core.a
+[ 53%] Built target doorbell_core
+[ 58%] Building CXX object CMakeFiles/doorbell_video_decode_probe.dir/tests/integration/video_track_decode_probe.cpp.o
+[ 58%] Building CXX object CMakeFiles/doorbell.dir/src/capi/doorbell_capi.cpp.o
+[ 58%] Building CXX object CMakeFiles/doorbell_host.dir/host/main.cpp.o
+[ 58%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_admin_api.cpp.o
+[ 59%] Linking CXX executable doorbell_video_decode_probe
+[ 60%] Linking CXX executable doorbell_host
+[ 60%] Built target doorbell_video_decode_probe
+[ 61%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_assets.cpp.o
+[ 61%] Built target doorbell_host
+[ 62%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_call_log.cpp.o
+[ 63%] Linking CXX shared library libdoorbell.dylib
+[ 63%] Built target doorbell
+[ 64%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_capi_abi.cpp.o
+[ 65%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_color.cpp.o
+[ 67%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_contracts_v2.cpp.o
+[ 68%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_crdt.cpp.o
+[ 69%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_display.cpp.o
+[ 70%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_emergency.cpp.o
+[ 71%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_event_log.cpp.o
+[ 72%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_fmp4.cpp.o
+[ 73%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_fmp4_demux.cpp.o
+[ 74%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_httpd.cpp.o
+[ 75%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_main.cpp.o
+[ 76%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_media.cpp.o
+[ 78%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_media_publish.cpp.o
+[ 79%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_mesh.cpp.o
+[ 80%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_motion.cpp.o
+[ 81%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_mqtt.cpp.o
+[ 82%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_node.cpp.o
+[ 83%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_operations.cpp.o
+[ 84%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_operations_disk.cpp.o
+[ 85%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_operations_http.cpp.o
+[ 86%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_operations_service.cpp.o
+[ 87%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_pair_uri.cpp.o
+[ 89%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_panel.cpp.o
+[ 90%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_rules.cpp.o
+[ 91%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_secure_channel.cpp.o
+[ 92%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_settings.cpp.o
+[ 93%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_sip.cpp.o
+[ 94%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_store.cpp.o
+[ 95%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_telegram.cpp.o
+[ 96%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_time.cpp.o
+[ 97%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_util.cpp.o
+[ 98%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_visitor.cpp.o
+[100%] Linking CXX executable doorbell_tests
+[100%] Built target doorbell_tests

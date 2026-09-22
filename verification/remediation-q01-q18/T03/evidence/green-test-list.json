@@ -1,0 +1,35 @@
+{
+  "task_id": "T03",
+  "test_id": "green-test-list",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "ffe201c48e6c718784d09412beec7e1e3053ae19d40f3bab1cbb1119306675b9",
+  "command": [
+    "build/remediation-t03-20260922/doorbell_tests",
+    "--test-case=T03:*,doors: the unlock*,admin API: the cluster-wide notice*",
+    "--list-test-cases"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T13:33:37.768983+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "sip_backend": "stub",
+  "signing_state": "unsigned_host",
+  "app_version": null,
+  "build_number": null,
+  "device_or_browser": "macOS host / Node.js",
+  "artifact_sha256": "05b1561d2f797665743bdf4092db16fce87238014de0009f326ad4e9b1e1596e",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T03/evidence/green-test-list.log",
+  "source_files": {
+    "core/src/node/node.cpp": "8c110ca3f4199ab121da9c06784fc1d59a847a60d94427da1c721ed1da8f719e",
+    "core/src/httpd/httpd.cpp": "785c2ab865e31d4e80f17ea7c26addb5d78ec5c6535edc9a885592ff11530798",
+    "core/tests/test_admin_api.cpp": "7754ddf047811c17a59ac78e4c086409344ab2149f73fe4e339e96a385cd6d41",
+    "core/tests/test_settings.cpp": "5a7bdd1dbe7dda9f798f2bcff234be6706149fd7a2d3d338daf870b6f603f129",
+    "webui/admin/app.js": "b0738afbd726c5ef7288a2283437b7e81d8e6205531185513724ae974a950f5b",
+    "webui/tests/theme_notice.test.js": "b6ce94ef8145247c1324d2f20cd1b1686ec33d5a3e5064aecd33f3a61af59426",
+    "i18n/strings.yaml": "6db958d561364a1a16852c90c5c11c17129183a41312a4f39f2462fe022e88e5"
+  },
+  "exit_code": 0,
+  "finished_at": "2026-09-22T13:33:38.477610+00:00"
+}

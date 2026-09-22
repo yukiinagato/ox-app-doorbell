@@ -1,0 +1,20 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T18:07:03.677436+00:00",
+  "status": "APPROVED_IN_RECORDED_ISOLATED_UIKIT_SCOPE",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-compat/source-frozen-r8.json",
+  "source_manifest_sha256": "38b3d57366e0f4c574955b726bbe091dc614a616b73932ef82c0e687e126ab00",
+  "uikit_summary_sha256": "905f8cac29bdba01f3caffc3fc7883a1f6859d3d5b4a4db2d43b962aa5bab4c8",
+  "verified_output_hashes": 56,
+  "checks": [
+    "Reviewed r6 to r8 production delta: actual flat background feeds foreground measurement; actual custom buttons explicitly expose accessibility element and button traits.",
+    "Reviewed runner build: frozen production UIKit UI, fake Core/Router/audio/network boundaries; no Core/SIP library linked.",
+    "Verified four per-case result manifests and owned output hashes; 95 checks with zero failures.",
+    "Visually inspected actual UIKit large Chinese portrait idle and Japanese landscape ringing screenshots: foreground readable, action fits and remains separate."
+  ],
+  "limitations": [
+    "sendActionsForControlEvents and view bounds are not physical HID or system rotation.",
+    "VoiceOver speech/navigation was not exercised.",
+    "Formal app with current integrated Core, long duration and physical hardware operations remain separate gates."
+  ]
+}

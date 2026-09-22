@@ -1,0 +1,10 @@
+{
+  "command": [
+    "build/remediation-t15-20260923/green-host/doorbell_tests",
+    "--test-case=media publishing*,panel*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "exit_code": 0,
+  "duration_s": 34.532474994659424,
+  "source_manifest": "frozen-source.json"
+}

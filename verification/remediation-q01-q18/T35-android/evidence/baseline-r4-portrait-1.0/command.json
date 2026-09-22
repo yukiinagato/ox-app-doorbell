@@ -1,0 +1,130 @@
+{
+  "started_at": "2026-09-22T17:07:43.785364+00:00",
+  "finished_at": "2026-09-22T17:07:48.706520+00:00",
+  "serial": "emulator-5554",
+  "profile": "API35 / Android15 / arm64-v8a",
+  "app_version": "0.3.21 / build22",
+  "sip_backend": "real_pjsip (linked; Core stays unstarted)",
+  "signing": "Android debug certificate",
+  "apks": [
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-baseline-r4/android/app/build/intermediates/apk/modern/debug/app-modern-debug.apk",
+      "sha256": "e09b1836da5b977ec762e40983f39d950c7970539ddc9379a21e80223f494846"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-baseline-r4/android/app/build/intermediates/apk/androidTest/modern/debug/app-modern-debug-androidTest.apk",
+      "sha256": "a3462580c4d8fc13bbec2915752ba13dc654084b4a429f9bcddbe6cf69ed0423"
+    }
+  ],
+  "commands": [
+    {
+      "arguments": [
+        "install",
+        "-t",
+        "-r",
+        "-g",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-baseline-r4/android/app/build/intermediates/apk/modern/debug/app-modern-debug.apk"
+      ],
+      "exit_code": 0,
+      "output": "Performing Streamed Install\nSuccess\n"
+    },
+    {
+      "arguments": [
+        "install",
+        "-t",
+        "-r",
+        "-g",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-baseline-r4/android/app/build/intermediates/apk/androidTest/modern/debug/app-modern-debug-androidTest.apk"
+      ],
+      "exit_code": 0,
+      "output": "Performing Streamed Install\nSuccess\n"
+    },
+    {
+      "arguments": [
+        "shell",
+        "settings",
+        "put",
+        "secure",
+        "immersive_mode_confirmations",
+        "confirmed"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "rm",
+        "-rf",
+        "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "settings",
+        "put",
+        "system",
+        "font_scale",
+        "1.0"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "am",
+        "force-stop",
+        "jp.ox.doorbell"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "am",
+        "instrument",
+        "-w",
+        "-r",
+        "-e",
+        "phase",
+        "baseline",
+        "-e",
+        "orientation",
+        "portrait",
+        "jp.ox.doorbell.test/jp.ox.doorbell.VisitorUiInstrumentation"
+      ],
+      "exit_code": 0,
+      "output": "INSTRUMENTATION_RESULT: stream={\n  \"phase\": \"baseline\",\n  \"orientation\": \"portrait\",\n  \"font_scale\": 1,\n  \"source_id\": \"d17334d24d49b2e3e4587be7ff004672f42da26727f5b11b695320b386a07f38\",\n  \"results\": [\n    {\n      \"id\": \"baseline_capture\",\n      \"status\": \"RECORDED\"\n    }\n  ],\n  \"core_started\": false,\n  \"failure\": null\n}\nINSTRUMENTATION_CODE: -1\n"
+    },
+    {
+      "arguments": [
+        "pull",
+        "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui/.",
+        "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-android/evidence/baseline-r4-portrait-1.0"
+      ],
+      "exit_code": 0,
+      "output": "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui/./: 5 files pulled, 0 skipped. 1.3 MB/s (189455 bytes in 0.138s)\n"
+    }
+  ],
+  "scope": "Production MainActivity/View layout and bindings; test recording CallFlowGateway and SOS callback; no physical devices or Core networking.",
+  "observed_result": {
+    "phase": "baseline",
+    "orientation": "portrait",
+    "font_scale": 1,
+    "source_id": "d17334d24d49b2e3e4587be7ff004672f42da26727f5b11b695320b386a07f38",
+    "results": [
+      {
+        "id": "baseline_capture",
+        "status": "RECORDED"
+      }
+    ],
+    "core_started": false,
+    "failure": null
+  },
+  "status": "PASS"
+}

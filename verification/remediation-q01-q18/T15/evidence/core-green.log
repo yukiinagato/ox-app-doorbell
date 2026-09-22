@@ -1,0 +1,42 @@
+09-23 00:37:03 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21810
+09-23 00:37:03 I [node] created the missing door entry doors.front for this door station
+09-23 00:37:03 I [httpd] listening on 31451,[::]:31451
+09-23 00:37:03 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:37:03 I [node] node 27241285 (doorbell) started
+09-23 00:37:05 I [httpd] stopped
+09-23 00:37:05 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27098
+09-23 00:37:05 I [node] created the missing door entry doors.front for this door station
+09-23 00:37:05 I [httpd] listening on 27766,[::]:27766
+09-23 00:37:05 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:37:05 I [node] node 696be9af (doorbell) started
+09-23 00:37:07 I [httpd] stopped
+09-23 00:37:07 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27097
+09-23 00:37:07 I [node] created the missing door entry doors.front for this door station
+09-23 00:37:07 I [httpd] listening on 29139,[::]:29139
+09-23 00:37:07 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:37:07 I [node] node b6495ed8 (doorbell) started
+09-23 00:37:09 I [httpd] stopped
+09-23 00:37:09 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28458
+09-23 00:37:09 I [node] created the missing door entry doors.front for this door station
+09-23 00:37:09 I [httpd] listening on 27270,[::]:27270
+09-23 00:37:09 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:37:09 I [node] node 3af9e699 (doorbell) started
+09-23 00:37:11 I [httpd] stopped
+09-23 00:37:11 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:28070
+09-23 00:37:11 I [node] created the missing door entry doors.front for this door station
+09-23 00:37:11 I [httpd] listening on 20180,[::]:20180
+09-23 00:37:11 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:37:11 I [node] node 53a480d4 (doorbell) started
+09-23 00:37:13 I [httpd] stopped
+09-23 00:37:13 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21427
+09-23 00:37:13 I [node] created the missing door entry doors.front for this door station
+09-23 00:37:13 I [httpd] listening on 27218,[::]:27218
+09-23 00:37:13 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:37:13 I [node] node a3222cee (doorbell) started
+09-23 00:37:15 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   1 |   1 passed | 0 failed | 451 skipped
+[doctest] assertions: 291 | 291 passed | 0 failed |
+[doctest] Status: SUCCESS!

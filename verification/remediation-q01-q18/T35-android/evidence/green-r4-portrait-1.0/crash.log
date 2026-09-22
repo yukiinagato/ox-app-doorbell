@@ -1,0 +1,19 @@
+--------- beginning of crash
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: FATAL EXCEPTION: main
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: Process: jp.ox.doorbell, PID: 5102
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: java.lang.IllegalStateException: Check failed.
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at jp.ox.doorbell.VisitorUiInstrumentation.onStart$lambda$24$lambda$23(VisitorUiInstrumentation.kt:137)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at jp.ox.doorbell.VisitorUiInstrumentation.$r8$lambda$wJ2k1nUbYk3b0Il3AUSIAOUjLLg(Unknown Source:0)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at jp.ox.doorbell.VisitorUiInstrumentation$$ExternalSyntheticLambda14.invoke(D8$$SyntheticClass:0)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at jp.ox.doorbell.VisitorUiInstrumentation.ui$lambda$36(VisitorUiInstrumentation.kt:227)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at jp.ox.doorbell.VisitorUiInstrumentation.$r8$lambda$4nKNYHuyVZUBnGYGtPLkGGeR9yg(Unknown Source:0)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at jp.ox.doorbell.VisitorUiInstrumentation$$ExternalSyntheticLambda0.run(D8$$SyntheticClass:0)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at android.app.Instrumentation$SyncRunnable.run(Instrumentation.java:2612)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at android.os.Handler.handleCallback(Handler.java:959)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at android.os.Handler.dispatchMessage(Handler.java:100)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at android.os.Looper.loopOnce(Looper.java:232)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at android.os.Looper.loop(Looper.java:317)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at android.app.ActivityThread.main(ActivityThread.java:8705)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at java.lang.reflect.Method.invoke(Native Method)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at com.android.internal.os.RuntimeInit$MethodAndArgsCaller.run(RuntimeInit.java:580)
+09-23 02:08:22.037  5102  5102 E AndroidRuntime: 	at com.android.internal.os.ZygoteInit.main(ZygoteInit.java:886)

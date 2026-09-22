@@ -1,0 +1,87 @@
+{
+  "recorded_at": "2026-09-22T16:25:34.241762+00:00",
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "runs": [
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 1,
+      "log": "web-red.log",
+      "classification": "business red: legacy emergency endpoint instead of session/prepare/execute/query"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 1,
+      "log": "web-green-r1.log",
+      "classification": "7 business scenarios passed; production page extraction fixture ended at object brace and failed parsing; fixed the fixture only"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 0,
+      "log": "web-green-r2.log",
+      "classification": "all initial 8 production overlay/page scenarios passed"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 0,
+      "log": "web-green-r3.log",
+      "classification": "12 production scenarios passed"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 0,
+      "log": "web-green-r4.log",
+      "classification": "13 production scenarios passed including tab reload recovery"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 1,
+      "log": "web-repaint-red.log",
+      "classification": "business red: refreshText redelivered an already settled onTriggerResult; final production test passes after repaint-only fix"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 1,
+      "log": "web-session-contract-red.log",
+      "classification": "integration contract red after fixture was corrected to actual Core GET session csrf_token; production corrected and final 21 suites passed"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 1,
+      "log": "web-prepare-message-red.log",
+      "classification": "no-handle prepare failure needs distinct recovery text rather than implying query is possible"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 0,
+      "log": "web-prepare-message-green.log",
+      "classification": "13 production scenarios passed after no-handle preparation copy was separated"
+    }
+  ]
+}

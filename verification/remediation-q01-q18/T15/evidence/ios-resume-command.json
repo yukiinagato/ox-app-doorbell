@@ -1,0 +1,18 @@
+{
+  "status": "NOT_RUN",
+  "precondition": "User manually unlocks the Mac",
+  "command": [
+    "xcodebuild",
+    "test-without-building",
+    "-xctestrun",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/xcode/Build/Products/Doorbell_iphonesimulator26.5-arm64.xctestrun",
+    "-destination",
+    "platform=iOS Simulator,id=3F1ACD06-8FEE-4651-9DB6-6105D30011D7",
+    "-resultBundlePath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/ios-unlocked-final.xcresult",
+    "-only-testing:DoorbellTests/CoreBridgeLifecycleTests",
+    "-parallel-testing-enabled",
+    "NO"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell"
+}

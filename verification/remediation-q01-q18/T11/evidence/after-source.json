@@ -1,0 +1,15 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "time": "2026-09-22T14:36:13.499302+00:00",
+  "files": {
+    "core/src/node/node.cpp": "622b482e68e0677ef1e690d83ae2bb4550487796cc2ce49d2c3131cdbd342f77",
+    "core/tests/test_panel.cpp": "81447f720c60efcb2c128375b3e49c832e09b312349f1c92a5ac4fb2a5fcdb59",
+    "webui/panel/call.html": "0424a27b3c52335fcbe7b1c293f28c5ea9b2d65be11fbb1805c0bef30a1605c6",
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/tests/call_heartbeat.test.js": "96a2f0069a79ca470db8b86541e70af4fe8956d1b49f5207179476f88fcb5bac",
+    "webui/tests/call_page_fixture.js": "6cec4c3d396a75f2e6dab53864075845c2cd867f154484cd2b22faa13cf2d51f",
+    "webui/tests/call_poll_lanes.test.js": "66bce87f96611d0ca99c2489b45392235ffa1db253098c79d23d8b5994fb1959",
+    "i18n/strings.yaml": "51d8dab4350cdcedc460cd5c776296688015543cdd7e1c3fa39b34f5efcedafb"
+  },
+  "diff_sha256": "250361e9cf4cd4cdca8d49d0a997945d90dd25d53475f51cc9c615b976c3452d"
+}

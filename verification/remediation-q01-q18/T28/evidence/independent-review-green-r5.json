@@ -1,0 +1,14 @@
+{
+  "command": [
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/green-r5-build/doorbell_tests",
+    "--test-case=config conflict review:*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "exit_code": 0,
+  "elapsed_seconds": 2.885,
+  "finished_at": "2026-09-22T17:23:29.701174+00:00",
+  "source_manifest_sha256": "de307f12ae1e0257de42e595276fbbc6644ca64cd041057edd307c3c43b00f80",
+  "binary_sha256": "4054e6bb85da0322d1afa74a6b93b918daf5d3b33593fe5cedd36dfe3f6f85e2",
+  "log_sha256": "cd87680b4f45f36e1c83b46c392c40299abfd8f26aced980d33d8a023a26efbb",
+  "review_test_sha256": "e3cd80d312690f29f3db626e509d148c6777d913cbb48f502e65bdb30e448573"
+}

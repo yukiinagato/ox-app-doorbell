@@ -1,0 +1,40 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "227d6e639873da6594919090ed0d0b3740ed41f4911ebaede16b232d1d1f613e",
+  "task_id": "T05",
+  "test_id": "asan-store-r2",
+  "evidence_kind": "production_test",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T05/source-candidate-r2.json",
+  "source_manifest_sha256": "33cd8ebc98797d5b813cc4d7a1de4dd9a68c00a995d7024fa8362dba60e58874",
+  "command": [
+    "build/remediation-t05-20260922/asan/doorbell_tests",
+    "--test-case=operations:*,store:*",
+    "--no-skip"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:07:06.883958+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "host_unsigned",
+  "artifact_sha256": "fdf60c483adb8fb40935c9eced2a7509240defc89a01f55d68440971ab19f0fe",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T05/evidence/asan-store-r2.log",
+  "limitations": [
+    "Store production layer only. Node/HTTP/authenticated mesh routing and actual actuator integration are T06, not claimed here.",
+    "Darwin arm64 host. No device deployment, physical door/SOS, signed release, or hardware power-loss test.",
+    "No pre-existing operation ledger API existed; no compile-failure or replacement model is claimed as a pre-fix RED.",
+    "Capacity tests use actual in-memory SQLite; disk durability, WAL failure and process-death cases use real file databases. Logical 48 MiB reservation is not a physical SQLite/WAL size bound.",
+    "C/C++ Core, SQLite, third-party dependencies and tests are AddressSanitizer-instrumented. No ASan diagnostics. No global LeakSanitizer qualification claimed."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:07:13.963467+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "33/33 cases and 17124/17124 assertions passed: 14 new real Store/SQLite operation-ledger cases plus 19 existing Store regressions. WAL SQLITE_FULL write injection observed once; abrupt child process exit before/after file-marker adapter send recovers unknown without replay. Operation identity now matches C02: 32 lowercase hex characters; 64-character and uppercase inputs rejected."
+}

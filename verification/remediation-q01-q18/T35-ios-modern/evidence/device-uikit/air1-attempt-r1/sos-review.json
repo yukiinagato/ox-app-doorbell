@@ -1,0 +1,308 @@
+[
+  {
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "class" : "_UIAlertControllerView",
+    "hidden" : false,
+    "frame" : "{{0, 0}, {270, 169}}",
+    "traits" : 0
+  },
+  {
+    "frame" : "{{0, 0}, {270, 169}}",
+    "class" : "UIView",
+    "hidden" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "accessibility_element" : false
+  },
+  {
+    "alpha" : 1,
+    "hidden" : false,
+    "class" : "_UIAlertControllerInterfaceActionGroupView",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "frame" : "{{0, 0}, {270, 169}}"
+  },
+  {
+    "traits" : 0,
+    "frame" : "{{0, 0}, {270, 169}}",
+    "hidden" : false,
+    "alpha" : 1,
+    "class" : "_UIDimmingKnockoutBackdropView",
+    "accessibility_element" : false
+  },
+  {
+    "frame" : "{{0, 0}, {270, 169}}",
+    "hidden" : false,
+    "class" : "UIView",
+    "traits" : 0,
+    "alpha" : 1,
+    "accessibility_element" : false
+  },
+  {
+    "class" : "UIVisualEffectView",
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "hidden" : false,
+    "frame" : "{{0, 0}, {270, 169}}",
+    "traits" : 0
+  },
+  {
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "class" : "_UIVisualEffectBackdropView",
+    "hidden" : false,
+    "frame" : "{{0, 0}, {270, 169}}",
+    "traits" : 0
+  },
+  {
+    "class" : "_UIVisualEffectSubview",
+    "frame" : "{{0, 0}, {270, 169}}",
+    "alpha" : 1,
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0
+  },
+  {
+    "accessibility_element" : false,
+    "hidden" : false,
+    "frame" : "{{0, 0}, {270, 169}}",
+    "class" : "UIView",
+    "alpha" : 1,
+    "traits" : 0
+  },
+  {
+    "traits" : 0,
+    "content_size" : "{270, 80}",
+    "hidden" : false,
+    "frame" : "{{0, 0}, {270, 80}}",
+    "class" : "_UIInterfaceActionGroupHeaderScrollView",
+    "accessibility_element" : false,
+    "alpha" : 1
+  },
+  {
+    "traits" : 0,
+    "hidden" : false,
+    "class" : "UIView",
+    "alpha" : 1,
+    "frame" : "{{0, 0}, {270, 80}}",
+    "accessibility_element" : false
+  },
+  {
+    "alpha" : 1,
+    "class" : "UIView",
+    "frame" : "{{0, 0}, {270, 0}}",
+    "traits" : 0,
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "text" : "Start the SOS countdown?",
+    "alpha" : 1,
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "class" : "UILabel",
+    "font_size" : 17,
+    "frame" : "{{16, 20}, {238, 20.5}}"
+  },
+  {
+    "traits" : 0,
+    "alpha" : 1,
+    "frame" : "{{16, 43.5}, {238, 16}}",
+    "font_size" : 13,
+    "class" : "UILabel",
+    "text" : "Activate to review, then confirm.",
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "alpha" : 1,
+    "traits" : 0,
+    "class" : "UIView",
+    "frame" : "{{135, 0}, {0, 0}}",
+    "accessibility_element" : false,
+    "hidden" : false
+  },
+  {
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "frame" : "{{0, 0}, {270, 0}}",
+    "hidden" : false,
+    "class" : "UIView"
+  },
+  {
+    "accessibility_element" : false,
+    "class" : "UIImageView",
+    "traits" : 0,
+    "frame" : "{{264.5, -39}, {2.5, 36}}",
+    "hidden" : false,
+    "alpha" : 0
+  },
+  {
+    "traits" : 0,
+    "accessibility_element" : false,
+    "alpha" : 0,
+    "class" : "UIImageView",
+    "frame" : "{{-39, 74.5}, {36, 2.5}}",
+    "hidden" : false
+  },
+  {
+    "hidden" : false,
+    "class" : "_UIInterfaceActionItemSeparatorView_iOS",
+    "frame" : "{{0, 80}, {270, 0.5}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 1
+  },
+  {
+    "class" : "UIView",
+    "frame" : "{{0, 80}, {270, 0.5}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "hidden" : false
+  },
+  {
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "frame" : "{{0, 80}, {270, 0.5}}",
+    "traits" : 0,
+    "hidden" : false,
+    "class" : "UIView"
+  },
+  {
+    "frame" : "{{0, 80.5}, {270, 88.5}}",
+    "class" : "_UIInterfaceActionRepresentationsSequenceView",
+    "traits" : 0,
+    "hidden" : false,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "content_size" : "{270, 88.5}"
+  },
+  {
+    "traits" : 0,
+    "accessibility_element" : false,
+    "frame" : "{{0, 80.5}, {270, 88.5}}",
+    "hidden" : false,
+    "class" : "_UIInterfaceActionSeparatableSequenceView",
+    "alpha" : 1
+  },
+  {
+    "traits" : 0,
+    "frame" : "{{0, 80.5}, {270, 88.5}}",
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "class" : "UIStackView",
+    "hidden" : false
+  },
+  {
+    "traits" : 0,
+    "alpha" : 1,
+    "frame" : "{{0, 80.5}, {270, 44}}",
+    "class" : "_UIInterfaceActionCustomViewRepresentationView",
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "accessibility_element" : false,
+    "class" : "_UIAlertControllerActionView",
+    "alpha" : 1,
+    "hidden" : false,
+    "frame" : "{{0, 80.5}, {270, 44}}",
+    "traits" : 0
+  },
+  {
+    "traits" : 0,
+    "frame" : "{{52, 80.5}, {166, 44}}",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "class" : "UIView",
+    "alpha" : 1
+  },
+  {
+    "class" : "UILabel",
+    "hidden" : false,
+    "text" : "Start emergency SOS",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "frame" : "{{52, 92.5}, {166, 20.5}}",
+    "font_size" : 17
+  },
+  {
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "hidden" : false,
+    "class" : "_UIInterfaceActionItemSeparatorView_iOS",
+    "frame" : "{{0, 124.5}, {270, 0.5}}"
+  },
+  {
+    "hidden" : false,
+    "traits" : 0,
+    "frame" : "{{0, 124.5}, {270, 0.5}}",
+    "alpha" : 1,
+    "class" : "UIView",
+    "accessibility_element" : false
+  },
+  {
+    "hidden" : false,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "class" : "UIView",
+    "frame" : "{{0, 124.5}, {270, 0.5}}"
+  },
+  {
+    "traits" : 0,
+    "accessibility_element" : false,
+    "class" : "_UIInterfaceActionCustomViewRepresentationView",
+    "frame" : "{{0, 125}, {270, 44}}",
+    "hidden" : false,
+    "alpha" : 1
+  },
+  {
+    "frame" : "{{0, 125}, {270, 44}}",
+    "class" : "_UIAlertControllerActionView",
+    "hidden" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "accessibility_element" : false
+  },
+  {
+    "frame" : "{{107.5, 125}, {55, 44}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "class" : "UIView",
+    "hidden" : false
+  },
+  {
+    "alpha" : 1,
+    "class" : "UILabel",
+    "text" : "Cancel",
+    "hidden" : false,
+    "frame" : "{{107.5, 137}, {55, 20.5}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "font_size" : 17
+  },
+  {
+    "hidden" : false,
+    "frame" : "{{264.5, 170.5}, {2.5, 7}}",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "class" : "UIImageView",
+    "alpha" : 0
+  },
+  {
+    "class" : "UIImageView",
+    "traits" : 0,
+    "hidden" : false,
+    "alpha" : 0,
+    "frame" : "{{90, 163.5}, {7, 2.5}}",
+    "accessibility_element" : false
+  }
+]

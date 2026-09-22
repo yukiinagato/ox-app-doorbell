@@ -1,0 +1,98 @@
+{
+  "task_id": "T06",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty; isolated source snapshot; concurrent work preserved",
+  "diff_sha256": "f4abf8aaaa9d0f3e7309457d09cd34de46dd8658b7230418281d19eb89131981",
+  "created_at": "2026-09-22T15:53:28.846202+00:00",
+  "scope": "production host tests; SIP stub; no physical lock/SOS or deployment",
+  "owned_inputs": [
+    {
+      "path": "core/src/node/node.cpp",
+      "sha256": "7f513a5dafb8b624d7640ba052950aec61f1475b4c3903f3a39a1e89a7496db1",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/node/node.cpp"
+    },
+    {
+      "path": "core/src/node/node.h",
+      "sha256": "853c6a381a0e3b7386182ab59ff2666f21938c435d3f7be0ef1619b3200f7dea",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/node/node.h"
+    },
+    {
+      "path": "core/src/node/operation_config.h",
+      "sha256": "64601fe04be202be5a0c9ac8bdddbc9229107345dc25b30a20f6d515d18713c2",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/node/operation_config.h"
+    },
+    {
+      "path": "core/src/node/operation_service.inc",
+      "sha256": "ba960369e4909e2234fec11cd14b799262d9a14e32c0d14e6ecbfb2bb10ea216",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/node/operation_service.inc"
+    },
+    {
+      "path": "core/src/node/operation_dispatcher.h",
+      "sha256": "be0fc6694ba3650cf2cbe63b3011f10ff837b7b5ec674fd5d1b70c15eab9ea62",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/node/operation_dispatcher.h"
+    },
+    {
+      "path": "core/src/node/operation_dispatcher.cpp",
+      "sha256": "8d95509a4587addaea4474aa6cf3b7d2287498ff1ab5c8bb8ee7d54b47cd8bc5",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/node/operation_dispatcher.cpp"
+    },
+    {
+      "path": "core/src/httpd/httpd.h",
+      "sha256": "d82dcd55a8279c2f7ebfce24aa744b5415e78cc8c8f65bb191a5c1658f455e9b",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/httpd/httpd.h"
+    },
+    {
+      "path": "core/src/httpd/httpd.cpp",
+      "sha256": "bb25e9edae198a51e56438c7ed0d26441e7b3fc6211b4fb3926ab4bbdd30264a",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/httpd/httpd.cpp"
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.h",
+      "sha256": "72e73af0da455ff3cbb09f63aacc5d0d94c823b426cfc983bb2e37d63dbfa240",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/bridge/ha_bridge.h"
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.cpp",
+      "sha256": "e7b142df95246781e0e6a4b85f4426830308fe0c38f7b4b62df80e9d5dfea45b",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/bridge/ha_bridge.cpp"
+    },
+    {
+      "path": "core/src/bridge/mqtt_client.h",
+      "sha256": "20cae86d3b4568f321a8c00f43cb6e63a77f937e38a112ddd113a9f42f37b0dd",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/bridge/mqtt_client.h"
+    },
+    {
+      "path": "core/src/bridge/mqtt_client.cpp",
+      "sha256": "1e5a39ab4eec5d5c692620647c021a0beb7b4c48d642489686a3cb6dfb938fa2",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/bridge/mqtt_client.cpp"
+    },
+    {
+      "path": "core/src/capi/doorbell_capi.cpp",
+      "sha256": "8ba6ab0ec459b903d5aa3be1df20c30ba732e98e78d01d21a7b9d13a95922ea6",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/src/capi/doorbell_capi.cpp"
+    },
+    {
+      "path": "core/include/doorbell/doorbell.h",
+      "sha256": "5ac62bdd966176848699973a935a0607fc063cfdcb7c3890715b77242845a13f",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/include/doorbell/doorbell.h"
+    },
+    {
+      "path": "core/tests/test_operations_http.cpp",
+      "sha256": "71e270d8af3a1b716d1ee4c82c2a16f852312bdbc9e2121a957871d0cc3ffddd",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/tests/test_operations_http.cpp"
+    },
+    {
+      "path": "core/tests/test_operations_service.cpp",
+      "sha256": "63996d93eeed9da11c3d69c027de99857f243181df25fa3423640f59432e2e09",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/core/tests/test_operations_service.cpp"
+    }
+  ],
+  "full_snapshot_manifest": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/snapshot/source-inputs-final.json",
+  "full_snapshot_manifest_sha256": "2028c2151d1b821cdcfb3e1847a7df18cb19b571deb936009ce1774007ed118f",
+  "notes": [
+    "Shared Node includes independently owned T26 configuration changes; not attributed to T06.",
+    "DB_HTTPD_TEST_HOOKS exposes pending counts only when DB_BUILD_TESTS is enabled.",
+    "Runtime source includes operation_service.inc inside Node::Impl.",
+    "Final source follows the actual borrowed-loop red/green lifetime fix."
+  ]
+}

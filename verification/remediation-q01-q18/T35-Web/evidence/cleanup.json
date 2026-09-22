@@ -1,0 +1,9 @@
+{
+  "recorded_at": "2026-09-22T18:32:58.585413+00:00",
+  "fixture_pid": 83029,
+  "fixture_stop": "SIGTERM completed; localhost TCP 18769 LISTEN inventory empty (lsof exit 1)",
+  "browser_tabs": "All T35 agent-created tabs closed; selected IAB tab inventory empty",
+  "viewport": "Temporary override reset",
+  "preserved": "Frozen sources and actual JSON/log evidence retained. No user tabs or devices modified.",
+  "fixture_exit_code": 143
+}

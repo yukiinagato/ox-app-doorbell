@@ -1,0 +1,40 @@
+{
+  "status": "PASS",
+  "android": [
+    {
+      "model": "/Users/ox/Documents/project/app-doorbell/android/app/build/intermediates/cxx/Debug/3u5j596e/logs/armeabi-v7a/build_model.json",
+      "native_cache": "/Users/ox/Documents/project/app-doorbell/android/app/.cxx/Debug/3u5j596e/armeabi-v7a/CMakeCache.txt",
+      "abi": "armeabi-v7a",
+      "api": 21,
+      "ndk": "/Users/ox/Library/Android/sdk/ndk/27.1.12297006",
+      "pjsip_tier": "api21"
+    },
+    {
+      "model": "/Users/ox/Documents/project/app-doorbell/android/app/build/intermediates/cxx/Debug/3u5j596e/logs/arm64-v8a/build_model.json",
+      "native_cache": "/Users/ox/Documents/project/app-doorbell/android/app/.cxx/Debug/3u5j596e/arm64-v8a/CMakeCache.txt",
+      "abi": "arm64-v8a",
+      "api": 21,
+      "ndk": "/Users/ox/Library/Android/sdk/ndk/27.1.12297006",
+      "pjsip_tier": "api21"
+    },
+    {
+      "model": "/Users/ox/Documents/project/app-doorbell/android/app/build/intermediates/cxx/Debug/3u5j596e/logs/x86_64/build_model.json",
+      "native_cache": "/Users/ox/Documents/project/app-doorbell/android/app/.cxx/Debug/3u5j596e/x86_64/CMakeCache.txt",
+      "abi": "x86_64",
+      "api": 21,
+      "ndk": "/Users/ox/Library/Android/sdk/ndk/27.1.12297006",
+      "pjsip_tier": "api21"
+    },
+    {
+      "model": "/Users/ox/Documents/project/app-doorbell/android/app/build/intermediates/cxx/Debug/7025515s/logs/armeabi-v7a/build_model.json",
+      "native_cache": "/Users/ox/Documents/project/app-doorbell/android/app/.cxx/Debug/7025515s/armeabi-v7a/CMakeCache.txt",
+      "abi": "armeabi-v7a",
+      "api": 19,
+      "ndk": "/Users/ox/Library/Android/sdk/ndk/25.2.9519653",
+      "pjsip_tier": "api19"
+    }
+  ],
+  "host_baseline": "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-host",
+  "host_candidate": "/Users/ox/Documents/project/app-doorbell/build/repair-20260922",
+  "ios5": "/Users/ox/Documents/project/app-doorbell/build/ios-compat/ios5-armv7-pjsip-off"
+}

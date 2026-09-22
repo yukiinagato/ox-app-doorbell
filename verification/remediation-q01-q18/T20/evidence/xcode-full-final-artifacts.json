@@ -1,0 +1,44 @@
+{
+  "test_id": "xcode-full-final",
+  "captured_after": "completed Xcode command, before another build in this platform/architecture/minimum-OS key",
+  "app_version": "0.1.36",
+  "build": "37",
+  "minimum_os": "12.0",
+  "app_binaries": {
+    "build/remediation-t20-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell": {
+      "sha256": "9d1e5e42104fb7d1557c9e18541fe379c60fad80f5ab699bf8f58c36e4918f24",
+      "uuid": "UUID: 84C47D61-5530-30AE-A6BB-B4A68D48994A (arm64) build/remediation-t20-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell"
+    },
+    "build/remediation-t20-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib": {
+      "sha256": "45b9c17db2012d9ccca04f9fedb11ca3bdc1d7462be5078344d48c46ebb24f39",
+      "uuid": "UUID: 35C61B2E-2A50-3D8A-9EE7-0F3A324E9C48 (arm64) build/remediation-t20-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib"
+    }
+  },
+  "native_artifact_manifest": {
+    "architectures": [
+      "arm64"
+    ],
+    "archive_sha256": "063b3fcfa14efc5d61fd63b773570367822a202af34017f8fef90bd4a8ef3b1d",
+    "artifact": "doorbell-core-bundle",
+    "minimum_os": "12.0",
+    "pjsip_manifest_sha256": "",
+    "platform": "iphonesimulator",
+    "schema_version": 1,
+    "signing_identity": "unsigned-static-library",
+    "sip_backend": "stub",
+    "source_dirty": true,
+    "source_revision": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "toolchain": {
+      "cmake": "cmake version 4.4.3",
+      "sdk_version": "26.5",
+      "xcode": "Xcode 26.6 Build version 17F113"
+    }
+  },
+  "native_archive_copy": "build/remediation-t20-20260922/artifact-snapshots/xcode-full-final/libdoorbell_all.a",
+  "native_archive_sha256": "063b3fcfa14efc5d61fd63b773570367822a202af34017f8fef90bd4a8ef3b1d",
+  "native_cmake_flags": [
+    "CMAKE_CXX_FLAGS:STRING=",
+    "CMAKE_C_FLAGS:STRING="
+  ],
+  "source_manifest_native_archives_note": "The native_archives field in source-manifest-final.json is a PRE-RUN observation only, not the archive linked by this command; this per-command capture identifies the completed artifact."
+}

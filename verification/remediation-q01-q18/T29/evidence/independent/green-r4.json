@@ -1,0 +1,30 @@
+{
+  "started_at": "2026-09-22T18:26:02.712254+00:00",
+  "finished_at": "2026-09-22T18:26:07.441899+00:00",
+  "command": [
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-build/doorbell_tests",
+    "--test-case=config import review:*",
+    "--no-colors=true"
+  ],
+  "exit_code": 0,
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/source-green-r4.json",
+  "source_manifest_sha256": "4a4db9bdd50789476fadb64fc25b07438cd0f707bfa8f45d67efc43a55c1e9e0",
+  "binary": "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-build/doorbell_tests",
+  "binary_sha256": "76c8b56489a552b701aed6a9be4793e9bf231347fa0824d85315afb3eaff951f",
+  "frozen_test_source_sha256": "0b3e465f9dc5529febab7c0df91e7dc04cd344eae5adbe13f6d6c891b8f35a9f",
+  "current_test_source_sha256": "0b3e465f9dc5529febab7c0df91e7dc04cd344eae5adbe13f6d6c891b8f35a9f",
+  "platform": "macOS arm64",
+  "sip_backend": "stub",
+  "signing": "Host test binary; no release identity; actual codesign inspection in binary-signature-r4.log",
+  "scope": "Independent two-case production HTTP/Node import regression; no physical devices or real SIP registration",
+  "log_sha256": "44d853e8806e7f6e67e25a3aa1cdf05b2a4808131add79df471464190f5e60b5",
+  "observed_result": {
+    "status": "PASS",
+    "cases": 2,
+    "assertions": 45
+  },
+  "signature_inspection": {
+    "exit_code": 0,
+    "log_sha256": "cca1c8cb9b8c7ade756edae0a58e8e8a5cf28e2b3fe47f87186655e1bcd127e3"
+  }
+}

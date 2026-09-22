@@ -1,0 +1,45 @@
+{
+  "phase": "green",
+  "source_sha256": "ecfa4cac230ac7091c9cf6fb6e467590122bc5f7be9c3f2c827ae4065a669005",
+  "case_sha256": "3bcf026f917d757cb4187392e117eea6fb2d552bee9112b2b29cf9e0032f929d",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T16:19:20.824Z",
+  "results": [
+    {
+      "id": "T25-01",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-02",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-03",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-04",
+      "status": "PASS"
+    },
+    {
+      "id": "synchronous validation retains the editor without a request",
+      "status": "PASS"
+    },
+    {
+      "id": "notice API failure retains its dedicated editor",
+      "status": "PASS"
+    },
+    {
+      "id": "retrying a failed preset does not duplicate the draft",
+      "status": "PASS"
+    },
+    {
+      "id": "unknown secret config outcome does not delete a possibly live credential",
+      "status": "PASS"
+    },
+    {
+      "id": "native timeout and late success settle the save once",
+      "status": "PASS"
+    }
+  ]
+}

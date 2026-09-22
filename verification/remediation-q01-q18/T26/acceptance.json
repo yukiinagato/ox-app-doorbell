@@ -1,0 +1,35 @@
+{
+  "task_id": "T26",
+  "status": "VERIFIED_IN_SCOPE",
+  "scope": "production_test",
+  "source_manifest": "source-green-r4.json",
+  "source_manifest_sha256": "138384b7fc207802285bb19c6e557521ccf2c4d5988725879b7146b1e5115853",
+  "tests": [
+    {
+      "id": "T26-01",
+      "status": "PASS",
+      "evidence": "evidence/config-cas-r4.json"
+    },
+    {
+      "id": "T26-02",
+      "status": "PASS",
+      "evidence": "evidence/config-cas-r4.json"
+    },
+    {
+      "id": "T26-03",
+      "status": "PASS",
+      "evidence": "evidence/config-cas-r4.json"
+    },
+    {
+      "id": "T26-04",
+      "status": "PASS",
+      "evidence": "evidence/config-cas-r4.json"
+    }
+  ],
+  "regression": "evidence/admin-store-regression-r4.json",
+  "review": "evidence/review.json",
+  "limitations": [
+    "Local CAS only; T27/T28/T29/T30 remain separate.",
+    "Host arm64, SIP stub, unsigned; no device or physical-action qualification."
+  ]
+}

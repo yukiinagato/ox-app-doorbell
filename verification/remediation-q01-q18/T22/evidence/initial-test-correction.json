@@ -1,0 +1,5 @@
+{
+  "observed_failure": "First helper run failed ABI size assertion because test counted 11 pointer fields instead of the 10 fields in unchanged DbPlatformV2.",
+  "correction": "Recounted actual production ABI fields; both uint fields and ten IntPtr fields.",
+  "classification": "Test expectation error, not a reproduced product red."
+}

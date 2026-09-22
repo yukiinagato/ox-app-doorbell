@@ -1,0 +1,126 @@
+{
+  "recorded_at": "2026-09-22T17:33:11.463391+00:00",
+  "nodes": {
+    "a": {
+      "state": {
+        "node_id": "8c048aaa693960da664342c84ab7cd0c",
+        "revision": "0e3e065961bc2d69e2ce6a38dfa264ec:4e2880dc3773d26ec0d1b5fbfe0583fb05705575513e460dfa1abf05c2a8d88d",
+        "edit_conflicts": [],
+        "edit_journal": {
+          "records": 5,
+          "local_record_limit": 512,
+          "entity_record_limit": 64,
+          "capacity_available": true,
+          "blocked_entities": []
+        },
+        "settings": {
+          "partition_test": "A intent"
+        }
+      },
+      "resolution": {
+        "schema_version": 1,
+        "change_id": "ee1c6d468e315c9327fdc1771eb518f4",
+        "author_node": "8c048aaa693960da664342c84ab7cd0c",
+        "entity": "settings",
+        "parents": [
+          "55a64b8e5397fd98b96e626ff9ba4c32",
+          "d8bfc1692d7d3c051d67485a86886a46"
+        ],
+        "base_entity_version": "00f26e5a4146fe157de447790178dd0b2fc9b1bde7da2b729a7a00e316ab4d4c",
+        "ops": [
+          {
+            "key": "settings",
+            "op": "set",
+            "base_versions": [],
+            "value": {
+              "partition_test": "A intent"
+            }
+          },
+          {
+            "key": "settings.partition_test",
+            "op": "set",
+            "base_versions": [
+              {
+                "hlc": "01a0ca2d0a36-0000-4bfc9509",
+                "author": "4bfc9509a1dc735db9e0d0fea2228de9",
+                "seq": "7",
+                "key": "settings.partition_test",
+                "deleted": false
+              }
+            ],
+            "value": "A intent"
+          }
+        ],
+        "candidate_exists": true,
+        "candidate": {
+          "partition_test": "A intent"
+        },
+        "requires_reentry": false
+      },
+      "settings_journal_records": 4
+    },
+    "b": {
+      "state": {
+        "node_id": "4bfc9509a1dc735db9e0d0fea2228de9",
+        "revision": "15d390bcdf6fcb0957664fb55c9efd5a:4e2880dc3773d26ec0d1b5fbfe0583fb05705575513e460dfa1abf05c2a8d88d",
+        "edit_conflicts": [],
+        "edit_journal": {
+          "records": 5,
+          "local_record_limit": 512,
+          "entity_record_limit": 64,
+          "capacity_available": true,
+          "blocked_entities": []
+        },
+        "settings": {
+          "partition_test": "A intent"
+        }
+      },
+      "resolution": {
+        "schema_version": 1,
+        "change_id": "ee1c6d468e315c9327fdc1771eb518f4",
+        "author_node": "8c048aaa693960da664342c84ab7cd0c",
+        "entity": "settings",
+        "parents": [
+          "55a64b8e5397fd98b96e626ff9ba4c32",
+          "d8bfc1692d7d3c051d67485a86886a46"
+        ],
+        "base_entity_version": "00f26e5a4146fe157de447790178dd0b2fc9b1bde7da2b729a7a00e316ab4d4c",
+        "ops": [
+          {
+            "key": "settings",
+            "op": "set",
+            "base_versions": [],
+            "value": {
+              "partition_test": "A intent"
+            }
+          },
+          {
+            "key": "settings.partition_test",
+            "op": "set",
+            "base_versions": [
+              {
+                "hlc": "01a0ca2d0a36-0000-4bfc9509",
+                "author": "4bfc9509a1dc735db9e0d0fea2228de9",
+                "seq": "7",
+                "key": "settings.partition_test",
+                "deleted": false
+              }
+            ],
+            "value": "A intent"
+          }
+        ],
+        "candidate_exists": true,
+        "candidate": {
+          "partition_test": "A intent"
+        },
+        "requires_reentry": false
+      },
+      "settings_journal_records": 4
+    }
+  },
+  "initial_heads": [
+    "55a64b8e5397fd98b96e626ff9ba4c32",
+    "d8bfc1692d7d3c051d67485a86886a46"
+  ],
+  "status": "PASS"
+}

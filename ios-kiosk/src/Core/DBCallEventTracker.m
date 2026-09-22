@@ -1,4 +1,6 @@
 #import "DBCallEventTracker.h"
+#import "DBCallTiming.h"
+#import <math.h>
 
 static const NSUInteger kDBCallCacheLimit = 128;
 
@@ -22,6 +24,8 @@ static NSNumber *DBEventNumber(NSDictionary *event, NSString *key) {
   NSMutableArray *_resolvedOrder;
   NSMutableDictionary *_supersededIdleByID;
   NSMutableArray *_supersededIdleOrder;
+  NSMutableDictionary *_pendingChimes;
+  NSMutableArray *_pendingChimeOrder;
 }
 
 @synthesize currentCallID = _currentCallID;
@@ -37,6 +41,8 @@ static NSNumber *DBEventNumber(NSDictionary *event, NSString *key) {
     _resolvedOrder = [[NSMutableArray alloc] init];
     _supersededIdleByID = [[NSMutableDictionary alloc] init];
     _supersededIdleOrder = [[NSMutableArray alloc] init];
+    _pendingChimes = [[NSMutableDictionary alloc] init];
+    _pendingChimeOrder = [[NSMutableArray alloc] init];
   }
   return self;
 }
@@ -158,27 +164,115 @@ static NSNumber *DBEventNumber(NSDictionary *event, NSString *key) {
 }
 
 - (NSDictionary *)acceptChimeEvent:(NSDictionary *)event nowMs:(long long)nowMs {
+  return [self acceptChimeEvent:event nowMs:nowMs coreDeadlineValidated:NO];
+}
+
+- (NSDictionary *)normalizedChimeEvent:(NSDictionary *)event {
+  if (![event isKindOfClass:[NSDictionary class]]) return nil;
+  NSString *callID = DBEventString(event, @"call_id");
+  if (![callID length]) return nil;
+  NSMutableDictionary *normalized = [NSMutableDictionary dictionary];
+  NSDictionary *cached = [_callDataByID objectForKey:callID];
+  for (NSString *key in @[@"door", @"purpose", @"visitor_lang", @"stage_revision", @"expires_at_ms"]) {
+    id value = [cached objectForKey:key];
+    if (value && value != [NSNull null]) [normalized setObject:value forKey:key];
+  }
+  [normalized addEntriesFromDictionary:event];
+  return normalized;
+}
+
+- (NSUInteger)pendingChimeCount { return [_pendingChimes count]; }
+
+- (BOOL)queueChimeEvent:(NSDictionary *)event coreGeneration:(NSUInteger)generation
+                   now:(NSTimeInterval)now {
+  NSDictionary *normalized = [self normalizedChimeEvent:event];
+  NSString *callID = DBEventString(normalized, @"call_id");
+  NSNumber *revision = DBEventNumber(normalized, @"stage_revision");
+  if (!isfinite(now) || !generation || [DBEventNumber(normalized, @"schema_version") integerValue] < 2 ||
+      ![DBEventString(normalized, @"door") length] || !revision || [revision longLongValue] < 0)
+    return NO;
+  NSNumber *accepted = [_acceptedRevisionByID objectForKey:callID];
+  if (accepted && [revision longLongValue] <= [accepted longLongValue]) return NO;
+  NSDictionary *pending = [_pendingChimes objectForKey:callID];
+  if (pending && [[pending objectForKey:@"core"] unsignedIntegerValue] == generation &&
+      [revision longLongValue] <= [DBEventNumber([pending objectForKey:@"event"], @"stage_revision") longLongValue])
+    return NO;
+  [_pendingChimeOrder removeObject:callID];
+  [_pendingChimes setObject:[@{@"event": normalized, @"core": @(generation),
+      @"deadline": @(now + 10), @"timing": [[DBCallTiming alloc] init]} mutableCopy] forKey:callID];
+  [_pendingChimeOrder addObject:callID];
+  [self trimMap:_pendingChimes order:_pendingChimeOrder];
+  return YES;
+}
+
+- (void)requireFreshChimeSnapshot:(DBCallTimingSnapshot *)snapshot {
+  for (NSDictionary *pending in [_pendingChimes allValues])
+    [[pending objectForKey:@"timing"] requireFreshSnapshot:snapshot];
+}
+
+- (NSArray *)takeReadyChimesFromSnapshot:(DBCallTimingSnapshot *)snapshot
+                         coreGeneration:(NSUInteger)generation now:(NSTimeInterval)now {
+  NSMutableArray *ready = [NSMutableArray array];
+  for (NSString *callID in [_pendingChimeOrder copy]) {
+    NSMutableDictionary *pending = [_pendingChimes objectForKey:callID];
+    NSDictionary *event = [pending objectForKey:@"event"];
+    NSString *resolved = DBEventString([_resolvedCallIDs objectForKey:callID], @"type");
+    BOOL remove = !isfinite(now) || now >= [[pending objectForKey:@"deadline"] doubleValue] ||
+        generation != [[pending objectForKey:@"core"] unsignedIntegerValue] ||
+        [resolved isEqualToString:@"call_cancelled"] || [resolved isEqualToString:@"call_ended"];
+    NSString *sample = DBEventString(snapshot.document, @"snapshot_generation");
+    if (!remove && snapshot.coreGeneration == generation && [sample length] &&
+        ![[pending objectForKey:@"sample"] isEqual:sample]) {
+      [pending setObject:sample forKey:@"sample"];
+      DBCallTiming *timing = [pending objectForKey:@"timing"];
+      DBCallTimingReading *reading = [timing observeSnapshot:snapshot callID:callID
+          door:DBEventString(event, @"door") now:now];
+      if (reading.disposition == DBCallTimingActive) {
+        NSNumber *currentRevision = DBEventNumber(reading.call, @"stage_revision");
+        NSNumber *eventRevision = DBEventNumber(event, @"stage_revision");
+        if ([currentRevision longLongValue] > [eventRevision longLongValue] ||
+            ![DBEventString(reading.call, @"state") isEqualToString:@"ringing"]) remove = YES;
+        else if ([currentRevision isEqual:eventRevision] && [reading.remainingSeconds doubleValue] > 0) {
+          NSString *previous = _currentCallID;
+          NSDictionary *accepted = [self acceptChimeEvent:event timingReading:reading];
+          if (accepted) [ready addObject:@{@"event": accepted, @"previous_call_id": previous ?: @""}];
+          remove = YES;
+        }
+      }
+    }
+    if (remove) {
+      [_pendingChimes removeObjectForKey:callID];
+      [_pendingChimeOrder removeObject:callID];
+    }
+  }
+  return ready;
+}
+
+- (NSDictionary *)acceptChimeEvent:(NSDictionary *)event timingReading:(DBCallTimingReading *)reading {
+  if (reading.disposition != DBCallTimingActive || [reading.remainingSeconds doubleValue] <= 0 ||
+      ![DBEventString(reading.call, @"state") isEqualToString:@"ringing"] ||
+      ![DBEventString(event, @"call_id") isEqualToString:DBEventString(reading.call, @"call_id")] ||
+      ![DBEventString(event, @"door") isEqualToString:DBEventString(reading.call, @"door")] ||
+      ![DBEventNumber(event, @"stage_revision") isEqual:DBEventNumber(reading.call, @"stage_revision")])
+    return nil;
+  return [self acceptChimeEvent:event nowMs:0 coreDeadlineValidated:YES];
+}
+
+- (NSDictionary *)acceptChimeEvent:(NSDictionary *)event nowMs:(long long)nowMs
+           coreDeadlineValidated:(BOOL)validated {
   if (![event isKindOfClass:[NSDictionary class]]) return nil;
   NSNumber *schema = DBEventNumber(event, @"schema_version");
   NSString *callID = DBEventString(event, @"call_id");
   if (!schema || [schema integerValue] < 2 || [callID length] == 0)
     return nil;
 
-  NSMutableDictionary *normalized = [NSMutableDictionary dictionary];
-  NSDictionary *cached = [_callDataByID objectForKey:callID];
-  for (NSString *key in @[
-         @"door", @"purpose", @"visitor_lang", @"stage_revision", @"expires_at_ms"
-       ]) {
-    id value = [cached objectForKey:key];
-    if (value != nil && value != [NSNull null]) [normalized setObject:value forKey:key];
-  }
-  [normalized addEntriesFromDictionary:event];
+  NSDictionary *normalized = [self normalizedChimeEvent:event];
 
   NSString *door = DBEventString(normalized, @"door");
   NSNumber *revision = DBEventNumber(normalized, @"stage_revision");
   NSNumber *expires = DBEventNumber(normalized, @"expires_at_ms");
   if ([door length] == 0 || !revision || [revision longLongValue] < 0 || !expires ||
-      [expires longLongValue] <= nowMs)
+      (!validated && [expires longLongValue] <= nowMs))
     return nil;
 
   NSDictionary *resolution = [_resolvedCallIDs objectForKey:callID];

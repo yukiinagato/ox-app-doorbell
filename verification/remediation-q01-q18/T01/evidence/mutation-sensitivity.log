@@ -1,0 +1,11 @@
+original: source_sha256=24ee1a814e42de5b21b50eae28c4deda17ae284e32c6965f34a7d45c6901344a exit=0
+video session tests: ok
+
+mutated: source_sha256=1dfc1b97d278caf8280e3a2e9172be374cf31fb51235e898d77021ba1b63e580 exit=1
+AssertionError [ERR_ASSERTION]: a stream resolving after stop is immediately released
+    at main (/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/mutations/media-mutation-yswc8_qx/webui/tests/video_session.test.js:58:5)
+
+restored: source_sha256=24ee1a814e42de5b21b50eae28c4deda17ae284e32c6965f34a7d45c6901344a exit=0
+video session tests: ok
+
+Production mutation sensitivity passed; scratch removed and user source unchanged.

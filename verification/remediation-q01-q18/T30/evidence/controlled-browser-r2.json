@@ -1,0 +1,67 @@
+{
+  "scope": "actual production DOM with controlled XHR; not Core HTTP end-to-end",
+  "source_sha256": "26f711ae3ecdbdc2025cf3d296958819a420714f5fad3bc412f16a8e5e05ea5c",
+  "cases_sha256": "f98ad5e06d37fa195f128639772cc055b51e66e277fa53077a30888c060d2361",
+  "recorded_at": "2026-09-22T18:54:01.109Z",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "id": "257 legacy entries preview and commit through staged APIs",
+      "status": "PASS"
+    },
+    {
+      "id": "Full replacement explicitly previews deletions before confirmation",
+      "status": "PASS"
+    },
+    {
+      "id": "Missing secret blocks commit and explains separate reprovisioning",
+      "status": "FAIL",
+      "message": "Reprovision guidance missing"
+    },
+    {
+      "id": "Missing asset blocks commit and exposes upload recovery",
+      "status": "PASS"
+    },
+    {
+      "id": "Preflight response must bind the exact staged digest",
+      "status": "PASS"
+    },
+    {
+      "id": "Malformed and unsupported documents cannot create a stage",
+      "status": "PASS"
+    },
+    {
+      "id": "Oversized input is rejected locally without a request",
+      "status": "PASS"
+    },
+    {
+      "id": "A stale revision never automatically restages or commits",
+      "status": "PASS"
+    },
+    {
+      "id": "Lost commit response queries the original operation only",
+      "status": "PASS"
+    },
+    {
+      "id": "Unknown query remains unknown without automatic import",
+      "status": "PASS"
+    },
+    {
+      "id": "Repeated confirmation cannot submit a second operation",
+      "status": "PASS"
+    },
+    {
+      "id": "401 discards sensitive input and keeps only recovery handle",
+      "status": "PASS"
+    },
+    {
+      "id": "Reload recovery offers query without creating a stage",
+      "status": "FAIL",
+      "message": "Recovery offered another import"
+    },
+    {
+      "id": "Export excludes synthetic passwords tokens private keys and credential URLs",
+      "status": "PASS"
+    }
+  ]
+}

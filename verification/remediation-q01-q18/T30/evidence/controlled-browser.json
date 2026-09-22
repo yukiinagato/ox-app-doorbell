@@ -1,0 +1,77 @@
+{
+  "scope": "actual production DOM with controlled XHR; not Core HTTP end-to-end",
+  "source_sha256": "144af4de97ab5950911a0e8397ff0335ef4cbe8a32d0293fe6f596315cc0da97",
+  "cases_sha256": "3ad38d827b4c3426bbbe92a2525e7607d33eef98c898a27d7d8756a0873cb8d7",
+  "recorded_at": "2026-09-22T18:56:08.759Z",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "results": [
+    {
+      "id": "257 legacy entries preview and commit through staged APIs",
+      "status": "PASS"
+    },
+    {
+      "id": "Full replacement explicitly previews deletions before confirmation",
+      "status": "PASS"
+    },
+    {
+      "id": "Missing secret blocks commit and explains separate reprovisioning",
+      "status": "PASS"
+    },
+    {
+      "id": "Missing asset blocks commit and exposes upload recovery",
+      "status": "PASS"
+    },
+    {
+      "id": "Preflight response must bind the exact staged digest",
+      "status": "PASS"
+    },
+    {
+      "id": "Malformed and unsupported documents cannot create a stage",
+      "status": "PASS"
+    },
+    {
+      "id": "Oversized input is rejected locally without a request",
+      "status": "PASS"
+    },
+    {
+      "id": "A stale revision never automatically restages or commits",
+      "status": "PASS"
+    },
+    {
+      "id": "Lost commit response queries the original operation only",
+      "status": "PASS"
+    },
+    {
+      "id": "Unknown query remains unknown without automatic import",
+      "status": "PASS"
+    },
+    {
+      "id": "Repeated confirmation cannot submit a second operation",
+      "status": "PASS"
+    },
+    {
+      "id": "401 discards sensitive input and keeps only recovery handle",
+      "status": "PASS"
+    },
+    {
+      "id": "Reload recovery offers query without creating a stage",
+      "status": "PASS"
+    },
+    {
+      "id": "Export excludes synthetic passwords tokens private keys and credential URLs",
+      "status": "PASS"
+    },
+    {
+      "id": "Redacted export metadata stays visible before any commit",
+      "status": "PASS"
+    },
+    {
+      "id": "Unknown result requires explicit acknowledgement before another preview",
+      "status": "PASS"
+    },
+    {
+      "id": "Authentication expiry clears an unsubmitted sensitive file",
+      "status": "PASS"
+    }
+  ]
+}

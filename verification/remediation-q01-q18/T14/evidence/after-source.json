@@ -1,0 +1,13 @@
+{
+  "recorded_at": "2026-09-22T15:02:28.614501+00:00",
+  "head": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "sources": {
+    "webui/panel/call.html": "5aad5a5d646982411eed7dd9952608f906ac37b721e4693b839b7baa603d6953",
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "core/src/node/node.cpp": "d75fefe49fbb846dc709861fd578979772c9f92533c983db0aa08a742293c0d1",
+    "core/tests/test_panel.cpp": "713eabf6754909b7e9ae8ea67ebaab60acd26cda72f03cb8f707271a8a30c480",
+    "webui/tests/call_page_fixture.js": "49a22bc62318559a4837b6193240730c36b320de2674cfdbba5b49cc8fc93489",
+    "webui/tests/call_ua_generation.test.js": "940bc7d27f0894d8b143abc762dfd83b082b1b07d2a37fdc2c613b60e7b9d031",
+    "i18n/strings.yaml": "038d3c24cc6f7ffd89c8fa64c52635637aa8bf1d2f2965e6b9940403fa65a123"
+  }
+}

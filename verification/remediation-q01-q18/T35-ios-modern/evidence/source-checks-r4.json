@@ -1,0 +1,37 @@
+{
+  "recorded_at": "2026-09-22T17:35:15.729347+00:00",
+  "inputs": [
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "sha256": "215b493176ba05cfba69c7dcca31926835c0a8837974c2960d02ad4a765118fc",
+      "matches_frozen_source": true
+    },
+    {
+      "path": "ios/DoorbellTests/VisitorScreenLayoutTests.swift",
+      "sha256": "76d3bb87b747b4b60b2ae4c933983313d837f9de079938240d10357a7fddef22",
+      "matches_frozen_source": true
+    }
+  ],
+  "commands": [
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "--",
+        "ios/Doorbell/MainViewController.swift",
+        "ios/DoorbellTests/VisitorScreenLayoutTests.swift"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "command": [
+        "python3",
+        "tools/check_english_source.py"
+      ],
+      "exit_code": 0,
+      "output": "check_english_source: no violations\n"
+    }
+  ]
+}

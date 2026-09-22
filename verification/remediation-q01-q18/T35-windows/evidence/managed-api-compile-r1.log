@@ -1,0 +1,5 @@
+Compilation succeeded - 3 warning(s)
+/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/win/DoorbellApp/MainWindow.Shell.cs(522,22): warning CS0108: `DoorbellApp.MainWindow.IsAncestorOf(System.Windows.DependencyObject)' hides inherited member `System.Windows.Media.Visual.IsAncestorOf(System.Windows.DependencyObject)'. Use the new keyword if hiding was intended
+/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references/build/.NETFramework/v4.8/PresentationCore.dll (Location of the symbol related to previous warning)
+/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/win/DoorbellApp/Core/H264LiveStreamer.cs(50,32): warning CS0649: Field `DoorbellApp.Core.H264LiveStreamer._dropped' is never assigned to, and will always have its default value `0'
+/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/win/DoorbellApp/MainWindow.xaml.cs(178,24): warning CS0414: The private field `DoorbellApp.MainWindow._adminUrl' is assigned but its value is never used

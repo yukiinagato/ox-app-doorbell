@@ -1,0 +1,32 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "e14e510f07ed396ee788d73216a23847ee4ec87839808658c1b335f3d6b8d1eb",
+  "task_id": "T29",
+  "test_id": "core-regression-r3",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/source-green-r3.json",
+  "source_manifest_sha256": "54d0dc121c101edd7a8396b2ffcca31a4e6769cb7b1cd876b3748d384d259a7e",
+  "command": [
+    "build/remediation-t29-20260923/green-r3-build/doorbell_tests"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T18:08:46.650742+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/evidence/core-regression-r3.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T18:15:34.227312+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

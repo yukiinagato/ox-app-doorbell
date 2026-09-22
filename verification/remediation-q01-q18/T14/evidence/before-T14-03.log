@@ -1,0 +1,13 @@
+AssertionError [ERR_ASSERTION]: A new generation needs a distinct UA
+
+1 !== 2
+
+    at T14-03 (/Users/ox/Documents/project/app-doorbell/webui/tests/call_ua_generation.test.js:65:12)
+    at async /Users/ox/Documents/project/app-doorbell/webui/tests/call_ua_generation.test.js:90:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 2,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

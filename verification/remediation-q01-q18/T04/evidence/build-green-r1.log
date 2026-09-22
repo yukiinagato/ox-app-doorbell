@@ -1,0 +1,41 @@
+[ 15%] Built target db_third_party
+[ 16%] Embedding webui assets
+embed_webui: 23 assets, 1871366 bytes -> /Users/ox/Documents/project/app-doorbell/build/remediation-t04-20260922/normal/gen/webui_assets.cpp
+[ 19%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/ha_bridge.cpp.o
+[ 20%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/telegram.cpp.o
+[ 21%] Building CXX object CMakeFiles/doorbell_core.dir/src/capi/doorbell_capi.cpp.o
+[ 21%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/mqtt_client.cpp.o
+[ 23%] Building CXX object CMakeFiles/doorbell_core.dir/src/httpd/httpd.cpp.o
+[ 24%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/inmem_net.cpp.o
+[ 25%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/mesh.cpp.o
+[ 26%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/secure_channel.cpp.o
+[ 28%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/tcp_transport.cpp.o
+[ 29%] Building CXX object CMakeFiles/doorbell_core.dir/src/mesh/udp_beacon.cpp.o
+[ 30%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+[ 32%] Building CXX object CMakeFiles/doorbell_core.dir/src/sipctl/sipctl_stub.cpp.o
+[ 33%] Building CXX object CMakeFiles/doorbell_core.dir/src/util/runloop.cpp.o
+[ 34%] Building CXX object CMakeFiles/doorbell_core.dir/gen/webui_assets.cpp.o
+[ 35%] Linking CXX static library libdoorbell_core.a
+[ 60%] Built target doorbell_core
+[ 62%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_assets.cpp.o
+[ 62%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_admin_api.cpp.o
+[ 65%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_call_log.cpp.o
+[ 65%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_contracts_v2.cpp.o
+[ 66%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_display.cpp.o
+[ 67%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_emergency.cpp.o
+[ 69%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_fmp4.cpp.o
+[ 70%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_httpd.cpp.o
+[ 71%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_media.cpp.o
+[ 73%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_mesh.cpp.o
+[ 74%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_mqtt.cpp.o
+[ 75%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_node.cpp.o
+[ 76%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_panel.cpp.o
+[ 78%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_secure_channel.cpp.o
+[ 79%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_settings.cpp.o
+[ 80%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_sip.cpp.o
+[ 82%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_telegram.cpp.o
+[ 83%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_time.cpp.o
+[ 84%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_util.cpp.o
+[ 85%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_visitor.cpp.o
+[ 87%] Linking CXX executable doorbell_tests
+[100%] Built target doorbell_tests

@@ -1,0 +1,29 @@
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:199:13: warning: unused variable 'call' [-Wunused-variable]
+  199 |   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
+      |             ^~~~
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:199:24: warning: unused variable 'cancel' [-Wunused-variable]
+  199 |   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
+      |                        ^~~~~~
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:199:43: warning: unused variable 'anchor' [-Wunused-variable]
+  199 |   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
+      |                                           ^~~~~~
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:199:72: warning: unused variable 'callID' [-Wunused-variable]
+  199 |   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
+      |                                                                        ^~~~~~
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:251:13: warning: unused variable 'call' [-Wunused-variable]
+  251 |   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
+      |             ^~~~
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:251:24: warning: unused variable 'cancel' [-Wunused-variable]
+  251 |   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
+      |                        ^~~~~~
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:251:43: warning: unused variable 'anchor' [-Wunused-variable]
+  251 |   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
+      |                                           ^~~~~~
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:251:72: warning: unused variable 'callID' [-Wunused-variable]
+  251 |   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
+      |                                                                        ^~~~~~
+/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/main.m:273:72: warning: unused variable 'callID' [-Wunused-variable]
+  273 |   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
+      |                                                                        ^~~~~~
+9 warnings generated.
+/Users/ox/Documents/project/app-doorbell/build/remediation-t35-compat/uikit-runner-r8/DoorbellT35UIKit.app

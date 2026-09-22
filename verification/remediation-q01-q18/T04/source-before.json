@@ -1,0 +1,13 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "faf75deb307309fd7ec39381650870381a028eeb2f2c139d7fc68421aef3a298",
+  "inputs": {
+    "core/src/httpd/httpd.cpp": "785c2ab865e31d4e80f17ea7c26addb5d78ec5c6535edc9a885592ff11530798",
+    "core/src/httpd/httpd.h": "773e3a6a4d33913f04354e1c285d108f53f3751cb7f566ca91a32539175cd778",
+    "core/src/util/runloop.cpp": "26249ce93897e016d6394741f298b552f499b38d1834cbe7e4ebf1536a36ab35",
+    "core/src/util/runloop.h": "05b2cd25e6bea656721518b4c5c433a7d0abe24c20508cb541e1bb8251c16de6",
+    "core/tests/test_httpd.cpp": "9177626d044ea33ba463b4cbc93fb5d7faa3e175c76b5074bec6b68b73b895b2"
+  },
+  "scope_note": "Original production HTTP/Runloop sources plus the newly added real scheduling counterexample; unrelated workspace edits are preserved."
+}

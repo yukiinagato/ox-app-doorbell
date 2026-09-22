@@ -1,0 +1,6 @@
+Host production C# timing and ABI declarations: PASS; runtime pointer width=8
+09-23 00:06:11 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-23 00:06:11 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:06:11 I [node] node ce1d0c9f (doorbell) started
+Actual macOS native Core through unchanged production PInvoke: PASS; not Windows qualification
+Assertions: 32 PASS

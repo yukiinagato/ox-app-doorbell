@@ -1,0 +1,26 @@
+{
+  "checks": [
+    {
+      "command": [
+        "python3",
+        "tools/check_english_source.py"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "observed_result": "check_english_source: no violations",
+      "log": "evidence/english-check.log",
+      "log_sha256": "e31b139fc62aa187694c8103481b6e9e3fd40190149c2243857640caccdac6a4"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/gen_i18n.py",
+        "--check"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "observed_result": "gen_i18n: 15 generated files are current",
+      "log": "evidence/i18n-check.log",
+      "log_sha256": "260f741e918f6a280e7b455528427e841f7352cc53f0c199e5703ee0aa0c69bf"
+    }
+  ],
+  "scope": "Read-only checks on shared current tree; platform build proof uses separate frozen source."
+}

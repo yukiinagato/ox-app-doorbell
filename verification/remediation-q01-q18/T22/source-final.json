@@ -1,0 +1,14 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "89912ecd82ee0d131eba37d211ce5255a5b2879626695868253469f6f015fb75",
+  "files": {
+    "win/DoorbellApp/Core/CallTiming.cs": "101bf724d54891961dec99a5417cd49a3aef21d988ad99f2423680b11307b47a",
+    "win/DoorbellApp/Core/CoreClient.cs": "4567baac7e693c0ea93eb8bacfbef22ae88f225a0e46632195745a3c256b274e",
+    "win/DoorbellApp/Core/CoreInterop.cs": "26131886c96172574278a335c11897d89f65180e0cb57d274f7c42318baf62ff",
+    "win/DoorbellApp/MainWindow.xaml.cs": "38d6715fe92ee06ea958ecad8eefae25638c7a7ca5e9bbbdbd3af1dbdd972a6f",
+    "win/DoorbellApp/DoorbellApp.csproj": "e064fef07f36ccac100663a2da0904db7670b372a4fa295c91468f29ad6c2460",
+    "win/tests/CallTimingTests.cs": "021f5c066517fa840402a948cf0525493eb322dd0c5557b6dd1066f992e9cae4",
+    "win/tests/test_windows_contracts.py": "f3029e5ef086a19eefe4e3e5e40a653b3f641d4642ce4c14c72e17eaa0b845d6"
+  }
+}

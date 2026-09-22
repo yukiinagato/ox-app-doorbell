@@ -1,0 +1,25 @@
+{
+  "status": "PASS_IN_REVIEWED_SOURCE_AND_GUARD_SCOPE",
+  "reviewer": "t02_translation",
+  "reviewed_at": "2026-09-22T18:11:44.427112+00:00",
+  "source_manifest": "verification/remediation-q01-q18/T35-windows/source-candidate-r3.json",
+  "source_manifest_sha256": "3d8b165108885f55e030f8f9625de7007b9274a9f09c7ae425417fc27e9165df",
+  "source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r3",
+  "verified_input_count": 98,
+  "findings": [
+    {
+      "id": "R1",
+      "priority": 2,
+      "status": "FIXED",
+      "summary": "Abandoned physical input retained a stale call/phase capture and rejected the next current accessibility action.",
+      "red": "evidence/independent-cancelled-input-red.json",
+      "green": "evidence/independent-guard-green-r3.json"
+    }
+  ],
+  "review_document_sha256": "c47ea08f881b15fcc27b97c90d2b632f90ac72d41b88d17dd055771f6514cfa6",
+  "limits": [
+    "No actual WPF application or Windows UI runtime executed.",
+    "No physical input, UIA/assistive runtime, target layout, Core/SIP, door or SOS action tested.",
+    "All four target UI qualification gates remain NOT_RUN."
+  ]
+}

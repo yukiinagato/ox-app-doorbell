@@ -1,0 +1,17 @@
+{
+  "task_id": "T21",
+  "status": "PASS",
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T15:24:23.987210+00:00",
+  "source_manifest": "source-final.json",
+  "source_manifest_sha256": "e210967fe0c6edc2abe792c5368fd8dd74ff62507901919e8239b1b7d0c68e98",
+  "checks": [
+    "Previously identified foreground same-snapshot issue remains covered by final production barrier and actual MainViewController tests.",
+    "Reviewed r5 observeRecovery filtering current door/origin/dialog owner before updating single-call timing anchors; unrelated same-snapshot calls cannot renew the recovery window.",
+    "R5 targeted actual XCTest 28/28 passed and both iOS9 arm64 and tvOS builds reran on final source. Full 157/157 belongs to previous r4, not represented as a full r5 run."
+  ],
+  "limitations": [
+    "T23 is separately changing shared compat host contract tests after this frozen Swift source.",
+    "No hardware qualification; final integrated native builds remain required."
+  ]
+}

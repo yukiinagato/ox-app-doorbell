@@ -1,0 +1,55 @@
+{
+  "scope": "Independent read-only review of the parent-authored T28 Web conflict UI; corrective edits R5/R6/R7 authored by this reviewer and require parent review. No Core implementation review claim.",
+  "reviewer": "/root/t01_evidence_review",
+  "recorded_at": "2026-09-22T17:30:46.853826+00:00",
+  "status": "PASS_IN_WEB_REVIEW_SCOPE",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28-Web/source-web-final.json",
+  "source_manifest_sha256": "a4b955df6813bb405b8612ba3cd9ff0b6b04a582b6d19513f9ed78a145cad124",
+  "checks": [
+    "Explicit current/head/custom whole-entity resolution carries snapshot revision and all current heads.",
+    "409 does not auto-rewrite; refresh retains manual JSON and updates resolution identity.",
+    "Sensitive candidates cannot be blindly restored; 401 clears arbitrary custom JSON and rejects old completion.",
+    "Candidate text is escaped; history capacity does not invent an unresolved candidate.",
+    "Actual two-Node production HTTP chain verified for candidate visibility, preserved editor draft, explicit selection, and one shared resolution referencing both heads."
+  ],
+  "findings": [
+    {
+      "id": "R5",
+      "issue": "Resolution selector lacked an accessible name.",
+      "fix": "Existing localized choice label used as aria-label.",
+      "red": "controlled-browser-red.json",
+      "green": "controlled-browser-green.json",
+      "independent_correction_review": "PASS_IN_WEB_CORRECTION_SOURCE_SCOPE by /root; see the separate signed review."
+    },
+    {
+      "id": "R6",
+      "issue": "Open page status polling did not discover new remote conflicts.",
+      "fix": "Existing single-flight poll includes authenticated bounded refreshConfig without rebuilding editors.",
+      "red": "controlled-browser-poll-red.json",
+      "green": "controlled-browser-poll-green.json",
+      "independent_correction_review": "PASS_IN_WEB_CORRECTION_SOURCE_SCOPE by /root; see the separate signed review."
+    },
+    {
+      "id": "R7",
+      "issue": "Repeated banner innerHTML replacement removed keyboard focus.",
+      "fix": "Stable rendered markup retains DOM; handlers read current conflict by entity; changed banner restores Review focus for the same entity.",
+      "red": "controlled-browser-focus-red.json",
+      "green": "controlled-browser-focus-green.json",
+      "independent_correction_review": "PASS_IN_WEB_CORRECTION_SOURCE_SCOPE by /root; see the separate signed review."
+    }
+  ],
+  "evidence": {
+    "evidence/controlled-browser-focus-red.json": "39e5553603be1ec321b9c6dacd3d90a2e2794a6e25774e664d2d96d0b0e68a59",
+    "evidence/controlled-browser-focus-green.json": "05b18c5b80be778f73a93794362bb6f562b8a7d369a2879d9703b152f9381da0",
+    "evidence/real-core-browser.json": "ddbd5e16a49c62a6be5311512786de4e8a038978eff40c3d8f1f8fd4fd44eec4",
+    "evidence/web-focus-targeted-regression.json": "eba3d78dedd47b92cc602e4bf6d6d7a731e906daac0c21bdd54d60024853cbbd",
+    "evidence/real-core-browser-r6.json": "a561bf6e489b845db400c7b8feb5dff276eb50c954f3e678917209faec7b6fbb"
+  },
+  "limitations": [
+    "Controlled 15-case browser suite is not Core end-to-end.",
+    "Final r6 Core HTTP/browser chain binds the same final Web source, in addition to preserved r5 evidence.",
+    "No physical device, Safari, SIP call, door lock, or SOS qualification."
+  ],
+  "correction_review": "evidence/root-corrections-review.json",
+  "correction_review_sha256": "05ba4000b88ca96670b21683e38d27e85d0f7581f52bea6d5895fd8d544dde53"
+}

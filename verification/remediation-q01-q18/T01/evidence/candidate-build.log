@@ -1,0 +1,6 @@
+[ 14%] Built target db_third_party
+[ 55%] Built target doorbell_core
+[ 61%] Built target doorbell
+[ 63%] Built target doorbell_video_decode_probe
+[ 63%] Built target doorbell_host
+[100%] Built target doorbell_tests

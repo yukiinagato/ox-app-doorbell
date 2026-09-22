@@ -1,0 +1,15 @@
+--- core/src/node/operation_service.inc (T07 frozen)
++++ core/src/node/operation_service.inc (current)
+@@ -345,7 +345,11 @@
+     }
+     std::string panel_session;
+     if (!native) {
+-      const bool administrator = checkSession(req);
++      const auto csrf_header = req.headers.find("x-doorbell-csrf");
++      const auto supplied_panel = req.cookie("dbpanel");
++      const bool panel_intent = csrf_header != req.headers.end() && !csrf_header->second.empty() &&
++          panelSessionRemaining(supplied_panel, csrf_header->second) > 0;
++      const bool administrator = !panel_intent && checkSession(req);
+       if (!administrator) {
+         panel_session = req.cookie("dbpanel");
+         if (panelSessionRemaining(panel_session) <= 0) {

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.ClusterDateTextTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-22T14:35:48" hostname="MacBookPro.local" time="0.099">
+  <properties/>
+  <testcase name="deviceZoneCannotChangeTheCoreCalendarDate" classname="jp.ox.doorbell.ClusterDateTextTest" time="0.066"/>
+  <testcase name="unavailableCoreCalendarIsPreservedWithoutAnOsClockFallback" classname="jp.ox.doorbell.ClusterDateTextTest" time="0.011"/>
+  <testcase name="languageChangesUpdateTheSameCoreDateImmediately" classname="jp.ox.doorbell.ClusterDateTextTest" time="0.014"/>
+  <testcase name="midnightAndCalendarChangesHaveNoCachedWeekday" classname="jp.ox.doorbell.ClusterDateTextTest" time="0.008"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

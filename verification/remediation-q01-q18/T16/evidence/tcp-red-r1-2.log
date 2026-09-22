@@ -1,0 +1,32 @@
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/test_media_tcp_bounds.cpp:35:
+TEST CASE:  media TCP bounds: a non-reading peer cannot retain an unbounded outbox
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  burst to a peer which never reads
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/test_media_tcp_bounds.cpp:82: ERROR: CHECK( waitTcpClose(closed, 2000) ) is NOT correct!
+  values: CHECK( false )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/test_media_tcp_bounds.cpp:84: ERROR: CHECK( closed.load() == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/test_media_tcp_bounds.cpp:35:
+TEST CASE:  media TCP bounds: a non-reading peer cannot retain an unbounded outbox
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  a single frame above the wire limit
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/test_media_tcp_bounds.cpp:82: ERROR: CHECK( waitTcpClose(closed, 2000) ) is NOT correct!
+  values: CHECK( false )
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/test_media_tcp_bounds.cpp:84: ERROR: CHECK( closed.load() == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 0 skipped
+[doctest] assertions: 32 | 28 passed | 4 failed |
+[doctest] Status: FAILURE!

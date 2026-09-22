@@ -1,0 +1,5 @@
+{
+  "explicit_button_label" : "Isolated probe",
+  "voice_over_running" : false,
+  "explicit_button_accessible_getter" : true
+}

@@ -1,0 +1,9 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "captured_at": "2026-09-22T14:15:00.122860+00:00",
+  "files": {
+    "webui/panel/call.html": "93c7c88a2cd2a99b695c0512d83e5f28c777e2a5a1949d98aa25b4e526184177",
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/tests/call_state_controller.test.js": "22a85c1f8b074b61034608d8869b696285c336766c17a4f5929624f326269901"
+  }
+}

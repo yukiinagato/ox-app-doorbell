@@ -1,0 +1,42 @@
+{
+  "task_id": "T10",
+  "status": "VERIFIED_IN_SCOPE",
+  "scope": "production_test",
+  "source_manifest": "after-source.json",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "task_diff_sha256": "de3bb9ec00afc65dbdf176b308b04633a40e2e9fd8dd76c43f4e0ac96f00a91b",
+  "tests": [
+    {
+      "id": "T10-01",
+      "status": "PASS",
+      "red_log": "before-T10-01.log",
+      "green_log": "call_poll_lanes.log",
+      "green_metadata": "call_poll_lanes.json"
+    },
+    {
+      "id": "T10-02",
+      "status": "PASS",
+      "red_log": "before-T10-02.log",
+      "green_log": "call_poll_lanes.log",
+      "green_metadata": "call_poll_lanes.json"
+    },
+    {
+      "id": "T10-03",
+      "status": "PASS",
+      "red_log": "before-T10-03.log",
+      "green_log": "call_poll_lanes.log",
+      "green_metadata": "call_poll_lanes.json"
+    },
+    {
+      "id": "T10-04",
+      "status": "PASS",
+      "red_log": "before-T10-04.log",
+      "green_log": "call_poll_lanes.log",
+      "green_metadata": "call_poll_lanes.json"
+    }
+  ],
+  "regressions": "web-suite.json",
+  "validation_limit": "Actual production HTML/JS under Node VM with controlled browser boundaries; no real browser, SIP session, physical SOS, or device qualification in this subtask. Parent owns embedded build and app version integration.",
+  "independent_review": "review.json"
+}

@@ -1,0 +1,12 @@
+{
+  "recorded_at": "2026-09-22T18:17:09.195947+00:00",
+  "status": "PREPARATION_ONLY",
+  "source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t30-20260923/baseline-source",
+  "files": {
+    "webui/admin/app.js": "4fe4fc42bcc0508c29a7fd22f3d31feb58f8d1b9c2aa27bcd889da8da7a448fa",
+    "webui/admin/index.html": "5b409284dd42cdea4e66c480777474cd49ba269bf82ae2e6b20a5d023bb2863d",
+    "i18n/strings.yaml": "0dc9c7eeee15550e11b9ede243b2e5fd53736bf6c1027d751e39bc5cb3bf6aac",
+    "docs/en/config-import.md": "55830ebbf69feb0c0d35ae7fbae2a4e20cba282c7ed87062b0c593f88210e34b"
+  },
+  "qualification": "Read-only source baseline. No browser or live Core claim. T29 remains an implementation prerequisite."
+}

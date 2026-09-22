@@ -1,0 +1,10 @@
+{
+  "scope": "Parent-owned T26 capability projection added after the T06 test-source freeze. No T06 implementation difference.",
+  "at": "2026-09-22T15:59:09.926277+00:00",
+  "path": "core/src/node/node.cpp",
+  "tested_snapshot_sha256": "7f513a5dafb8b624d7640ba052950aec61f1475b4c3903f3a39a1e89a7496db1",
+  "current_sha256": "218f40354113274ee87fa8e7334f7c118031f6589d29dd0d4ca57709b6276907",
+  "diff_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/evidence/post-freeze-t26-delta.patch",
+  "diff_sha256": "e5c5b4f500228be1be7496a001e5a88a96b0e7c89d0d4740d8f23f2a5594e9af",
+  "verification": "Exact full-file equality after one config_cas_v1 feature-list insertion; all other T06 owned inputs match final manifest."
+}

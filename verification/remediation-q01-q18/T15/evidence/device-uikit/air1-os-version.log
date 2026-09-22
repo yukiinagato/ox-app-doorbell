@@ -1,0 +1,19 @@
+iPad4,2
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>BuildID</key>
+	<string>84B4FAB8-F251-11F0-A669-706956D71A2C</string>
+	<key>ProductBuildVersion</key>
+	<string>16H88</string>
+	<key>ProductCopyright</key>
+	<string>1983-2026 Apple Inc.</string>
+	<key>ProductName</key>
+	<string>iPhone OS</string>
+	<key>ProductVersion</key>
+	<string>12.5.8</string>
+	<key>SystemImageID</key>
+	<string>79F33871-C1F3-49D4-B666-1B3EEE134822</string>
+</dict>
+</plist>

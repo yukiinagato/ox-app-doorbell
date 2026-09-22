@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.VisitorActionLatchTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.009">
+  <properties/>
+  <testcase name="aHeldCancelNeverBecomesAnEndAction" classname="jp.ox.doorbell.VisitorActionLatchTest" time="0.009"/>
+  <testcase name="accessibilityActivationUsesTheCurrentlyDisplayedAction" classname="jp.ox.doorbell.VisitorActionLatchTest" time="0.0"/>
+  <testcase name="aHeldActionCannotAddressAReplacementCall" classname="jp.ox.doorbell.VisitorActionLatchTest" time="0.0"/>
+  <testcase name="confirmedZeroCountdownFiresOnceJustLikeACompletedSlide" classname="jp.ox.doorbell.VisitorActionLatchTest" time="0.0"/>
+  <testcase name="confirmedSosUsesTheSlideCountdownAndCanBeCancelled" classname="jp.ox.doorbell.VisitorActionLatchTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

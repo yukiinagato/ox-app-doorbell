@@ -1,0 +1,40 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "49d5d09c3df2dd1033fbac26a7abe811f477cfff2f36eed234562ad9b006c9ab",
+  "production_source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/source-green-r3.json",
+  "production_source_manifest_sha256": "54d0dc121c101edd7a8396b2ffcca31a4e6769cb7b1cd876b3748d384d259a7e",
+  "files": {
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp": "49d5d09c3df2dd1033fbac26a7abe811f477cfff2f36eed234562ad9b006c9ab",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-build/libdoorbell_core.a": "994ab2ca44b51310cc1528a1a992857fbb0ec8209d968ad23b6bb21fa2d125f3",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-build/libdb_third_party.a": "5a943057a8c2e4c98352eee4c9df1ea7094354efe61d6a9ac63ff28eb4ed16ec",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-build/CMakeFiles/doorbell_tests.dir/tests/test_main.cpp.o": "6452c35057776bd4417e7eed8bca64f4a32e2f68176cc360b7f7165616546738"
+  },
+  "compile_command": [
+    "/usr/bin/c++",
+    "-g",
+    "-std=gnu++17",
+    "-arch",
+    "arm64",
+    "-DDB_HTTPD_TEST_HOOKS=1",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/third_party/doctest",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/include",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/src",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/third_party/sqlite",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/third_party/civetweb",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/third_party/cjson",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/third_party/monocypher",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/third_party/qrcodegen",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/third_party/quirc",
+    "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-source/core/third_party/stb",
+    "build/remediation-t29-20260923/receipt-red-r1/test_config_import.cpp",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-build/CMakeFiles/doorbell_tests.dir/tests/test_main.cpp.o",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-build/libdoorbell_core.a",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r3-build/libdb_third_party.a",
+    "-lpthread",
+    "-o",
+    "build/remediation-t29-20260923/receipt-red-r1/doorbell_import_receipt_tests"
+  ],
+  "compile_exit_code": 1,
+  "recorded_at": "2026-09-22T18:12:37.874315+00:00"
+}

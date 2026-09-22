@@ -1,0 +1,362 @@
+{
+  "scope": "modern Swift CoreBridge including shared tvOS consumers",
+  "handle_storage": "CoreBridge.core is private; copied only inside startup, leased closure or teardown",
+  "leased_methods": [
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 325,
+      "declaration": "func press(door: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 329,
+      "declaration": "func pressPurpose(door: String, purpose: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 334,
+      "declaration": "func pressV2(door: String, purpose: String = \"\") -> String? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 343,
+      "declaration": "func selectPurpose(door: String, callId: String, purpose: String) -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 350,
+      "declaration": "func cancelCall(door: String, callId: String, reason: String = \"visitor\") -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 357,
+      "declaration": "func reportCallRecovery(callId: String, restored: Bool) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 365,
+      "declaration": "func reportCallAnswered(door: String, callId: String, stageRevision: Int) -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 373,
+      "declaration": "func reportCallEnded(door: String, callId: String, stageRevision: Int,",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 381,
+      "declaration": "func setVisitorLang(door: String, lang: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 385,
+      "declaration": "func quickReply(replyId: String, door: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 389,
+      "declaration": "func quickReplyV2(replyId: String, door: String, callId: String,",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 398,
+      "declaration": "func emergency(_ active: Bool) -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 406,
+      "declaration": "func sipCall(target: String, mode: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 410,
+      "declaration": "func sipHangup() {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 415,
+      "declaration": "func sipSendDtmf(_ digits: String) -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 427,
+      "declaration": "func status() -> [String: Any]? { return withCore { takeJson(db_core_status_json($0)) } ?? nil }",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 429,
+      "declaration": "func debugInfo() -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 433,
+      "declaration": "func config() -> [String: Any]? { return withCore { takeJson(db_core_config_json($0)) } ?? nil }",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 435,
+      "declaration": "func capabilities() -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 439,
+      "declaration": "func pairing() -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 447,
+      "declaration": "func parsePairUri(_ uri: String) -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 454,
+      "declaration": "func joinCluster(host: String, pin: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 462,
+      "declaration": "func createCluster() -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 468,
+      "declaration": "func pairingMode(seconds: Int32) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 474,
+      "declaration": "func startPairing(seconds: Int32 = 600) -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 494,
+      "declaration": "func mintJoinToken(seconds: Int32 = 600) -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 501,
+      "declaration": "func removeDevice(_ id: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 505,
+      "declaration": "func inviteDevice(_ id: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 510,
+      "declaration": "func inviteDirect(addr: String, id: String, pk: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 518,
+      "declaration": "func denyDevice(_ id: String) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 525,
+      "declaration": "func retryPairingPersistence() -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 532,
+      "declaration": "func unpair() {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 546,
+      "declaration": "func setCapabilities(_ value: [String: Any]) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 552,
+      "declaration": "func setRuntimeStatus(_ value: [String: Any]) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 558,
+      "declaration": "func setUiManifest(_ value: [String: Any]) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 564,
+      "declaration": "func onCameraFrame(_ data: UnsafePointer<UInt8>, format: Int32, width: Int32, height: Int32,",
+      "lease": "expected_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 572,
+      "declaration": "func setVideoSensorRotation(_ degrees: Int32) {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 576,
+      "declaration": "func onEncodedFrame(_ annexb: Data, isKeyframe: Bool, tsMs: Int64, coreGeneration: UInt64) {",
+      "lease": "expected_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 586,
+      "declaration": "func videoEncoderWanted() -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 592,
+      "declaration": "func takeVideoKeyframeRequest() -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 619,
+      "declaration": "func localTime(wallMs: Int64 = 0) -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 627,
+      "declaration": "func timeSyncNow() -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 634,
+      "declaration": "func audioVolumes(deviceId: String = \"\") -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 642,
+      "declaration": "func setDoorNotice(door: String, text: String, expiresMs: Int64) -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 651,
+      "declaration": "func openDoor(_ door: String) -> Int32 {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 659,
+      "declaration": "func clearDoorNotice(door: String) -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 669,
+      "declaration": "func callLog(sinceMs: Int64 = 0, limit: Int = 50) -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 684,
+      "declaration": "func callLogPage(sinceMs: Int64, beforeMs: Int64, limit: Int) -> [String: Any]? {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 692,
+      "declaration": "func markCallLogSeen(upToHlc: String = \"\") -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 708,
+      "declaration": "func setMicMuted(_ muted: Bool) -> Bool {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 761,
+      "declaration": "func applyConfigBatch(_ opsJson: String,",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 829,
+      "declaration": "func verifyAdminPassword(_ password: String) -> AdminPasswordResult {",
+      "lease": "running_generation"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "line": 869,
+      "declaration": "func setAdminPassword(current: String, new: String) -> AdminPasswordChange {",
+      "lease": "running_generation"
+    }
+  ],
+  "lifecycle_owners": [
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "symbol": "start"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "symbol": "finishStarting"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "symbol": "stop"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "symbol": "finishStop"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "symbol": "deinit"
+    },
+    {
+      "source": "ios/Doorbell/CoreBridge.swift",
+      "symbol": "withCore"
+    }
+  ],
+  "generation_consumers": [
+    "CoreBridge UI/TTS callback registration",
+    "DoorbellClockSource.refresh",
+    "MainViewController.pollPeerFrame",
+    "CameraFeeder AVCaptureOutput-bound Core generation",
+    "VideoEncoderVT output closure carries input Core generation"
+  ],
+  "known_unqualified": [
+    "Physical camera and VT execution on a device",
+    "Real PJSIP runtime",
+    "iOS 9/12 device and tvOS device execution"
+  ]
+}

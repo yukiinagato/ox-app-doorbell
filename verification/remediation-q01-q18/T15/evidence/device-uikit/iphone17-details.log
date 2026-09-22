@@ -1,0 +1,90 @@
+Gathering device information…
+Current device information:
+• identifier: 54DB00FE-62A0-5739-9679-B7C513DFCEC4
+• tags: 
+▿ hardwareProperties:
+    • cpuType: arm64e (type: 16777228, subtype: 2)
+    • deviceType: iPhone
+    • ecid: 93707840307228
+    • hardwareModel: V57AP
+    • internalStorageCapacity: 256000000000
+    • isProductionFused: true
+    • marketingName: iPhone 17
+    • platform: iOS
+    • productType: iPhone18,3
+    • reality: physical
+    • serialNumber: K4QKXLQ2V5
+    ▿ supportedCPUTypes:
+        • arm64e (type: 16777228, subtype: 2)
+        • arm64 (type: 16777228, subtype: 0)
+    • supportedDeviceFamilies: [1]
+    • thinningProductType: iPhone18,3
+    • udid: 00008150-0000553A0E88C01C
+▿ deviceProperties:
+    • bootState: booted
+    • ddiServicesAvailable: true
+    • developerModeStatus: enabled
+    • hasInternalOSBuild: false
+    • name: nagato
+    • osBuildUpdate: 24A437
+    • osVersionNumber: 27.0
+    • rootFileSystemIsWritable: false
+    • screenViewingURL: devices://device/open?id=54DB00FE-62A0-5739-9679-B7C513DFCEC4
+    • bootedFromSnapshot: true
+    • bootedSnapshotName: com.apple.os.update-2F84F15640311FF6B6E167430924783D704EA550D02003D07870051DE17AFF1F
+    • supportsCheckedAllocations: true
+▿ connectionProperties:
+    • authenticationType: manualPairing
+    • isMobileDeviceOnly: false
+    • lastConnectionDate: 2026-09-22 18:13:00 +0000
+    ▿ localHostnames:
+        • nagato.coredevice.local
+        • 54DB00FE-62A0-5739-9679-B7C513DFCEC4.coredevice.local
+        • 00008150-0000553A0E88C01C.coredevice.local
+    ▿ potentialHostnames:
+        • nagato.coredevice.local
+        • 54DB00FE-62A0-5739-9679-B7C513DFCEC4.coredevice.local
+        • 00008150-0000553A0E88C01C.coredevice.local
+    • pairingState: paired
+    • transportType: localNetwork
+    • tunnelTransportProtocol: tcp
+    • tunnelIPAddress: fdf1:b8d4:d785::1
+    • tunnelState: connected
+▿ capabilities:
+    • Acquire Usage Assertion (com.apple.coredevice.feature.acquireusageassertion)
+    • Application Control (com.apple.coredevice.feature.applicationcontrol)
+    • Capture Sysdiagnose (com.apple.coredevice.feature.capturesysdiagnose)
+    • Create Service Connection (com.apple.dt.serviceconnection.create)
+    • Create Service Socket (com.apple.dt.servicesocket.create)
+    • Disable Developer Disk Image Services (com.apple.coredevice.feature.disableddiservices)
+    • Disconnect from Device (com.apple.coredevice.feature.disconnectdevice)
+    • Fetch Application Icons (com.apple.coredevice.feature.fetchappicons)
+    • Fetch AuthListing Identifiers (com.apple.coredevice.feature.getauthlistingidentifiers)
+    • Fetch Developer Disk Image Services Metadata (com.apple.coredevice.feature.fetchddimetadata)
+    • Fetch Extended Device Info (com.apple.coredevice.feature.getdeviceinfo)
+    • Get Display Information (com.apple.coredevice.feature.getdisplayinfo)
+    • Get Lock State (com.apple.coredevice.feature.getlockstate)
+    • Install Application (com.apple.coredevice.feature.installapp)
+    • Install Root (com.apple.coredevice.feature.installroot)
+    • Launch Application (com.apple.coredevice.feature.launchapplication)
+    • List Files (com.apple.coredevice.feature.listFiles)
+    • List Roots (com.apple.coredevice.feature.listroots)
+    • Modify Tags (com.apple.coredevice.feature.tags)
+    • Modify credentials for default users for a device (com.apple.coredevice.feature.default.user.credentials)
+    • Monitor Process for Termination (com.apple.coredevice.feature.monitorprocesstermination)
+    • Post Darwin Notification (com.apple.dt.customer.postdarwinnotification)
+    • Process Control (com.apple.coredevice.feature.processcontrol)
+    • Query MobileGestalt (com.apple.coredevice.feature.querymobilegestalt)
+    • Reboot Device (com.apple.coredevice.feature.rebootdevice)
+    • Send Memory Warning to Process (com.apple.coredevice.feature.sendmemorywarningtoprocess)
+    • Send Signal to Process (com.apple.coredevice.feature.sendsignaltoprocess)
+    • Service Hub Profile (com.apple.dt.profile)
+    • Spawn Executable (com.apple.coredevice.feature.spawnexecutable)
+    • Stream Application List (com.apple.coredevice.feature.streamapplist)
+    • Stream Process List (com.apple.coredevice.feature.streamprocesslist)
+    • Transfer Files (com.apple.coredevice.feature.transferFiles)
+    • Uninstall Application (com.apple.coredevice.feature.uninstallapp)
+    • Uninstall Root (com.apple.coredevice.feature.uninstallroot)
+    • Unpair Device (com.apple.coredevice.feature.unpairdevice)
+    • View Device Screen (com.apple.coredevice.feature.viewdevicescreen)
+• visibilityClass: default

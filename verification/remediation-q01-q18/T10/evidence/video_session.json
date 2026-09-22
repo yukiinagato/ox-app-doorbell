@@ -1,0 +1,21 @@
+{
+  "task_id": "T10",
+  "test_id": "video_session",
+  "command": [
+    "node",
+    "webui/tests/video_session.test.js"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "start": "2026-09-22T14:21:02.773977+00:00",
+  "end": "2026-09-22T14:21:02.846903+00:00",
+  "exit_code": 0,
+  "source_manifest": "after-source.json",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "arch": "arm64",
+  "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+  "signing_state": "not_applicable",
+  "sip_backend": "not_run",
+  "log_path": "verification/remediation-q01-q18/T10/evidence/video_session.log"
+}

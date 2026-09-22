@@ -1,0 +1,15 @@
+T35 main entered
+2026-09-23 02:59:52.982 DoorbellT35UIKit[30736:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 02:59:53.408 DoorbellT35UIKit[30736:707] T35 T35-04 FAIL: Hint ink contrasts with the actual flat background
+2026-09-23 02:59:53.418 DoorbellT35UIKit[30736:707] T35 T35-04 PASS: Large multilingual call remains inside viewport
+2026-09-23 02:59:53.435 DoorbellT35UIKit[30736:707] T35 T35-04 PASS: UIKit hit testing reaches the primary call
+2026-09-23 02:59:53.484 DoorbellT35UIKit[30736:707] T35 T35-04 PASS: Actual UIKit font measurement fits long call text
+2026-09-23 02:59:54.030 DoorbellT35UIKit[30736:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:59:54.162 DoorbellT35UIKit[30736:707] T35 T35-04 PASS: Large cancel stays in the fixed area
+2026-09-23 02:59:54.173 DoorbellT35UIKit[30736:707] T35 T35-04 PASS: Large cancel has its explicit accessibility label
+2026-09-23 02:59:54.180 DoorbellT35UIKit[30736:707] T35 T35-04 FAIL: Large cancel is an explicit accessibility button
+2026-09-23 02:59:54.792 DoorbellT35UIKit[30736:707] T35 T35-04 PASS: Production UIControl exists
+2026-09-23 02:59:54.834 DoorbellT35UIKit[30736:707] T35 T35-04 PASS: Large multilingual cancellation completes
+2026-09-23 02:59:54.866 DoorbellT35UIKit[30736:707] T35 COMPLETE: 10 checks, 2 failures

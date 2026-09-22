@@ -1,0 +1,83 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.11.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preModernDebugBuild UP-TO-DATE
+> Task :app:mergeModernDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateModernDebugBuildConfig
+> Task :app:checkModernDebugAarMetadata UP-TO-DATE
+> Task :app:generateModernDebugResValues UP-TO-DATE
+> Task :app:mapModernDebugSourceSetPaths
+> Task :app:generateModernDebugResources
+> Task :app:packageModernDebugResources
+> Task :app:createModernDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksModernDebug UP-TO-DATE
+> Task :app:mergeModernDebugResources
+> Task :app:parseModernDebugLocalResources
+> Task :app:processModernDebugMainManifest
+> Task :app:processModernDebugManifest
+> Task :app:javaPreCompileModernDebug UP-TO-DATE
+> Task :app:mergeModernDebugShaders UP-TO-DATE
+> Task :app:compileModernDebugShaders NO-SOURCE
+> Task :app:generateModernDebugAssets UP-TO-DATE
+> Task :app:mergeModernDebugAssets UP-TO-DATE
+> Task :app:compressModernDebugAssets UP-TO-DATE
+> Task :app:checkModernDebugDuplicateClasses UP-TO-DATE
+> Task :app:desugarModernDebugFileDependencies UP-TO-DATE
+> Task :app:mergeExtDexModernDebug UP-TO-DATE
+> Task :app:mergeLibDexModernDebug UP-TO-DATE
+> Task :app:configureCMakeDebug[arm64-v8a]
+> Task :app:buildCMakeDebug[arm64-v8a][doorbell]
+> Task :app:configureCMakeDebug[armeabi-v7a]
+> Task :app:buildCMakeDebug[armeabi-v7a][doorbell]
+> Task :app:configureCMakeDebug[x86_64]
+> Task :app:processModernDebugManifestForPackage
+> Task :app:buildCMakeDebug[x86_64][doorbell]
+> Task :app:mergeModernDebugJniLibFolders UP-TO-DATE
+> Task :app:validateSigningModernDebug UP-TO-DATE
+> Task :app:writeModernDebugAppMetadata UP-TO-DATE
+> Task :app:writeModernDebugSigningConfigVersions UP-TO-DATE
+> Task :app:preModernDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileModernDebugUnitTest UP-TO-DATE
+> Task :app:preModernDebugAndroidTestBuild SKIPPED
+> Task :app:generateModernDebugAndroidTestResValues UP-TO-DATE
+> Task :app:extractProguardFiles UP-TO-DATE
+> Task :app:processModernDebugResources
+> Task :app:mergeModernDebugNativeLibs
+> Task :app:stripModernDebugDebugSymbols
+
+> Task :app:compileModernDebugKotlin
+w: file:///Users/ox/Documents/project/app-doorbell/android/app/src/main/java/jp/ox/doorbell/H264Commissioning.kt:191:58 'field versionCode: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/android/app/src/main/java/jp/ox/doorbell/IncomingActivity.kt:95:40 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/android/app/src/main/java/jp/ox/doorbell/ProcessRecovery.kt:89:47 'field versionCode: Int' is deprecated. Deprecated in Java.
+
+> Task :app:compileModernDebugJavaWithJavac
+> Task :app:dexBuilderModernDebug
+> Task :app:mergeModernDebugGlobalSynthetics UP-TO-DATE
+> Task :app:processModernDebugJavaRes UP-TO-DATE
+> Task :app:mergeModernDebugJavaResource UP-TO-DATE
+> Task :app:bundleModernDebugClassesToRuntimeJar
+> Task :app:bundleModernDebugClassesToCompileJar
+> Task :app:generateModernDebugLintReportModel
+> Task :app:generateModernDebugAndroidTestLintModel
+> Task :app:generateModernDebugUnitTestLintModel
+> Task :app:mergeProjectDexModernDebug
+> Task :app:compileModernDebugUnitTestKotlin
+> Task :app:compileModernDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processModernDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testModernDebugUnitTest
+> Task :app:packageModernDebug
+> Task :app:createModernDebugApkListingFileRedirect
+> Task :app:assembleModernDebug
+> Task :app:lintAnalyzeModernDebugAndroidTest
+> Task :app:lintAnalyzeModernDebugUnitTest
+> Task :app:lintAnalyzeModernDebug
+
+> Task :app:lintReportModernDebug
+Wrote HTML report to file:///Users/ox/Documents/project/app-doorbell/android/app/build/reports/lint-results-modernDebug.html
+
+> Task :app:lintModernDebug
+
+BUILD SUCCESSFUL in 1m 35s
+59 actionable tasks: 37 executed, 22 up-to-date

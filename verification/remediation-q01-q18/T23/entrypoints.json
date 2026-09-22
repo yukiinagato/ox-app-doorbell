@@ -1,0 +1,102 @@
+{
+  "task_id": "T23",
+  "entrypoints": [
+    {
+      "path": "ios-kiosk/src/Core/DBCallTiming.m",
+      "line": 6,
+      "purpose": "Historical monotonic adapter",
+      "review": "mach_absolute_time + dispatch_once; no wall clock or new OS time API."
+    },
+    {
+      "path": "ios-kiosk/src/Core/DBCallTiming.m",
+      "line": 73,
+      "purpose": "Foreground freshness",
+      "review": "Preserves baseline through reset and rejects unchanged cache generation/age."
+    },
+    {
+      "path": "ios-kiosk/src/Core/DBCallTiming.m",
+      "line": 95,
+      "purpose": "Recovery candidate ownership",
+      "review": "Foreign door/origin/owner is rejected before changing the active timing anchor."
+    },
+    {
+      "path": "ios-kiosk/src/Core/DBCoreBridge.m",
+      "line": 680,
+      "purpose": "Core snapshot lifetime",
+      "review": "Copies and frees real C status JSON on existing serial queue, checks Core generation before and after."
+    },
+    {
+      "path": "ios-kiosk/src/Core/DBCoreBridge.m",
+      "line": 522,
+      "purpose": "Recovery result admission",
+      "review": "Expected generation is checked on the actual C dispatch queue."
+    },
+    {
+      "path": "ios-kiosk/src/Screens/DBDoorScreen.m",
+      "line": 1280,
+      "purpose": "Door restoration",
+      "review": "Current snapshot state/origin/door and Core recovery flags control acceptance."
+    },
+    {
+      "path": "ios-kiosk/src/Screens/DBDoorScreen.m",
+      "line": 1385,
+      "purpose": "Door display timer",
+      "review": "Unknown/zero checks Core again; no inferred cancellation; object and generation token isolate old timer."
+    },
+    {
+      "path": "ios-kiosk/src/Screens/DBRouter.m",
+      "line": 320,
+      "purpose": "Targeted indoor persisted recovery",
+      "review": "Requires persisted targeted identity; uses Core reading and original tracker revision deduplication."
+    },
+    {
+      "path": "ios-kiosk/src/Screens/DBRouter.m",
+      "line": 380,
+      "purpose": "Native process recovery",
+      "review": "Event selects only identity; snapshot owns state/owner and ten-second recovery validity."
+    },
+    {
+      "path": "ios-kiosk/src/Core/DBCallEventTracker.m",
+      "line": 251,
+      "purpose": "Recovered chime admission",
+      "review": "Checks current reading identity/door/revision/duration then retains original terminal and revision dedupe."
+    },
+    {
+      "path": "ios-kiosk/src/Core/DBCallEventTracker.m",
+      "line": 186,
+      "purpose": "Live targeted chime admission queue",
+      "review": "Exact call/door/revision with captured Core generation, fixed ten-second TTL and 128 identity cap. Repeated revisions do not renew TTL."
+    },
+    {
+      "path": "ios-kiosk/src/Core/DBCallEventTracker.m",
+      "line": 213,
+      "purpose": "Delayed Core snapshot admission",
+      "review": "Each identity has its own timing anchor. Only a new snapshot sample can resolve pending admission; expired/unknown time does not activate UI or issue cancellation."
+    },
+    {
+      "path": "ios-kiosk/src/Screens/DBRouter.m",
+      "line": 991,
+      "purpose": "Live chime asynchronous Core lookup",
+      "review": "At most one read and one retry timer. Captured Core generation and recovery epoch gate final main delivery; background/foreground requires a fresh sample."
+    },
+    {
+      "path": "ios-kiosk/src/Screens/DBRouter.m",
+      "line": 1138,
+      "purpose": "Normal production chime entrypoint",
+      "review": "Queues the already targeted Core event and checks current Core remaining duration; NSDate is no longer an admission authority."
+    },
+    {
+      "path": "ios-kiosk/src/Screens/DBIncomingScreen.m",
+      "line": 808,
+      "purpose": "Incoming local return countdown",
+      "review": "Unreachable wall-clock autoClose code was deleted. Existing DBCallReturnCountdown uses its original local return behavior and pauses while a dialog is active."
+    }
+  ],
+  "preserved_outside_scope": [
+    "ios-legacy remains unchanged",
+    "DBIncomingScreen actual local return countdown remains unchanged; removed only the unreachable legacy wall-clock autoClose branch",
+    "NSDate notice timestamps, media metadata, clock labels and secret admin tap interval are not call timing authority",
+    "The existing tracker acceptChimeEvent:nowMs: remains as an explicit compatibility method exercised by historical tests; no production Router caller uses it to admit live or restored chimes"
+  ],
+  "source_delta_sha256": "1ebd54b7769b4e70f46fa8841a8b1f6ce29c704cbe92aeb073763f847b6b76d5"
+}

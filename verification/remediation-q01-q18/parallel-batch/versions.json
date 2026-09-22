@@ -1,0 +1,76 @@
+{
+  "tasks": [
+    "T03",
+    "T09",
+    "T20"
+  ],
+  "reason": "Shared Core/Web resources are embedded in these deliverables; Swift bridge changes affect its shared iOS and tvOS targets. One increment per affected deliverable in this combined change.",
+  "changes": [
+    {
+      "file": "ios/Doorbell/Info.plist",
+      "from": [
+        "0.1.35",
+        "36"
+      ],
+      "to": [
+        "0.1.36",
+        "37"
+      ]
+    },
+    {
+      "file": "ios/DoorbellTV/Info.plist",
+      "from": [
+        "0.1.12",
+        "13"
+      ],
+      "to": [
+        "0.1.13",
+        "14"
+      ]
+    },
+    {
+      "file": "ios-kiosk/src/Info.plist",
+      "from": [
+        "0.3.47",
+        "50"
+      ],
+      "to": [
+        "0.3.48",
+        "51"
+      ]
+    },
+    {
+      "file": "ios-compat/profiles/ios9-armv7.Info.plist",
+      "from": [
+        "0.4.1",
+        "401"
+      ],
+      "to": [
+        "0.4.2",
+        "402"
+      ]
+    },
+    {
+      "file": "android/app/build.gradle.kts",
+      "from": [
+        "0.3.19",
+        "20"
+      ],
+      "to": [
+        "0.3.20",
+        "21"
+      ]
+    },
+    {
+      "file": "win/DoorbellApp/DoorbellApp.csproj",
+      "from": [
+        "0.1.12",
+        "0.1.12.9"
+      ],
+      "to": [
+        "0.1.13",
+        "0.1.13.10"
+      ]
+    }
+  ]
+}

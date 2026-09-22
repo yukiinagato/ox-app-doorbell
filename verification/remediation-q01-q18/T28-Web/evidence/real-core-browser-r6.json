@@ -1,0 +1,65 @@
+{
+  "status": "PASS_IN_PRODUCTION_HTTP_BROWSER_SCOPE",
+  "recorded_at": "2026-09-22T17:34:08.222672+00:00",
+  "browser": "Codex IAB / Chromium 153",
+  "browser_url": "http://127.0.0.1:18766/admin/?lang=en",
+  "xhr_interception": false,
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/source-green-r6.json",
+  "source_manifest_sha256": "80e4a932021f714dc94b4306d0bed8430823c5f151d6535df7e9c46506a5a7ef",
+  "app_js_sha256": "4fe4fc42bcc0508c29a7fd22f3d31feb58f8d1b9c2aa27bcd889da8da7a448fa",
+  "artifacts": {
+    "build/remediation-t28-web-20260923/config-conflict-fixture-r6": "638e48f3f28392f9e575f7b3e39ddec2bdf6ebc4fdf7e8f9e8e30cb79ada0648",
+    "build/remediation-t28-20260923/green-r6-build/libdoorbell_core.a": "051231a9c258f4e14a6f14e7a02bb7f7030e00a4ec11f55055e02efd7917733c",
+    "build/remediation-t28-20260923/green-r6-build/libdb_third_party.a": "8b470c24f25dabd93e5ca353cce15e763828883e9bbb426b87691361f16d3828",
+    "build/remediation-t28-20260923/green-r6-build/CMakeCache.txt": "5f937ba951d7e4722507d2318c7c4277bd053e9abe0b6e3fd3df83d1eaf5e00b",
+    "build/remediation-t28-20260923/green-r6-build/CMakeFiles/doorbell_core.dir/flags.make": "5512a3e491e204616f66764777748ee88edaaf870210cbb950f9a8d69cc90dc6",
+    "build/remediation-t28-20260923/green-r6-build/CMakeFiles/db_third_party.dir/flags.make": "486dc5d9ffbc0dae49e223c7b86adb82676d08d6ff1c9102184c2cff6cc13665"
+  },
+  "observations_kind": "Manual transcript of actual CUA accessibility/DOM/screenshot observations; not an automated Playwright test log. Tool interaction transcript is the original browser record.",
+  "steps": [
+    {
+      "action": "Log in to the local fixture with the synthetic test credential",
+      "observed": "Actual dashboard listed both isolated nodes; no conflict banner at shared ancestor."
+    },
+    {
+      "action": "Open Quick replies > Add reply and type the English label",
+      "observed": "Final unsaved replication draft; focus on the same text field."
+    },
+    {
+      "action": "Create fixture marker, causing real native CAS edits on partitioned A/B then heal",
+      "observed": "Core produced one settings conflict on both replicas; existing browser page discovered Review: settings without reload; draft and focused input remained."
+    },
+    {
+      "action": "Cancel unsaved reply draft and open Review: settings",
+      "observed": "Current B intent; A and B heads plus common ancestor. Expanded A candidate showed A intent and the shared parent."
+    },
+    {
+      "action": "Choose T28 isolated a \u00b7 d8bfc169 and click Save",
+      "observed": "Conflict modal and Review button both absent (count=0)."
+    },
+    {
+      "action": "Read persisted settings journal and final snapshots from both test nodes",
+      "observed": "A intent on both; zero unresolved conflicts; one identical resolution record referencing both original heads."
+    }
+  ],
+  "initial_heads": [
+    "55a64b8e5397fd98b96e626ff9ba4c32",
+    "d8bfc1692d7d3c051d67485a86886a46"
+  ],
+  "evidence": {
+    "verification/remediation-q01-q18/T28-Web/evidence/core-http-r6/current-a.json": "1bae3dd5df6d3692e8ac200af3bc9480b84b528f9809c3b650b806cbf815f217",
+    "verification/remediation-q01-q18/T28-Web/evidence/core-http-r6/initial-a.json": "6987e1ad00ae2ff5a11d66e21a3a6ab71e13cb0cbf583337825e12c7e8dd84cf",
+    "verification/remediation-q01-q18/T28-Web/evidence/core-http-r6/conflict-b.json": "607c793cb755f99358c4e1cb494034219ed4b15bd6fab61b104da1e8d69b7a4c",
+    "verification/remediation-q01-q18/T28-Web/evidence/core-http-r6/final-b.json": "77a3092736624e9ba51c32d2e3b8c38e6992d2ddca32c0d0582a358c02c92538",
+    "verification/remediation-q01-q18/T28-Web/evidence/core-http-r6/conflict-a.json": "4652bde0edfd9ddc03cca416d5607f0128840f1276cc19e86353020090e5b147",
+    "verification/remediation-q01-q18/T28-Web/evidence/core-http-r6/final-a.json": "1bae3dd5df6d3692e8ac200af3bc9480b84b528f9809c3b650b806cbf815f217",
+    "verification/remediation-q01-q18/T28-Web/evidence/core-http-r6/resolution-check.json": "bde3889ee27f43b8d906f3e82802053359f9d1baad62a088c41aa0c232114b3f",
+    "verification/remediation-q01-q18/T28-Web/evidence/core-http-r6/initial-b.json": "a213bd16aed9caec0ee9b052198ae4706cf9c8378d13a4047d2bc2ac6c8895f2",
+    "verification/remediation-q01-q18/T28-Web/evidence/core-http-r6/current-b.json": "77a3092736624e9ba51c32d2e3b8c38e6992d2ddca32c0d0582a358c02c92538"
+  },
+  "limitations": [
+    "One end-to-end head selection path; other choice/error cases are the separate controlled-XHR browser suite.",
+    "Actual screenshots viewed at 1280x720 in the tool transcript; IAB content export is unsupported, so no local screenshot/DOM export is claimed.",
+    "No iOS/Safari or physical-device qualification."
+  ]
+}

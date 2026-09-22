@@ -1,4 +1,10 @@
 #include "node/node.h"
+#include "node/admin_sessions.h"
+#include "node/operation_config.h"
+#include "node/panel_identity.h"
+#include "node/config_edit_journal.h"
+#include "node/config_import.h"
+#include "node/operation_dispatcher.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -25,6 +31,7 @@
 #include "mesh/tcp_transport.h"
 #include "mesh/udp_beacon.h"
 #include "monocypher.h"
+#include "stb_image.h"
 #include "sipctl/sipctl.h"
 #ifdef _WIN32
 #include "media/camera_win.h"
@@ -426,7 +433,7 @@ bool uiManifestValid(const std::string& manifest_json, std::string* error) {
 }
 
 const char* baseWebUiManifestJson() {
-  return R"({"schema_version":1,"units":"effective_px","viewport":{"minimum_touch":44,"scale_min":0.75,"scale_max":2.0},"elements":{"call.primary":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"cancel.call":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#8D2932","accent":"#FFFFFF","border":"#FFFFFF","radius":12},"safety_critical":true},"call.end":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#8D2932","accent":"#FFFFFF","border":"#FFFFFF","radius":12},"safety_critical":true},"purpose.button":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"ring.title":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"ring.action":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"status.offline":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#8D2932","accent":"#FFFFFF","border":"#FFFFFF","radius":12},"safety_critical":false}}})";
+  return R"({"schema_version":1,"units":"effective_px","viewport":{"minimum_touch":44,"scale_min":0.75,"scale_max":2.0},"elements":{"call.primary":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"cancel.call":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#8D2932","accent":"#FFFFFF","border":"#FFFFFF","radius":12},"safety_critical":true},"call.end":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#8D2932","accent":"#FFFFFF","border":"#FFFFFF","radius":12},"safety_critical":true},"purpose.button":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"ring.title":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"ring.action":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#E8EDF2","background":"#1A2027","accent":"#4DA3FF","border":"#4DA3FF","radius":12},"safety_critical":false},"status.offline":{"properties":["scale","font_scale","foreground","background","accent","border","radius"],"defaults":{"scale":1,"font_scale":1,"foreground":"#FFFFFF","background":"#26313C","accent":"#FFFFFF","border":"#FFFFFF","radius":12},"safety_critical":false}}})";
 }
 
 const char* webOnlyUiElementsJson() {
@@ -1702,7 +1709,10 @@ bool callReturnValid(const std::string& key, const cJSON* value, std::string* er
 }
 
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
-                      std::vector<ConfigWarning>* warnings = nullptr) {
+                      std::vector<ConfigWarning>* warnings = nullptr,
+                      bool enforce_write_scope = true) {
+  if (configEditReserved(key)) { *error = "reserved_config_key"; return false; }
+  if (!operationConfigValid(key, value, error)) return false;
   if (!callReturnValid(key, value, error)) return false;
   if (!secretContractValid(key, value, error)) return false;
   if (!visitPurposeValid(key, value, error)) return false;
@@ -1717,19 +1727,22 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
   if (!timeConfigValid(key, value, error)) return false;
   if (!audioVolumeValid(key, value, error)) return false;
   if (!doorNoticeValid(key, value, error)) return false;
-  if (!noticeConfigValid(key, value, error)) return false;
+  if ((enforce_write_scope || key.rfind("notice.global.", 0) != 0) &&
+      !noticeConfigValid(key, value, error)) return false;
   if (!doorUnlockValid(key, value, error)) return false;
   if (!appearanceValid(key, value, error)) return false;
   if (!screensaverValid(key, value, error)) return false;
   if (!themeOverrideValid(key, value, error)) return false;
   if (!emergencyTriggerValid(key, value, error)) return false;
   if (!panelTokenGenerationValid(key, value, error)) return false;
-  if (key == "web_push.subscriptions") {
+  if (!panelIdentityConfigValid(key, value, error)) return false;
+  if (enforce_write_scope && key == "web_push.subscriptions") {
     *error = "the Web Push subscription container is read-only";
     return false;
   }
-  if (!webPushSealedRecordValid(key, value, error)) return false;
-  if (key == "devices") {
+  if ((enforce_write_scope || key.find('.', std::string("web_push.subscriptions.").size()) ==
+          std::string::npos) && !webPushSealedRecordValid(key, value, error)) return false;
+  if (enforce_write_scope && key == "devices") {
     *error = "the devices container is read-only; write one device or semantic element leaf";
     return false;
   }
@@ -1739,11 +1752,11 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
   const bool ui_namespace = ui_pos != std::string::npos &&
       (ui_pos + ui_path.size() == key.size() || key[ui_pos + ui_path.size()] == '.');
   const bool element_leaf = key.find(element_path) != std::string::npos;
-  if (key.rfind("devices.", 0) == 0 && ui_namespace && !element_leaf) {
+  if (enforce_write_scope && key.rfind("devices.", 0) == 0 && ui_namespace && !element_leaf) {
     *error = "UI containers are read-only; write one semantic element override at a time";
     return false;
   }
-  if (key.rfind("devices.", 0) == 0 && cJSON_IsObject(value) && !ui_namespace) {
+  if (enforce_write_scope && key.rfind("devices.", 0) == 0 && cJSON_IsObject(value) && !ui_namespace) {
     const cJSON* embedded_ui = nullptr;
     if (key.size() >= 6 && key.compare(key.size() - 6, 6, ".local") == 0)
       embedded_ui = json::get(value, "ui");
@@ -1754,7 +1767,7 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
       return false;
     }
   }
-  if (!uiStyleOverrideValid(key, value, error, warnings)) return false;
+  if (enforce_write_scope && !uiStyleOverrideValid(key, value, error, warnings)) return false;
   const std::string helper_suffix = ".local.recovery.helper_mode";
   if (key.rfind("devices.", 0) == 0 && key.size() >= helper_suffix.size() &&
       key.compare(key.size() - helper_suffix.size(), helper_suffix.size(), helper_suffix) == 0) {
@@ -1779,11 +1792,23 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
     }
   } else if (key.rfind("media_sources.", 0) == 0) {
     const std::string id = key.substr(std::string("media_sources.").size());
+    if (!enforce_write_scope && id.find('.') != std::string::npos) return true;
     if (!mediaSourceIdValid(id)) {
       *error = "media source writes must replace one complete source definition";
       return false;
     }
     if (!mediaSourceDefinitionValid(value, error)) return false;
+  }
+  return true;
+}
+
+bool configCandidateValid(const cJSON* value, const std::string& path, std::string* error) {
+  if (!path.empty() && !configWriteValid(path, value, error, nullptr, false)) return false;
+  if (!cJSON_IsObject(value)) return true;
+  const cJSON* child = nullptr;
+  cJSON_ArrayForEach(child, value) {
+    if (!child->string || !configCandidateValid(child,
+        path.empty() ? child->string : path + "." + child->string, error)) return false;
   }
   return true;
 }
@@ -2115,6 +2140,9 @@ struct Node::Impl {
   struct WebDialogLease {
     std::string door;
     std::string owner;
+    std::string publisher_session;
+    int stage_revision = 0;
+    int64_t deadline_mono = 0;
     uint64_t timer = 0;
     unsigned retry_step = 0;
   };
@@ -2142,12 +2170,16 @@ struct Node::Impl {
   std::string ui_manifest_json = "{}";
   bool suppress_config_callbacks = false;
   bool config_persistence_failed = false;
+  std::string config_edit_error;
   uint64_t config_persistence_failures = 0;
   std::string node_id;
   uint64_t epoch = 1;
   bool started = false;
   std::mutex snap_mu;
   std::string status_snap;
+  int64_t status_snap_mono_ms = 0;
+  std::string snapshot_epoch;
+  uint64_t snapshot_sequence = 0;
   std::string config_snap;
   std::string pairing_snap;
   bool snap_scheduled = false;
@@ -2207,6 +2239,14 @@ struct Node::Impl {
 
   Bytes peer_frame;
   int64_t peer_frame_mono = 0;
+  std::string peer_frame_generation;
+  struct MediaAuthorization {
+    std::string door, call_id, owner, session, generation;
+    int stage_revision = -1;
+    int64_t deadline_mono = 0;
+    uint64_t last_sequence = 0;
+  };
+  std::map<std::string, MediaAuthorization> media_authorizations;
   std::string dtmf_buf;
   uint64_t dtmf_timer = 0;
   uint64_t sip_reapply_timer = 0;
@@ -2304,12 +2344,40 @@ struct Node::Impl {
   int64_t admin_lockout_until_mono = 0;
   static constexpr int kAdminAuthMaxFailures = 5;
   static constexpr int64_t kAdminLockoutMs = 10 * 60 * 1000;
-  std::set<std::string> sessions;
+  AdminSessions sessions;
+  ConfigImportStage import_stage;
+  std::string pending_import_receipts, pending_import_operation;
+  uint64_t import_stage_timer = 0;
+  std::unique_ptr<OperationDispatcher> operation_dispatcher;
+  struct OperationForward {
+    std::string authority;
+    OperationDispatcher::Complete complete;
+    uint64_t timer = 0;
+  };
+  std::map<std::string, OperationForward> operation_forwards;
+  struct OperationFeedback {
+    uint64_t timer = 0;
+    bool disconnected = false;
+  };
+  std::map<std::string, OperationFeedback> operation_feedback;
+  uint64_t operation_feedback_sweep = 0;
+  bool operation_feedback_stopped = false;
   struct PanelCredentialBinding {
+    std::string panel_id;
+    std::string grant_version;
+    std::string boot_epoch;
     std::string generation;
+    std::string secret_identity;
     std::vector<std::string> refs;
   };
-  std::map<std::string, PanelCredentialBinding> panel_sessions;
+  struct PanelSession {
+    PanelCredentialBinding credential;
+    std::string csrf;
+    int64_t issued_mono = 0;
+    int64_t interactive_mono = 0;
+  };
+  std::map<std::string, PanelSession> panel_sessions;
+  std::map<std::string, std::pair<std::string, std::string>> panel_call_configs;
 
 
 
@@ -2326,6 +2394,9 @@ struct Node::Impl {
   bool mqtt_probe_reachable = false;
 
   // ---------- helpers ----------
+#include "node/operation_service.inc"
+#include "node/panel_identity_service.inc"
+
   bool uiNotify(const std::string& event_json) {
 
 
@@ -2536,6 +2607,7 @@ struct Node::Impl {
 
   PanelCredentialBinding panelCredentialBinding() {
     PanelCredentialBinding binding;
+    binding.boot_epoch = snapshot_epoch;
     binding.refs = panelSecretRefs();
     std::sort(binding.refs.begin(), binding.refs.end());
     binding.refs.erase(std::unique(binding.refs.begin(), binding.refs.end()),
@@ -2543,17 +2615,72 @@ struct Node::Impl {
     const cJSON* generation = cfgAt("panel.token_generation");
     if (cJSON_IsString(generation) && generation->valuestring)
       binding.generation = generation->valuestring;
+    auto identities = json::arr();
+    for (const auto& ref : binding.refs)
+      json::push(identities.get(), json::Doc(cJSON_CreateString(secretValue(ref).c_str())));
+    const auto identity = json::dump(identities.get());
+    uint8_t digest[32];
+    crypto_blake2b(digest, sizeof(digest),
+        reinterpret_cast<const uint8_t*>(identity.data()), identity.size());
+    binding.secret_identity = hexEncode(digest, sizeof(digest));
     return binding;
   }
 
   static bool samePanelCredentialBinding(const PanelCredentialBinding& a,
                                          const PanelCredentialBinding& b) {
-    return a.generation == b.generation && a.refs == b.refs;
+    return a.panel_id == b.panel_id && a.grant_version == b.grant_version &&
+        a.boot_epoch == b.boot_epoch &&
+        a.generation == b.generation && a.refs == b.refs &&
+        a.secret_identity == b.secret_identity;
   }
 
   void invalidatePanelSessions() {
-    std::lock_guard<std::mutex> lk(sess_mu);
-    panel_sessions.clear();
+    std::vector<std::string> tokens;
+    {
+      std::lock_guard<std::mutex> lk(sess_mu);
+      for (const auto& entry : panel_sessions) tokens.push_back(entry.first);
+    }
+    for (const auto& token : tokens) panelSessionRemaining(token);
+    for (auto entry = panel_call_configs.begin(); entry != panel_call_configs.end();) {
+      if (entry->first != "legacy_shared" && !cfgAt("panel.identities." + entry->first))
+        entry = panel_call_configs.erase(entry);
+      else ++entry;
+    }
+    pruneMediaAuthorizations();
+  }
+
+  int64_t panelSessionRemaining(const std::string& session, const std::string& csrf = "") {
+    if (session.empty()) return 0;
+    std::string panel_id;
+    {
+      std::lock_guard<std::mutex> lock(sess_mu);
+      auto found = panel_sessions.find(session);
+      if (found == panel_sessions.end()) return 0;
+      panel_id = found->second.credential.panel_id;
+    }
+    const auto credential = panel_id.empty() ? panelCredentialBinding() :
+        panelIdentityCredentialBinding(panel_id);
+    const int64_t now = clock->monoMs();
+    std::lock_guard<std::mutex> lock(sess_mu);
+    auto found = panel_sessions.find(session);
+    if (found == panel_sessions.end()) return 0;
+    const auto& value = found->second;
+    const int64_t remaining = std::min(value.issued_mono + 8 * 60 * 60 * 1000 - now,
+        value.interactive_mono + 30 * 60 * 1000 - now);
+    if (remaining <= 0 || now < value.issued_mono ||
+        !samePanelCredentialBinding(value.credential, credential)) {
+      panel_sessions.erase(found);
+      return 0;
+    }
+    if (!csrf.empty() && !constantTimeEqual(csrf, value.csrf)) return 0;
+    return remaining;
+  }
+
+  std::string panelMutationSession(const HttpReq& req) {
+    const auto csrf = req.headers.find("x-doorbell-csrf");
+    const auto session = req.cookie("dbpanel");
+    return trustedWebOrigin(req) && csrf != req.headers.end() && !csrf->second.empty() &&
+        panelSessionRemaining(session, csrf->second) > 0 ? session : std::string();
   }
 
   bool panelCredentialOk(const std::string& candidate) {
@@ -3203,8 +3330,9 @@ struct Node::Impl {
       DB_LOGW(kTag, "rejected door notice for " + door + " (" + error + ")");
       return false;
     }
-    config->mutate({{key, json::dump(value.get()), false}});
-    return config->lastMutationCommitted();
+    int status = 200;
+    setConfigJsonOnLoop(key, json::dump(value.get()), &status);
+    return status == 200;
   }
 
   bool clearDoorNoticeOnLoop(const std::string& door) {
@@ -3215,27 +3343,16 @@ struct Node::Impl {
             ? json::get(json::get(cfg.get(), "notice"), "global")
             : json::get(json::get(json::get(cfg.get(), "doors"), door.c_str()), "notice");
     if (!current) return true;
-    config->mutate({{key, "", true}});
-    return config->lastMutationCommitted();
+    int status = 200;
+    deleteConfigKeyJsonOnLoop(key, &status);
+    return status == 200;
   }
 
   // ---------- door unlock ----------
-  // The unlock action is the existing feature-code path: a configured ha_command that the MQTT
-  // bridge republishes as <base>/cmd/<command>. A door may name its own command; otherwise the
-  // first ha_command among the SIP feature codes is used. An empty result means no unlock action
-  // is configured anywhere, which the shells must say out loud rather than silently doing nothing.
+  // Only an explicit door binding authorizes an unlock. A SIP feature code can control any HA
+  // device, so its command must never be inferred to operate this door's lock.
   std::string unlockCommandFor(const std::string& door) {
-    const std::string configured =
-        json::getString(json::get(cfgAt("doors." + door), "unlock"), "command");
-    if (!configured.empty()) return configured;
-    const cJSON* actions = cfgAt("sip.dtmf_actions");
-    const cJSON* action = nullptr;
-    cJSON_ArrayForEach(action, actions) {
-      if (json::getString(action, "type") != "ha_command") continue;
-      const std::string command = json::getString(action, "command");
-      if (!command.empty()) return command;
-    }
-    return "";
+    return json::getString(json::get(cfgAt("doors." + door), "unlock"), "command");
   }
 
   json::Doc doorUnlockDoc(const std::string& door) {
@@ -3398,7 +3515,11 @@ struct Node::Impl {
     std::lock_guard<std::mutex> lk(snap_mu);
     if (snap_scheduled) return;
     snap_scheduled = true;
-    if (!loop->post([this] { refreshSnapshots(); })) snap_scheduled = false;
+    std::weak_ptr<char> lifetime = alive;
+    if (!loop->post([this, lifetime] {
+      if (!lifetime.lock()) return;
+      refreshSnapshots();
+    })) snap_scheduled = false;
   }
 
 
@@ -3417,6 +3538,7 @@ struct Node::Impl {
       snap_scheduled = false;
       return;
     }
+    const int64_t sampled_mono = clock->monoMs();
     std::string status = statusJsonOnLoop();
     std::string config_json = config->materializeJson();
     std::string pairing = pairingJsonOnLoop();
@@ -3426,6 +3548,7 @@ struct Node::Impl {
     publishAudioSnapshot();
     std::lock_guard<std::mutex> lk(snap_mu);
     status_snap = std::move(status);
+    status_snap_mono_ms = sampled_mono;
     config_snap = std::move(config_json);
     pairing_snap = std::move(pairing);
     snap_scheduled = false;
@@ -3436,6 +3559,7 @@ struct Node::Impl {
     if (!cfg) cfg = json::obj();
     playback_invalid_logged.clear();
     rules.setConfig(json::dump(cfg.get()));
+    sessions.publishCredential(adminCredentialVersionOnLoop());
   }
 
 
@@ -5791,7 +5915,7 @@ struct Node::Impl {
     auto features = json::obj();
     for (const char* feature : {"emergency_rules_v1", "config_batch_v1",
                                 "sip_dtmf_v1", "media_sources_v1",
-                                "web_push_subscriptions_v1"})
+                                "web_push_subscriptions_v1", "operations_v1", "config_cas_v1"})
       json::setBool(features.get(), feature, true);
     for (const char* feature : {"platform_v2", "call_flow_v2", "call_cancel_v2",
                                 "call_lifecycle_v2", "device_alert_v1", "runtime_recovery_v1",
@@ -6096,18 +6220,24 @@ struct Node::Impl {
       json::setBool(persistence, "fail_closed", true);
       json::set(persistence, "failures", static_cast<int64_t>(config_persistence_failures));
       json::set(persistence, "active_state", "last_known_good");
+      json::set(persistence, "error_code", config_edit_error.empty() ? "config_persistence_failed" : config_edit_error);
     }
     return runtime;
   }
 
   bool onConfigChanges(const std::vector<LwwEntry>& entries, bool is_local, bool batch) {
     if (entries.empty() || suppress_config_callbacks) return true;
+    if (!configEditRecordsValid(config->all(), &config_edit_error)) {
+      config_persistence_failed = true; ++config_persistence_failures;
+      if (started) scheduleSnapshotRefresh();
+      return false;
+    }
     std::vector<LwwEntry> effective_entries = entries;
     std::vector<LwwEntry> rejected_entries;
     std::vector<LwwEntry> tombstones_to_push;
     if (!is_local) {
       for (const auto& entry : entries) {
-        if (entry.deleted) continue;
+        if (entry.deleted || configEditReserved(entry.key)) continue;
         auto value = json::parse(entry.value_json);
         std::string error;
         // Remote ingress can enforce context-free schema and safety rules, but must not depend on
@@ -6146,9 +6276,29 @@ struct Node::Impl {
       }
     }
     if (effective_entries.empty()) return true;
-    const bool persisted = (batch || effective_entries.size() > 1)
-        ? store.configPutBatch(effective_entries)
-        : store.configPut(effective_entries.front());
+    const bool credential_changed = std::any_of(effective_entries.begin(), effective_entries.end(),
+        [](const LwwEntry& entry) {
+          return entry.key == "admin" || entry.key == "admin.password_hash" ||
+                 entry.key.rfind("admin.password_hash.", 0) == 0;
+        });
+    std::vector<std::pair<std::string, std::string>> credential_meta;
+    if (credential_changed) {
+      auto candidate = json::parse(config->materializeJson());
+      const cJSON* record = json::get(json::get(candidate.get(), "admin"), "password_hash");
+      const std::string salt = json::getString(record, "salt");
+      const std::string hash = json::getString(record, "hash");
+      if (!salt.empty() && !hash.empty())
+        credential_meta = {{"admin_pw_salt", salt}, {"admin_pw_hash", hash}};
+    }
+    if (is_local && !pending_import_operation.empty()) {
+      const auto import_metadata = configImportReceiptMetadata();
+      credential_meta.insert(credential_meta.end(), import_metadata.begin(), import_metadata.end());
+    }
+    const bool persisted = !credential_meta.empty()
+        ? store.configPutBatchWithMeta(effective_entries, credential_meta)
+        : (batch || effective_entries.size() > 1)
+            ? store.configPutBatch(effective_entries)
+            : store.configPut(effective_entries.front());
     if (!persisted) {
       const bool first_failure = !config_persistence_failed;
       config_persistence_failed = true;
@@ -6158,6 +6308,7 @@ struct Node::Impl {
       if (started) scheduleSnapshotRefresh();
       return false;
     }
+    if (is_local) { pending_import_receipts.clear(); pending_import_operation.clear(); }
     if (config_persistence_failed) {
       config_persistence_failed = false;
       if (started) scheduleSnapshotRefresh();
@@ -6173,7 +6324,22 @@ struct Node::Impl {
         values_before[e.key] = value ? json::dump(value) : std::string();
       }
     }
+    std::set<std::string> notice_doors;
+    auto collect_container_notices = [&] {
+      for (const auto& entry : effective_entries) {
+        if (entry.key == "doors") {
+          const cJSON* door = nullptr;
+          cJSON_ArrayForEach(door, cfgAt("doors"))
+            if (door->string && json::get(door, "notice")) notice_doors.insert(door->string);
+        } else if (entry.key.compare(0, 6, "doors.") == 0 &&
+                   entry.key.find('.', 6) == std::string::npos && cfgAt(entry.key + ".notice")) {
+          notice_doors.insert(entry.key.substr(6));
+        }
+      }
+    };
+    collect_container_notices();
     rebuildCfg();
+    collect_container_notices();
     if (mesh && mesh->isPaired() && cfgAt("removed_devices." + node_id)) {
       std::weak_ptr<char> w = alive;
       loop->post([this, w] {
@@ -6204,7 +6370,6 @@ struct Node::Impl {
     bool integrations_changed = false;
     bool panel_credential_changed = false;
     bool time_changed = false;
-    std::set<std::string> notice_doors;
     for (const auto& e : effective_entries) {
       if (e.key == "time" || e.key.compare(0, 5, "time.") == 0) time_changed = true;
       const std::string notice_suffix = ".notice";
@@ -6222,11 +6387,12 @@ struct Node::Impl {
       const bool self_device = e.key.compare(0, 8, "devices.") == 0 &&
           e.key.find(node_id) != std::string::npos;
       self_device_changed = self_device_changed || self_device;
-      sip_changed = sip_changed || e.key.compare(0, 4, "sip.") == 0 || self_device;
+      sip_changed = sip_changed || e.key == "sip" || e.key.compare(0, 4, "sip.") == 0 || self_device;
       integrations_changed = integrations_changed || e.key == "integrations" ||
           e.key.compare(0, 13, "integrations.") == 0;
       panel_credential_changed = panel_credential_changed || e.key == "panel" ||
-          e.key == "panel.token_refs" || e.key == "panel.token_generation";
+          e.key == "panel.token_refs" || e.key == "panel.token_generation" ||
+          e.key == "panel.identities" || e.key.rfind("panel.identities.", 0) == 0;
     }
     if (panel_credential_changed) invalidatePanelSessions();
     if (self_device_changed) {
@@ -6278,6 +6444,9 @@ struct Node::Impl {
   }
 
   bool init() {
+    snapshot_epoch = hexEncode(randomBytes(16));
+    snapshot_sequence = 0;
+    sessions.clear();
     // Store
     std::string db_path = opts.data_dir;
     if (db_path != ":memory:") {
@@ -6313,6 +6482,7 @@ struct Node::Impl {
     makeDir(assets_dir);
 
     hlc.reset(new HlcClock(*clock, node_id.substr(0, 8)));
+    if (!store.operationStart(node_id, hlc->correctedWallMs())) return false;
     config.reset(new LwwMap(node_id, *hlc));
     config->load(store.configLoadAll());
     events.reset(new EventLog(node_id, *hlc, store));
@@ -6490,6 +6660,8 @@ struct Node::Impl {
 
     {
       HaBridge::Hooks hooks;
+      hooks.on_operation_ack = [this](const std::string& payload) { onOperationAck(payload); };
+      hooks.on_operation_disconnect = [this] { onOperationDisconnect(); };
       hooks.on_reply = [this](const std::string& rid, const std::string& text,
                               const std::string& door, const std::string& call_id,
                               int revision) {
@@ -6569,6 +6741,11 @@ struct Node::Impl {
       updateSipAllowedSources();
     }
 
+    operation_feedback_stopped = false;
+    operation_dispatcher->begin([this](const HttpReq& request,
+                                        const OperationDispatcher::Complete& complete) {
+      operationRequestOnLoop(request, complete);
+    });
     if (opts.http_port > 0) {
       httpd.reset(new Httpd(*loop));
       registerHttp();
@@ -6939,6 +7116,15 @@ struct Node::Impl {
     return seconds * 1000;
   }
 
+  // Unsigned subtraction preserves the positive difference across signed limits. Clamp before
+  // conversion so JSON and clients can represent every returned millisecond exactly.
+  static int64_t remainingDuration(int64_t deadline, int64_t now,
+                                   int64_t limit = 9'007'199'254'740'991LL) {
+    if (deadline <= now) return 0;
+    const uint64_t delta = static_cast<uint64_t>(deadline) - static_cast<uint64_t>(now);
+    return static_cast<int64_t>(std::min<uint64_t>(delta, static_cast<uint64_t>(limit)));
+  }
+
   static std::string eventCallId(const EventRecord& ev) {
     auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
     std::string id = p ? json::getString(p.get(), "call_id") : "";
@@ -7150,6 +7336,13 @@ struct Node::Impl {
   }
 
   void cancelWebDialogLease(const std::string& call_id) {
+    for (auto it = media_authorizations.begin(); it != media_authorizations.end();) {
+      if (it->second.call_id != call_id) { ++it; continue; }
+      if (peer_frame_generation == it->first) {
+        peer_frame.clear(); peer_frame_generation.clear();
+      }
+      it = media_authorizations.erase(it);
+    }
     auto timer = web_dialog_timers.find(call_id);
     if (timer == web_dialog_timers.end()) return;
     if (timer->second.timer) loop->cancel(timer->second.timer);
@@ -7163,8 +7356,14 @@ struct Node::Impl {
     if (lease.timer) loop->cancel(lease.timer);
     lease.door = door;
     lease.owner = owner;
-    if (reset_retry) lease.retry_step = 0;
-    lease.timer = loop->postDelayed(delay, [this, door, call_id, owner] {
+    if (reset_retry) {
+      lease.retry_step = 0;
+      lease.deadline_mono = clock->monoMs() + delay;
+      auto active = active_calls.find(door);
+      lease.stage_revision = active == active_calls.end() ? -1 : active->second.stage_revision;
+    }
+    const int revision = lease.stage_revision;
+    lease.timer = loop->postDelayed(delay, [this, door, call_id, owner, revision] {
       auto lease_it = web_dialog_timers.find(call_id);
       if (lease_it == web_dialog_timers.end() || lease_it->second.door != door ||
           lease_it->second.owner != owner)
@@ -7172,7 +7371,8 @@ struct Node::Impl {
       lease_it->second.timer = 0;
       auto active = active_calls.find(door);
       if (active == active_calls.end() || active->second.call_id != call_id ||
-          active->second.dialog_owner != owner || active->second.state != "in_call") {
+          active->second.dialog_owner != owner || active->second.stage_revision != revision ||
+          active->second.state != "in_call") {
         web_dialog_timers.erase(lease_it);
         return;
       }
@@ -7190,8 +7390,63 @@ struct Node::Impl {
 
   void armWebDialogLease(const std::string& door, const std::string& call_id,
                          const std::string& owner) {
-    cancelWebDialogLease(call_id);
     armWebDialogLeaseTimer(door, call_id, owner, 10'000, /*reset_retry=*/true);
+  }
+
+  int64_t webDialogLeaseRemaining(const std::string& door, const std::string& call_id,
+                                  int revision, const std::string& owner) {
+    auto lease = web_dialog_timers.find(call_id);
+    if (lease == web_dialog_timers.end() || lease->second.door != door ||
+        lease->second.owner != owner || lease->second.stage_revision != revision)
+      return 0;
+    return std::max<int64_t>(0, std::min<int64_t>(10'000,
+        lease->second.deadline_mono - clock->monoMs()));
+  }
+
+  bool mediaAuthorityCurrent(const MediaAuthorization& auth) {
+    if (auth.deadline_mono <= clock->monoMs() ||
+        !panelSessionAllowed(auth.session, auth.door, "media.publish") ||
+        opts.role != "door_station" || auth.door != opts.door) return false;
+    const auto active = active_calls.find(auth.door);
+    const auto lease = web_dialog_timers.find(auth.call_id);
+    return active != active_calls.end() && active->second.state == "in_call" &&
+        active->second.call_id == auth.call_id &&
+        active->second.stage_revision == auth.stage_revision &&
+        active->second.dialog_owner == auth.owner && lease != web_dialog_timers.end() &&
+        lease->second.publisher_session == auth.session &&
+        webDialogLeaseRemaining(auth.door, auth.call_id, auth.stage_revision, auth.owner) > 0;
+  }
+
+  void pruneMediaAuthorizations() {
+    for (auto it = media_authorizations.begin(); it != media_authorizations.end();) {
+      if (mediaAuthorityCurrent(it->second)) { ++it; continue; }
+      if (peer_frame_generation == it->first) {
+        peer_frame.clear(); peer_frame_generation.clear();
+      }
+      it = media_authorizations.erase(it);
+    }
+  }
+
+  static bool mediaDecimal(const std::string& text, uint64_t maximum, uint64_t* result,
+                           bool allow_zero = false) {
+    if (text.empty() || text.size() > 19 || (text.size() > 1 && text[0] == '0')) return false;
+    uint64_t value = 0;
+    for (char digit : text) {
+      if (digit < '0' || digit > '9' || value > (maximum - (digit - '0')) / 10) return false;
+      value = value * 10 + static_cast<unsigned>(digit - '0');
+    }
+    if (!allow_zero && value == 0) return false;
+    *result = value;
+    return true;
+  }
+
+  static HttpResp mediaFailure(int status, const std::string& code) {
+    auto body = json::obj();
+    json::setBool(body.get(), "ok", false);
+    json::set(body.get(), "error_code", code);
+    auto response = HttpResp::json(json::dump(body.get()), status);
+    response.headers["Cache-Control"] = "no-store";
+    return response;
   }
 
   void rememberCancelled(const std::string& call_id) {
@@ -7846,6 +8101,10 @@ struct Node::Impl {
     auto c = json::parse(cmd_json);
     if (!c) return;
     std::string cmd = json::getString(c.get(), "cmd");
+    if (cmd == "operation_request_v1" || cmd == "operation_response_v1") {
+      if (cmd_json.size() <= 16384) onOperationCommand(from, c.get());
+      return;
+    }
     if (handleTelegramSecret(from, c.get()) || handleTelegramTest(from, c.get())) return;
     if (cmd == "pairing_revoked") {
       if (json::getString(c.get(), "target") != node_id) return;
@@ -8011,8 +8270,36 @@ struct Node::Impl {
     return "";
   }
 
-  // Return a peer node's HTTP origin; never proxy back to the local node.
+  bool trustedWebOrigin(const HttpReq& req) const {
+    const auto header = req.headers.find("origin");
+    if (header == req.headers.end()) return false;
+    const std::string& origin = header->second;
+    const auto scheme = origin.find("://");
+    if (scheme == std::string::npos || (origin.substr(0, scheme) != "http" &&
+        origin.substr(0, scheme) != "https")) return false;
+    const std::string authority = origin.substr(scheme + 3);
+    if (authority.empty() || authority.size() > 2048 ||
+        authority.find_first_of("/@?#* \t\r\n\\") != std::string::npos) return false;
+    const std::string port = opts.http_port == 80 ? "" : ":" + std::to_string(opts.http_port);
+    if (origin == "http://localhost" + port || origin == "http://127.0.0.1" + port ||
+        origin == "http://[::1]" + port) return true;
+    for (const auto& ip : db::net::localAddresses(true)) {
+      const std::string host = ip.find(':') == std::string::npos ? ip : "[" + ip + "]";
+      if (origin == "http://" + host + port) return true;
+    }
+    const cJSON* allowed = json::get(json::get(cfg.get(), "web"), "allowed_origins");
+    if (cJSON_IsArray(allowed)) {
+      const int count = std::min(32, cJSON_GetArraySize(allowed));
+      for (int i = 0; i < count; ++i) {
+        const cJSON* item = cJSON_GetArrayItem(allowed, i);
+        if (cJSON_IsString(item) && item->valuestring && origin == item->valuestring)
+          return true;
+      }
+    }
+    return false;
+  }
 
+  // Return a peer node's HTTP origin; never proxy back to the local node.
   std::string nodeOrigin(const std::string& nid) {
     if (nid == node_id || !mesh) return "";
     for (const auto& p : mesh->peers()) {
@@ -8448,6 +8735,7 @@ struct Node::Impl {
     // the same cluster would push deletions for every device this replica had forgotten.
     if (!store.configDeleteAll())
       DB_LOGW(kTag, "leaving a cluster: replicated configuration could not be cleared");
+    snapshot_epoch = hexEncode(randomBytes(16));
     config->resetReplica();
     // Cached peer contracts are the gossip cache: they are what made an offline device from a
     // previous cluster still resolve to a name, role, and manifest.
@@ -8541,6 +8829,9 @@ struct Node::Impl {
   // ---------- status ----------
   std::string statusJsonOnLoop() {
     auto o = json::obj();
+    const std::string generation = snapshot_epoch + ":" + std::to_string(++snapshot_sequence);
+    json::set(o.get(), "snapshot_generation", generation);
+    json::set(o.get(), "snapshot_age_ms", static_cast<int64_t>(0));
     cJSON* self = json::addObj(o.get(), "node");
     json::set(self, "id", node_id);
     json::set(self, "name", opts.name);
@@ -8644,10 +8935,13 @@ struct Node::Impl {
                   web_manifest ? std::move(web_manifest) : json::obj());
     json::setItem(o.get(), "features", effectiveFeaturesDoc());
     cJSON* calls = json::addArr(o.get(), "active_calls");
+    const int64_t call_snapshot_now = hlc->correctedWallMs();
+    const int64_t call_snapshot_mono = clock->monoMs();
     for (const auto& kv : active_calls) {
       const ActiveCall& call = kv.second;
       cJSON* item = json::pushObj(calls);
       json::set(item, "call_id", call.call_id);
+      json::set(item, "snapshot_generation", generation);
       json::set(item, "door", call.door);
       json::set(item, "origin", call.origin);
       if (!call.dialog_owner.empty()) json::set(item, "dialog_owner", call.dialog_owner);
@@ -8655,6 +8949,16 @@ struct Node::Impl {
       json::set(item, "state", call.state);
       json::set(item, "call_flow", effectiveCallFlow(call.door));
       json::set(item, "expires_at_ms", call.expires_wall_ms);
+      json::set(item, "server_now_ms", call_snapshot_now);
+      json::set(item, "remaining_ms", remainingDuration(call.expires_wall_ms, call_snapshot_now));
+      const bool recovery_required = call.recovery_timer != 0 &&
+          call.recovery_kind == RecoveryLeaseKind::LocalProcess;
+      const int64_t recovery_remaining = recovery_required
+          ? remainingDuration(call.recovery_deadline_mono, call_snapshot_mono, 10'000) : 0;
+      json::setBool(item, "recovery_required", recovery_required);
+      json::set(item, "recovery_remaining_ms", recovery_remaining);
+      json::setBool(item, "recovery_eligible", recovery_required && recovery_remaining > 0 &&
+                    (call.state == "in_call" || call.expires_wall_ms > call_snapshot_now));
       if (!call.purpose.empty()) json::set(item, "purpose", call.purpose);
     }
 
@@ -8974,15 +9278,34 @@ struct Node::Impl {
     return out;
   }
 
+  std::string adminCredentialVersionOnLoop() {
+    const auto credential = adminCredentialOnLoop();
+    if (!credential.present) return "";
+    auto identity = json::obj();
+    json::set(identity.get(), "salt", credential.salt);
+    json::set(identity.get(), "hash", credential.hash);
+    json::setBool(identity.get(), "local", credential.from_local_meta);
+    cJSON* versions = json::addArr(identity.get(), "records");
+    if (!credential.from_local_meta) {
+      for (const auto& entry : config->all()) {
+        if (entry.key != "admin" && entry.key != "admin.password_hash" &&
+            entry.key.rfind("admin.password_hash.", 0) != 0) continue;
+        cJSON* version = json::pushObj(versions);
+        json::set(version, "key", entry.key);
+        json::set(version, "hlc", entry.hlc);
+        json::set(version, "author", entry.author);
+        json::set(version, "seq", std::to_string(entry.seq));
+        json::setBool(version, "deleted", entry.deleted);
+      }
+    }
+    return sha256Hex(toBytes(json::dump(identity.get())));
+  }
+
   // Replicate the digest and keep the local meta copy in step, so a downgrade to an older build
   // still finds a working password on this node.
   bool storeAdminCredentialOnLoop(const std::string& password) {
     const std::string salt = genTokenHex(16);
     const std::string hash = hashPassword(password, salt);
-    // The local durable write comes first: a session must never be issued for a password that
-    // did not survive, and a half-written credential must not leave the cluster holding a digest
-    // this node cannot reproduce.
-    if (!store.metaSetBatch({{"admin_pw_salt", salt}, {"admin_pw_hash", hash}})) return false;
     auto record = json::obj();
     json::set(record.get(), "salt", salt);
     json::set(record.get(), "hash", hash);
@@ -8990,8 +9313,9 @@ struct Node::Impl {
     json::set(record.get(), "updated_ms", hlc->correctedWallMs());
     config->mutate({{"admin.password_hash", json::dump(record.get()), false}});
     if (!config->lastMutationCommitted()) {
-      // The password works on this node; the cluster copy is retried on the next verification.
-      DB_LOGW(kTag, "administrator password stored locally but not replicated");
+      // onConfigChanges commits the credential's CRDT identity and downgrade metadata in one
+      // transaction. A rejected commit leaves both the old password and its sessions intact.
+      DB_LOGW(kTag, "administrator password update was not committed");
       return false;
     }
     return true;
@@ -9048,7 +9372,6 @@ struct Node::Impl {
     admin_auth_failures = 0;
     admin_lockout_until_mono = 0;
     // A password change invalidates every session established with the old one.
-    std::lock_guard<std::mutex> lk(sess_mu);
     sessions.clear();
     return 0;
   }
@@ -9060,6 +9383,317 @@ struct Node::Impl {
       return -4;
     }
     return result;
+  }
+
+  std::string configurationRevisionOnLoop() const {
+    if (!started || !config) return "";
+    auto records = json::arr();
+    for (const auto& entry : config->all()) {
+      cJSON* record = json::pushObj(records.get());
+      json::set(record, "key", entry.key);
+      json::set(record, "hlc", entry.hlc);
+      json::set(record, "author", entry.author);
+      json::set(record, "seq", std::to_string(entry.seq));
+      json::setBool(record, "deleted", entry.deleted);
+    }
+    return snapshot_epoch + ":" + sha256Hex(toBytes(json::dump(records.get())));
+  }
+
+#include "node/config_import_service.inc"
+
+  std::string configSnapshotJsonOnLoop() const {
+    if (!started || !config)
+      return "{\"ok\":false,\"schema_version\":2,\"error_code\":\"not_started\"}";
+    auto out = json::obj();
+    auto document = json::parse(config->materializeJson());
+    if (auto* admin = json::get(document.get(), "admin"))
+      cJSON_DeleteItemFromObjectCaseSensitive(admin, "password_hash");
+    json::set(out.get(), "schema_version", int64_t{2});
+    json::set(out.get(), "revision", configurationRevisionOnLoop());
+    json::setItem(out.get(), "edit_conflicts", configEditConflicts(config->all(), document.get()));
+    json::setItem(out.get(), "edit_journal", configEditSummary(config->all()));
+    json::setItem(out.get(), "config", std::move(document));
+    return json::dump(out.get());
+  }
+
+  bool adminMutationAuthorizedOnLoop(const HttpReq& request) {
+    auto header = request.headers.find("x-doorbell-csrf");
+    if (!trustedWebOrigin(request) || header == request.headers.end() || header->second.empty())
+      return false;
+    const auto token = sessions.csrfToken(request.cookie("dbsess"), clock->monoMs());
+    return !token.empty() && constantTimeEquals(token, header->second);
+  }
+
+  HttpResp commitDoorNoticeOnLoop(const HttpReq& request, const std::string& door,
+                                  const cJSON* body) {
+    if (!adminMutationAuthorizedOnLoop(request))
+      return HttpResp::json("{\"ok\":false,\"error_code\":\"forbidden\"}", 403);
+    if (request.body.size() > 4096)
+      return HttpResp::json("{\"ok\":false,\"error_code\":\"capacity_exceeded\"}", 413);
+    std::set<std::string> fields;
+    const cJSON* field = nullptr;
+    cJSON_ArrayForEach(field, body) {
+      const std::string name = field->string ? field->string : "";
+      if ((name != "text" && name != "ttl_s" && name != "expiry" && name != "expected_revision") ||
+          !fields.insert(name).second)
+        return HttpResp::json("{\"ok\":false,\"error_code\":\"invalid_request\"}", 400);
+    }
+    const auto* ttl = json::get(body, "ttl_s");
+    const auto* expiry = json::get(body, "expiry");
+    if (!cJSON_IsString(json::get(body, "text")) ||
+        (ttl && !wholeNumberInRange(ttl, 0, 2147483647)) ||
+        (expiry && (!cJSON_IsString(expiry) || json::getString(body, "expiry") != "today" ||
+                    json::getInt(body, "ttl_s", 0) > 0)))
+      return HttpResp::json("{\"ok\":false,\"error_code\":\"invalid_request\"}", 400);
+    if (!isGlobalNoticeTarget(door) && !doorExists(door))
+      return HttpResp::json("{\"ok\":false,\"error_code\":\"unknown_door\"}", 404);
+    const int64_t ttl_s = json::getInt(body, "ttl_s", 0);
+    auto notice = doorNoticeDoc(json::getString(body, "text"), 0);
+    if (ttl_s > 0)
+      json::set(notice.get(), "expires_ms",
+                static_cast<int64_t>(json::getInt(notice.get(), "created_ms") + ttl_s * 1000LL));
+    else if (expiry) {
+      const int64_t created = json::getInt(notice.get(), "created_ms");
+      const int64_t day = floorDiv(created + static_cast<int64_t>(tzOffsetMinAt(created)) *
+                                  60'000LL, 86'400'000LL);
+      int64_t before = created, after = created + 27 * 60 * 60 * 1000LL;
+      while (after - before > 1) {
+        const int64_t middle = before + (after - before) / 2;
+        const int64_t local = middle + static_cast<int64_t>(tzOffsetMinAt(middle)) * 60'000LL;
+        if (floorDiv(local, 86'400'000LL) > day) after = middle;
+        else before = middle;
+      }
+      json::set(notice.get(), "expires_ms", after);
+    }
+    auto commit = json::obj();
+    json::set(commit.get(), "schema_version", int64_t{2});
+    json::setItem(commit.get(), "expected_revision",
+                  json::Doc(cJSON_Duplicate(json::get(body, "expected_revision"), 1)));
+    auto* operation = json::pushObj(json::addArr(commit.get(), "ops"));
+    json::set(operation, "op", "set");
+    json::set(operation, "key", noticeKeyFor(door));
+    json::setItem(operation, "value", std::move(notice));
+    int status = 200;
+    auto result = configCommitJsonOnLoop(json::dump(commit.get()), &status);
+    return HttpResp::json(result, status);
+  }
+
+  static json::Doc mergeConfigFields(const cJSON* base, const cJSON* patch) {
+    if (!cJSON_IsObject(base) || !cJSON_IsObject(patch))
+      return json::Doc(cJSON_Duplicate(patch, 1));
+    json::Doc result(cJSON_Duplicate(base, 1));
+    const cJSON* field = nullptr;
+    cJSON_ArrayForEach(field, patch) {
+      if (!field->string) continue;
+      json::setItem(result.get(), field->string,
+                    mergeConfigFields(json::get(result.get(), field->string), field));
+    }
+    return result;
+  }
+
+  std::string configCommitJsonOnLoop(const std::string& request_json, int* status_out,
+                                     bool require_schema = true) {
+    auto fail = [&](const char* code, int status) {
+      if (status_out) *status_out = status;
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", false);
+      json::set(result.get(), "schema_version", int64_t{2});
+      json::set(result.get(), "request_id", genTokenHex(16));
+      json::set(result.get(), "error_code", code);
+      json::set(result.get(), "err", code);
+      json::set(result.get(), "retry_mode", "none");
+      json::set(result.get(), "revision", configurationRevisionOnLoop());
+      return json::dump(result.get());
+    };
+    if (!started || !config) return fail("not_started", 503);
+    if (request_json.size() > 256 * 1024) return fail("capacity_exceeded", 413);
+    unsigned depth = 0;
+    bool quoted = false, escaped = false;
+    for (char character : request_json) {
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (character == '\\') escaped = true;
+        else if (character == '"') quoted = false;
+      } else if (character == '"') quoted = true;
+      else if (character == '{' || character == '[') {
+        if (++depth > 32) return fail("capacity_exceeded", 413);
+      } else if (character == '}' || character == ']') {
+        if (depth == 0) return fail("invalid_request", 400);
+        --depth;
+      }
+    }
+    auto request = json::parse(request_json);
+    if (!request || !cJSON_IsObject(request.get())) return fail("invalid_request", 400);
+    std::set<std::string> members;
+    const cJSON* member = nullptr;
+    cJSON_ArrayForEach(member, request.get()) {
+      const std::string key = member->string ? member->string : "";
+      if ((key != "schema_version" && key != "expected_revision" && key != "ops" && key != "resolves") ||
+          !members.insert(key).second) return fail("invalid_request", 400);
+    }
+    const auto* schema = json::get(request.get(), "schema_version");
+    if ((require_schema || schema) && (!cJSON_IsNumber(schema) || schema->valuedouble != 2))
+      return fail("invalid_request", 400);
+    const auto* expected_value = json::get(request.get(), "expected_revision");
+    const std::string expected = json::getString(request.get(), "expected_revision");
+    if (!cJSON_IsString(expected_value) || expected.empty() || expected.size() > 256)
+      return fail("revision_required", 400);
+    const auto* ops = json::get(request.get(), "ops");
+    if (!cJSON_IsArray(ops) || cJSON_GetArraySize(ops) < 1) return fail("invalid_request", 400);
+    if (cJSON_GetArraySize(ops) > 256) return fail("capacity_exceeded", 413);
+    std::string response;
+    const bool committed = store.configWriteTransaction([&] {
+      if (expected != configurationRevisionOnLoop()) {
+        response = fail("config_conflict", 409);
+        return false;
+      }
+      auto expanded = json::arr();
+      std::vector<LwwMutation> mutations;
+      std::set<std::string> keys;
+      const cJSON* op = nullptr;
+      cJSON_ArrayForEach(op, ops) {
+        if (!cJSON_IsObject(op)) { response = fail("invalid_request", 400); return false; }
+        std::set<std::string> fields;
+        const cJSON* field = nullptr;
+        cJSON_ArrayForEach(field, op) {
+          const std::string name = field->string ? field->string : "";
+          if ((name != "op" && name != "key" && name != "value" && name != "remove_fields") ||
+              !fields.insert(name).second) {
+            response = fail("invalid_request", 400); return false;
+          }
+        }
+        const auto kind = json::getString(op, "op");
+        const auto key = json::getString(op, "key");
+        if ((kind != "set" && kind != "delete") || key.empty() || key.size() > 512 ||
+            key.front() == '.' || key.back() == '.' || key.find("..") != std::string::npos ||
+            !keys.insert(key).second || (kind == "delete" &&
+                (json::get(op, "value") || json::get(op, "remove_fields")))) {
+          response = fail("invalid_request", 400); return false;
+        }
+        auto* output = json::pushObj(expanded.get());
+        json::set(output, "op", kind);
+        json::set(output, "key", key);
+        LwwMutation mutation{key, "", kind == "delete"};
+        const cJSON* resolutions = json::get(request.get(), "resolves");
+        const bool resolving = resolutions && json::get(resolutions, configEditEntity(key).c_str());
+        if (resolving && key != configEditEntity(key)) {
+          response = fail("invalid_resolution", 400); return false;
+        }
+        if (!mutation.deleted) {
+          const auto* value = json::get(op, "value");
+          if (!value) { response = fail("invalid_request", 400); return false; }
+          const auto* removed = json::get(op, "remove_fields");
+          std::set<std::string> removed_names;
+          if (removed) {
+            if (!cJSON_IsObject(value) || !cJSON_IsArray(removed) ||
+                cJSON_GetArraySize(removed) < 1 || cJSON_GetArraySize(removed) > 64) {
+              response = fail("invalid_request", 400); return false;
+            }
+            const cJSON* name = nullptr;
+            cJSON_ArrayForEach(name, removed) {
+              const std::string field = cJSON_IsString(name) && name->valuestring ? name->valuestring : "";
+              if (field.empty() || field.size() > 128 || !removed_names.insert(field).second ||
+                  json::get(value, field.c_str())) {
+                response = fail("invalid_request", 400); return false;
+              }
+            }
+          }
+          if (resolving && !configEditCandidateComplete(value)) {
+            response = fail("invalid_resolution", 400); return false;
+          }
+          auto merged = resolving ? json::Doc(cJSON_Duplicate(value, 1))
+                                  : mergeConfigFields(cfgAt(key), value);
+          for (const auto& name : removed_names)
+            cJSON_DeleteItemFromObjectCaseSensitive(merged.get(), name.c_str());
+          mutation.value_json = json::dump(merged.get());
+          json::setItem(output, "value", std::move(merged));
+        }
+        mutations.push_back(std::move(mutation));
+      }
+      for (const auto& key : keys) {
+        const auto descendant = keys.lower_bound(key + ".");
+        if (descendant != keys.end() && descendant->compare(0, key.size() + 1, key + ".") == 0) {
+          response = fail("overlapping_keys", 400);
+          return false;
+        }
+      }
+      std::vector<LwwMutation> descendants;
+      for (const auto& mutation : mutations) {
+        auto merged = json::parse(mutation.value_json);
+        for (const auto& entry : config->byPrefix(mutation.key + ".")) {
+          const cJSON* desired = mutation.deleted ? nullptr : merged.get();
+          size_t begin = mutation.key.size() + 1;
+          while (desired && begin < entry.first.size()) {
+            const auto end = entry.first.find('.', begin);
+            desired = cJSON_IsObject(desired)
+                ? json::get(desired, entry.first.substr(begin, end - begin).c_str()) : nullptr;
+            if (end == std::string::npos) break;
+            begin = end + 1;
+          }
+          const auto value = desired ? json::dump(desired) : std::string();
+          if (desired && value == entry.second) continue;
+          descendants.push_back({entry.first, value, !desired});
+          if (mutations.size() + descendants.size() > 256) {
+            response = fail("capacity_exceeded", 413);
+            return false;
+          }
+          auto* expanded_op = json::pushObj(expanded.get());
+          json::set(expanded_op, "op", desired ? "set" : "delete");
+          json::set(expanded_op, "key", entry.first);
+          if (desired)
+            json::setItem(expanded_op, "value", json::Doc(cJSON_Duplicate(desired, 1)));
+        }
+      }
+      // Old scalar child records otherwise override an updated parent during materialization.
+      // Keep the existing CRDT key model and update the affected existing records atomically.
+      mutations.insert(mutations.end(), descendants.begin(), descendants.end());
+      // Use the production CRDT materializer with a private clock; preview cannot advance the
+      // live HLC, publish a value, or call a persistence observer.
+      HlcClock preview_clock(*clock, node_id.substr(0, 8));
+      LwwMap preview(node_id, preview_clock);
+      preview.load(config->all());
+      preview.mutate(mutations);
+      auto candidate = json::parse(preview.materializeJson());
+      bool valid = true;
+      {
+        struct PreviewScope {
+          json::Doc& target;
+          json::Doc previous;
+          ~PreviewScope() { target = std::move(previous); }
+        } scope{cfg, std::move(cfg)};
+        cfg = std::move(candidate);
+        std::string error;
+        valid = configCandidateValid(cfg.get(), "", &error);
+        for (const auto& mutation : mutations) {
+          if (!valid) break;
+          if (!mutation.deleted) {
+            auto value = json::parse(mutation.value_json);
+            if (!configWriteValidEffective(mutation.key, value.get(), &error)) { valid = false; break; }
+          }
+        }
+      }
+      if (!valid) { response = fail("invalid_request", 400); return false; }
+      int status = 200;
+      response = configBatchJsonOnLoop(json::dump(expanded.get()), &status, json::get(request.get(), "resolves"));
+      if (status_out) *status_out = status;
+      if (status != 200) {
+        auto rejected = json::parse(response);
+        const auto code = json::getString(rejected.get(), "err", "invalid_request");
+        response = fail(code.c_str(), status);
+      }
+      return status == 200;
+    });
+    if (!committed) {
+      if (!response.empty()) return response;
+      return fail("config_persistence_failed", 500);
+    }
+    auto result = json::parse(response);
+    json::set(result.get(), "schema_version", int64_t{2});
+    json::set(result.get(), "request_id", genTokenHex(16));
+    json::set(result.get(), "revision", configurationRevisionOnLoop());
+    json::set(result.get(), "config_generation", configurationRevisionOnLoop());
+    json::set(result.get(), "retry_mode", "none");
+    return json::dump(result.get());
   }
 
   // ---------- configuration writes ----------
@@ -9098,7 +9732,12 @@ struct Node::Impl {
     std::vector<ConfigWarning> warnings;
     if (!configWriteValidEffective(key, parsed.get(), &error, &warnings))
       return fail(error.c_str(), 400);
-    if (!setKey(key, value_json)) return fail("config_persistence_failed", 500);
+    auto ops = json::arr(); auto* op = json::pushObj(ops.get());
+    json::set(op, "op", "set"); json::set(op, "key", key);
+    json::setItem(op, "value", json::Doc(cJSON_Duplicate(parsed.get(), 1)));
+    int write_status = 200;
+    const auto result = configBatchJsonOnLoop(json::dump(ops.get()), &write_status);
+    if (write_status != 200) { if (status_out) *status_out = write_status; return result; }
     if (status_out) *status_out = 200;
     rememberWarnings(warnings);
     auto out = json::obj();
@@ -9109,7 +9748,8 @@ struct Node::Impl {
 
   // ops_json is either the array of operations or the {"ops":[...]} envelope the HTTP endpoint
   // takes, so the same document works for both callers.
-  std::string configBatchJsonOnLoop(const std::string& ops_json, int* status_out) {
+  std::string configBatchJsonOnLoop(const std::string& ops_json, int* status_out,
+                                   const cJSON* resolves = nullptr) {
     auto fail = [&](const char* error, int status) {
       if (status_out) *status_out = status;
       auto out = json::obj();
@@ -9118,6 +9758,8 @@ struct Node::Impl {
       return json::dump(out.get());
     };
     auto body = json::parse(ops_json);
+    if (body && cJSON_IsObject(body.get()) && json::get(body.get(), "expected_revision"))
+      return configCommitJsonOnLoop(ops_json, status_out, false);
     const cJSON* ops = nullptr;
     if (body && cJSON_IsArray(body.get())) ops = body.get();
     else if (body) ops = json::get(body.get(), "ops");
@@ -9134,6 +9776,8 @@ struct Node::Impl {
       if ((kind != "set" && kind != "delete") || key.empty() || key.size() > 512 ||
           key.front() == '.' || key.back() == '.' || key.find("..") != std::string::npos)
         return fail("bad op or key", 400);
+      if (configEditReserved(key)) return fail("reserved_config_key", 400);
+      if (key == "devices") return fail("device_collection_read_only", 400);
       if (!keys.insert(key).second) return fail("duplicate key", 400);
       LwwMutation mutation;
       mutation.key = key;
@@ -9156,14 +9800,29 @@ struct Node::Impl {
       }
     }
     mutations.insert(mutations.end(), descendants.begin(), descendants.end());
+    HlcClock edit_preview_clock(*clock, node_id.substr(0, 8));
+    LwwMap edit_preview(node_id, edit_preview_clock);
+    edit_preview.load(config->all()); edit_preview.mutate(mutations);
+    auto edit_candidate = json::parse(edit_preview.materializeJson());
+    std::vector<LwwMutation> journal;
+    const auto journal_error = appendConfigEdits(config->all(), mutations, edit_candidate.get(),
+                                                 node_id, resolves, &journal);
+    if (!journal_error.empty()) {
+      const bool conflict = journal_error == "unresolved_config_conflict" ||
+                            journal_error == "stale_config_resolution";
+      return fail(journal_error.c_str(), conflict ? 409 :
+          journal_error == "config_history_capacity_exceeded" ? 413 : 400);
+    }
+    const size_t changed_count = mutations.size();
+    mutations.insert(mutations.end(), journal.begin(), journal.end());
     const auto changed = config->mutate(mutations);
     if (!config->lastMutationCommitted()) return fail("config_persistence_failed", 500);
     if (status_out) *status_out = 200;
     auto result = json::obj();
     json::setBool(result.get(), "ok", true);
-    json::set(result.get(), "n", static_cast<int64_t>(changed.size()));
+    json::set(result.get(), "n", static_cast<int64_t>(changed_count));
     if (!changed.empty()) {
-      json::set(result.get(), "revision", changed.back().hlc);
+      json::set(result.get(), "revision", configurationRevisionOnLoop());
       json::set(result.get(), "hlc", changed.back().hlc);  // one-release compatibility alias
     }
     attachWarnings(result.get(), warnings);
@@ -9205,21 +9864,12 @@ struct Node::Impl {
   }
 
   std::string deleteConfigKeyJsonOnLoop(const std::string& key, int* status_out) {
-    auto fail = [&](const char* error, int status) {
-      if (status_out) *status_out = status;
-      auto out = json::obj();
-      json::setBool(out.get(), "ok", false);
-      json::set(out.get(), "err", error);
-      return json::dump(out.get());
-    };
-    if (key.empty()) return fail("no key", 400);
-    std::vector<LwwMutation> removals = {{key, "", true}};
-    for (const auto& entry : config->byPrefix(key + "."))
-      removals.push_back({entry.first, "", true});
-    config->mutate(removals);
-    if (!config->lastMutationCommitted()) return fail("config_persistence_failed", 500);
-    if (status_out) *status_out = 200;
-    return "{\"ok\":true}";
+    auto ops = json::arr(); auto* op = json::pushObj(ops.get());
+    json::set(op, "op", "delete"); json::set(op, "key", key);
+    int status = 200;
+    const auto result = configBatchJsonOnLoop(json::dump(ops.get()), &status);
+    if (status_out) *status_out = status;
+    return status == 200 ? "{\"ok\":true}" : result;
   }
 
   // Extract "<id>" from "/api/doors/<id><suffix>". Returns an empty string for any other shape,
@@ -9248,11 +9898,16 @@ struct Node::Impl {
   bool checkSession(const HttpReq& req) {
     std::string tok = req.cookie("dbsess");
     if (tok.empty()) return false;
-    std::lock_guard<std::mutex> lk(sess_mu);
-    return sessions.count(tok) > 0;
+    return sessions.check(tok, clock->monoMs());
   }
 
   void registerHttp() {
+    httpd->routeWorker("POST", "/api/operations/prepare",
+        [this](const HttpReq& request) { return operationHttp(request); });
+    httpd->routeWorker("POST", "/api/operations/*",
+        [this](const HttpReq& request) { return operationHttp(request); });
+    httpd->routeWorker("GET", "/api/operations/*",
+        [this](const HttpReq& request) { return operationHttp(request); });
     size_t n = 0;
     const WebAsset* assets = webuiAssets(&n);
     for (size_t i = 0; i < n; i++)
@@ -9277,7 +9932,7 @@ struct Node::Impl {
                     "/api/call-log",
                     // Announcements and the unlock trigger accept an indoor panel credential
                     // as well as an admin session. The handlers re-check the caller explicitly.
-                    "/api/doors/", "/api/notice"});
+                    "/api/doors/", "/api/notice", "/api/operations/"});
 
     // /stream.mp4 follows the same LAN-public policy as /stream.mjpeg.
 
@@ -9292,7 +9947,7 @@ struct Node::Impl {
       bool local = false;
       int resolved_status = 503;
       loop->callSync([&] {
-        if (!panelTokenOk(req) && !checkSession(req)) {
+        if (!checkSession(req) && !panelRequestAllowed(req, req.param("door"), "view")) {
           resolved_status = 403;
           return;
         }
@@ -9381,15 +10036,42 @@ struct Node::Impl {
       } else if (verified <= 0) {
         return HttpResp::json("{\"ok\":false}", 401);
       }
-      std::string tok = genTokenHex(16);
-      {
-        std::lock_guard<std::mutex> lk(sess_mu);
-        sessions.insert(tok);
-        if (sessions.size() > 64) sessions.erase(sessions.begin());
+      const std::string version = adminCredentialVersionOnLoop();
+      sessions.publishCredential(version);
+      std::string tok;
+      const std::string csrf = genTokenHex(16);
+      for (int attempt = 0; attempt < 4; ++attempt) {
+        tok = genTokenHex(16);
+        if (sessions.issue(tok, version, clock->monoMs(), csrf)) break;
+        tok.clear();
       }
-      HttpResp r = HttpResp::json("{\"ok\":true}");
+      if (tok.empty()) return HttpResp::json("{\"ok\":false,\"error_code\":\"session_unavailable\"}", 503);
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", true);
+      json::set(result.get(), "csrf_token", csrf);
+      HttpResp r = HttpResp::json(json::dump(result.get()));
+      r.headers["Cache-Control"] = "no-store";
       r.headers["Set-Cookie"] = "dbsess=" + tok + "; Path=/; HttpOnly; SameSite=Strict";
       return r;
+    });
+
+    httpd->route("GET", "/api/session", [this](const HttpReq& req) {
+      const auto csrf = sessions.csrfToken(req.cookie("dbsess"), clock->monoMs());
+      if (csrf.empty()) return HttpResp::json("{\"error_code\":\"auth_required\"}", 401);
+      auto result = json::obj();
+      json::set(result.get(), "csrf_token", csrf);
+      HttpResp response = HttpResp::json(json::dump(result.get()));
+      response.headers["Cache-Control"] = "no-store";
+      return response;
+    });
+
+    httpd->route("POST", "/api/session/activity", [this](const HttpReq& req) {
+      const auto csrf = req.headers.find("x-doorbell-csrf");
+      if (!trustedWebOrigin(req) || csrf == req.headers.end())
+        return HttpResp::json("{\"ok\":false,\"error_code\":\"permission_denied\"}", 403);
+      if (!sessions.interact(req.cookie("dbsess"), csrf->second, clock->monoMs()))
+        return HttpResp::json("{\"ok\":false,\"error_code\":\"permission_denied\"}", 403);
+      return HttpResp::json("{\"ok\":true}");
     });
 
     httpd->route("GET", "/api/status",
@@ -9467,6 +10149,12 @@ struct Node::Impl {
       }
       query.door = req.param("door");
       query.outcome = req.param("outcome");
+      PanelPrincipal principal;
+      if (panelRequestPrincipal(req, &principal) && !principal.legacy_shared) {
+        if (!query.door.empty() && !panelPrincipalAllowed(principal, query.door, "view"))
+          return mediaFailure(403, "permission_denied");
+        return HttpResp::json(panelCallLogJson(principal, query));
+      }
       return HttpResp::json(callLogJson(query));
     });
 
@@ -9476,6 +10164,16 @@ struct Node::Impl {
       auto body = json::parse(req.body.empty() ? "{}" : req.body);
       const std::string up_to = body ? json::getString(body.get(), "up_to_hlc")
                                      : req.param("up_to_hlc");
+      PanelPrincipal principal;
+      if (panelRequestPrincipal(req, &principal) && !principal.legacy_shared) {
+        if (panelMutationSession(req).empty()) return mediaFailure(403, "permission_denied");
+        if (!panelMarkCallLogSeen(principal, up_to)) return mediaFailure(500, "persist_failed");
+        Store::CallLogQuery scoped;
+        scoped.limit = kCallLogDefaultLimit;
+        auto result = json::parse(panelCallLogJson(principal, scoped));
+        json::setBool(result.get(), "ok", true);
+        return HttpResp::json(json::dump(result.get()));
+      }
       if (!markCallLogSeen(up_to))
         return HttpResp::json("{\"ok\":false,\"err\":\"persist_failed\"}", 500);
       auto o = json::obj();
@@ -9484,6 +10182,34 @@ struct Node::Impl {
       json::set(o.get(), "seen_hlc", store.callLogSeenHlc());
       return HttpResp::json(json::dump(o.get()));
     });
+
+    httpd->route("GET", "/api/config/snapshot", [this](const HttpReq&) {
+      auto response = HttpResp::json(configSnapshotJsonOnLoop());
+      response.headers["Cache-Control"] = "no-store";
+      return response;
+    });
+    httpd->route("POST", "/api/config/commit", [this](const HttpReq& req) {
+      if (!adminMutationAuthorizedOnLoop(req))
+        return HttpResp::json("{\"ok\":false,\"schema_version\":2,\"error_code\":\"permission_denied\"}", 403);
+      int status = 200;
+      const auto result = configCommitJsonOnLoop(req.body, &status);
+      auto response = HttpResp::json(result, status);
+      response.headers["Cache-Control"] = "no-store";
+      return response;
+    });
+
+    for (const std::string action : {"stage", "preflight", "commit", "cancel", "query"}) {
+      httpd->route("POST", "/api/config/import/" + action, [this, action](const HttpReq& req) {
+        if (!adminMutationAuthorizedOnLoop(req))
+          return HttpResp::json(configImportFailure("permission_denied", 403, nullptr), 403);
+        int status = 200;
+        const auto result = configImportJsonOnLoop(action, req.body, req.cookie("dbsess"),
+            req.headers.at("x-doorbell-csrf"), &status);
+        auto response = HttpResp::json(result, status);
+        response.headers["Cache-Control"] = "no-store";
+        return response;
+      });
+    }
 
     httpd->route("GET", "/api/config", [this](const HttpReq&) {
       return HttpResp::json(config->materializeJson());
@@ -9510,10 +10236,7 @@ struct Node::Impl {
         return HttpResp::json("{\"ok\":false,\"err\":\"bad secret_ref or value\"}", 400);
       if (!putSecret(ref, value))
         return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_failed\"}", 500);
-      const auto active_panel_refs = panelSecretRefs();
-      if (std::find(active_panel_refs.begin(), active_panel_refs.end(), ref) !=
-          active_panel_refs.end())
-        invalidatePanelSessions();
+      invalidatePanelSessions();
       applyEffectiveCaps();
       scheduleBridgeReapply();
       scheduleSipReapply();
@@ -9523,20 +10246,62 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/panel/session", [this](const HttpReq& req) {
+      if (req.body.size() > 4096) return mediaFailure(413, "capacity_exceeded");
       auto body = json::parse(req.body);
       const std::string credential = body ? json::getString(body.get(), "credential") : "";
-      if (!panelCredentialOk(credential))
-        return HttpResp::json("{\"ok\":false,\"err\":\"bad credential\"}", 403);
+      PanelCredentialBinding credential_binding;
+      if (!panelBootstrapBinding(credential, &credential_binding))
+        return mediaFailure(403, "auth_required");
       const std::string session = genTokenHex(16);
+      const std::string csrf = genTokenHex(16);
+      invalidatePanelSessions();
       {
         std::lock_guard<std::mutex> lk(sess_mu);
-        panel_sessions[session] = panelCredentialBinding();
-        if (panel_sessions.size() > 128) panel_sessions.erase(panel_sessions.begin());
+        if (panel_sessions.size() >= 128) {
+          auto oldest = std::min_element(panel_sessions.begin(), panel_sessions.end(),
+              [](const auto& a, const auto& b) {
+                return std::tie(a.second.interactive_mono, a.second.issued_mono) <
+                       std::tie(b.second.interactive_mono, b.second.issued_mono);
+              });
+          panel_sessions.erase(oldest);
+        }
+        panel_sessions[session] = {credential_binding, csrf, clock->monoMs(), clock->monoMs()};
       }
-      HttpResp response = HttpResp::json("{\"ok\":true}");
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", true);
+      json::set(result.get(), "csrf_token", csrf);
+      PanelPrincipal principal;
+      if (panelSessionPrincipal(session, &principal)) panelIdentityResponse(result.get(), principal);
+      HttpResp response = HttpResp::json(json::dump(result.get()));
       response.headers["Cache-Control"] = "no-store";
       response.headers["Set-Cookie"] =
           "dbpanel=" + session + "; Path=/; HttpOnly; SameSite=Strict";
+      return response;
+    });
+
+    httpd->route("POST", "/api/panels/*", [this](const HttpReq& req) {
+      if (!adminMutationAuthorizedOnLoop(req)) return mediaFailure(403, "permission_denied");
+      int status = 200;
+      auto result = panelIdentityJsonOnLoop(req.uri.substr(std::string("/api/panels/").size()),
+          req.body, req.cookie("dbsess"), req.headers.at("x-doorbell-csrf"), &status);
+      auto response = HttpResp::json(result, status);
+      response.headers["Cache-Control"] = "no-store";
+      return response;
+    });
+
+    httpd->route("GET", "/api/panel/session", [this](const HttpReq& req) {
+      const auto session = req.cookie("dbpanel");
+      PanelPrincipal principal;
+      if (!panelSessionPrincipal(session, &principal)) return mediaFailure(403, "auth_required");
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", true);
+      panelIdentityResponse(result.get(), principal);
+      {
+        std::lock_guard<std::mutex> lock(sess_mu);
+        json::set(result.get(), "csrf_token", panel_sessions.at(session).csrf);
+      }
+      auto response = HttpResp::json(json::dump(result.get()));
+      response.headers["Cache-Control"] = "no-store";
       return response;
     });
 
@@ -9568,6 +10333,9 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/config/batch", [this](const HttpReq& req) {
+      auto body = json::parse(req.body);
+      if (body && json::get(body.get(), "expected_revision") && !adminMutationAuthorizedOnLoop(req))
+        return HttpResp::json("{\"ok\":false,\"error_code\":\"permission_denied\"}", 403);
       int status = 200;
       const std::string result = configBatchJsonOnLoop(req.body, &status);
       return HttpResp::json(result, status);
@@ -9582,40 +10350,21 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/config/import", [this](const HttpReq& req) {
-      auto b = json::parse(req.body);
-      cJSON* entries = b ? json::get(b.get(), "entries") : nullptr;
-      if (!entries || !cJSON_IsArray(entries))
+      auto body = json::parse(req.body);
+      const auto* entries = json::get(body.get(), "entries");
+      if (!cJSON_IsArray(entries))
         return HttpResp::json("{\"ok\":false,\"err\":\"no entries\"}", 400);
-      std::vector<LwwMutation> mutations;
-      std::set<std::string> keys;
-      cJSON* it = nullptr;
-      cJSON_ArrayForEach(it, entries) {
-        if (!cJSON_IsObject(it))
-          return HttpResp::json("{\"ok\":false,\"err\":\"bad entry\"}", 400);
-        std::string key = json::getString(it, "key");
-        cJSON* v = json::get(it, "value");
-        if (key.empty() || !v || key.size() > 512 || key.front() == '.' || key.back() == '.' ||
-            key.find("..") != std::string::npos)
-          return HttpResp::json("{\"ok\":false,\"err\":\"bad key or value\"}", 400);
-        if (!keys.insert(key).second)
-          return HttpResp::json("{\"ok\":false,\"err\":\"duplicate key\"}", 400);
-        std::string style_error;
-        if (!configWriteValidEffective(key, v, &style_error)) {
-          auto out = json::obj();
-          json::setBool(out.get(), "ok", false);
-          json::set(out.get(), "err", style_error);
-          return HttpResp::json(json::dump(out.get()), 400);
-        }
-        mutations.push_back({key, json::dump(v), false});
+      if (cJSON_GetArraySize(entries) == 0) return HttpResp::json("{\"ok\":true,\"n\":0}");
+      auto ops = json::arr(); const cJSON* entry = nullptr;
+      cJSON_ArrayForEach(entry, entries) {
+        auto* op = json::pushObj(ops.get());
+        json::set(op, "op", "set"); json::set(op, "key", json::getString(entry, "key"));
+        const auto* value = json::get(entry, "value");
+        if (value) json::setItem(op, "value", json::Doc(cJSON_Duplicate(value, 1)));
       }
-      const auto changed = config->mutate(mutations);
-      if (!config->lastMutationCommitted())
-        return HttpResp::json(
-            "{\"ok\":false,\"err\":\"config_persistence_failed\"}", 500);
-      auto o = json::obj();
-      json::setBool(o.get(), "ok", true);
-      json::set(o.get(), "n", static_cast<int64_t>(changed.size()));
-      return HttpResp::json(json::dump(o.get()));
+      int status = 200;
+      const auto result = configBatchJsonOnLoop(json::dump(ops.get()), &status);
+      return HttpResp::json(result, status);
     });
 
 
@@ -10015,13 +10764,10 @@ struct Node::Impl {
     // Announcements. An indoor panel posts with its panel credential; the Admin doors tab posts
     // with the administrator session.
     httpd->route("POST", "/api/doors/*", [this](const HttpReq& req) {
-      // The existing unlock capability: trigger the configured unlock action for this door. It
-      // publishes the same ha_command the SIP feature code does, so an installation that already
-      // wired a relay to <base>/cmd/unlock needs no new configuration.
       const std::string unlock_door = doorPathDoor(req.uri, "/open");
       if (!unlock_door.empty()) {
-        if (!checkSession(req) && !panelTokenOk(req))
-          return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
+        if (!checkSession(req) && !panelRequestAllowed(req, unlock_door, "door.open", true))
+          return mediaFailure(403, "permission_denied");
         if (!doorExists(unlock_door))
           return HttpResp::json("{\"ok\":false,\"err\":\"unknown_door\"}", 404);
         if (!openDoorOnLoop(unlock_door))
@@ -10031,10 +10777,12 @@ struct Node::Impl {
       }
       const std::string door = doorNoticePathDoor(req.uri);
       if (door.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"not_found\"}", 404);
-      if (!checkSession(req) && !panelTokenOk(req))
+      if (!checkSession(req) && !panelRequestAllowed(req, door, "notice.write", true))
         return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
       auto body = json::parse(req.body);
       if (!body) return HttpResp::json("{\"ok\":false,\"err\":\"bad_body\"}", 400);
+      if (json::get(body.get(), "expected_revision"))
+        return commitDoorNoticeOnLoop(req, door, body.get());
       const std::string text = json::getString(body.get(), "text");
       int64_t expires = json::getInt(body.get(), "expires_ms", 0);
       const int64_t ttl_s = json::getInt(body.get(), "ttl_s", 0);
@@ -10047,10 +10795,12 @@ struct Node::Impl {
     // The cluster-wide announcement. A door-specific one overrides it, so this is the
     // "everywhere" target of the announcement dialog rather than a bulk per-door write.
     httpd->route("POST", "/api/notice", [this](const HttpReq& req) {
-      if (!checkSession(req) && !panelTokenOk(req))
+      if (!checkSession(req) && !panelRequestAllowed(req, "*", "notice.write", true))
         return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
       auto body = json::parse(req.body);
       if (!body) return HttpResp::json("{\"ok\":false,\"err\":\"bad_body\"}", 400);
+      if (json::get(body.get(), "expected_revision"))
+        return commitDoorNoticeOnLoop(req, "*", body.get());
       const std::string text = json::getString(body.get(), "text");
       int64_t expires = json::getInt(body.get(), "expires_ms", 0);
       const int64_t ttl_s = json::getInt(body.get(), "ttl_s", 0);
@@ -10061,7 +10811,7 @@ struct Node::Impl {
     });
 
     httpd->route("DELETE", "/api/notice", [this](const HttpReq& req) {
-      if (!checkSession(req) && !panelTokenOk(req))
+      if (!checkSession(req) && !panelRequestAllowed(req, "*", "notice.write", true))
         return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
       if (!clearDoorNoticeOnLoop("*"))
         return HttpResp::json("{\"ok\":false,\"err\":\"rejected\"}", 400);
@@ -10071,7 +10821,7 @@ struct Node::Impl {
     httpd->route("DELETE", "/api/doors/*", [this](const HttpReq& req) {
       const std::string door = doorNoticePathDoor(req.uri);
       if (door.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"not_found\"}", 404);
-      if (!checkSession(req) && !panelTokenOk(req))
+      if (!checkSession(req) && !panelRequestAllowed(req, door, "notice.write", true))
         return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
       if (!clearDoorNoticeOnLoop(door))
         return HttpResp::json("{\"ok\":false,\"err\":\"rejected\"}", 400);
@@ -10100,7 +10850,9 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/panel/push-subscription", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      PanelPrincipal principal;
+      if (!panelRequestPrincipal(req, &principal)) return mediaFailure(403, "auth_required");
+      if (!principal.legacy_shared) return mediaFailure(403, "unsupported_capability");
       auto body = json::parse(req.body);
       cJSON* subscription = body ? json::get(body.get(), "subscription") : nullptr;
       auto normalized = normalizedWebPushSubscription(subscription);
@@ -10136,7 +10888,9 @@ struct Node::Impl {
     });
 
     httpd->route("DELETE", "/api/panel/push-subscription", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      PanelPrincipal principal;
+      if (!panelRequestPrincipal(req, &principal)) return mediaFailure(403, "auth_required");
+      if (!principal.legacy_shared) return mediaFailure(403, "unsupported_capability");
       auto body = json::parse(req.body);
       const std::string endpoint = body ? json::getString(body.get(), "endpoint") : "";
       if (endpoint.empty())
@@ -10149,15 +10903,17 @@ struct Node::Impl {
     });
 
     httpd->route("GET", "/api/panel/state", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      PanelPrincipal principal;
+      if (!panelRequestPrincipal(req, &principal)) return mediaFailure(403, "auth_required");
       auto o = json::obj();
+      panelIdentityResponse(o.get(), principal);
       cJSON* doors = json::addArr(o.get(), "doors");
       int64_t now_mono = clock->monoMs();
       pruneTerminalCalls();
       cJSON* dcfg = json::get(cfg.get(), "doors");
       cJSON* it = nullptr;
       cJSON_ArrayForEach(it, dcfg) {
-        if (!it->string) continue;
+        if (!it->string || !panelRequestAllowed(req, it->string, "view")) continue;
         cJSON* e = json::pushObj(doors);
         json::set(e, "id", it->string);
         std::string label = labelIn(json::get(it, "label"), "ja");
@@ -10259,9 +11015,10 @@ struct Node::Impl {
                                   "web_active_page_alerts", true));
       std::string web_group = req.param("group");
       if (!webGroupNameValid(web_group)) web_group = "all";
-      json::setItem(o.get(), "device_alert", panelDeviceAlert(web_group));
+      json::setItem(o.get(), "device_alert", principal.legacy_shared ? panelDeviceAlert(web_group) : json::obj());
       cJSON* evs = json::addArr(o.get(), "events");
       for (const auto& ev : store.recentEvents(10)) {
+        if (!principal.legacy_shared && !panelRequestAllowed(req, ev.door, "view")) continue;
         cJSON* e = json::pushObj(evs);
         json::set(e, "type", ev.type);
         json::set(e, "door", ev.door);
@@ -10275,7 +11032,7 @@ struct Node::Impl {
           if (!vlang.empty()) json::set(e, "visitor_lang", vlang);
         }
       }
-      if (last_reply_ts > 0) {
+      if (last_reply_ts > 0 && principal.legacy_shared) {
         cJSON* r = json::addObj(o.get(), "reply");
         json::set(r, "text", last_reply_text);
         json::set(r, "ts", last_reply_ts);
@@ -10354,7 +11111,9 @@ struct Node::Impl {
 
 
     httpd->route("POST", "/api/panel/ui-report", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      PanelPrincipal principal;
+      if (!panelRequestPrincipal(req, &principal)) return mediaFailure(403, "auth_required");
+      if (!principal.legacy_shared) return mediaFailure(403, "unsupported_capability");
       if (req.body.size() > 16 * 1024)
         return HttpResp::json("{\"ok\":false,\"err\":\"report too large\"}", 413);
       auto body = json::parse(req.body);
@@ -10428,7 +11187,8 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/panel/press", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "call.initiate", true))
+        return mediaFailure(403, "permission_denied");
       std::string door = req.param("door");
       if (door.empty() || !cfgAt("doors." + door))
         return HttpResp::json("{\"ok\":false,\"err\":\"unknown door\"}", 400);
@@ -10453,7 +11213,8 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/panel/purpose", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "call.initiate", true))
+        return mediaFailure(403, "permission_denied");
       const std::string door = req.param("door");
       if (effectiveCallFlow(door.empty() ? opts.door : door) != "ring_then_purpose")
         return HttpResp::json("{\"ok\":false,\"err\":\"call flow unsupported\"}", 409);
@@ -10471,7 +11232,8 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/panel/reply", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "call.answer", true))
+        return mediaFailure(403, "permission_denied");
       const std::string door = req.param("door").empty() ? opts.door : req.param("door");
       const std::string reply_id = req.param("reply_id");
       if (door.empty() || !cfgAt("doors." + door))
@@ -10504,7 +11266,8 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/panel/cancel", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "call.initiate", true))
+        return mediaFailure(403, "permission_denied");
       const std::string door = req.param("door").empty() ? opts.door : req.param("door");
       if (!doorFeature(door, "call_cancel_v2") ||
           !doorManifestSupports(door, "cancel.call"))
@@ -10515,11 +11278,21 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/panel/call-lifecycle", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      auto failure = [](int status, const std::string& code, const std::string& message) {
+        auto response = json::obj();
+        json::setBool(response.get(), "ok", false);
+        json::set(response.get(), "error_code", code);
+        json::set(response.get(), "err", message);
+        return HttpResp::json(json::dump(response.get()), status);
+      };
+      if (!panelRequestAllowed(req, req.param("door").empty() ? opts.door : req.param("door"),
+          "call.answer", true, false))
+        return failure(403, "permission_denied", "panel permission denied");
       const std::string door = req.param("door").empty() ? opts.door : req.param("door");
+      const std::string call_id = req.param("call_id");
       const std::string owner = webDialogOwner(req.param("dialog_id"));
       if (owner.empty())
-        return HttpResp::json("{\"ok\":false,\"err\":\"invalid dialog identity\"}", 400);
+        return failure(400, "invalid_request", "invalid dialog identity");
       const std::string revision_text = req.param("stage_revision");
       int revision = -1;
       try {
@@ -10530,34 +11303,80 @@ struct Node::Impl {
         revision = -1;
       }
       if (revision < 0)
-        return HttpResp::json("{\"ok\":false,\"err\":\"invalid stage revision\"}", 400);
+        return failure(400, "invalid_request", "invalid stage revision");
       const std::string state = req.param("state");
+      if (state != "answered" && state != "ended" && state != "heartbeat")
+        return failure(400, "invalid_request", "invalid lifecycle state");
+      auto active = active_calls.find(door);
+      const std::string publisher_session = panelMutationSession(req);
+      const auto existing_lease = web_dialog_timers.find(call_id);
+      if (existing_lease != web_dialog_timers.end() &&
+          !existing_lease->second.publisher_session.empty() &&
+          existing_lease->second.publisher_session != publisher_session)
+        return failure(403, "permission_denied", "dialog belongs to another session");
+      const bool first_answer = active != active_calls.end() && active->second.state == "ringing";
+      if (state != "ended") {
+        if (active == active_calls.end() || active->second.call_id != call_id)
+          return failure(409, "call_ended", "call is no longer active");
+        if (active->second.stage_revision != revision)
+          return failure(409, "stale_revision", "stage revision changed");
+        if (active->second.state == "in_call") {
+          if (active->second.dialog_owner != owner)
+            return failure(409, "stale_owner", "dialog owner changed");
+          if (web_dialog_timers.find(call_id) == web_dialog_timers.end())
+            return failure(409, "recovery_required", "dialog recovery required");
+          if (webDialogLeaseRemaining(door, call_id, revision, owner) == 0)
+            return failure(409, "call_ended", "dialog lease expired");
+        } else if (state == "heartbeat" || active->second.state != "ringing") {
+          return failure(409, "call_ended", "call is not in progress");
+        }
+      }
       bool ok = false;
       if (state == "answered") {
-        ok = doReportCallAnswered(door, req.param("call_id"), revision, owner);
-        if (ok) armWebDialogLease(door, req.param("call_id"), owner);
+        ok = doReportCallAnswered(door, call_id, revision, owner);
+        if (ok) {
+          armWebDialogLease(door, call_id, owner);
+          if (first_answer) {
+            web_dialog_timers[call_id].publisher_session = publisher_session;
+            if (!publisher_session.empty()) {
+              std::lock_guard<std::mutex> lock(sess_mu);
+              auto authenticated = panel_sessions.find(publisher_session);
+              if (authenticated != panel_sessions.end())
+                authenticated->second.interactive_mono = clock->monoMs();
+            }
+          }
+        }
       } else if (state == "ended") {
-        ok = doReportCallEnded(door, req.param("call_id"), revision,
+        ok = doReportCallEnded(door, call_id, revision,
                                req.param("reason").empty() ? "sip_ended" : req.param("reason"),
                                owner);
       } else if (state == "heartbeat") {
-        auto active = active_calls.find(door);
-        ok = active != active_calls.end() && active->second.call_id == req.param("call_id") &&
-             active->second.stage_revision == revision && active->second.state == "in_call" &&
-             active->second.dialog_owner == owner;
-        if (ok) armWebDialogLease(door, req.param("call_id"), owner);
-      } else {
-        return HttpResp::json("{\"ok\":false,\"err\":\"invalid lifecycle state\"}", 400);
+        ok = true;
+        armWebDialogLease(door, call_id, owner);
       }
-      if (!ok) return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
+      if (!ok) {
+        active = active_calls.find(door);
+        if (active == active_calls.end() || active->second.call_id != call_id)
+          return failure(409, "call_ended", "call is no longer active");
+        if (active->second.stage_revision != revision)
+          return failure(409, "stale_revision", "stage revision changed");
+        if (active->second.state == "in_call" && active->second.dialog_owner != owner)
+          return failure(409, "stale_owner", "dialog owner changed");
+        return failure(503, "persistence_failed", "lifecycle write did not complete");
+      }
       auto response = json::obj();
       json::setBool(response.get(), "ok", true);
+      json::set(response.get(), "call_id", call_id);
+      json::set(response.get(), "stage_revision", static_cast<int64_t>(revision));
       json::set(response.get(), "dialog_owner", owner);
+      json::set(response.get(), "lease_remaining_ms",
+                webDialogLeaseRemaining(door, call_id, revision, owner));
       return HttpResp::json(json::dump(response.get()));
     });
 
     httpd->route("POST", "/api/panel/hangup", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "call.answer", true))
+        return mediaFailure(403, "permission_denied");
       const std::string door = req.param("door").empty() ? opts.door : req.param("door");
       if (!doorManifestSupports(door, "call.end"))
         return HttpResp::json("{\"ok\":false,\"err\":\"hangup unsupported\"}", 409);
@@ -10567,7 +11386,8 @@ struct Node::Impl {
     });
 
     httpd->route("POST", "/api/panel/recovery", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "call.answer", true))
+        return mediaFailure(403, "permission_denied");
       const std::string call_id = req.param("call_id");
       const std::string door = req.param("door");
       auto active = active_calls.find(door.empty() ? opts.door : door);
@@ -10596,7 +11416,8 @@ struct Node::Impl {
 
 
     httpd->route("POST", "/api/panel/visitor-lang", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "call.initiate", true))
+        return mediaFailure(403, "permission_denied");
       const std::string lang = req.param("lang");
       if (lang.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no lang\"}", 400);
       const std::string door = req.param("door");
@@ -10609,7 +11430,8 @@ struct Node::Impl {
 
 
     httpd->route("POST", "/api/panel/emergency", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (!panelRequestAllowed(req, "", "sos.trigger", true))
+        return mediaFailure(403, "permission_denied");
       const std::string act = req.param("active");
       if (act == "0" || act == "false")
         return HttpResp::json("{\"ok\":false,\"err\":\"cancel not allowed\"}", 403);
@@ -10620,7 +11442,8 @@ struct Node::Impl {
     });
 
     httpd->route("GET", "/snapshot-proxy", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "view", false))
+        return mediaFailure(403, "permission_denied");
       std::string door = req.param("door");
 
       std::string target;
@@ -10663,20 +11486,52 @@ struct Node::Impl {
 
 
     httpd->route("GET", "/api/panel/call-info", [this](const HttpReq& req) {
-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
+      PanelPrincipal principal;
+      if (!panelRequestPrincipal(req, &principal)) return mediaFailure(403, "auth_required");
       auto o = json::obj();
       json::setBool(o.get(), "ok", true);
+      panelIdentityResponse(o.get(), principal);
       cJSON* w = json::addObj(o.get(), "webrtc");
       cJSON* wc = cfgAt("integrations.webrtc");
       json::set(w, "ws_url", json::getString(wc, "ws_url"));
-      json::set(w, "sip_user", json::getString(wc, "sip_user"));
-      json::set(w, "sip_pass", referencedSecret(wc, "sip_pass_ref"));
       json::set(w, "server", json::getString(json::get(cfg.get(), "sip"), "server"));
+      if (principal.legacy_shared) {
+        json::set(w, "sip_user", json::getString(wc, "sip_user"));
+        json::set(w, "sip_pass_ref", json::getString(wc, "sip_pass_ref"));
+        json::set(w, "sip_pass", referencedSecret(wc, "sip_pass_ref"));
+        json::set(w, "provisioning_status", "legacy_shared");
+      } else {
+        const auto* identity = cfgAt("panel.identities." + principal.panel_id);
+        bool may_call = false;
+        const cJSON* door = nullptr;
+        cJSON_ArrayForEach(door, json::get(identity, "door_scope")) {
+          may_call = may_call || panelPrincipalAllowed(principal, door->valuestring, "call.monitor") ||
+              panelPrincipalAllowed(principal, door->valuestring, "call.answer");
+        }
+        const bool provisioned = panelIdentitySipConfigured(principal.panel_id);
+        json::set(w, "provisioning_status", !provisioned ? "provisioning_required" :
+            !may_call ? "permission_denied" : "configured");
+        if (provisioned && may_call) {
+          auto* account = cfgAt("sip.accounts." + json::getString(identity, "sip_account_id"));
+          json::set(w, "sip_user", json::getString(account, "user"));
+          json::set(w, "sip_pass_ref", json::getString(account, "pass_ref"));
+          json::set(w, "sip_pass", referencedSecret(account, "pass_ref"));
+        }
+      }
+      // This private identity includes resolved credentials so same-reference rotations count.
+      // The public generation is random and exposes neither a credential digest nor its input.
+      const std::string identity = snapshot_epoch + ":" + json::dump(w);
+      auto& call_config = panel_call_configs[principal.legacy_shared ? "legacy_shared" : principal.panel_id];
+      if (call_config.second.empty() || call_config.first != identity) {
+        call_config.first = identity;
+        call_config.second = genTokenHex(16);
+      }
+      json::set(w, "config_generation", call_config.second);
       cJSON* doors = json::addObj(o.get(), "doors");
       cJSON* dcfg = json::get(cfg.get(), "doors");
       cJSON* it = nullptr;
       cJSON_ArrayForEach(it, dcfg) {
-        if (!it->string) continue;
+        if (!it->string || !panelRequestAllowed(req, it->string, "view")) continue;
         cJSON* e = json::addObj(doors, it->string);
 
         std::string station;
@@ -10714,68 +11569,151 @@ struct Node::Impl {
           }
         }
       }
-      return HttpResp::json(json::dump(o.get()));
+      auto response = HttpResp::json(json::dump(o.get()));
+      response.headers["Cache-Control"] = "no-store";
+      return response;
     });
 
 
 
+
+    httpd->route("POST", "/api/panel/media-authorize", [this](const HttpReq& req) {
+      const auto session = panelMutationSession(req);
+      if (session.empty()) return mediaFailure(403, "permission_denied");
+      const std::string door = req.param("door");
+      if (!panelSessionAllowed(session, door, "media.publish"))
+        return mediaFailure(403, "permission_denied");
+      if (opts.role != "door_station" || door != opts.door)
+        return mediaFailure(501, "media_transport_unsupported");
+      const std::string call_id = req.param("call_id");
+      uint64_t revision = 0;
+      if (call_id.empty() || !mediaDecimal(req.param("stage_revision"), 2147483647,
+                                         &revision, true))
+        return mediaFailure(400, "identity_required");
+      pruneMediaAuthorizations();
+      const auto active = active_calls.find(door);
+      if (active == active_calls.end() || active->second.call_id != call_id ||
+          active->second.stage_revision != static_cast<int>(revision) ||
+          active->second.state != "in_call") return mediaFailure(409, "stale_call");
+      const auto lease = web_dialog_timers.find(call_id);
+      if (lease == web_dialog_timers.end() || lease->second.publisher_session != session)
+        return mediaFailure(403, "publisher_not_owner");
+      const auto remaining = std::min(panelSessionRemaining(session),
+          webDialogLeaseRemaining(door, call_id, static_cast<int>(revision),
+                                  active->second.dialog_owner));
+      if (remaining <= 0) return mediaFailure(409, "lease_expired");
+      for (auto it = media_authorizations.begin(); it != media_authorizations.end();) {
+        if (it->second.call_id != call_id) { ++it; continue; }
+        if (peer_frame_generation == it->first) {
+          peer_frame.clear(); peer_frame_generation.clear();
+        }
+        it = media_authorizations.erase(it);
+      }
+      if (media_authorizations.size() >= 8) return mediaFailure(429, "publisher_limit");
+      MediaAuthorization authorization;
+      authorization.door = door; authorization.call_id = call_id;
+      authorization.stage_revision = static_cast<int>(revision);
+      authorization.owner = active->second.dialog_owner;
+      authorization.session = session;
+      authorization.generation = genTokenHex(16);
+      authorization.deadline_mono = clock->monoMs() + std::min<int64_t>(10000, remaining);
+      media_authorizations.emplace(authorization.generation, authorization);
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", true);
+      json::set(result.get(), "schema_version", static_cast<int64_t>(1));
+      json::set(result.get(), "door", door);
+      json::set(result.get(), "call_id", call_id);
+      json::set(result.get(), "stage_revision", static_cast<int64_t>(revision));
+      json::set(result.get(), "dialog_owner", authorization.owner);
+      json::set(result.get(), "media_generation", authorization.generation);
+      json::set(result.get(), "publish_remaining_ms", std::min<int64_t>(10000, remaining));
+      json::set(result.get(), "upload_path", "/call-frame");
+      auto response = HttpResp::json(json::dump(result.get()));
+      response.headers["Cache-Control"] = "no-store";
+      return response;
+    });
 
     httpd->route("POST", "/call-frame", [this](const HttpReq& req) {
-      auto cors = [](HttpResp r) {
-        r.headers["Access-Control-Allow-Origin"] = "*";
-        return r;
-      };
-      if (!panelTokenOk(req))
-        return cors(HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403));
-      const std::string door = req.param("door");
-      if (opts.role != "door_station" || (!door.empty() && door != opts.door))
-        return cors(HttpResp::json("{\"ok\":false,\"err\":\"not this station\"}", 404));
-      if (sip_call != SipCallState::InCall)
-        return cors(HttpResp::json("{\"ok\":false,\"err\":\"not in call\"}", 409));
-
-      if (req.body.size() < 4 || static_cast<uint8_t>(req.body[0]) != 0xFF ||
-          static_cast<uint8_t>(req.body[1]) != 0xD8)
-        return cors(HttpResp::json("{\"ok\":false,\"err\":\"not jpeg\"}", 400));
+      const auto session = panelMutationSession(req);
+      if (session.empty()) return mediaFailure(403, "permission_denied");
+      const std::string generation = req.param("media_generation");
+      const std::string door = req.param("door"), call_id = req.param("call_id");
+      uint64_t revision = 0, sequence = 0;
+      if (door.empty() || call_id.empty() || generation.size() != 32 ||
+          generation.find_first_not_of("0123456789abcdef") != std::string::npos ||
+          !mediaDecimal(req.param("stage_revision"), 2147483647, &revision, true) ||
+          !mediaDecimal(req.param("frame_sequence"), 9223372036854775807ULL, &sequence))
+        return mediaFailure(400, "invalid_media_identity");
+      pruneMediaAuthorizations();
+      auto found = media_authorizations.find(generation);
+      if (found == media_authorizations.end()) return mediaFailure(409, "stale_media_generation");
+      MediaAuthorization& authorization = found->second;
+      if (authorization.session != session) return mediaFailure(403, "publisher_not_owner");
+      if (authorization.door != door || authorization.call_id != call_id ||
+          authorization.stage_revision != static_cast<int>(revision) ||
+          sequence <= authorization.last_sequence)
+        return mediaFailure(409, "stale_media_frame");
+      const auto type = req.headers.find("content-type");
+      if (req.body.size() > 1024 * 1024) return mediaFailure(413, "frame_too_large");
+      if (type == req.headers.end() || type->second != "image/jpeg" || req.body.size() < 4 ||
+          static_cast<uint8_t>(req.body[0]) != 0xff || static_cast<uint8_t>(req.body[1]) != 0xd8)
+        return mediaFailure(400, "invalid_jpeg");
+      int width = 0, height = 0, components = 0;
+      if (!stbi_info_from_memory(reinterpret_cast<const stbi_uc*>(req.body.data()),
+          static_cast<int>(req.body.size()), &width, &height, &components) ||
+          width <= 0 || height <= 0 || width > 1024 || height > 1024 || width * height > 307200)
+        return mediaFailure(400, "invalid_jpeg_dimensions");
+      // Decoding/transport may later move off-loop; the final slot write must retain this check.
+      if (!mediaAuthorityCurrent(authorization) || sequence <= authorization.last_sequence)
+        return mediaFailure(409, "stale_media_frame");
       peer_frame.assign(req.body.begin(), req.body.end());
       peer_frame_mono = clock->monoMs();
-      return cors(HttpResp::json("{\"ok\":true}"));
-    });
-    httpd->route("OPTIONS", "/call-frame", [](const HttpReq&) {
-      HttpResp r;
-      r.status = 204;
-      r.body = "";
-      r.headers["Access-Control-Allow-Origin"] = "*";
-      r.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS";
-      r.headers["Access-Control-Allow-Headers"] = "Authorization, Content-Type";
-      r.headers["Access-Control-Max-Age"] = "600";
-      return r;
+      peer_frame_generation = generation;
+      authorization.last_sequence = sequence;
+      auto result = json::obj();
+      json::setBool(result.get(), "ok", true);
+      json::set(result.get(), "media_generation", generation);
+      json::set(result.get(), "frame_sequence", std::to_string(sequence));
+      json::set(result.get(), "acceptance", "remote_core_accepted");
+      return HttpResp::json(json::dump(result.get()));
     });
 
-
-
-    httpd->route("GET", "/peer-frame.jpg", [this](const HttpReq&) {
-      if (peer_frame.empty() || clock->monoMs() - peer_frame_mono > 3000)
-        return HttpResp::json("{\"ok\":false,\"err\":\"no frame\"}", 404);
+    httpd->route("GET", "/peer-frame.jpg", [this](const HttpReq& req) {
+      const bool loopback = req.remote_addr == "127.0.0.1" || req.remote_addr == "::1" ||
+          req.remote_addr == "::ffff:127.0.0.1";
+      if ((!loopback && panelSessionRemaining(req.cookie("dbpanel")) <= 0) ||
+          (req.headers.count("origin") && !trustedWebOrigin(req)))
+        return mediaFailure(403, "permission_denied");
+      uint64_t revision = 0;
+      if (req.param("call_id").empty() ||
+          !mediaDecimal(req.param("stage_revision"), 2147483647, &revision, true))
+        return mediaFailure(409, "identity_required");
+      if (opts.role != "door_station" || req.param("door", opts.door) != opts.door)
+        return mediaFailure(403, "wrong_door");
+      pruneMediaAuthorizations();
+      const auto authorization = media_authorizations.find(peer_frame_generation);
+      if (peer_frame.empty() || clock->monoMs() - peer_frame_mono > 3000 ||
+          authorization == media_authorizations.end() ||
+          authorization->second.call_id != req.param("call_id") ||
+          authorization->second.stage_revision != static_cast<int>(revision))
+        return mediaFailure(404, "no_current_frame");
       HttpResp r;
       r.content_type = "image/jpeg";
       r.body.assign(peer_frame.begin(), peer_frame.end());
       r.headers["Cache-Control"] = "no-store";
+      r.headers["X-Doorbell-Call-Id"] = authorization->second.call_id;
+      r.headers["X-Doorbell-Dialog-Owner"] = authorization->second.owner;
+      r.headers["X-Doorbell-Stage-Revision"] = std::to_string(authorization->second.stage_revision);
+      r.headers["X-Doorbell-Media-Generation"] = authorization->second.generation;
+      r.headers["X-Doorbell-Frame-Sequence"] = std::to_string(authorization->second.last_sequence);
       return r;
     });
   }
 
-  // Panel bearer values never appear in URLs. APIs accept only the revocable HttpOnly session.
+  // Legacy bearer authentication cannot establish independent media publication authority.
   bool panelTokenOk(const HttpReq& req) {
     const std::string session = req.cookie("dbpanel");
-    if (!session.empty()) {
-      const PanelCredentialBinding current = panelCredentialBinding();
-      std::lock_guard<std::mutex> lk(sess_mu);
-      auto existing = panel_sessions.find(session);
-      if (existing != panel_sessions.end()) {
-        if (samePanelCredentialBinding(existing->second, current)) return true;
-        panel_sessions.erase(existing);
-      }
-    }
+    if (panelSessionRemaining(session) > 0) return true;
     const auto auth = req.headers.find("authorization");
     const std::string prefix = "Bearer ";
     return auth != req.headers.end() && auth->second.rfind(prefix, 0) == 0 &&
@@ -11049,9 +11987,27 @@ Node::Node(NodeOptions opts, NodeDeps deps) : impl_(new Impl) {
   }
   impl_->transport = std::move(deps.transport);
   impl_->discovery = std::move(deps.discovery);
+  impl_->operation_dispatcher.reset(new OperationDispatcher(*impl_->loop));
 }
 
 Node::~Node() { stop(); }
+
+#if defined(DB_HTTPD_TEST_HOOKS)
+size_t Node::operationPendingForTesting() const {
+  return impl_->operation_dispatcher->pendingCountForTesting();
+}
+#endif
+
+std::string Node::operationRequestJson(const std::string& verb, const std::string& request_json) {
+  if (request_json.size() > 8192) return operationFailure("capacity_exceeded", 413).body;
+  auto normalized = Impl::operationBody(request_json);
+  if (!normalized) return operationFailure("invalid_request", 400).body;
+  HttpReq request;
+  request.method = "NATIVE";
+  request.uri = verb;
+  request.body = json::dump(normalized.get());
+  return impl_->operation_dispatcher->request(std::move(request)).body;
+}
 
 bool Node::start() {
   if (impl_->started) return true;
@@ -11064,6 +12020,7 @@ bool Node::start() {
 
 void Node::stop() {
   if (!impl_ || !impl_->started) return;
+  impl_->operation_dispatcher->stop();
   impl_->started = false;
   // The SNTP worker holds a raw pointer to Impl, so it is stopped before anything else is torn
   // down. It observes the abort flag between exchanges and each exchange is bounded.
@@ -11080,6 +12037,7 @@ void Node::stop() {
 
   impl_->loop->callSync([&] {
     impl_->stopQrScanOnLoop();
+    impl_->stopOperationsOnLoop();
     impl_->stopNetMonitor();
     if (impl_->sip_reapply_timer) {
       impl_->loop->cancel(impl_->sip_reapply_timer);
@@ -11267,7 +12225,12 @@ void Node::cancelCall(const std::string& door_id) {
 
 std::string Node::pressV2(const std::string& door_id, const std::string& purpose) {
   std::string id;
-  impl_->loop->callSync([&] { id = impl_->doPress(door_id, purpose); });
+  impl_->loop->callSync([&] {
+    id = impl_->doPress(door_id, purpose);
+    // A caller can read status as soon as the identifier is returned. Publish the completed
+    // transition so its watchdog cannot mistake the previous snapshot for a missing call.
+    if (!id.empty()) impl_->refreshSnapshots();
+  });
   return id;
 }
 
@@ -11420,9 +12383,22 @@ bool Node::setEmergencyV2(bool active, const std::string& via) {
 }
 
 std::string Node::statusJson() {
-  std::lock_guard<std::mutex> lk(impl_->snap_mu);
-  if (impl_->status_snap.empty()) return "{}";
-  return impl_->status_snap;
+  std::string snapshot;
+  int64_t sampled_mono = 0;
+  {
+    std::lock_guard<std::mutex> lk(impl_->snap_mu);
+    snapshot = impl_->status_snap;
+    sampled_mono = impl_->status_snap_mono_ms;
+  }
+  if (snapshot.empty()) return "{}";
+  auto document = json::parse(snapshot);
+  if (!document) return "{}";
+  const int64_t now = impl_->clock->monoMs();
+  // Only age is calculated on the reader thread. Identity/state/deadline remain the single
+  // loop snapshot; stale reads cannot mint a new countdown or recovery window.
+  json::set(document.get(), "snapshot_age_ms", now < sampled_mono ? static_cast<int64_t>(-1)
+      : Impl::remainingDuration(now, sampled_mono));
+  return json::dump(document.get());
 }
 
 std::string Node::callLogJson(int64_t since_ms, int limit) {
@@ -11461,10 +12437,40 @@ std::string Node::debugJson() {
   return out;
 }
 
+std::string Node::configSnapshotJson() {
+  std::string out = "{\"ok\":false,\"schema_version\":2,\"error_code\":\"not_started\"}";
+  impl_->loop->callSync([&] { out = impl_->configSnapshotJsonOnLoop(); });
+  return out;
+}
+
+std::string Node::configCommitJson(const std::string& request) {
+  std::string out;
+  if (!impl_->loop->callSync([&] { out = impl_->configCommitJsonOnLoop(request, nullptr); }))
+    return "{\"ok\":false,\"schema_version\":2,\"error_code\":\"not_started\"}";
+  return out;
+}
+
+std::string Node::configImportJson(const std::string& action, const std::string& request,
+                                  const std::string& session, const std::string& csrf) {
+  std::string out;
+  if (!impl_->loop->callSync([&] { out = impl_->configImportJsonOnLoop(action, request, session, csrf, nullptr); }))
+    return "{\"ok\":false,\"schema_version\":2,\"error_code\":\"not_started\"}";
+  return out;
+}
+
 std::string Node::configJson() {
   std::lock_guard<std::mutex> lk(impl_->snap_mu);
   if (impl_->config_snap.empty()) return "{}";
   return impl_->config_snap;
+}
+
+std::string Node::panelIdentityJson(const std::string& action, const std::string& request,
+                                   const std::string& session, const std::string& csrf) {
+  std::string result = "{\"ok\":false,\"error_code\":\"not_started\"}";
+  impl_->loop->callSync([&] {
+    result = impl_->panelIdentityJsonOnLoop(action, request, session, csrf);
+  });
+  return result;
 }
 
 std::string Node::localTimeJson(int64_t wall_ms) {
@@ -11532,17 +12538,9 @@ std::string Node::deleteConfigKeyJson(const std::string& key) {
 }
 
 void Node::setConfigKey(const std::string& key, const std::string& value_json) {
-  auto parsed = json::parse(value_json);
-  if (!parsed) parsed = json::Doc(cJSON_CreateString(value_json.c_str()));
-  impl_->loop->callSync([&] {
-    std::string error;
-    if (!impl_->configWriteValidEffective(key, parsed.get(), &error)) {
-      DB_LOGE(kTag, "refused unsafe programmatic config write: " + key + " (" + error + ")");
-      return;
-    }
-    if (!impl_->setKey(key, value_json))
-      DB_LOGE(kTag, "programmatic config write was not persisted: " + key);
-  });
+  const auto response = json::parse(setConfigJson(key, value_json));
+  if (!json::getBool(response.get(), "ok"))
+    DB_LOGW(kTag, "programmatic configuration edit rejected: " + key);
 }
 
 std::string Node::pairingJson() {

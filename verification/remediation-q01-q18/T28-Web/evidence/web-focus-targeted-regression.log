@@ -1,0 +1,14 @@
+Typed config merge, array/delete/null and redaction tests: PASS
+✔ webui/tests/admin_config_merge.test.js (78.633458ms)
+admin logic tests: ok
+✔ webui/tests/admin_logic.test.js (89.603375ms)
+admin runtime tests: ok
+✔ webui/tests/admin_runtime.test.js (119.243542ms)
+ℹ tests 3
+ℹ suites 0
+ℹ pass 3
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 128.745958

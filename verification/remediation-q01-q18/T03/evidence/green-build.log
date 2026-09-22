@@ -1,0 +1,30 @@
+[ 14%] Built target db_third_party
+[ 15%] Embedding webui assets
+embed_webui: 23 assets, 1867621 bytes -> /Users/ox/Documents/project/app-doorbell/build/remediation-t03-20260922/gen/webui_assets.cpp
+[ 19%] Building CXX object CMakeFiles/doorbell_core.dir/gen/webui_assets.cpp.o
+[ 19%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+[ 19%] Building CXX object CMakeFiles/doorbell_core.dir/src/capi/doorbell_capi.cpp.o
+[ 20%] Linking CXX static library libdoorbell_core.a
+[ 55%] Built target doorbell_core
+[ 57%] Building CXX object CMakeFiles/doorbell.dir/src/capi/doorbell_capi.cpp.o
+[ 58%] Building CXX object CMakeFiles/doorbell_host.dir/host/main.cpp.o
+[ 59%] Linking CXX executable doorbell_video_decode_probe
+[ 60%] Built target doorbell_video_decode_probe
+[ 61%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_admin_api.cpp.o
+[ 63%] Linking CXX executable doorbell_host
+[ 64%] Linking CXX shared library libdoorbell.dylib
+[ 64%] Built target doorbell_host
+[ 65%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_assets.cpp.o
+[ 65%] Built target doorbell
+[ 66%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_call_log.cpp.o
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1640:3: error: no matching function for call to 'db_core_set_ui_callback'
+ 1640 |   db_core_set_ui_callback(core, [](const char* raw, void* context) {
+      |   ^~~~~~~~~~~~~~~~~~~~~~~
+/Users/ox/Documents/project/app-doorbell/core/include/doorbell/doorbell.h:137:13: note: candidate function not viable: no known conversion from '(lambda at /Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1640:33)' to 'db_ui_event_cb' (aka 'void (*)(void *, const char *)') for 2nd argument
+  137 | DB_API void db_core_set_ui_callback(db_core* c, db_ui_event_cb cb, void* user);
+      |             ^                                   ~~~~~~~~~~~~~~~~~
+1 error generated.
+make[2]: *** [CMakeFiles/doorbell_tests.dir/tests/test_admin_api.cpp.o] Error 1
+make[2]: *** Waiting for unfinished jobs....
+make[1]: *** [CMakeFiles/doorbell_tests.dir/all] Error 2
+make: *** [all] Error 2

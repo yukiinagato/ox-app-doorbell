@@ -1,0 +1,35 @@
+{
+  "documents": [
+    {
+      "path": "docs/en/operation-ack-protocol.md",
+      "sha256": "5cfa7a099799864403f3d7ff859e2c3377366c3ca6214f06fa00b4480e85fe16",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/documentation-final/docs/en/operation-ack-protocol.md"
+    },
+    {
+      "path": "docs/en/config-schema.md",
+      "sha256": "24dd7282ca7427fa89d732465783e7c260a6c7c06929be4354cf6feda9dc30dd",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/documentation-final/docs/en/config-schema.md"
+    },
+    {
+      "path": "docs/ja/operation-ack-protocol.md",
+      "sha256": "18d95d50f6cbbb77f4fac24bace1372a488bbc91f980f8cba1074bfbc72c3f9b",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/documentation-final/docs/ja/operation-ack-protocol.md"
+    },
+    {
+      "path": "docs/ja/config-schema.md",
+      "sha256": "5ad50e0fb1291997c5023e56a448d2464dbd82bf2100d5376fb53cd6c6e51d47",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/documentation-final/docs/ja/config-schema.md"
+    },
+    {
+      "path": "docs/zh/operation-ack-protocol.md",
+      "sha256": "46b98059ca2be84033253426a5033b9ef43e17b1f736bd656835d2bee51035b3",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/documentation-final/docs/zh/operation-ack-protocol.md"
+    },
+    {
+      "path": "docs/zh/config-schema.md",
+      "sha256": "9ab3f4cab4f30076d59658b4041da717f1b55aac9c76e100520e48f5d73ddc49",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/documentation-final/docs/zh/config-schema.md"
+    }
+  ],
+  "at": "2026-09-22T16:29:14.693735+00:00"
+}

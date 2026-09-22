@@ -1,0 +1,10 @@
+{
+  "command": [
+    "cmake",
+    "--build",
+    "build/remediation-t15-20260923/green-host",
+    "-j4"
+  ],
+  "exit_code": 0,
+  "duration_s": 11.836370944976807
+}

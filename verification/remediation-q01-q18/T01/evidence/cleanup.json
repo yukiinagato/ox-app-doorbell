@@ -1,0 +1,17 @@
+{
+  "status": "PASS",
+  "fixture_pid": 70719,
+  "process_and_threads_exited": true,
+  "ports_rebound": [
+    "('127.0.0.1', 28001)",
+    "('::1', 28001)"
+  ],
+  "database": {
+    "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/browser-data/doorbell.db",
+    "exclusive_reopen": true,
+    "integrity": "ok"
+  },
+  "owned_database_dir_removed": true,
+  "mutation_directories_remaining": [],
+  "scope": "T01 owned fixtures; existing test diagnostic files are retained."
+}

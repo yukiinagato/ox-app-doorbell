@@ -1,0 +1,886 @@
+--- before/webui/panel/call.html
++++ after/webui/panel/call.html
+@@ -15,6 +15,7 @@
+   #regState { font-size: 14px; color: #5d6b79; }
+   #offlineBand { display: none; background: #ff6b6b; color: #2a0505; text-align: center;
+                  font-size: 22px; font-weight: bold; padding: 10px; }
++  #configBand { display: none; padding: 8px 16px; color: #ffd59a; background: #3a2d19; }
+   #doorTabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
+   #doorTabs button { font-size: 20px; padding: 10px 22px; border-radius: 10px;
+                      border: 1px solid #2a333d; background: #1a2027; color: #e8edf2;
+@@ -47,6 +48,7 @@
+ </head>
+ <body>
+ <div id="offlineBand" data-semantic-id="status.offline"></div>
++<div id="configBand" role="status"></div>
+ <header><h1 id="title" data-semantic-id="ring.title"></h1><span id="regState"></span></header>
+ <div id="doorTabs"></div>
+ <main>
+@@ -92,23 +94,28 @@
+   return value;
+ }
+ 
+-async function ensureLanguage(requested, isCurrent) {
++function ensureLanguage(requested) {
+   const lang = normalizeLang(requested) || "ja";
+-  if (LANG === lang) return;
+-  try {
+-    const response = await fetch("/locale/" + lang + ".json", { cache: "no-store" });
+-    if (!response.ok) throw new Error("locale HTTP " + response.status);
+-    const dictionary = await response.json();
+-    if (isCurrent && !isCurrent()) return;
++  if (!readsAllowed()) return;
++  if (LANG === lang) {
++    if (localePoll.pending) retirePoll(localePoll);
++    return;
++  }
++  if (localeAttempt && localeAttempt.lang === lang && contextCurrent(localeAttempt.context)) return;
++  retirePoll(localePoll);
++  const attempt = { lang: lang, context: captureContext() };
++  localeAttempt = attempt;
++  readPoll(localePoll, "/locale/" + lang + ".json", dictionary => {
++    if (localeAttempt !== attempt || !contextCurrent(attempt.context)) return false;
++    if (!dictionary || typeof dictionary !== "object" || Array.isArray(dictionary) ||
++        Object.keys(dictionary).some(key => typeof dictionary[key] !== "string"))
++      throw new Error("invalid locale dictionary");
+     I18N = dictionary;
+     LANG = lang;
+-  } catch (error) {
+-    if (isCurrent && !isCurrent()) return;
+-    if (lang !== "en") { await ensureLanguage("en", isCurrent); return; }
+-    I18N = {};
+-    LANG = "en";
+-  }
+-  document.documentElement.setAttribute("lang", LANG);
++    document.documentElement.setAttribute("lang", LANG);
++    applyI18n();
++    return true;
++  });
+ }
+ 
+ function languageForState(state, doorId) {
+@@ -166,6 +173,7 @@
+   status: document.getElementById("status"),
+   reg: document.getElementById("regState"),
+   offline: document.getElementById("offlineBand"),
++  config: document.getElementById("configBand"),
+   audio: document.getElementById("remoteAudio"),
+ };
+ let doors = [];        // [{id,label,extension,station,online}]
+@@ -186,9 +194,104 @@
+ let selectionRevision = 0;
+ let pageRevision = 0;
+ let pageActive = true;
+-let loadTimer = null;
+-let loadPending = null;
+-const callInfoRequests = DoorbellPanelRuntime.createRequestLane();
++const statePoll = makePoll(1000, 3000);
++const callInfoPoll = makePoll(5000, 4000);
++const localePoll = makePoll(0, 4000);
++let localeAttempt = null;
++let latestCallInfo = null;
++let latestStateContext = null;
++let monotonicHighWater = 0;
++
++function makePoll(period, deadline) {
++  return { period: period, deadline: deadline, lane: DoorbellPanelRuntime.createRequestLane(),
++    timer: null, pending: null, lastSuccess: null, failed: false };
++}
++
++function monotonicNow() {
++  const value = performance.now();
++  if (Number.isFinite(value)) monotonicHighWater = Math.max(monotonicHighWater, value);
++  return monotonicHighWater;
++}
++
++function readsAllowed() { return pageActive && !document.hidden; }
++
++function captureContext() {
++  return { page: pageRevision, selection: selectionRevision,
++    binding: activeLifecycle, session: session };
++}
++
++function contextCurrent(request) {
++  return readsAllowed() && pageRevision === request.page &&
++    selectionRevision === request.selection && activeLifecycle === request.binding &&
++    session === request.session;
++}
++
++function retirePoll(poll) {
++  clearTimeout(poll.timer);
++  poll.timer = null;
++  poll.pending = null;
++  poll.lane.cancel();
++}
++
++function retireReads() {
++  [statePoll, callInfoPoll, localePoll].forEach(retirePoll);
++  localeAttempt = null;
++  statePoll.failed = true;
++}
++
++function renderFreshness() {
++  const now = monotonicNow();
++  const age = statePoll.lastSuccess === null ? null : Math.max(0, now - statePoll.lastSuccess);
++  const stale = statePoll.failed || age === null || age > statePoll.deadline;
++  els.offline.style.display = stale ? "block" : "none";
++  els.offline.textContent = age === null ? t("panel.state_waiting") :
++    t("panel.state_stale", { sec: Math.floor(age / 1000) });
++  els.config.style.display = callInfoPoll.failed || callInfoPoll.lastSuccess !== null &&
++    now - callInfoPoll.lastSuccess > callInfoPoll.period + callInfoPoll.deadline ? "block" : "none";
++  els.config.textContent = t("panel.config_stale");
++}
++
++function readPoll(poll, url, apply) {
++  if (!readsAllowed() || poll.pending) return;
++  clearTimeout(poll.timer);
++  poll.timer = null;
++  const request = captureContext();
++  poll.pending = request;
++  renderFreshness();
++  const finish = result => {
++    if (poll.pending !== request) return;
++    try {
++      if (!readsAllowed() || request.page !== pageRevision) return;
++      if (result.ok) {
++        if (apply(result.data, request) !== false) {
++          poll.lastSuccess = monotonicNow();
++          poll.failed = false;
++        }
++      } else {
++        poll.failed = true;
++        if (result.status === 403 && K && !sessionRefreshPending) {
++          sessionRefreshPending = true;
++          DoorbellPanelRuntime.establishSession(response => {
++            sessionRefreshPending = false;
++            if (readsAllowed() && request.page === pageRevision && response.ok) load();
++          }, K);
++        }
++      }
++    } catch (error) {
++      poll.failed = true;
++    } finally {
++      if (poll.pending === request) poll.pending = null;
++      if (readsAllowed() && request.page === pageRevision) {
++        renderFreshness();
++        if (poll.period) poll.timer = setTimeout(poll === statePoll ? loadState : loadCallInfo, poll.period);
++      }
++    }
++  };
++  try {
++    request.handle = poll.lane.start({ url: url, deadline_ms: poll.deadline }, finish);
++    if (!request.handle) finish({ ok: false, kind: "busy" });
++  } catch (error) { finish({ ok: false, kind: "network" }); }
++}
+ 
+ function renderRegistration() {
+   if (registrationState.state === "registered") {
+@@ -210,7 +313,7 @@
+   els.title.textContent = t("panel.call_title");
+   els.noVideo.textContent = t("panel.no_video");
+   els.sendVideoText.textContent = t("panel.send_video");
+-  els.offline.textContent = t("panel.offline");
++  renderFreshness();
+   if (session || mockSessionActive) els.call.textContent = t("incall.end");
+   else els.call.textContent = selected && (selected.calling ||
+     selected.call_state === "ringing" || selected.call_state === "purpose_pending") ?
+@@ -273,6 +376,7 @@
+       onState: (state) => { els.noVideo.style.display = state === "failed" ? "" : "none"; } });
+   }
+   updateCallButton();
++  if (latestPanelState) ensureLanguage(languageForState(latestPanelState, d.id));
+ }
+ 
+ function updateCallButton() {
+@@ -491,10 +595,7 @@
+ window.addEventListener("pagehide", () => {
+   pageActive = false;
+   pageRevision++;
+-  clearTimeout(loadTimer);
+-  loadTimer = null;
+-  loadPending = null;
+-  callInfoRequests.cancel();
++  retireReads();
+   if (playback) { playback.stop(); playback = null; }
+   stopSendingVideo();
+   const binding = activeLifecycle;
+@@ -520,6 +621,14 @@
+ });
+ 
+ 
++document.addEventListener("visibilitychange", () => {
++  if (!pageActive) return;
++  pageRevision++;
++  retireReads();
++  if (!document.hidden) start();
++});
++
++
+ async function startSendingVideo() {
+   if (videoBinding || frameTimer || !selected || (!session && !MOCK)) return;
+   const binding = { session: session, door: selected.id,
+@@ -558,8 +667,97 @@
+ };
+ 
+ 
+-async function load() {
+-  if (!pageActive || loadPending) return;
++function refreshDoors(st) {
++  const oldSelected = selected;
++  const infoDoors = latestCallInfo && latestCallInfo.doors || {};
++  doors = (st.doors || []).map(d => DoorbellCallFlow.projectDoor(d, infoDoors[d.id] || {}));
++  renderTabs();
++  const refreshed = oldSelected ? doors.find(d => d.id === oldSelected.id) : null;
++  if (!oldSelected && doors.length)
++    selectDoor(doors.find(d => d.id === INITIAL_DOOR) || doors[0]);
++  else if (oldSelected && !refreshed && doors.length) selectDoor(doors[0], true);
++  else if (refreshed && playbackKey(refreshed) !== playbackKey(oldSelected))
++    selectDoor(refreshed, true);
++  else { selected = refreshed; renderTabs(); updateCallButton(); }
++  return refreshed;
++}
++
++function applyState(st, request) {
++  if (!contextCurrent(request)) return false;
++  if (!st || typeof st !== "object" || !Array.isArray(st.doors)) throw new Error("invalid state");
++  emergencyOverlay.update(st);
++  latestPanelState = st;
++  const refreshed = refreshDoors(st);
++  ensureLanguage(languageForState(st, selected && selected.id || INITIAL_DOOR));
++  const callSnapshotCurrent = !activeLifecycle || (refreshed &&
++    refreshed.id === activeLifecycle.door && refreshed.call_id === activeLifecycle.callId &&
++    Number(refreshed.stage_revision) >= activeLifecycle.stageRevision);
++  if (callSnapshotCurrent && refreshed && activeLifecycle)
++    activeLifecycle.stageRevision = Math.max(activeLifecycle.stageRevision, refreshed.stage_revision);
++  if (callSnapshotCurrent && refreshed && sessionConfirmed && activeLifecycle && refreshed.dialog_owner &&
++    activeLifecycle.owner && refreshed.dialog_owner !== activeLifecycle.owner) {
++    activeLifecycle.ended = true;
++    activeLifecycle = null;
++    setStatus(t("panel.other_answered"));
++    if (session) endCall("answered_elsewhere");
++  }
++  if (callSnapshotCurrent && refreshed && refreshed.recovery_required && activeLifecycle && sessionConfirmed &&
++    refreshed.call_id === activeLifecycle.callId && !activeLifecycle.recoveryPending) {
++    const recoveryBinding = activeLifecycle;
++    const recoverySession = session;
++    recoveryBinding.recoveryPending = true;
++    reportRecovery(recoveryBinding, true).then(ok => {
++      // This completion owns only the lifecycle and SIP session captured at request time. A
++      // later call can reuse the same door and must never be ended by an old recovery result.
++      finishRecovery(recoveryBinding, recoverySession, ok);
++    });
++  }
++  heartbeatLifecycle(activeLifecycle);
++  const disposition = callSnapshotCurrent ? DoorbellCallFlow.residentDisposition(
++    refreshed ? refreshed.call_state : "", sessionConfirmed, !!activeLifecycle) : "keep";
++  if (disposition === "answered_elsewhere") {
++    setStatus(t("panel.other_answered"));
++    if (session) endCall();
++  }
++  if (disposition === "end") {
++    if (session) endCall();
++    setStatus(t("panel.call_ended"));
++  }
++  if (disposition === "cancelled" || disposition === "expired") {
++    setStatus(disposition === "cancelled" ? t("ring.cancelled") :
++      t("panel.call_expired"), true);
++    if (session) endCall();
++  }
++  if (!ua) initUa();
++  DoorbellPanelRuntime.applySemanticUi(st, { page: "call" });
++  latestStateContext = captureContext();
++  return true;
++}
++
++function loadState() {
++  readPoll(statePoll, DoorbellPanelRuntime.panelStateUrl(), applyState);
++}
++
++function loadCallInfo() {
++  readPoll(callInfoPoll, "/api/panel/call-info", ci => {
++    if (!ci || typeof ci !== "object" || Array.isArray(ci) ||
++        ci.doors && (typeof ci.doors !== "object" || Array.isArray(ci.doors)))
++      throw new Error("invalid call-info");
++    latestCallInfo = ci;
++    webrtc = ci.webrtc || null;
++    // Configuration only reprojects the latest state; it never replays call lifecycle effects.
++    if (latestPanelState && latestStateContext && contextCurrent(latestStateContext)) {
++      refreshDoors(latestPanelState);
++      latestStateContext = captureContext();
++    }
++    if (!ua) initUa();
++    updateCallButton();
++    return true;
++  });
++}
++
++function load() {
++  if (!readsAllowed()) return;
+   if (MOCK) {
+     doors = [
+       { id: "d_front", label: "Front door", extension: "8001", station: "", online: true },
+@@ -572,118 +770,13 @@
+     selectDoor(doors[0]);
+     return;
+   }
+-  const request = { page: pageRevision, selection: selectionRevision,
+-    binding: activeLifecycle, session: session };
+-  loadPending = request;
+-  const current = () => pageActive && pageRevision === request.page &&
+-    selectionRevision === request.selection && activeLifecycle === request.binding &&
+-    session === request.session;
+-  try {
+-    const oldSelected = selected;
+-    const [st, ci] = await Promise.all([
+-      fetch(DoorbellPanelRuntime.panelStateUrl()).then(r => {
+-        if (!r.ok) { const e = new Error("state HTTP " + r.status); e.status = r.status; throw e; }
+-        return r.json();
+-      }),
+-      new Promise((resolve, reject) => {
+-        request.callInfo = callInfoRequests.start({ url: "/api/panel/call-info", deadline_ms: 4000 }, result => {
+-          if (result.ok) resolve(result.data);
+-          else reject(result);
+-        });
+-        if (!request.callInfo) reject(new Error("call-info request already in flight"));
+-      }),
+-    ]);
+-    if (!current()) return;
+-    const languageDoor = oldSelected && oldSelected.id || INITIAL_DOOR ||
+-      ((st.doors || []).find(door => door.calling) || {}).id || "";
+-    const desiredLanguage = languageForState(st, languageDoor);
+-    if (desiredLanguage !== LANG) {
+-      await ensureLanguage(desiredLanguage, current);
+-      if (!current()) return;
+-      applyI18n();
+-    }
+-    emergencyOverlay.update(st);
+-    latestPanelState = st;
+-    els.offline.style.display = "none";
+-    webrtc = ci.webrtc || null;
+-    doors = (st.doors || []).map(d => DoorbellCallFlow.projectDoor(d, (ci.doors || {})[d.id] || {}));
+-    renderTabs();
+-    const refreshed = oldSelected ? doors.find(d => d.id === oldSelected.id) : null;
+-    if (!oldSelected && doors.length)
+-      selectDoor(doors.find(d => d.id === INITIAL_DOOR) || doors[0]);
+-    else if (oldSelected && !refreshed && doors.length) selectDoor(doors[0], true);
+-    else if (refreshed && playbackKey(refreshed) !== playbackKey(oldSelected))
+-      selectDoor(refreshed, true);
+-    else { selected = refreshed; renderTabs(); updateCallButton(); }
+-    const callSnapshotCurrent = !activeLifecycle || (refreshed &&
+-      refreshed.id === activeLifecycle.door && refreshed.call_id === activeLifecycle.callId &&
+-      Number(refreshed.stage_revision) >= activeLifecycle.stageRevision);
+-    if (callSnapshotCurrent && refreshed && activeLifecycle)
+-      activeLifecycle.stageRevision = Math.max(activeLifecycle.stageRevision, refreshed.stage_revision);
+-    if (callSnapshotCurrent && refreshed && sessionConfirmed && activeLifecycle && refreshed.dialog_owner &&
+-        activeLifecycle.owner && refreshed.dialog_owner !== activeLifecycle.owner) {
+-      activeLifecycle.ended = true;
+-      activeLifecycle = null;
+-      setStatus(t("panel.other_answered"));
+-      if (session) endCall("answered_elsewhere");
+-    }
+-    if (callSnapshotCurrent && refreshed && refreshed.recovery_required && activeLifecycle && sessionConfirmed &&
+-        refreshed.call_id === activeLifecycle.callId && !activeLifecycle.recoveryPending) {
+-      const recoveryBinding = activeLifecycle;
+-      const recoverySession = session;
+-      recoveryBinding.recoveryPending = true;
+-      reportRecovery(recoveryBinding, true).then(ok => {
+-        // This completion owns only the lifecycle and SIP session captured at request time. A
+-        // later call can reuse the same door and must never be ended by an old recovery result.
+-        finishRecovery(recoveryBinding, recoverySession, ok);
+-      });
+-    }
+-    heartbeatLifecycle(activeLifecycle);
+-    const disposition = callSnapshotCurrent ? DoorbellCallFlow.residentDisposition(
+-      refreshed ? refreshed.call_state : "", sessionConfirmed, !!activeLifecycle) : "keep";
+-    if (disposition === "answered_elsewhere") {
+-      setStatus(t("panel.other_answered"));
+-      if (session) endCall();
+-    }
+-    if (disposition === "end") {
+-      if (session) endCall();
+-      setStatus(t("panel.call_ended"));
+-    }
+-    if (disposition === "cancelled" || disposition === "expired") {
+-      setStatus(disposition === "cancelled" ? t("ring.cancelled") :
+-                t("panel.call_expired"), true);
+-      if (session) endCall();
+-    }
+-    if (!ua) initUa();
+-    DoorbellPanelRuntime.applySemanticUi(st, { page: "call" });
+-  } catch (e) {
+-    if (!current()) return;
+-    els.offline.style.display = "block";
+-    if (e && e.status === 403 && K && !sessionRefreshPending) {
+-      sessionRefreshPending = true;
+-      DoorbellPanelRuntime.establishSession(result => {
+-        sessionRefreshPending = false;
+-        if (pageActive && pageRevision === request.page && result.ok) {
+-          clearTimeout(loadTimer);
+-          loadTimer = setTimeout(load, 0);
+-        }
+-      }, K);
+-      return;
+-    }
+-  } finally {
+-    // Retire this load's sibling request without cancelling a later page generation's request.
+-    if (request.callInfo) request.callInfo.cancel();
+-    if (loadPending === request) loadPending = null;
+-    if (pageActive && pageRevision === request.page) {
+-      clearTimeout(loadTimer);
+-      loadTimer = setTimeout(load, 2000);
+-    }
+-  }
+-}
+-async function start() {
++  loadState();
++  loadCallInfo();
++}
++function start() {
++  if (!readsAllowed()) return;
+   const activation = pageRevision;
+-  await ensureLanguage(QUERY_LANG || "ja", () => pageActive && activation === pageRevision);
+-  if (!pageActive || activation !== pageRevision) return;
++  ensureLanguage(latestPanelState ? languageForState(latestPanelState, selected && selected.id) : QUERY_LANG || "ja");
+   applyI18n();
+   installEmergency();
+   if (MOCK) { load(); return; }
+--- before/webui/tests/call_state_controller.test.js
++++ after/webui/tests/call_state_controller.test.js
+@@ -1,150 +1,60 @@
+ "use strict";
+ const assert = require("assert");
+-const fs = require("fs");
+-const path = require("path");
+-const vm = require("vm");
+-const source = fs.readFileSync(path.join(__dirname, "../panel/call.html"), "utf8")
+-  .match(/<script>\s*([\s\S]*?)<\/script>/)[1].replace(/\nstart\(\);\s*$/, "");
+-function deferred() {
+-  let resolve;
+-  return { promise: new Promise(ok => { resolve = ok; }), resolve: value => resolve(value) };
+-}
+-function runtime() {
+-  const elements = new Map(), requests = [], timers = new Map(), listeners = {};
+-  let timerId = 0, now = 0;
+-  function schedule(fn, delay) {
+-    const id = ++timerId; timers.set(id, { fn, at: now + (delay || 0) }); return id;
+-  }
+-  function advance(ms) {
+-    now += ms;
+-    for (const [id, timer] of Array.from(timers)) {
+-      if (timer.at <= now) { timers.delete(id); timer.fn(); }
+-    }
+-  }
+-  const element = () => ({ style: {}, classList: { add() {}, remove() {} },
+-    setAttribute() {}, appendChild() {}, textContent: "", checked: false });
+-  const context = vm.createContext({ URLSearchParams, Uint8Array, console, Promise,
+-    location: { search: "?lang=en", hostname: "localhost" },
+-    document: { getElementById(id) {
+-      if (!elements.has(id)) elements.set(id, element()); return elements.get(id);
+-    }, createElement: element, documentElement: { setAttribute() {} },
+-    getElementsByClassName() { return []; } },
+-    window: { location: {}, addEventListener(name, fn) { listeners[name] = fn; },
+-      setTimeout: schedule, clearTimeout(id) { timers.delete(id); },
+-      XMLHttpRequest: function () {
+-        this.open = (_method, url) => { this.url = url; };
+-        this.setRequestHeader = () => {};
+-        this.send = () => {
+-          const success = () => { if (this.onload) this.onload(); };
+-          requests.push({ url: this.url, xhr: this, response: { resolve: async response => {
+-            this.status = response.status;
+-            this.responseText = JSON.stringify(await response.json());
+-            success();
+-          } } });
+-        };
+-        this.abort = () => { this.aborted = true; if (this.onabort) this.onabort(); };
+-      } },
+-    navigator: {},
+-    setTimeout: schedule,
+-    clearTimeout(id) { timers.delete(id); },
+-    DoorbellCallFlow: require("../panel/call-flow.js"),
+-    DoorbellPanelRuntime: { panelStateUrl() { return "/state"; }, applySemanticUi() {},
+-      establishSession(cb) { cb({ ok: true }); } },
+-    DoorbellPanelVideo: { create() { return { stop() {} }; } },
+-    DoorbellPlayback: { proxyMp4Url() { return ""; }, start() { return { stop() {} }; } },
+-    fetch(url) {
+-      const response = deferred(); requests.push({ url, response }); return response.promise;
+-    }
+-  });
+-  vm.runInContext(fs.readFileSync(path.join(__dirname, "../panel/runtime.js"), "utf8"), context);
+-  Object.assign(context.DoorbellPanelRuntime, {
+-    requestWithDeadline: context.window.DoorbellPanelRuntime.requestWithDeadline,
+-    createRequestLane: context.window.DoorbellPanelRuntime.createRequestLane
+-  });
+-  vm.runInContext(source, context);
+-  vm.runInContext('LANG="en"; I18N={}; emergencyOverlay={update(){}}; ua={}; registered=true;', context);
+-  function run(code) { return vm.runInContext(code, context); }
+-  function activate(door, call, revision) {
+-    run(`selected={id:${JSON.stringify(door)}, call_id:${JSON.stringify(call)}, stage_revision:${revision}, extension:"8001"};
+-      selectionRevision++; activeLifecycle={door:selected.id,callId:selected.call_id,stageRevision:${revision},owner:"mine",ended:false};
+-      session={terminated:0,isEnded(){return false},terminate(){this.terminated++}}; sessionConfirmed=true;`);
+-    return run("session");
+-  }
+-  function respond(state) {
+-    for (const request of requests.splice(0)) {
+-      const body = request.url === "/state" ? state : { webrtc: { ws_url: "ws://localhost" }, doors: {} };
+-      request.response.resolve({ ok: true, status: 200, json: async () => body });
+-    }
+-  }
+-  return { run, activate, respond, requests, timers, elements, listeners, advance };
+-}
++const { runtime } = require("./call_page_fixture.js");
++const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
+ (async () => {
+   {
+-    const r = runtime(); r.activate("A", "current", 2);
+-    r.run("load()");
++    const r = runtime(); r.run("load()");
+     const state = r.requests.find(request => request.url === "/state");
+-    state.response.resolve({ ok: true, status: 200, json: async () => ({ doors: [] }) });
+-    r.advance(4000);
+-    for (let i = 0; i < 8; i++) await Promise.resolve();
+-    assert.strictEqual(r.run("loadPending"), null,
+-      "a silent call-info request must release the production load gate at its deadline");
+-    assert.strictEqual(r.elements.get("offlineBand").style.display, "block");
+-    assert.strictEqual(r.timers.size, 1, "the expired read schedules exactly one retry");
+-    console.log("T09 production read deadline: PASS");
++    await state.response.resolve({ ok: true, status: 200, json: async () => ({ doors: [] }) });
++    await flush();
++    r.advance(4000); await flush();
++    assert.strictEqual(r.run("callInfoPoll.pending"), null,
++      "a silent call-info request releases only its own production gate at the deadline");
++    assert.strictEqual(r.elements.get("configBand").style.display, "block");
++    assert.strictEqual(r.timers.size, 2, "state and call-info each retain one timer or watchdog");
++    console.log("T09 retained read deadline under independent scheduling: PASS");
+   }
+   if (process.argv.includes("--deadline-regression")) return;
+   {
+-    const r = runtime();
+-    const first = r.run("load()");
++    const r = runtime(); r.run("load()");
+     const failedState = r.requests.find(request => request.url === "/state");
+-    failedState.response.resolve({ ok: false, status: 500, json: async () => ({}) });
+-    await first;
+-    r.requests.splice(0);
+-    r.advance(2000);
+-    r.respond({ doors: [] });
+-    for (let i = 0; i < 8; i++) await Promise.resolve();
+-    r.advance(2000);
+-    r.respond({ doors: [] });
+-    for (let i = 0; i < 8; i++) await Promise.resolve();
++    await failedState.response.resolve({ ok: false, status: 500, json: async () => ({}) });
++    await flush();
++    r.requests.splice(0); r.advance(1000); r.respond({ doors: [] }); await flush();
+     assert.strictEqual(r.elements.get("offlineBand").style.display, "none",
+-      "an early state failure must retire its call-info request so the next poll can recover");
+-    assert.strictEqual(r.run("loadPending"), null,
+-      "a retry cannot retain an unresolved Promise after the old call-info deadline");
+-    assert.strictEqual(r.run("callInfoRequests.pending()"), false);
+-    console.log("T09 early state failure recovery: PASS");
++      "state recovers while the earlier call-info remains pending");
++    assert.strictEqual(r.run("statePoll.pending"), null);
++    assert.strictEqual(r.run("callInfoPoll.lane.pending()"), true);
++    r.advance(3000); await flush();
++    assert.strictEqual(r.run("callInfoPoll.lane.pending()"), false);
++    console.log("T09 retained early state failure recovery: PASS");
+   }
+   if (process.argv.includes("--early-state-failure")) return;
+   {
+     const r = runtime();
+-    r.run('var heldCallInfo = callInfoRequests.start({url:"/held-call-info",deadline_ms:4000}, function(){});');
+-    await r.run("load()");
+-    assert.strictEqual(r.run("loadPending"), null,
+-      "rejected lane admission must settle instead of leaving a pending Promise");
++    r.run('var heldCallInfo = callInfoPoll.lane.start({url:"/held-call-info",deadline_ms:4000}, function(){}); loadCallInfo();');
++    assert.strictEqual(r.run("callInfoPoll.pending"), null,
++      "rejected admission must settle instead of leaving the controller pending");
+     assert.strictEqual(r.run("heldCallInfo.pending()"), true,
+-      "a load that acquired no handle cannot cancel another owner's request");
+-    assert.strictEqual(r.run("callInfoRequests.pending()"), true);
++      "a rejected owner cannot cancel another request");
+     r.run("heldCallInfo.cancel()");
+     assert.strictEqual(r.timers.size, 1);
+   }
+   {
+-    const r = runtime(), retiredLoad = r.run("load()");
+-    const retiredInfo = r.requests.find(request => request.xhr).xhr;
+-    r.listeners.pagehide();
+-    r.listeners.pageshow();
+-    for (let i = 0; i < 8; i++) await Promise.resolve();
+-    await retiredLoad;
+-    const successor = r.requests.filter(request => request.xhr && request.xhr !== retiredInfo);
+-    assert.strictEqual(successor.length, 1, "the restored page starts one new call-info request");
+-    assert.strictEqual(retiredInfo.aborted, true);
+-    assert.strictEqual(successor[0].xhr.aborted, undefined,
+-      "the old load's finally must not cancel a restored page's successor");
+-    assert.strictEqual(r.run("callInfoRequests.pending()"), true);
+-    r.respond({ doors: [] });
+-    for (let i = 0; i < 8; i++) await Promise.resolve();
+-    assert.strictEqual(r.run("loadPending"), null);
+-    assert.strictEqual(r.run("callInfoRequests.pending()"), false);
+-    assert.strictEqual(r.timers.size, 1);
+-    console.log("T09 rejected admission and restored-page ownership: PASS");
++    const r = runtime(); r.activate("A", "old", 1); r.run("load()");
++    const state = r.requests.find(request => request.url === "/state");
++    await state.response.resolve({ ok: true, status: 200, json: async () => ({ doors: [
++      { id: "A", call_id: "old", stage_revision: 1, call_state: "in_call" }
++    ] }) });
++    await flush();
++    const current = r.activate("B", "new", 2);
++    const info = r.requests.find(request => request.url === "/api/panel/call-info");
++    await info.response.resolve({ ok: true, status: 200, json: async () => ({ webrtc: {}, doors: {} }) });
++    await flush();
++    assert.strictEqual(r.run("selected.id"), "B", "late config cannot reproject an old call snapshot over a new selection");
++    assert.strictEqual(r.run("session"), current);
++    assert.strictEqual(current.terminated, 0);
+   }
+   for (const state of ["in_call", "cancelled", "ended", "expired"]) {
+     const r = runtime();
+@@ -153,17 +63,17 @@
+     const current = r.activate("B", "call-B", 2);
+     r.respond({ doors: [{ id: "A", call_id: "call-A", stage_revision: 1,
+       call_state: state, dialog_owner: "other" }, { id: "B", call_id: "call-B", stage_revision: 2 }] });
+-    await pending;
++    await flush();
+     assert.strictEqual(r.run("selected.id"), "B");
+     assert.strictEqual(r.run("session"), current);
+     assert.strictEqual(current.terminated, 0, "late A cannot terminate B");
+-    assert.strictEqual(r.timers.size, 1, "the retired read schedules only one successor");
++    assert.strictEqual(r.timers.size, 2, "each independent read schedules only one successor");
+   }
+   for (const stale of [{ call_id: "old", stage_revision: 9 }, { call_id: "current", stage_revision: 1 }]) {
+     const r = runtime(), current = r.activate("A", "current", 2);
+     const pending = r.run("load()");
+     r.respond({ doors: [{ id: "A", ...stale, call_state: "ended", dialog_owner: "other" }] });
+-    await pending;
++    await flush();
+     assert.strictEqual(current.terminated, 0, "an old call or revision has no authority over the session");
+   }
+   {
+@@ -171,7 +81,7 @@
+     const pending = r.run("load()");
+     r.respond({ doors: [{ id: "A", call_id: "current", stage_revision: 2,
+       call_state: "in_call", dialog_owner: "other" }] });
+-    await pending;
++    await flush();
+     assert.strictEqual(current.terminated, 1, "a current winning owner still ends the losing session");
+     assert.strictEqual(r.run("session"), null);
+   }
+@@ -182,10 +92,10 @@
+     r.respond({ doors: [{ id: "A", call_id: "old", stage_revision: 1 }] });
+     for (let i = 0; i < 8; i++) await Promise.resolve();
+     const locale = r.requests.find(request => request.url === "/locale/en.json");
+-    assert(locale, "language request is suspended in the production load path");
++    assert(locale, "language request runs independently of state");
+     const current = r.activate("B", "new", 2);
+     locale.response.resolve({ ok: true, json: async () => ({ stale: "dictionary" }) });
+-    await pending;
++    await flush();
+     assert.strictEqual(r.run("session"), current);
+     assert.strictEqual(r.run("LANG"), "ja", "old language completion has no authority over the page");
+     assert.strictEqual(r.run("selected.id"), "B");
+@@ -195,7 +105,7 @@
+     const pending = r.run("load()");
+     r.listeners.pagehide();
+     r.respond({ doors: [{ id: "A", call_id: "current", stage_revision: 2 }] });
+-    await pending;
++    await flush();
+     assert.strictEqual(r.timers.size, 0, "retired pages cannot resurrect polling");
+     assert.strictEqual(r.run("session"), null);
+   }
+--- before/webui/tests/call_page_fixture.js
++++ after/webui/tests/call_page_fixture.js
+@@ -0,0 +1,82 @@
++"use strict";
++const fs = require("fs");
++const path = require("path");
++const vm = require("vm");
++const source = fs.readFileSync(path.join(__dirname, "../panel/call.html"), "utf8")
++  .match(/<script>\s*([\s\S]*?)<\/script>/)[1].replace(/\nstart\(\);\s*$/, "");
++function deferred() {
++  let resolve;
++  return { promise: new Promise(ok => { resolve = ok; }), resolve: value => resolve(value) };
++}
++function runtime(options = {}) {
++  const elements = new Map(), requests = [], timers = new Map(), listeners = {}, emergencyUpdates = [];
++  let timerId = 0, now = 0;
++  function schedule(fn, delay) {
++    const id = ++timerId; timers.set(id, { fn, at: now + (delay || 0) }); return id;
++  }
++  function advance(ms) {
++    now += ms;
++    for (const [id, timer] of Array.from(timers)) {
++      if (timer.at <= now) { timers.delete(id); timer.fn(); }
++    }
++  }
++  const element = () => ({ style: {}, classList: { add() {}, remove() {} },
++    setAttribute(name, value) { this[name] = value; }, appendChild() {}, textContent: "", checked: false });
++  const context = vm.createContext({ URLSearchParams, Uint8Array, console, Promise,
++    performance: { now: () => now },
++    location: { search: options.search || "?lang=en", hostname: "localhost" },
++    document: { hidden: false, addEventListener(name, fn) { listeners[name] = fn; }, getElementById(id) {
++      if (!elements.has(id)) elements.set(id, element()); return elements.get(id);
++    }, createElement: element, documentElement: { setAttribute() {} },
++    getElementsByClassName() { return []; } },
++    window: { location: {}, addEventListener(name, fn) { listeners[name] = fn; },
++      setTimeout: schedule, clearTimeout(id) { timers.delete(id); },
++      XMLHttpRequest: function () {
++        this.open = (_method, url) => { this.url = url; };
++        this.setRequestHeader = () => {};
++        this.send = () => {
++          const success = this.onload;
++          requests.push({ url: this.url, xhr: this, response: { resolve: async response => {
++            this.status = response.status === undefined ? 200 : response.status;
++            this.responseText = JSON.stringify(await response.json());
++            if (success) success();
++          } } });
++        };
++        this.abort = () => { this.aborted = true; if (this.onabort) this.onabort(); };
++      } },
++    navigator: {},
++    setTimeout: schedule,
++    clearTimeout(id) { timers.delete(id); },
++    DoorbellCallFlow: require("../panel/call-flow.js"),
++    DoorbellPanelRuntime: { panelStateUrl() { return "/state"; }, applySemanticUi() {},
++      establishSession(cb) { cb({ ok: true }); } },
++    DoorbellPanelVideo: { create() { return { stop() {} }; } },
++    DoorbellPlayback: { proxyMp4Url() { return ""; }, start() { return { stop() {} }; } },
++    fetch(url) {
++      const response = deferred(); requests.push({ url, response }); return response.promise;
++    }
++  });
++  vm.runInContext(fs.readFileSync(path.join(__dirname, "../panel/runtime.js"), "utf8"), context);
++  Object.assign(context.DoorbellPanelRuntime, {
++    requestWithDeadline: context.window.DoorbellPanelRuntime.requestWithDeadline,
++    createRequestLane: context.window.DoorbellPanelRuntime.createRequestLane
++  });
++  vm.runInContext(source, context);
++  context.recordEmergency = state => emergencyUpdates.push(state);
++  vm.runInContext('LANG="en"; I18N={}; emergencyOverlay={update:recordEmergency}; ua={}; registered=true;', context);
++  function run(code) { return vm.runInContext(code, context); }
++  function activate(door, call, revision) {
++    run(`selected={id:${JSON.stringify(door)}, call_id:${JSON.stringify(call)}, stage_revision:${revision}, extension:"8001"};
++      selectionRevision++; activeLifecycle={door:selected.id,callId:selected.call_id,stageRevision:${revision},owner:"mine",ended:false};
++      session={terminated:0,isEnded(){return false},terminate(){this.terminated++}}; sessionConfirmed=true;`);
++    return run("session");
++  }
++  function respond(state) {
++    for (const request of requests.splice(0)) {
++      const body = request.url === "/state" ? state : { webrtc: { ws_url: "ws://localhost" }, doors: {} };
++      request.response.resolve({ ok: true, status: 200, json: async () => body });
++    }
++  }
++  return { run, activate, respond, requests, timers, elements, listeners, emergencyUpdates, advance, context };
++}
++module.exports = { runtime };
+--- before/webui/tests/call_poll_lanes.test.js
++++ after/webui/tests/call_poll_lanes.test.js
+@@ -0,0 +1,109 @@
++"use strict";
++const assert = require("assert");
++const { runtime } = require("./call_page_fixture.js");
++const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
++const info = { webrtc: { ws_url: "ws://localhost", sip_user: "260" }, doors: {} };
++function pending(r, url) { return r.requests.filter(x => x.url === url && !x.completed && !(x.xhr && x.xhr.aborted)); }
++async function reply(r, url, body, status = 200) {
++  const request = pending(r, url)[0]; assert(request, "missing request: " + url);
++  request.completed = true;
++  await request.response.resolve({ ok: status >= 200 && status < 300, status, json: async () => body });
++  await flush(); return request;
++}
++const state = active => ({ doors: [], emergency: { active } });
++const tests = {
++  async "T10-01"() {
++    const r = runtime(); r.run("load()");
++    await reply(r, "/state", state(true));
++    assert.strictEqual(r.emergencyUpdates.length, 1, "state/SOS applies before hung call-info settles");
++    assert.strictEqual(r.emergencyUpdates[0].emergency.active, true);
++    const hung = pending(r, "/api/panel/call-info")[0];
++    for (let i = 0; i < 4; i++) { r.advance(1000); await reply(r, "/state", state(i < 3)); }
++    assert.strictEqual(hung.xhr.aborted, true, "call-info is bounded at 4000 ms");
++    assert.strictEqual(r.emergencyUpdates.length, 5);
++    assert.strictEqual(r.emergencyUpdates[4].emergency.active, false, "authoritative clear still applies");
++    assert.strictEqual(r.elements.get("offlineBand").style.display, "none");
++    assert.strictEqual(r.elements.get("configBand").style.display, "block");
++    r.advance(5000);
++    await reply(r, "/api/panel/call-info", info);
++    assert.strictEqual(r.run("webrtc.sip_user"), "260");
++    assert.strictEqual(r.elements.get("configBand").style.display, "none");
++    r.advance(5000); await reply(r, "/api/panel/call-info", {}, 503);
++    assert.strictEqual(r.run("webrtc.sip_user"), "260", "failed config preserves working SIP settings");
++    assert.strictEqual(r.elements.get("configBand").style.display, "block");
++  },
++  async "T10-02"() {
++    const r = runtime(); r.activate("A", "current", 2);
++    r.run('LANG="ja"; I18N={"panel.call_title":"Retained dictionary"}; activeLifecycle.answered=true; activeLifecycle.dialogId="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; start();');
++    assert.strictEqual(pending(r, "/state").length, 1, "startup state does not wait for locale");
++    await reply(r, "/api/panel/call-info", info);
++    for (let i = 0; i < 5; i++) {
++      if (i) r.advance(1000);
++      await reply(r, "/state", { doors: [{ id: "A", call_id: "current", stage_revision: 2, call_state: "in_call", dialog_owner: "mine" }] });
++      if (pending(r, "/api/panel/call-lifecycle").length)
++        await reply(r, "/api/panel/call-lifecycle", { ok: true, dialog_owner: "mine" });
++    }
++    assert.strictEqual(r.run('t("panel.call_title")'), "Retained dictionary", "failed locale retains valid dictionary");
++    assert.strictEqual(r.run("LANG"), "ja");
++    assert(r.requests.filter(x => x.url === "/api/panel/call-lifecycle").length >= 2, "locale cannot block existing heartbeat invocation");
++    assert.strictEqual(r.requests.filter(x => x.url === "/locale/en.json").length, 1, "unchanged failed language is not polled every second");
++    assert.strictEqual(r.emergencyUpdates.length, 5);
++    r.run('ensureLanguage("zh")');
++    await reply(r, "/locale/zh.json", { invalid: 42 });
++    assert.strictEqual(r.run('t("panel.call_title")'), "Retained dictionary", "malformed locale cannot replace valid language");
++  },
++  async "T10-03"() {
++    const r = runtime();
++    r.run('I18N={"panel.state_stale":"Last update {sec}s ago","panel.state_waiting":"Waiting"}; load();');
++    await reply(r, "/api/panel/call-info", info); await reply(r, "/state", state(true));
++    for (let i = 0; i < 3; i++) { r.advance(2000); await reply(r, "/state", {}, 503); }
++    assert.strictEqual(r.emergencyUpdates.length, 1, "failed reads never clear or synthesize SOS");
++    assert.strictEqual(r.emergencyUpdates[0].emergency.active, true);
++    assert.strictEqual(r.elements.get("offlineBand").style.display, "block");
++    assert.strictEqual(r.elements.get("offlineBand").textContent, "Last update 6s ago", "stale age uses the last successful monotonic sample");
++    r.advance(1000); await reply(r, "/state", state(false));
++    assert.strictEqual(r.elements.get("offlineBand").style.display, "none");
++    assert.strictEqual(r.emergencyUpdates[1].emergency.active, false);
++    r.advance(1000);
++    const blackhole = pending(r, "/state")[0];
++    assert.strictEqual(blackhole.xhr.timeout, 3000);
++    r.advance(3000);
++    assert.strictEqual(blackhole.xhr.aborted, true);
++    assert.strictEqual(r.elements.get("offlineBand").style.display, "block");
++    r.advance(1000); await reply(r, "/state", state(false));
++    assert.strictEqual(r.elements.get("offlineBand").style.display, "none");
++  },
++  async "T10-04"() {
++    const r = runtime(); r.run('LANG="ja"; start();');
++    const retired = r.requests.slice();
++    r.listeners.pagehide(); assert.strictEqual(r.timers.size, 0, "closed page has no polling/watchdog timers");
++    r.listeners.pageshow();
++    const successors = r.requests.filter(x => !retired.includes(x));
++    assert(successors.some(x => x.url === "/state"), "restored page immediately queries authority even with hung locale");
++    assert(retired.filter(x => x.xhr).every(x => x.xhr.aborted), "all retired XHR lanes are cancelled");
++    for (const old of retired) {
++      await old.response.resolve({ ok: true, status: 200, json: async () => old.url === "/state" ? state(true) : { old: "retired" } });
++    }
++    await flush();
++    assert.strictEqual(r.emergencyUpdates.length, 0, "old page cannot update replacement");
++    await reply(r, "/state", state(false)); await reply(r, "/api/panel/call-info", info);
++    await reply(r, "/locale/en.json", { "panel.call_title": "Current" });
++    assert.strictEqual(r.run("LANG"), "en");
++    assert.strictEqual(r.emergencyUpdates.length, 1);
++    for (let i = 0; i < 3; i++) {
++      r.listeners.pagehide(); assert.strictEqual(r.timers.size, 0);
++      r.listeners.pageshow(); assert(r.timers.size <= 3, "at most three lane watchdogs/timers");
++    }
++    r.context.document.hidden = true; r.listeners.visibilitychange();
++    assert.strictEqual(r.timers.size, 0, "hidden page retires all read timers");
++    r.context.document.hidden = false; r.listeners.visibilitychange();
++    assert.strictEqual(pending(r, "/state").length, 1, "foreground return reacquires authoritative state");
++    assert.strictEqual(r.elements.get("offlineBand").style.display, "block", "old success is stale until foreground refresh completes");
++  }
++};
++(async () => {
++  for (const [id, test] of Object.entries(tests)) {
++    if (process.argv[2] && process.argv[2] !== id) continue;
++    await test(); console.log(id + " production page: PASS");
++  }
++})().catch(error => { console.error(error); process.exitCode = 1; });

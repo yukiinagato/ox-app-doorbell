@@ -1,0 +1,51 @@
+09-22 22:46:24 I [node] addr-detect: local v4=2 all=7 route=10.10.38.24 advertise=10.10.38.24:21550
+09-22 22:46:24 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:46:24 I [httpd] listening on 22524,[::]:22524
+09-22 22:46:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:46:24 I [node] node d743cccb (T03-unlock-test) started
+09-22 22:46:24 I [node] initialized the cluster administrator password
+09-22 22:46:26 I [httpd] stopped
+09-22 22:46:26 I [node] addr-detect: local v4=2 all=7 route=10.10.38.24 advertise=10.10.38.24:31060
+09-22 22:46:26 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:46:26 I [httpd] listening on 27864,[::]:27864
+09-22 22:46:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:46:26 I [node] node 8e55766e (T03-unlock-test) started
+09-22 22:46:26 I [node] initialized the cluster administrator password
+09-22 22:46:28 I [httpd] stopped
+09-22 22:46:28 I [node] addr-detect: local v4=2 all=7 route=10.10.38.24 advertise=10.10.38.24:24631
+09-22 22:46:28 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:46:28 I [httpd] listening on 21406,[::]:21406
+09-22 22:46:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:46:28 I [node] node ae822487 (T03-unlock-test) started
+09-22 22:46:28 I [node] initialized the cluster administrator password
+09-22 22:46:30 I [httpd] stopped
+09-22 22:46:30 I [node] addr-detect: local v4=2 all=7 route=10.10.38.24 advertise=10.10.38.24:28860
+09-22 22:46:30 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:46:30 I [httpd] listening on 30604,[::]:30604
+09-22 22:46:30 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:46:30 I [node] node 73dd55f4 (T03-unlock-test) started
+09-22 22:46:30 I [node] initialized the cluster administrator password
+09-22 22:46:32 I [httpd] stopped
+09-22 22:46:32 I [node] addr-detect: local v4=2 all=7 route=10.10.38.24 advertise=10.10.38.24:0
+09-22 22:46:32 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:46:32 I [node] node aa0bd72f (T03-native-test) started
+09-22 22:46:32 I [node] addr-detect: local v4=2 all=7 route=10.10.38.24 advertise=10.10.38.24:23782
+09-22 22:46:32 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:46:32 I [httpd] listening on 27458,[::]:27458
+09-22 22:46:32 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:46:32 I [node] node 45f1a659 (round4-api) started
+09-22 22:46:32 I [node] initialized the cluster administrator password
+09-22 22:46:32 W [node] rejected door notice for * (announcement text must be between 1 and 200 characters)
+09-22 22:46:34 I [httpd] stopped
+09-22 22:46:34 I [node] addr-detect: local v4=2 all=7 route=10.10.38.24 advertise=10.10.38.24:0
+09-22 22:46:34 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:46:34 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:46:34 I [node] node c2470d92 (settings) started
+09-22 22:46:34 E [node] refused unsafe programmatic config write: doors.d_front.unlock.command (doors.d_front.unlock.command must be 1..32 characters of letters, digits, _ or -)
+09-22 22:46:34 E [node] refused unsafe programmatic config write: doors.d_front.unlock.show_button (doors.d_front.unlock.show_button must be a boolean)
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   4 |   4 passed | 0 failed | 415 skipped
+[doctest] assertions: 250 | 250 passed | 0 failed |
+[doctest] Status: SUCCESS!

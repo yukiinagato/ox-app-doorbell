@@ -1,0 +1,12 @@
+{
+  "status": "BLOCKED_ENV",
+  "reason": "CUA reports the Mac is locked; automatic unlock failed. Final simulator test never started. User must manually unlock the Mac.",
+  "final_change": "strict sequence comparison > and a production MainViewController duplicate-frame assertion",
+  "previous_simulator_evidence": "ios-final.xcresult recorded 17 passing tests before the final strict-duplicate change",
+  "current_attempts": [
+    "ios-stalled-launch.json",
+    "ios-duplicate-launch-stall.json",
+    "ios-duplicate-red.json"
+  ],
+  "actions": "Stopped only owned stalled xcodebuild and bootstatus processes; no lock-screen bypass attempted."
+}

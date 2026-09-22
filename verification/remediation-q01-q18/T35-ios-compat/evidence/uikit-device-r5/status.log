@@ -1,0 +1,26 @@
+30245	-	UIKitApplication:jp.ox.doorbell[0x1d44]
+19	-	jp.ox.doorbell.keepalive
+total 360
+-rw-r--r-- 1 mobile mobile 19110 Sep 23 02:42 01-purpose-first-ringing.json
+-rw-r--r-- 1 mobile mobile 33911 Sep 23 02:42 01-purpose-first-ringing.png
+-rw-r--r-- 1 mobile mobile 33649 Sep 23 02:42 01-ring-first-chooser.json
+-rw-r--r-- 1 mobile mobile 53099 Sep 23 02:42 01-ring-first-chooser.png
+-rw-r--r-- 1 mobile mobile 19082 Sep 23 02:42 02-connected.json
+-rw-r--r-- 1 mobile mobile 26499 Sep 23 02:42 02-connected.png
+-rw-r--r-- 1 mobile mobile 19091 Sep 23 02:37 03-emergency.json
+-rw-r--r-- 1 mobile mobile 30102 Sep 23 02:37 03-emergency.png
+-rw-r--r-- 1 mobile mobile 19090 Sep 23 02:37 03-network-failure.json
+-rw-r--r-- 1 mobile mobile 49436 Sep 23 02:37 03-network-failure.png
+-rw-r--r-- 1 mobile mobile     0 Sep 23 02:41 launch.log
+-rw-r--r-- 1 mobile mobile  2778 Sep 23 02:42 progress.json
+Traceback (most recent call last):
+  File "/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/device.py", line 28, in <module>
+    ssh('/bin/launchctl list | /bin/grep -E "doorbell|t35"; /bin/ls -l /var/mobile/Library/DoorbellT35UIKit; /bin/cat /var/mobile/Library/DoorbellT35UIKit/result.json /var/mobile/Library/DoorbellT35UIKit/launch.log')
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/ox/Documents/project/app-doorbell/ios-compat/tests/uikit_visitor_runner/device.py", line 10, in ssh
+    print(result.stdout.strip()); result.check_returncode(); return result.stdout
+                                  ~~~~~~~~~~~~~~~~~~~~~~~^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/subprocess.py", line 509, in check_returncode
+    raise CalledProcessError(self.returncode, self.args, self.stdout,
+                             self.stderr)
+subprocess.CalledProcessError: Command '['sshpass', '-e', 'ssh', '-o', 'ConnectTimeout=8', '-o', 'StrictHostKeyChecking=yes', '-o', 'HostKeyAlgorithms=+ssh-rsa', '-o', 'KexAlgorithms=+diffie-hellman-group1-sha1,diffie-hellman-group14-sha1', '-o', 'Ciphers=+aes128-cbc,3des-cbc', '-o', 'PubkeyAuthentication=no', 'root@10.10.38.147', '/bin/launchctl list | /bin/grep -E "doorbell|t35"; /bin/ls -l /var/mobile/Library/DoorbellT35UIKit; /bin/cat /var/mobile/Library/DoorbellT35UIKit/result.json /var/mobile/Library/DoorbellT35UIKit/launch.log']' returned non-zero exit status 1.

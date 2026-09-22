@@ -1,0 +1,36 @@
+{
+  "task_id": "T12",
+  "status": "VERIFIED_IN_SCOPE",
+  "scope": "production_test",
+  "cases": [
+    {
+      "id": "T12-01",
+      "status": "PASS",
+      "evidence": "evidence/final-checks.json"
+    },
+    {
+      "id": "T12-02",
+      "status": "PASS",
+      "evidence": "evidence/final-checks.json"
+    },
+    {
+      "id": "T12-03",
+      "status": "PASS",
+      "evidence": "evidence/final-checks.json"
+    },
+    {
+      "id": "T12-04",
+      "status": "PASS",
+      "evidence": "evidence/final-checks.json"
+    }
+  ],
+  "host": "3/195; related 36/2917 PASS",
+  "web": "13 production overlay cases; 21 Web scripts PASS",
+  "review": "evidence/review.json",
+  "source": "source-combined.json",
+  "limitations": [
+    "No browser-engine visual, physical SOS delivery, native device or release qualification claimed.",
+    "A lost prepare response has no recoverable handle; no execute has been sent and the explicit retry begins a new preparation.",
+    "T15 final simulator qualification remains open."
+  ]
+}

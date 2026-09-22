@@ -1,0 +1,94 @@
+09-23 02:23:26 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:23:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:26 I [node] node 8ac06494 (review-a) started
+09-23 02:23:26 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:23:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:26 I [node] node b43220ba (review-b) started
+09-23 02:23:26 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:23:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:26 I [node] node 5b9a7567 (review-a) started
+09-23 02:23:26 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:23:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:26 I [node] node d71ee143 (review-b) started
+09-23 02:23:27 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:25872
+09-23 02:23:27 I [httpd] listening on 22316,[::]:22316
+09-23 02:23:27 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:27 I [node] node 955d9c35 (doorbell) started
+09-23 02:23:27 I [node] initialized the cluster administrator password
+09-23 02:23:29 I [httpd] stopped
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node 113666e8 (review-a) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node c01002ef (review-b) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node 0cd0f576 (review-a) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node 80c42ceb (review-b) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node 85fae9b8 (review-a) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node 5c7f1afa (review-b) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node d6f1dbdf (review-a) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node 87020025 (review-b) started
+09-23 02:23:29 E [node] config persistence failed; retaining the last-known-good state
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 W [mesh] rejected malformed sync response from 87020025a1b4fbb9e8bdff5c6fc3fd15
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node e5cd04e1 (review-a) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node 9a2893dd (review-b) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node f5d54b54 (review-a) started
+09-23 02:23:29 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:23:29 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:23:29 I [node] node 9e92b6aa (review-b) started
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   8 |   8 passed | 0 failed | 498 skipped
+[doctest] assertions: 168 | 168 passed | 0 failed |
+[doctest] Status: SUCCESS!

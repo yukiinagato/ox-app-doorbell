@@ -1,0 +1,23 @@
+T12-01: silent execute reaches a real deadline and exposes an unknown result: PASS
+T12-02: accepted response lost; repeated recovery queries only the original intent: PASS
+T12-03: permission, validation, and authentication failures remain actionable: PASS
+T12-04: double activation and native timeout/watchdog/late success settle once: PASS
+prepared query requires explicit same-handle execution, with no second preparation: PASS
+server 500, network and malformed write replies never imply not started: PASS
+page retirement cancels its request, retains the handle, and ignores late completion: PASS
+all production page integrations visibly render translated SOS outcomes: FAIL
+evalmachine.<anonymous>:19
+  }
+  ^
+
+SyntaxError: missing ) after argument list
+    at new Script (node:vm:117:7)
+    at createScript (node:vm:269:10)
+    at Object.runInContext (node:vm:300:10)
+    at fixture (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:67:8)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:160:15
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:170:42)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)

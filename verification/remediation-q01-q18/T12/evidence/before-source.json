@@ -1,0 +1,11 @@
+{
+  "recorded_at": "2026-09-22T16:14:23.648209+00:00",
+  "files": {
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/panel/call.html": "1dde0c12a682a22a86e8be81c7dd0b56079dd5b985acc3c7460d088fa9e28d71",
+    "webui/panel/door.html": "f7ad09e6ad3fe2b3649443f8ad14a519d1dca1db656013c93fea4f1362538721",
+    "webui/panel/monitor.html": "4960d3d8df2f3a41deb0369e2140ec67a997dff1a7c16ecb6fba1fb2bb34c10b",
+    "webui/panel/API.md": "973233a7ccb3c2c74c99449c96310fb50d465cafdac7f1ea095e08fe1da17b55",
+    "webui/panel/API.ja.md": "8795748b514db154cf6998327fa212711d2a7d667d2372ad0c13a3f06153426c"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "task_id": "T23",
+  "status": "IMPLEMENTED_AND_TESTED_PENDING_INDEPENDENT_REVIEW",
+  "source_manifest_sha256": "ce5b6131f19bf909cfe00e9c85018999d989352cc2759163a2429da073059735",
+  "acceptance": [
+    {
+      "id": "T23-01",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "assertion": "Actual original tracker fails with device wall +5min; production Core-duration helper and targeted recovery path accept valid calls with snapshot wall +/-5min.",
+      "scope": "host production Foundation helper + native source",
+      "command_record": "evidence/compat-host-frozen-r3.json",
+      "command_record_sha256": "62c840eda256238e9e72e0db8b64055ce90f6e0ce532a0506707cf0d118fada4",
+      "log_sha256": "671ffe8b21ccb533e00c4bcba2324e9b8248d20b2b819bfd75a98f4d4bcc6e12"
+    },
+    {
+      "id": "T23-02",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "assertion": "Expired or invalid/unknown Core duration does not accept a restored chime. Accepted revision deduplicates repeated recovery. Door/Router timers never issue cancellation from local duration.",
+      "scope": "host production timing/tracker + native source",
+      "command_record": "evidence/compat-host-frozen-r3.json",
+      "command_record_sha256": "62c840eda256238e9e72e0db8b64055ce90f6e0ce532a0506707cf0d118fada4",
+      "log_sha256": "671ffe8b21ccb533e00c4bcba2324e9b8248d20b2b819bfd75a98f4d4bcc6e12"
+    },
+    {
+      "id": "T23-03",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "assertion": "Production callback identity rejects old Core, call and timer revision; foreground identical generation/age cannot release barrier. Queue/main results and recovery writes bind captured Core generation.",
+      "scope": "host production helper; UIKit dispatch inspected and cross-compiled",
+      "command_record": "evidence/compat-host-frozen-r3.json",
+      "command_record_sha256": "62c840eda256238e9e72e0db8b64055ce90f6e0ce532a0506707cf0d118fada4",
+      "log_sha256": "671ffe8b21ccb533e00c4bcba2324e9b8248d20b2b819bfd75a98f4d4bcc6e12"
+    },
+    {
+      "id": "T23-04",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "assertion": "Clean actual historical SDK armv7 Core/App compile, link, minimum5.1 and zero unresolved non-system symbols pass; ARC and mach clock add no post-iOS5 runtime dependency.",
+      "scope": "historical SDK build/symbol gate",
+      "command_record": "evidence/ios5-app-frozen-r3.json",
+      "command_record_sha256": "4ff0bc7dab672d118cbcba085d51d1e1b3d074f87ac1822b6250e4f856053abd",
+      "log_sha256": "0c9224109875ecba86a33ee937c22e2cb38ac6a555b7924def0ad76572a650a6"
+    }
+  ],
+  "historical_records_note": "Non-frozen Core/app r2/r3 are development results only because parallel Core work changed Store mutex type. Final qualification uses a clean frozen build.",
+  "artifacts_sha256": "58e3f7502625a750346c2e856cf2d48a98c1f4714db632752265fd28a5ac0372"
+}

@@ -1,0 +1,12 @@
+[ 14%] Built target db_third_party
+[ 16%] Embedding webui assets
+embed_webui: 23 assets, 1887339 bytes -> /Users/ox/Documents/project/app-doorbell/build/remediation-t05-20260922/normal/gen/webui_assets.cpp
+[ 17%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+[ 19%] Building CXX object CMakeFiles/doorbell_core.dir/src/store/operation_ledger.cpp.o
+[ 19%] Building CXX object CMakeFiles/doorbell_core.dir/gen/webui_assets.cpp.o
+[ 20%] Linking CXX static library libdoorbell_core.a
+[ 59%] Built target doorbell_core
+[ 61%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_operations.cpp.o
+[ 61%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_panel.cpp.o
+[ 62%] Linking CXX executable doorbell_tests
+[100%] Built target doorbell_tests

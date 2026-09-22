@@ -1,0 +1,93 @@
+{
+  "started_at": "2026-09-22T17:01:33.589310+00:00",
+  "finished_at": "2026-09-22T17:01:34.638115+00:00",
+  "serial": "emulator-5554",
+  "profile": "API35 / Android15 / arm64-v8a",
+  "app_version": "0.3.21 / build22",
+  "sip_backend": "real_pjsip (linked; Core stays unstarted)",
+  "signing": "Android debug certificate",
+  "apks": [
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-baseline/android/app/build/intermediates/apk/modern/debug/app-modern-debug.apk",
+      "sha256": "0a1eb1d0b483d036ee0129fe4b488180f9fb9306fb295491b80de4e132b02e52"
+    },
+    {
+      "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-baseline/android/app/build/intermediates/apk/androidTest/modern/debug/app-modern-debug-androidTest.apk",
+      "sha256": "22c5821718a1ff8cb10af23cc6b83be07710b40e23dec2321f1fd8ac9979be6d"
+    }
+  ],
+  "commands": [
+    {
+      "arguments": [
+        "install",
+        "-t",
+        "-r",
+        "-g",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-baseline/android/app/build/intermediates/apk/modern/debug/app-modern-debug.apk"
+      ],
+      "exit_code": 0,
+      "output": "Performing Streamed Install\nSuccess\n"
+    },
+    {
+      "arguments": [
+        "install",
+        "-t",
+        "-r",
+        "-g",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-baseline/android/app/build/intermediates/apk/androidTest/modern/debug/app-modern-debug-androidTest.apk"
+      ],
+      "exit_code": 0,
+      "output": "Performing Streamed Install\nSuccess\n"
+    },
+    {
+      "arguments": [
+        "shell",
+        "settings",
+        "put",
+        "system",
+        "font_scale",
+        "1.0"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "am",
+        "force-stop",
+        "jp.ox.doorbell"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "shell",
+        "am",
+        "instrument",
+        "-w",
+        "-r",
+        "-e",
+        "phase",
+        "baseline",
+        "-e",
+        "orientation",
+        "portrait",
+        "jp.ox.doorbell.test/jp.ox.doorbell.VisitorUiInstrumentation"
+      ],
+      "exit_code": 0,
+      "output": "INSTRUMENTATION_RESULT: stream={\n  \"phase\": \"baseline\",\n  \"orientation\": \"portrait\",\n  \"font_scale\": 1,\n  \"source_id\": \"6cf2c8ee9099961fdfae2b32c67becea03b946d5e9d3dabd01d42327936d1bf7\",\n  \"results\": [],\n  \"core_started\": false,\n  \"failure\": \"kotlin.UninitializedPropertyAccessException: lateinit property runtime has not been initialized\\n\\tat jp.ox.doorbell.App.getRuntime(App.kt:23)\\n\\tat jp.ox.doorbell.VisitorUiInstrumentation.onStart(VisitorUiInstrumentation.kt:44)\\n\\tat android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2594)\\n\"\n}\nINSTRUMENTATION_CODE: 0\n"
+    },
+    {
+      "arguments": [
+        "pull",
+        "/sdcard/Android/data/jp.ox.doorbell/files/t35-ui/.",
+        "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-android/evidence/baseline-portrait-1.0"
+      ],
+      "exit_code": 1,
+      "output": "adb: error: failed to stat remote object '/sdcard/Android/data/jp.ox.doorbell/files/t35-ui/.': No such file or directory\n"
+    }
+  ],
+  "scope": "Production MainActivity/View layout and bindings; test recording CallFlowGateway and SOS callback; no physical devices or Core networking."
+}

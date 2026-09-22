@@ -1,0 +1,38 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "573cbaa50aa730a74c90af99ac8afe9f148b82c6907bb48e31ff869ef23ae1aa",
+  "task_id": "T28-Web",
+  "test_id": "web-focus-targeted-regression",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28-Web/source-web-final.json",
+  "source_manifest_sha256": "a4b955df6813bb405b8612ba3cd9ff0b6b04a582b6d19513f9ed78a145cad124",
+  "command": [
+    "node",
+    "--test",
+    "webui/tests/admin_runtime.test.js",
+    "webui/tests/admin_config_merge.test.js",
+    "webui/tests/admin_logic.test.js"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t28-web-20260923/web-focus-final-source",
+  "started_at": "2026-09-22T17:29:38.708962+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_applicable",
+  "signing_state": "not_applicable",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28-Web/evidence/web-focus-targeted-regression.log",
+  "limitations": [
+    "Host JavaScript regression; browser and Core HTTP evidence are separate."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T17:29:38.957676+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "3 Node.js suites passed on the final focus-fix candidate: admin runtime, typed configuration merge, and admin logic."
+}

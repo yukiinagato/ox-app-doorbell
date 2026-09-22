@@ -1,0 +1,17 @@
+{
+  "started_at": "2026-09-22T18:09:55.476095+00:00",
+  "finished_at": "2026-09-22T18:09:55.586902+00:00",
+  "command": [
+    "python3",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r3/win/tests/test_windows_contracts.py"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "exit_code": 0,
+  "source_manifest_sha256": "3d8b165108885f55e030f8f9625de7007b9274a9f09c7ae425417fc27e9165df",
+  "platform": "macOS arm64 / Mono",
+  "sip_backend": "not linked",
+  "signing": "test-only unsigned",
+  "scope": "Existing source/XML contract suite on the frozen source; not WPF UI execution.",
+  "observed_result": "70 tests passed",
+  "log_sha256": "2048e13f3f6b9f4b5e00353c7c684aa3ca2cb52bb5c4b71e8b3231291bc239fb"
+}

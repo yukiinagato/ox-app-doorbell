@@ -782,14 +782,7 @@ internal class DashboardView(
     }
 
     private fun dateLine(now: ClusterTime): String {
-        if (now.date.isEmpty()) return ""
-        val parts = now.date.split("-")
-        if (parts.size != 3) return now.date
-        val weekday = WEEKDAYS.getOrElse(now.weekdayNum) { "" }
-        return String.format(
-            Locale.US, "%s-%s-%s%s", parts[0], parts[1], parts[2],
-            if (weekday.isEmpty()) "" else " ($weekday)",
-        )
+        return texts.dateLine(now)
     }
 
     private fun updateHeader() {
@@ -862,6 +855,9 @@ internal class DashboardView(
             texts.t("sos.slide_sub", R.string.sos_slide_sub, countdown.toString()),
             texts.t("sos.countdown_cancel", R.string.sos_countdown_cancel),
             countdown,
+            texts.t("sos.accessibility_start", R.string.sos_accessibility_start),
+            texts.t("sos.accessibility_hint", R.string.sos_accessibility_hint),
+            texts.t("sos.accessibility_confirm", R.string.sos_accessibility_confirm),
         ) { seconds -> texts.t("sos.countdown", R.string.sos_countdown, seconds.toString()) }
         sosSlider.visibility = if (sosVisible()) View.VISIBLE else View.GONE
     }
@@ -1363,6 +1359,5 @@ internal class DashboardView(
         const val TAG = "doorbell-dash"
         const val CLOCK_TAG = "doorbell-clock"
         const val STILL_INTERVAL_MS = 5_000L
-        val WEEKDAYS = arrayOf("日", "月", "火", "水", "木", "金", "土")
     }
 }

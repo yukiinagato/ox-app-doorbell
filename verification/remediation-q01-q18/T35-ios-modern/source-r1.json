@@ -1,0 +1,35 @@
+{
+  "at": "2026-09-22T16:54:10.277597+00:00",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "6ddf4fd557086d9ada6830b39f5d4edc030ed20ddf4ea1f101256711749c4158",
+  "task_id": "T35-ios-modern",
+  "scope": "owned Swift production and actual UIKit test inputs; runtime verification pending Mac unlock",
+  "inputs": [
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "sha256": "01e04182e3978cd9b5032aad438728ee8cbb2fc37d1393bdf34734da079f554b",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/source-r1/ios/Doorbell/MainViewController.swift"
+    },
+    {
+      "path": "ios/Doorbell/VisitorScreenView.swift",
+      "sha256": "d6318dfbc917b26c65bfda8b4e317804939fb1c897d36d32f766571d2afb8edf",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/source-r1/ios/Doorbell/VisitorScreenView.swift"
+    },
+    {
+      "path": "ios/Doorbell/SosSlideControl.swift",
+      "sha256": "e947792e32100bd3004a8a01820bfd9b57c13ad7fbe0fd484315ab8d937994ef",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/source-r1/ios/Doorbell/SosSlideControl.swift"
+    },
+    {
+      "path": "ios/Doorbell/IOSAvailability.swift",
+      "sha256": "f15e8bce8c8382c168bc2a4fee09e0c5c62ea2ffab0de62d0e0295577d972f34",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/source-r1/ios/Doorbell/IOSAvailability.swift"
+    },
+    {
+      "path": "ios/DoorbellTests/VisitorScreenLayoutTests.swift",
+      "sha256": "4848e78ff1fccda29a8a2b5880eb9e1cd9054feafe9a0e964c87fab53466640e",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/source-r1/ios/DoorbellTests/VisitorScreenLayoutTests.swift"
+    }
+  ]
+}

@@ -1,0 +1,72 @@
+[
+  {
+    "platform": "android",
+    "tier": "modern",
+    "version": "0.3.20+b26e0d3",
+    "build": 21,
+    "apk": "/Users/ox/Documents/project/app-doorbell/android/app/build/outputs/apk/modern/debug/app-modern-debug.apk",
+    "sha256": "3fe1dde82fb590df12d45477fd6bcd7791d7ebe801dc2172c1a111ad453a8f3a",
+    "min_api": 21,
+    "ndk": "27.1.12297006",
+    "unit_suites": 43,
+    "unit_results": {
+      "tests": 377,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lint_errors": 0,
+    "unit_execution_note": "Gradle reused up-to-date Java/Kotlin test results. Modified native Core and Web paths are verified separately; no fresh unit execution count is claimed.",
+    "device_validation": "NOT_RUN"
+  },
+  {
+    "platform": "android",
+    "tier": "legacy19",
+    "version": "0.3.20+b26e0d3-legacy19",
+    "build": 21,
+    "apk": "/Users/ox/Documents/project/app-doorbell/android/app/build/outputs/apk/legacy19/debug/app-legacy19-debug.apk",
+    "sha256": "97fc1d3b2e54336234fce4675c4a54923c4c098a6a05586e5599db8c1d291f78",
+    "min_api": 19,
+    "ndk": "25.2.9519653",
+    "unit_suites": 43,
+    "unit_results": {
+      "tests": 377,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "lint_errors": 0,
+    "unit_execution_note": "Gradle reused up-to-date Java/Kotlin test results. Modified native Core and Web paths are verified separately; no fresh unit execution count is claimed.",
+    "device_validation": "NOT_RUN"
+  },
+  {
+    "platform": "ios5",
+    "manifest": "/Users/ox/Documents/project/app-doorbell/build/ios-compat/artifacts/ios5-armv7-app/manifest.json",
+    "manifest_sha256": "ac47aa6938113294f6bf87edf814784dfd8168c0f212c5c87824b1d224c5b826",
+    "metadata": {
+      "architectures": [
+        "armv7"
+      ],
+      "artifact": "Doorbell.app",
+      "bundle_identifier": "jp.ox.doorbell",
+      "bundle_sha256": "db75e0e879b3b2a2c2bcae02aa04cb9176e986fe41e66c1315ad3fb60315a3a8",
+      "bundle_version": "51",
+      "core_manifest_sha256": "9e36fbbd3435763fbdfac44a6aa357a5f6161e2da6b8b14e1cf6c472b4b34e7e",
+      "core_sha256": "92e1f1b8711c08d850576fb5f571a3ec37d7f94bf7169ec095bcc26bf16441eb",
+      "minimum_os": "5.1",
+      "profile": "ios5-armv7-jailbreak",
+      "schema_version": 1,
+      "short_version": "0.3.48",
+      "signing": "ldid-jailbreak",
+      "sip_backend": "ios_compat_minisip_uac_uas",
+      "source_dirty": true,
+      "source_revision": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+      "source_sha256": "ad11251960dbb23cb7dc98a4990725912cb3d54cd709515a6101cf340dd233a0",
+      "toolchain": {
+        "clang": "Apple clang version 21.0.0 (clang-2100.1.1.101)",
+        "sdk": "iPhoneOS7.1.sdk"
+      }
+    },
+    "device_validation": "NOT_RUN"
+  }
+]

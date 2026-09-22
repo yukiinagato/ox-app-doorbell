@@ -1,0 +1,108 @@
+/bin/mkdir -p /var/mobile/Library/DoorbellT35UIKit; chown mobile:mobile /var/mobile/Library/DoorbellT35UIKit; /bin/rm -f /var/mobile/Library/DoorbellT35UIKit/*.json /var/mobile/Library/DoorbellT35UIKit/*.png /var/mobile/Library/DoorbellT35UIKit/runner.log
+
+exit=0
+for pid in $(/bin/launchctl list | /bin/grep "UIKitApplication:jp.ox.doorbell.t35uitest" | /bin/sed "s/[[:space:]].*//"); do case "$pid" in [0-9]*) kill -9 "$pid";; esac; done; /bin/mkdir -p /Applications/DoorbellT35UIKit.stage
+
+exit=0
+/bin/rm -rf /Applications/DoorbellT35UIKit.app; /bin/mv /Applications/DoorbellT35UIKit.stage/DoorbellT35UIKit.app /Applications/DoorbellT35UIKit.app; /bin/rmdir /Applications/DoorbellT35UIKit.stage
+
+exit=0
+chown -R mobile:mobile /Applications/DoorbellT35UIKit.app; /bin/chmod 755 /Applications/DoorbellT35UIKit.app/DoorbellT35UIKit; su mobile -c /usr/bin/uicache
+
+exit=0
+if [ -S /var/run/doorbell-keepalive.sock ]; then /usr/local/libexec/doorbell-keepalive --control begin --seconds 180 --socket /var/run/doorbell-keepalive.sock; fi; su mobile -c "/usr/bin/uiopen doorbell-t35-test://"; /bin/launchctl list | /bin/grep t35 || true
+{"ok":true}
+30861	-	UIKitApplication:jp.ox.doorbell.t35uitest[0x28a6]
+
+exit=0
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do if [ -f /var/mobile/Library/DoorbellT35UIKit/result.json ]; then /bin/cat /var/mobile/Library/DoorbellT35UIKit/result.json; exit 0; fi; sleep 2; done; exit 1
+{
+  "selected_case" : 2,
+  "source_manifest" : "38b3d57366e0f4c574955b726bbe091dc614a616b73932ef82c0e687e126ab00",
+  "checks" : [
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 15020032,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Call and cancel share the fixed action area",
+      "resident_bytes" : 15101952,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Ringing touch cannot become connected end",
+      "resident_bytes" : 15155200,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Connected end remains in the same area",
+      "resident_bytes" : 15163392,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17203200,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Fresh connected end works",
+      "resident_bytes" : 17203200,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 25919488,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Nil visitor ID native SIP call can end",
+      "resident_bytes" : 25948160,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Old nil-ID gesture cannot end the next SIP session",
+      "resident_bytes" : 26120192,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 26124288,
+      "case" : "T35-02",
+      "pass" : true
+    }
+  ],
+  "version" : "1.0.0",
+  "machine" : "iPad1,1",
+  "boundary_calls" : [
+    "audio.configured"
+  ],
+  "system_version" : "5.1.1",
+  "accessibility_probe" : {
+    "explicit_button_label" : "Isolated probe",
+    "voice_over_running" : false,
+    "explicit_button_accessible_getter" : true
+  },
+  "bundle_id" : "jp.ox.doorbell.t35uitest",
+  "build" : "11",
+  "pid" : 30861,
+  "failed" : 0,
+  "scope" : "Actual iPad UIKit hierarchy, production target\/actions, dialogs, timers, hit-testing and rendering. UIControl events are programmatically dispatched; no HID injection, physical rotation, VoiceOver speech or external Core action."
+}
+exit=0
+su mobile -c "/usr/bin/uiopen doorbell://"; if [ -S /var/run/doorbell-keepalive.sock ]; then /usr/local/libexec/doorbell-keepalive --control end --socket /var/run/doorbell-keepalive.sock; fi; /bin/launchctl list | /bin/grep -E "doorbell|t35"
+{"ok":true}
+30861	-	UIKitApplication:jp.ox.doorbell.t35uitest[0x28a6]
+30692	-	UIKitApplication:jp.ox.doorbell[0xe03b]
+19	-	jp.ox.doorbell.keepalive
+
+exit=0

@@ -1,0 +1,8 @@
+{
+  "recorded_at": "2026-09-22T15:08:36.647949+00:00",
+  "sources": {
+    "webui/admin/app.js": "50834004c39680a1649f831de8af0df7c5e5d90842ec6163afaf224c51656978",
+    "webui/admin/index.html": "5b409284dd42cdea4e66c480777474cd49ba269bf82ae2e6b20a5d023bb2863d",
+    "webui/tests/admin_runtime.test.js": "a1211ba8a5f06b62a747512131d9d524751ab909aa3a7336b75f7f14927e7bdb"
+  }
+}

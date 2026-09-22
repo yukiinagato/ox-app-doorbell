@@ -1,0 +1,13 @@
+{
+  "task": "T35-android",
+  "status": "READY_FOR_PARENT_REVIEW",
+  "candidate": "source-candidate-r6.json",
+  "acceptance": "acceptance.json",
+  "report": "report.zh.md",
+  "native_ui": "API35 arm64, four profiles, 20/20 tests passed; no Core started",
+  "build": "modern and legacy19 each 386/386 JVM tests, assemble and lint passed",
+  "remaining": "Physical Android/API19 UI, integrated later-Core build and actual active SOS overlay/clear are not qualified.",
+  "cleanup": "Dedicated AVD stopped; no active task services.",
+  "pause_rule": "If parent reports a quota reset, save current state and stop all actions.",
+  "recorded_at": "2026-09-22T17:21:55.382723+00:00"
+}

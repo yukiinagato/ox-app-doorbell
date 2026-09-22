@@ -1,4 +1,5 @@
 #import "DBCoreBridge.h"
+#import "DBCallTiming.h"
 #import <UIKit/UIKit.h>
 #import <AudioToolbox/AudioToolbox.h>
 #import <Security/Security.h>
@@ -309,6 +310,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
 
 @implementation DBCoreBridge {
   db_core *_core;
+  NSUInteger _lifecycleGeneration;
   NSMutableDictionary *_handlers;
   NSString *_deviceInfoCache;
   NSString *_powerStateCache;
@@ -366,6 +368,10 @@ static void DBUiEventCb(void *user, const char *event_json) {
   return _core != NULL;
 }
 
+- (NSUInteger)lifecycleGeneration {
+  @synchronized(self) { return _lifecycleGeneration; }
+}
+
 - (void)pushCameraFrame:(NSData *)data format:(int)format width:(int)width height:(int)height stride:(int)stride {
   if (width <= 0 || height <= 0 || (format != 1 && format != 3) ||
       stride < width * (format == 3 ? 4 : 1)) return;
@@ -388,6 +394,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
 }
 - (BOOL)startWithDataDir:(NSString *)dataDir bootJson:(NSString *)bootJson {
   if (_core != NULL) return YES;
+  @synchronized(self) { ++_lifecycleGeneration; }
   // startWithDataDir is invoked on the main thread, so prime the UIKit-backed
   // device-info cache before Core can issue its first worker-thread callback.
   [self refreshDeviceInfo];
@@ -424,6 +431,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
 }
 
 - (void)stop {
+  @synchronized(self) { ++_lifecycleGeneration; }
   if (_diTimer) {
     [_diTimer invalidate];
     _diTimer = nil;
@@ -508,10 +516,15 @@ static void DBUiEventCb(void *user, const char *event_json) {
 }
 
 - (void)reportCallRecovery:(NSString *)callID restored:(BOOL)restored {
+  [self reportCallRecovery:callID restored:restored expectedGeneration:self.lifecycleGeneration];
+}
+
+- (void)reportCallRecovery:(NSString *)callID restored:(BOOL)restored
+        expectedGeneration:(NSUInteger)generation {
   if ([callID length] == 0) return;
   NSString *cid = [callID copy];
   dispatch_async(_coreQueue, ^{
-    if (self->_core)
+    if (self->_core && self.lifecycleGeneration == generation)
       db_core_report_call_recovery(self->_core, [cid UTF8String], restored ? 1 : 0);
   });
 }
@@ -662,6 +675,19 @@ static void DBUiEventCb(void *user, const char *event_json) {
     if (self->_core) out = [self takeJson:db_core_status_json(self->_core)];
   });
   return out;
+}
+
+- (DBCallTimingSnapshot *)callTimingSnapshot {
+  NSUInteger generation = self.lifecycleGeneration;
+  NSTimeInterval requestedAt = DBCallMonotonicTime();
+  __block NSDictionary *document = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core && self.lifecycleGeneration == generation)
+      document = [self takeJson:db_core_status_json(self->_core)];
+  });
+  if (!document || self.lifecycleGeneration != generation) return nil;
+  return [[DBCallTimingSnapshot alloc] initWithDocument:document
+      coreGeneration:generation requestedAt:requestedAt];
 }
 
 - (NSDictionary *)debugInfo {

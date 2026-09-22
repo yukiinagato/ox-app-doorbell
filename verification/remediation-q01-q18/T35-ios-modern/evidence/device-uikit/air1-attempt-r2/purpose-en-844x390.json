@@ -1,0 +1,144 @@
+[
+  {
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "identifier" : "purpose_choice_screen",
+    "alpha" : 1,
+    "frame" : "{{0, 0}, {844, 390}}",
+    "class" : "UIView"
+  },
+  {
+    "content_size" : "{772, 1745.5}",
+    "hidden" : false,
+    "traits" : 0,
+    "frame" : "{{36, 16}, {772, 166}}",
+    "alpha" : 1,
+    "class" : "UIScrollView",
+    "accessibility_element" : false
+  },
+  {
+    "class" : "UILabel",
+    "accessibility_element" : false,
+    "traits" : 65536,
+    "frame" : "{{36, 16}, {772, 255.5}}",
+    "text" : "Please choose your purpose",
+    "font_size" : 107,
+    "hidden" : false,
+    "alpha" : 1
+  },
+  {
+    "alpha" : 1,
+    "traits" : 0,
+    "text" : "Calling now. Let us know what brings you here.",
+    "accessibility_element" : false,
+    "frame" : "{{36, 281.5}, {772, 134}}",
+    "font_size" : 56,
+    "hidden" : false,
+    "class" : "UILabel"
+  },
+  {
+    "enabled" : true,
+    "identifier" : "purpose_choice_long",
+    "frame" : "{{36, 439.5}, {378, 1322}}",
+    "accessibility_element" : true,
+    "accessibility_label" : "Scheduled delivery and building maintenance visit. Please confirm the visitor purpose and connection with the resident.",
+    "alpha" : 1,
+    "hidden" : false,
+    "traits" : 1,
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "title" : ""
+  },
+  {
+    "class" : "UIView",
+    "alpha" : 1,
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "frame" : "{{58, 459.5}, {56, 56}}"
+  },
+  {
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "frame" : "{{70, 471.5}, {32, 32}}",
+    "class" : "UIImageView",
+    "hidden" : false,
+    "traits" : 0
+  },
+  {
+    "class" : "UILabel",
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "frame" : "{{58, 525.5}, {334, 1220}}",
+    "font_size" : 73,
+    "traits" : 0,
+    "hidden" : false,
+    "text" : "Scheduled delivery and building maintenance visit. Please confirm the visitor purpose and connection with the resident."
+  },
+  {
+    "frame" : "{{802.5, -23}, {2.5, 36}}",
+    "traits" : 0,
+    "class" : "UIImageView",
+    "alpha" : 0,
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "traits" : 0,
+    "hidden" : false,
+    "alpha" : 0,
+    "accessibility_element" : false,
+    "class" : "UIImageView",
+    "frame" : "{{-3, 176.5}, {36, 2.5}}"
+  },
+  {
+    "frame" : "{{36, 198}, {772, 168}}",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "alpha" : 1,
+    "class" : "UIView"
+  },
+  {
+    "enabled" : true,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "class" : "UIButton",
+    "alpha" : 1,
+    "identifier" : "purpose_choice_cancel",
+    "hidden" : false,
+    "frame" : "{{36, 198}, {378, 168}}",
+    "title" : "Cancel call"
+  },
+  {
+    "hidden" : false,
+    "class" : "UIButtonLabel",
+    "text" : "Cancel call",
+    "font_size" : 62,
+    "alpha" : 1,
+    "traits" : 0,
+    "accessibility_element" : false,
+    "frame" : "{{75, 245}, {300.5, 74}}"
+  },
+  {
+    "class" : "UIButton",
+    "frame" : "{{430, 198}, {378, 168}}",
+    "title" : "Skip purpose",
+    "alpha" : 1,
+    "enabled" : true,
+    "accessibility_element" : false,
+    "traits" : 0,
+    "hidden" : false,
+    "identifier" : "purpose_choice_skip"
+  },
+  {
+    "hidden" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "font_size" : 62,
+    "accessibility_element" : false,
+    "class" : "UIButtonLabel",
+    "frame" : "{{505, 208}, {228, 148}}",
+    "text" : "Skip purpose"
+  }
+]

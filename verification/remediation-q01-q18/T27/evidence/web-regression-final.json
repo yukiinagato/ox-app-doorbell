@@ -1,0 +1,193 @@
+{
+  "recorded_at": "2026-09-22T16:34:23.236895+00:00",
+  "source_manifest_sha256": "7e74bfc8188686d3c51db1e9a1bb5d728b7f27e8a5fa6efe17e93526c64a26eb",
+  "results": [
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_config_merge.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "43e0132d1df887f3b6abdf6e074ed53b97059918fa16e38124beb11a4fe5b4a0"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_logic.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "daeff1201f740706478e0d25f70a380e34e6e735ab84101ce42536d397dd9843"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/admin_runtime.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "db6f6ca9ba31b301270aaccc56aa2f436dce6223a86ea80b0236f991665e1219"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_flow.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "d2f03d219363ce9505b3308deb35bb7a3b7e104012fff4d10f0e0a6f7378429e"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_heartbeat.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "96a2f0069a79ca470db8b86541e70af4fe8956d1b49f5207179476f88fcb5bac"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_media_authority.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "bcf30431e4a63e7c3cc571ee452128ae2df8212d4fbab846cf863ee959588aed"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_poll_lanes.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "66bce87f96611d0ca99c2489b45392235ffa1db253098c79d23d8b5994fb1959"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_recovery_controller.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "7ed6f78ba0bd8809294b69bed3771194d129b936a9248ce12da40085dfe9095e"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_state_controller.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "2b0cd6d7e9cdf38af610da251d67b0a17ecc86e803f1832db2d55095e5c894e3"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_tabs.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "e065dd851d07627d975b2c525bd6af2a5e9acbea7fdd8ab0e86200e978ec09d1"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/call_ua_generation.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "940bc7d27f0894d8b143abc762dfd83b082b1b07d2a37fdc2c613b60e7b9d031"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/pairing.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "348a183b700f4832fab2c549771ca3f94fae13b32c00075cd00eb1b1357f60ae"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/panel_i18n.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "8b26879ec828d913e868102cec1ffb61969ac8d36fb6194b14d4247ac8041d50"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/playback.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "0a8221554f739ac137b9d202fbb4fef37d82e620c1087aa307d356f5b265ec99"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/request_deadline.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "b95776ae75014e787be5c18710be68d637de8d78fd46814ea75f149d01f66b82"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/runtime.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "12b630cd2e987f3319dec27365b90715f32d5759e5a385d4f55ab4bcedec25e6"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/service_worker.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "37425cf664a2c4147cf1bbefbc3e8095dba37a8c997d729bcf24747ef28f6057"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/settings.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "b50da3ad2c4497533830abc5626dd2d499beff8c19ef166ddc6bdb4a243d9602"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/sos_operation.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "3e25f7e5293972a57595d1cdc501eef19045c398c19552dd12436d6e1d3b87fb"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/theme_notice.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "b6ce94ef8145247c1324d2f20cd1b1686ec33d5a3e5064aecd33f3a61af59426"
+    },
+    {
+      "command": [
+        "node",
+        "webui/tests/video_session.test.js"
+      ],
+      "exit_code": 0,
+      "source_sha256": "627b57cf3083bf094cb098c4e67e194c8e405d52c5838920e784dfecc4885bcf"
+    },
+    {
+      "command": [
+        "python3",
+        "tools/gen_i18n.py",
+        "--check"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "python3",
+        "tools/check_english_source.py"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "status": "PASS",
+  "platform": "macOS host Node.js",
+  "node_version": "v25.9.0",
+  "scope": "Production JS logic/runtime tests; native-browser behavior recorded separately."
+}

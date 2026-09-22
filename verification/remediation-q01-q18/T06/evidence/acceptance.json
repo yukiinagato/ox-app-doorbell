@@ -1,0 +1,112 @@
+{
+  "task_id": "T06",
+  "status": "VERIFIED_IN_SCOPE",
+  "scope": "production_test / host with real HTTP/TCP/authenticated mesh and local MQTT protocol fixture",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/source-final.json",
+  "source_manifest_sha256": "5cc445041f114abd9d9abc27fc5dbccbd67578a38a349f55a6b7f6047eac7217",
+  "commands": [
+    {
+      "id": "normal-final",
+      "command_record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/evidence/normal-final.json",
+      "command_record_sha256": "701212628ca5f77d3bc97460889672d6e0e60220c70235ee465bf4c84c923a33",
+      "exit_code": 0,
+      "test_cases": 14,
+      "assertions": 306,
+      "log_sha256": "877f11ce5c251d8e575412e9d7693811eb3c1165ce92e57baa6822ed5778d844",
+      "artifact_sha256": "6436ff2ed3439574a7487ef1745d399c0741b5f397e24e1a6b762fee514e740e"
+    },
+    {
+      "id": "asan-final",
+      "command_record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/evidence/asan-final.json",
+      "command_record_sha256": "11319a810c64270b2805708fe5415b8c109fd7fe033c451ac5c89516eb0f2411",
+      "exit_code": 0,
+      "test_cases": 14,
+      "assertions": 306,
+      "log_sha256": "5fdf7e8b38f4cd5228d69a82a68174969886fb735491dc2326dec47ad0e82314",
+      "artifact_sha256": "60a63491f078bddfb5d19108abe6dc7acb5d93c00569921d966189d8f01fd78c"
+    },
+    {
+      "id": "regression-final",
+      "command_record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/evidence/regression-final.json",
+      "command_record_sha256": "5b4e1797ec565ce26c89908c8c61d5d2674e2c18f7b91dcec642a76b09466923",
+      "exit_code": 0,
+      "test_cases": 62,
+      "assertions": 1191,
+      "log_sha256": "2a06375f9f06e3c708ef2706899072a564e1d36bb98c1d950743137d64203dc2",
+      "artifact_sha256": "6436ff2ed3439574a7487ef1745d399c0741b5f397e24e1a6b762fee514e740e"
+    },
+    {
+      "id": "red-http-final",
+      "command_record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/evidence/red-http-final.json",
+      "command_record_sha256": "72225171730f0deb35de4b1fdb76f2a758fdacf4e25d070709bc1305520623d7",
+      "exit_code": 1,
+      "test_cases": 1,
+      "assertions": 13,
+      "log_sha256": "da562c828e001187f0c74276e4df31abc9819c6316093baceb3a9e4bf28b61b1",
+      "artifact_sha256": "274e1edbc56b7cfb8d09195d9f4cc066fc95c3043357b25c4c2669d5cea05767"
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "T06-01",
+      "result": "PASS_IN_SCOPE",
+      "tests": [
+        "operations HTTP: remote door retries dispatch one MQTT packet and query the same handle"
+      ],
+      "evidence": [
+        "normal-final",
+        "asan-final"
+      ],
+      "observed": "Same ID retried four times, one actual MQTT publish observed, query retains ID and dispatched state."
+    },
+    {
+      "id": "T06-02",
+      "result": "PASS_IN_SCOPE",
+      "tests": [
+        "operations native: another authenticated node cannot query or execute the creator handle",
+        "operations HTTP: current grants and CSRF guard prepare execute and query"
+      ],
+      "evidence": [
+        "normal-final",
+        "asan-final"
+      ],
+      "observed": "A second authenticated native principal with target grant is refused query/execute with no state/config disclosure; CSRF and current grant checks also refuse requests."
+    },
+    {
+      "id": "T06-03",
+      "result": "PASS_IN_SCOPE",
+      "tests": [
+        "operations HTTP: remote door retries dispatch one MQTT packet and query the same handle"
+      ],
+      "evidence": [
+        "normal-final",
+        "asan-final"
+      ],
+      "observed": "Stopping authority B causes 503 from A and no substitute dispatch."
+    },
+    {
+      "id": "T06-04",
+      "result": "PASS_IN_SCOPE",
+      "tests": [
+        "operations HTTP: lost SOS response is recoverable without a second intent"
+      ],
+      "evidence": [
+        "normal-final",
+        "asan-final"
+      ],
+      "observed": "Fixture discards client-read execute response; query/retries of same ID retain one emergency intention."
+    }
+  ],
+  "limitations": [
+    "No physical lock, HA deployment, target device qualification or actuator ACK.",
+    "SIP backend is stub; ASan covers C/C++ but LeakSanitizer is disabled.",
+    "SOS response-loss fixture discards an already-read HTTP response, not a wire-level outage.",
+    "All legacy one-shot callers remain explicitly listed as weaker; UI/SOS identity migration remains T12/T31/T36 work."
+  ],
+  "post_freeze_delta": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/evidence/post-freeze-t26-delta.json",
+  "independent_review": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/evidence/review.json",
+    "sha256": "4f1ad83670ab048f38752bc7f1db14f5d1c2c76616465589a4aaf17ea7867388",
+    "verdict": "PASS_IN_PRODUCTION_TEST_SCOPE"
+  }
+}

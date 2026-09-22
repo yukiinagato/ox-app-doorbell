@@ -1,0 +1,42 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "227d6e639873da6594919090ed0d0b3740ed41f4911ebaede16b232d1d1f613e",
+  "task_id": "T06",
+  "test_id": "red-http-final",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/source-red.json",
+  "source_manifest_sha256": "79fd9a29b7ff1c52fcf4dd10cd1d6ee7aa83d812c62bb1a386258760e9430b0f",
+  "command": [
+    "build/remediation-t06-20260922/red-http-tests",
+    "-tc=operations HTTP: prepare uses the configured remote authority"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:54:36.703504+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "unsigned host verification binary",
+  "artifact_sha256": "274e1edbc56b7cfb8d09195d9f4cc066fc95c3043357b25c4c2669d5cea05767",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T06/evidence/red-http-final.log",
+  "limitations": [
+    "Host production paths with local TCP/HTTP/authenticated mesh; not hardware qualification.",
+    "MQTT output is observed by a local protocol fixture; no real lock, Home Assistant or actuator ACK.",
+    "SOS response-loss fixture discards an HTTP result after reading it; it does not claim a wire-level network fault.",
+    "Legacy callers are recorded separately and are not claimed migrated."
+  ],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T15:54:40.760897+00:00",
+  "expected_exit_code": 1,
+  "status": "PASS",
+  "observed_result": "Expected real RED: authenticated HTTP prepare route returned 404 against preserved pre-T06 production library (1 failed assertion in 1 test, 12/13 assertions passed). No physical duplicate actuation claimed.",
+  "artifact_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/red-http-tests",
+  "log_sha256": "da562c828e001187f0c74276e4df31abc9819c6316093baceb3a9e4bf28b61b1",
+  "test_cases": 1,
+  "assertions": 13
+}

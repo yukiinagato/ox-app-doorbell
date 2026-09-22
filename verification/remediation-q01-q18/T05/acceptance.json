@@ -1,0 +1,104 @@
+{
+  "task_id": "T05",
+  "status": "VERIFIED_IN_SCOPE",
+  "scope": "production_test",
+  "source_manifest": "source-candidate-r2.json",
+  "source_manifest_sha256": "33cd8ebc98797d5b813cc4d7a1de4dd9a68c00a995d7024fa8362dba60e58874",
+  "independent_review_status": "PASS",
+  "acceptance": [
+    {
+      "id": "T05-01",
+      "status": "PASS",
+      "tests": [
+        "operations: twenty concurrent retries acquire one durable dispatch"
+      ],
+      "evidence": [
+        "normal-store-r2",
+        "asan-store-r2"
+      ],
+      "observed": "Exactly one of 20 concurrent accept/acquire sequences receives a commit-backed dispatch grant; all observe the same dispatching record."
+    },
+    {
+      "id": "T05-02",
+      "status": "PASS",
+      "tests": [
+        "operations: content conflicts and revoked context never retarget a prepared intent",
+        "operations: identity alone grants no authority and SOS has global scope"
+      ],
+      "evidence": [
+        "normal-store-r2",
+        "asan-store-r2"
+      ],
+      "observed": "Different immutable content conflicts, changed credential/grant/config rejects unstarted records, and unrelated/unauthorized principals cannot read or execute."
+    },
+    {
+      "id": "T05-03",
+      "status": "PASS",
+      "tests": [
+        "operations: abrupt process death before and after adapter send never causes replay",
+        "operations: recovery invalidates prepared and accepted without acquiring dispatch",
+        "operations: a newer authority boot fences an older open connection",
+        "operations: late authenticated actuator acknowledgement resolves unknown without resend",
+        "operations: transaction failure never returns a dispatch grant",
+        "operations: disk full during real WAL commit grants no dispatch and preserves accepted record"
+      ],
+      "evidence": [
+        "normal-store-r2",
+        "asan-store-r2"
+      ],
+      "observed": "File-backed SQLite/WAL survives abrupt process exit before/after a file-marker send; uncertain state recovers unknown with no second grant. Commit failure gives no grant."
+    },
+    {
+      "id": "T05-04",
+      "status": "PASS",
+      "tests": [
+        "operations: expiry retention and removal cannot resurrect old identities"
+      ],
+      "evidence": [
+        "normal-store-r2",
+        "asan-store-r2"
+      ],
+      "observed": "30-second expiry and 24-hour retention enforced; removed/unknown handles never create operations, and malformed IDs fail validation."
+    },
+    {
+      "id": "T05-05",
+      "status": "PASS",
+      "tests": [
+        "operations: prepared capacity and pagination remain bounded",
+        "operations: unresolved records fill active capacity and are never silently evicted",
+        "operations: all-state reservation ceiling preserves young terminal results",
+        "operations: bounded metadata and results retain existing reservations",
+        "operations: disk full during real WAL commit grants no dispatch and preserves accepted record"
+      ],
+      "evidence": [
+        "normal-store-r2",
+        "asan-store-r2"
+      ],
+      "observed": "Real SQLite admission reaches 128 prepared, 2048 active/unknown and 4096 total limits; unknown/young terminals retained, page limit32, record byte reservations bounded, real VFS SQLITE_FULL fails closed."
+    }
+  ],
+  "commands": {
+    "normal-store-r2": {
+      "record": "evidence/normal-store-r2.json",
+      "sha256": "05d88b0de724bbd4a89b7378dca6fa1ad6e6466002929e68db1eefc5d969d7ad",
+      "exit_code": 0
+    },
+    "asan-store-r2": {
+      "record": "evidence/asan-store-r2.json",
+      "sha256": "252b378121118254324c61f2ea960433b099b0b6dbc8b22220295aaf5c45909a",
+      "exit_code": 0
+    }
+  },
+  "artifacts": "evidence/artifacts-r2.json",
+  "artifacts_sha256": "67a4771970368698788c3e3b24eb0c8fe182b9b62b97e3e3db5d8736eec35c6d",
+  "limitations": [
+    "No pre-existing ledger API: no fabricated compile-failure RED.",
+    "Store production layer; Node/HTTP/mesh/ABI operation integration and current door/action permission evaluation belong to T06.",
+    "No hardware actuator, SOS delivery, hardware power-loss or device qualification.",
+    "ASan covers C/C++ Core and SQLite; no general LeakSanitizer claim.",
+    "128/2048/4096 capacity tests use real in-memory SQLite; WAL/process-death/full-write tests use actual file databases. 48 MiB is logical reservation only."
+  ],
+  "cleanup": "New operation fixtures, WAL/SHM/marker files and child processes cleaned. Existing Store regression scratch directories and dedicated evidence/build/binaries retained; no device or service deployment.",
+  "independent_review": "evidence/review.json",
+  "independent_review_sha256": "94970510926814a315356ff17b61bd0ca9fdc2308e68601f83f1ce9157606fa3"
+}

@@ -1,0 +1,16 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "1c11bdf42d2a5ab0a5a78e53d9ab6722bc866401a09a3195b999a5a6a9760a14",
+  "observed_at": "2026-09-22T14:48:53.598887+00:00",
+  "inputs": {
+    "ios/Doorbell/CallRevisionLifecycle.swift": "75bb01e65dc24d0722b90d0b7fcad77de004eee28d5ac0cc6c8e60c7af05dc84",
+    "ios/Doorbell/CoreBridge.swift": "6fa79deaaa1f8e83d11837769973374074f95122949f7e2a9c8ad5b7666b85f6",
+    "ios/Doorbell/DoorbellClock.swift": "a2da2e566099c39fa9dabbc6fb444f4ed9801cf8d09795995be1460fc4c03229",
+    "ios/Doorbell/MainViewController.swift": "f4ff19560df55918f0d545623c15a5ee6598a6cf56213e27c74515de2e1c3add",
+    "ios/DoorbellTests/ClusterAndClockTests.swift": "accf0b44b1b21dd5315ddf6ea3e67c12776c8724c8c975b7c99e5c3ea0daecb1",
+    "ios/DoorbellTests/CoreBridgeLifecycleTests.swift": "2e65c797061d5b1bb0c83a11d6daba31e28d6b7af5a4adadf9d601a2e29e2711",
+    "ios/DoorbellTV/TVMainViewController.swift": "4eba1f09256e396733f32d011a9d4b222b8dead7b1855741d72a72f7b8296278"
+  },
+  "scope": "T21 Swift inputs; preserves prior T20 lifecycle implementation and previous UI work. Shared Core may contain parallel authorized changes."
+}

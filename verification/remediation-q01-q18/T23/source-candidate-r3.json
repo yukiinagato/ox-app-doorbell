@@ -1,0 +1,22 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "observed_at": "2026-09-22T15:15:30.937984+00:00",
+  "inputs": {
+    "ios-kiosk/src/Core/DBCoreBridge.h": "1c25243f989f88002a056f885782e9aeabd96d3c193fd1e3cc18fd3c3de5226c",
+    "ios-kiosk/src/Core/DBCoreBridge.m": "ae41cd8c34ab97916d736ee544cb739db22dce5ac2de27792665311f1dcbb9eb",
+    "ios-kiosk/src/Core/DBCallEventTracker.h": "ef1a94fb034368929cf0eabf04b52ff67216d8f537b40fbdc73b0fc0c691dc69",
+    "ios-kiosk/src/Core/DBCallEventTracker.m": "740dd743bf8c0b755c83298d73276c691475d613bc0055d4a762bd9d54c7d612",
+    "ios-kiosk/src/Screens/DBDoorScreen.h": "f54114a305d20d51c6849ad004d3fb0fd333897c088645726cddc0e8dc053f84",
+    "ios-kiosk/src/Screens/DBDoorScreen.m": "26c3359378dc2b414081d89430b42341fc2ef61169299e82b7f3e7979e6b954f",
+    "ios-kiosk/src/Screens/DBRouter.m": "f77804619646921c472731c9dedf80e8071b211cd5cd404c9338edc03f36710c",
+    "ios-kiosk/src/Screens/DBIncomingScreen.m": "1af8e2b7fd4b22a3cd8d1e378a561dd29d9b587a8921c7a47c0cbce8b9281785",
+    "ios-compat/scripts/test_host.sh": "dc8778b164327657ea9985ea05fcaa95ba359f403e63b4199a97b456d8724049",
+    "ios-compat/tests/recovery_safe_mode_contract_test.py": "ed0c32dbffd686049b29bd84f1721975d0f342a1c5b3b5020e8de5d11403afef",
+    "ios-kiosk/src/Core/DBCallTiming.h": "5e6b996c90f9821a9b8d0b283f1067a1d62fc27c406bc1dd9b4e6dbd9aa10abc",
+    "ios-kiosk/src/Core/DBCallTiming.m": "05f161974367cb4ab91e5df7714fc921055680b3dcf25160f5f4c6fcee1940e0",
+    "ios-compat/tests/call_timing_test.m": "f55cc1b6f79688cd46c59c1a1184aba910bdf0f92c7c422d3bb9e00f05093070"
+  },
+  "diff_sha256": "1fc651eeb12a6402ba4f01aeeaaade997ba7b018593f89a982f151f6a875d2e5",
+  "refinement": "Clear the transient Checking presentation when the native dialog is actually confirmed."
+}

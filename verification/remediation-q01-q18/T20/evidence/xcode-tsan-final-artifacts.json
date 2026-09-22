@@ -1,0 +1,44 @@
+{
+  "test_id": "xcode-tsan-final",
+  "captured_after": "completed Xcode command, before next build in this native key",
+  "app_version": "0.1.36",
+  "build": "37",
+  "minimum_os": "12.0",
+  "app_binaries": {
+    "build/remediation-t20-20260922/xcode-tsan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell": {
+      "sha256": "28bc4db2665ed6124b1f0783f3c182da42c83181ce5b4808895ccc9bf74bc338",
+      "uuid": "UUID: D1690855-6411-3F45-844B-22C749AFBBBA (arm64) build/remediation-t20-20260922/xcode-tsan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell"
+    },
+    "build/remediation-t20-20260922/xcode-tsan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib": {
+      "sha256": "5a5f53bc9166520602cfd072b08a3a5ddf3da46471d90964dba6f813f7733ba8",
+      "uuid": "UUID: 995C63F3-5B34-3652-AF05-06A0B5C37142 (arm64) build/remediation-t20-20260922/xcode-tsan/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell.debug.dylib"
+    }
+  },
+  "native_artifact_manifest": {
+    "architectures": [
+      "arm64"
+    ],
+    "archive_sha256": "c2b1f9adeb7ddbc0414a47435d67bd7f488f356d1c1fac4972e3ed736aab6055",
+    "artifact": "doorbell-core-bundle",
+    "minimum_os": "12.0",
+    "pjsip_manifest_sha256": "",
+    "platform": "iphonesimulator",
+    "schema_version": 1,
+    "signing_identity": "unsigned-static-library",
+    "sip_backend": "stub",
+    "source_dirty": true,
+    "source_revision": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "toolchain": {
+      "cmake": "cmake version 4.4.3",
+      "sdk_version": "26.5",
+      "xcode": "Xcode 26.6 Build version 17F113"
+    }
+  },
+  "native_archive_copy": "build/remediation-t20-20260922/artifact-snapshots/xcode-tsan-final/libdoorbell_all.a",
+  "native_archive_sha256": "c2b1f9adeb7ddbc0414a47435d67bd7f488f356d1c1fac4972e3ed736aab6055",
+  "native_cmake_flags": [
+    "CMAKE_CXX_FLAGS:STRING=",
+    "CMAKE_C_FLAGS:STRING="
+  ],
+  "source_manifest_native_archives_note": "PRE-RUN observation only; this per-command capture identifies the completed artifact."
+}

@@ -1,0 +1,22 @@
+{
+  "command": [
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-compat/frozen-r6/ios-compat/scripts/test_host.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-compat/frozen-r6",
+  "environment": {
+    "GIT_DIR": "/Users/ox/Documents/project/app-doorbell/.git",
+    "GIT_WORK_TREE": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-compat/frozen-r6",
+    "GIT_OPTIONAL_LOCKS": "0",
+    "DB_ALLOW_DIRTY": "1",
+    "DB_BUILD_ID": "remediation-t35-compat-r6",
+    "DB_BUILD_JOBS": "4"
+  },
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-compat/source-frozen-r6.json",
+  "source_manifest_sha256": "f57098ce19961c6e4ec3965f6fd2b53de03dfe5acc9400c96a24a48dc6147af7",
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "started_at": "2026-09-22T17:28:40.637026+00:00",
+  "exit_code": 0,
+  "elapsed_seconds": 59.202,
+  "log_sha256": "6cd4cbe40ab6ac1606e97cfbffeb897223d3194c7b748bb532d143a2d50462db",
+  "finished_at": "2026-09-22T17:29:39.840530+00:00"
+}

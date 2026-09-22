@@ -1,0 +1,14 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "59781e16af0966c16f876321ede9da1f14a306a7269e13713e7225cab234727e",
+  "files": {
+    "android/app/src/main/java/jp/ox/doorbell/ClusterDateText.kt": "ce92120c961a81c942a11d236a63ea6700095131d1565edbda7c739d343d8b97",
+    "android/app/src/main/java/jp/ox/doorbell/Texts.kt": "8dc229cd2f4626777e74c4b45d668dc247440ff556f3511a31871962ad8a0d17",
+    "android/app/src/main/java/jp/ox/doorbell/MainActivity.kt": "4822cba436fce63348a20b45aa3c840f5b329afe51f42f415cefa398a94f529e",
+    "android/app/src/main/java/jp/ox/doorbell/DashboardView.kt": "1b2f1c1ba017c3e7611105dcc46353512309149bccfaf1fd4b4c116306b4b442",
+    "android/app/src/test/java/jp/ox/doorbell/ClusterDateTextTest.kt": "cd3644031f047ade35e792e77fb3da787938c63882ada56ecaa447f5e5ae1d7c",
+    "android/app/build.gradle.kts": "a4f67c76c762bdb9dc5a0e0075e83615736bedb083d6635c70aae48f54fc4d09",
+    "i18n/strings.yaml": "51d8dab4350cdcedc460cd5c776296688015543cdd7e1c3fa39b34f5efcedafb"
+  }
+}

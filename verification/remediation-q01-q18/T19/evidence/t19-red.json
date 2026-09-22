@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "52856c6c579bff29b00c2c58e05f91a75c6be756a15d6e697677edee4c6d53c6",
+  "task_id": "T19",
+  "test_id": "t19-red",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T19/source-red.json",
+  "source_manifest_sha256": "9585498d2ea54dead98fd4a8bf158930a372e90e24895d6eb9b11f0724b8834e",
+  "command": [
+    "build/remediation-t19-20260922/doorbell_tests",
+    "--test-case=visitor: call snapshots*,visitor: concurrent readers*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T14:20:42.510977+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T19/evidence/t19-red.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T14:20:43.112391+00:00",
+  "expected_exit_code": 1,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

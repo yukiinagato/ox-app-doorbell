@@ -1,0 +1,13 @@
+T09 production read deadline: PASS
+AssertionError [ERR_ASSERTION]: an early state failure must retire its call-info request so the next poll can recover
+
+'block' !== 'none'
+
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/call_state_controller.test.js:109:12 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 'block',
+  expected: 'none',
+  operator: 'strictEqual',
+  diff: 'simple'
+}

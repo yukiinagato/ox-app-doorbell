@@ -1,0 +1,61 @@
+getpwuid_r did not find a match for uid 501
+Timestamp               Ty Process[PID:TID]
+2026-09-23 01:00:20.099 A  testmanagerd[29257:2cb002] (libsystem_containermanager.dylib) container_query_t
+2026-09-23 01:00:20.100 Df testmanagerd[29257:2cb002] [com.apple.containermanager:query] Query; euid = 501, uid = 501, class = 10, identifier = [(null)](0), flags = 900000003
+2026-09-23 01:00:20.108 Df testmanagerd[29257:2cb002] [com.apple.containermanager:unspecified] _container_query_get_result_at_index: success
+2026-09-23 01:00:20.110 A  testmanagerd[29257:2cb002] (libsystem_containermanager.dylib) container_copy_sandbox_token
+2026-09-23 01:00:20.110 Df testmanagerd[29257:2cb002] Successfully created data container at file:///Users/ox/Library/Developer/CoreSimulator/Devices/3F1ACD06-8FEE-4651-9DB6-6105D30011D7/data/Containers/Data/InternalDaemon/F3287A06-7402-43C4-88BB-E5796FC14AB2/
+2026-09-23 01:00:20.110 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Data container URL: file:///Users/ox/Library/Developer/CoreSimulator/Devices/3F1ACD06-8FEE-4651-9DB6-6105D30011D7/data/Containers/Data/InternalDaemon/F3287A06-7402-43C4-88BB-E5796FC14AB2/
+2026-09-23 01:00:20.111 Df testmanagerd[29257:2cb002] [com.apple.FileURL:default] kExcludedFromBackupXattrName set on path: /Users/ox/Library/Developer/CoreSimulator/Devices/3F1ACD06-8FEE-4651-9DB6-6105D30011D7/data/Containers/Data/InternalDaemon/F3287A06-7402-43C4-88BB-E5796FC14AB2/tmp/Attachments
+2026-09-23 01:00:20.111 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Listening for incoming remote runner connections from <NSXPCListener: 0x1058b07c0> service: com.apple.dt.xctestd.remote.runner
+2026-09-23 01:00:20.111 Df testmanagerd[29257:2cb002] [com.apple.xpc:connection] [0x1052928b0] activating connection: mach=true listener=true peer=false name=com.apple.dt.xctestd.remote.runner
+2026-09-23 01:00:20.111 Df testmanagerd[29257:2cb002] [com.apple.xpc:connection] [0x1052928b0] listener failed to activate: xpc_error=[1: Operation not permitted]
+2026-09-23 01:00:20.111 Df testmanagerd[29257:2cb002] [com.apple.xpc:connection] [0x1052928b0] invalidated after a failed init
+2026-09-23 01:00:20.111 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Listening for incoming IDE connections from <NSXPCListener: 0x1058b0880> service: com.apple.testmanagerd.control
+2026-09-23 01:00:20.111 Df testmanagerd[29257:2cb002] [com.apple.xpc:connection] [0x105294370] activating connection: mach=true listener=true peer=false name=com.apple.testmanagerd.control
+2026-09-23 01:00:20.111 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Listening for incoming IDE connections from named socket com.apple.testmanagerd.unix-domain.socket
+2026-09-23 01:00:20.112 Df testmanagerd[29257:2cb005] [com.apple.dt.xctest:Default] IDE connected over socket 4
+2026-09-23 01:00:20.112 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Listening for incoming test runner connections from <NSXPCListener: 0x1058b08c0> service: com.apple.testmanagerd
+2026-09-23 01:00:20.112 Df testmanagerd[29257:2cb002] [com.apple.xpc:connection] [0x105294530] activating connection: mach=true listener=true peer=false name=com.apple.testmanagerd
+2026-09-23 01:00:20.112 Df testmanagerd[29257:2cb005] [com.apple.dt.xctest:Default] IDE connected over socket 5
+2026-09-23 01:00:20.112 Df testmanagerd[29257:2cb00c] [com.apple.dt.xctest:Default] Created session with socket 4
+2026-09-23 01:00:20.112 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Listening for incoming test target connections from <NSXPCListener: 0x1058b0900> service: com.apple.dt.xctestd.target
+2026-09-23 01:00:20.112 Df testmanagerd[29257:2cb002] [com.apple.xpc:connection] [0x105294860] activating connection: mach=true listener=true peer=false name=com.apple.dt.xctestd.target
+2026-09-23 01:00:20.115 Df testmanagerd[29257:2cb00c] [com.apple.xpc:connection] [0x105998000] activating connection: mach=true listener=false peer=false name=com.apple.cfprefsd.daemon
+2026-09-23 01:00:20.118 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Launched testmanagerd from /Library/Developer/CoreSimulator/Volumes/iOS_23F77/Library/Developer/CoreSimulator/Profiles/Runtimes/iOS 26.5.simruntime/Contents/Resources/RuntimeRoot/usr/libexec/testmanagerd, modified on Thursday, May 7, 2026 at 7:45:43 Japan Standard Time
+2026-09-23 01:00:20.118 Df testmanagerd[29257:2cb00f] [com.apple.dt.xctest:Default] Handled a proxy request from the IDE with session <XCIDESession: 0x105294710> (socket 4) created Wednesday, September 23, 2026 at 1:00:20 Japan Standard Time proxy <_DTXProxy: 0x10529bf10>
+2026-09-23 01:00:20.118 Df testmanagerd[29257:2cb00c] [com.apple.dt.xctest:Default] Adding <XCIDESession: 0x105294710> (socket 4) created Wednesday, September 23, 2026 at 1:00:20 Japan Standard Time to the set of unidentified IDE sessions
+2026-09-23 01:00:20.118 Df testmanagerd[29257:2cb00c] [com.apple.dt.xctest:Default] Created session with socket 5
+2026-09-23 01:00:20.118 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Initiating control session with IDE capabilities <XCTCapabilities: 0x1052a2b10>: {
+}
+2026-09-23 01:00:20.118 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Adding control session <XCIDESession: 0x105294710> (socket 4) created Wednesday, September 23, 2026 at 1:00:20 Japan Standard Time with capabilities <XCTCapabilities: 0x1052a2b10>: {
+}
+2026-09-23 01:00:20.118 Df testmanagerd[29257:2cb00c] [com.apple.dt.xctest:Default] Adding <XCIDESession: 0x10529ab80> (socket 5) created Wednesday, September 23, 2026 at 1:00:20 Japan Standard Time to the set of unidentified IDE sessions
+2026-09-23 01:00:20.119 Df testmanagerd[29257:2cb00e] [com.apple.dt.xctest:Default] Handled a proxy request from the IDE with session <XCIDESession: 0x10529ab80> (socket 5) created Wednesday, September 23, 2026 at 1:00:20 Japan Standard Time proxy <_DTXProxy: 0x10529bd70>
+2026-09-23 01:00:20.119 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Initiating session with identifier F5183CD3-0386-472C-973D-0593044CAECC and IDE capabilities <XCTCapabilities: 0x10529bd80>: {
+    "XCTIssue capability" = 1;
+    "daemon container sandbox extension" = 1;
+    "delayed attachment transfer" = 1;
+    "expected failure test capability" = 1;
+    "in-process test parallelization capability" = 1;
+    "request diagnostics for specific devices" = 1;
+    "runner plan" = 1;
+    "skipped suite capability" = 1;
+    "skipped test capability" = 1;
+    "test case run configurations" = 1;
+    "test iterations" = 2;
+    "test timeout capability" = 1;
+    traits = 1;
+    "ubiquitous test identifiers" = 1;
+    "unified issue recorded" = 1;
+}
+2026-09-23 01:00:20.119 Df testmanagerd[29257:2cb005] [com.apple.dt.xctest:Default] Setting session <XCIDESession: 0x10529ab80> (socket 5) created Wednesday, September 23, 2026 at 1:00:20 Japan Standard Time waiting to pair with test session F5183CD3-0386-472C-973D-0593044CAECC for identifier F5183CD3-0386-472C-973D-0593044CAECC
+2026-09-23 01:00:20.120 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Received request to collect crash reports in directories '/Users/ox/Library/Logs/DiagnosticReports', '/Library/Logs/DiagnosticReports' for processes with names 'xctest', 'assertiond', 'backboardd', 'DTServiceHub', 'Doorbell', 'DoorbellTests', 'runningboardd', 'testmanagerd', 'SpringBoard', 'debugserver', 'FrontBoard'
+2026-09-23 01:00:20.120 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Initializing crash report observer for /Users/ox/Library/Logs/DiagnosticReports
+2026-09-23 01:00:20.120 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Getting files in /Users/ox/Library/Logs/DiagnosticReports
+2026-09-23 01:00:20.125 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Found 11 non-empty files in /Users/ox/Library/Logs/DiagnosticReports
+2026-09-23 01:00:20.125 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Started monitoring /Users/ox/Library/Logs/DiagnosticReports
+2026-09-23 01:00:20.125 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Initializing crash report observer for /Library/Logs/DiagnosticReports
+2026-09-23 01:00:20.125 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Getting files in /Library/Logs/DiagnosticReports
+2026-09-23 01:00:20.144 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Found 42 non-empty files in /Library/Logs/DiagnosticReports
+2026-09-23 01:00:20.144 Df testmanagerd[29257:2cb002] [com.apple.dt.xctest:Default] Started monitoring /Library/Logs/DiagnosticReports

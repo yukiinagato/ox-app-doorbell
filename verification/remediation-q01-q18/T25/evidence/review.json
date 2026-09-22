@@ -1,0 +1,21 @@
+{
+  "task_id": "T25",
+  "status": "PASS",
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T15:37:18.062019+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T25/evidence/after-source.json",
+  "source_manifest_sha256": "0170143263f1f98b983bdb7256520dff3f67f59f36b0919e87566a8ec400b010",
+  "app_js_sha256": "ecfa4cac230ac7091c9cf6fb6e467590122bc5f7be9c3f2c827ae4065a669005",
+  "checks": [
+    "Reviewed all 9 openForm and 4 direct openModal callers passing completion and preserving non-sensitive DOM drafts.",
+    "Reviewed submission guard, attempt/modal/page identities, success-only close/refresh, preserved focus/scroll and authentication suspension.",
+    "Reviewed fixed 10 second request deadline, native timeout and watchdog once settlement, unknown commit retaining possibly referenced secrets.",
+    "Reviewed the same nine native Chromium red/green cases and fixture correction without reduced scroll assertion.",
+    "Independently executed admin_logic.test.js and admin_runtime.test.js: PASS. Original frozen candidate Web regression is 18 scripts PASS."
+  ],
+  "limitations": [
+    "Controlled browser XHR boundary, no Core or hardware deployment claim.",
+    "Current combined tree Web regression found T15 in-progress page shutdown timer regression in T10-04; root-web-regression.log retained and assigned to T15. T25 unchanged app.js hash and admin tests pass.",
+    "CAS editor migration remains T27."
+  ]
+}

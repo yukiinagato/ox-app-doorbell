@@ -69,7 +69,6 @@ namespace DoorbellApp
                 PlaceVisitor(VisitorClockBlock, 0, 0, 2, 1);
                 PlaceVisitor(VisitorNoticeCard, 1, 0, 2, 1);
                 PlaceVisitor(LangBar, 2, 0, 2, 1);
-                PlaceVisitor(VisitorCallBlock, 3, 0, 2, 1);
                 PlaceVisitor(TouchHint, 4, 0, 2, 1);
                 VisitorClockBlock.HorizontalAlignment = HorizontalAlignment.Center;
             }
@@ -80,16 +79,17 @@ namespace DoorbellApp
                 // The notice fills the left column beside the language row and the call button.
                 PlaceVisitor(VisitorNoticeCard, 1, 0, 1, 3);
                 PlaceVisitor(LangBar, 2, 1, 1, 1);
-                PlaceVisitor(VisitorCallBlock, 3, 1, 1, 1);
                 PlaceVisitor(TouchHint, 4, 1, 1, 1);
                 VisitorClockBlock.HorizontalAlignment = HorizontalAlignment.Left;
             }
 
             ClockText.FontSize = large ? 84 : (tablet ? 68 : 52);
             DateText.FontSize = large ? 26 : (tablet ? 22 : 17);
-            CallButton.MinHeight = large ? 170 : (tablet ? 120 : 96);
-            CallButton.MinWidth = tablet ? 360 : 240;
-            CallButton.FontSize = large ? 44 : (tablet ? 34 : 26);
+            CallButton.MinWidth = 0;
+            PurposeGrid.Columns = Math.Max(1, (int)((width - 40) / 240));
+            CallingPurposeGrid.Columns = PurposeGrid.Columns;
+            InCallHeaderScroll.MaxHeight = Math.Max(56, height / 3);
+            UpdateVisitorActionHeights(width);
             TouchHint.FontSize = tablet ? 21 : 16;
             VisitorNoticeText.FontSize = tablet ? 22 : 17;
 
@@ -239,6 +239,26 @@ namespace DoorbellApp
         /// </summary>
         private void LayOutSosAndFooters(double width, bool portrait)
         {
+            if (App.Boot.Role == "door_station")
+            {
+                if (SosButton.Parent != VisitorSosHost)
+                {
+                    (SosButton.Parent as Panel)?.Children.Remove(SosButton);
+                    VisitorSosHost.Children.Add(SosButton);
+                }
+                SosButton.HorizontalAlignment = HorizontalAlignment.Stretch;
+                SosButton.Width = double.NaN;
+                SosButton.MaxWidth = 620;
+                SosButton.Margin = new Thickness(0);
+                VisitorFooter.Margin = new Thickness(0, 12, 0, 0);
+                return;
+            }
+            if (SosButton.Parent != IdleView)
+            {
+                (SosButton.Parent as Panel)?.Children.Remove(SosButton);
+                IdleView.Children.Add(SosButton);
+            }
+            SosButton.MaxWidth = double.PositiveInfinity;
             bool sosVisible = SosButton.Visibility == Visibility.Visible;
             bool sosBelow = sosVisible &&
                 (portrait || width < SosReservedWidth + FooterMinimumWidth);

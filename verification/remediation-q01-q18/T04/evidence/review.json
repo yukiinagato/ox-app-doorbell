@@ -1,0 +1,221 @@
+{
+  "task_id": "T04",
+  "reviewer": "t02_contract_inventory",
+  "reviewed_at": "2026-09-22T14:35:34.940049+00:00",
+  "verdict": "PASS_IN_SCOPE",
+  "scope": "Independent source and completed production_test evidence review of HTTP dispatch expiry, running timeouts, queue cleanup and shutdown ownership on macOS arm64. No production edits or test reruns by this reviewer.",
+  "source_manifest": "verification/remediation-q01-q18/T04/source-candidate-r3.json",
+  "source_manifest_sha256": "566cff597986a0e27ddd44e39453e1dfa08866e79affb5c33f03fe1e1a1c929a",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "inputs": [
+    {
+      "path": "core/src/httpd/httpd.cpp",
+      "sha256": "38a0242857b563885f71902c4cb0cf9f92117eb91072a021c4432f3842567eeb",
+      "candidate_match": true
+    },
+    {
+      "path": "core/src/httpd/httpd.h",
+      "sha256": "68ba88ebd39ea4d8efbdf85a9aa7e8ddd3ce28dd9388338fc928c7bf80e8106e",
+      "candidate_match": true
+    },
+    {
+      "path": "core/src/util/runloop.cpp",
+      "sha256": "fd1efbc28ea434086aac955a3d52ae835aa122d37e6bcf58798f2224f4e93cf1",
+      "candidate_match": true
+    },
+    {
+      "path": "core/src/util/runloop.h",
+      "sha256": "61c3909fdb0f47161dfcd5b8d72b241f7c214684504365f44f434bdabb483913",
+      "candidate_match": true
+    },
+    {
+      "path": "core/tests/test_httpd.cpp",
+      "sha256": "907212f61202666c1fe27467523972b051b059e286f70700014a64a89acd8a8e",
+      "candidate_match": true
+    },
+    {
+      "path": "core/CMakeLists.txt",
+      "sha256": "b57bef6fd1fb3de16b16d6cd7ff55a5be6c243166357ff20d1ce1e622482e4cd",
+      "candidate_match": true
+    }
+  ],
+  "findings": [],
+  "checks": [
+    {
+      "id": "atomic_admission",
+      "status": "PASS",
+      "source": [
+        "core/src/httpd/httpd.cpp:480",
+        "core/src/httpd/httpd.cpp:526"
+      ],
+      "reason": "The loop checks steady_clock deadline and transitions Queued to Running under the same Pending mutex used by waiter expiry. A request already Expired cannot invoke its handler."
+    },
+    {
+      "id": "completion_and_unknown",
+      "status": "PASS",
+      "source": [
+        "core/src/httpd/httpd.cpp:494",
+        "core/src/httpd/httpd.cpp:512",
+        "core/src/httpd/httpd.cpp:536"
+      ],
+      "reason": "Only the single posted closure runs the copied handler. Timeout and shutdown leave Running intact and report outcome_unknown; completion writes one result while holding the same mutex. Known completion wins when already observed."
+    },
+    {
+      "id": "lock_order",
+      "status": "PASS",
+      "source": [
+        "core/src/httpd/httpd.cpp:472",
+        "core/src/httpd/httpd.cpp:458",
+        "core/src/httpd/httpd.cpp:854",
+        "core/src/util/runloop.cpp:75"
+      ],
+      "reason": "Admission nests pending_mu then Runloop mutex only while posting. Runloop releases its mutex before taking Pending mutex or invoking code. Waiter cleanup and stop release Pending mutex before cancelQueued and pending registry access. No HTTP mutex is held across handler execution or condition-variable wait."
+    },
+    {
+      "id": "owned_lifetime",
+      "status": "PASS",
+      "source": [
+        "core/src/httpd/httpd.cpp:182",
+        "core/src/httpd/httpd.cpp:478",
+        "core/src/httpd/httpd.cpp:880",
+        "core/src/node/node.cpp:11173"
+      ],
+      "reason": "Queued closure owns Pending, copied HttpReq and Handler, and does not capture Httpd::Impl or a connection/worker stack reference. mg_stop joins workers before Impl destruction. Actual Node shutdown retains Node Impl and drains its loop before destruction; arbitrary caller-provided handler capture lifetimes remain a caller responsibility."
+    },
+    {
+      "id": "bounded_queue",
+      "status": "PASS",
+      "source": [
+        "core/src/httpd/httpd.cpp:795",
+        "core/src/httpd/httpd.cpp:465",
+        "core/src/util/runloop.cpp:63"
+      ],
+      "reason": "Sixteen fixed HTTP workers bound admitted waiters; expiry removes queued payloads before a worker accepts another request. At most one detached Running handler can remain on the single loop. cancelQueued removes only queued work and retains no completed-task tombstones. Existing 8 MiB body bound is unchanged, not claimed as the future media/import bound."
+    },
+    {
+      "id": "shutdown",
+      "status": "PASS",
+      "source": [
+        "core/src/httpd/httpd.cpp:837",
+        "core/src/httpd/httpd.cpp:854",
+        "core/third_party/civetweb/civetweb.c:6184",
+        "core/third_party/civetweb/civetweb.c:20166"
+      ],
+      "reason": "Admission closes before workers are joined. Queued requests are expired and removed; Running contexts retain their owner and finish after Httpd destruction. CivetWeb stop may suppress writes and close the socket: transport loss is unknown and must not be labeled not_started."
+    },
+    {
+      "id": "deadline_test_hook",
+      "status": "PASS",
+      "source": [
+        "core/CMakeLists.txt:263",
+        "core/src/httpd/httpd.cpp:514",
+        "core/tests/test_httpd.cpp:260"
+      ],
+      "reason": "The DB_BUILD_TESTS-only before-wait hook runs outside all production locks, receives the real unchanged five-second deadline and pauses only the waiter; the production loop itself must reject the elapsed request. No replacement state-machine implementation is tested."
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "T04-01",
+      "status": "PASS",
+      "tests": [
+        "httpd: scheduling expired queued write never reaches handler"
+      ],
+      "evidence": [
+        "green-httpd-r3",
+        "asan-httpd-r3"
+      ],
+      "observed": "503 not_started then zero handler calls after barrier release; queued work removed."
+    },
+    {
+      "id": "T04-02",
+      "status": "PASS",
+      "tests": [
+        "httpd: scheduling running timeout reports unknown and completes once"
+      ],
+      "evidence": [
+        "green-httpd-r3",
+        "asan-httpd-r3"
+      ],
+      "observed": "Running timeout returns outcome_unknown, never not_started; exactly one completion after barrier release."
+    },
+    {
+      "id": "T04-03",
+      "status": "PASS",
+      "tests": [
+        "httpd: scheduling boundary orders permit only expired or running",
+        "httpd: scheduling loop rejects elapsed deadline before waiter expires"
+      ],
+      "evidence": [
+        "green-httpd-r3",
+        "asan-httpd-r3"
+      ],
+      "observed": "Both deterministic scheduling orders repeat; separate barrier makes loop check its own elapsed deadline before the waiter can expire it."
+    },
+    {
+      "id": "T04-04",
+      "status": "PASS",
+      "tests": [
+        "httpd: scheduling shutdown expires queued work and releases its owner",
+        "httpd: scheduling shutdown preserves an already running owned request",
+        "httpd: scheduling a stopped runloop fails without waiting for deadline"
+      ],
+      "evidence": [
+        "green-httpd-r3",
+        "asan-httpd-r3"
+      ],
+      "observed": "Stop completes while loop/handler remains held, queued owner is released, running owner stays alive until one completion, no ASan diagnostics."
+    }
+  ],
+  "history": [
+    {
+      "candidate": "before",
+      "record": "evidence/red-queued-expiry.json",
+      "record_sha256": "e31e8d43d4c0a9dd3d994a463ae69f62f87b0fb6fd18676c60848d66a09097d7",
+      "log_sha256": "87f6fb43c80162104852e1e1e9f6d5f22299baf902239b6835947443cb33e93c",
+      "observed": "Expected red exit 1. Actual old production handler count became 1 after HTTP timeout, proving late execution."
+    },
+    {
+      "candidate": "r2",
+      "verdict": "TEST_EVIDENCE_CHANGES_REQUESTED",
+      "record_sha256": "efbedceb22cde213337cbab5765be686e55079eadde4f0086b99d21e8dd0cc25",
+      "observed": "11/13 passed. Shutdown tests required a response after CivetWeb stop_flag suppressed writes and used a two-second budget equal to its polling boundary. r3 permits empty transport only as unknown, retains ownership/count/empty-queue assertions and uses a four-second stop budget; deadline is still five seconds."
+    }
+  ],
+  "completed_runs": [
+    {
+      "test_id": "green-httpd-r3",
+      "record": "verification/remediation-q01-q18/T04/evidence/green-httpd-r3.json",
+      "record_sha256": "88bb3f9156e46b46c5b19c138ecba0cf1aff0fb3ed8e30acd636e940e0808b39",
+      "log": "verification/remediation-q01-q18/T04/evidence/green-httpd-r3.log",
+      "log_sha256": "99187af5614aed1cdaa11eafd70e83c4e4fd2adee58550d5fdce8cdf07db854a",
+      "exit_code": 0,
+      "test_cases_passed": 20,
+      "assertions_passed": 289,
+      "artifact_sha256": "ed0979aa1ae0f58efd382c689234708a2ee547f83ad18c6bdf7ad4a11168c8c4"
+    },
+    {
+      "test_id": "asan-httpd-r3",
+      "record": "verification/remediation-q01-q18/T04/evidence/asan-httpd-r3.json",
+      "record_sha256": "370dc63554cfaeef6708b429ef4a62949f8a7ff86662fd068462c6d5870d14eb",
+      "log": "verification/remediation-q01-q18/T04/evidence/asan-httpd-r3.log",
+      "log_sha256": "5d80e39026640985e9f1bd90ac02232df6a33814b3525a7f7aff68feb4730e5a",
+      "exit_code": 0,
+      "test_cases_passed": 20,
+      "assertions_passed": 290,
+      "artifact_sha256": "6c7244a5b484331f585721276b3b7df1c4cdddc7abdde1e2f1d4854e013ef9de"
+    }
+  ],
+  "artifact_record": {
+    "path": "verification/remediation-q01-q18/T04/evidence/artifacts-r3.json",
+    "sha256": "a52df17f33d9cf503d95b06263d780c55bf9e0f9a228a2fa55a61dd30661debc"
+  },
+  "limits": [
+    "Host macOS arm64 only; no device, SIP, lock, SOS, Android, Windows or historical iOS runtime qualification.",
+    "ASan C and C++ flags cover this host Core, bundled third-party code and tests; no ASan diagnostics observed. This does not claim a global leak scan or a TSan run.",
+    "Bounded barrier tests establish the tested interleavings, not an exhaustive scheduler proof.",
+    "Running handlers are not undone by HTTP timeout. Durable operation query and result semantics remain T05/T06.",
+    "The broader Core regression suite and platform builds are owned by the integrating agent, outside this focused review."
+  ]
+}

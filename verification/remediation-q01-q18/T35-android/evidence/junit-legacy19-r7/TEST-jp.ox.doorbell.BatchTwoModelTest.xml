@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.BatchTwoModelTest" tests="54" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.027">
+  <properties/>
+  <testcase name="theVersionLineCarriesBothVersionsAndHidesAnAbsentBattery" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.002"/>
+  <testcase name="theUnlockControlFollowsCoresReportedVisibility" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.001"/>
+  <testcase name="twoCatalogEntriesCombineAndAnOverrideWithItsOwnBreakWins" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="presetsComeFromConfigurationAndFallBackToTheSeededDefaults" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.003"/>
+  <testcase name="globalIsOneWriteToTheClusterWideAnnouncementAndADoorWritesOnlyItsOwn" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="aDoorSpecificAnnouncementWinsOverTheGlobalOne" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="aLabelWithoutABreakStaysOneLine" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="durationsRenderAsMinutesAndSeconds" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.002"/>
+  <testcase name="theWeekdayFollowsCoresSundayZeroConvention" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="tabletsGetATallerCallButtonAndALargerHint" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.001"/>
+  <testcase name="theLegacyHoldModeStillRendersAsASlide" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="theDeviceOverrideWinsOverTheClusterAppearance" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.001"/>
+  <testcase name="anExpiredResolvedAnnouncementIsTreatedAsAbsent" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="theVisitorScreenSplitsOnlyOnAWideLandscapeWindow" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="theOldestShownTimestampIsTheWatermarkForTheNextPage" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.002"/>
+  <testcase name="theScheduleWindowWrapsPastMidnight" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="aSlideCannotRestartWhileTheCountdownIsRunning" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.001"/>
+  <testcase name="theDebugLineReportsMeasuredFramesJitterAndDrops" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.002"/>
+  <testcase name="announcementTextIsValidatedAtTwoHundredCharacters" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="cancellingDuringTheCountdownNeverReportsTheAlarm" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="theCountdownComesFromConfigurationAndIsClamped" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="theAdminLinkPrefersTheNodesOwnAddressAndNamesTheLeaderSeparately" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.002"/>
+  <testcase name="autoSystemFollowsThePlatformAndFallsBackToTheScheduleWithoutOne" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.001"/>
+  <testcase name="filtersNarrowByOutcomeAndByDoor" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="civilDatesRoundTripAcrossLeapYearsAndCenturies" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="theAdminLinkFallsBackToLoopbackAndHidesAnIdenticalLeader" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="expiryPresetsProduceAbsoluteDeadlines" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="coresOpenDoorResultsAreDistinguished" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="anImplausibleGapIsNotCountedAsJitter" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.001"/>
+  <testcase name="anAdministratorCanForceTheUnlockControlEitherWay" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="zeroMeansUntilCleared" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="rowsAreGroupedByDayInTheOrderTheyArrive" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.002"/>
+  <testcase name="pagingReturnsFiftyRowsAtATimeAndKnowsWhenMoreExist" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.001"/>
+  <testcase name="theTileChipListsOnlyDoorsThatCurrentlyShowSomething" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="theAuthoredBreakSplitsIntoAPrimaryAndASmallerSecondLine" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="presetsAreCappedAndOverlongEntriesAreDropped" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="windowsAndClassicMacBreaksAreAccepted" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.001"/>
+  <testcase name="aZeroCountdownFiresOnRelease" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="slidingPastNinetyPercentStartsTheConfiguredCountdown" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="aFiredAlarmIsNotCancelledByTheSlideControl" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="coresResolvedAnnouncementIsRenderedRatherThanMergedInTheShell" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="aShortSlideSpringsBackWithoutArming" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="withoutACoreAnswerTheUnlockControlStaysHidden" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="floorDivisionRoundsTowardNegativeInfinity" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="flatteningIsUsedForAccessibilityAndTightControls" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.002"/>
+  <testcase name="explicitAppearancesIgnoreTheSystemAndTheSchedule" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="thePinCardNeverOpensTheBulkAddWindow" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="onlyTheFirstBreakSplits" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="aMintResultIsOnlyASuccessWhenCoreActuallyReturnedAPin" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.001"/>
+  <testcase name="rowsAreParsedAndMalformedEntriesAreSkipped" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="theShellFallsBackToConfigurationOnlyWhenCorePublishesNoResolvedValue" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="clockTimesAreParsedStrictly" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="bothPalettesKeepReadableTextOverTheirOwnSurfaces" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <testcase name="anExpiredDoorAnnouncementFallsBackToTheGlobalOne" classname="jp.ox.doorbell.BatchTwoModelTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

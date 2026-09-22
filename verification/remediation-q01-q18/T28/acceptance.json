@@ -1,0 +1,50 @@
+{
+  "task_id": "T28",
+  "status": "VERIFIED_IN_SCOPE",
+  "recorded_at": "2026-09-22T17:39:19.872418+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/source-green-r6.json",
+  "source_manifest_sha256": "80e4a932021f714dc94b4306d0bed8430823c5f151d6535df7e9c46506a5a7ef",
+  "diff_sha256": "b8ef3946cdf448923aa75d5e77af82b2b8943fb2e5b6be352fdfa30411336227",
+  "all_271_frozen_inputs_match": true,
+  "cases": [
+    {
+      "id": "T28-01",
+      "status": "PASS",
+      "evidence": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/evidence/core-regression-r6.json"
+    },
+    {
+      "id": "T28-02",
+      "status": "PASS",
+      "evidence": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/evidence/core-regression-r6.json"
+    },
+    {
+      "id": "T28-03",
+      "status": "PASS",
+      "evidence": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/evidence/core-regression-r6.json"
+    },
+    {
+      "id": "T28-04",
+      "status": "PASS",
+      "evidence": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/evidence/core-regression-r6.json"
+    }
+  ],
+  "evidence": {
+    "verification/remediation-q01-q18/T28/evidence/core-regression-r6.json": "b1438161f505330e210a16835a327a0ace1d80289aaceabe31a5f825543a6fdf",
+    "verification/remediation-q01-q18/T28/evidence/review.json": "85396cfde2a4c572cab446a0cd2c7d4da8143497e82b5685a6a7480cec8664bf",
+    "verification/remediation-q01-q18/T28/evidence/review-r6-addendum.json": "e06e6ed80d1332baea746a55ab35d22a1e4f83891726547d13229780abbf621d",
+    "verification/remediation-q01-q18/T28/evidence/web-regression-r6.json": "205a8c0f948bd8ba1f232ce4d6d9838af5b2cb06a7b0cf27c942c2e7a8d94189",
+    "verification/remediation-q01-q18/T28/evidence/ios5-core-r6.json": "9fddbeb2ad790aca3661797359376bd998fe7859b60ea93988c27c216c5380ac",
+    "verification/remediation-q01-q18/T28/evidence/artifacts-green-r6.json": "784556677e390708d814872b36e966ba24322a56c32b06281537a97f0bf9699a",
+    "verification/remediation-q01-q18/T28-Web/acceptance.json": "7394deb9b45764ce44d22257bd88bcc1beb8321a5003e105774b76364aa91a2b",
+    "verification/remediation-q01-q18/T28-Web/evidence/real-core-browser-r6.json": "a561bf6e489b845db400c7b8feb5dff276eb50c954f3e678917209faec7b6fbb",
+    "verification/remediation-q01-q18/T28-Web/evidence/independent-web-review.json": "7985ac173b5466c2eebf64c7a8a3f839767f817d0809ddefce16f8dd33df750c",
+    "verification/remediation-q01-q18/T28-Web/evidence/root-corrections-review.json": "05ba4000b88ca96670b21683e38d27e85d0f7581f52bea6d5895fd8d544dde53"
+  },
+  "limitations": [
+    "Bounded history retains resolved ancestry and may block further edits; no compactor is claimed.",
+    "Mixed fleet writers do not retain edits authored by old versions.",
+    "Legacy import still has ordinary 256-item limits; staged import is T29.",
+    "Host Core + actual IAB/production HTTP + historical static build do not qualify device UI, real SIP or physical actuators.",
+    "Subsequent T35 Web work can change its separate default color and panel files; final integration remains a later gate."
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "recorded_at": "2026-09-22T17:59:51.868874+00:00",
+  "source_manifest_sha256": "7bedd6a1e5ace48ccb04c644a2ea5598b70de03f176985e0d09ce72092fc782e",
+  "guard_exe": {
+    "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/VisitorActionGuardTests-r2.exe",
+    "sha256": "5d2f554aaf23a06fdbc65203f0fb15e2f1e677425aaf0858935bbc52b3928f04"
+  },
+  "api_compile_dll": {
+    "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/DoorbellSourceCompileOnly-r2.dll",
+    "sha256": "2a55352823aa019f19ff87a9e989d6da96e03f42b68bb3104b07bb98dc5e95f5",
+    "NOT_A_SHIPPABLE_APPLICATION": true
+  },
+  "reference_package": {
+    "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/net48-references.nupkg",
+    "sha256": "8a7e348538e7eb91351696911689f49e3d4f63f8bab517432bbe159b8b1104a2"
+  },
+  "version_from_project": {
+    "Version": "0.1.14",
+    "FileVersion": "0.1.14.11",
+    "device_verified": false
+  },
+  "scope": "Test/compile-only artifacts. No application package, native Windows DLL, full WPF compilation or runtime qualification."
+}

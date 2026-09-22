@@ -1,0 +1,421 @@
+[doctest] listing all test case names
+===============================================================================
+admin API: initial password is issued only after an atomic durable write
+admin API: config persistence failure keeps last-known-good state
+admin API: session gate + config delete/import + join-token + panel-token rotate
+admin API: failed panel rotation keeps the previous fleet credential atomic
+admin API: panel sessions follow replicated rotation and per-node provisioning
+admin API: /api/test/telegram with a mock HttpsFn
+admin API: /api/test/telegram returns an error on a non-leader
+admin API: pairing routes expose state, PIN, deny, scan, retry, and unpair
+admin API: announcements and the manual time sync enforce their own callers
+admin API: the cluster-wide notice, the unlock trigger, and PIN minting
+admin API: a door station with no working camera keeps serving HTTP after a press
+admin API: the pairing QR payload comes from core, on every surface that mints a PIN
+admin API: a follower forwards Telegram tests to the elected node
+admin API: device removal requires a session and cannot remove self
+admin API: cloud speech caches, deduplicates and invalidates generated replies
+assets: addAsset replicates config and other nodes prefetch automatically
+assets: a transferred theme image refreshes automatic background sampling
+assets: transfers a one-megabyte blob across multiple chunks
+assets: HTTP API (POST /api/assets / GET /asset/<hash>)
+assets: late join downloads the full resource library without a theme reference
+call log: outcome derivation covers every terminal combination
+call log: a recovery timeout is a missed call, not a visitor cancellation
+call log: rows carry identity, timestamps, duration and visitor language
+call log: since_ms, before_ms, door and outcome page the history
+call log: the seen watermark is local, monotonic and drives unread_missed
+call log: the watermark survives a restart and never replicates
+call log: a schema v6 database is migrated and backfilled by replay
+store: retention prunes only what replication coverage proves
+store: retention never deletes an undispatched event
+rules: call_missed matches only timeout and recovery cancellations
+call log API: the seeded missed-call rule alerts indoor roles only
+call log API: a door station never raises a missed-call alert
+call log API: panel credential and admin session read the same history
+call log API: mark-seen clears the badge and republishes the count
+events API: since_ms, type and door cursor the stream with replication identity
+config: events.retention_days rejects values outside the supported range
+capi: legacy platform layout remains six pointers
+capi: v2 platform rejects truncated and unknown layouts
+capi: a v2 shell built before secure_delete still starts
+capi: a v2 shell built before power_state still starts
+capi: the power SPI feeds status and the settings entry points fail closed
+capi: legacy and v2 constructors accept their declared layouts
+capi: call-history entry points fail closed on a null core
+capi: SIP backend identity is explicit
+capi: video keyframe request polling fails closed on a null core
+capi: quick reply v2 carries exact call scope
+capi: quick reply v2 rejects stale scope and accepts the active revision
+capi: shell call lifecycle requires an exact call and stage
+capi: mesh PSK can be resolved through a secret reference
+capi: v2 device info is sampled when the runtime monitor starts
+capi: native config writes match the HTTP endpoints, warnings included
+capi: one cluster administrator password, shared lockout, SOS never blocked
+[R1] capi serializes concurrent administrator password changes
+[R2] capi unregister drains an entered UI callback
+[R2] capi callback can unregister itself without waiting
+capi: mic mute, call-log paging, and the bundled zone list
+color: hex parsing accepts only #RRGGBB
+color: relative luminance and contrast follow WCAG 2.x
+color: HSL conversion round-trips and reports the expected hue
+color: automatic ink picks whichever token has the higher contrast
+color: the computed call button satisfies both contrast constraints
+color: the computed call button is stable and reproducible
+color: image averaging samples a decodable file and reports why it could not
+color: an ordinary phone photograph is sampled, not refused for its size
+secret contract: loaded runtime credentials migrate before export or use
+secret contract: failed migration removes plaintext and reports boot fallback
+secret contract: durable scrub failure refuses startup and retries safely
+call flow v2: retry, purpose update, and cancellation are idempotent
+call lifecycle v2 binds only the matching established shell dialog
+call lifecycle retries durable answer and end writes at the normal boundary
+call lifecycle projection deterministically preserves the earliest dialog owner
+call purpose projection converges on an earlier answer in either arrival order
+call purpose projection converges on an earlier purpose in either arrival order
+call purpose projection cannot create or revive terminal calls
+call purpose and answer live state converge by HLC across a partition
+same-door concurrent presses converge and cannot replace an established call
+same-door answer wins regardless of when the competing press arrives
+an answer that arrives before its press retains the press origin
+a terminal call fence promotes only causally newer same-door presses
+same-door partitioned press and answer converge on the established candidate
+scoped quick reply tombstone converges when it arrives before its press
+rules: purpose revisions rerun button rules and emergency aliases match
+call flow v2: answered calls recover as in-call and ended calls stay resolved
+call recovery uses the durable projection beyond the recent-event window
+failed recovery report keeps its authority lease until cancellation is durable
+call projection isolates concurrent calls and rejects visitor cancellation in call
+CRDT convergence: three replicas agree after shuffled duplicate operations
+CRDT merge is commutative, idempotent, and associative
+concurrent writes use the author as a deterministic HLC tie-breaker
+remote batches expose all winners in one callback
+persistence rejection rolls back local state and sequence allocation
+persistence rejection rolls back complete local and remote batches
+persistence rejection preserves remote out-of-order frontier bookkeeping
+deltaSince is consistent with the version vector
+version vectors do not cover delayed mutations across sequence gaps
+complete snapshots acknowledge compacted same-key sequences across restart
+a complete snapshot repairs different-key state before acknowledging its frontier
+a losing remote repair durably closes a same-key sequence gap
+snapshot coverage rolls back atomically when persistence rejects it
+restart preserves remote gaps and a batch repair closes independent frontiers
+materializeJson handles nesting, prefix conflicts, and localized values
+gcTombstones respects coverage and age requirements
+load avoids callbacks, continues local sequence, and prevents HLC regression
+subtree tombstones hide stale leaves and embedded parent members across replicas
+display: publishes defaults and status once immediately after start
+display: config changes re-evaluate and the device-local value wins
+display: night mode uses the adjusted clock and supports midnight spans
+display: periodic timer emits uiNotify when entering the night interval
+display: idle policy follows midnight windows and restores at the end
+display: device idle settings inherit leaves and can disable the global policy
+emergency: activation and clearing update UI state on both nodes
+emergency: state replication is independent from configurable alert recipients
+emergency: event replay restores state after restart
+emergency: startup does not present an older recovered activation over a newer clear
+emergency API: panels may activate, while only admins may clear
+emergency: a node joining after a cancelled SOS never re-enacts the alarm
+emergency: a node joining during an active SOS alarms once, after its history converged
+event_log: append advances sequence and HLC and invokes the local callback
+event_log: a future peer preserves ordering without shifting local event time
+event_log: nested local append waits for the source dispatch acknowledgement
+event_log: applied events replay after restart until dispatch is acknowledged
+event_log: callback failure remains pending across restart
+event_log: failed local persistence does not consume a sequence or emit
+event_log: startup repairs and replays a durable event whose frontier was not applied
+event_log: applyRemote is idempotent for duplicates and reflected local events
+event_log: head advances only through a contiguous out-of-order prefix
+event_log: anti-entropy repairs a gap after restart without reusing local IDs
+event_log: buffered lifecycle events project and notify in origin sequence order
+event_log: mergeNotify uses HLC LWW and preserves the field union
+event_log: loadHeads continues sequence after reopen
+event_log: loadHeads restores the applied event HLC before a wall-clock rollback
+event_log: anti-entropy records are dispatched as backfill, live and local ones are not
+event_log: a batch is stored completely before its first record is dispatched
+fmp4: splits Annex B with three- and four-byte start codes
+fmp4: parses SPS dimensions, cropping, EPB, and invalid input
+fmp4: codecString reports SPS profile, constraints, and level
+fmp4: toSample converts AVCC, filters metadata NALUs, and detects keyframes
+fmp4: init segment contains valid ftyp, moov, avc1, and avcC boxes
+fmp4: fragments contain sequential mfhd, tfdt, trun, and mdat boxes
+video_track: emits per-frame fragments with capture time and continuous decode time
+video_track: slow live subscribers receive only the latest fragment
+video_track: a late subscriber receives the cached keyframe and requests a new one
+[V01] VideoTrack merges in-flight recovery requests and counts each discarded fragment
+[V01] VideoTrack counts every undisplayed fragment once per reader
+[B3][M05] VideoTrack commits a PPS update only at its matching IDR
+[M05] VideoTrack retains the last valid configuration after malformed parameters
+[M05] VideoTrack drops an invalid parameter update with a delta frame
+VideoTrack rejected parameter-only updates do not break a reference chain
+[M05] VideoTrack does not reset for an identical valid configuration
+[M05] H.264 parameter and slice association rejects a mismatched PPS
+video_track: ignores pushes while the H.264 track is disabled
+fmp4: Node serves encoded frames through GET /stream.mp4
+fmp4: authenticated same-origin proxy streams from an alive mesh peer
+fmp4: validates parsing with ffprobe when available
+fmp4_demux: round-trips VideoTrack output into Annex-B access units
+fmp4_demux: a new init segment replaces the configuration
+[R3] VideoTrack waits for a parsed IDR after a reader gap
+fmp4_demux: rejects corrupt or oversized input instead of buffering it
+fmp4_demux: parseAvcC reads the first SPS and PPS and the NAL length size
+httpd: routing + params + cookie + static
+httpd: auth gate 401 + public_prefix
+httpd: snapshot + stream
+httpd: restarts after stop
+httpd: same-origin mp4 proxy authenticates before streaming
+httpd: an IPv4-only listener serves, and IPv6 is added only where it works
+media: converts BGRA to a valid JPEG with expected dimensions and color
+media: converts NV12, NV21, and YUY2 colors using BT.601
+media: encoding is demand-driven and caches for active subscribers
+media: warm preview cache avoids first-subscriber encoding
+media: repeatedly halves frames that exceed max_width
+media: supports an external encoder SPI and stb fallback
+media: discards undersized and invalid frames
+media: Node serves pushed camera frames as snapshots and MJPEG
+mesh: beacon discovery makes three nodes alive and elects capability leaders
+mesh: peer gossip preserves the order of multiple local interface addresses
+mesh: peer runtime exposes only bounded semantic UI application reports
+mesh: the power section gossips as three clamped scalars and nothing else
+mesh: a duty without an eligible node has no leader
+mesh: backend leaders require local credential readiness
+mesh leadership requires an explicit sane wall clock measurement
+mesh: delta push and periodic sync converge config with deterministic conflicts
+mesh: full config sync acknowledges compacted same-key history
+mesh: malformed config wire snapshots are rejected atomically
+mesh: malformed live events are neither persisted nor forwarded
+mesh: sync event arrays decode completely before any state is applied
+mesh: heartbeat and claim counters reject unsafe wire numbers
+mesh: broadcastEvent is exactly once despite duplicate delivery
+mesh: anti-entropy fills a missing event below an out-of-order sequence
+mesh: sendCommand / broadcastCommand → on_command
+mesh: fetchSnapshot handles remote JPEG, missing providers, and timeout
+mesh: fetchBlob supports chunked remote, direct local, and missing blobs
+mesh: partitions elect local leaders and heal without event loss or duplication
+mesh: killNode reports dead and a higher epoch reports alive
+mesh: leader death promotes the next candidate after lease expiry
+mesh: joinCluster retrieves PSK and config snapshot before joining
+mesh: joinCluster invalidates a token after bad PIN attempts or expiry
+mesh: membership, config, and events converge with loss and delay
+mesh: real TcpTransport performs loopback handshake, ping, and config sync
+mesh: pairing discovery and invite provide PSK and config to an unpaired node
+mesh: inviteDeviceDirect accepts address and public key without discovery
+mesh: pairing mode automatically invites newly discovered unpaired nodes
+mesh: foundCluster requires a paired founder and creates a real PSK
+mesh: an unpaired host rejects join attempts
+mesh: an unpaired node cannot issue invitations
+mesh: an acknowledged invitation reports invite_result, then device_joined
+mesh: a manual invitation to a silent device retries and then reports no_ack
+mesh: denyDevice drops a pending device and keeps ignoring its announcements
+mesh: an invitation to an already paired device is rejected, not ignored
+mesh: unpair clears the key, drops peers, and allows joining another cluster
+mesh: JOIN_OK is refused once an invitation has already paired the node
+mesh: joinCluster on a paired node answers already_paired
+mesh: an invitation carrying an all-zero cluster key is rejected
+mesh: the join token reports its countdown, attempts, and expiry
+mesh: pairing mode reports start, stop, and how many devices it added
+mesh: discovery is rekeyed when a node creates or joins a cluster at runtime
+udp_beacon: a keyed HELLO is discovered and a zero-key HELLO is ignored
+udp_beacon: multicast smoke test sends without errors
+mesh: a dead peer that returns with restarted counters is accepted again
+mesh: gossip about a partitioned peer never revives it
+mesh: a leader losing its credentials cannot retain a live lease
+mesh: measured Telegram reachability does not qualify unrelated WAN duties
+motion: consecutive still frames do not trigger
+motion: movement in part of the frame triggers
+motion: triggering requires two consecutive frames above threshold
+motion: does not retrigger within min_interval_s
+motion: sensitivity boundary distinguishes a 25 percent change
+motion: small luminance noise does not cause a false trigger
+motion: large changes do not trigger during the learning period
+motion: disabling is inert and re-enabling restarts learning
+motion: dimension changes restart learning
+mqtt: remaining-length round trips across multibyte boundaries
+mqtt: encodes CONNECT with LWT, credentials, keepalive, and flags
+mqtt: retained PUBLISH encode and decode round trip
+mqtt: long payload round trip uses a two-byte remaining length
+mqtt: encodes SUBSCRIBE, PINGREQ, and DISCONNECT
+mqtt: client connects, publishes retained data, and emits LWT on disconnect
+mqtt: Node handles retained discovery, press, reply, and HA republish
+node: startup applies and replays a durable event beyond the saved frontier
+node: remote config persistence failure rolls back and retries anti-entropy
+node: two nodes join and replicate default config
+node: boot identity repairs stale self role and door leaves
+node: playback strategy resolves pair, global, then legacy configuration
+node: status and config snapshot JSON are available after start
+node: setConfigKey becomes visible through the deferred snapshot
+node: video rotation follows the sensor unless fixed by an administrator
+sanitizeCaps suppresses HTTPS when only TLS 1.2 is available
+runtime capabilities: administrator overrides cannot exceed hardware measurements
+runtime feature gating requires measured shell support and a real UI manifest
+mixed fleet derives call flow from the originating door shell
+offline semantic UI edits use the persisted last-valid peer manifest
+a live configured door authority expires a call after its origin stops
+a dead dialog owner is cancelled once by the deterministic survivor
+a returning dialog owner cancels the survivor takeover lease
+configured MQTT reachability is measured and administrator overrides stay explicit
+pairing: secure-store failure never exposes a mesh PSK
+node: pairing discovers and invites an unpaired device and supplies PSK
+node: press evaluates rules and replicates chime, SIP, and events exactly once
+node: quick replies reach the door-station display and TTS
+node: node death records one offline event
+node: real TCP and HTTP API smoke test covers login, status, press, and events
+pairing: an unpaired node reports the unpaired state and its own device card
+pairing: creating a cluster reports ready, the founder badge, and secure storage
+pairing: the snapshot is rebuilt on every call so countdowns tick
+pairing: a secure-store failure is retried without rejoining the cluster
+pairing: unpair clears the stored secret and returns to the unpaired state
+pairing: a platform without secure deletion still unpairs
+pairing: joining while already paired reports already_paired instead of silence
+pairing: an administrator revocation unpairs the device
+pairing: an invited device reports invite_result, device_joined, and membership
+pairing: a scanned QR payload invites the device it names
+pairing: denying a device removes it from the pending list
+pairing: a PIN join reports join_result before paired and never fakes success
+pairing: pairing mode is refused while the node is not in a cluster
+pairing: minting a PIN neither opens the bulk-add window nor invites anyone
+doors: an indoor panel lists a live door station's door even without a config entry
+pairing: unpair then found leaves no peer from the previous cluster
+pairing: a replicated devices entry from the old cluster does not resurrect
+calls: joining a cluster imports the history silently
+calls: an indoor panel rings and never answers by itself
+calls: a monitor dialog leaves a ringing call ringing
+doors: served_by and the peer list never disagree about a station
+doors: a live station advertisement outranks stale replicated identity
+peers: a quiet cluster stops emitting peers_changed
+node: purpose deletion removes edited descendants and converges to an empty list
+node: removal forgets an offline identity without deleting its replacement
+node: Telegram credentials synchronize only to secure storage and rotate by reference
+node: motion wakes only its entrance when the option is enabled
+node: an offline removed member leaves after reconnecting
+pair uri: the format is exactly the four documented keys
+pair uri: encoding round-trips names with spaces and Japanese
+pair uri: parsing rejects exactly what it should
+panel API: token auth / state / press / snapshot proxy / motion detection
+panel dialog lease retries a failed durable recovery cancellation
+panel state retains terminal calls across restart for a bounded interval
+panel recovery reports a restored visitor call exactly once
+panel recovery cannot claim a restarted native SIP dialog
+panel API: call-frame / peer-frame.jpg / call-info web call contract
+rules: when matches event type, doors, and devices
+rules: schedule windows support weekdays, boundaries, and midnight spans
+rules: tz_offset evaluates local time
+rules: quiet_hours supports suppress and never_suppress
+rules: disabled rules are skipped and multiple rules are deterministic
+rules: action parameters pass through without the type field
+rules: when.purposes branches by purpose and supports auto_reply
+rules: malformed config JSON is treated as empty config
+secure_channel: handshake and bidirectional AEAD never expose the PSK
+secure_channel: messages queue before establishment and flow afterward
+secure_channel: mismatched PSKs are rejected before establishment
+secure_channel: a tampered frame disconnects immediately
+secure_channel: header sequence tampering is detected and disconnected
+secure_channel: replaying the same frame is rejected and disconnected
+secure_channel: missing frames are allowed and later frames still pass
+secure_channel: handshake timeout disconnects
+config: the time keys accept only resolvable zones and bounded NTP settings
+config: volume levels are bounded at every scope
+config: the SOS trigger keys validate and the legacy hold duration stays accepted
+volumes: the effective level resolves device, cluster, then built-in defaults
+announcements: a door notice replicates, expires, and can be cleared
+power: a reported battery reaches status, capabilities, and the change event
+announcements: a cluster-wide notice is overridden by a door-specific one
+config: the announcement presets are seeded once and stay editable
+doors: the unlock control appears only when an unlock action exists
+display: appearance resolves in the configured zone and per device
+display: the automatic theme is published and overridable
+video: the publish-side counters describe what this node produced
+purposes: a disabled purpose is kept but never offered to a visitor
+theme: a hard-to-read colour is saved and reported, never refused
+doors: a door station founding a cluster gets a door entry to target
+doors: seeding a door entry never overwrites what an administrator wrote
+doors: a live door with no configuration entry still appears and is addressable
+display: a configured background that cannot be sampled is never reported as color
+doors: a device that stops serving a door takes back the entry it seeded
+doors: an entry an administrator has adopted outlives the device that seeded it
+doors: served_by names the alive station, and is null when nobody serves the door
+config: the incoming-call return countdown is bounded and overridable per device
+display: the theme backdrop has defaults, overrides and a validated range
+display: frosted glass radius resolves per device and rejects invalid values
+sip: extension 8001 registers within five seconds
+sip: call reaches InCall, exchanges RTP with echo, and hangs up
+sip: a wrong password fails within ten seconds
+sip: direct monitor INVITE is accepted as one-way audio with RTP
+sip: owned cancellation rejects an unrelated Core call id
+sip: direct INVITE without a mode falls back to monitor during a primary call
+sip: direct answer INVITE cancels an unestablished primary call and takes over
+sip: setAllowedSources rejects a direct INVITE from an unlisted source
+sip: Node press rule transitions a SIP call from calling to in_call
+sip: a listen-in dialog can never answer a call
+sip: the event pump idles instead of polling every ten milliseconds
+store: metadata round trip
+store: metadata batches roll back atomically on write failure
+store: full config round trip includes tombstones
+store: config writes report SQLite failures without partial batches
+store: data persists after reopen
+store: corrupt files are renamed and recreated
+store: a busy healthy database fails closed without replacement
+store: duplicate eventPut returns false
+store: eventHeads and eventsSince respect HLC order and limit
+store: event heads and retained prefix survive a refused prune
+store: recentEvents returns newest first
+store: runtime event queries exclude gaps until their origin frontier advances
+store: schema migration rebuilds call projection from contiguous events only
+store: quick reply never terminalizes an established call
+store: scoped replies converge and never terminate a later call
+store: schema v4 upgrade treats its applied frontier as already dispatched
+store: pruneEvents fails closed until a replicated coverage snapshot exists
+telegram: cancellation while snapshot is pending suppresses delivery
+telegram: reordered cancellation persists when its press arrives later
+telegram: press → sendPhoto (multipart: chat_id/caption/reply_markup/JPEG)
+telegram: expands and deduplicates chat IDs across households
+telegram: retries a server failure with backoff and stops after success
+telegram: visitor cancellation suppresses claim and queued retry work
+telegram: cancellation does not retract a successfully delivered message
+telegram: a new leader does not resend after notified_at is recorded
+telegram: a new leader sends when its predecessor claimed but did not deliver
+telegram: leader fetches a JPEG snapshot from the originating node
+telegram: getUpdates handles callback queries, replies, TTS, and button removal
+telegram: sendMessage updates fall back to editMessageText after status 400
+telegram: SOS leader notifies every chat regardless of quiet hours
+telegram: press notification includes purpose and visitor-language badge
+telegram: i18n overrides replace motion and offline text through Node::text
+telegram: indoor answers and replies edit the original notification with the device name
+telegram: a response during snapshot capture survives send completion and edit retry
+tz: the bundled table resolves fixed-offset zones
+tz: daylight saving follows each regime's transition instants
+tz: local time renders civil fields and falls back for an unknown zone
+sntp: request and reply encoding round-trips with fixed vectors
+sntp: implausible samples are rejected and the lowest round trip wins
+sntp: server specifications are parsed and rejected consistently
+clock: the time-service offset corrects every wall reading
+rules: schedules and quiet hours follow the configured zone across daylight saving
+node: the time service adopts a measured offset and falls back when it goes stale
+node: a backward NTP correction reaches displayed time immediately
+node: the configured zone drives local time and the derived compatibility offset
+node: the read-only time and volume exports never wait for the run loop
+node: NTP syncs once a day, once on a change, and backs off after a failure
+db_core_qr_encode returns a valid matrix and rejects empty input
+db_core_qr_decode round-trips a generated pairing QR code
+qr scan mode decodes a camera frame and reports it once
+hex roundtrip
+sha256 known vector from FIPS 180-4
+file IO covers writeFileBytes, readFileBytes, and listDir
+ids
+hlc monotonic + lexicographic order
+hlc observe merges logical order without changing wall time
+json helpers
+runloop manual mode: ordering, periodic, cancel
+runloop threaded mode: call and post behavior after stop
+runloop manual mode: callSync is inline and pumpDue executes posts
+runloop: callSync does not deadlock while stopping
+runloop: cancel(0) no-op
+runloop threaded mode: post + callSync
+visitor: language changes replicate and affect press, replies, and TTS
+visitor: when.purposes branches and auto_reply responds at the door station
+visitor: Node::text resolves override, Japanese, built-in default, then key
+visitor: cached quick-reply audio takes precedence over TTS
+visitor: panel language affects state, press, and events, then resets on idle
+visitor: remaining call time is sampled against the corrected clock
+===============================================================================
+[doctest] unskipped test cases passing the current filters: 417

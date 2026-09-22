@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "reviewer": "/root",
+  "reviewed_at": "2026-09-22T14:55:43.351481+00:00",
+  "production_source_sha256": "01f1bfb5d9d547e74b87c25f9de2228035cf06911a0adf4da0cde60d49e9ae40",
+  "checks": [
+    "Reviewed stable-ID reuse, changed-only DOM writes, current object event capture, removed-node cleanup, adjacent keyboard focus fallback and scroll restoration.",
+    "Reviewed native Chromium red/green source and test hashes; all four browser cases PASS after observed failures.",
+    "Independently reran the production renderer tests, four PASS."
+  ],
+  "limitations": [
+    "T14 is advancing the same page after this frozen source. Final integrated Web suite is required.",
+    "No hardware accessibility or media qualification."
+  ]
+}

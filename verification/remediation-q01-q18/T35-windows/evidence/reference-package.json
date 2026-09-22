@@ -1,0 +1,7 @@
+{
+  "package": "Microsoft.NETFramework.ReferenceAssemblies.net48",
+  "version": "1.0.3",
+  "url": "https://api.nuget.org/v3-flatcontainer/microsoft.netframework.referenceassemblies.net48/1.0.3/microsoft.netframework.referenceassemblies.net48.1.0.3.nupkg",
+  "sha256": "8a7e348538e7eb91351696911689f49e3d4f63f8bab517432bbe159b8b1104a2",
+  "scope": "Public official reference assemblies for compile-only API validation on Mac. Not a WPF runtime or application build."
+}

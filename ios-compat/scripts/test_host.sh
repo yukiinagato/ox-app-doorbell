@@ -74,9 +74,30 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
 
 "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
   -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBCallTiming.m" \
   "$REPO_ROOT/ios-kiosk/src/Core/DBCallEventTracker.m" \
   "$REPO_ROOT/ios-compat/tests/call_event_tracker_test.m" \
   -framework Foundation -o "$OUT/call_event_tracker_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBCallTiming.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBCallEventTracker.m" \
+  "$REPO_ROOT/ios-compat/tests/call_timing_test.m" \
+  -framework Foundation -o "$OUT/call_timing_test"
+"$OUT/call_timing_test"
+
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBDoorVisitorLayout.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBSosSlideModel.m" \
+  "$REPO_ROOT/ios-compat/tests/door_visitor_layout_test.m" \
+  -framework Foundation -framework CoreGraphics -o "$OUT/door_visitor_layout_test"
+"$OUT/door_visitor_layout_test"
+python3 "$REPO_ROOT/ios-compat/tests/run_door_visitor_actions_host.py" \
+  --out "$OUT/door-visitor-actions"
+python3 "$REPO_ROOT/ios-compat/tests/run_door_visitor_actions_host.py" \
+  --sos --out "$OUT/sos-accessibility-actions"
 
 # The Swift call-revision test builds for the host, so every file it pulls in has
 # to be host-compilable. ConfigUtil.swift is Foundation and CoreGraphics only for

@@ -1,0 +1,40 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T18:34:07.289134+00:00",
+  "status": "APPROVED_IN_RECORDED_WEB_UI_SCOPE",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/source-final.json",
+  "source_manifest_sha256": "9f0fea603c9e300a01dab5571bc6350a177ffc2a72bc6dd6fd27432d7e0f6a8b",
+  "browser_evidence": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/final-browser.json",
+  "browser_evidence_sha256": "adb19f00a3828b8de1198febcf510ca629d97be57a1fa2973f4300ff4cf2f83f",
+  "actual_browser_cases": 40,
+  "frozen_inputs_verified": 17,
+  "findings": [
+    {
+      "id": "R1",
+      "status": "FIXED",
+      "description": "Physical gesture freezes call identity and intended Cancel/End verb; stale release cannot upgrade the action."
+    },
+    {
+      "id": "R2",
+      "status": "FIXED",
+      "description": "Cancelled and outside gestures retire; first fresh assistive activation remains available."
+    },
+    {
+      "id": "R3",
+      "status": "FIXED",
+      "description": "Release while disabled without a click retires intent; call reset cancels held keyboard release defaults without blocking a later fresh action."
+    }
+  ],
+  "reviewed": [
+    "Production call action identity guards and release/cancellation lifecycle",
+    "Original and added real DOM behavioral test input sequences with positive paths",
+    "Fixed primary action footer, secondary scrolling, distinct SOS and neutral offline state",
+    "Historical failures preserved and final host/browser evidence bound to frozen sources"
+  ],
+  "limitations": [
+    "Actual IAB Chromium DOM with controlled XHR, not native Core/SIP integration, Safari, physical devices or screen-reader navigation",
+    "Visual observations are the implementing agent actual browser screenshots; root independently reviewed source and runtime assertions, not new screenshot capture",
+    "Frozen Node input is only default Web UI manifest extraction; current Node contains separately tested T29 changes",
+    "Does not close whole multi-platform T35"
+  ]
+}

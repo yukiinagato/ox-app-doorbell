@@ -1,0 +1,14 @@
+{
+  "phase": "baseline",
+  "orientation": "portrait",
+  "font_scale": 1,
+  "source_id": "d17334d24d49b2e3e4587be7ff004672f42da26727f5b11b695320b386a07f38",
+  "results": [
+    {
+      "id": "baseline_capture",
+      "status": "RECORDED"
+    }
+  ],
+  "core_started": false,
+  "failure": null
+}

@@ -1,0 +1,14 @@
+warning: building a development-only SIP stub because DB_ALLOW_SIP_STUB=1
+-- PJSIP: disabled (using the sipctl stub)
+-- Configuring done (0.2s)
+-- Generating done (0.0s)
+CMake Warning (unused-cli):
+  Manually-specified variables were not used by the project:
+
+    CMAKE_TOOLCHAIN_FILE
+
+
+-- Build files have been written to: /Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/ios/build/core/iphonesimulator/arm64+x86_64/min-12.0
+[ 24%] Built target db_third_party
+[100%] Built target doorbell_core
+ok: /Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green/ios/build/core/iphonesimulator/arm64+x86_64/min-12.0/libdoorbell_all.a (2 archives, stub, minimum OS 12.0)

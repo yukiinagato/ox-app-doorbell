@@ -1,0 +1,13 @@
+{
+  "recorded_at": "2026-09-22T17:38:02.383249+00:00",
+  "command": [
+    "xcrun",
+    "simctl",
+    "shutdown",
+    "320AE92C-9691-4979-8CDE-3FF45E799F57"
+  ],
+  "exit_code": 0,
+  "output": "",
+  "scope": "Task-owned Doorbell T35 title simulator only; T15 simulator and physical devices untouched.",
+  "verified_state": "Shutdown"
+}

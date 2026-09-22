@@ -203,6 +203,28 @@ assert.deepStrictEqual(L.doorUnlockEntries("d_front", "auto", { show_button: tru
 assert.deepStrictEqual(
   L.doorUnlockEntries("d_front", "auto", { show_button: true, command: "gate" }),
   { entries: [{ key: "doors.d_front.unlock", value: { command: "gate" } }], dels: [] });
+const oldFeatureCodes = { sip: { dtmf_actions: {
+  "*1": { type: "ha_command", command: "light_on" },
+  "*2": { type: "ha_command", command: "front_gate" },
+  "*3": { type: "ha_command", command: "front_gate" },
+  "*4": { type: "hangup", command: "wrong" },
+  "*5": { type: "ha_command", command: "bad command" }
+} } };
+assert.deepStrictEqual(L.doorUnlockOptions(oldFeatureCodes), [
+  { v: "light_on", label: "light_on (*1)" },
+  { v: "front_gate", label: "front_gate (*2)" }
+]);
+assert.deepStrictEqual(L.doorUnlockEntries("d_front", "show", {}, ""),
+  { entries: [{ key: "doors.d_front.unlock", value: { show_button: true } }], dels: [] },
+  "visibility does not infer any suggested HA command");
+assert.deepStrictEqual(L.doorUnlockEntries("d_front", "auto", {}, " front_gate "),
+  { entries: [{ key: "doors.d_front.unlock", value: { command: "front_gate" } }], dels: [] });
+assert.deepStrictEqual(L.doorUnlockEntries("d_front", "auto", { command: "front_gate" }, ""),
+  { entries: [], dels: ["doors.d_front.unlock"] }, "clearing removes the binding");
+assert.throws(() => L.doorUnlockEntries("d_front", "show", {}, "bad command"),
+  /invalid_unlock_command/);
+assert.strictEqual(oldFeatureCodes.sip.dtmf_actions["*1"].command, "light_on",
+  "choosing an explicit unlock does not rewrite feature codes");
 
 // ---- a live door with no configuration entry is still listed and still addressable ------------
 // The regression: a cluster founded by a door station had no doors.* entries at all, so the tab

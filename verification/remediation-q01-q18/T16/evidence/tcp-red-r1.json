@@ -1,0 +1,69 @@
+{
+  "started_at": "2026-09-22T18:55:36.436366+00:00",
+  "base_manifest_sha256": "4a4db9bdd50789476fadb64fc25b07438cd0f707bfa8f45d67efc43a55c1e9e0",
+  "test_sha256": "9e831c820dc133b0e3ec484a5d1369085431ce4159a8dce193237fd4cbd5cd0c",
+  "commands": [
+    {
+      "command": [
+        "/usr/bin/c++",
+        "-DDB_HTTPD_TEST_HOOKS=1",
+        "-DNO_CACHING",
+        "-DNO_CGI",
+        "-DNO_SSL",
+        "-DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1",
+        "-DSQLITE_DQS=0",
+        "-DSQLITE_OMIT_LOAD_EXTENSION",
+        "-DSQLITE_THREADSAFE=1",
+        "-DUSE_IPV6",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/third_party/doctest",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/include",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/src",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/third_party/sqlite",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/third_party/civetweb",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/third_party/cjson",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/third_party/monocypher",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/third_party/qrcodegen",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/third_party/quirc",
+        "-I/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-source/core/third_party/stb",
+        "-g",
+        "-std=gnu++17",
+        "-arch",
+        "arm64",
+        "-fPIE",
+        "-c",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/test_media_tcp_bounds.cpp",
+        "-o",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/test.o"
+      ],
+      "exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "/usr/bin/c++",
+        "-g",
+        "-arch",
+        "arm64",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/test.o",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-build/CMakeFiles/doorbell_tests.dir/tests/test_main.cpp.o",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-build/libdoorbell_core.a",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/green-r4-build/libdb_third_party.a",
+        "-lpthread",
+        "-o",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/tcp-tests"
+      ],
+      "exit_code": 0,
+      "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "command": [
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t16-20260923/tcp-red-r1/tcp-tests",
+        "--test-case=media TCP bounds:*"
+      ],
+      "exit_code": 1,
+      "log_sha256": "a4562c65e4f2c89d08844654ddc1ed17cd92cf87ec9e0942a607c8e4c003f7b2"
+    }
+  ],
+  "finished_at": "2026-09-22T18:55:41.892936+00:00",
+  "binary_sha256": "2108a397394bef84776c882439bf20122a13b45c9892a6bb17c79d1fb057d7ce"
+}

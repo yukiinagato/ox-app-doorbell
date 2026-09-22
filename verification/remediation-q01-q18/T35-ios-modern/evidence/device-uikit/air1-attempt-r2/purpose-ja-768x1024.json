@@ -1,0 +1,144 @@
+[
+  {
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "hidden" : false,
+    "frame" : "{{0, 0}, {768, 1024}}",
+    "traits" : 0,
+    "class" : "UIView",
+    "identifier" : "purpose_choice_screen"
+  },
+  {
+    "hidden" : false,
+    "accessibility_element" : false,
+    "class" : "UIScrollView",
+    "traits" : 0,
+    "frame" : "{{36, 16}, {696, 800}}",
+    "alpha" : 1,
+    "content_size" : "{696, 1484.5}"
+  },
+  {
+    "hidden" : false,
+    "text" : "ご用件をお選びください",
+    "font_size" : 107,
+    "frame" : "{{36, 16}, {696, 255.5}}",
+    "class" : "UILabel",
+    "accessibility_element" : false,
+    "traits" : 65536,
+    "alpha" : 1
+  },
+  {
+    "traits" : 0,
+    "class" : "UILabel",
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "font_size" : 56,
+    "frame" : "{{36, 281.5}, {696, 134}}",
+    "text" : "呼び出し中です。ご用件をお知らせください。",
+    "hidden" : false
+  },
+  {
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "alpha" : 1,
+    "hidden" : false,
+    "title" : "",
+    "frame" : "{{36, 439.5}, {340, 1061}}",
+    "accessibility_element" : true,
+    "enabled" : true,
+    "traits" : 1,
+    "accessibility_label" : "予約された配達と建物設備の保守点検について、居住者への連絡と通話状態を確認してください",
+    "identifier" : "purpose_choice_long"
+  },
+  {
+    "hidden" : false,
+    "traits" : 0,
+    "frame" : "{{58, 459.5}, {56, 56}}",
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "class" : "UIView"
+  },
+  {
+    "alpha" : 1,
+    "hidden" : false,
+    "class" : "UIImageView",
+    "frame" : "{{70, 471.5}, {32, 32}}",
+    "accessibility_element" : false,
+    "traits" : 0
+  },
+  {
+    "class" : "UILabel",
+    "hidden" : false,
+    "alpha" : 1,
+    "font_size" : 73,
+    "traits" : 0,
+    "frame" : "{{58, 525.5}, {296, 959}}",
+    "accessibility_element" : false,
+    "text" : "予約された配達と建物設備の保守点検について、居住者への連絡と通話状態を確認してください"
+  },
+  {
+    "accessibility_element" : false,
+    "hidden" : false,
+    "class" : "UIImageView",
+    "alpha" : 0,
+    "frame" : "{{726.5, -23}, {2.5, 36}}",
+    "traits" : 0
+  },
+  {
+    "class" : "UIImageView",
+    "traits" : 0,
+    "frame" : "{{-3, 810.5}, {36, 2.5}}",
+    "alpha" : 0,
+    "hidden" : false,
+    "accessibility_element" : false
+  },
+  {
+    "frame" : "{{36, 832}, {696, 168}}",
+    "class" : "UIView",
+    "alpha" : 1,
+    "hidden" : false,
+    "accessibility_element" : false,
+    "traits" : 0
+  },
+  {
+    "frame" : "{{36, 832}, {340, 168}}",
+    "identifier" : "purpose_choice_cancel",
+    "alpha" : 1,
+    "hidden" : false,
+    "class" : "UIButton",
+    "title" : "呼び出しを取り消す",
+    "enabled" : true,
+    "accessibility_element" : false,
+    "traits" : 0
+  },
+  {
+    "accessibility_element" : false,
+    "class" : "UIButtonLabel",
+    "hidden" : false,
+    "traits" : 0,
+    "text" : "呼び出しを取り消す",
+    "font_size" : 62,
+    "frame" : "{{61, 842}, {290, 148}}",
+    "alpha" : 1
+  },
+  {
+    "enabled" : true,
+    "traits" : 0,
+    "frame" : "{{392, 832}, {340, 168}}",
+    "class" : "UIButton",
+    "accessibility_element" : false,
+    "hidden" : false,
+    "title" : "用件を選ばず続ける",
+    "alpha" : 1,
+    "identifier" : "purpose_choice_skip"
+  },
+  {
+    "accessibility_element" : false,
+    "alpha" : 1,
+    "text" : "用件を選ばず続ける",
+    "frame" : "{{417, 842}, {290, 148}}",
+    "hidden" : false,
+    "traits" : 0,
+    "class" : "UIButtonLabel",
+    "font_size" : 62
+  }
+]

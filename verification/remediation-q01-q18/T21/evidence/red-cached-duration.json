@@ -1,0 +1,18 @@
+{
+  "test_id": "red-cached-duration",
+  "scope": "native_source",
+  "command": [
+    "build/remediation-t21-20260922/red/cached-duration"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T14:29:04.673491+00:00",
+  "finished_at": "2026-09-22T14:29:05.229922+00:00",
+  "exit_code": 1,
+  "expected_exit_code": 1,
+  "observed_result": "Production CallTiming returns 10 seconds from a repeated cached duration whose Core snapshot age is 5 seconds. The current API cannot consume snapshot age.",
+  "log_sha256": "f381c30edd1f0fd1261bf2f79adb8284f5e2ff76a4d336cdf59acd042bcb4023",
+  "source_manifest": "../source-before.json",
+  "limitations": [
+    "Host Swift production helper; not a device, UIKit timer or Core integration test."
+  ]
+}

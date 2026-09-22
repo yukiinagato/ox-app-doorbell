@@ -1,0 +1,19 @@
+{
+  "at": "2026-09-22T17:01:19.957674+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r2.json",
+  "source_manifest_sha256": "d744dc8f24e22df4c69c2078a23a5ee03930b5c4af8b7086dfc49679fe6c33e3",
+  "binary": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/ios9-arm64/Build/Products/Release-iphoneos/DoorbellIOS9.app/DoorbellIOS9",
+  "images": {
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/ios9-arm64/Build/Products/Release-iphoneos/DoorbellIOS9.app/DoorbellIOS9": "UUID: C389302F-314B-33FE-83CD-E5B9AE01BE5B (arm64) /Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/ios9-arm64/Build/Products/Release-iphoneos/DoorbellIOS9.app/DoorbellIOS9"
+  },
+  "app_version": "0.1.37",
+  "build_number": "38",
+  "target_minimum_os": "9.0",
+  "sip_backend": "real_pjsip",
+  "hashes": {
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/ios9-arm64/Build/Products/Release-iphoneos/DoorbellIOS9.app/DoorbellIOS9": "fda46a618faafe1dedbd4f56d390fe9e592bb0e2bd131f68545ccf9b68218ffb",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/candidate-source-r2/ios/build/core/iphoneos/arm64/min-9.0/libdoorbell_all.a": "2dc8f6c8f67809367a75364cba4efbd5f2f1c1c987027feafebc3a801a57a3ce",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-20260923/candidate-source-r2/ios/build/core/iphoneos/arm64/min-9.0/artifact-manifest.json": "84fbb27713c53b9e2275c95cc277921e8e403403c4add6dbabcb0cb691bb324d"
+  },
+  "scope": "completed build only; no runtime launch or device installation; T12 frozen Core plus T35 r2"
+}

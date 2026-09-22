@@ -1,0 +1,12 @@
+{
+  "task_id": "T09",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "0580716c7ae55b3eb3060ff9ded4020efbcd44b27a8a9658599b448480d142f1",
+  "captured_at": "2026-09-22T13:42:09.880994+00:00",
+  "files": {
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/panel/call.html": "09295e3590193c4f1d52c98203598b54e56ee6376ca42ecdc06c71192b541eba",
+    "webui/tests/call_state_controller.test.js": "c5457cf807ac2e1e2dc4a9189ade5f158be4abc875265c64ca08bff3d4d47bcc"
+  }
+}

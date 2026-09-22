@@ -1,0 +1,42 @@
+[
+  {
+    "path": "win/DoorbellApp/MainWindow.xaml",
+    "sha256": "9aa47a9bbb410daf8111dc0432c9c15164b68a772aab6c8cb48ef99c33c786df",
+    "matches_candidate": true
+  },
+  {
+    "path": "win/DoorbellApp/MainWindow.xaml.cs",
+    "sha256": "50d25e377ad38507ca8a51ae215622ae66597dfcd8f6944fa352b255435e9ff8",
+    "matches_candidate": true
+  },
+  {
+    "path": "win/DoorbellApp/MainWindow.Shell.cs",
+    "sha256": "91af02cfd20a49315ddd4cdf4b81744ecbe067770a9718d0cdc00a2a0cdcc703",
+    "matches_candidate": true
+  },
+  {
+    "path": "win/DoorbellApp/MainWindow.VisitorActions.cs",
+    "sha256": "f467d7ba542d43f8780053f10bd2218d7f4dcb6c31e8fc7c6d81b31795c09978",
+    "matches_candidate": true
+  },
+  {
+    "path": "win/DoorbellApp/Ui/SosSlider.cs",
+    "sha256": "75400042a8fd9618f9e21a25f568b13d7a6c43d4f82ba652b4a5fda0830d338c",
+    "matches_candidate": true
+  },
+  {
+    "path": "win/DoorbellApp/Ui/VisitorActionGuard.cs",
+    "sha256": "f6c0f0da6e0c4b670f9d09b169997c9ce7b7ac05f153153165284f83aa069319",
+    "matches_candidate": true
+  },
+  {
+    "path": "win/tests/VisitorActionGuardTests.cs",
+    "sha256": "a7a571e2436da9d6dda25b78e7eb09fb07bfc11ec86681599c89bdb26d735c1e",
+    "matches_candidate": true
+  },
+  {
+    "path": "win/tests/test_windows_contracts.py",
+    "sha256": "d10cbf163832550f4998d34ca0938866b7a80ca935598f6db696068d92ac33b9",
+    "matches_candidate": true
+  }
+]

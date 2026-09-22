@@ -1,0 +1,83 @@
+{
+  "observed_at": "2026-09-22T18:02:49.370949+00:00",
+  "head": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "source_manifest": "verification/remediation-q01-q18/T35-ios-compat/source-frozen-r8.json",
+  "source_manifest_sha256": "38b3d57366e0f4c574955b726bbe091dc614a616b73932ef82c0e687e126ab00",
+  "frozen_input_count": 1084,
+  "all_inputs_unchanged": true,
+  "owned_sources_match_mainline": true,
+  "core_web_identical_to_r2": true,
+  "production_diff_sha256": "ecd9ba16b647c528e8ebff84e0702adfcfbf9fbdbe8d6af1cd80595fd75e71a8",
+  "app_version": "0.3.49",
+  "build": "52",
+  "architecture": "armv7",
+  "minimum_os": "5.1",
+  "sdk": "licensed local iPhoneOS7.1.sdk",
+  "signing": "ldid jailbreak",
+  "sip_backend": "core_pjsip_off_ios_compat_minisip",
+  "artifacts": {
+    "app_executable": {
+      "path": "build/remediation-t35-compat/frozen-r8/ios-kiosk/build/Doorbell.app/Doorbell",
+      "sha256": "298d4ab4c568cc2ff93abf541c3c509483650d0cd2ef2056ec5a9e51b94e34b9"
+    },
+    "app_manifest": {
+      "path": "build/remediation-t35-compat/frozen-r8/build/ios-compat/artifacts/ios5-armv7-app/manifest.json",
+      "sha256": "cb7d0cb5f1638e081e0efb7d42b2397c296d11e4aade60ae568cb19b71fad98e"
+    },
+    "core_archive": {
+      "path": "build/remediation-t35-compat/frozen-r8/ios-kiosk/lib/libdoorbell_all.a",
+      "sha256": "0f74a800407d0ffc574b5adc4ae8ea0a55da7dc9ecb97f0ead715ffbe6489741"
+    },
+    "core_manifest": {
+      "path": "build/remediation-t35-compat/frozen-r8/build/ios-compat/artifacts/ios5-armv7-pjsip-off/manifest.json",
+      "sha256": "4d197f7fab1dcd74cd9a2c25ef7e211a2a131295d31b68f243cb397b90682cb4"
+    },
+    "layout_binary": {
+      "path": "build/remediation-t35-compat/frozen-r8/build/ios-compat/host-tests/door_visitor_layout_test",
+      "sha256": "1387d432d38022f0723ec96fcf6623056ec14db4bffbbcf064066106ff211908"
+    },
+    "selector_binary": {
+      "path": "build/remediation-t35-compat/frozen-r8/build/ios-compat/host-tests/door-visitor-actions/door_visitor_actions",
+      "sha256": "3721b7412e735ea6e244df8d2ee0a74bc6146d9b939956a6db8a599f3ebf080c"
+    },
+    "sos_selector_binary": {
+      "path": "build/remediation-t35-compat/frozen-r8/build/ios-compat/host-tests/sos-accessibility-actions/door_visitor_actions",
+      "sha256": "d4feb8417f836de4e5c88374e4fb8427d7173c62f487e08cf3857e233ee175ab"
+    }
+  },
+  "limitations": [
+    "Isolated real iPad UIKit runner substitutes external Core/SIP/network/audio boundaries; production application was not installed or qualified end to end.",
+    "Physical HID input, physical device rotation, VoiceOver navigation/speech and iOS9 armv7 target qualification not run.",
+    "Core/Web are verified T12 frozen source; later integration requires rebuilding."
+  ],
+  "gesture_red": {
+    "path": "build/remediation-t35-compat/actions-gesture-red/provenance.json",
+    "sha256": "85a1b42cf2b0ef76aa80c16a2ad1c28e407c3918d3c97e791c2cd14b71fe89f0",
+    "checks": 40,
+    "failures": 3
+  },
+  "gesture_green": {
+    "path": "build/remediation-t35-compat/actions-gesture-green/provenance.json",
+    "sha256": "305fa95213d7ec4ed86a82991cfa9a18082f447c29bed1f915323aab41da9e58",
+    "checks": 40,
+    "failures": 0
+  },
+  "nil_call_red": {
+    "path": "build/remediation-t35-compat/actions-nil-call-red/provenance.json",
+    "sha256": "2ab393383dc8166b3dc42250553c6a760198d6bdd027d1a20ea779035c72646b",
+    "checks": 42,
+    "failures": 1
+  },
+  "nil_call_green": {
+    "path": "build/remediation-t35-compat/actions-nil-call-green/provenance.json",
+    "sha256": "99898da60e9d119d64dcf41817019609a53785bd21dcf0b850663527f256a454",
+    "checks": 42,
+    "failures": 0
+  },
+  "uikit_summary": {
+    "path": "verification/remediation-q01-q18/T35-ios-compat/evidence/uikit-summary.json",
+    "sha256": "905f8cac29bdba01f3caffc3fc7883a1f6859d3d5b4a4db2d43b962aa5bab4c8",
+    "checks": 95,
+    "failed": 0
+  }
+}

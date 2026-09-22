@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-09-22T14:05:10.946504+00:00",
+  "owned_simulator": {
+    "udid": "5675591C-491D-4232-9887-B2ECBB030C10",
+    "name": "Doorbell T20 lifecycle 20260922",
+    "state": "Shutdown"
+  },
+  "shutdown_attempt_exit_code": 149,
+  "shutdown_attempt_result": "Already Shutdown when explicitly requested; confirmed by simctl readback.",
+  "owned_test_temporary_directory_count": 0,
+  "owned_test_temporary_directories": [],
+  "retained_for_review": [
+    "build/remediation-t20-20260922/*.xcresult",
+    "build/remediation-t20-20260922/xcode-*/Build/Products",
+    "build/remediation-t20-20260922/artifact-snapshots"
+  ],
+  "other_devices_modified": false
+}

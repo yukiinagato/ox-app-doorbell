@@ -1,0 +1,358 @@
+{
+  "scope": "Production DOM and callbacks with controlled XHR; not Core/device qualification",
+  "phase": "final",
+  "door_sha256": "956d7a555f958aa8f9d2173b3efafe8af1df09c41cd5d8995b539b173a59b335",
+  "case_sha256": "3c9f2de96de25eacea0688a551af96133226c01c46928a4da4cd08142e929d19",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T18:06:14.853Z",
+  "results": [
+    {
+      "id": "Purpose-first waits for a choice and sends the chosen purpose with the call",
+      "status": "PASS"
+    },
+    {
+      "id": "Purpose-first Back survives background snapshots and never rings",
+      "status": "PASS"
+    },
+    {
+      "id": "Ring-then-purpose starts once and Skip does not cancel",
+      "status": "PASS"
+    },
+    {
+      "id": "Answered state retires purpose actions and the stable action ends only the call",
+      "status": "PASS"
+    },
+    {
+      "id": "Held mouse Cancel cannot turn into End when the call connects",
+      "status": "PASS"
+    },
+    {
+      "id": "Held pointer Cancel cannot turn into End when the call connects",
+      "status": "PASS"
+    },
+    {
+      "id": "Held touch Cancel cannot turn into End when the call connects",
+      "status": "PASS"
+    },
+    {
+      "id": "Held keyboard Cancel cannot turn into End when the call connects",
+      "status": "PASS"
+    },
+    {
+      "id": "Held Back cannot cancel the call started by a purpose choice",
+      "status": "PASS"
+    },
+    {
+      "id": "Cancelled and outside gestures cannot mutate a call and fresh gestures still work",
+      "status": "PASS"
+    },
+    {
+      "id": "A gesture from an ended call cannot apply to a replacement call",
+      "status": "PASS"
+    },
+    {
+      "id": "Layout 320x480 en semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          320,
+          480
+        ],
+        "language": "en",
+        "font_scale": 1,
+        "action": {
+          "left": 16,
+          "top": 388.4140625,
+          "right": 204,
+          "bottom": 468
+        }
+      }
+    },
+    {
+      "id": "Layout 320x480 en semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          320,
+          480
+        ],
+        "language": "en",
+        "font_scale": 1.5,
+        "action": {
+          "left": 16,
+          "top": 388.4140625,
+          "right": 204,
+          "bottom": 468
+        }
+      }
+    },
+    {
+      "id": "Layout 320x480 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          320,
+          480
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 16,
+          "top": 388.4140625,
+          "right": 204,
+          "bottom": 468
+        }
+      }
+    },
+    {
+      "id": "Layout 320x480 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          320,
+          480
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 16,
+          "top": 388.4140625,
+          "right": 204,
+          "bottom": 468
+        }
+      }
+    },
+    {
+      "id": "Layout 844x390 en semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          844,
+          390
+        ],
+        "language": "en",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 298.4140625,
+          "right": 712,
+          "bottom": 378
+        }
+      }
+    },
+    {
+      "id": "Layout 844x390 en semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          844,
+          390
+        ],
+        "language": "en",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 298.4140625,
+          "right": 712,
+          "bottom": 378
+        }
+      }
+    },
+    {
+      "id": "Layout 844x390 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          844,
+          390
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 298.4140625,
+          "right": 712,
+          "bottom": 378
+        }
+      }
+    },
+    {
+      "id": "Layout 844x390 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          844,
+          390
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 298.4140625,
+          "right": 712,
+          "bottom": 378
+        }
+      }
+    },
+    {
+      "id": "Layout 768x1024 en semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "en",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 932.4140625,
+          "right": 636,
+          "bottom": 1012
+        }
+      }
+    },
+    {
+      "id": "Layout 768x1024 en semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "en",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 932.4140625,
+          "right": 636,
+          "bottom": 1012
+        }
+      }
+    },
+    {
+      "id": "Layout 768x1024 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 932.4140625,
+          "right": 636,
+          "bottom": 1012
+        }
+      }
+    },
+    {
+      "id": "Layout 768x1024 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          768,
+          1024
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 932.4140625,
+          "right": 636,
+          "bottom": 1012
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 en semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "en",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 676.4140625,
+          "right": 892,
+          "bottom": 756
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 en semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "en",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 676.4140625,
+          "right": 892,
+          "bottom": 756
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 zh semantic font 100%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "zh",
+        "font_scale": 1,
+        "action": {
+          "left": 32,
+          "top": 676.4140625,
+          "right": 892,
+          "bottom": 756
+        }
+      }
+    },
+    {
+      "id": "Layout 1024x768 zh semantic font 150%",
+      "status": "PASS",
+      "detail": {
+        "viewport": [
+          1024,
+          768
+        ],
+        "language": "zh",
+        "font_scale": 1.5,
+        "action": {
+          "left": 32,
+          "top": 676.4140625,
+          "right": 892,
+          "bottom": 756
+        }
+      }
+    },
+    {
+      "id": "Ordinary offline status is neutral while the existing SOS overlay stays separate",
+      "status": "PASS"
+    },
+    {
+      "id": "Keyboard cancellation and assistive activation retain the existing SOS operation path",
+      "status": "PASS"
+    },
+    {
+      "id": "Language remains secondary and updates the visible purpose choices",
+      "status": "PASS"
+    },
+    {
+      "id": "Recovery and no-answer titles keep the existing call identity and terminal permissions",
+      "status": "PASS"
+    }
+  ]
+}

@@ -19,6 +19,8 @@ namespace db {
 namespace {
 
 constexpr size_t kMaxFrame = 8 * 1024 * 1024;
+constexpr size_t kMaxQueuedBytes = kMaxFrame + 4;
+constexpr size_t kMaxQueuedFrames = 1024;
 constexpr int64_t kConnectTimeoutMs = 10000;
 
 
@@ -92,6 +94,14 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
   void send(const Bytes& frame) override {
     std::lock_guard<std::mutex> lk(impl_->mu);
     if (!open_ || closing_) return;
+    if (frame.size() > kMaxFrame || outbox_.size() >= kMaxQueuedFrames ||
+        frame.size() + 4 > kMaxQueuedBytes - out_bytes_) {
+      // The I/O thread owns socket closure and the front buffer may already be in use.
+      abort_ = true;
+      closing_ = true;
+      impl_->wake();
+      return;
+    }
     Bytes framed(4 + frame.size());
     const uint32_t n = static_cast<uint32_t>(frame.size());
     framed[0] = static_cast<uint8_t>(n >> 24);
@@ -99,6 +109,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
     framed[2] = static_cast<uint8_t>(n >> 8);
     framed[3] = static_cast<uint8_t>(n);
     std::memcpy(framed.data() + 4, frame.data(), frame.size());
+    out_bytes_ += framed.size();
     outbox_.push_back(std::move(framed));
     impl_->wake();
   }
@@ -152,7 +163,12 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
   }
   bool closingAndDrained() {
     std::lock_guard<std::mutex> lk(impl_->mu);
-    return closing_ && outbox_.empty();
+    return closing_ && !abort_ && outbox_.empty();
+  }
+
+  bool aborted() {
+    std::lock_guard<std::mutex> lk(impl_->mu);
+    return abort_;
   }
 
 
@@ -162,6 +178,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
       size_t off;
       {
         std::lock_guard<std::mutex> lk(impl_->mu);
+        if (abort_) return false;
         if (outbox_.empty()) return true;
         chunk = outbox_.front();
         off = out_off_;
@@ -171,6 +188,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
       std::lock_guard<std::mutex> lk(impl_->mu);
       out_off_ += static_cast<size_t>(n);
       if (out_off_ >= outbox_.front().size()) {
+        out_bytes_ -= outbox_.front().size();
         outbox_.pop_front();
         out_off_ = 0;
       }
@@ -227,6 +245,9 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
     {
       std::lock_guard<std::mutex> lk(impl_->mu);
       open_ = false;
+      outbox_.clear();
+      out_bytes_ = 0;
+      out_off_ = 0;
       had_cb = static_cast<bool>(on_close_);
       if (notify && !had_cb) closed_before_cb_ = true;
     }
@@ -254,11 +275,13 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
   std::string remote_;
   bool open_ = true;
   bool closing_ = false;
+  bool abort_ = false;
   bool close_notified_ = false;
   bool closed_before_cb_ = false;
   bool pending_close_notify_ = false;
   std::deque<Bytes> outbox_;
   size_t out_off_ = 0;
+  size_t out_bytes_ = 0;
   std::vector<uint8_t> inbuf_;
   std::vector<Bytes> pre_frames_;
   std::function<void(const Bytes&)> on_frame_;
@@ -418,8 +441,8 @@ void TcpTransport::Impl::ioMain() {
     for (size_t i = 0; i < pconns.size(); i++) {
       auto& c = pconns[i];
       const short rev = pfds[conn_base + i].revents;
-      bool ok = true;
-      if (rev & (POLLERR | POLLHUP | POLLNVAL)) ok = (rev & POLLIN) != 0;
+      bool ok = !c->aborted();
+      if (ok && (rev & (POLLERR | POLLHUP | POLLNVAL))) ok = (rev & POLLIN) != 0;
       if (ok && (rev & POLLIN)) ok = c->onReadable();
       if (ok && (rev & POLLOUT)) ok = c->onWritable();
       if (ok && c->closingAndDrained()) {

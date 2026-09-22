@@ -1,0 +1,888 @@
+--- a/win/DoorbellApp/MainWindow.xaml
++++ b/win/DoorbellApp/MainWindow.xaml
+@@ -6,6 +6,21 @@
+         Title="ドアホン" Background="{DynamicResource Bg}"
+         WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
+         Topmost="False" Cursor="Arrow" FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI">
++    <Window.Resources>
++        <Style x:Key="VisitorPrimaryAction" TargetType="Button" BasedOn="{StaticResource BigButton}">
++            <Setter Property="FontSize" Value="28"/>
++            <Setter Property="Padding" Value="20,16"/>
++            <Setter Property="MinWidth" Value="0"/>
++            <Setter Property="MinHeight" Value="96"/>
++            <Setter Property="MaxWidth" Value="620"/>
++            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
++            <Setter Property="ContentTemplate">
++                <Setter.Value>
++                    <DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center"/></DataTemplate>
++                </Setter.Value>
++            </Setter>
++        </Style>
++    </Window.Resources>
+     <Grid ClipToBounds="True">
+         <Image x:Name="ThemeBgImage" Stretch="UniformToFill" Visibility="Collapsed"
+                IsHitTestVisible="False"/>
+@@ -22,13 +37,17 @@
+ 
+             <!-- Hidden 7-tap corner, drawn first so the dashboard chips above it still take
+                  their own taps; panels without a background never steal one. -->
+-            <Border x:Name="SecretCorner" Width="200" Height="200" Background="Transparent"
++            <Border x:Name="SecretCorner" Width="48" Height="48" Background="Transparent"
+                     HorizontalAlignment="Right" VerticalAlignment="Top"
+                     MouseLeftButtonDown="OnSecretCorner"/>
+ 
+             <!-- B · door-station visitor screen. Row and column placement is recomputed from the
+                  window size, so the same elements serve portrait and landscape. -->
+-            <Grid x:Name="VisitorHome" Margin="26,22,26,18" Visibility="Collapsed">
++            <Grid x:Name="VisitorHome" Margin="20,18,20,18" Visibility="Collapsed">
++                <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
++                <ScrollViewer x:Name="VisitorContentScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto"
++                              HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,12">
++                    <Grid>
+                 <Grid.ColumnDefinitions>
+                     <ColumnDefinition x:Name="VisitorLeftColumn" Width="*"/>
+                     <ColumnDefinition x:Name="VisitorRightColumn" Width="1.2*"/>
+@@ -37,10 +56,11 @@
+                     <RowDefinition Height="Auto"/>
+                     <RowDefinition Height="Auto"/>
+                     <RowDefinition Height="Auto"/>
+-                    <RowDefinition Height="*"/>
+                     <RowDefinition Height="Auto"/>
+                     <RowDefinition Height="Auto"/>
+                     <RowDefinition Height="Auto"/>
++                    <RowDefinition Height="Auto"/>
++                    <RowDefinition Height="Auto"/>
+                 </Grid.RowDefinitions>
+ 
+                 <StackPanel x:Name="VisitorClockBlock" Grid.Row="0" Grid.Column="0">
+@@ -59,16 +79,10 @@
+                                Foreground="{DynamicResource Fg}"/>
+                 </Border>
+ 
+-                <StackPanel x:Name="LangBar" Grid.Row="2" Grid.Column="1"
++                <WrapPanel x:Name="LangBar" Grid.Row="2" Grid.Column="1"
+                             Orientation="Horizontal" HorizontalAlignment="Center"
+                             Margin="0,10,0,10" Visibility="Collapsed"/>
+ 
+-                <StackPanel x:Name="VisitorCallBlock" Grid.Row="3" Grid.Column="1"
+-                            VerticalAlignment="Center">
+-                    <Button x:Name="CallButton" Style="{StaticResource BigButton}"
+-                            MinWidth="360" MinHeight="150" Click="OnCallClick"/>
+-                </StackPanel>
+-
+                 <TextBlock x:Name="TouchHint" Grid.Row="4" Grid.Column="1" FontSize="20"
+                            TextWrapping="Wrap" TextAlignment="Center"
+                            Foreground="{DynamicResource Dim}" Margin="0,14,0,0"/>
+@@ -78,10 +92,10 @@
+                     <TextBlock x:Name="PurposeHint" FontSize="18"
+                                Foreground="{DynamicResource Dim}"
+                                HorizontalAlignment="Center" Margin="0,0,0,8"/>
+-                    <ScrollViewer HorizontalScrollBarVisibility="Auto"
++                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                                   VerticalScrollBarVisibility="Disabled">
+                         <UniformGrid x:Name="PurposeGrid" Columns="3"
+-                                     HorizontalAlignment="Center"/>
++                                     HorizontalAlignment="Stretch"/>
+                     </ScrollViewer>
+                 </StackPanel>
+ 
+@@ -91,6 +105,15 @@
+                                Foreground="{DynamicResource Dim}" HorizontalAlignment="Left"
+                                VerticalAlignment="Center"/>
+                 </Grid>
++                <Grid x:Name="VisitorSosHost" Grid.Row="7" Grid.ColumnSpan="2" Margin="0,16,0,0"/>
++                    </Grid>
++                </ScrollViewer>
++                <StackPanel x:Name="VisitorCallBlock" Grid.Row="1">
++                    <TextBlock x:Name="VisitorStatus" Visibility="Collapsed" FontSize="22"
++                               TextWrapping="Wrap" TextAlignment="Center" Margin="0,0,0,12"
++                               Foreground="{DynamicResource Fg}" AutomationProperties.LiveSetting="Polite"/>
++                    <Button x:Name="CallButton" Style="{StaticResource VisitorPrimaryAction}" Click="OnCallClick"/>
++                </StackPanel>
+             </Grid>
+ 
+             <!-- A · indoor dashboard, after the iPad 1 layout: clock with small seconds, action
+@@ -333,23 +356,28 @@
+         </Grid>
+ 
+         <Grid x:Name="CallingView" Visibility="Collapsed" Background="{DynamicResource Bg}">
+-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+-                <TextBlock x:Name="CallingText" FontSize="56" FontWeight="Bold"
+-                           Foreground="{DynamicResource Fg}" HorizontalAlignment="Center"/>
+-                <Ellipse x:Name="Pulse" Width="140" Height="140" Margin="0,50"
+-                         Stroke="{DynamicResource Accent}" StrokeThickness="6"
+-                         HorizontalAlignment="Center"/>
+-                <StackPanel x:Name="CallingPurposeSection" Visibility="Collapsed" Margin="20,0,20,24">
+-                    <TextBlock x:Name="CallingPurposeHint" FontSize="20"
+-                               Foreground="{DynamicResource Dim}" HorizontalAlignment="Center"
+-                               Margin="0,0,0,8"/>
+-                    <UniformGrid x:Name="CallingPurposeGrid" Columns="3"
+-                                 HorizontalAlignment="Center"/>
++            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
++            <ScrollViewer Grid.Row="0" Margin="20,18,20,0" VerticalScrollBarVisibility="Auto"
++                          HorizontalScrollBarVisibility="Disabled">
++                <StackPanel VerticalAlignment="Center">
++                    <TextBlock x:Name="CallingText" FontSize="42" FontWeight="Bold" TextWrapping="Wrap"
++                               TextAlignment="Center" Foreground="{DynamicResource Fg}"/>
++                    <TextBlock x:Name="CallingDetail" FontSize="22" TextWrapping="Wrap" Margin="0,12,0,0"
++                               TextAlignment="Center" Foreground="{DynamicResource Dim}"/>
++                    <Ellipse x:Name="Pulse" Width="100" Height="100" Margin="0,24"
++                             Stroke="{DynamicResource Accent}" StrokeThickness="6" HorizontalAlignment="Center"/>
++                    <StackPanel x:Name="CallingPurposeSection" Visibility="Collapsed" Margin="0,0,0,24">
++                        <TextBlock x:Name="CallingPurposeHint" FontSize="20" TextWrapping="Wrap"
++                                   Foreground="{DynamicResource Dim}" TextAlignment="Center" Margin="0,0,0,8"/>
++                        <UniformGrid x:Name="CallingPurposeGrid" Columns="3" HorizontalAlignment="Stretch"/>
++                        <Button x:Name="CallingPurposeSkip" MinHeight="48" FontSize="22" Padding="16,10"
++                                Margin="0,12,0,0" Click="OnPurposeSkipClick"/>
++                    </StackPanel>
+                 </StackPanel>
+-                <Button x:Name="CancelButton" FontSize="28" Padding="40,16"
+-                        Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
+-                        BorderBrush="{DynamicResource Line}" Click="OnCancelClick"/>
+-            </StackPanel>
++            </ScrollViewer>
++            <Button x:Name="CancelButton" Grid.Row="1" Style="{StaticResource VisitorPrimaryAction}"
++                    Margin="20,12,20,18" Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
++                    BorderBrush="{DynamicResource Line}" Click="OnCancelClick"/>
+         </Grid>
+ 
+         <Border x:Name="ReplyBanner" Visibility="Collapsed" VerticalAlignment="Center"
+@@ -364,14 +392,21 @@
+             </StackPanel>
+         </Border>
+ 
+-        <Border x:Name="OfflineView" Visibility="Collapsed" Background="#B5A21B00">
+-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+-                <TextBlock x:Name="OfflineTitle" FontSize="52" FontWeight="Bold"
+-                           Foreground="#FFF" HorizontalAlignment="Center"/>
+-                <TextBlock x:Name="OfflineBody" FontSize="28" Foreground="#FFE9D5"
+-                           HorizontalAlignment="Center" Margin="0,16,0,0"/>
+-            </StackPanel>
+-        </Border>
++        <Grid x:Name="OfflineView" Visibility="Collapsed" Background="{DynamicResource Bg}">
++            <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
++            <ScrollViewer Grid.Row="0" Margin="20,18,20,0" VerticalScrollBarVisibility="Auto"
++                          HorizontalScrollBarVisibility="Disabled">
++                <StackPanel VerticalAlignment="Center">
++                    <TextBlock x:Name="OfflineTitle" FontSize="42" FontWeight="Bold" TextWrapping="Wrap"
++                               Foreground="{DynamicResource Fg}" TextAlignment="Center"/>
++                    <TextBlock x:Name="OfflineBody" FontSize="24" Foreground="{DynamicResource Dim}"
++                               TextAlignment="Center" TextWrapping="Wrap" Margin="0,16,0,0"/>
++                </StackPanel>
++            </ScrollViewer>
++            <Button x:Name="OfflineAction" Grid.Row="1" Style="{StaticResource VisitorPrimaryAction}"
++                    Margin="20,12,20,18" IsEnabled="False" Background="{DynamicResource Card}"
++                    Foreground="{DynamicResource Dim}"/>
++        </Grid>
+ 
+         <!-- A2 · incoming / monitor screen. -->
+         <!-- Incoming / monitor screen, after the iPad 1 layout: title with the return countdown at
+@@ -475,9 +510,11 @@
+                 <RowDefinition Height="*"/>
+                 <RowDefinition Height="Auto"/>
+             </Grid.RowDefinitions>
+-            <StackPanel Grid.Row="0" Margin="24,18,24,8" HorizontalAlignment="Left">
++            <ScrollViewer x:Name="InCallHeaderScroll" Grid.Row="0" Margin="24,18,24,8"
++                          VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
++            <StackPanel HorizontalAlignment="Stretch">
+                 <TextBlock x:Name="InCallTitle" FontSize="30" FontWeight="Bold"
+-                           Foreground="{DynamicResource Fg}"/>
++                           Foreground="{DynamicResource Fg}" TextWrapping="Wrap"/>
+                 <Grid x:Name="InCallPurposeSlot" Height="34" Margin="0,6,0,0">
+                     <Border x:Name="InCallPurposeBadge" Visibility="Collapsed"
+                             Background="{DynamicResource Pill}" CornerRadius="8" Padding="12,6"
+@@ -487,6 +524,7 @@
+                     </Border>
+                 </Grid>
+             </StackPanel>
++            </ScrollViewer>
+             <Grid Grid.Row="1" Margin="24,4,24,0">
+                 <Border CornerRadius="16" Background="#000000" ClipToBounds="True"
+                         HorizontalAlignment="Center" VerticalAlignment="Center">
+@@ -499,18 +537,18 @@
+                     </Grid>
+                 </Border>
+             </Grid>
+-            <WrapPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"
+-                       Margin="20,12,20,18">
+-                <Button x:Name="EndCallButton" Style="{StaticResource ActionButton}"
+-                        Background="{DynamicResource Danger}"
+-                        Foreground="{DynamicResource OnDanger}"
+-                        BorderBrush="{DynamicResource Danger}" Click="OnEndCallClick"/>
++            <StackPanel Grid.Row="2" Margin="20,12,20,18">
++                <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
+                 <Button x:Name="InCallMicButton" Style="{StaticResource ActionButton}"
+                         Visibility="Collapsed" Click="OnMicClick"/>
+                 <Button x:Name="InCallOpenDoorButton" Style="{StaticResource ActionButton}"
+                         Background="#B7791F" Foreground="#FFFFFF" BorderBrush="#B7791F"
+                         Click="OnOpenDoorClick"/>
+-            </WrapPanel>
++                </WrapPanel>
++                <Button x:Name="EndCallButton" Style="{StaticResource VisitorPrimaryAction}"
++                        Background="{DynamicResource Danger}" Foreground="{DynamicResource OnDanger}"
++                        BorderBrush="{DynamicResource Danger}" Click="OnEndCallClick"/>
++            </StackPanel>
+         </Grid>
+ 
+         <!-- Shared overlay for both call screens: the announcement chip, this node's admin QR and
+--- a/win/DoorbellApp/MainWindow.xaml.cs
++++ b/win/DoorbellApp/MainWindow.xaml.cs
+@@ -28,7 +28,8 @@
+         private readonly DispatcherTimer _replyTimeout = new DispatcherTimer();
+         private readonly DispatcherTimer _pixelShift = new DispatcherTimer();
+         private readonly DispatcherTimer _saverDrift = new DispatcherTimer();
+-        private readonly DispatcherTimer _sosCountdown = new DispatcherTimer();
++        private DispatcherTimer _sosCountdown;
++        private long _sosCountdownRevision;
+         private readonly DispatcherTimer _tileRefresh = new DispatcherTimer();
+         private readonly DispatcherTimer _statsRefresh = new DispatcherTimer();
+         private readonly DispatcherTimer _emergencyPresentationTimeout = new DispatcherTimer();
+@@ -252,9 +253,12 @@
+             };
+             _saverDrift.Interval = TimeSpan.FromSeconds(30);
+             _saverDrift.Tick += (s, e) => MoveSaverClock();
+-            _sosCountdown.Interval = TimeSpan.FromSeconds(1);
+-            _sosCountdown.Tick += (s, e) => OnSosCountdownTick();
+             SosSlide.Armed += OnSosArmed;
++            SosSlide.ReviewRequested += OnSosReviewRequested;
++            SosSlide.Unloaded += (s, e) => StopSosCountdown();
++            SosSlide.IsVisibleChanged += (s, e) => { if (!SosSlide.IsVisible) StopSosCountdown(); };
++            BindVisitorAction(CancelButton, Ui.VisitorActionKind.Cancel);
++            BindVisitorAction(EndCallButton, Ui.VisitorActionKind.End);
+             _tileRefresh.Interval = TimeSpan.FromSeconds(5);
+             _tileRefresh.Tick += (s, e) => RefreshDoorTileStills();
+             _statsRefresh.Interval = TimeSpan.FromSeconds(1);
+@@ -363,6 +367,7 @@
+             };
+             Closed += (s, e) => {
+                 Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
++                StopSosCountdown();
+                 _callTimeout.Stop();
+                 System.Threading.Interlocked.Increment(ref _callViewRevision);
+             };
+@@ -415,6 +420,8 @@
+             PurposeHint.Text = Texts.T("idle.choose_purpose");
+             CallingText.Text = Texts.T("calling.title");
+             CancelButton.Content = Texts.T("calling.cancel");
++            CallingPurposeSkip.Content = Texts.T("purpose.skip");
++            OfflineAction.Content = Texts.T(string.IsNullOrEmpty(_activeCallId) ? "idle.call" : "calling.cancel");
+             ReplyCaption.Text = Texts.T("reply.banner");
+             OfflineTitle.Text = Texts.T("offline.title");
+             OfflineBody.Text = Texts.T("offline.body");
+@@ -432,7 +439,7 @@
+             IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Danger"));
+             IncomingNoVideo.Text = Texts.T("ring.no_video");
+             InCallTitle.Text = Texts.T("incall.title");
+-            EndCallButton.Content = IconStack("IconPhoneOff", Texts.T("incall.end_call"), Brushes.White);
++            EndCallButton.Content = Texts.T("incall.end_call");
+             QuickReplyToggle.Content = IconStack("IconMessageReply", Texts.T("ring.quick_replies"));
+             NoticeChipText.Text = Texts.T("notice.chip");
+             NoticeEditButton.Content = Texts.T("notice.edit");
+@@ -1013,8 +1020,9 @@
+             var b = new Button
+             {
+                 Content = panel,
+-                MinWidth = 190,
+-                MinHeight = 110,
++                MinWidth = 0,
++                MinHeight = 96,
++                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                 Margin = new Thickness(8),
+                 Padding = new Thickness(12, 10, 12, 10),
+                 Background = (Brush)FindResource("Card"),
+@@ -1031,6 +1039,7 @@
+ 
+         private void OnPurposeClick(object sender, RoutedEventArgs e)
+         {
++            if (_inCall) return;
+             if (!string.IsNullOrEmpty(_activeCallId) && !ShowsCallingPurposes()) return;
+             if (string.IsNullOrEmpty(_activeCallId) && !ShowsHomePurposes()) return;
+             var b = sender as Button;
+@@ -1045,7 +1054,7 @@
+             {
+                 if (!App.Core.SelectPurpose(App.Boot.Door, _activeCallId, id))
+                 {
+-                    CallingText.Text = Texts.T("purpose.select_failed");
++                    CallingDetail.Text = Texts.T("purpose.select_failed");
+                     return;
+                 }
+                 CallingPurposeSection.Visibility = Visibility.Collapsed;
+@@ -1426,6 +1435,8 @@
+ 
+         private void RefreshSosConfig(Dictionary<string, object> cfg)
+         {
++            bool previousVisibility = SosButton.Visibility == Visibility.Visible;
++            int previousCountdown = _sosCountdownS;
+             bool show = App.Boot.Role == "indoor_panel";
+             var roles = CoreClient.Dig(cfg, "emergency.button_on_roles") as System.Collections.IEnumerable;
+             if (roles != null && !(roles is string))
+@@ -1436,8 +1447,8 @@
+             }
+             SosButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+ 
+-            // Slide mode is the only trigger; "hold" stays accepted so an older configuration
+-            // keeps validating, and the cancellable countdown is what it configures.
++            // Sliding and confirmed accessible activation use the same cancellable countdown.
++            // Legacy "hold" remains an accepted configuration spelling.
+             var countdown = CoreClient.Dig(cfg, "emergency.trigger.countdown_s");
+             _sosCountdownS = 3;
+             if (countdown != null)
+@@ -1446,6 +1457,7 @@
+                 if (int.TryParse(countdown.ToString(), out seconds) &&
+                     seconds >= 0 && seconds <= 10) _sosCountdownS = seconds;
+             }
++            if (previousVisibility != show || previousCountdown != _sosCountdownS) _sosReview.Revoke();
+             ApplySosLabel();
+ 
+             // status.emergency.cancel_requires_password is cancel_requires_pin AND a password
+@@ -1465,6 +1477,8 @@
+         // break is authored in the catalog rather than produced by wrapping.
+         private void ApplySosLabel()
+         {
++            System.Windows.Automation.AutomationProperties.SetName(SosSlide, Texts.T("sos.accessibility_start"));
++            System.Windows.Automation.AutomationProperties.SetHelpText(SosSlide, Texts.T("sos.accessibility_hint"));
+             string label = Texts.T("sos.slide_label", _sosCountdownS);
+             int split = label.IndexOf('\n');
+             SosText.Text = split >= 0 ? label.Substring(0, split) : label;
+@@ -1473,10 +1487,12 @@
+                 Visibility.Collapsed : Visibility.Visible;
+         }
+ 
+-        /// <summary>The thumb was released past 90 %: start the cancellable countdown.</summary>
++        /// <summary>A complete slide or reviewed activation starts the same cancellable countdown.</summary>
+         private void OnSosArmed()
+         {
+-            if (_emergencyActive) return;
++            if (_emergencyActive || _sosCountdownLeft > 0 || !SosSlide.IsLoaded ||
++                !SosSlide.IsVisible || !SosSlide.IsEnabled) return;
++            _sosReview.Revoke();
+             if (_sosCountdownS <= 0)
+             {
+                 CommitEmergency();
+@@ -1485,12 +1501,20 @@
+             _sosCountdownLeft = _sosCountdownS;
+             SosCountdownText.Text = Texts.T("sos.countdown", _sosCountdownLeft);
+             SosCountdownView.Visibility = Visibility.Visible;
+-            _sosCountdown.Stop();
+-            _sosCountdown.Start();
++            long revision = ++_sosCountdownRevision, generation = App.Core.Generation;
++            var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
++            _sosCountdown = timer;
++            timer.Tick += (s, e) => {
++                if (_sosCountdown != timer || revision != _sosCountdownRevision) return;
++                if (generation != App.Core.Generation) { StopSosCountdown(); return; }
++                OnSosCountdownTick();
++            };
++            timer.Start();
+         }
+ 
+         private void OnSosCountdownTick()
+         {
++            if (_sosCountdownLeft <= 0 || SosCountdownView.Visibility != Visibility.Visible) return;
+             _sosCountdownLeft--;
+             if (_sosCountdownLeft > 0)
+             {
+@@ -1512,7 +1536,10 @@
+ 
+         private void StopSosCountdown()
+         {
+-            _sosCountdown.Stop();
++            _sosReview.Revoke();
++            ++_sosCountdownRevision;
++            _sosCountdown?.Stop();
++            _sosCountdown = null;
+             _sosCountdownLeft = 0;
+             SosCountdownView.Visibility = Visibility.Collapsed;
+             SosSlide.Reset();
+@@ -1842,12 +1869,21 @@
+             IdleView.Visibility = Visibility.Visible;
+             _callTimeout.Stop();
+             System.Threading.Interlocked.Increment(ref _callViewRevision);
+-            if (hint != null) TouchHint.Text = hint;
++            VisitorStatus.Text = hint ?? "";
++            VisitorStatus.Visibility = string.IsNullOrEmpty(hint) ? Visibility.Collapsed : Visibility.Visible;
++            TouchHint.Text = Texts.T("idle.touch_to_call");
++            VisitorContentScroll.ScrollToTop();
++            UpdateVisitorActionHeights(ActualWidth);
+         }
+ 
+         private void ShowOffline()
+         {
++            StopSosCountdown();
+             ExitScreensaver();
++            OfflineTitle.Text = Texts.T(string.IsNullOrEmpty(_activeCallId) ? "offline.title" : "visitor.restoring");
++            OfflineAction.Visibility = App.Boot.Role == "door_station" ? Visibility.Visible : Visibility.Collapsed;
++            OfflineAction.Content = Texts.T(string.IsNullOrEmpty(_activeCallId) ? "idle.call" : "calling.cancel");
++            UpdateVisitorActionHeights(ActualWidth);
+             IdleView.Visibility = Visibility.Collapsed;
+             CallingView.Visibility = Visibility.Collapsed;
+             OfflineView.Visibility = Visibility.Visible;
+@@ -1855,6 +1891,7 @@
+ 
+         private void SuspendCallTiming()
+         {
++            StopSosCountdown();
+             _suspendedCallSample = App.Core.CallTimingSnapshot();
+             _callTiming.RequireFresh(_suspendedCallSample);
+             _callTimeout.Stop();
+@@ -1905,14 +1942,18 @@
+             }
+             else if (!_inCall && CallingView.Visibility == Visibility.Visible)
+                 CallingText.Text = reading == null || !reading.RemainingMs.HasValue || reading.RemainingMs.Value <= 0
+-                    ? Texts.T("panel.deadline_reached") : _callTitleOverride ?? Texts.T("calling.title");
++                    ? Texts.T("visitor.restoring") : Texts.T("calling.title");
+         }
+ 
+         private void ShowCalling(string title = null)
+         {
++            StopSosCountdown();
+             ExitScreensaver();
+             if (title != null) _callTitleOverride = title;
+-            CallingText.Text = _callTitleOverride ?? Texts.T("calling.title");
++            CallingText.Text = Texts.T("calling.title");
++            CallingDetail.Text = _callTitleOverride ?? "";
++            OfflineView.Visibility = Visibility.Collapsed;
++            UpdateVisitorActionHeights(ActualWidth);
+             IdleView.Visibility = Visibility.Collapsed;
+             CallingView.Visibility = Visibility.Visible;
+             CallingPurposeSection.Visibility = ShowsCallingPurposes() ? Visibility.Visible : Visibility.Collapsed;
+@@ -2993,6 +3034,7 @@
+ 
+         private void OnEndCallClick(object sender, RoutedEventArgs e)
+         {
++            if (!AllowVisitorAction(Ui.VisitorActionKind.End)) return;
+             App.Core.SipHangup();
+             ReportLifecycleEndedIfNeeded();
+             OnSipIdle();
+@@ -3000,6 +3042,7 @@
+ 
+         private void OnSipInCall(UiEvent ev)
+         {
++            System.Threading.Interlocked.Increment(ref _callViewRevision);
+             RetirePeerFrame();
+             _inCall = true;
+             BuildQuickReplies();
+@@ -3125,6 +3168,9 @@
+ 
+         private void ShowInCall(string streamUrl)
+         {
++            StopSosCountdown();
++            OfflineView.Visibility = Visibility.Collapsed;
++            UpdateVisitorActionHeights(ActualWidth);
+             ExitScreensaver();
+             IdleView.Visibility = Visibility.Collapsed;
+             CallingView.Visibility = Visibility.Collapsed;
+@@ -3364,6 +3410,7 @@
+ 
+         private void OnCancelClick(object sender, RoutedEventArgs e)
+         {
++            if (!AllowVisitorAction(Ui.VisitorActionKind.Cancel)) return;
+             if (CancelActiveCall("visitor"))
+             {
+                 _callTimeout.Stop();
+@@ -3371,12 +3418,13 @@
+             }
+             else
+             {
+-                CallingText.Text = Texts.T("calling.cancel_failed");
++                CallingDetail.Text = Texts.T("calling.cancel_failed");
+             }
+         }
+ 
+         private bool CancelActiveCall(string reason)
+         {
++            if (_inCall) return false;
+             string callId = _activeCallId;
+             if (string.IsNullOrEmpty(callId)) return false;
+             bool ok = App.Core.CancelCall(App.Boot.Door, callId, reason);
+--- a/win/DoorbellApp/MainWindow.Shell.cs
++++ b/win/DoorbellApp/MainWindow.Shell.cs
+@@ -69,7 +69,6 @@
+                 PlaceVisitor(VisitorClockBlock, 0, 0, 2, 1);
+                 PlaceVisitor(VisitorNoticeCard, 1, 0, 2, 1);
+                 PlaceVisitor(LangBar, 2, 0, 2, 1);
+-                PlaceVisitor(VisitorCallBlock, 3, 0, 2, 1);
+                 PlaceVisitor(TouchHint, 4, 0, 2, 1);
+                 VisitorClockBlock.HorizontalAlignment = HorizontalAlignment.Center;
+             }
+@@ -80,16 +79,17 @@
+                 // The notice fills the left column beside the language row and the call button.
+                 PlaceVisitor(VisitorNoticeCard, 1, 0, 1, 3);
+                 PlaceVisitor(LangBar, 2, 1, 1, 1);
+-                PlaceVisitor(VisitorCallBlock, 3, 1, 1, 1);
+                 PlaceVisitor(TouchHint, 4, 1, 1, 1);
+                 VisitorClockBlock.HorizontalAlignment = HorizontalAlignment.Left;
+             }
+ 
+             ClockText.FontSize = large ? 84 : (tablet ? 68 : 52);
+             DateText.FontSize = large ? 26 : (tablet ? 22 : 17);
+-            CallButton.MinHeight = large ? 170 : (tablet ? 120 : 96);
+-            CallButton.MinWidth = tablet ? 360 : 240;
+-            CallButton.FontSize = large ? 44 : (tablet ? 34 : 26);
++            CallButton.MinWidth = 0;
++            PurposeGrid.Columns = Math.Max(1, (int)((width - 40) / 240));
++            CallingPurposeGrid.Columns = PurposeGrid.Columns;
++            InCallHeaderScroll.MaxHeight = Math.Max(56, height / 3);
++            UpdateVisitorActionHeights(width);
+             TouchHint.FontSize = tablet ? 21 : 16;
+             VisitorNoticeText.FontSize = tablet ? 22 : 17;
+ 
+@@ -239,6 +239,26 @@
+         /// </summary>
+         private void LayOutSosAndFooters(double width, bool portrait)
+         {
++            if (App.Boot.Role == "door_station")
++            {
++                if (SosButton.Parent != VisitorSosHost)
++                {
++                    (SosButton.Parent as Panel)?.Children.Remove(SosButton);
++                    VisitorSosHost.Children.Add(SosButton);
++                }
++                SosButton.HorizontalAlignment = HorizontalAlignment.Stretch;
++                SosButton.Width = double.NaN;
++                SosButton.MaxWidth = 620;
++                SosButton.Margin = new Thickness(0);
++                VisitorFooter.Margin = new Thickness(0, 12, 0, 0);
++                return;
++            }
++            if (SosButton.Parent != IdleView)
++            {
++                (SosButton.Parent as Panel)?.Children.Remove(SosButton);
++                IdleView.Children.Add(SosButton);
++            }
++            SosButton.MaxWidth = double.PositiveInfinity;
+             bool sosVisible = SosButton.Visibility == Visibility.Visible;
+             bool sosBelow = sosVisible &&
+                 (portrait || width < SosReservedWidth + FooterMinimumWidth);
+--- a/win/DoorbellApp/MainWindow.VisitorActions.cs
++++ b/win/DoorbellApp/MainWindow.VisitorActions.cs
+@@ -0,0 +1,96 @@
++using System;
++using System.Windows;
++using System.Windows.Controls;
++using System.Windows.Input;
++using System.Windows.Threading;
++using DoorbellApp.Ui;
++using DoorbellApp.Util;
++
++namespace DoorbellApp
++{
++    public partial class MainWindow
++    {
++        private readonly VisitorActionGuard _visitorAction = new VisitorActionGuard();
++        private readonly SosReviewGuard _sosReview = new SosReviewGuard();
++        private bool _sosReviewOpen;
++
++        private void BindVisitorAction(Button button, VisitorActionKind kind)
++        {
++            long inputRevision = 0;
++            Action capture = () => inputRevision = _visitorAction.Begin(_activeCallId, App.Core.Generation,
++                                                                       _callViewRevision, kind);
++            Action complete = () => {
++                long completed = inputRevision;
++                // WPF can release capture before raising Click in the same routed input event.
++                // Retire after that event returns, before a later queued accessibility activation.
++                Dispatcher.BeginInvoke(DispatcherPriority.Send,
++                    new Action(() => _visitorAction.CompleteInput(completed)));
++            };
++            button.PreviewMouseLeftButtonDown += (s, e) => capture();
++            button.PreviewTouchDown += (s, e) => capture();
++            button.PreviewMouseLeftButtonUp += (s, e) => complete();
++            button.PreviewTouchUp += (s, e) => complete();
++            button.LostMouseCapture += (s, e) => complete();
++            button.LostTouchCapture += (s, e) => complete();
++            button.LostKeyboardFocus += (s, e) => complete();
++            button.PreviewKeyDown += (s, e) => {
++                if (!e.IsRepeat && (e.Key == Key.Space || e.Key == Key.Enter)) capture();
++            };
++            button.PreviewKeyUp += (s, e) => {
++                if (e.Key == Key.Space || e.Key == Key.Enter) complete();
++            };
++        }
++
++        private bool AllowVisitorAction(VisitorActionKind kind)
++        {
++            bool available = IsVisible && EmergencyView.Visibility != Visibility.Visible &&
++                PairingOverlay.Visibility != Visibility.Visible && SosCountdownView.Visibility != Visibility.Visible;
++            bool visible = available && (kind == VisitorActionKind.Cancel
++                ? !_inCall && CallingView.Visibility == Visibility.Visible && CancelButton.IsVisible && CancelButton.IsEnabled
++                : _inCall && InCallView.Visibility == Visibility.Visible && EndCallButton.IsVisible && EndCallButton.IsEnabled);
++            return _visitorAction.Consume(_activeCallId, App.Core.Generation,
++                                           _callViewRevision, kind, visible);
++        }
++
++        private void OnPurposeSkipClick(object sender, RoutedEventArgs e)
++        {
++            if (_inCall || CallingView.Visibility != Visibility.Visible || !ShowsCallingPurposes()) return;
++            _purposeChosenCallId = _activeCallId;
++            CallingPurposeSection.Visibility = Visibility.Collapsed;
++        }
++
++        private void OnSosReviewRequested()
++        {
++            if (_sosReviewOpen || !SosSlide.IsLoaded || !SosSlide.IsVisible ||
++                !SosSlide.IsEnabled || _emergencyActive || _sosCountdownLeft > 0) return;
++            long revision = _sosReview.Begin(), generation = App.Core.Generation;
++            _sosReviewOpen = true;
++            MessageBoxResult result;
++            try {
++                result = MessageBox.Show(this, Texts.T("sos.accessibility_confirm"),
++                    Texts.T("sos.accessibility_start"), MessageBoxButton.OKCancel,
++                    MessageBoxImage.Warning, MessageBoxResult.Cancel);
++            }
++            finally { _sosReviewOpen = false; }
++            if (_sosReview.Consume(revision, generation, App.Core.Generation,
++                    result == MessageBoxResult.OK && SosSlide.IsLoaded && SosSlide.IsVisible &&
++                    SosSlide.IsEnabled && !_emergencyActive && _sosCountdownLeft == 0)) OnSosArmed();
++        }
++
++        private void UpdateVisitorActionHeights(double width)
++        {
++            if (width <= 40) width = ActualWidth > 40 ? ActualWidth : SystemParameters.PrimaryScreenWidth;
++            double available = Math.Max(1, Math.Min(620, width - 40) - 40);
++            double height = 96;
++            foreach (var button in new[] { CallButton, CancelButton, EndCallButton, OfflineAction })
++            {
++                var text = new TextBlock { Text = button.Content as string ?? "", FontSize = button.FontSize,
++                    FontFamily = button.FontFamily, FontWeight = button.FontWeight, TextWrapping = TextWrapping.Wrap };
++                text.Measure(new Size(available, double.PositiveInfinity));
++                height = Math.Max(height, Math.Ceiling(text.DesiredSize.Height + 32));
++            }
++            foreach (var button in new[] { CallButton, CancelButton, EndCallButton, OfflineAction })
++                button.MinHeight = height;
++        }
++    }
++}
+--- a/win/DoorbellApp/Ui/SosSlider.cs
++++ b/win/DoorbellApp/Ui/SosSlider.cs
+@@ -1,5 +1,9 @@
+ using System;
++using System.Windows;
++using System.Windows.Automation.Peers;
++using System.Windows.Automation.Provider;
+ using System.Windows.Controls;
++using System.Windows.Input;
+ using System.Windows.Controls.Primitives;
+ 
+ namespace DoorbellApp.Ui
+@@ -15,6 +19,8 @@
+ 
+         /// <summary>Raised on the dispatcher thread when the thumb was released past 90 %.</summary>
+         public event Action Armed;
++        public event Action ReviewRequested;
++        private long _reviewRevision;
+ 
+         public SosSlider()
+         {
+@@ -23,7 +29,10 @@
+             Value = 0;
+             IsSnapToTickEnabled = false;
+             IsMoveToPointEnabled = false;
+-            Focusable = false;
++            Focusable = true;
++            Unloaded += (s, e) => Reset();
++            IsVisibleChanged += (s, e) => { if (!IsVisible) Reset(); };
++            IsEnabledChanged += (s, e) => { if (!IsEnabled) Reset(); };
+             AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler(OnThumbDragStarted));
+             AddHandler(Thumb.DragCompletedEvent,
+                        new DragCompletedEventHandler(OnThumbDragCompleted));
+@@ -40,7 +49,7 @@
+         private void OnThumbDragCompleted(object sender, DragCompletedEventArgs e)
+         {
+             IsSliding = false;
+-            bool armed = Value >= ArmThreshold;
++            bool armed = !e.Canceled && IsEnabled && IsVisible && IsLoaded && Value >= ArmThreshold;
+             Value = 0;
+             if (!armed) return;
+             var handler = Armed;
+@@ -50,8 +59,42 @@
+         /// <summary>Returns the thumb to the start, for example when a countdown is cancelled.</summary>
+         public void Reset()
+         {
++            System.Threading.Interlocked.Increment(ref _reviewRevision);
+             IsSliding = false;
+             Value = 0;
+         }
++        protected override void OnKeyDown(KeyEventArgs e)
++        {
++            if (e.Key == Key.Enter || e.Key == Key.Space)
++            {
++                e.Handled = true;
++                if (!e.IsRepeat) RequestReview(System.Threading.Interlocked.Read(ref _reviewRevision));
++                return;
++            }
++            base.OnKeyDown(e);
++        }
++
++        private void RequestReview(long revision)
++        {
++            if (revision != _reviewRevision || !IsLoaded || !IsVisible || !IsEnabled) return;
++            var handler = ReviewRequested;
++            if (handler != null) handler();
++        }
++
++        protected override AutomationPeer OnCreateAutomationPeer() => new SosAutomationPeer(this);
++
++        private sealed class SosAutomationPeer : SliderAutomationPeer, IInvokeProvider
++        {
++            private readonly SosSlider _slider;
++            internal SosAutomationPeer(SosSlider slider) : base(slider) { _slider = slider; }
++            public override object GetPattern(PatternInterface patternInterface) =>
++                patternInterface == PatternInterface.Invoke ? this : base.GetPattern(patternInterface);
++            protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
++            public void Invoke()
++            {
++                long revision = System.Threading.Interlocked.Read(ref _slider._reviewRevision);
++                _slider.Dispatcher.BeginInvoke(new Action(() => _slider.RequestReview(revision)));
++            }
++        }
+     }
+ }
+--- a/win/DoorbellApp/Ui/VisitorActionGuard.cs
++++ b/win/DoorbellApp/Ui/VisitorActionGuard.cs
+@@ -0,0 +1,54 @@
++namespace DoorbellApp.Ui
++{
++    internal enum VisitorActionKind { Cancel, End }
++
++    /// <summary>A held input belongs to the displayed call and phase, even if the UI changes.</summary>
++    internal sealed class VisitorActionGuard
++    {
++        private bool _pressed;
++        private string _call;
++        private long _generation;
++        private long _revision;
++        private VisitorActionKind _kind;
++        private long _inputRevision;
++
++        internal long Begin(string call, long generation, long revision, VisitorActionKind kind)
++        {
++            _pressed = true;
++            _call = call ?? "";
++            _generation = generation;
++            _revision = revision;
++            _kind = kind;
++            return ++_inputRevision;
++        }
++
++        internal void CompleteInput(long inputRevision)
++        {
++            if (inputRevision == _inputRevision) _pressed = false;
++        }
++
++        internal bool Consume(string call, long generation, long revision,
++                              VisitorActionKind kind, bool phaseVisible)
++        {
++            bool current = !_pressed || (_call == (call ?? "") && _generation == generation &&
++                                        _revision == revision && _kind == kind);
++            _pressed = false;
++            return phaseVisible && current;
++        }
++    }
++
++    /// <summary>Nested modal dispatch must not confirm a replaced or cancelled SOS review.</summary>
++    internal sealed class SosReviewGuard
++    {
++        private long _revision;
++        internal long Begin() { return ++_revision; }
++        internal void Revoke() { ++_revision; }
++        internal bool Consume(long revision, long expectedGeneration, long currentGeneration,
++                              bool available)
++        {
++            if (revision != _revision) return false;
++            ++_revision;
++            return available && expectedGeneration == currentGeneration;
++        }
++    }
++}
+--- a/win/tests/VisitorActionGuardTests.cs
++++ b/win/tests/VisitorActionGuardTests.cs
+@@ -0,0 +1,66 @@
++using System;
++using DoorbellApp.Ui;
++
++internal static class VisitorActionGuardTests
++{
++    private static int _assertions;
++    private static void Check(bool value, string message)
++    {
++        ++_assertions;
++        if (!value) throw new Exception(message);
++    }
++
++    public static int Main()
++    {
++        var actions = new VisitorActionGuard();
++        actions.Begin("call-a", 1, 1, VisitorActionKind.Cancel);
++        Check(!actions.Consume("call-a", 1, 2, VisitorActionKind.End, true), "Held cancel became end");
++        actions.Begin("call-a", 1, 2, VisitorActionKind.End);
++        Check(!actions.Consume("call-b", 1, 3, VisitorActionKind.End, true), "Old end reached replacement call");
++        actions.Begin("call-a", 1, 2, VisitorActionKind.End);
++        Check(!actions.Consume("call-a", 2, 2, VisitorActionKind.End, true), "Old end reached replacement Core");
++        actions.Begin("call-a", 1, 2, VisitorActionKind.Cancel);
++        Check(!actions.Consume("call-a", 1, 2, VisitorActionKind.Cancel, false), "Hidden cancel remained available");
++        actions.Begin("call-b", 2, 3, VisitorActionKind.End);
++        Check(actions.Consume("call-b", 2, 3, VisitorActionKind.End, true), "Fresh end was blocked");
++        Check(actions.Consume("call-b", 2, 3, VisitorActionKind.End, true), "Current accessibility activation was blocked");
++        Check(!actions.Consume("call-b", 2, 3, VisitorActionKind.End, false), "Hidden accessibility action ran");
++        actions.Begin("call-a", 1, 1, VisitorActionKind.Cancel);
++        actions.Begin("call-b", 2, 2, VisitorActionKind.Cancel);
++        Check(actions.Consume("call-b", 2, 2, VisitorActionKind.Cancel, true), "A fresh press did not replace old input");
++
++        long abandoned = actions.Begin("call-a", 1, 1, VisitorActionKind.Cancel);
++        actions.CompleteInput(abandoned);
++        Check(actions.Consume("call-b", 2, 3, VisitorActionKind.End, true),
++              "Cancelled pointer input blocked current accessibility activation");
++        abandoned = actions.Begin("call-a", 1, 1, VisitorActionKind.Cancel);
++        long replacement = actions.Begin("call-b", 2, 3, VisitorActionKind.End);
++        actions.CompleteInput(abandoned);
++        Check(!actions.Consume("call-c", 2, 4, VisitorActionKind.End, true),
++              "Old release cleanup erased a replacement input identity");
++        replacement = actions.Begin("call-b", 2, 3, VisitorActionKind.End);
++        Check(!actions.Consume("call-b", 2, 4, VisitorActionKind.End, true),
++              "Synchronous Click after capture loss ignored its original phase");
++        actions.CompleteInput(replacement);
++        Check(actions.Consume("call-b", 2, 4, VisitorActionKind.End, true),
++              "Finished routed input blocked the next accessibility activation");
++
++        var reviews = new SosReviewGuard();
++        long old = reviews.Begin();
++        reviews.Revoke();
++        Check(!reviews.Consume(old, 1, 1, true), "Cancelled zero-second review triggered");
++        old = reviews.Begin();
++        long current = reviews.Begin();
++        Check(!reviews.Consume(old, 1, 1, true), "Old review confirmed a replacement");
++        Check(reviews.Consume(current, 1, 1, true), "Old callback revoked the current review");
++        Check(!reviews.Consume(current, 1, 1, true), "Review was reusable");
++        current = reviews.Begin();
++        Check(!reviews.Consume(current, 1, 2, true), "Review reached replacement Core");
++        current = reviews.Begin();
++        Check(!reviews.Consume(current, 1, 1, false), "Detached, disabled or declined review triggered");
++        current = reviews.Begin();
++        Check(reviews.Consume(current, 2, 2, true), "Current confirmed review was blocked");
++        Console.WriteLine("PASS: " + _assertions + " production visitor/SOS guard assertions; no WPF runtime or physical actions");
++        return 0;
++    }
++}
+--- a/win/tests/test_windows_contracts.py
++++ b/win/tests/test_windows_contracts.py
+@@ -904,7 +904,7 @@
+         window = read("win/DoorbellApp/MainWindow.xaml.cs")
+         self.assertIn("public class SosSlider : Slider", slider)
+         self.assertIn("public const double ArmThreshold = 90.0;", slider)
+-        self.assertIn("bool armed = Value >= ArmThreshold;", slider)
++        self.assertIn("bool armed = !e.Canceled && IsEnabled && IsVisible && IsLoaded && Value >= ArmThreshold;", slider)
+         # Core learns about the emergency only when the countdown reaches zero.
+         armed = window[window.index("private void OnSosArmed"):
+                        window.index("private void OnSosCountdownTick")]
+@@ -1888,8 +1888,8 @@
+         self.assertIn("PlaceVisitor(LangBar, 2, 1, 1, 1);", layout)
+         self.assertIn("PlaceDashboard(RecentCallsPanel, 1, 0, 2);", layout)
+         self.assertIn("PlaceDashboard(RecentCallsPanel, 0, 1, 1);", layout)
+-        # Tablets scale the call button and the hint.
+-        self.assertIn("CallButton.MinHeight = large ? 170 : (tablet ? 120 : 96);", layout)
++        # Primary actions share a text-measured dock; secondary content stays responsive.
++        self.assertIn("UpdateVisitorActionHeights(width);", layout)
+ 
+     def test_effective_volumes_reach_the_players(self):
+         window = read("win/DoorbellApp/MainWindow.xaml.cs")

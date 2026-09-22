@@ -1,0 +1,17 @@
+{
+  "started_at": "2026-09-22T18:09:55.587155+00:00",
+  "finished_at": "2026-09-22T18:09:58.024248+00:00",
+  "command": [
+    "python3",
+    "tools/check_english_source.py"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "exit_code": 0,
+  "source_manifest_sha256": "3d8b165108885f55e030f8f9625de7007b9274a9f09c7ae425417fc27e9165df",
+  "platform": "macOS arm64 / Mono",
+  "sip_backend": "not linked",
+  "signing": "test-only unsigned",
+  "scope": "Repository English source check.",
+  "observed_result": "PASS",
+  "log_sha256": "e31b139fc62aa187694c8103481b6e9e3fd40190149c2243857640caccdac6a4"
+}

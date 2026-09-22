@@ -5,6 +5,7 @@
 package jp.ox.doorbell
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -17,6 +18,7 @@ import android.os.Looper
 import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
+import android.view.accessibility.AccessibilityNodeInfo
 
 @SuppressLint("ViewConstructor")
 internal class SosSlideView(
@@ -49,7 +51,12 @@ internal class SosSlideView(
     private var palette: Palette = Palette.DARK
     private var label = TwoPartLabel("", "")
     private var countdownFormatter: (Int) -> String = { it.toString() }
-    private var cancelText = ""
+    private var cancelText = context.getString(R.string.sos_countdown_cancel)
+    private var accessibleStart = context.getString(R.string.sos_accessibility_start)
+    private var accessibleHint = context.getString(R.string.sos_accessibility_hint)
+    private var accessibleConfirm = context.getString(R.string.sos_accessibility_confirm)
+    private var confirmation: AlertDialog? = null
+    private var confirmationRevision = 0L
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
@@ -77,13 +84,21 @@ internal class SosSlideView(
         secondary: String,
         cancelLabel: String,
         countdownSeconds: Int,
+        startLabel: String = context.getString(R.string.sos_accessibility_start),
+        hintLabel: String = context.getString(R.string.sos_accessibility_hint),
+        confirmLabel: String = context.getString(R.string.sos_accessibility_confirm),
         countdownText: (Int) -> String,
     ) {
+        dismissConfirmation()
         label = TwoPartLabels.of(primary, secondary)
         cancelText = cancelLabel
+        accessibleStart = startLabel
+        accessibleHint = hintLabel
+        accessibleConfirm = confirmLabel
         countdownFormatter = countdownText
         state.configure(countdownSeconds)
-        contentDescription = TwoPartLabels.flatten(label)
+        updateDescription(state.snapshot())
+        requestLayout()
         invalidate()
     }
 
@@ -94,31 +109,39 @@ internal class SosSlideView(
 
     /** Cancel an armed countdown, for example when the owning screen goes away. */
     fun cancelCountdown() {
+        dismissConfirmation()
         handler.removeCallbacks(tick)
         publish(state.cancel())
+    }
+
+    private fun dismissConfirmation() {
+        confirmationRevision += 1
+        val dialog = confirmation
+        confirmation = null
+        dialog?.dismiss()
     }
 
     fun isArmed(): Boolean = state.armed
 
     override fun onDetachedFromWindow() {
-        handler.removeCallbacks(tick)
+        cancelCountdown()
         super.onDetachedFromWindow()
     }
 
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
         val width = resolveSize(dp(240), widthMeasureSpec)
-        val height = resolveSize(dp(56), heightMeasureSpec)
+        val height = resolveSize(maxOf(dp(56), (40 * resources.displayMetrics.scaledDensity).toInt()), heightMeasureSpec)
         setMeasuredDimension(width, height)
     }
 
     @SuppressLint("ClickableViewAccessibility")
     override fun onTouchEvent(event: MotionEvent): Boolean {
-        if (!isEnabled) return false
+        if (!isEnabled || !enabledProvider()) return false
         // A tap anywhere during the countdown cancels it, which is the documented escape hatch.
         if (state.armed) {
             if (event.actionMasked == MotionEvent.ACTION_UP) {
                 cancelCountdown()
-                performClick()
+                super.performClick()
             }
             return true
         }
@@ -132,7 +155,7 @@ internal class SosSlideView(
             MotionEvent.ACTION_UP -> {
                 publish(state.drag(progressFor(event.x)))
                 finishSlide()
-                performClick()
+                super.performClick()
             }
             MotionEvent.ACTION_CANCEL, MotionEvent.ACTION_OUTSIDE ->
                 publish(state.cancel())
@@ -143,28 +166,53 @@ internal class SosSlideView(
 
     override fun performClick(): Boolean {
         super.performClick()
-        return true
-    }
-
-    /**
-     * D-pad path: holding the centre key sweeps the thumb so a remote can reach the same armed
-     * state, and pressing it during a countdown cancels, matching the touch behaviour.
-     */
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (!isEnabled || !isTriggerKey(keyCode)) return super.onKeyDown(keyCode, event)
+        if (!isEnabled || !enabledProvider() || !isShown || windowToken == null) return false
         if (state.armed) {
             cancelCountdown()
             return true
         }
-        if (event.repeatCount == 0) publish(state.begin())
-        val steps = (event.repeatCount + 1).coerceAtMost(DPAD_STEPS)
-        publish(state.drag(steps.toFloat() / DPAD_STEPS))
+        if (confirmation != null) return true
+        confirmationRevision += 1
+        val revision = confirmationRevision
+        val dialog = AlertDialog.Builder(context)
+            .setTitle(accessibleStart)
+            .setMessage(accessibleConfirm)
+            .setNegativeButton(cancelText, null)
+            .setPositiveButton(accessibleStart) { selected, _ ->
+                // Android queues button callbacks; dismissal must revoke an already queued action.
+                if (confirmation !== selected || confirmationRevision != revision ||
+                    !isEnabled || !enabledProvider() || !isShown || windowToken == null) return@setPositiveButton
+                dismissConfirmation()
+                val snapshot = state.confirm()
+                publish(snapshot)
+                if (snapshot.phase == SosPhase.COUNTDOWN) handler.postDelayed(tick, 1000L)
+            }
+            .create()
+        dialog.setOnDismissListener {
+            if (confirmation === dialog) {
+                confirmation = null
+                confirmationRevision += 1
+            }
+        }
+        confirmation = dialog
+        dialog.show()
+        return true
+    }
+
+    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
+        super.onInitializeAccessibilityNodeInfo(info)
+        info.className = android.widget.Button::class.java.name
+        info.isClickable = isEnabled && enabledProvider()
+    }
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        if (!isEnabled || !isTriggerKey(keyCode)) return super.onKeyDown(keyCode, event)
         return true
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
         if (!isEnabled || !isTriggerKey(keyCode)) return super.onKeyUp(keyCode, event)
-        finishSlide()
+        if (!event.isCanceled) performClick()
         return true
     }
 
@@ -179,12 +227,19 @@ internal class SosSlideView(
     }
 
     private fun publish(snapshot: SosSnapshot) {
+        updateDescription(snapshot)
         invalidate()
         onStateChanged?.invoke(snapshot)
         if (!snapshot.fireNow) return
         handler.removeCallbacks(tick)
         if (enabledProvider()) onTrigger?.invoke()
         publish(state.reset())
+    }
+
+    private fun updateDescription(snapshot: SosSnapshot) {
+        contentDescription = if (snapshot.phase == SosPhase.COUNTDOWN)
+            TwoPartLabels.flatten(TwoPartLabel(countdownFormatter(snapshot.secondsLeft), cancelText))
+        else TwoPartLabels.flatten(TwoPartLabel(accessibleStart, accessibleHint))
     }
 
     private fun progressFor(x: Float): Float {
@@ -275,7 +330,4 @@ internal class SosSlideView(
 
     private fun dp(value: Int): Int = (value * density).toInt()
 
-    private companion object {
-        const val DPAD_STEPS = 6
-    }
 }

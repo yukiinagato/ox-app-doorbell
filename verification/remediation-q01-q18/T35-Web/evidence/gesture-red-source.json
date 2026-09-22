@@ -1,0 +1,10 @@
+{
+  "source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-web-20260923/gesture-red-source",
+  "files": {
+    "webui/panel/door.html": "27e8cfbc6ddd54c1561ec702230b0ee0246b6416e2a742564d62f362b7171868",
+    "webui/tests/door_visitor_cases.js": "3c9f2de96de25eacea0688a551af96133226c01c46928a4da4cd08142e929d19",
+    "webui/tests/door_visitor_browser_fixture.js": "c2eea7828d35441760d1f344355ae813fca9dbcc6cf64ee8987939aab2d275a0"
+  },
+  "browser_result": "gesture-red-browser.json",
+  "scope": "Frozen r3 production page; candidate fixture controlled XHR; actual IAB DOM events."
+}

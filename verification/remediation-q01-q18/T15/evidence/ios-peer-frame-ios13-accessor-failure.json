@@ -1,0 +1,26 @@
+{
+  "command": [
+    "env",
+    "DB_ALLOW_SIP_STUB=1",
+    "xcodebuild",
+    "-project",
+    "ios/Doorbell.xcodeproj",
+    "-scheme",
+    "Doorbell",
+    "-configuration",
+    "Debug",
+    "-destination",
+    "platform=iOS Simulator,id=5675591C-491D-4232-9887-B2ECBB030C10",
+    "-derivedDataPath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/xcode",
+    "-resultBundlePath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/peer-frame.xcresult",
+    "-only-testing:DoorbellTests/CoreBridgeLifecycleTests/testPeerFrameLateCallCannotDisplayOrClearSuccessorBusy",
+    "CODE_SIGNING_ALLOWED=NO",
+    "test"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-20260923/source-green",
+  "exit_code": 65,
+  "duration_s": 36.46194911003113,
+  "qualification": "iOS simulator, SIP stub, unsigned; controlled network completions exercise production MainViewController"
+}

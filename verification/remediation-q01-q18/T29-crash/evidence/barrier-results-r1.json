@@ -1,0 +1,78 @@
+{
+  "source_manifest_sha256": "156362c92f10c47b9da7d8148a4a336846ca5011415465a1cbe3fceeb2b09418",
+  "normal_log_sha256": "135dcced027efac87180e0cc7091a0804431e1540926b48c749d3de66902e4f0",
+  "phases": [
+    {
+      "phase": "before_commit",
+      "termination": "external SIGKILL, waitpid WIFSIGNALED/WTERMSIG verified",
+      "kill_before": {
+        "phase": "before_commit",
+        "autocommit": 1,
+        "new_rows": 0,
+        "receipt_rows": 0
+      },
+      "restart_after": {
+        "configuration": "complete_old",
+        "new_rows": 0,
+        "receipt": "absent",
+        "replay": "stage_expired",
+        "complete_snapshot_comparison": "cJSON_Compare against full expected public configuration passed; opposite snapshot rejected"
+      },
+      "source_log_line": "[import-crash] phase=before_commit signal=SIGKILL barrier={\"phase\":\"before_commit\",\"autocommit\":1,\"new_rows\":0,\"receipt_rows\":0} recovered=complete_old new_rows=0 receipt=absent replay=stage_expired"
+    },
+    {
+      "phase": "before_receipt",
+      "termination": "external SIGKILL, waitpid WIFSIGNALED/WTERMSIG verified",
+      "kill_before": {
+        "phase": "before_receipt",
+        "autocommit": 0,
+        "new_rows": 16,
+        "receipt_rows": 0
+      },
+      "restart_after": {
+        "configuration": "complete_old",
+        "new_rows": 0,
+        "receipt": "absent",
+        "replay": "stage_expired",
+        "complete_snapshot_comparison": "cJSON_Compare against full expected public configuration passed; opposite snapshot rejected"
+      },
+      "source_log_line": "[import-crash] phase=before_receipt signal=SIGKILL barrier={\"phase\":\"before_receipt\",\"autocommit\":0,\"new_rows\":16,\"receipt_rows\":0} recovered=complete_old new_rows=0 receipt=absent replay=stage_expired"
+    },
+    {
+      "phase": "after_receipt",
+      "termination": "external SIGKILL, waitpid WIFSIGNALED/WTERMSIG verified",
+      "kill_before": {
+        "phase": "after_receipt",
+        "autocommit": 0,
+        "new_rows": 16,
+        "receipt_rows": 1
+      },
+      "restart_after": {
+        "configuration": "complete_old",
+        "new_rows": 0,
+        "receipt": "absent",
+        "replay": "stage_expired",
+        "complete_snapshot_comparison": "cJSON_Compare against full expected public configuration passed; opposite snapshot rejected"
+      },
+      "source_log_line": "[import-crash] phase=after_receipt signal=SIGKILL barrier={\"phase\":\"after_receipt\",\"autocommit\":0,\"new_rows\":16,\"receipt_rows\":1} recovered=complete_old new_rows=0 receipt=absent replay=stage_expired"
+    },
+    {
+      "phase": "after_commit",
+      "termination": "external SIGKILL, waitpid WIFSIGNALED/WTERMSIG verified",
+      "kill_before": {
+        "phase": "after_commit",
+        "autocommit": 1,
+        "new_rows": 16,
+        "receipt_rows": 1
+      },
+      "restart_after": {
+        "configuration": "complete_new",
+        "new_rows": 16,
+        "receipt": "present",
+        "replay": "original_result",
+        "complete_snapshot_comparison": "cJSON_Compare against full expected public configuration passed; opposite snapshot rejected"
+      },
+      "source_log_line": "[import-crash] phase=after_commit signal=SIGKILL barrier={\"phase\":\"after_commit\",\"autocommit\":1,\"new_rows\":16,\"receipt_rows\":1} recovered=complete_new new_rows=16 receipt=present replay=original_result"
+    }
+  ]
+}

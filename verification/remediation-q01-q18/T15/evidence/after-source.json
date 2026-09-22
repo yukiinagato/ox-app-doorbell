@@ -1,0 +1,16 @@
+{
+  "core/src/node/node.cpp": "218f40354113274ee87fa8e7334f7c118031f6589d29dd0d4ca57709b6276907",
+  "core/src/httpd/httpd.cpp": "bb25e9edae198a51e56438c7ed0d26441e7b3fc6211b4fb3926ab4bbdd30264a",
+  "core/tests/test_panel.cpp": "85eb2086d883a045d666d974d0286a34746f82afd72982dcac5581a396e37f7b",
+  "core/tests/test_admin_api.cpp": "7208196e4fcee51a589cdac784e6a148cac4c91461e62a0023eb2c3a731a63bd",
+  "core/tests/test_media_publish.cpp": "c3b77e67f6e8193452aabc2ab254b9de5f1b1994a835c451aa498333e9155760",
+  "webui/panel/call.html": "1dde0c12a682a22a86e8be81c7dd0b56079dd5b985acc3c7460d088fa9e28d71",
+  "webui/panel/video-session.js": "59c976c0ca876894ef0a41d200eed1527487713162869a50d6aba6eed3f0f770",
+  "webui/tests/call_page_fixture.js": "aa991e001e7069254a29d6d14a72ec8a618e81f9a0d5593dd120f071896f69c8",
+  "webui/tests/call_media_authority.test.js": "bcf30431e4a63e7c3cc571ee452128ae2df8212d4fbab846cf863ee959588aed",
+  "ios/Doorbell/MainViewController.swift": "9e8037cd358d8127621b47fec763657bbf05b8ce79f66352dffbf2b79d4bcb25",
+  "ios/DoorbellTests/CoreBridgeLifecycleTests.swift": "cdf68f823c25f8ef093b5b41ff0778b6dad71d0723bce921161fa964f3c8a706",
+  "webui/panel/API.md": "973233a7ccb3c2c74c99449c96310fb50d465cafdac7f1ea095e08fe1da17b55",
+  "webui/panel/API.ja.md": "8795748b514db154cf6998327fa212711d2a7d667d2372ad0c13a3f06153426c",
+  "i18n/strings.yaml": "ee3531fb53921525fcf8d44300faa1eec9cd37f867d4101ac7cc6ada0d85ac41"
+}

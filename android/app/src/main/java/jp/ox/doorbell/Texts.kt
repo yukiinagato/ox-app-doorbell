@@ -63,6 +63,21 @@ class Texts(private val base: Context) {
         return PLACEHOLDER.replace(s) { m -> if (i < args.size) args[i++].toString() else m.value }
     }
 
+    internal fun dateLine(now: ClusterTime): String =
+        ClusterDateText.format(now.date, now.weekdayNum) { key, args ->
+            val resource = when (key) {
+                "day.sun" -> R.string.day_sun
+                "day.mon" -> R.string.day_mon
+                "day.tue" -> R.string.day_tue
+                "day.wed" -> R.string.day_wed
+                "day.thu" -> R.string.day_thu
+                "day.fri" -> R.string.day_fri
+                "day.sat" -> R.string.day_sat
+                else -> R.string.date_full
+            }
+            t(key, resource, *args)
+        }
+
     companion object {
         private val PLACEHOLDER = Regex("\\{[A-Za-z_][A-Za-z0-9_]*\\}")
 

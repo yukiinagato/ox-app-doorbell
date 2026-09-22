@@ -1,0 +1,13 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "57562d084001d290daff2ebed0252aa3ad90aafef02bdafc450c14066cec902f",
+  "inputs": {
+    "core/src/httpd/httpd.cpp": "d79704ee40787c137341bd00a60b94281c2a77b808d34a0c41e1d1a3d0319a8e",
+    "core/src/httpd/httpd.h": "00627759dcbce6ab248e8d18c433040b0b610b2f9d3b5f19d7f85f920e7523bc",
+    "core/src/util/runloop.cpp": "fd1efbc28ea434086aac955a3d52ae835aa122d37e6bcf58798f2224f4e93cf1",
+    "core/src/util/runloop.h": "61c3909fdb0f47161dfcd5b8d72b241f7c214684504365f44f434bdabb483913",
+    "core/tests/test_httpd.cpp": "d8a94c929672523f05fe76f0685f91f4688b34adde1eb44ab30b4ea6d25949d5"
+  },
+  "scope_note": "T04-owned sources only; shared repository contains independent parallel work. Native build uses real HTTP/Runloop/handler paths and a SIP stub unrelated to these tests."
+}

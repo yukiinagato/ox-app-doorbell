@@ -1,0 +1,50 @@
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t29-review-20260923/red-r3-test.cpp:86:
+TEST CASE:  config import review: existing local parent and semantic child round trip together
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t29-review-20260923/red-r3-test.cpp:100: ERROR: CHECK( json::getBool(report.get(), "can_commit") ) is NOT correct!
+  values: CHECK( false )
+  logged: {"ok":true,"schema_version":2,"stage_token":"d2907c8cf28c76000c3fc64ddcdb260f","digest":"fb212ff8fa5a7058ae2c26c309c7f65e6a76efc7ccb5c8309ea456529af52516","expected_revision":"943707a7f53e412c576733071ba8104c:e9dc3c992568819400a40f4233ed0663e8af6f55e8cce565d044c7a3d546f3f2","atomicity":"local_persistence","differences":[{"path":"/devices/c318440317693423cdcf75fce4c27835/name","op":"set","before_exists":true,"after_exists":true,"before":"doorbell","after":"Restored review device"},{"path":"/import_fixture","op":"set","before_exists":false,"after_exists":true,"after":{}}],"missing_secret_refs":[],"missing_assets":[],"problems":["invalid_write_scope"],"expanded_leaf_mutations":2,"can_commit":false,"mutation_records":5,"expires_in_ms":600000}
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t29-review-20260923/red-r3-test.cpp:102: ERROR: CHECK( json::getBool(result.get(), "ok") ) is NOT correct!
+  values: CHECK( false )
+  logged: {"ok":true,"schema_version":2,"stage_token":"d2907c8cf28c76000c3fc64ddcdb260f","digest":"fb212ff8fa5a7058ae2c26c309c7f65e6a76efc7ccb5c8309ea456529af52516","expected_revision":"943707a7f53e412c576733071ba8104c:e9dc3c992568819400a40f4233ed0663e8af6f55e8cce565d044c7a3d546f3f2","atomicity":"local_persistence","differences":[{"path":"/devices/c318440317693423cdcf75fce4c27835/name","op":"set","before_exists":true,"after_exists":true,"before":"doorbell","after":"Restored review device"},{"path":"/import_fixture","op":"set","before_exists":false,"after_exists":true,"after":{}}],"missing_secret_refs":[],"missing_assets":[],"problems":["invalid_write_scope"],"expanded_leaf_mutations":2,"can_commit":false,"mutation_records":5,"expires_in_ms":600000}
+          {"ok":false,"schema_version":2,"error_code":"preflight_failed","retry_mode":"none"}
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t29-review-20260923/red-r3-test.cpp:104: ERROR: CHECK( cJSON_Compare(json::get(current.get(), "config"), expected.get(), 1) ) is NOT correct!
+  values: CHECK( 0 )
+  logged: {"ok":true,"schema_version":2,"stage_token":"d2907c8cf28c76000c3fc64ddcdb260f","digest":"fb212ff8fa5a7058ae2c26c309c7f65e6a76efc7ccb5c8309ea456529af52516","expected_revision":"943707a7f53e412c576733071ba8104c:e9dc3c992568819400a40f4233ed0663e8af6f55e8cce565d044c7a3d546f3f2","atomicity":"local_persistence","differences":[{"path":"/devices/c318440317693423cdcf75fce4c27835/name","op":"set","before_exists":true,"after_exists":true,"before":"doorbell","after":"Restored review device"},{"path":"/import_fixture","op":"set","before_exists":false,"after_exists":true,"after":{}}],"missing_secret_refs":[],"missing_assets":[],"problems":["invalid_write_scope"],"expanded_leaf_mutations":2,"can_commit":false,"mutation_records":5,"expires_in_ms":600000}
+          {"ok":false,"schema_version":2,"error_code":"preflight_failed","retry_mode":"none"}
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t29-review-20260923/red-r3-test.cpp:107:
+TEST CASE:  config import review: restored door announcement publishes its production event
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t29-review-20260923/red-r3-test.cpp:127: ERROR: CHECK( changes.load() == 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+  logged: {"ok":true,"schema_version":2,"stage_token":"ba96c76a7c9f19f84c286154b46d9312","digest":"891779c2388338c7bacc9952b30ecc18a984c96fdc5e07368ff7d342e9b19cfa","expected_revision":"4338d3661eadbfaaef499f83b12cebdf:9d1a90ccad9d225a16df9b608dba0d27313938af206dfec1ca8c6406efb39736","atomicity":"local_persistence","differences":[{"path":"/doors/d_review/notice/created_ms","op":"set","before_exists":false,"after_exists":true,"after":1700000000000},{"path":"/doors/d_review/notice/expires_ms","op":"set","before_exists":false,"after_exists":true,"after":0},{"path":"/doors/d_review/notice/from_device","op":"set","before_exists":false,"after_exists":true,"after":"8a842bb024a5491c905f7aef8b53fa31"},{"path":"/doors/d_review/notice/text","op":"set","before_exists":false,"after_exists":true,"after":"Restored announcement"},{"path":"/import_fixture","op":"set","before_exists":false,"after_exists":true,"after":{}}],"missing_secret_refs":[],"missing_assets":[],"problems":[],"expanded_leaf_mutations":5,"can_commit":true,"mutation_records":3,"expires_in_ms":600000}
+
+===============================================================================
+[doctest] test cases:  3 |  1 passed | 2 failed | 0 skipped
+[doctest] assertions: 68 | 64 passed | 4 failed |
+[doctest] Status: FAILURE!
+09-23 03:18:47 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:27091
+09-23 03:18:47 I [httpd] listening on 22754,[::]:22754
+09-23 03:18:47 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:18:47 I [node] node c3184403 (doorbell) started
+09-23 03:18:47 I [node] initialized the cluster administrator password
+09-23 03:18:49 I [httpd] stopped
+09-23 03:18:49 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:23396
+09-23 03:18:49 I [httpd] listening on 20910,[::]:20910
+09-23 03:18:49 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:18:49 I [node] node 8a842bb0 (doorbell) started
+09-23 03:18:49 I [node] initialized the cluster administrator password
+09-23 03:18:51 I [httpd] stopped
+09-23 03:18:51 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22541
+09-23 03:18:51 I [httpd] listening on 24703,[::]:24703
+09-23 03:18:51 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 03:18:51 I [node] node 12e867e5 (doorbell) started
+09-23 03:18:51 I [node] initialized the cluster administrator password
+09-23 03:18:53 I [httpd] stopped

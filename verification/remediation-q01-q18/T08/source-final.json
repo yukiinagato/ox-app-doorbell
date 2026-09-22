@@ -1,0 +1,19 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "c93ccf95fce08021c3e4fe1526a354862bf196088510a5c5b2efa5b10da34630",
+  "files": {
+    "core/src/node/node.cpp": "fabb9e95d128db735376dd6b6d5cc599764282fd6db21edfeae1ce8383126f5a",
+    "core/src/node/admin_sessions.h": "2813eb8fdb015be7f38975bff37cd4f7ef74c530d6b1e688c066e5a25f96256c",
+    "core/src/store/store.h": "35e14c7b90ee3f84f6b4349a0bc52e4d096393b2d44bbad5bb029bb285027702",
+    "core/src/store/store.cpp": "7a4dc7295fec3095a8b51e30db114b8f30c74fdbbc8fb97472e8eb8e94e4e0b1",
+    "core/src/httpd/httpd.cpp": "336ed03462b5be66f8dbdc2ac9f81c00f2155dc720d7f7bbe42527a3b921c0cc",
+    "core/tests/test_admin_api.cpp": "b474c2d58c9fca77547f965c0ab9d354886f29d1c0326da41d66f34fcc0e17d5",
+    "core/tests/test_httpd.cpp": "ca511180a7ce1fe46c869904148fc3b473a2fdcf8cdd5f64da68c49d45e6740f",
+    "webui/admin/app.js": "a6aaefeae362ecb1a286d4ce2193bfc6ba8be15fc51ad14cceaddbb4f8d58d41",
+    "webui/tests/admin_runtime.test.js": "9e3b6ed8ab3555c136ae2dca8adc6d0655094e86a0576c2318ddd73b15546740",
+    "docs/en/config-schema.md": "418b88550366c1c159b73b1616147d80b251f6d972c520d8b5da5b3ed4b0cdc7",
+    "docs/ja/config-schema.md": "1a19ef7a763b34489e13614c6b540ef4e850aaa6f4806709f29939e0d9c13a70",
+    "docs/zh/config-schema.md": "2f1f2887d65413e941b94e659852d7957ae83dbe9ef45433c2e40c025bd44a78"
+  }
+}

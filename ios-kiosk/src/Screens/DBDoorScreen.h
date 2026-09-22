@@ -1,5 +1,6 @@
 #import "DBScreen.h"
 #import "../Media/DBSipSession.h"
+@class DBCallTimingSnapshot;
 
 // Visitor-facing compatibility screen used by both iOS 5 and iOS 9 profiles.
 // It intentionally owns only presentation state; all durable ring/cancel state
@@ -8,7 +9,8 @@
 
 - (id)initWithRouter:(DBRouter *)router;
 - (void)refreshFromCore;
-- (BOOL)restoreWaitingCall:(NSDictionary *)call recoveryState:(NSString *)state;
+// The call identity selects a row; state and recovery permission come only from the snapshot.
+- (BOOL)restoreWaitingCall:(NSString *)callID snapshot:(DBCallTimingSnapshot *)snapshot;
 - (void)handleCallEvent:(NSDictionary *)event;
 - (void)handleReplyEvent:(NSDictionary *)event;
 - (void)handleVisitorLangEvent:(NSDictionary *)event;

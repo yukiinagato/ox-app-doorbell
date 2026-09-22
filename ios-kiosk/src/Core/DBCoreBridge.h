@@ -6,6 +6,7 @@
 // the registered release_buffer callback.
 
 typedef void (^DBUiEventHandler)(NSDictionary *ev);
+@class DBCallTimingSnapshot;
 
 @interface DBCoreBridge : NSObject
 @property(atomic, assign) BOOL cameraActive;
@@ -14,6 +15,7 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (void)setVideoSensorRotation:(int)degrees;
 
 @property(nonatomic, readonly) BOOL isRunning;
+@property(nonatomic, readonly) NSUInteger lifecycleGeneration;
 
 - (BOOL)startWithDataDir:(NSString *)dataDir bootJson:(NSString *)bootJson;
 - (void)stop;
@@ -30,6 +32,8 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (BOOL)selectPurposeV2:(NSString *)door callID:(NSString *)callID purpose:(NSString *)purpose;
 - (BOOL)cancelCallV2:(NSString *)door callID:(NSString *)callID reason:(NSString *)reason;
 - (void)reportCallRecovery:(NSString *)callID restored:(BOOL)restored;
+- (void)reportCallRecovery:(NSString *)callID restored:(BOOL)restored
+        expectedGeneration:(NSUInteger)generation;
 - (BOOL)reportCallAnsweredV2:(NSString *)door callID:(NSString *)callID
                stageRevision:(NSInteger)stageRevision;
 - (BOOL)reportCallEndedV2:(NSString *)door callID:(NSString *)callID
@@ -83,6 +87,8 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (NSString *)coreVersion;
 
 - (NSDictionary *)status;
+// Owns the copied cached JSON and binds it to the serial Core handle lifetime.
+- (DBCallTimingSnapshot *)callTimingSnapshot;
 - (NSDictionary *)debugInfo;
 - (NSDictionary *)deviceInfoNow;
 - (NSDictionary *)config;

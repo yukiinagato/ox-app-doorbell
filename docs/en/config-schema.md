@@ -444,6 +444,22 @@ attempts create a ten-minute in-memory lockout on the Core node that received th
 shared between that node's `POST /api/login` and `db_core_admin_password_verify`. It is not
 replicated to other nodes and is therefore not a cluster-wide rate limiter.
 
+Administrator Web sessions bind to the winning credential record's version (including its
+CRDT identity), expire after 30 minutes without user interaction, and always expire eight hours
+after login. Core uses monotonic time; system-clock changes cannot extend either limit. Ordinary
+status/configuration polling does not renew a session. The admin page sends a bounded
+`POST /api/session/activity` only for user input; it requires the existing HttpOnly session and
+`X-Requested-With: doorbell-admin`. At most 64 sessions exist per node; expired entries are removed
+first, then the least recently used interaction/issuance order is evicted before a new token is
+inserted. Sessions are not persisted and a process restart requires login again.
+
+Local password changes, imported configuration and received remote credential records revoke
+sessions bound to the previous version as soon as this node observes the new record. This is not
+instantaneous cluster-wide revocation: an isolated node may continue accepting its cached old
+password, including new logins, until synchronization completes. Token expiry alone does not
+remove that partition limitation. Credential fingerprints remain internal and are never returned
+as session authority or placed in diagnostics.
+
 Before this key existed each node kept its own digest in local storage, and a kiosk kept a
 separate exit code. That local digest stays authoritative until the first successful
 verification, which republishes it as the cluster password. A shell that still holds its own
@@ -460,14 +476,29 @@ door; `status.doors.<id>.notice` reports the resolved value with a `scope` of `d
 `notice.presets` is an administrator-editable list of at most eight `{id, text}` entries that the
 announcement dialogs render; three are seeded once and may be edited or deleted freely.
 
-`doors.<id>.unlock.show_button` decides whether the unlock control appears. It defaults to
-"show it when it does something": true exactly when an unlock action is configured, which means
-`doors.<id>.unlock.command` or the first `ha_command` in `sip.dtmf_actions`. An administrator may
-force either answer. `status.doors.<id>.unlock` reports `configured`, `command`, `show_button` and
-whether the answer came from the default or an administrator, so a shell decides before the
-control is ever pressed. `POST /api/doors/<id>/open` and `db_core_open_door` publish the same
-`ha_command` the SIP feature code does, and report `unlock_not_configured` rather than a silent
-no-op.
+`doors.<id>.unlock.command` explicitly binds that door to its HA unlock command. Only this
+door-specific field enables unlocking; `sip.dtmf_actions` is never used as a fallback. Commands
+contain 1–32 ASCII letters, digits, underscores or hyphens. Removing a binding disables unlocking
+for that door even if other doors or SIP feature codes still name commands. SIP feature codes
+keep their existing independent behavior.
+
+`doors.<id>.unlock.show_button` controls visibility and defaults to true only when that door has
+an explicit command. An administrator may force visibility, but this never bypasses the backend
+binding check. `status.doors.<id>.unlock` reports `configured`, `command`, `show_button` and the
+visibility `source`. Unconfigured HTTP unlock requests return 409 `unlock_not_configured`;
+`db_core_open_door` returns -3. A configured request publishes its door's `ha_command` intent;
+acceptance does not confirm that the physical lock opened.
+
+Older configurations that relied on the first SIP HA action require administrator review.
+In **Doors & Buildings → Unlock button**, confirm and save the command that controls that door's
+lock. Existing HA commands are suggestions only; none is selected or saved automatically.
+Leave the command blank to remove the binding. For example, explicitly assign `front_gate`
+while leaving a light feature code unchanged:
+
+```json
+{"doors":{"d_front":{"unlock":{"command":"front_gate"}}},
+ "sip":{"dtmf_actions":{"*1":{"type":"ha_command","command":"light_on","door":"self"}}}}
+```
 
 `display.appearance` is `auto_system`, `auto_schedule`, `light`, or `dark`, with
 `display.appearance_schedule = {dark_from, light_from}` evaluated in `time.zone`. Both exist at
@@ -580,6 +611,23 @@ missed-call alert to still mean something.
 The same principle covers announcements and SOS by construction: both are replicated
 configuration and replicated state, so a joining node applies the *current* value once and never
 replays the transitions that produced it.
+
+Each `active_calls` entry in runtime status includes `server_now_ms`, `remaining_ms`,
+`expires_at_ms`, exact call identity/state, `recovery_required`, `recovery_eligible`, and
+`recovery_remaining_ms` (0..10000). Core samples these together on its loop; wall values are
+corrected Unix milliseconds, and durations are nonnegative milliseconds clamped to the largest
+exact JSON integer (9007199254740991). Recovery eligibility describes the existing local
+recovery window, not permission to answer, and querying never extends that window.
+
+The root and each call contain the same opaque `snapshot_generation`, unique per Core lifetime
+and sample. The root `snapshot_age_ms` measures the cached sample's age using Core monotonic
+time; `-1` means its age cannot be established. The status getter remains nonblocking with
+respect to the Core loop. Clients subtract the age once from a newly received duration and then
+use their own monotonic elapsed time. Re-reading the same generation must not restart a timer.
+A zero/unknown duration means checking with Core, never an automatic cancel. Missing generation,
+age, or duration fields require the same checking state, never fallback to OS wall time.
+Foreground return and Core/client restart discard old timer anchors and require a newly acquired
+snapshot. No monotonic absolute timestamp may be persisted. Core alone terminates calls.
 
 ### Who may answer
 
@@ -994,3 +1042,125 @@ For a live indoor-panel `call_answered` or scoped `reply`, the elected Telegram 
 `ui.call_flow` selects one of two door-station paths. `purpose_first` shows enabled purposes on the home screen; tapping a purpose creates a single call with that purpose. The **Direct call** button skips the purpose and creates the call immediately. There is no second purpose screen after ringing. `ring_then_purpose` hides the home purpose menu: the call button first creates the call and then opens the purpose screen. Selecting a purpose updates that same call; skipping it leaves the call ringing, and cancelling ends that call. When no purposes are enabled, both modes call directly without opening an empty chooser.
 
 The native iOS, iOS 5 compatibility, Android and Windows door stations follow these paths. The Web panel first selects a destination door, then uses the selected flow to order purpose selection and ringing. Switching the setting updates the home screen without starting a call. Existing calls keep their identity and deadline. The stored values stay unchanged; the admin menu displays localized names and an explanation of the selected flow.
+
+Administrator credential changes commit their CRDT entries and local credential metadata in one SQLite transaction. Failed persistence leaves both the previous password and its sessions in effect. New browser mutation routes require a session-bound random `X-Doorbell-CSRF` header and an exact trusted `Origin`; missing, null, wildcard and untrusted origins are rejected. `GET /api/session` returns the token with `Cache-Control: no-store` without renewing activity. Direct HTTP origins on the listener port for current local IP addresses and loopback are trusted. For a DNS name or reverse proxy, configure `web.allowed_origins` as an array of at most 32 exact `http://host[:port]` or `https://host[:port]` origins, with no path, wildcard or credentials. Neither `Host` nor forwarded headers grant trust. Invalid entries fail closed.
+
+### Local configuration revisions and conditional commits
+
+`GET /api/config/snapshot` and `db_core_config_snapshot_json_v2` return
+`{schema_version:2,revision,config,edit_conflicts,edit_journal}`. This administrator snapshot omits
+`admin.password_hash`; secret values remain in platform secure storage. HTTP
+responses use `Cache-Control: no-store`. A revision is an opaque token for one
+node and one running Core instance, including all visible CRDT record versions
+and tombstones. Restart or replica reset invalidates it. It is neither an HLC
+nor a cluster-wide lock.
+
+`POST /api/config/commit` and `db_core_config_commit_json_v2` accept
+`{schema_version:2,expected_revision,ops,resolves?}`. HTTP requires the administrator
+session, its `X-Doorbell-CSRF` token, and an exact trusted Origin. Native callers
+use the same Core validator and commit path. The ordinary batch bounds are
+256 operations, 256 KiB of JSON, and 32 nested containers. Missing revisions,
+unknown envelope/operation members, and repeated or overlapping operation keys are rejected.
+The 256-operation limit also covers updates to existing child CRDT records needed
+to apply parent field intent without reviving stale values. The materialized
+candidate is checked against the shared schema before persistence. The Core
+advertises `config_cas_v1` for this implemented API.
+The comparison, object composition, validation and durable batch commit run in
+one Core-loop/SQLite write context; a failed batch publishes no configuration.
+
+A `set` object is a recursive field patch preserving unspecified fields.
+Scalars and arrays replace their complete values. JSON null is a value; removing
+a field requires an explicit `delete` operation or `remove_fields` intent. Existing whole-object CRDT
+storage and replication remain unchanged. A stale token returns HTTP 409 with
+`error_code:"config_conflict"` and the current opaque revision, without any
+write or secret values. Clients fetch a new permitted snapshot and compare
+base/mine/current before asking the administrator to resolve conflicting
+intent; they must not automatically resubmit an old draft with the new token.
+
+For one compatibility cycle, `/api/config/batch` and
+`db_core_config_batch_json` accept an optional `expected_revision` in their
+object envelope to enter this conditional path. Batch responses use the opaque
+`revision`; the separate `hlc` field retains the old timestamp. Legacy batch
+calls without the condition, single-key writes/deletes, and the existing import
+endpoint still use their previous unconditional semantics. The administrator
+editor and import migrations are tracked separately; they cannot claim local
+conflict protection until they send a captured baseline. This local CAS does
+not itself detect or resolve edits made independently during a network partition.
+Upgraded writers also retain a bounded, atomic edit journal; unresolved entities reject
+ordinary writes. The additive `resolves` member permits explicit whole-entity resolution.
+See [retained configuration conflicts](config-conflicts.md) for replication, redaction,
+limits and mixed-version behavior. Legacy import shares the ordinary
+256-operation bound; the separate staged import API is documented below.
+
+## Durable operation authorities and grants
+
+`doors.<door>.operations.authority_node` binds new unlock operations to one
+existing 32-character lowercase-hex node ID. `cluster.operations.sos_authority_node`
+binds global SOS independently of doors. Omission disables the new protocol;
+a disconnected authority never transfers execution to another node.
+
+`devices.<node>.operations` contains only `doors` (up to 64 distinct door IDs),
+`sos_start` (boolean), and `sos_clear` (boolean). Omitted values are empty/false.
+Door IDs contain 1–128 ASCII letters, digits, `_` or `-`. Unknown fields,
+duplicates and wrong types are rejected in leaf and embedded container writes.
+Native callers and administrator HTTP page nodes both require these grants.
+Configuration and grants persist/replicate; current permissions are checked at
+prepare, execute, and query. Existing operation handles never retarget after a
+configuration change. See [the operation API](operation-api.md) for identity,
+CSRF, worker limits, result meanings, and legacy migration boundaries.
+
+Authenticated actuator acknowledgements are optional and disabled by default; see [the operation ACK protocol](operation-ack-protocol.md) for `doors.<door>.operations.ack`, key revocation, wire encoding and honest result states.
+
+### Conditional notice editing and explicit object field removal
+
+A conditional `set` may include `remove_fields`, an array of 1–64 distinct
+nonempty direct field names of at most 128 bytes. Its `value` must be an object
+and must not also contain a removed field. Core merges the supplied object into
+the current object and then removes exactly those fields, preserving all other
+unknown fields. This permits a semantic style override to change one property
+and reset another in the same validated commit. Nested paths are not interpreted
+inside a field name. `delete` operations cannot carry `remove_fields`; missing
+fields and JSON null still do not imply deletion. Existing descendant records
+are updated or tombstoned within the same bounded transaction.
+
+Administrator `POST /api/notice` and `POST /api/doors/<id>/notice` accept
+`expected_revision` with `text` and optional integer `ttl_s` (0–2147483647,
+zero means no expiry). These conditional requests require a current administrator
+cookie, CSRF token and exact trusted Origin, and use the same atomic CAS path.
+Core creates `from_device`, `created_ms` and `expires_ms`; conditional requests
+cannot supply these fields. Optional `expiry:"today"`, without a positive TTL,
+expires at the next local date boundary using Core's corrected clock and
+configured time zone, including its supported daylight-saving rules. The usual
+notice text and timestamp bounds still apply. Unknown or repeated members are
+rejected. Success returns the new revision; stale revisions return 409
+`config_conflict` with no write. Legacy requests without `expected_revision`
+retain their compatibility behavior.
+
+See [staged configuration import](config-import.md) for the authenticated preflight and atomic commit API, snapshot replacement semantics, receipt retention and capacity limits. The legacy import route remains bounded to 256 operations.
+
+## Independent panel identities
+
+`panel.identities.<panel_id>` is an independent, revocable panel record. Core allocates a random 128-bit ID encoded as 32 lowercase hexadecimal characters. It is not derived from an address, browser, or SIP username. At most 128 records are accepted. Each record requires:
+
+| Field | Contract |
+| --- | --- |
+| `credential_ref` | A `secret:` reference to the panel credential in platform secure storage; no bearer value is replicated, exported, or returned by management. |
+| `credential_generation` | 32 lowercase hexadecimal characters, replaced by the management API on every update, rotation, or revocation. |
+| `door_scope` | At most 64 unique explicit door IDs; no wildcard. Defaults to an empty array. |
+| `grants` | Explicit action names from the list below; defaults to an empty array. |
+| `revoked` | Boolean; a revoked identity cannot bootstrap, keep a session, or authorize a delegated operation. |
+| `sip_account_id` | Optional 32-character account record ID in `sip.accounts`; never an automatically provisioned PBX extension. |
+
+The action names are `view`, `call.monitor`, `call.answer`, `call.initiate`, `sos.trigger`, `door.open`, `media.publish`, and `notice.write`. Every door action also requires the exact door in `door_scope`. `sos.trigger` is global and has no door argument; it grants no SOS-clear authority. Existing native/admin clearing policy remains separate. New identities cannot write cluster-global notices. Direct legacy unlock URLs enforce `door.open` for independent panels, but retain their old immediate-action semantics; they do not become durable operation receipts. Trusted local native actions retain the existing Core/device authorization boundary. The additive identity-management ABI below checks administrator identity explicitly.
+
+`POST /api/panels/{list,create,update,revoke,rotate}` and `db_core_panel_identity_json_v2` share one implementation. Every call needs an active administrator session and its CSRF token; HTTP additionally requires a trusted exact Origin. The native function takes both authentication values as arguments. List accepts `{}`. Mutation requests require the current node-local `expected_revision`; stale revisions return `config_conflict` without changing identity or grants. Create accepts `credential_ref` and optional `door_scope`, `grants`, and `sip_account_id`; Core chooses the identity and generation. Update and rotate also require `panel_id`; rotate requires an explicitly provisioned `credential_ref`. Revoke accepts only `panel_id` and `expected_revision`. Provision the credential through existing secure storage before referencing it; absent local values return `credential_provisioning_required`. Changes use the existing configuration compare-and-commit transaction and a separate per-identity CRDT record/edit history. Management returns references and public identity data only, never the bearer.
+
+`POST /api/panel/session` selects an identity by its actual credential, without trusting a caller-selected `panel_id`. Ambiguous reused credentials fail closed. Sessions remain random 128-bit tokens with 30-minute interactive idle and 8-hour absolute limits, capacity 128, and no polling renewal. They bind to the Core boot epoch, identity, credential generation, local secure-value binding, and a canonical single-identity `grant_version`. The latter is a 64-character lowercase SHA-256 version of public identity configuration; it is not a credential digest. An observed change to A invalidates A; B's unchanged identity/session remains valid. A disconnected node cannot enforce a revocation it has not learned.
+
+Panel state, history, call-info and protected snapshot proxies filter by `view` and door scope. Independent call-history seen watermarks are local and keyed by both panel and door; they do not move native/legacy or another panel's watermark. Their `unread_missed` counts the returned page and declares `unread_scope:"returned_page"`. Existing shared Push subscription/fan-out and shared UI-report storage do not implement independent ownership: new identities receive `capabilities.scoped_push:false` and `scoped_ui_report:false`; those mutations return `unsupported_capability`. This is not a successful scoped subscription. Locale/bootstrap metadata remains available to an authenticated identity.
+
+SIP call-info uses only the mapped account's `user` and secure `pass_ref`. A missing account, missing local secret, duplicate account/user, a device-owned account, or a shared WebRTC user yields `provisioning_required`; no shared SIP password is copied into the new identity. An actual configured account also requires `call.monitor` or `call.answer` before its credential is returned. The PBX administrator must provision the extension and its PBX permissions; Core does not create PBX users or claim that a configured account proves a successful registration. PBX-level dial restrictions remain a separate external policy.
+
+Legacy global `panel.token_refs` and their sessions are explicitly `legacy_shared`. They retain the declared local compatibility actions and shared SIP behavior; rotating a shared credential is not independent device revocation. They cannot be delegated as independent identities for remote media. A missing identity or malformed delegation never becomes legacy automatically. `media.publish` is additional to current T15 session/call/revision/owner checks; the authenticated receiver must recheck current principal generation/grants and call ownership. No browser cookie, CSRF value, or long-lived bearer is forwarded.
+
+The existing LAN-public `/stream.mjpeg`, `/stream.mp4`, and `/snapshot.jpg` camera policy is unchanged. Panel `view` scope protects panel APIs and protected proxies; it does not turn those intentionally public door-camera feeds into private resources. Sensitive resident return-camera frames use their separate publisher/session authorization.

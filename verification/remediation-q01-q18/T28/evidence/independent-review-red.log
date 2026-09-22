@@ -1,0 +1,204 @@
+09-23 02:12:21 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:12:21 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:21 I [node] node 08e21d35 (review-a) started
+09-23 02:12:21 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:12:21 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:21 I [node] node 292a68a7 (review-b) started
+09-23 02:12:21 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:12:21 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:21 I [node] node 7e959e99 (review-a) started
+09-23 02:12:21 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:12:21 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:21 I [node] node 65640d40 (review-b) started
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  unknown record payload cannot leak into candidate history
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:100: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  unknown operation payload cannot bypass scrubbing
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:106: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  each field has at most two typed base versions
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:114: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  base versions cannot be an arbitrary string
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:120: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:96:
+TEST CASE:  config conflict review: replicated records reject unknown fields and excessive parent metadata
+  changed fields remain bounded
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:128: ERROR: CHECK_FALSE( configEditRecordsValid({entry}) ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:132:
+TEST CASE:  config conflict review: legacy public native setters retain partitioned intent
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:138: ERROR: CHECK( text.find("A native intent") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:139: ERROR: CHECK( text.find("B native intent") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:143:
+TEST CASE:  config conflict review: native notices retain both branches and block a blind clear
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:149: ERROR: CHECK( before.find("A notice intent") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:150: ERROR: CHECK( before.find("B notice intent") != std::string::npos ) is NOT 09-23 02:12:21 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24626
+09-23 02:12:22 I [httpd] listening on 29738,[::]:29738
+09-23 02:12:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:22 I [node] node 8f03f788 (doorbell) started
+09-23 02:12:22 I [node] initialized the cluster administrator password
+09-23 02:12:24 I [httpd] stopped
+09-23 02:12:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:12:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:24 I [node] node d841ef70 (review-a) started
+09-23 02:12:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:12:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:24 I [node] node 79a85baa (review-b) started
+09-23 02:12:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:12:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:24 I [node] node 65e96108 (review-a) started
+09-23 02:12:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:12:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:24 I [node] node f3781a4d (review-b) started
+09-23 02:12:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:12:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:24 I [node] node 15031944 (review-a) started
+09-23 02:12:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:12:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:24 I [node] node 168a9b9a (review-b) started
+09-23 02:12:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-a
+09-23 02:12:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:24 I [node] node da118583 (review-a) started
+09-23 02:12:24 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=review-b
+09-23 02:12:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:12:24 I [node] node 5f210f08 (review-b) started
+09-23 02:12:24 E [node] config persistence failed; retaining the last-known-good state
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+09-23 02:12:24 W [mesh] rejected malformed sync response from 5f210f0816a592f3727d286cbed0a187
+correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:151: ERROR: CHECK_FALSE( f.a->clearDoorNotice("*") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:154:
+TEST CASE:  config conflict review: legacy HTTP import commits an edit record atomically
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:169: ERROR: CHECK( journalCount(node) == before + 1 ) is NOT correct!
+  values: CHECK( 0 == 1 )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:173:
+TEST CASE:  config conflict review: collection root mutations are explicitly rejected
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  set was already restricted before T28
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:195: ERROR: CHECK( f.a->configJson().find("base device marker") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:173:
+TEST CASE:  config conflict review: collection root mutations are explicitly rejected
+  legacy delete must not create a different collection entity
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:184: ERROR: CHECK_FALSE( json::getBool(result.get(), "ok") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:173:
+TEST CASE:  config conflict review: collection root mutations are explicitly rejected
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  legacy delete must not create a different collection entity
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:194: ERROR: CHECK( journalCount(*f.a) == before ) is NOT correct!
+  values: CHECK( 5 == 1 )
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:195: ERROR: CHECK( f.a->configJson().find("base device marker") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:173:
+TEST CASE:  config conflict review: collection root mutations are explicitly rejected
+  CAS delete follows the same collection restriction
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:192: ERROR: CHECK_FALSE( json::getBool(json::parse(f.a->configCommitJson(json::dump(body.get()))).get(), "ok") ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+===============================================================================
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:173:
+TEST CASE:  config conflict review: collection root mutations are explicitly rejected
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  CAS delete follows the same collection restriction
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:194: ERROR: CHECK( journalCount(*f.a) == before ) is NOT correct!
+  values: CHECK( 5 == 1 )
+
+build/remediation-t28-20260923/independent-review-red/test_config_conflicts_review.cpp:195: ERROR: CHECK( f.a->configJson().find("base device marker") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+===============================================================================
+[doctest] test cases:  6 |  1 passed |  5 failed | 0 skipped
+[doctest] assertions: 88 | 70 passed | 18 failed |
+[doctest] Status: FAILURE!

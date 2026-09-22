@@ -1,0 +1,11 @@
+{
+  "source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-web-20260923/release-without-click-red-source",
+  "files": {
+    "webui/panel/door.html": "164d739fd20228ba24bd0b6ae29b541b70dd4d7f5a3146c3d03cffa242789f69",
+    "webui/tests/door_visitor_cases.js": "aa2ab53d43e1fbbed8585c6560df7bae1e4bf6ba3bb23599ab7377e318255c11",
+    "webui/tests/door_visitor_browser_fixture.js": "5ea25a4635fd88ec2400a3e15e1e7ebd473f7e23d90b7cc4f6eca195f77a2116"
+  },
+  "production_page_source": "source-final-r6.json",
+  "browser_result": "release-without-click-red-browser.json",
+  "scope": "Actual IAB production DOM events with controlled XHR; all five new release sequences failed against identical frozen r6 production page."
+}

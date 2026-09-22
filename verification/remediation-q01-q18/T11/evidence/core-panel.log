@@ -1,0 +1,58 @@
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   6 |   6 passed | 0 failed | 428 skipped
+[doctest] assertions: 441 | 441 passed | 0 failed |
+[doctest] Status: SUCCESS!
+09-22 23:36:14 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:31991
+09-22 23:36:14 I [node] created the missing door entry doors.d_front for this door station
+09-22 23:36:14 I [httpd] listening on 27186,[::]:27186
+09-22 23:36:14 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:36:14 I [node] node d1bb1f7a (panel-test) started
+09-22 23:36:16 I [httpd] stopped
+09-22 23:36:16 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:31547
+09-22 23:36:16 I [node] created the missing door entry doors.d_front for this door station
+09-22 23:36:16 I [httpd] listening on 26948,[::]:26948
+09-22 23:36:16 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:36:16 I [node] node 912493b4 (panel-lease-retry) started
+09-22 23:36:16 E [events] local event persistence failed; event was not emitted
+09-22 23:36:18 I [httpd] stopped
+09-22 23:36:18 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:31321
+09-22 23:36:18 I [node] created the missing door entry doors.d_front for this door station
+09-22 23:36:18 I [httpd] listening on 20290,[::]:20290
+09-22 23:36:18 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:36:18 I [node] node e16b7a1f (panel-terminal) started
+09-22 23:36:20 I [httpd] stopped
+09-22 23:36:20 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:31321
+09-22 23:36:20 I [httpd] listening on 20290,[::]:20290
+09-22 23:36:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:36:20 I [node] node e16b7a1f (panel-terminal) started
+09-22 23:36:22 I [httpd] stopped
+09-22 23:36:22 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:25432
+09-22 23:36:22 I [node] created the missing door entry doors.d_front for this door station
+09-22 23:36:22 I [httpd] listening on 25280,[::]:25280
+09-22 23:36:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:36:22 I [node] node 5b9a1e59 (panel-recovery) started
+09-22 23:36:24 I [httpd] stopped
+09-22 23:36:24 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:25432
+09-22 23:36:24 I [httpd] listening on 25280,[::]:25280
+09-22 23:36:24 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:36:24 I [node] node 5b9a1e59 (panel-recovery) started
+09-22 23:36:26 I [httpd] stopped
+09-22 23:36:26 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:26332
+09-22 23:36:26 I [node] created the missing door entry doors.d_front for this door station
+09-22 23:36:26 I [httpd] listening on 24300,[::]:24300
+09-22 23:36:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:36:26 I [node] node 5dd3be28 (panel-native-recovery) started
+09-22 23:36:28 I [httpd] stopped
+09-22 23:36:28 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:26332
+09-22 23:36:28 I [httpd] listening on 24300,[::]:24300
+09-22 23:36:28 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:36:28 I [node] node 5dd3be28 (panel-native-recovery) started
+09-22 23:36:30 I [httpd] stopped
+09-22 23:36:30 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:27058
+09-22 23:36:30 I [node] created the missing door entry doors.d_front for this door station
+09-22 23:36:30 I [httpd] listening on 25509,[::]:25509
+09-22 23:36:30 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:36:30 I [node] node 9931c8bc (callframe-test) started
+09-22 23:36:32 I [httpd] stopped

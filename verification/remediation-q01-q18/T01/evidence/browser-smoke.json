@@ -1,0 +1,38 @@
+{
+  "task_id": "T01",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "4b3c164a85fd749fe6640e44c4b8b0b0b8fe3124fe4213fb9866e0763e7c91f0",
+  "status": "PASS",
+  "evidence_kind": "browser",
+  "browser": "Google Chrome 153.0.8010.53",
+  "url": "http://127.0.0.1:28001/admin/?lang=en",
+  "fixture": "evidence/browser-server.json",
+  "observations": [
+    {
+      "action": "Submit the disposable wrong password",
+      "result": "Wrong admin password remains visible and Log in is available."
+    },
+    {
+      "action": "Submit the fixture test password",
+      "result": "Dashboard renders actual Node status and the T01 isolated fixture row."
+    },
+    {
+      "action": "Visit Add device, return to Dashboard, revisit Add device",
+      "result": "Add device page renders one cluster member and the pairing controls."
+    },
+    {
+      "action": "Reload",
+      "result": "Existing login is retained; the T01 isolated fixture self table cell is visible."
+    },
+    {
+      "action": "Close tab and stop fixture",
+      "result": "Fixture exit 0; see cleanup.json."
+    }
+  ],
+  "limitations": [
+    "Codex in-app browser backend was unavailable; existing Chrome was used.",
+    "No device, media decoder, bfcache, real pairing, physical unlock, or external SOS qualification.",
+    "Observations recorded from the live browser tool; no screenshot was captured."
+  ]
+}

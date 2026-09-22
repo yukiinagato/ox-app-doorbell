@@ -1,0 +1,49 @@
+{
+  "task_id": "T22",
+  "scope": "native_source",
+  "recorded_at": "2026-09-22T15:07:31.884741+00:00",
+  "cases": [
+    {
+      "id": "T22-01",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "evidence": [
+        "production-csharp-native-r2.log",
+        "existing-contracts-r2.log"
+      ]
+    },
+    {
+      "id": "T22-02",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "evidence": [
+        "production-csharp-native-r2.log",
+        "existing-contracts-r2.log"
+      ]
+    },
+    {
+      "id": "T22-03",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "evidence": [
+        "production-csharp-native-r2.log",
+        "existing-contracts-r2.log"
+      ]
+    },
+    {
+      "id": "T22-04",
+      "status": "PASS_IN_NATIVE_SOURCE_SCOPE",
+      "evidence": [
+        "compile-x86-r2.json",
+        "compile-x64-r2.json",
+        "production-csharp-native-r2.log",
+        "artifacts-r2.json"
+      ]
+    }
+  ],
+  "host_assertions": 41,
+  "existing_source_contracts": 70,
+  "limitations": [
+    "No Windows OS runtime or full WPF package build; T47/T48 remain NOT_RUN.",
+    "Controlled wall field offsets, not physical OS clock changes.",
+    "Initial production defect evidenced by original UI expiry arithmetic; the newly added helper has no fabricated pre-existing implementation."
+  ],
+  "source_manifest": "../source-final-r2.json"
+}

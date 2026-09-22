@@ -1,0 +1,57 @@
+[
+  {
+    "platform": "ios9-arm64",
+    "app_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-parallel-20260922/ios9-arm64/Build/Products/Release-iphoneos/DoorbellIOS9.app",
+    "version": "0.1.36",
+    "build": "37",
+    "minimum_os": "9.0",
+    "executable_sha256": "9be53556b53ed12da65630728a52d3c688e4288d0bcb38e69fb5aa4eca4341df",
+    "architectures": "arm64",
+    "signing": "unsigned",
+    "qualification": "build/test evidence only; no device deployment",
+    "signing_observation": {
+      "exit_code": 1,
+      "details": [
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-parallel-20260922/ios9-arm64/Build/Products/Release-iphoneos/DoorbellIOS9.app: code object is not signed at all"
+      ]
+    }
+  },
+  {
+    "platform": "ios-simulator",
+    "app_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t20-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app",
+    "version": "0.1.36",
+    "build": "37",
+    "minimum_os": "12.0",
+    "executable_sha256": "9d1e5e42104fb7d1557c9e18541fe379c60fad80f5ab699bf8f58c36e4918f24",
+    "architectures": "arm64",
+    "signing": "ad-hoc",
+    "qualification": "build/test evidence only; no device deployment",
+    "signing_observation": {
+      "exit_code": 0,
+      "details": [
+        "Identifier=Doorbell",
+        "Signature=adhoc",
+        "TeamIdentifier=not set"
+      ]
+    }
+  },
+  {
+    "platform": "tvos-simulator",
+    "app_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t20-20260922/xcode-tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app",
+    "version": "0.1.13",
+    "build": "14",
+    "minimum_os": "15.0",
+    "executable_sha256": "7b91369603f42f7299c11d632075bc510a9655827bd643f8c40a1e46bf2757a6",
+    "architectures": "arm64",
+    "signing": "ad-hoc",
+    "qualification": "build/test evidence only; no device deployment",
+    "signing_observation": {
+      "exit_code": 0,
+      "details": [
+        "Identifier=DoorbellTV",
+        "Signature=adhoc",
+        "TeamIdentifier=not set"
+      ]
+    }
+  }
+]

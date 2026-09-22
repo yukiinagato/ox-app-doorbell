@@ -1,0 +1,21 @@
+{
+  "started_at": "2026-09-22T16:54:38.850086+00:00",
+  "command": [
+    "./gradlew",
+    "--no-daemon",
+    "--max-workers=4",
+    "-PdoorbellTier=modern",
+    "assembleModernDebug",
+    "assembleModernDebugAndroidTest",
+    "testModernDebugUnitTest",
+    "lintModernDebug"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/android",
+  "java_home": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+  "ndk": "27.1.12297006",
+  "source_manifest_sha256": "fa60ed12e187c892ef6229b028377cd268ce58a341cc7cbb1570eccec65be4c1",
+  "sip_backend": "real_pjsip",
+  "scope": "Cross compile, host JVM unit tests and lint; UI runtime recorded separately.",
+  "exit_code": 1,
+  "finished_at": "2026-09-22T16:55:08.120433+00:00"
+}

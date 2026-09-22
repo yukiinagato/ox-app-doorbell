@@ -1,0 +1,69 @@
+{
+  "phase": "red",
+  "source_sha256": "ecfa4cac230ac7091c9cf6fb6e467590122bc5f7be9c3f2c827ae4065a669005",
+  "case_sha256": "668877ead3d8610e3911189bd0903b9e92d6956999d5e7a46fc79aeb559f8219",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T16:30:57.792Z",
+  "results": [
+    {
+      "id": "T27-01",
+      "status": "FAIL",
+      "message": "Old whole object overwrote concurrent notification change"
+    },
+    {
+      "id": "T27-02",
+      "status": "FAIL",
+      "message": "Conflicting field silently overwritten"
+    },
+    {
+      "id": "T27-03",
+      "status": "FAIL",
+      "message": "Preview/write includes untouched fields"
+    },
+    {
+      "id": "T27-04",
+      "status": "FAIL",
+      "message": "Conflict choice absent"
+    },
+    {
+      "id": "Login restoration compares the retained base",
+      "status": "FAIL",
+      "message": "Restored draft skipped three-way compare"
+    },
+    {
+      "id": "Array edits require a whole-array decision",
+      "status": "FAIL",
+      "message": "Unidentified array entries were guessed/overwritten"
+    },
+    {
+      "id": "Unselected conflicts retain completed choices",
+      "status": "FAIL",
+      "message": "Expected two changed fields"
+    },
+    {
+      "id": "Inline settings capture the rendered revision",
+      "status": "FAIL",
+      "message": "Inline setting retained a legacy write path"
+    },
+    {
+      "id": "Notice expiry is stamped only by Core",
+      "status": "FAIL",
+      "message": "Notice did not retry through revision comparison"
+    },
+    {
+      "id": "Clearing a known field is an explicit delete",
+      "status": "FAIL",
+      "message": "Delete intent was not explicit"
+    },
+    {
+      "id": "Semantic reset and edit share one conditional commit",
+      "status": "FAIL",
+      "message": "Cannot read properties of undefined (reading 'length')"
+    },
+    {
+      "id": "Inline login restoration preserves the original base",
+      "status": "FAIL",
+      "message": "Inline sign-in discarded or hid non-sensitive controls"
+    }
+  ]
+}

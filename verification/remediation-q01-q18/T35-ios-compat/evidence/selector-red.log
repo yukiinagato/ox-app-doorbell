@@ -1,0 +1,5 @@
+2026-09-23 01:43:06.993 door_visitor_actions[39105:3000128] FAIL line 223: s->_flowState == DBDoorFlowCalling && s->_router.hangups == 0
+2026-09-23 01:43:06.993 door_visitor_actions[39105:3000128] FAIL line 227: s->_core.trace.count == 1
+2026-09-23 01:43:06.993 door_visitor_actions[39105:3000128] FAIL line 229: s->_core.trace.count == 1 && s->_router.hangups == 0
+2026-09-23 01:43:06.993 door_visitor_actions[39105:3000128] FAIL line 230: s->_router.hangups == 0
+2026-09-23 01:43:06.993 door_visitor_actions[39105:3000128] Visitor production selectors: 25 checks, 4 failures

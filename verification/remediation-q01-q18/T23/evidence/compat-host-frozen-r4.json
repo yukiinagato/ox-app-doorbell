@@ -1,0 +1,37 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "7f7dbe4d480046409717883e9478c4b7f3cbe46ddd9dd2fa3ad6e13466a1326d",
+  "task_id": "T23",
+  "test_id": "compat-host-frozen-r4",
+  "evidence_kind": "host_native",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/source-frozen-r4.json",
+  "source_manifest_sha256": "6379fda3e7dc1d973beec486ac30004da3602dd84b0d5ad08a30fd1fe2dc57d3",
+  "command": [
+    "build/remediation-t23-20260923/frozen-r4/ios-compat/scripts/test_host.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:31:55.052640+00:00",
+  "platform": "macOS",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": "macOS native Foundation / MiniSIP loopback",
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "host_minisip_loopback",
+  "signing_state": "host_unsigned",
+  "artifact_sha256": "9fa20e5c0dc58b347577efcbf9551537660e38f37857c7c20fb91a7b57d0bfcd",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/evidence/compat-host-frozen-r4.log",
+  "limitations": [
+    "Production Foundation timing/tracker runs on macOS; not physical iOS or UIKit lifecycle execution.",
+    "The full frozen host runner includes production MiniSIP loopback and contract checks. No claim of live SIP/device/door qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:32:51.400437+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Full compatibility host runner passed, including the actual DBCallTiming/DBCallEventTracker live-chime and recovery tests; final log reports host tests passed.",
+  "artifacts_record": "evidence/artifacts-final-r4.json",
+  "log_sha256": "42ce3484bf004e1411a8ec3f698583faac908be0912b41c83033526bdefdb184"
+}

@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "build_source": "source-candidate-r2.json",
+  "current_source": "source-candidate-r4.json",
+  "prefixes": [
+    "core/",
+    "webui/",
+    "android/",
+    "ios-compat/profiles/",
+    "ios-kiosk/"
+  ],
+  "compared_file_count": 650,
+  "changed_files": [],
+  "meaning": "The final Apple lifecycle follow-up does not change the Core/Web/Android/iOS5 production sources already built and tested in r2."
+}

@@ -1,0 +1,172 @@
+{
+  "failed" : 2,
+  "system_version" : "5.1.1",
+  "bundle_id" : "jp.ox.doorbell.t35uitest",
+  "build" : "1",
+  "boundary_calls" : [
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured"
+  ],
+  "scope" : "Actual iPad UIKit hierarchy, production target\/actions, dialogs, timers, hit-testing and rendering. UIControl events are programmatically dispatched; no HID injection, physical rotation, VoiceOver speech or external Core action.",
+  "version" : "1.0.0",
+  "machine" : "iPad1,1",
+  "checks" : [
+    {
+      "case" : "T35-01",
+      "name" : "Disabled purpose absent",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Purpose-first sends the selected purpose once",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Purpose-first enters ringing",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Visitor cancellation returns idle",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Ring-first sends immediately",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Actual UIKit skip button dispatched",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Skip preserves the call",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Actual UIKit purpose button dispatched",
+      "pass" : true
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Ring-first purpose updates existing call",
+      "pass" : false
+    },
+    {
+      "case" : "T35-01",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Call and cancel share the fixed action area",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Ringing touch cannot become connected end",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Connected end remains in the same area",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Fresh connected end works",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Nil visitor ID native SIP call can end",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Old nil-ID gesture cannot end the next SIP session",
+      "pass" : true
+    },
+    {
+      "case" : "T35-02",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-03",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-03",
+      "name" : "Ordinary network failure keeps neutral visitor page",
+      "pass" : true
+    },
+    {
+      "case" : "T35-03",
+      "name" : "Authoritative SOS event shows emergency layer",
+      "pass" : true
+    },
+    {
+      "case" : "T35-03",
+      "name" : "Production UIControl exists",
+      "pass" : true
+    },
+    {
+      "case" : "T35-03",
+      "name" : "Existing SOS clear passes PIN boundary",
+      "pass" : true
+    },
+    {
+      "case" : "T35-03",
+      "name" : "Exception NSUnknownKeyException: [<DBSosSlider 0xc664c70> valueForUndefinedKey:]: this class is not key value coding-compliant for the key accessibleButton.",
+      "pass" : false
+    }
+  ]
+}

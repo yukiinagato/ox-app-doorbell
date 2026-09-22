@@ -1,0 +1,10 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "e636a490552071b165eb97d1cb5922e77757c06cc18b270a9c096ce5e5e4d16a",
+  "files": {
+    "ios/scripts/build_core.sh": "e636a490552071b165eb97d1cb5922e77757c06cc18b270a9c096ce5e5e4d16a"
+  },
+  "core_source": "build/remediation-t15-20260923/source-green/core",
+  "scope": "Architecture membership validation only; real simulator fat archive rebuilding does not execute iOS tests."
+}

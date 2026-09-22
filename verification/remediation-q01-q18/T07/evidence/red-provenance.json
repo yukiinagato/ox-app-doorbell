@@ -1,0 +1,21 @@
+{
+  "source_red_manifest_sha256": "4bd0d814239e8182f89c71f2412abca2cef9b8214735b0eaae140b97749240b3",
+  "retained_inputs": [
+    {
+      "original_path": "/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_ack.cpp",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/history/red/test_operations_ack.cpp",
+      "sha256": "3ede001e8067efa36d7b96c712baf8f2322bc93c70ffc97502c19ac973ed29bb"
+    },
+    {
+      "original_path": "/Users/ox/Documents/project/app-doorbell/core/tests/operation_test_fixture.h",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/history/red/operation_test_fixture.h",
+      "sha256": "3e4849c36b0856c394882784183c7eab4cdf313824021461a377fc3ced0f1380"
+    },
+    {
+      "original_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/red-ack-tests",
+      "retained_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/history/red/red-ack-tests",
+      "sha256": "23e76ce87501bd88911da7f6952358011fb24ccf6e1ba050ed3e47acce8bb881"
+    }
+  ],
+  "note": "Original test sources reconstructed byte-for-byte and checked against the pre-implementation red manifest; original manifest unchanged."
+}

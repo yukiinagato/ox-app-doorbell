@@ -243,17 +243,18 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("App.Core.OpenDoor(CurrentCallDoor())", window)
         self.assertIn("db_core_open_door", read("win/DoorbellApp/Core/CoreInterop.cs"))
 
-    def test_originated_call_timeout_uses_core_expiry(self):
+    def test_originated_call_timeout_uses_core_snapshot(self):
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
-        show = window[window.index("private long ResolveActiveCallExpiryMs"):
-                      window.index("private void OnUiEvent")]
-        self.assertIn('status["active_calls"]', show)
-        self.assertIn('DictLong(call, "expires_at_ms", 0)', show)
-        self.assertIn("_activeCallExpiresAtMs = ResolveActiveCallExpiryMs()", window)
-        self.assertIn("_activeCallExpiresAtMs -", show)
-        self.assertIn("Math.Max(1, remainingMs)", show)
-        self.assertNotIn("30000", show)
-        self.assertNotIn("TimeSpan.FromSeconds(30)", show)
+        timing = window[window.index("private void SuspendCallTiming"):
+                        window.index("private void OnUiEvent")]
+        self.assertIn("_callTiming.Observe(App.Core.CallTimingSnapshot()", timing)
+        self.assertIn("CallTiming.CallbackMatches", timing)
+        self.assertIn("_callTiming.RequireFresh", timing)
+        self.assertIn("reading.Absent", timing)
+        self.assertNotIn("DateTimeOffset.UtcNow", timing)
+        self.assertNotIn("CancelActiveCall", timing)
+        self.assertIn("ev.CoreGeneration != App.Core.Generation", window)
+        self.assertIn('ev.T == "state" && viewRevision != _callViewRevision', window)
 
     def test_established_audio_calls_do_not_wait_for_video(self):
         ios = read("ios/Doorbell/MainViewController.swift")
@@ -629,15 +630,14 @@ class WindowsContracts(unittest.TestCase):
         startup_recovery = window[window.index("private void RecoverActiveCall"):
                                   window.index("private void RecoverCall")]
         self.assertIn('status["active_calls"]', startup_recovery)
-        self.assertIn('state == "ringing"', startup_recovery)
-        self.assertIn('state == "in_call"', startup_recovery)
-        self.assertIn("owner != _nodeId", recovery)
-        self.assertIn('persistedState == "in_call" || eventState == "in_call"', recovery)
-        self.assertIn("ReportRecoveryOnce(callId, false)", recovery)
-        self.assertIn('persistedState == "ringing"', recovery)
-        self.assertIn("expiry <= DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()", recovery)
-        self.assertIn("ShowCalling(null, expiry)", recovery)
-        self.assertIn("ReportRecoveryOnce(callId, true)", recovery)
+        self.assertIn("IsOwnedRecovery(call)", startup_recovery)
+        self.assertIn('DictStr(active, "dialog_owner") == _nodeId', recovery)
+        self.assertIn('DictStr(active, "state") == "in_call"', recovery)
+        self.assertIn("ReportRecoveryOnce(callId, false, snapshot.CoreGeneration)", recovery)
+        self.assertIn('DictStr(active, "state") == "ringing"', recovery)
+        self.assertNotIn("DateTimeOffset.UtcNow", recovery)
+        self.assertIn("reading.RecoveryRemainingMs.Value <= 0", recovery)
+        self.assertIn("ReportRecoveryOnce(callId, true, snapshot.CoreGeneration)", recovery)
 
     def test_higher_purpose_revision_demotes_losing_answer_and_keeps_ringing(self):
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
@@ -904,7 +904,7 @@ class WindowsContracts(unittest.TestCase):
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
         self.assertIn("public class SosSlider : Slider", slider)
         self.assertIn("public const double ArmThreshold = 90.0;", slider)
-        self.assertIn("bool armed = Value >= ArmThreshold;", slider)
+        self.assertIn("bool armed = !e.Canceled && IsEnabled && IsVisible && IsLoaded && Value >= ArmThreshold;", slider)
         # Core learns about the emergency only when the countdown reaches zero.
         armed = window[window.index("private void OnSosArmed"):
                        window.index("private void OnSosCountdownTick")]
@@ -1888,8 +1888,8 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("PlaceVisitor(LangBar, 2, 1, 1, 1);", layout)
         self.assertIn("PlaceDashboard(RecentCallsPanel, 1, 0, 2);", layout)
         self.assertIn("PlaceDashboard(RecentCallsPanel, 0, 1, 1);", layout)
-        # Tablets scale the call button and the hint.
-        self.assertIn("CallButton.MinHeight = large ? 170 : (tablet ? 120 : 96);", layout)
+        # Primary actions share a text-measured dock; secondary content stays responsive.
+        self.assertIn("UpdateVisitorActionHeights(width);", layout)
 
     def test_effective_volumes_reach_the_players(self):
         window = read("win/DoorbellApp/MainWindow.xaml.cs")

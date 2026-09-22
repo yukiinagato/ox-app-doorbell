@@ -29,6 +29,8 @@ namespace db {
 class HaBridge {
  public:
   struct Hooks {
+    std::function<void(const std::string&)> on_operation_ack;
+    std::function<void()> on_operation_disconnect;
 
 
     std::function<bool(const std::string& reply_id, const std::string& free_text,
@@ -55,6 +57,14 @@ class HaBridge {
 
 
   void onEvent(const EventRecord& ev);
+  // Called exactly once after the authority's durable dispatch acquisition, never from replay.
+  bool dispatchOperation(const std::string& door, const std::string& command,
+                         const std::string& operation_id, const std::string& authority,
+                         const std::string& binding, const std::string& actuator = "",
+                         const std::string& command_digest = "");
+  static std::string operationBinding(const std::string& host, uint16_t port,
+                                      const std::string& base_topic);
+  bool operationReady(const std::string& binding) const;
 
 
   void stop();
@@ -66,7 +76,7 @@ class HaBridge {
   void startClient(const MqttClient::Options& mo);
   void stopClient(bool graceful);
   void onConnected();
-  void onMessage(const std::string& topic, const std::string& payload);
+  void onMessage(const std::string& topic, const std::string& payload, bool retained);
   void publishDiscovery();
   void publishState();
   void publishEmergency();

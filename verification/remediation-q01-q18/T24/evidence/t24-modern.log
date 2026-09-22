@@ -1,0 +1,43 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.11.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preModernDebugBuild UP-TO-DATE
+> Task :app:generateModernDebugBuildConfig
+> Task :app:checkModernDebugAarMetadata UP-TO-DATE
+> Task :app:generateModernDebugResValues UP-TO-DATE
+> Task :app:mapModernDebugSourceSetPaths
+> Task :app:generateModernDebugResources
+> Task :app:packageModernDebugResources
+> Task :app:createModernDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksModernDebug UP-TO-DATE
+> Task :app:parseModernDebugLocalResources
+> Task :app:processModernDebugMainManifest
+> Task :app:mergeModernDebugResources
+> Task :app:processModernDebugManifest
+> Task :app:javaPreCompileModernDebug UP-TO-DATE
+> Task :app:preModernDebugUnitTestBuild UP-TO-DATE
+> Task :app:javaPreCompileModernDebugUnitTest UP-TO-DATE
+> Task :app:processModernDebugManifestForPackage
+> Task :app:processModernDebugResources
+
+> Task :app:compileModernDebugKotlin
+w: file:///Users/ox/Documents/project/app-doorbell/android/app/src/main/java/jp/ox/doorbell/H264Commissioning.kt:191:58 'field versionCode: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/android/app/src/main/java/jp/ox/doorbell/IncomingActivity.kt:95:40 'var isSpeakerphoneOn: Boolean' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/android/app/src/main/java/jp/ox/doorbell/MainActivity.kt:409:53 'fun onBackPressed(): Unit' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/android/app/src/main/java/jp/ox/doorbell/MainActivity.kt:1370:79 'static field TRIM_MEMORY_RUNNING_LOW: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/android/app/src/main/java/jp/ox/doorbell/PairingActivity.kt:93:60 'static field SOFT_INPUT_ADJUST_RESIZE: Int' is deprecated. Deprecated in Java.
+w: file:///Users/ox/Documents/project/app-doorbell/android/app/src/main/java/jp/ox/doorbell/ProcessRecovery.kt:89:47 'field versionCode: Int' is deprecated. Deprecated in Java.
+
+> Task :app:compileModernDebugJavaWithJavac
+> Task :app:processModernDebugJavaRes UP-TO-DATE
+> Task :app:bundleModernDebugClassesToRuntimeJar
+> Task :app:bundleModernDebugClassesToCompileJar
+> Task :app:compileModernDebugUnitTestKotlin
+> Task :app:compileModernDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processModernDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testModernDebugUnitTest
+
+BUILD SUCCESSFUL in 23s
+24 actionable tasks: 17 executed, 7 up-to-date

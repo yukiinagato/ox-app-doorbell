@@ -179,15 +179,42 @@ struct Httpd::Impl {
   int port = 0;
   std::atomic<bool> stopping{false};
 
+  struct Pending {
+    enum class State { Queued, Running, Expired, Completed };
+    Pending(Handler handler, HttpReq request)
+        : deadline(std::chrono::steady_clock::now() +
+                   std::chrono::milliseconds(kHandlerTimeoutMs)),
+          handler(std::move(handler)), request(std::move(request)) {}
+
+    std::mutex mu;
+    std::condition_variable cv;
+    State state = State::Queued;
+    bool shutdown = false;
+    const std::chrono::steady_clock::time_point deadline;
+    Handler handler;
+    HttpReq request;
+    HttpResp response;
+    uint64_t task_id = 0;
+  };
+  // Only the bounded CivetWeb worker pool registers waiters. A timed-out queued request is
+  // removed from Runloop as well, so an indefinitely stalled loop cannot accumulate payloads.
+  std::mutex pending_mu;
+  std::set<std::shared_ptr<Pending>> pending;
+
 
   std::mutex mu;
+#if defined(DB_HTTPD_TEST_HOOKS)
+  std::function<void(std::chrono::steady_clock::time_point)> dispatch_before_wait;
+#endif
   struct Route {
     std::string method;
     std::string path;
     bool prefix = false;
+    bool worker = false;
     Handler h;
   };
   std::vector<Route> routes;
+  std::atomic<unsigned> media_uploads{0};
   struct Asset {
     std::string content_type;
     Bytes content;
@@ -216,18 +243,32 @@ HttpReq buildReq(struct mg_connection* conn) {
     req.headers[toLowerCopy(ri->http_headers[i].name)] =
         ri->http_headers[i].value ? ri->http_headers[i].value : "";
   }
-  if (ri->content_length != 0) {
-    char buf[4096];
-    long long want = ri->content_length;
-    for (;;) {
-      int n = mg_read(conn, buf, sizeof(buf));
-      if (n <= 0) break;
-      req.body.append(buf, static_cast<size_t>(n));
-      if (req.body.size() >= kMaxBodyBytes) break;
-      if (want > 0 && static_cast<long long>(req.body.size()) >= want) break;
-    }
-  }
   return req;
+}
+
+int readRequestBody(struct mg_connection* conn, HttpReq* req) {
+  const auto* info = mg_get_request_info(conn);
+  const bool media = req->uri == "/call-frame";
+  const size_t limit = media ? 1024 * 1024 : kMaxBodyBytes;
+  if (info->content_length > static_cast<long long>(limit)) return 413;
+  if (media) {
+    const auto type = req->headers.find("content-type");
+    if (type == req->headers.end() || type->second != "image/jpeg") return 400;
+  }
+  if (info->content_length == 0) return 0;
+  char buffer[4096];
+  for (;;) {
+    const size_t capacity = std::min(sizeof(buffer), limit - req->body.size() + 1);
+    const int count = mg_read(conn, buffer, capacity);
+    if (count < 0) return 400;
+    if (count == 0) {
+      return info->content_length > 0 && req->body.size() != static_cast<size_t>(info->content_length)
+          ? 400 : 0;
+    }
+    if (static_cast<size_t>(count) > limit - req->body.size()) return 413;
+    req->body.append(buffer, static_cast<size_t>(count));
+    if (info->content_length > 0 && req->body.size() == static_cast<size_t>(info->content_length)) return 0;
+  }
 }
 
 
@@ -425,41 +466,99 @@ int handleStreamProxyMp4(struct mg_connection* conn, Httpd::Impl* impl, const Ht
 
 
 HttpResp runOnLoop(Httpd::Impl* impl, const Httpd::Handler& h, const HttpReq& req) {
-  struct Pending {
-    std::mutex m;
-    std::condition_variable cv;
-    bool done = false;
-    HttpResp resp;
-  };
-  auto p = std::make_shared<Pending>();
-  const std::string uri = req.uri;
-  impl->loop.post([p, h, req] {
-    // The runloop is the single state thread for the whole node. An exception escaping a handler
-    // here would unwind it, so a bad request is answered with a 500 instead of stopping calls,
-    // the mesh, and every timer in the process.
-    HttpResp r;
-    try {
-      r = h(req);
-    } catch (const std::exception& e) {
-      DB_LOGE("httpd", std::string("handler threw on the runloop: ") + e.what());
-      r = HttpResp::text("internal error", 500);
-    } catch (...) {
-      DB_LOGE("httpd", "handler threw an unknown exception on the runloop");
-      r = HttpResp::text("internal error", 500);
+  using State = Httpd::Impl::Pending::State;
+  auto p = std::make_shared<Httpd::Impl::Pending>(h, req);
+  struct Registration {
+    Httpd::Impl* impl;
+    std::shared_ptr<Httpd::Impl::Pending> pending;
+    ~Registration() {
+      bool expired;
+      {
+        std::lock_guard<std::mutex> lock(pending->mu);
+        if (pending->state == State::Queued) pending->state = State::Expired;
+        expired = pending->state == State::Expired;
+      }
+      if (expired) impl->loop.cancelQueued(pending->task_id);
+      std::lock_guard<std::mutex> admission(impl->pending_mu);
+      impl->pending.erase(pending);
     }
-    std::lock_guard<std::mutex> lk(p->m);
-    p->resp = std::move(r);
-    p->done = true;
-    p->cv.notify_all();
-  });
-  std::unique_lock<std::mutex> lk(p->m);
-  if (!p->cv.wait_for(lk, std::chrono::milliseconds(kHandlerTimeoutMs), [&] { return p->done; })) {
-    // Worth a log: a stalled runloop shows up here first, one worker thread at a time.
+  } registration{impl, p};
+  const std::string uri = req.uri;
+  {
+    std::lock_guard<std::mutex> admission(impl->pending_mu);
+    if (impl->stopping.load()) {
+      return HttpResp::json("{\"ok\":false,\"err\":\"not_started\","
+                            "\"error_code\":\"not_started\"}", 503);
+    }
+    impl->pending.insert(p);
+    // The posted closure owns its request and completion state, never the HTTP connection,
+    // worker stack, or Httpd::Impl. It remains safe if the worker or server has already left.
+    p->task_id = impl->loop.postDelayed(0, [p] {
+      {
+        std::lock_guard<std::mutex> lock(p->mu);
+        if (p->state != State::Queued) return;
+        if (std::chrono::steady_clock::now() >= p->deadline) {
+          p->state = State::Expired;
+          p->cv.notify_all();
+          return;
+        }
+        p->state = State::Running;
+      }
+      // An exception must not unwind the node's state executor. It settles this request once
+      // with a 500 response, while the runloop remains available for subsequent requests.
+      HttpResp r;
+      try {
+        r = p->handler(p->request);
+      } catch (const std::exception& e) {
+        DB_LOGE("httpd", std::string("handler threw on the runloop: ") + e.what());
+        r = HttpResp::text("internal error", 500);
+      } catch (...) {
+        DB_LOGE("httpd", "handler threw an unknown exception on the runloop");
+        r = HttpResp::text("internal error", 500);
+      }
+      std::lock_guard<std::mutex> lk(p->mu);
+      p->response = std::move(r);
+      p->state = State::Completed;
+      p->cv.notify_all();
+    });
+    if (!p->task_id) {
+      std::lock_guard<std::mutex> lock(p->mu);
+      p->state = State::Expired;
+    }
+  }
+
+#if defined(DB_HTTPD_TEST_HOOKS)
+  std::function<void(std::chrono::steady_clock::time_point)> before_wait;
+  {
+    std::lock_guard<std::mutex> lock(impl->mu);
+    before_wait = impl->dispatch_before_wait;
+  }
+  if (before_wait) before_wait(p->deadline);
+#endif
+
+  bool timed_out = false;
+  HttpResp response;
+  {
+    std::unique_lock<std::mutex> lock(p->mu);
+    timed_out = !p->cv.wait_until(lock, p->deadline, [&] {
+      return p->state == State::Completed || p->state == State::Expired || p->shutdown;
+    });
+    if (p->state == State::Completed) {
+      response = std::move(p->response);
+    } else {
+      if (p->state == State::Queued) {
+        p->state = State::Expired;
+      }
+      const char* error = p->state == State::Expired ? "not_started" : "outcome_unknown";
+      response = HttpResp::json(std::string("{\"ok\":false,\"err\":\"") + error +
+                                "\",\"error_code\":\"" + error + "\"}", 503);
+    }
+  }
+  if (timed_out) {
     DB_LOGW("httpd", "handler timed out after " + std::to_string(kHandlerTimeoutMs) + "ms: " +
                          uri);
-    return HttpResp::text("handler timeout", 503);
   }
-  return std::move(p->resp);
+  return response;
 }
 
 
@@ -504,6 +603,26 @@ int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
     return 401;
   }
 
+  struct MediaAdmission {
+    std::atomic<unsigned>* count = nullptr;
+    ~MediaAdmission() { if (count) count->fetch_sub(1); }
+  } media_admission;
+  if (req.uri == "/call-frame") {
+    if (impl->media_uploads.fetch_add(1) >= 4) {
+      impl->media_uploads.fetch_sub(1);
+      writeResp(conn, HttpResp::json("{\"ok\":false,\"error_code\":\"media_capacity_exceeded\"}", 429));
+      return 429;
+    }
+    media_admission.count = &impl->media_uploads;
+  }
+  const int body_error = readRequestBody(conn, &req);
+  if (body_error) {
+    writeResp(conn, HttpResp::json(body_error == 413
+        ? "{\"ok\":false,\"error_code\":\"body_too_large\"}"
+        : "{\"ok\":false,\"error_code\":\"incomplete_or_invalid_body\"}", body_error));
+    return body_error;
+  }
+
 
   if (req.method == "GET" || req.method == "HEAD") {
     std::lock_guard<std::mutex> lk(impl->mu);
@@ -543,6 +662,7 @@ int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
 
 
   Httpd::Handler h;
+  bool worker = false;
   {
     std::lock_guard<std::mutex> lk(impl->mu);
     size_t best_len = 0;
@@ -552,6 +672,7 @@ int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
       if (!r.prefix) {
         if (r.path == req.uri) {
           h = r.h;
+          worker = r.worker;
           exact = true;
           break;
         }
@@ -560,6 +681,7 @@ int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
 
         best_len = r.path.size();
         h = r.h;
+        worker = r.worker;
       }
     }
   }
@@ -567,7 +689,21 @@ int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
     writeResp(conn, HttpResp::notFound());
     return 404;
   }
-  HttpResp resp = runOnLoop(impl, h, req);
+  // Authorization may change while a request waits for the loop. Recheck the live gate at
+  // dispatch, using owned function/request copies and no HTTP connection lifetime dependency.
+  Httpd::Handler authorized_handler = [gate, h](const HttpReq& current) {
+    if (gate && !gate(current))
+      return HttpResp::json("{\"ok\":false,\"error_code\":\"auth_required\"}", 401);
+    return h(current);
+  };
+  HttpResp resp;
+  if (worker) {
+    resp = impl->stopping.load()
+        ? HttpResp::json("{\"ok\":false,\"err\":\"not_started\",\"error_code\":\"not_started\"}", 503)
+        : authorized_handler(req);
+  } else {
+    resp = runOnLoop(impl, authorized_handler, req);
+  }
   writeResp(conn, resp);
   return resp.status;
 }
@@ -709,7 +845,7 @@ bool Httpd::start(int port, Ipv6Mode ipv6) {
     // pinned the pool and the port stopped accepting anything -- the process kept running and
     // the mesh kept heartbeating on its own thread, so it looked like the listener had died.
     std::vector<const char*> opts = {"listening_ports", ports.c_str(),
-                                     "num_threads", "16"};
+                                     "num_threads", "16", "request_timeout_ms", "5000"};
     if (nodelay) {
       opts.push_back("tcp_nodelay");
       opts.push_back("1");
@@ -763,7 +899,29 @@ void Httpd::stop() {
     g_log_suppressed = 0;
     g_logged.clear();
   }
-  impl_->stopping = true;
+  {
+    // Close admission and wake workers before mg_stop joins them. A running handler keeps its
+    // owned context and completes normally; shutdown cannot claim that it did not execute.
+    std::vector<std::shared_ptr<Impl::Pending>> pending;
+    {
+      std::lock_guard<std::mutex> admission(impl_->pending_mu);
+      impl_->stopping = true;
+      pending.assign(impl_->pending.begin(), impl_->pending.end());
+    }
+    for (const auto& p : pending) {
+      bool cancel_queued = false;
+      {
+        std::lock_guard<std::mutex> lock(p->mu);
+        p->shutdown = true;
+        if (p->state == Impl::Pending::State::Queued) {
+          p->state = Impl::Pending::State::Expired;
+          cancel_queued = true;
+        }
+        p->cv.notify_all();
+      }
+      if (cancel_queued) impl_->loop.cancelQueued(p->task_id);
+    }
+  }
   {
 
 
@@ -779,9 +937,27 @@ void Httpd::stop() {
 
 int Httpd::port() const { return impl_->port; }
 
+#if defined(DB_HTTPD_TEST_HOOKS)
+void Httpd::setDispatchBeforeWaitForTesting(
+    std::function<void(std::chrono::steady_clock::time_point)> hook) {
+  std::lock_guard<std::mutex> lock(impl_->mu);
+  impl_->dispatch_before_wait = std::move(hook);
+}
+#endif
+
 void Httpd::route(const std::string& method, const std::string& path, Handler h) {
+  registerRoute(method, path, std::move(h), false);
+}
+
+void Httpd::routeWorker(const std::string& method, const std::string& path, Handler h) {
+  registerRoute(method, path, std::move(h), true);
+}
+
+void Httpd::registerRoute(const std::string& method, const std::string& path, Handler h,
+                          bool worker) {
   Impl::Route r;
   r.method = method;
+  r.worker = worker;
   if (!path.empty() && path.back() == '*') {
     r.prefix = true;
     r.path = path.substr(0, path.size() - 1);

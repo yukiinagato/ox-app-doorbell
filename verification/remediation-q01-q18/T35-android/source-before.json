@@ -1,0 +1,37 @@
+{
+  "recorded_at": "2026-09-22T16:43:47.586782+00:00",
+  "inputs": [
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/MainActivity.kt",
+      "sha256": "4822cba436fce63348a20b45aa3c840f5b329afe51f42f415cefa398a94f529e"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/VisitorLayout.kt",
+      "sha256": "b7421839fa8b35c481f1aeb763a0c68dcece7eba60043ea77e8d37ea084841e2"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/SosSlideView.kt",
+      "sha256": "b136c8e3ed5616fc41c4f784d7122479753efc2a56a38e3a3d7dfbb99b49992e"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/SosSlideState.kt",
+      "sha256": "1e2f1ef169b0f13ae275c544261643e73b2d16d8bd9cf564435009604a449d78"
+    },
+    {
+      "path": "android/app/src/main/java/jp/ox/doorbell/DashboardView.kt",
+      "sha256": "1b2f1c1ba017c3e7611105dcc46353512309149bccfaf1fd4b4c116306b4b442"
+    },
+    {
+      "path": "android/app/src/main/res/layout/activity_main.xml",
+      "sha256": "badac3b32eb7bd5fd20d491144a4f904b53d7885933f5df3c1f1cb2f7b041d16"
+    },
+    {
+      "path": "android/app/src/main/res/values/colors.xml",
+      "sha256": "4248fec385d20451bdfb269d0e55eb8b2170948f09d8b211a9fa9fcd2e9042c5"
+    },
+    {
+      "path": "android/app/build.gradle.kts",
+      "sha256": "a4f67c76c762bdb9dc5a0e0075e83615736bedb083d6635c70aae48f54fc4d09"
+    }
+  ]
+}

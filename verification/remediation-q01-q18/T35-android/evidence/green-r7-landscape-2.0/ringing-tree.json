@@ -1,0 +1,418 @@
+{
+  "class": "DecorView",
+  "visibility": 0,
+  "enabled": true,
+  "bounds": "[0,0][1920,1080]",
+  "id": "",
+  "children": [
+    {
+      "class": "LinearLayout",
+      "visibility": 0,
+      "enabled": true,
+      "bounds": "[0,0][1920,1080]",
+      "id": "",
+      "children": [
+        {
+          "class": "ViewStub",
+          "visibility": 8,
+          "enabled": true,
+          "bounds": "[0,0][0,0]",
+          "id": "action_mode_bar_stub"
+        },
+        {
+          "class": "FrameLayout",
+          "visibility": 0,
+          "enabled": true,
+          "bounds": "[0,0][1920,1080]",
+          "id": "content",
+          "children": [
+            {
+              "class": "FrameLayout",
+              "visibility": 0,
+              "enabled": true,
+              "bounds": "[0,0][1920,1080]",
+              "id": "root_view",
+              "children": [
+                {
+                  "class": "ImageView",
+                  "visibility": 8,
+                  "enabled": true,
+                  "bounds": "[0,0][0,0]",
+                  "id": "theme_bg"
+                },
+                {
+                  "class": "FrameLayout",
+                  "visibility": 8,
+                  "enabled": true,
+                  "bounds": "[0,0][0,0]",
+                  "id": "dashboard_host",
+                  "children": []
+                },
+                {
+                  "class": "LinearLayout",
+                  "visibility": 0,
+                  "enabled": true,
+                  "bounds": "[0,0][1920,1080]",
+                  "id": "visitor_shell",
+                  "children": [
+                    {
+                      "class": "FrameLayout",
+                      "visibility": 0,
+                      "enabled": true,
+                      "bounds": "[0,0][1920,824]",
+                      "id": "",
+                      "children": [
+                        {
+                          "class": "ScrollView",
+                          "visibility": 8,
+                          "enabled": true,
+                          "bounds": "[0,0][1920,824]",
+                          "id": "idle_view",
+                          "children": [
+                            {
+                              "class": "LinearLayout",
+                              "visibility": 0,
+                              "enabled": true,
+                              "bounds": "[32,16][1888,808]",
+                              "id": "",
+                              "children": [
+                                {
+                                  "class": "LinearLayout",
+                                  "visibility": 0,
+                                  "enabled": true,
+                                  "bounds": "[32,16][1888,321]",
+                                  "id": "visitor_split",
+                                  "children": [
+                                    {
+                                      "class": "LinearLayout",
+                                      "visibility": 0,
+                                      "enabled": true,
+                                      "bounds": "[32,16][960,321]",
+                                      "id": "visitor_col_a",
+                                      "children": [
+                                        {
+                                          "class": "LinearLayout",
+                                          "visibility": 0,
+                                          "enabled": true,
+                                          "bounds": "[32,16][960,321]",
+                                          "id": "idle_header",
+                                          "children": [
+                                            {
+                                              "class": "TextView",
+                                              "visibility": 0,
+                                              "enabled": true,
+                                              "bounds": "[215,16][777,217]",
+                                              "id": "clock_text",
+                                              "text": "02:28:15"
+                                            },
+                                            {
+                                              "class": "TextView",
+                                              "visibility": 0,
+                                              "enabled": true,
+                                              "bounds": "[160,217][831,321]",
+                                              "id": "date_text",
+                                              "text": "2026年09月23日 (水)"
+                                            }
+                                          ]
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "class": "LinearLayout",
+                                      "visibility": 0,
+                                      "enabled": true,
+                                      "bounds": "[0,0][0,0]",
+                                      "id": "visitor_col_b",
+                                      "children": [
+                                        {
+                                          "class": "LinearLayout",
+                                          "visibility": 8,
+                                          "enabled": true,
+                                          "bounds": "[0,0][0,0]",
+                                          "id": "lang_bar",
+                                          "children": []
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "class": "TextView",
+                                  "visibility": 0,
+                                  "enabled": true,
+                                  "bounds": "[32,337][1427,440]",
+                                  "id": "touch_hint",
+                                  "text": "用件を選ぶか、そのまま呼び出してください"
+                                },
+                                {
+                                  "class": "LinearLayout",
+                                  "visibility": 0,
+                                  "enabled": true,
+                                  "bounds": "[32,440][1888,622]",
+                                  "id": "purpose_section",
+                                  "children": [
+                                    {
+                                      "class": "TextView",
+                                      "visibility": 8,
+                                      "enabled": true,
+                                      "bounds": "[586,440][1334,539]",
+                                      "id": "purpose_hint",
+                                      "text": "ご用件をお選びください"
+                                    },
+                                    {
+                                      "class": "TextView",
+                                      "visibility": 8,
+                                      "enabled": true,
+                                      "bounds": "[773,544][1147,622]",
+                                      "id": "purpose_auto_hint",
+                                      "text": "呼び出し中…"
+                                    },
+                                    {
+                                      "class": "GridLayout",
+                                      "visibility": 0,
+                                      "enabled": true,
+                                      "bounds": "[32,440][1888,622]",
+                                      "id": "purpose_grid",
+                                      "children": [
+                                        {
+                                          "class": "Button",
+                                          "visibility": 0,
+                                          "enabled": true,
+                                          "bounds": "[74,447][1847,615]",
+                                          "id": "",
+                                          "text": "配送 \/ Delivery"
+                                        }
+                                      ]
+                                    },
+                                    {
+                                      "class": "LinearLayout",
+                                      "visibility": 8,
+                                      "enabled": true,
+                                      "bounds": "[42,420][1814,546]",
+                                      "id": "",
+                                      "children": [
+                                        {
+                                          "class": "Button",
+                                          "visibility": 0,
+                                          "enabled": true,
+                                          "bounds": "[42,420][1803,546]",
+                                          "id": "purpose_skip_button",
+                                          "text": "用件を選ばず続ける"
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                },
+                                {
+                                  "class": "LinearLayout",
+                                  "visibility": 0,
+                                  "enabled": true,
+                                  "bounds": "[32,622][1888,808]",
+                                  "id": "visitor_footer",
+                                  "children": [
+                                    {
+                                      "class": "TextView",
+                                      "visibility": 0,
+                                      "enabled": true,
+                                      "bounds": "[32,638][1258,731]",
+                                      "id": "node_info",
+                                      "text": "クラスタ未設定 — タップして追加"
+                                    },
+                                    {
+                                      "class": "FrameLayout",
+                                      "visibility": 0,
+                                      "enabled": true,
+                                      "bounds": "[1258,638][1888,808]",
+                                      "id": "sos_slot",
+                                      "children": [
+                                        {
+                                          "class": "SosSlideView",
+                                          "visibility": 0,
+                                          "enabled": true,
+                                          "bounds": "[1258,638][1888,808]",
+                                          "id": ""
+                                        }
+                                      ]
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "class": "ScrollView",
+                          "visibility": 0,
+                          "enabled": true,
+                          "bounds": "[0,0][1920,824]",
+                          "id": "calling_view",
+                          "children": [
+                            {
+                              "class": "LinearLayout",
+                              "visibility": 0,
+                              "enabled": true,
+                              "bounds": "[0,0][1920,824]",
+                              "id": "",
+                              "children": [
+                                {
+                                  "class": "TextView",
+                                  "visibility": 0,
+                                  "enabled": true,
+                                  "bounds": "[63,204][1857,347]",
+                                  "id": "calling_text",
+                                  "text": "呼び出し中…"
+                                },
+                                {
+                                  "class": "View",
+                                  "visibility": 0,
+                                  "enabled": true,
+                                  "bounds": "[865,389][1054,578]",
+                                  "id": "pulse"
+                                }
+                              ]
+                            }
+                          ]
+                        },
+                        {
+                          "class": "ScrollView",
+                          "visibility": 8,
+                          "enabled": true,
+                          "bounds": "[0,0][0,0]",
+                          "id": "offline_view",
+                          "children": [
+                            {
+                              "class": "LinearLayout",
+                              "visibility": 0,
+                              "enabled": true,
+                              "bounds": "[0,0][0,0]",
+                              "id": "",
+                              "children": [
+                                {
+                                  "class": "TextView",
+                                  "visibility": 0,
+                                  "enabled": true,
+                                  "bounds": "[0,0][0,0]",
+                                  "id": "offline_title",
+                                  "text": "システムオフライン"
+                                },
+                                {
+                                  "class": "TextView",
+                                  "visibility": 0,
+                                  "enabled": true,
+                                  "bounds": "[0,0][0,0]",
+                                  "id": "offline_body",
+                                  "text": "呼び出しできません。直接ノックしてください。"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "class": "TextView",
+                      "visibility": 8,
+                      "enabled": true,
+                      "bounds": "[0,0][0,0]",
+                      "id": "visitor_status",
+                      "text": ""
+                    },
+                    {
+                      "class": "FrameLayout",
+                      "visibility": 0,
+                      "enabled": true,
+                      "bounds": "[0,824][1920,1080]",
+                      "id": "visitor_action_dock",
+                      "children": [
+                        {
+                          "class": "LinearLayout",
+                          "visibility": 8,
+                          "enabled": true,
+                          "bounds": "[42,845][1878,1048]",
+                          "id": "call_section",
+                          "children": [
+                            {
+                              "class": "Button",
+                              "visibility": 0,
+                              "enabled": true,
+                              "bounds": "[42,845][1878,1048]",
+                              "id": "call_button",
+                              "text": "直接呼出"
+                            }
+                          ]
+                        },
+                        {
+                          "class": "Button",
+                          "visibility": 8,
+                          "enabled": true,
+                          "bounds": "[42,845][1878,1048]",
+                          "id": "purpose_cancel_button",
+                          "text": "呼び出しを取り消す"
+                        },
+                        {
+                          "class": "Button",
+                          "visibility": 0,
+                          "enabled": true,
+                          "bounds": "[42,845][1878,1048]",
+                          "id": "cancel_button",
+                          "text": "取消し"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "class": "LinearLayout",
+                  "visibility": 8,
+                  "enabled": true,
+                  "bounds": "[0,0][0,0]",
+                  "id": "reply_banner",
+                  "children": [
+                    {
+                      "class": "TextView",
+                      "visibility": 0,
+                      "enabled": true,
+                      "bounds": "[0,0][0,0]",
+                      "id": "reply_caption",
+                      "text": "住人からのメッセージ"
+                    },
+                    {
+                      "class": "TextView",
+                      "visibility": 0,
+                      "enabled": true,
+                      "bounds": "[0,0][0,0]",
+                      "id": "reply_text",
+                      "text": ""
+                    }
+                  ]
+                },
+                {
+                  "class": "View",
+                  "visibility": 0,
+                  "enabled": true,
+                  "bounds": "[1794,0][1920,126]",
+                  "id": "secret_corner"
+                },
+                {
+                  "class": "View",
+                  "visibility": 8,
+                  "enabled": true,
+                  "bounds": "[0,0][0,0]",
+                  "id": "night_tint"
+                },
+                {
+                  "class": "TextView",
+                  "visibility": 8,
+                  "enabled": true,
+                  "bounds": "[42,21][1198,177]",
+                  "id": "pairing_banner",
+                  "text": "クラスタ未設定 — タップして追加"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

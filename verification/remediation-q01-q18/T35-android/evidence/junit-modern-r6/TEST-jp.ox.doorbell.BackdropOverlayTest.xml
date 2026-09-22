@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.BackdropOverlayTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:15:24" hostname="MacBookPro.local" time="0.007">
+  <properties/>
+  <testcase name="aZeroOpacityOverlayCompositesNothing" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.001"/>
+  <testcase name="compositingAColourUnderTheOverlay" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.0"/>
+  <testcase name="theFallbackKeepsTodaysDarkening" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.0"/>
+  <testcase name="aLightRegionUnderTheOverlayTakesLightInk" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.001"/>
+  <testcase name="anOutOfRangeOpacityIsClamped" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.0"/>
+  <testcase name="aDisabledOverlayCompositesNothing" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.0"/>
+  <testcase name="aPartialDocumentTakesTheDocumentedDefaults" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.0"/>
+  <testcase name="theSameRegionWithNoOverlayTakesDarkInk" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.001"/>
+  <testcase name="anUnreadableColourFallsBackToTheDefault" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.0"/>
+  <testcase name="anOlderCorePublishesNoOverlayAtAll" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.003"/>
+  <testcase name="aConfiguredOverlayReachesTheThemeThroughTheStatusDocument" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.0"/>
+  <testcase name="aBackdropOnlyThemeIsNotDiscarded" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.0"/>
+  <testcase name="aConfiguredOverlayIsCompositedAsPublished" classname="jp.ox.doorbell.BackdropOverlayTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

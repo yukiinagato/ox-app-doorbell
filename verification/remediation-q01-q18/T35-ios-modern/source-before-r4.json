@@ -1,0 +1,14 @@
+{
+  "recorded_at": "2026-09-22T17:30:41.085910+00:00",
+  "inputs": [
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "sha256": "01e04182e3978cd9b5032aad438728ee8cbb2fc37d1393bdf34734da079f554b"
+    },
+    {
+      "path": "ios/DoorbellTests/VisitorScreenLayoutTests.swift",
+      "sha256": "5197d80cf914cc409fa260645bef0685c3c39107eed64aecaa3ffe46bd2eb6ef"
+    }
+  ],
+  "scope": "Parent-assigned R1 in-call status scroll boundary and real UIKit assertion only."
+}

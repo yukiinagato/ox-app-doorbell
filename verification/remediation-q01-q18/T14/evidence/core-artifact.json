@@ -1,0 +1,16 @@
+{
+  "target": "host macOS arm64",
+  "sip_backend": "stub (DB_WITH_PJSIP=OFF)",
+  "signing": "not signed; test executable",
+  "compiler": "Apple clang version 21.0.0 (clang-2100.1.1.101)\nTarget: arm64-apple-darwin25.5.0\nThread model: posix\nInstalledDir: /Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin\n",
+  "cmake": "cmake version 4.4.3\n\nCMake suite maintained and supported by Kitware (kitware.com/cmake).\n",
+  "cache_flags": [
+    "CMAKE_BUILD_TYPE:STRING=RelWithDebInfo",
+    "CMAKE_CXX_COMPILER:FILEPATH=/usr/bin/c++",
+    "DB_BUILD_TESTS:BOOL=ON",
+    "DB_REQUIRE_PJSIP:BOOL=OFF",
+    "DB_WITH_PJSIP:BOOL=OFF"
+  ],
+  "binary_sha256": "bd20b399c302c79421762e8e391125e0cbc40bb5ffc9f4d09ead39cb319c6a06",
+  "final_resource_check": "core-panel-final-resources.json"
+}

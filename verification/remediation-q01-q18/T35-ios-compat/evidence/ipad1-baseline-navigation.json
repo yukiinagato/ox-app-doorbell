@@ -1,0 +1,15 @@
+{
+  "host": "10.10.38.147",
+  "version": "0.3.23",
+  "build": "26",
+  "original_screen_request": null,
+  "original_visible_screen": "dashboard (baseline screenshot)",
+  "navigation_only": true,
+  "no_call_sos_lock_action": true,
+  "navigate_exit": 0,
+  "fetch_exit": 0,
+  "restore_exit": 0,
+  "final_screen_request": "__ABSENT__",
+  "observed_result": "Navigation hook did not change installed dashboard; screenshot remains monitor. Visitor baseline unavailable through installed hook; restored request absence and verified dashboard.",
+  "visitor_screenshot_status": "NOT_AVAILABLE"
+}

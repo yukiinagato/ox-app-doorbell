@@ -1,0 +1,65 @@
+{
+  "scope": "production DOM with controlled XHR; not Core HTTP end-to-end",
+  "source_sha256": "965a241d798e2fd57f6ef6195947cc715def0033513f498cbe8c9fb88c27fbaf",
+  "case_sha256": "f66e5879e3a9552abc03aae2bc7bb5cbeb22029d2757d4228e3c827e920bc3d4",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T17:17:56.476Z",
+  "results": [
+    {
+      "id": "Partition banner exposes the effective value and both candidate intents",
+      "status": "PASS"
+    },
+    {
+      "id": "Resolution choice has an accessible name",
+      "status": "PASS"
+    },
+    {
+      "id": "Explicit effective choice sends the exact revision and all current heads",
+      "status": "PASS"
+    },
+    {
+      "id": "Head selection sends its full candidate rather than the LWW winner",
+      "status": "PASS"
+    },
+    {
+      "id": "Sensitive candidates cannot be restored by current or head choice",
+      "status": "PASS"
+    },
+    {
+      "id": "Refresh preserves custom JSON and updates revision and every resolution head",
+      "status": "PASS"
+    },
+    {
+      "id": "409 remains visible and never automatically overwrites the newer heads",
+      "status": "PASS"
+    },
+    {
+      "id": "401 retains non-sensitive choice but clears arbitrary custom JSON",
+      "status": "PASS"
+    },
+    {
+      "id": "Invalid custom JSON cannot create a resolution",
+      "status": "PASS"
+    },
+    {
+      "id": "Custom entity deletion is explicit and references the candidate heads",
+      "status": "PASS"
+    },
+    {
+      "id": "Deleted candidate produces a delete rather than a null set",
+      "status": "PASS"
+    },
+    {
+      "id": "Candidate strings are rendered as text",
+      "status": "PASS"
+    },
+    {
+      "id": "History capacity is visible without inventing an unresolved candidate",
+      "status": "PASS"
+    },
+    {
+      "id": "Open page discovers remote conflicts without replacing an editor draft",
+      "status": "PASS"
+    }
+  ]
+}

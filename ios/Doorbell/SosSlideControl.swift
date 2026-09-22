@@ -29,6 +29,8 @@ final class SosSlideControl: UIControl {
     private var counting = false
     private var remaining = 0
     private var timer: Timer?
+    private weak var accessibleConfirmation: UIAlertController?
+    private var confirmationRevision: UInt64 = 0
 
     private static let thumbSide: CGFloat = 52
     /// The bar is a bar. Inside a filling stack it has no intrinsic height to defend, so it took
@@ -143,18 +145,16 @@ final class SosSlideControl: UIControl {
             cancelButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 96),
             cancelButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
         ])
-        #if os(tvOS)
-        // No touch tracking on tvOS: the control is focusable and the select button arms it.
         addTarget(self, action: #selector(onSelect), for: .primaryActionTriggered)
-        #endif
     }
 
     private func applyIdleLabel() {
         label.attributedText = DoorbellTheme.twoPart(
             texts.t("sos.slide_two_line", "\(countdownSeconds)"), primarySize: 17,
             color: .white, bold: false)
-        accessibilityLabel = texts.t("sos.slide_two_line", "\(countdownSeconds)")
-            .replacingOccurrences(of: "\n", with: " ")
+        accessibilityLabel = texts.t("sos.accessibility_start")
+        accessibilityHint = texts.t("sos.accessibility_hint")
+        accessibilityValue = nil
     }
 
     func refreshStrings() {
@@ -178,10 +178,81 @@ final class SosSlideControl: UIControl {
         }, completion: nil)
     }
 
-    @objc private func onSelect() {
-        if counting { cancelCountdown() } else { startCountdown() }
-    }
     #endif
+
+    @objc private func onSelect() {
+        guard isEnabled else { return }
+#if os(tvOS)
+        if counting { cancelCountdown() } else { startCountdown() }
+#else
+        _ = accessibilityActivate()
+#endif
+    }
+
+    override func accessibilityActivate() -> Bool {
+        guard isAvailableForActivation else { return false }
+        if counting { cancelCountdown(); return true }
+        if accessibleConfirmation != nil { return true }
+        var responder: UIResponder? = self
+        while let current = responder, !(current is UIViewController) { responder = current.next }
+        guard let presenter = responder as? UIViewController,
+              presenter.presentedViewController == nil, window != nil else { return false }
+        let alert = UIAlertController(title: texts.t("sos.accessibility_confirm"),
+                                      message: texts.t("sos.accessibility_hint"), preferredStyle: .alert)
+        confirmationRevision &+= 1
+        let revision = confirmationRevision
+        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel) { [weak self] _ in
+            guard let self = self, self.confirmationRevision == revision else { return }
+            self.accessibleConfirmation = nil
+        })
+        alert.addAction(UIAlertAction(title: texts.t("sos.accessibility_start"), style: .destructive) {
+            [weak self] _ in self?.confirmAccessibleStart(revision: revision)
+        })
+        accessibleConfirmation = alert
+        presenter.present(alert, animated: true)
+        return true
+    }
+
+    private var isAvailableForActivation: Bool {
+        guard isEnabled, window != nil else { return false }
+        var current: UIView? = self
+        while let view = current {
+            if view.isHidden || view.alpha <= 0 || !view.isUserInteractionEnabled { return false }
+            current = view.superview
+        }
+        return true
+    }
+
+    private func confirmAccessibleStart(revision: UInt64) {
+        guard revision == confirmationRevision else { return }
+        accessibleConfirmation = nil
+        guard isAvailableForActivation else { return }
+        startCountdown()
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        guard window == nil else { return }
+        // Responsive stack rebuilding can reparent this control during the same layout pass.
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, self.window == nil else { return }
+            self.cancelCountdown()
+        }
+    }
+
+    override var isEnabled: Bool {
+        didSet { if !isEnabled { cancelCountdown() } }
+    }
+
+#if os(iOS)
+    override var canBecomeFirstResponder: Bool { return true }
+    override var keyCommands: [UIKeyCommand]? {
+        return [UIKeyCommand(input: " ", modifierFlags: [], action: #selector(onSelect)),
+                UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(onSelect)),
+                UIKeyCommand(input: UIKeyCommand.inputEscape, modifierFlags: [],
+                             action: #selector(cancelCountdown))]
+    }
+#endif
 
     // MARK: - Touch tracking
 
@@ -262,6 +333,9 @@ final class SosSlideControl: UIControl {
     }
 
     @objc func cancelCountdown() {
+        confirmationRevision &+= 1
+        accessibleConfirmation?.dismiss(animated: false)
+        accessibleConfirmation = nil
         guard counting else { return }
         stopCountdown()
         onCountdown?(nil)
@@ -299,6 +373,8 @@ final class SosSlideControl: UIControl {
 
     private func renderCountdown() {
         countdownLabel.text = texts.t("sos.countdown", "\(max(remaining, 0))")
+        accessibilityValue = countdownLabel.text
+        accessibilityHint = texts.t("sos.cancel_countdown")
     }
 
     var isCountingDown: Bool { return counting }

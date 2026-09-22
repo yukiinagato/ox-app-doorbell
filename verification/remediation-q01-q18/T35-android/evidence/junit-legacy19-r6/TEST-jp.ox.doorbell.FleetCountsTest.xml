@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.FleetCountsTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:14:56" hostname="MacBookPro.local" time="0.007">
+  <properties/>
+  <testcase name="aClusterOfThreeIsCountedByRole" classname="jp.ox.doorbell.FleetCountsTest" time="0.006"/>
+  <testcase name="anUnknownRoleCountsAsADeviceOnly" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="theDeviceStatusDocumentCountsTheSameAsTheAdministrationApi" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="aDeviceThatIsNotAnsweringCountsInTheTotalButNotAsOnline" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="thisNodeIsCountedExactlyOnce" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="thisNodeIsMatchedByIdWhenCoreDidNotFlagIt" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="aRoleNobodyHasCountsZero" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="theStartupStatusDocumentIsTheReportedMisreading" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="theDeviceReportedClusterCountsBothPanelsOnline" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="anEmptyOrAbsentStatusStillCountsThisDevice" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="aPeerInAnUnrecognisedStateIsNotCountedAsAnswering" classname="jp.ox.doorbell.FleetCountsTest" time="0.001"/>
+  <testcase name="aLiveAdvertisedRoleOverridesStaleConfiguration" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="aPeerWhoseRoleHasNotArrivedYetCountsAsADeviceOnly" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="theStartupDocumentCountsBothPanelsOnceConfigurationNamesTheRole" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <testcase name="thisNodeIsAlwaysOnline" classname="jp.ox.doorbell.FleetCountsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

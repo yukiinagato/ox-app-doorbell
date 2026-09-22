@@ -1,0 +1,23 @@
+{
+  "task_id": "T24",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T24/source-final.json",
+  "command": [
+    "./android/gradlew",
+    "-p",
+    "android",
+    "--no-daemon",
+    "testModernDebugUnitTest",
+    "--tests",
+    "jp.ox.doorbell.ClusterDateTextTest"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "java_home": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+  "android_home": "/Users/ox/Library/Android/sdk",
+  "exit_code": 0,
+  "observed_result": "Four actual JVM tests passed with generated language resources.",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T24/evidence/t24-modern.log",
+  "junit": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T24/evidence/modern-tests.xml",
+  "limitations": [
+    "Host Kotlin/JVM and Android lint; no hardware or rendered Android UI qualification."
+  ]
+}

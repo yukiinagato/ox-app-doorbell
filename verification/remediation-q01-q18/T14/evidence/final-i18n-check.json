@@ -1,0 +1,9 @@
+{
+  "command": [
+    "python3",
+    "tools/gen_i18n.py",
+    "--check"
+  ],
+  "exit_code": 0,
+  "output": "gen_i18n: 15 generated files are current\n"
+}

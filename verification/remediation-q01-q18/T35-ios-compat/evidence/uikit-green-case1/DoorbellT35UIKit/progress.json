@@ -1,0 +1,96 @@
+{
+  "build" : "10",
+  "pid" : 30803,
+  "checks" : [
+    {
+      "name" : "Disabled purpose absent",
+      "resident_bytes" : 15020032,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 15020032,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Purpose-first sends the selected purpose once",
+      "resident_bytes" : 15077376,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Purpose-first enters ringing",
+      "resident_bytes" : 15077376,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17149952,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Visitor cancellation returns idle",
+      "resident_bytes" : 17149952,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 25874432,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Ring-first sends immediately",
+      "resident_bytes" : 28672000,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit skip button dispatched",
+      "resident_bytes" : 28774400,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Skip preserves the call",
+      "resident_bytes" : 28774400,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 28774400,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 37511168,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit purpose button dispatched",
+      "resident_bytes" : 39542784,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Ring-first purpose updates existing call",
+      "resident_bytes" : 39542784,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 39542784,
+      "case" : "T35-01",
+      "pass" : true
+    }
+  ]
+}

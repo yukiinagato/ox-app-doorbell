@@ -1,0 +1,27 @@
+T00 baseline evidence; date=2026-09-22; source_sha=b26e0d346df99f2879915241b6e98d8ef1aa0707
+This log records read-only inventory commands. It is not a product test log.
+
+PASS exit=0: git rev-parse HEAD; git branch --show-current; git cat-file -e b26e0d3^{commit}
+  head=b26e0d346df99f2879915241b6e98d8ef1aa0707 branch=main base_exists=yes
+PASS exit=0: git status --short
+  clean before T00 outputs
+PASS exit=0: git diff --name-only b26e0d346df99f2879915241b6e98d8ef1aa0707..HEAD
+  file_count=0
+PASS exit=0: git diff ... b26e0d346df99f2879915241b6e98d8ef1aa0707..HEAD | shasum -a 256
+  e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+PASS exit=0: jq/read-only inspection of source/findings.json, traceability and review overlay
+  Q01-Q18 locations read; R1-R6 count=55; M01-M08 overlay read
+PASS exit=0: read-only production symbol and route search
+  Core HTTP/runloop, Web panel/admin, iOS, Android and Windows entrypoints located
+PASS exit=0: cmake --version; clang --version; node --version; swift --version; xcodebuild -version
+  cmake=4.4.3 clang=Apple-21 node=v25.9.0 swift=6.3.3 xcode=26.6
+PASS exit=0: xcodebuild -showsdks; xcrun simctl list devices available
+  current iOS/tvOS SDKs visible; no target physical device
+PASS exit=0: adb devices
+  no Android devices; no doorbell or SOS action invoked
+PASS exit=0: filesystem/toolchain availability probes
+  Android SDK/NDK entries absent; iOS5 local tools present; iOS9 armv7 PJSIP root missing
+
+NOT_RUN: Core build/tests, Gradle modern/legacy19, iOS App build/sign/install, tvOS build/device,
+Windows native/WPF, real browser, camera/WebRTC, real SIP/media, Q01-Q18 dynamic regressions,
+Q10 barrier reproduction, physical door/SOS.

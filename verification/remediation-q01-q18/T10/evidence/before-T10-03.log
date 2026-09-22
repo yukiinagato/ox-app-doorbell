@@ -1,0 +1,15 @@
+AssertionError [ERR_ASSERTION]: stale age uses the last successful monotonic sample
++ actual - expected
+
++ ''
+- 'Last update 6s ago'
+
+    at T10-03 (/Users/ox/Documents/project/app-doorbell/webui/tests/call_poll_lanes.test.js:53:12)
+    at async /Users/ox/Documents/project/app-doorbell/webui/tests/call_poll_lanes.test.js:84:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: '',
+  expected: 'Last update 6s ago',
+  operator: 'strictEqual',
+  diff: 'simple'
+}

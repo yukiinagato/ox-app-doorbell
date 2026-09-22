@@ -1,0 +1,36 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "4d84aefa8e8cfa8d5c2af3ba0d44330f1ea988189caaa24bf0f924954b4c3fa3",
+  "task_id": "T23",
+  "test_id": "timing-red-r1",
+  "evidence_kind": "host_native",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/source-candidate-r1.json",
+  "source_manifest_sha256": "7182d07576bc8184b11410fcaf611a46738c2ace4361080ace03a5ed02b40802",
+  "command": [
+    "build/remediation-t23-20260923/call_timing_test",
+    "--red-old-recovery"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:13:21.099894+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "host_timing_plus_MiniSIP_loopback",
+  "signing_state": "host_unsigned",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/evidence/timing-red-r1.log",
+  "limitations": [
+    "Host production-helper or historical-SDK build evidence; no physical device clock, installation, SIP/media hardware, or iOS9 armv7 qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T15:13:21.660011+00:00",
+  "expected_exit_code": 1,
+  "status": "PASS",
+  "observed_result": "Original production DBCallEventTracker rejects Core-valid call when supplied device wall time +300000ms: expected business assertion FAIL, exit1 reproduced.",
+  "artifact_provenance": null
+}

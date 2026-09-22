@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.ThemeBackdropTest" tests="15" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:15:24" hostname="MacBookPro.local" time="0.004">
+  <properties/>
+  <testcase name="onePreparedCopyPerPictureAndSize" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.002"/>
+  <testcase name="aPortraitWallpaperIsCroppedBeforeItIsSampledForLandscape" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.001"/>
+  <testcase name="theOverlayIsWithinTheSpecifiedRange" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="aLargeWallpaperKeepsAtLeastTheTargetResolution" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="theOverlayIsAnOpaqueBlackAlphaByte" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="aWidePictureOnATallViewOverflowsSidewaysAndStaysCentred" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="darkeningScalesEachChannelTowardsBlack" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="aDegenerateSizeIsNotACrash" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="aPictureOfTheSameShapeFillsTheViewExactly" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="aBrightPhotographIsDarkenedTowardsTheSameFloor" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="aMovedOverlayIsADifferentPreparedCopy" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.001"/>
+  <testcase name="aTallPictureOnAWideViewOverflowsVerticallyAndStaysCentred" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="theCacheHoldsAPanelsRealWorkingSet" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="theAspectRatioIsNeverDistorted" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <testcase name="aWhitePictureBecomesDarkEnoughForLightInk" classname="jp.ox.doorbell.ThemeBackdropTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

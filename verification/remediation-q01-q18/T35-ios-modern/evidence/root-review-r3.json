@@ -1,0 +1,15 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T17:24:04.301256+00:00",
+  "status": "CHANGES_REQUESTED",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r3.json",
+  "source_manifest_sha256": "c68c67452289b426588c570382a4df5d81d5e088f82a71703ed2ec2c0e32e5be",
+  "findings": [
+    {
+      "id": "R1",
+      "status": "OPEN",
+      "description": "The in-call title has no bottom/scroll constraint separating it from the fixed end button under large text and short landscape. Keep secondary text scrollable and assert non-intersection in UIKit."
+    }
+  ],
+  "scope": "Independent source and evidence review; target UI qualification is limited to the actual recorded runtime profiles. No physical actuator or deployment validation."
+}

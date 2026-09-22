@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.PairingModelTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.004">
+  <properties/>
+  <testcase name="onlyACompleteAddQrPayloadIsAccepted" classname="jp.ox.doorbell.PairingModelTest" time="0.001"/>
+  <testcase name="onlyReadyKeepsTheMainUiVisible" classname="jp.ox.doorbell.PairingModelTest" time="0.0"/>
+  <testcase name="membershipCountsAreReadFromHomeAndClampedAtZero" classname="jp.ox.doorbell.PairingModelTest" time="0.0"/>
+  <testcase name="theDeclaredStateIsAuthoritativeAndNeverInferred" classname="jp.ox.doorbell.PairingModelTest" time="0.0"/>
+  <testcase name="aSnapshotFromAnOlderCoreStillProducesAUsableState" classname="jp.ox.doorbell.PairingModelTest" time="0.0"/>
+  <testcase name="theTokenExposesThePinOnlyWhileItIsLive" classname="jp.ox.doorbell.PairingModelTest" time="0.0"/>
+  <testcase name="bulkAddCarriesTheCountdownAndTheCount" classname="jp.ox.doorbell.PairingModelTest" time="0.0"/>
+  <testcase name="everyDocumentedErrorCodeHasItsOwnHumanMessageAndKey" classname="jp.ox.doorbell.PairingModelTest" time="0.001"/>
+  <testcase name="pendingDevicesCarryTheCardFieldsAndNeverRenderBlank" classname="jp.ox.doorbell.PairingModelTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

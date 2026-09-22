@@ -1,0 +1,134 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/8.11.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preModernDebugBuild UP-TO-DATE
+> Task :app:mergeModernDebugNativeDebugMetadata NO-SOURCE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateModernDebugBuildConfig
+> Task :app:checkModernDebugAarMetadata
+> Task :app:generateModernDebugResValues
+> Task :app:mapModernDebugSourceSetPaths
+> Task :app:generateModernDebugResources
+> Task :app:mergeModernDebugResources
+> Task :app:packageModernDebugResources
+> Task :app:createModernDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksModernDebug
+> Task :app:processModernDebugMainManifest
+> Task :app:parseModernDebugLocalResources
+> Task :app:processModernDebugManifest
+> Task :app:javaPreCompileModernDebug
+> Task :app:mergeModernDebugShaders
+> Task :app:compileModernDebugShaders NO-SOURCE
+> Task :app:generateModernDebugAssets UP-TO-DATE
+> Task :app:mergeModernDebugAssets
+> Task :app:checkModernDebugDuplicateClasses
+> Task :app:compressModernDebugAssets
+> Task :app:desugarModernDebugFileDependencies
+> Task :app:mergeLibDexModernDebug
+> Task :app:configureCMakeDebug[arm64-v8a]
+> Task :app:mergeExtDexModernDebug
+
+> Task :app:buildCMakeDebug[arm64-v8a][doorbell] FAILED
+C/C++: ninja: Entering directory `/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/android/app/.cxx/Debug/3u5j596e/arm64-v8a'
+C/C++: /Users/ox/Library/Android/sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android21 --sysroot=/Users/ox/Library/Android/sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -DDB_HAVE_PJSIP -DNO_CACHING -DNO_CGI -DNO_SSL -DPJ_AUTOCONF=1 -DPJ_IS_BIG_ENDIAN=0 -DPJ_IS_LITTLE_ENDIAN=1 -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 -DSQLITE_DQS=0 -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=1 -DUSE_IPV6 -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/include -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/android/app/src/main/cpp/../../../../../core/third_party/pjsip/android/api21/arm64-v8a/include -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/sqlite -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/civetweb -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/cjson -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/monocypher -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/qrcodegen -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/quirc -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/stb -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC -Wall -Wextra -Wno-unused-parameter -std=gnu++17 -MD -MT core/CMakeFiles/doorbell_core.dir/src/node/node.cpp.o -MF core/CMakeFiles/doorbell_core.dir/src/node/node.cpp.o.d -o core/CMakeFiles/doorbell_core.dir/src/node/node.cpp.o -c /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src/node/node.cpp
+C/C++: /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src/node/node.cpp:9399:7: error: call to 'set' is ambiguous
+C/C++:  9399 |       json::set(notice.get(), "expires_ms",
+C/C++:       |       ^~~~~~~~~
+C/C++: /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src/util/json.h:36:6: note: candidate function
+C/C++:    36 | void set(cJSON* o, const char* key, int64_t v);
+C/C++:       |      ^
+C/C++: /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src/util/json.h:37:6: note: candidate function
+C/C++:    37 | void set(cJSON* o, const char* key, double v);
+C/C++:       |      ^
+C/C++: 1 error generated.
+
+> Task :app:processModernDebugManifestForPackage
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:buildCMakeDebug[arm64-v8a][doorbell]'.
+> com.android.ide.common.process.ProcessException: ninja: Entering directory `/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/android/app/.cxx/Debug/3u5j596e/arm64-v8a'
+  [0/2] Re-checking globbed directories...
+  [1/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/quirc/version_db.c.o
+  [2/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher-ed25519.c.o
+  [3/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/quirc/quirc.c.o
+  [4/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/quirc/decode.c.o
+  [5/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/qrcodegen/qrcodegen.c.o
+  [6/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/quirc/identify.c.o
+  [7/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/cjson/cJSON.c.o
+  [8/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/monocypher/monocypher.c.o
+  [9/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/stb/stb_image_impl.c.o
+  [10/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/civetweb/civetweb.c.o
+  [11/53] Building C object core/CMakeFiles/db_third_party.dir/third_party/sqlite/sqlite3.c.o
+  [12/53] Linking C static library core/libdb_third_party.a
+  [13/53] Embedding webui assets
+  embed_webui: 23 assets, 1941221 bytes -> /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/android/app/.cxx/Debug/3u5j596e/arm64-v8a/gen/webui_assets.cpp
+  [14/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/media/motion_detector.cpp.o
+  [15/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/media/fmp4.cpp.o
+  [16/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/media/fmp4_demux.cpp.o
+  [17/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/events/rule_engine.cpp.o
+  [18/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/media/frame_bus.cpp.o
+  [19/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/bridge/ha_bridge.cpp.o
+  [20/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/events/event_log.cpp.o
+  [21/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/media/qr_scanner.cpp.o
+  [22/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/bridge/mqtt_client.cpp.o
+  [23/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/crdt/lww_map.cpp.o
+  [24/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/media/video_track.cpp.o
+  [25/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/httpd/httpd.cpp.o
+  [26/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/capi/doorbell_capi.cpp.o
+  [27/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/mesh/secure_channel.cpp.o
+  [28/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/mesh/udp_beacon.cpp.o
+  [29/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/node/operation_dispatcher.cpp.o
+  [30/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/node/config_edit_journal.cpp.o
+  [31/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/store/operation_ledger.cpp.o
+  [32/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/color.cpp.o
+  [33/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/json.cpp.o
+  [34/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/bridge/telegram.cpp.o
+  [35/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/mesh/inmem_net.cpp.o
+  [36/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/hlc.cpp.o
+  [37/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/ids.cpp.o
+  [38/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/common.cpp.o
+  [39/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/sipctl/sipctl.cpp.o
+  [40/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/pair_uri.cpp.o
+  [41/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/log.cpp.o
+  [42/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/tz.cpp.o
+  [43/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/store/store.cpp.o
+  [44/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/sntp.cpp.o
+  [45/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/mesh/tcp_transport.cpp.o
+  [46/53] Building CXX object core/CMakeFiles/doorbell.dir/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/android/app/src/main/cpp/jni_bridge.cpp.o
+  [47/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/util/runloop.cpp.o
+  [48/53] Building CXX object core/CMakeFiles/doorbell.dir/src/capi/doorbell_capi.cpp.o
+  [49/53] Building CXX object core/CMakeFiles/doorbell_core.dir/__/gen/webui_assets.cpp.o
+  [50/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/mesh/mesh.cpp.o
+  [51/53] Building CXX object core/CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+  FAILED: core/CMakeFiles/doorbell_core.dir/src/node/node.cpp.o 
+  /Users/ox/Library/Android/sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/darwin-x86_64/bin/clang++ --target=aarch64-none-linux-android21 --sysroot=/Users/ox/Library/Android/sdk/ndk/27.1.12297006/toolchains/llvm/prebuilt/darwin-x86_64/sysroot -DDB_HAVE_PJSIP -DNO_CACHING -DNO_CGI -DNO_SSL -DPJ_AUTOCONF=1 -DPJ_IS_BIG_ENDIAN=0 -DPJ_IS_LITTLE_ENDIAN=1 -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 -DSQLITE_DQS=0 -DSQLITE_OMIT_LOAD_EXTENSION -DSQLITE_THREADSAFE=1 -DUSE_IPV6 -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/include -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/android/app/src/main/cpp/../../../../../core/third_party/pjsip/android/api21/arm64-v8a/include -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/sqlite -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/civetweb -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/cjson -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/monocypher -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/qrcodegen -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/quirc -I/Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/third_party/stb -g -DANDROID -fdata-sections -ffunction-sections -funwind-tables -fstack-protector-strong -no-canonical-prefixes -D_FORTIFY_SOURCE=2 -Wformat -Werror=format-security   -fno-limit-debug-info  -fPIC -Wall -Wextra -Wno-unused-parameter -std=gnu++17 -MD -MT core/CMakeFiles/doorbell_core.dir/src/node/node.cpp.o -MF core/CMakeFiles/doorbell_core.dir/src/node/node.cpp.o.d -o core/CMakeFiles/doorbell_core.dir/src/node/node.cpp.o -c /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src/node/node.cpp
+  /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src/node/node.cpp:9399:7: error: call to 'set' is ambiguous
+   9399 |       json::set(notice.get(), "expires_ms",
+        |       ^~~~~~~~~
+  /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src/util/json.h:36:6: note: candidate function
+     36 | void set(cJSON* o, const char* key, int64_t v);
+        |      ^
+  /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/core/src/util/json.h:37:6: note: candidate function
+     37 | void set(cJSON* o, const char* key, double v);
+        |      ^
+  1 error generated.
+  ninja: build stopped: subcommand failed.
+  
+  C++ build system [build] failed while executing:
+      /Users/ox/Library/Android/sdk/cmake/3.22.1/bin/ninja \
+        -C \
+        /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/android/app/.cxx/Debug/3u5j596e/arm64-v8a \
+        doorbell
+    from /Users/ox/Documents/project/app-doorbell/build/remediation-t35-android-20260923/source-r1/android/app
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+BUILD FAILED in 28s
+23 actionable tasks: 23 executed

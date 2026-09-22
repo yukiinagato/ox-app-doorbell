@@ -1,0 +1,32 @@
+09-23 01:47:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-a
+09-23 01:47:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:47:20 I [node] node c837dddf (config-race-a) started
+09-23 01:47:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-b
+09-23 01:47:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:47:20 I [node] node fb804c03 (config-race-b) started
+09-23 01:47:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-a
+09-23 01:47:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:47:20 I [node] node ee37f9e3 (config-race-a) started
+09-23 01:47:20 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=config-race-b
+09-23 01:47:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:47:20 I [node] node 799ee3ea (config-race-b) started
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/red-source/core/tests/test_config_conflicts.cpp:72:
+TEST CASE:  config conflicts: partitioned production replicas retain both editing intents
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/red-source/core/tests/test_config_conflicts.cpp:79: FATAL ERROR: REQUIRE( cJSON_IsArray(conflicts) ) is NOT correct!
+  values: REQUIRE( 0 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/red-source/core/tests/test_config_conflicts.cpp:95:
+TEST CASE:  config conflicts: explicit resolution references every head and does not remerge
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t28-20260923/red-source/core/tests/test_config_conflicts.cpp:99: FATAL ERROR: REQUIRE( cJSON_IsArray(conflicts) ) is NOT correct!
+  values: REQUIRE( 0 )
+
+===============================================================================
+[doctest] test cases:  2 |  0 passed | 2 failed | 493 skipped
+[doctest] assertions: 12 | 10 passed | 2 failed |
+[doctest] Status: FAILURE!

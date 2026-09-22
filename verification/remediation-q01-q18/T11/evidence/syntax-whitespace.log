@@ -1,0 +1,8 @@
+node --check build/remediation-t11-20260922/call-inline.js
+exit_code=0
+
+node --check webui/panel/runtime.js
+exit_code=0
+
+git diff --check -- core/src/node/node.cpp core/tests/test_panel.cpp webui/panel/call.html webui/tests/call_page_fixture.js webui/tests/call_poll_lanes.test.js
+exit_code=0

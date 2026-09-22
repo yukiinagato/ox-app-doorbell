@@ -1,0 +1,32 @@
+[
+  {
+    "command": [
+      "node",
+      "--check",
+      "webui/panel/runtime.js"
+    ],
+    "exit_code": 0,
+    "output": ""
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check",
+      "--",
+      "webui/panel/call.html",
+      "webui/tests/call_state_controller.test.js"
+    ],
+    "exit_code": 0,
+    "output": ""
+  },
+  {
+    "command": [
+      "node",
+      "--check",
+      "build/remediation-t10-20260922/call-inline.js"
+    ],
+    "exit_code": 0,
+    "output": ""
+  }
+]

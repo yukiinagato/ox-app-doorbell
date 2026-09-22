@@ -1,0 +1,481 @@
+{
+  "source_manifest" : "f57098ce19961c6e4ec3965f6fd2b53de03dfe5acc9400c96a24a48dc6147af7",
+  "failed" : 6,
+  "system_version" : "5.1.1",
+  "bundle_id" : "jp.ox.doorbell.t35uitest",
+  "build" : "6",
+  "boundary_calls" : [
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured"
+  ],
+  "scope" : "Actual iPad UIKit hierarchy, production target\/actions, dialogs, timers, hit-testing and rendering. UIControl events are programmatically dispatched; no HID injection, physical rotation, VoiceOver speech or external Core action.",
+  "version" : "1.0.0",
+  "machine" : "iPad1,1",
+  "checks" : [
+    {
+      "name" : "Disabled purpose absent",
+      "resident_bytes" : 15003648,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 15003648,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Purpose-first sends the selected purpose once",
+      "resident_bytes" : 15069184,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Purpose-first enters ringing",
+      "resident_bytes" : 15073280,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17149952,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Visitor cancellation returns idle",
+      "resident_bytes" : 17149952,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 25866240,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Ring-first sends immediately",
+      "resident_bytes" : 28680192,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit skip button dispatched",
+      "resident_bytes" : 28794880,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Skip preserves the call",
+      "resident_bytes" : 28794880,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 28794880,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 37543936,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit purpose button dispatched",
+      "resident_bytes" : 39579648,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Ring-first purpose updates existing call",
+      "resident_bytes" : 39579648,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 39579648,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 16556032,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Call and cancel share the fixed action area",
+      "resident_bytes" : 16556032,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Ringing touch cannot become connected end",
+      "resident_bytes" : 16560128,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Connected end remains in the same area",
+      "resident_bytes" : 16560128,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18423808,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Fresh connected end works",
+      "resident_bytes" : 18423808,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 27058176,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Nil visitor ID native SIP call can end",
+      "resident_bytes" : 27058176,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Old nil-ID gesture cannot end the next SIP session",
+      "resident_bytes" : 27090944,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 27090944,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 16609280,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Ordinary network failure keeps neutral visitor page",
+      "resident_bytes" : 16609280,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Authoritative SOS event shows emergency layer",
+      "resident_bytes" : 18415616,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18415616,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Existing SOS clear passes PIN boundary",
+      "resident_bytes" : 18415616,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Accessible activation requires confirmation",
+      "resident_bytes" : 18493440,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit SOS confirmation button dispatched",
+      "resident_bytes" : 18653184,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Confirmed SOS observes countdown",
+      "resident_bytes" : 18653184,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "SOS timer delivers once to isolated Core boundary",
+      "resident_bytes" : 18604032,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 16924672,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 16924672,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 16924672,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18894848,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays fixed and has accessible label",
+      "resident_bytes" : 18894848,
+      "case" : "T35-04",
+      "pass" : false
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18894848,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 18894848,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 16924672,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 16924672,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 16924672,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17162240,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays fixed and has accessible label",
+      "resident_bytes" : 17162240,
+      "case" : "T35-04",
+      "pass" : false
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17162240,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 17162240,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 17141760,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 17141760,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 17141760,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 19197952,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays fixed and has accessible label",
+      "resident_bytes" : 19202048,
+      "case" : "T35-04",
+      "pass" : false
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 19206144,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 19234816,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 17633280,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 17645568,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 17657856,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17633280,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays fixed and has accessible label",
+      "resident_bytes" : 17645568,
+      "case" : "T35-04",
+      "pass" : false
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17657856,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 17670144,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 18518016,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 18530304,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 18542592,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 21368832,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays fixed and has accessible label",
+      "resident_bytes" : 21401600,
+      "case" : "T35-04",
+      "pass" : false
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 21413888,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 21467136,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 19845120,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 19857408,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 19869696,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 19845120,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays fixed and has accessible label",
+      "resident_bytes" : 19857408,
+      "case" : "T35-04",
+      "pass" : false
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 19869696,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 19898368,
+      "case" : "T35-04",
+      "pass" : true
+    }
+  ],
+  "pid" : 30535
+}

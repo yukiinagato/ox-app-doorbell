@@ -60,6 +60,18 @@ void Runloop::cancel(uint64_t id) {
   cancelled_.insert(id);
 }
 
+bool Runloop::cancelQueued(uint64_t id) {
+  if (id == 0) return false;
+  std::lock_guard<std::mutex> lk(mu_);
+  for (auto it = queue_.begin(); it != queue_.end(); ++it) {
+    if (it->second.id == id) {
+      queue_.erase(it);
+      return true;
+    }
+  }
+  return false;
+}
+
 bool Runloop::runOne_(std::unique_lock<std::mutex>& lk) {
   if (queue_.empty()) return false;
   auto it = queue_.begin();

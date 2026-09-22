@@ -105,8 +105,11 @@ void HaBridge::startClient(const MqttClient::Options& mo) {
   mopts_ = mo;
   MqttClient::Callbacks cbs;
   cbs.on_connected = [this] { onConnected(); };
-  cbs.on_disconnected = [this] { connected_ = false; };
-  cbs.on_message = [this](const std::string& t, const std::string& p, bool) { onMessage(t, p); };
+  cbs.on_disconnected = [this] {
+    connected_ = false;
+    if (hooks_.on_operation_disconnect) hooks_.on_operation_disconnect();
+  };
+  cbs.on_message = [this](const std::string& t, const std::string& p, bool retained) { onMessage(t, p, retained); };
   client_.reset(new MqttClient(loop_, mo, std::move(cbs)));
   client_->start();
   DB_LOGI(kTag, "bridge started at " + mo.host + ":" + std::to_string(mo.port));
@@ -120,6 +123,7 @@ void HaBridge::stopClient(bool graceful) {
   client_->stop();
   client_.reset();
   connected_ = false;
+  if (hooks_.on_operation_disconnect) hooks_.on_operation_disconnect();
 }
 
 void HaBridge::stop() {
@@ -147,6 +151,38 @@ void HaBridge::onConnected() {
 
 void HaBridge::pub(const std::string& topic, const std::string& payload, bool retain) {
   if (client_) client_->publish(topic, payload, retain);
+}
+
+bool HaBridge::dispatchOperation(const std::string& door, const std::string& command,
+                                 const std::string& operation_id, const std::string& authority,
+                                 const std::string& binding, const std::string& actuator,
+                                 const std::string& command_digest) {
+  if (!operationReady(binding) || authority != node_id_ || command.empty() ||
+      sanitizeId(command) != command || door.empty() || operation_id.size() != 32) return false;
+  auto payload = json::obj();
+  json::set(payload.get(), "door", door);
+  json::set(payload.get(), "operation_id", operation_id);
+  json::set(payload.get(), "authority_node", authority);
+  if (!actuator.empty()) {
+    json::set(payload.get(), "ack_protocol", "ed25519-v1");
+    json::set(payload.get(), "actuator_id", actuator);
+    json::set(payload.get(), "command_digest", command_digest);
+  }
+  return client_->tryPublish(base_ + "/cmd/" + command, json::dump(payload.get()));
+}
+
+std::string HaBridge::operationBinding(const std::string& host, uint16_t port,
+                                       const std::string& base_topic) {
+  auto binding = json::obj();
+  json::set(binding.get(), "host", host);
+  json::set(binding.get(), "port", static_cast<int64_t>(port));
+  json::set(binding.get(), "base_topic", base_topic);
+  return sha256Hex(toBytes(json::dump(binding.get())));
+}
+
+bool HaBridge::operationReady(const std::string& binding) const {
+  return active_ && connected_ && client_ &&
+      binding == operationBinding(mopts_.host, mopts_.port, base_);
 }
 
 // ---------------------------------------------------------------- Discovery
@@ -411,7 +447,7 @@ void HaBridge::onEvent(const EventRecord& ev) {
 
 
 
-void HaBridge::onMessage(const std::string& topic, const std::string& payload) {
+void HaBridge::onMessage(const std::string& topic, const std::string& payload, bool retained) {
   if (topic == prefix_ + "/status") {
 
     if (payload == "online" && connected_) {
@@ -423,7 +459,8 @@ void HaBridge::onMessage(const std::string& topic, const std::string& payload) {
     return;
   }
   if (topic == base_ + "/cmd/ack") {
-    DB_LOGI(kTag, "cmd ack: " + payload);
+    if (!retained && payload.size() <= 2048 && hooks_.on_operation_ack)
+      hooks_.on_operation_ack(payload);
     return;
   }
   // <base>/<door_id>/reply/set

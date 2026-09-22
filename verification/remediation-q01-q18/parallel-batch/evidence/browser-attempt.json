@@ -1,0 +1,17 @@
+{
+  "status": "BLOCKED_ENV",
+  "fixture_pid": 83360,
+  "fixture_command": "build/remediation-parallel-20260922/browser-fixture build/remediation-parallel-20260922/browser-data 28003",
+  "binary_sha256": "bf33fc887e7ab9118c0e446c4844b6d1f1d87e829abce2a2d6efcc42d92273e6",
+  "reason": "IAB backend not connected; Chrome blocks automation because another extension UI is open.",
+  "ui_assertions_passed": [],
+  "cleanup": {
+    "fixture_exit_code": 0,
+    "ports_rebound": [
+      "127.0.0.1:28003",
+      "[::1]:28003"
+    ],
+    "database_exclusive_integrity": "ok",
+    "disposable_data_removed": true
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T17:46:24.251117+00:00",
+  "status": "APPROVED_SOURCE_CORRECTION_PENDING_FINAL_UIKIT_EVIDENCE",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-compat/source-frozen-r6.json",
+  "source_manifest_sha256": "f57098ce19961c6e4ec3965f6fd2b53de03dfe5acc9400c96a24a48dc6147af7",
+  "findings": [
+    {
+      "id": "R1",
+      "status": "FIXED",
+      "description": "Touch-down captures phase, call identity and action generation; release clears the latch then rejects any changed identity, phase or generation. Accessibility activation uses the current visible operation."
+    },
+    {
+      "id": "R2",
+      "status": "FIXED",
+      "description": "Pointer equality treats two nil call IDs as the same current SIP session; UI phase transitions increment the generation, rejecting a stale nil-ID gesture across distinct calls."
+    }
+  ],
+  "checks": [
+    "Reviewed production gesture and all phase generation changes against frozen r6.",
+    "Reviewed actual host result: 42 selector checks, zero failures; full host lane and historical app build pass."
+  ],
+  "limitations": [
+    "Host selector invocation does not prove UIKit event delivery. Independent iPad1 UIKit runner is in progress; its final results need separate review.",
+    "No production device deployment or physical actuator qualification."
+  ]
+}

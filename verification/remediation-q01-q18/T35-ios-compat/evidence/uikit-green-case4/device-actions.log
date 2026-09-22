@@ -1,0 +1,417 @@
+/bin/mkdir -p /var/mobile/Library/DoorbellT35UIKit; chown mobile:mobile /var/mobile/Library/DoorbellT35UIKit; /bin/rm -f /var/mobile/Library/DoorbellT35UIKit/*.json /var/mobile/Library/DoorbellT35UIKit/*.png /var/mobile/Library/DoorbellT35UIKit/runner.log
+
+exit=0
+for pid in $(/bin/launchctl list | /bin/grep "UIKitApplication:jp.ox.doorbell.t35uitest" | /bin/sed "s/[[:space:]].*//"); do case "$pid" in [0-9]*) kill -9 "$pid";; esac; done; /bin/mkdir -p /Applications/DoorbellT35UIKit.stage
+
+exit=0
+/bin/rm -rf /Applications/DoorbellT35UIKit.app; /bin/mv /Applications/DoorbellT35UIKit.stage/DoorbellT35UIKit.app /Applications/DoorbellT35UIKit.app; /bin/rmdir /Applications/DoorbellT35UIKit.stage
+
+exit=0
+chown -R mobile:mobile /Applications/DoorbellT35UIKit.app; /bin/chmod 755 /Applications/DoorbellT35UIKit.app/DoorbellT35UIKit; su mobile -c /usr/bin/uicache
+No matching processes belonging to you were found
+
+exit=0
+if [ -S /var/run/doorbell-keepalive.sock ]; then /usr/local/libexec/doorbell-keepalive --control begin --seconds 180 --socket /var/run/doorbell-keepalive.sock; fi; su mobile -c "/usr/bin/uiopen doorbell-t35-test://"; /bin/launchctl list | /bin/grep t35 || true
+{"ok":true}
+30974	-	UIKitApplication:jp.ox.doorbell.t35uitest[0x3239]
+
+exit=0
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do if [ -f /var/mobile/Library/DoorbellT35UIKit/result.json ]; then /bin/cat /var/mobile/Library/DoorbellT35UIKit/result.json; exit 0; fi; sleep 2; done; exit 1
+{
+  "selected_case" : 4,
+  "source_manifest" : "38b3d57366e0f4c574955b726bbe091dc614a616b73932ef82c0e687e126ab00",
+  "checks" : [
+    {
+      "name" : "Hint ink contrasts with the actual flat background",
+      "resident_bytes" : 15364096,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 15364096,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 15368192,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 15372288,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17510400,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays in the fixed area",
+      "resident_bytes" : 17551360,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel has its explicit accessibility label",
+      "resident_bytes" : 17551360,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel is an explicit accessibility button",
+      "resident_bytes" : 17559552,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18018304,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 18018304,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Hint ink contrasts with the actual flat background",
+      "resident_bytes" : 15708160,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 15708160,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 15708160,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 15708160,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 15945728,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays in the fixed area",
+      "resident_bytes" : 15945728,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel has its explicit accessibility label",
+      "resident_bytes" : 15945728,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel is an explicit accessibility button",
+      "resident_bytes" : 15945728,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17580032,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 17580032,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Hint ink contrasts with the actual flat background",
+      "resident_bytes" : 16015360,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 16015360,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 16015360,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 16015360,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18104320,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays in the fixed area",
+      "resident_bytes" : 18120704,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel has its explicit accessibility label",
+      "resident_bytes" : 18120704,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel is an explicit accessibility button",
+      "resident_bytes" : 18132992,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18911232,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 18911232,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Hint ink contrasts with the actual flat background",
+      "resident_bytes" : 16629760,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 16629760,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 16629760,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 16629760,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 16592896,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays in the fixed area",
+      "resident_bytes" : 16592896,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel has its explicit accessibility label",
+      "resident_bytes" : 16592896,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel is an explicit accessibility button",
+      "resident_bytes" : 16592896,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18612224,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 18612224,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Hint ink contrasts with the actual flat background",
+      "resident_bytes" : 17584128,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 17584128,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 17584128,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 17584128,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 20553728,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays in the fixed area",
+      "resident_bytes" : 20570112,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel has its explicit accessibility label",
+      "resident_bytes" : 20578304,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel is an explicit accessibility button",
+      "resident_bytes" : 20578304,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 21348352,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 21348352,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Hint ink contrasts with the actual flat background",
+      "resident_bytes" : 19083264,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual call remains inside viewport",
+      "resident_bytes" : 19083264,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit hit testing reaches the primary call",
+      "resident_bytes" : 19091456,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit font measurement fits long call text",
+      "resident_bytes" : 19103744,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 19070976,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel stays in the fixed area",
+      "resident_bytes" : 19083264,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel has its explicit accessibility label",
+      "resident_bytes" : 19095552,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large cancel is an explicit accessibility button",
+      "resident_bytes" : 19107840,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 21078016,
+      "case" : "T35-04",
+      "pass" : true
+    },
+    {
+      "name" : "Large multilingual cancellation completes",
+      "resident_bytes" : 21090304,
+      "case" : "T35-04",
+      "pass" : true
+    }
+  ],
+  "version" : "1.0.0",
+  "machine" : "iPad1,1",
+  "boundary_calls" : [
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured",
+    "audio.configured"
+  ],
+  "system_version" : "5.1.1",
+  "accessibility_probe" : {
+    "explicit_button_label" : "Isolated probe",
+    "voice_over_running" : false,
+    "explicit_button_accessible_getter" : true
+  },
+  "bundle_id" : "jp.ox.doorbell.t35uitest",
+  "build" : "14",
+  "pid" : 30974,
+  "failed" : 0,
+  "scope" : "Actual iPad UIKit hierarchy, production target\/actions, dialogs, timers, hit-testing and rendering. UIControl events are programmatically dispatched; no HID injection, physical rotation, VoiceOver speech or external Core action."
+}
+exit=0
+su mobile -c "/usr/bin/uiopen doorbell://"; if [ -S /var/run/doorbell-keepalive.sock ]; then /usr/local/libexec/doorbell-keepalive --control end --socket /var/run/doorbell-keepalive.sock; fi; /bin/launchctl list | /bin/grep -E "doorbell|t35"
+{"ok":true}
+30974	-	UIKitApplication:jp.ox.doorbell.t35uitest[0x3239]
+30692	-	UIKitApplication:jp.ox.doorbell[0xe03b]
+19	-	jp.ox.doorbell.keepalive
+
+exit=0
+for pid in $(/bin/launchctl list | /bin/grep "UIKitApplication:jp.ox.doorbell.t35uitest" | /bin/sed "s/[[:space:]].*//"); do case "$pid" in [0-9]*) kill -9 "$pid";; esac; done; killall DoorbellT35UIKi 2>/dev/null || true
+
+exit=0

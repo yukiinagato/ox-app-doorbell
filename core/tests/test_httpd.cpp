@@ -1,7 +1,11 @@
 
 #include <atomic>
+#include <chrono>
+#include <condition_variable>
 #include <cstring>
+#include <future>
 #include <map>
+#include <mutex>
 #include <random>
 #include <string>
 
@@ -86,10 +90,12 @@ CliResp parseResp(const std::string& raw) {
 }
 
 
-CliResp request(int port, const std::string& raw_req) {
+CliResp request(int port, const std::string& raw_req, int receive_timeout_seconds = 5) {
   CliResp r;
   int fd = connectTo(port);
   REQUIRE(fd >= 0);
+  timeval tv{receive_timeout_seconds, 0};
+  ::setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
   sendAll(fd, raw_req);
   std::string raw;
   char buf[4096];
@@ -114,7 +120,320 @@ CliResp postForm(int port, const std::string& path, const std::string& body) {
                            "Connection: close\r\n\r\n" + body);
 }
 
+class DispatchBarrier {
+ public:
+  void enter() {
+    std::unique_lock<std::mutex> lock(mu_);
+    entered_ = true;
+    cv_.notify_all();
+    CHECK(cv_.wait_for(lock, std::chrono::seconds(15), [&] { return released_; }));
+  }
+  bool waitEntered() {
+    std::unique_lock<std::mutex> lock(mu_);
+    return cv_.wait_for(lock, std::chrono::seconds(3), [&] { return entered_; });
+  }
+  void release() {
+    std::lock_guard<std::mutex> lock(mu_);
+    released_ = true;
+    cv_.notify_all();
+  }
+
+ private:
+  std::mutex mu_;
+  std::condition_variable cv_;
+  bool entered_ = false;
+  bool released_ = false;
+};
+
+CliResp writeRequest(int port) {
+  return request(port, "POST /api/test-write HTTP/1.1\r\nHost: 127.0.0.1\r\n"
+                      "Content-Length: 5\r\nConnection: close\r\n\r\nowned", 8);
+}
+
+bool waitForQueuedRequest(Runloop& loop) {
+  const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+  while (loop.nextDueMono() < 0 && std::chrono::steady_clock::now() < deadline)
+    std::this_thread::yield();
+  return loop.nextDueMono() >= 0;
+}
+
 }  // namespace
+
+TEST_CASE("httpd: scheduling expired queued write never reaches handler") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  Httpd httpd(loop);
+  std::atomic<int> calls{0};
+  httpd.route("POST", "/api/test-write", [&](const HttpReq&) {
+    calls.fetch_add(1);
+    return HttpResp::json("{\"ok\":true}");
+  });
+  const int port = pickPort();
+  REQUIRE(httpd.start(port, Httpd::Ipv6Mode::Off));
+  auto barrier = std::make_shared<DispatchBarrier>();
+  REQUIRE(loop.post([barrier] { barrier->enter(); }));
+  REQUIRE(barrier->waitEntered());
+  const auto response = writeRequest(port);
+  CHECK(response.status == 503);
+  CHECK(response.body.find("not_started") != std::string::npos);
+  CHECK(loop.nextDueMono() == -1);
+  barrier->release();
+  REQUIRE(loop.callSync([] {}));
+  CHECK(calls.load() == 0);
+  httpd.stop();
+  loop.stop();
+}
+
+TEST_CASE("httpd: scheduling running timeout reports unknown and completes once") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  Httpd httpd(loop);
+  auto barrier = std::make_shared<DispatchBarrier>();
+  std::atomic<int> calls{0};
+  std::atomic<int> completions{0};
+  httpd.route("POST", "/api/test-write", [&](const HttpReq& req) {
+    calls.fetch_add(1);
+    barrier->enter();
+    CHECK(req.body == "owned");
+    completions.fetch_add(1);
+    return HttpResp::json("{\"ok\":true}");
+  });
+  const int port = pickPort();
+  REQUIRE(httpd.start(port, Httpd::Ipv6Mode::Off));
+  auto request = std::async(std::launch::async, [port] { return writeRequest(port); });
+  REQUIRE(barrier->waitEntered());
+  const auto response = request.get();
+  CHECK(response.status == 503);
+  CHECK(response.body.find("outcome_unknown") != std::string::npos);
+  CHECK(response.body.find("not_started") == std::string::npos);
+  CHECK(calls.load() == 1);
+  CHECK(completions.load() == 0);
+  barrier->release();
+  REQUIRE(loop.callSync([] {}));
+  CHECK(completions.load() == 1);
+  httpd.stop();
+  loop.stop();
+}
+
+TEST_CASE("httpd: scheduling boundary orders permit only expired or running") {
+  for (int repetition = 0; repetition < 2; ++repetition) {
+    for (const bool start_first : {false, true}) {
+      CAPTURE(repetition);
+      CAPTURE(start_first);
+      RealClock clock;
+      Runloop loop(clock);
+      loop.start();
+      Httpd httpd(loop);
+      auto barrier = std::make_shared<DispatchBarrier>();
+      std::atomic<int> calls{0};
+      std::atomic<int> completions{0};
+      httpd.route("POST", "/api/test-write", [&](const HttpReq& req) {
+        calls.fetch_add(1);
+        if (start_first) barrier->enter();
+        CHECK(req.body == "owned");
+        completions.fetch_add(1);
+        return HttpResp::json("{\"ok\":true}");
+      });
+      const int port = pickPort();
+      REQUIRE(httpd.start(port, Httpd::Ipv6Mode::Off));
+      if (!start_first) REQUIRE(loop.post([barrier] { barrier->enter(); }));
+      auto request = std::async(std::launch::async, [port] { return writeRequest(port); });
+      REQUIRE(barrier->waitEntered());
+      const auto response = request.get();
+      CHECK(response.status == 503);
+      CHECK(response.body.find(start_first ? "outcome_unknown" : "not_started") !=
+            std::string::npos);
+      CHECK(calls.load() == (start_first ? 1 : 0));
+      CHECK(completions.load() == 0);
+      barrier->release();
+      REQUIRE(loop.callSync([] {}));
+      CHECK(calls.load() == (start_first ? 1 : 0));
+      CHECK(completions.load() == (start_first ? 1 : 0));
+      httpd.stop();
+      loop.stop();
+    }
+  }
+}
+
+TEST_CASE("httpd: scheduling loop rejects elapsed deadline before waiter expires") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  Httpd httpd(loop);
+  std::atomic<int> calls{0};
+  httpd.route("POST", "/api/test-write", [&](const HttpReq&) {
+    calls.fetch_add(1);
+    return HttpResp::text("unexpected");
+  });
+  auto loop_barrier = std::make_shared<DispatchBarrier>();
+  auto waiter_barrier = std::make_shared<DispatchBarrier>();
+  std::promise<std::chrono::steady_clock::time_point> posted_deadline;
+  auto deadline = posted_deadline.get_future();
+  httpd.setDispatchBeforeWaitForTesting([&](std::chrono::steady_clock::time_point value) {
+    posted_deadline.set_value(value);
+    waiter_barrier->enter();
+  });
+  const int port = pickPort();
+  REQUIRE(httpd.start(port, Httpd::Ipv6Mode::Off));
+  REQUIRE(loop.post([loop_barrier] { loop_barrier->enter(); }));
+  REQUIRE(loop_barrier->waitEntered());
+  auto request = std::async(std::launch::async, [port] { return writeRequest(port); });
+  REQUIRE(waiter_barrier->waitEntered());
+  {
+    std::mutex mu;
+    std::condition_variable cv;
+    std::unique_lock<std::mutex> lock(mu);
+    cv.wait_until(lock, deadline.get(), [] { return false; });
+  }
+  loop_barrier->release();
+  REQUIRE(loop.callSync([] {}));
+  CHECK(calls.load() == 0);
+  waiter_barrier->release();
+  const auto response = request.get();
+  CHECK(response.status == 503);
+  CHECK(response.body.find("not_started") != std::string::npos);
+  CHECK(calls.load() == 0);
+  httpd.stop();
+  loop.stop();
+}
+
+TEST_CASE("httpd: scheduling shutdown expires queued work and releases its owner") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  auto httpd = std::unique_ptr<Httpd>(new Httpd(loop));
+  auto owned = std::make_shared<int>(1);
+  std::weak_ptr<int> ownership = owned;
+  std::atomic<int> calls{0};
+  httpd->route("POST", "/api/test-write", [owned, &calls](const HttpReq&) {
+    calls.fetch_add(1);
+    return HttpResp::text(std::to_string(*owned));
+  });
+  owned.reset();
+  const int port = pickPort();
+  REQUIRE(httpd->start(port, Httpd::Ipv6Mode::Off));
+  auto barrier = std::make_shared<DispatchBarrier>();
+  REQUIRE(loop.post([barrier] { barrier->enter(); }));
+  REQUIRE(barrier->waitEntered());
+  auto request = std::async(std::launch::async, [port] { return writeRequest(port); });
+  REQUIRE(waitForQueuedRequest(loop));
+  auto stop_loop = std::async(std::launch::async, [&] { loop.stop(); });
+  auto stop_http = std::async(std::launch::async, [&] { httpd->stop(); });
+  const bool stopped_without_loop =
+      stop_http.wait_for(std::chrono::seconds(4)) == std::future_status::ready;
+  CHECK(stopped_without_loop);
+  if (!stopped_without_loop) barrier->release();
+  stop_http.get();
+  const auto response = request.get();
+  // CivetWeb may close the socket when stop_flag is set; an empty transport response makes
+  // no execution claim. The handler count and ownership checks below prove cancellation.
+  if (response.raw.empty()) {
+    CHECK(response.status == -1);
+  } else {
+    CHECK(response.status == 503);
+    CHECK(response.body.find("not_started") != std::string::npos);
+  }
+  httpd.reset();
+  CHECK(ownership.expired());
+  CHECK(loop.nextDueMono() == -1);
+  barrier->release();
+  stop_loop.get();
+  CHECK(calls.load() == 0);
+}
+
+TEST_CASE("httpd: scheduling shutdown preserves an already running owned request") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  auto httpd = std::unique_ptr<Httpd>(new Httpd(loop));
+  auto owned = std::make_shared<int>(1);
+  std::weak_ptr<int> ownership = owned;
+  auto barrier = std::make_shared<DispatchBarrier>();
+  std::atomic<int> completions{0};
+  httpd->route("POST", "/api/test-write", [owned, barrier, &completions](const HttpReq& req) {
+    barrier->enter();
+    CHECK(*owned == 1);
+    CHECK(req.body == "owned");
+    completions.fetch_add(1);
+    return HttpResp::json("{\"ok\":true}");
+  });
+  owned.reset();
+  const int port = pickPort();
+  REQUIRE(httpd->start(port, Httpd::Ipv6Mode::Off));
+  auto request = std::async(std::launch::async, [port] { return writeRequest(port); });
+  REQUIRE(barrier->waitEntered());
+  auto stop_http = std::async(std::launch::async, [&] { httpd->stop(); });
+  const bool stopped_without_handler =
+      stop_http.wait_for(std::chrono::seconds(4)) == std::future_status::ready;
+  CHECK(stopped_without_handler);
+  if (!stopped_without_handler) barrier->release();
+  stop_http.get();
+  const auto response = request.get();
+  // A stop-time disconnect is an unknown transport outcome, never evidence of non-execution.
+  if (response.raw.empty()) {
+    CHECK(response.status == -1);
+  } else {
+    CHECK(response.status == 503);
+    CHECK(response.body.find("outcome_unknown") != std::string::npos);
+  }
+  httpd.reset();
+  CHECK_FALSE(ownership.expired());
+  barrier->release();
+  REQUIRE(loop.callSync([] {}));
+  CHECK(completions.load() == 1);
+  CHECK(ownership.expired());
+  loop.stop();
+}
+
+TEST_CASE("httpd: scheduling a stopped runloop fails without waiting for deadline") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  loop.stop();
+  Httpd httpd(loop);
+  std::atomic<int> calls{0};
+  httpd.route("POST", "/api/test-write", [&](const HttpReq&) {
+    calls.fetch_add(1);
+    return HttpResp::text("unexpected");
+  });
+  const int port = pickPort();
+  REQUIRE(httpd.start(port, Httpd::Ipv6Mode::Off));
+  const auto started = std::chrono::steady_clock::now();
+  const auto response = writeRequest(port);
+  CHECK(std::chrono::steady_clock::now() - started < std::chrono::seconds(2));
+  CHECK(response.status == 503);
+  CHECK(response.body.find("not_started") != std::string::npos);
+  CHECK(calls.load() == 0);
+  httpd.stop();
+}
+
+TEST_CASE("httpd: queued cancellation leaves active and completed work unchanged") {
+  RealClock clock;
+  Runloop loop(clock);
+  std::atomic<int> calls{0};
+  const auto queued = loop.postDelayed(0, [&] { calls.fetch_add(1); });
+  CHECK(loop.cancelQueued(queued));
+  CHECK_FALSE(loop.cancelQueued(queued));
+  CHECK(loop.pumpDue() == 0);
+  CHECK(calls.load() == 0);
+  loop.start();
+  auto barrier = std::make_shared<DispatchBarrier>();
+  const auto running = loop.postDelayed(0, [barrier, &calls] {
+    barrier->enter();
+    calls.fetch_add(1);
+  });
+  REQUIRE(barrier->waitEntered());
+  CHECK_FALSE(loop.cancelQueued(running));
+  barrier->release();
+  REQUIRE(loop.callSync([] {}));
+  CHECK(calls.load() == 1);
+  CHECK_FALSE(loop.cancelQueued(running));
+  CHECK_FALSE(loop.cancelQueued(0));
+  CHECK(loop.nextDueMono() == -1);
+  loop.stop();
+}
 
 TEST_CASE("httpd: routing + params + cookie + static") {
   RealClock clock;
@@ -429,4 +748,32 @@ TEST_CASE("httpd: an IPv4-only listener serves, and IPv6 is added only where it 
     CHECK_FALSE(httpdFamilyServable(AF_UNIX));
     CHECK_FALSE(httpdFamilyServable(-1));
   }
+}
+
+TEST_CASE("httpd: queued requests revalidate revoked authentication before dispatch") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  Httpd httpd(loop);
+  std::atomic<bool> authorized{true};
+  std::atomic<int> executions{0};
+  httpd.setAuth([&](const HttpReq&) { return authorized.load(); }, {});
+  httpd.route("POST", "/api/test-write", [&](const HttpReq&) {
+    ++executions;
+    return HttpResp::json("{\"ok\":true}");
+  });
+  const int port = pickPort();
+  REQUIRE(httpd.start(port));
+  DispatchBarrier blocker;
+  REQUIRE(loop.post([&] { blocker.enter(); }));
+  REQUIRE(blocker.waitEntered());
+  auto response = std::async(std::launch::async, [&] { return writeRequest(port); });
+  const bool queued = waitForQueuedRequest(loop);
+  authorized = false;
+  blocker.release();
+  REQUIRE(queued);
+  CHECK(response.get().status == 401);
+  CHECK(executions == 0);
+  httpd.stop();
+  loop.stop();
 }

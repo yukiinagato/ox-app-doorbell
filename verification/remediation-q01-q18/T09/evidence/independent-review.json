@@ -1,0 +1,33 @@
+{
+  "reviewer": "/root",
+  "task_id": "T09",
+  "status": "PASS_IN_SCOPE",
+  "reviewed_at": "2026-09-22T13:46:57.554823+00:00",
+  "files": {
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/panel/call.html": "93c7c88a2cd2a99b695c0512d83e5f28c777e2a5a1949d98aa25b4e526184177",
+    "webui/tests/request_deadline.test.js": "b95776ae75014e787be5c18710be68d637de8d78fd46814ea75f149d01f66b82",
+    "webui/tests/call_state_controller.test.js": "22a85c1f8b074b61034608d8869b696285c336766c17a4f5929624f326269901"
+  },
+  "blocking_findings_resolved": [
+    {
+      "problem": "An early state failure left the call-info lane occupied; the next load wrapped a rejected lane admission in an unsettled Promise.",
+      "resolution": "Each load owns and retires its own request handle in finally; a rejected lane admission settles immediately.",
+      "evidence": "verification/remediation-q01-q18/T09/evidence/review-before-early-state-r2.log",
+      "green": "verification/remediation-q01-q18/T09/evidence/call-state-r2.log"
+    }
+  ],
+  "checks": [
+    "Native and watchdog timeout order settles once; timer and handlers retire.",
+    "Old cancelled XHR cannot publish again or clear a successor lane.",
+    "Early sibling failure releases only the owning load request.",
+    "Pagehide cancellation and old finally preserve a new page generation request.",
+    "Only call-info is migrated; state/locale/heartbeat scheduling remains separate planned work."
+  ],
+  "regression": "verification/remediation-q01-q18/parallel-batch/evidence/web-all-r2.log",
+  "limitations": [
+    "14 host Web test scripts execute production modules with controlled browser boundaries.",
+    "Browser interaction blocked by open Chrome extension UI; IAB disconnected.",
+    "Old Safari/WebView devices and physical actions are not qualified."
+  ]
+}

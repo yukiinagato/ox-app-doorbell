@@ -572,10 +572,12 @@ TEST_CASE("doors: the unlock control appears only when an unlock action exists")
   CHECK(json::getString(initial.get(), "source") == "default");
   CHECK(fleet.node->openDoor("d_front") == false);
 
-  // The existing feature-code action is what makes the door openable.
   fleet.node->setConfigKey(
       "sip.dtmf_actions",
       "{\"*1\":{\"type\":\"ha_command\",\"command\":\"unlock\",\"door\":\"self\"}}");
+  CHECK_FALSE(json::getBool(unlock().get(), "configured"));
+  CHECK_FALSE(fleet.node->openDoor("d_front"));
+  fleet.node->setConfigKey("doors.d_front.unlock.command", "\"unlock\"");
   auto configured = unlock();
   REQUIRE(configured);
   CHECK(json::getBool(configured.get(), "configured"));
@@ -591,7 +593,6 @@ TEST_CASE("doors: the unlock control appears only when an unlock action exists")
   CHECK(json::getString(unlock().get(), "source") == "admin");
   CHECK(fleet.node->openDoor("d_front"));
 
-  // A door may name its own command, which wins over the feature-code default.
   fleet.node->setConfigKey("doors.d_front.unlock.command", "\"gate\"");
   CHECK(json::getString(unlock().get(), "command") == "gate");
   fleet.node->setConfigKey("doors.d_front.unlock.command", "\"bad command\"");

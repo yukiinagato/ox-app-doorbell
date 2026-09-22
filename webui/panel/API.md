@@ -144,11 +144,31 @@ a different browser or a generic door page cannot confirm that dialog.
 
 ## Emergency
 
-`POST /api/panel/emergency` with `active=1` raises SOS and returns `{"ok":true}`. It accepts the
-HttpOnly panel session or the rolling-upgrade `k=<token>` credential. Every stock panel keeps an
-always-visible `sos.trigger`; it sends this request only after an uninterrupted two-second hold.
-Panel clients cannot clear SOS: `active=0` or `active=false` returns 403. Clearing requires kiosk
-PIN control or an authenticated admin session.
+The stock door, monitor and call pages use the [durable operations API](../../docs/en/operation-api.md)
+with `action:"sos_start"`. One explicit SOS activation prepares one handle, then executes it.
+Every request, including session metadata and status queries, has a four-second transport deadline.
+The shared overlay displays preparing, sending, accepted, explicitly unstarted, refused, and
+unknown results. Accepted means Core accepted the operation; it does not confirm notification
+delivery. Only replicated state or a valid Push controls the active emergency presentation.
+
+An ambiguous execute preserves the handle. The recovery button queries that same handle; it never
+prepares a replacement automatically. A query returning `prepared` offers explicit execution of
+that handle. Only an authoritative unstarted terminal state permits an explicit new preparation.
+A lost prepare response never causes execute and can be retried only by a new user action.
+The handle is retained in tab session storage when available, without credentials, so a normal
+page refresh offers a query before another send. A session change does not grant access to that
+record: Core rechecks its original creator and current permissions.
+
+The server-derived `dbpanel` session principal may use only `sos_start`, with the serving node's
+explicit SOS grant and configured authority. Every operation request carries the session CSRF
+header; mutations require a trusted exact Origin. There is no shared-Bearer or legacy-endpoint
+fallback. The existing two-second pointer/keyboard hold remains available; assistive-technology
+button activation and ordinary recovery buttons use the same single-intent controller.
+Authentication, permission and validation refusals remain visible with another-help instructions.
+
+`POST /api/panel/emergency` remains a legacy one-shot compatibility endpoint (`active=1`).
+Panel clients cannot clear SOS: `active=0` or `active=false` returns 403. Clearing retains the
+existing kiosk/admin rules, including the existing no-admin-password exception on those controls.
 
 SOS active/clear state always replicates. `emergency.web_active_page_alerts` is an administrator
 boolean and defaults to true. When true, an open page renders replicated active SOS before any
@@ -187,18 +207,57 @@ Returns a same-origin fMP4/H.264 stream. The server proxies the responsible stat
 redirecting the browser across origins. Unknown door is 404, invalid token is 403, and unavailable
 or disabled encoding is 503. Disconnecting the client releases the upstream subscription.
 
-### POST /call-frame?door=<id>
+### POST /api/panel/media-authorize
 
-Posts one JPEG body from the browser to the responsible door station. The server accepts only a
-valid panel session/bearer, a locally owned door, a JPEG SOI marker, and an active SIP call. Expected errors
-are 400, 403, 404, and 409 respectively. `OPTIONS` supports the direct-station CORS preflight.
-Clients should send at most about two frames per second; only the latest frame is retained.
+The relative same-origin endpoint accepts form fields `door`, `call_id`, and `stage_revision`.
+First obtain the session's random `csrf_token` from `GET /api/panel/session` (or the credential
+exchange response). Authorization, frame publication, and a session-bound call lifecycle require
+the `dbpanel` HttpOnly cookie, `X-Doorbell-CSRF`, and an exact trusted `Origin`. Long-lived shared
+Bearer credentials cannot publish. An initial `answered` transition binds the independently
+authenticated Web session to the server's dialog owner; knowing another session's `dialog_id`
+does not grant publication. Legacy answers without this binding and recovered dialogs whose
+original Web session was lost cannot publish.
 
-### GET /peer-frame.jpg
+Success returns `schema_version:1`, `door`, `call_id`, integer `stage_revision`, server-derived
+`dialog_owner`, a random 32-character lowercase-hex `media_generation`, `publish_remaining_ms`
+(integer 1..10000), and `upload_path:"/call-frame"`. The deadline cannot outlive the current
+dialog lease or Web session. Renewal creates a new generation and clears the previous frame;
+it never renews the dialog lease. Session background reads and media traffic do not extend
+interactive idle expiry. Restart and observed credential changes invalidate sessions and grants.
 
-Returns the latest browser peer frame to the native door shell. This LAN endpoint has the same
-exposure as `/snapshot.jpg`; a frame older than three seconds returns 404. Deployments must isolate
-the doorbell LAN accordingly.
+Only this node's door station is supported here. Cross-node requests return 501 with
+`media_transport_unsupported`; the bounded authenticated transport remains a T16 qualification
+gate. There is no direct-peer HTTP fallback or wildcard CORS. These local checks alone do not
+advertise the cross-node `media_publish_v1` capability.
+
+### POST /call-frame?door=<id>&call_id=<id>&stage_revision=<revision>&media_generation=<generation>&frame_sequence=<sequence>
+
+The body is one `image/jpeg`. All identity fields are mandatory. The server rechecks current
+call, revision, owner, session/credential, and authorization expiry before writing the transient
+peer-frame slot. `frame_sequence` is a decimal string from 1 through 9223372036854775807, at
+most 19 digits, without leading zero, sign, or exponent. Duplicate/older sequences and retired
+generations return 409. Wrong session/CSRF/Origin returns 403; malformed identity/JPEG returns
+400. Encoded data is capped at 1 MiB; JPEG metadata must describe at most 307200 pixels and
+neither dimension may exceed 1024. T16 still owns strict HTTP-reader admission and worker bounds.
+The browser sends at most two frames per second and retains one in-flight request. A successful
+reply echoes generation and sequence with `acceptance:"remote_core_accepted"`; it does not prove
+that a remote screen rendered the image.
+
+### GET /peer-frame.jpg?door=<local-door>&call_id=<id>&stage_revision=<revision>
+
+Only the local door station's current call may be read. `door` defaults to the station's own
+door; `call_id` and `stage_revision` are mandatory (409 when absent). Native loopback readers
+need no browser cookie. Non-loopback readers need a current `dbpanel` session; any supplied
+browser `Origin` must be exactly trusted, including on loopback. Missing/currently invalid
+frames and frames older than three seconds return 404. No wildcard CORS is supplied.
+
+Successful `image/jpeg` responses have `Cache-Control:no-store` and headers
+`X-Doorbell-Call-Id`, `X-Doorbell-Stage-Revision`, `X-Doorbell-Dialog-Owner`,
+`X-Doorbell-Media-Generation`, and `X-Doorbell-Frame-Sequence`. The last two have the same
+32-hex/decimal-string contracts as publication. A shell captures current call/revision/owner,
+Core generation, and its own polling generation before requesting; it checks them again and
+validates all response identity headers before rendering. Retiring a poll clears its image and
+cancels its request; a late completion cannot clear a successor's busy flag or display its image.
 
 An in-call UI state may include `remote`, `peer_node`, and `peer_stream`. When peer resolution
 fails, a door station may poll `/peer-frame.jpg`; an indoor client reports video unavailable.

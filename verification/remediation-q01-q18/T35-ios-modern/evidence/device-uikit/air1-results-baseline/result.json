@@ -1,0 +1,13 @@
+{
+  "failed" : 0,
+  "version" : "1.0.0",
+  "build" : "1",
+  "source_manifest" : "92ed542708ffa474244241f9a07ee2933a5c3bd6e74b92204b01f03242d32b7f",
+  "checks" : [
+
+  ],
+  "bundle" : "jp.ox.doorbell.t35modernuitest",
+  "pid" : 1372,
+  "system_version" : "12.5.8",
+  "scope" : "Physical UIKit with virtual-size child profiles. Production UI unchanged; Core has no peers or family configuration. No camera, real call, SOS or lock action. UIView tree is not a VoiceOver navigation record."
+}

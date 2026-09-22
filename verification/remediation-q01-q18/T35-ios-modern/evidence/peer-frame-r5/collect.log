@@ -1,0 +1,13 @@
+total 360
+-rw-r--r--  1 mobile  mobile  15836 Sep 23 03:58 accepted-sequence-ten.json
+-rw-r--r--  1 mobile  mobile  22755 Sep 23 03:58 accepted-sequence-ten.png
+drwxr-xr-x  4 mobile  mobile    128 Sep 23 03:22 core-53DEDC6E-4DEC-426A-AE85-DD7D0DB046F9
+drwxr-xr-x  4 mobile  mobile    128 Sep 23 03:28 core-7EFD6F71-CCDB-4CA9-BB9E-4B23E794BB11
+drwxr-xr-x  4 mobile  mobile    128 Sep 23 03:58 core-FE824962-DE5D-4A77-A60F-8682EA42026D
+-rw-r--r--  1 mobile  mobile  15836 Sep 23 03:58 duplicate-and-nine-rejected.json
+-rw-r--r--  1 mobile  mobile  22755 Sep 23 03:58 duplicate-and-nine-rejected.png
+-rw-r--r--  1 mobile  mobile  15836 Sep 23 03:58 ended-late-eleven-rejected.json
+-rw-r--r--  1 mobile  mobile  19555 Sep 23 03:58 ended-late-eleven-rejected.png
+-rw-r--r--  1 mobile  mobile   2087 Sep 23 03:58 progress.json
+-rwxr-xr-x  1 root    mobile  54752 Sep 23 03:58 register
+-rw-r--r--  1 mobile  mobile   2521 Sep 23 03:58 result.json

@@ -1,0 +1,14 @@
+[ 13%] Built target db_third_party
+[ 15%] Building CXX object CMakeFiles/doorbell_core.dir/src/bridge/ha_bridge.cpp.o
+[ 15%] Building CXX object CMakeFiles/doorbell_core.dir/src/node/node.cpp.o
+[ 16%] Linking CXX static library libdoorbell_core.a
+[ 53%] Built target doorbell_core
+[ 57%] Linking CXX executable doorbell_host
+[ 57%] Linking CXX shared library libdoorbell.dylib
+[ 57%] Linking CXX executable doorbell_video_decode_probe
+[ 58%] Built target doorbell_video_decode_probe
+[ 60%] Built target doorbell_host
+[ 60%] Built target doorbell
+[ 61%] Building CXX object CMakeFiles/doorbell_tests.dir/tests/test_operations_http.cpp.o
+[ 62%] Linking CXX executable doorbell_tests
+[100%] Built target doorbell_tests

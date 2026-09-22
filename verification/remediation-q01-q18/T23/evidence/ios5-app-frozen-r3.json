@@ -1,0 +1,39 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "1fc651eeb12a6402ba4f01aeeaaade997ba7b018593f89a982f151f6a875d2e5",
+  "task_id": "T23",
+  "test_id": "ios5-app-frozen-r3",
+  "evidence_kind": "historical_sdk_build",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/source-frozen-r3.json",
+  "source_manifest_sha256": "f2184b8f0d3e7c5abc6e48351056c4e23c84712df6ae5733e7c79237ce7b6436",
+  "command": [
+    "env",
+    "GIT_DIR=/Users/ox/Documents/project/app-doorbell/.git",
+    "GIT_WORK_TREE=/Users/ox/Documents/project/app-doorbell/build/remediation-t23-20260923/frozen-r3",
+    "GIT_OPTIONAL_LOCKS=0",
+    "build/remediation-t23-20260923/frozen-r3/ios-compat/scripts/build_app_ios5.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:18:35.574822+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": "0.3.49",
+  "build_number": "52",
+  "sip_backend": "ios_compat_minisip_uac_uas",
+  "signing_state": "ldid-jailbreak",
+  "artifact_sha256": "f3203f617f6a170a098902b077823ffee683401b3f740a450a75d3b7dd6f0908",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/evidence/ios5-app-frozen-r3.log",
+  "limitations": [
+    "Host production-helper or historical-SDK build evidence; no physical device clock, installation, SIP/media hardware, or iOS9 armv7 qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:18:47.106855+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Actual clean historical-SDK armv7/iOS5.1 build and symbol gate passed.",
+  "artifact_provenance": "verification/remediation-q01-q18/T23/evidence/artifacts-final-r3.json"
+}

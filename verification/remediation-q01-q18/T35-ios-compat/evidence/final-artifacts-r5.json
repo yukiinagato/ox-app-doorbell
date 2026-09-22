@@ -1,0 +1,66 @@
+{
+  "observed_at": "2026-09-22T17:22:49.619533+00:00",
+  "head": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "source_manifest": "verification/remediation-q01-q18/T35-ios-compat/source-frozen-r5.json",
+  "source_manifest_sha256": "f2035362797499f9d5dca1e2c2cacd9eca2d88ddf120d96a85670490589b8a86",
+  "frozen_input_count": 1084,
+  "all_inputs_unchanged": true,
+  "owned_sources_match_mainline": true,
+  "core_web_identical_to_r2": true,
+  "production_diff_sha256": "c1681f5f05dc245df22931bb8daf87f8f13ee68ed123a3aa6f7c06a6ff7a8e45",
+  "app_version": "0.3.49",
+  "build": "52",
+  "architecture": "armv7",
+  "minimum_os": "5.1",
+  "sdk": "licensed local iPhoneOS7.1.sdk",
+  "signing": "ldid jailbreak",
+  "sip_backend": "core_pjsip_off_ios_compat_minisip",
+  "artifacts": {
+    "app_executable": {
+      "path": "build/remediation-t35-compat/frozen-r5/ios-kiosk/build/Doorbell.app/Doorbell",
+      "sha256": "e961010dd7890696a0367de120f7c5fdbefe6aec6796aa1e69a6156a9cc55ca9"
+    },
+    "app_manifest": {
+      "path": "build/remediation-t35-compat/frozen-r5/build/ios-compat/artifacts/ios5-armv7-app/manifest.json",
+      "sha256": "90999a3f205c1f65d04600656684157a9e698df432aa05fa3cafc01fd76d2e20"
+    },
+    "core_archive": {
+      "path": "build/remediation-t35-compat/frozen-r5/ios-kiosk/lib/libdoorbell_all.a",
+      "sha256": "0f74a800407d0ffc574b5adc4ae8ea0a55da7dc9ecb97f0ead715ffbe6489741"
+    },
+    "core_manifest": {
+      "path": "build/remediation-t35-compat/frozen-r5/build/ios-compat/artifacts/ios5-armv7-pjsip-off/manifest.json",
+      "sha256": "4d197f7fab1dcd74cd9a2c25ef7e211a2a131295d31b68f243cb397b90682cb4"
+    },
+    "layout_binary": {
+      "path": "build/remediation-t35-compat/frozen-r5/build/ios-compat/host-tests/door_visitor_layout_test",
+      "sha256": "1387d432d38022f0723ec96fcf6623056ec14db4bffbbcf064066106ff211908"
+    },
+    "selector_binary": {
+      "path": "build/remediation-t35-compat/frozen-r5/build/ios-compat/host-tests/door-visitor-actions/door_visitor_actions",
+      "sha256": "773607bd977049d8060802177604f32a8f1ead261af4bfd03100c325d5723611"
+    },
+    "sos_selector_binary": {
+      "path": "build/remediation-t35-compat/frozen-r5/build/ios-compat/host-tests/sos-accessibility-actions/door_visitor_actions",
+      "sha256": "d4feb8417f836de4e5c88374e4fb8427d7173c62f487e08cf3857e233ee175ab"
+    }
+  },
+  "limitations": [
+    "UIKit target interaction/rendering not run on the candidate; no device installation",
+    "iOS9 armv7 dedicated runner preflight not commissioned; iOS5 artifact does not qualify iOS9",
+    "Exact selector bodies execute with host fakes, not UIKit event dispatch",
+    "Core/Web are the verified T12 frozen source; in-progress T28 excluded and final integration must rebuild"
+  ],
+  "gesture_red": {
+    "path": "build/remediation-t35-compat/actions-gesture-red/provenance.json",
+    "sha256": "85a1b42cf2b0ef76aa80c16a2ad1c28e407c3918d3c97e791c2cd14b71fe89f0",
+    "checks": 40,
+    "failures": 3
+  },
+  "gesture_green": {
+    "path": "build/remediation-t35-compat/actions-gesture-green/provenance.json",
+    "sha256": "305fa95213d7ec4ed86a82991cfa9a18082f447c29bed1f915323aab41da9e58",
+    "checks": 40,
+    "failures": 0
+  }
+}

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.EmergencyProjectionTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.005">
+  <properties/>
+  <testcase name="stateStoreRestoresOnlyKnownPresentationFields" classname="jp.ox.doorbell.EmergencyProjectionTest" time="0.005"/>
+  <testcase name="explicitEmptyChannelsRemainSilentAndClearRemainsDurable" classname="jp.ox.doorbell.EmergencyProjectionTest" time="0.0"/>
+  <testcase name="channelsAreProjectedWithoutImplicitSystemPresentation" classname="jp.ox.doorbell.EmergencyProjectionTest" time="0.0"/>
+  <testcase name="persistenceFailureDoesNotSuppressTheInMemorySafetyState" classname="jp.ox.doorbell.EmergencyProjectionTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

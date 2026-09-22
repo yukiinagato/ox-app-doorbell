@@ -1,0 +1,56 @@
+{
+  "task": "T28-Web",
+  "status": "PASS_IN_PRODUCTION_HTTP_BROWSER_SCOPE",
+  "source_manifest": "source-web-final.json",
+  "source_manifest_sha256": "a4b955df6813bb405b8612ba3cd9ff0b6b04a582b6d19513f9ed78a145cad124",
+  "core_manifest": "../T28/source-green-r6.json",
+  "core_manifest_sha256": "80e4a932021f714dc94b4306d0bed8430823c5f151d6535df7e9c46506a5a7ef",
+  "acceptance": [
+    {
+      "id": "T28-01",
+      "status": "PASS_IN_BROWSER_HTTP_SCOPE",
+      "result": "Two real partitioned Nodes retain A/B intent; an already open browser discovers the conflict and preserves its unsaved editor draft."
+    },
+    {
+      "id": "T28-02",
+      "status": "SEE_CORE_REPORT",
+      "result": "Reconnection order and convergence storms are independently covered by the parent Core report."
+    },
+    {
+      "id": "T28-03",
+      "status": "SEE_CORE_REPORT",
+      "result": "History retention and capacity behavior are covered by the parent Core report; Web capacity visibility is checked separately."
+    },
+    {
+      "id": "T28-04",
+      "status": "PASS_IN_BROWSER_HTTP_SCOPE",
+      "result": "A selected explicitly; both production stores contain the same new resolution with both original parents and no unresolved conflict."
+    }
+  ],
+  "evidence": {
+    "evidence/controlled-browser-focus-red.json": "39e5553603be1ec321b9c6dacd3d90a2e2794a6e25774e664d2d96d0b0e68a59",
+    "evidence/controlled-browser-focus-green.json": "05b18c5b80be778f73a93794362bb6f562b8a7d369a2879d9703b152f9381da0",
+    "evidence/real-core-browser-r6.json": "a561bf6e489b845db400c7b8feb5dff276eb50c954f3e678917209faec7b6fbb",
+    "evidence/core-http-r6-build.json": "6bba1ed462f181d1b5f407e7707ee88ec2f9c1c5590c78ba655bc9a95ef65483",
+    "evidence/core-http-r6-run.json": "2fbc6e866bd01a725b424bf1507df7d495f4599175d8d027005af1eba797b70d",
+    "evidence/core-http-r6/resolution-check.json": "bde3889ee27f43b8d906f3e82802053359f9d1baad62a088c41aa0c232114b3f",
+    "evidence/web-focus-targeted-regression.json": "eba3d78dedd47b92cc602e4bf6d6d7a731e906daac0c21bdd54d60024853cbbd",
+    "evidence/independent-web-review.json": "7985ac173b5466c2eebf64c7a8a3f839767f817d0809ddefce16f8dd33df750c",
+    "evidence/root-corrections-review.json": "05ba4000b88ca96670b21683e38d27e85d0f7581f52bea6d5895fd8d544dde53"
+  },
+  "cleanup": {
+    "owned_http_listeners_stopped": [
+      18766,
+      18767,
+      18768
+    ],
+    "fixture_exit_code": 0,
+    "owned_browser_tabs_closed": true,
+    "artifacts_and_test_databases_retained": true
+  },
+  "limitations": [
+    "Controlled 15-case suite and actual production HTTP joint test are separate evidence scopes.",
+    "No physical-device or Safari/UIKIt qualification; no external SIP/lock/SOS triggered.",
+    "No claim that this subreport alone verifies T28 Core reconnect-order or retention requirements."
+  ]
+}

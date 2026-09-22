@@ -94,9 +94,23 @@
   <data name="admin_clear_pairing" xml:space="preserve"><value>この端末のペアリングを消去</value></data>
   <data name="admin_clock_warn" xml:space="preserve"><value>時刻未同期</value></data>
   <data name="admin_codec_auto" xml:space="preserve"><value>自動 (対応機なら H.264)</value></data>
+  <data name="admin_config_cas_unavailable" xml:space="preserve"><value>このノードは同時編集を安全に保存できません。入力内容は保持されています。</value></data>
   <data name="admin_config_value_placeholder" xml:space="preserve"><value>{&quot;ja&quot;:&quot;正面玄関&quot;}</value></data>
   <data name="admin_configured" xml:space="preserve"><value>設定済み</value></data>
   <data name="admin_confirm_delete" xml:space="preserve"><value>{0} を削除しますか?</value></data>
+  <data name="admin_conflict_back" xml:space="preserve"><value>編集に戻る</value></data>
+  <data name="admin_conflict_back_hint" xml:space="preserve"><value>入力内容は保持されています。確認してから再度保存してください。</value></data>
+  <data name="admin_conflict_base" xml:space="preserve"><value>編集を開始した時の値</value></data>
+  <data name="admin_conflict_choose" xml:space="preserve"><value>すべての競合について値を選択してください。</value></data>
+  <data name="admin_conflict_current" xml:space="preserve"><value>現在の値を残す</value></data>
+  <data name="admin_conflict_delete" xml:space="preserve"><value>削除</value></data>
+  <data name="admin_conflict_hint" xml:space="preserve"><value>編集中に設定が変更されました。競合する項目ごとに残す値を選択してください。</value></data>
+  <data name="admin_conflict_merged" xml:space="preserve"><value>次の変更は競合せずに保存できます：</value></data>
+  <data name="admin_conflict_mine" xml:space="preserve"><value>自分の変更を残す</value></data>
+  <data name="admin_conflict_missing" xml:space="preserve"><value>未設定</value></data>
+  <data name="admin_conflict_retry_limit" xml:space="preserve"><value>設定が繰り返し変更されました。入力内容は保持されています。再度保存すると最新の設定と比較できます。</value></data>
+  <data name="admin_conflict_save" xml:space="preserve"><value>選択した変更を保存</value></data>
+  <data name="admin_conflict_title" xml:space="preserve"><value>同時に行われた変更を確認</value></data>
   <data name="admin_copied" xml:space="preserve"><value>コピーしました</value></data>
   <data name="admin_copy" xml:space="preserve"><value>コピー</value></data>
   <data name="admin_copy_failed" xml:space="preserve"><value>コピー失敗</value></data>
@@ -115,6 +129,8 @@
   <data name="admin_door_required" xml:space="preserve"><value>門口機には担当ドアを選択してください</value></data>
   <data name="admin_door_unconfigured" xml:space="preserve"><value>未設定</value></data>
   <data name="admin_doors" xml:space="preserve"><value>ドア／建物</value></data>
+  <data name="admin_draft_restored" xml:space="preserve"><value>入力内容を復元しました。保存前にパスワードとシークレットを再入力してください。</value></data>
+  <data name="admin_draft_sign_in" xml:space="preserve"><value>再ログインして続行してください。入力内容は保持されていますが、パスワードとシークレットは消去しました。</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>ここにファイルをドラッグ＆ドロップ／クリックで選択</value></data>
   <data name="admin_duty" xml:space="preserve"><value>担当</value></data>
   <data name="admin_edit" xml:space="preserve"><value>編集</value></data>
@@ -133,6 +149,7 @@
   <data name="admin_helper_mode" xml:space="preserve"><value>復帰ヘルパー</value></data>
   <data name="admin_helper_off" xml:space="preserve"><value>無効</value></data>
   <data name="admin_helper_on" xml:space="preserve"><value>常に有効</value></data>
+  <data name="admin_history_capacity" xml:space="preserve"><value>一部の設定項目で編集履歴が上限に達しました。保存済みの候補を失わないよう、その項目の変更を停止しています。</value></data>
   <data name="admin_host" xml:space="preserve"><value>ホスト</value></data>
   <data name="admin_households" xml:space="preserve"><value>通知先</value></data>
   <data name="admin_image_read_failed" xml:space="preserve"><value>画像を読み込めませんでした</value></data>
@@ -143,7 +160,44 @@
   <data name="admin_image_resized" xml:space="preserve"><value>画像を {0} から {1} に縮小しました</value></data>
   <data name="admin_image_resizing" xml:space="preserve"><value>画像を縮小しています（{0}）…</value></data>
   <data name="admin_import" xml:space="preserve"><value>インポート</value></data>
+  <data name="admin_import_ack" xml:space="preserve"><value>{0} 件の削除を含む変更を確認し、このノードへの適用に同意します。</value></data>
+  <data name="admin_import_auth" xml:space="preserve"><value>再ログインしてください。ファイル内容は消去しましたが、既存の復旧情報は保持しています。</value></data>
+  <data name="admin_import_blocked" xml:space="preserve"><value>適用する前に問題を解決してください。</value></data>
+  <data name="admin_import_changes" xml:space="preserve"><value>{0} 項目の変更</value></data>
+  <data name="admin_import_clear" xml:space="preserve"><value>結果の確認を終了</value></data>
+  <data name="admin_import_commit" xml:space="preserve"><value>確認済みの設定を適用</value></data>
+  <data name="admin_import_connection" xml:space="preserve"><value>確認済みの接続: 既知の {0} 台中 {1} 台がオンライン</value></data>
+  <data name="admin_import_crypto" xml:space="preserve"><value>このブラウザーでは安全なインポート参照を作成できません。対応ブラウザーを使用してください。</value></data>
+  <data name="admin_import_dependencies" xml:space="preserve"><value>既存の連携設定または安全な保存機能でこのノードに秘密情報を再登録し、不足ファイルを素材にアップロードしてください。その後、このプレビューを破棄して再確認してください。設定 JSON に秘密情報の値を貼り付けないでください。</value></data>
+  <data name="admin_import_discard" xml:space="preserve"><value>このプレビューを破棄</value></data>
+  <data name="admin_import_error" xml:space="preserve"><value>要求を完了できませんでした。再試行する前に以下の情報を確認してください。</value></data>
+  <data name="admin_import_excluded" xml:space="preserve"><value>エクスポートから除外した項目: {0}</value></data>
+  <data name="admin_import_file" xml:space="preserve"><value>設定ファイル</value></data>
   <data name="admin_import_hint" xml:space="preserve"><value>エクスポートした JSON を貼り付けてください (フラット化して書き込みます)</value></data>
+  <data name="admin_import_invalid" xml:space="preserve"><value>設定ファイルが不正または曖昧です。インポートは開始していません。</value></data>
+  <data name="admin_import_json" xml:space="preserve"><value>または設定 JSON を貼り付け</value></data>
+  <data name="admin_import_local_done" xml:space="preserve"><value>このノードに設定を保存しました。</value></data>
+  <data name="admin_import_missing_assets" xml:space="preserve"><value>不足している素材ファイル</value></data>
+  <data name="admin_import_missing_secrets" xml:space="preserve"><value>不足している秘密情報の参照</value></data>
+  <data name="admin_import_new_preview" xml:space="preserve"><value>新しいインポートを確認</value></data>
+  <data name="admin_import_no_preview" xml:space="preserve"><value>設定を適用する前に新しいプレビューを作成してください。</value></data>
+  <data name="admin_import_not_found" xml:space="preserve"><value>保存済みの結果が見つかりません。失敗の確定ではありません。復旧情報を保持して再確認してください。</value></data>
+  <data name="admin_import_omitted" xml:space="preserve"><value>このエクスポートから除外された秘密情報です。必要に応じて確認し、別途再登録してください</value></data>
+  <data name="admin_import_preparing" xml:space="preserve"><value>プレビューを準備中…</value></data>
+  <data name="admin_import_preview" xml:space="preserve"><value>インポートを確認</value></data>
+  <data name="admin_import_query" xml:space="preserve"><value>このインポートの結果を確認</value></data>
+  <data name="admin_import_ready" xml:space="preserve"><value>適用する前にすべての変更を確認してください。</value></data>
+  <data name="admin_import_reference" xml:space="preserve"><value>復旧情報</value></data>
+  <data name="admin_import_refresh_status" xml:space="preserve"><value>接続状態を更新</value></data>
+  <data name="admin_import_replace" xml:space="preserve"><value>設定全体を置き換え、このファイルにない項目を削除する</value></data>
+  <data name="admin_import_schema" xml:space="preserve"><value>未対応の設定バージョンです。</value></data>
+  <data name="admin_import_scope" xml:space="preserve"><value>設定のみです。秘密情報の値と素材ファイルは含まず、完全な復旧用バックアップではありません。</value></data>
+  <data name="admin_import_size" xml:space="preserve"><value>インポートがサイズまたは項目数の上限を超えています（要求全体は最大 4 MiB）。</value></data>
+  <data name="admin_import_sync_unverified" xml:space="preserve"><value>他ノードへの設定同期は未確認です。接続状態は同期完了を示しません。</value></data>
+  <data name="admin_import_target" xml:space="preserve"><value>対象ノード: {0}</value></data>
+  <data name="admin_import_unknown" xml:space="preserve"><value>結果は不明です。この復旧情報を保持して同じインポートを確認し、重複送信しないでください。</value></data>
+  <data name="admin_import_unknown_ack" xml:space="preserve"><value>復旧情報を保存し、前回の結果が不明なままであることを理解しました。別のインポートを新たに確認します。</value></data>
+  <data name="admin_import_wrong_node" xml:space="preserve"><value>この復旧情報は別のノードのものです。元のノードで結果を確認してください。</value></data>
   <data name="admin_imported" xml:space="preserve"><value>{0} 件を書き込みました</value></data>
   <data name="admin_indoor_ringtone" xml:space="preserve"><value>室内機の着信音</value></data>
   <data name="admin_integrations" xml:space="preserve"><value>統合</value></data>
@@ -203,6 +257,17 @@
   <data name="admin_pair_secure_failed" xml:space="preserve"><value>ペアリングキーを安全に保存できませんでした。ストレージと権限を確認してください。</value></data>
   <data name="admin_pair_self_unpaired" xml:space="preserve"><value>この端末はまだクラスタに参加していません。最初の 1 台ならここで新規作成してください。</value></data>
   <data name="admin_panel_token" xml:space="preserve"><value>パネル token</value></data>
+  <data name="admin_partition_changed" xml:space="preserve"><value>設定が再度変更されました。候補を更新して確認後、もう一度保存してください。</value></data>
+  <data name="admin_partition_choice" xml:space="preserve"><value>保存する設定を選択</value></data>
+  <data name="admin_partition_conflict_hint" xml:space="preserve"><value>切断中に複数の端末で編集されました。現在の設定が変わっている場合があります。保存された候補を確認してから変更してください。</value></data>
+  <data name="admin_partition_conflicts" xml:space="preserve"><value>編集内容の確認が必要です</value></data>
+  <data name="admin_partition_custom" xml:space="preserve"><value>最終設定を編集</value></data>
+  <data name="admin_partition_custom_hint" xml:space="preserve"><value>手動で編集する場合、この項目の設定全体を有効なJSONで入力してください。省略した項目は削除されます。</value></data>
+  <data name="admin_partition_effective" xml:space="preserve"><value>現在有効な設定</value></data>
+  <data name="admin_partition_reentry" xml:space="preserve"><value>保護された値は非表示です。非表示の値を含む候補は、保存前にシークレット参照を再入力してください。</value></data>
+  <data name="admin_partition_refresh" xml:space="preserve"><value>候補を更新</value></data>
+  <data name="admin_partition_resolved" xml:space="preserve"><value>この競合はすでに解決されています。閉じて現在の設定を確認してください。</value></data>
+  <data name="admin_partition_review" xml:space="preserve"><value>確認する</value></data>
   <data name="admin_pass" xml:space="preserve"><value>パスワード</value></data>
   <data name="admin_password" xml:space="preserve"><value>管理パスワード</value></data>
   <data name="admin_password_set_failed" xml:space="preserve"><value>管理パスワードを設定できませんでした</value></data>
@@ -249,7 +314,9 @@
   <data name="admin_save" xml:space="preserve"><value>保存</value></data>
   <data name="admin_save_failed" xml:space="preserve"><value>保存に失敗しました</value></data>
   <data name="admin_save_pair_override" xml:space="preserve"><value>組合せ上書きを保存</value></data>
+  <data name="admin_save_unknown" xml:space="preserve"><value>保存結果を確認できません。入力内容は保持されています。再試行前に現在の設定を確認してください。</value></data>
   <data name="admin_saved" xml:space="preserve"><value>保存しました</value></data>
+  <data name="admin_saving" xml:space="preserve"><value>保存しています…</value></data>
   <data name="admin_schedule" xml:space="preserve"><value>スケジュール</value></data>
   <data name="admin_secret_cleanup_deferred" xml:space="preserve"><value>以前の secret {0} 件はまだ参照中か削除できないため、後で整理します</value></data>
   <data name="admin_secret_configured" xml:space="preserve"><value>設定済み（変更しない場合は空欄）</value></data>
@@ -369,6 +436,7 @@
   <data name="calling_cancel_failed" xml:space="preserve"><value>呼出を取り消せませんでした</value></data>
   <data name="calling_no_answer" xml:space="preserve"><value>応答がありません</value></data>
   <data name="calling_title" xml:space="preserve"><value>呼び出し中…</value></data>
+  <data name="calling_wait_hint" xml:space="preserve"><value>住人が応答するまでお待ちください</value></data>
   <data name="cluster_devices_a11y" xml:space="preserve"><value>クラスタの端末 {0} 台</value></data>
   <data name="cluster_door_stations_a11y" xml:space="preserve"><value>門口機 {0}/{1} 台オンライン</value></data>
   <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>室内機 {0}/{1} 台オンライン</value></data>
@@ -434,6 +502,22 @@
   <data name="emergency_notified" xml:space="preserve"><value>家族に通知しました</value></data>
   <data name="emergency_notify_off" xml:space="preserve"><value>✅ 緊急解除</value></data>
   <data name="emergency_notify_on" xml:space="preserve"><value>🚨 緊急事態です — {0} から発報 ({1})</value></data>
+  <data name="emergency_sos_accepted" xml:space="preserve"><value>システムがSOSを受理しました。通知の到達は未確認です。</value></data>
+  <data name="emergency_sos_alternative" xml:space="preserve"><value>緊急の場合は、近くの人や緊急窓口に別の手段で助けを求めてください。</value></data>
+  <data name="emergency_sos_auth_required" xml:space="preserve"><value>セッションが切れました。再ログインしてください。</value></data>
+  <data name="emergency_sos_invalid" xml:space="preserve"><value>SOSの要求が無効です。管理者に連絡してください。</value></data>
+  <data name="emergency_sos_not_started" xml:space="preserve"><value>このSOSはまだ送信されていません。</value></data>
+  <data name="emergency_sos_permission_denied" xml:space="preserve"><value>このパネルにはSOS送信の権限がありません。管理者に連絡してください。</value></data>
+  <data name="emergency_sos_prepare_unknown" xml:space="preserve"><value>SOSの準備を確認できませんでした。送信要求はまだ出していません。再試行すると新しく準備します。</value></data>
+  <data name="emergency_sos_preparing" xml:space="preserve"><value>SOSを準備しています…</value></data>
+  <data name="emergency_sos_query" xml:space="preserve"><value>状況を確認</value></data>
+  <data name="emergency_sos_querying" xml:space="preserve"><value>このSOSを確認しています…</value></data>
+  <data name="emergency_sos_rejected" xml:space="preserve"><value>SOSの要求が拒否されました。</value></data>
+  <data name="emergency_sos_retry" xml:space="preserve"><value>再試行</value></data>
+  <data name="emergency_sos_send_same" xml:space="preserve"><value>このSOSを送信</value></data>
+  <data name="emergency_sos_sending" xml:space="preserve"><value>SOSを送信しています…</value></data>
+  <data name="emergency_sos_unavailable" xml:space="preserve"><value>SOSサービスを利用できません。</value></data>
+  <data name="emergency_sos_unknown" xml:space="preserve"><value>SOSの結果は不明です。再送する前に状況を確認してください。</value></data>
   <data name="emergency_title" xml:space="preserve"><value>緊急事態</value></data>
   <data name="event_motion" xml:space="preserve"><value>{0} で動きを検知 ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} オフライン (最終応答 {1})</value></data>
@@ -539,10 +623,12 @@
   <data name="notice_chip" xml:space="preserve"><value>お知らせ</value></data>
   <data name="notice_clear" xml:space="preserve"><value>取り消す</value></data>
   <data name="notice_cleared" xml:space="preserve"><value>お知らせを取り消しました</value></data>
+  <data name="notice_collapse" xml:space="preserve"><value>お知らせを折りたたむ</value></data>
   <data name="notice_dialog_title" xml:space="preserve"><value>門口機にお知らせを表示</value></data>
   <data name="notice_door_button" xml:space="preserve"><value>この門口機にお知らせ</value></data>
   <data name="notice_edit" xml:space="preserve"><value>編集</value></data>
   <data name="notice_empty" xml:space="preserve"><value>本文を入力してください</value></data>
+  <data name="notice_expand" xml:space="preserve"><value>お知らせをすべて表示</value></data>
   <data name="notice_expires_at" xml:space="preserve"><value>期限</value></data>
   <data name="notice_expiry" xml:space="preserve"><value>表示期限</value></data>
   <data name="notice_expiry_1h" xml:space="preserve"><value>1 時間</value></data>
@@ -710,6 +796,12 @@
   <data name="panel_cancel_missing_id" xml:space="preserve"><value>call_id がないため安全な取消 API を使用できません</value></data>
   <data name="panel_cancel_sending" xml:space="preserve"><value>取消しを送信中…</value></data>
   <data name="panel_cancel_unavailable" xml:space="preserve"><value>このノードでは安全な取消 API を使用できません</value></data>
+  <data name="panel_config_apply_failed" xml:space="preserve"><value>内線 {0} に接続できません。前回登録した内線: {1}。</value></data>
+  <data name="panel_config_applying" xml:space="preserve"><value>内線 {0} に接続しています…</value></data>
+  <data name="panel_config_pending" xml:space="preserve"><value>通話終了後に接続設定を更新します。</value></data>
+  <data name="panel_config_revoked" xml:space="preserve"><value>通話の権限が取り消されました。</value></data>
+  <data name="panel_config_stale" xml:space="preserve"><value>通話設定を更新できません。再試行中…</value></data>
+  <data name="panel_control_reconnecting" xml:space="preserve"><value>制御接続が中断されました。再接続中…</value></data>
   <data name="panel_deadline_reached" xml:space="preserve"><value>呼出期限に達しました — 終了状態を確認中です</value></data>
   <data name="panel_dialog_identity_missing" xml:space="preserve"><value>安全なブラウザ通話識別子を作成できなかったため、通話を開始しませんでした</value></data>
   <data name="panel_event_auto_reply" xml:space="preserve"><value>自動返信</value></data>
@@ -743,6 +835,8 @@
   <data name="panel_lifecycle_end_sync_failed" xml:space="preserve"><value>SIP 通話は終了しましたが、状態同期に失敗しました</value></data>
   <data name="panel_lifecycle_heartbeat_failed" xml:space="preserve"><value>通話状態のハートビートに失敗したため、安全に終了します</value></data>
   <data name="panel_lifecycle_identity_missing" xml:space="preserve"><value>呼出の識別情報がないため、安全に応答できません</value></data>
+  <data name="panel_lifecycle_lease_expired" xml:space="preserve"><value>通話制御の有効期限が切れました。</value></data>
+  <data name="panel_lifecycle_lease_unavailable" xml:space="preserve"><value>このノードでは通話制御の有効期限を確認できません。</value></data>
   <data name="panel_mock_incall" xml:space="preserve"><value>通話中 (mock)</value></data>
   <data name="panel_mock_registered" xml:space="preserve"><value>内線 {0} 登録済み (mock)</value></data>
   <data name="panel_monitor_title" xml:space="preserve"><value>着信モニター</value></data>
@@ -775,9 +869,12 @@
   <data name="panel_resident_notified_no_cancel" xml:space="preserve"><value>住人へ通知しました — このノードは call_id を使う安全な取消に対応していません</value></data>
   <data name="panel_send_video" xml:space="preserve"><value>映像も送る</value></data>
   <data name="panel_sending" xml:space="preserve"><value>送信中…</value></data>
+  <data name="panel_state_stale" xml:space="preserve"><value>接続が中断されました。最終更新は {0} 秒前です。</value></data>
+  <data name="panel_state_waiting" xml:space="preserve"><value>接続中です。最新の状態を取得しています…</value></data>
   <data name="panel_tap_sound" xml:space="preserve"><value>タップして音を有効化</value></data>
   <data name="panel_title" xml:space="preserve"><value>呼出パネル</value></data>
   <data name="panel_unregistered" xml:space="preserve"><value>未登録</value></data>
+  <data name="panel_video_unavailable" xml:space="preserve"><value>この通話では映像を送信できません。</value></data>
   <data name="panel_visitor_calling" xml:space="preserve"><value>来客呼出中</value></data>
   <data name="panel_webrtc_required" xml:space="preserve"><value>通話には Asterisk の WebRTC 設定 (integrations.webrtc.ws_url) が必要です — deploy/asterisk/webrtc.md を参照してください</value></data>
   <data name="power_charging" xml:space="preserve"><value>充電中</value></data>
@@ -961,6 +1058,9 @@ PIN: {1}</value></data>
   <data name="setup_title" xml:space="preserve"><value>端末を設定</value></data>
   <data name="sip_unavailable" xml:space="preserve"><value>通話機能は現在利用できません</value></data>
   <data name="sos_abort" xml:space="preserve"><value>取り消す</value></data>
+  <data name="sos_accessibility_confirm" xml:space="preserve"><value>SOSのカウントダウンを開始しますか？</value></data>
+  <data name="sos_accessibility_hint" xml:space="preserve"><value>開いて内容を確認し、開始を確定してください。</value></data>
+  <data name="sos_accessibility_start" xml:space="preserve"><value>緊急SOSを開始</value></data>
   <data name="sos_alarm_sound" xml:space="preserve"><value>警報音</value></data>
   <data name="sos_alarm_volume" xml:space="preserve"><value>警報音の音量</value></data>
   <data name="sos_button_on_roles" xml:space="preserve"><value>SOS を表示する端末</value></data>
@@ -1083,13 +1183,17 @@ PIN: {1}</value></data>
   <data name="time_zone" xml:space="preserve"><value>タイムゾーン</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</value></data>
   <data name="unlock_auto" xml:space="preserve"><value>設定されているときだけ表示</value></data>
+  <data name="unlock_binding_hint" xml:space="preserve"><value>このドアの錠に対応するコマンドを入力または選択してください。空欄で割り当てを解除します。</value></data>
+  <data name="unlock_binding_required" xml:space="preserve"><value>共通の HA 操作は開錠に自動使用されません。このドアの錠に対応するコマンドを確認して保存してください。</value></data>
   <data name="unlock_command" xml:space="preserve"><value>送信するコマンド</value></data>
+  <data name="unlock_command_invalid" xml:space="preserve"><value>コマンドは英数字、_、- の 1～32 文字で入力してください。</value></data>
   <data name="unlock_hide" xml:space="preserve"><value>表示しない</value></data>
   <data name="unlock_not_configured" xml:space="preserve"><value>開錠の動作が設定されていません</value></data>
   <data name="unlock_show" xml:space="preserve"><value>常に表示</value></data>
   <data name="unlock_title" xml:space="preserve"><value>開錠ボタン</value></data>
   <data name="version_line" xml:space="preserve"><value>core {0} · app {1}</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
+  <data name="visitor_restoring" xml:space="preserve"><value>通話状態を復元しています…</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼出</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>クラスタ既定 {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>この端末の音量</value></data>

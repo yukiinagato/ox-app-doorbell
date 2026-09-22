@@ -1,0 +1,117 @@
+{
+  "task_id": "T08",
+  "reviewer": "independent subagent t02_contract_inventory",
+  "observed_at": "2026-09-22T15:01:22.890125+00:00",
+  "verdict": "PASS_IN_PRODUCTION_TEST_SCOPE",
+  "source_manifest_sha256": "19aa85336b95d527cad77a78f528a0a497a38db1c8e7aa345b907c60a172c626",
+  "source_manifest": "verification/remediation-q01-q18/T08/source-final-r4.json",
+  "frozen_source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-continuation-20260922/t08-candidate-r4",
+  "inputs": {
+    "core/src/node/admin_sessions.h": {
+      "frozen_sha256": "58da07d6eee124446d06ab4fbe5afa149442ba977bb1da6fc2a0373301787929",
+      "matches_manifest": true,
+      "current_sha256": "58da07d6eee124446d06ab4fbe5afa149442ba977bb1da6fc2a0373301787929"
+    },
+    "core/src/node/node.cpp": {
+      "frozen_sha256": "5ea06dfb716c342e9e7a471138b0dad62b38898a0e9c333a737587a23f277fa8",
+      "matches_manifest": true,
+      "current_sha256": "d75fefe49fbb846dc709861fd578979772c9f92533c983db0aa08a742293c0d1"
+    },
+    "core/src/store/store.h": {
+      "frozen_sha256": "35e14c7b90ee3f84f6b4349a0bc52e4d096393b2d44bbad5bb029bb285027702",
+      "matches_manifest": true,
+      "current_sha256": "35e14c7b90ee3f84f6b4349a0bc52e4d096393b2d44bbad5bb029bb285027702"
+    },
+    "core/src/store/store.cpp": {
+      "frozen_sha256": "7a4dc7295fec3095a8b51e30db114b8f30c74fdbbc8fb97472e8eb8e94e4e0b1",
+      "matches_manifest": true,
+      "current_sha256": "7a4dc7295fec3095a8b51e30db114b8f30c74fdbbc8fb97472e8eb8e94e4e0b1"
+    },
+    "core/src/httpd/httpd.cpp": {
+      "frozen_sha256": "336ed03462b5be66f8dbdc2ac9f81c00f2155dc720d7f7bbe42527a3b921c0cc",
+      "matches_manifest": true,
+      "current_sha256": "336ed03462b5be66f8dbdc2ac9f81c00f2155dc720d7f7bbe42527a3b921c0cc"
+    },
+    "core/tests/test_admin_api.cpp": {
+      "frozen_sha256": "1cab768239612ae6b53e9dcc4cd51ca720c57ac89933c514444d7b7253b4778e",
+      "matches_manifest": true,
+      "current_sha256": "1cab768239612ae6b53e9dcc4cd51ca720c57ac89933c514444d7b7253b4778e"
+    },
+    "core/tests/test_httpd.cpp": {
+      "frozen_sha256": "ca511180a7ce1fe46c869904148fc3b473a2fdcf8cdd5f64da68c49d45e6740f",
+      "matches_manifest": true,
+      "current_sha256": "ca511180a7ce1fe46c869904148fc3b473a2fdcf8cdd5f64da68c49d45e6740f"
+    },
+    "webui/admin/app.js": {
+      "frozen_sha256": "50834004c39680a1649f831de8af0df7c5e5d90842ec6163afaf224c51656978",
+      "matches_manifest": true,
+      "current_sha256": "50834004c39680a1649f831de8af0df7c5e5d90842ec6163afaf224c51656978"
+    },
+    "webui/tests/admin_runtime.test.js": {
+      "frozen_sha256": "a1211ba8a5f06b62a747512131d9d524751ab909aa3a7336b75f7f14927e7bdb",
+      "matches_manifest": true,
+      "current_sha256": "a1211ba8a5f06b62a747512131d9d524751ab909aa3a7336b75f7f14927e7bdb"
+    }
+  },
+  "findings": [
+    {
+      "id": "C02-CSRF",
+      "historical_verdict": "CHANGES_REQUESTED",
+      "status": "RESOLVED",
+      "detail": "Original activity relied on static X-Requested-With. r4 uses random 16-byte session-bound CSRF checked under session mutex plus exact trusted Origin. Tests reject missing/null/untrusted/suffix/path origins, wrong token and another session token. Host and X-Forwarded headers are not trusted."
+    }
+  ],
+  "reviewed_invariants": [
+    {
+      "source": "core/src/node/admin_sessions.h:20",
+      "result": "Credential publication invalidates sessions under authorization mutex. Idle/absolute use monotonic age with backward-time rejection. Reads and GET csrfToken never renew interaction. Capacity eviction precedes insertion, ordered by interaction then issuance."
+    },
+    {
+      "source": "core/src/node/node.cpp:9063",
+      "result": "Fingerprint includes digest and existing LWW record identity including decimal sequence. Rebuild publishes only after successful durable commit. Local change, replicated change and config rebuild apply the same binding."
+    },
+    {
+      "source": "core/src/store/store.cpp:459",
+      "result": "Config and metadata share BEGIN IMMEDIATE and Store mutex; row/meta/commit failure rolls back. Node observer rejects failed mutation without publishing. Real disk tests exercise config/meta failure and reopen consistency."
+    },
+    {
+      "source": "core/src/node/node.cpp:8058",
+      "result": "Origin requires http/https with bounded authority and delimiter/wildcard rejection. Exact direct origins use local IPs/loopback and listener port; bounded explicit allowed_origins support DNS/proxy. No Host/X-Forwarded trust."
+    },
+    {
+      "source": "core/src/node/node.cpp:9509",
+      "result": "Authenticated session GET returns no-store CSRF without interaction. Activity requires trusted Origin and current session CSRF. Expired sessions fail before renewal."
+    },
+    {
+      "source": "core/src/httpd/httpd.cpp:655",
+      "result": "Owned queued handler rechecks live gate at dispatch, retaining T04 Pending/unknown-outcome ownership."
+    },
+    {
+      "source": "webui/admin/app.js:8212",
+      "result": "Visible interaction sends bounded activity. Polling does not renew. Stop clears runtime/CSRF; generation checks reject delayed old runtime token responses."
+    }
+  ],
+  "evidence": {
+    "final-core-r4": {
+      "command_record": "verification/remediation-q01-q18/T08/evidence/final-core-r4.json",
+      "command_record_sha256": "8f030f277331a86f5ccca46b3254ec96998222e45d7354977c8aaf77f1982331",
+      "log_sha256": "efaf44e7c21f7483a88deeef144f867b39d478b21cb7a3fa2f8cc88a99efa4af",
+      "exit_code": 0,
+      "actual_result": "23/23 cases, 736/736 assertions; 426 skipped"
+    },
+    "final-web-r4": {
+      "command_record": "verification/remediation-q01-q18/T08/evidence/final-web-r4.json",
+      "command_record_sha256": "020cfc5111301668da1ec2761ab708cbe2f82d79251fc8a4f482b469af216549",
+      "log_sha256": "694326e1aa4a74eb7e2bd957d4f17fde6202b4aaffc157381d87aa094915f88d",
+      "exit_code": 0,
+      "actual_result": "admin runtime tests: ok"
+    }
+  },
+  "limitations": [
+    "Independent source/evidence review; no reviewer rerun.",
+    "Host real HTTP/Store tests use deterministic clock/network seams; no device or physical action qualification.",
+    "Partitioned nodes cannot revoke unseen credentials; offline repeated login is not prevented.",
+    "T08 CSRF verdict covers new activity endpoint, not all pre-existing mutations scheduled for later contracts.",
+    "Current Store contains parallel T05 edits; this verdict is anchored to frozen r4."
+  ]
+}

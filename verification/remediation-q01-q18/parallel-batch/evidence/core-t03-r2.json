@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "95b0c5256009eb7fc4f40073c8ee722046c134a1e9bf5083ec39312b4c5a1ea9",
+  "task_id": "parallel-batch",
+  "test_id": "core-t03-r2",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/source-candidate-r2.json",
+  "source_manifest_sha256": "cda743864d3958a16c20546f64ef04c64d27c51b2a27b3ce554c3907f6c65a90",
+  "command": [
+    "build/repair-20260922/doorbell_tests",
+    "--test-case=*unlock*,*open-door*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T13:46:23.733860+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/parallel-batch/evidence/core-t03-r2.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T13:46:34.633777+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

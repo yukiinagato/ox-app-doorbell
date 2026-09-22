@@ -1,0 +1,13 @@
+09-22 21:58:00 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:0
+09-22 21:58:00 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 21:58:00 I [node] node 5f4a4ef5 (callback-drain) started
+09-22 21:58:00 I [httpd] listening on 31991,[::]:31991
+09-22 21:58:02 I [httpd] stopped
+09-22 21:58:02 I [httpd] listening on 28793,[::]:28793
+09-22 21:58:04 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:  7 |  7 passed | 0 failed | 410 skipped
+[doctest] assertions: 64 | 64 passed | 0 failed |
+[doctest] Status: SUCCESS!

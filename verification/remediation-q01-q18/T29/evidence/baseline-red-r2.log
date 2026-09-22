@@ -1,0 +1,19 @@
+09-23 02:55:33 I [node] addr-detect: local v4=1 all=7 route=10.10.38.24 advertise=10.10.38.24:22852
+09-23 02:55:33 I [httpd] listening on 27629,[::]:27629
+09-23 02:55:33 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 02:55:33 I [node] node acaf3730 (doorbell) started
+09-23 02:55:33 I [node] initialized the cluster administrator password
+09-23 02:55:35 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/red-r2-source/core/tests/test_config_import.cpp:83:
+TEST CASE:  config import: 255 256 and 257 leaf restores use the staged production path
+
+/Users/ox/Documents/project/app-doorbell/build/remediation-t29-20260923/red-r2-source/core/tests/test_config_import.cpp:87: FATAL ERROR: REQUIRE( json::getBool(stage.get(), "ok") ) is NOT correct!
+  values: REQUIRE( false )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 506 skipped
+[doctest] assertions: 11 | 10 passed | 1 failed |
+[doctest] Status: FAILURE!

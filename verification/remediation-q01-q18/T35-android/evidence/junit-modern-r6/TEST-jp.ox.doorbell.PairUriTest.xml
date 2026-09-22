@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.PairUriTest" tests="17" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:15:24" hostname="MacBookPro.local" time="0.005">
+  <properties/>
+  <testcase name="thePinCardPrefersCoresLinkAndFallsBackToTheLegacyPayload" classname="jp.ox.doorbell.PairUriTest" time="0.001"/>
+  <testcase name="aMissingOrMalformedHostIsRefused" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="aMintResultCarriesTheLinkAtTheTopLevel" classname="jp.ox.doorbell.PairUriTest" time="0.001"/>
+  <testcase name="aLinkWithoutAnExpiryNeverExpires" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="coresAnswerIsStillCheckedForExpiryAndShape" classname="jp.ox.doorbell.PairUriTest" time="0.001"/>
+  <testcase name="anythingThatIsNotAPairLinkIsRejected" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="thePinCardTakesTheLinkFromCoresTokenObject" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="aValidLinkRoundTrips" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="aClusterNameSurvivesEncoding" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="coresAnswerIsAdoptedWhenItHasOne" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="aTokenWithoutALinkFallsBackToTheLegacyPayload" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="everyErrorHasAMessageToShowInline" classname="jp.ox.doorbell.PairUriTest" time="0.001"/>
+  <testcase name="anExpiredLinkIsRefusedRatherThanStartingADoomedJoin" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="anInvalidLinkIsRejectedWhateverTheDeviceState" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="aMissingOrMalformedPinIsRefused" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="anAlreadyPairedDeviceIsAskedBeforeLeavingItsCluster" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <testcase name="anUnpairedDeviceGoesStraightToTheConfirmButton" classname="jp.ox.doorbell.PairUriTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

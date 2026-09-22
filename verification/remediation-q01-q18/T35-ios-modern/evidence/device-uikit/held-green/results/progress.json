@@ -1,0 +1,1430 @@
+{
+  "checks" : [
+    {
+      "group" : "setup",
+      "name" : "Isolated real Core starts",
+      "pass" : true
+    },
+    {
+      "group" : "setup",
+      "name" : "Real Core configuration ui.call_sound",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Real Core configuration ui.call_flow",
+      "group" : "setup"
+    },
+    {
+      "group" : "setup",
+      "name" : "Core accepts the complete semantic manifest",
+      "pass" : true
+    },
+    {
+      "name" : "Actual language button selects en",
+      "pass" : true,
+      "group" : "actions-en-320x480"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-en-320x480",
+      "name" : "UIKit child uses requested profile dimensions"
+    },
+    {
+      "pass" : true,
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "group" : "actions-en-320x480"
+    },
+    {
+      "name" : "End is fully visible with safe touch height",
+      "pass" : true,
+      "group" : "actions-en-320x480"
+    },
+    {
+      "group" : "actions-en-320x480",
+      "name" : "Action follows largest accessibility text",
+      "pass" : true
+    },
+    {
+      "name" : "Cancel label fits the action",
+      "group" : "actions-en-320x480",
+      "pass" : true
+    },
+    {
+      "name" : "Status is clipped above fixed end action",
+      "group" : "actions-en-320x480",
+      "pass" : true
+    },
+    {
+      "name" : "Status width follows the scroll viewport",
+      "pass" : true,
+      "group" : "actions-en-320x480"
+    },
+    {
+      "name" : "Visible long title never covers end at offset 0.0",
+      "pass" : true,
+      "group" : "actions-en-320x480"
+    },
+    {
+      "name" : "Visible long title never covers end at offset 1984.5",
+      "pass" : true,
+      "group" : "actions-en-320x480"
+    },
+    {
+      "name" : "Cancel is complete and at least 64 points",
+      "pass" : true,
+      "group" : "purpose-en-320x480"
+    },
+    {
+      "name" : "Scrollable purpose stays above cancel",
+      "group" : "purpose-en-320x480",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-en-320x480",
+      "name" : "Skip and cancel are distinct controls"
+    },
+    {
+      "group" : "purpose-en-320x480",
+      "pass" : true,
+      "name" : "Purpose follows largest accessibility text"
+    },
+    {
+      "group" : "purpose-en-320x480",
+      "name" : "Long purpose label is not cropped",
+      "pass" : true
+    },
+    {
+      "name" : "Actual language button selects en",
+      "pass" : true,
+      "group" : "actions-en-480x320"
+    },
+    {
+      "name" : "UIKit child uses requested profile dimensions",
+      "group" : "actions-en-480x320",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "actions-en-480x320",
+      "name" : "Cancel and end keep identical fixed vertical position"
+    },
+    {
+      "pass" : true,
+      "name" : "End is fully visible with safe touch height",
+      "group" : "actions-en-480x320"
+    },
+    {
+      "group" : "actions-en-480x320",
+      "name" : "Action follows largest accessibility text",
+      "pass" : true
+    },
+    {
+      "name" : "Cancel label fits the action",
+      "group" : "actions-en-480x320",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "actions-en-480x320",
+      "name" : "Status is clipped above fixed end action"
+    },
+    {
+      "group" : "actions-en-480x320",
+      "name" : "Status width follows the scroll viewport",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 0.0",
+      "group" : "actions-en-480x320"
+    },
+    {
+      "name" : "Visible long title never covers end at offset 1353.5",
+      "pass" : true,
+      "group" : "actions-en-480x320"
+    },
+    {
+      "name" : "Short landscape exposes overflowing title by scrolling",
+      "group" : "actions-en-480x320",
+      "pass" : true
+    },
+    {
+      "name" : "Cancel is complete and at least 64 points",
+      "group" : "purpose-en-480x320",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Scrollable purpose stays above cancel",
+      "group" : "purpose-en-480x320"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-en-480x320",
+      "name" : "Skip and cancel are distinct controls"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-en-480x320",
+      "name" : "Purpose follows largest accessibility text"
+    },
+    {
+      "name" : "Long purpose label is not cropped",
+      "pass" : true,
+      "group" : "purpose-en-480x320"
+    },
+    {
+      "group" : "actions-en-844x390",
+      "pass" : true,
+      "name" : "Actual language button selects en"
+    },
+    {
+      "group" : "actions-en-844x390",
+      "name" : "UIKit child uses requested profile dimensions",
+      "pass" : true
+    },
+    {
+      "group" : "actions-en-844x390",
+      "pass" : true,
+      "name" : "Cancel and end keep identical fixed vertical position"
+    },
+    {
+      "name" : "End is fully visible with safe touch height",
+      "group" : "actions-en-844x390",
+      "pass" : true
+    },
+    {
+      "name" : "Action follows largest accessibility text",
+      "pass" : true,
+      "group" : "actions-en-844x390"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-en-844x390",
+      "name" : "Cancel label fits the action"
+    },
+    {
+      "group" : "actions-en-844x390",
+      "pass" : true,
+      "name" : "Status is clipped above fixed end action"
+    },
+    {
+      "group" : "actions-en-844x390",
+      "pass" : true,
+      "name" : "Status width follows the scroll viewport"
+    },
+    {
+      "group" : "actions-en-844x390",
+      "name" : "Visible long title never covers end at offset 0.0",
+      "pass" : true
+    },
+    {
+      "group" : "actions-en-844x390",
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 573.5"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-en-844x390",
+      "name" : "Cancel is complete and at least 64 points"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-en-844x390",
+      "name" : "Scrollable purpose stays above cancel"
+    },
+    {
+      "group" : "purpose-en-844x390",
+      "pass" : true,
+      "name" : "Skip and cancel are distinct controls"
+    },
+    {
+      "group" : "purpose-en-844x390",
+      "pass" : true,
+      "name" : "Purpose follows largest accessibility text"
+    },
+    {
+      "name" : "Long purpose label is not cropped",
+      "pass" : true,
+      "group" : "purpose-en-844x390"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-en-768x1024",
+      "name" : "Actual language button selects en"
+    },
+    {
+      "name" : "UIKit child uses requested profile dimensions",
+      "group" : "actions-en-768x1024",
+      "pass" : true
+    },
+    {
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "group" : "actions-en-768x1024",
+      "pass" : true
+    },
+    {
+      "group" : "actions-en-768x1024",
+      "name" : "End is fully visible with safe touch height",
+      "pass" : true
+    },
+    {
+      "group" : "actions-en-768x1024",
+      "pass" : true,
+      "name" : "Action follows largest accessibility text"
+    },
+    {
+      "name" : "Cancel label fits the action",
+      "pass" : true,
+      "group" : "actions-en-768x1024"
+    },
+    {
+      "group" : "actions-en-768x1024",
+      "pass" : true,
+      "name" : "Status is clipped above fixed end action"
+    },
+    {
+      "name" : "Status width follows the scroll viewport",
+      "group" : "actions-en-768x1024",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "actions-en-768x1024",
+      "name" : "Visible long title never covers end at offset 0.0"
+    },
+    {
+      "group" : "actions-en-768x1024",
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 0.0"
+    },
+    {
+      "name" : "Cancel is complete and at least 64 points",
+      "pass" : true,
+      "group" : "purpose-en-768x1024"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-en-768x1024",
+      "name" : "Scrollable purpose stays above cancel"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-en-768x1024",
+      "name" : "Skip and cancel are distinct controls"
+    },
+    {
+      "group" : "purpose-en-768x1024",
+      "name" : "Purpose follows largest accessibility text",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-en-768x1024",
+      "pass" : true,
+      "name" : "Long purpose label is not cropped"
+    },
+    {
+      "name" : "Actual language button selects en",
+      "pass" : true,
+      "group" : "actions-en-1024x768"
+    },
+    {
+      "group" : "actions-en-1024x768",
+      "name" : "UIKit child uses requested profile dimensions",
+      "pass" : true
+    },
+    {
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "group" : "actions-en-1024x768",
+      "pass" : true
+    },
+    {
+      "name" : "End is fully visible with safe touch height",
+      "group" : "actions-en-1024x768",
+      "pass" : true
+    },
+    {
+      "group" : "actions-en-1024x768",
+      "name" : "Action follows largest accessibility text",
+      "pass" : true
+    },
+    {
+      "group" : "actions-en-1024x768",
+      "pass" : true,
+      "name" : "Cancel label fits the action"
+    },
+    {
+      "group" : "actions-en-1024x768",
+      "pass" : true,
+      "name" : "Status is clipped above fixed end action"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-en-1024x768",
+      "name" : "Status width follows the scroll viewport"
+    },
+    {
+      "group" : "actions-en-1024x768",
+      "name" : "Visible long title never covers end at offset 0.0",
+      "pass" : true
+    },
+    {
+      "group" : "actions-en-1024x768",
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 94.0"
+    },
+    {
+      "group" : "purpose-en-1024x768",
+      "name" : "Cancel is complete and at least 64 points",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-en-1024x768",
+      "name" : "Scrollable purpose stays above cancel",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-en-1024x768",
+      "name" : "Skip and cancel are distinct controls"
+    },
+    {
+      "name" : "Purpose follows largest accessibility text",
+      "pass" : true,
+      "group" : "purpose-en-1024x768"
+    },
+    {
+      "pass" : true,
+      "name" : "Long purpose label is not cropped",
+      "group" : "purpose-en-1024x768"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-320x480",
+      "name" : "Actual language button selects zh"
+    },
+    {
+      "group" : "actions-zh-320x480",
+      "pass" : true,
+      "name" : "UIKit child uses requested profile dimensions"
+    },
+    {
+      "group" : "actions-zh-320x480",
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "pass" : true
+    },
+    {
+      "name" : "End is fully visible with safe touch height",
+      "group" : "actions-zh-320x480",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-320x480",
+      "name" : "Action follows largest accessibility text"
+    },
+    {
+      "name" : "Cancel label fits the action",
+      "group" : "actions-zh-320x480",
+      "pass" : true
+    },
+    {
+      "group" : "actions-zh-320x480",
+      "name" : "Status is clipped above fixed end action",
+      "pass" : true
+    },
+    {
+      "group" : "actions-zh-320x480",
+      "name" : "Status width follows the scroll viewport",
+      "pass" : true
+    },
+    {
+      "group" : "actions-zh-320x480",
+      "name" : "Visible long title never covers end at offset 0.0",
+      "pass" : true
+    },
+    {
+      "group" : "actions-zh-320x480",
+      "name" : "Visible long title never covers end at offset 889.0",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-zh-320x480",
+      "pass" : true,
+      "name" : "Cancel is complete and at least 64 points"
+    },
+    {
+      "name" : "Scrollable purpose stays above cancel",
+      "group" : "purpose-zh-320x480",
+      "pass" : true
+    },
+    {
+      "name" : "Skip and cancel are distinct controls",
+      "pass" : true,
+      "group" : "purpose-zh-320x480"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-zh-320x480",
+      "name" : "Purpose follows largest accessibility text"
+    },
+    {
+      "group" : "purpose-zh-320x480",
+      "pass" : true,
+      "name" : "Long purpose label is not cropped"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-480x320",
+      "name" : "Actual language button selects zh"
+    },
+    {
+      "group" : "actions-zh-480x320",
+      "pass" : true,
+      "name" : "UIKit child uses requested profile dimensions"
+    },
+    {
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "group" : "actions-zh-480x320",
+      "pass" : true
+    },
+    {
+      "name" : "End is fully visible with safe touch height",
+      "group" : "actions-zh-480x320",
+      "pass" : true
+    },
+    {
+      "name" : "Action follows largest accessibility text",
+      "pass" : true,
+      "group" : "actions-zh-480x320"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-480x320",
+      "name" : "Cancel label fits the action"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-480x320",
+      "name" : "Status is clipped above fixed end action"
+    },
+    {
+      "group" : "actions-zh-480x320",
+      "pass" : true,
+      "name" : "Status width follows the scroll viewport"
+    },
+    {
+      "name" : "Visible long title never covers end at offset 0.0",
+      "group" : "actions-zh-480x320",
+      "pass" : true
+    },
+    {
+      "group" : "actions-zh-480x320",
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 643.5"
+    },
+    {
+      "group" : "actions-zh-480x320",
+      "name" : "Short landscape exposes overflowing title by scrolling",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-zh-480x320",
+      "name" : "Cancel is complete and at least 64 points",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-zh-480x320",
+      "name" : "Scrollable purpose stays above cancel"
+    },
+    {
+      "name" : "Skip and cancel are distinct controls",
+      "group" : "purpose-zh-480x320",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-zh-480x320",
+      "name" : "Purpose follows largest accessibility text",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-zh-480x320",
+      "pass" : true,
+      "name" : "Long purpose label is not cropped"
+    },
+    {
+      "group" : "actions-zh-844x390",
+      "name" : "Actual language button selects zh",
+      "pass" : true
+    },
+    {
+      "name" : "UIKit child uses requested profile dimensions",
+      "group" : "actions-zh-844x390",
+      "pass" : true
+    },
+    {
+      "group" : "actions-zh-844x390",
+      "pass" : true,
+      "name" : "Cancel and end keep identical fixed vertical position"
+    },
+    {
+      "name" : "End is fully visible with safe touch height",
+      "group" : "actions-zh-844x390",
+      "pass" : true
+    },
+    {
+      "name" : "Action follows largest accessibility text",
+      "group" : "actions-zh-844x390",
+      "pass" : true
+    },
+    {
+      "group" : "actions-zh-844x390",
+      "pass" : true,
+      "name" : "Cancel label fits the action"
+    },
+    {
+      "name" : "Status is clipped above fixed end action",
+      "group" : "actions-zh-844x390",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-844x390",
+      "name" : "Status width follows the scroll viewport"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-844x390",
+      "name" : "Visible long title never covers end at offset 0.0"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-844x390",
+      "name" : "Visible long title never covers end at offset 269.0"
+    },
+    {
+      "group" : "purpose-zh-844x390",
+      "pass" : true,
+      "name" : "Cancel is complete and at least 64 points"
+    },
+    {
+      "group" : "purpose-zh-844x390",
+      "pass" : true,
+      "name" : "Scrollable purpose stays above cancel"
+    },
+    {
+      "group" : "purpose-zh-844x390",
+      "name" : "Skip and cancel are distinct controls",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Purpose follows largest accessibility text",
+      "group" : "purpose-zh-844x390"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-zh-844x390",
+      "name" : "Long purpose label is not cropped"
+    },
+    {
+      "name" : "Actual language button selects zh",
+      "pass" : true,
+      "group" : "actions-zh-768x1024"
+    },
+    {
+      "pass" : true,
+      "name" : "UIKit child uses requested profile dimensions",
+      "group" : "actions-zh-768x1024"
+    },
+    {
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "pass" : true,
+      "group" : "actions-zh-768x1024"
+    },
+    {
+      "pass" : true,
+      "name" : "End is fully visible with safe touch height",
+      "group" : "actions-zh-768x1024"
+    },
+    {
+      "pass" : true,
+      "name" : "Action follows largest accessibility text",
+      "group" : "actions-zh-768x1024"
+    },
+    {
+      "group" : "actions-zh-768x1024",
+      "pass" : true,
+      "name" : "Cancel label fits the action"
+    },
+    {
+      "name" : "Status is clipped above fixed end action",
+      "pass" : true,
+      "group" : "actions-zh-768x1024"
+    },
+    {
+      "group" : "actions-zh-768x1024",
+      "name" : "Status width follows the scroll viewport",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-768x1024",
+      "name" : "Visible long title never covers end at offset 0.0"
+    },
+    {
+      "group" : "actions-zh-768x1024",
+      "name" : "Visible long title never covers end at offset 0.0",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-zh-768x1024",
+      "name" : "Cancel is complete and at least 64 points"
+    },
+    {
+      "pass" : true,
+      "name" : "Scrollable purpose stays above cancel",
+      "group" : "purpose-zh-768x1024"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-zh-768x1024",
+      "name" : "Skip and cancel are distinct controls"
+    },
+    {
+      "group" : "purpose-zh-768x1024",
+      "name" : "Purpose follows largest accessibility text",
+      "pass" : true
+    },
+    {
+      "name" : "Long purpose label is not cropped",
+      "pass" : true,
+      "group" : "purpose-zh-768x1024"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-1024x768",
+      "name" : "Actual language button selects zh"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-1024x768",
+      "name" : "UIKit child uses requested profile dimensions"
+    },
+    {
+      "group" : "actions-zh-1024x768",
+      "pass" : true,
+      "name" : "Cancel and end keep identical fixed vertical position"
+    },
+    {
+      "group" : "actions-zh-1024x768",
+      "pass" : true,
+      "name" : "End is fully visible with safe touch height"
+    },
+    {
+      "group" : "actions-zh-1024x768",
+      "name" : "Action follows largest accessibility text",
+      "pass" : true
+    },
+    {
+      "name" : "Cancel label fits the action",
+      "pass" : true,
+      "group" : "actions-zh-1024x768"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-1024x768",
+      "name" : "Status is clipped above fixed end action"
+    },
+    {
+      "pass" : true,
+      "name" : "Status width follows the scroll viewport",
+      "group" : "actions-zh-1024x768"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-zh-1024x768",
+      "name" : "Visible long title never covers end at offset 0.0"
+    },
+    {
+      "group" : "actions-zh-1024x768",
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 0.0"
+    },
+    {
+      "name" : "Cancel is complete and at least 64 points",
+      "pass" : true,
+      "group" : "purpose-zh-1024x768"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-zh-1024x768",
+      "name" : "Scrollable purpose stays above cancel"
+    },
+    {
+      "group" : "purpose-zh-1024x768",
+      "name" : "Skip and cancel are distinct controls",
+      "pass" : true
+    },
+    {
+      "name" : "Purpose follows largest accessibility text",
+      "pass" : true,
+      "group" : "purpose-zh-1024x768"
+    },
+    {
+      "group" : "purpose-zh-1024x768",
+      "pass" : true,
+      "name" : "Long purpose label is not cropped"
+    },
+    {
+      "group" : "actions-ja-320x480",
+      "pass" : true,
+      "name" : "Actual language button selects ja"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-320x480",
+      "name" : "UIKit child uses requested profile dimensions"
+    },
+    {
+      "group" : "actions-ja-320x480",
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "pass" : true
+    },
+    {
+      "group" : "actions-ja-320x480",
+      "name" : "End is fully visible with safe touch height",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-320x480",
+      "name" : "Action follows largest accessibility text"
+    },
+    {
+      "pass" : true,
+      "name" : "Cancel label fits the action",
+      "group" : "actions-ja-320x480"
+    },
+    {
+      "pass" : true,
+      "name" : "Status is clipped above fixed end action",
+      "group" : "actions-ja-320x480"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-320x480",
+      "name" : "Status width follows the scroll viewport"
+    },
+    {
+      "group" : "actions-ja-320x480",
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 0.0"
+    },
+    {
+      "group" : "actions-ja-320x480",
+      "name" : "Visible long title never covers end at offset 1295.0",
+      "pass" : true
+    },
+    {
+      "name" : "Cancel is complete and at least 64 points",
+      "group" : "purpose-ja-320x480",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-ja-320x480",
+      "name" : "Scrollable purpose stays above cancel"
+    },
+    {
+      "name" : "Skip and cancel are distinct controls",
+      "pass" : true,
+      "group" : "purpose-ja-320x480"
+    },
+    {
+      "group" : "purpose-ja-320x480",
+      "pass" : true,
+      "name" : "Purpose follows largest accessibility text"
+    },
+    {
+      "pass" : true,
+      "name" : "Long purpose label is not cropped",
+      "group" : "purpose-ja-320x480"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-480x320",
+      "name" : "Actual language button selects ja"
+    },
+    {
+      "group" : "actions-ja-480x320",
+      "pass" : true,
+      "name" : "UIKit child uses requested profile dimensions"
+    },
+    {
+      "group" : "actions-ja-480x320",
+      "pass" : true,
+      "name" : "Cancel and end keep identical fixed vertical position"
+    },
+    {
+      "group" : "actions-ja-480x320",
+      "name" : "End is fully visible with safe touch height",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Action follows largest accessibility text",
+      "group" : "actions-ja-480x320"
+    },
+    {
+      "name" : "Cancel label fits the action",
+      "pass" : true,
+      "group" : "actions-ja-480x320"
+    },
+    {
+      "group" : "actions-ja-480x320",
+      "name" : "Status is clipped above fixed end action",
+      "pass" : true
+    },
+    {
+      "group" : "actions-ja-480x320",
+      "name" : "Status width follows the scroll viewport",
+      "pass" : true
+    },
+    {
+      "name" : "Visible long title never covers end at offset 0.0",
+      "group" : "actions-ja-480x320",
+      "pass" : true
+    },
+    {
+      "name" : "Visible long title never covers end at offset 846.0",
+      "pass" : true,
+      "group" : "actions-ja-480x320"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-480x320",
+      "name" : "Short landscape exposes overflowing title by scrolling"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-ja-480x320",
+      "name" : "Cancel is complete and at least 64 points"
+    },
+    {
+      "group" : "purpose-ja-480x320",
+      "pass" : true,
+      "name" : "Scrollable purpose stays above cancel"
+    },
+    {
+      "name" : "Skip and cancel are distinct controls",
+      "group" : "purpose-ja-480x320",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-ja-480x320",
+      "name" : "Purpose follows largest accessibility text",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-ja-480x320",
+      "name" : "Long purpose label is not cropped"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-844x390",
+      "name" : "Actual language button selects ja"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-844x390",
+      "name" : "UIKit child uses requested profile dimensions"
+    },
+    {
+      "group" : "actions-ja-844x390",
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "End is fully visible with safe touch height",
+      "group" : "actions-ja-844x390"
+    },
+    {
+      "pass" : true,
+      "name" : "Action follows largest accessibility text",
+      "group" : "actions-ja-844x390"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-844x390",
+      "name" : "Cancel label fits the action"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-844x390",
+      "name" : "Status is clipped above fixed end action"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-844x390",
+      "name" : "Status width follows the scroll viewport"
+    },
+    {
+      "name" : "Visible long title never covers end at offset 0.0",
+      "pass" : true,
+      "group" : "actions-ja-844x390"
+    },
+    {
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 370.5",
+      "group" : "actions-ja-844x390"
+    },
+    {
+      "name" : "Cancel is complete and at least 64 points",
+      "pass" : true,
+      "group" : "purpose-ja-844x390"
+    },
+    {
+      "group" : "purpose-ja-844x390",
+      "pass" : true,
+      "name" : "Scrollable purpose stays above cancel"
+    },
+    {
+      "pass" : true,
+      "name" : "Skip and cancel are distinct controls",
+      "group" : "purpose-ja-844x390"
+    },
+    {
+      "group" : "purpose-ja-844x390",
+      "name" : "Purpose follows largest accessibility text",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-ja-844x390",
+      "name" : "Long purpose label is not cropped",
+      "pass" : true
+    },
+    {
+      "name" : "Actual language button selects ja",
+      "pass" : true,
+      "group" : "actions-ja-768x1024"
+    },
+    {
+      "group" : "actions-ja-768x1024",
+      "name" : "UIKit child uses requested profile dimensions",
+      "pass" : true
+    },
+    {
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "pass" : true,
+      "group" : "actions-ja-768x1024"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-768x1024",
+      "name" : "End is fully visible with safe touch height"
+    },
+    {
+      "name" : "Action follows largest accessibility text",
+      "pass" : true,
+      "group" : "actions-ja-768x1024"
+    },
+    {
+      "name" : "Cancel label fits the action",
+      "group" : "actions-ja-768x1024",
+      "pass" : true
+    },
+    {
+      "group" : "actions-ja-768x1024",
+      "name" : "Status is clipped above fixed end action",
+      "pass" : true
+    },
+    {
+      "group" : "actions-ja-768x1024",
+      "pass" : true,
+      "name" : "Status width follows the scroll viewport"
+    },
+    {
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 0.0",
+      "group" : "actions-ja-768x1024"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-768x1024",
+      "name" : "Visible long title never covers end at offset 0.0"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-ja-768x1024",
+      "name" : "Cancel is complete and at least 64 points"
+    },
+    {
+      "group" : "purpose-ja-768x1024",
+      "pass" : true,
+      "name" : "Scrollable purpose stays above cancel"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-ja-768x1024",
+      "name" : "Skip and cancel are distinct controls"
+    },
+    {
+      "name" : "Purpose follows largest accessibility text",
+      "pass" : true,
+      "group" : "purpose-ja-768x1024"
+    },
+    {
+      "name" : "Long purpose label is not cropped",
+      "pass" : true,
+      "group" : "purpose-ja-768x1024"
+    },
+    {
+      "name" : "Actual language button selects ja",
+      "group" : "actions-ja-1024x768",
+      "pass" : true
+    },
+    {
+      "group" : "actions-ja-1024x768",
+      "name" : "UIKit child uses requested profile dimensions",
+      "pass" : true
+    },
+    {
+      "group" : "actions-ja-1024x768",
+      "name" : "Cancel and end keep identical fixed vertical position",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "End is fully visible with safe touch height",
+      "group" : "actions-ja-1024x768"
+    },
+    {
+      "pass" : true,
+      "name" : "Action follows largest accessibility text",
+      "group" : "actions-ja-1024x768"
+    },
+    {
+      "group" : "actions-ja-1024x768",
+      "pass" : true,
+      "name" : "Cancel label fits the action"
+    },
+    {
+      "pass" : true,
+      "group" : "actions-ja-1024x768",
+      "name" : "Status is clipped above fixed end action"
+    },
+    {
+      "group" : "actions-ja-1024x768",
+      "name" : "Status width follows the scroll viewport",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Visible long title never covers end at offset 0.0",
+      "group" : "actions-ja-1024x768"
+    },
+    {
+      "name" : "Visible long title never covers end at offset 0.0",
+      "pass" : true,
+      "group" : "actions-ja-1024x768"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-ja-1024x768",
+      "name" : "Cancel is complete and at least 64 points"
+    },
+    {
+      "pass" : true,
+      "name" : "Scrollable purpose stays above cancel",
+      "group" : "purpose-ja-1024x768"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-ja-1024x768",
+      "name" : "Skip and cancel are distinct controls"
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-ja-1024x768",
+      "name" : "Purpose follows largest accessibility text"
+    },
+    {
+      "pass" : true,
+      "name" : "Long purpose label is not cropped",
+      "group" : "purpose-ja-1024x768"
+    },
+    {
+      "group" : "purpose-first-actions",
+      "pass" : true,
+      "name" : "Real Core configuration ui.call_flow"
+    },
+    {
+      "name" : "Actual language button selects en",
+      "pass" : true,
+      "group" : "purpose-first-actions"
+    },
+    {
+      "group" : "purpose-first-actions",
+      "name" : "Purpose-first sends selected purpose to actual Core",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-first-actions",
+      "name" : "Actual Core preserves purpose-first mode",
+      "pass" : true
+    },
+    {
+      "group" : "purpose-first-actions",
+      "name" : "Visible call ID exists",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "purpose-first-actions",
+      "name" : "Hidden end cannot end ringing"
+    },
+    {
+      "group" : "purpose-first-actions",
+      "name" : "Actual cancel ends only the current ringing call",
+      "pass" : true
+    },
+    {
+      "group" : "ring-then-purpose-actions",
+      "pass" : true,
+      "name" : "Real Core configuration ui.call_flow"
+    },
+    {
+      "name" : "Actual language button selects en",
+      "group" : "ring-then-purpose-actions",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "ring-then-purpose-actions",
+      "name" : "Actual Core rings before purpose"
+    },
+    {
+      "name" : "Skip dismisses purpose while preserving the same call",
+      "group" : "ring-then-purpose-actions",
+      "pass" : true
+    },
+    {
+      "name" : "Ring-first cancel ends current call",
+      "pass" : true,
+      "group" : "ring-then-purpose-actions"
+    },
+    {
+      "pass" : true,
+      "group" : "ring-then-purpose-actions",
+      "name" : "Purpose-sheet cancel is distinct from skip and ends call"
+    },
+    {
+      "group" : "answered-cancel-permission",
+      "name" : "Real Core configuration ui.call_flow",
+      "pass" : true
+    },
+    {
+      "group" : "answered-cancel-permission",
+      "name" : "Actual language button selects en",
+      "pass" : true
+    },
+    {
+      "group" : "answered-cancel-permission",
+      "name" : "Actual Core accepts answered transition",
+      "pass" : true
+    },
+    {
+      "name" : "Rejected queued cancel cannot render idle",
+      "group" : "answered-cancel-permission",
+      "pass" : true
+    },
+    {
+      "name" : "Actual Core remains in call after queued cancel",
+      "pass" : true,
+      "group" : "answered-cancel-permission"
+    },
+    {
+      "name" : "Visible connected UI cannot grant visitor cancel",
+      "group" : "answered-cancel-permission",
+      "pass" : true
+    },
+    {
+      "name" : "Ordinary status is distinct from initially hidden SOS",
+      "pass" : true,
+      "group" : "offline-sos-layers"
+    },
+    {
+      "group" : "offline-sos-layers",
+      "pass" : true,
+      "name" : "Injected presentation shows distinct emergency layer"
+    },
+    {
+      "name" : "Existing clear control preserves touch target",
+      "pass" : true,
+      "group" : "offline-sos-layers"
+    },
+    {
+      "group" : "offline-sos-layers",
+      "pass" : true,
+      "name" : "Presentation clear input hides only presentation"
+    },
+    {
+      "pass" : true,
+      "name" : "Actual language button selects en",
+      "group" : "held-cancel-cross-call"
+    },
+    {
+      "group" : "held-cancel-cross-call",
+      "name" : "Actual Core call A exists before held cancel",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "held-cancel-cross-call",
+      "name" : "External local test actor ends A"
+    },
+    {
+      "name" : "Same screen now owns actual distinct Core call B",
+      "pass" : true,
+      "group" : "held-cancel-cross-call"
+    },
+    {
+      "name" : "Held A cancel release cannot cancel successor B",
+      "group" : "held-cancel-cross-call",
+      "pass" : true
+    },
+    {
+      "group" : "held-end-cross-call",
+      "name" : "Actual Core call A answered",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "name" : "Actual distinct Core call B answered",
+      "group" : "held-end-cross-call"
+    },
+    {
+      "pass" : true,
+      "group" : "held-end-cross-call",
+      "name" : "Held A end release cannot dismiss successor B"
+    },
+    {
+      "name" : "Normal held end remains usable for nil-ID SIP UI",
+      "pass" : true,
+      "group" : "nil-id-and-assistive-end"
+    },
+    {
+      "group" : "nil-id-and-assistive-end",
+      "pass" : true,
+      "name" : "Assistive end without touchDown remains usable"
+    },
+    {
+      "group" : "nil-id-and-assistive-end",
+      "name" : "Held nil-ID end cannot cross idle into another SIP UI session",
+      "pass" : true
+    },
+    {
+      "name" : "Retired physical input permits current assistive end",
+      "pass" : true,
+      "group" : "nil-id-and-assistive-end"
+    },
+    {
+      "group" : "held-end-core-generation",
+      "name" : "Owned actual Core restarts",
+      "pass" : true
+    },
+    {
+      "name" : "Actual Core generation changes",
+      "group" : "held-end-core-generation",
+      "pass" : true
+    },
+    {
+      "group" : "held-end-core-generation",
+      "name" : "Held end cannot cross Core restart with same nil-ID UI",
+      "pass" : true
+    },
+    {
+      "group" : "held-end-core-generation",
+      "pass" : true,
+      "name" : "Current assistive end works after rejected old Core gesture"
+    },
+    {
+      "pass" : true,
+      "group" : "actual-offline-presentation",
+      "name" : "Stopped Core shows actual visible offline status"
+    },
+    {
+      "pass" : true,
+      "group" : "actual-offline-presentation",
+      "name" : "Ordinary offline state does not show SOS"
+    },
+    {
+      "pass" : true,
+      "group" : "actual-offline-presentation",
+      "name" : "Offline surface differs from SOS warning control"
+    },
+    {
+      "name" : "Actual accessibility activation opens review",
+      "pass" : true,
+      "group" : "sos-accessible-actions"
+    },
+    {
+      "name" : "Review alone cannot trigger or start countdown",
+      "pass" : true,
+      "group" : "sos-accessible-actions"
+    },
+    {
+      "pass" : true,
+      "group" : "sos-accessible-actions",
+      "name" : "Actual UIKit review has cancel and explicit start"
+    },
+    {
+      "name" : "Accessible action cancels the same countdown",
+      "pass" : true,
+      "group" : "sos-accessible-actions"
+    },
+    {
+      "group" : "sos-accessible-actions",
+      "name" : "No external trigger and keyboard action exists",
+      "pass" : true
+    },
+    {
+      "pass" : true,
+      "group" : "sos-accessible-actions",
+      "name" : "Same-pass reparenting preserves cancellable countdown"
+    },
+    {
+      "name" : "True detachment retires countdown and activation",
+      "group" : "sos-accessible-actions",
+      "pass" : true
+    },
+    {
+      "group" : "sos-accessible-actions",
+      "name" : "Disabled SOS cannot trigger",
+      "pass" : true
+    },
+    {
+      "group" : "sos-accessible-actions",
+      "pass" : true,
+      "name" : "Actual primary-action target requires review"
+    },
+    {
+      "name" : "Actual keyboard target requires the same review",
+      "group" : "sos-accessible-actions",
+      "pass" : true
+    },
+    {
+      "name" : "All SOS UI paths stayed inside the counter boundary",
+      "group" : "sos-accessible-actions",
+      "pass" : true
+    }
+  ],
+  "step" : 54
+}

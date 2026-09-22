@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "784125ea2bfb2836a0f02bfd9000b4d3d63cc64f11a8f8c3c0d4173ad947dd6b",
+  "task_id": "T08",
+  "test_id": "final-web-r4",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T08/source-final-r4.json",
+  "source_manifest_sha256": "19aa85336b95d527cad77a78f528a0a497a38db1c8e7aa345b907c60a172c626",
+  "command": [
+    "node",
+    "build/remediation-continuation-20260922/t08-candidate-r4/webui/tests/admin_runtime.test.js"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T14:57:12.425488+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T08/evidence/final-web-r4.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T14:57:12.556955+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

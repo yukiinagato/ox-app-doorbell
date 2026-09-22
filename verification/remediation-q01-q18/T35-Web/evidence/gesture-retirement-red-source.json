@@ -1,0 +1,10 @@
+{
+  "source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-web-20260923/gesture-retirement-red-source",
+  "files": {
+    "webui/panel/door.html": "956d7a555f958aa8f9d2173b3efafe8af1df09c41cd5d8995b539b173a59b335",
+    "webui/tests/door_visitor_cases.js": "0cf064accb3d7860ccddf8ade8ab13fb3eb53cf33b3d7c3abe9dbf620bddc2ef",
+    "webui/tests/door_visitor_browser_fixture.js": "7e102af5896574de027da6cebbc90bf8f61a7cf183c86faaa2bcc7a3111b1e2e"
+  },
+  "browser_result": "gesture-retirement-red-browser.json",
+  "scope": "r4 production page; actual IAB DOM events; four retirement cases, three fail, touch case passes and is not claimed as a reproduced defect."
+}

@@ -399,6 +399,16 @@ supervision 才是 fallback。它不會以未 qualification 的 launcher 取代 
 该 node 的 `POST /api/login` 与 `db_core_admin_password_verify` 共享。它不会复制到其他 node，因此不是
 cluster-wide rate limiter。
 
+管理员 Web 会话绑定获胜凭据记录的 CRDT 版本；没有用户交互 30 分钟后失效，登录后最多
+有效 8 小时。Core 使用单调时钟，系统时间变动不能延长期限。后台状态、配置轮询不续期；
+管理页仅在用户输入时限频发送 `POST /api/session/activity`，要求现有 HttpOnly 会话及
+`X-Requested-With: doorbell-admin`。每节点最多 64 个会话，先清除过期项，再按最后交互和
+签发顺序淘汰最旧项，随后插入新 token。会话不持久化，进程重启后须重新登录。
+
+本地改密、配置导入及远端凭据同步都在节点观察到新记录后撤销旧版本会话。这不是全局
+瞬时撤销：分区节点在同步前仍可能用缓存的旧密码接受新登录；单个 token 到期并不能消除
+这一限制。凭据指纹只保留在服务端内部，不作为客户端会话权限或诊断数据返回。
+
 在此键出现之前，每个节点各自保存摘要，信息亭还另有退出码。该本地摘要在第一次校验成功前仍然有效，
 成功后即作为集群密码被复制。仍持有自己 `exit_pin.txt` 摘要的外壳，应在
 `db_core_admin_password_verify` 返回成功或“未设置”后停止使用并删除它，以免改了密码却留下另一个入口。
@@ -412,12 +422,24 @@ cluster-wide rate limiter。
 `notice.presets` 是管理员可编辑的至多 8 条 `{id, text}`，公告对话框据此渲染；
 首次会 seed 三条，之后可自由编辑或删除。
 
-`doors.<id>.unlock.show_button` 决定是否显示开锁控件。默认是“能用才显示”：
-仅当配置了 `doors.<id>.unlock.command` 或 `sip.dtmf_actions` 中的第一个 `ha_command` 时为 true。
-管理员可以强制为任一取值。`status.doors.<id>.unlock` 返回 `configured`、`command`、`show_button`
-以及该结论来自默认还是管理员，因此外壳在按下之前就能决定。
-`POST /api/doors/<id>/open` 与 `db_core_open_door` 发出与 SIP 特服码相同的 `ha_command`，
-未配置时返回 `unlock_not_configured` 而不是静默无操作。
+`doors.<id>.unlock.command` 将此门明确绑定到对应的 HA 开锁命令。只有此门自己的字段能启用开锁，
+不再回退使用 `sip.dtmf_actions`。命令由 1–32 个 ASCII 字母、数字、下划线或连字符组成。
+移除绑定后，此门无法开锁，即使其他门或 SIP 特服码仍配置了命令。SIP 特服码原有的独立行为保持不变。
+
+`doors.<id>.unlock.show_button` 只控制可见性，默认仅在此门明确配置命令时为 true。
+管理员可以强制显示按钮，但不能绕过后端绑定检查。`status.doors.<id>.unlock` 返回
+`configured`、`command`、`show_button` 及可见性来源 `source`。未配置时，HTTP 开锁请求返回
+409 `unlock_not_configured`，`db_core_open_door` 返回 -3。已配置的请求发布此门的
+`ha_command` 意图；受理成功不表示物理门锁已经打开。
+
+曾依赖第一个 SIP HA 动作的旧配置需要管理员确认。在“门口与建筑 → 开锁按钮”中，确认并保存
+实际控制此门锁的命令。已有 HA 命令只作为输入建议，不会自动选中或保存。留空可解除绑定。
+例如明确指定 `front_gate`，同时保留开灯特服码：
+
+```json
+{"doors":{"d_front":{"unlock":{"command":"front_gate"}}},
+ "sip":{"dtmf_actions":{"*1":{"type":"ha_command","command":"light_on","door":"self"}}}}
+```
 
 `display.appearance` 取值为 `auto_system`、`auto_schedule`、`light`、`dark`；
 `display.appearance_schedule = {dark_from, light_from}` 在 `time.zone` 中求值。两者都可置于
@@ -533,6 +555,19 @@ anti-entropy 会把集群的全部事件历史一次性交给新加入的节点�
 
 公告与 SOS 天然满足这一原则：两者都是复制的配置与状态，新加入的节点只应用**当前值**一次，
 不会重演产生该值的历次变更。
+
+运行状态中每个 `active_calls` 包含精确呼叫身份、状态及 `server_now_ms`、`remaining_ms`、
+`expires_at_ms`、`recovery_required`、`recovery_eligible`、`recovery_remaining_ms`（0..10000）。
+Core 在同一 loop 内采样；墙钟字段是校正后的 Unix 毫秒，时长为非负毫秒，最大夹到 JSON
+可精确表示的整数 9007199254740991。恢复可行性描述现有本地恢复窗口，不等于接听权限；
+查询不会延长恢复窗口。
+
+根对象及每个呼叫具有相同的不透明 `snapshot_generation`，每次 Core 启动及采样均不同。
+根对象的 `snapshot_age_ms` 使用 Core 单调时钟表示缓存年龄；`-1` 代表无法确定年龄。
+状态读取仍不会等待 Core loop。客户端从新收到的时长中减去快照年龄一次，再以自身单调
+时钟递减；重复读取同一代次不得重新启动倒计时。时长为零、未知，或代次、年龄、时长字段
+缺失时显示核实中，不能回退至系统墙钟或自动取消。回到前台及 Core/客户端重启后丢弃旧
+计时基点并重新取得快照，不能持久化单调绝对时刻。呼叫结束仅由 Core 决定。
 
 ### 谁可以接听
 
@@ -790,3 +825,71 @@ App 不保證免費額度，請在供應商設定配額。詳見
 `ui.call_flow` 将门口机分为两条独立路径。`purpose_first` 在首页显示已启用的目的，点击目的即发出一次带有该目的的呼叫。**直接呼叫** 按钮可跳过目的并立即呼叫，呼叫后不再打开目的页面。`ring_then_purpose` 隐藏首页目的菜单，点击呼叫按钮后先发出呼叫，再打开目的页面；选择目的只更新同一次呼叫，跳过目的会继续呼叫，取消则结束该次呼叫。没有已启用的目的时，两种模式都直接呼叫，不打开空选单。
 
 iOS、iOS 5 兼容版、Android 和 Windows 原生门口机遵循上述流程。Web 面板先选择目标门，再按所选模式安排目的选择与呼叫的顺序。切换设置只更新首页，不会发起呼叫；已有呼叫保留其标识和截止时间。配置存储值不变，管理菜单显示翻译后的名称和所选流程说明。
+
+管理员凭据变更将 CRDT 条目和本地凭据元数据放在同一 SQLite 事务中提交。持久化失败时保留原密码及其会话。新的浏览器写接口必须携带会话绑定的随机 `X-Doorbell-CSRF` 请求头，并通过精确可信 `Origin` 检查；缺失、null、通配符和不可信来源均拒绝。`GET /api/session` 使用 `Cache-Control: no-store` 返回令牌，不延长活动期限。当前本机 IP 及回环地址在监听端口上的直接 HTTP 来源可信。DNS 名或反向代理需要在 `web.allowed_origins` 数组配置最多 32 个精确的 `http://host[:port]` 或 `https://host[:port]` 来源，不含路径、通配符或凭据。`Host` 和转发请求头不能授予信任；非法条目拒绝匹配。
+
+### 本地配置版本与条件提交
+
+`GET /api/config/snapshot` 和 `db_core_config_snapshot_json_v2` 返回
+`{schema_version:2,revision,config,edit_conflicts,edit_journal}`。管理快照去除 `admin.password_hash`，秘密值仍在
+平台安全存储中。HTTP 使用 `Cache-Control: no-store`。版本是单个节点、单次运行 Core
+的不透明令牌，涵盖全部可见 CRDT 记录版本及墓碑；重启或重置副本后失效。它不是 HLC，
+也不是全网锁。
+
+`POST /api/config/commit` 和 `db_core_config_commit_json_v2` 接收
+`{schema_version:2,expected_revision,ops,resolves?}`。HTTP 要求管理员会话、该会话的
+`X-Doorbell-CSRF` 和精确匹配的可信 Origin；原生调用共享 Core 验证及提交入口。
+普通批次上限为 256 项、256 KiB JSON、32 层容器。缺少版本、未知的请求或操作字段、
+重复或父子重叠的操作键会被拒绝。为防旧子记录盖过父对象补丁而同步的已有 CRDT 子记录，
+也计入 256 项上限。物化后的完整候选配置通过共享 schema 校验。Core 为已实现的该 API
+宣告 `config_cas_v1`。比较、合成对象、验证和持久化批次处于同一 Core 循环／SQLite
+写入上下文；失败批次不发布配置。
+
+对象 `set` 是递归字段补丁，保留未指定字段；标量和数组整体替换。JSON null 是值，
+删除字段必须显式 `delete`。原有整对象 CRDT 存储及复制保持不变。过期版本返回 HTTP 409、
+`error_code:"config_conflict"` 和当前不透明版本，不写入任何内容，也不返回秘密原值。
+客户端读取新的许可快照并比较 base/mine/current，由管理员解决冲突；禁止直接用新版本
+自动重发旧草稿。
+
+一个兼容周期内，`/api/config/batch` 和 `db_core_config_batch_json` 的对象请求可携带
+可选 `expected_revision` 进入同一条件提交入口。批次响应的 `revision` 改为不透明版本，
+单独 `hlc` 字段保留原时间戳。无条件的旧 batch、单键写入／删除和现有导入仍保持原有
+弱并发语义。后台编辑器及导入迁移由独立任务处理；发送读取时捕获的基准之前，不能声称
+具备本地冲突保护。本地 CAS 本身不检测或解决网络分区中不同节点独立编辑的冲突。
+升级后的写入路径还将有容量上限的编辑记录与配置原子保存，并拒绝对未解决实体的普通写入。
+新增可选 `resolves` 用于显式解决整个实体。复制、脱敏、上限及混合版本行为见
+[保留配置冲突](config-conflicts.md)。旧导入当前共用普通批次的 256 项上限，暂存导入另行定义。
+
+## 持久化动作的权威与权限
+
+`doors.<door>.operations.authority_node` 将新开门固定给现有的 32 位小写十六进制节点 ID；`cluster.operations.sos_authority_node` 独立绑定全局 SOS。缺省禁用新协议；失联不会换节点执行。
+
+`devices.<node>.operations` 只允许 `doors`（最多 64 个不重复门 ID）、布尔 `sos_start`、布尔 `sos_clear`；缺省为空/false。门 ID 为 1–128 位 ASCII 字母、数字、下划线或连字符。叶写入和内嵌整对象均拒绝未知字段、重复项和错误类型。原生节点与管理员 HTTP 页面节点都须有显式权限。配置及权限持久化复制，prepare、execute、query 均检查当前权限；已有意图不会随配置修改换目标。身份、CSRF、等待容量、结果与旧调用迁移边界见[动作 API](operation-api.md)。
+
+认证执行器 ACK 默认关闭、可选启用。`doors.<door>.operations.ack`、密钥撤销、消息编码和结果语义见[操作 ACK 协议](operation-ack-protocol.md)。
+
+### 公告条件保存与明确的对象字段删除
+
+条件 `set` 可带 `remove_fields`：1–64 个不重复的直接字段名，每项非空且最多128字节。`value` 必须是对象，且不能同时含有待删除字段。Core 先合并修改，再仅删除指定字段，保留其他未知字段，因此可以在一次经校验的保存中修改样式属性并将另一属性恢复继承。字段名中的点不解释为嵌套路径。`delete` 不可带该字段；省略和 null 仍不代表删除。既有子记录在同一有界事务中更新或写入墓碑。
+
+管理员 `POST /api/notice` 与 `POST /api/doors/<id>/notice` 接受 `expected_revision`、`text` 和可选整数 `ttl_s`（0–2147483647，0表示不过期）。条件请求要求有效管理员cookie、CSRF和准确的可信Origin，并共用原子CAS。`from_device`、`created_ms`、`expires_ms` 由Core生成，条件请求不允许客户端提供。未带正TTL时可用 `expiry:"today"`，由Core校正时钟和配置时区（包括支持的夏令时规则）确定下一本地日期边界。原有公告字数与时间戳上限仍适用。未知或重复成员拒绝；成功返回新revision，旧revision返回409 `config_conflict`且不写入。不带条件的旧请求保留兼容行为。
+
+认证预检、原子提交 API、snapshot 替换语义、回执保留和容量上限见[配置暂存导入](config-import.md)。旧 import 路由仍限制 256 项。
+
+## 独立面板身份
+
+`panel.identities.<panel_id>` 保存独立、可撤销的面板记录。Core 随机生成 128 位身份，以 32 位小写十六进制表示，不从 IP、浏览器或 SIP 用户名推导；最多 128 条记录。必需字段为 `credential_ref`（平台安全存储中的 `secret:` 引用）、`credential_generation`（32 位小写十六进制）、`door_scope`（最多 64 个唯一明确门 ID，禁止通配符）、`grants`（明确操作列表）、`revoked`（布尔）。可选 `sip_account_id` 指向现有 `sip.accounts` 中的 32 位账号记录 ID。新身份默认门范围和权限均为空。
+
+权限名称为 `view`、`call.monitor`、`call.answer`、`call.initiate`、`sos.trigger`、`door.open`、`media.publish`、`notice.write`。门相关操作同时要求该门位于范围内。`sos.trigger` 是不带门参数的全局触发权，不包含解除 SOS；原生及管理员既有解除策略独立保留。新身份不能修改全局公告。旧直接开门地址也检查独立面板的 `door.open`，但保留原即时执行语义，不能当成持久操作回执。受信本地原生动作继续采用 Core/设备权限边界；新增身份管理 ABI 显式校验管理员。
+
+`POST /api/panels/{list,create,update,revoke,rotate}` 与 `db_core_panel_identity_json_v2` 共用实现。所有调用需有效管理员 session 和 CSRF，HTTP 还需精确受信 Origin。list 接受 `{}`；写操作必须携带当前节点的 `expected_revision`，冲突不写入并返回 `config_conflict`。create 接受 `credential_ref` 及可选门范围、权限、SIP 账号，ID 和代次由 Core 生成。update/rotate 另需 `panel_id`；rotate 必须显式提供已配置的凭据引用。revoke 只接受 `panel_id`、`expected_revision`。先通过既有安全存储提供凭据，再引用；本地值缺失返回 `credential_provisioning_required`。每次更新、轮换、撤销都会换代，通过既有配置 CAS 事务提交，保留独立身份 CRDT 记录和编辑历史。管理响应只含引用和公开身份信息，不返回 bearer。
+
+面板 session 根据实际凭据匹配身份，不相信请求指定的 ID；重复凭据无法唯一匹配时拒绝。随机 128 位 session 保留 30 分钟交互空闲、8 小时绝对期限和 128 容量，轮询不续期。会话绑定 Core 启动代次、身份、凭据代次、本地安全值及单身份 `grant_version`。后者是公开身份配置规范化后的 64 位小写 SHA-256，不是凭据摘要。观察到 A 的变化只使 A 失效，不让 B 下线；分区节点无法执行尚未收到的撤销。
+
+状态、历史、call-info、受保护快照代理按 `view` 与门范围过滤。独立已读水位按面板和门分别保存在本地，不改其他面板或原生/legacy 水位；`unread_missed` 只计算返回页，明确标识 `unread_scope:"returned_page"`。既有共享 Push 订阅/分发和共享 UI 报告不支持独立归属，新身份明确返回 `capabilities.scoped_push:false`、`scoped_ui_report:false`，相应写入返回 `unsupported_capability`，不能宣称订阅配置成功。认证身份仍可读取语言和启动所需元信息。
+
+SIP 仅使用明确映射账号的 `user` 与安全 `pass_ref`。账号或本地秘密缺失、重复账号/用户名、设备已有账号或共享 WebRTC 用户均返回 `provisioning_required`，不回落到共享 SIP 密码。实际配置账号还需监听或接听权才返回其凭据。PBX 管理员负责实际开通分机与 PBX 权限；Core 不自动创建 PBX 用户，也不把已配置等同于注册成功。PBX 拨号限制是外部策略。
+
+旧 `panel.token_refs` 及会话明确标为 `legacy_shared`，保留已声明的本地动作和共享 SIP 兼容行为，不宣称能独立撤销设备；不能作为独立身份委托远端媒体。缺失或畸形身份不会自动成为 legacy。`media.publish` 还必须满足 T15 当前 session/call/revision/owner 检查，认证接收端再次校验当前身份代次、权限和通话归属，不转发浏览器 Cookie、CSRF 或长期 bearer。
+
+既有 LAN-public `/stream.mjpeg`、`/stream.mp4`、`/snapshot.jpg` 门口摄像头策略保持不变。`view` 范围保护面板 API 和受保护代理，不会把这些明确公开的门口画面自动变成私有资源；住户回传画面另有发布者/session 授权。

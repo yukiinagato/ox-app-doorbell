@@ -1,0 +1,29 @@
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_disk.cpp:123:
+TEST CASE:  operations: disk full during real WAL commit grants no dispatch and preserves accepted record
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_disk.cpp:138: ERROR: CHECK( injection.rejected.load() > 0 ) is NOT correct!
+  values: CHECK( 0 >  0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_disk.cpp:139: ERROR: CHECK( failed.error_code == "storage_error" ) is NOT correct!
+  values: CHECK(  == storage_error )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_disk.cpp:140: ERROR: CHECK_FALSE( failed.dispatch_acquired ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_disk.cpp:143: ERROR: CHECK( unchanged.record->state == "accepted" ) is NOT correct!
+  values: CHECK( dispatching == accepted )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_disk.cpp:144: ERROR: CHECK_FALSE( unchanged.record->dispatch_acquired ) is NOT correct!
+  values: CHECK_FALSE( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_operations_disk.cpp:145: ERROR: CHECK( store.operationAcquireDispatch(id, auth, 1004, 100004).dispatch_acquired ) is NOT correct!
+  values: CHECK( false )
+
+[operation-storage] rows=1 reserved_bytes=12288 database_bytes=4096 wal_bytes=263712 full_writes=0
+===============================================================================
+[doctest] test cases:    14 |    13 passed | 1 failed | 436 skipped
+[doctest] assertions: 16821 | 16815 passed | 6 failed |
+[doctest] Status: FAILURE!

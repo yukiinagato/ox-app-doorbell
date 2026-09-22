@@ -1,0 +1,46 @@
+{
+  "devicesAndConfigurations" : [
+    {
+      "device" : {
+        "architecture" : "arm64",
+        "deviceId" : "5675591C-491D-4232-9887-B2ECBB030C10",
+        "deviceName" : "Doorbell T20 lifecycle 20260922",
+        "modelName" : "iPhone 17",
+        "osBuildNumber" : "23F77",
+        "osVersion" : "26.5",
+        "platform" : "iOS Simulator"
+      },
+      "expectedFailures" : 0,
+      "failedTests" : 0,
+      "passedTests" : 17,
+      "skippedTests" : 0,
+      "testPlanConfiguration" : {
+        "configurationId" : "1",
+        "configurationName" : "Test Scheme Action"
+      }
+    }
+  ],
+  "environmentDescription" : "Doorbell · Built with macOS 26.5.1",
+  "expectedFailures" : 0,
+  "failedTests" : 0,
+  "finishTime" : 1790091972.192,
+  "passedTests" : 17,
+  "result" : "Passed",
+  "skippedTests" : 0,
+  "startTime" : 1790091937.993,
+  "statistics" : [
+
+  ],
+  "testFailures" : [
+
+  ],
+  "title" : "Test - Doorbell",
+  "topInsights" : [
+    {
+      "category" : "Longest Test Runs",
+      "impact" : "41% of duration",
+      "text" : "1 longest test run with outlier durations exceeding 2.52s (three standard deviations)"
+    }
+  ],
+  "totalTestCount" : 17
+}

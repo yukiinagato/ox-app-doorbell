@@ -1,0 +1,307 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-22",
+  "mode": "read_only",
+  "restrictions": [
+    "No installation, restart, configuration or app-state mutation",
+    "No lock/SOS/call action, backups or network-range scan",
+    "Existing pinned host identities retained",
+    "No credential values, private key or boot contents retained"
+  ],
+  "ipad_air1": {
+    "device": "ipad-air1",
+    "address": "10.10.38.199",
+    "ssh_port": 44,
+    "authentication": "Existing public-key alias; strict saved host identity",
+    "observations": [
+      {
+        "label": "kernel_machine_and_cpu",
+        "remote_command": "uname -m; uname -r; sysctl -n hw.cputype hw.cpusubtype",
+        "started_at": "2026-09-22T14:19:40.964864+00:00",
+        "exit_code": 0,
+        "value": "iPad4,2\n18.7.0\n16777228\n1"
+      },
+      {
+        "label": "os_version",
+        "remote_command": "cat /System/Library/CoreServices/SystemVersion.plist",
+        "started_at": "2026-09-22T14:19:41.265819+00:00",
+        "exit_code": 0,
+        "value": {
+          "ProductBuildVersion": "16H88",
+          "ProductName": "iPhone OS",
+          "ProductVersion": "12.5.8"
+        }
+      },
+      {
+        "label": "installed_app_version",
+        "remote_command": "cat /private/var/containers/Bundle/Application/64FD671A-D11A-464E-8D6B-C2A35A9F31F0/Doorbell.app/Info.plist",
+        "started_at": "2026-09-22T14:19:41.441441+00:00",
+        "exit_code": 0,
+        "value": {
+          "CFBundleExecutable": "Doorbell",
+          "CFBundleIdentifier": "jp.ox.doorbell",
+          "CFBundleShortVersionString": "0.1.36",
+          "CFBundleVersion": "37",
+          "MinimumOSVersion": "12.0"
+        }
+      },
+      {
+        "label": "doorbell_launch_jobs",
+        "remote_command": "launchctl list",
+        "started_at": "2026-09-22T14:19:41.744088+00:00",
+        "exit_code": 0,
+        "value": [
+          "1022\t0\tjp.ox.doorbell.test-ssh-lan.744AA3BC-9934-4AD5-AED9-32F9F6DDA63A",
+          "925\t0\tUIKitApplication:jp.ox.doorbell[0x9f29][63]",
+          "-\t0\tjp.ox.doorbell.test-ssh-lan"
+        ]
+      },
+      {
+        "label": "doorbell_process",
+        "remote_command": "ps -A -o pid,comm",
+        "started_at": "2026-09-22T14:19:42.031911+00:00",
+        "exit_code": 0,
+        "value": [
+          "  925 /var/containers/Bundle/Application/64FD671A-D11A-464E-8D6B-C2A35A9F31F0/Doorbell.app/Doorbell"
+        ]
+      }
+    ]
+  },
+  "ipad1": {
+    "device": "ipad1",
+    "address": "10.10.38.147",
+    "ssh_port": 22,
+    "authentication": "Recorded credential supplied only in child environment; strict saved host identity",
+    "observations": [
+      {
+        "label": "kernel_machine_and_cpu",
+        "remote_command": "uname -m; uname -r; sysctl -n hw.cputype hw.cpusubtype",
+        "started_at": "2026-09-22T14:19:40.968122+00:00",
+        "exit_code": 0,
+        "value": "iPad1,1\n11.0.0\n12\n9"
+      },
+      {
+        "label": "os_version",
+        "remote_command": "cat /System/Library/CoreServices/SystemVersion.plist",
+        "started_at": "2026-09-22T14:19:41.438102+00:00",
+        "exit_code": 0,
+        "value": {
+          "ProductBuildVersion": "9B206",
+          "ProductName": "iPhone OS",
+          "ProductVersion": "5.1.1"
+        }
+      },
+      {
+        "label": "installed_app_version",
+        "remote_command": "cat /Applications/Doorbell.app/Info.plist",
+        "started_at": "2026-09-22T14:19:42.233448+00:00",
+        "exit_code": 0,
+        "value": {
+          "CFBundleExecutable": "Doorbell",
+          "CFBundleIdentifier": "jp.ox.doorbell",
+          "CFBundleShortVersionString": "0.3.23",
+          "CFBundleVersion": "26",
+          "MinimumOSVersion": "5.1"
+        }
+      },
+      {
+        "label": "doorbell_launch_jobs",
+        "remote_command": "launchctl list",
+        "started_at": "2026-09-22T14:19:43.021762+00:00",
+        "exit_code": 0,
+        "value": [
+          "30018\t-\tUIKitApplication:jp.ox.doorbell[0xca36]",
+          "19\t-\tjp.ox.doorbell.keepalive"
+        ]
+      }
+    ]
+  },
+  "iphone17": {
+    "device": "iphone17",
+    "coredevice_id": "54DB00FE-62A0-5739-9679-B7C513DFCEC4",
+    "details": {
+      "command": [
+        "xcrun",
+        "devicectl",
+        "device",
+        "info",
+        "details",
+        "--device",
+        "54DB00FE-62A0-5739-9679-B7C513DFCEC4"
+      ],
+      "exit_code": 0,
+      "started_at": "2026-09-22T14:19:40.972858+00:00",
+      "error": "",
+      "selected_metadata": [
+        {
+          "hardware": {
+            "cpuType": {
+              "name": "arm64e",
+              "subType": 2,
+              "type": 16777228
+            },
+            "productType": "iPhone18,3",
+            "reality": "physical",
+            "platform": "iOS"
+          },
+          "device": {
+            "osVersionNumber": "27.0",
+            "osBuildUpdate": "24A437",
+            "bootState": "booted",
+            "developerModeStatus": "enabled"
+          },
+          "connection": {
+            "transportType": "localNetwork",
+            "pairingState": "paired",
+            "tunnelState": "connected"
+          }
+        }
+      ]
+    },
+    "apps": {
+      "command": [
+        "xcrun",
+        "devicectl",
+        "device",
+        "info",
+        "apps",
+        "--device",
+        "54DB00FE-62A0-5739-9679-B7C513DFCEC4",
+        "--bundle-id",
+        "jp.ox.doorbell"
+      ],
+      "exit_code": 0,
+      "started_at": "2026-09-22T14:19:43.088637+00:00",
+      "error": "",
+      "selected_metadata": [
+        {
+          "name": "Doorbell",
+          "bundleIdentifier": "jp.ox.doorbell",
+          "version": "0.1.16",
+          "bundleVersion": "17"
+        }
+      ]
+    },
+    "processes": {
+      "command": [
+        "xcrun",
+        "devicectl",
+        "device",
+        "info",
+        "processes",
+        "--device",
+        "54DB00FE-62A0-5739-9679-B7C513DFCEC4"
+      ],
+      "exit_code": 0,
+      "started_at": "2026-09-22T14:19:43.996407+00:00",
+      "error": "",
+      "selected_metadata": []
+    }
+  },
+  "http_status": [
+    {
+      "device": "ipad-air1",
+      "url": "http://10.10.38.199:47180/api/status",
+      "method": "GET",
+      "started_at": "2026-09-22T14:19:40.966800+00:00",
+      "http_status": 401,
+      "interpretation": "HTTP server answered; authenticated application state not read"
+    },
+    {
+      "device": "ipad1",
+      "url": "http://10.10.38.147:47180/api/status",
+      "method": "GET",
+      "started_at": "2026-09-22T14:19:40.994603+00:00",
+      "http_status": 401,
+      "interpretation": "HTTP server answered; authenticated application state not read"
+    },
+    {
+      "device": "ipad-mini3",
+      "url": "http://10.10.38.79:47180/api/status",
+      "method": "GET",
+      "started_at": "2026-09-22T14:19:41.022348+00:00",
+      "http_status": 401,
+      "interpretation": "HTTP server answered; authenticated application state not read"
+    },
+    {
+      "device": "android-moto-recorded-address",
+      "url": "http://10.10.39.174:47180/api/status",
+      "method": "GET",
+      "started_at": "2026-09-22T14:19:41.032578+00:00",
+      "error": "<urlopen error timed out>"
+    },
+    {
+      "device": "windows-recorded-address",
+      "url": "http://10.10.38.43:47180/api/status",
+      "method": "GET",
+      "started_at": "2026-09-22T14:19:46.034371+00:00",
+      "error": "<urlopen error timed out>"
+    },
+    {
+      "device": "iphone17-recorded-address",
+      "url": "http://10.10.38.80:47180/api/status",
+      "method": "GET",
+      "started_at": "2026-09-22T14:19:51.036567+00:00",
+      "error": "<urlopen error timed out>"
+    }
+  ],
+  "known_endpoint_tcp": [
+    {
+      "address": "10.10.38.79",
+      "port": 44,
+      "started_at": "2026-09-22T14:19:40.967787+00:00",
+      "connected": false,
+      "error": "[Errno 61] Connection refused"
+    },
+    {
+      "address": "10.10.38.79",
+      "port": 22,
+      "started_at": "2026-09-22T14:19:41.997707+00:00",
+      "connected": false,
+      "error": "[Errno 61] Connection refused"
+    },
+    {
+      "address": "10.10.38.43",
+      "port": 3389,
+      "started_at": "2026-09-22T14:19:43.002644+00:00",
+      "connected": true
+    },
+    {
+      "address": "10.10.38.43",
+      "port": 445,
+      "started_at": "2026-09-22T14:19:43.009154+00:00",
+      "connected": true
+    }
+  ],
+  "adb": {
+    "command": [
+      "adb",
+      "devices",
+      "-l"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-09-22T14:19:56.038971+00:00",
+    "output": "List of devices attached",
+    "error": ""
+  },
+  "usb_ios": {
+    "command": [
+      "idevice_id",
+      "-l"
+    ],
+    "exit_code": 0,
+    "started_at": "2026-09-22T14:19:56.056746+00:00",
+    "output": "",
+    "error": ""
+  },
+  "source_documents": {
+    "docs/en/test-devices.md": "e448baa1e5e836489a8c84ce82c96f7e51aa7a4d35ad14013d607dac18d543ff",
+    "/Users/ox/.codex/memories/doorbell-device-access.md": "adbab938780ac8048a30b189a7045a2a4df474e5b4e7d9895d51151a34a7b5a1",
+    "/Users/ox/.claude/projects/-Users-ox-Documents-project-app-doorbell/memory/MEMORY.md": "0808b40f50a9ab1bf1bc64acc7ac41d33844f9de4153c63e5e96e15b0f31b9e9",
+    "/Users/ox/.claude/projects/-Users-ox-Documents-project-app-doorbell/memory/project-ipad1-update-runbook.md": "8ce11b08bbf8c8618be290226d1bc4ffe270970d7e998b2aa187cbe87b0cd616",
+    "/Users/ox/.claude/projects/-Users-ox-Documents-project-app-doorbell/memory/project-mini3-swift-shell-workflow.md": "e64c0b907f6e337c7a8ba696a19d32102c9a3f5aae56ced8648032646274903d",
+    "/Users/ox/.claude/projects/-Users-ox-Documents-project-app-doorbell/memory/project-device-role-rotation.md": "2823b190405fa3e26732d10038083587b917fdcf3cb6f25fc5da3efe1055ca15",
+    "/Users/ox/.claude/projects/-Users-ox-Documents-project-app-doorbell/memory/project-iphone17-free-signing-runbook.md": "95f5c6df5f52d79c866a48ed8c966744153c71b01a66b98e01d126a3f825a6f0",
+    "/Users/ox/.claude/projects/-Users-ox-Documents-project-app-doorbell/memory/project-worktree-build-prereqs.md": "780a217aeec61a906aad1b8ab2d422740f20e6630b11f5247a957d58da52fe23"
+  }
+}

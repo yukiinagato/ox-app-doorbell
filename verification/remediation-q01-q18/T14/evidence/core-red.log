@@ -1,0 +1,19 @@
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:844:
+TEST CASE:  panel API: call-frame / peer-frame.jpg / call-info web call contract
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_panel.cpp:908: FATAL ERROR: REQUIRE( generation.size() == 32 ) is NOT correct!
+  values: REQUIRE( 0 == 32 )
+
+===============================================================================
+[doctest] test cases:  1 |  0 passed | 1 failed | 449 skipped
+[doctest] assertions: 38 | 37 passed | 1 failed |
+[doctest] Status: FAILURE!
+09-22 23:56:20 I [node] addr-detect: local v4=1 all=5 route=10.10.38.24 advertise=10.10.38.24:25122
+09-22 23:56:20 I [node] created the missing door entry doors.d_front for this door station
+09-22 23:56:20 I [httpd] listening on 31126,[::]:31126
+09-22 23:56:20 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 23:56:20 I [node] node 4379f811 (callframe-test) started
+09-22 23:56:22 I [httpd] stopped

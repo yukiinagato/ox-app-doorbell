@@ -1,0 +1,48 @@
+{
+  "recorded_at": "2026-09-22T18:52:49.582936+00:00",
+  "status": "IN_PROGRESS",
+  "implemented": "identity/session helpers, management HTTP/native CAS entry, non-media grants/scoped state, SIP mapping, operation delegation, scoped call history; current source not yet qualified",
+  "remaining": [
+    "run and fix new production tests",
+    "baseline media missing-grant RED and final GREEN",
+    "complete security edge review",
+    "document migration and capability limits in three languages",
+    "freeze final source and relevant regressions",
+    "independent review"
+  ],
+  "media_gate_owner": "root",
+  "inputs": [
+    {
+      "path": "core/src/node/panel_identity.h",
+      "sha256": "efa4df9862d2b9a7f060157a40866c27948c2489dba7b1717ab6e4f1a271108c"
+    },
+    {
+      "path": "core/src/node/panel_identity_service.inc",
+      "sha256": "334c56abf9333256d9de46c9c6827b5e5947419ad5bc94101b037bbdfd06b7d0"
+    },
+    {
+      "path": "core/src/node/node.cpp",
+      "sha256": "49be89efd457e0ed98c544e5259aeb8373c77547e91149bcb24e20e52fce3840"
+    },
+    {
+      "path": "core/src/node/node.h",
+      "sha256": "7422b8c40d147639f8ad334be77766ee782e2d52cc6f273dc0a2843712ef0052"
+    },
+    {
+      "path": "core/src/node/operation_service.inc",
+      "sha256": "65112734f5c4bea720e957d2993468c36476b57314b584eb5cb154f4329cf0fb"
+    },
+    {
+      "path": "core/src/capi/doorbell_capi.cpp",
+      "sha256": "50b0b532cb9b11699dcd075e253edd0a3606e1f515453c224250d116c97084d4"
+    },
+    {
+      "path": "core/include/doorbell/doorbell.h",
+      "sha256": "01256e371b865fe9711cb780cee6cb511ca5fdc9a8394b96d47777cde8e673e4"
+    },
+    {
+      "path": "core/tests/test_panel_identity.cpp",
+      "sha256": "5c8e6b11ddab819ce916d64bbb5b9fbc78d29f5df98f5977af373ccd2132bc17"
+    }
+  ]
+}

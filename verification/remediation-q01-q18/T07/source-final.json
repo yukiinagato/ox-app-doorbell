@@ -1,0 +1,62 @@
+{
+  "task_id": "T07",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty; isolated source snapshot; concurrent work preserved",
+  "diff_sha256": "adf9094c443b8ca2efccf1ddf02cc8fc1a4a3bc9a59ae685dccdcb790f508991",
+  "created_at": "2026-09-22T16:23:57.492021+00:00",
+  "scope": "production host tests; SIP stub; local authenticated reference executor; no physical lock/HA/device qualification",
+  "owned_inputs": [
+    {
+      "path": "core/src/node/node.cpp",
+      "sha256": "50c8adc056cb18270ba3512f4d416eafbe9b0575a887dad17773bb83b8698ef2",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src/node/node.cpp"
+    },
+    {
+      "path": "core/src/node/operation_ack.h",
+      "sha256": "e8263f860b098e134ee4cfff1d3db5b3c1409838b8d6fee1c39f968fb93b854c",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src/node/operation_ack.h"
+    },
+    {
+      "path": "core/src/node/operation_config.h",
+      "sha256": "86daf49fa392ca191759c5c7c4d566b289999e9f97c0b1b1a88dc4051a712a04",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src/node/operation_config.h"
+    },
+    {
+      "path": "core/src/node/operation_service.inc",
+      "sha256": "4a2fe28d1f6591dc25b7619a3516a079f0d6b90d1372fd7709825aee943048c5",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src/node/operation_service.inc"
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.h",
+      "sha256": "d4c55997a7affba50f4d947e4d8a2d9de525309c18aff21e1cff8f4e006ad6e4",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src/bridge/ha_bridge.h"
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.cpp",
+      "sha256": "dfbbbc44694b23b75829ef217152c5211acbc03add5cdba3dde7682b65555f6b",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/src/bridge/ha_bridge.cpp"
+    },
+    {
+      "path": "core/tests/test_operations_http.cpp",
+      "sha256": "9388d315a18acd2b2a9b881971b9f88f878178cb2dd9ebfeb6a70d4dc171a77d",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/tests/test_operations_http.cpp"
+    },
+    {
+      "path": "core/tests/operation_test_fixture.h",
+      "sha256": "2cbb6a27f5580114d5ccc621ba7faae088d7bdc8ad2de984e9de3dd9fac5a4c6",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/tests/operation_test_fixture.h"
+    },
+    {
+      "path": "core/tests/test_operations_ack.cpp",
+      "sha256": "4960b5b829986296d376b41193003daecf5cbb3b4771b4dfbf0b1668c0bd617e",
+      "snapshot_path": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/core/tests/test_operations_ack.cpp"
+    }
+  ],
+  "full_snapshot_manifest": "/Users/ox/Documents/project/app-doorbell/build/remediation-t07-20260922/snapshot/source-inputs-final.json",
+  "full_snapshot_manifest_sha256": "06a9a140c62682053ce8f919673eb6ab99139470b47d9072dfea91e74acc1617",
+  "notes": [
+    "Shared Node and operation_service include root T12 panel authentication and T27 notice/CAS work at this timestamp, not attributed to T07.",
+    "Core operation ACK state is tested; multiple shipping UI migration remains T36.",
+    "All verification commands use this immutable source snapshot."
+  ]
+}

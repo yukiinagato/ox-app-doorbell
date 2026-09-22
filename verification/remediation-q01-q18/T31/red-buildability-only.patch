@@ -1,0 +1,11 @@
+--- original/node.cpp
++++ buildable/node.cpp
+@@ -11508,7 +11508,7 @@
+         json::set(w, "provisioning_status", !provisioned ? "provisioning_required" :
+             !may_call ? "permission_denied" : "configured");
+         if (provisioned && may_call) {
+-          const auto* account = cfgAt("sip.accounts." + json::getString(identity, "sip_account_id"));
++          auto* account = cfgAt("sip.accounts." + json::getString(identity, "sip_account_id"));
+           json::set(w, "sip_user", json::getString(account, "user"));
+           json::set(w, "sip_pass_ref", json::getString(account, "pass_ref"));
+           json::set(w, "sip_pass", referencedSecret(account, "pass_ref"));

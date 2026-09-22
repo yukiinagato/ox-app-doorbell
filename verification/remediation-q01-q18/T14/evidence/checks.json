@@ -1,0 +1,36 @@
+[
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check",
+      "--",
+      "webui/panel/call.html",
+      "webui/panel/runtime.js",
+      "core/src/node/node.cpp",
+      "core/tests/test_panel.cpp",
+      "webui/tests/call_page_fixture.js",
+      "webui/tests/call_ua_generation.test.js",
+      "i18n/strings.yaml"
+    ],
+    "exit_code": 0,
+    "output": ""
+  },
+  {
+    "command": [
+      "python3",
+      "tools/gen_i18n.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "output": "gen_i18n: 15 generated files are current\n"
+  },
+  {
+    "command": [
+      "python3",
+      "tools/check_english_source.py"
+    ],
+    "exit_code": 0,
+    "output": "check_english_source: no violations\n"
+  }
+]

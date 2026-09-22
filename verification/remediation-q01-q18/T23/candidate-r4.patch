@@ -1,0 +1,1709 @@
+--- before/ios-kiosk/src/Core/DBCoreBridge.h
++++ after/ios-kiosk/src/Core/DBCoreBridge.h
+@@ -6,6 +6,7 @@
+ // the registered release_buffer callback.
+ 
+ typedef void (^DBUiEventHandler)(NSDictionary *ev);
++@class DBCallTimingSnapshot;
+ 
+ @interface DBCoreBridge : NSObject
+ @property(atomic, assign) BOOL cameraActive;
+@@ -14,6 +15,7 @@
+ - (void)setVideoSensorRotation:(int)degrees;
+ 
+ @property(nonatomic, readonly) BOOL isRunning;
++@property(nonatomic, readonly) NSUInteger lifecycleGeneration;
+ 
+ - (BOOL)startWithDataDir:(NSString *)dataDir bootJson:(NSString *)bootJson;
+ - (void)stop;
+@@ -30,6 +32,8 @@
+ - (BOOL)selectPurposeV2:(NSString *)door callID:(NSString *)callID purpose:(NSString *)purpose;
+ - (BOOL)cancelCallV2:(NSString *)door callID:(NSString *)callID reason:(NSString *)reason;
+ - (void)reportCallRecovery:(NSString *)callID restored:(BOOL)restored;
++- (void)reportCallRecovery:(NSString *)callID restored:(BOOL)restored
++        expectedGeneration:(NSUInteger)generation;
+ - (BOOL)reportCallAnsweredV2:(NSString *)door callID:(NSString *)callID
+                stageRevision:(NSInteger)stageRevision;
+ - (BOOL)reportCallEndedV2:(NSString *)door callID:(NSString *)callID
+@@ -83,6 +87,8 @@
+ - (NSString *)coreVersion;
+ 
+ - (NSDictionary *)status;
++// Owns the copied cached JSON and binds it to the serial Core handle lifetime.
++- (DBCallTimingSnapshot *)callTimingSnapshot;
+ - (NSDictionary *)debugInfo;
+ - (NSDictionary *)deviceInfoNow;
+ - (NSDictionary *)config;
+--- before/ios-kiosk/src/Core/DBCoreBridge.m
++++ after/ios-kiosk/src/Core/DBCoreBridge.m
+@@ -1,4 +1,5 @@
+ #import "DBCoreBridge.h"
++#import "DBCallTiming.h"
+ #import <UIKit/UIKit.h>
+ #import <AudioToolbox/AudioToolbox.h>
+ #import <Security/Security.h>
+@@ -309,6 +310,7 @@
+ 
+ @implementation DBCoreBridge {
+   db_core *_core;
++  NSUInteger _lifecycleGeneration;
+   NSMutableDictionary *_handlers;
+   NSString *_deviceInfoCache;
+   NSString *_powerStateCache;
+@@ -366,6 +368,10 @@
+   return _core != NULL;
+ }
+ 
++- (NSUInteger)lifecycleGeneration {
++  @synchronized(self) { return _lifecycleGeneration; }
++}
++
+ - (void)pushCameraFrame:(NSData *)data format:(int)format width:(int)width height:(int)height stride:(int)stride {
+   if (width <= 0 || height <= 0 || (format != 1 && format != 3) ||
+       stride < width * (format == 3 ? 4 : 1)) return;
+@@ -388,6 +394,7 @@
+ }
+ - (BOOL)startWithDataDir:(NSString *)dataDir bootJson:(NSString *)bootJson {
+   if (_core != NULL) return YES;
++  @synchronized(self) { ++_lifecycleGeneration; }
+   // startWithDataDir is invoked on the main thread, so prime the UIKit-backed
+   // device-info cache before Core can issue its first worker-thread callback.
+   [self refreshDeviceInfo];
+@@ -424,6 +431,7 @@
+ }
+ 
+ - (void)stop {
++  @synchronized(self) { ++_lifecycleGeneration; }
+   if (_diTimer) {
+     [_diTimer invalidate];
+     _diTimer = nil;
+@@ -508,10 +516,15 @@
+ }
+ 
+ - (void)reportCallRecovery:(NSString *)callID restored:(BOOL)restored {
++  [self reportCallRecovery:callID restored:restored expectedGeneration:self.lifecycleGeneration];
++}
++
++- (void)reportCallRecovery:(NSString *)callID restored:(BOOL)restored
++        expectedGeneration:(NSUInteger)generation {
+   if ([callID length] == 0) return;
+   NSString *cid = [callID copy];
+   dispatch_async(_coreQueue, ^{
+-    if (self->_core)
++    if (self->_core && self.lifecycleGeneration == generation)
+       db_core_report_call_recovery(self->_core, [cid UTF8String], restored ? 1 : 0);
+   });
+ }
+@@ -662,6 +675,19 @@
+     if (self->_core) out = [self takeJson:db_core_status_json(self->_core)];
+   });
+   return out;
++}
++
++- (DBCallTimingSnapshot *)callTimingSnapshot {
++  NSUInteger generation = self.lifecycleGeneration;
++  NSTimeInterval requestedAt = DBCallMonotonicTime();
++  __block NSDictionary *document = nil;
++  dispatch_sync(_coreQueue, ^{
++    if (self->_core && self.lifecycleGeneration == generation)
++      document = [self takeJson:db_core_status_json(self->_core)];
++  });
++  if (!document || self.lifecycleGeneration != generation) return nil;
++  return [[DBCallTimingSnapshot alloc] initWithDocument:document
++      coreGeneration:generation requestedAt:requestedAt];
+ }
+ 
+ - (NSDictionary *)debugInfo {
+--- before/ios-kiosk/src/Core/DBCallEventTracker.h
++++ after/ios-kiosk/src/Core/DBCallEventTracker.h
+@@ -1,10 +1,13 @@
+ #import <Foundation/Foundation.h>
++@class DBCallTimingReading;
++@class DBCallTimingSnapshot;
+ 
+ // Tracks the call identity carried by Core schema-v2 events. A replicated
+ // press may populate the cache, but only a targeted chime can activate a call.
+ @interface DBCallEventTracker : NSObject
+ 
+ @property(nonatomic, readonly) NSString *currentCallID;
++@property(nonatomic, readonly) NSUInteger pendingChimeCount;
+ 
+ // Cache state from raw press/purpose events without activating UI or audio. Returns YES only when
+ // this event advances the cached call revision.
+@@ -25,6 +28,16 @@
+ // Returns a normalized, immutable chime event when it is current, unexpired,
+ // and newer than the last accepted revision for its call. Otherwise nil.
+ - (NSDictionary *)acceptChimeEvent:(NSDictionary *)event nowMs:(long long)nowMs;
++// Recovery uses the Core-projected duration, while retaining identity/revision deduplication.
++- (NSDictionary *)acceptChimeEvent:(NSDictionary *)event timingReading:(DBCallTimingReading *)reading;
++
++// Targeted events may arrive before the cached Core row. Pending admission is bounded to 128
++// identities and ten monotonic seconds; expiry drops only the notification, never the call.
++- (BOOL)queueChimeEvent:(NSDictionary *)event coreGeneration:(NSUInteger)generation
++                   now:(NSTimeInterval)now;
++- (NSArray *)takeReadyChimesFromSnapshot:(DBCallTimingSnapshot *)snapshot
++                         coreGeneration:(NSUInteger)generation now:(NSTimeInterval)now;
++- (void)requireFreshChimeSnapshot:(DBCallTimingSnapshot *)snapshot;
+ 
+ // Scoped events must carry the exact active call_id.
+ - (BOOL)eventMatchesCurrentCall:(NSDictionary *)event;
+--- before/ios-kiosk/src/Core/DBCallEventTracker.m
++++ after/ios-kiosk/src/Core/DBCallEventTracker.m
+@@ -1,4 +1,6 @@
+ #import "DBCallEventTracker.h"
++#import "DBCallTiming.h"
++#import <math.h>
+ 
+ static const NSUInteger kDBCallCacheLimit = 128;
+ 
+@@ -22,6 +24,8 @@
+   NSMutableArray *_resolvedOrder;
+   NSMutableDictionary *_supersededIdleByID;
+   NSMutableArray *_supersededIdleOrder;
++  NSMutableDictionary *_pendingChimes;
++  NSMutableArray *_pendingChimeOrder;
+ }
+ 
+ @synthesize currentCallID = _currentCallID;
+@@ -37,6 +41,8 @@
+     _resolvedOrder = [[NSMutableArray alloc] init];
+     _supersededIdleByID = [[NSMutableDictionary alloc] init];
+     _supersededIdleOrder = [[NSMutableArray alloc] init];
++    _pendingChimes = [[NSMutableDictionary alloc] init];
++    _pendingChimeOrder = [[NSMutableArray alloc] init];
+   }
+   return self;
+ }
+@@ -158,27 +164,115 @@
+ }
+ 
+ - (NSDictionary *)acceptChimeEvent:(NSDictionary *)event nowMs:(long long)nowMs {
++  return [self acceptChimeEvent:event nowMs:nowMs coreDeadlineValidated:NO];
++}
++
++- (NSDictionary *)normalizedChimeEvent:(NSDictionary *)event {
++  if (![event isKindOfClass:[NSDictionary class]]) return nil;
++  NSString *callID = DBEventString(event, @"call_id");
++  if (![callID length]) return nil;
++  NSMutableDictionary *normalized = [NSMutableDictionary dictionary];
++  NSDictionary *cached = [_callDataByID objectForKey:callID];
++  for (NSString *key in @[@"door", @"purpose", @"visitor_lang", @"stage_revision", @"expires_at_ms"]) {
++    id value = [cached objectForKey:key];
++    if (value && value != [NSNull null]) [normalized setObject:value forKey:key];
++  }
++  [normalized addEntriesFromDictionary:event];
++  return normalized;
++}
++
++- (NSUInteger)pendingChimeCount { return [_pendingChimes count]; }
++
++- (BOOL)queueChimeEvent:(NSDictionary *)event coreGeneration:(NSUInteger)generation
++                   now:(NSTimeInterval)now {
++  NSDictionary *normalized = [self normalizedChimeEvent:event];
++  NSString *callID = DBEventString(normalized, @"call_id");
++  NSNumber *revision = DBEventNumber(normalized, @"stage_revision");
++  if (!isfinite(now) || !generation || [DBEventNumber(normalized, @"schema_version") integerValue] < 2 ||
++      ![DBEventString(normalized, @"door") length] || !revision || [revision longLongValue] < 0)
++    return NO;
++  NSNumber *accepted = [_acceptedRevisionByID objectForKey:callID];
++  if (accepted && [revision longLongValue] <= [accepted longLongValue]) return NO;
++  NSDictionary *pending = [_pendingChimes objectForKey:callID];
++  if (pending && [[pending objectForKey:@"core"] unsignedIntegerValue] == generation &&
++      [revision longLongValue] <= [DBEventNumber([pending objectForKey:@"event"], @"stage_revision") longLongValue])
++    return NO;
++  [_pendingChimeOrder removeObject:callID];
++  [_pendingChimes setObject:[@{@"event": normalized, @"core": @(generation),
++      @"deadline": @(now + 10), @"timing": [[DBCallTiming alloc] init]} mutableCopy] forKey:callID];
++  [_pendingChimeOrder addObject:callID];
++  [self trimMap:_pendingChimes order:_pendingChimeOrder];
++  return YES;
++}
++
++- (void)requireFreshChimeSnapshot:(DBCallTimingSnapshot *)snapshot {
++  for (NSDictionary *pending in [_pendingChimes allValues])
++    [[pending objectForKey:@"timing"] requireFreshSnapshot:snapshot];
++}
++
++- (NSArray *)takeReadyChimesFromSnapshot:(DBCallTimingSnapshot *)snapshot
++                         coreGeneration:(NSUInteger)generation now:(NSTimeInterval)now {
++  NSMutableArray *ready = [NSMutableArray array];
++  for (NSString *callID in [_pendingChimeOrder copy]) {
++    NSMutableDictionary *pending = [_pendingChimes objectForKey:callID];
++    NSDictionary *event = [pending objectForKey:@"event"];
++    NSString *resolved = DBEventString([_resolvedCallIDs objectForKey:callID], @"type");
++    BOOL remove = !isfinite(now) || now >= [[pending objectForKey:@"deadline"] doubleValue] ||
++        generation != [[pending objectForKey:@"core"] unsignedIntegerValue] ||
++        [resolved isEqualToString:@"call_cancelled"] || [resolved isEqualToString:@"call_ended"];
++    NSString *sample = DBEventString(snapshot.document, @"snapshot_generation");
++    if (!remove && snapshot.coreGeneration == generation && [sample length] &&
++        ![[pending objectForKey:@"sample"] isEqual:sample]) {
++      [pending setObject:sample forKey:@"sample"];
++      DBCallTiming *timing = [pending objectForKey:@"timing"];
++      DBCallTimingReading *reading = [timing observeSnapshot:snapshot callID:callID
++          door:DBEventString(event, @"door") now:now];
++      if (reading.disposition == DBCallTimingActive) {
++        NSNumber *currentRevision = DBEventNumber(reading.call, @"stage_revision");
++        NSNumber *eventRevision = DBEventNumber(event, @"stage_revision");
++        if ([currentRevision longLongValue] > [eventRevision longLongValue] ||
++            ![DBEventString(reading.call, @"state") isEqualToString:@"ringing"]) remove = YES;
++        else if ([currentRevision isEqual:eventRevision] && [reading.remainingSeconds doubleValue] > 0) {
++          NSString *previous = _currentCallID;
++          NSDictionary *accepted = [self acceptChimeEvent:event timingReading:reading];
++          if (accepted) [ready addObject:@{@"event": accepted, @"previous_call_id": previous ?: @""}];
++          remove = YES;
++        }
++      }
++    }
++    if (remove) {
++      [_pendingChimes removeObjectForKey:callID];
++      [_pendingChimeOrder removeObject:callID];
++    }
++  }
++  return ready;
++}
++
++- (NSDictionary *)acceptChimeEvent:(NSDictionary *)event timingReading:(DBCallTimingReading *)reading {
++  if (reading.disposition != DBCallTimingActive || [reading.remainingSeconds doubleValue] <= 0 ||
++      ![DBEventString(reading.call, @"state") isEqualToString:@"ringing"] ||
++      ![DBEventString(event, @"call_id") isEqualToString:DBEventString(reading.call, @"call_id")] ||
++      ![DBEventString(event, @"door") isEqualToString:DBEventString(reading.call, @"door")] ||
++      ![DBEventNumber(event, @"stage_revision") isEqual:DBEventNumber(reading.call, @"stage_revision")])
++    return nil;
++  return [self acceptChimeEvent:event nowMs:0 coreDeadlineValidated:YES];
++}
++
++- (NSDictionary *)acceptChimeEvent:(NSDictionary *)event nowMs:(long long)nowMs
++           coreDeadlineValidated:(BOOL)validated {
+   if (![event isKindOfClass:[NSDictionary class]]) return nil;
+   NSNumber *schema = DBEventNumber(event, @"schema_version");
+   NSString *callID = DBEventString(event, @"call_id");
+   if (!schema || [schema integerValue] < 2 || [callID length] == 0)
+     return nil;
+ 
+-  NSMutableDictionary *normalized = [NSMutableDictionary dictionary];
+-  NSDictionary *cached = [_callDataByID objectForKey:callID];
+-  for (NSString *key in @[
+-         @"door", @"purpose", @"visitor_lang", @"stage_revision", @"expires_at_ms"
+-       ]) {
+-    id value = [cached objectForKey:key];
+-    if (value != nil && value != [NSNull null]) [normalized setObject:value forKey:key];
+-  }
+-  [normalized addEntriesFromDictionary:event];
++  NSDictionary *normalized = [self normalizedChimeEvent:event];
+ 
+   NSString *door = DBEventString(normalized, @"door");
+   NSNumber *revision = DBEventNumber(normalized, @"stage_revision");
+   NSNumber *expires = DBEventNumber(normalized, @"expires_at_ms");
+   if ([door length] == 0 || !revision || [revision longLongValue] < 0 || !expires ||
+-      [expires longLongValue] <= nowMs)
++      (!validated && [expires longLongValue] <= nowMs))
+     return nil;
+ 
+   NSDictionary *resolution = [_resolvedCallIDs objectForKey:callID];
+--- before/ios-kiosk/src/Screens/DBDoorScreen.h
++++ after/ios-kiosk/src/Screens/DBDoorScreen.h
+@@ -1,5 +1,6 @@
+ #import "DBScreen.h"
+ #import "../Media/DBSipSession.h"
++@class DBCallTimingSnapshot;
+ 
+ // Visitor-facing compatibility screen used by both iOS 5 and iOS 9 profiles.
+ // It intentionally owns only presentation state; all durable ring/cancel state
+@@ -8,7 +9,8 @@
+ 
+ - (id)initWithRouter:(DBRouter *)router;
+ - (void)refreshFromCore;
+-- (BOOL)restoreWaitingCall:(NSDictionary *)call recoveryState:(NSString *)state;
++// The call identity selects a row; state and recovery permission come only from the snapshot.
++- (BOOL)restoreWaitingCall:(NSString *)callID snapshot:(DBCallTimingSnapshot *)snapshot;
+ - (void)handleCallEvent:(NSDictionary *)event;
+ - (void)handleReplyEvent:(NSDictionary *)event;
+ - (void)handleVisitorLangEvent:(NSDictionary *)event;
+--- before/ios-kiosk/src/Screens/DBDoorScreen.m
++++ after/ios-kiosk/src/Screens/DBDoorScreen.m
+@@ -5,6 +5,7 @@
+ #import "../Core/DBPairingModel.h"
+ #import "../Core/DBCompatibilityProfile.h"
+ #import "../Core/DBCoreBridge.h"
++#import "../Core/DBCallTiming.h"
+ #import "../Core/DBMediaSource.h"
+ #import "../Core/DBSemanticStyle.h"
+ #import "../Core/DBTexts.h"
+@@ -90,6 +91,8 @@
+   NSString *_callingTitleOverride;
+   NSInteger _snapshotGeneration;
+   NSTimer *_callTimer;
++  DBCallTiming *_callTiming;
++  BOOL _callTimingChecking;
+   NSTimer *_replyTimer;
+   DBSiren *_feedbackAudio;
+   DBSiren *_replyAudio;
+@@ -183,6 +186,7 @@
+     _core = router.core;
+     _boot = router.boot;
+     _texts = router.texts;
++    _callTiming = [[DBCallTiming alloc] init];
+     _visitorLang = [_boot.uiLang length] ? _boot.uiLang : @"ja";
+     _purposeButtons = [[NSMutableArray alloc] init];
+     _purposeIcons = [[NSMutableArray alloc] init];
+@@ -615,21 +619,24 @@
+ }
+ 
+ - (void)onScreenWillDisappear {
+-  // Flow timers deliberately survive the admin/info overlay. A visitor call
+-  // must still expire and be cancelled while maintenance UI is visible.
++  // Keep observing Core while the admin/info overlay is visible.
+ }
+ 
+ - (void)refreshFromCore {
+   NSInteger generation = ++_snapshotGeneration;
+   DBCoreBridge *core = _core;
++  NSUInteger coreGeneration = core.lifecycleGeneration;
+   __weak DBDoorScreen *weakSelf = self;
+   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+     NSDictionary *config = [core config];
+-    NSDictionary *status = [core status];
++    DBCallTimingSnapshot *timingSnapshot = [core callTimingSnapshot];
++    NSDictionary *status = timingSnapshot.document;
+     NSDictionary *pairing = [core pairingInfo];
+     dispatch_async(dispatch_get_main_queue(), ^{
+       DBDoorScreen *screen = weakSelf;
+-      if (!screen || generation != screen->_snapshotGeneration) return;
++      if (!screen || generation != screen->_snapshotGeneration ||
++          timingSnapshot.coreGeneration != coreGeneration ||
++          timingSnapshot.coreGeneration != core.lifecycleGeneration) return;
+       [screen applyPairingSnapshot:pairing];
+       screen->_cfg = config;
+       screen->_status = status;
+@@ -669,7 +676,8 @@
+       [screen applyTheme];
+       [screen rebuildPurposes];
+       [screen rebuildLanguages];
+-      if (waitingCall) [screen restoreWaitingCall:waitingCall recoveryState:@""];
++      if (waitingCall) [screen restoreWaitingCall:[DBConfigUtil evStr:waitingCall key:@"call_id"]
++                                        snapshot:timingSnapshot];
+       [screen applyStrings];
+       [screen applySemanticStyles];
+       [screen setNeedsLayout];
+@@ -981,7 +989,7 @@
+   [_callButton setTitle:[_texts ts:[self showsHomePurposes] ? @"door.call_direct" : @"idle.call"]
+               forState:UIControlStateNormal];
+   _purposeHint.text = @"";
+-  _callingLabel.text = _flowState == DBDoorFlowInCall
++  _callingLabel.text = _callTimingChecking ? [_texts ts:@"web_admin.update_checking"] : _flowState == DBDoorFlowInCall
+       ? [_texts ts:@"incall.title"]
+       : (_callingTitleOverride ?: [_texts ts:@"calling.title"]);
+   [_cancelButton setTitle:(_flowState == DBDoorFlowInCall
+@@ -1188,9 +1196,11 @@
+ 
+ - (void)showInCall {
+   _flowState = DBDoorFlowInCall;
++  _callTimingChecking = NO;
+   _callingTitleOverride = nil;
+   [_callTimer invalidate];
+   _callTimer = nil;
++  [_callTiming invalidateCallbacks];
+   [_feedbackAudio stop];
+   _callingOverlay.hidden = NO;
+   [self bringSubviewToFront:_callingOverlay];
+@@ -1206,6 +1216,9 @@
+   _callingTitleOverride = nil;
+   [_callTimer invalidate];
+   _callTimer = nil;
++  [_callTiming invalidateCallbacks];
++  [_callTiming reset];
++  _callTimingChecking = NO;
+   [_feedbackAudio stop];
+   [_pulse.layer removeAllAnimations];
+   _pulse.alpha = 1;
+@@ -1264,18 +1277,18 @@
+   return YES;
+ }
+ 
+-- (BOOL)restoreWaitingCall:(NSDictionary *)call recoveryState:(NSString *)state {
+-  if (![call isKindOfClass:[NSDictionary class]]) return NO;
+-  NSString *door = [DBConfigUtil evStr:call key:@"door"];
+-  NSString *callID = [DBConfigUtil evStr:call key:@"call_id"];
+-  NSString *persistedState = [DBConfigUtil evStr:call key:@"state"];
+-  if ([callID length] == 0 ||
+-      ([door length] > 0 && ![door isEqualToString:_boot.door]) ||
+-      (![persistedState isEqualToString:@"ringing"] &&
+-       ![state isEqualToString:@"ringing"] &&
+-       ![state isEqualToString:@"purpose_pending"])) return NO;
+-  NSNumber *remaining = [call objectForKey:@"remaining_ms"];
+-  if (![remaining isKindOfClass:[NSNumber class]] || [remaining doubleValue] <= 0) return NO;
++- (BOOL)restoreWaitingCall:(NSString *)callID snapshot:(DBCallTimingSnapshot *)snapshot {
++  if (_mediaSuspendedForBackground || snapshot.coreGeneration != _core.lifecycleGeneration)
++    return NO;
++  DBCallTimingReading *reading = [_callTiming observeSnapshot:snapshot callID:callID
++      door:_boot.door now:DBCallMonotonicTime()];
++  NSDictionary *call = reading.call;
++  if (reading.disposition != DBCallTimingActive ||
++      ![[DBConfigUtil evStr:call key:@"state"] isEqualToString:@"ringing"] ||
++      ![[DBConfigUtil evStr:call key:@"origin"] isEqualToString:
++          [DBConfigUtil str:snapshot.document path:@"node.id"]] ||
++      [reading.remainingSeconds doubleValue] <= 0 ||
++      ([DBConfigUtil evBool:call key:@"recovery_required"] && !reading.mayRestore)) return NO;
+ 
+   BOOL alreadyVisible = _flowState == DBDoorFlowCalling &&
+       [_activeCallID isEqualToString:callID];
+@@ -1291,8 +1304,7 @@
+ 
+   NSString *flow = [DBConfigUtil evStr:call key:@"call_flow"];
+   if ([flow length] == 0) flow = [DBConfigUtil str:_cfg path:@"ui.call_flow"];
+-  BOOL purposePending = [state isEqualToString:@"purpose_pending"] ||
+-      ([flow isEqualToString:@"ring_then_purpose"] && _activeStageRevision == 0 &&
++  BOOL purposePending = ([flow isEqualToString:@"ring_then_purpose"] && _activeStageRevision == 0 &&
+        [[DBConfigUtil evStr:call key:@"purpose"] length] == 0);
+   if (purposePending && [_purposeIds count] > 0 &&
+       _purposeAlertMode == DBDoorPurposeAlertNone &&
+@@ -1373,31 +1385,30 @@
+ - (void)refreshCallingDeadline {
+   [_callTimer invalidate];
+   _callTimer = nil;
+-  if (_flowState != DBDoorFlowCalling || [_activeCallID length] == 0) return;
++  [_callTiming invalidateCallbacks];
++  if (_mediaSuspendedForBackground || _flowState != DBDoorFlowCalling ||
++      [_activeCallID length] == 0) return;
+   NSTimeInterval delay = 1.0;
+-  NSArray *calls = [[_core status] objectForKey:@"active_calls"];
+-  if ([calls isKindOfClass:[NSArray class]]) {
+-    NSDictionary *current = nil;
+-    for (NSDictionary *call in calls) {
+-      if ([[DBConfigUtil evStr:call key:@"call_id"] isEqualToString:_activeCallID]) {
+-        current = call;
+-        break;
+-      }
+-    }
+-    if (!current) {
+-      [self showIdleWithHint:[_texts ts:@"calling.no_answer"]];
+-      return;
+-    }
+-    if (![[DBConfigUtil evStr:current key:@"state"] isEqualToString:@"ringing"]) return;
+-    NSNumber *remaining = [current objectForKey:@"remaining_ms"];
+-    if ([remaining isKindOfClass:[NSNumber class]])
+-      delay = MAX(0.25, [remaining doubleValue] / 1000.0);
+-  }
++  DBCallTimingSnapshot *snapshot = [_core callTimingSnapshot];
++  DBCallTimingReading *reading = [_callTiming observeSnapshot:snapshot callID:_activeCallID
++      door:_boot.door now:DBCallMonotonicTime()];
++  if (reading.disposition == DBCallTimingAbsent) {
++    [self showIdleWithHint:[_texts ts:@"calling.no_answer"]];
++    return;
++  }
++  _callTimingChecking = reading.disposition != DBCallTimingActive ||
++      ![[DBConfigUtil evStr:reading.call key:@"state"] isEqualToString:@"ringing"] ||
++      [reading.remainingSeconds doubleValue] <= 0;
++  if (!_callTimingChecking) delay = MIN(1.0, MAX(0.25, [reading.remainingSeconds doubleValue]));
++  [self applyStrings];
+   _callTimer = [NSTimer scheduledTimerWithTimeInterval:delay target:self
+-      selector:@selector(onCallTimeout) userInfo:nil repeats:NO];
+-}
+-
+-- (void)onCallTimeout {
++      selector:@selector(onCallTimeout:) userInfo:[_callTiming callbackForCall:_activeCallID
++          coreGeneration:_core.lifecycleGeneration] repeats:NO];
++}
++
++- (void)onCallTimeout:(NSTimer *)timer {
++  if (timer != _callTimer || ![_callTiming acceptsCallback:timer.userInfo callID:_activeCallID
++      coreGeneration:_core.lifecycleGeneration]) return;
+   [self refreshCallingDeadline];
+ }
+ 
+@@ -1610,6 +1621,10 @@
+ 
+ - (void)suspendMediaForBackground {
+   _mediaSuspendedForBackground = YES;
++  ++_snapshotGeneration;
++  [_callTimer invalidate];
++  _callTimer = nil;
++  [_callTiming requireFreshSnapshot:[_core callTimingSnapshot]];
+   _rtspGeneration++;
+   [_rtspSource stop];
+   _rtspSource = nil;
+@@ -1625,6 +1640,9 @@
+ - (void)resumeMediaAfterBackground {
+   if (!_mediaSuspendedForBackground) return;
+   _mediaSuspendedForBackground = NO;
++  [_callTiming requireFreshSnapshot:[_core callTimingSnapshot]];
++  [self refreshCallingDeadline];
++  [self refreshFromCore];
+   if (!_rtspSuspendedForMemoryPressure) [self configureRTSPSource];
+   [self configureLocalPreview];
+   [self publishMediaSourceStatus];
+--- before/ios-kiosk/src/Screens/DBRouter.m
++++ after/ios-kiosk/src/Screens/DBRouter.m
+@@ -4,6 +4,7 @@
+ #import "../Core/DBCallEventTracker.h"
+ #import "../Core/DBConfigUtil.h"
+ #import "../Core/DBCoreBridge.h"
++#import "../Core/DBCallTiming.h"
+ #import "../Core/DBTexts.h"
+ #import "../Media/DBSiren.h"
+ #import "../Media/DBSipListener.h"
+@@ -65,10 +66,10 @@
+ 
+ @interface DBRouter ()
+ - (void)resolveCallRecoveryEvent:(NSDictionary *)event;
+-- (void)processCallRecoveryEvent:(NSDictionary *)event status:(NSDictionary *)status;
++- (void)processCallRecoveryEvent:(NSDictionary *)event snapshot:(DBCallTimingSnapshot *)snapshot;
+ - (void)persistTargetedIndoorCall:(NSDictionary *)call;
+ - (void)clearPersistedIndoorCall:(NSString *)callID;
+-- (void)restoreTargetedIndoorCallFromStatus:(NSDictionary *)status;
++- (void)restoreTargetedIndoorCallFromSnapshot:(DBCallTimingSnapshot *)snapshot;
+ @end
+ 
+ @implementation DBRouter {
+@@ -102,6 +103,13 @@
+   DBCallEventTracker *_callEvents;
+   NSString *_selfDeviceID;
+   NSString *_reportedRecoveryCallID;
++  DBCallTiming *_recoveryTiming;
++  DBCallTiming *_indoorTiming;
++  NSUInteger _recoveryEpoch;
++  BOOL _recoverySuspended;
++  NSTimer *_recoveryTimer;
++  NSTimer *_pendingChimeTimer;
++  BOOL _pendingChimeReadInFlight;
+   NSTimer *_emergencyPresentationTimer;
+   UILocalNotification *_emergencyNotification;
+   NSDictionary *_emergencyReport;
+@@ -123,6 +131,8 @@
+     _effects = [[DBSiren alloc] init];
+     _launchAudio = [[DBSiren alloc] init];
+     _callEvents = [[DBCallEventTracker alloc] init];
++    _recoveryTiming = [[DBCallTiming alloc] init];
++    _indoorTiming = [[DBCallTiming alloc] init];
+     [_texts setLang:_boot.uiLang];
+     _container = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
+     _container.backgroundColor = [UIColor blackColor];
+@@ -149,6 +159,7 @@
+ }
+ 
+ - (void)dealloc {
++  [_recoveryTimer invalidate];
+   [_emergencyPresentationTimer invalidate];
+   if (_emergencyNotification)
+     [[UIApplication sharedApplication] cancelLocalNotification:_emergencyNotification];
+@@ -237,25 +248,36 @@
+ }
+ 
+ - (void)refreshSelfDeviceIdentity {
++  if (_recoverySuspended) return;
+   __weak DBRouter *weakSelf = self;
+   DBCoreBridge *core = _core;
++  NSUInteger epoch = _recoveryEpoch;
++  NSUInteger coreGeneration = core.lifecycleGeneration;
+   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+-    NSDictionary *status = [core status];
+-    NSString *identifier = [DBConfigUtil str:status path:@"node.id"];
+-    if (![identifier length]) return;
++    DBCallTimingSnapshot *snapshot = [core callTimingSnapshot];
+     dispatch_async(dispatch_get_main_queue(), ^{
+       DBRouter *router = weakSelf;
+-      if (router) {
+-        router->_selfDeviceID = [identifier copy];
+-        [router reportOwnedCallRecoveryFromStatus:status];
++      if (!router || router->_recoverySuspended || epoch != router->_recoveryEpoch ||
++          snapshot.coreGeneration != coreGeneration ||
++          snapshot.coreGeneration != core.lifecycleGeneration) return;
++      NSString *identifier = [DBConfigUtil str:snapshot.document path:@"node.id"];
++      if ([identifier length]) router->_selfDeviceID = [identifier copy];
++      [router processCallRecoveryEvent:nil snapshot:snapshot];
++      [router restoreTargetedIndoorCallFromSnapshot:snapshot];
++      if (router->_recoveryTiming.waitingForFreshSnapshot ||
++          router->_indoorTiming.waitingForFreshSnapshot) {
++        [router->_recoveryTimer invalidate];
++        router->_recoveryTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:router
++            selector:@selector(retryRecovery:) userInfo:@(epoch) repeats:NO];
+       }
+     });
+   });
+ }
+ 
+-- (void)reportOwnedCallRecoveryFromStatus:(NSDictionary *)status {
+-  [self processCallRecoveryEvent:nil status:status];
+-  [self restoreTargetedIndoorCallFromStatus:status];
++- (void)retryRecovery:(NSTimer *)timer {
++  if (timer != _recoveryTimer || [timer.userInfo unsignedIntegerValue] != _recoveryEpoch) return;
++  _recoveryTimer = nil;
++  [self refreshSelfDeviceIdentity];
+ }
+ 
+ - (void)persistTargetedIndoorCall:(NSDictionary *)call {
+@@ -295,54 +317,29 @@
+         savedCallID, (int)synchronized);
+ }
+ 
+-- (void)restoreTargetedIndoorCallFromStatus:(NSDictionary *)status {
+-  if ([_boot.role isEqualToString:@"door_station"] ||
+-      ![status isKindOfClass:[NSDictionary class]]) return;
++- (void)restoreTargetedIndoorCallFromSnapshot:(DBCallTimingSnapshot *)snapshot {
++  if (_recoverySuspended || snapshot.coreGeneration != _core.lifecycleGeneration ||
++      ![_indoorTiming acceptsSnapshot:snapshot] || [_boot.role isEqualToString:@"door_station"])
++    return;
+   NSDictionary *saved = [[NSUserDefaults standardUserDefaults]
+       objectForKey:DBPendingIndoorCallDefaultsKey];
+   if (![saved isKindOfClass:[NSDictionary class]]) return;
+   NSString *callID = [DBConfigUtil evStr:saved key:@"call_id"];
+-  long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+-  long long savedExpires =
+-      [DBConfigUtil longLongVal:saved path:@"expires_at_ms" def:0];
+-  if ([callID length] == 0 || savedExpires <= nowMs) {
++  NSString *door = [DBConfigUtil evStr:saved key:@"door"];
++  if (![callID length] || ![door length]) return;
++  if (_current == _incoming && [_callEvents.currentCallID isEqualToString:callID]) return;
++  DBCallTimingReading *reading = [_indoorTiming observeSnapshot:snapshot callID:callID
++      door:door now:DBCallMonotonicTime()];
++  if (reading.disposition != DBCallTimingActive) return;
++  NSDictionary *selected = reading.call;
++  if (![[DBConfigUtil evStr:selected key:@"state"] isEqualToString:@"ringing"]) {
+     [self clearPersistedIndoorCall:callID];
+     return;
+   }
+-  // Runtime identity/capability refreshes also call this method. Once the
+-  // exact targeted call is already visible, a temporarily incomplete status
+-  // snapshot must not delete its crash-recovery marker.
+-  if (_current == _incoming &&
+-      [_callEvents.currentCallID isEqualToString:callID]) return;
+-  NSDictionary *selected = nil;
+-  BOOL matchingCallSeen = NO;
+-  NSArray *calls = [status objectForKey:@"active_calls"];
+-  if ([callID length] > 0 && [calls isKindOfClass:[NSArray class]]) {
+-    for (id rawCall in calls) {
+-      if (![rawCall isKindOfClass:[NSDictionary class]]) continue;
+-      NSDictionary *call = (NSDictionary *)rawCall;
+-      if (![[DBConfigUtil evStr:call key:@"call_id"] isEqualToString:callID]) continue;
+-      matchingCallSeen = YES;
+-      NSString *state = [DBConfigUtil evStr:call key:@"state"];
+-      long long expires = [DBConfigUtil longLongVal:call path:@"expires_at_ms" def:0];
+-      if (([state isEqualToString:@"ringing"] ||
+-           [state isEqualToString:@"purpose_pending"]) && expires > nowMs) {
+-        selected = call;
+-      }
+-      break;
+-    }
+-  }
+-  if (!selected) {
+-    // Missing is not terminal: mesh/status convergence can lag the targeted
+-    // chime. A matching but non-waiting row is authoritative and may clear.
+-    if (matchingCallSeen) [self clearPersistedIndoorCall:callID];
+-    return;
+-  }
+-
++  // Missing/expired duration is a request to check Core again, not to cancel or re-ring.
++  if ([reading.remainingSeconds doubleValue] <= 0) return;
+   NSMutableDictionary *chime = [saved mutableCopy];
+-  for (NSString *key in @[
+-         @"door", @"purpose", @"visitor_lang", @"stage_revision", @"expires_at_ms"
+-       ]) {
++  for (NSString *key in @[@"door", @"purpose", @"visitor_lang", @"stage_revision", @"expires_at_ms"]) {
+     id value = [selected objectForKey:key];
+     if ([value isKindOfClass:[NSString class]] || [value isKindOfClass:[NSNumber class]])
+       [chime setObject:value forKey:key];
+@@ -350,11 +347,8 @@
+   [chime setObject:@2 forKey:@"schema_version"];
+   [chime setObject:@"chime" forKey:@"t"];
+   [chime setObject:callID forKey:@"call_id"];
+-  NSDictionary *accepted = [_callEvents acceptChimeEvent:chime nowMs:nowMs];
+-  if (!accepted) {
+-    [self clearPersistedIndoorCall:callID];
+-    return;
+-  }
++  NSDictionary *accepted = [_callEvents acceptChimeEvent:chime timingReading:reading];
++  if (!accepted) return;
+   [_home playChime:accepted];
+   [self showIncoming:[DBConfigUtil evStr:accepted key:@"door"]
+              purpose:[DBConfigUtil evStr:accepted key:@"purpose"]
+@@ -365,87 +359,59 @@
+ }
+ 
+ - (void)resolveCallRecoveryEvent:(NSDictionary *)event {
++  if (_recoverySuspended) return;
+   NSDictionary *recoveryEvent = [event copy];
+   __weak DBRouter *weakSelf = self;
+   DBCoreBridge *core = _core;
++  NSUInteger epoch = _recoveryEpoch;
++  NSUInteger coreGeneration = core.lifecycleGeneration;
+   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+-    NSDictionary *status = [core status];
++    DBCallTimingSnapshot *snapshot = [core callTimingSnapshot];
+     dispatch_async(dispatch_get_main_queue(), ^{
+       DBRouter *router = weakSelf;
+-      if (router) [router processCallRecoveryEvent:recoveryEvent status:status];
++      if (router && !router->_recoverySuspended && epoch == router->_recoveryEpoch &&
++          snapshot.coreGeneration == coreGeneration &&
++          snapshot.coreGeneration == core.lifecycleGeneration)
++        [router processCallRecoveryEvent:recoveryEvent snapshot:snapshot];
+     });
+   });
+ }
+ 
+-- (void)processCallRecoveryEvent:(NSDictionary *)event status:(NSDictionary *)status {
++- (void)processCallRecoveryEvent:(NSDictionary *)event snapshot:(DBCallTimingSnapshot *)snapshot {
++  if (_recoverySuspended || snapshot.coreGeneration != _core.lifecycleGeneration ||
++      ![_recoveryTiming acceptsSnapshot:snapshot]) return;
+   NSString *requestedCallID = [DBConfigUtil evStr:event key:@"call_id"];
+-  NSString *statusDeviceID = [DBConfigUtil str:status path:@"node.id"];
+-  if ([statusDeviceID length] > 0) _selfDeviceID = [statusDeviceID copy];
+-  if (![_selfDeviceID length]) {
+-    if ([requestedCallID length]) [_core reportCallRecovery:requestedCallID restored:NO];
+-    return;
+-  }
+-
+-  NSArray *calls = [status objectForKey:@"active_calls"];
+-  NSDictionary *selected = nil;
+-  if ([calls isKindOfClass:[NSArray class]]) {
+-    for (id rawCall in calls) {
+-      if (![rawCall isKindOfClass:[NSDictionary class]]) continue;
+-      NSDictionary *call = (NSDictionary *)rawCall;
+-      NSString *callID = [DBConfigUtil evStr:call key:@"call_id"];
+-      if (![callID length] ||
+-          ([requestedCallID length] && ![requestedCallID isEqualToString:callID])) continue;
+-      NSString *state = [DBConfigUtil evStr:call key:@"state"];
+-      BOOL ownsDialog = [state isEqualToString:@"in_call"] &&
+-          [[DBConfigUtil evStr:call key:@"dialog_owner"] isEqualToString:_selfDeviceID];
+-      BOOL ownsWaiting = [state isEqualToString:@"ringing"] &&
+-          [[DBConfigUtil evStr:call key:@"origin"] isEqualToString:_selfDeviceID] &&
+-          [_boot.role isEqualToString:@"door_station"] &&
+-          ([[DBConfigUtil evStr:call key:@"door"] length] == 0 ||
+-           [[DBConfigUtil evStr:call key:@"door"] isEqualToString:_boot.door]);
+-      if ([requestedCallID length] || ownsDialog || ownsWaiting) {
+-        selected = call;
+-        break;
++  NSString *deviceID = [DBConfigUtil str:snapshot.document path:@"node.id"];
++  if (![deviceID length]) return;
++  _selfDeviceID = [deviceID copy];
++  for (id rawCall in [snapshot.document objectForKey:@"active_calls"]) {
++    if (![rawCall isKindOfClass:[NSDictionary class]]) continue;
++    NSString *callID = [DBConfigUtil evStr:rawCall key:@"call_id"];
++    if (![callID length] || ([requestedCallID length] && ![requestedCallID isEqual:callID])) continue;
++    DBCallTimingReading *reading = [_recoveryTiming observeRecoverySnapshot:snapshot callID:callID
++        role:_boot.role nodeID:deviceID door:_boot.door now:DBCallMonotonicTime()];
++    if (reading.disposition != DBCallTimingActive) continue;
++    NSDictionary *call = reading.call;
++    NSString *identity = [NSString stringWithFormat:@"%lu:%@", (unsigned long)snapshot.coreGeneration, callID];
++    if ([_reportedRecoveryCallID isEqual:identity]) continue;
++    BOOL required = [DBConfigUtil evBool:call key:@"recovery_required"];
++    if ([[DBConfigUtil evStr:call key:@"state"] isEqualToString:@"in_call"]) {
++      if (required && [[DBConfigUtil evStr:call key:@"dialog_owner"] isEqualToString:deviceID]) {
++        // Neither MiniSIP nor Core PJSIP retains a dialog across a process restart.
++        _reportedRecoveryCallID = identity;
++        [_core reportCallRecovery:callID restored:NO expectedGeneration:snapshot.coreGeneration];
+       }
+-    }
+-  }
+-
+-  if (!selected) {
+-    NSString *eventOwner = [DBConfigUtil evStr:event key:@"dialog_owner"];
+-    if ([requestedCallID length] &&
+-        ([eventOwner length] == 0 || [eventOwner isEqualToString:_selfDeviceID]) &&
+-        ![_reportedRecoveryCallID isEqualToString:requestedCallID]) {
+-      _reportedRecoveryCallID = [requestedCallID copy];
+-      [_core reportCallRecovery:requestedCallID restored:NO];
+-    }
+-    return;
+-  }
+-
+-  NSString *callID = [DBConfigUtil evStr:selected key:@"call_id"];
+-  if ([_reportedRecoveryCallID isEqualToString:callID]) return;
+-  NSString *persistedState = [DBConfigUtil evStr:selected key:@"state"];
+-  NSString *eventState = [DBConfigUtil evStr:event key:@"state"];
+-  NSString *eventOwner = [DBConfigUtil evStr:event key:@"dialog_owner"];
+-  NSString *owner = [eventOwner length] > 0
+-      ? eventOwner : [DBConfigUtil evStr:selected key:@"dialog_owner"];
+-  if ([persistedState isEqualToString:@"in_call"] ||
+-      [eventState isEqualToString:@"in_call"]) {
+-    if (![owner isEqualToString:_selfDeviceID]) return;
+-    _reportedRecoveryCallID = [callID copy];
+-    // Neither MiniSIP nor Core PJSIP keeps a native dialog across process restart.
+-    [_core reportCallRecovery:callID restored:NO];
+-    return;
+-  }
+-
+-  BOOL ownsWaiting = [_boot.role isEqualToString:@"door_station"] &&
+-      [[DBConfigUtil evStr:selected key:@"origin"] isEqualToString:_selfDeviceID] &&
+-      ([persistedState isEqualToString:@"ringing"] ||
+-       [eventState isEqualToString:@"ringing"] ||
+-       [eventState isEqualToString:@"purpose_pending"]);
+-  if (!ownsWaiting) return;
+-  BOOL restored = [self.door restoreWaitingCall:selected recoveryState:eventState];
+-  _reportedRecoveryCallID = [callID copy];
+-  [_core reportCallRecovery:callID restored:restored];
++      continue;
++    }
++    if (![_boot.role isEqualToString:@"door_station"] ||
++        ![[DBConfigUtil evStr:call key:@"origin"] isEqualToString:deviceID] ||
++        ![[DBConfigUtil evStr:call key:@"door"] isEqualToString:_boot.door] ||
++        [reading.remainingSeconds doubleValue] <= 0 || (required && !reading.mayRestore)) continue;
++    if ([self.door restoreWaitingCall:callID snapshot:snapshot] && required) {
++      _reportedRecoveryCallID = identity;
++      [_core reportCallRecovery:callID restored:YES expectedGeneration:snapshot.coreGeneration];
++    }
++  }
+ }
+ 
+ - (NSString *)effectiveSipBackend {
+@@ -689,7 +655,7 @@
+     NSString *door = [_boot.door length] > 0 ? _boot.door : @"d_front";
+     [self showIncoming:door purpose:@"" lang:_boot.uiLang callID:@"debug-preview"
+          stageRevision:0
+-           expiresAtMs:(long long)([[NSDate date] timeIntervalSince1970] * 1000.0) + 600000];
++           expiresAtMs:0];
+   } else {
+     NSLog(@"[doorbell][debug] unknown start screen '%@'", screen);
+   }
+@@ -830,11 +796,27 @@
+ }
+ 
+ - (void)suspendMediaForBackground {
++  _recoverySuspended = YES;
++  ++_recoveryEpoch;
++  [_recoveryTimer invalidate];
++  _recoveryTimer = nil;
++  [_pendingChimeTimer invalidate];
++  _pendingChimeTimer = nil;
++  _pendingChimeReadInFlight = NO;
++  DBCallTimingSnapshot *snapshot = [_core callTimingSnapshot];
++  [_recoveryTiming requireFreshSnapshot:snapshot];
++  [_indoorTiming requireFreshSnapshot:snapshot];
++  [_callEvents requireFreshChimeSnapshot:snapshot];
+   [_incoming suspendMediaForBackground];
+   [_door suspendMediaForBackground];
+ }
+ 
+ - (void)resumeMediaAfterBackground {
++  _recoverySuspended = NO;
++  ++_recoveryEpoch;
++  [self refreshSelfDeviceIdentity];
++  [_callEvents requireFreshChimeSnapshot:[_core callTimingSnapshot]];
++  [self resolvePendingChimes];
+   [_incoming resumeMediaAfterBackground];
+   [_door resumeMediaAfterBackground];
+ }
+@@ -987,6 +969,57 @@
+ 
+ 
+ 
++- (void)presentAdmittedChime:(NSDictionary *)entry {
++  NSDictionary *chime = [entry objectForKey:@"event"];
++  NSString *callID = [DBConfigUtil evStr:chime key:@"call_id"];
++  [self persistTargetedIndoorCall:chime];
++  [_home playChime:chime];
++  if ([[entry objectForKey:@"previous_call_id"] isEqual:callID] &&
++      _current == _incoming && ![_incoming isActiveMonitor]) {
++    [_incoming refreshPurpose:[DBConfigUtil evStr:chime key:@"purpose"]
++                         lang:[DBConfigUtil evStr:chime key:@"visitor_lang"]
++                stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]];
++    return;
++  }
++  [self showIncoming:[DBConfigUtil evStr:chime key:@"door"]
++             purpose:[DBConfigUtil evStr:chime key:@"purpose"]
++                lang:[DBConfigUtil evStr:chime key:@"visitor_lang"] callID:callID
++       stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]
++          expiresAtMs:[DBConfigUtil longLongVal:chime path:@"expires_at_ms" def:0]];
++}
++
++- (void)resolvePendingChimes {
++  if (_recoverySuspended || _pendingChimeReadInFlight || !_callEvents.pendingChimeCount) return;
++  [_pendingChimeTimer invalidate];
++  _pendingChimeTimer = nil;
++  _pendingChimeReadInFlight = YES;
++  NSUInteger epoch = _recoveryEpoch;
++  NSUInteger generation = _core.lifecycleGeneration;
++  DBCoreBridge *core = _core;
++  __weak DBRouter *weakSelf = self;
++  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
++    DBCallTimingSnapshot *snapshot = [core callTimingSnapshot];
++    dispatch_async(dispatch_get_main_queue(), ^{
++      DBRouter *router = weakSelf;
++      if (!router || router->_recoverySuspended || epoch != router->_recoveryEpoch) return;
++      router->_pendingChimeReadInFlight = NO;
++      DBCallTimingSnapshot *current = generation == core.lifecycleGeneration ? snapshot : nil;
++      NSArray *ready = [router->_callEvents takeReadyChimesFromSnapshot:current
++          coreGeneration:core.lifecycleGeneration now:DBCallMonotonicTime()];
++      for (NSDictionary *entry in ready) [router presentAdmittedChime:entry];
++      if (router->_callEvents.pendingChimeCount)
++        router->_pendingChimeTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:router
++            selector:@selector(retryPendingChimes:) userInfo:@(epoch) repeats:NO];
++    });
++  });
++}
++
++- (void)retryPendingChimes:(NSTimer *)timer {
++  if (timer != _pendingChimeTimer || [timer.userInfo unsignedIntegerValue] != _recoveryEpoch) return;
++  _pendingChimeTimer = nil;
++  [self resolvePendingChimes];
++}
++
+ - (void)onCoreEvent:(NSDictionary *)ev {
+   NSString *t = [DBConfigUtil evStr:ev key:@"t"];
+ 
+@@ -1102,25 +1135,9 @@
+       [_home playChime:ev];
+       return;
+     }
+-    NSString *previousCallID = _callEvents.currentCallID;
+-    long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+-    NSDictionary *chime = [_callEvents acceptChimeEvent:ev nowMs:nowMs];
+-    if (!chime) return;  // expired, malformed, duplicate, or stale revision
+-    [self persistTargetedIndoorCall:chime];
+-    [_home playChime:chime];
+-    BOOL sameCall = [previousCallID length] > 0 && [previousCallID isEqualToString:callID];
+-    if (sameCall && _current == _incoming && ![_incoming isActiveMonitor]) {
+-      [_incoming refreshPurpose:[DBConfigUtil evStr:chime key:@"purpose"]
+-                           lang:[DBConfigUtil evStr:chime key:@"visitor_lang"]
+-                  stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]];
+-      return;
+-    }
+-    [self showIncoming:[DBConfigUtil evStr:chime key:@"door"]
+-               purpose:[DBConfigUtil evStr:chime key:@"purpose"]
+-                  lang:[DBConfigUtil evStr:chime key:@"visitor_lang"]
+-                callID:callID
+-         stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]
+-            expiresAtMs:[DBConfigUtil longLongVal:chime path:@"expires_at_ms" def:0]];
++    [_callEvents queueChimeEvent:ev coreGeneration:_core.lifecycleGeneration
++                            now:DBCallMonotonicTime()];
++    [self resolvePendingChimes];
+   } else if ([t isEqualToString:@"reply"]) {
+     if ([_boot.role isEqualToString:@"door_station"]) {
+       [_door handleReplyEvent:ev];
+--- before/ios-kiosk/src/Screens/DBIncomingScreen.m
++++ after/ios-kiosk/src/Screens/DBIncomingScreen.m
+@@ -24,8 +24,6 @@
+ // The debug line is remembered per device (spec §5.2).
+ static NSString *const kDebugLineHiddenKey = @"DBIncomingDebugLineHidden";
+ 
+-static const NSTimeInterval kLegacyAutoCloseS = 30;
+-static const NSTimeInterval kCancelledCloseS = 15;
+ 
+ static BOOL DBSameString(NSString *a, NSString *b) {
+   return (a == b) || [a isEqualToString:b];
+@@ -35,7 +33,6 @@
+ - (void)startVideoStatsTimer;
+ - (void)updateVideoStats:(NSTimer *)timer;
+ - (void)publishVideoRuntime:(DBVideoStats)stats force:(BOOL)force;
+-- (void)autoCloseTimerFired:(NSTimer *)timer;
+ - (void)startVideoOrientationPolling;
+ - (void)pollVideoOrientation:(NSTimer *)timer;
+ - (void)updateAdminAddressesFromPeer:(NSDictionary *)peer;
+@@ -64,7 +61,6 @@
+   NSString *_visitorLang;
+   NSString *_callID;
+   NSInteger _stageRevision;
+-  long long _callExpiresAtMs;
+   NSString *_nodeId;
+ 
+   NSDictionary *_cfg;
+@@ -104,9 +100,6 @@
+   BOOL _lifecycleEnded;
+   BOOL _safeMode;
+   BOOL _cancelled;
+-  NSTimer *_autoCloseTimer;
+-  BOOL _autoCloseTimerForCancelled;
+-  long long _autoCloseDeadlineMs;
+   NSTimer *_videoStatsTimer;
+   CFAbsoluteTime _lastMediaRuntimePublishAt;
+   NSString *_lastMediaRuntimeSignature;
+@@ -397,6 +390,7 @@
+ - (void)prepareWithDoor:(NSString *)door purpose:(NSString *)purpose lang:(NSString *)lang
+                  callID:(NSString *)callID stageRevision:(NSInteger)stageRevision
+             expiresAtMs:(long long)expiresAtMs {
++  (void)expiresAtMs;
+   ++_sipActionGen;
+   [_router sipHangup];
+   _sipMode = @"";
+@@ -417,7 +411,6 @@
+   _visitorLang = [lang copy];
+   _callID = [callID copy];
+   _stageRevision = MAX(0, stageRevision);
+-  _callExpiresAtMs = MAX(0LL, expiresAtMs);
+   _answerPending = NO;
+   _awaitingSupersededIdle = NO;
+   _lifecycleAnswered = NO;
+@@ -467,7 +460,6 @@
+   [self startVideo:_incomingStreamUrl];
+ 
+   [self applyContent];
+-  [self restartAutoClose];
+   [self fetchAndApplyCoreSnapshot];
+ }
+ 
+@@ -486,7 +478,6 @@
+   _visitorLang = @"";
+   _callID = @"";
+   _stageRevision = 0;
+-  _callExpiresAtMs = 0;
+   _answerPending = NO;
+   _awaitingSupersededIdle = NO;
+   _lifecycleAnswered = NO;
+@@ -525,7 +516,6 @@
+   _videoPlayback = @"low_latency";
+   [self applyContent];
+   [self startVideo:_incomingStreamUrl];
+-  [self restartAutoClose];
+   [self fetchAndApplyCoreSnapshot];
+ }
+ 
+@@ -565,7 +555,6 @@
+     _lifecycleEnded = YES;
+     _inCall = NO;
+     _sipMode = @"";
+-    [_autoCloseTimer invalidate];
+   }
+   _purpose = [purpose copy];
+   _visitorLang = [lang copy];
+@@ -574,7 +563,6 @@
+   [self applyContent];
+   _answerButton.enabled = !supersedesAnswer && ([_peerHost length] > 0);
+   _hintLabel.hidden = YES;
+-  if (!_inCall) [self restartAutoClose];
+   if (supersedesAnswer) [_router sipHangup];
+   [self fetchAndApplyCoreSnapshot];
+ }
+@@ -587,7 +575,6 @@
+   _answerButton.enabled = ([_peerHost length] > 0);
+   [_answerButton setTitle:[_texts ts:@"ring.answer"] forState:UIControlStateNormal];
+   _hintLabel.hidden = YES;
+-  [self restartAutoClose];
+ }
+ 
+ 
+@@ -689,7 +676,6 @@
+       if (!s->_cancelled && (mediaChanged || videoStopped))
+         [s startVideo:s->_incomingStreamUrl];
+       [s applyContent];
+-      [s restartAutoClose];
+     });
+   });
+ }
+@@ -1662,61 +1648,6 @@
+ 
+ 
+ 
+-- (void)restartAutoClose {
+-  // A ringing indoor page is governed by the return countdown (batch 3): the
+-  // visitor cancelling must not take the live view away, and the old fixed
+-  // auto-close would have done exactly that.
+-  if (!_monitorOnly) {
+-    [_autoCloseTimer invalidate];
+-    _autoCloseTimer = nil;
+-    _autoCloseTimerForCancelled = NO;
+-    _autoCloseDeadlineMs = 0;
+-    return;
+-  }
+-  if (_monitorOnly) {
+-    [_autoCloseTimer invalidate];
+-    _autoCloseTimer = nil;
+-    _autoCloseTimerForCancelled = NO;
+-    _autoCloseDeadlineMs = 0;
+-    return;
+-  }
+-  long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
+-  long long deadlineMs = 0;
+-  if (_cancelled) {
+-    deadlineMs = nowMs + (long long)(kCancelledCloseS * 1000.0);
+-  } else if (_callExpiresAtMs > 0) {
+-    deadlineMs = _callExpiresAtMs;
+-  } else {
+-    // Legacy callers that predate schema-v2 have no Core deadline. Keep the
+-    // old bounded fallback, but schema-v2 calls always use expires_at_ms.
+-    deadlineMs = nowMs + (long long)(kLegacyAutoCloseS * 1000.0);
+-  }
+-  // Snapshot/config refreshes can arrive several times per second. They must
+-  // not keep extending the same ringing/cancelled deadline indefinitely.
+-  // Only a real transition into or out of the cancelled state replaces it.
+-  if (_autoCloseTimer && [_autoCloseTimer isValid] &&
+-      _autoCloseTimerForCancelled == _cancelled &&
+-      llabs(_autoCloseDeadlineMs - deadlineMs) < 100)
+-    return;
+-  [_autoCloseTimer invalidate];
+-  _autoCloseTimerForCancelled = _cancelled;
+-  _autoCloseDeadlineMs = deadlineMs;
+-  NSTimeInterval remaining = MAX(0.01, (deadlineMs - nowMs) / 1000.0);
+-  _autoCloseTimer = [NSTimer timerWithTimeInterval:remaining
+-                                             target:self
+-                                           selector:@selector(autoCloseTimerFired:)
+-                                           userInfo:nil
+-                                            repeats:NO];
+-  [[NSRunLoop mainRunLoop] addTimer:_autoCloseTimer forMode:NSRunLoopCommonModes];
+-}
+-
+-- (void)autoCloseTimerFired:(NSTimer *)timer {
+-  if (timer != _autoCloseTimer) return;
+-  _autoCloseTimer = nil;
+-  _autoCloseDeadlineMs = 0;
+-  [self closeSelf];
+-}
+-
+ - (void)handleCallCancelled:(NSDictionary *)ev {
+   if (_monitorOnly) return;
+   NSString *door = [DBConfigUtil evStr:ev key:@"door"];
+@@ -1736,7 +1667,6 @@
+   _statusLabel.layer.cornerRadius = 8;
+   _statusLabel.clipsToBounds = YES;
+   [self setNeedsLayout];
+-  [self restartAutoClose];
+   NSLog(@"[doorbell] call cancelled: video retained until the return deadline or resident close");
+ }
+ 
+@@ -1752,10 +1682,6 @@
+ }
+ 
+ - (void)closeSelf {
+-  [_autoCloseTimer invalidate];
+-  _autoCloseTimer = nil;
+-  _autoCloseTimerForCancelled = NO;
+-  _autoCloseDeadlineMs = 0;
+   [_router closeIncomingAnimated:YES];
+ }
+ 
+@@ -1781,9 +1707,6 @@
+   ++_sipActionGen;
+   [self stopReturnTimer];
+   [_returnCountdown reset];
+-  [_autoCloseTimer invalidate];
+-  _autoCloseTimer = nil;
+-  _autoCloseDeadlineMs = 0;
+   [_videoStatsTimer invalidate];
+   _videoStatsTimer = nil;
+   [self stopVideoPlayers];
+@@ -1860,7 +1783,6 @@
+   }
+   _answerPending = YES;
+   _answerButton.enabled = NO;
+-  [_autoCloseTimer invalidate];
+   if ([_sipMode isEqualToString:@"monitor"]) {
+ 
+     [_router sipHangup];
+@@ -1940,7 +1862,6 @@
+       ? [_texts t:@"reply.sent", (sender.currentTitle ?: @""), nil]
+       : [_texts ts:@"reply.failed"];
+   _hintLabel.hidden = NO;
+-  if (accepted && !_inCall) [self restartAutoClose];
+ }
+ 
+ 
+@@ -1957,7 +1878,6 @@
+       _lifecycleAnswered = [_core reportCallAnsweredV2:_door callID:_callID
+                                         stageRevision:_stageRevision];
+     }
+-    [_autoCloseTimer invalidate];
+     _answerButton.enabled = YES;
+     [_answerButton setTitle:[_texts ts:@"incall.end"] forState:UIControlStateNormal];
+     _statusLabel.text = [_texts ts:@"incall.title"];
+--- before/ios-compat/scripts/test_host.sh
++++ after/ios-compat/scripts/test_host.sh
+@@ -74,9 +74,18 @@
+ 
+ "$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+   -I"$REPO_ROOT/ios-kiosk/src/Core" \
++  "$REPO_ROOT/ios-kiosk/src/Core/DBCallTiming.m" \
+   "$REPO_ROOT/ios-kiosk/src/Core/DBCallEventTracker.m" \
+   "$REPO_ROOT/ios-compat/tests/call_event_tracker_test.m" \
+   -framework Foundation -o "$OUT/call_event_tracker_test"
++
++"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
++  -I"$REPO_ROOT/ios-kiosk/src/Core" \
++  "$REPO_ROOT/ios-kiosk/src/Core/DBCallTiming.m" \
++  "$REPO_ROOT/ios-kiosk/src/Core/DBCallEventTracker.m" \
++  "$REPO_ROOT/ios-compat/tests/call_timing_test.m" \
++  -framework Foundation -o "$OUT/call_timing_test"
++"$OUT/call_timing_test"
+ 
+ # The Swift call-revision test builds for the host, so every file it pulls in has
+ # to be host-compilable. ConfigUtil.swift is Foundation and CoreGraphics only for
+--- before/ios-compat/tests/recovery_safe_mode_contract_test.py
++++ after/ios-compat/tests/recovery_safe_mode_contract_test.py
+@@ -238,33 +238,31 @@
+ 
+     def test_ios5_call_deadline_is_not_extended_by_snapshot_refresh(self):
+         incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
+-        timer = incoming[incoming.index("- (void)restartAutoClose"):
+-                         incoming.index("- (void)handleCallCancelled:")]
+-        self.assertIn("[_autoCloseTimer isValid]", timer)
+-        self.assertIn("_autoCloseTimerForCancelled == _cancelled", timer)
+-        self.assertIn("_callExpiresAtMs", timer)
+-        self.assertIn("deadlineMs = _callExpiresAtMs", timer)
+-        self.assertIn("(deadlineMs - nowMs) / 1000.0", timer)
+-        self.assertNotIn("kAutoCloseS", timer)
+-        self.assertIn("@selector(autoCloseTimerFired:)", timer)
+-        self.assertIn("forMode:NSRunLoopCommonModes", timer)
++        self.assertNotIn("restartAutoClose", incoming)
++        self.assertNotIn("_callExpiresAtMs", incoming)
++        self.assertIn("[_returnCountdown tick]", incoming)
++        self.assertIn("[_returnCountdown pauseForAnsweredCall]", incoming)
++        self.assertIn("[_returnCountdown resumeAfterCall]", incoming)
++        door = read("ios-kiosk/src/Screens/DBDoorScreen.m")
++        self.assertIn("acceptsCallback:timer.userInfo", door)
++        self.assertIn("MIN(1.0, MAX(0.25, [reading.remainingSeconds doubleValue]))", door)
+ 
+     def test_ios5_restores_only_a_previously_targeted_unexpired_indoor_call(self):
+         router = read("ios-kiosk/src/Screens/DBRouter.m")
+-        restore = router[router.index("- (void)restoreTargetedIndoorCallFromStatus:"):
++        restore = router[router.index("- (void)restoreTargetedIndoorCallFromSnapshot:"):
+                          router.index("- (NSString *)effectiveSipBackend")]
+         self.assertIn('DBPendingIndoorCallDefaultsKey', router)
+         self.assertIn('[self persistTargetedIndoorCall:chime]', router)
+         self.assertIn('objectForKey:DBPendingIndoorCallDefaultsKey', restore)
+         self.assertIn('isEqualToString:callID', restore)
+         self.assertIn('isEqualToString:@"ringing"', restore)
+-        self.assertIn('isEqualToString:@"purpose_pending"', restore)
+-        self.assertIn('expires > nowMs', restore)
+-        self.assertIn('longLongVal:call path:@"expires_at_ms"', restore)
++        self.assertIn('[reading.remainingSeconds doubleValue] <= 0', restore)
++        self.assertNotIn('NSDate', restore)
++        self.assertIn('observeSnapshot:snapshot callID:callID', restore)
+         self.assertNotIn('intVal:call path:@"expires_at_ms"', restore)
+         self.assertIn('_callEvents.currentCallID isEqualToString:callID', restore)
+-        self.assertIn('if (matchingCallSeen) [self clearPersistedIndoorCall:callID]', restore)
+-        self.assertIn('acceptChimeEvent:chime nowMs:nowMs', restore)
++        self.assertIn('reading.disposition != DBCallTimingActive', restore)
++        self.assertIn('acceptChimeEvent:chime timingReading:reading', restore)
+         self.assertIn('[self clearPersistedIndoorCall:callID]', restore)
+         self.assertIn('[self clearPersistedIndoorCall:_callEvents.currentCallID]', router)
+ 
+@@ -394,7 +392,7 @@
+         self.assertIn("[_router sipHangup]", compat_refresh)
+         self.assertIn("!s->_awaitingSupersededIdle", compat)
+         self.assertIn("_answerButton.enabled = ([_peerHost length] > 0)", compat_idle)
+-        self.assertIn("[self restartAutoClose]", compat_idle)
++        self.assertNotIn("closeSelf", compat_idle)
+         self.assertIn("consumeSupersededIdleForCurrentCall", router)
+         self.assertIn("handleSupersededSipIdle", router)
+ 
+@@ -414,10 +412,10 @@
+         self.assertIn("reportRecovery(callId, restored: true, generation: reading.coreGeneration)", modern)
+         self.assertIn('@"dialog_owner"', compat)
+         self.assertIn('isEqualToString:@"in_call"', compat)
+-        self.assertIn("reportCallRecovery:callID restored:NO", compat)
+-        self.assertIn("restoreWaitingCall:selected recoveryState:eventState", compat)
+-        self.assertIn("reportCallRecovery:callID restored:restored", compat)
+-        self.assertIn("[remaining doubleValue] <= 0", door)
++        self.assertIn("reportCallRecovery:callID restored:NO expectedGeneration:snapshot.coreGeneration", compat)
++        self.assertIn("restoreWaitingCall:callID snapshot:snapshot", compat)
++        self.assertIn("reportCallRecovery:callID restored:YES expectedGeneration:snapshot.coreGeneration", compat)
++        self.assertIn("[reading.remainingSeconds doubleValue] <= 0", door)
+         self.assertIn("presentPurposeAlertForActiveCall:YES", door)
+ 
+     def test_emergency_colors_are_contrast_checked_and_report_fallback(self):
+--- before/ios-kiosk/src/Core/DBCallTiming.h
++++ after/ios-kiosk/src/Core/DBCallTiming.h
+@@ -0,0 +1,45 @@
++#import <Foundation/Foundation.h>
++
++// mach_absolute_time is available on iOS 5; foreground freshness must be checked separately.
++NSTimeInterval DBCallMonotonicTime(void);
++
++@interface DBCallTimingSnapshot : NSObject
++@property(nonatomic, readonly) NSDictionary *document;
++@property(nonatomic, readonly) NSUInteger coreGeneration;
++@property(nonatomic, readonly) NSTimeInterval requestedAt;
++- (id)initWithDocument:(NSDictionary *)document coreGeneration:(NSUInteger)generation
++           requestedAt:(NSTimeInterval)requestedAt;
++@end
++
++typedef enum {
++  DBCallTimingUnavailable = 0,
++  DBCallTimingAbsent,
++  DBCallTimingActive
++} DBCallTimingDisposition;
++
++@interface DBCallTimingReading : NSObject
++@property(nonatomic, readonly) DBCallTimingDisposition disposition;
++@property(nonatomic, readonly) NSDictionary *call;
++@property(nonatomic, readonly) NSNumber *remainingSeconds;
++@property(nonatomic, readonly) NSNumber *recoveryRemainingSeconds;
++@property(nonatomic, readonly) BOOL mayRestore;
++@end
++
++// Main-thread state. A cached Core sample can shorten an anchor but cannot renew it.
++@interface DBCallTiming : NSObject
++@property(nonatomic, readonly) BOOL waitingForFreshSnapshot;
++- (void)reset;
++- (void)requireFreshSnapshot:(DBCallTimingSnapshot *)snapshot;
++- (BOOL)acceptsSnapshot:(DBCallTimingSnapshot *)snapshot;
++- (DBCallTimingReading *)observeSnapshot:(DBCallTimingSnapshot *)snapshot
++                                 callID:(NSString *)callID door:(NSString *)door
++                                    now:(NSTimeInterval)now;
++- (DBCallTimingReading *)observeRecoverySnapshot:(DBCallTimingSnapshot *)snapshot
++                                         callID:(NSString *)callID role:(NSString *)role
++                                         nodeID:(NSString *)nodeID door:(NSString *)door
++                                            now:(NSTimeInterval)now;
++- (void)invalidateCallbacks;
++- (NSDictionary *)callbackForCall:(NSString *)callID coreGeneration:(NSUInteger)generation;
++- (BOOL)acceptsCallback:(NSDictionary *)callback callID:(NSString *)callID
++         coreGeneration:(NSUInteger)generation;
++@end
+--- before/ios-kiosk/src/Core/DBCallTiming.m
++++ after/ios-kiosk/src/Core/DBCallTiming.m
+@@ -0,0 +1,171 @@
++#import "DBCallTiming.h"
++#import <CoreFoundation/CoreFoundation.h>
++#import <mach/mach_time.h>
++#import <math.h>
++
++NSTimeInterval DBCallMonotonicTime(void) {
++  static mach_timebase_info_data_t timebase;
++  static dispatch_once_t once;
++  dispatch_once(&once, ^{ mach_timebase_info(&timebase); });
++  return (double)mach_absolute_time() * timebase.numer / timebase.denom / 1e9;
++}
++
++static NSString *DBTimingString(id value) {
++  return [value isKindOfClass:[NSString class]] ? value : @"";
++}
++
++static NSNumber *DBTimingMilliseconds(id value) {
++  if (![value isKindOfClass:[NSNumber class]] ||
++      CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) return nil;
++  double number = [value doubleValue];
++  return isfinite(number) && number >= 0 && number <= 9007199254740991.0 &&
++      floor(number) == number ? value : nil;
++}
++
++@implementation DBCallTimingSnapshot
++- (id)initWithDocument:(NSDictionary *)document coreGeneration:(NSUInteger)generation
++           requestedAt:(NSTimeInterval)requestedAt {
++  self = [super init];
++  if (self) {
++    _document = [document copy];
++    _coreGeneration = generation;
++    _requestedAt = requestedAt;
++  }
++  return self;
++}
++@end
++
++@interface DBCallTimingReading ()
++@property(nonatomic, readwrite) DBCallTimingDisposition disposition;
++@property(nonatomic, readwrite, copy) NSDictionary *call;
++@property(nonatomic, readwrite, strong) NSNumber *remainingSeconds;
++@property(nonatomic, readwrite, strong) NSNumber *recoveryRemainingSeconds;
++@end
++
++@implementation DBCallTimingReading
++- (BOOL)mayRestore {
++  return [[_call objectForKey:@"recovery_required"] isEqual:@YES] &&
++      [[_call objectForKey:@"recovery_eligible"] isEqual:@YES] &&
++      [_remainingSeconds doubleValue] > 0 && [_recoveryRemainingSeconds doubleValue] > 0;
++}
++@end
++
++@implementation DBCallTiming {
++  NSArray *_identity;
++  NSNumber *_deadline;
++  NSNumber *_recoveryDeadline;
++  NSArray *_lastSample;
++  NSArray *_refreshBaseline;
++  NSUInteger _callbackRevision;
++}
++
++- (NSArray *)sampleIdentity:(DBCallTimingSnapshot *)snapshot {
++  NSString *generation = DBTimingString([snapshot.document objectForKey:@"snapshot_generation"]);
++  return [generation length] ? @[@(snapshot.coreGeneration), generation] : nil;
++}
++
++- (void)reset {
++  _identity = nil;
++  _deadline = nil;
++  _recoveryDeadline = nil;
++}
++
++- (void)requireFreshSnapshot:(DBCallTimingSnapshot *)snapshot {
++  if (!_waitingForFreshSnapshot) _refreshBaseline = [self sampleIdentity:snapshot] ?: _lastSample;
++  _waitingForFreshSnapshot = YES;
++  [self reset];
++  [self invalidateCallbacks];
++}
++
++- (BOOL)acceptsSnapshot:(DBCallTimingSnapshot *)snapshot {
++  NSArray *sample = [self sampleIdentity:snapshot];
++  if (!sample || !isfinite(snapshot.requestedAt) ||
++      !DBTimingMilliseconds([snapshot.document objectForKey:@"snapshot_age_ms"]) ||
++      ![[snapshot.document objectForKey:@"active_calls"] isKindOfClass:[NSArray class]]) return NO;
++  _lastSample = sample;
++  if (_waitingForFreshSnapshot) {
++    if (!_refreshBaseline) { _refreshBaseline = sample; return NO; }
++    if ([_refreshBaseline isEqual:sample]) return NO;
++    _waitingForFreshSnapshot = NO;
++    _refreshBaseline = nil;
++  }
++  return YES;
++}
++
++- (DBCallTimingReading *)observeRecoverySnapshot:(DBCallTimingSnapshot *)snapshot
++                                         callID:(NSString *)callID role:(NSString *)role
++                                         nodeID:(NSString *)nodeID door:(NSString *)door
++                                            now:(NSTimeInterval)now {
++  if ([nodeID length] && [[snapshot.document objectForKey:@"active_calls"] isKindOfClass:[NSArray class]]) {
++    for (id call in [snapshot.document objectForKey:@"active_calls"]) {
++      if (![call isKindOfClass:[NSDictionary class]] ||
++          ![DBTimingString([call objectForKey:@"call_id"]) isEqualToString:callID]) continue;
++      NSString *state = DBTimingString([call objectForKey:@"state"]);
++      BOOL ownsDialog = [state isEqualToString:@"in_call"] &&
++          [DBTimingString([call objectForKey:@"dialog_owner"]) isEqualToString:nodeID];
++      BOOL ownsWaiting = [state isEqualToString:@"ringing"] && [role isEqualToString:@"door_station"] &&
++          [DBTimingString([call objectForKey:@"origin"]) isEqualToString:nodeID] &&
++          [DBTimingString([call objectForKey:@"door"]) isEqualToString:door];
++      if (ownsDialog || ownsWaiting)
++        return [self observeSnapshot:snapshot callID:callID
++            door:DBTimingString([call objectForKey:@"door"]) now:now];
++      break;
++    }
++  }
++  return [[DBCallTimingReading alloc] init];
++}
++
++- (DBCallTimingReading *)observeSnapshot:(DBCallTimingSnapshot *)snapshot
++                                 callID:(NSString *)callID door:(NSString *)door
++                                    now:(NSTimeInterval)now {
++  DBCallTimingReading *reading = [[DBCallTimingReading alloc] init];
++  if (![self acceptsSnapshot:snapshot] || ![callID length] || !isfinite(now) ||
++      now < snapshot.requestedAt) return reading;
++  NSDictionary *call = nil;
++  for (id candidate in [snapshot.document objectForKey:@"active_calls"]) {
++    if (![candidate isKindOfClass:[NSDictionary class]]) return reading;
++    if ([DBTimingString([candidate objectForKey:@"call_id"]) isEqualToString:callID] &&
++        [DBTimingString([candidate objectForKey:@"door"]) isEqualToString:door]) call = candidate;
++  }
++  if (!call) { [self reset]; reading.disposition = DBCallTimingAbsent; return reading; }
++  NSString *sample = DBTimingString([snapshot.document objectForKey:@"snapshot_generation"]);
++  NSString *state = DBTimingString([call objectForKey:@"state"]);
++  NSNumber *revision = DBTimingMilliseconds([call objectForKey:@"stage_revision"]);
++  if (![DBTimingString([call objectForKey:@"snapshot_generation"]) isEqual:sample] ||
++      !revision || (![state isEqualToString:@"ringing"] && ![state isEqualToString:@"in_call"]))
++    return reading;
++  NSArray *identity = @[@(snapshot.coreGeneration), sample, callID, door ?: @"", revision,
++      DBTimingString([call objectForKey:@"dialog_owner"]), state];
++  double age = [[snapshot.document objectForKey:@"snapshot_age_ms"] doubleValue];
++  NSNumber *remaining = DBTimingMilliseconds([call objectForKey:@"remaining_ms"]);
++  NSNumber *recovery = DBTimingMilliseconds([call objectForKey:@"recovery_remaining_ms"]);
++  if ([recovery doubleValue] > 10000) recovery = nil;
++  NSNumber *deadline = remaining ? @(snapshot.requestedAt + MAX(0, [remaining doubleValue] - age) / 1000) : nil;
++  NSNumber *recoveryDeadline = recovery ? @(snapshot.requestedAt + MAX(0, [recovery doubleValue] - age) / 1000) : nil;
++  if ([_identity isEqual:identity]) {
++    if (deadline) _deadline = _deadline ? @(MIN([_deadline doubleValue], [deadline doubleValue])) : deadline;
++    if (recoveryDeadline) _recoveryDeadline = _recoveryDeadline ?
++        @(MIN([_recoveryDeadline doubleValue], [recoveryDeadline doubleValue])) : recoveryDeadline;
++  } else {
++    _identity = identity;
++    _deadline = deadline;
++    _recoveryDeadline = recoveryDeadline;
++  }
++  reading.disposition = DBCallTimingActive;
++  reading.call = call;
++  reading.remainingSeconds = deadline ? @(MAX(0, [_deadline doubleValue] - now)) : nil;
++  reading.recoveryRemainingSeconds = recoveryDeadline ? @(MAX(0, [_recoveryDeadline doubleValue] - now)) : nil;
++  return reading;
++}
++
++- (void)invalidateCallbacks { ++_callbackRevision; }
++
++- (NSDictionary *)callbackForCall:(NSString *)callID coreGeneration:(NSUInteger)generation {
++  return @{@"revision": @(_callbackRevision), @"core": @(generation), @"call": callID ?: @""};
++}
++
++- (BOOL)acceptsCallback:(NSDictionary *)callback callID:(NSString *)callID
++         coreGeneration:(NSUInteger)generation {
++  return [callback isEqual:[self callbackForCall:callID coreGeneration:generation]];
++}
++@end
+--- before/ios-compat/tests/call_timing_test.m
++++ after/ios-compat/tests/call_timing_test.m
+@@ -0,0 +1,194 @@
++#import <Foundation/Foundation.h>
++#import "DBCallTiming.h"
++#import "DBCallEventTracker.h"
++#import <math.h>
++
++static void require(BOOL condition, NSString *message) {
++  if (!condition) {
++    fprintf(stderr, "FAIL: %s\n", [message UTF8String]);
++    exit(1);
++  }
++}
++
++static DBCallTimingSnapshot *sample(NSString *generation, NSUInteger core, double request,
++                                    long long age, id remaining, id recovery, long long wall) {
++  NSMutableDictionary *call = [@{@"call_id": @"c1", @"door": @"front", @"state": @"ringing",
++      @"stage_revision": @0, @"snapshot_generation": generation,
++      @"snapshot_at_ms": @(wall), @"expires_at_ms": @(wall + 10000),
++      @"recovery_required": @YES, @"recovery_eligible": @YES} mutableCopy];
++  if (remaining) [call setObject:remaining forKey:@"remaining_ms"];
++  if (recovery) [call setObject:recovery forKey:@"recovery_remaining_ms"];
++  return [[DBCallTimingSnapshot alloc] initWithDocument:@{@"snapshot_generation": generation,
++      @"snapshot_age_ms": @(age), @"active_calls": @[call]} coreGeneration:core requestedAt:request];
++}
++
++static DBCallTimingReading *observe(DBCallTiming *timing, DBCallTimingSnapshot *snapshot, double now) {
++  return [timing observeSnapshot:snapshot callID:@"c1" door:@"front" now:now];
++}
++
++int main(int argc, const char *argv[]) {
++  @autoreleasepool {
++    NSDictionary *chime = @{@"schema_version": @2, @"call_id": @"c1", @"door": @"front",
++        @"stage_revision": @0, @"expires_at_ms": @1010000};
++    if (argc > 1 && strcmp(argv[1], "--red-old-recovery") == 0) {
++      DBCallEventTracker *oldTracker = [[DBCallEventTracker alloc] init];
++      require([oldTracker acceptChimeEvent:chime nowMs:1300000] != nil,
++          @"a Core-valid call must survive a device wall clock five minutes fast");
++      return 0;
++    }
++    for (NSNumber *offset in @[@(-300000), @0, @300000]) {
++      DBCallTiming *timing = [[DBCallTiming alloc] init];
++      DBCallTimingReading *r = observe(timing, sample(@"s1", 1, 100, 2000, @10000, @8000,
++          1000000 + [offset longLongValue]), 101);
++      require(fabs([r.remainingSeconds doubleValue] - 7) < 0.000001 && r.mayRestore,
++          @"wall offsets cannot change the Core-projected remaining duration");
++      require(fabs([r.recoveryRemainingSeconds doubleValue] - 5) < 0.000001,
++          @"age and read latency also consume the recovery window");
++      DBCallEventTracker *tracker = [[DBCallEventTracker alloc] init];
++      require([tracker acceptChimeEvent:chime timingReading:r] != nil,
++          @"targeted restoration uses current Core duration despite a stale persisted wall deadline");
++      require([tracker acceptChimeEvent:chime timingReading:r] == nil,
++          @"repeated recovery cannot chime twice");
++      DBCallEventTracker *live = [[DBCallEventTracker alloc] init];
++      require([live queueChimeEvent:chime coreGeneration:1 now:100], @"targeted live chime is queued");
++      NSArray *ready = [live takeReadyChimesFromSnapshot:sample(@"live", 1, 100, 2000,
++          @10000, @0, 1000000 + [offset longLongValue]) coreGeneration:1 now:101];
++      require([ready count] == 1 && live.pendingChimeCount == 0,
++          @"ordinary targeted chime also ignores device wall offset");
++      require(![live queueChimeEvent:chime coreGeneration:1 now:102],
++          @"accepted live revision remains deduplicated");
++    }
++    DBCallEventTracker *late = [[DBCallEventTracker alloc] init];
++    require([late queueChimeEvent:chime coreGeneration:1 now:100], @"late snapshot fixture queues real event");
++    DBCallTimingSnapshot *empty = [[DBCallTimingSnapshot alloc] initWithDocument:
++        @{@"snapshot_generation": @"before", @"snapshot_age_ms": @0, @"active_calls": @[]}
++        coreGeneration:1 requestedAt:100];
++    require([[late takeReadyChimesFromSnapshot:empty coreGeneration:1 now:100] count] == 0 &&
++        late.pendingChimeCount == 1, @"an event before the cache waits without activating or cancelling");
++    require([[late takeReadyChimesFromSnapshot:sample(@"before", 1, 101, 0, @10000, @0, 1000000)
++        coreGeneration:1 now:101] count] == 0, @"unchanged sample generation is not retried as fresh");
++    require([[late takeReadyChimesFromSnapshot:sample(@"after", 1, 102, 0, @10000, @0, 1000000)
++        coreGeneration:1 now:102] count] == 1, @"a matching newly published Core snapshot releases the targeted event");
++    DBCallEventTracker *revisionWait = [[DBCallEventTracker alloc] init];
++    NSMutableDictionary *newPurpose = [chime mutableCopy];
++    [newPurpose setObject:@1 forKey:@"stage_revision"];
++    [revisionWait queueChimeEvent:newPurpose coreGeneration:1 now:100];
++    require([[revisionWait takeReadyChimesFromSnapshot:sample(@"old-purpose", 1, 100, 0, @10000, @0, 1000000)
++        coreGeneration:1 now:100] count] == 0, @"a cached older purpose cannot admit the newer targeted revision");
++    DBCallTimingSnapshot *purposeBase = sample(@"new-purpose", 1, 101, 0, @10000, @0, 1000000);
++    NSMutableDictionary *purposeDoc = [purposeBase.document mutableCopy];
++    NSMutableDictionary *purposeCall = [[[purposeDoc objectForKey:@"active_calls"] objectAtIndex:0] mutableCopy];
++    [purposeCall setObject:@1 forKey:@"stage_revision"];
++    [purposeDoc setObject:@[purposeCall] forKey:@"active_calls"];
++    DBCallTimingSnapshot *purposeSnapshot = [[DBCallTimingSnapshot alloc] initWithDocument:purposeDoc
++        coreGeneration:1 requestedAt:101];
++    require([[revisionWait takeReadyChimesFromSnapshot:purposeSnapshot coreGeneration:1 now:101] count] == 1,
++        @"the exact new call revision admits the waiting targeted notification");
++    DBCallEventTracker *foregroundChime = [[DBCallEventTracker alloc] init];
++    [foregroundChime queueChimeEvent:chime coreGeneration:1 now:100];
++    DBCallTimingSnapshot *beforeSleep = sample(@"sleep", 1, 100, 0, @10000, @0, 1000000);
++    [foregroundChime requireFreshChimeSnapshot:beforeSleep];
++    require([[foregroundChime takeReadyChimesFromSnapshot:beforeSleep coreGeneration:1 now:100] count] == 0,
++        @"a pending chime cannot use an unchanged pre-sleep sample");
++    require([[foregroundChime takeReadyChimesFromSnapshot:sample(@"awake", 1, 101, 0, @10000, @0, 1000000)
++        coreGeneration:1 now:101] count] == 1, @"new foreground sample releases the still-valid pending chime");
++    DBCallEventTracker *bounded = [[DBCallEventTracker alloc] init];
++    [bounded queueChimeEvent:chime coreGeneration:1 now:100];
++    require(![bounded queueChimeEvent:chime coreGeneration:1 now:109],
++        @"duplicate delivery cannot renew the unresolved notification deadline");
++    require([[bounded takeReadyChimesFromSnapshot:nil coreGeneration:1 now:110] count] == 0 &&
++        bounded.pendingChimeCount == 0 && bounded.currentCallID == nil,
++        @"bounded waiting ends without accepting or changing the call");
++    DBCallEventTracker *restart = [[DBCallEventTracker alloc] init];
++    [restart queueChimeEvent:chime coreGeneration:1 now:100];
++    require([[restart takeReadyChimesFromSnapshot:sample(@"old", 1, 100, 0, @10000, @0, 1000000)
++        coreGeneration:2 now:101] count] == 0 && restart.pendingChimeCount == 0,
++        @"a pre-restart queued notification cannot enter the replacement Core lifetime");
++    [restart queueChimeEvent:chime coreGeneration:2 now:102];
++    require([[restart takeReadyChimesFromSnapshot:sample(@"old", 1, 102, 0, @10000, @0, 1000000)
++        coreGeneration:2 now:102] count] == 0 && restart.pendingChimeCount == 1,
++        @"an old callback cannot consume the new lifetime's pending notification");
++    require([[restart takeReadyChimesFromSnapshot:sample(@"new", 2, 103, 0, @10000, @0, 1000000)
++        coreGeneration:2 now:103] count] == 1, @"new lifetime callback remains admissible");
++    DBCallEventTracker *cancelled = [[DBCallEventTracker alloc] init];
++    [cancelled queueChimeEvent:chime coreGeneration:1 now:100];
++    [cancelled recordCancellationEvent:@{@"call_id": @"c1", @"stage_revision": @0}];
++    require([[cancelled takeReadyChimesFromSnapshot:sample(@"late", 1, 101, 0, @10000, @0, 1000000)
++        coreGeneration:1 now:101] count] == 0 && cancelled.currentCallID == nil,
++        @"a late old-call result cannot resurrect a cancelled call");
++    DBCallEventTracker *capacity = [[DBCallEventTracker alloc] init];
++    for (NSUInteger i = 0; i < 129; ++i) {
++      NSMutableDictionary *event = [chime mutableCopy];
++      [event setObject:[NSString stringWithFormat:@"pending-%lu", (unsigned long)i] forKey:@"call_id"];
++      require([capacity queueChimeEvent:event coreGeneration:1 now:100], @"new pending identity is accepted");
++    }
++    require(capacity.pendingChimeCount == 128, @"unresolved targeted notifications have fixed capacity");
++    [capacity takeReadyChimesFromSnapshot:nil coreGeneration:1 now:110];
++    require(capacity.pendingChimeCount == 0, @"capacity clears at the bounded admission deadline");
++    DBCallTiming *timing = [[DBCallTiming alloc] init];
++    observe(timing, sample(@"s1", 1, 100, 0, @10000, @10000, 1000000), 100);
++    DBCallTimingReading *r = observe(timing, sample(@"s1", 1, 106, 0, @10000, @10000, 700000), 106);
++    require([r.remainingSeconds doubleValue] == 4, @"same cache cannot reset deadline");
++    r = observe(timing, sample(@"s1", 1, 107, 0, nil, @10000, 1000000), 107);
++    require(r.remainingSeconds == nil && !r.mayRestore, @"missing duration remains unknown");
++    r = observe(timing, sample(@"s1", 1, 111, 0, @10000, @10000, 1000000), 111);
++    require([r.remainingSeconds doubleValue] == 0 && !r.mayRestore, @"invalid read cannot erase old anchor");
++    DBCallEventTracker *expiredTracker = [[DBCallEventTracker alloc] init];
++    require([expiredTracker acceptChimeEvent:chime timingReading:r] == nil,
++        @"expired Core projection cannot re-ring");
++    for (id invalid in @[@(-1), @YES, @(NAN), @(INFINITY), @1.5, @9007199254740992.0]) {
++      r = observe(timing, sample(@"s2", 1, 120, 0, invalid, @10000, 1000000), 120);
++      require(r.remainingSeconds == nil && !r.mayRestore, @"malformed duration must not become a timer");
++    }
++    r = observe(timing, sample(@"s3", 1, 130, -1, @10000, @10000, 1000000), 130);
++    require(r.disposition == DBCallTimingUnavailable, @"unknown age blocks recovery");
++    r = observe(timing, sample(@"s3", 1, 130, 0, @10000, @10001, 1000000), 130);
++    require(!r.mayRestore, @"recovery window cannot exceed ten seconds");
++
++    DBCallTimingSnapshot *old = sample(@"s4", 1, 140, 0, @10000, @10000, 1000000);
++    observe(timing, old, 140);
++    [timing requireFreshSnapshot:old];
++    [timing reset];
++    require(observe(timing, old, 140).disposition == DBCallTimingUnavailable,
++        @"foreground same generation and age cannot prove freshness after sleep");
++    require(observe(timing, sample(@"s5", 1, 140, 0, @0, @0, 1000000), 140).disposition == DBCallTimingActive,
++        @"a new Core sample releases the foreground barrier");
++    DBCallTiming *unknown = [[DBCallTiming alloc] init];
++    [unknown requireFreshSnapshot:nil];
++    require(![unknown acceptsSnapshot:old] && ![unknown acceptsSnapshot:old],
++        @"without previous reads the first sample is only a baseline");
++    require([unknown acceptsSnapshot:sample(@"s4", 2, 140, 0, @10000, @10000, 1000000)],
++        @"new Core lifetime releases the barrier");
++    NSDictionary *callback = [timing callbackForCall:@"c1" coreGeneration:1];
++    require([timing acceptsCallback:callback callID:@"c1" coreGeneration:1], @"current callback is accepted");
++    require(![timing acceptsCallback:callback callID:@"c1" coreGeneration:2], @"old Core callback is rejected");
++    require(![timing acceptsCallback:callback callID:@"replacement" coreGeneration:1], @"old call callback is rejected");
++    [timing invalidateCallbacks];
++    require(![timing acceptsCallback:callback callID:@"c1" coreGeneration:1], @"old timer revision is rejected");
++    DBCallTiming *owned = [[DBCallTiming alloc] init];
++    NSMutableDictionary *local = [[[sample(@"owned", 1, 200, 0, @10000, @10000, 1000000)
++        .document objectForKey:@"active_calls"] objectAtIndex:0] mutableCopy];
++    [local setObject:@"self" forKey:@"origin"];
++    NSMutableDictionary *foreign = [local mutableCopy];
++    [foreign setObject:@"foreign" forKey:@"call_id"];
++    [foreign setObject:@"other" forKey:@"origin"];
++    NSDictionary *document = @{@"snapshot_generation": @"owned", @"snapshot_age_ms": @0,
++        @"active_calls": @[foreign, local]};
++    DBCallTimingSnapshot *ownedSnapshot = [[DBCallTimingSnapshot alloc]
++        initWithDocument:document coreGeneration:1 requestedAt:200];
++    [owned observeRecoverySnapshot:ownedSnapshot callID:@"c1" role:@"door_station"
++        nodeID:@"self" door:@"front" now:200];
++    ownedSnapshot = [[DBCallTimingSnapshot alloc] initWithDocument:document
++        coreGeneration:1 requestedAt:205];
++    require([owned observeRecoverySnapshot:ownedSnapshot callID:@"foreign" role:@"door_station"
++        nodeID:@"self" door:@"front" now:205].disposition == DBCallTimingUnavailable,
++        @"foreign candidates cannot replace an owned recovery anchor");
++    r = [owned observeRecoverySnapshot:ownedSnapshot callID:@"c1" role:@"door_station"
++        nodeID:@"self" door:@"front" now:205];
++    require([r.remainingSeconds doubleValue] == 5 && [r.recoveryRemainingSeconds doubleValue] == 5,
++        @"owned cached call and recovery deadlines remain unchanged after foreign candidates");
++    require(DBCallMonotonicTime() > 0, @"historical monotonic adapter returns measured time");
++    puts("compatibility call timing: live chime, bounded admission, wall offsets, cache age, recovery, foreground and stale callbacks passed");
++  }
++  return 0;
++}

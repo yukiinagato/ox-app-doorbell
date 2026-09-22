@@ -1,0 +1,19 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "227d6e639873da6594919090ed0d0b3740ed41f4911ebaede16b232d1d1f613e",
+  "inputs": {
+    "core/src/store/store.cpp": "7a4dc7295fec3095a8b51e30db114b8f30c74fdbbc8fb97472e8eb8e94e4e0b1",
+    "core/src/store/store.h": "35e14c7b90ee3f84f6b4349a0bc52e4d096393b2d44bbad5bb029bb285027702",
+    "core/src/store/operation_ledger.cpp": "1b71491e5a154f4dcaaf97387270e7dd464ba39cd2516af923030a90c7b62a69",
+    "core/src/store/operation_ledger.h": "ea5cc34c0979b098a58061077f03a136ca1f8beb5118adad2be680997f728331",
+    "core/tests/test_operations.cpp": "b202300a4e7606dd5ab8b9a1716e84cd7292d4062c77ccf15b998bbd2fa293ca",
+    "core/tests/test_operations_disk.cpp": "28a604ade194304279ab74e5ae2b4cae21ea0415339091c6d84286d0ca46f4b1"
+  },
+  "baseline_store_inputs": {
+    "build/remediation-t05-20260922/before/store.cpp": "cab46272797326b09d46b044aac2b71550bc73f63444e0c7b5c6c7a08e246251",
+    "build/remediation-t05-20260922/before/store.h": "f808d02269198816af2e5547788dfb3c184db63117fb75ea9a1bdeb55f55221e"
+  },
+  "scope_note": "T05 Store production implementation and its real SQLite tests. Delta is relative to preserved Store baseline that already contains T03 and T08 configPutBatchWithMeta; it does not claim those changes as T05. Node/HTTP integration belongs to T06, hardware qualification to platform tasks. Newly implemented API has no compilable predecessor; no compile-failure RED is claimed.",
+  "candidate_note": "R2 aligns operation_id with frozen C02: 16 secure random bytes, exactly 32 lowercase hex characters. R1 is retained as superseded development evidence."
+}

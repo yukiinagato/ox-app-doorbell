@@ -1,0 +1,13 @@
+AssertionError [ERR_ASSERTION]: Slow retirement must coalesce changes into one successor
+
+1 !== 2
+
+    at T14-04 (/Users/ox/Documents/project/app-doorbell/webui/tests/call_ua_generation.test.js:78:12)
+    at async /Users/ox/Documents/project/app-doorbell/webui/tests/call_ua_generation.test.js:90:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: 1,
+  expected: 2,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

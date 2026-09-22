@@ -1,0 +1,45 @@
+{
+  "task_id": "T11",
+  "status": "VERIFIED_IN_SCOPE",
+  "scope": "production_test",
+  "source_manifest": "after-source.json",
+  "task_diff_sha256": "6fab0bcc06991a82f13a7406023da9af2836542e4f1edbd437f6bbe73fcd47b1",
+  "tests": [
+    {
+      "id": "T11-01",
+      "status": "PASS",
+      "red_log": "before-T11-01.log",
+      "green_log": "call_heartbeat.log",
+      "green_metadata": "call_heartbeat.json"
+    },
+    {
+      "id": "T11-02",
+      "status": "PASS",
+      "red_log": "before-T11-02.log",
+      "green_log": "call_heartbeat.log",
+      "green_metadata": "call_heartbeat.json"
+    },
+    {
+      "id": "T11-03",
+      "status": "PASS",
+      "red_log": "before-T11-03.log",
+      "green_log": "call_heartbeat.log",
+      "green_metadata": "call_heartbeat.json"
+    },
+    {
+      "id": "T11-04",
+      "status": "PASS",
+      "red_log": "before-T11-04.log",
+      "green_log": "call_heartbeat.log",
+      "green_metadata": "call_heartbeat.json"
+    }
+  ],
+  "core_contract": {
+    "red": "core-red.json",
+    "green": "core-panel.json",
+    "result": "6 cases, 441 assertions; all pass"
+  },
+  "web_regressions": "web-suite.json",
+  "limitation": "Controlled host HTTP and Node VM production-page execution. No real SIP session, browser suspension qualification, physical action, deployment, or device claim.",
+  "independent_review": "review.json"
+}

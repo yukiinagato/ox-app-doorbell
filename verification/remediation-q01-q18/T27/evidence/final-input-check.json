@@ -1,0 +1,8 @@
+{
+  "recorded_at": "2026-09-22T16:38:03.189010+00:00",
+  "exit_code": 0,
+  "matched_inputs": 11,
+  "browser_app_and_cases_match": true,
+  "all_recorded_assertions_pass": true,
+  "acceptance_sha256": "eed4fca6eca32480f19944b0846909bea92e843372b9d6ffe0f7f800e6a9aea9"
+}

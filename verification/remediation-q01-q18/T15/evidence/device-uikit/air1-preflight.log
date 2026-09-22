@@ -1,0 +1,15 @@
+iPad4,2
+Information for jp.ox.doorbell
+State: jp.ox.doorbell <installed >
+Path: /private/var/containers/Bundle/Application/64FD671A-D11A-464E-8D6B-C2A35A9F31F0/Doorbell.app
+Container Path: /var/mobile
+I don't understand '--help'
+Usage: lsdtrip.arm64 [apps|plugins|publicurls|privateurls] [-v]
+                app _bundle_id_ (implies -v for this app)
+                launch _bundle_id_
+                advid [clear]
+                whohas _url_ 
+                types
+                dump
+
+Set CFSHOW=1 to use CFshow in place of J's dumping function (which is still a work in progress)

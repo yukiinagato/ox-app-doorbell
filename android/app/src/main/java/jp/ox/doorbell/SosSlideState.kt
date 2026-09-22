@@ -72,6 +72,14 @@ internal class SosSlideState(countdownSeconds: Int) {
         return snapshot()
     }
 
+    /** Explicit accessibility confirmation enters the same cancellable countdown as a slide. */
+    fun confirm(): SosSnapshot {
+        if (phase == SosPhase.COUNTDOWN || phase == SosPhase.FIRED) return snapshot()
+        begin()
+        drag(1f)
+        return release()
+    }
+
     /** One second of the countdown elapsed; fires when it reaches zero. */
     fun tick(): SosSnapshot {
         if (phase != SosPhase.COUNTDOWN) return snapshot()

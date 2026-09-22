@@ -1,0 +1,30 @@
+{
+  "task_id": "T19",
+  "status": "VERIFIED_IN_SCOPE",
+  "tests": [
+    {
+      "id": "T19-01",
+      "status": "PASS",
+      "evidence": "t19-green.json"
+    },
+    {
+      "id": "T19-02",
+      "status": "PASS",
+      "evidence": "t19-green.json"
+    },
+    {
+      "id": "T19-03",
+      "status": "PASS",
+      "evidence": "t19-green.json"
+    },
+    {
+      "id": "T19-04",
+      "status": "PASS",
+      "evidence": "t19-green.json"
+    }
+  ],
+  "source_manifest": "../source-final.json",
+  "limits": [
+    "Core production tests with deterministic clock/transport and SIP stub; client migration and hardware gates are separate."
+  ]
+}

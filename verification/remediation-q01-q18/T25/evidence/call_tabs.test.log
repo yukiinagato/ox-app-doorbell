@@ -1,0 +1,5 @@
+T13-01: PASS
+T13-02: PASS
+T13-03: PASS
+T13-04: PASS
+Door tabs execute the production page renderer; native browser focus is verified separately.

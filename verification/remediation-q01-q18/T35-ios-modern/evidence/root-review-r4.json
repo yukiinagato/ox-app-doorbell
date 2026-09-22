@@ -1,0 +1,21 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T17:38:17.150726+00:00",
+  "status": "APPROVED_SOURCE_CORRECTION_PENDING_UIKIT_RUNTIME",
+  "source_manifest_sha256": "92ed542708ffa474244241f9a07ee2933a5c3bd6e74b92204b01f03242d32b7f",
+  "reviewed_inputs": {
+    "ios/Doorbell/MainViewController.swift": "215b493176ba05cfba69c7dcca31926835c0a8837974c2960d02ad4a765118fc",
+    "ios/DoorbellTests/VisitorScreenLayoutTests.swift": "76d3bb87b747b4b60b2ae4c933983313d837f9de079938240d10357a7fddef22"
+  },
+  "findings": [
+    {
+      "id": "R1",
+      "status": "SOURCE_CORRECTED_RUNTIME_PENDING",
+      "description": "The status scroll viewport is constrained between the safe-area top and fixed end button with clipping. Full multiline title content can scroll; the added UIKit test checks visible title/button intersection at both scroll extremes across five sizes and maximum Dynamic Type."
+    }
+  ],
+  "limitations": [
+    "UIKit test execution timed out before any Test Suite/Test Case result; compile success is not runtime qualification.",
+    "This is a review of the R1 correction and its test assertions, not proof of all visitor/device/SIP behavior."
+  ]
+}

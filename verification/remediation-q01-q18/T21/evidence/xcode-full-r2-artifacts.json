@@ -1,0 +1,26 @@
+{
+  "run": "xcode-full-r2",
+  "recorded_after_completed_run": true,
+  "observed_at": "2026-09-22T14:42:55.836504+00:00",
+  "app": "build/remediation-t21-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app",
+  "version": "0.1.37",
+  "build": "38",
+  "minimum_os": "12.0",
+  "sip_backend": "stub",
+  "executable": "build/remediation-t21-20260922/xcode-normal/Build/Products/Debug-iphonesimulator/Doorbell.app/Doorbell",
+  "executable_sha256": "9d1e5e42104fb7d1557c9e18541fe379c60fad80f5ab699bf8f58c36e4918f24",
+  "retained_executable": "build/remediation-t21-20260922/artifact-snapshots/xcode-full-r2/Doorbell",
+  "native_inputs": [
+    {
+      "path": "ios/build/core/iphonesimulator/arm64/min-12.0/libdoorbell_all.a",
+      "retained_path": "build/remediation-t21-20260922/artifact-snapshots/xcode-full-r2/libdoorbell_all.a",
+      "sha256": "cd895baaa4e50aa6d138fc4c3e5c0cd50429d2626c583294580619888ad6b101"
+    },
+    {
+      "path": "ios/build/core/iphonesimulator/arm64/min-12.0/artifact-manifest.json",
+      "retained_path": "build/remediation-t21-20260922/artifact-snapshots/xcode-full-r2/artifact-manifest.json",
+      "sha256": "1d3d78d569a2a36dbd80c4108c670a2dfdf9d6d413c6cf627bdd34e0a58cf851"
+    }
+  ],
+  "native_scope_note": "Completed-run native archive and manifest identities; shared native build lane reused by later commands only after these retained copies."
+}

@@ -1,0 +1,101 @@
+--- r2/core/tests/test_admin_api.cpp
++++ r3/core/tests/test_admin_api.cpp
+@@ -9,6 +9,7 @@
+ #include <algorithm>
+ #include <atomic>
+ #include <chrono>
++#include <condition_variable>
+ #include <cstdio>
+ #include <functional>
+ #include <mutex>
+@@ -2639,3 +2640,90 @@
+   unavailable();
+   db_core_destroy(core);
+ }
++
++namespace {
++struct CasCommitBarrier {
++  std::mutex mutex;
++  std::condition_variable changed;
++  bool entered = false;
++  bool released = false;
++};
++CasCommitBarrier* casCommitBarrier = nullptr;
++void waitAtCasCommit(sqlite3_context* context, int, sqlite3_value**) {
++  auto* barrier = casCommitBarrier;
++  if (!barrier) { sqlite3_result_int(context, 1); return; }
++  std::unique_lock<std::mutex> lock(barrier->mutex);
++  barrier->entered = true;
++  barrier->changed.notify_all();
++  if (!barrier->changed.wait_for(lock, std::chrono::seconds(10), [&] { return barrier->released; }))
++    sqlite3_result_error(context, "test commit barrier timeout", -1);
++  else sqlite3_result_int(context, 1);
++}
++int installCasCommitBarrier(sqlite3* database, char**, const sqlite3_api_routines*) {
++  return sqlite3_create_function(database, "t26_commit_barrier", 0, SQLITE_UTF8, nullptr,
++                                  waitAtCasCommit, nullptr, nullptr);
++}
++}
++
++TEST_CASE("config CAS: a competing native write queued inside persistence cannot cross the compare boundary") {
++  REQUIRE(sqlite3_auto_extension(reinterpret_cast<void(*)()>(installCasCommitBarrier)) == SQLITE_OK);
++  auto options = casOptions();
++  options.data_dir = adminTempDir();
++  RealClock clock;
++  Runloop loop(clock);
++  loop.start();
++  NodeDeps dependencies;
++  dependencies.clock = &clock;
++  dependencies.loop = &loop;
++  {
++    Node node(options, std::move(dependencies));
++    REQUIRE(node.start());
++    node.setConfigKey("cas.document", R"({"name":"base","future":42})");
++    const auto revision = casRevision(node);
++    sqlite3* database = nullptr;
++    REQUIRE(sqlite3_open((options.data_dir + "/doorbell.db").c_str(), &database) == SQLITE_OK);
++    REQUIRE(sqlite3_exec(database, "CREATE TRIGGER t26_pause_commit BEFORE INSERT ON config "
++        "WHEN NEW.key='cas.document' BEGIN SELECT t26_commit_barrier(); END", nullptr, nullptr, nullptr) == SQLITE_OK);
++    sqlite3_close(database);
++    CasCommitBarrier barrier;
++    casCommitBarrier = &barrier;
++    std::string first, second;
++    std::atomic<bool> competing_entered{false};
++    std::thread writer([&] {
++      first = node.configCommitJson(casRequest(revision,
++          R"([{"op":"set","key":"cas.document","value":{"name":"first"}}])"));
++    });
++    bool entered = false;
++    {
++      std::unique_lock<std::mutex> lock(barrier.mutex);
++      entered = barrier.changed.wait_for(lock, std::chrono::seconds(10), [&] { return barrier.entered; });
++    }
++    CHECK(entered);
++    const bool queued = loop.post([&] {
++      competing_entered = true;
++      second = node.configCommitJson(casRequest(revision,
++          R"([{"op":"set","key":"cas.document","value":{"name":"second"}}])"));
++    });
++    CHECK(queued);
++    CHECK_FALSE(competing_entered.load());
++    auto published = json::parse(node.configJson());
++    CHECK(json::getString(json::get(json::get(published.get(), "cas"), "document"), "name") == "base");
++    {
++      std::lock_guard<std::mutex> lock(barrier.mutex);
++      barrier.released = true;
++    }
++    barrier.changed.notify_all();
++    writer.join();
++    loop.callSync([] {});
++    casCommitBarrier = nullptr;
++    CHECK(competing_entered.load());
++    CHECK(json::getBool(json::parse(first).get(), "ok"));
++    CHECK(json::getString(json::parse(second).get(), "error_code") == "config_conflict");
++    auto current = json::parse(node.configJson());
++    CHECK(json::getString(json::get(json::get(current.get(), "cas"), "document"), "name") == "first");
++    node.stop();
++  }
++  loop.stop();
++  sqlite3_cancel_auto_extension(reinterpret_cast<void(*)()>(installCasCommitBarrier));
++  removeAdminTempDir(options.data_dir);
++}

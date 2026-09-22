@@ -1,0 +1,73 @@
+09-22 23:23:28 I [httpd] listening on 23907
+09-22 23:23:33 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:23:34 I [httpd] stopped
+09-22 23:23:34 I [httpd] listening on 23546
+09-22 23:23:39 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:23:40 I [httpd] stopped
+09-22 23:23:40 I [httpd] listening on 20550
+09-22 23:23:45 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:23:46 I [httpd] stopped
+09-22 23:23:46 I [httpd] listening on 24550
+09-22 23:23:51 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:23:52 I [httpd] stopped
+09-22 23:23:52 I [httpd] listening on 28765
+09-22 23:23:57 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:23:58 I [httpd] stopped
+09-22 23:23:58 I [httpd] listening on 20085
+09-22 23:24:03 W [httpd] handler timed out after 5000ms: /api/test-write
+09-22 23:24:04 I [httpd] stopped
+09-22 23:24:04 I [httpd] listening on 27912
+09-22 23:24:06 I [httpd] stopped
+09-22 23:24:06 I [httpd] listening on 28567
+09-22 23:24:08 I [httpd] stopped
+09-22 23:24:08 I [httpd] listening on 21807
+09-22 23:24:10 I [httpd] stopped
+09-22 23:24:10 I [httpd] listening on 27178,[::]:27178
+09-22 23:24:12 I [httpd] stopped
+09-22 23:24:12 I [httpd] listening on 20318,[::]:20318
+09-22 23:24:14 I [httpd] stopped
+09-22 23:24:14 I [httpd] listening on 28134,[::]:28134
+09-22 23:24:16 I [httpd] stopped
+09-22 23:24:16 I [httpd] listening on 25220,[::]:25220
+09-22 23:24:18 I [httpd] stopped
+09-22 23:24:18 I [httpd] listening on 31941,[::]:31941
+09-22 23:24:20 I [httpd] stopped
+09-22 23:24:20 I [httpd] listening on 31170,[::]:31170
+09-22 23:24:22 I [httpd] stopped
+09-22 23:24:22 I [httpd] listening on 26300
+09-22 23:24:25 I [httpd] stopped
+09-22 23:24:25 I [httpd] listening on 22551,[::]:22551
+09-22 23:24:27 I [httpd] stopped
+09-22 23:24:27 W [httpd] civetweb: cannot bind to IPv6 [::]:31499: 48 (Address already in use)
+09-22 23:24:27 W [httpd] civetweb: Failed to setup server ports
+09-22 23:24:27 I [httpd] listening on 31499
+09-22 23:24:29 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:260:
+TEST CASE:  httpd: scheduling shutdown expires queued work and releases its owner
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:284: ERROR: CHECK( stopped_without_loop ) is NOT correct!
+  values: CHECK( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:288: ERROR: CHECK( response.status == 503 ) is NOT correct!
+  values: CHECK( -1 == 503 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:289: ERROR: CHECK( response.body.find("not_started") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:298:
+TEST CASE:  httpd: scheduling shutdown preserves an already running owned request
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:326: ERROR: CHECK( response.status == 503 ) is NOT correct!
+  values: CHECK( -1 == 503 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_httpd.cpp:327: ERROR: CHECK( response.body.find("outcome_unknown") != std::string::npos ) is NOT correct!
+  values: CHECK( 18446744073709551615 != 18446744073709551615 )
+
+===============================================================================
+[doctest] test cases:  13 |  11 passed | 2 failed | 416 skipped
+[doctest] assertions: 256 | 251 passed | 5 failed |
+[doctest] Status: FAILURE!

@@ -79,3 +79,12 @@ Keep comments only when they explain an API contract, ownership/lifetime,
 threading, a security decision, or a required old-OS/hardware workaround.
 Remove narration, completed phase notes, obsolete TODOs, commented-out code,
 and documentation duplicated inline.
+
+## Local test devices
+
+The iPad Air 1 is a designated Doorbell test device. Read
+`docs/en/test-devices.md` before accessing it. From this Mac, use
+`ssh doorbell-ipad-air1` for verified LAN access. Connection keys remain under
+`~/.ssh`, outside this repository. Local device memory also lives in
+`/Users/ox/.codex/memories/doorbell-device-access.md` and the project's existing
+Claude memory directory. Preserve the test-device no-backup policy.

@@ -1,0 +1,11 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "core_manifest": "core-source-green.json",
+  "web_manifest": "evidence/web-source.json",
+  "core_snapshot_sha256": "28471a68a44ccea047f1c7db4a19fced86f38eb0490c0ee0e156edb4f8366ce3",
+  "web_patch_sha256": "02bc5d229b8904b872585b57b178e19594f26261b651294e218841b8728ac28b",
+  "recorded_at": "2026-09-22T16:34:08.753358+00:00",
+  "artifact_sha256": "e54551fdff9538fc3ca488e3283b0e4f0ba5846497a56e7ec9478135b3683851",
+  "diff_sha256": "0ebc2a7cf0af33d8b00cf45cd50413b1a23ddb5323a77f99fc42b8c9180b4acb"
+}

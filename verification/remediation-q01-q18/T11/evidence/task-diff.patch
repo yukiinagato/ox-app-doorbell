@@ -1,0 +1,636 @@
+--- before/webui/panel/call.html
++++ after/webui/panel/call.html
+@@ -194,6 +194,7 @@
+ let selectionRevision = 0;
+ let pageRevision = 0;
+ let pageActive = true;
++let callRevision = 0;
+ const statePoll = makePoll(1000, 3000);
+ const callInfoPoll = makePoll(5000, 4000);
+ const localePoll = makePoll(0, 4000);
+@@ -459,6 +460,7 @@
+     return;
+   }
+   activeLifecycle = binding;
++  callRevision++;
+   setStatus(answering ? t("panel.answering") : t("calling.title"));
+   els.call.textContent = t("incall.end");
+   els.call.classList.add("hang");
+@@ -477,9 +479,14 @@
+       binding.answerPromise = postLifecycle(binding, "answered").then(result => {
+         binding.answered = result.ok;
+         binding.owner = result.dialog_owner || "";
+-        if (!result.ok && session === newSession) {
+-          setStatus(t("panel.lifecycle_connected_sync_failed"), true);
+-          endCall("lifecycle_rejected");
++        if (activeLifecycle === binding && session === newSession) {
++          if (!result.ok || !acceptLease(binding, result)) {
++            setStatus(t(result.ok ? "panel.lifecycle_lease_unavailable" :
++              "panel.lifecycle_connected_sync_failed"), true);
++            endCall("lifecycle_rejected", binding, newSession);
++          } else {
++            scheduleHeartbeat(binding, 2000);
++          }
+         }
+         return result.ok;
+       });
+@@ -497,43 +504,118 @@
+   });
+ }
+ 
+-async function postLifecycle(binding, state, reason) {
+-  if (MOCK || !binding) return { ok: true, dialog_owner: "mock" };
+-  try {
+-    const response = await fetch("/api/panel/call-lifecycle", {
+-      method: "POST",
+-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+-      body: DoorbellCallFlow.lifecycleForm(binding.door, binding.callId,
+-        binding.stageRevision, state, binding.dialogId, reason),
+-    });
+-    if (!response.ok) return { ok: false, dialog_owner: "" };
+-    const body = await response.json();
+-    return { ok: body.ok === true, dialog_owner: body.dialog_owner || binding.owner || "" };
+-  } catch (e) {
+-    return { ok: false, dialog_owner: "" };
+-  }
++function postLifecycle(binding, state, reason, lane) {
++  const request = { callId: binding.callId, stageRevision: binding.stageRevision,
++    owner: binding.owner, started: monotonicNow() };
++  return new Promise(resolve => {
++    const complete = result => {
++      const body = result.data || {};
++      resolve(Object.assign({}, body, { ok: result.ok && body.ok === true,
++        status: result.status || 0, kind: result.kind, error_code: result.error_code || "",
++        request: request }));
++    };
++    try {
++      const remaining = state === "heartbeat" ? binding.leaseDeadline - request.started : 1500;
++      const options = { url: "/api/panel/call-lifecycle", method: "POST",
++        deadline_ms: Math.max(1, Math.min(1500, Math.floor(remaining))),
++        headers: { "Content-Type": "application/x-www-form-urlencoded" },
++        body: DoorbellCallFlow.lifecycleForm(binding.door, request.callId,
++          request.stageRevision, state, binding.dialogId, reason) };
++      const handle = lane ? lane.start(options, complete) :
++        DoorbellPanelRuntime.requestWithDeadline(options, complete);
++      if (!handle) complete({ ok: false, kind: "busy" });
++    } catch (error) { complete({ ok: false, kind: "network" }); }
++  });
+ }
+ 
+ function reportLifecycleEnd(binding, reason) {
+   if (!binding || binding.ended) return;
+   binding.ended = true;
++  const revision = callRevision;
+   Promise.resolve(binding.answerPromise || binding.answered).then(answered => {
+     if (answered) return postLifecycle(binding, "ended", reason || "sip_ended");
+     return { ok: false };
+   }).then(result => {
+-    if (binding.answered && !result.ok && !session)
++    if (binding.answered && !result.ok && !session && revision === callRevision)
+       setStatus(t("panel.lifecycle_end_sync_failed"), true);
+   });
+ }
+ 
++function heartbeatCurrent(binding, expectedSession) {
++  return pageActive && activeLifecycle === binding && !binding.ended &&
++    session && (!expectedSession || session === expectedSession);
++}
++
++function stopHeartbeat(binding, preserveExpiry) {
++  if (!binding) return;
++  clearTimeout(binding.heartbeatTimer);
++  binding.heartbeatTimer = null;
++  if (!preserveExpiry) { clearTimeout(binding.leaseTimer); binding.leaseTimer = null; }
++  binding.heartbeatGeneration = (binding.heartbeatGeneration || 0) + 1;
++  binding.heartbeatPending = false;
++  if (binding.heartbeatLane) binding.heartbeatLane.cancel();
++}
++
++function expireLease(binding, expectedSession) {
++  if (!heartbeatCurrent(binding, expectedSession)) return;
++  setStatus(t("panel.lifecycle_lease_expired"), true);
++  endCall("lifecycle_lease_lost", binding, session);
++}
++
++function acceptLease(binding, result) {
++  const remaining = result.lease_remaining_ms, request = result.request;
++  if (!request || result.call_id !== binding.callId ||
++      result.stage_revision !== request.stageRevision || binding.stageRevision !== request.stageRevision ||
++      !binding.owner || result.dialog_owner !== binding.owner ||
++      typeof remaining !== "number" || !Number.isInteger(remaining) || remaining < 0 || remaining > 10000)
++    return false;
++  const deadline = request.started + remaining;
++  if (deadline <= monotonicNow()) return false;
++  binding.leaseDeadline = deadline;
++  binding.heartbeatRetry = 0;
++  clearTimeout(binding.leaseTimer);
++  const expectedSession = session;
++  binding.leaseTimer = setTimeout(() => {
++    if (binding.leaseDeadline === deadline) expireLease(binding, expectedSession);
++  }, Math.max(0, deadline - monotonicNow()));
++  return true;
++}
++
++function scheduleHeartbeat(binding, delay) {
++  if (!heartbeatCurrent(binding) || !Number.isFinite(binding.leaseDeadline)) return;
++  clearTimeout(binding.heartbeatTimer);
++  const remaining = binding.leaseDeadline - monotonicNow();
++  if (remaining <= 0) { expireLease(binding, session); return; }
++  if (document.hidden || binding.awaitingAuthority) return;
++  binding.heartbeatTimer = setTimeout(() => heartbeatLifecycle(binding), Math.min(delay, remaining));
++}
++
+ function heartbeatLifecycle(binding) {
+-  if (!binding || !binding.answered || binding.heartbeatPending) return;
++  if (!binding || !binding.answered || !heartbeatCurrent(binding) || binding.heartbeatPending ||
++      document.hidden || binding.awaitingAuthority || !Number.isFinite(binding.leaseDeadline)) return;
++  if (monotonicNow() >= binding.leaseDeadline) { expireLease(binding, session); return; }
++  if (binding.recoveryPending) { scheduleHeartbeat(binding, 500); return; }
++  clearTimeout(binding.heartbeatTimer);
++  binding.heartbeatTimer = null;
++  if (!binding.heartbeatLane) binding.heartbeatLane = DoorbellPanelRuntime.createRequestLane();
++  const expectedSession = session, generation = binding.heartbeatGeneration || 0;
+   binding.heartbeatPending = true;
+-  postLifecycle(binding, "heartbeat").then(result => {
++  postLifecycle(binding, "heartbeat", "", binding.heartbeatLane).then(result => {
++    if (!heartbeatCurrent(binding, expectedSession) ||
++        (binding.heartbeatGeneration || 0) !== generation) return;
+     binding.heartbeatPending = false;
+-    if (!result.ok && activeLifecycle === binding && session) {
++    if (monotonicNow() >= binding.leaseDeadline) { expireLease(binding, expectedSession); return; }
++    if (["stale_owner", "call_ended", "auth_required", "permission_denied"].includes(result.error_code)) {
+       setStatus(t("panel.lifecycle_heartbeat_failed"), true);
+-      endCall("lifecycle_lease_lost");
++      endCall("lifecycle_lease_lost", binding, expectedSession);
++    } else if (result.ok && acceptLease(binding, result)) {
++      setStatus(t("incall.title"));
++      scheduleHeartbeat(binding, 2000);
++    } else {
++      setStatus(t("panel.control_reconnecting"), true);
++      const delay = [500, 1000, 2000][Math.min(binding.heartbeatRetry || 0, 2)];
++      binding.heartbeatRetry = Math.min((binding.heartbeatRetry || 0) + 1, 2);
++      scheduleHeartbeat(binding, delay);
+     }
+   });
+ }
+@@ -564,6 +646,8 @@
+   if (expectedBinding && (activeLifecycle !== expectedBinding || session !== expectedSession)) return false;
+   const binding = activeLifecycle;
+   const endedSession = session;
++  stopHeartbeat(binding);
++  callRevision++;
+   session = null;
+   sessionConfirmed = false;
+   activeLifecycle = null;
+@@ -625,6 +709,12 @@
+   if (!pageActive) return;
+   pageRevision++;
+   retireReads();
++  if (activeLifecycle) {
++    activeLifecycle.awaitingAuthority = true;
++    stopHeartbeat(activeLifecycle, true);
++    setStatus(t("panel.control_reconnecting"), true);
++    if (monotonicNow() >= activeLifecycle.leaseDeadline) expireLease(activeLifecycle, session);
++  }
+   if (!document.hidden) start();
+ });
+ 
+@@ -696,6 +786,7 @@
+     activeLifecycle.stageRevision = Math.max(activeLifecycle.stageRevision, refreshed.stage_revision);
+   if (callSnapshotCurrent && refreshed && sessionConfirmed && activeLifecycle && refreshed.dialog_owner &&
+     activeLifecycle.owner && refreshed.dialog_owner !== activeLifecycle.owner) {
++    stopHeartbeat(activeLifecycle);
+     activeLifecycle.ended = true;
+     activeLifecycle = null;
+     setStatus(t("panel.other_answered"));
+@@ -712,7 +803,11 @@
+       finishRecovery(recoveryBinding, recoverySession, ok);
+     });
+   }
+-  heartbeatLifecycle(activeLifecycle);
++  if (activeLifecycle && activeLifecycle.awaitingAuthority && callSnapshotCurrent && refreshed &&
++      refreshed.dialog_owner === activeLifecycle.owner && !activeLifecycle.recoveryPending) {
++    activeLifecycle.awaitingAuthority = false;
++    heartbeatLifecycle(activeLifecycle);
++  }
+   const disposition = callSnapshotCurrent ? DoorbellCallFlow.residentDisposition(
+     refreshed ? refreshed.call_state : "", sessionConfirmed, !!activeLifecycle) : "keep";
+   if (disposition === "answered_elsewhere") {
+--- before/webui/tests/call_page_fixture.js
++++ after/webui/tests/call_page_fixture.js
+@@ -34,9 +34,9 @@
+       XMLHttpRequest: function () {
+         this.open = (_method, url) => { this.url = url; };
+         this.setRequestHeader = () => {};
+-        this.send = () => {
++        this.send = body => {
+           const success = this.onload;
+-          requests.push({ url: this.url, xhr: this, response: { resolve: async response => {
++          requests.push({ url: this.url, body, xhr: this, response: { resolve: async response => {
+             this.status = response.status === undefined ? 200 : response.status;
+             this.responseText = JSON.stringify(await response.json());
+             if (success) success();
+@@ -52,8 +52,8 @@
+       establishSession(cb) { cb({ ok: true }); } },
+     DoorbellPanelVideo: { create() { return { stop() {} }; } },
+     DoorbellPlayback: { proxyMp4Url() { return ""; }, start() { return { stop() {} }; } },
+-    fetch(url) {
+-      const response = deferred(); requests.push({ url, response }); return response.promise;
++    fetch(url, options = {}) {
++      const response = deferred(); requests.push({ url, body: options.body, response }); return response.promise;
+     }
+   });
+   vm.runInContext(fs.readFileSync(path.join(__dirname, "../panel/runtime.js"), "utf8"), context);
+--- before/webui/tests/call_poll_lanes.test.js
++++ after/webui/tests/call_poll_lanes.test.js
+@@ -34,14 +34,15 @@
+   },
+   async "T10-02"() {
+     const r = runtime(); r.activate("A", "current", 2);
+-    r.run('LANG="ja"; I18N={"panel.call_title":"Retained dictionary"}; activeLifecycle.answered=true; activeLifecycle.dialogId="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; start();');
++    r.run('LANG="ja"; I18N={"panel.call_title":"Retained dictionary"}; activeLifecycle.answered=true; activeLifecycle.dialogId="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"; activeLifecycle.leaseDeadline=10000; heartbeatLifecycle(activeLifecycle); start();');
+     assert.strictEqual(pending(r, "/state").length, 1, "startup state does not wait for locale");
+     await reply(r, "/api/panel/call-info", info);
+     for (let i = 0; i < 5; i++) {
+       if (i) r.advance(1000);
+       await reply(r, "/state", { doors: [{ id: "A", call_id: "current", stage_revision: 2, call_state: "in_call", dialog_owner: "mine" }] });
+       if (pending(r, "/api/panel/call-lifecycle").length)
+-        await reply(r, "/api/panel/call-lifecycle", { ok: true, dialog_owner: "mine" });
++        await reply(r, "/api/panel/call-lifecycle", { ok: true, dialog_owner: "mine",
++          call_id: "current", stage_revision: 2, lease_remaining_ms: 10000 });
+     }
+     assert.strictEqual(r.run('t("panel.call_title")'), "Retained dictionary", "failed locale retains valid dictionary");
+     assert.strictEqual(r.run("LANG"), "ja");
+--- before/webui/tests/call_heartbeat.test.js
++++ after/webui/tests/call_heartbeat.test.js
+@@ -0,0 +1,146 @@
++"use strict";
++const assert = require("assert");
++const { runtime } = require("./call_page_fixture.js");
++const flush = async () => { for (let i = 0; i < 12; i++) await Promise.resolve(); };
++function pending(r, state) {
++  return r.requests.find(x => !x.completed && !(x.xhr && x.xhr.aborted) &&
++    x.url === "/api/panel/call-lifecycle" && new URLSearchParams(x.body).get("state") === state);
++}
++async function reply(request, body, status = 200) {
++  assert(request, "expected lifecycle request"); request.completed = true;
++  await request.response.resolve({ ok: status >= 200 && status < 300, status, json: async () => body });
++  await flush();
++}
++function lease(call = "A", remaining = 10000) {
++  return { ok: true, call_id: call, stage_revision: 2, dialog_owner: "owner-" + call,
++    lease_remaining_ms: remaining };
++}
++async function connect(r, call = "A", remaining = 10000) {
++  const events = {}, sip = { terminated: 0, isEnded() { return false; },
++    terminate() { this.terminated++; }, on(name, cb) { events[name] = cb; },
++    connection: { addEventListener() {} } };
++  r.context.sipFixture = sip;
++  r.context.window.crypto = { getRandomValues(bytes) { bytes.fill(call === "A" ? 1 : 2); } };
++  r.activate("door", call, 2);
++  r.run('session=null; activeLifecycle=null; selected.calling=true; webrtc={server:"localhost"}; ua={call(){return sipFixture}}; startCall();');
++  events.confirmed();
++  await reply(pending(r, "answered"), lease(call, remaining));
++  return { sip, binding: r.run("activeLifecycle") };
++}
++const tests = {
++  async "T11-01"() {
++    const r = runtime(), { sip } = await connect(r);
++    r.advance(2000); r.run("heartbeatLifecycle(activeLifecycle)");
++    await reply(pending(r, "heartbeat"), { ok: false, error_code: "not_started" }, 503);
++    assert.strictEqual(sip.terminated, 0, "a single 503 cannot end a valid leased media session");
++    assert.strictEqual(r.elements.get("status").textContent, "panel.control_reconnecting");
++    r.advance(499); assert(!pending(r, "heartbeat"), "first retry waits 500 ms");
++    r.advance(1); const retry = pending(r, "heartbeat");
++    assert(retry, "heartbeat retries independently of state/config/locale");
++    assert.strictEqual(retry.xhr.timeout, 1500);
++    r.advance(1000); await reply(retry, lease());
++    assert.strictEqual(r.run("activeLifecycle.leaseDeadline"), 12500,
++      "a delayed ACK uses request start plus server remaining duration, not arrival plus a full lease");
++    assert.strictEqual(r.elements.get("status").textContent, "incall.title");
++    assert.strictEqual(sip.terminated, 0);
++  },
++  async "T11-02"() {
++    const r = runtime(), { sip } = await connect(r);
++    r.run("heartbeatLifecycle(activeLifecycle)");
++    await reply(pending(r, "heartbeat"), { ok: false, error_code: "stale_revision" }, 409);
++    assert.strictEqual(sip.terminated, 0, "an unrelated 409 is not terminal ownership evidence");
++    r.advance(500);
++    await reply(pending(r, "heartbeat"), { ok: false, error_code: "stale_owner" }, 409);
++    assert.strictEqual(sip.terminated, 1);
++    assert.strictEqual(r.run("session"), null);
++    const winner = await connect(r, "B");
++    const ended = pending(r, "ended");
++    if (ended) await reply(ended, { ok: false, error_code: "stale_owner" }, 409);
++    assert.strictEqual(r.run("session"), winner.sip, "old owner's end result cannot stop winner");
++    assert.strictEqual(winner.sip.terminated, 0);
++  },
++  async "T11-03"() {
++    const r = runtime(), { sip } = await connect(r);
++    r.run("heartbeatLifecycle(activeLifecycle)");
++    await reply(pending(r, "heartbeat"), {}, 503);
++    assert.strictEqual(sip.terminated, 0, "failure remains transient before lease expiry");
++    for (let i = 0; i < 19; i++) { r.advance(500); await flush(); }
++    assert.strictEqual(sip.terminated, 0, "media remains while the original lease is valid");
++    r.advance(500); await flush();
++    assert.strictEqual(sip.terminated, 1, "no endless ownership past server lease boundary");
++    assert.strictEqual(r.run("activeLifecycle"), null);
++  },
++  async "T11-04"() {
++    const r = runtime(), first = await connect(r);
++    r.run("heartbeatLifecycle(activeLifecycle)"); const old = pending(r, "heartbeat");
++    r.run('endCall("local_hangup")');
++    const current = await connect(r, "B", 6000);
++    assert.strictEqual(current.binding.leaseDeadline, 6000, "new lease comes from its own server snapshot");
++    await reply(old, lease("A"));
++    assert.strictEqual(current.binding.leaseDeadline, 6000, "old success cannot renew new call");
++    assert.strictEqual(r.run("session"), current.sip);
++    assert.strictEqual(current.sip.terminated, 0);
++    assert.strictEqual(first.sip.terminated, 1);
++    r.run("heartbeatLifecycle(activeLifecycle)"); const cancelled = pending(r, "heartbeat");
++    r.run('endCall("local_hangup")');
++    const third = await connect(r, "C", 7000);
++    await reply(cancelled, { ok: false, error_code: "stale_owner" }, 409);
++    assert.strictEqual(r.run("session"), third.sip, "late terminal response cannot end successor");
++    assert.strictEqual(third.binding.leaseDeadline, 7000);
++  }
++};
++(async () => {
++  for (const [id, test] of Object.entries(tests)) {
++    if (process.argv[2] && process.argv[2] !== id) continue;
++    await test(); console.log(id + " production heartbeat: PASS");
++  }
++  if (process.argv[2]) return;
++  for (const mismatch of [
++    { call_id: "old" }, { stage_revision: 1 }, { dialog_owner: "another-owner" },
++    { lease_remaining_ms: 10001 }, { lease_remaining_ms: -1 },
++    { lease_remaining_ms: "10000" }, { lease_remaining_ms: 1.5 }
++  ]) {
++    const r = runtime(), { binding, sip } = await connect(r);
++    r.advance(2000);
++    await reply(pending(r, "heartbeat"), Object.assign(lease(), mismatch));
++    assert.strictEqual(binding.leaseDeadline, 10000, "unbound or invalid ACK cannot renew the lease");
++    assert.strictEqual(sip.terminated, 0, "invalid ACK remains bounded by original lease");
++  }
++  for (const code of ["auth_required", "permission_denied", "call_ended"]) {
++    const r = runtime(), { sip } = await connect(r);
++    r.advance(2000);
++    await reply(pending(r, "heartbeat"), { ok: false, error_code: code }, 403);
++    assert.strictEqual(sip.terminated, 1, "explicit terminal evidence retires exact call: " + code);
++  }
++  {
++    const r = runtime(), { binding, sip } = await connect(r);
++    r.context.document.hidden = true; r.listeners.visibilitychange();
++    r.advance(2500); await flush();
++    assert(!pending(r, "heartbeat"), "hidden page does not issue more ownership claims");
++    r.context.document.hidden = false; r.listeners.visibilitychange();
++    assert(!pending(r, "heartbeat"), "foreground waits for authority before claiming its old owner");
++    const request = r.requests.find(x => x.url === "/state" && !x.completed && !x.xhr.aborted);
++    await reply(request, { doors: [{ id: "door", call_id: "A", stage_revision: 2,
++      call_state: "in_call", dialog_owner: "owner-A" }] });
++    assert(pending(r, "heartbeat"), "fresh matching state permits ownership verification");
++    assert.strictEqual(binding.leaseDeadline, 10000, "foreground snapshot alone does not renew lease");
++    assert.strictEqual(sip.terminated, 0);
++    r.context.document.hidden = true; r.listeners.visibilitychange();
++    r.advance(8000); await flush();
++    assert.strictEqual(sip.terminated, 1, "sleep cannot extend the old lease");
++  }
++  {
++    const r = runtime(), { sip } = await connect(r);
++    r.advance(2000); const expiredRequest = pending(r, "heartbeat");
++    r.advance(1500); await flush();
++    assert.strictEqual(expiredRequest.xhr.aborted, true);
++    assert.strictEqual(sip.terminated, 0, "bounded transport timeout keeps media within remaining lease");
++    r.advance(500); const successor = pending(r, "heartbeat");
++    assert(successor && successor !== expiredRequest);
++    await reply(expiredRequest, lease());
++    assert.strictEqual(r.run("activeLifecycle.heartbeatPending"), true, "retired timeout cannot release successor gate");
++    await reply(successor, lease());
++    assert.strictEqual(r.run("activeLifecycle.leaseDeadline"), 14000);
++  }
++  console.log("heartbeat identity bounds, auth, visibility, timeout and late-success guards: PASS");
++})().catch(error => { console.error(error); process.exitCode = 1; });
+--- before/core/tests/test_panel.cpp
++++ after/core/tests/test_panel.cpp
+@@ -335,6 +335,16 @@
+                  "door=d_front&call_id=" + first_call_id +
+                      "&stage_revision=0&state=heartbeat&dialog_id=" + losing_dialog + "&k=" + k,
+                  "application/x-www-form-urlencoded").find("409") != std::string::npos);
++  {
++    auto losing_end = panelBodyJson(panelReq(http_port, "POST", "/api/panel/call-lifecycle",
++        "door=d_front&call_id=" + first_call_id +
++        "&stage_revision=0&state=ended&dialog_id=" + losing_dialog,
++        "application/x-www-form-urlencoded"));
++    REQUIRE(losing_end);
++    CHECK(json::getString(losing_end.get(), "error_code") == "stale_owner");
++    CHECK(panelReq(http_port, "GET", "/api/panel/state").find("\"call_state\":\"in_call\"") !=
++          std::string::npos);
++  }
+   CHECK(panelReq(http_port, "POST", "/api/panel/cancel",
+                  "door=d_front&call_id=" + first_call_id + "&k=" + k,
+                  "application/x-www-form-urlencoded").find("409") != std::string::npos);
+@@ -551,12 +561,42 @@
+   const std::string call_id = json::getString(pressed.get(), "call_id");
+   REQUIRE(!call_id.empty());
+   const std::string dialog_id = "0123456789abcdef0123456789abcdef";
+-  CHECK(panelReq(http_port, "POST", "/api/panel/call-lifecycle",
++  auto answer = panelBodyJson(panelReq(http_port, "POST", "/api/panel/call-lifecycle",
+                  "door=d_front&call_id=" + call_id +
+                      "&stage_revision=0&state=answered&dialog_id=" + dialog_id +
+                      "&k=" + kPanelCredential,
+-                 "application/x-www-form-urlencoded").find("\"ok\":true") !=
+-        std::string::npos);
++                 "application/x-www-form-urlencoded"));
++  REQUIRE(answer);
++  CHECK(json::getBool(answer.get(), "ok"));
++  CHECK(json::getString(answer.get(), "call_id") == call_id);
++  CHECK(json::getInt(answer.get(), "stage_revision", -1) == 0);
++  const std::string owner = json::getString(answer.get(), "dialog_owner");
++  REQUIRE(!owner.empty());
++  CHECK(json::getInt(answer.get(), "lease_remaining_ms", -1) == 10'000);
++  auto heartbeat = [&](const std::string& dialog, int revision) {
++    return panelReq(http_port, "POST", "/api/panel/call-lifecycle",
++        "door=d_front&call_id=" + call_id + "&stage_revision=" + std::to_string(revision) +
++        "&state=heartbeat&dialog_id=" + dialog, "application/x-www-form-urlencoded");
++  };
++  auto rejected = panelBodyJson(heartbeat("fedcba9876543210fedcba9876543210", 0));
++  REQUIRE(rejected);
++  CHECK(json::getString(rejected.get(), "error_code") == "stale_owner");
++  rejected = panelBodyJson(heartbeat(dialog_id, 1));
++  REQUIRE(rejected);
++  CHECK(json::getString(rejected.get(), "error_code") == "stale_revision");
++  panel_auth.clear();
++  rejected = panelBodyJson(heartbeat(dialog_id, 0));
++  REQUIRE(rejected);
++  CHECK(json::getString(rejected.get(), "error_code") == "auth_required");
++  panel_auth = kPanelCredential;
++  clock.advance(1'234);
++  clock.setWall(clock.systemWallMs() - 86'400'000);
++  auto renewed = panelBodyJson(heartbeat(dialog_id, 0));
++  REQUIRE(renewed);
++  CHECK(json::getString(renewed.get(), "call_id") == call_id);
++  CHECK(json::getString(renewed.get(), "dialog_owner") == owner);
++  CHECK(json::getInt(renewed.get(), "stage_revision", -1) == 0);
++  CHECK(json::getInt(renewed.get(), "lease_remaining_ms", -1) == 10'000);
+ 
+   REQUIRE(setPanelEventProjectionFailure(db_path, true));
+   clock.advance(9'999);
+@@ -566,6 +606,11 @@
+   clock.advance(1);
+   state = panelReq(http_port, "GET", "/api/panel/state?k=" + kPanelCredential);
+   CHECK(state.find("\"call_state\":\"in_call\"") != std::string::npos);
++  // A pending durable cancellation cannot let a late heartbeat resurrect an expired lease.
++  rejected = panelBodyJson(heartbeat(dialog_id, 0));
++  REQUIRE(rejected);
++  CHECK_FALSE(json::getBool(rejected.get(), "ok"));
++  CHECK(json::getString(rejected.get(), "error_code") == "call_ended");
+ 
+   REQUIRE(setPanelEventProjectionFailure(db_path, false));
+   clock.advance(1'999);
+--- before/core/src/node/node.cpp
++++ after/core/src/node/node.cpp
+@@ -2115,6 +2116,8 @@
+   struct WebDialogLease {
+     std::string door;
+     std::string owner;
++    int stage_revision = 0;
++    int64_t deadline_mono = 0;
+     uint64_t timer = 0;
+     unsigned retry_step = 0;
+   };
+@@ -7167,8 +7172,14 @@
+     if (lease.timer) loop->cancel(lease.timer);
+     lease.door = door;
+     lease.owner = owner;
+-    if (reset_retry) lease.retry_step = 0;
+-    lease.timer = loop->postDelayed(delay, [this, door, call_id, owner] {
++    if (reset_retry) {
++      lease.retry_step = 0;
++      lease.deadline_mono = clock->monoMs() + delay;
++      auto active = active_calls.find(door);
++      lease.stage_revision = active == active_calls.end() ? -1 : active->second.stage_revision;
++    }
++    const int revision = lease.stage_revision;
++    lease.timer = loop->postDelayed(delay, [this, door, call_id, owner, revision] {
+       auto lease_it = web_dialog_timers.find(call_id);
+       if (lease_it == web_dialog_timers.end() || lease_it->second.door != door ||
+           lease_it->second.owner != owner)
+@@ -7176,7 +7187,8 @@
+       lease_it->second.timer = 0;
+       auto active = active_calls.find(door);
+       if (active == active_calls.end() || active->second.call_id != call_id ||
+-          active->second.dialog_owner != owner || active->second.state != "in_call") {
++          active->second.dialog_owner != owner || active->second.stage_revision != revision ||
++          active->second.state != "in_call") {
+         web_dialog_timers.erase(lease_it);
+         return;
+       }
+@@ -7196,6 +7208,16 @@
+                          const std::string& owner) {
+     cancelWebDialogLease(call_id);
+     armWebDialogLeaseTimer(door, call_id, owner, 10'000, /*reset_retry=*/true);
++  }
++
++  int64_t webDialogLeaseRemaining(const std::string& door, const std::string& call_id,
++                                  int revision, const std::string& owner) {
++    auto lease = web_dialog_timers.find(call_id);
++    if (lease == web_dialog_timers.end() || lease->second.door != door ||
++        lease->second.owner != owner || lease->second.stage_revision != revision)
++      return 0;
++    return std::max<int64_t>(0, std::min<int64_t>(10'000,
++        lease->second.deadline_mono - clock->monoMs()));
+   }
+ 
+   void rememberCancelled(const std::string& call_id) {
+@@ -10532,11 +10587,19 @@
+     });
+ 
+     httpd->route("POST", "/api/panel/call-lifecycle", [this](const HttpReq& req) {
+-      if (!panelTokenOk(req)) return HttpResp::json("{\"ok\":false,\"err\":\"bad token\"}", 403);
++      auto failure = [](int status, const std::string& code, const std::string& message) {
++        auto response = json::obj();
++        json::setBool(response.get(), "ok", false);
++        json::set(response.get(), "error_code", code);
++        json::set(response.get(), "err", message);
++        return HttpResp::json(json::dump(response.get()), status);
++      };
++      if (!panelTokenOk(req)) return failure(403, "auth_required", "bad token");
+       const std::string door = req.param("door").empty() ? opts.door : req.param("door");
++      const std::string call_id = req.param("call_id");
+       const std::string owner = webDialogOwner(req.param("dialog_id"));
+       if (owner.empty())
+-        return HttpResp::json("{\"ok\":false,\"err\":\"invalid dialog identity\"}", 400);
++        return failure(400, "invalid_request", "invalid dialog identity");
+       const std::string revision_text = req.param("stage_revision");
+       int revision = -1;
+       try {
+@@ -10547,29 +10610,56 @@
+         revision = -1;
+       }
+       if (revision < 0)
+-        return HttpResp::json("{\"ok\":false,\"err\":\"invalid stage revision\"}", 400);
++        return failure(400, "invalid_request", "invalid stage revision");
+       const std::string state = req.param("state");
++      if (state != "answered" && state != "ended" && state != "heartbeat")
++        return failure(400, "invalid_request", "invalid lifecycle state");
++      auto active = active_calls.find(door);
++      if (state != "ended") {
++        if (active == active_calls.end() || active->second.call_id != call_id)
++          return failure(409, "call_ended", "call is no longer active");
++        if (active->second.stage_revision != revision)
++          return failure(409, "stale_revision", "stage revision changed");
++        if (active->second.state == "in_call") {
++          if (active->second.dialog_owner != owner)
++            return failure(409, "stale_owner", "dialog owner changed");
++          if (web_dialog_timers.find(call_id) == web_dialog_timers.end())
++            return failure(409, "recovery_required", "dialog recovery required");
++          if (webDialogLeaseRemaining(door, call_id, revision, owner) == 0)
++            return failure(409, "call_ended", "dialog lease expired");
++        } else if (state == "heartbeat" || active->second.state != "ringing") {
++          return failure(409, "call_ended", "call is not in progress");
++        }
++      }
+       bool ok = false;
+       if (state == "answered") {
+-        ok = doReportCallAnswered(door, req.param("call_id"), revision, owner);
+-        if (ok) armWebDialogLease(door, req.param("call_id"), owner);
++        ok = doReportCallAnswered(door, call_id, revision, owner);
++        if (ok) armWebDialogLease(door, call_id, owner);
+       } else if (state == "ended") {
+-        ok = doReportCallEnded(door, req.param("call_id"), revision,
++        ok = doReportCallEnded(door, call_id, revision,
+                                req.param("reason").empty() ? "sip_ended" : req.param("reason"),
+                                owner);
+       } else if (state == "heartbeat") {
+-        auto active = active_calls.find(door);
+-        ok = active != active_calls.end() && active->second.call_id == req.param("call_id") &&
+-             active->second.stage_revision == revision && active->second.state == "in_call" &&
+-             active->second.dialog_owner == owner;
+-        if (ok) armWebDialogLease(door, req.param("call_id"), owner);
+-      } else {
+-        return HttpResp::json("{\"ok\":false,\"err\":\"invalid lifecycle state\"}", 400);
+-      }
+-      if (!ok) return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
++        ok = true;
++        armWebDialogLease(door, call_id, owner);
++      }
++      if (!ok) {
++        active = active_calls.find(door);
++        if (active == active_calls.end() || active->second.call_id != call_id)
++          return failure(409, "call_ended", "call is no longer active");
++        if (active->second.stage_revision != revision)
++          return failure(409, "stale_revision", "stage revision changed");
++        if (active->second.state == "in_call" && active->second.dialog_owner != owner)
++          return failure(409, "stale_owner", "dialog owner changed");
++        return failure(503, "persistence_failed", "lifecycle write did not complete");
++      }
+       auto response = json::obj();
+       json::setBool(response.get(), "ok", true);
++      json::set(response.get(), "call_id", call_id);
++      json::set(response.get(), "stage_revision", static_cast<int64_t>(revision));
+       json::set(response.get(), "dialog_owner", owner);
++      json::set(response.get(), "lease_remaining_ms",
++                webDialogLeaseRemaining(door, call_id, revision, owner));
+       return HttpResp::json(json::dump(response.get()));
+     });
+ 

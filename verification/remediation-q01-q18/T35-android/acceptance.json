@@ -1,0 +1,546 @@
+{
+  "task": "T35-android",
+  "recorded_at": "2026-09-22T17:29:30.519354+00:00",
+  "verdict": "PASS_IN_API35_UI_AND_HOST_BUILD_SCOPE",
+  "whole_T35_closed": false,
+  "source": {
+    "path": "verification/remediation-q01-q18/T35-android/source-candidate-r7.json",
+    "sha256": "bec71ff30ef893027577a1afdde61c4e4fc15a21e60e4b4a8267ffed44fcb199"
+  },
+  "owned_inputs": {
+    "path": "verification/remediation-q01-q18/T35-android/owned-inputs-r7.json",
+    "sha256": "8b40205ada8b6310190fb2818267c1dc280899539995a931050367a57cb9a18b"
+  },
+  "owned_input_check": {
+    "path": "verification/remediation-q01-q18/T35-android/evidence/final-owned-input-check.json",
+    "sha256": "35080bf7b7dfb7920f688f75cdd844fb144b17894c0ef6a5465292d9c3ebcb41"
+  },
+  "baseline": {
+    "source": {
+      "path": "verification/remediation-q01-q18/T35-android/source-baseline-runtime-r4.json",
+      "sha256": "b09dad4cb83e22ec51ca10109d153a68f956794b4c74db86f7ff65bb5be54894"
+    },
+    "actual_capture": [
+      {
+        "path": "verification/remediation-q01-q18/T35-android/evidence/baseline-r4-portrait-1.0/command.json",
+        "sha256": "92d1ba640c8d38cd5f6f16dbb429cc5cd7a34f21b5082be4469735f9543a5af9"
+      },
+      {
+        "path": "verification/remediation-q01-q18/T35-android/evidence/baseline-r4-portrait-1.0/idle-tree.json",
+        "sha256": "5eaf25208566774d8621af12f7f6e3ace0d4c300070ce7e65ddc347e4b27241c"
+      },
+      {
+        "path": "verification/remediation-q01-q18/T35-android/evidence/baseline-r4-portrait-1.0/idle.png",
+        "sha256": "e999f67b91f91641b252764c53a32b6633bcbb5ad00b976135fefecf1f06d13d"
+      },
+      {
+        "path": "verification/remediation-q01-q18/T35-android/evidence/baseline-r4-portrait-1.0/instrumentation.log",
+        "sha256": "74a1f569bf1454bae9accb450cb15431c6276c59888306e54df7167db561d8af"
+      },
+      {
+        "path": "verification/remediation-q01-q18/T35-android/evidence/baseline-r4-portrait-1.0/result.json",
+        "sha256": "102456970a6c7cbc45a206eee56dfdf41973c85a5c3dd8a45496d517f035e8fb"
+      },
+      {
+        "path": "verification/remediation-q01-q18/T35-android/evidence/baseline-r4-portrait-1.0/ringing-tree.json",
+        "sha256": "e5af9cccb6c4351d18a6face59bc7657c52029b7ee9cb6b30d4a7f39cb228456"
+      },
+      {
+        "path": "verification/remediation-q01-q18/T35-android/evidence/baseline-r4-portrait-1.0/ringing.png",
+        "sha256": "a422c1290ddf493219e2e3a30efa46124844e120ea919c9cadd0b652e997211e"
+      }
+    ]
+  },
+  "ui_profiles": [
+    {
+      "profile": "API35 arm64 portrait, font scale 1.0",
+      "results": [
+        {
+          "id": "T35-01 purpose_first",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-01 ring_then_purpose",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-02 stable slot and gesture ownership",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-03 neutral recovery and accessible SOS",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after cancel",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after detach",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after replace",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-04 long text and scaled primary actions",
+          "status": "PASS"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/command.json",
+          "sha256": "0ed4c3e95942c9aa33dbb30f839fc0013ce1ca4d86bdd8114b1cb421ac0b4151"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/established-tree.json",
+          "sha256": "cff7866ab85c045573d66d3bfc8e2f05f5837b73762bfa3ba94f8407d904b128"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/established.png",
+          "sha256": "42a6037f2736f65bbeabb55da09adcd942e75146df9ff17b53a3aa5f88230e14"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/instrumentation.log",
+          "sha256": "7467dc505516194bac72db586ee7fdecddaa22cecb04f8255dbe260a9b9a5fc1"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/long-calling-tree.json",
+          "sha256": "b88053679257390fb4044cbb6bb791de0d19493411a1425a0cf07fadc2e304f8"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/long-calling.png",
+          "sha256": "0073c215e1617bbcaf773784524e1c50d7d99835aa62ce286246e65f86a0e161"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/long-idle-tree.json",
+          "sha256": "fe20a2550e78dc4fbd33691c63f9a43be6276efb4a4a41973f3e9e6d4474bd50"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/long-idle.png",
+          "sha256": "e59d50227e607717535d4cb5194fe97bfa12ecdd7698ce3e4b5f3e2e1f6388dc"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/no-answer-tree.json",
+          "sha256": "30c21e38a702cc56e92739447189092dcf8eea248944bcd50883ec8b1093fe1d"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/no-answer.png",
+          "sha256": "7b95225eab41b05ecbe5a6b7d75a432e353a5e9113755d8d7081439638b12368"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/recovering-tree.json",
+          "sha256": "bfa4e4b2f36ad65e90f24bbdb1aefaab92f5653e3371465cdf2182936a02c34d"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/recovering.png",
+          "sha256": "a01aaa424e242d44059b86cc6f385f6ebe80d305737a06ebcb9f3fe8c44467de"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/result.json",
+          "sha256": "d8c5ee29cc7a6148a1b723f4bfa06ff305caf9b6230db19cad48685cee34bb76"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/ringing-tree.json",
+          "sha256": "8abc1b3c867bcc0633eb34c2cb3a5957dee5ad489893620cb594e9ba81e8347c"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/ringing.png",
+          "sha256": "1af01cb754219a69a05b08c168e39d9ef9703e0243614f92552f4c4976f7e936"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/sos-confirm-tree.json",
+          "sha256": "a49c66ccd91bc5fb49c4f78a6f1a004bb2bf084a8fb158de357ce9d8a4830df0"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-1.0/sos-confirm.png",
+          "sha256": "ac3af8b9b971c2182374b9ad651bf8d056bba98e6eb871061d759c83a4d92a48"
+        }
+      ]
+    },
+    {
+      "profile": "API35 arm64 portrait, font scale 2.0",
+      "results": [
+        {
+          "id": "T35-01 purpose_first",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-01 ring_then_purpose",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-02 stable slot and gesture ownership",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-03 neutral recovery and accessible SOS",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after cancel",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after detach",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after replace",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-04 long text and scaled primary actions",
+          "status": "PASS"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/command.json",
+          "sha256": "9b3fb21e1f40145d02aab93190a25bbf39787371090bf23ad6794900257d186f"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/established-tree.json",
+          "sha256": "d3ceedffe3ae21c8deaee47495aac81708ff4b8ed869daaaad8a3fb49183c3ed"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/established.png",
+          "sha256": "5d5fa7aede8cfc25b1db6b1ec2209dc865dcd84437d560a898131cfeb6814194"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/instrumentation.log",
+          "sha256": "9a1e485b3b90b63fe4b35bd2b1d6b026d133958b3d0200e3547b76ec55b5c55f"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/long-calling-tree.json",
+          "sha256": "5122e2945da9d1b8c08293a5f8d6dab8b385f03acd3c92ae277b5013667d4c8f"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/long-calling.png",
+          "sha256": "ad1d19e4be3f2f5bcb911675cce305aec83f0e0971551525c11bb8b9f6cac7ed"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/long-idle-tree.json",
+          "sha256": "a591186cff4251e9bb8e23d6d938355ccd4cfbf0517399225ed12a7f1d36807d"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/long-idle.png",
+          "sha256": "f7581c979df8b227148bd5a499be958ddcd6b248e30fa671840550259bc1018a"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/no-answer-tree.json",
+          "sha256": "5606a5a61e0d7ebe473e7810fc568a67655c7c8836f950f901362cfe44ac374e"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/no-answer.png",
+          "sha256": "4af60df3ec214fcfe0e5e914b02b1343bb33d3e274dd5a2c08b08c7a97271be5"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/recovering-tree.json",
+          "sha256": "8f8a5bb85754133d2b279c9726cea62a626d494ec309c1487a80fe1006e0a532"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/recovering.png",
+          "sha256": "605039e5aa99c792bf0716bbc9c4e13bc6f07f266bcc37d68621121104ab0a79"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/result.json",
+          "sha256": "234cef4ace79bcf339b259e1471fe2e3181e17f68e816623ea68c8bae62bd6ea"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/ringing-tree.json",
+          "sha256": "b02d28c6a31a1aa946fb742c40af77fd520f06c9f78caf427d5375b3f57af631"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/ringing.png",
+          "sha256": "ef1e9cadbbca6d6eb6de97a09e7c6f5fafe95b3fe3592109ccf8a5c13c1855fc"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/sos-confirm-tree.json",
+          "sha256": "fd5cea01fd4be8fd271eda249c47b3ec1ded9f56f1a12540207e86f11391219e"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-portrait-2.0/sos-confirm.png",
+          "sha256": "1f0a07e73b1aa693989f41096a37d853de74391271eed6aaaaa573ce7afbd268"
+        }
+      ]
+    },
+    {
+      "profile": "API35 arm64 landscape, font scale 1.0",
+      "results": [
+        {
+          "id": "T35-01 purpose_first",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-01 ring_then_purpose",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-02 stable slot and gesture ownership",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-03 neutral recovery and accessible SOS",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after cancel",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after detach",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after replace",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-04 long text and scaled primary actions",
+          "status": "PASS"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/command.json",
+          "sha256": "6f7221f7e24f1047547fa48d34ecf6d5db7cc1c8b64d95d8de9838ae6cac8dc8"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/established-tree.json",
+          "sha256": "486b5657f42547149c440aa31c1107a61f6f8165478dfc155fb3e41c8b380d4f"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/established.png",
+          "sha256": "1d3e4d2cab3e7b40f1de7c9952f865f7711e5e9c4b3fef313b62e10ce930fd95"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/instrumentation.log",
+          "sha256": "1e9f3a96270e3e448b31e3c24559d70c13e09261bbaf90b7cddc22dbc2bcc199"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/long-calling-tree.json",
+          "sha256": "a873f4147536376b74c47551d91de6a9fec98ed38ef123aa542d8d82cb731615"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/long-calling.png",
+          "sha256": "ad3e3e4583bb2690a0b7a5b9fadc292951e7e125b73edbab88335fe8c761ba13"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/long-idle-tree.json",
+          "sha256": "498a5fa19830a67ad0a5cab48553fb6748416eaf8e59c60e966c2770b7850f87"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/long-idle.png",
+          "sha256": "d13135c0d9105b3edc66ac632a6f4449d63d26b8566cdc51b94760d00413ece0"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/no-answer-tree.json",
+          "sha256": "f4cd8711550414536cbfd911fddb036d4de402f03519c4f1b3171bae3b17d09e"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/no-answer.png",
+          "sha256": "17e1c7e9c5577788c6bb60f15ef5c219eb5ef3ea323938127eaa684defeeb729"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/recovering-tree.json",
+          "sha256": "3cbdbdc334f6ca92b8af8290457b9bc58ea26bf86e9b7957e69886284f1fad27"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/recovering.png",
+          "sha256": "6f18a20670ab9479b8b1c549d6a00f33043a032c1652219d36cf852bc3ff78ef"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/result.json",
+          "sha256": "bbc2fa632b815b9770b14361417c9cc8aabb01083f301adb8c879e7f5cdfff6c"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/ringing-tree.json",
+          "sha256": "882f68b9bec9c3150b5e07808d17103d0ae8b3afd8be1e7ace8840b48e18dd4a"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/ringing.png",
+          "sha256": "6382baa4f4f210c692295b96e962a23e4177933f1b76a770994b2153123c9c0d"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/sos-confirm-tree.json",
+          "sha256": "7994523e35eb2780bd60f170772e7e018a93003a725ee4117689856f61107045"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-1.0/sos-confirm.png",
+          "sha256": "e7c11d94087cfe41c82886c6b3050cba70f3b33f7e65ed0112d2dff6f020ebe7"
+        }
+      ]
+    },
+    {
+      "profile": "API35 arm64 landscape, font scale 2.0",
+      "results": [
+        {
+          "id": "T35-01 purpose_first",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-01 ring_then_purpose",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-02 stable slot and gesture ownership",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-03 neutral recovery and accessible SOS",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after cancel",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after detach",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-R1 stale SOS confirmation after replace",
+          "status": "PASS"
+        },
+        {
+          "id": "T35-04 long text and scaled primary actions",
+          "status": "PASS"
+        }
+      ],
+      "artifacts": [
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/command.json",
+          "sha256": "df1adec492e537344d22818010b20410b152ac69593be39490ab4d4b0c8dde55"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/established-tree.json",
+          "sha256": "d4bb5cd98034f4077922d8a3f9f64d2c159f8babc0e4bdd04d9b493e1ee8e08a"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/established.png",
+          "sha256": "846610064ab46f7d7d76496d42162b89152975e313d7d99a230da79181fb7e0e"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/instrumentation.log",
+          "sha256": "a46a9ccfbbc973a7b48e3e72f8e359366a71fbc2f8d1da42e1e4f42e86411051"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/long-calling-tree.json",
+          "sha256": "ad7b772ce0a23da0c279e20db5ddbcc167590d7eb63792f3840a6bc232078ce9"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/long-calling.png",
+          "sha256": "855a66309c9038af1f9cf12d8c79d9576bb9bc4b17f106a4dc28c1cfed638497"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/long-idle-tree.json",
+          "sha256": "50f9e9b1b95a5ca7ed6fdb04998e43480a8a98a15af7be27a20888f3ad080fed"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/long-idle.png",
+          "sha256": "a44560a5b887463ffd70530cc21dff1b8c0108b04e33c4821084b8b5f335f7d1"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/no-answer-tree.json",
+          "sha256": "6d0182d159ed3f4840f3db6634f5d61c1be8d4ca78a3eb8efd24faca8001125f"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/no-answer.png",
+          "sha256": "0874bfb11169b53ba982723a23be0a7a1262aefc926e148c94b65a3e23c9c07e"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/recovering-tree.json",
+          "sha256": "626621fc3273082a930dfd008106d53e94473f989ed4fd1416631b87395df25c"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/recovering.png",
+          "sha256": "e1f82cac770763050dc062bd129b1d5e12cb95cea9e35f268529511f40768aad"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/result.json",
+          "sha256": "c2e43169b86c909b93024e4ce8e6241f001359fb79abc70a304aec38f7dafc0f"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/ringing-tree.json",
+          "sha256": "871018b34f5a346ae9a48795d6589c680f37a1eafdca240697e55d40ea80e2c7"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/ringing.png",
+          "sha256": "54d41455bc8b12e3783b57d360e212e2ccafb89a0a9b3ca4ce7d700476d97ce9"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/sos-confirm-tree.json",
+          "sha256": "71ba05faf768d5fd8b50b1af642a635c3ed75fe21ccb7bbed924728ca475815c"
+        },
+        {
+          "path": "verification/remediation-q01-q18/T35-android/evidence/green-r7-landscape-2.0/sos-confirm.png",
+          "sha256": "356a4b2807c15ce08d07ff389d95cdc11f5f6782ae7116418dc7f64bd42e4d19"
+        }
+      ]
+    }
+  ],
+  "acceptance": [
+    {
+      "id": "T35-01",
+      "status": "PASS_IN_API35_UI_SCOPE",
+      "evidence": "Both purpose modes invoke production MainActivity listeners and the real CallFlowController using a recording gateway."
+    },
+    {
+      "id": "T35-02",
+      "status": "PASS_IN_API35_UI_SCOPE",
+      "evidence": "A down/up gesture spanning ringing to established cannot change cancel to hangup; a fresh activation performs exactly one hangup; shared button bounds stay identical."
+    },
+    {
+      "id": "T35-03",
+      "status": "PASS_FOR_NEUTRAL_RECOVERY_AND_ACCESSIBLE_COUNTDOWN",
+      "evidence": "Neutral disconnected recovery, disabled pending action, accessibility and keyboard confirmation, slide countdown and cancellation run on real Views. Active Core SOS overlay and authorized clear were not exercised; those existing production paths are unchanged."
+    },
+    {
+      "id": "T35-04",
+      "status": "PASS_IN_API35_UI_SCOPE",
+      "evidence": "English/Chinese long labels, both orientations and 1x/2x font; actual screen-coordinate call/cancel taps; full visible bounds; production timeout presents no-answer above fixed action dock."
+    }
+  ],
+  "r1": {
+    "status": "RESOLVED_IN_SOURCE_PENDING_PARENT_REVIEW",
+    "red": "evidence/red-r7-portrait-1.0/result.json",
+    "regressions": "Actual zero-second dialog callback: cancel, detach+reattach, old A versus new B; all four profiles must pass."
+  },
+  "build_runs": [
+    {
+      "path": "verification/remediation-q01-q18/T35-android/evidence/modern-r7.json",
+      "sha256": "97990442bafe89f9d273a60c0451ac27a35c15dba8188e2216e45f7ba08423be"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-android/evidence/legacy19-r7.json",
+      "sha256": "de851c1da4444ff67f80fb3deb17414b26702c00f49bb1363feace66c9b4d704"
+    }
+  ],
+  "build_logs": [
+    {
+      "path": "verification/remediation-q01-q18/T35-android/evidence/modern-r7.log",
+      "sha256": "a3100a37141cba9e5d8ad6e46f2dc01a534513333fb099d088d9603edb16bbe6"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-android/evidence/legacy19-r7.log",
+      "sha256": "65204ec9df6fd64c275411797d5b81e85f176f7ea5a00debefcf0d6b95992d48"
+    }
+  ],
+  "artifacts": {
+    "path": "verification/remediation-q01-q18/T35-android/evidence/artifacts-final.json",
+    "sha256": "9ac22e8302920f10d3793f17d1fda76034192b0d406d33fbbb97747cffa0343c"
+  },
+  "source_checks": {
+    "path": "verification/remediation-q01-q18/T35-android/evidence/source-checks-final.json",
+    "sha256": "47f6ac23e2070f7a4734680625a4372cba84f3daa6617e0f4b31993a12f4e6b4"
+  },
+  "limitations": [
+    "No physical Android or API19 UI runtime was available.",
+    "UI fixture keeps Core uncreated and uses recording call/SOS outputs; no real SIP, unlock or SOS was dispatched. Active emergency overlay/clear qualification remains NOT_RUN.",
+    "API19/modern each assembled and passed 386 JVM tests plus lint; this does not qualify old-system UI.",
+    "Native inputs are frozen T12 green Core plus authorized int64_t notice-expiry cast. Later Core integration requires a new build.",
+    "Source-review and button tests do not certify screen-reader navigation on physical assistive hardware."
+  ]
+}

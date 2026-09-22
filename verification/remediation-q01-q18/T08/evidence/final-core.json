@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "c93ccf95fce08021c3e4fe1526a354862bf196088510a5c5b2efa5b10da34630",
+  "task_id": "T08",
+  "test_id": "final-core",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T08/source-final.json",
+  "source_manifest_sha256": "5622f43c6b8ee29c71e14b2b0f170da68b1ae1fa519892c8e6567093925de9a0",
+  "command": [
+    "build/remediation-t19-20260922/doorbell_tests",
+    "--test-case=admin sessions:*,admin API: initial password*,httpd:*,runloop:*,panel:*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T14:43:23.408367+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T08/evidence/final-core.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 127,
+  "finished_at": "2026-09-22T14:43:23.410940+00:00",
+  "expected_exit_code": 0,
+  "status": "FAIL",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

@@ -1,0 +1,11 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "79c67e61c9962c199566972b373aca8c77f9bbc6ab929c5dade75fde8e571d54",
+  "captured_at": "2026-09-22T13:26:33.638550+00:00",
+  "files": {
+    "webui/panel/runtime.js": "982a879309c5b0f346d534288e360ba10d3025b9b85e2ceb3a262c4c0a98470e",
+    "webui/panel/call.html": "5268a7e7739f1c93e1dd1ab875229e12e462de2824a5b0fbe3f354d445572bfb",
+    "webui/tests/call_state_controller.test.js": "89bd339a051e97151a7b0e2076f8466e25a398afc7e08e2264e903033a5053ed"
+  }
+}

@@ -1,0 +1,20 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T18:27:33.002658+00:00",
+  "status": "PASS_IN_RECORDED_PROCESS_CRASH_SCOPE",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/source-green-r4.json",
+  "source_manifest_sha256": "4a4db9bdd50789476fadb64fc25b07438cd0f707bfa8f45d67efc43a55c1e9e0",
+  "test_source_sha256": "ab450071994a5cfbfff1ce1e627c69e81c7d1e6bbd8f34ce36511b0e1c0db29b",
+  "evidence": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/evidence/candidate-crash-r4.json",
+  "evidence_sha256": "2da715288b9c955e17f7edbad3b37340c630cc96d88c506443c8d5b66da83140",
+  "reviewed": [
+    "Actual posix_spawn child with independent production Node, HTTP login/stage/preflight/commit and disk SQLite",
+    "SQLite test-only BEFORE/AFTER receipt insertion barriers report same-connection transaction state; SIGKILL confirmed by waitpid before object destruction",
+    "Fresh Node compares whole recovered configuration with old/new snapshots and checks receipt durability plus original-result replay",
+    "Owned child processes and temporary directories cleaned by fixture"
+  ],
+  "limitations": [
+    "macOS arm64 SIP stub; process crash with OS alive, not physical power loss or hardware storage qualification",
+    "No cluster-wide atomicity claim"
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "recorded_at": "2026-09-22T17:20:46.977611+00:00",
+  "scope": "Only the dedicated doorbell-t35-api35 AVD was stopped. Standard SDK runtime and own AVD retained for reuse. No physical device was changed.",
+  "commands": [
+    {
+      "arguments": [
+        "-s",
+        "emulator-5554",
+        "shell",
+        "settings",
+        "put",
+        "system",
+        "font_scale",
+        "1.0"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "-s",
+        "emulator-5554",
+        "shell",
+        "am",
+        "force-stop",
+        "jp.ox.doorbell"
+      ],
+      "exit_code": 0,
+      "output": ""
+    },
+    {
+      "arguments": [
+        "-s",
+        "emulator-5554",
+        "emu",
+        "kill"
+      ],
+      "exit_code": 0,
+      "output": "OK: killing emulator, bye bye\nOK\n"
+    }
+  ],
+  "post_cleanup_devices": {
+    "exit_code": 0,
+    "output": "List of devices attached\n\n"
+  },
+  "dedicated_emulator_absent": true
+}

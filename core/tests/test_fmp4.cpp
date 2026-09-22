@@ -701,9 +701,42 @@ TEST_CASE("[M05] VideoTrack drops an invalid parameter update with a delta frame
   CHECK(reader->pull(0, &ended).empty());
   CHECK_FALSE(ended);
 
+  CHECK(track.takeKeyframeRequest());
+  auto late = track.subscribe();
+  REQUIRE_FALSE(late->pull(0, &ended).empty());
+  CHECK(late->pull(0, &ended).empty());
+  const Bytes delta = annexb({makeSlice(false, 16)});
+  for (int i = 0; i < 3; ++i) {
+    track.push(delta.data(), delta.size(), false, 1050 + i * 10);
+    CHECK(reader->pull(0, &ended).empty());
+    CHECK(late->pull(0, &ended).empty());
+    CHECK_FALSE(track.takeKeyframeRequest());
+  }
+  CHECK(track.stats().frames == 1);
   const Bytes recovery = annexb({makeSlice(true, 16)});
   track.push(recovery.data(), recovery.size(), true, 1080);
   CHECK_FALSE(reader->pull(0, &ended).empty());
+  CHECK_FALSE(late->pull(0, &ended).empty());
+  track.push(delta.data(), delta.size(), false, 1120);
+  CHECK_FALSE(reader->pull(0, &ended).empty());
+  CHECK_FALSE(late->pull(0, &ended).empty());
+}
+
+TEST_CASE("VideoTrack rejected parameter-only updates do not break a reference chain") {
+  VideoTrack track;
+  track.setEnabled(true);
+  auto reader = track.subscribe();
+  const Bytes initial = annexb({makeSps(80, 45, 0), makePps(), makeSlice(true, 16)});
+  track.push(initial.data(), initial.size(), true, 1000);
+  bool ended = false;
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+  const Bytes invalid = annexb({{0x68, 0x00}});
+  track.push(invalid.data(), invalid.size(), false, 1040);
+  const Bytes delta = annexb({makeSlice(false, 16)});
+  track.push(delta.data(), delta.size(), false, 1080);
+  CHECK_FALSE(reader->pull(0, &ended).empty());
+  CHECK_FALSE(track.takeKeyframeRequest());
 }
 
 TEST_CASE("[M05] VideoTrack does not reset for an identical valid configuration") {

@@ -1,0 +1,26 @@
+{
+  "run": "ios9-arm64-r3",
+  "recorded_after_completed_run": true,
+  "observed_at": "2026-09-22T14:56:31.406464+00:00",
+  "app": "build/remediation-t21-20260922/ios9-arm64/Build/Products/Release-iphoneos/DoorbellIOS9.app",
+  "version": "0.1.37",
+  "build": "38",
+  "minimum_os": "9.0",
+  "sip_backend": "real_pjsip",
+  "executable": "build/remediation-t21-20260922/ios9-arm64/Build/Products/Release-iphoneos/DoorbellIOS9.app/DoorbellIOS9",
+  "executable_sha256": "b13779ee0fb030e75b366c2d4cbf362020fb417d3bbf8079a425da5d3cab9d82",
+  "retained_executable": "build/remediation-t21-20260922/artifact-snapshots/ios9-arm64-r3/DoorbellIOS9",
+  "native_inputs": [
+    {
+      "path": "ios/build/core/iphoneos/arm64/min-9.0/libdoorbell_all.a",
+      "retained_path": "build/remediation-t21-20260922/artifact-snapshots/ios9-arm64-r3/libdoorbell_all.a",
+      "sha256": "4208a276a5d69ae0ac076e0fed244a9c76e3f381c04dc6a5d44af42081f0ba70"
+    },
+    {
+      "path": "ios/build/core/iphoneos/arm64/min-9.0/artifact-manifest.json",
+      "retained_path": "build/remediation-t21-20260922/artifact-snapshots/ios9-arm64-r3/artifact-manifest.json",
+      "sha256": "6d6533cabba14402647918e659fba62bfc480d62f6c262452b763baf9dbbbce4"
+    }
+  ],
+  "native_scope_note": "Completed-run archive and manifest retained before any subsequent rebuild in these lanes; shared Core includes parallel authorized changes."
+}

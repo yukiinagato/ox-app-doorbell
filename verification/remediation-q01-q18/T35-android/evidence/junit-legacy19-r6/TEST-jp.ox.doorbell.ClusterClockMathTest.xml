@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.ClusterClockMathTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:14:55" hostname="MacBookPro.local" time="0.001">
+  <properties/>
+  <testcase name="theRefreshIntervalIsThirtySeconds" classname="jp.ox.doorbell.ClusterClockMathTest" time="0.0"/>
+  <testcase name="anAnchorFromTheFutureIsStale" classname="jp.ox.doorbell.ClusterClockMathTest" time="0.001"/>
+  <testcase name="aCallerMayAskForItsOwnMaximumAge" classname="jp.ox.doorbell.ClusterClockMathTest" time="0.0"/>
+  <testcase name="everySecondOfRealTimeIsOneSecondOnTheLabel" classname="jp.ox.doorbell.ClusterClockMathTest" time="0.0"/>
+  <testcase name="anAnchorIsTrustedForThirtySecondsAndThenRenewed" classname="jp.ox.doorbell.ClusterClockMathTest" time="0.0"/>
+  <testcase name="theClockAdvancesWithTheMonotonicClock" classname="jp.ox.doorbell.ClusterClockMathTest" time="0.0"/>
+  <testcase name="noAnchorIsAlwaysStale" classname="jp.ox.doorbell.ClusterClockMathTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

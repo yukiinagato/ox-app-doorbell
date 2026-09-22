@@ -1,0 +1,165 @@
+09-23 01:26:17 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:20692
+09-23 01:26:17 I [node] created the missing door entry doors.front for this door station
+09-23 01:26:17 I [httpd] listening on 25285,[::]:25285
+09-23 01:26:17 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:17 I [node] node f0ffb8af (operation-authority) started
+09-23 01:26:17 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:27796
+09-23 01:26:17 I [httpd] listening on 25603,[::]:25603
+09-23 01:26:17 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:17 I [node] node 8ee33a3b (operation-page) started
+09-23 01:26:17 I [node] initialized the cluster administrator password
+09-23 01:26:18 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:26:18 I [ha_bridge] bridge started at 127.0.0.1:30609
+09-23 01:26:18 I [mqtt] connected to 127.0.0.1:30609
+09-23 01:26:20 I [httpd] stopped
+09-23 01:26:21 I [httpd] stopped
+09-23 01:26:21 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:20114
+09-23 01:26:21 I [node] created the missing door entry doors.front for this door station
+09-23 01:26:21 I [httpd] listening on 22100,[::]:22100
+09-23 01:26:21 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:21 I [node] node 637c729d (operation-authority) started
+09-23 01:26:22 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:27025
+09-23 01:26:22 I [httpd] listening on 22826,[::]:22826
+09-23 01:26:22 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:22 I [node] node 5d75f4f7 (operation-page) started
+09-23 01:26:22 I [node] initialized the cluster administrator password
+09-23 01:26:22 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:26:22 I [ha_bridge] bridge started at 127.0.0.1:29247
+09-23 01:26:22 I [mqtt] connected to 127.0.0.1:29247
+09-23 01:26:24 I [httpd] stopped
+09-23 01:26:26 I [httpd] stopped
+09-23 01:26:26 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:26678
+09-23 01:26:26 I [node] created the missing door entry doors.front for this door station
+09-23 01:26:26 I [httpd] listening on 22612,[::]:22612
+09-23 01:26:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:26 I [node] node 121b7c68 (operation-authority) started
+09-23 01:26:26 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:28061
+09-23 01:26:26 I [httpd] listening on 22959,[::]:22959
+09-23 01:26:26 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:26 I [node] node 5faf2068 (operation-page) started
+09-23 01:26:26 I [node] initialized the cluster administrator password
+09-23 01:26:26 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:26:26 I [ha_bridge] bridge started at 127.0.0.1:27686
+09-23 01:26:26 I [mqtt] connected to 127.0.0.1:27686
+09-23 01:26:28 I [httpd] stopped
+09-23 01:26:30 I [httpd] stopped
+09-23 01:26:30 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:28216
+09-23 01:26:30 I [node] created the missing door entry doors.front for this door station
+09-23 01:26:30 I [httpd] listening on 30079,[::]:30079
+09-23 01:26:30 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:30 I [node] node 18ddba21 (operation-authority) started
+09-23 01:26:30 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:23621
+09-23 01:26:30 I [httpd] listening on 23804,[::]:23804
+09-23 01:26:30 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:30 I [node] node 729d1af9 (operation-page) started
+09-23 01:26:30 I [node] initialized the cluster administrator password
+09-23 01:26:30 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:26:30 I [ha_bridge] bridge started at 127.0.0.1:20315
+09-23 01:26:30 I [mqtt] connected to 127.0.0.1:20315
+09-23 01:26:36 I [httpd] stopped
+09-23 01:26:38 I [httpd] stopped
+09-23 01:26:38 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:30469
+09-23 01:26:38 I [node] created the missing door entry doors.front for this door station
+09-23 01:26:38 I [httpd] listening on 29965,[::]:29965
+09-23 01:26:38 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:38 I [node] node ab441a0a (operation-authority) started
+09-23 01:26:38 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:31910
+09-23 01:26:38 I [httpd] listening on 30245,[::]:30245
+09-23 01:26:38 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:38 I [node] node a18daef7 (operation-page) started
+09-23 01:26:38 I [node] initialized the cluster administrator password
+09-23 01:26:38 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:26:38 I [ha_bridge] bridge started at 127.0.0.1:22904
+09-23 01:26:38 I [mqtt] connected to 127.0.0.1:22904
+09-23 01:26:38 W [mqtt] disconnected; reconnecting with backoff
+09-23 01:26:40 I [mqtt] connected to 127.0.0.1:22904
+09-23 01:26:40 I [httpd] stopped
+09-23 01:26:42 I [httpd] stopped
+09-23 01:26:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:21216
+09-23 01:26:42 I [node] created the missing door entry doors.front for this door station
+09-23 01:26:42 I [httpd] listening on 26328,[::]:26328
+09-23 01:26:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:42 I [node] node 0ec8d73a (operation-authority) started
+09-23 01:26:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:30809
+09-23 01:26:42 I [httpd] listening on 24003,[::]:24003
+09-23 01:26:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:42 I [node] node c4474f3c (operation-page) started
+09-23 01:26:42 I [node] initialized the cluster administrator password
+09-23 01:26:42 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:26:42 I [ha_bridge] bridge started at 127.0.0.1:28181
+09-23 01:26:42 I [mqtt] connected to 127.0.0.1:28181
+09-23 01:26:48 I [httpd] stopped
+09-23 01:26:50 I [httpd] stopped
+09-23 01:26:50 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:23618
+09-23 01:26:50 I [node] created the missing door entry doors.front for this door station
+09-23 01:26:50 I [httpd] listening on 28335,[::]:28335
+09-23 01:26:50 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:50 I [node] node f8c1d6a4 (operation-authority) started
+09-23 01:26:50 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:29770
+09-23 01:26:50 I [httpd] listening on 27214,[::]:27214
+09-23 01:26:50 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:50 I [node] node dd3afdaa (operation-page) started
+09-23 01:26:50 I [node] initialized the cluster administrator password
+09-23 01:26:50 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:26:50 I [ha_bridge] bridge started at 127.0.0.1:31301
+09-23 01:26:50 I [mqtt] connected to 127.0.0.1:31301
+09-23 01:26:52 I [httpd] stopped
+09-23 01:26:54 I [httpd] stopped
+09-23 01:26:54 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:22544
+09-23 01:26:54 I [node] created the missing door entry doors.front for this door station
+09-23 01:26:54 I [httpd] listening on 20095,[::]:20095
+09-23 01:26:54 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:54 I [node] node 129e6585 (operation-authority) started
+09-23 01:26:54 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:25610
+09-23 01:26:54 I [httpd] listening on 31107,[::]:31107
+09-23 01:26:54 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:54 I [node] node 902bb657 (operation-page) started
+09-23 01:26:54 I [node] initialized the cluster administrator password
+09-23 01:26:54 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:26:54 I [ha_bridge] bridge started at 127.0.0.1:29584
+09-23 01:26:54 I [mqtt] connected to 127.0.0.1:29584
+09-23 01:26:56 I [httpd] stopped
+09-23 01:26:56 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:22544
+09-23 01:26:56 I [httpd] listening on 20095,[::]:20095
+09-23 01:26:56 I [ha_bridge] bridge started at 127.0.0.1:29584
+09-23 01:26:56 I [mqtt] connected to 127.0.0.1:29584
+09-23 01:26:56 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:26:56 I [node] node 129e6585 (operation-authority) started
+09-23 01:26:58 I [httpd] stopped
+09-23 01:27:00 I [httpd] stopped
+09-23 01:27:00 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:27882
+09-23 01:27:00 I [node] created the missing door entry doors.front for this door station
+09-23 01:27:00 I [httpd] listening on 20025,[::]:20025
+09-23 01:27:00 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:00 I [node] node c631ac3f (operation-authority) started
+09-23 01:27:00 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:30268
+09-23 01:27:00 I [httpd] listening on 25873,[::]:25873
+09-23 01:27:00 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:00 I [node] node 332678b1 (operation-page) started
+09-23 01:27:00 I [node] initialized the cluster administrator password
+09-23 01:27:00 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:27:00 I [ha_bridge] bridge started at 127.0.0.1:26382
+09-23 01:27:00 I [mqtt] connected to 127.0.0.1:26382
+09-23 01:27:02 I [httpd] stopped
+09-23 01:27:04 I [httpd] stopped
+09-23 01:27:04 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:21554
+09-23 01:27:04 I [node] created the missing door entry doors.front for this door station
+09-23 01:27:04 I [httpd] listening on 28973,[::]:28973
+09-23 01:27:04 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:04 I [node] node 1cc5eb1a (operation-authority) started
+09-23 01:27:04 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=127.0.0.1:31005
+09-23 01:27:04 I [httpd] listening on 23588,[::]:23588
+09-23 01:27:04 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 01:27:04 I [node] node c9b7b614 (operation-page) started
+09-23 01:27:04 I [node] initialized the cluster administrator password
+09-23 01:27:04 I [ha_bridge] bridge started at 127.0.0.1:1883
+09-23 01:27:04 I [ha_bridge] bridge started at 127.0.0.1:20996
+09-23 01:27:04 I [mqtt] connected to 127.0.0.1:20996
+09-23 01:27:07 I [httpd] stopped
+09-23 01:27:08 I [httpd] stopped
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+[doctest] test cases:   11 |   11 passed | 0 failed | 482 skipped
+[doctest] assertions: 1352 | 1352 passed | 0 failed |
+[doctest] Status: SUCCESS!

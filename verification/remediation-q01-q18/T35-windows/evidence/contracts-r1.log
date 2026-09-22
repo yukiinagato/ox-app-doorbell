@@ -1,0 +1,132 @@
+test_a_door_station_without_a_camera_gets_no_tile (__main__.WindowsContracts.test_a_door_station_without_a_camera_gets_no_tile) ... ok
+test_add_device_panel_confirms_with_device_joined (__main__.WindowsContracts.test_add_device_panel_confirms_with_device_joined) ... ok
+test_admin_password_is_one_cluster_secret (__main__.WindowsContracts.test_admin_password_is_one_cluster_secret) ... ok
+test_an_unset_password_never_traps_a_running_alarm (__main__.WindowsContracts.test_an_unset_password_never_traps_a_running_alarm) ... ok
+test_android_helper_policy_uses_only_the_fixed_local_protocol (__main__.WindowsContracts.test_android_helper_policy_uses_only_the_fixed_local_protocol) ... ERROR
+test_announcements_have_three_entry_points_and_editable_presets (__main__.WindowsContracts.test_announcements_have_three_entry_points_and_editable_presets) ... ok
+test_appearance_and_automatic_contrast_follow_the_shared_decision (__main__.WindowsContracts.test_appearance_and_automatic_contrast_follow_the_shared_decision) ... ok
+test_automatic_ink_picks_the_higher_contrast_of_the_two (__main__.WindowsContracts.test_automatic_ink_picks_the_higher_contrast_of_the_two)
+The decision is a WCAG contrast comparison, not a luminance threshold at 0.5. ... ok
+test_call_flow_and_targeted_chime (__main__.WindowsContracts.test_call_flow_and_targeted_chime) ... ok
+test_coloured_labels_keep_their_padding (__main__.WindowsContracts.test_coloured_labels_keep_their_padding) ... ok
+test_core_theme_values_are_dropped_when_core_never_read_the_image (__main__.WindowsContracts.test_core_theme_values_are_dropped_when_core_never_read_the_image) ... ok
+test_dashboard_shows_tiles_history_versions_and_battery (__main__.WindowsContracts.test_dashboard_shows_tiles_history_versions_and_battery) ... ok
+test_effective_volumes_reach_the_players (__main__.WindowsContracts.test_effective_volumes_reach_the_players) ... ok
+test_established_audio_calls_do_not_wait_for_video (__main__.WindowsContracts.test_established_audio_calls_do_not_wait_for_video) ... ok
+test_every_home_event_routes_through_the_one_second_coalescer (__main__.WindowsContracts.test_every_home_event_routes_through_the_one_second_coalescer) ... ok
+test_every_optional_core_export_is_probed_not_hard_linked (__main__.WindowsContracts.test_every_optional_core_export_is_probed_not_hard_linked) ... ok
+test_every_windows_string_key_is_generated_from_the_catalog (__main__.WindowsContracts.test_every_windows_string_key_is_generated_from_the_catalog) ... ok
+test_first_run_requires_an_explicit_valid_role_and_random_door_id (__main__.WindowsContracts.test_first_run_requires_an_explicit_valid_role_and_random_door_id) ... ok
+test_global_notice_and_history_paging_use_the_new_abi (__main__.WindowsContracts.test_global_notice_and_history_paging_use_the_new_abi) ... ok
+test_h264_playback_failures_are_logged_and_retries_are_bounded (__main__.WindowsContracts.test_h264_playback_failures_are_logged_and_retries_are_bounded) ... ok
+test_higher_purpose_revision_demotes_losing_answer_and_keeps_ringing (__main__.WindowsContracts.test_higher_purpose_revision_demotes_losing_answer_and_keeps_ringing) ... ok
+test_home_and_visitor_text_is_not_ellipsised (__main__.WindowsContracts.test_home_and_visitor_text_is_not_ellipsised) ... ok
+test_https_and_dpapi_fail_closed (__main__.WindowsContracts.test_https_and_dpapi_fail_closed) ... ok
+test_icons_are_tabler_geometries_never_hand_drawn (__main__.WindowsContracts.test_icons_are_tabler_geometries_never_hand_drawn) ... ok
+test_in_app_updater_verifies_the_checksum_before_running_the_installer (__main__.WindowsContracts.test_in_app_updater_verifies_the_checksum_before_running_the_installer) ... ok
+test_incoming_screen_controls_notice_chip_and_debug_line (__main__.WindowsContracts.test_incoming_screen_controls_notice_chip_and_debug_line) ... ok
+test_ink_is_refined_per_region_over_a_background_image (__main__.WindowsContracts.test_ink_is_refined_per_region_over_a_background_image) ... ok
+test_installer_sets_up_role_service_firewall_and_upgrades_in_place (__main__.WindowsContracts.test_installer_sets_up_role_service_firewall_and_upgrades_in_place) ... ok
+test_manual_call_lifecycle_is_owned_and_monitor_never_claims_it (__main__.WindowsContracts.test_manual_call_lifecycle_is_owned_and_monitor_never_claims_it) ... ok
+test_mic_mute_follows_the_replicated_call_state (__main__.WindowsContracts.test_mic_mute_follows_the_replicated_call_state) ... ok
+test_native_config_writes_are_prepared (__main__.WindowsContracts.test_native_config_writes_are_prepared) ... ok
+test_native_h264_player_replaces_media_element_when_core_exports_it (__main__.WindowsContracts.test_native_h264_player_replaces_media_element_when_core_exports_it) ... ok
+test_native_zero_success_is_not_inverted (__main__.WindowsContracts.test_native_zero_success_is_not_inverted) ... ok
+test_no_loop_marshalling_read_runs_on_the_ui_thread (__main__.WindowsContracts.test_no_loop_marshalling_read_runs_on_the_ui_thread)
+Every call the doorbell.h table names as entering core's run loop is on a worker. ... ok
+test_onboarding_renders_core_state_and_never_infers_it (__main__.WindowsContracts.test_onboarding_renders_core_state_and_never_infers_it) ... ok
+test_one_status_document_is_shared_by_every_consumer (__main__.WindowsContracts.test_one_status_document_is_shared_by_every_consumer) ... ok
+test_operational_capabilities_do_not_infer_wan_from_a_default_gateway (__main__.WindowsContracts.test_operational_capabilities_do_not_infer_wan_from_a_default_gateway) ... ok
+test_originated_call_timeout_uses_core_snapshot (__main__.WindowsContracts.test_originated_call_timeout_uses_core_snapshot) ... ok
+test_pairing_boot_uses_secret_reference (__main__.WindowsContracts.test_pairing_boot_uses_secret_reference) ... ok
+test_pairing_pin_never_opens_the_bulk_add_window (__main__.WindowsContracts.test_pairing_pin_never_opens_the_bulk_add_window) ... ok
+test_pairing_surfaces_bind_the_core_contract (__main__.WindowsContracts.test_pairing_surfaces_bind_the_core_contract) ... ok
+test_pairing_surfaces_use_only_generated_resource_keys (__main__.WindowsContracts.test_pairing_surfaces_use_only_generated_resource_keys) ... ok
+test_platform_v2_layout_and_owned_buffers (__main__.WindowsContracts.test_platform_v2_layout_and_owned_buffers) ... ok
+test_power_state_spi_reports_battery_charging_and_mains (__main__.WindowsContracts.test_power_state_spi_reports_battery_charging_and_mains) ... ok
+test_qr_scanner_uses_the_core_decoder_and_reports_no_camera (__main__.WindowsContracts.test_qr_scanner_uses_the_core_decoder_and_reports_no_camera) ... ok
+test_release_build_requires_real_pjsip_for_both_arches (__main__.WindowsContracts.test_release_build_requires_real_pjsip_for_both_arches) ... ok
+test_responsive_layout_is_computed_from_the_window_size (__main__.WindowsContracts.test_responsive_layout_is_computed_from_the_window_size) ... ok
+test_revoke_resets_the_device_to_first_run_setup (__main__.WindowsContracts.test_revoke_resets_the_device_to_first_run_setup) ... ok
+test_runtime_health_is_persisted_measured_and_periodic (__main__.WindowsContracts.test_runtime_health_is_persisted_measured_and_periodic) ... ok
+test_safe_mode_retains_audio_controls_and_uses_low_resource_mjpeg (__main__.WindowsContracts.test_safe_mode_retains_audio_controls_and_uses_low_resource_mjpeg) ... ok
+test_semantic_ui_schema_is_narrow_and_lkg_is_atomic (__main__.WindowsContracts.test_semantic_ui_schema_is_narrow_and_lkg_is_atomic) ... ok
+test_sos_channels_are_rule_driven (__main__.WindowsContracts.test_sos_channels_are_rule_driven) ... ok
+test_sos_mutation_failure_keeps_visible_state (__main__.WindowsContracts.test_sos_mutation_failure_keeps_visible_state) ... ERROR
+test_sos_presentation_colors_fall_back_when_contrast_is_unsafe (__main__.WindowsContracts.test_sos_presentation_colors_fall_back_when_contrast_is_unsafe) ... ok
+test_sos_slider_uses_a_contained_track_and_round_thumb (__main__.WindowsContracts.test_sos_slider_uses_a_contained_track_and_round_thumb) ... ok
+test_sos_slides_then_counts_down_before_core_is_told (__main__.WindowsContracts.test_sos_slides_then_counts_down_before_core_is_told) ... ok
+test_supported_shells_never_parse_paired_plaintext (__main__.WindowsContracts.test_supported_shells_never_parse_paired_plaintext) ... ERROR
+test_the_clock_ticks_from_a_cached_base_not_a_call_per_second (__main__.WindowsContracts.test_the_clock_ticks_from_a_cached_base_not_a_call_per_second) ... ok
+test_the_dashboard_counts_devices_by_role (__main__.WindowsContracts.test_the_dashboard_counts_devices_by_role) ... ok
+test_the_footer_and_the_sos_slider_never_overlap (__main__.WindowsContracts.test_the_footer_and_the_sos_slider_never_overlap) ... ok
+test_the_incoming_page_returns_home_on_its_own_countdown (__main__.WindowsContracts.test_the_incoming_page_returns_home_on_its_own_countdown) ... ok
+test_the_outline_answers_to_the_worst_patch_not_the_average (__main__.WindowsContracts.test_the_outline_answers_to_the_worst_patch_not_the_average)
+A region that spans light and dark fails over one of them even when its average reads. ... ok
+test_the_shell_publishes_whether_it_can_serve_frames (__main__.WindowsContracts.test_the_shell_publishes_whether_it_can_serve_frames) ... ok
+test_the_theme_backdrop_is_admin_configurable (__main__.WindowsContracts.test_the_theme_backdrop_is_admin_configurable) ... ok
+test_the_visitor_call_button_never_names_the_door (__main__.WindowsContracts.test_the_visitor_call_button_never_names_the_door) ... ok
+test_watchdog_restarts_app_not_windows (__main__.WindowsContracts.test_watchdog_restarts_app_not_windows) ... ok
+test_windows_firewall_rules_require_consent_before_uac_repair (__main__.WindowsContracts.test_windows_firewall_rules_require_consent_before_uac_repair) ... ok
+test_windows_has_no_native_settings_only_the_web_admin_entry (__main__.WindowsContracts.test_windows_has_no_native_settings_only_the_web_admin_entry) ... ok
+test_windows_network_discovery_never_advertises_the_wildcard_listener (__main__.WindowsContracts.test_windows_network_discovery_never_advertises_the_wildcard_listener) ... ok
+test_xaml_and_resources_are_well_formed (__main__.WindowsContracts.test_xaml_and_resources_are_well_formed) ... ok
+
+======================================================================
+ERROR: test_android_helper_policy_uses_only_the_fixed_local_protocol (__main__.WindowsContracts.test_android_helper_policy_uses_only_the_fixed_local_protocol)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/win/tests/test_windows_contracts.py", line 211, in test_android_helper_policy_uses_only_the_fixed_local_protocol
+    client = read(
+        "android/app/src/main/java/jp/ox/doorbell/RootKeepaliveClient.kt")
+  File "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/win/tests/test_windows_contracts.py", line 16, in read
+    return (ROOT / relative).read_text(encoding="utf-8")
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 787, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 771, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/android/app/src/main/java/jp/ox/doorbell/RootKeepaliveClient.kt'
+
+======================================================================
+ERROR: test_sos_mutation_failure_keeps_visible_state (__main__.WindowsContracts.test_sos_mutation_failure_keeps_visible_state)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/win/tests/test_windows_contracts.py", line 93, in test_sos_mutation_failure_keeps_visible_state
+    android_core = read(
+        "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt")
+  File "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/win/tests/test_windows_contracts.py", line 16, in read
+    return (ROOT / relative).read_text(encoding="utf-8")
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 787, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 771, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt'
+
+======================================================================
+ERROR: test_supported_shells_never_parse_paired_plaintext (__main__.WindowsContracts.test_supported_shells_never_parse_paired_plaintext)
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/win/tests/test_windows_contracts.py", line 188, in test_supported_shells_never_parse_paired_plaintext
+    android_boot = read(
+        "android/app/src/main/java/jp/ox/doorbell/BootConfig.kt")
+  File "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/win/tests/test_windows_contracts.py", line 16, in read
+    return (ROOT / relative).read_text(encoding="utf-8")
+           ~~~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 787, in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/homebrew/Cellar/python@3.14/3.14.6/Frameworks/Python.framework/Versions/3.14/lib/python3.14/pathlib/__init__.py", line 771, in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/Users/ox/Documents/project/app-doorbell/build/remediation-t35-windows-20260923/source-r1/android/app/src/main/java/jp/ox/doorbell/BootConfig.kt'
+
+----------------------------------------------------------------------
+Ran 70 tests in 0.049s
+
+FAILED (errors=3)

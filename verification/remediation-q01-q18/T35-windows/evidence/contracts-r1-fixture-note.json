@@ -1,0 +1,16 @@
+{
+  "recorded_at": "2026-09-22T17:59:48.825332+00:00",
+  "status": "SNAPSHOT_FIXTURE_ERROR",
+  "errors": 3,
+  "cause": "Missing cross-platform files referenced by multiline read() expressions. No product assertion failed.",
+  "preserved_log_sha256": "0b5cbabaa35e8d33be726beb155c383c353e6338663a329538414e5743ee9e03",
+  "replacement_manifest": "source-candidate-r2.json",
+  "added_dependencies": [
+    "android/app/src/main/java/jp/ox/doorbell/DoorbellCore.kt",
+    "android/app/src/main/java/jp/ox/doorbell/BootConfig.kt",
+    "android/app/src/main/java/jp/ox/doorbell/PairingActivity.kt",
+    "android/app/src/main/java/jp/ox/doorbell/RootKeepaliveClient.kt",
+    "android/app/src/main/java/jp/ox/doorbell/RuntimeSupervisor.kt",
+    "android/app/src/main/java/jp/ox/doorbell/KioskController.kt"
+  ]
+}

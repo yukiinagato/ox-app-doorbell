@@ -1,0 +1,865 @@
+09-22 22:33:38 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:22654
+09-22 22:33:38 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:33:38 I [httpd] listening on 23301,[::]:23301
+09-22 22:33:38 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:33:38 I [node] node 1354e5db (T03-unlock-test) started
+09-22 22:33:38 I [node] initialized the cluster administrator password
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1543:
+TEST CASE:  T03: unlock requires the selected door's explicit command
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1556: SUCCESS: REQUIRE( node.start() ) is correct!
+  values: REQUIRE( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 137 == 137 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:73: SUCCESS: REQUIRE( r.find("HTTP/1.1 200") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:75: SUCCESS: REQUIRE( p != std::string::npos ) is correct!
+  values: REQUIRE( 115 != 18446744073709551615 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1543:
+TEST CASE:  T03: unlock requires the selected door's explicit command
+  T03-01: a light feature code is not an unlock binding
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 113 == 113 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1566: SUCCESS: REQUIRE( status ) is correct!
+  values: REQUIRE( 0xa4b007880 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1588: SUCCESS: CHECK_FALSE( json::getBool(unlock().get(), "configured") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 113 == 113 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1566: SUCCESS: REQUIRE( status ) is correct!
+  values: REQUIRE( 0xa4b004340 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1589: SUCCESS: CHECK_FALSE( json::getBool(unlock().get(), "show_button") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1590: SUCCESS: CHECK_FALSE( node.openDoor("d_front") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size())09-22 22:33:40 I [httpd] stopped
+09-22 22:33:40 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21267
+09-22 22:33:40 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:33:40 I [httpd] listening on 23242,[::]:23242
+09-22 22:33:40 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:33:40 I [node] node 8ae8a1a4 (T03-unlock-test) started
+09-22 22:33:40 I [node] initialized the cluster administrator password
+ ) is correct!
+  values: REQUIRE( 179 == 179 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1579: SUCCESS: CHECK( response.find("HTTP/1.1 409") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1581: SUCCESS: REQUIRE( body ) is correct!
+  values: REQUIRE( 0xa4b8863c0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1582: SUCCESS: CHECK_FALSE( json::getBool(body.get(), "ok") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1583: SUCCESS: CHECK( json::getString(body.get(), "err") == "unlock_not_configured" ) is correct!
+  values: CHECK( unlock_not_configured == unlock_not_configured )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 130 == 130 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1573: SUCCESS: REQUIRE( events ) is correct!
+  values: REQUIRE( 0xa4b886a40 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1584: SUCCESS: CHECK( cJSON_GetArraySize(commands().get()) == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1543:
+TEST CASE:  T03: unlock requires the selected door's explicit command
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  T03-01: a light feature code is not an unlock binding
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1625: SUCCESS: REQUIRE( config ) is correct!
+  values: REQUIRE( 0xa4b8863c0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1627: SUCCESS: CHECK( json::getString(json::get(json::get(json::get(config.get(), "sip"), "dtmf_actions"), "*1"), "command") == "light_on" ) is correct!
+  values: CHECK( light_on == light_on )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1556: SUCCESS: REQUIRE( node.start() ) is correct!
+  values: REQUIRE( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 137 == 137 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:73: SUCCESS: REQUIRE( r.find("HTTP/1.1 200") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:75: SUCCESS: REQUIRE( p != std::string::npos ) is correct!
+  values: REQUIRE( 115 != 18446744073709551615 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1543:
+TEST CASE:  T03: unlock requires the selected door's explicit command
+  T03-02: removing front binding never selects back or a feature code
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1597: SUCCESS: REQUIRE( removed ) is correct!
+  values: REQUIRE( 0xa4b891740 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1598: SUCCESS: REQUIRE( json::getBool(removed.get(), "ok") ) is correct!
+  values: REQUIRE( true )
+
+/Users/ox09-22 22:33:42 I [httpd] stopped
+09-22 22:33:42 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:29253
+09-22 22:33:42 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:33:42 I [httpd] listening on 21929,[::]:21929
+09-22 22:33:42 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:33:42 I [node] node b75c3f51 (T03-unlock-test) started
+/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 113 == 113 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1566: SUCCESS: REQUIRE( status ) is correct!
+  values: REQUIRE( 0xa4b88e3c0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1599: SUCCESS: CHECK_FALSE( json::getBool(unlock().get(), "configured") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 179 == 179 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1579: SUCCESS: CHECK( response.find("HTTP/1.1 409") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1581: SUCCESS: REQUIRE( body ) is correct!
+  values: REQUIRE( 0xa4b892980 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1582: SUCCESS: CHECK_FALSE( json::getBool(body.get(), "ok") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1583: SUCCESS: CHECK( json::getString(body.get(), "err") == "unlock_not_configured" ) is correct!
+  values: CHECK( unlock_not_configured == unlock_not_configured )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 130 == 130 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1573: SUCCESS: REQUIRE( events ) is correct!
+  values: REQUIRE( 0xa4b891b00 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1584: SUCCESS: CHECK( cJSON_GetArraySize(commands().get()) == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1543:
+TEST CASE:  T03: unlock requires the selected door's explicit command
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  T03-02: removing front binding never selects back or a feature code
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1625: SUCCESS: REQUIRE( config ) is correct!
+  values: REQUIRE( 0xa4b891740 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1627: SUCCESS: CHECK( json::getString(json::get(json::get(json::get(config.get(), "sip"), "dtmf_actions"), "*1"), "command") == "light_on" ) is correct!
+  values: CHECK( light_on == light_on )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1556: SUCCESS: REQUIRE( node.start() ) is correct!
+  values: REQUIRE( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values:09-22 22:33:42 I [node] initialized the cluster administrator password
+ REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 137 == 137 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:73: SUCCESS: REQUIRE( r.find("HTTP/1.1 200") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:75: SUCCESS: REQUIRE( p != std::string::npos ) is correct!
+  values: REQUIRE( 115 != 18446744073709551615 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1543:
+TEST CASE:  T03: unlock requires the selected door's explicit command
+  T03-03: one request emits only the selected door command once
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 113 == 113 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1566: SUCCESS: REQUIRE( status ) is correct!
+  values: REQUIRE( 0xa4b883840 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1605: SUCCESS: CHECK( json::getBool(unlock().get(), "configured") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 113 == 113 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1566: SUCCESS: REQUIRE( status ) is correct!
+  values: REQUIRE( 0xa4b883a00 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1606: SUCCESS: CHECK( json::getString(unlock().get(), "command") == "front_gate" ) is correct!
+  values: CHECK( front_gate == front_gate )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 179 == 179 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1609: SUCCESS: CHECK( response.find("HTTP/1.1 200") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is corre09-22 22:33:44 I [httpd] stopped
+09-22 22:33:44 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:24078
+09-22 22:33:44 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:33:44 I [httpd] listening on 25702,[::]:25702
+09-22 22:33:44 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:33:44 I [node] node 43350d61 (T03-unlock-test) started
+09-22 22:33:44 I [node] initialized the cluster administrator password
+ct!
+  values: REQUIRE( 130 == 130 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1573: SUCCESS: REQUIRE( events ) is correct!
+  values: REQUIRE( 0xa4b887680 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1611: SUCCESS: REQUIRE( cJSON_GetArraySize(emitted.get()) == 1 ) is correct!
+  values: REQUIRE( 1 == 1 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1613: SUCCESS: CHECK( json::getString(event, "door") == "d_front" ) is correct!
+  values: CHECK( d_front == d_front )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1615: SUCCESS: REQUIRE( payload ) is correct!
+  values: REQUIRE( 0xa4b887680 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1616: SUCCESS: CHECK( json::getString(payload.get(), "command") == "front_gate" ) is correct!
+  values: CHECK( front_gate == front_gate )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1543:
+TEST CASE:  T03: unlock requires the selected door's explicit command
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  T03-03: one request emits only the selected door command once
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1625: SUCCESS: REQUIRE( config ) is correct!
+  values: REQUIRE( 0xa4b885c80 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1627: SUCCESS: CHECK( json::getString(json::get(json::get(json::get(config.get(), "sip"), "dtmf_actions"), "*1"), "command") == "light_on" ) is correct!
+  values: CHECK( light_on == light_on )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1556: SUCCESS: REQUIRE( node.start() ) is correct!
+  values: REQUIRE( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 137 == 137 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:73: SUCCESS: REQUIRE( r.find("HTTP/1.1 200") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:75: SUCCESS: REQUIRE( p != std::string::npos ) is correct!
+  values: REQUIRE( 115 != 18446744073709551615 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1543:
+TEST CASE:  T03: unlock requires the selected door's explicit command
+  T03-04: forced visibility never authorizes an unconfigured unlock
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 113 == 113 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1566: SUCCESS: REQUIRE( status ) is correct!
+  values: REQUIRE( 0xa4b004ec0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1620: SUCCESS: CHECK( json::getBool(unlock().get(), "show_button") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/co09-22 22:33:46 I [httpd] stopped
+09-22 22:33:46 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-22 22:33:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:33:46 I [node] node eb63d6e2 (T03-native-test) started
+re/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 113 == 113 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1566: SUCCESS: REQUIRE( status ) is correct!
+  values: REQUIRE( 0xa4b007700 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1621: SUCCESS: CHECK_FALSE( json::getBool(unlock().get(), "configured") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 179 == 179 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1579: SUCCESS: CHECK( response.find("HTTP/1.1 409") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1581: SUCCESS: REQUIRE( body ) is correct!
+  values: REQUIRE( 0xa4b8922c0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1582: SUCCESS: CHECK_FALSE( json::getBool(body.get(), "ok") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1583: SUCCESS: CHECK( json::getString(body.get(), "err") == "unlock_not_configured" ) is correct!
+  values: CHECK( unlock_not_configured == unlock_not_configured )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 130 == 130 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1573: SUCCESS: REQUIRE( events ) is correct!
+  values: REQUIRE( 0xa4b890440 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1584: SUCCESS: CHECK( cJSON_GetArraySize(commands().get()) == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1543:
+TEST CASE:  T03: unlock requires the selected door's explicit command
+
+DEEPEST SUBCASE STACK REACHED (DIFFERENT FROM THE CURRENT ONE):
+  T03-04: forced visibility never authorizes an unconfigured unlock
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1625: SUCCESS: REQUIRE( config ) is correct!
+  values: REQUIRE( 0xa4b8922c0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1627: SUCCESS: CHECK( json::getString(json::get(json::get(json::get(config.get(), "sip"), "dtmf_actions"), "*1"), "command") == "light_on" ) is correct!
+  values: CHECK( light_on == light_on )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1631:
+TEST CASE:  T03: native ABI unlock rejects feature codes and shares the explicit binding
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1638: SUCCESS: REQUIRE( core != nullptr ) is correct!
+  values: REQUIRE( 0xa4a8f4000 != nullptr )
+
+/Users/ox/Documents/project/app-door09-22 22:33:46 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:21522
+09-22 22:33:46 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:33:46 I [httpd] listening on 22534,[::]:22534
+09-22 22:33:46 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:33:46 I [node] node 8acf84dc (round4-api) started
+09-22 22:33:46 I [node] initialized the cluster administrator password
+bell/core/tests/test_admin_api.cpp:1646: SUCCESS: REQUIRE( db_core_start(core) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1647: SUCCESS: REQUIRE( db_core_set_config_json(core, "time.ntp.enabled", "false") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1649: SUCCESS: REQUIRE( db_core_set_config_json(core, "doors.d_front", "{\"label\":{\"en\":\"Front\"},\"unlock\":{\"show_button\":true}}") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1651: SUCCESS: REQUIRE( db_core_set_config_json(core, "sip.dtmf_actions", "{\"*1\":{\"type\":\"ha_command\",\"command\":\"light_on\",\"door\":\"self\"}}") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1655: SUCCESS: REQUIRE( snapshot != nullptr ) is correct!
+  values: REQUIRE( 0x102476c80 != nullptr )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1659: SUCCESS: CHECK( db_core_open_door(core, "d_front") == -3 ) is correct!
+  values: CHECK( -3 == -3 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1660: SUCCESS: CHECK( dispatches.load() == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1661: SUCCESS: REQUIRE( db_core_set_config_json(core, "doors.d_front.unlock.command", "\"front_gate\"") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1655: SUCCESS: REQUIRE( snapshot != nullptr ) is correct!
+  values: REQUIRE( 0x102476c80 != nullptr )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1663: SUCCESS: CHECK( db_core_open_door(core, "d_front") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1664: SUCCESS: CHECK( dispatches.load() == 1 ) is correct!
+  values: CHECK( 1 == 1 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1665: SUCCESS: REQUIRE( db_core_delete_config_key(core, "doors.d_front.unlock.command") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1655: SUCCESS: REQUIRE( snapshot != nullptr ) is correct!
+  values: REQUIRE( 0x102476c80 != nullptr )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1667: SUCCESS: CHECK( db_core_open_door(core, "d_front") == -3 ) is correct!
+  values: CHECK( -3 == -3 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1668: SUCCESS: CHECK( dispatches.load() == 1 ) is correct!
+  values: CHECK( 1 == 1 )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1674:
+TEST CASE:  admin API: the cluster-wide notice, the unlock trigger, and PIN minting
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1678: SUCCESS: REQUIRE( mesh_port > 0 ) is correct!
+  values: REQUIRE( 21522 >  0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1679: SUCCESS: REQUIRE( http_port > 0 ) is correct!
+  values: REQUIRE( 22534 >  0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1703: SUCCESS: REQUIRE( node.start() ) is correct!
+  values: REQUIRE( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 137 == 137 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:73: SUCCESS: REQUIRE( r.find("HTTP/1.1 200") == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:75: SUCCESS: REQUIRE( p != std::string::npos ) is correct!
+  values: REQUIRE( 115 != 18446744073709551615 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 141 == 141 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1709: SUCCESS: CHECK( adminReq(http_port, "POST", "/api/notice", "{\"text\":\"House message\"}") .find("HTTP/1.1 403") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 190 == 190 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1711: SUCCESS: CHECK( adminReq(http_port, "POST", "/api/notice", "{\"text\":\"House message\"}", session) .find("HTTP/1.1 200") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1712: SUCCESS: CHECK( node.configJson().find("House message") != std::string::npos ) is correct!
+  values: CHECK( 526 != 18446744073709551615 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 113 == 113 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1714: SUCCESS: REQUIRE( status ) is correct!
+  values: REQUIRE( 0xa4b880ec0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1716: SUCCESS: REQUIRE( cJSON_IsObject(front) ) is correct!
+  values: REQUIRE( 1 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1717: SUCCESS: CHECK( json::getString(json::get(front, "notice"), "text") == "House message" ) is correct!
+  values: CHECK( House message == House message )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1718: SUCCESS: CHECK( json::getString(json::get(front, "notice"), "scope") == "global" ) is correct!
+  values: CHECK( global == global )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1719: SUCCESS: CHECK( json::getBool(json::get(status.get(), "notice"), "global_active") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_c09-22 22:33:46 W [node] rejected door notice for * (announcement text must be between 1 and 200 characters)
+ast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 379 == 379 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1722: SUCCESS: CHECK( adminReq(http_port, "POST", "/api/notice", "{\"text\":\"" + std::string(201, 'x') + "\"}", session) .find("HTTP/1.1 400") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 116 == 116 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1723: SUCCESS: CHECK( adminReq(http_port, "DELETE", "/api/notice", "", session).find("HTTP/1.1 200") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1724: SUCCESS: CHECK( node.configJson().find("House message") == std::string::npos ) is correct!
+  values: CHECK( 18446744073709551615 == 18446744073709551615 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 179 == 179 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1730: SUCCESS: REQUIRE( unconfigured ) is correct!
+  values: REQUIRE( 0xa4b007c40 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1731: SUCCESS: CHECK_FALSE( json::getBool(unconfigured.get(), "ok") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1732: SUCCESS: CHECK( json::getString(unconfigured.get(), "err") == "unlock_not_configured" ) is correct!
+  values: CHECK( unlock_not_configured == unlock_not_configured )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 181 == 181 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1734: SUCCESS: CHECK( adminReq(http_port, "POST", "/api/doors/d_missing/open", "{}", session) .find("HTTP/1.1 404") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 130 == 130 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1735: SUCCESS: CHECK( adminReq(http_port, "POST", "/api/doors/d_front/open", "{}").find("HTTP/1.1 403") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 179 == 179 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1741: SUCCESS: CHECK( adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session) .find("HTTP/1.1 409") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 179 == 179 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1744: SUCCESS: CHECK( adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session) .find("HTTP/1.1 200") == 0 ) is correct!
+  values: CHECK( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 113 == 113 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1746: SUCCESS: REQUIRE( with_unlock ) is correct!
+  values: REQUIRE( 0xa4b891a80 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1749: SUCCESS: CHECK( json::getBool(unlock, "configured") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1750: SUCCESS: CHECK( json::getBool(unlock, "show_button") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1751: SUCCESS: CHECK( json::getString(unlock, "command") == "unlock" ) is correct!
+  values: CHECK( unlock == unlock )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 171 == 171 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1755: SUCCESS: REQUIRE( minted ) is correct!
+  values: REQUIRE( 0xa4b9964c0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1756: SUCCESS: CHECK( json::getBool(minted.get(), "ok") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1757: SUCCESS: CHECK( json::getString(minted.get(), "pin").size() == 6 ) is correct!
+  values: CHECK( 6 == 6 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1758: SUCCESS: CHECK_FALSE( json::getString(minted.get(), "host").empty() ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1759: SUCCESS: CHECK( json::getInt(minted09-22 22:33:49 I [httpd] stopped
+09-22 22:33:49 I [node] addr-detect: local v4=1 all=6 route=10.10.38.24 advertise=10.10.38.24:0
+09-22 22:33:49 I [node] created the missing door entry doors.d_front for this door station
+09-22 22:33:49 D [store] event pruning refused because no replicated coverage snapshot exists
+09-22 22:33:49 I [node] node 5c2b52a6 (settings) started
+.get(), "expires_s") > 0 ) is correct!
+  values: CHECK( 599 >  0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 114 == 114 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1761: SUCCESS: REQUIRE( pairing ) is correct!
+  values: REQUIRE( 0xa4b996cc0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1762: SUCCESS: CHECK_FALSE( json::getBool(json::get(pairing.get(), "pending"), "pairing_mode") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1763: SUCCESS: CHECK( json::getBool(json::get(pairing.get(), "token"), "active") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 188 == 188 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1767: SUCCESS: REQUIRE( started ) is correct!
+  values: REQUIRE( 0xa4b996b40 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1768: SUCCESS: CHECK( json::getBool(started.get(), "ok") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:42: SUCCESS: REQUIRE( fd >= 0 ) is correct!
+  values: REQUIRE( 9 >= 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:47: SUCCESS: REQUIRE( ::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0 ) is correct!
+  values: REQUIRE( 0 == 0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:56: SUCCESS: REQUIRE( ::send(fd, r.data(), r.size(), 0) == static_cast<ssize_t>(r.size()) ) is correct!
+  values: REQUIRE( 114 == 114 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1770: SUCCESS: REQUIRE( opened ) is correct!
+  values: REQUIRE( 0xa4b997a80 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_admin_api.cpp:1771: SUCCESS: CHECK( json::getBool(json::get(opened.get(), "pending"), "pairing_mode") ) is correct!
+  values: CHECK( true )
+
+===============================================================================
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:557:
+TEST CASE:  doors: the unlock control appears only when an unlock action exists
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:48: SUCCESS: REQUIRE( node->start() ) is correct!
+  values: REQUIRE( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:74: SUCCESS: REQUIRE( parsed ) is correct!
+  values: REQUIRE( 0xa4b99a2c0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:569: SUCCESS: REQUIRE( initial ) is correct!
+  values: REQUIRE( 0xa4b890f80 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:570: SUCCESS: CHECK_FALSE( json::getBool(initial.get(), "configured") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:571: SUCCESS: CHECK_FALSE( json::getBool(initial.get(), "show_button") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:572: SUCCESS: CHECK( json::09-22 22:33:49 E [node] refused unsafe programmatic config write: doors.d_front.unlock.command (doors.d_front.unlock.command must be 1..32 characters of letters, digits, _ or -)
+09-22 22:33:49 E [node] refused unsafe programmatic config write: doors.d_front.unlock.show_button (doors.d_front.unlock.show_button must be a boolean)
+getString(initial.get(), "source") == "default" ) is correct!
+  values: CHECK( default == default )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:573: SUCCESS: CHECK( fleet.node->openDoor("d_front") == false ) is correct!
+  values: CHECK( false == false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:74: SUCCESS: REQUIRE( parsed ) is correct!
+  values: REQUIRE( 0xa4b881300 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:578: SUCCESS: CHECK_FALSE( json::getBool(unlock().get(), "configured") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:579: SUCCESS: CHECK_FALSE( fleet.node->openDoor("d_front") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:74: SUCCESS: REQUIRE( parsed ) is correct!
+  values: REQUIRE( 0xa4b99b840 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:582: SUCCESS: REQUIRE( configured ) is correct!
+  values: REQUIRE( 0xa4b88d4c0 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:583: SUCCESS: CHECK( json::getBool(configured.get(), "configured") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:584: SUCCESS: CHECK( json::getBool(configured.get(), "show_button") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:585: SUCCESS: CHECK( json::getString(configured.get(), "command") == "unlock" ) is correct!
+  values: CHECK( unlock == unlock )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:586: SUCCESS: CHECK( json::getString(configured.get(), "source") == "default" ) is correct!
+  values: CHECK( default == default )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:587: SUCCESS: CHECK( fleet.node->openDoor("d_front") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:588: SUCCESS: CHECK( fleet.node->openDoor("d_missing") == false ) is correct!
+  values: CHECK( false == false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:74: SUCCESS: REQUIRE( parsed ) is correct!
+  values: REQUIRE( 0xa4b880f00 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:592: SUCCESS: CHECK_FALSE( json::getBool(unlock().get(), "show_button") ) is correct!
+  values: CHECK_FALSE( false )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:74: SUCCESS: REQUIRE( parsed ) is correct!
+  values: REQUIRE( 0xa4b007980 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:593: SUCCESS: CHECK( json::getString(unlock().get(), "source") == "admin" ) is correct!
+  values: CHECK( admin == admin )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:594: SUCCESS: CHECK( fleet.node->openDoor("d_front") ) is correct!
+  values: CHECK( true )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:74: SUCCESS: REQUIRE( parsed ) is correct!
+  values: REQUIRE( 0xa4b890540 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:597: SUCCESS: CHECK( json::getString(unlock().get(), "command") == "gate" ) is correct!
+  values: CHECK( gate == gate )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:74: SUCCESS: REQUIRE( parsed ) is correct!
+  values: REQUIRE( 0xa4b005640 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:599: SUCCESS: CHECK( json::getString(unlock().get(), "command") == "gate" ) is correct!
+  values: CHECK( gate == gate )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:74: SUCCESS: REQUIRE( parsed ) is correct!
+  values: REQUIRE( 0xa4b891300 )
+
+/Users/ox/Documents/project/app-doorbell/core/tests/test_settings.cpp:601: SUCCESS: CHECK( json::getString(unlock().get(), "source") == "admin" ) is correct!
+  values: CHECK( admin == admin )
+
+===============================================================================
+[doctest] test cases:   4 |   4 passed | 0 failed | 415 skipped
+[doctest] assertions: 250 | 250 passed | 0 failed |
+[doctest] Status: SUCCESS!

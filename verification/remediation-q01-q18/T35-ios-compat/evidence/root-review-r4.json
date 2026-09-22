@@ -1,0 +1,15 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T17:24:04.301256+00:00",
+  "status": "CHANGES_REQUESTED",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-compat/source-frozen-r4.json",
+  "source_manifest_sha256": "179938e8d6283dc2488392ed27804c874cec613b3241f6f62f5531165bb6b426",
+  "findings": [
+    {
+      "id": "R1",
+      "status": "FIX_IN_PROGRESS",
+      "description": "The same cancel/end control can change semantic action between TouchDown and TouchUpInside. Bind phase and call ID to the original gesture and reject stale releases."
+    }
+  ],
+  "scope": "Independent source and evidence review; target UI qualification is limited to the actual recorded runtime profiles. No physical actuator or deployment validation."
+}

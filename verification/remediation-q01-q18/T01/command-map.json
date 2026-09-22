@@ -1,0 +1,755 @@
+{
+  "task_id": "T01",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "4b3c164a85fd749fe6640e44c4b8b0b0b8fe3124fe4213fb9866e0763e7c91f0",
+  "commands": [
+    {
+      "test_id": "android-legacy19-configured",
+      "command": [
+        "./gradlew",
+        "--no-daemon",
+        "-PdoorbellTier=legacy19",
+        "assembleLegacy19Debug",
+        "testLegacy19DebugUnitTest",
+        "lintLegacy19Debug"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell/android",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "target_build_and_host_tests",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-legacy19-configured.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-legacy19-configured.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "API 19: armeabi-v7a",
+      "prerequisites": [
+        "JDK 21",
+        "Android SDK 35",
+        "Tier-matched NDK and local PJSIP artifacts"
+      ],
+      "environment": {
+        "JAVA_HOME": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+        "ANDROID_HOME": "/Users/ox/Library/Android/sdk",
+        "PATH_prefix": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home/bin"
+      }
+    },
+    {
+      "test_id": "android-legacy19",
+      "command": [
+        "./gradlew",
+        "--no-daemon",
+        "-PdoorbellTier=legacy19",
+        "assembleLegacy19Debug",
+        "testLegacy19DebugUnitTest",
+        "lintLegacy19Debug"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell/android",
+      "exit_code": 1,
+      "expected_exit_code": 0,
+      "evidence_kind": "discovery",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-legacy19.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-legacy19.json",
+      "classification": "ENV_CONFIGURATION_ERROR_RESOLVED",
+      "note": "Initial invocation omitted the installed Homebrew JAVA_HOME. Configured rerun passed; this is not a missing-JDK conclusion.",
+      "target": "Android API19 / armeabi-v7a",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "android-modern-configured",
+      "command": [
+        "./gradlew",
+        "--no-daemon",
+        "-PdoorbellTier=modern",
+        "assembleModernDebug",
+        "testModernDebugUnitTest",
+        "lintModernDebug"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell/android",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "target_build_and_host_tests",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-modern-configured.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-modern-configured.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "API 21: arm64-v8a, armeabi-v7a, x86_64",
+      "prerequisites": [
+        "JDK 21",
+        "Android SDK 35",
+        "Tier-matched NDK and local PJSIP artifacts"
+      ],
+      "environment": {
+        "JAVA_HOME": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+        "ANDROID_HOME": "/Users/ox/Library/Android/sdk",
+        "PATH_prefix": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home/bin"
+      }
+    },
+    {
+      "test_id": "android-modern",
+      "command": [
+        "./gradlew",
+        "--no-daemon",
+        "-PdoorbellTier=modern",
+        "assembleModernDebug",
+        "testModernDebugUnitTest",
+        "lintModernDebug"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell/android",
+      "exit_code": 1,
+      "expected_exit_code": 0,
+      "evidence_kind": "discovery",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-modern.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/android-modern.json",
+      "classification": "ENV_CONFIGURATION_ERROR_RESOLVED",
+      "note": "Initial invocation omitted the installed Homebrew JAVA_HOME. Configured rerun passed; this is not a missing-JDK conclusion.",
+      "target": "Android API21 / arm64-v8a, armeabi-v7a, x86_64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "apple-sdks",
+      "command": [
+        "xcodebuild",
+        "-showsdks"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "discovery",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/apple-sdks.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/apple-sdks.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "Installed Xcode SDK discovery",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "baseline-build",
+      "command": [
+        "cmake",
+        "--build",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-host",
+        "-j4"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-source",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-build.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-build.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "baseline-configure",
+      "command": [
+        "cmake",
+        "-S",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-source/core",
+        "-B",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-host",
+        "-DDB_WITH_PJSIP=OFF",
+        "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-source",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-configure.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-configure.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "baseline-core",
+      "command": [
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-host/doorbell_tests"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-source",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-core.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-core.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "baseline-test-list",
+      "command": [
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-host/doorbell_tests",
+        "--list-test-cases"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-source",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-test-list.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-test-list.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "baseline-web",
+      "command": [
+        "python3",
+        "-c",
+        "import pathlib,subprocess; tests=sorted(pathlib.Path('webui/tests').glob('*.test.js')); [subprocess.run(['node',str(t)],check=True) for t in tests]; print('Web suites:',len(tests))"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/baseline-source",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-web.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/baseline-web.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "browser-fixture-build-r2",
+      "command": [
+        "c++",
+        "-std=c++17",
+        "-pthread",
+        "-Icore/src",
+        "-Icore/include",
+        "-Icore/third_party/cjson",
+        "tools/verification/browser_fixture.cpp",
+        "build/repair-20260922/libdoorbell_core.a",
+        "build/repair-20260922/libdb_third_party.a",
+        "-o",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/browser-fixture"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/browser-fixture-build-r2.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/browser-fixture-build-r2.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "browser-fixture-build",
+      "command": [
+        "c++",
+        "-std=c++17",
+        "-pthread",
+        "-Icore/src",
+        "-Icore/include",
+        "-Icore/third_party",
+        "tools/verification/browser_fixture.cpp",
+        "build/repair-20260922/libdoorbell_core.a",
+        "build/repair-20260922/libdb_third_party.a",
+        "-o",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/browser-fixture"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 1,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/browser-fixture-build.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/browser-fixture-build.json",
+      "classification": "HARNESS_BUILD_ERROR_RESOLVED",
+      "note": "Initial fixture compile omitted the cJSON include directory; corrected command -r2 passed without changing product code.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "candidate-build",
+      "command": [
+        "cmake",
+        "--build",
+        "build/repair-20260922",
+        "-j4"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-build.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-build.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "candidate-compat",
+      "command": [
+        "ios-compat/scripts/test_host.sh"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-compat.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-compat.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "candidate-configure",
+      "command": [
+        "cmake",
+        "-S",
+        "core",
+        "-B",
+        "build/repair-20260922",
+        "-DDB_WITH_PJSIP=OFF",
+        "-DDB_BUILD_TESTS=ON",
+        "-DCMAKE_BUILD_TYPE=Debug"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-configure.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-configure.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "candidate-ctest",
+      "command": [
+        "ctest",
+        "--test-dir",
+        "build/repair-20260922",
+        "-V",
+        "--output-on-failure"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-ctest.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-ctest.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "candidate-targeted",
+      "command": [
+        "./build/repair-20260922/doorbell_tests",
+        "--test-case=*runloop manual mode*,httpd: restarts after stop,store: metadata batches roll back atomically on write failure,*time-service offset*,*unregister drains an entered UI callback*,mesh: partitions elect local leaders and heal without event loss or duplication"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-targeted.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-targeted.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "candidate-test-list",
+      "command": [
+        "./build/repair-20260922/doorbell_tests",
+        "--list-test-cases"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-test-list.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-test-list.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "candidate-web",
+      "command": [
+        "python3",
+        "-c",
+        "import pathlib,subprocess; tests=sorted(pathlib.Path('webui/tests').glob('*.test.js')); [subprocess.run(['node',str(t)],check=True) for t in tests]; print('Web suites:',len(tests))"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-web.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/candidate-web.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "diff-check",
+      "command": [
+        "git",
+        "diff",
+        "--check"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "static",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/diff-check.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/diff-check.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "english-source",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "tools/check_english_source.py"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "static",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/english-source.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/english-source.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "i18n",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "tools/gen_i18n.py",
+        "--check"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "static",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/i18n.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/i18n.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "ios-schemes",
+      "command": [
+        "xcodebuild",
+        "-list",
+        "-json",
+        "-project",
+        "ios/Doorbell.xcodeproj"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "discovery",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/ios-schemes.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/ios-schemes.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "Xcode project scheme discovery",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "ios5-app",
+      "command": [
+        "ios-compat/scripts/build_app_ios5.sh"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "target_build",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/ios5-app.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/ios5-app.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "iOS 5.1 / armv7 / compatibility miniSIP",
+      "prerequisites": [
+        "iPhoneOS7.1.sdk",
+        "iOS 5 compatibility libc++",
+        "ldid",
+        "Fresh Core archive for app build"
+      ],
+      "environment": {
+        "DB_ALLOW_DIRTY": "1",
+        "DB_BUILD_ID": "b26e0d3-t01-20260922",
+        "DB_BUILD_JOBS": "4"
+      }
+    },
+    {
+      "test_id": "ios5-core",
+      "command": [
+        "ios-compat/scripts/build_core_ios5.sh",
+        "--install"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "target_build",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/ios5-core.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/ios5-core.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "iOS 5.1 / armv7 / compatibility miniSIP",
+      "prerequisites": [
+        "iPhoneOS7.1.sdk",
+        "iOS 5 compatibility libc++",
+        "ldid",
+        "Fresh Core archive for app build"
+      ],
+      "environment": {
+        "DB_ALLOW_DIRTY": "1",
+        "DB_BUILD_ID": "b26e0d3-t01-20260922",
+        "DB_BUILD_JOBS": "4"
+      }
+    },
+    {
+      "test_id": "ios9-armv7-preflight",
+      "command": [
+        "ios-compat/scripts/build_ios9_armv7.sh",
+        "--signing",
+        "jailbreak",
+        "--preflight-only"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 1,
+      "expected_exit_code": 0,
+      "evidence_kind": "discovery",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/ios9-armv7-preflight.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/ios9-armv7-preflight.json",
+      "classification": "BLOCKED_ENV",
+      "note": "Preflight/discovery only, not target execution.",
+      "target": "iOS 9 / armv7 formal profile",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "mutation-sensitivity",
+      "command": [
+        "python3",
+        "tools/verification/check_mutation_sensitivity.py",
+        "--repo",
+        "/Users/ox/Documents/project/app-doorbell",
+        "--scratch",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/mutations"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 0,
+      "expected_exit_code": 0,
+      "evidence_kind": "host",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/mutation-sensitivity.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/mutation-sensitivity.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "runner-timeout",
+      "command": [
+        "/opt/homebrew/opt/python@3.14/bin/python3.14",
+        "-c",
+        "import subprocess,sys,pathlib,time; p=subprocess.Popen([sys.executable,'-c','import signal,time; signal.signal(signal.SIGTERM,signal.SIG_IGN); time.sleep(60)']); pathlib.Path(sys.argv[1]).write_text(str(p.pid)); p.wait()",
+        "/Users/ox/Documents/project/app-doorbell/build/remediation-t01-20260922/timeout-child.pid"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 124,
+      "expected_exit_code": 124,
+      "evidence_kind": "harness",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/runner-timeout.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/runner-timeout.json",
+      "classification": "PASS",
+      "note": "Inspect the raw log; this entry preserves the actual command exit.",
+      "target": "arm64",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    },
+    {
+      "test_id": "windows-dotnet",
+      "command": [
+        "dotnet",
+        "--info"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "exit_code": 127,
+      "expected_exit_code": 0,
+      "evidence_kind": "discovery",
+      "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/windows-dotnet.log",
+      "record_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T01/evidence/windows-dotnet.json",
+      "classification": "BLOCKED_ENV",
+      "note": "Preflight/discovery only, not target execution.",
+      "target": "Windows toolchain discovery from macOS host",
+      "prerequisites": [
+        "See tools/verification/README.md and environment.json."
+      ]
+    }
+  ],
+  "unexecuted_targets": [
+    {
+      "id": "modern-ios-device",
+      "command": [
+        "xcodebuild",
+        "-project",
+        "ios/Doorbell.xcodeproj",
+        "-scheme",
+        "Doorbell",
+        "-configuration",
+        "Release",
+        "-sdk",
+        "iphoneos",
+        "-destination",
+        "generic/platform=iOS",
+        "ARCHS=arm64",
+        "ONLY_ACTIVE_ARCH=YES",
+        "CODE_SIGNING_ALLOWED=NO",
+        "build"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "status": "NOT_RUN",
+      "exit_code": null,
+      "log_path": null,
+      "evidence_kind": "target_build",
+      "target": "iOS / arm64",
+      "prerequisites": [
+        "Xcode",
+        "matching real PJSIP artifacts"
+      ],
+      "discovery": "evidence/ios-schemes.json; .github/workflows/build.yml"
+    },
+    {
+      "id": "ios9-arm64",
+      "command": [
+        "ios/scripts/build_ios9_arm64.sh"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "status": "NOT_RUN",
+      "exit_code": null,
+      "log_path": null,
+      "evidence_kind": "target_build",
+      "target": "iOS 9 minimum / arm64",
+      "prerequisites": [
+        "Current Xcode",
+        "matching min-9.0 PJSIP artifacts"
+      ],
+      "discovery": "ios/scripts/build_ios9_arm64.sh; project memory"
+    },
+    {
+      "id": "tvos-simulator",
+      "command": [
+        "xcodebuild",
+        "-project",
+        "ios/Doorbell.xcodeproj",
+        "-scheme",
+        "DoorbellTV",
+        "-configuration",
+        "Debug",
+        "-sdk",
+        "appletvsimulator",
+        "-destination",
+        "generic/platform=tvOS Simulator",
+        "ARCHS=arm64",
+        "ONLY_ACTIVE_ARCH=YES",
+        "CODE_SIGNING_ALLOWED=NO",
+        "build"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "status": "NOT_RUN",
+      "exit_code": null,
+      "log_path": null,
+      "evidence_kind": "target_build",
+      "target": "tvOS Simulator / arm64",
+      "prerequisites": [
+        "Xcode",
+        "tvOS simulator PJSIP artifacts"
+      ],
+      "discovery": "evidence/ios-schemes.json; .github/workflows/build.yml"
+    },
+    {
+      "id": "windows-release",
+      "command": [
+        "cmd",
+        "/c",
+        "win\\build.cmd"
+      ],
+      "cwd": "/Users/ox/Documents/project/app-doorbell",
+      "status": "BLOCKED_ENV",
+      "exit_code": null,
+      "log_path": null,
+      "evidence_kind": "target_build",
+      "target": "Windows / x86 and x64",
+      "prerequisites": [
+        "Windows VS2022 C++ and .NET desktop workloads",
+        "per-architecture PJSIP inputs",
+        "release signing configuration"
+      ],
+      "discovery": "win/build.cmd"
+    }
+  ],
+  "test_count_note": "CTest has one wrapper. Candidate Core contains 417 test cases and 10708 assertions. Do not add targeted reruns or baseline counts to unique coverage. Android unit tests run on the host JVM, not on devices."
+}

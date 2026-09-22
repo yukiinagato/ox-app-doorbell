@@ -183,6 +183,7 @@
     return "ja";
   }
   function applyEmergencyI18n() {
+    if (emergencyOverlay && emergencyOverlay.refreshText) emergencyOverlay.refreshText();
     var overlays = document.getElementsByClassName("dbEmergencyOverlay");
     if (overlays.length) {
       var headings = overlays[0].getElementsByTagName("h2");
@@ -203,6 +204,7 @@
   }
   function installEmergency() {
     emergencyOverlay = DoorbellPanelRuntime.installEmergencyOverlay({
+      translate: t,
       title: t("emergency.title"),
       detail: t("emergency.active_detail"),
       clearInstruction: t("emergency.clear_instruction"),

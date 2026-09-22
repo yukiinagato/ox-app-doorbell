@@ -1,0 +1,10 @@
+{
+  "recorded_at": "2026-09-22T18:20:16.339235+00:00",
+  "status": "INVALID_ORACLE_EXPLORATION_NOT_ACCEPTANCE",
+  "runs": [
+    "red-r2",
+    "red-r3"
+  ],
+  "reason": "statusJsonOnLoop itself calls sipSettings and changes credential_source; this field cannot prove SipCtl.updateSettings ran. Removed that probe from committed test source. Preserve exploratory logs without claiming a SIP runtime result.",
+  "production_source_finding": "onConfigChanges recognizes sip. descendants but not root sip entity emitted by import; runtime SipCtl reapply lacks this root case."
+}

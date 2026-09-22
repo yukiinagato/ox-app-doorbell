@@ -1,0 +1,92 @@
+{
+  "task_id": "T01",
+  "entries": [
+    {
+      "fault": "scheduled_timeout",
+      "production": "core/src/util/runloop.cpp",
+      "test_source": "core/tests/test_util.cpp",
+      "test_name_or_assertion": "runloop manual mode: ordering, periodic, cancel",
+      "control": "Production Runloop with SimClock; advance and pumpDue control timer order and cancellation.",
+      "limitations": "Core host tests; not HTTP queued-write deadline proof."
+    },
+    {
+      "fault": "delay_and_loss",
+      "production": "core/src/mesh/inmem_net.cpp; core/src/mesh/mesh.cpp",
+      "test_source": "core/tests/test_mesh.cpp",
+      "test_name_or_assertion": "mesh: membership, config, and events converge with loss and delay",
+      "control": "InMemNet setDelayMs(3), setDrop(0.20, 20250827), and SimClock; fixed seed makes loss reproducible.",
+      "limitations": "No real network or lock."
+    },
+    {
+      "fault": "partition",
+      "production": "core/src/mesh/mesh.cpp",
+      "test_source": "core/tests/test_mesh.cpp",
+      "test_name_or_assertion": "mesh: partitions elect local leaders and heal without event loss or duplication",
+      "control": "Partition/heal actual Mesh instances using InMemNet and SimClock.",
+      "limitations": "Host network simulation, not device packet-loss qualification."
+    },
+    {
+      "fault": "storage_failure",
+      "production": "core/src/store/store.cpp",
+      "test_source": "core/tests/test_store.cpp",
+      "test_name_or_assertion": "store: metadata batches roll back atomically on write failure",
+      "control": "SQLite trigger injects a real write failure; production Store transaction must roll back prior writes.",
+      "limitations": "SQLite host path; no copied business model."
+    },
+    {
+      "fault": "http_stop_restart",
+      "production": "core/src/httpd/httpd.cpp",
+      "test_source": "core/tests/test_httpd.cpp",
+      "test_name_or_assertion": "httpd: restarts after stop",
+      "control": "Actual Httpd listener, production Runloop routing and TCP requests; stop/start changes listener.",
+      "limitations": "Queued/entered mutation gates are still T04 work."
+    },
+    {
+      "fault": "wall_offset",
+      "production": "core/src/util/clock.h",
+      "test_source": "core/tests/test_time.cpp",
+      "test_name_or_assertion": "clock: the time-service offset corrects every wall reading",
+      "control": "SimClock implements production IClock; setWallOffsetMs changes corrected reads without changing the host clock.",
+      "limitations": "Does not alone qualify every UI countdown."
+    },
+    {
+      "fault": "callback_drain",
+      "production": "core/src/capi/doorbell_capi.cpp",
+      "test_source": "core/tests/test_capi_abi.cpp",
+      "test_name_or_assertion": "[R2] capi unregister drains an entered UI callback",
+      "control": "Condition-variable entry/release barrier around a real C callback; unregister joins before destroy.",
+      "limitations": "The 25 ms negative wait is bounded observation, not proof of Swift acquire/stop ordering. Q10 remains for T20."
+    },
+    {
+      "fault": "xhr_timeout",
+      "production": "webui/admin/app.js",
+      "test_source": "webui/tests/admin_runtime.test.js",
+      "test_name_or_assertion": "timeout intent wins over abort and status=0 ready-state notifications",
+      "control": "Load actual app.js; manually deliver fake-XHR timeout/abort/ready-state and fake timers.",
+      "limitations": "Web callback ordering only."
+    },
+    {
+      "fault": "late_media",
+      "production": "webui/panel/video-session.js",
+      "test_source": "webui/tests/video_session.test.js",
+      "test_name_or_assertion": "a stream resolving after stop is immediately released",
+      "control": "Deferred getUserMedia promise resolves after stop; existing assertion requires tracks to stop. Mutation sensitivity removes the real branch and observes AssertionError.",
+      "limitations": "No physical camera required."
+    },
+    {
+      "fault": "page_and_runtime",
+      "production": "webui/panel/call.html; webui/panel/runtime.js",
+      "test_source": "webui/tests/call_state_controller.test.js; webui/tests/call_recovery_controller.test.js; webui/tests/runtime.test.js",
+      "test_name_or_assertion": "Actual production module/page scripts loaded by existing Node runners",
+      "control": "VM DOM/network boundaries are injected; the production controller is loaded directly.",
+      "limitations": "Real browser smoke separately covers authentication and navigation, not media playback or bfcache certification."
+    }
+  ],
+  "evidence": [
+    "evidence/candidate-test-list.log",
+    "evidence/candidate-ctest.log",
+    "evidence/candidate-targeted.log",
+    "evidence/candidate-web.log",
+    "evidence/mutation-sensitivity.log"
+  ]
+}

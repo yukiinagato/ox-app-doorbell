@@ -1,0 +1,9 @@
+T14-01 production UA generation: PASS
+T14-02 production UA generation: PASS
+T14-03 production UA generation: PASS
+T14-04 production UA generation: PASS
+registration failures remain bounded production UA generation: PASS
+explicit revocation overrides active-call deferral production UA generation: PASS
+registration error preserves an existing call production UA generation: PASS
+credential and reference changes participate in identity production UA generation: PASS
+failed transport retirement never overlaps a successor production UA generation: PASS

@@ -1,0 +1,33 @@
+{
+  "at": "2026-09-22T16:34:01.562604+00:00",
+  "scope": "Read-only preparation, not a runtime baseline or acceptance result",
+  "inputs": [
+    {
+      "path": "ios/Doorbell/MainViewController.swift",
+      "sha256": "9e8037cd358d8127621b47fec763657bbf05b8ce79f66352dffbf2b79d4bcb25"
+    },
+    {
+      "path": "ios/Doorbell/VisitorScreenView.swift",
+      "sha256": "59ef5da43dbd6617b48959925a18261253169fe3dc357a34894e6ca73ec5e7a1"
+    },
+    {
+      "path": "ios/Doorbell/SosSlideControl.swift",
+      "sha256": "7a186d0009e7903c98f796302a261dc0e5b1f82d0d50ba1244afb321bfc6cd12"
+    },
+    {
+      "path": "ios/Doorbell/IOSAvailability.swift",
+      "sha256": "6b5e3610c3310114ea38968371010fd220ed639d478c30c52f9e79cf9cc1a096"
+    },
+    {
+      "path": "ios/DoorbellTests/VisitorScreenLayoutTests.swift",
+      "sha256": "c28ecfcd5ae92874f36543684f5b6f5323135bd25b495dd1cc3549594c3ea875"
+    },
+    {
+      "path": "ios/Doorbell/Info.plist",
+      "sha256": "8360e5f01a13769cc5e0050114e52caef8e7cf658e37e27efd95e8a5d724f112"
+    }
+  ],
+  "device_readonly_command": "ssh -o BatchMode=yes -o ConnectTimeout=5 doorbell-ipad-air1 uname -m / uicache -l jp.ox.doorbell",
+  "device_readonly_exit_code": 0,
+  "device_readonly_log_sha256": "255288811481a6196d9124bea3d8b033a6ca1f19098577281eb8e4d5a8406266"
+}

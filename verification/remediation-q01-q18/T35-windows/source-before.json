@@ -1,0 +1,34 @@
+{
+  "recorded_at": "2026-09-22T17:43:34.955706+00:00",
+  "inputs": [
+    {
+      "path": "win/DoorbellApp/MainWindow.xaml",
+      "sha256": "5a3d0d35a92a34e8136c8515b9c5aebe914feda0dc421b8234cf68bfc64237fc"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.xaml.cs",
+      "sha256": "0e6ae9cf2e56c466e41e3b5303b5cea30b28f5995d0297c61274c56d25d2c812"
+    },
+    {
+      "path": "win/DoorbellApp/MainWindow.Shell.cs",
+      "sha256": "c57d8e208fcaaad31af54f8649b09e92480375b0dc7df8b9c1447e2173c4d7ec"
+    },
+    {
+      "path": "win/DoorbellApp/Ui/SosSlider.cs",
+      "sha256": "fb28691426b5f7f02d91a3237e8b42c579791b64063a4c4744ce76170471ee2a"
+    },
+    {
+      "path": "win/DoorbellApp/DoorbellApp.csproj",
+      "sha256": "e064fef07f36ccac100663a2da0904db7670b372a4fa295c91468f29ad6c2460"
+    },
+    {
+      "path": "win/DoorbellApp/App.xaml",
+      "sha256": "d4c81e5bf18aa79f930d7cbf8e773521aa03058ccccdf0b75a020b2d5a4fc0ba"
+    },
+    {
+      "path": "win/tests/test_windows_contracts.py",
+      "sha256": "ef386937f5928dad1486da50112ba681640bbb36667f21da02d60a8d5dde637b"
+    }
+  ],
+  "runtime_baseline": "NOT_RUN. LAN known Windows RDP/SMB reachable, no configured execution access; CUA Windows App returned Mac locked and automatic unlock failed. No bypass attempted."
+}

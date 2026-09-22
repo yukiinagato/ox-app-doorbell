@@ -1,0 +1,20 @@
+09-23 00:00:13 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:00:13 I [store] pruned 3 replicated events
+09-23 00:00:13 I [store] pruned 2 replicated events
+09-23 00:00:13 I [store] pruned 3 replicated events
+09-23 00:00:13 I [store] pruned 2 replicated events
+09-23 00:00:16 E [store] SQL failed: file is not a database
+09-23 00:00:16 W [store] database could not be opened; backed up and recreated: /tmp/doorbell_store_ITNNbB/db.sqlite.corrupt-1790089216
+09-23 00:00:19 E [store] SQL failed: database is locked
+09-23 00:00:19 E [store] database open failed without confirmed corruption; refusing to replace it
+09-23 00:00:19 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:00:19 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:00:19 D [store] event pruning refused because no replicated coverage snapshot exists
+09-23 00:00:19 D [store] event pruning refused because no replicated coverage snapshot exists
+[doctest] doctest version is "2.4.11"
+[doctest] run with "--help" for options
+[operation-storage] rows=1 reserved_bytes=12288 database_bytes=4096 wal_bytes=263712 full_writes=1
+===============================================================================
+[doctest] test cases:    33 |    33 passed | 0 failed | 417 skipped
+[doctest] assertions: 17122 | 17122 passed | 0 failed |
+[doctest] Status: SUCCESS!

@@ -1,0 +1,8 @@
+{
+  "recorded_at": "2026-09-22T18:12:02.300130+00:00",
+  "status": "IMPLEMENTED_PENDING_WPF_RUNTIME",
+  "source_manifest_sha256": "3d8b165108885f55e030f8f9625de7007b9274a9f09c7ae425417fc27e9165df",
+  "acceptance_sha256": "405365c6a84c086d96330da07673d1962883a29d46100b6276a64f9f676c5e75",
+  "next": "Actual WPF target gates remain NOT_RUN; source/helper independent review passed. No production edits pending.",
+  "pause_rule": "On root quota reset notification save and stop."
+}

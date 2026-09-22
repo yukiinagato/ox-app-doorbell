@@ -2,6 +2,12 @@ import UIKit
 
 final class VisitorScreenView: UIView {
 
+    static func purposeColumnCount(for viewport: CGSize) -> Int {
+        let available = viewport.width > viewport.height && viewport.width >= 600
+            ? (viewport.width - 68) / 2 : viewport.width - 40
+        return max(1, min(3, Int((available + 12) / 144)))
+    }
+
     private let texts: Texts
     private let clockLabel = HaloLabel()
     private let dateLabel = HaloLabel()
@@ -20,6 +26,8 @@ final class VisitorScreenView: UIView {
     private let sosControl: SosSlideControl
 
     private let root = UIStackView()
+    private let scroll = UIScrollView()
+    private let footer = UIStackView()
     private let noticeColumn = UIStackView()
     private let actionColumn = UIStackView()
 
@@ -30,10 +38,15 @@ final class VisitorScreenView: UIView {
     private var lastLayoutSize = CGSize.zero
 
     override func layoutSubviews() {
-        super.layoutSubviews()
         if bounds.width > 0, bounds.height > 0, bounds.size != lastLayoutSize {
             applyLayout(for: bounds.size)
         }
+        super.layoutSubviews()
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if bounds.width > 0 && bounds.height > 0 { applyLayout(for: bounds.size) }
     }
 
     func setLayoutStyle(_ value: String) {
@@ -76,6 +89,7 @@ final class VisitorScreenView: UIView {
 
         dateLabel.font = .systemFont(ofSize: 24, weight: .medium)
         dateLabel.textAlignment = .center
+        dateLabel.numberOfLines = 2
         clockLabel.inkCompanion = dateLabel
         dateLabel.inkCompanion = clockLabel
 
@@ -97,7 +111,7 @@ final class VisitorScreenView: UIView {
 
         hintLabel.font = .systemFont(ofSize: 20)
         hintLabel.textAlignment = .center
-        hintLabel.numberOfLines = 2
+        hintLabel.numberOfLines = 0
         hintLabel.accessibilityIdentifier = "visitor_hint"
 
         footerLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
@@ -130,12 +144,31 @@ final class VisitorScreenView: UIView {
         root.spacing = 18
         root.alignment = .fill
         root.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(root)
+        scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.alwaysBounceVertical = false
+        scroll.showsVerticalScrollIndicator = true
+        scroll.addSubview(root)
+        addSubview(scroll)
+        footer.axis = .vertical
+        footer.spacing = 12
+        footer.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(footer)
+        let fill = root.heightAnchor.constraint(greaterThanOrEqualTo: scroll.heightAnchor)
+        fill.priority = UILayoutPriority(250)
         NSLayoutConstraint.activate([
-            root.topAnchor.constraint(equalTo: topAnchor),
-            root.bottomAnchor.constraint(equalTo: bottomAnchor),
-            root.leadingAnchor.constraint(equalTo: leadingAnchor),
-            root.trailingAnchor.constraint(equalTo: trailingAnchor),
+            scroll.topAnchor.constraint(equalTo: topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: footer.topAnchor, constant: -16),
+            scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
+            footer.bottomAnchor.constraint(equalTo: bottomAnchor),
+            footer.leadingAnchor.constraint(equalTo: leadingAnchor),
+            footer.trailingAnchor.constraint(equalTo: trailingAnchor),
+            root.topAnchor.constraint(equalTo: scroll.topAnchor),
+            root.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
+            root.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
+            root.widthAnchor.constraint(equalTo: scroll.widthAnchor),
+            fill,
         ])
         applyLayout(for: CGSize(width: 768, height: 1024))
     }
@@ -143,9 +176,11 @@ final class VisitorScreenView: UIView {
     func applyLayout(for size: CGSize) {
         lastLayoutSize = size
         let landscape = size.width > size.height
-        let wide = min(size.width, size.height) >= 768
+        let wide = size.width >= 600 && size.height >= 600
+        let compact = size.width < 600 || size.height < 420
         isLandscape = landscape
         columnWidth?.isActive = false
+        callWidth?.isActive = false
 
         for view in root.arrangedSubviews.reversed() {
             root.removeArrangedSubview(view)
@@ -157,6 +192,12 @@ final class VisitorScreenView: UIView {
                 child.removeFromSuperview()
             }
         }
+        for view in footer.arrangedSubviews {
+            footer.removeArrangedSubview(view)
+            view.removeFromSuperview()
+        }
+        footer.addArrangedSubview(footerLabel)
+        if sosVisible { footer.addArrangedSubview(sosControl) }
 
         let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel])
         clockColumn.axis = .vertical
@@ -167,18 +208,26 @@ final class VisitorScreenView: UIView {
         noticeRow.spacing = 8
         noticeRow.alignment = .center
         noticeColumn.addArrangedSubview(noticeRow)
+        noticeColumn.addArrangedSubview(cameraWarning)
+        noticeColumn.isHidden = noticeText.isEmpty && cameraWarning.isHidden
+        noticeRow.isHidden = noticeText.isEmpty
 
         clockLabel.font = UIFont.monospacedDigitSystemFont(
-            ofSize: wide ? 104 : (landscape ? 80 : 84), weight: .regular)
-        hintLabel.font = .systemFont(ofSize: wide ? 18 : 16, weight: .regular)
-        callButton.titleLabel?.font = .systemFont(ofSize: wide ? 44 : 38, weight: .semibold)
+            ofSize: wide ? 96 : (landscape ? 56 : 64), weight: .light)
+        dateLabel.font = IOSAvailability.visitorFont(size: wide ? 22 : 17, weight: .medium, traits: traitCollection)
+        root.spacing = compact ? 16 : 24
+        actionColumn.spacing = compact ? 14 : 20
+        noticeLabel.font = IOSAvailability.visitorFont(size: wide ? 22 : 18, traits: traitCollection)
+        hintLabel.font = IOSAvailability.visitorFont(size: wide ? 18 : 16, traits: traitCollection)
+        callButton.titleLabel?.font = IOSAvailability.visitorFont(size: wide ? 36 : 28, weight: .semibold, traits: traitCollection)
+        callButton.titleLabel?.numberOfLines = 0
         #if !os(tvOS)
-        let vertical: CGFloat = wide ? 34 : 24
-        callButton.contentEdgeInsets = UIEdgeInsets(top: vertical, left: 60, bottom: vertical,
-                                                    right: 60)
+        let vertical: CGFloat = wide ? 30 : 22
+        callButton.contentEdgeInsets = UIEdgeInsets(top: vertical, left: 24, bottom: vertical,
+                                                    right: 24)
         #endif
 
-        if layoutStyle == "left" || layoutStyle == "right" {
+        if !compact && (layoutStyle == "left" || layoutStyle == "right") {
             clockLabel.font = .monospacedDigitSystemFont(ofSize: wide ? 80 : 68, weight: .regular)
             #if !os(tvOS)
             callButton.contentEdgeInsets = UIEdgeInsets(top: 30, left: 28, bottom: 30, right: 28)
@@ -199,8 +248,6 @@ final class VisitorScreenView: UIView {
                 multiplier: landscape ? 0.46 : 0.70)
             columnWidth?.isActive = true
             root.addArrangedSubview(columns)
-            root.addArrangedSubview(footerLabel)
-            if sosVisible { root.addArrangedSubview(sosControl) }
             return
         }
         if layoutStyle == "edges" {
@@ -212,11 +259,9 @@ final class VisitorScreenView: UIView {
             root.addArrangedSubview(hintLabel)
             root.addArrangedSubview(purposeSection)
             root.addArrangedSubview(langBar)
-            root.addArrangedSubview(footerLabel)
-            if sosVisible { root.addArrangedSubview(sosControl) }
             return
         }
-        if landscape {
+        if landscape && size.width >= 600 {
             actionColumn.addArrangedSubview(callButtonRow())
             actionColumn.addArrangedSubview(hintLabel)
             actionColumn.addArrangedSubview(purposeSection)
@@ -228,8 +273,6 @@ final class VisitorScreenView: UIView {
             columns.distribution = .fillEqually
             columns.alignment = .center
             root.addArrangedSubview(columns)
-            root.addArrangedSubview(footerLabel)
-            if sosVisible { root.addArrangedSubview(sosControl) }
             return
         }
 
@@ -241,8 +284,6 @@ final class VisitorScreenView: UIView {
         actionColumn.addArrangedSubview(langBar)
         root.addArrangedSubview(actionColumn)
         root.addArrangedSubview(UIView())
-        root.addArrangedSubview(footerLabel)
-        if sosVisible { root.addArrangedSubview(sosControl) }
     }
 
     /// The call button, centred in a full-width row and never narrower than its share of it.
@@ -255,6 +296,7 @@ final class VisitorScreenView: UIView {
         width.priority = UILayoutPriority(999)
         width.isActive = true
         callWidth = width
+        callButton.widthAnchor.constraint(lessThanOrEqualTo: row.widthAnchor).isActive = true
         return row
     }
 
@@ -295,7 +337,8 @@ final class VisitorScreenView: UIView {
     func updateNotice(_ notice: DoorbellNotice?) {
         noticeText = notice?.text ?? ""
         let hasNotice = !noticeText.isEmpty
-        noticeColumn.isHidden = !hasNotice
+        noticeColumn.isHidden = !hasNotice && cameraWarning.isHidden
+        noticeLabel.superview?.isHidden = !hasNotice
         noticeLabel.text = noticeText
         noticeExpand.isHidden = !hasNotice || noticeText.count < 40
         applyNoticeLines()
@@ -304,6 +347,7 @@ final class VisitorScreenView: UIView {
     private func applyNoticeLines() {
         noticeLabel.numberOfLines = noticeExpanded ? 0 : 2
         noticeExpand.setTitle(noticeExpanded ? "▴" : "▾", for: .normal)
+        noticeExpand.accessibilityLabel = texts.t(noticeExpanded ? "notice.collapse" : "notice.expand")
     }
 
     @objc private func toggleNotice() {
@@ -323,6 +367,7 @@ final class VisitorScreenView: UIView {
     func updateCameraWarning(_ text: String?) {
         cameraWarning.text = text
         cameraWarning.isHidden = (text == nil)
+        noticeColumn.isHidden = noticeText.isEmpty && cameraWarning.isHidden
         applyCameraWarningSkin()
     }
 

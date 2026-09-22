@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.BootConfigFactoryResetTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:26:48" hostname="MacBookPro.local" time="0.022">
+  <properties/>
+  <testcase name="clearingOnlyThePairingReferenceIsStillDistinctFromAFactoryReset" classname="jp.ox.doorbell.BootConfigFactoryResetTest" time="0.012"/>
+  <testcase name="aFactoryResetClearsThePairingMaterialAndTheLocalIdentity" classname="jp.ox.doorbell.BootConfigFactoryResetTest" time="0.003"/>
+  <testcase name="aResetIsWrittenThroughTheBackupGenerationAndIsIdempotent" classname="jp.ox.doorbell.BootConfigFactoryResetTest" time="0.003"/>
+  <testcase name="theProvisionedPortsSurviveSoARepairReachesTheSameEndpoints" classname="jp.ox.doorbell.BootConfigFactoryResetTest" time="0.002"/>
+  <testcase name="theResetProfileRequiresFirstRunSetupAgain" classname="jp.ox.doorbell.BootConfigFactoryResetTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

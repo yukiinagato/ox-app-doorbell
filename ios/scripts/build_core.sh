@@ -163,10 +163,15 @@ xcrun libtool -static -no_warning_for_no_symbols -o "$ALL_ARCHIVE" "${LIBRARIES[
 
 ACTUAL_ARCHS="$(xcrun lipo -archs "$ALL_ARCHIVE")"
 EXPECTED_ARCHS="${ARCHS}"
-[[ "$ACTUAL_ARCHS" = "$EXPECTED_ARCHS" ]] || {
+if ! python3 - "$ACTUAL_ARCHS" "$EXPECTED_ARCHS" <<'PY'
+import sys
+
+sys.exit(0 if sorted(sys.argv[1].split()) == sorted(sys.argv[2].split()) else 1)
+PY
+then
   echo "error: $ALL_ARCHIVE contains '$ACTUAL_ARCHS', expected '$EXPECTED_ARCHS'" >&2
   exit 1
-}
+fi
 if [[ "$SIP_BACKEND" = real_pjsip ]] && \
    ! xcrun nm -gU "$ALL_ARCHIVE" | grep -E '(^|[[:space:]])_pjsua_create$' >/dev/null; then
   echo "error: combined native archive does not define pjsua_create" >&2

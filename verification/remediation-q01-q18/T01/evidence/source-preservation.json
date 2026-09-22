@@ -1,0 +1,9 @@
+{
+  "status": "PASS",
+  "initial_file_count": 1216,
+  "changed_initial_files": [],
+  "current_source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "diff_sha256": "4b3c164a85fd749fe6640e44c4b8b0b0b8fe3124fe4213fb9866e0763e7c91f0",
+  "original_hashes": "../source-manifests/starting-files.json",
+  "ios_legacy_changed": false
+}

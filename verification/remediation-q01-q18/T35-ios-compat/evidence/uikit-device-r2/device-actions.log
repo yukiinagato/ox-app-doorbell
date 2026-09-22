@@ -1,0 +1,159 @@
+/bin/mkdir -p /var/mobile/Library/DoorbellT35UIKit; /usr/sbin/chown mobile:mobile /var/mobile/Library/DoorbellT35UIKit; /bin/rm -f /var/mobile/Library/DoorbellT35UIKit/result.json
+sh: /usr/sbin/chown: No such file or directory
+
+exit=0
+/usr/sbin/chown -R mobile:mobile /Applications/DoorbellT35UIKit.app; /bin/chmod 755 /Applications/DoorbellT35UIKit.app/DoorbellT35UIKit; su mobile -c /usr/bin/uicache
+sh: /usr/sbin/chown: No such file or directory
+No matching processes belonging to you were found
+
+exit=0
+if [ -S /var/run/doorbell-keepalive.sock ]; then /usr/local/libexec/doorbell-keepalive --control begin --seconds 180 --socket /var/run/doorbell-keepalive.sock; fi; su mobile -c "/usr/bin/uiopen doorbell-t35-test://"; /bin/launchctl list | /bin/grep t35
+{"ok":true}
+
+exit=1
+/bin/launchctl list | /bin/grep -E "doorbell|t35"; /bin/ls -l /var/mobile/Library/DoorbellT35UIKit; /bin/cat /var/mobile/Library/DoorbellT35UIKit/result.json
+30018	-	UIKitApplication:jp.ox.doorbell[0xca36]
+19	-	jp.ox.doorbell.keepalive
+total 0
+/bin/cat: /var/mobile/Library/DoorbellT35UIKit/result.json: No such file or directory
+
+exit=1
+su mobile -c "/Applications/DoorbellT35UIKit.app/DoorbellT35UIKit > /var/mobile/Library/DoorbellT35UIKit/launch.log 2>&1 &"; /bin/launchctl list | /bin/grep -E "doorbell|t35"
+30018	-	UIKitApplication:jp.ox.doorbell[0xca36]
+19	-	jp.ox.doorbell.keepalive
+sh: /var/mobile/Library/DoorbellT35UIKit/launch.log: Permission denied
+
+exit=0
+/bin/launchctl list | /bin/grep -E "doorbell|t35"; /bin/ls -l /var/mobile/Library/DoorbellT35UIKit; /bin/cat /var/mobile/Library/DoorbellT35UIKit/result.json /var/mobile/Library/DoorbellT35UIKit/launch.log
+30018	-	UIKitApplication:jp.ox.doorbell[0xca36]
+19	-	jp.ox.doorbell.keepalive
+total 0
+/bin/cat: /var/mobile/Library/DoorbellT35UIKit/result.json: No such file or directory
+/bin/cat: /var/mobile/Library/DoorbellT35UIKit/launch.log: No such file or directory
+
+exit=1
+chown mobile:mobile /var/mobile/Library/DoorbellT35UIKit; su mobile -c "/Applications/DoorbellT35UIKit.app/DoorbellT35UIKit > /var/mobile/Library/DoorbellT35UIKit/launch.log 2>&1 &"; /bin/launchctl list | /bin/grep -E "doorbell|t35"
+30018	-	UIKitApplication:jp.ox.doorbell[0xca36]
+19	-	jp.ox.doorbell.keepalive
+
+exit=0
+/bin/launchctl list | /bin/grep -E "doorbell|t35"; /bin/ls -l /var/mobile/Library/DoorbellT35UIKit; /bin/cat /var/mobile/Library/DoorbellT35UIKit/result.json /var/mobile/Library/DoorbellT35UIKit/launch.log
+30018	-	UIKitApplication:jp.ox.doorbell[0xca36]
+19	-	jp.ox.doorbell.keepalive
+total 0
+-rw-r--r-- 1 mobile mobile 0 Sep 23 02:36 launch.log
+/bin/cat: /var/mobile/Library/DoorbellT35UIKit/result.json: No such file or directory
+
+exit=1
+chown mobile:mobile /var/mobile/Library/DoorbellT35UIKit; su mobile -c "trap  HUP; /Applications/DoorbellT35UIKit.app/DoorbellT35UIKit > /var/mobile/Library/DoorbellT35UIKit/launch.log 2>&1 &"; /bin/launchctl list | /bin/grep -E "doorbell|t35"
+30018	-	UIKitApplication:jp.ox.doorbell[0xca36]
+19	-	jp.ox.doorbell.keepalive
+trap: usage: trap [-lp] [[arg] signal_spec ...]
+
+exit=0
+killall -0 DoorbellT35UIKit; /bin/ls -l /Applications/DoorbellT35UIKit.app /var/mobile/Library/DoorbellT35UIKit; /usr/bin/uiopen --help; /bin/cat /var/mobile/Library/DoorbellT35UIKit/launch.log
+/Applications/DoorbellT35UIKit.app:
+total 1544
+-rwxr-xr-x 1 root admin 793536 Sep 23 02:34 DoorbellT35UIKit
+-rw-r--r-- 1 root admin   1035 Sep 23 02:34 Icon-72.png
+-rw-r--r-- 1 root admin   1497 Sep 23 02:34 Icon-72@2x.png
+-rw-r--r-- 1 root admin   1153 Sep 23 02:34 Info.plist
+-rw-r--r-- 1 root admin    855 Sep 23 02:34 icon.png
+-rw-r--r-- 1 root admin    552 Sep 23 02:34 tabler_adjustments.png
+-rw-r--r-- 1 root admin    938 Sep 23 02:34 tabler_adjustments@2x.png
+-rw-r--r-- 1 root admin    491 Sep 23 02:34 tabler_backspace.png
+-rw-r--r-- 1 root admin    804 Sep 23 02:34 tabler_backspace@2x.png
+-rw-r--r-- 1 root admin    406 Sep 23 02:34 tabler_battery.png
+-rw-r--r-- 1 root admin    715 Sep 23 02:34 tabler_battery@2x.png
+-rw-r--r-- 1 root admin    513 Sep 23 02:34 tabler_battery_charging.png
+-rw-r--r-- 1 root admin   1043 Sep 23 02:34 tabler_battery_charging@2x.png
+-rw-r--r-- 1 root admin    536 Sep 23 02:34 tabler_bell.png
+-rw-r--r-- 1 root admin   1102 Sep 23 02:34 tabler_bell@2x.png
+-rw-r--r-- 1 root admin    538 Sep 23 02:34 tabler_brush.png
+-rw-r--r-- 1 root admin   1208 Sep 23 02:34 tabler_brush@2x.png
+-rw-r--r-- 1 root admin    616 Sep 23 02:34 tabler_building_community.png
+-rw-r--r-- 1 root admin   1066 Sep 23 02:34 tabler_building_community@2x.png
+-rw-r--r-- 1 root admin    651 Sep 23 02:34 tabler_calendar_time.png
+-rw-r--r-- 1 root admin   1293 Sep 23 02:34 tabler_calendar_time@2x.png
+-rw-r--r-- 1 root admin    679 Sep 23 02:34 tabler_camera_off.png
+-rw-r--r-- 1 root admin   1226 Sep 23 02:34 tabler_camera_off@2x.png
+-rw-r--r-- 1 root admin    258 Sep 23 02:34 tabler_check.png
+-rw-r--r-- 1 root admin    351 Sep 23 02:34 tabler_check@2x.png
+-rw-r--r-- 1 root admin    247 Sep 23 02:34 tabler_chevron_down.png
+-rw-r--r-- 1 root admin    342 Sep 23 02:34 tabler_chevron_down@2x.png
+-rw-r--r-- 1 root admin    260 Sep 23 02:34 tabler_chevron_right.png
+-rw-r--r-- 1 root admin    313 Sep 23 02:34 tabler_chevron_right@2x.png
+-rw-r--r-- 1 root admin    301 Sep 23 02:34 tabler_chevrons_right.png
+-rw-r--r-- 1 root admin    372 Sep 23 02:34 tabler_chevrons_right@2x.png
+-rw-r--r-- 1 root admin    543 Sep 23 02:34 tabler_clock.png
+-rw-r--r-- 1 root admin   1106 Sep 23 02:34 tabler_clock@2x.png
+-rw-r--r-- 1 root admin    564 Sep 23 02:34 tabler_copy.png
+-rw-r--r-- 1 root admin   1108 Sep 23 02:34 tabler_copy@2x.png
+-rw-r--r-- 1 root admin    442 Sep 23 02:34 tabler_device_tablet.png
+-rw-r--r-- 1 root admin    717 Sep 23 02:34 tabler_device_tablet@2x.png
+-rw-r--r-- 1 root admin    453 Sep 23 02:34 tabler_door.png
+-rw-r--r-- 1 root admin    717 Sep 23 02:34 tabler_door@2x.png
+-rw-r--r-- 1 root admin    481 Sep 23 02:34 tabler_download.png
+-rw-r--r-- 1 root admin    805 Sep 23 02:34 tabler_download@2x.png
+-rw-r--r-- 1 root admin    454 Sep 23 02:34 tabler_eye.png
+-rw-r--r-- 1 root admin   1009 Sep 23 02:34 tabler_eye@2x.png
+-rw-r--r-- 1 root admin    597 Sep 23 02:34 tabler_eye_off.png
+-rw-r--r-- 1 root admin   1184 Sep 23 02:34 tabler_eye_off@2x.png
+-rw-r--r-- 1 root admin    542 Sep 23 02:34 tabler_home.png
+-rw-r--r-- 1 root admin    972 Sep 23 02:34 tabler_home@2x.png
+-rw-r--r-- 1 root admin    548 Sep 23 02:34 tabler_info_circle.png
+-rw-r--r-- 1 root admin   1092 Sep 23 02:34 tabler_info_circle@2x.png
+-rw-r--r-- 1 root admin    502 Sep 23 02:34 tabler_link.png
+-rw-r--r-- 1 root admin    922 Sep 23 02:34 tabler_link@2x.png
+-rw-r--r-- 1 root admin    234 Sep 23 02:34 tabler_list.png
+-rw-r--r-- 1 root admin    337 Sep 23 02:34 tabler_list@2x.png
+-rw-r--r-- 1 root admin    544 Sep 23 02:34 tabler_mail.png
+-rw-r--r-- 1 root admin    853 Sep 23 02:34 tabler_mail@2x.png
+-rw-r--r-- 1 root admin    618 Sep 23 02:34 tabler_message_reply.png
+-rw-r--r-- 1 root admin   1194 Sep 23 02:34 tabler_message_reply@2x.png
+-rw-r--r-- 1 root admin    557 Sep 23 02:34 tabler_microphone.png
+-rw-r--r-- 1 root admin   1157 Sep 23 02:34 tabler_microphone@2x.png
+-rw-r--r-- 1 root admin    643 Sep 23 02:34 tabler_microphone_off.png
+-rw-r--r-- 1 root admin   1311 Sep 23 02:34 tabler_microphone_off@2x.png
+-rw-r--r-- 1 root admin    532 Sep 23 02:34 tabler_note.png
+-rw-r--r-- 1 root admin    844 Sep 23 02:34 tabler_note@2x.png
+-rw-r--r-- 1 root admin    592 Sep 23 02:34 tabler_package.png
+-rw-r--r-- 1 root admin   1078 Sep 23 02:34 tabler_package@2x.png
+-rw-r--r-- 1 root admin    649 Sep 23 02:34 tabler_palette.png
+-rw-r--r-- 1 root admin   1348 Sep 23 02:34 tabler_palette@2x.png
+-rw-r--r-- 1 root admin    560 Sep 23 02:34 tabler_phone.png
+-rw-r--r-- 1 root admin   1305 Sep 23 02:34 tabler_phone@2x.png
+-rw-r--r-- 1 root admin    644 Sep 23 02:34 tabler_phone_off.png
+-rw-r--r-- 1 root admin   1416 Sep 23 02:34 tabler_phone_off@2x.png
+-rw-r--r-- 1 root admin    637 Sep 23 02:34 tabler_photo.png
+-rw-r--r-- 1 root admin   1171 Sep 23 02:34 tabler_photo@2x.png
+-rw-r--r-- 1 root admin    355 Sep 23 02:34 tabler_plus.png
+-rw-r--r-- 1 root admin    490 Sep 23 02:34 tabler_plus@2x.png
+-rw-r--r-- 1 root admin    592 Sep 23 02:34 tabler_reload.png
+-rw-r--r-- 1 root admin   1268 Sep 23 02:34 tabler_reload@2x.png
+-rw-r--r-- 1 root admin    551 Sep 23 02:34 tabler_settings.png
+-rw-r--r-- 1 root admin   1090 Sep 23 02:34 tabler_settings@2x.png
+-rw-r--r-- 1 root admin    610 Sep 23 02:34 tabler_shield_lock.png
+-rw-r--r-- 1 root admin   1347 Sep 23 02:34 tabler_shield_lock@2x.png
+-rw-r--r-- 1 root admin    502 Sep 23 02:34 tabler_topology_star_3.png
+-rw-r--r-- 1 root admin    892 Sep 23 02:34 tabler_topology_star_3@2x.png
+-rw-r--r-- 1 root admin    608 Sep 23 02:34 tabler_trash.png
+-rw-r--r-- 1 root admin   1218 Sep 23 02:34 tabler_trash@2x.png
+-rw-r--r-- 1 root admin    498 Sep 23 02:34 tabler_upload.png
+-rw-r--r-- 1 root admin    795 Sep 23 02:34 tabler_upload@2x.png
+-rw-r--r-- 1 root admin    559 Sep 23 02:34 tabler_users.png
+-rw-r--r-- 1 root admin   1160 Sep 23 02:34 tabler_users@2x.png
+-rw-r--r-- 1 root admin    588 Sep 23 02:34 tabler_video_off.png
+-rw-r--r-- 1 root admin   1076 Sep 23 02:34 tabler_video_off@2x.png
+-rw-r--r-- 1 root admin    586 Sep 23 02:34 tabler_volume.png
+-rw-r--r-- 1 root admin   1185 Sep 23 02:34 tabler_volume@2x.png
+-rw-r--r-- 1 root admin    642 Sep 23 02:34 tabler_world.png
+-rw-r--r-- 1 root admin   1284 Sep 23 02:34 tabler_world@2x.png
+-rw-r--r-- 1 root admin    345 Sep 23 02:34 tabler_x.png
+-rw-r--r-- 1 root admin    491 Sep 23 02:34 tabler_x@2x.png
+
+/var/mobile/Library/DoorbellT35UIKit:
+total 0
+-rw-r--r-- 1 mobile mobile 0 Sep 23 02:36 launch.log
+
+exit=0

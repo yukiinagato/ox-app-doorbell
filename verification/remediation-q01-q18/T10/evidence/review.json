@@ -1,0 +1,20 @@
+{
+  "task_id": "T10",
+  "status": "PASS",
+  "reviewer": "/root",
+  "source_files": {
+    "webui/panel/call.html": "4a6029f179620a8fc5b0e10a2f58dbaf99776f9a4f203aa7a435d4cd46e11fa5",
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/tests/call_poll_lanes.test.js": "0a05c33a2fddc116a6f1e02a636797f3709c6298aeae7fab1749905f2a61d9c1",
+    "webui/tests/call_state_controller.test.js": "2b0cd6d7e9cdf38af610da251d67b0a17ecc86e803f1832db2d55095e5c894e3",
+    "webui/tests/call_page_fixture.js": "19fce4c3b611b25212a0e88fdaca796ce85ab238907fa9510e85c01419f4f477"
+  },
+  "checks": [
+    "Independent review of request ownership, three lane scheduling, page/selection guards, configuration failure retention, locale validation, and unchanged SOS authoritative semantics.",
+    "Independent rerun of all 15 actual Web test scripts; independent-web-suite.json/log."
+  ],
+  "limits": [
+    "Node VM production code boundaries; no physical browser or SIP qualification.",
+    "T11 heartbeat independent scheduling remains a separate required task."
+  ]
+}

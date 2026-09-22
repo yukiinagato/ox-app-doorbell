@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.CallFlowControllerTest" tests="11" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:14:55" hostname="MacBookPro.local" time="0.005">
+  <properties/>
+  <testcase name="ttlUsesTheConfiguredDeadlineAndEmitsOneGlobalCancel" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.004"/>
+  <testcase name="ringThenPurposeSelectsAgainstTheExactCall" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.0"/>
+  <testcase name="lifecycleEventsRejectWrongCallsAndStaleStages" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.0"/>
+  <testcase name="ringThenPurposePressesFirstAndCancelsOnlyOnce" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.0"/>
+  <testcase name="answeredAndEndedEventsUseCallAndStageFiltering" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.001"/>
+  <testcase name="newerPurposeReturnsAnAnsweredRevisionToRinging" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.0"/>
+  <testcase name="purposeFirstSkipIsAnExplicitNoPurposePress" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.0"/>
+  <testcase name="purposeFirstDoesNotPressUntilPurposeIsConfirmed" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.0"/>
+  <testcase name="recoveryRequiresThePersistedOriginCallAndUnexpiredTtl" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.0"/>
+  <testcase name="rejectedCancelKeepsStateAndDoesNotRetryTheGlobalMutation" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.0"/>
+  <testcase name="establishedEndOnlyHangsUp" classname="jp.ox.doorbell.CallFlowControllerTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

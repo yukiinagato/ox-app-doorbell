@@ -1,0 +1,52 @@
+[
+  {
+    "command": [
+      "node",
+      "webui/tests/admin_import.test.js"
+    ],
+    "started_at": "2026-09-22T18:58:44.714896+00:00",
+    "exit_code": 0,
+    "log": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T30/evidence/admin_import.log",
+    "log_sha256": "35f0d7278a999e3f3c0ca8237211d25fb56bd2da7fb9809d2cd50c4310b74321"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/admin_logic.test.js"
+    ],
+    "started_at": "2026-09-22T18:58:44.859751+00:00",
+    "exit_code": 0,
+    "log": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T30/evidence/admin_logic.log",
+    "log_sha256": "09539d14ac1885f121aedc976d556c31dcf612f9b78a79e79319986917d2dbaa"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/admin_config_merge.test.js"
+    ],
+    "started_at": "2026-09-22T18:58:45.001110+00:00",
+    "exit_code": 0,
+    "log": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T30/evidence/admin_config_merge.log",
+    "log_sha256": "3a21c78cfdb7b9c606f3aade0a7d955b1af64f8abc83a845a6276a7dcf978214"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/admin_runtime.test.js"
+    ],
+    "started_at": "2026-09-22T18:58:45.086460+00:00",
+    "exit_code": 0,
+    "log": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T30/evidence/admin_runtime.log",
+    "log_sha256": "694326e1aa4a74eb7e2bd957d4f17fde6202b4aaffc157381d87aa094915f88d"
+  },
+  {
+    "command": [
+      "node",
+      "webui/tests/panel_i18n.test.js"
+    ],
+    "started_at": "2026-09-22T18:58:45.217200+00:00",
+    "exit_code": 0,
+    "log": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T30/evidence/panel_i18n.log",
+    "log_sha256": "68c609fbd382c01752c9a9a780588e4319c7b369217e7ba75b632fdc1b7818b0"
+  }
+]

@@ -1,0 +1,20 @@
+{
+  "started_at": "2026-09-22T18:09:58.094873+00:00",
+  "finished_at": "2026-09-22T18:09:58.114493+00:00",
+  "command": [
+    "git",
+    "diff",
+    "--check",
+    "--",
+    "win"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "exit_code": 0,
+  "source_manifest_sha256": "3d8b165108885f55e030f8f9625de7007b9274a9f09c7ae425417fc27e9165df",
+  "platform": "macOS arm64 / Mono",
+  "sip_backend": "not linked",
+  "signing": "test-only unsigned",
+  "scope": "Windows scope whitespace check.",
+  "observed_result": "PASS",
+  "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+}

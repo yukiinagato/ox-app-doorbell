@@ -1,0 +1,298 @@
+{
+  "calls" : [
+    {
+      "remaining_ms" : 59980,
+      "origin" : "408245591fb2cee3bcb7c095b02e4999",
+      "recovery_required" : false,
+      "expires_at_ms" : 1790103493820,
+      "state" : "ringing",
+      "purpose" : "p_visit",
+      "door" : "front",
+      "server_now_ms" : 1790103433840,
+      "recovery_remaining_ms" : 0,
+      "stage_revision" : 0,
+      "recovery_eligible" : false,
+      "call_id" : "d93acc628b40d93644b92b03f4b1de5a",
+      "call_flow" : "purpose_first",
+      "snapshot_generation" : "0b31c6d8391e62c38203fe7ebb2052e0:27"
+    }
+  ],
+  "capabilities" : {
+    "schema_version" : 2,
+    "ui_manifest" : {
+      "elements" : {
+        "purpose.button" : {
+          "defaults" : {
+            "scale" : 1
+          },
+          "properties" : [
+            "scale"
+          ],
+          "safety_critical" : false
+        },
+        "cancel.call" : {
+          "safety_critical" : true,
+          "properties" : [
+            "scale"
+          ],
+          "defaults" : {
+            "scale" : 1
+          }
+        }
+      },
+      "units" : "pt",
+      "viewport" : {
+        "minimum_touch" : 44,
+        "scale_min" : 0.75,
+        "scale_max" : 2
+      },
+      "schema_version" : 1
+    },
+    "runtime" : {
+
+    },
+    "web_ui" : {
+      "device_id" : "408245591fb2cee3bcb7c095b02e4999",
+      "manifest" : {
+        "elements" : {
+          "reply.button" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#E8EDF2",
+              "background" : "#1A2027",
+              "scale" : 1
+            }
+          },
+          "monitor.close" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#FFFFFF",
+              "background" : "#274261",
+              "scale" : 1
+            }
+          },
+          "purpose.button" : {
+            "defaults" : {
+              "scale" : 1
+            },
+            "properties" : [
+              "scale"
+            ],
+            "safety_critical" : false
+          },
+          "call.primary" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#E8EDF2",
+              "background" : "#1A2027",
+              "scale" : 1
+            }
+          },
+          "cancel.call" : {
+            "safety_critical" : true,
+            "properties" : [
+              "scale"
+            ],
+            "defaults" : {
+              "scale" : 1
+            }
+          },
+          "ring.action" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#E8EDF2",
+              "background" : "#1A2027",
+              "scale" : 1
+            }
+          },
+          "call.end" : {
+            "safety_critical" : true,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#FFFFFF",
+              "border" : "#FFFFFF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#FFFFFF",
+              "background" : "#8D2932",
+              "scale" : 1
+            }
+          },
+          "ring.title" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#4DA3FF",
+              "border" : "#4DA3FF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#E8EDF2",
+              "background" : "#1A2027",
+              "scale" : 1
+            }
+          },
+          "status.offline" : {
+            "safety_critical" : false,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#FFFFFF",
+              "border" : "#FFFFFF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#FFFFFF",
+              "background" : "#8D2932",
+              "scale" : 1
+            }
+          },
+          "sos.trigger" : {
+            "safety_critical" : true,
+            "properties" : [
+              "scale",
+              "font_scale",
+              "foreground",
+              "background",
+              "accent",
+              "border",
+              "radius"
+            ],
+            "defaults" : {
+              "accent" : "#FFD166",
+              "border" : "#FFFFFF",
+              "radius" : 12,
+              "font_scale" : 1,
+              "foreground" : "#FFFFFF",
+              "background" : "#8F1010",
+              "scale" : 1
+            }
+          }
+        },
+        "units" : "effective_px",
+        "viewport" : {
+          "scale_max" : 2,
+          "scale_min" : 0.75,
+          "minimum_touch" : 44
+        },
+        "schema_version" : 1
+      }
+    },
+    "caps" : {
+      "mqtt_reachability_source" : "unmeasured",
+      "features" : {
+        "operations_v1" : true,
+        "runtime_recovery_v1" : false,
+        "helper_policy_v1" : false,
+        "emergency_rules_v1" : true,
+        "call_cancel_v2" : true,
+        "call_lifecycle_v2" : true,
+        "ui_manifest_v1" : true,
+        "sip_dtmf_v1" : true,
+        "config_batch_v1" : true,
+        "media_sources_v1" : true,
+        "call_flow_v2" : true,
+        "device_alert_v1" : false,
+        "config_cas_v1" : true,
+        "web_push_subscriptions_v1" : true,
+        "platform_v2" : true
+      },
+      "mqtt_ready" : false,
+      "telegram_ready" : false,
+      "telegram_reachable" : false,
+      "mains_power" : true,
+      "tls12" : false,
+      "web_push_ready" : false
+    },
+    "features" : {
+      "operations_v1" : true,
+      "runtime_recovery_v1" : false,
+      "helper_policy_v1" : false,
+      "emergency_rules_v1" : true,
+      "call_cancel_v2" : true,
+      "call_lifecycle_v2" : true,
+      "ui_manifest_v1" : true,
+      "sip_dtmf_v1" : true,
+      "config_batch_v1" : true,
+      "media_sources_v1" : true,
+      "call_flow_v2" : true,
+      "device_alert_v1" : false,
+      "config_cas_v1" : true,
+      "web_push_subscriptions_v1" : true,
+      "platform_v2" : true
+    }
+  }
+}

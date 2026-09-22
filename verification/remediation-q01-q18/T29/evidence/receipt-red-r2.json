@@ -1,0 +1,33 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "49d5d09c3df2dd1033fbac26a7abe811f477cfff2f36eed234562ad9b006c9ab",
+  "task_id": "T29",
+  "test_id": "receipt-red-r2",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/source-receipt-red-r2.json",
+  "source_manifest_sha256": "fc92af668368a9ebda260570c8055468092f9c4783bc2023ea141ea23ccf7b4c",
+  "command": [
+    "build/remediation-t29-20260923/receipt-red-r1/doorbell_import_receipt_tests",
+    "--test-case=config import: receipt recovery*"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T18:14:41.871235+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T29/evidence/receipt-red-r2.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T18:14:48.631682+00:00",
+  "expected_exit_code": 1,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

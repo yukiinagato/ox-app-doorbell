@@ -1,0 +1,53 @@
+{
+  "scope": "production_test",
+  "browser": "Native Chromium 153 / Codex IAB / macOS",
+  "cases": [
+    {
+      "id": "T25-01",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-02",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-03",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-04",
+      "status": "PASS"
+    },
+    {
+      "id": "synchronous validation retains the editor without a request",
+      "status": "PASS"
+    },
+    {
+      "id": "notice API failure retains its dedicated editor",
+      "status": "PASS"
+    },
+    {
+      "id": "retrying a failed preset does not duplicate the draft",
+      "status": "PASS"
+    },
+    {
+      "id": "unknown secret config outcome does not delete a possibly live credential",
+      "status": "PASS"
+    },
+    {
+      "id": "native timeout and late success settle the save once",
+      "status": "PASS"
+    }
+  ],
+  "red": "browser-red.json",
+  "green": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T27/evidence/t25-revalidation-green.json",
+  "web_regressions": "web-suite.json",
+  "web_result": "18 scripts PASS",
+  "production_path": "Complete admin HTML and app.js; existing opt-in test hooks expose editor entry points; controlled XHR boundary, real DOM/focus/scroll/click behavior.",
+  "limitations": [
+    "XHR responses and timeout events are injected; no actual write to a running Core or external service.",
+    "This task retains the existing legacy config batch API; CAS editor migration belongs to T27 after T26.",
+    "No target device, embedded Core page, deployment or signing qualification in this card."
+  ],
+  "evidence_audit": "Original browser-green.json was overwritten by the old development fixture during T27. Its replacement is a newly timestamped real-browser rerun using the exact frozen T25 source and cases, not a reconstruction of the original log."
+}

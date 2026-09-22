@@ -1,0 +1,52 @@
+{
+  "task": "T31",
+  "kind": "read_only_inventory",
+  "recorded_at": "2026-09-22T18:36:20.498772+00:00",
+  "production_changed": false,
+  "inputs": [
+    {
+      "path": "core/src/node/node.cpp",
+      "sha256": "5dad1e482a63b47a146dbcfd760ac3353d133c0b053786a3ce146217d76a45e4"
+    },
+    {
+      "path": "core/src/node/node.h",
+      "sha256": "4a8ba89b0c8e73f9fb254069c6669e05a78cf9ac7cb4e84a782127d8c143b752"
+    },
+    {
+      "path": "core/src/node/operation_service.inc",
+      "sha256": "ce565d423fee1c1eb6598c64978ba86960c08fe08b1a8e800fc505a443dfe28b"
+    },
+    {
+      "path": "core/src/node/operation_config.h",
+      "sha256": "86daf49fa392ca191759c5c7c4d566b289999e9f97c0b1b1a88dc4051a712a04"
+    },
+    {
+      "path": "core/src/capi/doorbell_capi.cpp",
+      "sha256": "e19b1f6384675f8227de411d76202c649b993ea2154ff73980bcd60661d25c98"
+    },
+    {
+      "path": "core/include/doorbell/doorbell.h",
+      "sha256": "3cc5ffdfcc6aad8427f69aa8b484d940c88923c17610649a0b21a2bd81d16f48"
+    },
+    {
+      "path": "core/src/httpd/httpd.cpp",
+      "sha256": "bb25e9edae198a51e56438c7ed0d26441e7b3fc6211b4fb3926ab4bbdd30264a"
+    },
+    {
+      "path": "core/src/httpd/httpd.h",
+      "sha256": "d82dcd55a8279c2f7ebfce24aa744b5415e78cc8c8f65bb191a5c1658f455e9b"
+    },
+    {
+      "path": "docs/en/remediation-contracts-adr.md",
+      "sha256": "d70fe5775a41a890caff859b3f5d1c9cc5f0993a2de5d4275a6c42071bad5ee5"
+    },
+    {
+      "path": "docs/en/config-schema.md",
+      "sha256": "17b9769c43066b9e8039d4436b503ce1798e7ea3e70ec104ce4be49f48cb7d16"
+    },
+    {
+      "path": "webui/panel/runtime.js",
+      "sha256": "e9761a77889ddbe69da94254ecbdbb03746aeb8821f787301891dfe2567e697e"
+    }
+  ]
+}

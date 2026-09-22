@@ -1,0 +1,24 @@
+{
+  "run": "tvos-build-r1",
+  "recorded_after_completed_run": true,
+  "observed_at": "2026-09-22T14:39:59.601029+00:00",
+  "app": "build/remediation-t21-20260922/tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app",
+  "version": "0.1.14",
+  "build": "15",
+  "minimum_os": "15.0",
+  "executable": "build/remediation-t21-20260922/tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV",
+  "executable_sha256": "7b91369603f42f7299c11d632075bc510a9655827bd643f8c40a1e46bf2757a6",
+  "retained_executable": "build/remediation-t21-20260922/artifact-snapshots/tvos-build-r1/DoorbellTV",
+  "native_inputs": [
+    {
+      "path": "ios/build/core/appletvsimulator/arm64/min-15.0/libdoorbell_all.a",
+      "retained_path": "build/remediation-t21-20260922/artifact-snapshots/tvos-build-r1/libdoorbell_all.a",
+      "sha256": "78f88f960ee531bf6e4bbcd75e61c82180924c0bfc5150db5d817f612ce0c6cc"
+    },
+    {
+      "path": "ios/build/core/appletvsimulator/arm64/min-15.0/artifact-manifest.json",
+      "retained_path": "build/remediation-t21-20260922/artifact-snapshots/tvos-build-r1/artifact-manifest.json",
+      "sha256": "1e47472ba4a32fc5ab8528e69379bd08b4edffb27938abe7e9fe3fc7656e8c88"
+    }
+  ]
+}

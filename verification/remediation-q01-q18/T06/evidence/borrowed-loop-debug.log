@@ -1,0 +1,6 @@
+(lldb) target create "build/remediation-t06-20260922/normal/doorbell_tests"
+Current executable set to '/Users/ox/Documents/project/app-doorbell/build/remediation-t06-20260922/normal/doorbell_tests' (arm64).
+(lldb) breakpoint set -n __cxa_throw
+Breakpoint 1: where = libc++abi.dylib`__cxa_throw, address = 0x0000000180494040
+(lldb) run -tc="operations Node:*"
+error: shell expansion failed (reason: lldb-argdumper exited with error 1). consider launching with 'process launch'.

@@ -1,0 +1,30 @@
+{
+  "source_memory": "/Users/ox/.claude/projects/-Users-ox-Documents-project-app-doorbell/memory/project-worktree-build-prereqs.md",
+  "verified_paths": {
+    "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home": true,
+    "/Users/ox/Library/Android/sdk": true,
+    "/Users/ox/Documents/project/app-doorbell/tools/sdk/iPhoneOS7.1.sdk": true,
+    "/Users/ox/Documents/project/app-doorbell/tools/toolchain/ios5-armv7": true
+  },
+  "android_environment": {
+    "JAVA_HOME": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home",
+    "ANDROID_HOME": "/Users/ox/Library/Android/sdk",
+    "PATH_prefix": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home/bin"
+  },
+  "java_version": "openjdk version \"21.0.12.1\" 2026-08-18\nOpenJDK Runtime Environment Homebrew (build 21.0.12.1)\nOpenJDK 64-Bit Server VM Homebrew (build 21.0.12.1, mixed mode, sharing)\n",
+  "ios5_environment": {
+    "DB_ALLOW_DIRTY": "1",
+    "DB_BUILD_ID": "b26e0d3-t01-20260922",
+    "DB_BUILD_JOBS": "4"
+  },
+  "ios9_armv7": {
+    "status": "BLOCKED_ENV",
+    "observed_gate": "DB_IOS9_SDK_LICENSE_ATTESTED was not configured; no commissioned Xcode 7 / iOS 9.x SDK path was identified in the inspected project memory, tools/sdk, or Applications. SDK presence elsewhere is not ruled out.",
+    "preflight_evidence": "evidence/ios9-armv7-preflight.json"
+  },
+  "windows": {
+    "status": "BLOCKED_ENV",
+    "observed_gate": "Local host is macOS and dotnet is not on PATH. Native VS2022/Windows execution has not been performed.",
+    "evidence": "evidence/windows-dotnet.json"
+  }
+}

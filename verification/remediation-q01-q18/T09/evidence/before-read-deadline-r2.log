@@ -1,0 +1,29 @@
+AssertionError [ERR_ASSERTION]: a silent call-info request must release the production load gate at its deadline
++ actual - expected
+
++ {
++   binding: {
++     callId: 'current',
++     door: 'A',
++     ended: false,
++     owner: 'mine',
++     stageRevision: 2
++   },
++   page: 0,
++   selection: 1,
++   session: {
++     isEnded: [Function: isEnded],
++     terminate: [Function: terminate],
++     terminated: 0
++   }
++ }
+- null
+
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/call_state_controller.test.js:89:12 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: [Object],
+  expected: null,
+  operator: 'strictEqual',
+  diff: 'simple'
+}

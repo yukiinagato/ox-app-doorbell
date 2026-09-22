@@ -1,0 +1,19 @@
+{
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T17:31:09.718374+00:00",
+  "status": "PASS_IN_WEB_CORRECTION_SOURCE_SCOPE",
+  "app_js_sha256": "4fe4fc42bcc0508c29a7fd22f3d31feb58f8d1b9c2aa27bcd889da8da7a448fa",
+  "corrections": [
+    "R5 choice select has an escaped localized accessible name.",
+    "R6 single-flight polling fetches conflict snapshots with auth generation and existing deadline; no form render or automatic commit.",
+    "R7 unchanged banner markup preserves DOM/focus; retained controls read latest conflict by entity; changed markup restores a still-present entity focus."
+  ],
+  "evidence_reviewed": [
+    "Actual 15-case IAB red/green records and new timer/focus/head-selection case.",
+    "Actual r5 non-intercepted Core HTTP/IAB record and matching two-node persisted resolution parents."
+  ],
+  "limitations": [
+    "Core and final application qualification are separate.",
+    "This signature independently reviews the subagent corrections, not root-authored initial Web logic."
+  ]
+}

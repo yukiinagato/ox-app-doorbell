@@ -1,0 +1,27 @@
+{
+  "command": [
+    "xcodebuild",
+    "-project",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-device-uikit/source/ios/Doorbell.xcodeproj",
+    "-scheme",
+    "DoorbellIOS9",
+    "-configuration",
+    "Debug",
+    "-sdk",
+    "iphoneos",
+    "-destination",
+    "generic/platform=iOS",
+    "-derivedDataPath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t15-device-uikit/xcode",
+    "ARCHS=arm64",
+    "ONLY_ACTIVE_ARCH=YES",
+    "CODE_SIGNING_ALLOWED=NO",
+    "SWIFT_ACTIVE_COMPILATION_CONDITIONS=DEBUG IOS9_COMPAT",
+    "build"
+  ],
+  "source_manifest_sha256": "3f69c3acca2c46fd61c2e6d044a126a1efd1051d9d679c7290c9f9a78dd35573",
+  "started_at": "2026-09-22T18:20:15.191793+00:00",
+  "finished_at": "2026-09-22T18:20:21.634507+00:00",
+  "exit_code": 0,
+  "scope": "Isolated real UIKit app; unmodified final production CoreBridge/MainViewController; reused verified T12 native iOS9 arm64 real-PJSIP archive."
+}

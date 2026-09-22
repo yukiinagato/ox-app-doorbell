@@ -3,6 +3,7 @@
 #pragma once
 
 #include <cstdint>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <optional>
@@ -12,6 +13,7 @@
 
 #include "crdt/lww_map.h"
 #include "events/events.h"
+#include "store/operation_ledger.h"
 #include "util/common.h"
 
 struct sqlite3;
@@ -37,7 +39,16 @@ class Store {
 
 
   bool configPut(const LwwEntry& e);
+  // Holds the Store transaction and recursive lock through validation and the existing batch
+  // commit hook. That hook must commit before publishing memory/events; a rejected callback rolls
+  // back without publication. Nested configuration transaction scopes are rejected.
+  bool configWriteTransaction(const std::function<bool()>& operation);
+
   bool configPutBatch(const std::vector<LwwEntry>& entries);
+  // Configuration versions and their local credential metadata commit together or not at all.
+  bool configPutBatchWithMeta(
+      const std::vector<LwwEntry>& entries,
+      const std::vector<std::pair<std::string, std::string>>& metadata);
   void configDelete(const std::string& key);
   // Hard local wipe of the replicated configuration, for unpair and revoke. Rows are removed,
   // not tombstoned, so nothing about the old cluster can replicate into the next one.
@@ -46,6 +57,39 @@ class Store {
   // peer contracts of a cluster this device has left.
   size_t metaDeletePrefix(const std::string& prefix);
   std::vector<LwwEntry> configLoadAll();
+
+  // One authority per Store lifetime. A fresh cryptographic boot generation invalidates old
+  // prepared records and recovers uncertain dispatch without resending. No external I/O occurs.
+  bool operationStart(const std::string& authority_node, int64_t now_wall_ms);
+  OperationResult operationPrepare(const OperationIntent& intent,
+                                   const OperationAuthorization& authorization,
+                                   int64_t now_mono_ms, int64_t now_wall_ms);
+  OperationResult operationAccept(const std::string& operation_id,
+                                  const OperationAuthorization& authorization,
+                                  int64_t now_mono_ms, int64_t now_wall_ms,
+                                  const std::optional<OperationRequest>& expected = std::nullopt);
+  OperationResult operationAcquireDispatch(
+      const std::string& operation_id, const OperationAuthorization& authorization,
+      int64_t now_mono_ms, int64_t now_wall_ms,
+      const std::optional<OperationRequest>& expected = std::nullopt);
+  OperationResult operationQuery(const std::string& operation_id,
+                                 const OperationAuthorization& authorization,
+                                 int64_t now_mono_ms, int64_t now_wall_ms);
+  OperationPage operationList(const OperationAuthorization& authorization,
+                              const std::string& after_id, size_t limit,
+                              int64_t now_mono_ms, int64_t now_wall_ms);
+  OperationResult operationMarkDispatched(const std::string& operation_id,
+                                          const std::string& result_json, int64_t now_wall_ms);
+  OperationResult operationMarkUnknown(const std::string& operation_id,
+                                       const std::string& result_json, int64_t now_wall_ms);
+  OperationResult operationReject(const std::string& operation_id,
+                                  const std::string& error_code, int64_t now_wall_ms);
+  OperationResult operationAcknowledge(const std::string& operation_id,
+                                       const std::string& authority_node,
+                                       const std::string& actuator_id, bool authenticated,
+                                       const std::string& result_json, int64_t now_wall_ms);
+  // Core may reclaim only when its wall-clock estimate is trustworthy. Unknowns are excluded.
+  size_t operationPrune(int64_t now_wall_ms, bool clock_trusted);
 
   // --- events ---
 
@@ -185,6 +229,16 @@ class Store {
  private:
   bool exec(const char* sql);
   bool migrate();  // Requires mu_.
+  bool migrateOperationsLocked();
+  bool operationReadyLocked();
+  bool operationExpireLocked(int64_t now_mono_ms, int64_t now_wall_ms);
+  OperationResult operationAdvanceLocked(
+      const std::string& operation_id, const OperationAuthorization& authorization,
+      int64_t now_mono_ms, int64_t now_wall_ms,
+      const std::optional<OperationRequest>& expected, bool acquire);
+  OperationResult operationFinishLocked(const std::string& operation_id,
+                                        const std::string& state,
+                                        const std::string& result_json, int64_t now_wall_ms);
   void closeLocked();  // Requires mu_.
 
 
@@ -204,7 +258,12 @@ class Store {
                                   const std::string& hlc);
   bool applyCallProjectionLocked(const EventRecord& e);
   sqlite3* db_ = nullptr;
-  mutable std::mutex mu_;  // Serializes the single SQLite connection.
+  std::string operation_authority_;
+  std::string operation_boot_;
+  bool config_transaction_scope_ = false;
+  bool config_transaction_open_ = false;
+  bool config_transaction_committed_ = false;
+  mutable std::recursive_mutex mu_;  // Serializes the single SQLite connection.
 };
 
 }  // namespace db

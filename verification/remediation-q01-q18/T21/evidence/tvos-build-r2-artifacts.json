@@ -1,0 +1,26 @@
+{
+  "run": "tvos-build-r2",
+  "recorded_after_completed_run": true,
+  "observed_at": "2026-09-22T14:42:55.876384+00:00",
+  "app": "build/remediation-t21-20260922/tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app",
+  "version": "0.1.14",
+  "build": "15",
+  "minimum_os": "15.0",
+  "sip_backend": "real_pjsip",
+  "executable": "build/remediation-t21-20260922/tvos/Build/Products/Debug-appletvsimulator/DoorbellTV.app/DoorbellTV",
+  "executable_sha256": "7b91369603f42f7299c11d632075bc510a9655827bd643f8c40a1e46bf2757a6",
+  "retained_executable": "build/remediation-t21-20260922/artifact-snapshots/tvos-build-r2/DoorbellTV",
+  "native_inputs": [
+    {
+      "path": "ios/build/core/appletvsimulator/arm64/min-15.0/libdoorbell_all.a",
+      "retained_path": "build/remediation-t21-20260922/artifact-snapshots/tvos-build-r2/libdoorbell_all.a",
+      "sha256": "3a29af624dbe13226b1d97a9bd797d89a7c614a05bd91109c8efbc3764fa6028"
+    },
+    {
+      "path": "ios/build/core/appletvsimulator/arm64/min-15.0/artifact-manifest.json",
+      "retained_path": "build/remediation-t21-20260922/artifact-snapshots/tvos-build-r2/artifact-manifest.json",
+      "sha256": "807269f5229732612573044efd1ec6415c04b05afb9b07bb4ab16db07e928867"
+    }
+  ],
+  "native_scope_note": "Completed-run native archive and manifest identities; shared native build lane reused by later commands only after these retained copies."
+}

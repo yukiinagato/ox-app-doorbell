@@ -1,0 +1,20 @@
+{
+  "recorded_at": "2026-09-22T18:10:14.845298+00:00",
+  "status": "PASS_IN_RECORDED_PORTABILITY_SCOPE",
+  "change": "The generated notice expiry explicitly converts to int64_t before json::set, avoiding the long/long-long/double overload ambiguity on Android NDK targets.",
+  "source_file": "core/src/node/node.cpp",
+  "evidence": [
+    {
+      "path": "verification/remediation-q01-q18/T35-android/evidence/modern-r7.json",
+      "sha256": "97990442bafe89f9d273a60c0451ac27a35c15dba8188e2216e45f7ba08423be"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T35-android/evidence/legacy19-r7.json",
+      "sha256": "de851c1da4444ff67f80fb3deb17414b26702c00f49bb1363feace66c9b4d704"
+    }
+  ],
+  "limitations": [
+    "Android r7 uses its recorded T12 Core freeze plus this portability correction, not the full latest T27/T28/T29 integration.",
+    "No additional Android device qualification is claimed."
+  ]
+}

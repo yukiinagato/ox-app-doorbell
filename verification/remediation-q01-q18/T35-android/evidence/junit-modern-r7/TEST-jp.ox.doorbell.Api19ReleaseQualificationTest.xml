@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.Api19ReleaseQualificationTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:27:15" hostname="MacBookPro.local" time="0.016">
+  <properties/>
+  <testcase name="hashMismatchMissingArtifactAndArbitraryHashCannotQualify" classname="jp.ox.doorbell.Api19ReleaseQualificationTest" time="0.005"/>
+  <testcase name="reportMustBindExactIdentityAndEveryHardwareGate" classname="jp.ox.doorbell.Api19ReleaseQualificationTest" time="0.009"/>
+  <testcase name="qualificationRequiresExactFingerprintCodecAndEvidenceReport" classname="jp.ox.doorbell.Api19ReleaseQualificationTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

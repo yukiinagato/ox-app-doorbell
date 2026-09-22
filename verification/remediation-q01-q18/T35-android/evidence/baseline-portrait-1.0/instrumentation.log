@@ -1,0 +1,10 @@
+INSTRUMENTATION_RESULT: stream={
+  "phase": "baseline",
+  "orientation": "portrait",
+  "font_scale": 1,
+  "source_id": "6cf2c8ee9099961fdfae2b32c67becea03b946d5e9d3dabd01d42327936d1bf7",
+  "results": [],
+  "core_started": false,
+  "failure": "kotlin.UninitializedPropertyAccessException: lateinit property runtime has not been initialized\n\tat jp.ox.doorbell.App.getRuntime(App.kt:23)\n\tat jp.ox.doorbell.VisitorUiInstrumentation.onStart(VisitorUiInstrumentation.kt:44)\n\tat android.app.Instrumentation$InstrumentationThread.run(Instrumentation.java:2594)\n"
+}
+INSTRUMENTATION_CODE: 0

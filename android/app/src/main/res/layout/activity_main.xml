@@ -1,289 +1,348 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- Door-station visitor screen (idle, purpose, ringing, reply, offline) and the host container
-     for the indoor dashboard. Camera capture is service-owned.
-
-     The visitor screen is responsive: the two columns below are filled at runtime by
-     VisitorLayout, which stacks them in portrait and splits them in landscape. -->
+<?xml version='1.0' encoding='utf-8'?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/root_view"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/bg">
-
-    <!-- Theme background. -->
     <ImageView
         android:id="@+id/theme_bg"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="@null"
         android:scaleType="centerCrop"
-        android:visibility="gone"/>
-
-    <!-- Indoor dashboard host; filled by DashboardView on an indoor panel. -->
+        android:visibility="gone" />
     <FrameLayout
         android:id="@+id/dashboard_host"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:visibility="gone"/>
-
+        android:visibility="gone" />
     <LinearLayout
-        android:id="@+id/idle_view"
+        android:id="@+id/visitor_shell"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:orientation="vertical"
-        android:paddingLeft="12dp"
-        android:paddingTop="6dp"
-        android:paddingRight="12dp"
-        android:paddingBottom="6dp">
-
-        <!-- Two responsive columns. VisitorLayout owns their orientation and their children. -->
-        <LinearLayout
-            android:id="@+id/visitor_split"
+        android:orientation="vertical">
+        <FrameLayout
             android:layout_width="match_parent"
             android:layout_height="0dp"
-            android:layout_weight="1"
-            android:baselineAligned="false"
-            android:orientation="vertical">
-            <LinearLayout
-                android:id="@+id/visitor_col_a"
+            android:layout_weight="1">
+            <ScrollView
+                android:id="@+id/idle_view"
                 android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical"/>
-            <LinearLayout
-                android:id="@+id/visitor_col_b"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:gravity="center"
-                android:orientation="vertical"
-                android:visibility="gone"/>
-        </LinearLayout>
-
-        <!-- Clock: large HH:MM:SS with the date on every size. -->
-        <LinearLayout
-            android:id="@+id/idle_header"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="vertical">
-            <TextView
-                android:id="@+id/clock_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:fontFamily="sans-serif-light"
-                android:maxLines="1"
-                android:textColor="@color/fg"
-                android:textSize="52sp"/>
-            <TextView
-                android:id="@+id/date_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:maxLines="1"
-                android:textColor="@color/dim"
-                android:textSize="15sp"/>
-        </LinearLayout>
-
-        <!-- Announcement: the text only, no source and no expiry (§5.1). -->
-        <TextView
-            android:id="@+id/notice_card"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginLeft="8dp"
-            android:layout_marginTop="8dp"
-            android:layout_marginRight="8dp"
-            android:ellipsize="end"
-            android:maxLines="2"
-            android:paddingLeft="12dp"
-            android:paddingTop="6dp"
-            android:paddingRight="12dp"
-            android:paddingBottom="6dp"
-            android:textColor="@color/fg"
-            android:textSize="15sp"
-            android:visibility="gone"/>
-
-        <!-- Visitor-language controls. -->
-        <LinearLayout
-            android:id="@+id/lang_bar"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center_horizontal"
-            android:baselineAligned="false"
-            android:orientation="horizontal"
-            android:visibility="gone"/>
-
-        <!-- Primary call action and the single-sentence hint. -->
-        <LinearLayout
-            android:id="@+id/call_section"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="vertical">
-            <Button
-                android:id="@+id/call_button"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginLeft="24dp"
-                android:layout_marginRight="24dp"
-                android:background="@drawable/bg_big_button"
-                android:maxLines="2"
-                android:maxWidth="560dp"
-                android:minHeight="72dp"
-                android:textColor="@color/fg"
-                android:textSize="28sp"
-                android:textStyle="bold"/>
-            <TextView
-                android:id="@+id/touch_hint"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:gravity="center"
-                android:maxLines="2"
-                android:text="@string/door_hint_call"
-                android:textColor="@color/dim"
-                android:textSize="15sp"/>
-        </LinearLayout>
-
-        <!-- Visit-purpose actions. -->
-        <LinearLayout
-            android:id="@+id/purpose_section"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center"
-            android:orientation="vertical"
-            android:visibility="gone">
-            <TextView
-                android:id="@+id/purpose_hint"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="2dp"
-                android:maxLines="1"
-                android:text="@string/idle_choose_purpose"
-                android:textColor="@color/dim"
-                android:textSize="14sp"/>
-            <TextView
-                android:id="@+id/purpose_auto_hint"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="4dp"
-                android:maxLines="1"
-                android:text="@string/calling_title"
-                android:textColor="@color/accent"
-                android:textSize="13sp"/>
-            <GridLayout
-                android:id="@+id/purpose_grid"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:alignmentMode="alignMargins"
-                android:columnCount="3"
+                android:layout_height="match_parent"
                 android:paddingLeft="12dp"
+                android:paddingTop="6dp"
                 android:paddingRight="12dp"
-                android:useDefaultMargins="false"/>
-            <LinearLayout
-                style="?android:attr/buttonBarStyle"
+                android:paddingBottom="6dp"
+                android:fillViewport="true">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+                    <LinearLayout
+                        android:id="@+id/visitor_split"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:baselineAligned="false"
+                        android:orientation="vertical">
+                        <LinearLayout
+                            android:id="@+id/visitor_col_a"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:orientation="vertical" />
+                        <LinearLayout
+                            android:id="@+id/visitor_col_b"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:gravity="center"
+                            android:orientation="vertical"
+                            android:visibility="gone" />
+                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/touch_hint"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:gravity="center"
+                        android:maxLines="2"
+                        android:text="@string/door_hint_call"
+                        android:textColor="@color/dim"
+                        android:textSize="15sp" />
+                    <LinearLayout
+                        android:id="@+id/idle_header"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="vertical">
+                        <TextView
+                            android:id="@+id/clock_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="sans-serif-light"
+                            android:maxLines="1"
+                            android:textColor="@color/fg"
+                            android:textSize="52sp" />
+                        <TextView
+                            android:id="@+id/date_text"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:maxLines="1"
+                            android:textColor="@color/dim"
+                            android:textSize="15sp" />
+                    </LinearLayout>
+                    <TextView
+                        android:id="@+id/notice_card"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="8dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginRight="8dp"
+                        android:ellipsize="end"
+                        android:maxLines="2"
+                        android:paddingLeft="12dp"
+                        android:paddingTop="6dp"
+                        android:paddingRight="12dp"
+                        android:paddingBottom="6dp"
+                        android:textColor="@color/fg"
+                        android:textSize="15sp"
+                        android:visibility="gone" />
+                    <LinearLayout
+                        android:id="@+id/lang_bar"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_gravity="center_horizontal"
+                        android:baselineAligned="false"
+                        android:orientation="horizontal"
+                        android:visibility="gone" />
+                    <LinearLayout
+                        android:id="@+id/purpose_section"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+                        <TextView
+                            android:id="@+id/purpose_hint"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="2dp"
+                            android:maxLines="4"
+                            android:text="@string/idle_choose_purpose"
+                            android:textColor="@color/dim"
+                            android:textSize="14sp"
+                            android:gravity="center" />
+                        <TextView
+                            android:id="@+id/purpose_auto_hint"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="4dp"
+                            android:maxLines="4"
+                            android:text="@string/calling_title"
+                            android:textColor="@color/accent"
+                            android:textSize="13sp"
+                            android:gravity="center" />
+                        <GridLayout
+                            android:id="@+id/purpose_grid"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:alignmentMode="alignMargins"
+                            android:columnCount="3"
+                            android:paddingLeft="12dp"
+                            android:paddingRight="12dp"
+                            android:useDefaultMargins="false" />
+                        <LinearLayout
+                            style="?android:attr/buttonBarStyle"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginLeft="16dp"
+                            android:layout_marginTop="10dp"
+                            android:layout_marginRight="16dp"
+                            android:baselineAligned="false"
+                            android:orientation="horizontal">
+                            <Button
+                                android:id="@+id/purpose_skip_button"
+                                style="?android:attr/buttonBarButtonStyle"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="4dp"
+                                android:background="@drawable/bg_big_button"
+                                android:maxLines="2"
+                                android:text="@string/purpose_skip"
+                                android:textColor="@color/fg"
+                                android:textSize="18sp"
+                                android:textStyle="bold"
+                                android:minHeight="48dp" />
+                        </LinearLayout>
+                    </LinearLayout>
+                    <LinearLayout
+                        android:id="@+id/visitor_footer"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:baselineAligned="false"
+                        android:orientation="vertical"
+                        android:paddingTop="6dp">
+                        <TextView
+                            android:id="@+id/node_info"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:maxLines="2"
+                            android:textColor="@color/dim"
+                            android:textSize="12sp" />
+                        <FrameLayout
+                            android:id="@+id/sos_slot"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="6dp"
+                            android:minWidth="200dp" />
+                    </LinearLayout>
+                </LinearLayout>
+            </ScrollView>
+            <ScrollView
+                android:id="@+id/calling_view"
                 android:layout_width="match_parent"
-                android:layout_height="52dp"
-                android:layout_marginLeft="16dp"
-                android:layout_marginTop="10dp"
-                android:layout_marginRight="16dp"
-                android:baselineAligned="false"
-                android:orientation="horizontal">
-                <Button
-                    android:id="@+id/purpose_skip_button"
-                    style="?android:attr/buttonBarButtonStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginEnd="4dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_big_button"
-                    android:maxLines="2"
-                    android:text="@string/purpose_skip"
-                    android:textColor="@color/fg"
-                    android:textSize="18sp"
-                    android:textStyle="bold"/>
-                <Button
-                    android:id="@+id/purpose_cancel_button"
-                    style="?android:attr/buttonBarButtonStyle"
-                    android:layout_width="0dp"
-                    android:layout_height="match_parent"
-                    android:layout_marginStart="4dp"
-                    android:layout_weight="1"
-                    android:background="@drawable/bg_card_button"
-                    android:maxLines="2"
-                    android:text="@string/purpose_cancel_call"
-                    android:textColor="@color/fg"
-                    android:textSize="18sp"
-                    android:visibility="gone"/>
-            </LinearLayout>
-        </LinearLayout>
-
-        <!-- Footer: door label, core and app versions, battery, and the optional SOS slider.
-             Stacked by default so a portrait phone never clips the version line behind the
-             slider; VisitorLayout puts them side by side only on a wide landscape window. -->
-        <LinearLayout
-            android:id="@+id/visitor_footer"
+                android:layout_height="match_parent"
+                android:background="@color/bg"
+                android:visibility="gone"
+                android:fillViewport="true">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="24dp">
+                    <TextView
+                        android:id="@+id/calling_text"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center"
+                        android:text="@string/calling_title"
+                        android:textColor="@color/fg"
+                        android:textSize="28sp"
+                        android:textStyle="bold" />
+                    <View
+                        android:id="@+id/pulse"
+                        android:layout_width="72dp"
+                        android:layout_height="72dp"
+                        android:layout_marginTop="16dp"
+                        android:layout_marginBottom="16dp"
+                        android:background="@drawable/pulse_circle" />
+                </LinearLayout>
+            </ScrollView>
+            <ScrollView
+                android:id="@+id/offline_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/bg"
+                android:visibility="gone"
+                android:fillViewport="true">
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:gravity="center"
+                    android:padding="24dp">
+                    <TextView
+                        android:id="@+id/offline_title"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/offline_title"
+                        android:textColor="@color/fg"
+                        android:textSize="28sp"
+                        android:textStyle="bold"
+                        android:gravity="center" />
+                    <TextView
+                        android:id="@+id/offline_body"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="14dp"
+                        android:text="@string/offline_body"
+                        android:textColor="@color/dim"
+                        android:textSize="18sp"
+                        android:gravity="center" />
+                </LinearLayout>
+            </ScrollView>
+        </FrameLayout>
+        <TextView
+            android:id="@+id/visitor_status"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:baselineAligned="false"
-            android:orientation="vertical"
-            android:paddingTop="6dp">
-            <TextView
-                android:id="@+id/node_info"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:maxLines="2"
-                android:textColor="@color/dim"
-                android:textSize="12sp"/>
-            <FrameLayout
-                android:id="@+id/sos_slot"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="6dp"
-                android:minWidth="200dp"/>
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- Ringing. -->
-    <LinearLayout
-        android:id="@+id/calling_view"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/bg"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:visibility="gone">
-        <TextView
-            android:id="@+id/calling_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
+            android:accessibilityLiveRegion="polite"
+            android:background="@color/card"
             android:gravity="center"
-            android:text="@string/calling_title"
+            android:maxLines="3"
+            android:padding="12dp"
             android:textColor="@color/fg"
-            android:textSize="44sp"
-            android:textStyle="bold"/>
-        <View
-            android:id="@+id/pulse"
-            android:layout_width="120dp"
-            android:layout_height="120dp"
-            android:layout_marginTop="40dp"
-            android:layout_marginBottom="40dp"
-            android:background="@drawable/pulse_circle"/>
-        <Button
-            android:id="@+id/cancel_button"
-            android:layout_width="wrap_content"
+            android:textSize="18sp"
+            android:visibility="gone" />
+        <FrameLayout
+            android:id="@+id/visitor_action_dock"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:background="@drawable/bg_card_button"
-            android:paddingLeft="40dp"
-            android:paddingTop="14dp"
-            android:paddingRight="40dp"
-            android:paddingBottom="14dp"
-            android:text="@string/calling_cancel"
-            android:textColor="@color/fg"
-            android:textSize="26sp"/>
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:paddingTop="8dp"
+            android:paddingBottom="12dp">
+            <LinearLayout
+                android:id="@+id/call_section"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center"
+                android:orientation="vertical">
+                <Button
+                    android:id="@+id/call_button"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:background="@drawable/bg_big_button"
+                    android:maxLines="4"
+                    android:maxWidth="560dp"
+                    android:minHeight="72dp"
+                    android:textColor="@color/fg"
+                    android:textSize="24sp"
+                    android:textStyle="bold"
+                    android:paddingLeft="16dp"
+                    android:paddingRight="16dp"
+                    android:paddingTop="12dp"
+                    android:paddingBottom="12dp"
+                    android:gravity="center"
+                    android:visibility="visible" />
+            </LinearLayout>
+            <Button
+                android:id="@+id/purpose_cancel_button"
+                style="?android:attr/buttonBarButtonStyle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card_button"
+                android:maxLines="4"
+                android:text="@string/purpose_cancel_call"
+                android:textColor="@color/fg"
+                android:textSize="24sp"
+                android:visibility="gone"
+                android:minHeight="72dp"
+                android:paddingLeft="16dp"
+                android:paddingRight="16dp"
+                android:paddingTop="12dp"
+                android:paddingBottom="12dp"
+                android:gravity="center" />
+            <Button
+                android:id="@+id/cancel_button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@drawable/bg_card_button"
+                android:paddingLeft="16dp"
+                android:paddingTop="12dp"
+                android:paddingRight="16dp"
+                android:paddingBottom="12dp"
+                android:text="@string/calling_cancel"
+                android:textColor="@color/fg"
+                android:textSize="24sp"
+                android:minHeight="72dp"
+                android:maxLines="4"
+                android:gravity="center"
+                android:visibility="gone" />
+        </FrameLayout>
     </LinearLayout>
-
-    <!-- Quick-reply overlay. -->
     <LinearLayout
         android:id="@+id/reply_banner"
         android:layout_width="wrap_content"
@@ -301,7 +360,7 @@
             android:layout_height="wrap_content"
             android:text="@string/reply_banner"
             android:textColor="@color/dim"
-            android:textSize="20sp"/>
+            android:textSize="20sp" />
         <TextView
             android:id="@+id/reply_text"
             android:layout_width="wrap_content"
@@ -310,45 +369,14 @@
             android:gravity="center"
             android:textColor="@color/fg"
             android:textSize="40sp"
-            android:textStyle="bold"/>
+            android:textStyle="bold" />
     </LinearLayout>
-
-    <!-- Offline. -->
-    <LinearLayout
-        android:id="@+id/offline_view"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@color/offline_bg"
-        android:gravity="center"
-        android:orientation="vertical"
-        android:visibility="gone">
-        <TextView
-            android:id="@+id/offline_title"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/offline_title"
-            android:textColor="#FFFFFF"
-            android:textSize="44sp"
-            android:textStyle="bold"/>
-        <TextView
-            android:id="@+id/offline_body"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:text="@string/offline_body"
-            android:textColor="#FFE9D5"
-            android:textSize="24sp"/>
-    </LinearLayout>
-
-    <!-- Hidden maintenance tap target; the door station's only way into settings. -->
     <View
         android:id="@+id/secret_corner"
-        android:layout_width="200dp"
-        android:layout_height="200dp"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
         android:layout_gravity="top|end"
-        android:background="@android:color/transparent"/>
-
-    <!-- Non-interactive night tint above theme imagery. -->
+        android:background="@android:color/transparent" />
     <View
         android:id="@+id/night_tint"
         android:layout_width="match_parent"
@@ -356,19 +384,16 @@
         android:background="#33FF2200"
         android:clickable="false"
         android:focusable="false"
-        android:visibility="gone"/>
-
-    <!-- Persistent "not set up" banner; visible until the cluster state is ready. -->
+        android:visibility="gone" />
     <TextView
         android:id="@+id/pairing_banner"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_gravity="bottom|start"
+        android:layout_gravity="top|start"
         android:layout_marginStart="16dp"
         android:layout_marginLeft="16dp"
         android:layout_marginEnd="130dp"
         android:layout_marginRight="130dp"
-        android:layout_marginBottom="16dp"
         android:background="#243244"
         android:clickable="true"
         android:focusable="true"
@@ -381,5 +406,6 @@
         android:text="@string/pair_not_set_up_banner"
         android:textColor="#FFFFFF"
         android:textSize="15sp"
-        android:visibility="gone"/>
+        android:visibility="gone"
+        android:layout_marginTop="8dp" />
 </FrameLayout>

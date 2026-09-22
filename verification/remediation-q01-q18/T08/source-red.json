@@ -1,0 +1,9 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "7c92a0b8e0fe3ff5fcb007b1f355c82410ba5cdb6e793129111cef42f8c6d71a",
+  "files": {
+    "core/src/node/node.cpp": "7aa6de13ab9d26fb74c93935c7c66033a75fb377e5c5d4817100d5d2c40d6101",
+    "core/tests/test_admin_api.cpp": "aa515f4cb3bc0b34dde2b571b19c59d30e52974d46481f9976af2f9bc03e1661"
+  }
+}

@@ -1,0 +1,168 @@
+{
+  "build" : "7",
+  "pid" : 30660,
+  "checks" : [
+    {
+      "name" : "Disabled purpose absent",
+      "resident_bytes" : 15015936,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 15015936,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Purpose-first sends the selected purpose once",
+      "resident_bytes" : 15085568,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Purpose-first enters ringing",
+      "resident_bytes" : 15089664,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 17162240,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Visitor cancellation returns idle",
+      "resident_bytes" : 17162240,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 25890816,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Ring-first sends immediately",
+      "resident_bytes" : 28680192,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit skip button dispatched",
+      "resident_bytes" : 28807168,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Skip preserves the call",
+      "resident_bytes" : 28807168,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 28807168,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 37556224,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Actual UIKit purpose button dispatched",
+      "resident_bytes" : 39591936,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Ring-first purpose updates existing call",
+      "resident_bytes" : 39591936,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 39591936,
+      "case" : "T35-01",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 16568320,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Call and cancel share the fixed action area",
+      "resident_bytes" : 16568320,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Ringing touch cannot become connected end",
+      "resident_bytes" : 16572416,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Connected end remains in the same area",
+      "resident_bytes" : 16572416,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 18436096,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Fresh connected end works",
+      "resident_bytes" : 18436096,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 27070464,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Nil visitor ID native SIP call can end",
+      "resident_bytes" : 27070464,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Old nil-ID gesture cannot end the next SIP session",
+      "resident_bytes" : 27111424,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 27115520,
+      "case" : "T35-02",
+      "pass" : true
+    },
+    {
+      "name" : "Production UIControl exists",
+      "resident_bytes" : 16633856,
+      "case" : "T35-03",
+      "pass" : true
+    },
+    {
+      "name" : "Ordinary network failure keeps neutral visitor page",
+      "resident_bytes" : 16633856,
+      "case" : "T35-03",
+      "pass" : true
+    }
+  ]
+}

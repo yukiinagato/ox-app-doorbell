@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.CoreExportsTest" tests="16" skipped="0" failures="0" errors="0" timestamp="2026-09-22T12:59:05" hostname="MacBookPro.local" time="0.005">
+  <properties/>
+  <testcase name="anObjectValueSurvivesAsAnObjectAndGarbageStaysAString" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="anUnsetPasswordNeverBlocksClearingARunningAlarm" classname="jp.ox.doorbell.CoreExportsTest" time="0.001"/>
+  <testcase name="anOlderCoreAppliesTheSameConjunctionRatherThanTheFlagAlone" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="everyWarningIsParsedAndAnUnknownMessageKeyStillRenders" classname="jp.ox.doorbell.CoreExportsTest" time="0.001"/>
+  <testcase name="anUnsupportedWriteIsDistinguishedFromARefusedOne" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="theUnlockSettingIsThreeWayWithAbsenceMeaningAutomatic" classname="jp.ox.doorbell.CoreExportsTest" time="0.001"/>
+  <testcase name="theBatchDocumentIsTheOneTheWebAdminAlreadySends" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="anAdvisoryWarningRidesAlongWithASuccessfulWrite" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="anOlderCoreOffersNothingAndEveryFeatureFallsBack" classname="jp.ox.doorbell.CoreExportsTest" time="0.001"/>
+  <testcase name="aWriteWithoutWarningsHasNoAdvisory" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="theLegacyDigestIsRetiredOnlyOnceCoreAnswersAuthoritatively" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="whetherTheClusterHasAPasswordIsReadFromStatus" classname="jp.ox.doorbell.CoreExportsTest" time="0.001"/>
+  <testcase name="coresVerifyResultsMapToTheGatesStates" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="aNewPasswordMustMatchCoresLengthRule" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="theExportProbeIsReadPerFeature" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <testcase name="anAlarmIsNeverGatedWithoutTheSettingOrWithoutAStatus" classname="jp.ox.doorbell.CoreExportsTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

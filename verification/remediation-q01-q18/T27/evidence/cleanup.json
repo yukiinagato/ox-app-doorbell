@@ -1,0 +1,26 @@
+{
+  "recorded_at": "2026-09-22T16:40:43.920149+00:00",
+  "scope": "Only this agent-created T27 test fixtures and browser tabs.",
+  "fixture_sessions_terminated": [
+    71382,
+    21166
+  ],
+  "browser_tabs_closed": [
+    "1",
+    "2"
+  ],
+  "browser_inventory_after_cleanup": [],
+  "listener_checks": [
+    {
+      "loopback_port": 18764,
+      "listener_found": false,
+      "lsof_exit_code": 1
+    },
+    {
+      "loopback_port": 18765,
+      "listener_found": false,
+      "lsof_exit_code": 1
+    }
+  ],
+  "deployments_or_hardware_actions": false
+}

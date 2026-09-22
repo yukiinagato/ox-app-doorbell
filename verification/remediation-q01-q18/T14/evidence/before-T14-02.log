@@ -1,0 +1,13 @@
+AssertionError [ERR_ASSERTION]: Active call retains its applied config
+
+'262' !== '260'
+
+    at T14-02 (/Users/ox/Documents/project/app-doorbell/webui/tests/call_ua_generation.test.js:55:53)
+    at async /Users/ox/Documents/project/app-doorbell/webui/tests/call_ua_generation.test.js:90:5 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: '262',
+  expected: '260',
+  operator: 'strictEqual',
+  diff: 'simple'
+}

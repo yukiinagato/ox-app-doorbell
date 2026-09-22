@@ -1,0 +1,12 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "files": {
+    "webui/panel/call.html": "4a6029f179620a8fc5b0e10a2f58dbaf99776f9a4f203aa7a435d4cd46e11fa5",
+    "webui/panel/runtime.js": "1c512d41d4ad2594d60426fcad5c68fe48ea1bcd8b0f1fe6032b8803aa9684bc",
+    "webui/tests/call_page_fixture.js": "19fce4c3b611b25212a0e88fdaca796ce85ab238907fa9510e85c01419f4f477",
+    "webui/tests/call_poll_lanes.test.js": "0a05c33a2fddc116a6f1e02a636797f3709c6298aeae7fab1749905f2a61d9c1",
+    "webui/tests/call_state_controller.test.js": "2b0cd6d7e9cdf38af610da251d67b0a17ecc86e803f1832db2d55095e5c894e3",
+    "i18n/strings.yaml": "3f73e85756d21fa70f9eca05ddaab96c3c9260221490a30c863b41e4c757998d"
+  },
+  "dirty_diff_sha256": "7e7b93e015c99dc45447151515d60262d976c9a68d81ad5cc34d25aa1ef5dd58"
+}

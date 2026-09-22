@@ -1,0 +1,28 @@
+{
+  "task_id": "T14",
+  "status": "PASS",
+  "reviewer": "/root",
+  "recorded_at": "2026-09-22T15:11:27.121837+00:00",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T14/evidence/after-source.json",
+  "source_manifest_sha256": "94729a1ac559ebac720f898ff717e60a58a7c324785309262b4f2daf81d29fcd",
+  "inputs_match": {
+    "webui/panel/call.html": true,
+    "webui/panel/runtime.js": true,
+    "core/src/node/node.cpp": true,
+    "core/tests/test_panel.cpp": true,
+    "webui/tests/call_page_fixture.js": true,
+    "webui/tests/call_ua_generation.test.js": true,
+    "i18n/strings.yaml": true
+  },
+  "checks": [
+    "Reviewed immutable desired/applied configuration separation, explicit ordinary-change deferral during active session and immediate revocation.",
+    "Reviewed retired UA object/generation guards, listener removal, capped retirement/registration and blocked ambiguous old transport preventing overlapping successor.",
+    "Reviewed opaque server generation including resolved secret rotation, no-store call-info, and current registration UI truthfulness.",
+    "Independently executed all T14 production-page cases including old UA callbacks, simultaneous changes, failed retirement, same-reference secret rotation and permissions.",
+    "Reviewed actual Core HTTP six tests / 477 assertions and 18-suite Web regression evidence."
+  ],
+  "limitations": [
+    "Controllable JsSIP transport boundary, not real PBX registration or hardware qualification.",
+    "The complete source diff contains concurrent T08 authentication edits which are reviewed in T08, not attributed to T14."
+  ]
+}

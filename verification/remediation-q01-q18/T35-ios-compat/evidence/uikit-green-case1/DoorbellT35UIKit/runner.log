@@ -1,0 +1,26 @@
+T35 main entered
+2026-09-23 03:01:02.665 DoorbellT35UIKit[30803:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 03:01:03.011 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Disabled purpose absent
+2026-09-23 03:01:03.024 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 03:01:03.079 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Purpose-first sends the selected purpose once
+2026-09-23 03:01:03.088 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Purpose-first enters ringing
+2026-09-23 03:01:03.686 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 03:01:03.727 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Visitor cancellation returns idle
+2026-09-23 03:01:03.820 DoorbellT35UIKit[30803:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 03:01:04.224 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 03:01:04.651 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Ring-first sends immediately
+2026-09-23 03:01:05.666 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Actual UIKit skip button dispatched
+2026-09-23 03:01:05.684 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Skip preserves the call
+2026-09-23 03:01:05.693 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 03:01:05.842 DoorbellT35UIKit[30803:707] [doorbell][sos] door station bar shown (button_on_roles=(
+    "door_station"
+))
+2026-09-23 03:01:06.242 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 03:01:06.999 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Actual UIKit purpose button dispatched
+2026-09-23 03:01:07.012 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Ring-first purpose updates existing call
+2026-09-23 03:01:07.021 DoorbellT35UIKit[30803:707] T35 T35-01 PASS: Production UIControl exists
+2026-09-23 03:01:07.119 DoorbellT35UIKit[30803:707] T35 COMPLETE: 15 checks, 0 failures

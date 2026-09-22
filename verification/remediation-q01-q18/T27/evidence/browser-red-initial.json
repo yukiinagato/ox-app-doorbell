@@ -1,0 +1,29 @@
+{
+  "phase": "red",
+  "source_sha256": "ecfa4cac230ac7091c9cf6fb6e467590122bc5f7be9c3f2c827ae4065a669005",
+  "case_sha256": "92684f8afcbf235952daf73be3e12b8b8043bc3ebef705023c5387533e019905",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T16:09:57.846Z",
+  "results": [
+    {
+      "id": "T27-01",
+      "status": "FAIL",
+      "message": "Old whole object overwrote concurrent notification change"
+    },
+    {
+      "id": "T27-02",
+      "status": "FAIL",
+      "message": "Conflicting field silently overwritten"
+    },
+    {
+      "id": "T27-03",
+      "status": "FAIL",
+      "message": "Preview/write includes untouched fields"
+    },
+    {
+      "id": "T27-04",
+      "status": "FAIL",
+      "message": "Conflict choice absent"
+    }
+  ]
+}

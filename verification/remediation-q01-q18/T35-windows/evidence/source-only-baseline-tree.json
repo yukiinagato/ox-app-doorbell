@@ -1,0 +1,1779 @@
+{
+  "scope": "Source XML structure, not a runtime WPF automation tree or screenshot.",
+  "elements": [
+    {
+      "type": "Image",
+      "name": "ThemeBgImage",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ThemeBgImage",
+        "Stretch": "UniformToFill",
+        "Visibility": "Collapsed",
+        "IsHitTestVisible": "False"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "ThemeBackdrop",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ThemeBackdrop",
+        "Visibility": "Collapsed",
+        "IsHitTestVisible": "False"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "IdleView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IdleView"
+      }
+    },
+    {
+      "type": "TranslateTransform",
+      "name": "IdleShift",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IdleShift"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "SecretCorner",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SecretCorner",
+        "Width": "200",
+        "Height": "200",
+        "Background": "Transparent",
+        "HorizontalAlignment": "Right",
+        "VerticalAlignment": "Top",
+        "MouseLeftButtonDown": "OnSecretCorner"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "VisitorHome",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VisitorHome",
+        "Margin": "26,22,26,18",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "ColumnDefinition",
+      "name": "VisitorLeftColumn",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VisitorLeftColumn",
+        "Width": "*"
+      }
+    },
+    {
+      "type": "ColumnDefinition",
+      "name": "VisitorRightColumn",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VisitorRightColumn",
+        "Width": "1.2*"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "VisitorClockBlock",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VisitorClockBlock",
+        "Grid.Row": "0",
+        "Grid.Column": "0"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "ClockText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ClockText",
+        "FontSize": "76",
+        "FontWeight": "Light",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "DateText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DateText",
+        "FontSize": "24",
+        "Foreground": "{DynamicResource Dim}",
+        "Margin": "0,2,0,0"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "VisitorNoticeCard",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VisitorNoticeCard",
+        "Grid.Row": "1",
+        "Grid.Column": "0",
+        "Visibility": "Collapsed",
+        "Margin": "0,16,0,0",
+        "CornerRadius": "12",
+        "Padding": "16,12",
+        "Background": "{DynamicResource Card}",
+        "BorderBrush": "{DynamicResource Notice}",
+        "BorderThickness": "1,1,1,4",
+        "VerticalAlignment": "Top"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "VisitorNoticeText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VisitorNoticeText",
+        "FontSize": "22",
+        "TextWrapping": "Wrap",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "LangBar",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "LangBar",
+        "Grid.Row": "2",
+        "Grid.Column": "1",
+        "Orientation": "Horizontal",
+        "HorizontalAlignment": "Center",
+        "Margin": "0,10,0,10",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "VisitorCallBlock",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VisitorCallBlock",
+        "Grid.Row": "3",
+        "Grid.Column": "1",
+        "VerticalAlignment": "Center"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "CallButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CallButton",
+        "Style": "{StaticResource BigButton}",
+        "MinWidth": "360",
+        "MinHeight": "150",
+        "Click": "OnCallClick"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "TouchHint",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "TouchHint",
+        "Grid.Row": "4",
+        "Grid.Column": "1",
+        "FontSize": "20",
+        "TextWrapping": "Wrap",
+        "TextAlignment": "Center",
+        "Foreground": "{DynamicResource Dim}",
+        "Margin": "0,14,0,0"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "PurposeSection",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PurposeSection",
+        "Grid.Row": "5",
+        "Grid.Column": "0",
+        "Grid.ColumnSpan": "2",
+        "Visibility": "Collapsed",
+        "Margin": "0,14,0,6"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "PurposeHint",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PurposeHint",
+        "FontSize": "18",
+        "Foreground": "{DynamicResource Dim}",
+        "HorizontalAlignment": "Center",
+        "Margin": "0,0,0,8"
+      }
+    },
+    {
+      "type": "UniformGrid",
+      "name": "PurposeGrid",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PurposeGrid",
+        "Columns": "3",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "VisitorFooter",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VisitorFooter",
+        "Grid.Row": "6",
+        "Grid.Column": "0",
+        "Grid.ColumnSpan": "2",
+        "Margin": "0,12,0,0"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "VisitorVersionLine",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VisitorVersionLine",
+        "FontSize": "14",
+        "TextWrapping": "Wrap",
+        "Foreground": "{DynamicResource Dim}",
+        "HorizontalAlignment": "Left",
+        "VerticalAlignment": "Center"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "DashboardHome",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardHome",
+        "Margin": "24,16,24,16",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "DashClock",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashClock",
+        "FontSize": "66",
+        "FontWeight": "Light",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "DashClockSeconds",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashClockSeconds",
+        "FontSize": "28",
+        "FontWeight": "Light",
+        "Margin": "6,0,0,12",
+        "VerticalAlignment": "Bottom",
+        "Foreground": "{DynamicResource Dim}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "DashDate",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashDate",
+        "FontSize": "18",
+        "Foreground": "{DynamicResource Dim}",
+        "Margin": "2,0,0,0"
+      }
+    },
+    {
+      "type": "WrapPanel",
+      "name": "DashboardChips",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardChips",
+        "Orientation": "Horizontal",
+        "HorizontalAlignment": "Right"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "MissedBadge",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MissedBadge",
+        "Visibility": "Collapsed",
+        "Cursor": "Hand",
+        "Background": "{DynamicResource Danger}",
+        "CornerRadius": "10",
+        "Padding": "14,8",
+        "Margin": "8,0,0,0",
+        "MinHeight": "40",
+        "MouseLeftButtonDown": "OnMissedBadgeClick"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "MissedBadgeText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MissedBadgeText",
+        "FontSize": "16",
+        "FontWeight": "Bold",
+        "Margin": "8,0,0,0",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource OnDanger}"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "NoticeGlobalButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticeGlobalButton",
+        "Style": "{StaticResource ChipButton}",
+        "Click": "OnGlobalNoticeClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "OpenMonitorButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "OpenMonitorButton",
+        "Style": "{StaticResource ChipButton}",
+        "Visibility": "Collapsed",
+        "Click": "OnOpenMonitorClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "AdminEntryButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "AdminEntryButton",
+        "Style": "{StaticResource ChipButton}",
+        "Click": "OnAdminEntryClick"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "MembershipStatus",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MembershipStatus",
+        "Visibility": "Collapsed",
+        "Cursor": "Hand",
+        "Background": "{DynamicResource Pill}",
+        "CornerRadius": "10",
+        "Padding": "14,7",
+        "BorderBrush": "{DynamicResource PlateLine}",
+        "BorderThickness": "1",
+        "Margin": "0,8,0,0",
+        "HorizontalAlignment": "Right",
+        "MouseLeftButtonDown": "OnMembershipClick"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "ClusterCounter",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ClusterCounter",
+        "Orientation": "Horizontal",
+        "VerticalAlignment": "Center"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "ClusterCountText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ClusterCountText",
+        "FontSize": "15",
+        "Margin": "6,0,0,0",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "ClusterOnlineText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ClusterOnlineText",
+        "FontSize": "15",
+        "Margin": "8,0,0,0",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Ok}"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "DoorCounter",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DoorCounter",
+        "Orientation": "Horizontal",
+        "VerticalAlignment": "Center"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "DoorCounterLabel",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DoorCounterLabel",
+        "FontSize": "15",
+        "Margin": "6,0,0,0",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Dim}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "DoorCountText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DoorCountText",
+        "FontSize": "15",
+        "FontWeight": "Bold",
+        "Margin": "6,0,0,0",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "PanelCounter",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PanelCounter",
+        "Orientation": "Horizontal",
+        "VerticalAlignment": "Center"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "PanelCounterLabel",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PanelCounterLabel",
+        "FontSize": "15",
+        "Margin": "6,0,0,0",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Dim}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "PanelCountText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PanelCountText",
+        "FontSize": "15",
+        "FontWeight": "Bold",
+        "Margin": "6,0,0,0",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "BatteryCounter",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "BatteryCounter",
+        "Orientation": "Horizontal",
+        "VerticalAlignment": "Center",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "Path",
+      "name": "BatteryIcon",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "BatteryIcon",
+        "Data": "{StaticResource IconBattery}",
+        "Stroke": "{DynamicResource Dim}",
+        "StrokeThickness": "2",
+        "StrokeStartLineCap": "Round",
+        "StrokeEndLineCap": "Round",
+        "StrokeLineJoin": "Round"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "BatteryText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "BatteryText",
+        "FontSize": "15",
+        "Margin": "6,0,0,0",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "Ellipse",
+      "name": "MeshDot",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MeshDot",
+        "Width": "9",
+        "Height": "9",
+        "Fill": "{DynamicResource Ok}",
+        "Margin": "12,0,0,0",
+        "VerticalAlignment": "Center"
+      }
+    },
+    {
+      "type": "ColumnDefinition",
+      "name": "DashboardTitleLeftColumn",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardTitleLeftColumn",
+        "Width": "1.4*"
+      }
+    },
+    {
+      "type": "ColumnDefinition",
+      "name": "DashboardTitleRightColumn",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardTitleRightColumn",
+        "Width": "*"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "DoorsSectionTitle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DoorsSectionTitle",
+        "FontSize": "15",
+        "FontWeight": "Bold",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "RecentCallsTitle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "RecentCallsTitle",
+        "FontSize": "15",
+        "FontWeight": "Bold",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "SeeAllCallsButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SeeAllCallsButton",
+        "Style": "{StaticResource LinkButton}",
+        "HorizontalAlignment": "Right",
+        "Click": "OnOpenHistoryClick"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "DashboardContent",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardContent",
+        "Grid.Row": "2"
+      }
+    },
+    {
+      "type": "ColumnDefinition",
+      "name": "DashboardLeftColumn",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardLeftColumn",
+        "Width": "1.4*"
+      }
+    },
+    {
+      "type": "ColumnDefinition",
+      "name": "DashboardRightColumn",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardRightColumn",
+        "Width": "*"
+      }
+    },
+    {
+      "type": "RowDefinition",
+      "name": "DashboardTopRow",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardTopRow",
+        "Height": "*"
+      }
+    },
+    {
+      "type": "RowDefinition",
+      "name": "DashboardBottomRow",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardBottomRow",
+        "Height": "0"
+      }
+    },
+    {
+      "type": "ScrollViewer",
+      "name": "DoorTilesPanel",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DoorTilesPanel",
+        "Grid.Row": "0",
+        "Grid.Column": "0",
+        "VerticalScrollBarVisibility": "Auto",
+        "HorizontalScrollBarVisibility": "Disabled",
+        "Margin": "0,0,12,0"
+      }
+    },
+    {
+      "type": "UniformGrid",
+      "name": "DoorTileGrid",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DoorTileGrid",
+        "Columns": "2",
+        "VerticalAlignment": "Top"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "RecentCallsPanel",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "RecentCallsPanel",
+        "Grid.Row": "0",
+        "Grid.Column": "1",
+        "{clr-namespace:DoorbellApp.Ui}Frost.Enabled": "True",
+        "CornerRadius": "16",
+        "Margin": "12,4,4,0",
+        "BorderBrush": "{DynamicResource PlateLine}",
+        "BorderThickness": "1",
+        "ClipToBounds": "True",
+        "VerticalAlignment": "Top"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "RecentCallsList",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "RecentCallsList"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "DashboardFooter",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardFooter",
+        "Grid.Row": "3",
+        "Margin": "0,16,0,0"
+      }
+    },
+    {
+      "type": "ColumnDefinition",
+      "name": "DashboardSosColumn",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "DashboardSosColumn",
+        "Width": "0"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "AdminLinkCard",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "AdminLinkCard",
+        "Grid.Column": "0",
+        "Cursor": "Hand",
+        "{clr-namespace:DoorbellApp.Ui}Frost.Enabled": "True",
+        "CornerRadius": "14",
+        "ClipToBounds": "True",
+        "BorderBrush": "{DynamicResource PlateLine}",
+        "BorderThickness": "1",
+        "MinWidth": "320",
+        "MaxWidth": "560",
+        "HorizontalAlignment": "Left",
+        "MouseLeftButtonDown": "OnWebAdminClick"
+      }
+    },
+    {
+      "type": "Image",
+      "name": "AdminQrImage",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "AdminQrImage",
+        "Width": "66",
+        "Height": "66",
+        "RenderOptions.BitmapScalingMode": "NearestNeighbor"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "AdminLinkTitle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "AdminLinkTitle",
+        "FontSize": "15",
+        "FontWeight": "Bold",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "AdminAddressCount",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "AdminAddressCount",
+        "FontSize": "14",
+        "Margin": "6,0,0,0",
+        "VerticalAlignment": "Bottom",
+        "Foreground": "{DynamicResource Dim}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "AdminUrlText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "AdminUrlText",
+        "FontSize": "14",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "NodeInfo",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NodeInfo",
+        "FontSize": "13",
+        "Margin": "0,4,0,0",
+        "TextWrapping": "Wrap",
+        "MaxWidth": "440",
+        "Foreground": "{DynamicResource Dim}"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "SosButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SosButton",
+        "Visibility": "Collapsed",
+        "Background": "{DynamicResource Danger}",
+        "CornerRadius": "28",
+        "BorderBrush": "#33FFFFFF",
+        "BorderThickness": "1",
+        "HorizontalAlignment": "Right",
+        "VerticalAlignment": "Bottom",
+        "Margin": "0,0,20,16",
+        "Width": "248",
+        "Height": "62"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "SosText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SosText",
+        "FontSize": "17",
+        "FontWeight": "Bold",
+        "Foreground": "{DynamicResource OnDanger}",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "SosHint",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SosHint",
+        "FontSize": "13",
+        "Opacity": "0.85",
+        "Foreground": "{DynamicResource OnDanger}",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "SosSlider",
+      "name": "SosSlide",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SosSlide",
+        "Style": "{StaticResource SosTrack}"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "CallingView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CallingView",
+        "Visibility": "Collapsed",
+        "Background": "{DynamicResource Bg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "CallingText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CallingText",
+        "FontSize": "56",
+        "FontWeight": "Bold",
+        "Foreground": "{DynamicResource Fg}",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "Ellipse",
+      "name": "Pulse",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "Pulse",
+        "Width": "140",
+        "Height": "140",
+        "Margin": "0,50",
+        "Stroke": "{DynamicResource Accent}",
+        "StrokeThickness": "6",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "CallingPurposeSection",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CallingPurposeSection",
+        "Visibility": "Collapsed",
+        "Margin": "20,0,20,24"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "CallingPurposeHint",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CallingPurposeHint",
+        "FontSize": "20",
+        "Foreground": "{DynamicResource Dim}",
+        "HorizontalAlignment": "Center",
+        "Margin": "0,0,0,8"
+      }
+    },
+    {
+      "type": "UniformGrid",
+      "name": "CallingPurposeGrid",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CallingPurposeGrid",
+        "Columns": "3",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "CancelButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CancelButton",
+        "FontSize": "28",
+        "Padding": "40,16",
+        "Background": "{DynamicResource Card}",
+        "Foreground": "{DynamicResource Fg}",
+        "BorderBrush": "{DynamicResource Line}",
+        "Click": "OnCancelClick"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "ReplyBanner",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ReplyBanner",
+        "Visibility": "Collapsed",
+        "VerticalAlignment": "Center",
+        "HorizontalAlignment": "Center",
+        "Background": "{DynamicResource Card}",
+        "CornerRadius": "20",
+        "Padding": "60,40",
+        "MaxWidth": "900"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "ReplyCaption",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ReplyCaption",
+        "FontSize": "22",
+        "Foreground": "{DynamicResource Dim}",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "ReplyText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ReplyText",
+        "FontSize": "46",
+        "FontWeight": "Bold",
+        "TextWrapping": "Wrap",
+        "Foreground": "{DynamicResource Fg}",
+        "HorizontalAlignment": "Center",
+        "Margin": "0,14,0,0",
+        "TextAlignment": "Center"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "OfflineView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "OfflineView",
+        "Visibility": "Collapsed",
+        "Background": "#B5A21B00"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "OfflineTitle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "OfflineTitle",
+        "FontSize": "52",
+        "FontWeight": "Bold",
+        "Foreground": "#FFF",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "OfflineBody",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "OfflineBody",
+        "FontSize": "28",
+        "Foreground": "#FFE9D5",
+        "HorizontalAlignment": "Center",
+        "Margin": "0,16,0,0"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "IncomingView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingView",
+        "Visibility": "Collapsed",
+        "Background": "{DynamicResource Bg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "IncomingTitle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingTitle",
+        "FontSize": "30",
+        "FontWeight": "Bold",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "ReturnCountdown",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ReturnCountdown",
+        "Visibility": "Collapsed",
+        "Cursor": "Hand",
+        "Margin": "12,0,0,0",
+        "CornerRadius": "10",
+        "Padding": "12,6",
+        "VerticalAlignment": "Center",
+        "Background": "{DynamicResource Pill}",
+        "BorderBrush": "{DynamicResource PlateLine}",
+        "BorderThickness": "1",
+        "MouseLeftButtonDown": "OnReturnCountdownClick"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "ReturnCountdownText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ReturnCountdownText",
+        "FontSize": "20",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Dim}"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "PurposeSlot",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PurposeSlot",
+        "Height": "36",
+        "Margin": "0,6,0,0"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "PurposeBadge",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PurposeBadge",
+        "Visibility": "Collapsed",
+        "Background": "{DynamicResource Pill}",
+        "CornerRadius": "8",
+        "Padding": "12,6",
+        "BorderBrush": "{DynamicResource PlateLine}",
+        "BorderThickness": "1"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "PurposeBadgeContent",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PurposeBadgeContent",
+        "Orientation": "Horizontal"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "LangBadge",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "LangBadge",
+        "Visibility": "Collapsed",
+        "Background": "{DynamicResource Pill}",
+        "CornerRadius": "8",
+        "Padding": "12,6",
+        "BorderBrush": "{DynamicResource PlateLine}",
+        "BorderThickness": "1",
+        "Margin": "10,0,0,0"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "LangBadgeText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "LangBadgeText",
+        "FontSize": "17",
+        "Margin": "8,0,0,0",
+        "VerticalAlignment": "Center",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "IncomingHint",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingHint",
+        "FontSize": "16",
+        "Foreground": "{DynamicResource Dim}",
+        "Margin": "0,4,0,0",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "IncomingVideoFrame",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingVideoFrame",
+        "CornerRadius": "16",
+        "Background": "#000000",
+        "ClipToBounds": "True",
+        "HorizontalAlignment": "Center",
+        "VerticalAlignment": "Center"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "IncomingVideoArea",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingVideoArea",
+        "ClipToBounds": "True"
+      }
+    },
+    {
+      "type": "MediaElement",
+      "name": "IncomingH264",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingH264",
+        "Stretch": "Uniform",
+        "Visibility": "Collapsed",
+        "LoadedBehavior": "Manual",
+        "UnloadedBehavior": "Manual",
+        "ScrubbingEnabled": "False"
+      }
+    },
+    {
+      "type": "Image",
+      "name": "IncomingLive",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingLive",
+        "Stretch": "Uniform"
+      }
+    },
+    {
+      "type": "Image",
+      "name": "IncomingH264Image",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingH264Image",
+        "Stretch": "Uniform",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "IncomingNoVideo",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingNoVideo",
+        "FontSize": "22",
+        "Foreground": "#8A97A5",
+        "HorizontalAlignment": "Center",
+        "VerticalAlignment": "Center"
+      }
+    },
+    {
+      "type": "WrapPanel",
+      "name": "QuickReplyPanel",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "QuickReplyPanel",
+        "Grid.Row": "2",
+        "Orientation": "Horizontal",
+        "HorizontalAlignment": "Center",
+        "Margin": "30,8,30,0",
+        "MaxWidth": "1200"
+      }
+    },
+    {
+      "type": "WrapPanel",
+      "name": "IncomingControlRow",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IncomingControlRow",
+        "Grid.Row": "3",
+        "Orientation": "Horizontal",
+        "HorizontalAlignment": "Center",
+        "Margin": "20,12,20,18"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "MonitorButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MonitorButton",
+        "Style": "{StaticResource ActionButton}",
+        "Click": "OnMonitorClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "AnswerButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "AnswerButton",
+        "Style": "{StaticResource ActionButton}",
+        "Background": "#1E8E4B",
+        "Foreground": "#FFFFFF",
+        "BorderBrush": "#1E8E4B",
+        "Click": "OnAnswerClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "MicButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MicButton",
+        "Style": "{StaticResource ActionButton}",
+        "Visibility": "Collapsed",
+        "Click": "OnMicClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "OpenDoorButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "OpenDoorButton",
+        "Style": "{StaticResource ActionButton}",
+        "Background": "#B7791F",
+        "Foreground": "#FFFFFF",
+        "BorderBrush": "#B7791F",
+        "Click": "OnOpenDoorClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "QuickReplyToggle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "QuickReplyToggle",
+        "Style": "{StaticResource ActionButton}",
+        "Click": "OnQuickReplyToggleClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "IgnoreButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "IgnoreButton",
+        "Style": "{StaticResource ActionButton}",
+        "Foreground": "{DynamicResource Danger}",
+        "BorderBrush": "{DynamicResource Danger}",
+        "Click": "OnIgnoreClick"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "InCallView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "InCallView",
+        "Visibility": "Collapsed",
+        "Background": "{DynamicResource Bg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "InCallTitle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "InCallTitle",
+        "FontSize": "30",
+        "FontWeight": "Bold",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "InCallPurposeSlot",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "InCallPurposeSlot",
+        "Height": "34",
+        "Margin": "0,6,0,0"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "InCallPurposeBadge",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "InCallPurposeBadge",
+        "Visibility": "Collapsed",
+        "Background": "{DynamicResource Pill}",
+        "CornerRadius": "8",
+        "Padding": "12,6",
+        "BorderBrush": "{DynamicResource PlateLine}",
+        "BorderThickness": "1",
+        "HorizontalAlignment": "Left",
+        "VerticalAlignment": "Center"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "InCallPurposeContent",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "InCallPurposeContent",
+        "Orientation": "Horizontal"
+      }
+    },
+    {
+      "type": "MediaElement",
+      "name": "PeerH264",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PeerH264",
+        "Stretch": "Uniform",
+        "Visibility": "Collapsed",
+        "LoadedBehavior": "Manual",
+        "UnloadedBehavior": "Manual",
+        "ScrubbingEnabled": "False"
+      }
+    },
+    {
+      "type": "Image",
+      "name": "PeerVideo",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PeerVideo",
+        "Stretch": "Uniform"
+      }
+    },
+    {
+      "type": "Image",
+      "name": "PeerH264Image",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PeerH264Image",
+        "Stretch": "Uniform",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "EndCallButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "EndCallButton",
+        "Style": "{StaticResource ActionButton}",
+        "Background": "{DynamicResource Danger}",
+        "Foreground": "{DynamicResource OnDanger}",
+        "BorderBrush": "{DynamicResource Danger}",
+        "Click": "OnEndCallClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "InCallMicButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "InCallMicButton",
+        "Style": "{StaticResource ActionButton}",
+        "Visibility": "Collapsed",
+        "Click": "OnMicClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "InCallOpenDoorButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "InCallOpenDoorButton",
+        "Style": "{StaticResource ActionButton}",
+        "Background": "#B7791F",
+        "Foreground": "#FFFFFF",
+        "BorderBrush": "#B7791F",
+        "Click": "OnOpenDoorClick"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "CallOverlay",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CallOverlay",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "NoticeChip",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticeChip",
+        "HorizontalAlignment": "Right",
+        "VerticalAlignment": "Top",
+        "Margin": "0,20,24,0",
+        "Cursor": "Hand",
+        "CornerRadius": "10",
+        "Padding": "14,8",
+        "Background": "{DynamicResource Pill}",
+        "BorderBrush": "{DynamicResource PlateLine}",
+        "BorderThickness": "1",
+        "MouseLeftButtonDown": "OnNoticeChipClick"
+      }
+    },
+    {
+      "type": "Ellipse",
+      "name": "NoticeChipDot",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticeChipDot",
+        "Width": "9",
+        "Height": "9",
+        "Margin": "0,0,8,0",
+        "VerticalAlignment": "Center",
+        "Fill": "{DynamicResource Warn}",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "NoticeChipText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticeChipText",
+        "FontSize": "15",
+        "FontWeight": "Bold",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "CallAdminQrCard",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CallAdminQrCard",
+        "HorizontalAlignment": "Left",
+        "VerticalAlignment": "Bottom",
+        "Margin": "24,0,0,118",
+        "CornerRadius": "8",
+        "Padding": "5",
+        "Background": "#FFFFFF",
+        "Cursor": "Hand",
+        "MouseLeftButtonDown": "OnWebAdminClick"
+      }
+    },
+    {
+      "type": "Image",
+      "name": "CallAdminQrImage",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "CallAdminQrImage",
+        "Width": "44",
+        "Height": "44",
+        "RenderOptions.BitmapScalingMode": "NearestNeighbor"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "VideoStatsCard",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VideoStatsCard",
+        "HorizontalAlignment": "Right",
+        "VerticalAlignment": "Bottom",
+        "Margin": "0,0,24,118",
+        "CornerRadius": "8",
+        "Padding": "12,6",
+        "Background": "{DynamicResource Pill}",
+        "BorderBrush": "{DynamicResource PlateLine}",
+        "BorderThickness": "1",
+        "Cursor": "Hand",
+        "MouseLeftButtonDown": "OnVideoStatsClick"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "VideoStatsText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "VideoStatsText",
+        "FontSize": "11",
+        "Foreground": "{DynamicResource Dim}",
+        "FontFamily": "Consolas, Courier New"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "NoticePopover",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticePopover",
+        "Visibility": "Collapsed",
+        "HorizontalAlignment": "Right",
+        "VerticalAlignment": "Top",
+        "Margin": "0,58,20,0",
+        "MaxWidth": "440",
+        "CornerRadius": "12",
+        "Padding": "16,14",
+        "Background": "{DynamicResource Card}",
+        "BorderBrush": "{DynamicResource Line}",
+        "BorderThickness": "1"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "NoticePopoverTarget",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticePopoverTarget",
+        "FontSize": "13",
+        "Foreground": "{DynamicResource Dim}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "NoticePopoverText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticePopoverText",
+        "FontSize": "18",
+        "TextWrapping": "Wrap",
+        "Margin": "0,8,0,0",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "NoticeEditButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticeEditButton",
+        "Style": "{StaticResource ChipButton}",
+        "BorderBrush": "{DynamicResource Line}",
+        "Click": "OnNoticeEditClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "NoticeClearButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticeClearButton",
+        "Style": "{StaticResource ChipButton}",
+        "BorderBrush": "{DynamicResource Line}",
+        "Click": "OnNoticeClearClick"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "NoticePopoverClose",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NoticePopoverClose",
+        "Style": "{StaticResource ChipButton}",
+        "BorderBrush": "{DynamicResource Line}",
+        "Click": "OnNoticePopoverCloseClick"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "MonitorPickerView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MonitorPickerView",
+        "Visibility": "Collapsed",
+        "Background": "#E6101418"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "MonitorPickerTitle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MonitorPickerTitle",
+        "FontSize": "34",
+        "FontWeight": "Bold",
+        "Foreground": "{DynamicResource Fg}",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "MonitorDoorList",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MonitorDoorList",
+        "Margin": "0,24,0,18"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "MonitorPickerClose",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "MonitorPickerClose",
+        "FontSize": "24",
+        "Padding": "34,12",
+        "Background": "{DynamicResource Card}",
+        "Foreground": "{DynamicResource Fg}",
+        "BorderBrush": "{DynamicResource Line}",
+        "HorizontalAlignment": "Center",
+        "Click": "OnMonitorPickerClose"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "HistoryView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryView",
+        "Visibility": "Collapsed",
+        "Background": "{DynamicResource Bg}"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "HistoryTitle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryTitle",
+        "FontSize": "30",
+        "FontWeight": "Bold",
+        "HorizontalAlignment": "Left",
+        "Foreground": "{DynamicResource Fg}"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "HistoryCloseButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryCloseButton",
+        "Style": "{StaticResource ChipButton}",
+        "BorderBrush": "{DynamicResource Line}",
+        "HorizontalAlignment": "Right",
+        "VerticalAlignment": "Center",
+        "Click": "OnHistoryCloseClick"
+      }
+    },
+    {
+      "type": "WrapPanel",
+      "name": "HistoryFilterRow",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryFilterRow",
+        "Grid.Row": "1",
+        "Orientation": "Horizontal",
+        "Margin": "26,0,26,8"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "HistoryFilterAll",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryFilterAll",
+        "Style": "{StaticResource ChipButton}",
+        "BorderBrush": "{DynamicResource Line}",
+        "Margin": "0,0,0,0",
+        "Click": "OnHistoryFilterClick",
+        "Tag": "all"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "HistoryFilterMissed",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryFilterMissed",
+        "Style": "{StaticResource ChipButton}",
+        "BorderBrush": "{DynamicResource Line}",
+        "Click": "OnHistoryFilterClick",
+        "Tag": "missed"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "HistoryDoorFilters",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryDoorFilters",
+        "Orientation": "Horizontal"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "HistoryMarkSeenButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryMarkSeenButton",
+        "Style": "{StaticResource ChipButton}",
+        "BorderBrush": "{DynamicResource Line}",
+        "Margin": "18,0,0,0",
+        "Click": "OnHistoryMarkSeenClick"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "HistoryList",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryList"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "HistoryMoreButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryMoreButton",
+        "Style": "{StaticResource ChipButton}",
+        "BorderBrush": "{DynamicResource Line}",
+        "HorizontalAlignment": "Center",
+        "Click": "OnHistoryMoreClick"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "HistoryNote",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "HistoryNote",
+        "FontSize": "13",
+        "Margin": "0,8,0,0",
+        "HorizontalAlignment": "Center",
+        "Foreground": "{DynamicResource Dim}",
+        "Visibility": "Collapsed"
+      }
+    },
+    {
+      "type": "Canvas",
+      "name": "ScreensaverView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "ScreensaverView",
+        "Visibility": "Collapsed",
+        "Background": "#000000"
+      }
+    },
+    {
+      "type": "StackPanel",
+      "name": "SaverBlock",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SaverBlock",
+        "Canvas.Left": "120",
+        "Canvas.Top": "120"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "SaverClock",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SaverClock",
+        "FontSize": "64",
+        "FontWeight": "Light",
+        "Foreground": "#D9D9D9"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "SaverDate",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SaverDate",
+        "FontSize": "20",
+        "Foreground": "#D9D9D9",
+        "Margin": "0,6,0,0"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "SaverHint",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SaverHint",
+        "FontSize": "28",
+        "FontWeight": "SemiBold",
+        "Foreground": "#FFFFFF",
+        "TextWrapping": "Wrap",
+        "MaxWidth": "600",
+        "Margin": "0,16,0,0"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "SosCountdownView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SosCountdownView",
+        "Visibility": "Collapsed",
+        "Background": "#E68C0D0A"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "SosCountdownText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SosCountdownText",
+        "FontSize": "86",
+        "FontWeight": "Bold",
+        "Foreground": "#FFFFFF",
+        "HorizontalAlignment": "Center",
+        "TextAlignment": "Center"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "SosCountdownCancel",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "SosCountdownCancel",
+        "FontSize": "32",
+        "Padding": "70,20",
+        "Margin": "0,44,0,0",
+        "Background": "#FFFFFF",
+        "Foreground": "#8C0D0A",
+        "BorderThickness": "0",
+        "HorizontalAlignment": "Center",
+        "Click": "OnSosCountdownCancel"
+      }
+    },
+    {
+      "type": "Grid",
+      "name": "EmergencyView",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "EmergencyView",
+        "Visibility": "Collapsed",
+        "Background": "#C62828"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "EmergencyTitle",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "EmergencyTitle",
+        "FontSize": "110",
+        "FontWeight": "Bold",
+        "Foreground": "#FFFFFF",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "EmergencyNote",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "EmergencyNote",
+        "FontSize": "30",
+        "Foreground": "#FFE3DE",
+        "HorizontalAlignment": "Center",
+        "Margin": "0,18,0,0"
+      }
+    },
+    {
+      "type": "Button",
+      "name": "EmergencyCancelButton",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "EmergencyCancelButton",
+        "FontSize": "30",
+        "Padding": "64,18",
+        "Margin": "0,64,0,0",
+        "Background": "#7F1D1D",
+        "Foreground": "#FFFFFF",
+        "BorderBrush": "#FFFFFF",
+        "HorizontalAlignment": "Center",
+        "Click": "OnEmergencyCancelClick"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "NightTint",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "NightTint",
+        "Visibility": "Collapsed",
+        "Background": "#33FF2200",
+        "IsHitTestVisible": "False"
+      }
+    },
+    {
+      "type": "Border",
+      "name": "PairBanner",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PairBanner",
+        "Visibility": "Collapsed",
+        "Background": "{DynamicResource Notice}",
+        "Padding": "16,12",
+        "VerticalAlignment": "Top",
+        "Cursor": "Hand",
+        "MouseLeftButtonDown": "OnPairBannerClick"
+      }
+    },
+    {
+      "type": "TextBlock",
+      "name": "PairBannerText",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PairBannerText",
+        "FontSize": "20",
+        "FontWeight": "Bold",
+        "Foreground": "#FFFFFF",
+        "HorizontalAlignment": "Center"
+      }
+    },
+    {
+      "type": "PairingOnboardingView",
+      "name": "PairingOverlay",
+      "attributes": {
+        "{http://schemas.microsoft.com/winfx/2006/xaml}Name": "PairingOverlay",
+        "Visibility": "Collapsed"
+      }
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "task": "T35-ios-modern",
+  "lane": "tvos-r4",
+  "started_at": "2026-09-22T17:33:11.564171+00:00",
+  "command": [
+    "xcodebuild",
+    "-project",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/source-r4/ios/Doorbell.xcodeproj",
+    "-scheme",
+    "DoorbellTV",
+    "-configuration",
+    "Debug",
+    "-sdk",
+    "appletvsimulator",
+    "-destination",
+    "generic/platform=tvOS Simulator",
+    "-derivedDataPath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/tvos-r4",
+    "ARCHS=arm64",
+    "CODE_SIGNING_ALLOWED=NO",
+    "build"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r4.json",
+  "source_manifest_sha256": "92ed542708ffa474244241f9a07ee2933a5c3bd6e74b92204b01f03242d32b7f",
+  "platform": "macOS arm64 host / tvOS Simulator arm64",
+  "signing": "CODE_SIGNING_ALLOWED=NO",
+  "sip_backend": "real_pjsip",
+  "scope": "Parent R1 scrolling in-call title above end button; T12 frozen Core, production UIKit tests use temporary local Core and disabled media. No physical devices.",
+  "exit_code": 0,
+  "timed_out": false,
+  "finished_at": "2026-09-22T17:34:00.226250+00:00",
+  "status": "PASS",
+  "app_version": "0.1.14",
+  "build_number": "15",
+  "artifact_sha256": "7b91369603f42f7299c11d632075bc510a9655827bd643f8c40a1e46bf2757a6",
+  "artifact_provenance": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/evidence/tvos-r4-artifacts.json",
+  "observed_result": "BUILD SUCCEEDED; unsigned target built.",
+  "limitations": [
+    "Frozen r3 basis plus R1 title boundary; later mainline Core integration needs rebuild.",
+    "Build is not simulator execution or physical UI qualification."
+  ]
+}

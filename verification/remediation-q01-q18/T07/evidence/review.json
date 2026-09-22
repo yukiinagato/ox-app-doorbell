@@ -1,0 +1,89 @@
+{
+  "task_id": "T07",
+  "reviewer": "t02_translation",
+  "reviewed_at": "2026-09-22T16:33:43.147202+00:00",
+  "verdict": "PASS_IN_PRODUCTION_TEST_SCOPE",
+  "scope": "Independent frozen Core/HTTP/MQTT/Store protocol review and 3 actual production-case rerun; no production modifications by reviewer. T07-03 target UI presentation remains a T36 gate.",
+  "source_manifest": "source-final.json",
+  "source_manifest_sha256": "c8d50870fb7cfe4776f131f28b78386cc5fb74dca660c9e41397e58928e06d24",
+  "full_snapshot_manifest_sha256": "06a9a140c62682053ce8f919673eb6ab99139470b47d9072dfea91e74acc1617",
+  "inputs": [
+    {
+      "path": "core/src/node/node.cpp",
+      "frozen_sha256": "50c8adc056cb18270ba3512f4d416eafbe9b0575a887dad17773bb83b8698ef2"
+    },
+    {
+      "path": "core/src/node/operation_ack.h",
+      "frozen_sha256": "e8263f860b098e134ee4cfff1d3db5b3c1409838b8d6fee1c39f968fb93b854c"
+    },
+    {
+      "path": "core/src/node/operation_config.h",
+      "frozen_sha256": "86daf49fa392ca191759c5c7c4d566b289999e9f97c0b1b1a88dc4051a712a04"
+    },
+    {
+      "path": "core/src/node/operation_service.inc",
+      "frozen_sha256": "4a2fe28d1f6591dc25b7619a3516a079f0d6b90d1372fd7709825aee943048c5"
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.h",
+      "frozen_sha256": "d4c55997a7affba50f4d947e4d8a2d9de525309c18aff21e1cff8f4e006ad6e4"
+    },
+    {
+      "path": "core/src/bridge/ha_bridge.cpp",
+      "frozen_sha256": "dfbbbc44694b23b75829ef217152c5211acbc03add5cdba3dde7682b65555f6b"
+    },
+    {
+      "path": "core/tests/test_operations_http.cpp",
+      "frozen_sha256": "9388d315a18acd2b2a9b881971b9f88f878178cb2dd9ebfeb6a70d4dc171a77d"
+    },
+    {
+      "path": "core/tests/operation_test_fixture.h",
+      "frozen_sha256": "2cbb6a27f5580114d5ccc621ba7faae088d7bdc8ad2de984e9de3dd9fac5a4c6"
+    },
+    {
+      "path": "core/tests/test_operations_ack.cpp",
+      "frozen_sha256": "4960b5b829986296d376b41193003daecf5cbb3b4771b4dfbf0b1668c0bd617e"
+    }
+  ],
+  "frozen_input_hashes_verified": true,
+  "documentation_hashes_verified": true,
+  "evidence_verified": [
+    {
+      "path": "verification/remediation-q01-q18/T07/evidence/normal-final.json",
+      "cases": 11,
+      "assertions": 1370,
+      "log_sha256": "1a4c21490c77b22c1e0f7c669dbf3779c4ed4b81eb52072afce97f0ff6eb8f02",
+      "binary_sha256": "495a650e477ae684466dd4bd777131a55776484eac03288d1e07cf9e47c4bddc"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T07/evidence/asan-final.json",
+      "cases": 11,
+      "assertions": 1352,
+      "log_sha256": "1876d1e47424a9e6e6c8f58755e52272124f0991f646fb02fb9b65ec5334c421",
+      "binary_sha256": "db177adf55fab6032bf54a7cb4f07436a9e1b7db97133c77ba8e2093fd7d40f2"
+    },
+    {
+      "path": "verification/remediation-q01-q18/T07/evidence/regression-final.json",
+      "cases": 86,
+      "assertions": 17953,
+      "log_sha256": "0c8131cd70a1daf9f8867714b57af6e1c3050c03d9c3437a3e49071aab8c871c",
+      "binary_sha256": "495a650e477ae684466dd4bd777131a55776484eac03288d1e07cf9e47c4bddc"
+    }
+  ],
+  "independent_execution": {
+    "path": "evidence/independent-targeted.json",
+    "exit_code": 0,
+    "cases": 3,
+    "assertions": 160,
+    "scope": "canonical and low-order keys; unsigned/retained/forged/mismatched packets; duplicate/out-of-order exact operation isolation"
+  },
+  "findings": [],
+  "qualification_limits": [
+    "Only configured actuator acknowledgement is authenticated; physical door state remains unconfirmed.",
+    "T07-03 Core scope isolation passed; multi-shell UI old-ACK presentation is NOT_RUN here and remains T36.",
+    "Local MQTT broker and durable simulated reference actuator are not deployed Home Assistant/actuator firmware.",
+    "ASan evidence has leak detection disabled and does not imply TSan or device qualification."
+  ],
+  "cryptographic_reference": "https://github.com/jedisct1/libsodium/blob/1.0.18/src/libsodium/crypto_core/ed25519/ref10/ed25519_ref10.c#L966",
+  "report": "independent-review.md"
+}

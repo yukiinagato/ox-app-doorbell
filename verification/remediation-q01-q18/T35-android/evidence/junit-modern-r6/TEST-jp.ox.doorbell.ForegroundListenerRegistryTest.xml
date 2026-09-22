@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="jp.ox.doorbell.ForegroundListenerRegistryTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-09-22T17:15:24" hostname="MacBookPro.local" time="0.0">
+  <properties/>
+  <testcase name="depthIsBoundedSoALeakedActivityCannotGrowTheStack" classname="jp.ox.doorbell.ForegroundListenerRegistryTest" time="0.0"/>
+  <testcase name="rebindingPromotesWithoutDuplicating" classname="jp.ox.doorbell.ForegroundListenerRegistryTest" time="0.0"/>
+  <testcase name="theScreenBelowKeepsReceivingEventsAfterTheOneAboveCloses" classname="jp.ox.doorbell.ForegroundListenerRegistryTest" time="0.0"/>
+  <testcase name="unbindingABackgroundListenerNeverStealsTheForegroundSlot" classname="jp.ox.doorbell.ForegroundListenerRegistryTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

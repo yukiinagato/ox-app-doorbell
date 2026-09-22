@@ -1,0 +1,50 @@
+[
+  {
+    "command": [
+      "cmake",
+      "--build",
+      "build/remediation-t15-20260923/green-host",
+      "-j4"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.5894029140472412
+  },
+  {
+    "command": [
+      "python3",
+      "tools/gen_i18n.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.07173895835876465
+  },
+  {
+    "command": [
+      "python3",
+      "tools/check_english_source.py"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.8316121101379395
+  },
+  {
+    "command": [
+      "git",
+      "diff",
+      "--check",
+      "--",
+      "core/src/node/node.cpp",
+      "core/tests/test_panel.cpp",
+      "core/tests/test_media_publish.cpp",
+      "webui/panel/call.html",
+      "webui/panel/video-session.js",
+      "webui/tests/call_page_fixture.js",
+      "webui/tests/call_media_authority.test.js",
+      "ios/Doorbell/MainViewController.swift",
+      "ios/DoorbellTests/CoreBridgeLifecycleTests.swift",
+      "webui/panel/API.md",
+      "webui/panel/API.ja.md"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.0395047664642334
+  }
+]

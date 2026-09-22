@@ -40,6 +40,10 @@ class Runloop {
   }
   void cancel(uint64_t id);
 
+  // Removes only work still in the queue. An already executing or completed task is unchanged,
+  // and no cancellation tombstone is retained for a one-shot task that has already returned.
+  bool cancelQueued(uint64_t id);
+
 
 
   // Executes inline on the loop/manual thread, waits while running, and returns false after stop.

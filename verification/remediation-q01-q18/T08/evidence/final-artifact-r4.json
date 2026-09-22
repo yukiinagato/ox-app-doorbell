@@ -1,0 +1,9 @@
+{
+  "task_id": "T08",
+  "source_manifest": "../source-final-r4.json",
+  "recorded_at": "2026-09-22T15:04:47.661300+00:00",
+  "path": "/Users/ox/Documents/project/app-doorbell/build/remediation-continuation-20260922/t08-candidate-r4/build/doorbell_tests",
+  "sha256": "08a5b3e94a208f97d5acfc7fd3eb717b4b8f98f1800a3b3ca9e2dad775a71bea",
+  "sip_backend": "stub",
+  "scope": "macOS host production tests; not shippable application"
+}

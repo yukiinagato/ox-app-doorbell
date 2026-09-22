@@ -1,0 +1,11 @@
+{
+  "observed_at": "2026-09-22T15:12:07.629809+00:00",
+  "scope": "Only the existing dedicated remediation Simulator; no physical device or other simulator touched.",
+  "simulator": {
+    "udid": "5675591C-491D-4232-9887-B2ECBB030C10",
+    "state": "Shutdown",
+    "name": "Doorbell T20 lifecycle 20260922"
+  },
+  "shutdown_action": null,
+  "retained": "xcresult, generated App Mach-O and native archive snapshots for completed runs. XCTest tearDown stops owned Core instances and removes their temporary directories."
+}

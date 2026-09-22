@@ -1,0 +1,15 @@
+{
+  "task": "T15",
+  "status": "IMPLEMENTED",
+  "core_http": "PASS: media and panel 7 cases / 850 assertions",
+  "web": "PASS: 19 production-module/page scripts",
+  "panel_credential_regression": "PASS: 3 real admin API cases / 558 assertions after convergence-fixture repair",
+  "windows": "PASS: actual production helper 36 assertions + 70 contract assertions; WPF NOT_RUN",
+  "ios_final_arm64_compile": "PASS: final strict comparison and added test compile successfully",
+  "ios_prior_execution": "PASS: 17 CoreBridge/MainViewController tests before final strict duplicate comparison",
+  "ios_final_execution": "BLOCKED_ENV: Mac locked; final duplicate assertion NOT_RUN; no test-start occurred in blocked attempts",
+  "independent_windows_review": "PASS: windows-independent-review.md",
+  "independent_core_web_ios_review": "Root review found duplicate-render check; source fixed and test added; final simulator qualification remains open",
+  "release_qualification": "NOT_RUN: real SIP / physical devices / cross-node media / bounded T16 transport",
+  "resume": "ios-resume-command.json"
+}

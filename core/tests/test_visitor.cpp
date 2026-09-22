@@ -8,6 +8,7 @@
 #include <unistd.h>
 
 #include <chrono>
+#include <atomic>
 #include <memory>
 #include <mutex>
 #include <random>
@@ -159,7 +160,25 @@ TEST_CASE("visitor: language changes replicate and affect press, replies, and TT
 
   const std::string call_id = a.node->pressV2("d_front", "p_delivery");
   REQUIRE(!call_id.empty());
+  {
+    auto status = json::parse(a.node->statusJson());
+    const auto* call = cJSON_GetArrayItem(json::get(status.get(), "active_calls"), 0);
+    REQUIRE(call);
+    CHECK(json::getString(call, "call_id") == call_id);
+    CHECK(json::getInt(call, "remaining_ms") > 0);
+  }
   f.run(500);
+  {
+    auto status = json::parse(a.node->statusJson());
+    const auto* call = cJSON_GetArrayItem(json::get(status.get(), "active_calls"), 0);
+    REQUIRE(call);
+    const int64_t now = json::getInt(call, "server_now_ms");
+    auto localTime = json::parse(a.node->localTimeJson(0));
+    CHECK(now <= json::getInt(localTime.get(), "wall_ms"));
+    CHECK(now > json::getInt(localTime.get(), "wall_ms") - 1000);
+    CHECK(json::getInt(call, "remaining_ms") == json::getInt(call, "expires_at_ms") - now);
+    CHECK(json::getInt(call, "remaining_ms") > 0);
+  }
   {
     auto ev = b.lastUi("event");
     REQUIRE(ev);
@@ -518,4 +537,118 @@ TEST_CASE("visitor: panel language affects state, press, and events, then resets
   }
 
   node.stop();
+}
+
+TEST_CASE("visitor: remaining call time is sampled against the corrected clock") {
+  for (int64_t offset : {-300000LL, 300000LL}) {
+    VFleet fleet;
+    auto& station = fleet.add("A:1", "front", "door_station", "d_front", true);
+    REQUIRE(station.node->start());
+    const int64_t corrected_now = fleet.clock.systemWallMs();
+    fleet.clock.setWall(corrected_now + offset);
+    fleet.clock.setWallOffsetMs(-offset);
+    station.node->setConfigKey("ui.call_ttl_s", "30");
+    REQUIRE_FALSE(station.node->pressV2("d_front", "").empty());
+    fleet.run(50);
+    const auto status = json::parse(station.node->statusJson());
+    const auto* call = cJSON_GetArrayItem(json::get(status.get(), "active_calls"), 0);
+    REQUIRE(call);
+    CHECK(json::getInt(call, "remaining_ms") <= 30000);
+    CHECK(json::getInt(call, "remaining_ms") > 29000);
+    const int64_t sampled_offset = json::getInt(call, "server_now_ms") - fleet.clock.systemWallMs();
+    CHECK(sampled_offset <= -offset);
+    CHECK(sampled_offset > -offset - 1000);
+  }
+}
+
+TEST_CASE("visitor: a corrected time update changes only fresh snapshot countdowns") {
+  VFleet fleet;
+  auto& station = fleet.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(station.node->start());
+  REQUIRE_FALSE(station.node->pressV2("d_front", "").empty());
+  auto before = json::parse(station.node->statusJson());
+  REQUIRE(before);
+  const std::string generation = json::getString(before.get(), "snapshot_generation");
+  const int64_t remaining = json::getInt(
+      cJSON_GetArrayItem(json::get(before.get(), "active_calls"), 0), "remaining_ms");
+  fleet.clock.setWallOffsetMs(5'000);
+  auto cached = json::parse(station.node->statusJson());
+  CHECK(json::getString(cached.get(), "snapshot_generation") == generation);
+  fleet.run(2'000);
+  auto fresh = json::parse(station.node->statusJson());
+  auto* call = cJSON_GetArrayItem(json::get(fresh.get(), "active_calls"), 0);
+  REQUIRE(call);
+  CHECK(json::getString(fresh.get(), "snapshot_generation") != generation);
+  CHECK(json::getInt(call, "remaining_ms") == remaining - 7'000);
+  CHECK(station.uiCount("event", "call_cancelled") == 0);
+}
+
+TEST_CASE("visitor: call snapshots retain identity and age while the loop is asleep") {
+  VFleet fleet;
+  auto& station = fleet.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(station.node->start());
+  const std::string id = station.node->pressV2("d_front", "");
+  REQUIRE_FALSE(id.empty());
+  auto initial = json::parse(station.node->statusJson());
+  REQUIRE(initial);
+  const std::string generation = json::getString(initial.get(), "snapshot_generation");
+  REQUIRE_FALSE(generation.empty());
+  auto* call = cJSON_GetArrayItem(json::get(initial.get(), "active_calls"), 0);
+  REQUIRE(call);
+  CHECK(json::getString(call, "snapshot_generation") == generation);
+  CHECK_FALSE(json::getBool(call, "recovery_required", true));
+  CHECK(json::getInt(call, "recovery_remaining_ms", -1) == 0);
+  const int64_t remaining = json::getInt(call, "remaining_ms");
+  fleet.clock.advance(remaining + 1);
+  auto asleep = json::parse(station.node->statusJson());
+  REQUIRE(asleep);
+  CHECK(json::getString(asleep.get(), "snapshot_generation") == generation);
+  CHECK(json::getInt(asleep.get(), "snapshot_age_ms", -1) >= remaining);
+  fleet.loop.pumpDue();
+  auto refreshed = json::parse(station.node->statusJson());
+  REQUIRE(refreshed);
+  CHECK(json::getString(refreshed.get(), "snapshot_generation") != generation);
+  CHECK(cJSON_GetArraySize(json::get(refreshed.get(), "active_calls")) == 0);
+  for (int i = 0; i < 10; ++i) {
+    station.node->reportCallRecovery(id, true);
+    CHECK(station.node->statusJson().find(id) == std::string::npos);
+  }
+  CHECK(station.uiCount("event", "call_cancelled") == 1);
+}
+
+TEST_CASE("visitor: concurrent readers receive coherent call snapshot generations") {
+  VFleet fleet;
+  auto& station = fleet.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(station.node->start());
+  std::atomic<bool> finished{false};
+  std::atomic<int> failures{0};
+  std::atomic<int> reads{0};
+  std::thread reader([&] {
+    do {
+      auto snapshot = json::parse(station.node->statusJson());
+      const std::string generation = json::getString(snapshot.get(), "snapshot_generation");
+      if (!snapshot || generation.empty()) { ++failures; continue; }
+      cJSON* call = nullptr;
+      cJSON_ArrayForEach(call, json::get(snapshot.get(), "active_calls")) {
+        if (json::getString(call, "snapshot_generation") != generation ||
+            json::getString(call, "call_id").empty() ||
+            json::getString(call, "door") != "d_front" ||
+            json::getString(call, "state") != "ringing" ||
+            json::getInt(call, "remaining_ms") !=
+                std::max<int64_t>(0, json::getInt(call, "expires_at_ms") -
+                                        json::getInt(call, "server_now_ms"))) ++failures;
+      }
+      ++reads;
+    } while (!finished.load());
+  });
+  for (int i = 0; i < 20; ++i) {
+    const std::string id = station.node->pressV2("d_front", "");
+    fleet.run(10);
+    station.node->cancelCallV2("d_front", id, "test_complete");
+    fleet.run(10);
+  }
+  finished = true;
+  reader.join();
+  CHECK(reads > 0);
+  CHECK(failures == 0);
 }

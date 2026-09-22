@@ -1,0 +1,144 @@
+[
+  {
+    "frame" : "{{0, 0}, {1024, 768}}",
+    "identifier" : "purpose_choice_screen",
+    "traits" : 0,
+    "alpha" : 1,
+    "accessibility_element" : false,
+    "hidden" : false,
+    "class" : "UIView"
+  },
+  {
+    "content_size" : "{952, 1290}",
+    "hidden" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "class" : "UIScrollView",
+    "accessibility_element" : false,
+    "frame" : "{{36, 16}, {952, 618}}"
+  },
+  {
+    "accessibility_element" : false,
+    "frame" : "{{36, 16}, {952, 128}}",
+    "font_size" : 107,
+    "class" : "UILabel",
+    "traits" : 65536,
+    "hidden" : false,
+    "alpha" : 1,
+    "text" : "请选择来访目的"
+  },
+  {
+    "font_size" : 56,
+    "alpha" : 1,
+    "text" : "正在呼叫，您可以選擇此次來訪的目的。",
+    "frame" : "{{36, 154}, {952, 67}}",
+    "class" : "UILabel",
+    "accessibility_element" : false,
+    "traits" : 0,
+    "hidden" : false
+  },
+  {
+    "identifier" : "purpose_choice_long",
+    "title" : "",
+    "traits" : 1,
+    "frame" : "{{36, 245}, {306.66666666666669, 1061}}",
+    "class" : "_TtC12DoorbellIOS9P33_20C8087F7160FC1F1A28E4D03EE37C7C17PurposeChoiceCard",
+    "enabled" : true,
+    "accessibility_element" : true,
+    "hidden" : false,
+    "alpha" : 1,
+    "accessibility_label" : "预约配送与大楼设备维护来访，请联系住户确认此次来访目的与接通状态"
+  },
+  {
+    "accessibility_element" : false,
+    "hidden" : false,
+    "frame" : "{{58, 265}, {56, 56}}",
+    "alpha" : 1,
+    "traits" : 0,
+    "class" : "UIView"
+  },
+  {
+    "frame" : "{{70, 277}, {32, 32}}",
+    "traits" : 0,
+    "class" : "UIImageView",
+    "hidden" : false,
+    "alpha" : 1,
+    "accessibility_element" : false
+  },
+  {
+    "frame" : "{{58, 331}, {262.66666666666669, 959}}",
+    "text" : "预约配送与大楼设备维护来访，请联系住户确认此次来访目的与接通状态",
+    "hidden" : false,
+    "alpha" : 1,
+    "traits" : 0,
+    "font_size" : 73,
+    "class" : "UILabel",
+    "accessibility_element" : false
+  },
+  {
+    "alpha" : 0,
+    "frame" : "{{982.5, -23}, {2.5, 36}}",
+    "class" : "UIImageView",
+    "hidden" : false,
+    "traits" : 0,
+    "accessibility_element" : false
+  },
+  {
+    "alpha" : 0,
+    "hidden" : false,
+    "accessibility_element" : false,
+    "frame" : "{{-3, 628.5}, {36, 2.5}}",
+    "traits" : 0,
+    "class" : "UIImageView"
+  },
+  {
+    "traits" : 0,
+    "class" : "UIView",
+    "frame" : "{{36, 650}, {952, 94}}",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "alpha" : 1
+  },
+  {
+    "alpha" : 1,
+    "frame" : "{{36, 650}, {468, 94}}",
+    "accessibility_element" : false,
+    "title" : "取消呼叫",
+    "traits" : 0,
+    "class" : "UIButton",
+    "identifier" : "purpose_choice_cancel",
+    "enabled" : true,
+    "hidden" : false
+  },
+  {
+    "traits" : 0,
+    "accessibility_element" : false,
+    "text" : "取消呼叫",
+    "font_size" : 62,
+    "alpha" : 1,
+    "frame" : "{{154, 660}, {232, 74}}",
+    "class" : "UIButtonLabel",
+    "hidden" : false
+  },
+  {
+    "class" : "UIButton",
+    "hidden" : false,
+    "accessibility_element" : false,
+    "title" : "跳过来访目的",
+    "enabled" : true,
+    "alpha" : 1,
+    "traits" : 0,
+    "identifier" : "purpose_choice_skip",
+    "frame" : "{{520, 650}, {468, 94}}"
+  },
+  {
+    "font_size" : 62,
+    "class" : "UIButtonLabel",
+    "frame" : "{{576, 660}, {356.5, 74}}",
+    "traits" : 0,
+    "alpha" : 1,
+    "hidden" : false,
+    "text" : "跳过来访目的",
+    "accessibility_element" : false
+  }
+]

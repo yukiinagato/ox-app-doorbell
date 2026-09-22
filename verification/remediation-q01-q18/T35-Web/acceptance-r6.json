@@ -1,0 +1,59 @@
+{
+  "task_id": "T35-Web",
+  "status": "PASS_IN_WEB_UI_PROFILE_SCOPE",
+  "independent_review": "PENDING_ROOT_FINAL_REVIEW",
+  "qualification_scope": "Real IAB Chromium production DOM/layout/callbacks with controlled XHR; not native Core, SIP, Safari, physical device, or screen-reader qualification. Does not close whole multi-shell T35.",
+  "source_manifest": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/source-final-r6.json",
+    "sha256": "a4252e68a2557dd1a15715bcdf554ffad3090c8d7d736365ed585fd9712bd839"
+  },
+  "browser": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/final-r6-browser.json",
+    "sha256": "49e1e0f3feb3ed3e69305b6f19e65d1e9625f6fa975b84d8139ff195287ad96f"
+  },
+  "host": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/final-host-regression-r6.json",
+    "sha256": "cd24e04ff9a0bb9e7a96716aa9023d0e9db7b65efb6f8f7e1424bf5c7cfffa3c"
+  },
+  "host_log": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/final-host-regression-r6.log",
+    "sha256": "e31e14118163cc450dad64e337694cf20d23c788516f898bd43299feec08ebfc"
+  },
+  "visual_observations": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/visual-observations.json",
+    "sha256": "0f5915662b1a91199c88e98e80434f0486dbb2c6b87706d01cbf57fd36a27784"
+  },
+  "cleanup": {
+    "path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-Web/evidence/cleanup.json",
+    "sha256": "8f8975f5f62d16cea89f4f358305d8599ddd87a4cb894aa2a996ff663f8148a9"
+  },
+  "acceptance": [
+    {
+      "id": "T35-01",
+      "status": "PASS_IN_SCOPE",
+      "coverage": "Both purpose flows, selected purpose with call identity, Back and Skip preserve call semantics."
+    },
+    {
+      "id": "T35-02",
+      "status": "PASS_IN_SCOPE",
+      "coverage": "Stable Call/Cancel/End positions; no unlock; 11 gesture transition/retirement cases plus same-input positive paths, terminal permissions and late purpose actions."
+    },
+    {
+      "id": "T35-03",
+      "status": "PASS_IN_SCOPE",
+      "coverage": "Ordinary offline neutral, separate SOS alert without visitor clear, keyboard cancellation and existing operation path assistive activation."
+    },
+    {
+      "id": "T35-04",
+      "status": "PASS_IN_SCOPE",
+      "coverage": "16 real layout combinations: 320x480,844x390,768x1024,1024x768 x English/Chinese x 100/150% semantic font scale; viewport/scroll clip minimum size and separation."
+    }
+  ],
+  "historical_results": [
+    "baseline-browser.json: 7/24 pass",
+    "gesture-red-browser.json: 24/31 pass (R1 plus terminal timer)",
+    "gesture-retirement-red-browser.json: 1/4 pass (R2 touch was not reproduced)",
+    "final-r5-browser.json: 34/35 pass (fixture keyup missing key; production unchanged in r6)"
+  ],
+  "version_management": "Parent owns shared application version/resource updates."
+}

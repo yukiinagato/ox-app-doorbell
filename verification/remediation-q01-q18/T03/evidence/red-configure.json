@@ -1,0 +1,35 @@
+{
+  "task_id": "T03",
+  "test_id": "red-configure",
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "436250df8fa855811ba3655ff51b96fe4dc34af26db68b1ac66d1c0730590960",
+  "command": [
+    "cmake",
+    "-S",
+    "core",
+    "-B",
+    "build/remediation-t03-20260922",
+    "-DDB_WITH_PJSIP=OFF",
+    "-DCMAKE_BUILD_TYPE=Debug"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T13:27:23.565290+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "sip_backend": "stub",
+  "signing_state": "unsigned_host",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T03/evidence/red-configure.log",
+  "app_version": null,
+  "build_number": null,
+  "device_or_browser": "macOS host",
+  "source_files": {
+    "core/src/node/node.cpp": "fe73645b774c5e4cae85472781f4d6f137c397c944a5d2df968ea4a2010e6176",
+    "core/src/httpd/httpd.cpp": "785c2ab865e31d4e80f17ea7c26addb5d78ec5c6535edc9a885592ff11530798",
+    "core/tests/test_admin_api.cpp": "93d2241e527a599ca46c4bfc8955e539161e9732196987f3d2bbb2cf877d67bf"
+  },
+  "exit_code": 0,
+  "finished_at": "2026-09-22T13:27:24.624084+00:00"
+}

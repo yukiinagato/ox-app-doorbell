@@ -1,0 +1,32 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "1fc651eeb12a6402ba4f01aeeaaade997ba7b018593f89a982f151f6a875d2e5",
+  "task_id": "T23",
+  "test_id": "ios5-app-r3",
+  "evidence_kind": "historical_sdk_build",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/source-candidate-r3.json",
+  "source_manifest_sha256": "6ce442620a0a99231cf4e615e91911ff02ed8ee8f12f26964607f3f1d517017d",
+  "command": [
+    "ios-compat/scripts/build_app_ios5.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T15:15:31.012544+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T23/evidence/ios5-app-r3.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T15:15:32.166601+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

@@ -7,7 +7,8 @@
 
 
 // Embedded CivetWeb wrapper. Route handlers are marshaled synchronously to Runloop with a bounded
-// timeout. Authentication and media providers run on HTTP workers and must be thread-safe.
+// timeout. Queued expiry prevents execution; a running timeout reports an unknown outcome.
+// Authentication and media providers run on HTTP workers and must be thread-safe.
 #pragma once
 
 #include <cstdint>
@@ -16,6 +17,10 @@
 #include <memory>
 #include <string>
 #include <vector>
+
+#if defined(DB_HTTPD_TEST_HOOKS)
+#include <chrono>
+#endif
 
 #include "util/common.h"
 #include "util/runloop.h"
@@ -76,10 +81,21 @@ class Httpd {
   void stop();
   int port() const;
 
+#if defined(DB_HTTPD_TEST_HOOKS)
+  // Pauses only the HTTP waiter after posting, to exercise the loop's own deadline check.
+  void setDispatchBeforeWaitForTesting(
+      std::function<void(std::chrono::steady_clock::time_point)> hook);
+#endif
+
 
 
   // A trailing * performs prefix matching; other paths are exact.
   void route(const std::string& method, const std::string& path, Handler h);
+
+  // For protocols that await asynchronous loop/network completion on the HTTP worker. The
+  // handler must own its request state, bound its wait, and be cancelled by its owner before
+  // stop(); stop joins every worker before releasing the registered handlers.
+  void routeWorker(const std::string& method, const std::string& path, Handler h);
 
 
   void setStatic(const std::string& path, const std::string& content_type, Bytes content);
@@ -116,6 +132,7 @@ class Httpd {
   struct Impl;
 
  private:
+  void registerRoute(const std::string& method, const std::string& path, Handler h, bool worker);
   std::unique_ptr<Impl> impl_;
 };
 

@@ -1,0 +1,39 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "b8ef3946cdf448923aa75d5e77af82b2b8943fb2e5b6be352fdfa30411336227",
+  "task_id": "T28",
+  "test_id": "core-regression-r6",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/source-green-r6.json",
+  "source_manifest_sha256": "80e4a932021f714dc94b4306d0bed8430823c5f151d6535df7e9c46506a5a7ef",
+  "command": [
+    "build/remediation-t28-20260923/green-r6-build/doorbell_tests"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T17:31:37.300990+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": "macOS arm64 host, production Node/Mesh/SecureChannel/SQLite/CRDT",
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "stub",
+  "signing_state": "unsigned host test binary",
+  "artifact_sha256": "417635a70016b8fda6224c2e01f39b714f71381ec8895ec317d2f3c799a94cb5",
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T28/evidence/core-regression-r6.log",
+  "limitations": [
+    "Host and stub-SIP scope only; hardware and real SIP behavior require later qualification."
+  ],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T17:37:37.658098+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "All 506 Core cases and 31,490 assertions passed on the final frozen r6 source.",
+  "test_cases": 506,
+  "passed_cases": 506,
+  "failed_cases": 0,
+  "assertions": 31490,
+  "failed_assertions": 0
+}

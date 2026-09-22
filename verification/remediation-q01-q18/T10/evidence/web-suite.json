@@ -1,0 +1,317 @@
+[
+  {
+    "task_id": "T10",
+    "test_id": "admin_logic",
+    "command": [
+      "node",
+      "webui/tests/admin_logic.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:01.200402+00:00",
+    "end": "2026-09-22T14:21:01.293519+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/admin_logic.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "admin_runtime",
+    "command": [
+      "node",
+      "webui/tests/admin_runtime.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:01.330633+00:00",
+    "end": "2026-09-22T14:21:01.454691+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/admin_runtime.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "call_flow",
+    "command": [
+      "node",
+      "webui/tests/call_flow.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:01.480841+00:00",
+    "end": "2026-09-22T14:21:01.556865+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/call_flow.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "call_poll_lanes",
+    "command": [
+      "node",
+      "webui/tests/call_poll_lanes.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:01.581972+00:00",
+    "end": "2026-09-22T14:21:01.663563+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/call_poll_lanes.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "call_recovery_controller",
+    "command": [
+      "node",
+      "webui/tests/call_recovery_controller.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:01.688683+00:00",
+    "end": "2026-09-22T14:21:01.760400+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/call_recovery_controller.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "call_state_controller",
+    "command": [
+      "node",
+      "webui/tests/call_state_controller.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:01.786082+00:00",
+    "end": "2026-09-22T14:21:01.869390+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/call_state_controller.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "pairing",
+    "command": [
+      "node",
+      "webui/tests/pairing.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:01.894692+00:00",
+    "end": "2026-09-22T14:21:02.003260+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/pairing.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "panel_i18n",
+    "command": [
+      "node",
+      "webui/tests/panel_i18n.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:02.029466+00:00",
+    "end": "2026-09-22T14:21:02.106919+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/panel_i18n.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "playback",
+    "command": [
+      "node",
+      "webui/tests/playback.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:02.132444+00:00",
+    "end": "2026-09-22T14:21:02.204298+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/playback.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "request_deadline",
+    "command": [
+      "node",
+      "webui/tests/request_deadline.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:02.230048+00:00",
+    "end": "2026-09-22T14:21:02.312030+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/request_deadline.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "runtime",
+    "command": [
+      "node",
+      "webui/tests/runtime.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:02.337674+00:00",
+    "end": "2026-09-22T14:21:02.413274+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/runtime.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "service_worker",
+    "command": [
+      "node",
+      "webui/tests/service_worker.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:02.438537+00:00",
+    "end": "2026-09-22T14:21:02.516305+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/service_worker.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "settings",
+    "command": [
+      "node",
+      "webui/tests/settings.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:02.542004+00:00",
+    "end": "2026-09-22T14:21:02.633310+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/settings.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "theme_notice",
+    "command": [
+      "node",
+      "webui/tests/theme_notice.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:02.659402+00:00",
+    "end": "2026-09-22T14:21:02.748106+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/theme_notice.log"
+  },
+  {
+    "task_id": "T10",
+    "test_id": "video_session",
+    "command": [
+      "node",
+      "webui/tests/video_session.test.js"
+    ],
+    "cwd": "/Users/ox/Documents/project/app-doorbell",
+    "start": "2026-09-22T14:21:02.773977+00:00",
+    "end": "2026-09-22T14:21:02.846903+00:00",
+    "exit_code": 0,
+    "source_manifest": "after-source.json",
+    "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+    "tree_state": "dirty",
+    "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+    "arch": "arm64",
+    "device_or_browser": "Node v25.9.0 VM / host JS; production modules/page",
+    "signing_state": "not_applicable",
+    "sip_backend": "not_run",
+    "log_path": "verification/remediation-q01-q18/T10/evidence/video_session.log"
+  }
+]

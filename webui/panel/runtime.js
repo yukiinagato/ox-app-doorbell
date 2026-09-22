@@ -9,6 +9,103 @@
   function isObj(v) { return !!v && typeof v === "object" && !(v instanceof Array); }
   function own(o, k) { return Object.prototype.hasOwnProperty.call(o, k); }
 
+  // Cancellation retires this transport only; a write may already have reached Core.
+  function requestWithDeadline(options, complete) {
+    options = options || {};
+    var deadline = options.deadline_ms === undefined ? 3000 : options.deadline_ms;
+    if (typeof deadline !== "number" || !isFinite(deadline) || deadline <= 0 ||
+        Math.floor(deadline) !== deadline || deadline > 2147483647)
+      throw new RangeError("deadline_ms must be a positive bounded integer");
+    var method = String(options.method || "GET").toUpperCase(), generation = options.generation;
+    var writing = method !== "GET" && method !== "HEAD";
+    var xhr = null, timer = null, settled = false;
+    var handle = { generation: generation,
+      pending: function () { return !settled; },
+      cancel: function () { return finish("aborted", null, 0, true); } };
+    function finish(kind, data, status, abort) {
+      if (settled) return false;
+      settled = true;
+      if (timer !== null) { root.clearTimeout(timer); timer = null; }
+      if (xhr) {
+        xhr.onload = xhr.onerror = xhr.ontimeout = xhr.onabort = xhr.onreadystatechange = null;
+        if (abort) { try { xhr.abort(); } catch (ignored) {} }
+      }
+      if (complete) complete({ ok: kind === "success", kind: kind, status: status || 0,
+        error_code: data && typeof data.error_code === "string" ? data.error_code : "",
+        data: data, generation: generation,
+        outcome_unknown: writing && (kind === "timeout" || kind === "network" ||
+          kind === "aborted" || kind === "parse_error") });
+      return true;
+    }
+    function received() {
+      if (settled) return;
+      var status = xhr.status === 1223 ? 204 : xhr.status;
+      if (!status) { finish("network", null, 0); return; }
+      var data = null, invalid = false;
+      try {
+        if (xhr.responseText) data = JSON.parse(xhr.responseText);
+        else if (status !== 204 && method !== "HEAD") invalid = true;
+      } catch (ignored) { invalid = true; }
+      if (status < 200 || status >= 300) { finish("http", data, status); return; }
+      if (invalid) { finish("parse_error", null, status); return; }
+      if (data && (data.ok === false || typeof data.error_code === "string" && data.error_code))
+        finish("business", data, status);
+      else finish("success", data, status);
+    }
+    try {
+      if (!root.XMLHttpRequest || !root.setTimeout || !root.clearTimeout) {
+        finish("network", null, 0); return handle;
+      }
+      xhr = new root.XMLHttpRequest();
+      xhr.open(method, options.url, true);
+      // Old WebViews may reject the native timeout property; the watchdog still bounds waiting.
+      try { xhr.timeout = deadline; } catch (ignored) {}
+      var headers = options.headers || {};
+      for (var name in headers) if (own(headers, name)) xhr.setRequestHeader(name, headers[name]);
+      xhr.onload = received;
+      xhr.onreadystatechange = function () {
+        if (xhr.readyState === 4 && xhr.status) received();
+      };
+      xhr.onerror = function () { finish("network", null, 0); };
+      xhr.ontimeout = function () { finish("timeout", null, 0, true); };
+      xhr.onabort = function () { finish("aborted", null, 0); };
+      timer = root.setTimeout(function () { finish("timeout", null, 0, true); }, deadline);
+      xhr.send(options.body === undefined ? null : options.body);
+    } catch (error) {
+      if (settled) throw error;
+      finish("network", null, 0, true);
+    }
+    return handle;
+  }
+
+  // Each owner keeps one lane. Retiring an old handle cannot release a successor's gate.
+  function createRequestLane() {
+    var active = null, generation = 0;
+    return {
+      pending: function () { return active !== null; },
+      cancel: function () {
+        var retired = active;
+        active = null;
+        if (retired && retired.handle) retired.handle.cancel();
+      },
+      start: function (options, complete) {
+        if (active) return null;
+        options = options || {};
+        var entry = { generation: ++generation, handle: null }, request = {}, key;
+        for (key in options) if (own(options, key)) request[key] = options[key];
+        request.generation = entry.generation;
+        active = entry;
+        try {
+          entry.handle = requestWithDeadline(request, function (result) {
+            if (active === entry) active = null;
+            if (complete) complete(result);
+          });
+        } catch (error) { if (active === entry) active = null; throw error; }
+        return entry.handle;
+      }
+    };
+  }
+
   var UI_PROPERTIES = ["scale", "font_scale", "foreground", "background",
                        "accent", "border", "radius"];
 
@@ -484,13 +581,150 @@
     xhr.send(JSON.stringify({ credential: credential }));
   }
 
+  function createSosOperationController(onChange) {
+    var state = { phase: "idle", busy: false, error_code: "", status: 0 };
+    var intent = null, csrf = "", action = "prepare", request = null, generation = 0;
+    var storageKey = "doorbell.sos.operation.v2";
+    try {
+      var saved = root.sessionStorage && root.sessionStorage.getItem(storageKey);
+      var remembered = saved && saved.length <= 1024 ? JSON.parse(saved) : null;
+      if (remembered && remembered.schema_version === 2 && remembered.action === "sos_start" &&
+          /^[a-f0-9]{32}$/.test(remembered.operation_id || "") &&
+          /^[a-f0-9]{32}$/.test(remembered.authority_node || "")) {
+        intent = { operation_id: remembered.operation_id, authority_node: remembered.authority_node };
+        action = "query";
+        state.phase = "unknown";
+      }
+    } catch (ignored) {}
+    function remember() {
+      // An operation ID is not authority. Core still checks the live session on every lookup.
+      try {
+        if (!root.sessionStorage) return;
+        if (intent) root.sessionStorage.setItem(storageKey, JSON.stringify({ schema_version: 2,
+          action: "sos_start", operation_id: intent.operation_id, authority_node: intent.authority_node }));
+        else root.sessionStorage.removeItem(storageKey);
+      } catch (ignored) {}
+    }
+    function snapshot() {
+      return { phase: state.phase, busy: state.busy, error_code: state.error_code,
+        status: state.status, operation_id: intent ? intent.operation_id : "",
+        authority_node: intent ? intent.authority_node : "", action: action };
+    }
+    function publish(phase, result) {
+      state = { phase: phase, busy: phase === "preparing" || phase === "sending" || phase === "querying",
+        error_code: result && result.error_code || "", status: result && result.status || 0 };
+      remember();
+      if (onChange) onChange(snapshot());
+    }
+    function send(method, url, body, done) {
+      var mine = ++generation;
+      var handle = requestWithDeadline({ method: method, url: url, deadline_ms: 4000,
+        headers: { "Content-Type": "application/json", "X-Doorbell-CSRF": csrf },
+        body: body === null ? undefined : JSON.stringify(body) }, function (result) {
+        if (mine !== generation) return;
+        request = null;
+        done(result);
+      });
+      if (mine === generation && handle.pending()) request = handle;
+    }
+    function refused(result) {
+      return result.status === 400 || result.status === 401 || result.status === 403 ||
+        result.error_code === "config_conflict" || result.error_code === "idempotency_conflict";
+    }
+    function fail(result, querying) {
+      if (result.status === 401 || result.status === 403) csrf = "";
+      // After an ambiguous execute, a denied or failed query cannot prove the SOS never ran.
+      publish(result.error_code === "not_started" && !querying ? "not_started"
+        : !querying && refused(result) ? "rejected" : "unknown", result);
+    }
+    function withCsrf(done, querying) {
+      if (csrf) { done(); return; }
+      send("GET", "/api/panel/session", null, function (result) {
+        if (!result.ok || !result.data || !/^[a-f0-9]{32}$/.test(result.data.csrf_token || "")) {
+          fail(result, querying); return;
+        }
+        csrf = result.data.csrf_token;
+        done();
+      });
+    }
+    function validRecord(data) {
+      return data && data.schema_version === 2 && data.ok === true &&
+        /^[a-f0-9]{32}$/.test(data.operation_id || "") &&
+        /^[a-f0-9]{32}$/.test(data.authority_node || "") &&
+        (!intent || data.operation_id === intent.operation_id && data.authority_node === intent.authority_node);
+    }
+    function applyResult(result, querying) {
+      if (!result.ok || !validRecord(result.data)) { fail(result, querying); return; }
+      var execution = result.data.execution_state;
+      action = "query";
+      if (execution === "prepared") {
+        action = "execute";
+        publish("not_started", result);
+      } else if (execution === "accepted" || execution === "dispatching" || execution === "dispatched" || execution === "actuator_ack") {
+        publish("accepted", result);
+      } else if (execution === "rejected_not_started" || execution === "expired_not_started" || execution === "failed_before_dispatch") {
+        action = "prepare";
+        publish("not_started", result);
+      } else publish("unknown", result);
+    }
+    function execute() {
+      publish("sending");
+      action = "query";
+      withCsrf(function () {
+        send("POST", "/api/operations/" + intent.operation_id + "/execute", {
+          schema_version: 2, action: "sos_start", parameters: {},
+          operation_id: intent.operation_id, authority_node: intent.authority_node
+        }, function (result) { applyResult(result, false); });
+      }, false);
+    }
+    function prepare() {
+      intent = null;
+      action = "prepare";
+      publish("preparing");
+      withCsrf(function () {
+        send("POST", "/api/operations/prepare", { schema_version: 2, action: "sos_start", parameters: {} }, function (result) {
+          var data = result.data;
+          if (!result.ok || !validRecord(data) || data.execution_state !== "prepared") {
+            fail(result, false); return;
+          }
+          intent = { operation_id: data.operation_id, authority_node: data.authority_node };
+          execute();
+        });
+      }, false);
+    }
+    function query() {
+      publish("querying");
+      withCsrf(function () {
+        send("GET", "/api/operations/" + intent.operation_id + "?authority_node=" +
+          intent.authority_node + "&action=sos_start", null,
+          function (result) { applyResult(result, true); });
+      }, true);
+    }
+    return {
+      state: snapshot,
+      start: function () {
+        if (state.busy) return false;
+        if (!intent || action === "prepare") prepare();
+        else if (action === "execute") execute();
+        else query();
+        return true;
+      },
+      retire: function () { if (request) request.cancel(); },
+      clearAccepted: function () {
+        if (state.busy || state.phase !== "accepted") return;
+        intent = null; action = "prepare"; publish("idle");
+      }
+    };
+  }
+
   function installEmergencyOverlay(options) {
     options = options || {};
     var doc = root.document, overlay = null, title = null, detail = null;
     var trigger = null, triggerLabel = null, triggerHint = null;
     var current = { known: false, active: false, source: "none" };
     var expiryTimer = null, expiryKey = "", expired = {}, alarm = null;
-    var requestInflight = false;
+    var operationBox = null, operationText = null, operationReason = null, operationHelp = null;
+    var operationAction = null, operation = null;
     if (doc && doc.body) {
       var style = doc.createElement("style");
       style.type = "text/css";
@@ -506,7 +740,14 @@
         ".dbSosTrigger .dbSosLabel{display:block;font-size:24px;}" +
         ".dbSosTrigger .dbSosHint{display:block;margin-top:5px;font-size:11px;font-weight:normal;}" +
         ".dbSosTrigger.dbSosHolding{outline:5px solid #ffd166;outline-offset:3px;}" +
-        ".dbSosTrigger:disabled{opacity:.6;}"));
+        ".dbSosTrigger:disabled{opacity:.6;}" +
+        ".dbSosOperation{display:none;position:fixed;right:18px;bottom:118px;z-index:2147483647;" +
+        "width:320px;max-width:90%;max-height:60%;overflow:auto;padding:16px;box-sizing:border-box;" +
+        "border:2px solid #8f1010;border-radius:12px;background:#fff;color:#20242a;text-align:left;}" +
+        ".dbSosOperation p{font-size:16px;line-height:1.4;margin:0 0 10px;}" +
+        ".dbSosOperation .dbSosOperationHelp{font-size:13px;}" +
+        ".dbSosOperation button{min-height:44px;width:100%;padding:8px;border:0;border-radius:8px;" +
+        "font-size:16px;background:#8f1010;color:#fff;}"));
       (doc.head || doc.body).appendChild(style);
       overlay = doc.createElement("div");
       overlay.className = "dbEmergencyOverlay";
@@ -534,6 +775,22 @@
       triggerLabel.appendChild(doc.createTextNode(options.triggerLabel || "SOS"));
       triggerHint.appendChild(doc.createTextNode(options.triggerHint || "Hold 2s"));
       doc.body.appendChild(trigger);
+      operationBox = doc.createElement("div");
+      operationBox.className = "dbSosOperation";
+      operationBox.setAttribute("role", "status");
+      operationBox.setAttribute("aria-live", "polite");
+      operationText = doc.createElement("p");
+      operationReason = doc.createElement("p");
+      operationHelp = doc.createElement("p");
+      operationHelp.className = "dbSosOperationHelp";
+      operationAction = doc.createElement("button");
+      operationAction.type = "button";
+      operationAction.className = "dbSosOperationAction";
+      operationBox.appendChild(operationText);
+      operationBox.appendChild(operationReason);
+      operationBox.appendChild(operationHelp);
+      operationBox.appendChild(operationAction);
+      doc.body.appendChild(operationBox);
     }
 
     function semanticColor(name, fallback) {
@@ -576,7 +833,9 @@
       } catch (e) { alarm = null; }
     }
     function paint(next, presentation) {
+      var wasActive = current.active;
       current = next || current;
+      if (wasActive && current.known && !current.active && operation) operation.clearAccepted();
       presentation = presentation || { visual: true, sound: "", volume: 0,
                                         sticky: true, ttl_s: 0, key: "emergency" };
       var isExpired = !!expired[presentation.key];
@@ -596,7 +855,7 @@
         overlay.style.display = current.presented ? "block" : "none";
         paintPalette(presentation, rawFallback);
       }
-      if (trigger) trigger.disabled = current.active || requestInflight;
+      if (trigger) trigger.disabled = current.active || !!(operation && operation.state().busy);
       if (current.active && triggerHold) cancelTriggerHold();
       if (current.active && !isExpired) startAlarm(presentation); else stopAlarm();
       if (shouldExpire && !expiryTimer) {
@@ -657,36 +916,48 @@
       } }, next));
     }
 
-    function postEmergency() {
-      if (requestInflight || current.active || !root.XMLHttpRequest) return;
-      requestInflight = true;
-      if (trigger) {
-        trigger.disabled = true;
-        trigger.className = "dbSosTrigger";
-      }
-      var xhr = new root.XMLHttpRequest(), settled = false;
-      function finish(ok) {
-        if (settled) return;
-        settled = true;
-        requestInflight = false;
-        if (ok) {
-          paint({ known: true, active: true, source: "local_trigger", device: "",
-                  wall_ms: Date.now ? Date.now() : 0 },
-                { visual: true, sound: "", volume: 0, sticky: true, ttl_s: 0,
-                  background: "#8F1010", foreground: "#FFFFFF", accent: "#FFD166",
-                  custom_colors: false, raw_active: true, key: "local-trigger" });
-        } else if (trigger) trigger.disabled = false;
-        if (options.onTriggerResult) options.onTriggerResult(ok, xhr.status || 0);
-      }
-      try {
-        xhr.open("POST", "/api/panel/emergency", true);
-        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-        xhr.onload = function () { finish(xhr.status >= 200 && xhr.status < 300); };
-        xhr.onerror = function () { finish(false); };
-        xhr.ontimeout = function () { finish(false); };
-        xhr.send("active=1");
-      } catch (e) { finish(false); }
+    function text(element, value) {
+      if (!element) return;
+      while (element.firstChild) element.removeChild(element.firstChild);
+      element.appendChild(doc.createTextNode(value));
     }
+    function translate(key) { return options.translate ? options.translate(key) : key; }
+    function renderOperation(result) {
+      var notifyResult = !!result;
+      if (!result && operation) result = operation.state();
+      if (!result) return;
+      if (trigger) trigger.disabled = current.active || result.busy;
+      if (operationBox) {
+        operationBox.style.display = result.phase === "idle" ? "none" : "block";
+        operationBox.setAttribute("data-operation-state", result.phase);
+        text(operationText, translate("emergency.sos_" +
+          (result.phase === "unknown" && !result.operation_id ? "prepare_unknown" : result.phase)));
+        var reason = result.error_code === "auth_required" || result.status === 401 ? "auth_required"
+          : result.error_code === "permission_denied" || result.status === 403 ? "permission_denied"
+          : result.error_code === "invalid_request" || result.status === 400 ? "invalid"
+          : result.error_code === "authority_unavailable" || result.status === 501 ? "unavailable" : "";
+        operationReason.style.display = reason ? "block" : "none";
+        text(operationReason, reason ? translate("emergency.sos_" + reason) : "");
+        text(operationHelp, translate("emergency.sos_alternative"));
+        text(operationAction, translate("emergency.sos_" + (result.action === "query" ? "query"
+          : result.action === "execute" ? "send_same" : "retry")));
+        operationAction.disabled = result.busy;
+      }
+      if (notifyResult && options.onTriggerResult)
+        options.onTriggerResult(result.phase === "accepted", result.status, result);
+    }
+    operation = createSosOperationController(renderOperation);
+    renderOperation(operation.state());
+    function postEmergency() {
+      if (current.active) return;
+      if (trigger) trigger.className = "dbSosTrigger";
+      operation.start();
+    }
+    if (operationAction && operationAction.addEventListener)
+      operationAction.addEventListener("click", function () { operation.start(); }, false);
+    if (root.addEventListener) root.addEventListener("pagehide", function () {
+      cancelTriggerHold(); operation.retire();
+    }, false);
     var triggerHold = sosHoldController(postEmergency, root.setTimeout, root.clearTimeout,
                                         SOS_HOLD_MS);
     function cancelTriggerHold() {
@@ -694,7 +965,7 @@
       if (trigger) trigger.className = "dbSosTrigger";
     }
     function startTriggerHold(ev) {
-      if (!trigger || trigger.disabled || current.active || requestInflight) return;
+      if (!trigger || trigger.disabled || current.active || operation.state().busy) return;
       if (ev && ev.preventDefault) ev.preventDefault();
       if (triggerHold.start()) trigger.className = "dbSosTrigger dbSosHolding";
     }
@@ -710,7 +981,11 @@
           startTriggerHold(ev);
       }, false);
       trigger.addEventListener("keyup", cancelTriggerHold, false);
-      trigger.addEventListener("click", function (ev) { if (ev) ev.preventDefault(); }, false);
+      trigger.addEventListener("click", function (ev) {
+        if (ev) ev.preventDefault();
+        // Assistive technology activates native buttons with a zero-detail click.
+        if (ev && ev.detail === 0) { cancelTriggerHold(); postEmergency(); }
+      }, false);
     }
     if (root.navigator && root.navigator.serviceWorker &&
         root.navigator.serviceWorker.addEventListener) {
@@ -720,7 +995,8 @@
       });
     }
     return { update: update, onPush: onPush, state: function () { return current; },
-             trigger: function () { return trigger; }, hold: triggerHold };
+             trigger: function () { return trigger; }, hold: triggerHold,
+             operationState: operation.state, refreshText: function () { renderOperation(); } };
   }
 
   function base64Key(s) {
@@ -890,6 +1166,7 @@
   }
 
   return { emergencyState: emergencyState, activePage: activePage, panelUrl: panelUrl,
+           requestWithDeadline: requestWithDeadline, createRequestLane: createRequestLane,
            webGroup: webGroup, panelStateUrl: panelStateUrl,
            establishSession: establishSession,
            installEmergencyOverlay: installEmergencyOverlay, pushCapability: pushCapability,

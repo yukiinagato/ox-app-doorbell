@@ -1,0 +1,691 @@
+--- a/webui/panel/runtime.js
++++ b/webui/panel/runtime.js
+@@ -581,13 +581,150 @@
+     xhr.send(JSON.stringify({ credential: credential }));
+   }
+ 
++  function createSosOperationController(onChange) {
++    var state = { phase: "idle", busy: false, error_code: "", status: 0 };
++    var intent = null, csrf = "", action = "prepare", request = null, generation = 0;
++    var storageKey = "doorbell.sos.operation.v2";
++    try {
++      var saved = root.sessionStorage && root.sessionStorage.getItem(storageKey);
++      var remembered = saved && saved.length <= 1024 ? JSON.parse(saved) : null;
++      if (remembered && remembered.schema_version === 2 && remembered.action === "sos_start" &&
++          /^[a-f0-9]{32}$/.test(remembered.operation_id || "") &&
++          /^[a-f0-9]{32}$/.test(remembered.authority_node || "")) {
++        intent = { operation_id: remembered.operation_id, authority_node: remembered.authority_node };
++        action = "query";
++        state.phase = "unknown";
++      }
++    } catch (ignored) {}
++    function remember() {
++      // An operation ID is not authority. Core still checks the live session on every lookup.
++      try {
++        if (!root.sessionStorage) return;
++        if (intent) root.sessionStorage.setItem(storageKey, JSON.stringify({ schema_version: 2,
++          action: "sos_start", operation_id: intent.operation_id, authority_node: intent.authority_node }));
++        else root.sessionStorage.removeItem(storageKey);
++      } catch (ignored) {}
++    }
++    function snapshot() {
++      return { phase: state.phase, busy: state.busy, error_code: state.error_code,
++        status: state.status, operation_id: intent ? intent.operation_id : "",
++        authority_node: intent ? intent.authority_node : "", action: action };
++    }
++    function publish(phase, result) {
++      state = { phase: phase, busy: phase === "preparing" || phase === "sending" || phase === "querying",
++        error_code: result && result.error_code || "", status: result && result.status || 0 };
++      remember();
++      if (onChange) onChange(snapshot());
++    }
++    function send(method, url, body, done) {
++      var mine = ++generation;
++      var handle = requestWithDeadline({ method: method, url: url, deadline_ms: 4000,
++        headers: { "Content-Type": "application/json", "X-Doorbell-CSRF": csrf },
++        body: body === null ? undefined : JSON.stringify(body) }, function (result) {
++        if (mine !== generation) return;
++        request = null;
++        done(result);
++      });
++      if (mine === generation && handle.pending()) request = handle;
++    }
++    function refused(result) {
++      return result.status === 400 || result.status === 401 || result.status === 403 ||
++        result.error_code === "config_conflict" || result.error_code === "idempotency_conflict";
++    }
++    function fail(result, querying) {
++      if (result.status === 401 || result.status === 403) csrf = "";
++      // After an ambiguous execute, a denied or failed query cannot prove the SOS never ran.
++      publish(result.error_code === "not_started" && !querying ? "not_started"
++        : !querying && refused(result) ? "rejected" : "unknown", result);
++    }
++    function withCsrf(done, querying) {
++      if (csrf) { done(); return; }
++      send("GET", "/api/panel/session", null, function (result) {
++        if (!result.ok || !result.data || !/^[a-f0-9]{32}$/.test(result.data.csrf_token || "")) {
++          fail(result, querying); return;
++        }
++        csrf = result.data.csrf_token;
++        done();
++      });
++    }
++    function validRecord(data) {
++      return data && data.schema_version === 2 && data.ok === true &&
++        /^[a-f0-9]{32}$/.test(data.operation_id || "") &&
++        /^[a-f0-9]{32}$/.test(data.authority_node || "") &&
++        (!intent || data.operation_id === intent.operation_id && data.authority_node === intent.authority_node);
++    }
++    function applyResult(result, querying) {
++      if (!result.ok || !validRecord(result.data)) { fail(result, querying); return; }
++      var execution = result.data.execution_state;
++      action = "query";
++      if (execution === "prepared") {
++        action = "execute";
++        publish("not_started", result);
++      } else if (execution === "accepted" || execution === "dispatching" || execution === "dispatched" || execution === "actuator_ack") {
++        publish("accepted", result);
++      } else if (execution === "rejected_not_started" || execution === "expired_not_started" || execution === "failed_before_dispatch") {
++        action = "prepare";
++        publish("not_started", result);
++      } else publish("unknown", result);
++    }
++    function execute() {
++      publish("sending");
++      action = "query";
++      withCsrf(function () {
++        send("POST", "/api/operations/" + intent.operation_id + "/execute", {
++          schema_version: 2, action: "sos_start", parameters: {},
++          operation_id: intent.operation_id, authority_node: intent.authority_node
++        }, function (result) { applyResult(result, false); });
++      }, false);
++    }
++    function prepare() {
++      intent = null;
++      action = "prepare";
++      publish("preparing");
++      withCsrf(function () {
++        send("POST", "/api/operations/prepare", { schema_version: 2, action: "sos_start", parameters: {} }, function (result) {
++          var data = result.data;
++          if (!result.ok || !validRecord(data) || data.execution_state !== "prepared") {
++            fail(result, false); return;
++          }
++          intent = { operation_id: data.operation_id, authority_node: data.authority_node };
++          execute();
++        });
++      }, false);
++    }
++    function query() {
++      publish("querying");
++      withCsrf(function () {
++        send("GET", "/api/operations/" + intent.operation_id + "?authority_node=" +
++          intent.authority_node + "&action=sos_start", null,
++          function (result) { applyResult(result, true); });
++      }, true);
++    }
++    return {
++      state: snapshot,
++      start: function () {
++        if (state.busy) return false;
++        if (!intent || action === "prepare") prepare();
++        else if (action === "execute") execute();
++        else query();
++        return true;
++      },
++      retire: function () { if (request) request.cancel(); },
++      clearAccepted: function () {
++        if (state.busy || state.phase !== "accepted") return;
++        intent = null; action = "prepare"; publish("idle");
++      }
++    };
++  }
++
+   function installEmergencyOverlay(options) {
+     options = options || {};
+     var doc = root.document, overlay = null, title = null, detail = null;
+     var trigger = null, triggerLabel = null, triggerHint = null;
+     var current = { known: false, active: false, source: "none" };
+     var expiryTimer = null, expiryKey = "", expired = {}, alarm = null;
+-    var requestInflight = false;
++    var operationBox = null, operationText = null, operationReason = null, operationHelp = null;
++    var operationAction = null, operation = null;
+     if (doc && doc.body) {
+       var style = doc.createElement("style");
+       style.type = "text/css";
+@@ -603,7 +740,14 @@
+         ".dbSosTrigger .dbSosLabel{display:block;font-size:24px;}" +
+         ".dbSosTrigger .dbSosHint{display:block;margin-top:5px;font-size:11px;font-weight:normal;}" +
+         ".dbSosTrigger.dbSosHolding{outline:5px solid #ffd166;outline-offset:3px;}" +
+-        ".dbSosTrigger:disabled{opacity:.6;}"));
++        ".dbSosTrigger:disabled{opacity:.6;}" +
++        ".dbSosOperation{display:none;position:fixed;right:18px;bottom:118px;z-index:2147483647;" +
++        "width:320px;max-width:90%;max-height:60%;overflow:auto;padding:16px;box-sizing:border-box;" +
++        "border:2px solid #8f1010;border-radius:12px;background:#fff;color:#20242a;text-align:left;}" +
++        ".dbSosOperation p{font-size:16px;line-height:1.4;margin:0 0 10px;}" +
++        ".dbSosOperation .dbSosOperationHelp{font-size:13px;}" +
++        ".dbSosOperation button{min-height:44px;width:100%;padding:8px;border:0;border-radius:8px;" +
++        "font-size:16px;background:#8f1010;color:#fff;}"));
+       (doc.head || doc.body).appendChild(style);
+       overlay = doc.createElement("div");
+       overlay.className = "dbEmergencyOverlay";
+@@ -631,6 +775,22 @@
+       triggerLabel.appendChild(doc.createTextNode(options.triggerLabel || "SOS"));
+       triggerHint.appendChild(doc.createTextNode(options.triggerHint || "Hold 2s"));
+       doc.body.appendChild(trigger);
++      operationBox = doc.createElement("div");
++      operationBox.className = "dbSosOperation";
++      operationBox.setAttribute("role", "status");
++      operationBox.setAttribute("aria-live", "polite");
++      operationText = doc.createElement("p");
++      operationReason = doc.createElement("p");
++      operationHelp = doc.createElement("p");
++      operationHelp.className = "dbSosOperationHelp";
++      operationAction = doc.createElement("button");
++      operationAction.type = "button";
++      operationAction.className = "dbSosOperationAction";
++      operationBox.appendChild(operationText);
++      operationBox.appendChild(operationReason);
++      operationBox.appendChild(operationHelp);
++      operationBox.appendChild(operationAction);
++      doc.body.appendChild(operationBox);
+     }
+ 
+     function semanticColor(name, fallback) {
+@@ -673,7 +833,9 @@
+       } catch (e) { alarm = null; }
+     }
+     function paint(next, presentation) {
++      var wasActive = current.active;
+       current = next || current;
++      if (wasActive && current.known && !current.active && operation) operation.clearAccepted();
+       presentation = presentation || { visual: true, sound: "", volume: 0,
+                                         sticky: true, ttl_s: 0, key: "emergency" };
+       var isExpired = !!expired[presentation.key];
+@@ -693,7 +855,7 @@
+         overlay.style.display = current.presented ? "block" : "none";
+         paintPalette(presentation, rawFallback);
+       }
+-      if (trigger) trigger.disabled = current.active || requestInflight;
++      if (trigger) trigger.disabled = current.active || !!(operation && operation.state().busy);
+       if (current.active && triggerHold) cancelTriggerHold();
+       if (current.active && !isExpired) startAlarm(presentation); else stopAlarm();
+       if (shouldExpire && !expiryTimer) {
+@@ -754,36 +916,48 @@
+       } }, next));
+     }
+ 
++    function text(element, value) {
++      if (!element) return;
++      while (element.firstChild) element.removeChild(element.firstChild);
++      element.appendChild(doc.createTextNode(value));
++    }
++    function translate(key) { return options.translate ? options.translate(key) : key; }
++    function renderOperation(result) {
++      var notifyResult = !!result;
++      if (!result && operation) result = operation.state();
++      if (!result) return;
++      if (trigger) trigger.disabled = current.active || result.busy;
++      if (operationBox) {
++        operationBox.style.display = result.phase === "idle" ? "none" : "block";
++        operationBox.setAttribute("data-operation-state", result.phase);
++        text(operationText, translate("emergency.sos_" +
++          (result.phase === "unknown" && !result.operation_id ? "prepare_unknown" : result.phase)));
++        var reason = result.error_code === "auth_required" || result.status === 401 ? "auth_required"
++          : result.error_code === "permission_denied" || result.status === 403 ? "permission_denied"
++          : result.error_code === "invalid_request" || result.status === 400 ? "invalid"
++          : result.error_code === "authority_unavailable" || result.status === 501 ? "unavailable" : "";
++        operationReason.style.display = reason ? "block" : "none";
++        text(operationReason, reason ? translate("emergency.sos_" + reason) : "");
++        text(operationHelp, translate("emergency.sos_alternative"));
++        text(operationAction, translate("emergency.sos_" + (result.action === "query" ? "query"
++          : result.action === "execute" ? "send_same" : "retry")));
++        operationAction.disabled = result.busy;
++      }
++      if (notifyResult && options.onTriggerResult)
++        options.onTriggerResult(result.phase === "accepted", result.status, result);
++    }
++    operation = createSosOperationController(renderOperation);
++    renderOperation(operation.state());
+     function postEmergency() {
+-      if (requestInflight || current.active || !root.XMLHttpRequest) return;
+-      requestInflight = true;
+-      if (trigger) {
+-        trigger.disabled = true;
+-        trigger.className = "dbSosTrigger";
+-      }
+-      var xhr = new root.XMLHttpRequest(), settled = false;
+-      function finish(ok) {
+-        if (settled) return;
+-        settled = true;
+-        requestInflight = false;
+-        if (ok) {
+-          paint({ known: true, active: true, source: "local_trigger", device: "",
+-                  wall_ms: Date.now ? Date.now() : 0 },
+-                { visual: true, sound: "", volume: 0, sticky: true, ttl_s: 0,
+-                  background: "#8F1010", foreground: "#FFFFFF", accent: "#FFD166",
+-                  custom_colors: false, raw_active: true, key: "local-trigger" });
+-        } else if (trigger) trigger.disabled = false;
+-        if (options.onTriggerResult) options.onTriggerResult(ok, xhr.status || 0);
+-      }
+-      try {
+-        xhr.open("POST", "/api/panel/emergency", true);
+-        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+-        xhr.onload = function () { finish(xhr.status >= 200 && xhr.status < 300); };
+-        xhr.onerror = function () { finish(false); };
+-        xhr.ontimeout = function () { finish(false); };
+-        xhr.send("active=1");
+-      } catch (e) { finish(false); }
+-    }
++      if (current.active) return;
++      if (trigger) trigger.className = "dbSosTrigger";
++      operation.start();
++    }
++    if (operationAction && operationAction.addEventListener)
++      operationAction.addEventListener("click", function () { operation.start(); }, false);
++    if (root.addEventListener) root.addEventListener("pagehide", function () {
++      cancelTriggerHold(); operation.retire();
++    }, false);
+     var triggerHold = sosHoldController(postEmergency, root.setTimeout, root.clearTimeout,
+                                         SOS_HOLD_MS);
+     function cancelTriggerHold() {
+@@ -791,7 +965,7 @@
+       if (trigger) trigger.className = "dbSosTrigger";
+     }
+     function startTriggerHold(ev) {
+-      if (!trigger || trigger.disabled || current.active || requestInflight) return;
++      if (!trigger || trigger.disabled || current.active || operation.state().busy) return;
+       if (ev && ev.preventDefault) ev.preventDefault();
+       if (triggerHold.start()) trigger.className = "dbSosTrigger dbSosHolding";
+     }
+@@ -807,7 +981,11 @@
+           startTriggerHold(ev);
+       }, false);
+       trigger.addEventListener("keyup", cancelTriggerHold, false);
+-      trigger.addEventListener("click", function (ev) { if (ev) ev.preventDefault(); }, false);
++      trigger.addEventListener("click", function (ev) {
++        if (ev) ev.preventDefault();
++        // Assistive technology activates native buttons with a zero-detail click.
++        if (ev && ev.detail === 0) { cancelTriggerHold(); postEmergency(); }
++      }, false);
+     }
+     if (root.navigator && root.navigator.serviceWorker &&
+         root.navigator.serviceWorker.addEventListener) {
+@@ -817,7 +995,8 @@
+       });
+     }
+     return { update: update, onPush: onPush, state: function () { return current; },
+-             trigger: function () { return trigger; }, hold: triggerHold };
++             trigger: function () { return trigger; }, hold: triggerHold,
++             operationState: operation.state, refreshText: function () { renderOperation(); } };
+   }
+ 
+   function base64Key(s) {
+--- a/webui/panel/call.html
++++ b/webui/panel/call.html
+@@ -138,6 +138,7 @@
+ }
+ 
+ function applyEmergencyI18n() {
++  if (emergencyOverlay && emergencyOverlay.refreshText) emergencyOverlay.refreshText();
+   const overlay = document.getElementsByClassName("dbEmergencyOverlay")[0];
+   if (overlay) {
+     const heading = overlay.getElementsByTagName("h2")[0];
+@@ -157,6 +158,7 @@
+ 
+ function installEmergency() {
+   if (!emergencyOverlay) emergencyOverlay = DoorbellPanelRuntime.installEmergencyOverlay({
++    translate: t,
+     title: t("emergency.title"),
+     detail: t("emergency.active_detail"),
+     clearInstruction: t("emergency.clear_instruction"),
+--- a/webui/panel/door.html
++++ b/webui/panel/door.html
+@@ -159,6 +159,7 @@
+     return "ja";
+   }
+   function applyEmergencyI18n() {
++    if (emergencyOverlay && emergencyOverlay.refreshText) emergencyOverlay.refreshText();
+     var overlays = document.getElementsByClassName("dbEmergencyOverlay");
+     if (overlays.length) {
+       var headings = overlays[0].getElementsByTagName("h2");
+@@ -179,6 +180,7 @@
+   }
+   function installEmergency() {
+     emergencyOverlay = DoorbellPanelRuntime.installEmergencyOverlay({
++      translate: t,
+       title: t("emergency.title"),
+       detail: t("emergency.active_detail"),
+       clearInstruction: t("emergency.clear_instruction"),
+--- a/webui/panel/monitor.html
++++ b/webui/panel/monitor.html
+@@ -183,6 +183,7 @@
+     return "ja";
+   }
+   function applyEmergencyI18n() {
++    if (emergencyOverlay && emergencyOverlay.refreshText) emergencyOverlay.refreshText();
+     var overlays = document.getElementsByClassName("dbEmergencyOverlay");
+     if (overlays.length) {
+       var headings = overlays[0].getElementsByTagName("h2");
+@@ -203,6 +204,7 @@
+   }
+   function installEmergency() {
+     emergencyOverlay = DoorbellPanelRuntime.installEmergencyOverlay({
++      translate: t,
+       title: t("emergency.title"),
+       detail: t("emergency.active_detail"),
+       clearInstruction: t("emergency.clear_instruction"),
+--- a/webui/panel/API.md
++++ b/webui/panel/API.md
+@@ -144,11 +144,31 @@
+ 
+ ## Emergency
+ 
+-`POST /api/panel/emergency` with `active=1` raises SOS and returns `{"ok":true}`. It accepts the
+-HttpOnly panel session or the rolling-upgrade `k=<token>` credential. Every stock panel keeps an
+-always-visible `sos.trigger`; it sends this request only after an uninterrupted two-second hold.
+-Panel clients cannot clear SOS: `active=0` or `active=false` returns 403. Clearing requires kiosk
+-PIN control or an authenticated admin session.
++The stock door, monitor and call pages use the [durable operations API](../../docs/en/operation-api.md)
++with `action:"sos_start"`. One explicit SOS activation prepares one handle, then executes it.
++Every request, including session metadata and status queries, has a four-second transport deadline.
++The shared overlay displays preparing, sending, accepted, explicitly unstarted, refused, and
++unknown results. Accepted means Core accepted the operation; it does not confirm notification
++delivery. Only replicated state or a valid Push controls the active emergency presentation.
++
++An ambiguous execute preserves the handle. The recovery button queries that same handle; it never
++prepares a replacement automatically. A query returning `prepared` offers explicit execution of
++that handle. Only an authoritative unstarted terminal state permits an explicit new preparation.
++A lost prepare response never causes execute and can be retried only by a new user action.
++The handle is retained in tab session storage when available, without credentials, so a normal
++page refresh offers a query before another send. A session change does not grant access to that
++record: Core rechecks its original creator and current permissions.
++
++The server-derived `dbpanel` session principal may use only `sos_start`, with the serving node's
++explicit SOS grant and configured authority. Every operation request carries the session CSRF
++header; mutations require a trusted exact Origin. There is no shared-Bearer or legacy-endpoint
++fallback. The existing two-second pointer/keyboard hold remains available; assistive-technology
++button activation and ordinary recovery buttons use the same single-intent controller.
++Authentication, permission and validation refusals remain visible with another-help instructions.
++
++`POST /api/panel/emergency` remains a legacy one-shot compatibility endpoint (`active=1`).
++Panel clients cannot clear SOS: `active=0` or `active=false` returns 403. Clearing retains the
++existing kiosk/admin rules, including the existing no-admin-password exception on those controls.
+ 
+ SOS active/clear state always replicates. `emergency.web_active_page_alerts` is an administrator
+ boolean and defaults to true. When true, an open page renders replicated active SOS before any
+--- a/webui/panel/API.ja.md
++++ b/webui/panel/API.ja.md
+@@ -157,17 +157,30 @@
+ - in-call WebRTC の復元には answered claim を勝ち取った同じ `dialog_id` が必要。別 browser や一般の
+   door page はその dialog の復元を確認できない。
+ 
+-## POST /api/panel/emergency
+-
+-SOS 緊急モードの**発報のみ** (解除は不可)。標準 panel は常時表示する `sos.trigger` を持ち、
+-連続 2 秒の長押しが完了した場合だけ送信する。
+-
+-- Content-Type: `application/x-www-form-urlencoded`、Body: `active=1`。HttpOnly panel session
+-  または rolling-upgrade 用の `k=<token>` credential が必要。
+-- 応答: `{"ok":true}` / `403` (token 不正)
+-- `active=0` (または `active=false`) を付けた解除要求は `403` +
+-  `{"ok":false,"err":"cancel not allowed"}` — 解除は kiosk PIN 経由の端末操作
+-  (`db_core_emergency(0)`) か管理セッションの `POST /api/emergency` のみ。
++## SOS の送信と結果
++
++標準の door、monitor、call ページは [永続操作 API](../../docs/en/operation-api.md) の
++`action:"sos_start"` を使用する。明示的な発報操作ごとに一つのハンドルを準備して実行する。
++セッション情報や結果照会を含め、各リクエストの期限は4秒。共通UIは準備中、送信中、受理済み、
++未実行が確認された状態、拒否、結果不明を表示する。受理はCore側の受理であり、通知到達の証明ではない。
++緊急表示のactive状態は複製状態または有効なPushだけが決定する。
++
++実行結果が不明なときは同じハンドルを保持して照会し、自動で別のハンドルを準備しない。
++照会結果が`prepared`なら同じハンドルを明示的に実行できる。権威側が未実行の終端状態を返した場合のみ、
++明示的な新規準備を許可する。準備応答を失った場合は実行せず、ユーザー操作による再準備だけを許可する。
++利用可能ならハンドルをタブのsession storageに保存する。認証情報は保存しない。通常のページ再読み込み後も
++まず照会する。セッションが変わってもその記録への権限は得られず、Coreが作成者と現在の権限を再確認する。
++
++サーバーが導出する`dbpanel`セッション主体は`SOS start`だけを利用でき、ページ配信ノードの明示的なSOS権限と
++固定authority設定が必要。照会を含む操作リクエストにはセッションCSRFヘッダーを付け、更新時は信頼された
++正確なOriginを確認する。共有Bearerや旧エンドポイントへ戻さない。既存の2秒間のポインター／キーボード長押しを
++維持し、支援技術によるボタン起動と通常の照会／再試行ボタンも同じ単一意図コントローラーを使用する。
++認証・権限・入力の拒否理由と、他の手段で助けを求める案内を表示する。
++
++`POST /api/panel/emergency`は旧クライアント向けの一回限りの互換入口として残る（`active=1`）。
++パネルによる`active=0`または`active=false`の解除は403。解除は既存のkiosk／管理者経路に従い、
++その経路にある管理パスワード未設定時の例外も維持する。
++
+ - SOS active/clear 状態は常に全 Core ノードへ複製されるが、表示、音、Push、Telegram、MQTT の
+   実行先は有効な rule によって決まる。rule は受信者ゼロまたは Push のみにもでき、保存を妨げない。
+ - 管理者 boolean `emergency.web_active_page_alerts` の既定値は true。true なら開いている Web page は、
+--- a/webui/tests/sos_operation.test.js
++++ b/webui/tests/sos_operation.test.js
+@@ -0,0 +1,229 @@
++"use strict";
++const assert = require("assert");
++const fs = require("fs");
++const path = require("path");
++const vm = require("vm");
++const source = fs.readFileSync(path.join(__dirname, "../panel/runtime.js"), "utf8");
++const id = "a".repeat(32), authority = "b".repeat(32), csrf = "c".repeat(32);
++
++function fixture(page, storage = new Map()) {
++  let now = 0, counter = 0;
++  const requests = [], timers = new Map(), events = {}, notices = [];
++  class Element {
++    constructor(tag) { this.tagName = tag; this.children = []; this.style = {}; this.attributes = {}; this.events = {}; this.disabled = false; this.text = ""; }
++    appendChild(child) { this.children.push(child); child.parentNode = this; return child; }
++    removeChild(child) { this.children.splice(this.children.indexOf(child), 1); return child; }
++    setAttribute(key, value) { this.attributes[key] = String(value); }
++    getAttribute(key) { return this.attributes[key] || null; }
++    get firstChild() { return this.children[0]; }
++    get textContent() { return this.text + this.children.map(child => child.textContent).join(""); }
++    set textContent(value) { this.text = String(value); this.children = []; }
++    get innerHTML() { return this.textContent; }
++    set innerHTML(value) {
++      this.children = []; this.text = "";
++      const stack = [this], tokens = value.match(/<[^>]+>|[^<]+/g) || [];
++      for (const token of tokens) {
++        if (token.startsWith("</")) { stack.pop(); continue; }
++        if (token.startsWith("<")) {
++          const child = new Element(token.match(/^<([\w]+)/)[1]);
++          const cls = token.match(/class=['"]([^'"]+)/); if (cls) child.className = cls[1];
++          stack[stack.length - 1].appendChild(child); stack.push(child);
++        } else stack[stack.length - 1].appendChild({ textContent: token });
++      }
++    }
++    getElementsByTagName(tag) {
++      const all = []; for (const child of this.children) { if (child.tagName === tag) all.push(child); if (child.getElementsByTagName) all.push(...child.getElementsByTagName(tag)); } return all;
++    }
++    addEventListener(name, fn) { (this.events[name] || (this.events[name] = [])).push(fn); }
++    fire(name, value = {}) { if (this.disabled) return; (this.events[name] || []).forEach(fn => fn(Object.assign({ preventDefault() {} }, value))); }
++  }
++  const document = { body: new Element("body"), head: new Element("head"), createElement: tag => new Element(tag), createTextNode: value => ({ textContent: String(value) }) };
++  document.getElementsByClassName = name => document.body.getElementsByTagName("div").concat(document.body.getElementsByTagName("button")).filter(el => (el.className || "").split(" ").includes(name));
++  const root = { document, navigator: {}, sessionStorage: {
++    getItem: key => storage.get(key) || null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key)
++  }, location: { pathname: "/panel/" + (page || "call") },
++    addEventListener(name, fn) { events[name] = fn; },
++    performance: { now: () => now },
++    setTimeout(fn, delay) { const token = ++counter; timers.set(token, { fn, at: now + delay }); return token; },
++    clearTimeout(token) { timers.delete(token); },
++    XMLHttpRequest: function () {
++      requests.push(this); this.headers = {}; this.status = 0; this.readyState = 0;
++      this.open = (method, url) => Object.assign(this, { method, url });
++      this.setRequestHeader = (name, value) => { this.headers[name] = value; };
++      this.send = body => { this.body = body; };
++      this.abort = () => { this.aborted = true; if (this.onabort) this.onabort(); };
++      this.respond = (status, data) => {
++        this.status = status; this.responseText = typeof data === "string" ? data : JSON.stringify(data); this.readyState = 4;
++        const loaded = this.onload, ready = this.onreadystatechange; if (ready) ready(); if (loaded) loaded();
++      };
++    }
++  };
++  const context = vm.createContext({ window: root, document, console });
++  vm.runInContext(source, context);
++  let overlay;
++  if (page) {
++    const html = fs.readFileSync(path.join(__dirname, "../panel/" + page + ".html"), "utf8");
++    const indent = page === "call" ? "" : "  ";
++    const functionSource = name => html.match(new RegExp("function " + name + "\\(\\) \\{[\\s\\S]*?\\n" + indent + "\\}(?=\\n)"))[0];
++    const install = functionSource("installEmergency");
++    const translate = functionSource("applyEmergencyI18n");
++    Object.assign(context, { DoorbellPanelRuntime: root.DoorbellPanelRuntime, emergencyOverlay: null, t: key => key, esc: value => value });
++    vm.runInContext(translate + "\n" + install + "\ninstallEmergency();", context);
++    overlay = context.emergencyOverlay;
++  } else overlay = root.DoorbellPanelRuntime.installEmergencyOverlay({ translate: key => key, onTriggerResult: (ok, status, result) => notices.push(result) });
++  function advance(ms) {
++    now += ms;
++    for (const [token, timer] of Array.from(timers)) if (timer.at <= now) { timers.delete(token); timer.fn(); }
++  }
++  return { overlay, requests, timers, advance, events, notices, document,
++    begin() { overlay.hold.start(); advance(2000); },
++    session() { assert.strictEqual(requests.at(-1).url, "/api/panel/session"); requests.at(-1).respond(200, { ok: true, csrf_token: csrf }); },
++    prepare() {
++      const request = requests.at(-1); assert.strictEqual(request.url, "/api/operations/prepare");
++      assert.deepStrictEqual(JSON.parse(request.body), { schema_version: 2, action: "sos_start", parameters: {} });
++      assert.strictEqual(request.headers["X-Doorbell-CSRF"], csrf);
++      request.respond(200, { schema_version: 2, ok: true, operation_id: id, authority_node: authority,
++        execution_state: "prepared", config_generation: "opaque", prepared_remaining_ms: 30000 });
++    },
++    action() { const button = document.getElementsByClassName("dbSosOperationAction")[0]; assert(button); button.fire("click"); },
++    message() { return document.getElementsByClassName("dbSosOperation")[0].textContent; }
++  };
++}
++const cases = [];
++function test(name, run) { cases.push([name, run]); }
++function record(state) { return { schema_version: 2, ok: true, operation_id: id, authority_node: authority, execution_state: state, config_generation: "opaque", prepared_remaining_ms: 25000 }; }
++
++test("T12-01: silent execute reaches a real deadline and exposes an unknown result", () => {
++  const f = fixture(); f.begin(); f.session(); f.prepare();
++  const send = f.requests.at(-1); assert.strictEqual(send.timeout, 4000);
++  f.advance(4000);
++  assert.strictEqual(f.overlay.operationState().phase, "unknown");
++  assert.strictEqual(send.aborted, true);
++  assert.strictEqual(f.overlay.trigger().disabled, false);
++  assert(f.message().includes("emergency.sos_unknown"));
++  assert(f.message().includes("emergency.sos_alternative"));
++  assert.strictEqual(f.timers.size, 0);
++  assert.strictEqual(f.overlay.state().active, false, "unknown must not manufacture replicated SOS state");
++});
++test("T12-02: accepted response lost; repeated recovery queries only the original intent", () => {
++  const f = fixture(); f.begin(); f.session(); f.prepare(); f.advance(4000);
++  f.action(); const query = f.requests.at(-1);
++  assert.strictEqual(query.method, "GET");
++  assert.strictEqual(query.headers["X-Doorbell-CSRF"], csrf);
++  assert.strictEqual(query.url, "/api/operations/" + id + "?authority_node=" + authority + "&action=sos_start");
++  query.respond(200, record("dispatched"));
++  assert.strictEqual(f.overlay.operationState().phase, "accepted");
++  f.action(); f.requests.at(-1).respond(200, record("dispatched"));
++  assert.strictEqual(f.requests.filter(r => r.url === "/api/operations/prepare").length, 1);
++  assert.strictEqual(f.requests.filter(r => r.url.endsWith("/execute")).length, 1);
++  assert(f.message().includes("emergency.sos_accepted"));
++});
++test("T12-03: permission, validation, and authentication failures remain actionable", () => {
++  for (const [status, code, key] of [[403, "permission_denied", "emergency.sos_permission_denied"], [400, "invalid_request", "emergency.sos_invalid"], [401, "auth_required", "emergency.sos_auth_required"]]) {
++    const f = fixture(); f.begin(); f.session(); f.requests.at(-1).respond(status, { ok: false, error_code: code });
++    assert.strictEqual(f.overlay.operationState().phase, "rejected");
++    assert.strictEqual(f.overlay.trigger().disabled, false); assert(f.message().includes(key));
++    f.action(); assert.strictEqual(f.overlay.operationState().busy, true);
++  }
++});
++test("T12-04: double activation and native timeout/watchdog/late success settle once", () => {
++  const f = fixture(); f.begin(); f.overlay.hold.start(); f.advance(2000);
++  assert.strictEqual(f.requests.length, 1); f.session(); f.prepare();
++  const send = f.requests.at(-1), nativeTimeout = send.ontimeout, lateSuccess = send.onload;
++  const watchdog = Array.from(f.timers.values())[0].fn;
++  nativeTimeout(); watchdog(); f.action();
++  send.status = 202; send.responseText = JSON.stringify(record("dispatched")); lateSuccess();
++  assert.strictEqual(f.overlay.operationState().phase, "querying");
++  assert.strictEqual(f.requests.filter(r => r.url.endsWith("/execute")).length, 1);
++  assert.strictEqual(f.notices.filter(r => r.phase === "unknown").length, 1);
++  const deliveries = f.notices.length;
++  f.overlay.refreshText(); f.overlay.refreshText();
++  assert.strictEqual(f.notices.length, deliveries, "language repaint must not redeliver an operation result");
++  f.requests.at(-1).respond(200, record("dispatched")); assert.strictEqual(f.timers.size, 0);
++});
++test("prepared query requires explicit same-handle execution, with no second preparation", () => {
++  const f = fixture(); f.begin(); f.session(); f.prepare(); f.advance(4000); f.action();
++  f.requests.at(-1).respond(200, record("prepared"));
++  assert.strictEqual(f.overlay.operationState().phase, "not_started");
++  assert.strictEqual(f.requests.filter(r => r.url.endsWith("/execute")).length, 1);
++  f.action(); assert.strictEqual(JSON.parse(f.requests.at(-1).body).operation_id, id);
++  f.requests.at(-1).respond(202, record("unknown_after_dispatch")); f.action();
++  assert.strictEqual(f.requests.at(-1).method, "GET");
++  assert.strictEqual(f.requests.filter(r => r.url === "/api/operations/prepare").length, 1);
++});
++test("server 500, network and malformed write replies never imply not started", () => {
++  for (const failure of [r => r.respond(500, { ok: false }), r => r.onerror(), r => r.respond(200, "invalid json")]) {
++    const f = fixture(); f.begin(); f.session(); f.prepare(); failure(f.requests.at(-1));
++    assert.strictEqual(f.overlay.operationState().phase, "unknown"); f.action(); assert.strictEqual(f.requests.at(-1).method, "GET");
++  }
++});
++test("page retirement cancels its request, retains the handle, and ignores late completion", () => {
++  const f = fixture(); f.begin(); f.session(); f.prepare(); const send = f.requests.at(-1), late = send.onload;
++  f.events.pagehide(); assert.strictEqual(f.timers.size, 0); assert.strictEqual(send.aborted, true);
++  send.status = 202; send.responseText = JSON.stringify(record("dispatched")); late();
++  assert.strictEqual(f.overlay.operationState().phase, "unknown"); f.action(); assert.strictEqual(f.requests.at(-1).method, "GET");
++});
++test("all production page integrations visibly render translated SOS outcomes", () => {
++  for (const page of ["door", "monitor", "call"]) {
++    const f = fixture(page); f.begin(); f.session(); f.prepare(); f.advance(4000);
++    assert(f.message().includes("emergency.sos_unknown"), page);
++    assert(f.message().includes("emergency.sos_query"), page);
++    f.overlay.update({ emergency: { active: true } });
++    assert.strictEqual(f.overlay.state().active, true);
++    f.overlay.update({}); assert.strictEqual(f.overlay.state().active, true);
++    f.overlay.update({ emergency: { active: false } }); assert.strictEqual(f.overlay.state().active, false);
++  }
++});
++test("silent preparation never executes or automatically creates another intent", () => {
++  const f = fixture(); f.begin(); f.session(); f.advance(4000);
++  assert.strictEqual(f.overlay.operationState().phase, "unknown");
++  assert.strictEqual(f.overlay.operationState().operation_id, "");
++  assert(f.message().includes("emergency.sos_prepare_unknown"));
++  assert.strictEqual(f.requests.filter(r => r.url.endsWith("/execute")).length, 0);
++  assert.strictEqual(f.requests.filter(r => r.url === "/api/operations/prepare").length, 1);
++  f.advance(60000); assert.strictEqual(f.requests.length, 2);
++  f.action(); assert.strictEqual(f.requests.filter(r => r.url === "/api/operations/prepare").length, 2);
++});
++test("only authoritative unstarted states permit a new preparation", () => {
++  const f = fixture(); f.begin(); f.session(); f.prepare();
++  f.requests.at(-1).respond(503, { ok: false, error_code: "not_started" });
++  assert.strictEqual(f.overlay.operationState().phase, "not_started");
++  f.action(); assert.strictEqual(f.requests.at(-1).method, "GET");
++  f.requests.at(-1).respond(200, record("expired_not_started"));
++  f.action(); assert.strictEqual(f.requests.at(-1).url, "/api/operations/prepare");
++});
++test("a denied status query retains the ambiguous original handle", () => {
++  const f = fixture(); f.begin(); f.session(); f.prepare(); f.advance(4000); f.action();
++  f.requests.at(-1).respond(403, { ok: false, error_code: "permission_denied" });
++  assert.strictEqual(f.overlay.operationState().phase, "unknown");
++  assert.strictEqual(f.overlay.operationState().operation_id, id);
++  assert(f.message().includes("emergency.sos_permission_denied"));
++  f.action(); f.session(); assert.strictEqual(f.requests.at(-1).method, "GET");
++  assert(f.requests.at(-1).url.includes(id));
++});
++test("assistive button activation shares one intent, and authoritative clear permits a later SOS", () => {
++  const f = fixture(); f.overlay.trigger().fire("click", { detail: 0 });
++  assert.strictEqual(f.requests.length, 1); f.session(); f.prepare();
++  f.requests.at(-1).respond(202, record("dispatched"));
++  f.overlay.update({ emergency: { active: true } });
++  assert.strictEqual(f.overlay.trigger().disabled, true);
++  f.overlay.update({ emergency: { active: false } });
++  assert.strictEqual(f.overlay.operationState().phase, "idle");
++  f.overlay.trigger().fire("click", { detail: 0 });
++  assert.strictEqual(f.requests.at(-1).url, "/api/operations/prepare");
++});
++test("page reload recovers the persisted handle by query without another SOS", () => {
++  const storage = new Map(), first = fixture(null, storage);
++  first.begin(); first.session(); first.prepare(); first.events.pagehide();
++  const restored = fixture(null, storage);
++  assert.strictEqual(restored.overlay.operationState().phase, "unknown");
++  assert.strictEqual(restored.overlay.operationState().operation_id, id);
++  assert.strictEqual(restored.requests.length, 0);
++  restored.action(); restored.session();
++  assert.strictEqual(restored.requests.at(-1).method, "GET");
++  assert(restored.requests.at(-1).url.includes(id));
++  assert.strictEqual(restored.requests.filter(r => r.url === "/api/operations/prepare").length, 0);
++});
++let failures = 0;
++for (const [name, run] of cases) { try { run(); console.log(name + ": PASS"); } catch (error) { failures++; console.error(name + ": FAIL\n" + error.stack); } }
++if (failures) process.exitCode = 1;

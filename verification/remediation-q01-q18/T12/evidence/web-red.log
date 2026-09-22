@@ -1,0 +1,144 @@
+T12-01: silent execute reaches a real deadline and exposes an unknown result: FAIL
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/api/panel/emergency'
+- '/api/panel/session'
+              ^
+
+    at Object.session (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:76:24)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:93:37
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:170:42)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+T12-02: accepted response lost; repeated recovery queries only the original intent: FAIL
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/api/panel/emergency'
+- '/api/panel/session'
+              ^
+
+    at Object.session (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:76:24)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:105:37
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:170:42)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+T12-03: permission, validation, and authentication failures remain actionable: FAIL
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/api/panel/emergency'
+- '/api/panel/session'
+              ^
+
+    at Object.session (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:76:24)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:118:39
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:170:42)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+T12-04: double activation and native timeout/watchdog/late success settle once: FAIL
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/api/panel/emergency'
+- '/api/panel/session'
+              ^
+
+    at Object.session (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:76:24)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:126:47
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:170:42)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+prepared query requires explicit same-handle execution, with no second preparation: FAIL
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/api/panel/emergency'
+- '/api/panel/session'
+              ^
+
+    at Object.session (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:76:24)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:137:37
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:170:42)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+server 500, network and malformed write replies never imply not started: FAIL
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/api/panel/emergency'
+- '/api/panel/session'
+              ^
+
+    at Object.session (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:76:24)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:148:39
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:170:42)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+page retirement cancels its request, retains the handle, and ignores late completion: FAIL
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/api/panel/emergency'
+- '/api/panel/session'
+              ^
+
+    at Object.session (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:76:24)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:153:37
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:170:42)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47
+all production page integrations visibly render translated SOS outcomes: FAIL
+AssertionError [ERR_ASSERTION]: Expected values to be strictly equal:
++ actual - expected
+
++ '/api/panel/emergency'
+- '/api/panel/session'
+              ^
+
+    at Object.session (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:76:24)
+    at /Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:160:43
+    at Object.<anonymous> (/Users/ox/Documents/project/app-doorbell/webui/tests/sos_operation.test.js:170:42)
+    at Module._compile (node:internal/modules/cjs/loader:1829:14)
+    at Module._extensions..js (node:internal/modules/cjs/loader:1969:10)
+    at Module.load (node:internal/modules/cjs/loader:1552:32)
+    at Module._load (node:internal/modules/cjs/loader:1354:12)
+    at wrapModuleLoad (node:internal/modules/cjs/loader:255:19)
+    at Module.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:154:5)
+    at node:internal/main/run_main_module:33:47

@@ -1,0 +1,27 @@
+{
+  "lane": "candidate",
+  "base_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T35-ios-modern/source-r4.json",
+  "base_manifest_sha256": "92ed542708ffa474244241f9a07ee2933a5c3bd6e74b92204b01f03242d32b7f",
+  "source_root": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-modern-device-candidate/source",
+  "production_inputs": {
+    "ios/Doorbell/CoreBridge.swift": "6fa79deaaa1f8e83d11837769973374074f95122949f7e2a9c8ad5b7666b85f6",
+    "ios/Doorbell/MainViewController.swift": "215b493176ba05cfba69c7dcca31926835c0a8837974c2960d02ad4a765118fc",
+    "ios/DoorbellTests/CoreBridgeLifecycleTests.swift": "cdf68f823c25f8ef093b5b41ff0778b6dad71d0723bce921161fa964f3c8a706",
+    "ios/Doorbell/VisitorScreenView.swift": "d6318dfbc917b26c65bfda8b4e317804939fb1c897d36d32f766571d2afb8edf",
+    "ios/Doorbell/SosSlideControl.swift": "2b7e64d2b69cb79c6d02237bdb7b396a020040c460edb98f0bedb662fbb0c9de",
+    "ios/Doorbell/IOSAvailability.swift": "f15e8bce8c8382c168bc2a4fee09e0c5c62ea2ffab0de62d0e0295577d972f34"
+  },
+  "test_entry": {
+    "/Users/ox/Documents/project/app-doorbell/tools/verification/ios_visitor_runner/Runner.swift": "000c4cb2ce00938d503413509f7922ef6d08e6adf8113d874b78844fb87dd28a"
+  },
+  "build_adapters": {
+    "ios/Doorbell/AppDelegate.swift": "ac84a49fe696fbe6ba5dc90644ca5565f62d9afd8665ea41c08a15f599b2fb74",
+    "ios/Doorbell.xcodeproj/project.pbxproj": "a4bce823f7b6c5787511dc4ebc63cbdcfd86b5cb68b3ed80e7b597b9b191de93",
+    "ios/Doorbell/Info.plist": "ef346b2b25b59f4da12a9eaa83f1984515f08ebcd845360e6ea42f5f27630b54"
+  },
+  "native_archive": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-modern-device-candidate/source/ios/build/core/iphoneos/arm64/min-9.0/libdoorbell_all.a",
+  "native_archive_sha256": "2cab55041127a1b9b5927ff0fb95f38f26c9a83cdd9db2b76ec262aeea821811",
+  "native_manifest": "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-modern-device-candidate/source/ios/build/core/iphoneos/arm64/min-9.0/artifact-manifest.json",
+  "native_manifest_sha256": "1d9b1446f0a86bc12bb0c90750953709036c2415ffc2be0ae34a8106a32057d1",
+  "scope": "Only UIApplication entry/bundle identity/native archive build adapters; baseline overlays exact four preserved pre-T35 UI files, candidate preserves exact r4 production files."
+}

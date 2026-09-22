@@ -29,6 +29,9 @@ calling.title: { ja: "呼び出し中…", en: "Calling…", zh: "呼叫中…" 
 calling.cancel: { ja: "取消し", en: "Cancel", zh: "取消" }
 calling.no_answer: { ja: "応答がありません", en: "No answer", zh: "无人应答" }
 calling.cancel_failed: { ja: "呼出を取り消せませんでした", en: "Could not cancel the call", zh: "无法取消呼叫" }
+calling.wait_hint: { ja: "住人が応答するまでお待ちください", en: "Please wait for a resident to answer", zh: "请稍候，等待住户接听" }
+notice.expand: { ja: "お知らせをすべて表示", en: "Show full notice", zh: "展开完整公告" }
+notice.collapse: { ja: "お知らせを折りたたむ", en: "Collapse notice", zh: "收起公告" }
 
 incall.title: { ja: "通話中", en: "In call", zh: "通话中" }
 incall.end: { ja: "終了", en: "End", zh: "结束" }
@@ -1009,6 +1012,9 @@ unlock.show: { ja: "常に表示", en: "Always show", zh: "始终显示" }
 unlock.hide: { ja: "表示しない", en: "Never show", zh: "不显示" }
 unlock.not_configured: { ja: "開錠の動作が設定されていません", en: "No unlock action is configured", zh: "尚未配置开锁动作" }
 unlock.command: { ja: "送信するコマンド", en: "Configured command", zh: "发送的命令" }
+unlock.binding_hint: { ja: "このドアの錠に対応するコマンドを入力または選択してください。空欄で割り当てを解除します。", en: "Enter or choose the command that operates this door's lock. Leave blank to remove the binding.", zh: "请输入或选择控制此门锁的命令。留空可解除绑定。" }
+unlock.binding_required: { ja: "共通の HA 操作は開錠に自動使用されません。このドアの錠に対応するコマンドを確認して保存してください。", en: "Shared HA actions are no longer used automatically for unlocking. Confirm and save the command for this door's lock.", zh: "通用 HA 动作不再自动用于开锁。请确认并保存此门锁对应的命令。" }
+unlock.command_invalid: { ja: "コマンドは英数字、_、- の 1～32 文字で入力してください。", en: "Use 1–32 letters, digits, underscores or hyphens for the command.", zh: "命令需为 1–32 个英文字母、数字、下划线或连字符。" }
 admin.door_unconfigured: { ja: "未設定", en: "Not set up", zh: "未配置" }
 purpose.enabled: { ja: "表示する", en: "Shown", zh: "显示" }
 purpose.disabled: { ja: "非表示", en: "Hidden", zh: "隐藏" }
@@ -1167,3 +1173,110 @@ display.saver_help: { ja: "クラスタのタイムゾーンを使用し、日�
 display.saver_invalid: { ja: "開始・終了は異なる時刻、待機時間は1～86400秒、明るさは1～100%を指定してください。", en: "Enter distinct start/end times, an idle delay of 1–86400 seconds, and brightness of 1–100%.", zh: "开始与结束时间不能相同，等待时间应为 1–86400 秒，亮度应为 1–100%。" }
 display.saver_door_hint: { ja: "ドアホン · タッチして呼び出す", en: "Doorbell · Touch to wake and ring", zh: "门铃 · 触摸唤醒后呼叫" }
 display.saver_panel_hint: { ja: "ドアホン親機 · タッチして表示", en: "Doorbell panel · Touch to wake", zh: "室内门铃面板 · 触摸唤醒" }
+
+panel.state_stale: { ja: "接続が中断されました。最終更新は {sec} 秒前です。", en: "Connection interrupted. Last update {sec}s ago.", zh: "连接中断，上次更新在 {sec} 秒前。" }
+panel.state_waiting: { ja: "接続中です。最新の状態を取得しています…", en: "Connecting. Waiting for current status…", zh: "正在连接，等待最新状态…" }
+panel.config_stale: { ja: "通話設定を更新できません。再試行中…", en: "Call settings are out of date. Retrying…", zh: "通话设置暂未更新，正在重试…" }
+
+panel.control_reconnecting: { ja: "制御接続が中断されました。再接続中…", en: "Control connection interrupted. Reconnecting…", zh: "通话控制连接中断，正在恢复…" }
+panel.lifecycle_lease_expired: { ja: "通話制御の有効期限が切れました。", en: "Call control authorization expired.", zh: "通话控制授权已到期。" }
+panel.lifecycle_lease_unavailable: { ja: "このノードでは通話制御の有効期限を確認できません。", en: "This node cannot confirm the call control lease.", zh: "此节点无法确认通话控制授权期限。" }
+
+panel.config_pending: { en: "Connection settings will update after this call.", ja: "通話終了後に接続設定を更新します。", zh: "通话结束后将应用新的连接设置。" }
+panel.config_applying: { en: "Connecting extension {target}…", ja: "内線 {target} に接続しています…", zh: "正在连接分机 {target}…" }
+panel.config_apply_failed: { en: "Could not connect extension {target}. Last registered extension: {current}.", ja: "内線 {target} に接続できません。前回登録した内線: {current}。", zh: "无法连接分机 {target}。上次注册的分机：{current}。" }
+panel.config_revoked: { en: "Calling permission was revoked.", ja: "通話の権限が取り消されました。", zh: "通话权限已撤销。" }
+panel.video_unavailable: { en: "Video sharing is unavailable for this call.", ja: "この通話では映像を送信できません。", zh: "当前通话无法发送视频。" }
+
+admin.saving: { en: "Saving…", ja: "保存しています…", zh: "正在保存…" }
+admin.conflict_title: { en: "Review concurrent changes", ja: "同時に行われた変更を確認", zh: "检查同时发生的修改" }
+admin.conflict_hint: { en: "Some settings changed while you were editing. Choose which value to keep for each conflict.", ja: "編集中に設定が変更されました。競合する項目ごとに残す値を選択してください。", zh: "编辑期间部分设置发生了变化。请为每个冲突选择要保留的值。" }
+admin.conflict_base: { en: "When you opened this editor", ja: "編集を開始した時の値", zh: "开始编辑时的值" }
+admin.conflict_mine: { en: "Keep my change", ja: "自分の変更を残す", zh: "保留我的修改" }
+admin.conflict_current: { en: "Keep the current value", ja: "現在の値を残す", zh: "保留当前值" }
+admin.conflict_missing: { en: "Not present", ja: "未設定", zh: "未设置" }
+admin.conflict_delete: { en: "Delete", ja: "削除", zh: "删除" }
+admin.conflict_merged: { en: "Your other changes can be merged safely:", ja: "次の変更は競合せずに保存できます：", zh: "以下修改可以合并保存：" }
+admin.conflict_save: { en: "Save chosen changes", ja: "選択した変更を保存", zh: "保存所选修改" }
+admin.conflict_back: { en: "Back to editing", ja: "編集に戻る", zh: "返回编辑" }
+admin.conflict_choose: { en: "Choose a value for every conflict.", ja: "すべての競合について値を選択してください。", zh: "请为每个冲突选择一个值。" }
+admin.conflict_back_hint: { en: "Your draft is preserved. Review it before saving again.", ja: "入力内容は保持されています。確認してから再度保存してください。", zh: "草稿已保留。请检查后再次保存。" }
+admin.conflict_retry_limit: { en: "Settings changed repeatedly. Your draft is preserved; save again to compare the latest version.", ja: "設定が繰り返し変更されました。入力内容は保持されています。再度保存すると最新の設定と比較できます。", zh: "设置发生了多次变化。草稿已保留；再次保存时会与最新版本比较。" }
+admin.save_unknown: { en: "The save result is unknown. Your draft is preserved; check the current configuration before retrying.", ja: "保存結果を確認できません。入力内容は保持されています。再試行前に現在の設定を確認してください。", zh: "暂时无法确认保存结果。草稿已保留，请检查当前配置后再重试。" }
+admin.draft_sign_in: { en: "Sign in again to continue. Your draft is preserved; passwords and secrets have been cleared.", ja: "再ログインして続行してください。入力内容は保持されていますが、パスワードとシークレットは消去しました。", zh: "请重新登录后继续。草稿已保留，密码和密钥已清除。" }
+admin.draft_restored: { en: "Your draft is restored. Re-enter passwords and secrets before saving.", ja: "入力内容を復元しました。保存前にパスワードとシークレットを再入力してください。", zh: "草稿已恢复。保存前请重新输入密码和密钥。" }
+emergency.sos_preparing: { en: "Preparing SOS…", ja: "SOSを準備しています…", zh: "正在准备呼救…" }
+emergency.sos_sending: { en: "Sending SOS…", ja: "SOSを送信しています…", zh: "正在发送呼救…" }
+emergency.sos_querying: { en: "Checking this SOS…", ja: "このSOSを確認しています…", zh: "正在查询本次呼救…" }
+emergency.sos_accepted: { en: "SOS accepted by the system. Delivery is not confirmed.", ja: "システムがSOSを受理しました。通知の到達は未確認です。", zh: "系统已受理呼救，尚未确认通知送达。" }
+emergency.sos_not_started: { en: "This SOS has not been sent.", ja: "このSOSはまだ送信されていません。", zh: "本次呼救尚未发送。" }
+emergency.sos_unknown: { en: "The SOS result is unknown. Check its status before trying again.", ja: "SOSの結果は不明です。再送する前に状況を確認してください。", zh: "呼救结果未知，请先查询状态再尝试。" }
+emergency.sos_rejected: { en: "The SOS request was refused.", ja: "SOSの要求が拒否されました。", zh: "呼救请求被拒绝。" }
+emergency.sos_query: { en: "Check status", ja: "状況を確認", zh: "查询状态" }
+emergency.sos_retry: { en: "Try again", ja: "再試行", zh: "重试" }
+emergency.sos_send_same: { en: "Send this SOS", ja: "このSOSを送信", zh: "发送本次呼救" }
+emergency.sos_alternative: { en: "If you need urgent help, use another way to contact someone nearby or emergency services.", ja: "緊急の場合は、近くの人や緊急窓口に別の手段で助けを求めてください。", zh: "如需紧急帮助，请通过其他方式联系附近人员或当地紧急服务。" }
+emergency.sos_auth_required: { en: "Your session has expired. Sign in again to continue.", ja: "セッションが切れました。再ログインしてください。", zh: "会话已失效，请重新登录后继续。" }
+emergency.sos_permission_denied: { en: "This panel is not allowed to send SOS. Contact the administrator.", ja: "このパネルにはSOS送信の権限がありません。管理者に連絡してください。", zh: "此面板没有发送呼救的权限，请联系管理员。" }
+emergency.sos_invalid: { en: "The SOS request is invalid. Contact the administrator.", ja: "SOSの要求が無効です。管理者に連絡してください。", zh: "呼救请求无效，请联系管理员。" }
+emergency.sos_unavailable: { en: "The SOS service is unavailable.", ja: "SOSサービスを利用できません。", zh: "呼救服务暂不可用。" }
+admin.config_cas_unavailable: { en: "This node does not support safe concurrent editing. Your draft is preserved.", ja: "このノードは同時編集を安全に保存できません。入力内容は保持されています。", zh: "此节点不支持安全的同时编辑。草稿已保留。" }
+emergency.sos_prepare_unknown: { en: "SOS preparation could not be confirmed. No send request was made. Try again to start a new preparation.", ja: "SOSの準備を確認できませんでした。送信要求はまだ出していません。再試行すると新しく準備します。", zh: "未能确认呼救准备结果，尚未发出发送请求。重试会重新准备一次呼救。" }
+
+visitor.restoring: {en: "Restoring call status…", ja: "通話状態を復元しています…", zh: "正在恢复通话状态…"}
+sos.accessibility_start: {en: "Start emergency SOS", ja: "緊急SOSを開始", zh: "发起紧急呼救"}
+sos.accessibility_hint: {en: "Activate to review, then confirm.", ja: "開いて内容を確認し、開始を確定してください。", zh: "激活后查看说明，再确认发起。"}
+sos.accessibility_confirm: {en: "Start the SOS countdown?", ja: "SOSのカウントダウンを開始しますか？", zh: "要开始紧急呼救倒计时吗？"}
+
+admin.partition_conflicts: { en: "Edits need review", ja: "編集内容の確認が必要です", zh: "有编辑冲突需要处理" }
+admin.partition_conflict_hint: { en: "Devices were edited while disconnected. The active settings may already have changed; review the saved alternatives before making further changes.", ja: "切断中に複数の端末で編集されました。現在の設定が変わっている場合があります。保存された候補を確認してから変更してください。", zh: "设备断网期间发生了并发编辑。当前生效的设置可能已经变化；请查看保留的候选内容，再继续修改。" }
+admin.partition_review: { en: "Review", ja: "確認する", zh: "查看并处理" }
+admin.partition_choice: { en: "Choose the settings to keep", ja: "保存する設定を選択", zh: "选择要保留的设置" }
+admin.partition_effective: { en: "Currently active settings", ja: "現在有効な設定", zh: "当前生效的设置" }
+admin.partition_custom: { en: "Edit the final settings", ja: "最終設定を編集", zh: "编辑最终设置" }
+admin.partition_custom_hint: { en: "For a custom result, enter the complete settings for this section as valid JSON. Omitted fields will be removed.", ja: "手動で編集する場合、この項目の設定全体を有効なJSONで入力してください。省略した項目は削除されます。", zh: "如需自行合并，请用有效 JSON 填入此部分的完整设置。省略的字段将被删除。" }
+admin.partition_reentry: { en: "Protected values are hidden. Alternatives that contain hidden values require re-entry through secret references before saving.", ja: "保護された値は非表示です。非表示の値を含む候補は、保存前にシークレット参照を再入力してください。", zh: "受保护的值已隐藏。含隐藏值的候选内容，需要重新填入安全存储引用后才能保存。" }
+admin.partition_changed: { en: "Settings changed again. Refresh the alternatives, review them, and save again.", ja: "設定が再度変更されました。候補を更新して確認後、もう一度保存してください。", zh: "设置又发生了变化。请刷新候选内容，重新查看后再保存。" }
+admin.partition_refresh: { en: "Refresh alternatives", ja: "候補を更新", zh: "刷新候选内容" }
+admin.partition_resolved: { en: "This conflict has already been resolved. Close this dialog and review the current settings.", ja: "この競合はすでに解決されています。閉じて現在の設定を確認してください。", zh: "此冲突已处理。请关闭此窗口，查看当前设置。" }
+admin.history_capacity: { en: "Saved edit history is full for one or more sections. Further changes to those sections are blocked so that saved alternatives are not lost.", ja: "一部の設定項目で編集履歴が上限に達しました。保存済みの候補を失わないよう、その項目の変更を停止しています。", zh: "部分设置的编辑记录已满。为保留已有候选内容，这些设置暂时无法继续修改。" }
+
+admin.import_preview: { ja: "インポートを確認", en: "Preview import", zh: "预览导入" }
+admin.import_file: { ja: "設定ファイル", en: "Configuration file", zh: "配置文件" }
+admin.import_json: { ja: "または設定 JSON を貼り付け", en: "Or paste configuration JSON", zh: "或粘贴配置 JSON" }
+admin.import_replace: { ja: "設定全体を置き換え、このファイルにない項目を削除する", en: "Replace the complete configuration; remove fields missing from this file", zh: "替换完整配置，并删除文件中缺少的字段" }
+admin.import_scope: { ja: "設定のみです。秘密情報の値と素材ファイルは含まず、完全な復旧用バックアップではありません。", en: "Configuration only. Secret values and asset files are not included; this is not a complete recovery backup.", zh: "仅包含配置，不包含秘密值和资源文件，并非完整的灾难恢复备份。" }
+admin.import_preparing: { ja: "プレビューを準備中…", en: "Preparing the preview…", zh: "正在准备预览…" }
+admin.import_ready: { ja: "適用する前にすべての変更を確認してください。", en: "Review every change before applying it.", zh: "应用前请检查全部更改。" }
+admin.import_blocked: { ja: "適用する前に問題を解決してください。", en: "This import needs attention before it can be applied.", zh: "此导入存在待处理问题，暂不能应用。" }
+admin.import_changes: { ja: "{count} 項目の変更", en: "{count} changed fields", zh: "{count} 个字段将更改" }
+admin.import_ack: { ja: "{count} 件の削除を含む変更を確認し、このノードへの適用に同意します。", en: "I reviewed the changes, including {count} deletions, and want to apply them to this node.", zh: "我已检查全部更改（包括 {count} 项删除），并确认应用到此节点。" }
+admin.import_commit: { ja: "確認済みの設定を適用", en: "Apply reviewed import", zh: "应用已确认的导入" }
+admin.import_local_done: { ja: "このノードに設定を保存しました。", en: "The configuration was saved on this node.", zh: "配置已保存到此节点。" }
+admin.import_sync_unverified: { ja: "他ノードへの設定同期は未確認です。接続状態は同期完了を示しません。", en: "Configuration synchronization to other nodes has not been verified. Connection status does not prove synchronization.", zh: "尚未验证其他节点的配置同步；连接在线不代表已同步。" }
+admin.import_query: { ja: "このインポートの結果を確認", en: "Check this import result", zh: "查询此次导入结果" }
+admin.import_unknown: { ja: "結果は不明です。この復旧情報を保持して同じインポートを確認し、重複送信しないでください。", en: "The result is unknown. Keep this recovery reference and check the same import; do not submit another copy.", zh: "结果未知。请保留此恢复记录并查询同一次导入，不要重复提交。" }
+admin.import_not_found: { ja: "保存済みの結果が見つかりません。失敗の確定ではありません。復旧情報を保持して再確認してください。", en: "No saved result was found. This does not confirm failure. Keep the reference and check again.", zh: "未找到已保存的结果，这并不表示导入失败。请保留记录并再次查询。" }
+admin.import_discard: { ja: "このプレビューを破棄", en: "Discard this preview", zh: "丢弃此预览" }
+admin.import_clear: { ja: "結果の確認を終了", en: "Finish reviewing this result", zh: "结束结果查看" }
+admin.import_target: { ja: "対象ノード: {node}", en: "Target node: {node}", zh: "目标节点：{node}" }
+admin.import_reference: { ja: "復旧情報", en: "Recovery reference", zh: "恢复记录" }
+admin.import_missing_secrets: { ja: "不足している秘密情報の参照", en: "Missing secret references", zh: "缺失的秘密引用" }
+admin.import_missing_assets: { ja: "不足している素材ファイル", en: "Missing asset files", zh: "缺失的资源文件" }
+admin.import_dependencies: { ja: "既存の連携設定または安全な保存機能でこのノードに秘密情報を再登録し、不足ファイルを素材にアップロードしてください。その後、このプレビューを破棄して再確認してください。設定 JSON に秘密情報の値を貼り付けないでください。", en: "Restore secret values on this node through the existing Integrations or secure-storage setup, and upload missing files in Assets. Then discard this preview and prepare a new one. Never paste secret values into this configuration.", zh: "请通过现有集成或安全存储设置将秘密值恢复到此节点，并在资源页上传缺少的文件；然后丢弃此预览并重新预检。请勿把秘密值粘贴到配置中。" }
+admin.import_invalid: { ja: "設定ファイルが不正または曖昧です。インポートは開始していません。", en: "The configuration file is invalid or ambiguous. No import was started.", zh: "配置文件无效或存在歧义，尚未开始导入。" }
+admin.import_schema: { ja: "未対応の設定バージョンです。", en: "This file uses an unsupported configuration version.", zh: "此文件使用了不支持的配置版本。" }
+admin.import_size: { ja: "インポートがサイズまたは項目数の上限を超えています（要求全体は最大 4 MiB）。", en: "The import exceeds the supported size or entry limits (maximum request: 4 MiB).", zh: "导入超过大小或条目上限（完整请求最大 4 MiB）。" }
+admin.import_auth: { ja: "再ログインしてください。ファイル内容は消去しましたが、既存の復旧情報は保持しています。", en: "Sign in again. The file contents were cleared; the existing recovery reference was retained.", zh: "请重新登录。文件内容已清除，已有恢复记录仍保留。" }
+admin.import_error: { ja: "要求を完了できませんでした。再試行する前に以下の情報を確認してください。", en: "The request could not be completed. Review the information below before trying again.", zh: "请求未能完成，请先查看下面的信息再尝试。" }
+admin.import_crypto: { ja: "このブラウザーでは安全なインポート参照を作成できません。対応ブラウザーを使用してください。", en: "This browser cannot create a secure import reference. Use a supported browser.", zh: "此浏览器无法生成安全的导入标识，请使用受支持的浏览器。" }
+admin.import_wrong_node: { ja: "この復旧情報は別のノードのものです。元のノードで結果を確認してください。", en: "This recovery reference belongs to another node. Open the original node to check its result.", zh: "此恢复记录属于其他节点，请在原节点查询结果。" }
+admin.import_connection: { ja: "確認済みの接続: 既知の {total} 台中 {online} 台がオンライン", en: "Observed connections: {online} online / {total} known peers", zh: "观察到的连接：已知 {total} 个节点中 {online} 个在线" }
+admin.import_refresh_status: { ja: "接続状態を更新", en: "Refresh connection status", zh: "刷新连接状态" }
+admin.import_excluded: { ja: "エクスポートから除外した項目: {count}", en: "Fields omitted from the export: {count}", zh: "导出已排除 {count} 个敏感字段" }
+admin.import_no_preview: { ja: "設定を適用する前に新しいプレビューを作成してください。", en: "Prepare a new preview before applying any configuration.", zh: "应用配置前请重新生成预览。" }
+
+admin.import_omitted: { en: "Sensitive fields omitted from this export; review and restore them separately if needed", ja: "このエクスポートから除外された秘密情報です。必要に応じて確認し、別途再登録してください", zh: "此导出已排除以下敏感字段；请检查并按需单独恢复" }
+
+admin.import_unknown_ack: { en: "I saved the recovery reference and understand that the previous import result is still unknown. I want to review a new import explicitly.", ja: "復旧情報を保存し、前回の結果が不明なままであることを理解しました。別のインポートを新たに確認します。", zh: "我已保存恢复记录，并理解上次导入结果仍未知；我明确选择重新预检另一次导入。" }
+admin.import_new_preview: { en: "Review a new import", ja: "新しいインポートを確認", zh: "预检新的导入" }

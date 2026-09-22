@@ -1,0 +1,39 @@
+SOURCE XML STRUCTURE ONLY — NOT A RUNTIME ACCESSIBILITY TREE
+FrameLayout {'id': '@+id/root_view', 'layout_width': 'match_parent', 'layout_height': 'match_parent', 'background': '@color/bg'}
+  ImageView {'id': '@+id/theme_bg', 'layout_width': 'match_parent', 'layout_height': 'match_parent', 'visibility': 'gone'}
+  FrameLayout {'id': '@+id/dashboard_host', 'layout_width': 'match_parent', 'layout_height': 'match_parent', 'visibility': 'gone'}
+  LinearLayout {'id': '@+id/idle_view', 'layout_width': 'match_parent', 'layout_height': 'match_parent'}
+    LinearLayout {'id': '@+id/visitor_split', 'layout_width': 'match_parent', 'layout_height': '0dp', 'layout_weight': '1'}
+      LinearLayout {'id': '@+id/visitor_col_a', 'layout_width': 'match_parent', 'layout_height': '0dp', 'layout_weight': '1'}
+      LinearLayout {'id': '@+id/visitor_col_b', 'layout_width': 'match_parent', 'layout_height': '0dp', 'layout_weight': '1', 'visibility': 'gone'}
+    LinearLayout {'id': '@+id/idle_header', 'layout_width': 'match_parent', 'layout_height': 'wrap_content'}
+      TextView {'id': '@+id/clock_text', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'maxLines': '1', 'textSize': '52sp'}
+      TextView {'id': '@+id/date_text', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'maxLines': '1', 'textSize': '15sp'}
+    TextView {'id': '@+id/notice_card', 'layout_width': 'match_parent', 'layout_height': 'wrap_content', 'maxLines': '2', 'textSize': '15sp', 'visibility': 'gone'}
+    LinearLayout {'id': '@+id/lang_bar', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'visibility': 'gone'}
+    LinearLayout {'id': '@+id/call_section', 'layout_width': 'match_parent', 'layout_height': 'wrap_content'}
+      Button {'id': '@+id/call_button', 'layout_width': 'match_parent', 'layout_height': 'wrap_content', 'background': '@drawable/bg_big_button', 'maxLines': '2', 'minHeight': '72dp', 'textSize': '28sp'}
+      TextView {'id': '@+id/touch_hint', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'maxLines': '2', 'textSize': '15sp'}
+    LinearLayout {'id': '@+id/purpose_section', 'layout_width': 'match_parent', 'layout_height': 'wrap_content', 'visibility': 'gone'}
+      TextView {'id': '@+id/purpose_hint', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'maxLines': '1', 'textSize': '14sp'}
+      TextView {'id': '@+id/purpose_auto_hint', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'maxLines': '1', 'textSize': '13sp'}
+      GridLayout {'id': '@+id/purpose_grid', 'layout_width': 'match_parent', 'layout_height': 'wrap_content'}
+      LinearLayout {'layout_width': 'match_parent', 'layout_height': '52dp'}
+        Button {'id': '@+id/purpose_skip_button', 'layout_width': '0dp', 'layout_height': 'match_parent', 'layout_weight': '1', 'background': '@drawable/bg_big_button', 'maxLines': '2', 'textSize': '18sp'}
+        Button {'id': '@+id/purpose_cancel_button', 'layout_width': '0dp', 'layout_height': 'match_parent', 'layout_weight': '1', 'background': '@drawable/bg_card_button', 'maxLines': '2', 'textSize': '18sp', 'visibility': 'gone'}
+    LinearLayout {'id': '@+id/visitor_footer', 'layout_width': 'match_parent', 'layout_height': 'wrap_content'}
+      TextView {'id': '@+id/node_info', 'layout_width': 'match_parent', 'layout_height': 'wrap_content', 'maxLines': '2', 'textSize': '12sp'}
+      FrameLayout {'id': '@+id/sos_slot', 'layout_width': 'match_parent', 'layout_height': 'wrap_content'}
+  LinearLayout {'id': '@+id/calling_view', 'layout_width': 'match_parent', 'layout_height': 'match_parent', 'background': '@color/bg', 'visibility': 'gone'}
+    TextView {'id': '@+id/calling_text', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'textSize': '44sp'}
+    View {'id': '@+id/pulse', 'layout_width': '120dp', 'layout_height': '120dp', 'background': '@drawable/pulse_circle'}
+    Button {'id': '@+id/cancel_button', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'background': '@drawable/bg_card_button', 'textSize': '26sp'}
+  LinearLayout {'id': '@+id/reply_banner', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'background': '@drawable/bg_reply_card', 'visibility': 'gone'}
+    TextView {'id': '@+id/reply_caption', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'textSize': '20sp'}
+    TextView {'id': '@+id/reply_text', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'textSize': '40sp'}
+  LinearLayout {'id': '@+id/offline_view', 'layout_width': 'match_parent', 'layout_height': 'match_parent', 'background': '@color/offline_bg', 'visibility': 'gone'}
+    TextView {'id': '@+id/offline_title', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'textSize': '44sp'}
+    TextView {'id': '@+id/offline_body', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'textSize': '24sp'}
+  View {'id': '@+id/secret_corner', 'layout_width': '200dp', 'layout_height': '200dp', 'background': '@android:color/transparent'}
+  View {'id': '@+id/night_tint', 'layout_width': 'match_parent', 'layout_height': 'match_parent', 'background': '#33FF2200', 'visibility': 'gone'}
+  TextView {'id': '@+id/pairing_banner', 'layout_width': 'wrap_content', 'layout_height': 'wrap_content', 'background': '#243244', 'minHeight': '48dp', 'textSize': '15sp', 'visibility': 'gone'}

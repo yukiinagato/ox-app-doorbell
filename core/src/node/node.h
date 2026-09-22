@@ -166,6 +166,13 @@ class Node {
   void setEmergency(bool active, const std::string& via);
   bool setEmergencyV2(bool active, const std::string& via);
 
+  // Versioned durable operation service. Call from a worker, never a UI/state-loop callback:
+  // remote authority replies may take up to four seconds. Identity comes from this node.
+  std::string operationRequestJson(const std::string& verb, const std::string& request_json);
+#if defined(DB_HTTPD_TEST_HOOKS)
+  size_t operationPendingForTesting() const;
+#endif
+
 
 
 
@@ -212,6 +219,12 @@ class Node {
   std::string statusJson();
   std::string debugJson();
   std::string configJson();
+  std::string configSnapshotJson();
+  std::string configCommitJson(const std::string& request);
+  std::string configImportJson(const std::string& action, const std::string& request,
+                               const std::string& session, const std::string& csrf);
+  std::string panelIdentityJson(const std::string& action, const std::string& request,
+                                const std::string& session, const std::string& csrf);
 
   // Wall-clock rendering in the configured IANA zone. Pass 0 for "now". The result is
   // {"iso","date","hh","mm","ss","weekday","weekday_num","offset_min","dst","known","wall_ms",
@@ -228,7 +241,7 @@ class Node {
   bool setDoorNotice(const std::string& door, const std::string& text, int64_t expires_ms);
   bool clearDoorNotice(const std::string& door);
   // Trigger the configured unlock action for one door. False when the door is unknown or no
-  // unlock action is configured anywhere, so the caller can explain rather than no-op silently.
+  // explicit unlock action is configured for this door, so the caller can explain the failure.
   bool openDoor(const std::string& door);
 
   // Configuration writes with the same validation and result shape the HTTP endpoints use, so a

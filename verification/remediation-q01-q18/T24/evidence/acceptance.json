@@ -1,0 +1,38 @@
+{
+  "task_id": "T24",
+  "status": "VERIFIED_IN_SCOPE",
+  "tests": [
+    {
+      "id": "T24-01",
+      "status": "PASS",
+      "evidence": [
+        "modern.json",
+        "legacy19.json"
+      ]
+    },
+    {
+      "id": "T24-02",
+      "status": "PASS",
+      "evidence": [
+        "modern.json",
+        "legacy19.json"
+      ]
+    },
+    {
+      "id": "T24-03",
+      "status": "PASS",
+      "evidence": [
+        "modern.json",
+        "legacy19.json"
+      ]
+    },
+    {
+      "id": "T24-04",
+      "status": "PASS",
+      "evidence": [
+        "modern.json",
+        "legacy19.json"
+      ]
+    }
+  ]
+}

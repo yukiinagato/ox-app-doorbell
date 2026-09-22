@@ -1,0 +1,32 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "1c11bdf42d2a5ab0a5a78e53d9ab6722bc866401a09a3195b999a5a6a9760a14",
+  "task_id": "T21",
+  "test_id": "compat-host-final",
+  "evidence_kind": "host_native",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T21/source-final.json",
+  "source_manifest_sha256": "7a148d44e4153788fc79220bb1e6b6d77ff02acf36cabbab5c787c709c9f6b7b",
+  "command": [
+    "ios-compat/scripts/test_host.sh"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T14:55:47.064913+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": null,
+  "app_version": null,
+  "build_number": null,
+  "sip_backend": "not_qualified",
+  "signing_state": "not_qualified",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T21/evidence/compat-host-final.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 1,
+  "finished_at": "2026-09-22T14:56:14.672327+00:00",
+  "expected_exit_code": 0,
+  "status": "FAIL",
+  "observed_result": "Command exit status only; inspect the log for behavioral evidence."
+}

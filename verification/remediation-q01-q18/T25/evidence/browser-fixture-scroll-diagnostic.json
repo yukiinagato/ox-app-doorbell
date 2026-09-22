@@ -1,0 +1,26 @@
+{
+  "phase": "green",
+  "source_sha256": "5a3527bc2fae486364b800115173f37fe7862b451fc536582c00dbd7686d83c9",
+  "case_sha256": "3aa7b5131d43b25bf4a3b43f6f6152a7939d1220c4b68a90e18f931112a3040c",
+  "user_agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36",
+  "recorded_at": "2026-09-22T15:12:31.982Z",
+  "results": [
+    {
+      "id": "T25-01",
+      "status": "FAIL",
+      "message": "Failed save lost nonzero scroll position: 0 -> 0"
+    },
+    {
+      "id": "T25-02",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-03",
+      "status": "PASS"
+    },
+    {
+      "id": "T25-04",
+      "status": "PASS"
+    }
+  ]
+}

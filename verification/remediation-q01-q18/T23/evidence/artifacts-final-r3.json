@@ -1,0 +1,43 @@
+{
+  "observed_at": "2026-09-22T15:20:25.468904+00:00",
+  "app_version": "0.3.49",
+  "build_number": "52",
+  "minimum_os": "5.1",
+  "architecture": "armv7",
+  "sdk_headers": "licensed local iPhoneOS7.1.sdk",
+  "signing": "ldid-jailbreak",
+  "sip_backend": "ios_compat_minisip_uac_uas",
+  "core_backend": "core_pjsip_off_ios_compat_minisip",
+  "artifacts": {
+    "app_executable": {
+      "path": "build/remediation-t23-20260923/frozen-r3/ios-kiosk/build/Doorbell.app/Doorbell",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r3/app_executable",
+      "sha256": "f3203f617f6a170a098902b077823ffee683401b3f740a450a75d3b7dd6f0908"
+    },
+    "app_manifest": {
+      "path": "build/remediation-t23-20260923/frozen-r3/build/ios-compat/artifacts/ios5-armv7-app/manifest.json",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r3/app_manifest.json",
+      "sha256": "1cc1355a67cb9f131983b276fad56994ecfdb783febd9ddfbf82099c879a4458"
+    },
+    "core_archive": {
+      "path": "build/remediation-t23-20260923/frozen-r3/build/ios-compat/artifacts/ios5-armv7-pjsip-off/libdoorbell_all.a",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r3/core_archive.a",
+      "sha256": "567353487b2721a3508daa69a80b6f384e9ecfd1d0fc44b502e3b48f289ecacb"
+    },
+    "core_manifest": {
+      "path": "build/remediation-t23-20260923/frozen-r3/build/ios-compat/artifacts/ios5-armv7-pjsip-off/manifest.json",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r3/core_manifest.json",
+      "sha256": "806f887ea08acdf42db8a44b9932399444cea2992a2de8c6d3ffc343306d293f"
+    },
+    "timing_host_executable": {
+      "path": "build/remediation-t23-20260923/frozen-r3/build/ios-compat/host-tests/call_timing_test",
+      "retained_path": "build/remediation-t23-20260923/artifact-snapshots/final-r3/timing_host_executable",
+      "sha256": "10cc8624fb6eee84a73c3fef6fd0653948cc9c8f03dc99bca29e77e208685ec9"
+    }
+  },
+  "limits": [
+    "No device installation or execution; signed local artifact only.",
+    "Independent frozen Core source includes authorized T26 state at snapshot time; later root changes require final integration rebuild.",
+    "Historical SDK and compatibility C++ runtime are local ignored dependencies; no vendor SDK copied into evidence."
+  ]
+}

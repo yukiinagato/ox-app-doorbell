@@ -1,0 +1,77 @@
+{
+  "source_sha": "b26e0d346df99f2879915241b6e98d8ef1aa0707",
+  "tree_state": "dirty",
+  "diff_sha256": "b7a0626ccf2aaeccdbb7372daca3dfc2dfe0e898555fa4443b896700436853c1",
+  "task_id": "T09",
+  "test_id": "request-deadline",
+  "evidence_kind": "host",
+  "source_manifest": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T09/evidence/after-source.json",
+  "source_manifest_sha256": "d97cbd9975593d724789a8325989d4af4011442b1a5eb62da8a1bf780ff94c6a",
+  "command": [
+    "node",
+    "webui/tests/request_deadline.test.js"
+  ],
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "started_at": "2026-09-22T13:30:29.551989+00:00",
+  "platform": "Darwin",
+  "os_version": "25.5.0",
+  "arch": "arm64",
+  "device_or_browser": "Node.js v25.9.0 VM; browser APIs supplied by deterministic XHR/clock fixture",
+  "app_version": "pending parent integration",
+  "build_number": "pending parent integration",
+  "sip_backend": "not exercised",
+  "signing_state": "not applicable",
+  "artifact_sha256": null,
+  "log_path": "/Users/ox/Documents/project/app-doorbell/verification/remediation-q01-q18/T09/evidence/request-deadline.log",
+  "limitations": [],
+  "timed_out": false,
+  "exit_code": 0,
+  "finished_at": "2026-09-22T13:30:29.693807+00:00",
+  "expected_exit_code": 0,
+  "status": "PASS",
+  "observed_result": "PASS",
+  "test_ids": [
+    "T09-01",
+    "T09-02",
+    "T09-03",
+    "T09-04"
+  ],
+  "evidence_layer": "host_vm_production_module",
+  "limitation": "No physical old-browser or device qualification; shared asset packaging and application version bumps belong to parent integration.",
+  "acceptance": [
+    {
+      "test_id": "T09-01",
+      "result": "PASS",
+      "observation": "A silent production XHR settles once at 4000 ms, aborts its transport and releases the request lane."
+    },
+    {
+      "test_id": "T09-02",
+      "result": "PASS",
+      "observation": "Native timeout and watchdog delivered in both orders produce one callback and leave zero timers."
+    },
+    {
+      "test_id": "T09-03",
+      "result": "PASS",
+      "observation": "Captured late success/error after cancellation cannot publish old data or clear the successor busy gate."
+    },
+    {
+      "test_id": "T09-04",
+      "result": "PASS",
+      "observation": "Production runtime executes without AbortController, Promise or fetch; a rejected native timeout setter is still bounded by the watchdog."
+    }
+  ],
+  "production_page_regression": {
+    "before": "before-read-deadline-r2.json",
+    "after": "call-state.json",
+    "observation": "Actual call.html blackholed call-info previously kept loadPending non-null; the same assertion now passes at 4000 ms."
+  },
+  "task_diff_sha256": "8d6c25c509ec1b17d133ab1155fe45bb23b215b544f92cb5a659752261b06dec",
+  "related_regressions": [
+    "runtime.json",
+    "call-recovery.json",
+    "panel-i18n.json",
+    "video-session.json",
+    "syntax.json",
+    "whitespace.json"
+  ]
+}

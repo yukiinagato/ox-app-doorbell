@@ -1,0 +1,176 @@
+Darwin takashiminetekishodaiiPad 11.0.0 Darwin Kernel Version 11.0.0: Sun Apr  8 21:51:26 PDT 2012; root:xnu-1878.11.10~1/RELEASE_ARM_S5L8930X iPad1,1 arm K48AP Darwin
+PID	Status	Label
+30111	-	0x139130.anonymous.launchctl
+30109	-	0x138f50.anonymous.bash
+30108	-	0x138d70.anonymous.sshd
+30018	-	UIKitApplication:jp.ox.doorbell[0xca36]
+17996	-	UIKitApplication:com.apple.mobilesafari[0x82f3]
+17552	-	UIKitApplication:com.apple.mobilemail[0x7798]
+17237	-	UIKitApplication:com.apple.Preferences[0x7ae5]
+-	0	com.apple.ftp-proxy
+22	-	com.apple.wifid
+-	0	com.apple.wifiFirmwareLoader
+-	0	com.apple.webinspectord
+-	0	com.apple.wapi.client
+-	0	com.apple.vsassetd
+-	0	com.apple.voiced
+-	0	com.apple.vibrationmanagerd
+-	0	com.apple.ptpd
+-	0	com.apple.ubd
+-	0	com.apple.twitter
+-	0	com.apple.timed
+26	-	com.apple.syslogd
+-	0	com.apple.syncdefaultsd
+-	0	com.apple.spd
+-	0	com.apple.sharktrace
+30025	-	com.apple.securityd
+-	0	com.apple.securekeyvaultd.K48
+-	0	com.apple.searchd
+-	0	com.apple.search.appindexer
+-	0	com.apple.scrod
+-	0	com.apple.sandboxd
+-	0	com.apple.racoon
+-	0	com.apple.printd
+-	0	com.apple.powerlog
+27	-	com.apple.powerd
+103	-	com.apple.notifyd
+30031	-	com.apple.networkd
+-	0	com.apple.mtmergeprops
+-	0	com.apple.mobileassetd
+-	0	com.apple.mobile.vendor_device_arbitrator
+-	0	com.apple.mobile.usb_device_arbitrator
+-	0	com.apple.mobile.storage_mounter
+-	0	com.apple.mobile.ptp_device_arbitrator
+-	0	com.apple.mobile.profile_janitor
+-	0	com.apple.mobile.obliteration
+33	-	com.apple.mobile.lockdown
+-	0	com.apple.mobile.lockbot
+-	0	com.apple.mobile.keybagd
+-	0	com.apple.mobile.installd
+-	0	com.apple.mobile.installd.mount_helper
+-	0	com.apple.mobile.deleted
+-	0	com.apple.mobile.audio_device_arbitrator
+-	0	com.apple.mobile.accessory_device_arbitrator
+-	0	com.apple.midiserver
+-	0	com.apple.mediastream.mstreamd
+39	-	com.apple.mediaserverd
+40	-	com.apple.mediaremoted
+-	0	com.apple.mediacontrold
+-	0	com.apple.mdt
+-	0	com.apple.marcoagent
+-	0	com.apple.managedconfiguration.profiled
+-	0	com.apple.managedconfiguration.mdmd
+-	0	com.apple.mDNSResponderHelper
+41	-	com.apple.mDNSResponder
+-	0	com.apple.lsd
+42	-	com.apple.locationd
+-	0	com.apple.librariand
+-	0	com.apple.itunesstored
+-	0	com.apple.itunescloudd
+-	0	com.apple.itdbprep.server
+-	0	com.apple.imtransferagent
+-	0	com.apple.imtranscoderagent.plist
+44	-	com.apple.imagent
+45	-	com.apple.iapd
+-	0	com.apple.hpfd.mobile
+-	0	com.apple.gmmd
+4826	-	com.apple.geod
+-	0	com.apple.gamed
+47	-	com.apple.fseventsd
+48	-	com.apple.fairplayd.K48
+-	0	com.apple.distnoted.xpc.daemon
+-	0	com.apple.datamigrator
+-	0	com.apple.dataaccess.dataaccessd
+-	0	com.apple.daily
+-	0	com.apple.cvmsServ
+-	0	com.apple.cvmsCompAgent_armv7
+-	0	com.apple.crash_mover
+-	0	com.apple.coreservices.appleid.passwordcheck
+-	0	com.apple.coreservices.appleid.authentication
+51	-	com.apple.configd
+-	0	com.apple.chud.pilotfish
+-	0	com.apple.chud.chum
+-	0	com.apple.cfnetwork.cfnetworkagent
+-	0	com.apple.cfnetwork.AuthBrokerAgent
+-	0	com.apple.certui.relay
+-	0	com.apple.calaccessd
+-	0	com.apple.backupd
+-	0	com.apple.atc
+-	0	com.apple.atc.atwakeup
+-	0	com.apple.assistivetouchd
+-	0	com.apple.assetsd
+-	0	com.apple.aslmanager
+118	-	com.apple.apsd
+-	0	com.apple.appsupport.cplogd
+-	0	com.apple.appleprofilepolicyd
+55	-	com.apple.aggregated
+-	0	com.apple.aggregated.dbservice
+-	0	com.apple.accountsd
+-	0	com.apple.absinthed.K48
+-	0	com.apple.VoiceOverTouch
+21	-	com.apple.UserEventAgent-System
+-	0	com.apple.UIKit.pasteboardd
+3706	-	com.apple.SpringBoard
+-	0	com.apple.springboard.setuphelper
+17546	-	com.apple.SCHelper
+-	0	com.apple.ReportCrash
+-	0	com.apple.ReportCrash.StackShot
+-	0	com.apple.ReportCrash.SimulateCrash
+-	0	com.apple.ReportCrash.SafetyNet
+-	0	com.apple.ReportCrash.Jetsam
+-	0	com.apple.ReportCrash.DirectoryService
+-	0	com.apple.OTATaskingAgent
+-	0	com.apple.OTACrashCopier
+-	0	com.apple.MobileInternetSharing
+-	0	com.apple.FileCoordination
+-	0	com.apple.DumpPanic
+-	0	com.apple.DMHelper
+-	0	com.apple.CommCenterRootHelper
+-	0	com.apple.CommCenterMobileHelper
+61	-	com.apple.CommCenter
+62	-	com.apple.BTServer
+-	0	com.apple.AdminLite
+-	0	com.apple.AddressBook
+-	0	com.apple.AOSNotification
+19	-	jp.ox.doorbell.keepalive
+-	0	com.saurik.Cydia.Startup
+30106	-	com.openssh.sshd
+-	0	com.apple.MobileFileIntegrity
+-	0	com.apple.launchctl.System
+/usr/bin/uicache
+/usr/bin/uiopen
+
+/Applications:
+AdSheet.app
+AppStore.app
+Contacts~ipad.app
+Cydia.app
+DataActivation.app
+DemoApp.app
+Doorbell.app
+Doorbell.app.pre-codex-20260830
+FieldTest.app
+Game Center~ipad.app
+Maps~ipad.app
+MobileCal.app
+MobileMail.app
+MobileNotes.app
+MobileSMS.app
+MobileSafari.app
+MobileSlideShow.app
+MobileStore.app
+Music~ipad.app
+Preferences.app
+Reminders.app
+Setup.app
+TrustMe.app
+Utilities
+Videos.app
+Web.app
+WebSheet.app
+YouTube.app
+iOS Diagnostics.app
+iPodOut.app
+ProductName:    iPhone OS
+ProductVersion: 5.1.1
+BuildVersion:   9B206

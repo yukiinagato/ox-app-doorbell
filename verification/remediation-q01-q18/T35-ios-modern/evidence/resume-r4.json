@@ -1,0 +1,33 @@
+{
+  "scope": "Run only after normal testing is available; do not bypass host lock or change application/system security data.",
+  "source_manifest_sha256": "92ed542708ffa474244241f9a07ee2933a5c3bd6e74b92204b01f03242d32b7f",
+  "cwd": "/Users/ox/Documents/project/app-doorbell",
+  "command": [
+    "env",
+    "DB_ALLOW_SIP_STUB=1",
+    "xcodebuild",
+    "-project",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/source-r4/ios/Doorbell.xcodeproj",
+    "-scheme",
+    "Doorbell",
+    "-configuration",
+    "Debug",
+    "-destination",
+    "platform=iOS Simulator,id=320AE92C-9691-4979-8CDE-3FF45E799F57",
+    "-derivedDataPath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/xcode-r4",
+    "-resultBundlePath",
+    "/Users/ox/Documents/project/app-doorbell/build/remediation-t35-ios-modern-r1-20260923/test-r4-resume.xcresult",
+    "-parallel-testing-enabled",
+    "NO",
+    "-maximum-concurrent-test-simulator-destinations",
+    "1",
+    "-only-testing:DoorbellTests/VisitorActionContractTests",
+    "-only-testing:DoorbellTests/VisitorAccessibleActionTests",
+    "-only-testing:DoorbellTests/VisitorScreenLayoutTests",
+    "-only-testing:DoorbellTests/PurposeChoiceLayoutTests",
+    "CODE_SIGNING_ALLOWED=NO",
+    "test-without-building"
+  ],
+  "expected_results": "All requested test cases must actually run and pass. Current state NOT_RUN."
+}

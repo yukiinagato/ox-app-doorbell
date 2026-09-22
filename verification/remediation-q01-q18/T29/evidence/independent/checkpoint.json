@@ -1,0 +1,14 @@
+{
+  "recorded_at": "2026-09-22T18:28:45.737185+00:00",
+  "status": "FINAL_INDEPENDENT_REVIEW_COMPLETE",
+  "review_verdict": "PASS_IN_REVIEWED_PRODUCTION_SOURCE_AND_REGRESSION_SCOPE",
+  "open_findings": [],
+  "independent_test": "core/tests/test_config_import_review.cpp",
+  "independent_test_sha256": "0b3e465f9dc5529febab7c0df91e7dc04cd344eae5adbe13f6d6c891b8f35a9f",
+  "red_evidence": "red-r1.json",
+  "red_evidence_sha256": "bcf9317b6d3b8c33f54cd772ec0408c8374ddb63bf15cb7f9c5da31de5136b64",
+  "review_report_sha256": "ac47f1dca290fd190e5a6c3bf15c35139fe632f58260627063f241e65e197b2d",
+  "next": "Parent may reference final independent-review.json; no further reviewer production edits or tests pending.",
+  "quota_condition": "Parent reported95% used, reset time unchanged. If reset notification arrives, save and stop all actions.",
+  "final_review_sha256": "d202dbe07fa4bd87dedcac66710640bb5119289ad3446e49a3c53789a301b85f"
+}

@@ -798,6 +798,11 @@ static UIColor *DBSosTrackColor(void) {
   return [UIColor colorWithRed:0.608 green:0.110 blue:0.110 alpha:1];  // #9B1C1C
 }
 
+@interface DBSosSlider () <UIAlertViewDelegate>
+- (void)finishArming;
+- (BOOL)accessibilityActivate;
+@end
+
 @implementation DBSosSlider {
   DBSosSlideModel *_model;
   DBTexts *_texts;
@@ -810,6 +815,8 @@ static UIColor *DBSosTrackColor(void) {
   UILabel *_countdown;
   UILabel *_cancelHint;
   NSTimer *_timer;
+  UIAlertView *_accessibilityConfirmation;
+  UIButton *_accessibilityButton;
   CGFloat _thumbSide;
   UIColor *_danger;
   UIColor *_dangerInk;
@@ -821,6 +828,9 @@ static UIColor *DBSosTrackColor(void) {
   self = [super initWithFrame:frame];
   if (self) {
     _model = [[DBSosSlideModel alloc] init];
+    self.isAccessibilityElement = YES;
+    self.accessibilityTraits = UIAccessibilityTraitButton;
+    self.accessibilityIdentifier = @"sos_slider";
     _thumbSide = 56;
     _danger = [UIColor colorWithRed:0.78 green:0.08 blue:0.06 alpha:1];
     _dangerInk = [UIColor whiteColor];
@@ -828,6 +838,7 @@ static UIColor *DBSosTrackColor(void) {
     _trackInk = [UIColor whiteColor];
 
     _track = [[UIView alloc] init];
+    _track.accessibilityElementsHidden = YES;
     _track.layer.cornerRadius = frame.size.height / 2;
     _track.clipsToBounds = YES;
     [self addSubview:_track];
@@ -866,6 +877,7 @@ static UIColor *DBSosTrackColor(void) {
     _countdown.textAlignment = NSTextAlignmentCenter;
     _countdown.font = [UIFont boldSystemFontOfSize:26];
     _countdown.hidden = YES;
+    _countdown.isAccessibilityElement = NO;
     [self addSubview:_countdown];
 
     _cancelHint = [[UILabel alloc] init];
@@ -873,7 +885,21 @@ static UIColor *DBSosTrackColor(void) {
     _cancelHint.textAlignment = NSTextAlignmentCenter;
     _cancelHint.font = [UIFont boldSystemFontOfSize:18];
     _cancelHint.hidden = YES;
+    _cancelHint.isAccessibilityElement = NO;
     [self addSubview:_cancelHint];
+
+    // iOS 5 has no accessibilityActivate dispatch. VoiceOver activates this
+    // real control through its standard TouchUpInside action instead.
+    _accessibilityButton = [UIButton buttonWithType:UIButtonTypeCustom];
+    _accessibilityButton.isAccessibilityElement = YES;
+    _accessibilityButton.accessibilityTraits = UIAccessibilityTraitButton;
+    _accessibilityButton.backgroundColor = [UIColor clearColor];
+    _accessibilityButton.accessibilityIdentifier = @"sos_accessible_action";
+    [_accessibilityButton addTarget:self action:@selector(onAccessibleButton)
+                  forControlEvents:UIControlEventTouchUpInside];
+    [self addSubview:_accessibilityButton];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(voiceOverChanged:)
+        name:UIAccessibilityVoiceOverStatusChanged object:nil];
 
     [self applyState];
   }
@@ -882,6 +908,7 @@ static UIColor *DBSosTrackColor(void) {
 
 - (void)dealloc {
   [_timer invalidate];
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (DBSosPhase)phase {
@@ -909,12 +936,26 @@ static UIColor *DBSosTrackColor(void) {
 - (void)reset {
   [_timer invalidate];
   _timer = nil;
+  _accessibilityConfirmation.delegate = nil;
+  [_accessibilityConfirmation dismissWithClickedButtonIndex:
+      _accessibilityConfirmation.cancelButtonIndex animated:NO];
+  _accessibilityConfirmation = nil;
   [_model reset];
   [self applyState];
 }
 
 - (void)applyState {
   BOOL counting = (_model.phase == DBSosPhaseCountdown);
+  self.accessibilityLabel = [_texts ts:counting ? @"sos.countdown_cancel" : @"sos.accessibility_start"];
+  self.accessibilityHint = counting ? @"" : [_texts ts:@"sos.accessibility_hint"];
+  self.accessibilityValue = counting ? [_texts t:@"sos.countdown",
+      [NSString stringWithFormat:@"%ld", (long)_model.remainingSeconds], nil] : @"";
+  BOOL voiceOver = UIAccessibilityIsVoiceOverRunning();
+  self.isAccessibilityElement = !voiceOver;
+  _accessibilityButton.hidden = !voiceOver;
+  _accessibilityButton.accessibilityLabel = self.accessibilityLabel;
+  _accessibilityButton.accessibilityHint = self.accessibilityHint;
+  _accessibilityButton.accessibilityValue = self.accessibilityValue;
   _track.backgroundColor = _trackColor;
   _fill.backgroundColor = [[UIColor whiteColor] colorWithAlphaComponent:0.16];
   _thumb.backgroundColor = _danger;
@@ -976,6 +1017,7 @@ static UIColor *DBSosTrackColor(void) {
   _countdown.frame = CGRectMake(8, 4, MAX(0, size.width - 16), size.height / 2);
   _cancelHint.frame = CGRectMake(8, size.height / 2, MAX(0, size.width - 16),
                                  size.height / 2 - 4);
+  _accessibilityButton.frame = self.bounds;
 }
 
 - (double)fractionForTouch:(UITouch *)touch {
@@ -1012,6 +1054,44 @@ static UIColor *DBSosTrackColor(void) {
     [self applyState];
     return;
   }
+  [self finishArming];
+}
+
+- (BOOL)accessibilityActivate {
+  if (self.hidden || self.window == nil) return NO;
+  if (_model.phase == DBSosPhaseCountdown) {
+    [_timer invalidate];
+    _timer = nil;
+    if ([_model cancel]) [self.delegate sosSliderDidCancel:self];
+    [self applyState];
+    return YES;
+  }
+  if (_model.phase != DBSosPhaseIdle || _accessibilityConfirmation != nil) return NO;
+  _accessibilityConfirmation = [[UIAlertView alloc] initWithTitle:[_texts ts:@"sos.accessibility_start"]
+      message:[_texts ts:@"sos.accessibility_confirm"] delegate:self
+      cancelButtonTitle:[_texts ts:@"admin.cancel"]
+      otherButtonTitles:[_texts ts:@"sos.accessibility_start"], nil];
+  [_accessibilityConfirmation show];
+  return YES;
+}
+
+- (void)onAccessibleButton {
+  (void)[self accessibilityActivate];
+}
+
+- (void)voiceOverChanged:(NSNotification *)notification {
+  (void)notification;
+  [self applyState];
+}
+
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+  if (alertView != _accessibilityConfirmation) return;
+  _accessibilityConfirmation = nil;
+  if (buttonIndex == alertView.cancelButtonIndex || self.hidden || self.window == nil) return;
+  if ([_model confirmAccessibilityActivation]) [self finishArming];
+}
+
+- (void)finishArming {
   if (_model.phase == DBSosPhaseFired) {
     [self applyState];
     [self.delegate sosSliderDidFire:self];
@@ -1048,6 +1128,16 @@ static UIColor *DBSosTrackColor(void) {
   [super willMoveToSuperview:newSuperview];
   // A screen transition must never leave a live one-second timer behind.
   if (newSuperview == nil) [self reset];
+}
+
+- (void)willMoveToWindow:(UIWindow *)newWindow {
+  [super willMoveToWindow:newWindow];
+  if (newWindow == nil) [self reset];
+}
+
+- (void)setHidden:(BOOL)hidden {
+  if (hidden) [self reset];
+  [super setHidden:hidden];
 }
 
 @end
