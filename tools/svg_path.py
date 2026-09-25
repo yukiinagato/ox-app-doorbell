@@ -233,11 +233,15 @@ def flatten(data, curve_steps=16):
             end = (number(), number())
             if relative:
                 end = (current[0] + end[0], current[1] + end[1])
-            for c1, c2, stop in _arc_to_cubics(current, rx, ry, rotation, large_arc, sweep, end):
+            cubics = _arc_to_cubics(current, rx, ry, rotation, large_arc, sweep, end)
+            for c1, c2, stop in cubics:
                 points.extend(_flatten_cubic(current, c1, c2, stop, curve_steps))
                 current = stop
             current = end
-            if not points or points[-1] != end:
+            if cubics:
+                # The SVG endpoint is authoritative; avoid serializing libm-sized duplicate tails.
+                points[-1] = end
+            elif not points or points[-1] != end:
                 points.append(end)
             last_cubic_control = last_quad_control = None
             continue

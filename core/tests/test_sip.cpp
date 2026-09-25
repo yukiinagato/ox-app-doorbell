@@ -106,8 +106,7 @@ struct SipFix {
 
 }  // namespace
 
-TEST_CASE("sip: extension 8001 registers within five seconds") {
-  if (!sipTestEnabled()) return;
+TEST_CASE("sip: extension 8001 registers within five seconds" * doctest::skip(!sipTestEnabled())) {
   SipFix f;
   auto t0 = std::chrono::steady_clock::now();
   f.on([&] { f.sip->start(devSettings("8001", "devpass8001")); });
@@ -119,8 +118,7 @@ TEST_CASE("sip: extension 8001 registers within five seconds") {
   f.on([&] { CHECK(f.sip->regState() == SipRegState::Registered); });
 }
 
-TEST_CASE("sip: call reaches InCall, exchanges RTP with echo, and hangs up") {
-  if (!sipTestEnabled()) return;
+TEST_CASE("sip: call reaches InCall, exchanges RTP with echo, and hangs up" * doctest::skip(!sipTestEnabled())) {
   SipFix f;
   f.on([&] { f.sip->start(devSettings("8001", "devpass8001")); });
   REQUIRE(f.waitReg(SipRegState::Registered, 5000));
@@ -141,8 +139,7 @@ TEST_CASE("sip: call reaches InCall, exchanges RTP with echo, and hangs up") {
   REQUIRE(f.waitCall(SipCallState::Idle, 1000));
 }
 
-TEST_CASE("sip: a wrong password fails within ten seconds") {
-  if (!sipTestEnabled()) return;
+TEST_CASE("sip: a wrong password fails within ten seconds" * doctest::skip(!sipTestEnabled())) {
   SipFix f;
   f.on([&] { f.sip->start(devSettings("8002", "wrong")); });
   REQUIRE(f.waitReg(SipRegState::Failed, 10000));
@@ -174,8 +171,7 @@ bool waitMonitorCount(SipFix& f, int want, int ms) {
 }
 }  // namespace
 
-TEST_CASE("sip: direct monitor INVITE is accepted as one-way audio with RTP") {
-  if (!sipTestEnabled()) return;
+TEST_CASE("sip: direct monitor INVITE is accepted as one-way audio with RTP" * doctest::skip(!sipTestEnabled())) {
   const int port = 47380 + (::getpid() % 17);
   SipFix f;
   f.on([&] { f.sip->start(directSettings(port)); });
@@ -199,8 +195,7 @@ TEST_CASE("sip: direct monitor INVITE is accepted as one-way audio with RTP") {
   CHECK(waitMonitorCount(f, 0, 3000));
 }
 
-TEST_CASE("sip: owned cancellation rejects an unrelated Core call id") {
-  if (!sipTestEnabled()) return;
+TEST_CASE("sip: owned cancellation rejects an unrelated Core call id" * doctest::skip(!sipTestEnabled())) {
   const int port = 47380 + (::getpid() % 17);
   SipFix f;
   f.on([&] { f.sip->start(directSettings(port)); });
@@ -225,8 +220,7 @@ TEST_CASE("sip: owned cancellation rejects an unrelated Core call id") {
   CHECK(waitMonitorCount(f, 0, 3000));
 }
 
-TEST_CASE("sip: direct INVITE without a mode falls back to monitor during a primary call") {
-  if (!sipTestEnabled()) return;
+TEST_CASE("sip: direct INVITE without a mode falls back to monitor during a primary call" * doctest::skip(!sipTestEnabled())) {
   const int port = 47380 + (::getpid() % 17);
   SipFix f;
   f.on([&] { f.sip->start(directSettings(port)); });
@@ -239,8 +233,7 @@ TEST_CASE("sip: direct INVITE without a mode falls back to monitor during a prim
   CHECK(waitMonitorCount(f, 0, 3000));
 }
 
-TEST_CASE("sip: direct answer INVITE cancels an unestablished primary call and takes over") {
-  if (!sipTestEnabled()) return;
+TEST_CASE("sip: direct answer INVITE cancels an unestablished primary call and takes over" * doctest::skip(!sipTestEnabled())) {
   const int port = 47380 + (::getpid() % 17);
   SipFix f;
   f.on([&] { f.sip->start(directSettings(port)); });
@@ -254,8 +247,7 @@ TEST_CASE("sip: direct answer INVITE cancels an unestablished primary call and t
   CHECK(waitMonitorCount(f, 0, 500));
 }
 
-TEST_CASE("sip: setAllowedSources rejects a direct INVITE from an unlisted source") {
-  if (!sipTestEnabled()) return;
+TEST_CASE("sip: setAllowedSources rejects a direct INVITE from an unlisted source" * doctest::skip(!sipTestEnabled())) {
   const int port = 47380 + (::getpid() % 17);
   SipFix f;
   f.on([&] { f.sip->start(directSettings(port)); });
@@ -307,8 +299,7 @@ struct UiRec {
 };
 }  // namespace
 
-TEST_CASE("sip: Node press rule transitions a SIP call from calling to in_call") {
-  if (!sipTestEnabled()) return;
+TEST_CASE("sip: Node press rule transitions a SIP call from calling to in_call" * doctest::skip(!sipTestEnabled())) {
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x51Au);
   int mesh_port = freePortSip(rng);
   REQUIRE(mesh_port > 0);

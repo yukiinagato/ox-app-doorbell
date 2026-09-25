@@ -643,10 +643,10 @@ static NSArray *DBCommonTimeZones(void) {
                         [_texts ts:(ntpOn ? @"settings.on" : @"settings.off")],
                         @"toggle",
                         [NSString stringWithFormat:@"time.ntp.enabled|%d", ntpOn ? 1 : 0])];
-  NSInteger interval = [DBConfigUtil intVal:_cfg path:@"time.ntp.interval_s" def:900];
+  NSInteger interval = [DBConfigUtil intVal:_cfg path:@"time.ntp.interval_s" def:86400];
   [rows addObject:DBRow([_texts ts:@"time.interval_s"],
                         [NSString stringWithFormat:@"%ld", (long)interval], @"number",
-                        @"time.ntp.interval_s|60|86400")];
+                        @"time.ntp.interval_s|3600|604800")];
   // Host names cannot be typed on a drawn numeric keypad, so the server list
   // stays a web-admin field.
   id servers = [DBConfigUtil dig:_cfg path:@"time.ntp.servers"];
@@ -1074,6 +1074,8 @@ static NSArray *DBCommonTimeZones(void) {
     DBCoreBridge *core = _core;
     __weak DBSettingsScreen *weakSelf = self;
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+      NSDictionary *before = [[core status] objectForKey:@"time"];
+      long long previousSync = [[before objectForKey:@"last_sync_ms"] longLongValue];
       BOOL started = [core timeSyncNow];
       dispatch_async(dispatch_get_main_queue(), ^{
         DBSettingsScreen *screen = weakSelf;
@@ -1082,6 +1084,21 @@ static NSArray *DBCommonTimeZones(void) {
                                                       : @"time.sync_failed")]];
         if (started) [screen reload];
       });
+      if (!started) return;
+      for (int attempt = 0; attempt < 60; attempt++) {
+        [NSThread sleepForTimeInterval:0.1];
+        NSDictionary *time = [[core status] objectForKey:@"time"];
+        if ([[time objectForKey:@"syncing"] boolValue]) continue;
+        BOOL succeeded = [[time objectForKey:@"last_sync_ms"] longLongValue] > previousSync;
+        dispatch_async(dispatch_get_main_queue(), ^{
+          DBSettingsScreen *screen = weakSelf;
+          if (!screen) return;
+          [screen showToast:[screen->_texts ts:(succeeded ? @"time.sync_succeeded"
+                                                        : @"time.sync_result_failed")]];
+          [screen reload];
+        });
+        break;
+      }
     });
   } else if ([action isEqualToString:@"notice"]) {
     [self openNoticeDialogForDoor:row.argument];

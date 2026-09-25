@@ -467,6 +467,53 @@ TEST_CASE("call lifecycle retries durable answer and end writes at the normal bo
   removeContractDir(dir);
 }
 
+TEST_CASE("call lifecycle retains hangup intent while answer persistence is pending") {
+  const std::string dir = contractTempDir();
+  const std::string db_path = dir + "/doorbell.db";
+  SimClock clock(1'700'000'000'000LL, 0);
+  Runloop loop(clock);
+  NodeOptions options = v2NodeOptions();
+  options.data_dir = dir;
+  NodeDeps deps;
+  deps.clock = &clock;
+  deps.loop = &loop;
+  Node node(options, std::move(deps));
+  EventSink sink;
+  node.setUiEventCb([&](const std::string& event) { sink.push(event); });
+  REQUIRE(node.start());
+
+  const std::string call_id = node.pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
+  REQUIRE(setContractEventProjectionFailure(db_path, true));
+  CHECK_FALSE(node.reportCallAnsweredV2("d_front", call_id, 0));
+  CHECK(node.reportCallAnsweredResultV3("d_front", call_id, 0) ==
+        CallLifecycleResult::Pending);
+  CHECK(node.reportCallEndedResultV3("d_front", call_id, 1, "hangup") ==
+        CallLifecycleResult::Rejected);
+  CHECK(node.reportCallEndedResultV3("d_front", call_id, 0, "hangup") ==
+        CallLifecycleResult::Pending);
+  CHECK_FALSE(node.reportCallEndedV2("d_front", call_id, 0, "hangup"));
+  CHECK_FALSE(node.reportCallEndedV2("d_front", call_id, 0, "hangup"));
+  CHECK(sink.countEventType("call_answered") == 0);
+  CHECK(sink.countEventType("call_ended") == 0);
+
+  REQUIRE(setContractEventProjectionFailure(db_path, false));
+  clock.advance(2'000);
+  loop.pumpDue();
+  CHECK(sink.countEventType("call_answered") == 1);
+  CHECK(sink.countEventType("call_ended") == 1);
+  CHECK(node.statusJson().find("\"state\":\"in_call\"") == std::string::npos);
+
+  node.stop();
+  {
+    Store store;
+    REQUIRE(store.open(db_path));
+    CHECK(store.countEventsOfType("call_answered") == 1);
+    CHECK(store.countEventsOfType("call_ended") == 1);
+  }
+  removeContractDir(dir);
+}
+
 TEST_CASE("call lifecycle projection deterministically preserves the earliest dialog owner") {
   Store store;
   REQUIRE(store.open(":memory:"));

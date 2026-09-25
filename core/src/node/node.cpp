@@ -110,6 +110,26 @@ std::string preferredPeerHost(const std::vector<std::string>& addrs) {
   return candidates.front().second;
 }
 
+int peerHttpPort(const PeerInfo& peer) {
+  auto caps = json::parse(peer.caps_json);
+  if (!caps || !cJSON_IsObject(caps.get())) return 0;
+  const cJSON* advertised = json::get(caps.get(), "http_port");
+  if (!advertised) return 47180;  // Older peers did not advertise their HTTP listener.
+  if (!cJSON_IsNumber(advertised) || advertised->valuedouble < 1 ||
+      advertised->valuedouble > 65535 || advertised->valuedouble != advertised->valueint)
+    return 0;
+  return advertised->valueint;
+}
+
+std::string peerHttpOrigin(const PeerInfo& peer) {
+  const int port = peerHttpPort(peer);
+  const std::string host = preferredPeerHost(peer.addrs);
+  if (port == 0 || host.empty() || peer.status == "dead") return "";
+  const std::string authority = host.find(':') != std::string::npos && host.front() != '['
+      ? "[" + host + "]" : host;
+  return "http://" + authority + ":" + std::to_string(port);
+}
+
 bool safeProbeHost(const std::string& host) {
   if (host.empty() || host.size() > 253) return false;
   for (unsigned char ch : host) {
@@ -1816,7 +1836,7 @@ bool configCandidateValid(const cJSON* value, const std::string& path, std::stri
 
 class RemoteMp4Stream {
  public:
-  explicit RemoteMp4Stream(std::string host) : host_(std::move(host)) {}
+  RemoteMp4Stream(std::string host, int port) : host_(std::move(host)), port_(port) {}
   ~RemoteMp4Stream() { close(); }
 
   Bytes pull(bool* ended) {
@@ -1858,7 +1878,13 @@ class RemoteMp4Stream {
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     addrinfo* addresses = nullptr;
-    if (::getaddrinfo(host_.c_str(), "47180", &hints, &addresses) != 0 || !addresses)
+    if (port_ < 1 || port_ > 65535) return false;
+    const std::string service = std::to_string(port_);
+    std::string resolver_host = host_;
+    if (resolver_host.size() > 2 && resolver_host.front() == '[' &&
+        resolver_host.back() == ']')
+      resolver_host = resolver_host.substr(1, resolver_host.size() - 2);
+    if (::getaddrinfo(resolver_host.c_str(), service.c_str(), &hints, &addresses) != 0 || !addresses)
       return false;
     const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
     for (addrinfo* p = addresses; p && !net::valid(fd_); p = p->ai_next) {
@@ -1886,7 +1912,9 @@ class RemoteMp4Stream {
     if (!net::valid(fd_)) return false;
     int yes = 1;
     net::setSockOpt(fd_, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
-    const std::string request = "GET /stream.mp4 HTTP/1.1\r\nHost: " + host_ +
+    const std::string authority = host_.find(':') != std::string::npos && host_.front() != '['
+        ? "[" + host_ + "]:" + service : host_ + ":" + service;
+    const std::string request = "GET /stream.mp4 HTTP/1.1\r\nHost: " + authority +
                                 "\r\nAccept: video/mp4\r\nConnection: close\r\n\r\n";
     size_t sent = 0;
     while (sent < request.size()) {
@@ -1944,6 +1972,7 @@ class RemoteMp4Stream {
   }
 
   std::string host_;
+  int port_ = 0;
   net::socket_t fd_ = net::kInvalidSocket;
   bool opened_ = false;
   Bytes pending_;
@@ -2021,6 +2050,13 @@ struct Node::Impl {
   std::unique_ptr<IDiscovery> discovery;
   std::unique_ptr<Mesh> mesh;
   std::unique_ptr<Httpd> httpd;
+  struct SnapshotProxyEntry {
+    Bytes jpeg;
+    std::chrono::steady_clock::time_point received;
+    bool in_flight = false;
+  };
+  std::map<std::string, SnapshotProxyEntry> snapshot_proxy_cache;
+  unsigned snapshot_proxy_requests = 0;
   std::unique_ptr<SipCtl> sipctl;
   std::unique_ptr<HaBridge> bridge;
   std::unique_ptr<TelegramBridge> tg;
@@ -2043,7 +2079,6 @@ struct Node::Impl {
     bool ok = false;
     int64_t offset_ms = 0;
     int64_t last_sync_wall_ms = 0;
-    int64_t last_sync_mono_ms = 0;
     bool ever_synced = false;
     int64_t rtt_ms = 0;
     std::string server;
@@ -2974,15 +3009,13 @@ struct Node::Impl {
     return servers;
   }
 
-  // A measured offset is trusted for three sync intervals. After that the source falls back to
-  // system time rather than drifting on a stale correction.
-  bool timeSyncFresh() const {
-    if (!time_state.ok) return false;
-    const int64_t age = clock->monoMs() - time_state.last_sync_mono_ms;
-    return age >= 0 && age <= 3LL * ntpIntervalS() * 1000LL;
+  // Keep the last trusted UTC anchor while the network is unavailable; scheduled exchanges
+  // continue to refresh it at the configured interval.
+  bool timeSyncTrusted() const {
+    return time_state.ok;
   }
 
-  bool ntpActive() const { return ntpEnabled() && timeSyncFresh(); }
+  bool ntpActive() const { return ntpEnabled() && timeSyncTrusted(); }
 
   // Apply (or withdraw) the offset on the shared clock and report a meaningful change.
   void applyTimeOffset() {
@@ -3124,6 +3157,7 @@ struct Node::Impl {
     sntp::Sample best{};
     std::string best_server;
     std::string last_error = "no_response";
+    std::vector<int64_t> recovery_offsets;
     for (const auto& spec : servers) {
       std::string host;
       int port = sntp::kDefaultPort;
@@ -3133,22 +3167,43 @@ struct Node::Impl {
       }
       for (int attempt = 0; attempt < 3; attempt++) {
         if (time_sync_abort.load() || clock->monoMs() > deadline_mono) break;
-        uint8_t request[sntp::kPacketSize];
         uint8_t response[sntp::kPacketSize];
-        const int64_t t1 = clock->systemWallMs();
-        sntp::buildRequest(request, t1);
-        if (!sntp::exchange(host, port, 800, request, response)) continue;
-        const int64_t t4 = clock->systemWallMs();
+        int64_t t1 = 0;
+        int64_t t4 = 0;
+        bool clock_changed = false;
+        if (!sntp::exchange(host, port, 800, [this] { return clock->systemWallMs(); },
+                            [this] { return clock->monoMs(); },
+                            response, &t1, &t4, &clock_changed)) {
+          if (clock_changed) last_error = "clock_changed";
+          continue;
+        }
         sntp::Reply reply;
         if (!sntp::parseReply(response, sizeof(response), t1, &reply)) {
           last_error = "bad_reply";
           continue;
         }
-        const sntp::Sample sample =
+        sntp::Sample sample =
             sntp::computeSample(t1, reply.receive_ms, reply.transmit_ms, t4);
         if (!sntp::sampleSane(sample)) {
-          last_error = "implausible";
-          continue;
+          constexpr int64_t kMaxRecoveryOffsetMs = 30LL * 24 * 3600 * 1000;
+          if (!sntp::sampleRttSane(sample) || sample.offset_ms < -kMaxRecoveryOffsetMs ||
+              sample.offset_ms > kMaxRecoveryOffsetMs) {
+            last_error = !sntp::sampleRttSane(sample) ? "rtt_unreasonable" : "offset_unreasonable";
+            continue;
+          }
+          if (!recovery_offsets.empty()) {
+            const int64_t delta = sample.offset_ms - recovery_offsets.back();
+            if (delta < -1500 || delta > 1500) recovery_offsets.clear();
+          }
+          recovery_offsets.push_back(sample.offset_ms);
+          std::sort(recovery_offsets.begin(), recovery_offsets.end());
+          if (recovery_offsets.size() < 3 ||
+              recovery_offsets.back() - recovery_offsets.front() > 1500) {
+            last_error = "large_offset_confirming";
+            continue;
+          }
+          sample.offset_ms = recovery_offsets[recovery_offsets.size() / 2];
+          last_error.clear();
         }
         if (!ok || sample.rtt_ms < best.rtt_ms) {
           best = sample;
@@ -3176,7 +3231,6 @@ struct Node::Impl {
         time_state.offset_ms = offset;
         time_state.rtt_ms = rtt;
         time_state.server = best_server;
-        time_state.last_sync_mono_ms = clock->monoMs();
         time_state.last_sync_wall_ms = clock->systemWallMs() + offset;
         time_state.last_error.clear();
         time_sync_backoff_s = 0;
@@ -5073,8 +5127,10 @@ struct Node::Impl {
       return;
     }
     for (const auto& p : mesh->peers()) {
-      if (p.id == *node && p.status != "dead" && !p.addrs.empty()) {
-        *stream = "http://" + hostOf(p.addrs[0]) + ":47180/stream.mjpeg";
+      if (p.id == *node && p.status != "dead") {
+        const std::string origin = peerHttpOrigin(p);
+        if (origin.empty()) return;
+        *stream = origin + "/stream.mjpeg";
         return;
       }
     }
@@ -5630,6 +5686,10 @@ struct Node::Impl {
     auto measured = json::parse(measured_caps_json);
     if (!measured || !cJSON_IsObject(measured.get())) measured = json::obj();
     const bool measured_tls = json::getBool(measured.get(), "tls12", false);
+    if (opts.http_port >= 1 && opts.http_port <= 65535)
+      json::set(measured.get(), "http_port", static_cast<int64_t>(opts.http_port));
+    else
+      cJSON_DeleteItemFromObjectCaseSensitive(measured.get(), "http_port");
     std::string mqtt_source = cJSON_IsBool(json::get(measured.get(), "mqtt_reachable"))
         ? "shell" : "unmeasured";
     if (!mqtt_probe_host.empty() && mqtt_probe_known) {
@@ -5937,22 +5997,13 @@ struct Node::Impl {
   }
 
   std::string relevantDoorStation(const std::string& door) const {
+    std::string configured;
+    const int configured_matches = configuredStationForDoor(door, &configured);
+    if (configured_matches > 1) return "";
     std::string station;
     auto active = active_calls.find(door);
     if (active != active_calls.end()) station = active->second.origin;
-    if (station.empty()) {
-      const cJSON* devices = json::get(cfg.get(), "devices");
-      const cJSON* device = nullptr;
-      cJSON_ArrayForEach(device, devices) {
-        if (device->string && json::getString(device, "role") == "door_station" &&
-            json::getString(device, "door") == door) {
-          if (station.empty() || std::string(device->string) < station)
-            station = device->string;
-        }
-      }
-    }
-    if (station.empty() && opts.role == "door_station" && opts.door == door) station = node_id;
-    return station;
+    return station.empty() ? configured : station;
   }
 
   bool doorFeature(const std::string& door, const std::string& feature) const {
@@ -7229,9 +7280,13 @@ struct Node::Impl {
     });
   }
 
-  void queuePendingAnswer(const ActiveCall& call, const std::string& owner) {
-    if (!reservePendingLifecycle(call.call_id)) return;
+  bool queuePendingAnswer(const ActiveCall& call, const std::string& owner) {
+    if (!reservePendingLifecycle(call.call_id)) return false;
     PendingLifecycle& pending = pending_lifecycles[call.call_id];
+    if ((!pending.door.empty() && (pending.door != call.door ||
+         pending.stage_revision != call.stage_revision || pending.owner != owner)) ||
+        pending.end_pending)
+      return false;
     pending.call_id = call.call_id;
     pending.door = call.door;
     pending.owner = owner;
@@ -7245,19 +7300,26 @@ struct Node::Impl {
       door_calling_until.erase(call.door);
     }
     schedulePendingLifecycleRetry(call.call_id);
+    return true;
   }
 
-  void queuePendingEnd(const ActiveCall& call, const std::string& owner,
+  bool queuePendingEnd(const ActiveCall& call, const std::string& owner,
                        const std::string& reason) {
-    if (!reservePendingLifecycle(call.call_id)) return;
+    if (!reservePendingLifecycle(call.call_id)) return false;
     PendingLifecycle& pending = pending_lifecycles[call.call_id];
+    if (!pending.door.empty() && (pending.door != call.door ||
+        pending.stage_revision != call.stage_revision || pending.owner != owner))
+      return false;
     pending.call_id = call.call_id;
     pending.door = call.door;
     pending.owner = owner;
     pending.stage_revision = call.stage_revision;
-    pending.end_pending = true;
-    pending.end_reason = reason.empty() ? "sip_ended" : reason.substr(0, 64);
+    if (!pending.end_pending) {
+      pending.end_pending = true;
+      pending.end_reason = reason.empty() ? "sip_ended" : reason.substr(0, 64);
+    }
     schedulePendingLifecycleRetry(call.call_id);
+    return true;
   }
 
   bool callRecoveryTakeoverAuthority(const ActiveCall& call) const {
@@ -8239,15 +8301,8 @@ struct Node::Impl {
 
 
   std::string doorStation(const std::string& door_id) {
-    cJSON* devices = json::get(cfg.get(), "devices");
-    cJSON* dev = nullptr;
-    cJSON_ArrayForEach(dev, devices) {
-      if (dev->string && json::getString(dev, "role") == "door_station" &&
-          json::getString(dev, "door") == door_id) {
-        return dev->string;
-      }
-    }
-    return "";
+    std::string station;
+    return configuredStationForDoor(door_id, &station) == 1 ? station : "";
   }
 
   bool trustedWebOrigin(const HttpReq& req) const {
@@ -8280,12 +8335,30 @@ struct Node::Impl {
   }
 
   // Return a peer node's HTTP origin; never proxy back to the local node.
+  int configuredStationForDoor(const std::string& door, std::string* station) const {
+    if (station) station->clear();
+    int matches = 0;
+    const cJSON* devices = json::get(cfg.get(), "devices");
+    const cJSON* device = nullptr;
+    cJSON_ArrayForEach(device, devices) {
+      if (!device->string || json::getString(device, "role") != "door_station" ||
+          json::getString(device, "door") != door) continue;
+      ++matches;
+      if (matches == 1 && station) *station = device->string;
+    }
+    if (opts.role == "door_station" && opts.door == door &&
+        !json::get(json::get(cfg.get(), "devices"), node_id.c_str())) {
+      ++matches;
+      if (matches == 1 && station) *station = node_id;
+    }
+    if (matches != 1 && station) station->clear();
+    return matches;
+  }
+
   std::string nodeOrigin(const std::string& nid) {
     if (nid == node_id || !mesh) return "";
-    for (const auto& p : mesh->peers()) {
-      if (p.id == nid && !p.addrs.empty())
-        return "http://" + hostOf(p.addrs[0]) + ":47180";
-    }
+    for (const auto& p : mesh->peers())
+      if (p.id == nid) return peerHttpOrigin(p);
     return "";
   }
 
@@ -9163,9 +9236,9 @@ struct Node::Impl {
           if (d) json::set(e, "door_label", labelIn(json::get(d, "label"), "ja"));
         }
         json::set(e, "name", peer_name);
-        const std::string peer_http_host = preferredPeerHost(p.addrs);
-        if (peer_role == "door_station" && !peer_http_host.empty()) {
-          const std::string origin = "http://" + peer_http_host + ":47180";
+        const std::string peer_origin = peerHttpOrigin(p);
+        if (peer_role == "door_station" && !peer_origin.empty()) {
+          const std::string origin = peer_origin;
           json::set(e, "stream", origin + "/stream.mjpeg");
           json::set(e, "video_meta", origin + "/video-meta");
           // Treat an unregistered peer as auto-capable; clients fall back to MJPEG on 503.
@@ -9402,6 +9475,13 @@ struct Node::Impl {
       return false;
     const auto token = sessions.csrfToken(request.cookie("dbsess"), clock->monoMs());
     return !token.empty() && constantTimeEquals(token, header->second);
+  }
+
+  bool adminOrPanelMutationAuthorizedOnLoop(const HttpReq& request,
+                                             const std::string& door,
+                                             const std::string& grant) {
+    if (checkSession(request)) return adminMutationAuthorizedOnLoop(request);
+    return panelRequestAllowed(request, door, grant, true);
   }
 
   HttpResp commitDoorNoticeOnLoop(const HttpReq& request, const std::string& door,
@@ -9924,6 +10004,7 @@ struct Node::Impl {
 
     httpd->setMp4ProxyProvider([this](const HttpReq& req, int* status) -> Httpd::Mp4Pull {
       std::string upstream_host;
+      int upstream_port = 0;
       bool local = false;
       int resolved_status = 503;
       loop->callSync([&] {
@@ -9937,18 +10018,12 @@ struct Node::Impl {
           return;
         }
         std::string target;
-        if (opts.role == "door_station" && opts.door == door) target = node_id;
-        cJSON* devices = json::get(cfg.get(), "devices");
-        cJSON* device = nullptr;
-        cJSON_ArrayForEach(device, devices) {
-          if (!device->string) continue;
-          if (json::getString(device, "role") == "door_station" &&
-              json::getString(device, "door") == door) {
-            target = device->string;
-            break;
-          }
+        const int station_matches = configuredStationForDoor(door, &target);
+        if (station_matches > 1) {
+          resolved_status = 409;
+          return;
         }
-        if (target.empty()) {
+        if (station_matches == 0 || target.empty()) {
           resolved_status = 404;
           return;
         }
@@ -9959,8 +10034,10 @@ struct Node::Impl {
         }
         if (mesh) {
           for (const auto& peer : mesh->peers()) {
-            if (peer.id == target && peer.status == "alive" && !peer.addrs.empty()) {
-              upstream_host = hostOf(peer.addrs.front());
+            if (peer.id == target && peer.status == "alive") {
+              upstream_host = preferredPeerHost(peer.addrs);
+              upstream_port = peerHttpPort(peer);
+              if (upstream_host.empty() || upstream_port == 0) return;
               resolved_status = 200;
               return;
             }
@@ -9978,7 +10055,7 @@ struct Node::Impl {
         return [reader](bool* ended) { return reader->pull(500, ended); };
       }
       if (upstream_host.empty()) return nullptr;
-      auto stream = std::make_shared<RemoteMp4Stream>(upstream_host);
+      auto stream = std::make_shared<RemoteMp4Stream>(upstream_host, upstream_port);
       return [stream](bool* ended) { return stream->pull(ended); };
     });
 
@@ -10722,6 +10799,8 @@ struct Node::Impl {
 
 
     httpd->route("POST", "/api/emergency", [this](const HttpReq& req) {
+      if (!adminMutationAuthorizedOnLoop(req))
+        return mediaFailure(403, "permission_denied");
       auto b = json::parse(req.body);
       if (!b || !json::get(b.get(), "active"))
         return HttpResp::json("{\"ok\":false,\"err\":\"no active\"}", 400);
@@ -10746,7 +10825,7 @@ struct Node::Impl {
     httpd->route("POST", "/api/doors/*", [this](const HttpReq& req) {
       const std::string unlock_door = doorPathDoor(req.uri, "/open");
       if (!unlock_door.empty()) {
-        if (!checkSession(req) && !panelRequestAllowed(req, unlock_door, "door.open", true))
+        if (!adminOrPanelMutationAuthorizedOnLoop(req, unlock_door, "door.open"))
           return mediaFailure(403, "permission_denied");
         if (!doorExists(unlock_door))
           return HttpResp::json("{\"ok\":false,\"err\":\"unknown_door\"}", 404);
@@ -10757,7 +10836,7 @@ struct Node::Impl {
       }
       const std::string door = doorNoticePathDoor(req.uri);
       if (door.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"not_found\"}", 404);
-      if (!checkSession(req) && !panelRequestAllowed(req, door, "notice.write", true))
+      if (!adminOrPanelMutationAuthorizedOnLoop(req, door, "notice.write"))
         return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
       auto body = json::parse(req.body);
       if (!body) return HttpResp::json("{\"ok\":false,\"err\":\"bad_body\"}", 400);
@@ -10775,7 +10854,7 @@ struct Node::Impl {
     // The cluster-wide announcement. A door-specific one overrides it, so this is the
     // "everywhere" target of the announcement dialog rather than a bulk per-door write.
     httpd->route("POST", "/api/notice", [this](const HttpReq& req) {
-      if (!checkSession(req) && !panelRequestAllowed(req, "*", "notice.write", true))
+      if (!adminOrPanelMutationAuthorizedOnLoop(req, "*", "notice.write"))
         return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
       auto body = json::parse(req.body);
       if (!body) return HttpResp::json("{\"ok\":false,\"err\":\"bad_body\"}", 400);
@@ -10791,7 +10870,7 @@ struct Node::Impl {
     });
 
     httpd->route("DELETE", "/api/notice", [this](const HttpReq& req) {
-      if (!checkSession(req) && !panelRequestAllowed(req, "*", "notice.write", true))
+      if (!adminOrPanelMutationAuthorizedOnLoop(req, "*", "notice.write"))
         return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
       if (!clearDoorNoticeOnLoop("*"))
         return HttpResp::json("{\"ok\":false,\"err\":\"rejected\"}", 400);
@@ -10801,7 +10880,7 @@ struct Node::Impl {
     httpd->route("DELETE", "/api/doors/*", [this](const HttpReq& req) {
       const std::string door = doorNoticePathDoor(req.uri);
       if (door.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"not_found\"}", 404);
-      if (!checkSession(req) && !panelRequestAllowed(req, door, "notice.write", true))
+      if (!adminOrPanelMutationAuthorizedOnLoop(req, door, "notice.write"))
         return HttpResp::json("{\"ok\":false,\"err\":\"forbidden\"}", 403);
       if (!clearDoorNoticeOnLoop(door))
         return HttpResp::json("{\"ok\":false,\"err\":\"rejected\"}", 400);
@@ -11430,38 +11509,82 @@ struct Node::Impl {
       std::string door = req.param("door");
 
       std::string target;
-      cJSON* devices = json::get(cfg.get(), "devices");
-      cJSON* it = nullptr;
-      cJSON_ArrayForEach(it, devices) {
-        if (!it->string) continue;
-        if (json::getString(it, "role") == "door_station" && json::getString(it, "door") == door) {
-          target = it->string;
-          break;
-        }
-      }
-      if (target.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no station\"}", 404);
+      const int station_matches = configuredStationForDoor(door, &target);
+      if (station_matches > 1)
+        return HttpResp::json("{\"ok\":false,\"err\":\"ambiguous station\"}", 409);
+      if (station_matches == 0)
+        return HttpResp::json("{\"ok\":false,\"err\":\"no station\"}", 404);
       if (target == node_id) {
         Bytes jpg = frame_bus.latestJpeg();
         if (jpg.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no frame\"}", 503);
+        if (jpg.size() > 300 * 1024 || jpg.size() < 4 || jpg[0] != 0xff ||
+            jpg[1] != 0xd8 || jpg[jpg.size() - 2] != 0xff || jpg.back() != 0xd9)
+          return HttpResp::json("{\"ok\":false,\"err\":\"invalid frame\"}", 503);
         HttpResp r;
         r.content_type = "image/jpeg";
         r.body.assign(jpg.begin(), jpg.end());
         r.headers["Cache-Control"] = "no-store";
         return r;
       }
-
-      if (mesh) {
-        for (const auto& p : mesh->peers()) {
-          if (p.id == target && !p.addrs.empty()) {
-            HttpResp r;
-            r.status = 302;
-            r.headers["Location"] = "http://" + hostOf(p.addrs[0]) + ":47180/snapshot.jpg";
-            r.headers["Cache-Control"] = "no-store";
-            return r;
-          }
-        }
+      auto validJpeg = [](const Bytes& jpeg) {
+        return jpeg.size() >= 4 && jpeg.size() <= 300 * 1024 && jpeg[0] == 0xff &&
+               jpeg[1] == 0xd8 && jpeg[jpeg.size() - 2] == 0xff && jpeg.back() == 0xd9;
+      };
+      const auto now = std::chrono::steady_clock::now();
+      for (auto it = snapshot_proxy_cache.begin(); it != snapshot_proxy_cache.end();) {
+        if (!it->second.in_flight &&
+            now - it->second.received > std::chrono::seconds(10))
+          it = snapshot_proxy_cache.erase(it);
+        else
+          ++it;
       }
-      return HttpResp::json("{\"ok\":false,\"err\":\"station offline\"}", 503);
+      auto cached = snapshot_proxy_cache.find(target);
+      if (cached == snapshot_proxy_cache.end()) {
+        if (snapshot_proxy_cache.size() >= 8) {
+          auto oldest = snapshot_proxy_cache.end();
+          for (auto it = snapshot_proxy_cache.begin(); it != snapshot_proxy_cache.end(); ++it)
+            if (!it->second.in_flight &&
+                (oldest == snapshot_proxy_cache.end() ||
+                 it->second.received < oldest->second.received)) oldest = it;
+          if (oldest != snapshot_proxy_cache.end()) snapshot_proxy_cache.erase(oldest);
+        }
+        if (snapshot_proxy_cache.size() < 8)
+          cached = snapshot_proxy_cache.emplace(target, SnapshotProxyEntry{}).first;
+      }
+      bool peer_alive = false;
+      if (mesh) for (const auto& peer : mesh->peers())
+        if (peer.id == target && peer.status == "alive") { peer_alive = true; break; }
+      if (cached != snapshot_proxy_cache.end() && !cached->second.in_flight &&
+          peer_alive && snapshot_proxy_requests < 4) {
+        cached->second.in_flight = true;
+        ++snapshot_proxy_requests;
+        mesh->fetchSnapshot(target, [this, target](Bytes jpeg) {
+          auto found = snapshot_proxy_cache.find(target);
+          if (snapshot_proxy_requests) --snapshot_proxy_requests;
+          if (found == snapshot_proxy_cache.end()) return;
+          found->second.in_flight = false;
+          if (jpeg.size() >= 4 && jpeg.size() <= 300 * 1024 && jpeg[0] == 0xff &&
+              jpeg[1] == 0xd8 && jpeg[jpeg.size() - 2] == 0xff && jpeg.back() == 0xd9) {
+            found->second.jpeg = std::move(jpeg);
+            found->second.received = std::chrono::steady_clock::now();
+          }
+        });
+      }
+      if (cached == snapshot_proxy_cache.end() || !peer_alive ||
+          !validJpeg(cached->second.jpeg) ||
+          now - cached->second.received > std::chrono::seconds(1)) {
+        auto r = HttpResp::json("{\"ok\":false,\"err\":\"snapshot pending\"}", 503);
+        r.headers["Retry-After"] = "1";
+        r.headers["Cache-Control"] = "no-store";
+        return r;
+      }
+      Bytes jpg = cached->second.jpeg;
+      HttpResp r;
+      r.content_type = "image/jpeg";
+      r.body.assign(jpg.begin(), jpg.end());
+      r.headers["Cache-Control"] = "no-store";
+      r.headers["X-Content-Type-Options"] = "nosniff";
+      return r;
     });
 
 
@@ -11518,16 +11641,7 @@ struct Node::Impl {
         cJSON* e = json::addObj(doors, it->string);
 
         std::string station;
-        cJSON* devices = json::get(cfg.get(), "devices");
-        cJSON* dev = nullptr;
-        cJSON_ArrayForEach(dev, devices) {
-          if (dev->string && json::getString(dev, "role") == "door_station" &&
-              json::getString(dev, "door") == it->string) {
-            station = dev->string;
-            break;
-          }
-        }
-        if (station.empty()) continue;
+        if (configuredStationForDoor(it->string, &station) != 1) continue;
         json::set(e, "source_node_id", station);
         json::setItem(e, "playback_profile", playbackProfileDoc(node_id, station));
         json::set(e, "extension", json::getString(cfgAt("sip.accounts." + station), "user"));
@@ -11540,8 +11654,9 @@ struct Node::Impl {
           json::setBool(e, "online", true);
         } else if (mesh) {
           for (const auto& p : mesh->peers()) {
-            if (p.id == station && !p.addrs.empty()) {
-              const std::string origin = "http://" + hostOf(p.addrs[0]) + ":47180";
+            if (p.id == station) {
+              const std::string origin = peerHttpOrigin(p);
+              if (origin.empty()) continue;
               json::set(e, "station", origin);
               json::set(e, "stream_mjpeg", origin + "/stream.mjpeg");
               if (json::getString(json::get(json::get(cfgAt("devices." + station), "local"),
@@ -11695,18 +11810,20 @@ struct Node::Impl {
            projection->updated_hlc == ended.hlc;
   }
 
-  bool doReportCallAnswered(const std::string& door_arg, const std::string& call_id,
-                            int stage_revision, const std::string& reporter = "",
-                            bool retry_on_persistence_failure = false) {
+  CallLifecycleResult doReportCallAnsweredResult(
+      const std::string& door_arg, const std::string& call_id, int stage_revision,
+      const std::string& reporter = "", bool retry_on_persistence_failure = false) {
     const std::string door = door_arg.empty() ? opts.door : door_arg;
     const std::string owner = reporter.empty() ? node_id : reporter;
-    if (call_id.empty() || stage_revision < 0) return false;
+    if (call_id.empty() || stage_revision < 0) return CallLifecycleResult::Rejected;
     auto it = active_calls.find(door);
     if (it == active_calls.end() || it->second.call_id != call_id ||
         it->second.stage_revision != stage_revision)
-      return false;
-    if (it->second.state == "in_call") return it->second.dialog_owner == owner;
-    if (it->second.state != "ringing") return false;
+      return CallLifecycleResult::Rejected;
+    if (it->second.state == "in_call")
+      return it->second.dialog_owner == owner ? CallLifecycleResult::Accepted
+                                              : CallLifecycleResult::Rejected;
+    if (it->second.state != "ringing") return CallLifecycleResult::Rejected;
     auto p = json::obj();
     json::set(p.get(), "schema_version", static_cast<int64_t>(2));
     json::set(p.get(), "call_id", call_id);
@@ -11715,32 +11832,53 @@ struct Node::Impl {
     json::set(p.get(), "expires_at_ms", it->second.expires_wall_ms);
     if (!it->second.purpose.empty()) json::set(p.get(), "purpose", it->second.purpose);
     if (events->append("call_answered", door, owner, json::dump(p.get())).seq == 0) {
-      if (retry_on_persistence_failure) queuePendingAnswer(it->second, owner);
-      return false;
+      if (retry_on_persistence_failure && queuePendingAnswer(it->second, owner))
+        return CallLifecycleResult::Pending;
+      return CallLifecycleResult::Rejected;
     }
     auto accepted = active_calls.find(door);
     return accepted != active_calls.end() && accepted->second.call_id == call_id &&
            accepted->second.stage_revision == stage_revision &&
-           accepted->second.state == "in_call" && accepted->second.dialog_owner == owner;
+           accepted->second.state == "in_call" && accepted->second.dialog_owner == owner
+               ? CallLifecycleResult::Accepted : CallLifecycleResult::Rejected;
   }
 
-  bool doReportCallEnded(const std::string& door_arg, const std::string& call_id,
-                         int stage_revision, const std::string& reason,
-                         const std::string& reporter = "",
-                         bool retry_on_persistence_failure = false) {
+  bool doReportCallAnswered(const std::string& door_arg, const std::string& call_id,
+                            int stage_revision, const std::string& reporter = "",
+                            bool retry_on_persistence_failure = false) {
+    return doReportCallAnsweredResult(door_arg, call_id, stage_revision, reporter,
+                                     retry_on_persistence_failure) ==
+           CallLifecycleResult::Accepted;
+  }
+
+  CallLifecycleResult doReportCallEndedResult(
+      const std::string& door_arg, const std::string& call_id, int stage_revision,
+      const std::string& reason, const std::string& reporter = "",
+      bool retry_on_persistence_failure = false) {
     const std::string door = door_arg.empty() ? opts.door : door_arg;
     const std::string owner = reporter.empty() ? node_id : reporter;
-    if (call_id.empty() || stage_revision < 0) return false;
+    if (call_id.empty() || stage_revision < 0) return CallLifecycleResult::Rejected;
     auto it = active_calls.find(door);
     if (it == active_calls.end()) {
       auto projection = store.callProjection(call_id);
       return projection && projection->door == door &&
              projection->stage_revision == stage_revision && projection->state == "ended" &&
-             projection->dialog_owner == owner;
+             projection->dialog_owner == owner ? CallLifecycleResult::Accepted
+                                               : CallLifecycleResult::Rejected;
     }
-    if (it->second.call_id != call_id || it->second.stage_revision != stage_revision ||
-        it->second.state != "in_call" || it->second.dialog_owner != owner)
-      return false;
+    if (it->second.call_id != call_id || it->second.stage_revision != stage_revision)
+      return CallLifecycleResult::Rejected;
+    if (it->second.state == "ringing") {
+      auto pending = pending_lifecycles.find(call_id);
+      if (pending == pending_lifecycles.end() || !pending->second.answer_pending ||
+          pending->second.door != door || pending->second.stage_revision != stage_revision ||
+          pending->second.owner != owner || !pendingLifecycleIdentityValid(pending->second) ||
+          !queuePendingEnd(it->second, owner, reason))
+        return CallLifecycleResult::Rejected;
+      return CallLifecycleResult::Pending;
+    }
+    if (it->second.state != "in_call" || it->second.dialog_owner != owner)
+      return CallLifecycleResult::Rejected;
     auto p = json::obj();
     json::set(p.get(), "schema_version", static_cast<int64_t>(2));
     json::set(p.get(), "call_id", call_id);
@@ -11748,13 +11886,24 @@ struct Node::Impl {
     json::set(p.get(), "reason", reason.empty() ? "sip_ended" : reason.substr(0, 64));
     const EventRecord ended = events->append("call_ended", door, owner, json::dump(p.get()));
     if (ended.seq == 0) {
-      if (retry_on_persistence_failure) queuePendingEnd(it->second, owner, reason);
-      return false;
+      if (retry_on_persistence_failure && queuePendingEnd(it->second, owner, reason))
+        return CallLifecycleResult::Pending;
+      return CallLifecycleResult::Rejected;
     }
     auto projection = store.callProjection(call_id);
     return projection && projection->door == door && projection->state == "ended" &&
            projection->stage_revision == stage_revision &&
-           projection->dialog_owner == owner && projection->updated_hlc == ended.hlc;
+           projection->dialog_owner == owner && projection->updated_hlc == ended.hlc
+               ? CallLifecycleResult::Accepted : CallLifecycleResult::Rejected;
+  }
+
+  bool doReportCallEnded(const std::string& door_arg, const std::string& call_id,
+                         int stage_revision, const std::string& reason,
+                         const std::string& reporter = "",
+                         bool retry_on_persistence_failure = false) {
+    return doReportCallEndedResult(door_arg, call_id, stage_revision, reason, reporter,
+                                   retry_on_persistence_failure) ==
+           CallLifecycleResult::Accepted;
   }
 
   void flushPendingLifecycle(const std::string& call_id) {
@@ -12127,6 +12276,30 @@ bool Node::reportCallEndedV2(const std::string& door_id, const std::string& call
                                   /*retry_on_persistence_failure=*/true);
   });
   return ok;
+}
+
+CallLifecycleResult Node::reportCallAnsweredResultV3(const std::string& door_id,
+                                                      const std::string& call_id,
+                                                      int stage_revision) {
+  CallLifecycleResult result = CallLifecycleResult::Rejected;
+  impl_->loop->callSync([&] {
+    result = impl_->doReportCallAnsweredResult(
+        door_id, call_id, stage_revision, "", /*retry_on_persistence_failure=*/true);
+  });
+  return result;
+}
+
+CallLifecycleResult Node::reportCallEndedResultV3(const std::string& door_id,
+                                                   const std::string& call_id,
+                                                   int stage_revision,
+                                                   const std::string& reason) {
+  CallLifecycleResult result = CallLifecycleResult::Rejected;
+  impl_->loop->callSync([&] {
+    result = impl_->doReportCallEndedResult(
+        door_id, call_id, stage_revision, reason, "",
+        /*retry_on_persistence_failure=*/true);
+  });
+  return result;
 }
 
 void Node::reportCallRecovery(const std::string& call_id, bool restored) {

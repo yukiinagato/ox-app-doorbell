@@ -132,6 +132,58 @@ TEST_CASE("panel identity: current owner without media publish grant is denied")
   }
 }
 
+TEST_CASE("legacy panel Cookie mutations require CSRF and a trusted Origin") {
+  IdentityFixture fixture;
+  fixture.secrets["panel.legacy"] = "legacy-panel-test";
+  fixture.node->setConfigKey("panel.token_refs", R"(["secret:panel.legacy"])");
+  const auto session = operationHttp(fixture.options.http_port, "POST", "/api/panel/session",
+      R"({"credential":"legacy-panel-test"})");
+  REQUIRE(session.status == 200);
+  const auto csrf = operationField(session, "csrf_token");
+  REQUIRE(!csrf.empty());
+  const auto cookie = session.cookie;
+  auto request = [&](const std::string& path, const std::string& token,
+                     const std::string& origin) {
+    return operationHttp(fixture.options.http_port, "POST", path, "", cookie, token,
+                         false, origin);
+  };
+
+  for (const auto& path : {
+           "/api/panel/emergency?active=1",
+           "/api/panel/press?door=front",
+           "/api/panel/cancel?door=front&call_id=0123456789abcdef0123456789abcdef",
+           "/api/panel/hangup?door=front&call_id=0123456789abcdef0123456789abcdef",
+           "/api/doors/back/open"}) {
+    CAPTURE(path);
+    CHECK(request(path, "", "").status == 403);
+    CHECK(request(path, "wrong-csrf", "local").status == 403);
+    CHECK(request(path, csrf, "https://untrusted.invalid").status == 403);
+  }
+
+  CHECK(operationHttp(fixture.options.http_port, "POST",
+      "/api/panel/emergency?active=1").status == 403);
+  // The legacy panel remains usable with its own cookie, token and same-origin request.
+  CHECK(request("/api/panel/emergency?active=1", csrf, "local").status == 200);
+  // This route has no configured unlock for the back door: 409 proves authorization passed,
+  // while avoiding execution of any unlock command in the test.
+  CHECK(request("/api/doors/back/open", csrf, "local").status == 409);
+
+  fixture.node->setSecureStore([&](const std::string& key) {
+    return key == "panel.legacy" ? std::string("legacy-panel-rotated") :
+        (fixture.secrets.count(key) ? fixture.secrets.at(key) : std::string());
+  }, [](const std::string&, const std::string&) { return false; });
+  CHECK(request("/api/panel/emergency?active=1", csrf, "local").status == 403);
+  fixture.node->setSecureStore([&](const std::string& key) {
+    const auto found = fixture.secrets.find(key);
+    return found == fixture.secrets.end() ? std::string() : found->second;
+  }, [](const std::string&, const std::string&) { return false; });
+  const auto replacement = operationHttp(fixture.options.http_port, "POST", "/api/panel/session",
+      R"({"credential":"legacy-panel-test"})");
+  REQUIRE(replacement.status == 200);
+  CHECK(operationHttp(fixture.options.http_port, "POST", "/api/panel/emergency?active=1", "",
+      cookie, operationField(replacement, "csrf_token"), false, "local").status == 403);
+}
+
 TEST_CASE("panel identity: readonly alias denial scoped state and independent provisioning") {
   IdentityFixture fixture;
   const auto id = fixture.create("a", R"(["view"])", R"(["front"])");

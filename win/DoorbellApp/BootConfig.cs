@@ -53,7 +53,8 @@ namespace DoorbellApp
                     if (d.TryGetValue("http_port", out var hp) && hp != null)
                     {
                         int p;
-                        if (int.TryParse(hp.ToString(), out p) && p > 0) c.HttpPort = p;
+                        if (int.TryParse(hp.ToString(), out p) && p >= 0 && p <= 65535)
+                            c.HttpPort = p;
                     }
                     if (d.TryGetValue("listen_port", out var lp) && lp != null)
                     {

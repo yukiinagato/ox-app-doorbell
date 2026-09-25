@@ -170,6 +170,7 @@ class App : Application(), DoorbellCore.Listener {
     // Core callbacks run on Core-owned threads.
 
     override fun onUiEvent(ev: JSONObject) {
+        val callbackGeneration = if (::runtime.isInitialized) runtime.coreGeneration else 0L
         val eventType = ev.optString("t")
         if (eventType == "chime" && !acceptChimeV2(ev)) return
         if (eventType == "call_recovery_required") {
@@ -190,7 +191,8 @@ class App : Application(), DoorbellCore.Listener {
         } else ev
         if (eventType == "config_changed" && ::runtime.isInitialized) {
             mainHandler.post {
-                if (!applyReplicatedIdentity()) runtime.onConfigChanged()
+                if (runtime.isCurrentGeneration(callbackGeneration) &&
+                    !applyReplicatedIdentity()) runtime.onConfigChanged()
             }
         }
         if (eventType == "event") handleLifecycleEvent(ev)
@@ -208,7 +210,10 @@ class App : Application(), DoorbellCore.Listener {
                 incomingActivity?.onReply(ev.optString("door"))
             }
         }
-        activityListener?.onUiEvent(forwarded)
+        val taggedEvent = JSONObject(forwarded.toString()).put(
+            "_runtime_generation", callbackGeneration,
+        )
+        activityListener?.onUiEvent(taggedEvent)
         // Door stations retain their visitor UI; only indoor profiles open the incoming monitor.
         if (eventType == "chime" && boot.role != "door_station") {
             IncomingActivity.launch(this, lastPressDoor,
@@ -372,28 +377,34 @@ class App : Application(), DoorbellCore.Listener {
                 manualSipLifecycle.clear(report.identity.callId)
                 return@post
             }
-            val accepted = when (report.kind) {
-                ManualSipCallReportKind.ANSWERED -> core.reportCallAnsweredV2(
-                    current.door,
-                    current.callId,
-                    current.stageRevision,
+            val result = when (report.kind) {
+                ManualSipCallReportKind.ANSWERED -> core.reportCallAnsweredResultV3(
+                    report.identity.door,
+                    report.identity.callId,
+                    report.identity.stageRevision,
                 )
-                ManualSipCallReportKind.ENDED -> core.reportCallEndedV2(
-                    current.door,
-                    current.callId,
-                    current.stageRevision,
+                ManualSipCallReportKind.ENDED -> core.reportCallEndedResultV3(
+                    report.identity.door,
+                    report.identity.callId,
+                    report.identity.stageRevision,
                     report.reason.ifEmpty { "sip_ended" },
                 )
             }
-            if (!accepted) {
-                manualSipLifecycle.clear(report.identity.callId)
-                if (report.kind == ManualSipCallReportKind.ANSWERED) {
+            val disposition = manualSipLifecycle.settle(report, result)
+            when (disposition) {
+                ManualSipReportDisposition.REJECTED -> {
+                    if (report.kind == ManualSipCallReportKind.ANSWERED &&
+                        disposition.shouldHangUpAnsweredLeg()) {
                     core.sipHangup()
                     incomingActivity?.onManualSipClaimLost(report.identity.callId)
+                    }
+                    Log.w(TAG, "manual SIP lifecycle report rejected as stale: ${report.kind}")
                 }
-                Log.w(TAG, "manual SIP lifecycle report rejected as stale: ${report.kind}")
-            } else {
-                manualSipLifecycle.complete(report)
+                ManualSipReportDisposition.PENDING -> {
+                    Log.i(TAG, "manual SIP lifecycle report queued for persistence: ${report.kind}")
+                }
+                ManualSipReportDisposition.ACCEPTED,
+                ManualSipReportDisposition.STALE -> Unit
             }
         }
     }

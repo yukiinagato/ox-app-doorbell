@@ -34,8 +34,9 @@ class DoorbellCore(context: Context) {
             return false
         handle = nativeCreate(dataDir, bootJson)
         if (handle == 0L) return false
-        nativeSetUiCallback(handle, true)
-        if (nativeStart(handle) != 0) {
+        val createdHandle = handle
+        nativeSetUiCallback(createdHandle, true)
+        if (nativeStart(createdHandle) != 0 || handle != createdHandle) {
             destroy()
             return false
         }
@@ -45,8 +46,6 @@ class DoorbellCore(context: Context) {
     @Synchronized
     fun destroy() {
         if (handle == 0L) return
-        nativeSetUiCallback(handle, false)
-        nativeStop(handle)
         nativeDestroy(handle)
         handle = 0
     }
@@ -84,6 +83,18 @@ class DoorbellCore(context: Context) {
         handle != 0L &&
             nativeReportCallAnsweredV2(handle, doorId, callId, stageRevision) == 0
 
+    internal fun reportCallAnsweredResultV3(
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+    ): CoreCallLifecycleResult {
+        if (handle == 0L) return CoreCallLifecycleResult.REJECTED
+        val result = if (exports.callLifecycleResultV3)
+            nativeReportCallAnsweredResultV3(handle, doorId, callId, stageRevision)
+        else if (nativeReportCallAnsweredV2(handle, doorId, callId, stageRevision) == 0) 0 else 2
+        return CoreCallLifecycleResult.fromNative(result)
+    }
+
     fun reportCallEndedV2(
         doorId: String,
         callId: String,
@@ -91,6 +102,19 @@ class DoorbellCore(context: Context) {
         reason: String,
     ): Boolean = handle != 0L &&
         nativeReportCallEndedV2(handle, doorId, callId, stageRevision, reason) == 0
+
+    internal fun reportCallEndedResultV3(
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+        reason: String,
+    ): CoreCallLifecycleResult {
+        if (handle == 0L) return CoreCallLifecycleResult.REJECTED
+        val result = if (exports.callLifecycleResultV3)
+            nativeReportCallEndedResultV3(handle, doorId, callId, stageRevision, reason)
+        else if (nativeReportCallEndedV2(handle, doorId, callId, stageRevision, reason) == 0) 0 else 2
+        return CoreCallLifecycleResult.fromNative(result)
+    }
 
     fun reportCallRecovery(callId: String, restored: Boolean) {
         if (handle != 0L) nativeReportCallRecovery(handle, callId, restored)
@@ -452,6 +476,19 @@ class DoorbellCore(context: Context) {
         stageRevision: Int,
     ): Int
     private external fun nativeReportCallEndedV2(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+        reason: String,
+    ): Int
+    private external fun nativeReportCallAnsweredResultV3(
+        handle: Long,
+        doorId: String,
+        callId: String,
+        stageRevision: Int,
+    ): Int
+    private external fun nativeReportCallEndedResultV3(
         handle: Long,
         doorId: String,
         callId: String,

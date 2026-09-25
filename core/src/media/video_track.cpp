@@ -159,7 +159,8 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   if (!s.pending_sps.empty() || !s.pending_pps.empty()) {
     // Do not publish a sample from the update access unit under the prior configuration. A
     // matching IDR is the only safe point to replace avcC and begin the next generation.
-    if (!fmp4::idrReferencesPps(annexb, len, s.pending_pps)) {
+    const Bytes& candidate_sps = s.pending_sps.empty() ? s.sps : s.pending_sps;
+    if (!fmp4::idrReferencesPps(annexb, len, candidate_sps, s.pending_pps)) {
       if (!sample.data.empty()) s.rejectReferenceChainLocked();
       return;
     }
@@ -178,7 +179,7 @@ void VideoTrack::push(const uint8_t* annexb, size_t len, bool key, int64_t ts_ms
   }
   if (sample.data.empty()) return;
   if (s.source_waiting_for_key) {
-    if (!fmp4::idrReferencesPps(annexb, len, s.pps)) return;
+    if (!fmp4::idrReferencesPps(annexb, len, s.sps, s.pps)) return;
     s.source_waiting_for_key = false;
     s.have_last_ts = false;
   }

@@ -91,10 +91,16 @@
       "id": "ios-compat-targeted-chime-routing",
       "path": "ios-kiosk/src/Screens/DBRouter.m",
       "ordered_literals": [
-        "if ([type isEqualToString:@\"press\"] && ![_boot.role isEqualToString:@\"door_station\"])",
-        "} else if ([t isEqualToString:@\"chime\"])",
-        "acceptChimeEvent:ev nowMs:nowMs",
-        "[self showIncoming:"
+        "[self showIncoming:[DBConfigUtil evStr:chime key:@\"door\"]",
+        "expiresAtMs:[DBConfigUtil longLongVal:chime path:@\"expires_at_ms\" def:0]];",
+        "if (!router || router->_recoverySuspended || epoch != router->_recoveryEpoch) return;",
+        "generation == core.lifecycleGeneration ? snapshot : nil",
+        "NSArray *ready = [router->_callEvents takeReadyChimesFromSnapshot:current",
+        "for (NSDictionary *entry in ready) [router presentAdmittedChime:entry];",
+        "if ([_boot.role isEqualToString:@\"door_station\"]) return;",
+        "if ([callID length] == 0)",
+        "queueChimeEvent:ev coreGeneration:_core.lifecycleGeneration",
+        "[self resolvePendingChimes]"
       ]
     },
     {

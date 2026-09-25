@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Globalization;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace DoorbellApp.Core
 {
@@ -27,6 +28,13 @@ namespace DoorbellApp.Core
         private Identity _displayed;
         private string _mediaGeneration;
         private long _sequence;
+        private long _acceptedAt;
+        private readonly Func<long> _monotonicTicks;
+
+        public PeerFrameGate(Func<long> monotonicTicks = null)
+        {
+            _monotonicTicks = monotonicTicks ?? Stopwatch.GetTimestamp;
+        }
 
         public static Identity Capture(CallTiming.Snapshot snapshot, string door, string callId,
                                        long viewGeneration)
@@ -71,7 +79,21 @@ namespace DoorbellApp.Core
             _displayed = requested;
             _mediaGeneration = mediaGeneration;
             _sequence = number;
+            _acceptedAt = _monotonicTicks();
             return true;
+        }
+
+        public bool IsFresh(Identity identity, int maxAgeMs = 3000)
+        {
+            if (identity == null || !_displayedMatches(identity) || _acceptedAt == 0 || maxAgeMs <= 0)
+                return false;
+            long elapsed = _monotonicTicks() - _acceptedAt;
+            return elapsed >= 0 && elapsed <= maxAgeMs * (double)Stopwatch.Frequency / 1000.0;
+        }
+
+        private bool _displayedMatches(Identity identity)
+        {
+            return identity != null && identity.Matches(_displayed);
         }
 
         public void Reset()
@@ -79,6 +101,7 @@ namespace DoorbellApp.Core
             _displayed = null;
             _mediaGeneration = null;
             _sequence = 0;
+            _acceptedAt = 0;
         }
     }
 }

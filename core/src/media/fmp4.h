@@ -37,7 +37,8 @@ bool validParameterSets(const Bytes& sps, const Bytes& pps);
 
 // True only when this Annex-B access unit contains a syntactically valid IDR slice that names
 // `pps`. This is the commit point for a pending parameter-set update.
-bool idrReferencesPps(const uint8_t* annexb, size_t len, const Bytes& pps);
+bool idrReferencesPps(const uint8_t* annexb, size_t len, const Bytes& sps,
+                      const Bytes& pps);
 
 
 std::string codecString(const Bytes& sps);

@@ -21,6 +21,8 @@
 
 namespace db {
 
+enum class CallLifecycleResult { Accepted, Pending, Rejected };
+
 struct NodeOptions {
   std::string data_dir;
   std::string name = "doorbell";
@@ -122,6 +124,13 @@ class Node {
                             int stage_revision);
   bool reportCallEndedV2(const std::string& door_id, const std::string& call_id,
                          int stage_revision, const std::string& reason = "sip_ended");
+  CallLifecycleResult reportCallAnsweredResultV3(const std::string& door_id,
+                                                  const std::string& call_id,
+                                                  int stage_revision);
+  CallLifecycleResult reportCallEndedResultV3(const std::string& door_id,
+                                               const std::string& call_id,
+                                               int stage_revision,
+                                               const std::string& reason = "sip_ended");
   void reportCallRecovery(const std::string& call_id, bool restored);
 
 

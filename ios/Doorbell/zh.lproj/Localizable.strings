@@ -1137,8 +1137,12 @@
 "theme.unsampled_too_large" = "图片过大";
 "time.err_bad_reply" = "服务器的响应无效";
 "time.err_bad_server" = "服务器条目格式不正确";
+"time.err_clock_changed" = "同步期间设备时钟发生变化，请重试";
 "time.err_implausible" = "测得的时间不可信，已丢弃";
+"time.err_large_offset_confirming" = "正在确认较大的时钟偏差，请等待时间服务器提供稳定响应";
 "time.err_no_response" = "时间服务器没有响应";
+"time.err_offset_unreasonable" = "时钟偏差过大，请检查设备日期和时间服务器";
+"time.err_rtt_unreasonable" = "往返时间过长，未采用该时间";
 "time.interval_hint" = "默认 86400 秒（一天），可设范围为 3600 秒（一小时）至 604800 秒（七天）。时钟偏差以天为单位变化，同步更频繁只会白白消耗电量和流量。失败后将从 1 分钟起重试，逐次加倍直至一小时。";
 "time.interval_s" = "同步间隔（秒）";
 "time.invalid_interval" = "同步间隔必须在 3600 到 604800 秒之间";
@@ -1162,7 +1166,9 @@
 "time.status" = "当前状态";
 "time.sync_failed" = "无法开始同步";
 "time.sync_now" = "立即同步";
+"time.sync_result_failed" = "时间同步失败";
 "time.sync_started" = "已开始同步";
+"time.sync_succeeded" = "时间同步成功";
 "time.title" = "时间";
 "time.zone" = "时区";
 "time.zone_hint" = "此设置用于整个集群的时钟、呼叫记录与规则时段";

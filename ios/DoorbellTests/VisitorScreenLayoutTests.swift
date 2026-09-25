@@ -467,6 +467,26 @@ final class VisitorActionContractTests: XCTestCase {
     private var windows: [UIWindow] = []
     private var controllers: [MainViewController] = []
 
+    func testPendingAnswerCanEndBeforeCoreConfirmsAnswer() {
+        var lifecycle = IncomingCallLifecycleState()
+        XCTAssertFalse(lifecycle.recordAnswer(.pending))
+        XCTAssertTrue(lifecycle.mayReportEnd)
+
+        lifecycle.recordEnd(.pending)
+        XCTAssertTrue(lifecycle.ended)
+        XCTAssertTrue(lifecycle.confirmAnswer(ownerIsLocal: true) == false)
+        XCTAssertEqual(lifecycle.answer, .accepted)
+        XCTAssertTrue(lifecycle.ended)
+    }
+
+    func testPendingAnswerLosesOwnershipWithoutReportingEnd() {
+        var lifecycle = IncomingCallLifecycleState()
+        XCTAssertFalse(lifecycle.recordAnswer(.pending))
+        XCTAssertTrue(lifecycle.confirmAnswer(ownerIsLocal: false))
+        XCTAssertFalse(lifecycle.mayReportEnd)
+        XCTAssertTrue(lifecycle.ended)
+    }
+
     private func descendants(_ view: UIView) -> [UIView] {
         return view.subviews.flatMap { [$0] + descendants($0) }
     }

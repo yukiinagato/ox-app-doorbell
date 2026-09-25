@@ -41,6 +41,9 @@ class RuntimeSupervisor(private val app: App) {
 
     @Volatile var isCoreReady = false
         private set
+    private val generation = RuntimeGeneration()
+    val coreGeneration: Long get() = generation.current()
+    fun isCurrentGeneration(value: Long): Boolean = generation.isCurrent(value)
     @Volatile private var running = false
     private var retryAttempt = 0
     private var cameraStarted = false
@@ -283,6 +286,7 @@ class RuntimeSupervisor(private val app: App) {
 
     private fun startCore() {
         if (!running || isCoreReady) return
+        generation.begin()
         val ok = try { app.core.start(app.filesDir.absolutePath, app.boot.rawJson) }
             catch (e: Throwable) {
                 Log.e(TAG, "core start failed", e)

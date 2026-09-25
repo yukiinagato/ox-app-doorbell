@@ -767,10 +767,16 @@ time.never: { ja: "まだ同期していません", en: "Not synced yet", zh: "�
 time.local_now: { ja: "この時間帯の現在時刻", en: "Current time in this zone", zh: "该时区的当前时间" }
 time.sync_started: { ja: "同期を開始しました", en: "Sync started", zh: "已开始同步" }
 time.sync_failed: { ja: "同期を開始できませんでした", en: "Couldn't start the sync", zh: "无法开始同步" }
+time.sync_succeeded: { ja: "時刻を同期しました", en: "Time sync succeeded", zh: "时间同步成功" }
+time.sync_result_failed: { ja: "時刻を同期できませんでした", en: "Time sync failed", zh: "时间同步失败" }
 time.err_no_response: { ja: "時刻サーバーから応答がありません", en: "No answer from the time servers", zh: "时间服务器没有响应" }
 time.err_bad_server: { ja: "サーバーの書き方が正しくありません", en: "A server entry isn't written correctly", zh: "服务器条目格式不正确" }
 time.err_bad_reply: { ja: "サーバーの応答が正しくありません", en: "The server's answer wasn't valid", zh: "服务器的响应无效" }
 time.err_implausible: { ja: "測定した時刻が信用できないため使いませんでした", en: "The measured time wasn't plausible and was discarded", zh: "测得的时间不可信，已丢弃" }
+time.err_rtt_unreasonable: { ja: "応答時間が長すぎるため時刻を使いませんでした", en: "The server response took too long to trust", zh: "往返时间过长，未采用该时间" }
+time.err_offset_unreasonable: { ja: "日時が大きくずれています。端末の日付と時刻サーバーを確認してください", en: "The clock difference is too large; check the device date and time server", zh: "时钟偏差过大，请检查设备日期和时间服务器" }
+time.err_large_offset_confirming: { ja: "大きな時刻差を確認中です。時刻サーバーから安定した応答を待っています", en: "Confirming the large clock difference with more server responses", zh: "正在确认较大的时钟偏差，请等待时间服务器提供稳定响应" }
+time.err_clock_changed: { ja: "同期中に端末の時計が変更されました。もう一度同期してください", en: "The device clock changed during sync; try syncing again", zh: "同步期间设备时钟发生变化，请重试" }
 time.ntp_off: { ja: "先に「インターネットで時刻を合わせる」を有効にして保存してください", en: "Turn on \"Set the time from the Internet\" and save first", zh: "请先开启“从互联网校准时间”并保存" }
 time.invalid_zone: { ja: "タイムゾーンを選び直してください", en: "Choose a time zone from the list", zh: "请从列表中选择时区" }
 time.invalid_servers: { ja: "時刻サーバーは 1 行に 1 つ、最大 4 つまでです", en: "Enter one to four time servers, one per line", zh: "请输入 1 到 4 个时间服务器，每行一个" }

@@ -346,7 +346,7 @@ TEST_CASE("rules: schedules and quiet hours follow the configured zone across da
   CHECK(engine.evaluate(press, summer_quiet, offsetOf("Europe/Berlin", summer_quiet)).empty());
 }
 
-TEST_CASE("node: the time service adopts a measured offset and falls back when it goes stale") {
+TEST_CASE("node: the time service adopts a measured offset and withdraws it when disabled") {
   FakeNtpServer server(90'000);
   REQUIRE(server.start());
 

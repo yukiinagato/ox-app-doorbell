@@ -764,6 +764,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         val withConfig = homeRefreshWantsConfig
         val fullRender = homeRefreshWantsFullRender
         val withCalls = homeRefreshWantsCalls
+        val generation = app.runtime.coreGeneration
         homeRefreshWantsConfig = false
         homeRefreshWantsFullRender = false
         homeRefreshWantsCalls = false
@@ -774,7 +775,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             val pairing = app.core.pairingInfo()
             val ready = app.pairingReadyFrom(pairing)
             ui.post {
-                applyHomeRefresh(status, config, pairing, ready, withConfig, fullRender, withCalls)
+                applyHomeRefresh(status, config, pairing, ready, withConfig, fullRender,
+                    withCalls, generation)
             }
         }
     }
@@ -787,8 +789,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         withConfig: Boolean,
         fullRender: Boolean,
         withCalls: Boolean,
+        generation: Long,
     ) {
-        if (isFinishing) return
+        if (isFinishing || !app.runtime.isCurrentGeneration(generation)) return
         statusSnapshot = status
         coreDisplay = CoreDisplays.parse(status?.optJSONObject("display"))
         status?.optJSONObject("node")?.optString("id")?.let { if (it.isNotEmpty()) nodeId = it }
@@ -1397,7 +1400,11 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     // Marshal Core-thread callbacks to the UI thread.
 
     override fun onUiEvent(ev: JSONObject) {
-        ui.post { handleUiEvent(ev) }
+        val generation = ev.optLong("_runtime_generation", -1L)
+        ui.post {
+            if (generation == -1L || app.runtime.isCurrentGeneration(generation))
+                handleUiEvent(ev)
+        }
     }
 
     override fun onTts(text: String, lang: String) {

@@ -615,8 +615,8 @@ final class TimeSettingsViewController: SettingsChildViewController {
                             })
         result.append(.note(texts.t("time.servers_hint")))
         result.append(.text(title: texts.t("time.interval_s"),
-                            value: "\(ConfigUtil.int(config, "time.ntp.interval_s", 900))",
-                            placeholder: "900", identifier: "time_interval") {
+                            value: "\(ConfigUtil.int(config, "time.ntp.interval_s", 86400))",
+                            placeholder: "86400", identifier: "time_interval") {
                                 [weak self] value in self?.storeInterval(value)
                             })
         result.append(.value(title: texts.t("time.source"),
@@ -664,7 +664,7 @@ final class TimeSettingsViewController: SettingsChildViewController {
 
     private func storeInterval(_ value: String) {
         guard let seconds = Int(value.trimmingCharacters(in: .whitespaces)),
-              (60...86400).contains(seconds) else {
+              (3600...604800).contains(seconds) else {
             setStatus(texts.t("time.invalid_interval"))
             return
         }
@@ -676,8 +676,25 @@ final class TimeSettingsViewController: SettingsChildViewController {
             setStatus(texts.t("time.ntp_off"))
             return
         }
-        setStatus(core.timeSyncNow() ? texts.t("time.sync_started")
-            : texts.t("time.sync_failed"))
+        let previousSync = ConfigUtil.double(core.status()?["time"] as? [String: Any], "last_sync_ms", 0)
+        guard core.timeSyncNow() else {
+            setStatus(texts.t("time.sync_failed"))
+            return
+        }
+        setStatus(texts.t("time.sync_started"))
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            for _ in 0..<60 {
+                Thread.sleep(forTimeInterval: 0.1)
+                guard let status = self?.core.status()?["time"] as? [String: Any],
+                      !ConfigUtil.bool(status, "syncing", false) else { continue }
+                let succeeded = ConfigUtil.double(status, "last_sync_ms", 0) > previousSync
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    self.setStatus(self.texts.t(succeeded ? "time.sync_succeeded" : "time.sync_result_failed"))
+                }
+                return
+            }
+        }
     }
 }
 

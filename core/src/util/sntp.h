@@ -10,6 +10,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string>
+#include <functional>
 
 namespace db {
 namespace sntp {
@@ -53,6 +54,7 @@ Sample computeSample(int64_t t1, int64_t t2, int64_t t3, int64_t t4);
 // absolute offset below 24 hours; anything else is a broken server, a captive portal, or a
 // wildly wrong local clock that a doorbell must not silently adopt.
 bool sampleSane(const Sample& sample);
+bool sampleRttSane(const Sample& sample);
 
 // Split "host" or "host:port" into its parts. The default port is 123. Returns false for an
 // empty host, a port outside 1..65535, or trailing junk. Bracketed IPv6 literals are accepted
@@ -63,7 +65,9 @@ bool parseServer(const std::string& spec, std::string* host, int* port);
 // a worker thread rather than on the runloop. Returns false on any resolution, send, timeout, or
 // short-read failure.
 bool exchange(const std::string& host, int port, int timeout_ms,
-              const uint8_t request[kPacketSize], uint8_t response[kPacketSize]);
+              const std::function<int64_t()>& wall_now,
+              const std::function<int64_t()>& mono_now, uint8_t response[kPacketSize],
+              int64_t* sent_unix_ms, int64_t* received_unix_ms, bool* clock_changed);
 
 }  // namespace sntp
 }  // namespace db

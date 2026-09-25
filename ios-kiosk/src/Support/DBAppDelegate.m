@@ -1268,6 +1268,7 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
   (void)application;
+  [_core invalidateCachedLocalTime];
   [self refreshNativeKioskMeasurement];
   [_router resumeMediaAfterBackground];
   [self updateCameraOrientation:nil];

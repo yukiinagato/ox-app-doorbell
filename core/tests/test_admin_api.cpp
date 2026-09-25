@@ -33,6 +33,8 @@ using namespace db;
 
 namespace {
 
+std::map<std::string, std::string> admin_csrf_by_token;
+
 int adminFreePort(std::mt19937& /*rng*/) {
   // Ports come from one process-wide allocator; see core/tests/test_ports.h.
   return db::testing::freeListenPort();
@@ -41,7 +43,7 @@ int adminFreePort(std::mt19937& /*rng*/) {
 
 std::string adminReq(int port, const std::string& method, const std::string& path,
                      const std::string& body = "", const std::string& cookie = "",
-                     const std::string& extra_headers = "") {
+                     const std::string& extra_headers = "", bool send_csrf = true) {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   REQUIRE(fd >= 0);
   sockaddr_in sa{};
@@ -51,6 +53,14 @@ std::string adminReq(int port, const std::string& method, const std::string& pat
   REQUIRE(::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0);
   std::string r = method + " " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
   r += extra_headers;
+  if (send_csrf && method != "GET" && method != "HEAD" &&
+      extra_headers.find("X-Doorbell-CSRF:") == std::string::npos) {
+    const std::string token = cookie.rfind("dbsess=", 0) == 0 ? cookie.substr(7) : cookie;
+    const auto csrf = admin_csrf_by_token.find(token);
+    if (csrf != admin_csrf_by_token.end())
+      r += "Origin: http://127.0.0.1:" + std::to_string(port) +
+          "\r\nX-Doorbell-CSRF: " + csrf->second + "\r\n";
+  }
   if (!cookie.empty())
     r += "Cookie: " + (cookie.find('=') == std::string::npos ? "dbsess=" + cookie : cookie) +
          "\r\n";
@@ -79,13 +89,26 @@ std::string adminLogin(int port) {
   size_t p = r.find("dbsess=");
   REQUIRE(p != std::string::npos);
   size_t e = r.find(';', p);
-  return r.substr(p + 7, e - (p + 7));
+  const std::string token = r.substr(p + 7, e - (p + 7));
+  const size_t body = r.find("\r\n\r\n");
+  auto response = json::parse(body == std::string::npos ? "" : r.substr(body + 4));
+  REQUIRE(response);
+  admin_csrf_by_token[token] = json::getString(response.get(), "csrf_token");
+  REQUIRE_FALSE(admin_csrf_by_token[token].empty());
+  return token;
 }
 
-std::string panelLogin(int port, const std::string& credential) {
+std::string panelLogin(int port, const std::string& credential, std::string* csrf = nullptr) {
   std::string r = adminReq(port, "POST", "/api/panel/session",
                            "{\"credential\":\"" + credential + "\"}");
   REQUIRE(r.find("HTTP/1.1 200") == 0);
+  if (csrf) {
+    const size_t body = r.find("\r\n\r\n");
+    auto response = json::parse(body == std::string::npos ? "" : r.substr(body + 4));
+    REQUIRE(response);
+    *csrf = json::getString(response.get(), "csrf_token");
+    REQUIRE_FALSE(csrf->empty());
+  }
   size_t p = r.find("dbpanel=");
   REQUIRE(p != std::string::npos);
   size_t e = r.find(';', p);
@@ -1527,9 +1550,15 @@ TEST_CASE("admin API: announcements and the manual time sync enforce their own c
   REQUIRE(rotation);
   const std::string credential = json::getString(rotation.get(), "token");
   REQUIRE(credential.size() == 32);
-  const std::string panel_session = panelLogin(http_port, credential);
+  std::string panel_csrf;
+  const std::string panel_session = panelLogin(http_port, credential, &panel_csrf);
   CHECK(adminReq(http_port, "POST", "/api/doors/d_front/notice",
                  "{\"text\":\"From the indoor panel\"}", "dbpanel=" + panel_session)
+            .find("HTTP/1.1 403") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/notice",
+                 "{\"text\":\"From the indoor panel\"}", "dbpanel=" + panel_session,
+                 "Origin: http://127.0.0.1:" + std::to_string(http_port) +
+                     "\r\nX-Doorbell-CSRF: " + panel_csrf + "\r\n")
             .find("HTTP/1.1 200") == 0);
   CHECK(node.configJson().find("From the indoor panel") != std::string::npos);
 
@@ -1721,9 +1750,31 @@ TEST_CASE("admin API: the cluster-wide notice, the unlock trigger, and PIN minti
   const std::string session = adminLogin(http_port);
   node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
 
+  CHECK(adminReq(http_port, "POST", "/api/emergency", R"({"active":true})", session)
+            .find("HTTP/1.1 200") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/emergency", R"({"active":false})", session,
+                 "", false).find("HTTP/1.1 403") == 0);
+  auto emergency_status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+  REQUIRE(emergency_status);
+  CHECK(json::getBool(json::get(emergency_status.get(), "emergency"), "active"));
+  CHECK(adminReq(http_port, "POST", "/api/emergency", R"({"active":false})", session,
+                 "Origin: https://untrusted.invalid\r\nX-Doorbell-CSRF: " +
+                     admin_csrf_by_token.at(session) + "\r\n")
+            .find("HTTP/1.1 403") == 0);
+  emergency_status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+  REQUIRE(emergency_status);
+  CHECK(json::getBool(json::get(emergency_status.get(), "emergency"), "active"));
+  CHECK(adminReq(http_port, "POST", "/api/emergency", R"({"active":false})", session)
+            .find("HTTP/1.1 200") == 0);
+  emergency_status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
+  REQUIRE(emergency_status);
+  CHECK_FALSE(json::getBool(json::get(emergency_status.get(), "emergency"), "active"));
+
   // The cluster-wide announcement is its own resource, not a bulk per-door write.
   CHECK(adminReq(http_port, "POST", "/api/notice", "{\"text\":\"House message\"}")
             .find("HTTP/1.1 403") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/notice", "{\"text\":\"House message\"}",
+                 session, "", false).find("HTTP/1.1 403") == 0);
   CHECK(adminReq(http_port, "POST", "/api/notice", "{\"text\":\"House message\"}", session)
             .find("HTTP/1.1 200") == 0);
   CHECK(node.configJson().find("House message") != std::string::npos);
@@ -1757,6 +1808,27 @@ TEST_CASE("admin API: the cluster-wide notice, the unlock trigger, and PIN minti
   CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session)
             .find("HTTP/1.1 409") == 0);
   node.setConfigKey("doors.d_front.unlock.command", "\"unlock\"");
+  auto unlock_events = bodyJson(adminReq(http_port, "GET", "/api/events?type=dtmf_action",
+                                          "", session));
+  REQUIRE(unlock_events);
+  CHECK(cJSON_GetArraySize(json::get(unlock_events.get(), "events")) == 0);
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session,
+                 "", false).find("HTTP/1.1 403") == 0);
+  unlock_events = bodyJson(adminReq(http_port, "GET", "/api/events?type=dtmf_action",
+                                    "", session));
+  REQUIRE(unlock_events);
+  CHECK(cJSON_GetArraySize(json::get(unlock_events.get(), "events")) == 0);
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session,
+                 "Origin: http://127.0.0.1:" + std::to_string(http_port + 1) +
+                     "\r\nX-Doorbell-CSRF: " + admin_csrf_by_token.at(session) + "\r\n")
+            .find("HTTP/1.1 403") == 0);
+  unlock_events = bodyJson(adminReq(http_port, "GET", "/api/events?type=dtmf_action",
+                                    "", session));
+  REQUIRE(unlock_events);
+  CHECK(cJSON_GetArraySize(json::get(unlock_events.get(), "events")) == 0);
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}",
+                 session + "; dbpanel=stale-panel-cookie", "", false)
+            .find("HTTP/1.1 403") == 0);
   CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session)
             .find("HTTP/1.1 200") == 0);
   auto with_unlock = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
@@ -1786,6 +1858,12 @@ TEST_CASE("admin API: the cluster-wide notice, the unlock trigger, and PIN minti
   auto opened = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", session));
   REQUIRE(opened);
   CHECK(json::getBool(json::get(opened.get(), "pending"), "pairing_mode"));
+
+  CHECK(node.setAdminPassword("testpw", "rotated-test-password") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session)
+            .find("HTTP/1.1 403") == 0);
+  CHECK(adminReq(http_port, "GET", "/api/status", "", session)
+            .find("HTTP/1.1 401") == 0);
 
   node.stop();
 }
@@ -2153,7 +2231,7 @@ TEST_CASE("admin sessions: background reads expire despite raw clock rollback") 
                  "Origin: https://admin.example\r\nX-Doorbell-CSRF: " + csrf + "\r\n")
             .find("HTTP/1.1 200") == 0);
   clock.advance(20 * 60'000);
-  CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", active)
+  CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", active, "", false)
             .find("HTTP/1.1 403") == 0);
   CHECK(adminReq(options.http_port, "POST", "/api/session/activity", "{}", active,
                  activity_headers).find("HTTP/1.1 200") == 0);
@@ -2512,7 +2590,7 @@ TEST_CASE("config CAS: snapshots omit digests and commits require authenticated 
   CHECK(snapshot.find("Cache-Control: no-store") != std::string::npos);
   auto body = bodyJson(snapshot);
   CHECK(json::get(json::get(json::get(body.get(), "config"), "admin"), "password_hash") == nullptr);
-  CHECK(adminReq(options.http_port, "POST", "/api/config/commit", request, session)
+  CHECK(adminReq(options.http_port, "POST", "/api/config/commit", request, session, "", false)
             .find("HTTP/1.1 403") == 0);
   auto protection = bodyJson(adminReq(options.http_port, "GET", "/api/session", "", session));
   const auto wrong_origin = "Origin: http://untrusted.invalid\r\nX-Doorbell-CSRF: " +
@@ -2815,7 +2893,7 @@ TEST_CASE("notice CAS: conditional writes require admin intent and reject client
     auto body = json::obj();
     json::set(body.get(), "expected_revision", revision);
     json::set(body.get(), "text", "Protected notice");
-    CHECK(adminReq(options.http_port, "POST", path, json::dump(body.get()), session)
+    CHECK(adminReq(options.http_port, "POST", path, json::dump(body.get()), session, "", false)
               .find("HTTP/1.1 403") == 0);
     CHECK(adminReq(options.http_port, "POST", path, json::dump(body.get()), session,
               "Origin: http://untrusted.invalid\r\nX-Doorbell-CSRF: " + csrf + "\r\n")

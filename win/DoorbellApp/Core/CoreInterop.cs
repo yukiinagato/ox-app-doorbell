@@ -238,6 +238,20 @@ namespace DoorbellApp.Core
             [MarshalAs(UnmanagedType.LPUTF8Str)] string callId, int stageRevision,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string reason);
 
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "db_core_call_lifecycle_api_version")]
+        public static extern int db_core_call_lifecycle_api_version();
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "db_core_report_call_answered_result_v3")]
+        public static extern int db_core_report_call_answered_result_v3(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string doorId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string callId, int stageRevision);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, EntryPoint = "db_core_report_call_ended_result_v3")]
+        public static extern int db_core_report_call_ended_result_v3(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string doorId,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string callId, int stageRevision,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string reason);
+
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern void db_core_set_visitor_lang(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string door,

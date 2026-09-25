@@ -295,8 +295,8 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         card.row(numberRow(
             texts.t("time.interval_s", R.string.time_interval_s),
             "time.ntp.interval_s",
-            (app.core.dig(config, "time.ntp.interval_s") as? Number)?.toInt() ?: 900,
-            60, 86400,
+            (app.core.dig(config, "time.ntp.interval_s") as? Number)?.toInt() ?: 86400,
+            3600, 604800,
         ))
         val now = clock.now()
         val source = if (timeStatus?.optString("source") == "ntp")
@@ -321,12 +321,26 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             this, texts.t("time.sync_now", R.string.time_sync_now), palette,
         ) {
             Thread({
+                val previousSync = app.core.status()?.optJSONObject("time")?.optLong("last_sync_ms", 0L) ?: 0L
                 val started = app.core.timeSyncNow()
                 ui.post {
-                    toast(
-                        if (started) texts.t("time.sync_started", R.string.time_sync_started)
-                        else texts.t("time.sync_failed", R.string.time_sync_failed),
-                    )
+                    if (!started) toast(texts.t("time.sync_failed", R.string.time_sync_failed))
+                    else toast(texts.t("time.sync_started", R.string.time_sync_started))
+                }
+                if (started) {
+                    for (attempt in 0 until 60) {
+                        Thread.sleep(100)
+                        val time = app.core.status()?.optJSONObject("time") ?: continue
+                        if (time.optBoolean("syncing", false)) continue
+                        val succeeded = time.optLong("last_sync_ms", 0L) > previousSync
+                        ui.post {
+                            toast(texts.t(
+                                if (succeeded) "time.sync_succeeded" else "time.sync_result_failed",
+                                if (succeeded) R.string.time_sync_succeeded else R.string.time_sync_result_failed,
+                            ))
+                        }
+                        break
+                    }
                 }
             }, "doorbell-time-sync").apply { isDaemon = true }.start()
         })

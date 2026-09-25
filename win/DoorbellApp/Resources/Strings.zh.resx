@@ -1153,8 +1153,12 @@ PIN：{1}</value></data>
   <data name="theme_unsampled_too_large" xml:space="preserve"><value>图片过大</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>服务器的响应无效</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>服务器条目格式不正确</value></data>
+  <data name="time_err_clock_changed" xml:space="preserve"><value>同步期间设备时钟发生变化，请重试</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>测得的时间不可信，已丢弃</value></data>
+  <data name="time_err_large_offset_confirming" xml:space="preserve"><value>正在确认较大的时钟偏差，请等待时间服务器提供稳定响应</value></data>
   <data name="time_err_no_response" xml:space="preserve"><value>时间服务器没有响应</value></data>
+  <data name="time_err_offset_unreasonable" xml:space="preserve"><value>时钟偏差过大，请检查设备日期和时间服务器</value></data>
+  <data name="time_err_rtt_unreasonable" xml:space="preserve"><value>往返时间过长，未采用该时间</value></data>
   <data name="time_interval_hint" xml:space="preserve"><value>默认 86400 秒（一天），可设范围为 3600 秒（一小时）至 604800 秒（七天）。时钟偏差以天为单位变化，同步更频繁只会白白消耗电量和流量。失败后将从 1 分钟起重试，逐次加倍直至一小时。</value></data>
   <data name="time_interval_s" xml:space="preserve"><value>同步间隔（秒）</value></data>
   <data name="time_invalid_interval" xml:space="preserve"><value>同步间隔必须在 3600 到 604800 秒之间</value></data>
@@ -1178,7 +1182,9 @@ PIN：{1}</value></data>
   <data name="time_status" xml:space="preserve"><value>当前状态</value></data>
   <data name="time_sync_failed" xml:space="preserve"><value>无法开始同步</value></data>
   <data name="time_sync_now" xml:space="preserve"><value>立即同步</value></data>
+  <data name="time_sync_result_failed" xml:space="preserve"><value>时间同步失败</value></data>
   <data name="time_sync_started" xml:space="preserve"><value>已开始同步</value></data>
+  <data name="time_sync_succeeded" xml:space="preserve"><value>时间同步成功</value></data>
   <data name="time_title" xml:space="preserve"><value>时间</value></data>
   <data name="time_zone" xml:space="preserve"><value>时区</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>此设置用于整个集群的时钟、呼叫记录与规则时段</value></data>

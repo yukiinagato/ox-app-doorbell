@@ -78,8 +78,8 @@ namespace DoorbellApp
         private string _lifecycleDoor = "";
         private string _lifecycleCallId = "";
         private int _lifecycleStageRevision;
-        private bool _lifecycleAnswered;
-        private bool _lifecycleEnded;
+        private readonly CallLifecycleState _callLifecycle = new CallLifecycleState();
+        private long _lifecycleCoreGeneration;
         private bool _suppressLosingSipIdle;
         private readonly Dictionary<string, int> _acceptedChimeRevisions =
             new Dictionary<string, int>();
@@ -100,6 +100,7 @@ namespace DoorbellApp
         private long _peerFrameView;
         private System.Net.HttpWebRequest _peerFrameRequest;
         private readonly PeerFrameGate _peerFrameGate = new PeerFrameGate();
+        private PeerFrameGate.Identity _peerDisplayedIdentity;
         private int _directPort = 47190;
         private int _secretTaps;
         private DateTime _secretFirst = DateTime.MinValue;
@@ -202,10 +203,12 @@ namespace DoorbellApp
         private string _returnDoor = "";
         // The clock renders from a cached base: core's corrected wall clock and zone offset,
         // refreshed off the UI thread, never asked for on the tick that draws a second.
-        private long _clockOffsetMs;
         private int _clockZoneOffsetMin;
         private bool _clockBaseKnown;
         private bool _clockSyncBusy;
+        private bool _clockSyncPending;
+        private long _clockBaseWallMs;
+        private long _clockBaseTimestamp;
         private int _volumeCall = 80;
         private int _volumeSos = 100;
         private int _volumeIdle = 60;
@@ -280,7 +283,11 @@ namespace DoorbellApp
             _answerDelay.Interval = TimeSpan.FromMilliseconds(400);
             _answerDelay.Tick += (s, e) => { _answerDelay.Stop(); PlaceAnswerCall(); };
             _peerPoll.Interval = TimeSpan.FromMilliseconds(500);
-            _peerPoll.Tick += (s, e) => PollPeerFrame();
+            _peerPoll.Tick += (s, e) =>
+            {
+                ExpirePeerFrameIfStale();
+                PollPeerFrame();
+            };
             _h264Fallback.Interval = H264OpenTimeout;
             _h264Fallback.Tick += (s, e) =>
             {
@@ -524,11 +531,6 @@ namespace DoorbellApp
         private static readonly DateTime UnixEpoch =
             new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc);
 
-        private static long SystemUtcMs()
-        {
-            return (long)(DateTime.UtcNow - UnixEpoch).TotalMilliseconds;
-        }
-
         /// <summary>
         /// Now, in the cluster time zone, from the cached base alone. Until core has answered
         /// once this is simply the machine's own local clock.
@@ -536,7 +538,9 @@ namespace DoorbellApp
         private DateTime CorrectedNow()
         {
             if (!_clockBaseKnown) return DateTime.Now;
-            return InZone(SystemUtcMs() + _clockOffsetMs);
+            long elapsed = Stopwatch.GetTimestamp() - _clockBaseTimestamp;
+            long elapsedMs = elapsed * 1000L / Stopwatch.Frequency;
+            return InZone(_clockBaseWallMs + elapsedMs);
         }
 
         /// <summary>
@@ -566,21 +570,27 @@ namespace DoorbellApp
         /// </summary>
         private void SyncClockBase()
         {
-            if (_clockSyncBusy) return;
+            if (_clockSyncBusy) { _clockSyncPending = true; return; }
             _clockSyncBusy = true;
             Task.Run(() =>
             {
-                long before = SystemUtcMs();
+                long before = Stopwatch.GetTimestamp();
                 Dictionary<string, object> local = null;
                 try { local = App.Core.LocalTime(0); }
                 catch (Exception ex)
                 {
                     Debug.WriteLine("clock base unavailable: " + ex.Message);
                 }
-                long after = SystemUtcMs();
+                long after = Stopwatch.GetTimestamp();
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     _clockSyncBusy = false;
+                    if (_clockSyncPending)
+                    {
+                        _clockSyncPending = false;
+                        SyncClockBase();
+                        return;
+                    }
                     ApplyClockBase(local, before, after);
                 }));
             });
@@ -597,7 +607,8 @@ namespace DoorbellApp
             if (!int.TryParse(offset.ToString(), out zoneMinutes) ||
                 zoneMinutes < -900 || zoneMinutes > 900) return;
             // The reading is from the middle of the call, so the round trip does not skew it.
-            _clockOffsetMs = wallMs - (before + (after - before) / 2);
+            _clockBaseWallMs = wallMs;
+            _clockBaseTimestamp = before + (after - before) / 2;
             _clockZoneOffsetMin = zoneMinutes;
             _clockBaseKnown = true;
             object known;
@@ -2040,13 +2051,20 @@ namespace DoorbellApp
                         {
                             // The earliest confirmed claim owns the call. Terminate this losing
                             // SIP leg without publishing call_ended for the winning dialog.
-                            _lifecycleAnswered = false;
-                            _lifecycleEnded = true;
+                            _callLifecycle.ConfirmOwner(false);
                             _inCall = false;
                             _sipMode = "";
-                            App.Core.SipHangup();
+                            App.Core.SipHangup(_lifecycleCoreGeneration);
                             CloseInCall();
                             ShowIdle();
+                        }
+                        else if (!string.IsNullOrEmpty(owner) && !string.IsNullOrEmpty(_nodeId) &&
+                            owner == _nodeId && ev.Str("call_id") == _lifecycleCallId &&
+                            ev.Str("door") == _lifecycleDoor && answeredStage == _lifecycleStageRevision &&
+                            ev.CoreGeneration == _lifecycleCoreGeneration)
+                        {
+                            _callLifecycle.ConfirmOwner(true);
+                            if (_callLifecycle.Ended) CloseInCall();
                         }
                         else if (!_inCall && IncomingView.Visibility == Visibility.Visible &&
                             answeredStage >= _incomingStageRevision &&
@@ -2231,8 +2249,7 @@ namespace DoorbellApp
             }
 
             _answerDelay.Stop();
-            _lifecycleAnswered = false;
-            _lifecycleEnded = true;
+            _callLifecycle.ConfirmOwner(false);
             _lifecycleCallId = "";
             _lifecycleDoor = "";
             _inCall = false;
@@ -2873,8 +2890,8 @@ namespace DoorbellApp
             _lifecycleDoor = _incomingDoor;
             _lifecycleCallId = _incomingCallId;
             _lifecycleStageRevision = _incomingStageRevision;
-            _lifecycleAnswered = false;
-            _lifecycleEnded = false;
+            _callLifecycle.Reset();
+            _lifecycleCoreGeneration = App.Core.Generation;
             AnswerButton.IsEnabled = false;
             if (_sipMode == "monitor")
             {
@@ -2893,8 +2910,8 @@ namespace DoorbellApp
             _lifecycleDoor = _incomingDoor;
             _lifecycleCallId = _incomingCallId;
             _lifecycleStageRevision = _incomingStageRevision;
-            _lifecycleAnswered = false;
-            _lifecycleEnded = false;
+            _callLifecycle.Reset();
+            _lifecycleCoreGeneration = App.Core.Generation;
             App.Core.SipCall("sip:" + _incomingHost + ":" + _directPort, "answer");
             OpenDoorButton.IsEnabled = true;
         }
@@ -3062,9 +3079,21 @@ namespace DoorbellApp
             }
             else if (_sipMode == "answer")
             {
-                if (!_lifecycleAnswered)
-                    _lifecycleAnswered = App.Core.ReportCallAnswered(
-                        _lifecycleDoor, _lifecycleCallId, _lifecycleStageRevision);
+                if (!_callLifecycle.AnswerReported)
+                {
+                    var answer = App.Core.ReportCallAnsweredResult(
+                        _lifecycleDoor, _lifecycleCallId, _lifecycleStageRevision,
+                        _lifecycleCoreGeneration);
+                    if (_callLifecycle.RecordAnswer(answer))
+                    {
+                        _inCall = false;
+                        _sipMode = "";
+                        App.Core.SipHangup(_lifecycleCoreGeneration);
+                        CloseInCall();
+                        ShowIdle();
+                        return;
+                    }
+                }
                 EnterIncomingInCall();
             }
         }
@@ -3160,10 +3189,12 @@ namespace DoorbellApp
 
         private void ReportLifecycleEndedIfNeeded()
         {
-            if (!_inCall || _sipMode != "answer" || !_lifecycleAnswered || _lifecycleEnded ||
+            if (!_inCall || _sipMode != "answer" || !_callLifecycle.MayReportEnd ||
                 string.IsNullOrEmpty(_lifecycleCallId)) return;
-            _lifecycleEnded = App.Core.ReportCallEnded(
-                _lifecycleDoor, _lifecycleCallId, _lifecycleStageRevision, "sip_ended");
+            var result = App.Core.ReportCallEndedResult(
+                _lifecycleDoor, _lifecycleCallId, _lifecycleStageRevision, "sip_ended",
+                _lifecycleCoreGeneration);
+            _callLifecycle.RecordEnd(result);
         }
 
         private void ShowInCall(string streamUrl)
@@ -3330,7 +3361,18 @@ namespace DoorbellApp
             _peerFrameRequest = null;
             _peerPollBusy = false;
             _peerFrameGate.Reset();
+            _peerDisplayedIdentity = null;
             try { request?.Abort(); } catch { }
+        }
+
+        private void ExpirePeerFrameIfStale()
+        {
+            if (!_inCall || _peerDisplayedIdentity == null ||
+                _peerFrameGate.IsFresh(_peerDisplayedIdentity)) return;
+            PeerVideo.Source = null;
+            PeerVideo.Visibility = Visibility.Collapsed;
+            _peerDisplayedIdentity = null;
+            InCallTitle.Text = Texts.T("ring.no_video");
         }
 
         private void PollPeerFrame()
@@ -3339,8 +3381,16 @@ namespace DoorbellApp
             var identity = PeerFrameGate.Capture(App.Core.CallTimingSnapshot(), App.Boot.Door,
                                                   _activeCallId, _peerFrameView);
             if (identity == null || identity.CoreGeneration != App.Core.Generation) return;
+            string peerFrameUrl;
+            if (!PeerFrameUrlBuilder.TryBuild(App.Boot.HttpPort, identity.Query, out peerFrameUrl))
+            {
+                _peerPoll.Stop();
+                RetirePeerFrame();
+                PeerVideo.Source = null;
+                return;
+            }
             var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(
-                "http://127.0.0.1:47180/peer-frame.jpg" + identity.Query);
+                peerFrameUrl);
             request.Timeout = 2000;
             request.ReadWriteTimeout = 1500;
             request.AllowAutoRedirect = false;
@@ -3386,7 +3436,10 @@ namespace DoorbellApp
                         current, headers["X-Doorbell-Call-Id"], headers["X-Doorbell-Stage-Revision"],
                         headers["X-Doorbell-Dialog-Owner"], headers["X-Doorbell-Media-Generation"],
                         headers["X-Doorbell-Frame-Sequence"])) return;
+                    if (_peerDisplayedIdentity == null) InCallTitle.Text = Texts.T("incall.title");
+                    _peerDisplayedIdentity = identity;
                     if (InCallView.Visibility != Visibility.Visible) ShowInCall(null);
+                    PeerVideo.Visibility = Visibility.Visible;
                     PeerVideo.Source = bmp;
                 }));
             });

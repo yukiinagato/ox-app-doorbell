@@ -14,6 +14,7 @@ internal data class CoreExports(
     val adminPassword: Boolean,
     val callLogV2: Boolean,
     val micMute: Boolean,
+    val callLifecycleResultV3: Boolean,
 ) {
     /** True once core owns every path, which is when the local PIN file may be retired. */
     val complete: Boolean
@@ -22,6 +23,7 @@ internal data class CoreExports(
     companion object {
         val NONE = CoreExports(
             configWrite = false, adminPassword = false, callLogV2 = false, micMute = false,
+            callLifecycleResultV3 = false,
         )
 
         fun parse(document: JSONObject?): CoreExports {
@@ -31,6 +33,7 @@ internal data class CoreExports(
                 adminPassword = document.optBoolean("admin_password", false),
                 callLogV2 = document.optBoolean("call_log_v2", false),
                 micMute = document.optBoolean("mic_mute", false),
+                callLifecycleResultV3 = document.optBoolean("call_lifecycle_result_v3", false),
             )
         }
     }

@@ -1289,7 +1289,11 @@ var AdminLogic = (function () {
     var time = isObj(status) && isObj(status.time) ? status.time : {};
     var source = time.source === "ntp" ? "ntp" : "system";
     var errors = { no_response: "time.err_no_response", bad_server: "time.err_bad_server",
-                   bad_reply: "time.err_bad_reply", implausible: "time.err_implausible" };
+                   bad_reply: "time.err_bad_reply", implausible: "time.err_implausible",
+                   rtt_unreasonable: "time.err_rtt_unreasonable",
+                   offset_unreasonable: "time.err_offset_unreasonable",
+                   large_offset_confirming: "time.err_large_offset_confirming",
+                   clock_changed: "time.err_clock_changed" };
     return {
       zone: typeof time.zone === "string" ? time.zone : "",
       zoneKnown: time.zone_known !== false,

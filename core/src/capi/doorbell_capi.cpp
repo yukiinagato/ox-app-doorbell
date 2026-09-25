@@ -544,6 +544,28 @@ DB_API int db_core_report_call_ended_v2(db_core* c, const char* door_id,
                                     reason && *reason ? reason : "sip_ended") ? 0 : -2;
 }
 
+DB_API int db_core_call_lifecycle_api_version(void) {
+  return DB_CALL_LIFECYCLE_RESULT_API_VERSION;
+}
+
+DB_API db_call_lifecycle_result db_core_report_call_answered_result_v3(
+    db_core* c, const char* door_id, const char* call_id, int stage_revision) {
+  if (!c || !c->node || !call_id || !*call_id || stage_revision < 0)
+    return DB_CALL_LIFECYCLE_REJECTED;
+  return static_cast<db_call_lifecycle_result>(c->node->reportCallAnsweredResultV3(
+      door_id ? door_id : "", call_id, stage_revision));
+}
+
+DB_API db_call_lifecycle_result db_core_report_call_ended_result_v3(
+    db_core* c, const char* door_id, const char* call_id, int stage_revision,
+    const char* reason) {
+  if (!c || !c->node || !call_id || !*call_id || stage_revision < 0)
+    return DB_CALL_LIFECYCLE_REJECTED;
+  return static_cast<db_call_lifecycle_result>(c->node->reportCallEndedResultV3(
+      door_id ? door_id : "", call_id, stage_revision,
+      reason && *reason ? reason : "sip_ended"));
+}
+
 DB_API void db_core_report_call_recovery(db_core* c, const char* call_id, int restored) {
   if (c && c->node && call_id && *call_id) c->node->reportCallRecovery(call_id, restored != 0);
 }

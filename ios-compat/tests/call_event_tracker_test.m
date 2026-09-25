@@ -1,10 +1,23 @@
 #import <Foundation/Foundation.h>
 #import "DBCallEventTracker.h"
+#import "DBCallTiming.h"
 
 static void Check(BOOL condition, NSString *message) {
   if (condition) return;
   NSLog(@"FAIL: %@", message);
   exit(1);
+}
+
+static DBCallTimingSnapshot *Snapshot(NSString *sample, NSUInteger core, double requestedAt,
+                                      NSString *callID, NSString *door, NSInteger revision,
+                                      NSNumber *remaining) {
+  NSDictionary *call = @{@"call_id": callID, @"door": door, @"state": @"ringing",
+      @"stage_revision": @(revision), @"snapshot_generation": sample,
+      @"snapshot_at_ms": @100000, @"expires_at_ms": @105000,
+      @"remaining_ms": remaining};
+  return [[DBCallTimingSnapshot alloc] initWithDocument:@{@"snapshot_generation": sample,
+      @"snapshot_age_ms": @0, @"active_calls": @[call]}
+      coreGeneration:core requestedAt:requestedAt];
 }
 
 int main(void) {
@@ -125,6 +138,41 @@ int main(void) {
           @"same-call chime for the winning revision must ring");
     Check([race acceptChimeEvent:raceRevisionOne nowMs:1000] == nil,
           @"the winning revision chime remains idempotent");
+
+    DBCallEventTracker *routed = [[DBCallEventTracker alloc] init];
+    NSDictionary *routedChime = @{@"schema_version": @2, @"t": @"chime",
+        @"call_id": @"target-call", @"door": @"front", @"stage_revision": @3,
+        @"expires_at_ms": @105000};
+    Check([routed queueChimeEvent:routedChime coreGeneration:4 now:100],
+          @"a targeted chime waits for Core's identity snapshot");
+    NSArray *wrongCall = [routed takeReadyChimesFromSnapshot:
+        Snapshot(@"wrong-call", 4, 101, @"other-call", @"front", 3, @4000)
+        coreGeneration:4 now:101];
+    Check([wrongCall count] == 0 && routed.currentCallID == nil,
+          @"a nonmatching active call cannot open the target incoming page");
+    NSArray *target = [routed takeReadyChimesFromSnapshot:
+        Snapshot(@"target", 4, 102, @"target-call", @"front", 3, @4000)
+        coreGeneration:4 now:102];
+    Check([target count] == 1 &&
+          [[routed.currentCallID description] isEqualToString:@"target-call"],
+          @"the exact target, revision and Core lifetime admit the pending chime");
+
+    DBCallEventTracker *expired = [[DBCallEventTracker alloc] init];
+    Check([expired queueChimeEvent:@{@"schema_version": @2, @"t": @"chime",
+        @"call_id": @"expired-call", @"door": @"front", @"stage_revision": @0,
+        @"expires_at_ms": @105000} coreGeneration:4 now:100],
+        @"a potentially live chime is queued before its timing read");
+    Check([[expired takeReadyChimesFromSnapshot:Snapshot(@"expired", 4, 101,
+        @"expired-call", @"front", 0, @0) coreGeneration:4 now:101] count] == 0 &&
+        expired.currentCallID == nil,
+        @"Core expiry prevents stale chime presentation even when delivery was queued");
+
+    DBCallEventTracker *oldGeneration = [[DBCallEventTracker alloc] init];
+    [oldGeneration queueChimeEvent:routedChime coreGeneration:4 now:100];
+    Check([[oldGeneration takeReadyChimesFromSnapshot:Snapshot(@"old-core", 4, 101,
+        @"target-call", @"front", 3, @4000) coreGeneration:5 now:101] count] == 0 &&
+        oldGeneration.currentCallID == nil,
+        @"a delayed snapshot from an old Core generation cannot reopen the incoming page");
   }
   puts("call event tracker test passed");
   return 0;

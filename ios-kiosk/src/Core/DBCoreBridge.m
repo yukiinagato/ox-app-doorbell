@@ -11,6 +11,7 @@
 #import <sys/socket.h>
 #import <sys/sysctl.h>
 #import <dlfcn.h>
+#import <mach/mach_time.h>
 #import "DBCallHistoryModel.h"
 #import "DBNoticeModel.h"
 #import "doorbell/doorbell.h"
@@ -327,6 +328,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   NSDictionary *_localTimeBase;      // Last document core produced.
   CFAbsoluteTime _localTimeBaseAt;   // When it was produced, monotonic-ish.
   BOOL _localTimeRefreshing;
+  NSUInteger _localTimeVersion;
   NSUInteger _pendingEncodedFrames;
   NSUInteger _pendingEncodedBytes;
   BOOL _pendingCameraFrame;
@@ -1050,18 +1052,24 @@ static void DBUiEventCb(void *user, const char *event_json) {
   return out;
 }
 
-static const CFAbsoluteTime kLocalTimeBaseMaxAgeS = 30.0;
+static const uint64_t kLocalTimeBaseMaxAgeNs = 30ULL * NSEC_PER_SEC;
+
+static uint64_t DBMonotonicTimeNs(void) {
+  static mach_timebase_info_data_t info;
+  if (info.denom == 0) mach_timebase_info(&info);
+  return mach_absolute_time() * info.numer / info.denom;
+}
 
 - (NSDictionary *)cachedLocalTime {
   NSDictionary *base = nil;
-  CFAbsoluteTime baseAt = 0;
+  uint64_t baseAt = 0;
   [_cfgLock lock];
   base = _localTimeBase;
-  baseAt = _localTimeBaseAt;
+  baseAt = (uint64_t)(_localTimeBaseAt * 1000000000.0);
   BOOL refreshing = _localTimeRefreshing;
-  CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
-  BOOL stale = (base == nil) || (now - baseAt) > kLocalTimeBaseMaxAgeS ||
-               (now < baseAt);  // A clock step backwards also invalidates it.
+  NSUInteger version = _localTimeVersion;
+  uint64_t now = DBMonotonicTimeNs();
+  BOOL stale = (base == nil) || (now < baseAt) || (now - baseAt) > kLocalTimeBaseMaxAgeNs;
   if (stale && !refreshing) _localTimeRefreshing = YES;
   [_cfgLock unlock];
 
@@ -1072,9 +1080,9 @@ static const CFAbsoluteTime kLocalTimeBaseMaxAgeS = 30.0;
       if (!bridge) return;
       NSDictionary *fresh = [bridge localTimeJson:0];
       [bridge->_cfgLock lock];
-      if (fresh != nil) {
+      if (fresh != nil && bridge->_localTimeVersion == version) {
         bridge->_localTimeBase = fresh;
-        bridge->_localTimeBaseAt = CFAbsoluteTimeGetCurrent();
+        bridge->_localTimeBaseAt = (CFAbsoluteTime)DBMonotonicTimeNs() / 1000000000.0;
       }
       bridge->_localTimeRefreshing = NO;
       [bridge->_cfgLock unlock];
@@ -1092,8 +1100,7 @@ static const CFAbsoluteTime kLocalTimeBaseMaxAgeS = 30.0;
   id offsetValue = [base objectForKey:@"offset_min"];
   if ([offsetValue isKindOfClass:[NSNumber class]])
     offset = [(NSNumber *)offsetValue integerValue];
-  long long elapsedMs = (long long)((now - baseAt) * 1000.0);
-  if (elapsedMs < 0) elapsedMs = 0;
+  long long elapsedMs = now >= baseAt ? (long long)((now - baseAt) / 1000000ULL) : 0;
   NSMutableDictionary *derived = [[DBCallHistoryModel
       localPartsForTs:(baseWallMs + elapsedMs) offsetMinutes:offset] mutableCopy];
   id zone = [base objectForKey:@"tz"];
@@ -1107,6 +1114,7 @@ static const CFAbsoluteTime kLocalTimeBaseMaxAgeS = 30.0;
   [_cfgLock lock];
   _localTimeBase = nil;
   _localTimeBaseAt = 0;
+  _localTimeVersion++;
   [_cfgLock unlock];
 }
 

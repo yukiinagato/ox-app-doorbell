@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
@@ -41,6 +42,24 @@ class SvgPathTest(unittest.TestCase):
         self.assertAlmostEqual(max(ys), 21.0, places=2)
         for x, y in points:
             self.assertAlmostEqual(((x - 8.0) ** 2 + (y - 19.0) ** 2) ** 0.5, 2.0, places=2)
+
+    def test_arc_uses_svg_endpoint_instead_of_duplicate_rounded_endpoint(self):
+        # Platform libm can leave the cubic's last sample microscopically off the SVG endpoint.
+        with mock.patch.object(svg_path, "_arc_to_cubics", return_value=[
+                ((0.0, 1.0), (1.0, 1.0), (2.0000000001, 0.0))]):
+            path = "M0 0 A1 1 0 0 1 2 0"
+            _closed, points = svg_path.flatten(path)[0]
+            self.assertEqual(points[-1], (2.0, 0.0))
+            self.assertEqual(points.count((2.0, 0.0)), 1)
+            emitted = gen_icons.pdf_bytes("endpoint", path)
+            self.assertEqual(emitted.count(b"2.0000 24.0000 l"), 1)
+
+    def test_degenerate_arc_and_closed_path_keep_their_endpoints(self):
+        _closed, line_points = svg_path.flatten("M0 0 A0 2 0 0 1 2 0")[0]
+        self.assertEqual(line_points, [(0.0, 0.0), (2.0, 0.0)])
+        closed, closed_points = svg_path.flatten("M0 0 L2 0 A0 2 0 0 1 2 2 Z")[0]
+        self.assertTrue(closed)
+        self.assertEqual(closed_points[-1], (2.0, 2.0))
 
     def test_cubic_stays_inside_its_hull(self):
         _closed, points = svg_path.flatten("M0 0 C 0 10 10 10 10 0")[0]

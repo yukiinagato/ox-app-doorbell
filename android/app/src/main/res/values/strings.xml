@@ -1151,8 +1151,12 @@ Sends in %1$ss</string>
     <string name="theme_unsampled_too_large">Image too large</string>
     <string name="time_err_bad_reply">The server\'s answer wasn\'t valid</string>
     <string name="time_err_bad_server">A server entry isn\'t written correctly</string>
+    <string name="time_err_clock_changed">The device clock changed during sync; try syncing again</string>
     <string name="time_err_implausible">The measured time wasn\'t plausible and was discarded</string>
+    <string name="time_err_large_offset_confirming">Confirming the large clock difference with more server responses</string>
     <string name="time_err_no_response">No answer from the time servers</string>
+    <string name="time_err_offset_unreasonable">The clock difference is too large; check the device date and time server</string>
+    <string name="time_err_rtt_unreasonable">The server response took too long to trust</string>
     <string name="time_interval_hint">The default is 86400 seconds (one day), and the range is 3600 seconds (one hour) to 604800 seconds (seven days). A clock correction only drifts over days, so syncing more often costs battery and traffic for nothing. After a failure the service retries from one minute, doubling up to an hour.</string>
     <string name="time_interval_s">Sync interval (seconds)</string>
     <string name="time_invalid_interval">The sync interval must be between 3600 and 604800 seconds</string>
@@ -1176,7 +1180,9 @@ Sends in %1$ss</string>
     <string name="time_status">Current state</string>
     <string name="time_sync_failed">Couldn\'t start the sync</string>
     <string name="time_sync_now">Sync now</string>
+    <string name="time_sync_result_failed">Time sync failed</string>
     <string name="time_sync_started">Sync started</string>
+    <string name="time_sync_succeeded">Time sync succeeded</string>
     <string name="time_title">Time</string>
     <string name="time_zone">Time zone</string>
     <string name="time_zone_hint">This sets the clock, call history, and rule schedules for the whole cluster</string>

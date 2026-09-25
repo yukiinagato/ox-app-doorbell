@@ -1151,8 +1151,12 @@ PIN: %2$s</string>
     <string name="theme_unsampled_too_large">画像が大きすぎます</string>
     <string name="time_err_bad_reply">サーバーの応答が正しくありません</string>
     <string name="time_err_bad_server">サーバーの書き方が正しくありません</string>
+    <string name="time_err_clock_changed">同期中に端末の時計が変更されました。もう一度同期してください</string>
     <string name="time_err_implausible">測定した時刻が信用できないため使いませんでした</string>
+    <string name="time_err_large_offset_confirming">大きな時刻差を確認中です。時刻サーバーから安定した応答を待っています</string>
     <string name="time_err_no_response">時刻サーバーから応答がありません</string>
+    <string name="time_err_offset_unreasonable">日時が大きくずれています。端末の日付と時刻サーバーを確認してください</string>
+    <string name="time_err_rtt_unreasonable">応答時間が長すぎるため時刻を使いませんでした</string>
     <string name="time_interval_hint">既定は 86400 秒 (1 日)。指定できるのは 3600 秒 (1 時間) から 604800 秒 (7 日) まで。時刻のずれは数日単位でしか変わらないため、これより頻繁に同期しても電池と通信量を使うだけです。失敗したときは 1 分後から順に間隔を空けて再試行します</string>
     <string name="time_interval_s">同期間隔 (秒)</string>
     <string name="time_invalid_interval">同期間隔は 3600 秒から 604800 秒の間で指定してください</string>
@@ -1176,7 +1180,9 @@ PIN: %2$s</string>
     <string name="time_status">現在の状態</string>
     <string name="time_sync_failed">同期を開始できませんでした</string>
     <string name="time_sync_now">今すぐ同期</string>
+    <string name="time_sync_result_failed">時刻を同期できませんでした</string>
     <string name="time_sync_started">同期を開始しました</string>
+    <string name="time_sync_succeeded">時刻を同期しました</string>
     <string name="time_title">時刻</string>
     <string name="time_zone">タイムゾーン</string>
     <string name="time_zone_hint">この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</string>

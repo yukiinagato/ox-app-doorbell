@@ -18,6 +18,7 @@ class CoreExportsTest {
         assertEquals(CoreExports.NONE, CoreExports.parse(null))
         assertEquals(CoreExports.NONE, CoreExports.parse(JSONObject()))
         assertFalse(CoreExports.NONE.configWrite)
+        assertFalse(CoreExports.NONE.callLifecycleResultV3)
         assertFalse(CoreExports.NONE.complete)
     }
 
@@ -42,6 +43,10 @@ class CoreExportsTest {
             ),
         )
         assertTrue(full.complete)
+
+        val lifecycle = CoreExports.parse(JSONObject("""{"call_lifecycle_result_v3":true}"""))
+        assertTrue(lifecycle.callLifecycleResultV3)
+        assertFalse(CoreExports.NONE.callLifecycleResultV3)
     }
 
     // ---------- administrator password ----------

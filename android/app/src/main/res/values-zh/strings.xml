@@ -1151,8 +1151,12 @@ PIN：%2$s</string>
     <string name="theme_unsampled_too_large">图片过大</string>
     <string name="time_err_bad_reply">服务器的响应无效</string>
     <string name="time_err_bad_server">服务器条目格式不正确</string>
+    <string name="time_err_clock_changed">同步期间设备时钟发生变化，请重试</string>
     <string name="time_err_implausible">测得的时间不可信，已丢弃</string>
+    <string name="time_err_large_offset_confirming">正在确认较大的时钟偏差，请等待时间服务器提供稳定响应</string>
     <string name="time_err_no_response">时间服务器没有响应</string>
+    <string name="time_err_offset_unreasonable">时钟偏差过大，请检查设备日期和时间服务器</string>
+    <string name="time_err_rtt_unreasonable">往返时间过长，未采用该时间</string>
     <string name="time_interval_hint">默认 86400 秒（一天），可设范围为 3600 秒（一小时）至 604800 秒（七天）。时钟偏差以天为单位变化，同步更频繁只会白白消耗电量和流量。失败后将从 1 分钟起重试，逐次加倍直至一小时。</string>
     <string name="time_interval_s">同步间隔（秒）</string>
     <string name="time_invalid_interval">同步间隔必须在 3600 到 604800 秒之间</string>
@@ -1176,7 +1180,9 @@ PIN：%2$s</string>
     <string name="time_status">当前状态</string>
     <string name="time_sync_failed">无法开始同步</string>
     <string name="time_sync_now">立即同步</string>
+    <string name="time_sync_result_failed">时间同步失败</string>
     <string name="time_sync_started">已开始同步</string>
+    <string name="time_sync_succeeded">时间同步成功</string>
     <string name="time_title">时间</string>
     <string name="time_zone">时区</string>
     <string name="time_zone_hint">此设置用于整个集群的时钟、呼叫记录与规则时段</string>

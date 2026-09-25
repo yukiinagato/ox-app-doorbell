@@ -225,9 +225,9 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
   "time": {
     "zone": "Asia/Tokyo",                       // IANA identifier from the bundled table
     // Independent time service. Core never sets the operating-system clock: it measures an
-    // offset by SNTP and adds it to every wall-clock reading (HLC, event and call-history
-    // timestamps, rule schedules, quiet hours, displayed clocks). The offset is dropped again
-    // after three intervals without a successful sync.
+    // offset by SNTP and projects a trusted sample from a monotonic anchor for HLC, event and
+    // call-history timestamps, rule schedules, quiet hours, and displayed clocks. The sample
+    // remains active until a later sync replaces it or NTP is disabled.
     // One round runs when the service is switched on, when the servers change, and at start-up;
     // after that the interval. A failed round retries from one minute, doubling to at most an
     // hour, rather than waiting a whole day. POST /api/time/sync triggers one by hand.
@@ -683,13 +683,13 @@ at the offset that happened to be current when the zone was chosen. An installat
 `time.zone` keeps the fixed offset as the source of truth and nothing rewrites it.
 
 `time.ntp` is off by default. When it is on, Core runs a minimal SNTP v4 client (RFC 4330) on a
-short-lived worker thread: three samples per server, the lowest round trip wins, and a sample is
-discarded when its round trip exceeds three seconds or its offset exceeds 24 hours. The measured
-offset is applied to `IClock::wallMs()`, which is what the HLC, event timestamps, call history,
-rule schedules, quiet hours, and every rendered clock read. The operating-system clock is never
-written, and the correction is withdrawn after three intervals without a successful sync, so a
-device whose NTP servers become unreachable falls back to plain system time rather than drifting on
-a stale measurement. `POST /api/time/sync` (admin session) starts one immediate round;
+short-lived worker thread: three samples per server, the lowest round trip wins, and ordinary
+samples are discarded when their round trip exceeds three seconds or their offset exceeds 24
+hours. Initial recovery allows offsets up to 30 days after three consistent low-RTT responses.
+The measured offset becomes a monotonic wall-time anchor, so OS clock steps do not compound or
+erase an active correction; the platform clock is never written. The last trusted anchor remains
+in use during network loss and is replaced by the next successful scheduled sync, or withdrawn
+when NTP is disabled. `POST /api/time/sync` (admin session) starts one immediate round;
 `status.time` reports the result and `time_changed` is emitted when the source flips or the applied
 offset moves by more than 500 ms.
 

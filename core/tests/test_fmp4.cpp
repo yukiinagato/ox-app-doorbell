@@ -54,6 +54,8 @@ struct BitWriter {
     u(0, n);
     u(k, n + 1);
   }
+  void se(int32_t v) { ue(v <= 0 ? static_cast<uint32_t>(-2LL * v)
+                                  : static_cast<uint32_t>(2LL * v - 1)); }
   void trailing() {  // rbsp_trailing_bits
     bit(1);
     while (nbits) bit(0);
@@ -105,11 +107,12 @@ Bytes makeSps(int mbs_w, int map_h, uint32_t crop_bottom) {
   return makeNal(0x67, bw.out);  // nal_ref_idc=3, type=7
 }
 
-Bytes makePps(uint32_t pps_id = 0, uint32_t sps_id = 0) {
+Bytes makePps(uint32_t pps_id = 0, uint32_t sps_id = 0,
+              bool entropy_coding_mode = false) {
   BitWriter bw;
   bw.ue(pps_id);    // pic_parameter_set_id
   bw.ue(sps_id);    // seq_parameter_set_id
-  bw.u(0, 1);  // entropy_coding_mode_flag (CAVLC)
+  bw.u(entropy_coding_mode ? 1 : 0, 1);  // entropy_coding_mode_flag
   bw.u(0, 1);  // bottom_field_pic_order_in_frame_present_flag
   bw.ue(0);    // num_slice_groups_minus1
   bw.ue(0);    // num_ref_idx_l0_default_active_minus1
@@ -127,14 +130,23 @@ Bytes makePps(uint32_t pps_id = 0, uint32_t sps_id = 0) {
 }
 
 
-Bytes makeSlice(bool idr, size_t payload, uint32_t pps_id = 0) {
+Bytes makeSlice(bool idr, size_t payload, uint32_t pps_id = 0,
+                uint32_t slice_type = 2) {
   BitWriter bw;
   bw.ue(0);  // first_mb_in_slice
-  bw.ue(2);  // I slice; enough header syntax to identify the PPS safely
+  bw.ue(slice_type);
   bw.ue(pps_id);  // pic_parameter_set_id
+  bw.u(0, 4);  // frame_num for makeSps' four-bit syntax
+  if (idr) {
+    bw.ue(0);  // idr_pic_id
+    bw.u(0, 1);  // no_output_of_prior_pics_flag
+    bw.u(0, 1);  // long_term_reference_flag
+  }
+  bw.se(0);  // slice_qp_delta
+  for (size_t i = 0; i < payload; ++i)
+    bw.u(static_cast<uint32_t>(0x80 + (i % 0x40)), 8);
   bw.trailing();
   Bytes nal = makeNal(idr ? 0x65 : 0x41, bw.out);  // type 5 (IDR) / 1 (non-IDR)
-  for (size_t i = 0; i < payload; i++) nal.push_back(static_cast<uint8_t>(0x80 + (i % 0x40)));
   return nal;
 }
 
@@ -636,8 +648,7 @@ TEST_CASE("[B3][M05] VideoTrack commits a PPS update only at its matching IDR") 
   REQUIRE_FALSE(old_init.empty());
   REQUIRE_FALSE(old_reader->pull(0, &ended).empty());
 
-  Bytes changed_pps = pps;
-  changed_pps.push_back(0);
+  Bytes changed_pps = makePps(0, 0, true);
   Bytes pps_update = annexb({changed_pps});
   track.push(pps_update.data(), pps_update.size(), false, 1040);
   CHECK(old_reader->pull(0, &ended).empty());
@@ -671,7 +682,7 @@ TEST_CASE("[M05] VideoTrack retains the last valid configuration after malformed
   REQUIRE_FALSE(old_init.empty());
   REQUIRE_FALSE(reader->pull(0, &ended).empty());
 
-  const Bytes bad_pps = {0x68, 0x00};
+  const Bytes bad_pps = {0x68, 0xc0};
   const Bytes unsafe = annexb({bad_pps, makeSlice(true, 16)});
   track.push(unsafe.data(), unsafe.size(), true, 1040);
   CHECK(reader->pull(0, &ended).empty());
@@ -695,7 +706,7 @@ TEST_CASE("[M05] VideoTrack drops an invalid parameter update with a delta frame
   REQUIRE_FALSE(reader->pull(0, &ended).empty());
   REQUIRE_FALSE(reader->pull(0, &ended).empty());
 
-  const Bytes bad_pps = {0x68, 0x00};
+  const Bytes bad_pps = {0x68, 0xc0};
   const Bytes unsafe_delta = annexb({bad_pps, makeSlice(false, 16)});
   track.push(unsafe_delta.data(), unsafe_delta.size(), false, 1040);
   CHECK(reader->pull(0, &ended).empty());
@@ -761,9 +772,82 @@ TEST_CASE("[M05] H.264 parameter and slice association rejects a mismatched PPS"
   const Bytes pps = makePps(1, 0);
   CHECK(fmp4::validParameterSets(sps, pps));
   Bytes idr = annexb({makeSlice(true, 16, 0)});
-  CHECK_FALSE(fmp4::idrReferencesPps(idr.data(), idr.size(), pps));
+  CHECK_FALSE(fmp4::idrReferencesPps(idr.data(), idr.size(), sps, pps));
   idr = annexb({makeSlice(true, 16, 1)});
-  CHECK(fmp4::idrReferencesPps(idr.data(), idr.size(), pps));
+  CHECK(fmp4::idrReferencesPps(idr.data(), idr.size(), sps, pps));
+}
+
+TEST_CASE("[F04] H.264 parameter validation rejects truncated PPS syntax and forbidden headers") {
+  const Bytes sps = makeSps(80, 45, 0);
+  const Bytes truncated_after_ids = {0x68, 0xc0};
+  const Bytes forbidden_header = {0xe8, 0xce, 0x3c, 0x80};
+  const Bytes truncated_fields = {0x68, 0xce, 0x3c};
+  const Bytes valid_pps = makePps();
+
+  CHECK(fmp4::validParameterSets(sps, valid_pps));
+  CHECK_FALSE(fmp4::validParameterSets(sps, truncated_after_ids));
+  CHECK_FALSE(fmp4::validParameterSets(sps, forbidden_header));
+  CHECK_FALSE(fmp4::validParameterSets(sps, truncated_fields));
+}
+
+TEST_CASE("[F05] IDR recovery requires every VCL slice to be a consistent legal IDR") {
+  const Bytes configured_pps = makePps(0, 0);
+  const Bytes other_pps = makePps(1, 0);
+  const Bytes legal = annexb({makeSlice(true, 16, 0)});
+  const Bytes illegal_slice_type = annexb({makeSlice(true, 16, 0, 10)});
+  const Bytes truncated_header = annexb({makeSlice(true, 0, 0)});
+  const Bytes configured_then_other = annexb(
+      {makeSlice(true, 16, 0), makeSlice(true, 16, 1)});
+  const Bytes other_then_configured = annexb(
+      {makeSlice(true, 16, 1), makeSlice(true, 16, 0)});
+
+  const Bytes sps = makeSps(80, 45, 0);
+  CHECK(fmp4::idrReferencesPps(legal.data(), legal.size(), sps, configured_pps));
+  CHECK_FALSE(fmp4::idrReferencesPps(illegal_slice_type.data(), illegal_slice_type.size(),
+                                     sps, configured_pps));
+  CHECK_FALSE(fmp4::idrReferencesPps(truncated_header.data(), truncated_header.size(),
+                                     sps, configured_pps));
+  CHECK_FALSE(fmp4::idrReferencesPps(configured_then_other.data(),
+                                     configured_then_other.size(), sps, configured_pps));
+  CHECK_FALSE(fmp4::idrReferencesPps(other_then_configured.data(),
+                                     other_then_configured.size(), sps, configured_pps));
+}
+
+TEST_CASE("[F05] VideoTrack keeps the recovery barrier after a mixed-PPS IDR access unit") {
+  VideoTrack track;
+  track.setEnabled(true);
+  const Bytes sps = makeSps(80, 45, 0), pps = makePps();
+  const Bytes initial = annexb({sps, pps, makeSlice(true, 16)});
+  track.push(initial.data(), initial.size(), true, 1000);
+  auto reader = track.subscribe();
+  bool ended = false;
+  const Bytes old_init = reader->pull(0, &ended);
+  REQUIRE_FALSE(old_init.empty());
+  REQUIRE_FALSE(reader->pull(0, &ended).empty());
+
+  const Bytes updated_pps = makePps(0, 0, true);
+  const Bytes mixed_recovery = annexb(
+      {updated_pps, makeSlice(true, 16, 0), makeSlice(true, 16, 1)});
+  track.push(mixed_recovery.data(), mixed_recovery.size(), true, 1040);
+  CHECK(reader->pull(0, &ended).empty());
+  CHECK_FALSE(ended);
+  CHECK(track.takeKeyframeRequest());
+
+  const Bytes delta = annexb({makeSlice(false, 16)});
+  track.push(delta.data(), delta.size(), false, 1080);
+  CHECK(reader->pull(0, &ended).empty());
+  CHECK_FALSE(track.takeKeyframeRequest());
+
+  const Bytes valid_recovery = annexb({makeSlice(true, 16, 0)});
+  track.push(valid_recovery.data(), valid_recovery.size(), false, 1120);
+  CHECK(reader->pull(0, &ended).empty());
+  CHECK(ended);
+  auto new_reader = track.subscribe();
+  const Bytes new_init = new_reader->pull(0, &ended);
+  REQUIRE_FALSE(new_init.empty());
+  CHECK(new_init != old_init);
+  CHECK_FALSE(new_reader->pull(0, &ended).empty());
+  CHECK_FALSE(ended);
 }
 
 TEST_CASE("video_track: ignores pushes while the H.264 track is disabled") {
@@ -944,25 +1028,8 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
 }
 
 TEST_CASE("fmp4: authenticated same-origin proxy streams from an alive mesh peer") {
-  // The panel proxies to a peer on the conventional HTTP port, so the door must own
-  // 47180. Another test process (or a running node) on this host makes that
-  // impossible; skip rather than fail so parallel runs stay deterministic.
-  {
-    int probe = ::socket(AF_INET, SOCK_STREAM, 0);
-    REQUIRE(probe >= 0);
-    int one = 1;
-    ::setsockopt(probe, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
-    sockaddr_in addr{};
-    addr.sin_family = AF_INET;
-    addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    addr.sin_port = htons(47180);
-    const bool busy = ::bind(probe, reinterpret_cast<sockaddr*>(&addr), sizeof(addr)) != 0;
-    ::close(probe);
-    if (busy) {
-      MESSAGE("port 47180 is busy on this host; skipping the same-origin proxy case");
-      return;
-    }
-  }
+  // The station intentionally uses a non-default HTTP port; the reserved default prevents
+  // the random port helper from accidentally making this a compatibility-only test.
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x51a9u);
   std::vector<int> reserved{47180};
   auto distinctPort = [&] {
@@ -976,9 +1043,11 @@ TEST_CASE("fmp4: authenticated same-origin proxy streams from an alive mesh peer
     }
   };
   const int door_mesh_port = distinctPort();
+  const int door_http_port = distinctPort();
   const int panel_mesh_port = distinctPort();
   const int panel_http_port = distinctPort();
   REQUIRE(door_mesh_port > 0);
+  REQUIRE(door_http_port > 0);
   REQUIRE(panel_mesh_port > 0);
   REQUIRE(panel_http_port > 0);
 
@@ -993,7 +1062,7 @@ TEST_CASE("fmp4: authenticated same-origin proxy streams from an alive mesh peer
   door_options.advertise_addr = door_options.listen_addr;
   door_options.psk = psk;
   door_options.enable_beacon = false;
-  door_options.http_port = 47180;
+  door_options.http_port = door_http_port;
   door_options.seed_default_config = true;
 
   NodeOptions panel_options;
@@ -1031,6 +1100,48 @@ TEST_CASE("fmp4: authenticated same-origin proxy streams from an alive mesh peer
   panel.setConfigKey("doors.d_proxy", R"({"label":{"en":"Proxy door"}})");
   panel.setConfigKey("panel.token_refs", R"(["secret:panel.proxy"])");
 
+  REQUIRE(waitFor([&] {
+    const std::string info = httpGet(panel_http_port,
+        "/api/panel/call-info", "proxy-contract-token");
+    return info.find("http://127.0.0.1:" + std::to_string(door_http_port)) !=
+           std::string::npos;
+  }, 3'000));
+  std::vector<uint8_t> snapshot_pixels(64 * 48 * 4, 0xff);
+  for (size_t i = 0; i < snapshot_pixels.size(); i += 4) {
+    snapshot_pixels[i] = 40;
+    snapshot_pixels[i + 1] = 80;
+    snapshot_pixels[i + 2] = 220;
+  }
+  door.pushCameraFrame(snapshot_pixels.data(), 3, 64, 48, 64 * 4, 1000);
+  std::string snapshot;
+  REQUIRE(waitFor([&] {
+    snapshot = httpGet(panel_http_port, "/snapshot-proxy?door=d_proxy",
+                       "proxy-contract-token");
+    return snapshot.rfind("HTTP/1.1 200", 0) == 0;
+  }, 3'000));
+  CHECK(snapshot.rfind("HTTP/1.1 200", 0) == 0);
+  CHECK(snapshot.find("Content-Type: image/jpeg") != std::string::npos);
+  CHECK(snapshot.find("\xFF\xD8\xFF") != std::string::npos);
+  CHECK(snapshot.find("Location:") == std::string::npos);
+  CHECK(snapshot.find("Access-Control-Allow-Origin") == std::string::npos);
+  for (size_t i = 0; i < snapshot_pixels.size(); i += 4) {
+    snapshot_pixels[i] = 220;
+    snapshot_pixels[i + 1] = 35;
+    snapshot_pixels[i + 2] = 60;
+  }
+  door.pushCameraFrame(snapshot_pixels.data(), 3, 64, 48, 64 * 4, 2000);
+  const size_t first_body = snapshot.find("\r\n\r\n");
+  REQUIRE(first_body != std::string::npos);
+  const std::string first_jpeg = snapshot.substr(first_body + 4);
+  std::string next_snapshot;
+  REQUIRE(waitFor([&] {
+    next_snapshot = httpGet(panel_http_port,
+        "/snapshot-proxy?door=d_proxy&live=1", "proxy-contract-token");
+    const size_t body = next_snapshot.find("\r\n\r\n");
+    return next_snapshot.rfind("HTTP/1.1 200", 0) == 0 && body != std::string::npos &&
+           next_snapshot.substr(body + 4) != first_jpeg;
+  }, 3'000));
+
   const std::string denied =
       httpGet(panel_http_port, "/stream-proxy.mp4?door=d_proxy", "wrong");
   REQUIRE(denied.rfind("HTTP/1.1 403", 0) == 0);
@@ -1065,6 +1176,15 @@ TEST_CASE("fmp4: authenticated same-origin proxy streams from an alive mesh peer
   CHECK(hasMarker(response, "moov"));
   CHECK(hasMarker(response, "moof"));
   CHECK(hasMarker(response, "mdat"));
+
+  panel.setConfigKey("devices.duplicate-station",
+                     R"({"role":"door_station","door":"d_proxy"})");
+  CHECK(waitFor([&] {
+    return httpGet(panel_http_port, "/snapshot-proxy?door=d_proxy",
+                   "proxy-contract-token").rfind("HTTP/1.1 409", 0) == 0;
+  }, 3'000));
+  CHECK(httpGet(panel_http_port, "/stream-proxy.mp4?door=d_proxy",
+                "proxy-contract-token").rfind("HTTP/1.1 409", 0) == 0);
 
   panel.stop();
   door.stop();

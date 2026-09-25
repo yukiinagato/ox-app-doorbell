@@ -1153,8 +1153,12 @@ Sends in {0}s</value></data>
   <data name="theme_unsampled_too_large" xml:space="preserve"><value>Image too large</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>The server's answer wasn't valid</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>A server entry isn't written correctly</value></data>
+  <data name="time_err_clock_changed" xml:space="preserve"><value>The device clock changed during sync; try syncing again</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>The measured time wasn't plausible and was discarded</value></data>
+  <data name="time_err_large_offset_confirming" xml:space="preserve"><value>Confirming the large clock difference with more server responses</value></data>
   <data name="time_err_no_response" xml:space="preserve"><value>No answer from the time servers</value></data>
+  <data name="time_err_offset_unreasonable" xml:space="preserve"><value>The clock difference is too large; check the device date and time server</value></data>
+  <data name="time_err_rtt_unreasonable" xml:space="preserve"><value>The server response took too long to trust</value></data>
   <data name="time_interval_hint" xml:space="preserve"><value>The default is 86400 seconds (one day), and the range is 3600 seconds (one hour) to 604800 seconds (seven days). A clock correction only drifts over days, so syncing more often costs battery and traffic for nothing. After a failure the service retries from one minute, doubling up to an hour.</value></data>
   <data name="time_interval_s" xml:space="preserve"><value>Sync interval (seconds)</value></data>
   <data name="time_invalid_interval" xml:space="preserve"><value>The sync interval must be between 3600 and 604800 seconds</value></data>
@@ -1178,7 +1182,9 @@ Sends in {0}s</value></data>
   <data name="time_status" xml:space="preserve"><value>Current state</value></data>
   <data name="time_sync_failed" xml:space="preserve"><value>Couldn't start the sync</value></data>
   <data name="time_sync_now" xml:space="preserve"><value>Sync now</value></data>
+  <data name="time_sync_result_failed" xml:space="preserve"><value>Time sync failed</value></data>
   <data name="time_sync_started" xml:space="preserve"><value>Sync started</value></data>
+  <data name="time_sync_succeeded" xml:space="preserve"><value>Time sync succeeded</value></data>
   <data name="time_title" xml:space="preserve"><value>Time</value></data>
   <data name="time_zone" xml:space="preserve"><value>Time zone</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>This sets the clock, call history, and rule schedules for the whole cluster</value></data>

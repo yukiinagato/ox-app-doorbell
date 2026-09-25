@@ -157,6 +157,39 @@ struct DoorbellClock {
                        wallMs: reading.wallMs + Int64(seconds) * 1000, raw: reading.raw)
     }
 
+    static func advance(_ reading: Reading, byMilliseconds milliseconds: Int64) -> Reading {
+        guard milliseconds > 0 else { return reading }
+        let totalMs = reading.wallMs + milliseconds
+        guard let date = isoDate(from: totalMs, reading: reading) else {
+            return advance(reading, bySeconds: Int(milliseconds / 1000))
+        }
+        let calendar = calendar(for: reading)
+        let components = calendar.dateComponents([.hour, .minute, .second, .weekday],
+                                                   from: Date(timeIntervalSince1970: Double(totalMs) / 1000))
+        let weekday = components.weekday.map { weekdayKeys[($0 + 6) % 7] } ?? reading.weekday
+        return Reading(hour: components.hour ?? reading.hour,
+                       minute: components.minute ?? reading.minute,
+                       second: components.second ?? reading.second,
+                       date: date.text, weekday: weekday, tz: reading.tz, known: reading.known,
+                       wallMs: totalMs, raw: reading.raw)
+    }
+
+    private static func calendar(for reading: Reading) -> Calendar {
+        var value = Calendar(identifier: .gregorian)
+        let minutes = ConfigUtil.int(reading.raw, "offset_min", 0)
+        value.timeZone = TimeZone(identifier: reading.tz)
+            ?? TimeZone(secondsFromGMT: minutes * 60) ?? TimeZone(secondsFromGMT: 0)!
+        return value
+    }
+
+    private static func isoDate(from wallMs: Int64, reading: Reading) -> (text: String, components: DateComponents)? {
+        let calendar = calendar(for: reading)
+        let components = calendar.dateComponents([.year, .month, .day, .weekday],
+                                                   from: Date(timeIntervalSince1970: Double(wallMs) / 1000))
+        guard let year = components.year, let month = components.month, let day = components.day else { return nil }
+        return (String(format: "%04d-%02d-%02d", year, month, day), components)
+    }
+
     /// Civil-date arithmetic on Core's `YYYY-MM-DD`, so a clock that crosses midnight between two
     /// refreshes shows tomorrow's date rather than yesterday's for up to half a minute.
     static func addDays(_ days: Int, to date: String) -> String {
@@ -208,6 +241,8 @@ final class DoorbellClockSource {
     private var base: DoorbellClock.Reading?
     private var baseUptime: TimeInterval = 0
     private var refreshing = false
+    private var refreshPending = false
+    private var timeVersion: UInt64 = 0
     private let deliver: (@escaping () -> Void) -> Void
 
     init(deliver: @escaping (@escaping () -> Void) -> Void = { DispatchQueue.main.async(execute: $0) }) {
@@ -219,9 +254,9 @@ final class DoorbellClockSource {
     /// The time to draw. No Core call, no lock: safe at 1 Hz on the main thread.
     func reading() -> DoorbellClock.Reading? {
         guard let base = base else { return nil }
-        let elapsed = ProcessInfo.processInfo.systemUptime - baseUptime
-        guard elapsed >= 1 else { return base }
-        return DoorbellClock.advance(base, bySeconds: Int(elapsed))
+        let elapsedMs = Int64((ProcessInfo.processInfo.systemUptime - baseUptime) * 1000)
+        guard elapsedMs > 0 else { return base }
+        return DoorbellClock.advance(base, byMilliseconds: elapsedMs)
     }
 
     /// Whether the last attempt was turned away because Core had not started. The screens poll
@@ -233,7 +268,11 @@ final class DoorbellClockSource {
     /// which is the number worth watching: it is the stall this indirection exists to keep off
     /// the run loop.
     func refresh(_ core: DoorbellClockCore, completion: ((TimeInterval) -> Void)? = nil) {
-        guard !refreshing else { return }
+        if refreshing {
+            refreshPending = true
+            timeVersion &+= 1
+            return
+        }
         // The one rule this indirection exists to keep: never a loop-backed export off the main
         // thread while Core is still starting. `db_core_local_time_json` is synchronous into
         // Core's run loop, and before that loop is Running it executes the body on the calling
@@ -244,6 +283,7 @@ final class DoorbellClockSource {
         }
         waitingForCore = false
         refreshing = true
+        let requestedVersion = timeVersion
         DispatchQueue.global(qos: .utility).async { [weak self] in
             let started = ProcessInfo.processInfo.systemUptime
             let fresh = DoorbellClock.read(core)
@@ -255,13 +295,17 @@ final class DoorbellClockSource {
                     self.waitingForCore = true
                     return
                 }
-                if let fresh = fresh {
+                if requestedVersion == self.timeVersion, let fresh = fresh {
                     self.base = fresh
                     // The reading describes the moment Core answered, so the base is timed to the
                     // middle of the call rather than to either end of it.
                     self.baseUptime = (started + finished) / 2
                 }
                 completion?(finished - started)
+                if self.refreshPending || requestedVersion != self.timeVersion {
+                    self.refreshPending = false
+                    self.refresh(core)
+                }
             }
         }
     }

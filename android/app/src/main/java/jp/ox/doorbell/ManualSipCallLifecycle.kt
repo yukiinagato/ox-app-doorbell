@@ -12,6 +12,25 @@ internal enum class ManualSipClaimResult { NONE, OWNED, LOST_PENDING, LOST_ESTAB
 
 internal enum class ManualSipPurposeResult { NONE, SUPERSEDED_PENDING, SUPERSEDED_ESTABLISHED }
 
+internal enum class CoreCallLifecycleResult {
+    ACCEPTED,
+    PENDING,
+    REJECTED;
+
+    companion object {
+        fun fromNative(value: Int): CoreCallLifecycleResult = when (value) {
+            0 -> ACCEPTED
+            1 -> PENDING
+            else -> REJECTED
+        }
+    }
+}
+
+internal enum class ManualSipReportDisposition { ACCEPTED, PENDING, REJECTED, STALE }
+
+internal fun ManualSipReportDisposition.shouldHangUpAnsweredLeg(): Boolean =
+    this == ManualSipReportDisposition.REJECTED
+
 internal data class ManualSipCallReport(
     val kind: ManualSipCallReportKind,
     val identity: ManualSipCallIdentity,
@@ -128,6 +147,23 @@ internal class ManualSipCallLifecycle {
     @Synchronized
     fun complete(report: ManualSipCallReport) {
         if (report.kind == ManualSipCallReportKind.ENDED && isCurrent(report)) binding = null
+    }
+
+    @Synchronized
+    fun settle(report: ManualSipCallReport, result: CoreCallLifecycleResult)
+        : ManualSipReportDisposition {
+        if (!isCurrent(report)) return ManualSipReportDisposition.STALE
+        return when (result) {
+            CoreCallLifecycleResult.ACCEPTED -> {
+                complete(report)
+                ManualSipReportDisposition.ACCEPTED
+            }
+            CoreCallLifecycleResult.PENDING -> ManualSipReportDisposition.PENDING
+            CoreCallLifecycleResult.REJECTED -> {
+                clear(report.identity.callId)
+                ManualSipReportDisposition.REJECTED
+            }
+        }
     }
 
     @Synchronized

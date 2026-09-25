@@ -146,4 +146,56 @@ class ManualSipCallLifecycleTest {
         assertEquals(ManualSipPurposeResult.NONE,
             lifecycle.observeWinningPurpose(revisionZero.callId, 1))
     }
+
+    @Test
+    fun pendingAnswerAndIdlePreserveTheTerminalReportUntilCoreAcceptsBoth() {
+        val lifecycle = ManualSipCallLifecycle()
+        assertTrue(lifecycle.bind(call, "node-a"))
+        val answered = lifecycle.onSipState("in_call", call)!!
+        val answerDisposition = lifecycle.settle(answered, CoreCallLifecycleResult.PENDING)
+        assertEquals(ManualSipReportDisposition.PENDING, answerDisposition)
+        assertFalse(answerDisposition.shouldHangUpAnsweredLeg())
+        assertTrue(lifecycle.isCurrent(answered))
+
+        val ended = lifecycle.onSipState("idle", call)!!
+        assertEquals(ManualSipCallReportKind.ENDED, ended.kind)
+        assertEquals(ManualSipReportDisposition.PENDING,
+            lifecycle.settle(ended, CoreCallLifecycleResult.PENDING))
+        assertTrue(lifecycle.isCurrent(ended))
+
+        assertEquals(ManualSipReportDisposition.ACCEPTED,
+            lifecycle.settle(answered, CoreCallLifecycleResult.ACCEPTED))
+        assertEquals(ManualSipReportDisposition.ACCEPTED,
+            lifecycle.settle(ended, CoreCallLifecycleResult.ACCEPTED))
+        assertFalse(lifecycle.isCurrent(ended))
+    }
+
+    @Test
+    fun delayedPendingAnswerForACannotChangeTheBindingForB() {
+        val lifecycle = ManualSipCallLifecycle()
+        assertTrue(lifecycle.bind(call, "node-a"))
+        val answeredA = lifecycle.onSipState("in_call", call)!!
+        assertEquals(ManualSipReportDisposition.PENDING,
+            lifecycle.settle(answeredA, CoreCallLifecycleResult.PENDING))
+
+        val callB = ManualSipCallIdentity("front", "call-b", 0)
+        assertNull(lifecycle.onSipState("in_call", callB))
+        assertTrue(lifecycle.bind(callB, "node-a"))
+        assertEquals(ManualSipReportDisposition.STALE,
+            lifecycle.settle(answeredA, CoreCallLifecycleResult.ACCEPTED))
+        val answeredB = lifecycle.onSipState("in_call", callB)
+        assertEquals(callB, answeredB?.identity)
+    }
+
+    @Test
+    fun rejectedAnswerRetiresOnlyItsMatchingBinding() {
+        val lifecycle = ManualSipCallLifecycle()
+        assertTrue(lifecycle.bind(call, "node-a"))
+        val answered = lifecycle.onSipState("in_call", call)!!
+        val answerDisposition = lifecycle.settle(answered, CoreCallLifecycleResult.REJECTED)
+        assertEquals(ManualSipReportDisposition.REJECTED, answerDisposition)
+        assertTrue(answerDisposition.shouldHangUpAnsweredLeg())
+        assertFalse(lifecycle.isCurrent(answered))
+        assertEquals(CoreCallLifecycleResult.REJECTED, CoreCallLifecycleResult.fromNative(27))
+    }
 }

@@ -1,8 +1,51 @@
 import UIKit
 
+enum IncomingCallAnswerState {
+    case unreported
+    case pending
+    case accepted
+    case rejected
+}
+
+struct IncomingCallLifecycleState {
+    private(set) var answer = IncomingCallAnswerState.unreported
+    private(set) var ended = false
+
+    mutating func recordAnswer(_ result: CallLifecycleReportResult) -> Bool {
+        switch result {
+        case .accepted:
+            answer = .accepted
+            return false
+        case .pending:
+            answer = .pending
+            return false
+        case .rejected:
+            answer = .rejected
+            ended = true
+            return true
+        }
+    }
+
+    mutating func confirmAnswer(ownerIsLocal: Bool) -> Bool {
+        answer = ownerIsLocal ? .accepted : .rejected
+        if !ownerIsLocal { ended = true }
+        return !ownerIsLocal
+    }
+
+    var mayReportEnd: Bool { answer == .accepted || answer == .pending }
+
+    mutating func recordEnd(_ result: CallLifecycleReportResult) {
+        _ = result
+        ended = true
+    }
+
+    mutating func reset() { self = IncomingCallLifecycleState() }
+}
+
 final class IncomingViewController: UIViewController {
 
     private let core: CoreBridge
+    private let coreGeneration: UInt64?
     private let boot: BootConfig
     private let texts = Texts()
     private let styleApplier = UIStyleApplier()
@@ -23,8 +66,7 @@ final class IncomingViewController: UIViewController {
     private var directPort = 47190
     private var sipMode = ""
     private var inCall = false
-    private var lifecycleAnswered = false
-    private var lifecycleEnded = false
+    private var callLifecycle = IncomingCallLifecycleState()
     private var safeMode = UserDefaults.standard.bool(forKey: "runtime.safe_mode")
     private var answerDelayTimer: Timer?
     /// When this panel returns to its home page, and the number beside the title that says so.
@@ -69,6 +111,7 @@ final class IncomingViewController: UIViewController {
     init(core: CoreBridge, boot: BootConfig, door: String, purpose: String, visitorLang: String,
          callId: String, stageRevision: Int = 0) {
         self.core = core
+        self.coreGeneration = core.runningGeneration
         self.boot = boot
         self.door = door
         self.purpose = purpose
@@ -134,8 +177,8 @@ final class IncomingViewController: UIViewController {
         videoPlayer?.stop()
         videoPlayer = nil
         if !sipMode.isEmpty {
-            core.sipHangup()
             reportEndedIfNeeded()
+            core.sipHangup(coreGeneration: coreGeneration)
             sipMode = ""
         }
     }
@@ -189,7 +232,7 @@ final class IncomingViewController: UIViewController {
         guard !inCall else { return }
         answerDelayTimer?.invalidate()
         answerDelayTimer = nil
-        if !sipMode.isEmpty { core.sipHangup() }
+        if !sipMode.isEmpty { core.sipHangup(coreGeneration: coreGeneration) }
         sipMode = ""
         self.door = targetDoor
         self.purpose = purpose
@@ -198,8 +241,7 @@ final class IncomingViewController: UIViewController {
         stageRevision = max(0, newStageRevision)
         revisionLifecycle = CallRevisionLifecycle(stageRevision: stageRevision)
         lastChimeRevision = stageRevision
-        lifecycleAnswered = false
-        lifecycleEnded = false
+        callLifecycle.reset()
         cfg = core.config()
         texts.setConfig(cfg)
         directPort = ConfigUtil.int(cfg, "sip.direct_port", 47190)
@@ -678,23 +720,22 @@ final class IncomingViewController: UIViewController {
     private func demoteSupersededAnswer() {
         answerDelayTimer?.invalidate()
         answerDelayTimer = nil
-        lifecycleAnswered = false
-        lifecycleEnded = true
+        _ = callLifecycle.confirmAnswer(ownerIsLocal: false)
         inCall = false
         sipMode = ""
         monitorOn = false
         answerButton.isEnabled = false
         updateUnlockVisibility()
         hintLabel.isHidden = true
-        core.sipHangup()
+        core.sipHangup(coreGeneration: coreGeneration)
     }
 
 
     @objc private func onAnswer() {
         guard let host = peerHost else { return }
         if inCall {
-            core.sipHangup()
             reportEndedIfNeeded()
+            core.sipHangup(coreGeneration: coreGeneration)
             sipMode = ""
             inCall = false
             resumeReturnCountdown()
@@ -707,7 +748,7 @@ final class IncomingViewController: UIViewController {
         updateReturnCountdown()
         if sipMode == "monitor" {
             monitorOn = false
-            core.sipHangup()
+            core.sipHangup(coreGeneration: coreGeneration)
             answerDelayTimer?.invalidate()
             answerDelayTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.4,
                                                     repeats: false) { [weak self] _ in
@@ -720,16 +761,16 @@ final class IncomingViewController: UIViewController {
 
     private func placeAnswerCall(host: String) {
         sipMode = "answer"
-        lifecycleAnswered = false
-        lifecycleEnded = false
-        core.sipCall(target: "sip:\(host):\(directPort)", mode: "answer")
+        callLifecycle.reset()
+        core.sipCall(target: "sip:\(host):\(directPort)", mode: "answer",
+                     coreGeneration: coreGeneration)
     }
 
     /// Monitoring is a stateful toggle: pressing it again stops playing the door's audio.
     @objc private func onMonitor() {
         guard let host = peerHost else { return }
         if monitorOn && sipMode == "monitor" {
-            core.sipHangup()
+            core.sipHangup(coreGeneration: coreGeneration)
             sipMode = ""
             monitorOn = false
             hintLabel.isHidden = true
@@ -739,7 +780,8 @@ final class IncomingViewController: UIViewController {
         guard sipMode.isEmpty else { return }
         sipMode = "monitor"
         monitorOn = true
-        core.sipCall(target: "sip:\(host):\(directPort)", mode: "monitor")
+        core.sipCall(target: "sip:\(host):\(directPort)", mode: "monitor",
+                     coreGeneration: coreGeneration)
         hintLabel.text = texts.t("ring.monitoring")
         hintLabel.isHidden = false
         updateToggleTitles()
@@ -821,6 +863,7 @@ final class IncomingViewController: UIViewController {
 
 
     private func onUiEvent(_ ev: [String: Any]) {
+        if let coreGeneration, core.runningGeneration != coreGeneration { return }
         switch ConfigUtil.evStr(ev, "t") {
         case "state":
             let st = ConfigUtil.evStr(ev, "state")
@@ -865,21 +908,19 @@ final class IncomingViewController: UIViewController {
                         visitorLang: updatedVisitorLang.isEmpty ? visitorLang : updatedVisitorLang,
                         callId: eventCallId.isEmpty ? callId : eventCallId,
                         stageRevision: ConfigUtil.int(ev, "stage_revision", stageRevision))
-            } else if type == "call_answered",
-                      eventStageRevision >= stageRevision, !inCall {
-                close()
-            } else if type == "call_answered",
-                      eventStageRevision >= stageRevision, inCall {
+            } else if type == "call_answered", eventStageRevision >= stageRevision {
                 let reportedOwner = ConfigUtil.evStr(ev, "dialog_owner")
                 let owner = reportedOwner.isEmpty ? ConfigUtil.evStr(ev, "device") : reportedOwner
-                if !owner.isEmpty, !nodeId.isEmpty, owner != nodeId {
+                if !owner.isEmpty, !nodeId.isEmpty, owner == nodeId {
+                    _ = callLifecycle.confirmAnswer(ownerIsLocal: true)
+                    if !inCall { close() }
+                } else if !owner.isEmpty, !nodeId.isEmpty, owner != nodeId {
                     // Another confirmed answer won Core's deterministic ownership claim. End the
                     // losing SIP leg without publishing call_ended for the winner's dialog.
-                    lifecycleAnswered = false
-                    lifecycleEnded = true
+                    _ = callLifecycle.confirmAnswer(ownerIsLocal: false)
                     inCall = false
                     sipMode = ""
-                    core.sipHangup()
+                    core.sipHangup(coreGeneration: coreGeneration)
                     close()
                 }
             } else if type == "call_ended", eventStageRevision >= stageRevision {
@@ -920,9 +961,16 @@ final class IncomingViewController: UIViewController {
         micMuted = false
         updateToggleTitles()
         buildReplyButtons()
-        if !lifecycleAnswered {
-            lifecycleAnswered = core.reportCallAnswered(door: door, callId: callId,
-                                                         stageRevision: stageRevision)
+        if callLifecycle.answer == .unreported {
+            let result = core.reportCallAnsweredResult(door: door, callId: callId,
+                                                       stageRevision: stageRevision,
+                                                       coreGeneration: coreGeneration)
+            if callLifecycle.recordAnswer(result) {
+                inCall = false
+                sipMode = ""
+                core.sipHangup(coreGeneration: coreGeneration)
+                close()
+            }
         }
         returnCountdown.pauseForCall()
         updateReturnCountdown()
@@ -938,10 +986,12 @@ final class IncomingViewController: UIViewController {
     }
 
     private func reportEndedIfNeeded() {
-        guard inCall, sipMode == "answer", lifecycleAnswered, !lifecycleEnded else { return }
-        lifecycleEnded = core.reportCallEnded(door: door, callId: callId,
-                                               stageRevision: stageRevision,
-                                               reason: "sip_ended")
+        guard inCall, sipMode == "answer", callLifecycle.mayReportEnd,
+              !callLifecycle.ended else { return }
+        callLifecycle.recordEnd(core.reportCallEndedResult(door: door, callId: callId,
+                                                           stageRevision: stageRevision,
+                                                           reason: "sip_ended",
+                                                           coreGeneration: coreGeneration))
     }
 }
 

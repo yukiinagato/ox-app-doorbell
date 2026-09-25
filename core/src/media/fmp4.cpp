@@ -3,6 +3,7 @@
 
 #include "media/fmp4.h"
 
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 
@@ -41,11 +42,34 @@ struct BitReader {
       }
     }
     if (bad) return 0;
-    return ((1u << zeros) - 1) + u(zeros);
+    const uint64_t value = ((uint64_t{1} << zeros) - 1) + u(zeros);
+    if (bad || value > UINT32_MAX) {
+      bad = true;
+      return 0;
+    }
+    return static_cast<uint32_t>(value);
   }
   int32_t se() {
     uint32_t k = ue();
-    return (k & 1) ? static_cast<int32_t>((k + 1) / 2) : -static_cast<int32_t>(k / 2);
+    const int64_t value = (k & 1) ? static_cast<int64_t>(k / 2) + 1
+                                  : -static_cast<int64_t>(k / 2);
+    if (bad || value < INT32_MIN || value > INT32_MAX) {
+      bad = true;
+      return 0;
+    }
+    return static_cast<int32_t>(value);
+  }
+  bool moreRbspData() const {
+    if (bad || pos >= n * 8) return false;
+    if (((p[pos >> 3] >> (7 - (pos & 7))) & 1) == 0) return true;
+    for (size_t bit = pos + 1; bit < n * 8; bit++)
+      if ((p[bit >> 3] >> (7 - (bit & 7))) & 1) return true;
+    return false;
+  }
+  bool trailingBits() {
+    if (u(1) != 1) return false;
+    while (pos & 7) if (u(1) != 0) return false;
+    return !bad && pos == n * 8;
   }
 };
 
@@ -81,29 +105,288 @@ bool parseSpsId(const uint8_t* sps, size_t len, uint32_t* id) {
   return true;
 }
 
-bool parsePpsIds(const uint8_t* pps, size_t len, uint32_t* pps_id, uint32_t* sps_id) {
-  if (!pps || len < 2 || (pps[0] & 0x1f) != 8) return false;
-  Bytes rbsp = unescapeRbsp(pps, len);
-  if (rbsp.empty()) return false;
+bool validEscapedNal(const uint8_t* nal, size_t len, size_t max_len = 65535) {
+  if (!nal || len < 2 || len > max_len || (nal[0] & 0x80) != 0) return false;
+  size_t zeros = 0;
+  for (size_t i = 1; i < len; ++i) {
+    const uint8_t byte = nal[i];
+    if (zeros >= 2) {
+      if (byte == 0x03) {
+        if (i + 1 >= len || nal[i + 1] > 0x03) return false;
+        zeros = 0;
+        continue;
+      }
+      if (byte <= 0x02) return false;
+    }
+    zeros = byte == 0 ? zeros + 1 : 0;
+  }
+  return true;
+}
+
+void skipScalingList(BitReader& br, int size);
+
+bool spsChromaFormat(const Bytes& sps, uint32_t* chroma_format) {
+  if (!chroma_format || sps.size() < 4 || (sps[0] & 0x1f) != 7) return false;
+  Bytes rbsp = unescapeRbsp(sps.data(), sps.size());
+  BitReader br(rbsp.data(), rbsp.size());
+  const uint32_t profile = br.u(8);
+  br.u(8);
+  br.u(8);
+  br.ue();
+  uint32_t chroma = 1;
+  switch (profile) {
+    case 100: case 110: case 122: case 244: case 44:
+    case 83: case 86: case 118: case 128: case 138: case 139: case 134: case 135:
+      chroma = br.ue();
+      break;
+    default:
+      break;
+  }
+  if (br.bad || chroma > 3) return false;
+  *chroma_format = chroma;
+  return true;
+}
+
+bool parsePpsSyntax(const Bytes& pps, uint32_t chroma_format,
+                    uint32_t* pps_id, uint32_t* sps_id) {
+  if (!validEscapedNal(pps.data(), pps.size()) || (pps[0] & 0x1f) != 8 ||
+      (pps[0] & 0x60) == 0 || chroma_format > 3)
+    return false;
+  Bytes rbsp = unescapeRbsp(pps.data(), pps.size());
   BitReader br(rbsp.data(), rbsp.size());
   const uint32_t parsed_pps = br.ue();
   const uint32_t parsed_sps = br.ue();
   if (br.bad || parsed_pps > 255 || parsed_sps > 31) return false;
+  br.u(1);  // entropy_coding_mode_flag
+  br.u(1);  // bottom_field_pic_order_in_frame_present_flag
+  const uint32_t groups_minus1 = br.ue();
+  if (groups_minus1 > 7) return false;
+  if (groups_minus1 > 0) {
+    const uint32_t map_type = br.ue();
+    if (map_type == 0) {
+      for (uint32_t i = 0; i <= groups_minus1; ++i)
+        if (br.ue() > 1'048'575) return false;
+    } else if (map_type == 2) {
+      for (uint32_t i = 0; i < groups_minus1; ++i) {
+        if (br.ue() > 1'048'575 || br.ue() > 1'048'575) return false;
+      }
+    } else if (map_type >= 3 && map_type <= 5) {
+      br.u(1);
+      if (br.ue() > 1'048'575) return false;
+    } else if (map_type == 6) {
+      const uint32_t map_units_minus1 = br.ue();
+      if (map_units_minus1 > 1'048'575) return false;
+      int bits = 0;
+      while ((1u << bits) < groups_minus1 + 1) ++bits;
+      for (uint32_t i = 0; i <= map_units_minus1; ++i)
+        if (br.u(bits) > groups_minus1) return false;
+    } else {
+      return false;
+    }
+  }
+  if (br.ue() > 31 || br.ue() > 31) return false;
+  br.u(1);
+  if (br.u(2) > 2) return false;
+  const int32_t init_qp = br.se();
+  const int32_t init_qs = br.se();
+  const int32_t chroma_qp = br.se();
+  if (init_qp < -26 || init_qp > 25 || init_qs < -26 || init_qs > 25 ||
+      chroma_qp < -12 || chroma_qp > 12)
+    return false;
+  br.u(1);
+  br.u(1);
+  br.u(1);
+  if (br.bad) return false;
+  if (br.moreRbspData()) {
+    const uint32_t transform_8x8 = br.u(1);
+    if (br.u(1)) {
+      const uint32_t lists = 6 + (transform_8x8 ? (chroma_format == 3 ? 6 : 2) : 0);
+      for (uint32_t i = 0; i < lists; ++i)
+        if (br.u(1)) skipScalingList(br, i < 6 ? 16 : 64);
+    }
+    const int32_t second_chroma_qp = br.se();
+    if (second_chroma_qp < -12 || second_chroma_qp > 12) return false;
+  }
+  if (!br.trailingBits()) return false;
   *pps_id = parsed_pps;
   *sps_id = parsed_sps;
   return true;
 }
 
-bool parseSlicePpsId(const NalView& nal, uint32_t* pps_id) {
-  if (!nal.p || nal.n < 2 || (nal.type != 1 && nal.type != 5)) return false;
-  Bytes rbsp = unescapeRbsp(nal.p, nal.n);
-  if (rbsp.empty()) return false;
+struct SpsSliceInfo {
+  uint32_t id = 0;
+  uint32_t frame_num_bits = 0;
+  uint32_t poc_type = 0;
+  uint32_t poc_lsb_bits = 0;
+  bool delta_pic_order_always_zero = false;
+  bool frame_mbs_only = true;
+  uint32_t picture_mbs = 0;
+};
+
+struct PpsSliceInfo {
+  uint32_t id = 0;
+  bool bottom_field_pic_order = false;
+  bool redundant_pic_cnt = false;
+  bool deblocking_filter_control = false;
+  uint32_t slice_groups_minus1 = 0;
+};
+
+bool parseSpsSliceInfo(const Bytes& sps, SpsSliceInfo* info) {
+  if (!info || !validEscapedNal(sps.data(), sps.size()) || (sps[0] & 0x1f) != 7)
+    return false;
+  int width = 0, height = 0;
+  if (!parseSpsDims(sps.data(), sps.size(), &width, &height)) return false;
+  Bytes rbsp = unescapeRbsp(sps.data(), sps.size());
   BitReader br(rbsp.data(), rbsp.size());
-  br.ue();  // first_mb_in_slice
-  br.ue();  // slice_type
-  const uint32_t parsed = br.ue();  // pic_parameter_set_id
-  if (br.bad || parsed > 255) return false;
-  *pps_id = parsed;
+  const uint32_t profile = br.u(8);
+  br.u(8);
+  br.u(8);
+  const uint32_t id = br.ue();
+  switch (profile) {
+    case 100: case 110: case 122: case 244: case 44:
+    case 83: case 86: case 118: case 128: case 138: case 139: case 134: case 135: {
+      const uint32_t chroma = br.ue();
+      if (chroma > 3) return false;
+      if (chroma == 3) br.u(1);
+      if (br.ue() > 6 || br.ue() > 6) return false;
+      br.u(1);
+      if (br.u(1)) {
+        const int lists = chroma == 3 ? 12 : 8;
+        for (int i = 0; i < lists; ++i)
+          if (br.u(1)) skipScalingList(br, i < 6 ? 16 : 64);
+      }
+      break;
+    }
+    default:
+      break;
+  }
+  const uint32_t frame_num_minus4 = br.ue();
+  const uint32_t poc_type = br.ue();
+  if (frame_num_minus4 > 12 || poc_type > 2) return false;
+  uint32_t poc_bits = 0;
+  bool delta_zero = false;
+  if (poc_type == 0) {
+    const uint32_t poc_minus4 = br.ue();
+    if (poc_minus4 > 12) return false;
+    poc_bits = poc_minus4 + 4;
+  } else if (poc_type == 1) {
+    delta_zero = br.u(1) != 0;
+    br.se();
+    br.se();
+    const uint32_t cycle = br.ue();
+    if (cycle > 256) return false;
+    for (uint32_t i = 0; i < cycle; ++i) br.se();
+  }
+  br.ue();
+  br.u(1);
+  const uint32_t width_mbs_minus1 = br.ue();
+  const uint32_t height_map_units_minus1 = br.ue();
+  if (width_mbs_minus1 >= 1024 || height_map_units_minus1 >= 1024) return false;
+  const uint32_t width_mbs = width_mbs_minus1 + 1;
+  const uint32_t height_map_units = height_map_units_minus1 + 1;
+  const bool frame_only = br.u(1) != 0;
+  if (!frame_only) br.u(1);
+  const uint64_t picture_mbs = static_cast<uint64_t>(width_mbs) * height_map_units *
+                               (frame_only ? 1 : 2);
+  if (br.bad || picture_mbs == 0 || picture_mbs > 1'048'576) return false;
+  info->id = id;
+  info->frame_num_bits = frame_num_minus4 + 4;
+  info->poc_type = poc_type;
+  info->poc_lsb_bits = poc_bits;
+  info->delta_pic_order_always_zero = delta_zero;
+  info->frame_mbs_only = frame_only;
+  info->picture_mbs = static_cast<uint32_t>(picture_mbs);
+  return true;
+}
+
+bool parsePpsSliceInfo(const Bytes& pps, uint32_t chroma_format, PpsSliceInfo* info) {
+  uint32_t sps_id = 0;
+  if (!info || !parsePpsSyntax(pps, chroma_format, &info->id, &sps_id)) return false;
+  Bytes rbsp = unescapeRbsp(pps.data(), pps.size());
+  BitReader br(rbsp.data(), rbsp.size());
+  br.ue();
+  br.ue();
+  br.u(1);
+  info->bottom_field_pic_order = br.u(1) != 0;
+  info->slice_groups_minus1 = br.ue();
+  if (info->slice_groups_minus1 != 0) return false;
+  br.ue();
+  br.ue();
+  br.u(1);
+  br.u(2);
+  br.se();
+  br.se();
+  br.se();
+  info->deblocking_filter_control = br.u(1) != 0;
+  br.u(1);
+  info->redundant_pic_cnt = br.u(1) != 0;
+  return !br.bad;
+}
+
+struct SlicePictureIdentity {
+  uint32_t pps_id = 0;
+  uint32_t slice_type = 0;
+  uint32_t frame_num = 0;
+  uint32_t idr_pic_id = 0;
+  uint32_t poc_lsb = 0;
+  int32_t delta_bottom = 0;
+  int32_t delta_poc0 = 0;
+  int32_t delta_poc1 = 0;
+  bool field_pic = false;
+  bool bottom_field = false;
+  bool no_output_of_prior_pics = false;
+  bool long_term_reference = false;
+};
+
+bool parseIdrSlice(const NalView& nal, const SpsSliceInfo& sps,
+                   const PpsSliceInfo& pps, SlicePictureIdentity* picture,
+                   uint32_t* first_mb) {
+  if (!validEscapedNal(nal.p, nal.n, 4 * 1024 * 1024) || nal.type != 5 ||
+      (nal.p[0] & 0x60) == 0)
+    return false;
+  Bytes rbsp = unescapeRbsp(nal.p, nal.n);
+  BitReader br(rbsp.data(), rbsp.size());
+  SlicePictureIdentity parsed;
+  const uint32_t parsed_first_mb = br.ue();
+  const uint32_t slice_type = br.ue();
+  parsed.pps_id = br.ue();
+  if (br.bad || parsed_first_mb >= sps.picture_mbs || slice_type > 9 ||
+      slice_type % 5 != 2 || parsed.pps_id != pps.id || pps.slice_groups_minus1 != 0)
+    return false;
+  parsed.slice_type = slice_type;
+  parsed.frame_num = br.u(sps.frame_num_bits);
+  if (!sps.frame_mbs_only) {
+    parsed.field_pic = br.u(1) != 0;
+    if (parsed.field_pic) parsed.bottom_field = br.u(1) != 0;
+  }
+  parsed.idr_pic_id = br.ue();
+  if (parsed.idr_pic_id > 65535) return false;
+  if (sps.poc_type == 0) {
+    parsed.poc_lsb = br.u(sps.poc_lsb_bits);
+    if (pps.bottom_field_pic_order && !parsed.field_pic)
+      parsed.delta_bottom = br.se();
+  } else if (sps.poc_type == 1 && !sps.delta_pic_order_always_zero) {
+    parsed.delta_poc0 = br.se();
+    if (pps.bottom_field_pic_order && !parsed.field_pic)
+      parsed.delta_poc1 = br.se();
+  }
+  if (pps.redundant_pic_cnt && br.ue() > 127) return false;
+  parsed.no_output_of_prior_pics = br.u(1) != 0;
+  parsed.long_term_reference = br.u(1) != 0;
+  const int32_t slice_qp_delta = br.se();
+  if (slice_qp_delta < -26 || slice_qp_delta > 25) return false;
+  if (pps.deblocking_filter_control) {
+    const uint32_t disable_deblocking = br.ue();
+    if (disable_deblocking > 2) return false;
+    if (disable_deblocking != 1) {
+      const int32_t alpha = br.se();
+      const int32_t beta = br.se();
+      if (alpha < -6 || alpha > 6 || beta < -6 || beta > 6) return false;
+    }
+  }
+  if (br.bad || !br.moreRbspData()) return false;
+  *picture = parsed;
+  *first_mb = parsed_first_mb;
   return true;
 }
 
@@ -263,22 +546,61 @@ bool parseSpsDims(const uint8_t* sps, size_t len, int* w, int* h) {
 
 bool validParameterSets(const Bytes& sps, const Bytes& pps) {
   int width = 0, height = 0;
-  uint32_t sps_id = 0, pps_id = 0, pps_sps_id = 0;
-  return parseSpsDims(sps.data(), sps.size(), &width, &height) &&
+  uint32_t sps_id = 0, pps_id = 0, pps_sps_id = 0, chroma_format = 0;
+  return validEscapedNal(sps.data(), sps.size()) && (sps[0] & 0x1f) == 7 &&
+      (sps[0] & 0x60) != 0 &&
+      parseSpsDims(sps.data(), sps.size(), &width, &height) &&
       parseSpsId(sps.data(), sps.size(), &sps_id) &&
-      parsePpsIds(pps.data(), pps.size(), &pps_id, &pps_sps_id) &&
+      spsChromaFormat(sps, &chroma_format) &&
+      parsePpsSyntax(pps, chroma_format, &pps_id, &pps_sps_id) &&
       sps_id == pps_sps_id;
 }
 
-bool idrReferencesPps(const uint8_t* annexb, size_t len, const Bytes& pps) {
-  uint32_t configured_pps = 0, configured_sps = 0;
-  if (!parsePpsIds(pps.data(), pps.size(), &configured_pps, &configured_sps)) return false;
-  for (const NalView& nal : splitAnnexB(annexb, len)) {
-    if (nal.type != 5) continue;
-    uint32_t slice_pps = 0;
-    if (parseSlicePpsId(nal, &slice_pps) && slice_pps == configured_pps) return true;
+bool idrReferencesPps(const uint8_t* annexb, size_t len, const Bytes& sps,
+                      const Bytes& pps) {
+  if (!annexb || len == 0 || len > 4 * 1024 * 1024 ||
+      !validParameterSets(sps, pps)) return false;
+  uint32_t chroma_format = 0, pps_id = 0, pps_sps_id = 0;
+  SpsSliceInfo sps_info;
+  PpsSliceInfo pps_info;
+  if (!spsChromaFormat(sps, &chroma_format) ||
+      !parseSpsSliceInfo(sps, &sps_info) ||
+      !parsePpsSyntax(pps, chroma_format, &pps_id, &pps_sps_id) ||
+      pps_sps_id != sps_info.id || !parsePpsSliceInfo(pps, chroma_format, &pps_info) ||
+      pps_info.id != pps_id)
+    return false;
+  const std::vector<NalView> nals = splitAnnexB(annexb, len);
+  if (nals.empty() || nals.size() > 128) return false;
+  bool saw_slice = false;
+  SlicePictureIdentity first_picture;
+  std::vector<uint32_t> first_mbs;
+  for (const NalView& nal : nals) {
+    if (nal.type < 1 || nal.type > 5) continue;
+    if (nal.type != 5) return false;
+    SlicePictureIdentity picture;
+    uint32_t first_mb = 0;
+    if (!parseIdrSlice(nal, sps_info, pps_info, &picture, &first_mb)) return false;
+    if (!saw_slice) {
+      first_picture = picture;
+      saw_slice = true;
+    } else if (picture.pps_id != first_picture.pps_id ||
+               picture.slice_type != first_picture.slice_type ||
+               picture.frame_num != first_picture.frame_num ||
+               picture.idr_pic_id != first_picture.idr_pic_id ||
+               picture.poc_lsb != first_picture.poc_lsb ||
+               picture.delta_bottom != first_picture.delta_bottom ||
+               picture.delta_poc0 != first_picture.delta_poc0 ||
+               picture.delta_poc1 != first_picture.delta_poc1 ||
+               picture.field_pic != first_picture.field_pic ||
+               picture.bottom_field != first_picture.bottom_field ||
+               picture.no_output_of_prior_pics != first_picture.no_output_of_prior_pics ||
+               picture.long_term_reference != first_picture.long_term_reference)
+      return false;
+    if (std::find(first_mbs.begin(), first_mbs.end(), first_mb) != first_mbs.end())
+      return false;
+    first_mbs.push_back(first_mb);
   }
-  return false;
+  return saw_slice;
 }
 
 std::string codecString(const Bytes& sps) {

@@ -225,15 +225,22 @@ TEST_CASE("capi: shell call lifecycle requires an exact call and stage") {
       "\"door\":\"d_front\",\"listen_port\":0,\"http_port\":0}");
   REQUIRE(core != nullptr);
   REQUIRE(db_core_start(core) == 0);
+  CHECK(db_core_call_lifecycle_api_version() == DB_CALL_LIFECYCLE_RESULT_API_VERSION);
   CHECK(db_core_emergency_v2(core, 1) == 1);
   CHECK(db_core_emergency_v2(core, 0) == 1);
   char* call_id = db_core_press_v2(core, "d_front", "");
   REQUIRE(call_id != nullptr);
   CHECK(std::strlen(call_id) == 32);
+  CHECK(db_core_report_call_answered_result_v3(core, "d_front", call_id, 1) ==
+        DB_CALL_LIFECYCLE_REJECTED);
   CHECK(db_core_report_call_answered_v2(core, "d_front", call_id, 1) == -2);
   CHECK(db_core_report_call_answered_v2(core, "d_front", call_id, 0) == 0);
+  CHECK(db_core_report_call_answered_result_v3(core, "d_front", call_id, 0) ==
+        DB_CALL_LIFECYCLE_ACCEPTED);
   CHECK(db_core_cancel_call_v2(core, "d_front", call_id, "visitor") == -2);
   CHECK(db_core_report_call_ended_v2(core, "d_front", call_id, 0, "sip_ended") == 0);
+  CHECK(db_core_report_call_ended_result_v3(core, "d_front", call_id, 0, "sip_ended") ==
+        DB_CALL_LIFECYCLE_ACCEPTED);
   CHECK(db_core_report_call_ended_v2(core, "d_front", call_id, 0, "sip_ended") == 0);
   db_free(call_id);
   db_core_stop(core);

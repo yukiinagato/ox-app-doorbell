@@ -94,16 +94,22 @@
                            bool interaction = true) {
     PanelPrincipal principal;
     if (!panelRequestPrincipal(request, &principal) || !panelGrantValid(grant)) return false;
-    if (principal.legacy_shared) return true;
-    if (!panelPrincipalAllowed(principal, door, grant)) return false;
-    if (mutation) {
-      const auto session = panelMutationSession(request);
-      if (session.empty()) return false;
+    const std::string cookie_session = request.cookie("dbpanel");
+    std::string mutation_session;
+    if (mutation && !cookie_session.empty()) {
+      mutation_session = panelMutationSession(request);
+      if (mutation_session.empty() || mutation_session != cookie_session) return false;
+    }
+    if (!principal.legacy_shared && !panelPrincipalAllowed(principal, door, grant)) return false;
+    if (!mutation_session.empty()) {
       std::lock_guard<std::mutex> lock(sess_mu);
-      const auto found = panel_sessions.find(session);
+      const auto found = panel_sessions.find(mutation_session);
       if (found == panel_sessions.end()) return false;
       if (interaction) found->second.interactive_mono = clock->monoMs();
     }
+    // The legacy bearer header is an explicit compatibility credential. Browser cookies
+    // always pass the mutation-intent check above because browsers attach them automatically.
+    if (principal.legacy_shared) return true;
     return true;
   }
 

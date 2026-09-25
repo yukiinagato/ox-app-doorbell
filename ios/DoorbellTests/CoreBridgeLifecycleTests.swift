@@ -43,6 +43,8 @@ final class CoreBridgeLifecycleTests: XCTestCase {
         boot.door = "front"
         let screen = MainViewController(core: bridge, boot: boot, runtime: nil)
         var currentCall = "call-A"
+        var monotonicNow: TimeInterval = 100
+        screen.peerFrameClockForTesting = { monotonicNow }
         screen.callTimingSnapshotForTesting = {
             guard let generation = bridge.runningGeneration else { return nil }
             return CallTiming.Snapshot(document: ["active_calls": [["call_id": currentCall,
@@ -92,6 +94,7 @@ final class CoreBridgeLifecycleTests: XCTestCase {
         XCTAssertNotNil(screen.peerFrameForTesting)
         let acceptedImage = screen.peerFrameForTesting
         screen.pollPeerFrameForTesting()
+        monotonicNow = 102.5
         reply(3, call: "call-B", sequence: "10")
         drain()
         XCTAssertTrue(screen.peerFrameForTesting === acceptedImage, "duplicate ten cannot redraw the same frame")
@@ -100,9 +103,22 @@ final class CoreBridgeLifecycleTests: XCTestCase {
         drain()
         XCTAssertTrue(screen.peerFrameForTesting === acceptedImage, "sequence nine cannot replace ten")
         screen.pollPeerFrameForTesting()
+        requests[5].1(nil, HTTPURLResponse(url: requests[5].0.url!, statusCode: 404,
+                                           httpVersion: "HTTP/1.1", headerFields: nil))
+        drain()
+        XCTAssertTrue(screen.peerFrameForTesting === acceptedImage, "a 404 does not flicker the image")
+        monotonicNow = 103.1
+        screen.expirePeerFrameForTesting()
+        XCTAssertNil(screen.peerFrameForTesting, "the last valid frame expires after three seconds")
+        XCTAssertTrue(screen.inCallForTesting, "frame expiry leaves the voice call active")
+        screen.pollPeerFrameForTesting()
+        reply(6, call: "call-B", sequence: "11")
+        drain()
+        XCTAssertNotNil(screen.peerFrameForTesting, "a new legal sequence restores video")
+        screen.pollPeerFrameForTesting()
         currentCall = ""
         screen.setPeerCallForTesting("")
-        reply(5, call: "call-B", sequence: "11")
+        reply(7, call: "call-B", sequence: "12")
         drain()
         XCTAssertNil(screen.peerFrameForTesting, "end clears the image and rejects late B delivery")
     }

@@ -21,6 +21,13 @@ extern "C" {
 
 typedef struct db_core db_core;
 
+#define DB_CALL_LIFECYCLE_RESULT_API_VERSION 3
+typedef enum db_call_lifecycle_result {
+  DB_CALL_LIFECYCLE_ACCEPTED = 0,
+  DB_CALL_LIFECYCLE_PENDING = 1,
+  DB_CALL_LIFECYCLE_REJECTED = 2
+} db_call_lifecycle_result;
+
 /* Legacy platform SPI. This layout is frozen at six pointers for ABI compatibility.
  * New integrations must use db_platform_v2 and db_core_create_v2(). */
 typedef struct db_platform {
@@ -164,6 +171,15 @@ DB_API int db_core_report_call_answered_v2(db_core* c, const char* door_id,
 DB_API int db_core_report_call_ended_v2(db_core* c, const char* door_id,
                                         const char* call_id, int stage_revision,
                                         const char* reason);
+/* Result v3 distinguishes a durable accepted write, a precisely queued persistence retry, and
+ * a rejected operation. The v2 symbols retain their original 0/-2 behavior. Query the API
+ * version to select this result contract; older libraries require the v2 fallback. */
+DB_API int db_core_call_lifecycle_api_version(void);
+DB_API db_call_lifecycle_result db_core_report_call_answered_result_v3(
+    db_core* c, const char* door_id, const char* call_id, int stage_revision);
+DB_API db_call_lifecycle_result db_core_report_call_ended_result_v3(
+    db_core* c, const char* door_id, const char* call_id, int stage_revision,
+    const char* reason);
 /* A restarted shell confirms whether it restored media/UI for a call. Failure, or no report within
  * ten seconds after a recovery request, produces one global call_cancelled event. */
 DB_API void db_core_report_call_recovery(db_core* c, const char* call_id, int restored);
@@ -288,14 +304,15 @@ DB_API char* db_core_panel_identity_json_v2(db_core* c, const char* action,
 DB_API int db_core_delete_config_key(db_core* c, const char* key);
 
 /* ---- Time service ----
- * Core never sets the operating-system clock. When time.ntp.enabled is on and a sync succeeded
- * within three intervals, core adds its measured offset to every wall-clock reading: the HLC,
+ * Core never sets the operating-system clock. When time.ntp.enabled is on and a sync has
+ * succeeded, core projects that trusted sample from a monotonic anchor for wall-clock readings:
+ * the HLC,
  * event and call-history timestamps, rule schedules, and quiet hours. HLC ordering remains
  * monotonic, but its logical floor never overrides displayed time or physical timestamps;
  * backward corrections apply immediately. status.time reports
  *   {"zone":"Asia/Tokyo","zone_known":true,"source":"system|ntp","enabled":bool,"ok":bool,
  *    "offset_ms":0,"measured_offset_ms":0,"last_sync_ms":0,"rtt_ms":0,"server":"",
- *    "interval_s":900,"offset_min":540,"syncing":false,"err":"…","local":{…}}
+ *    "interval_s":86400,"offset_min":540,"syncing":false,"err":"…","local":{…}}
  * where offset_ms is the correction actually applied (zero while the source is system) and
  * measured_offset_ms is the last measurement regardless. status.time.zones lists every zone
  * identifier core can resolve, grouped by region ({"Asia":["Asia/Tokyo",…],…}); a native picker

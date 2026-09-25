@@ -1153,8 +1153,12 @@ PIN: {1}</value></data>
   <data name="theme_unsampled_too_large" xml:space="preserve"><value>画像が大きすぎます</value></data>
   <data name="time_err_bad_reply" xml:space="preserve"><value>サーバーの応答が正しくありません</value></data>
   <data name="time_err_bad_server" xml:space="preserve"><value>サーバーの書き方が正しくありません</value></data>
+  <data name="time_err_clock_changed" xml:space="preserve"><value>同期中に端末の時計が変更されました。もう一度同期してください</value></data>
   <data name="time_err_implausible" xml:space="preserve"><value>測定した時刻が信用できないため使いませんでした</value></data>
+  <data name="time_err_large_offset_confirming" xml:space="preserve"><value>大きな時刻差を確認中です。時刻サーバーから安定した応答を待っています</value></data>
   <data name="time_err_no_response" xml:space="preserve"><value>時刻サーバーから応答がありません</value></data>
+  <data name="time_err_offset_unreasonable" xml:space="preserve"><value>日時が大きくずれています。端末の日付と時刻サーバーを確認してください</value></data>
+  <data name="time_err_rtt_unreasonable" xml:space="preserve"><value>応答時間が長すぎるため時刻を使いませんでした</value></data>
   <data name="time_interval_hint" xml:space="preserve"><value>既定は 86400 秒 (1 日)。指定できるのは 3600 秒 (1 時間) から 604800 秒 (7 日) まで。時刻のずれは数日単位でしか変わらないため、これより頻繁に同期しても電池と通信量を使うだけです。失敗したときは 1 分後から順に間隔を空けて再試行します</value></data>
   <data name="time_interval_s" xml:space="preserve"><value>同期間隔 (秒)</value></data>
   <data name="time_invalid_interval" xml:space="preserve"><value>同期間隔は 3600 秒から 604800 秒の間で指定してください</value></data>
@@ -1178,7 +1182,9 @@ PIN: {1}</value></data>
   <data name="time_status" xml:space="preserve"><value>現在の状態</value></data>
   <data name="time_sync_failed" xml:space="preserve"><value>同期を開始できませんでした</value></data>
   <data name="time_sync_now" xml:space="preserve"><value>今すぐ同期</value></data>
+  <data name="time_sync_result_failed" xml:space="preserve"><value>時刻を同期できませんでした</value></data>
   <data name="time_sync_started" xml:space="preserve"><value>同期を開始しました</value></data>
+  <data name="time_sync_succeeded" xml:space="preserve"><value>時刻を同期しました</value></data>
   <data name="time_title" xml:space="preserve"><value>時刻</value></data>
   <data name="time_zone" xml:space="preserve"><value>タイムゾーン</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</value></data>

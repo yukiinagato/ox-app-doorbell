@@ -249,7 +249,7 @@ limitation を別に報告し、Admin は両 evidence level を区別します�
   "zone": "Asia/Tokyo", "zone_known": true,
   "source": "system", "enabled": false, "ok": false,
   "offset_ms": 0, "measured_offset_ms": 0,
-  "last_sync_ms": 0, "rtt_ms": 0, "server": "", "interval_s": 900,
+  "last_sync_ms": 0, "rtt_ms": 0, "server": "", "interval_s": 86400,
   "offset_min": 540, "syncing": false,
   "local": { "iso": "2026-09-02T21:30:00+09:00", "date": "2026-09-02",
              "hh": 21, "mm": 30, "ss": 0, "weekday": "wed", "weekday_num": 3,
@@ -258,12 +258,17 @@ limitation を別に報告し、Admin は両 evidence level を区別します�
 }
 ```
 
-`source` が `ntp` になるのは `time.ntp.enabled` が true で、かつ 3 間隔以内に同期が成功している
-場合だけです。それ以外は `system` で `offset_ms` は 0 になります。`measured_offset_ms` は
+`source` が `ntp` になるのは `time.ntp.enabled` が true で、かつ同期が一度成功している場合です。
+信頼できる測定値は次の同期または NTP 無効化まで単調時計アンカーから算出します。それ以外は `system` で `offset_ms` は 0 になります。`measured_offset_ms` は
 どちらの場合も最後の測定値を保持するので、NTP を切ったあとも測定結果を表示できます。
-`err` は同期失敗後に現れ、`no_response` / `bad_server` / `bad_reply` / `implausible` のいずれかです。
+`err` は同期失敗後に現れ、`no_response` / `bad_server` / `bad_reply` / `implausible` /
+`rtt_unreasonable` / `offset_unreasonable` / `large_offset_confirming` / `clock_changed` のいずれかです。
 Admin は `source` をそのまま表示し、`enabled` だけから推測してはいけません。有効でも到達できない
 時刻サービスは system 時刻で動いているからです。
+
+24 時間を超えるサンプルは通常の補正として採用しません。初回復旧では、最大 30 日の補正を
+低 RTT の安定した応答 3 回で確認してから適用します。それまでは以前の信頼できる時刻を維持し、
+却下理由を返します。`offset_unreasonable` が続く場合は端末の日付と設定した時刻サーバーを確認してください。
 
 `POST /api/time/sync` (管理セッション) は即時の 1 回を開始し `{"ok":true,"started":true}` を返します。
 独立時刻サービスが無効なら `409 {"ok":false,"err":"ntp_disabled"}`、core 起動前なら

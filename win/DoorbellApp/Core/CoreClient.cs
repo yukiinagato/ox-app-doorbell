@@ -264,23 +264,63 @@ namespace DoorbellApp.Core
         }
 
         public bool ReportCallAnswered(string doorId, string callId, int stageRevision)
+            => ReportCallAnsweredResult(doorId, callId, stageRevision, Generation) ==
+               CallLifecycleReportResult.Accepted;
+
+        public CallLifecycleReportResult ReportCallAnsweredResult(string doorId, string callId,
+            int stageRevision, long expectedGeneration)
         {
             if (string.IsNullOrEmpty(doorId) || string.IsNullOrEmpty(callId) ||
-                stageRevision < 0) return false;
+                stageRevision < 0) return CallLifecycleReportResult.Rejected;
             lock (_nativeLock)
-                return _core != IntPtr.Zero && CoreInterop.db_core_report_call_answered_v2(
-                    _core, doorId, callId, stageRevision) == 0;
+            {
+                if (_core == IntPtr.Zero || expectedGeneration != Generation)
+                    return CallLifecycleReportResult.Rejected;
+                try
+                {
+                    if (CoreInterop.db_core_call_lifecycle_api_version() >= 3)
+                        return MapCallLifecycleResult(
+                            CoreInterop.db_core_report_call_answered_result_v3(
+                                _core, doorId, callId, stageRevision));
+                }
+                catch (EntryPointNotFoundException) { }
+                return CoreInterop.db_core_report_call_answered_v2(
+                    _core, doorId, callId, stageRevision) == 0
+                    ? CallLifecycleReportResult.Accepted : CallLifecycleReportResult.Rejected;
+            }
         }
 
         public bool ReportCallEnded(string doorId, string callId, int stageRevision,
                                     string reason = "sip_ended")
+            => ReportCallEndedResult(doorId, callId, stageRevision, reason, Generation) ==
+               CallLifecycleReportResult.Accepted;
+
+        public CallLifecycleReportResult ReportCallEndedResult(string doorId, string callId,
+            int stageRevision, string reason, long expectedGeneration)
         {
             if (string.IsNullOrEmpty(doorId) || string.IsNullOrEmpty(callId) ||
-                stageRevision < 0) return false;
+                stageRevision < 0) return CallLifecycleReportResult.Rejected;
             lock (_nativeLock)
-                return _core != IntPtr.Zero && CoreInterop.db_core_report_call_ended_v2(
-                    _core, doorId, callId, stageRevision, reason ?? "sip_ended") == 0;
+            {
+                if (_core == IntPtr.Zero || expectedGeneration != Generation)
+                    return CallLifecycleReportResult.Rejected;
+                try
+                {
+                    if (CoreInterop.db_core_call_lifecycle_api_version() >= 3)
+                        return MapCallLifecycleResult(
+                            CoreInterop.db_core_report_call_ended_result_v3(
+                                _core, doorId, callId, stageRevision, reason ?? "sip_ended"));
+                }
+                catch (EntryPointNotFoundException) { }
+                return CoreInterop.db_core_report_call_ended_v2(
+                    _core, doorId, callId, stageRevision, reason ?? "sip_ended") == 0
+                    ? CallLifecycleReportResult.Accepted : CallLifecycleReportResult.Rejected;
+            }
         }
+
+        private static CallLifecycleReportResult MapCallLifecycleResult(int result) =>
+            result == 0 ? CallLifecycleReportResult.Accepted :
+            result == 1 ? CallLifecycleReportResult.Pending : CallLifecycleReportResult.Rejected;
 
         public UiEvent TakePendingRecovery()
         {
@@ -319,7 +359,15 @@ namespace DoorbellApp.Core
         public void SipCall(string target, string mode)
         { if (_core != IntPtr.Zero && !string.IsNullOrEmpty(target)) CoreInterop.db_core_sip_call(_core, target, mode ?? ""); }
 
-        public void SipHangup() { if (_core != IntPtr.Zero) CoreInterop.db_core_sip_hangup(_core); }
+        public void SipHangup() => SipHangup(-1);
+
+        public void SipHangup(long expectedGeneration)
+        {
+            lock (_nativeLock)
+                if (_core != IntPtr.Zero &&
+                    (expectedGeneration < 0 || expectedGeneration == Generation))
+                    CoreInterop.db_core_sip_hangup(_core);
+        }
 
         public bool SipSendDtmf(string digits)
         {

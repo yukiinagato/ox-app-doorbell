@@ -55,6 +55,8 @@ final class MainViewController: UIViewController {
     private var peerPollTask: URLSessionDataTask?
     private var peerMediaGeneration = ""
     private var peerFrameSequence: UInt64 = 0
+    private var peerDisplayedFrameIdentity: PeerFrameIdentity?
+    private var peerLastValidFrameAt: TimeInterval?
     private struct PeerFrameIdentity: Equatable {
         let core: UInt64
         let call: String
@@ -81,6 +83,7 @@ final class MainViewController: UIViewController {
     var callTimingSnapshotForTesting: (() -> CallTiming.Snapshot?)?
     var suppressVisitorMediaForTesting = false
     var peerFrameLoadForTesting: ((URLRequest, @escaping (Data?, URLResponse?) -> Void) -> Void)?
+    var peerFrameClockForTesting: (() -> TimeInterval)?
 #endif
     private let safeMode = false
     private var chimeGate = CallChimeRevisionGate()
@@ -251,9 +254,7 @@ final class MainViewController: UIViewController {
         ) { [weak self] _ in self?.suspendCallTiming() }
         refreshPairingStatus()
 
-        clockTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            self?.onClockTick()
-        }
+        scheduleClockTick()
         refreshClockBase()
         clockRefreshTimer = IOSAvailability.scheduledTimer(
             withTimeInterval: DoorbellClockSource.refreshIntervalS, repeats: true
@@ -898,6 +899,17 @@ final class MainViewController: UIViewController {
             inCallView.isHidden && presentedViewController == nil &&
             Date().timeIntervalSince(lastActivity) > Double(screensaverAfterS) {
             enterScreensaver()
+        }
+        scheduleClockTick()
+    }
+
+    private func scheduleClockTick() {
+        clockTimer?.invalidate()
+        let wallMs = clockSource.reading()?.wallMs ?? 0
+        let phase = Double((wallMs % 1000 + 1000) % 1000) / 1000
+        let delay = wallMs > 0 ? max(0.01, 1 - phase) : 1
+        clockTimer = IOSAvailability.scheduledTimer(withTimeInterval: delay, repeats: false) { [weak self] _ in
+            self?.onClockTick()
         }
     }
 
@@ -1744,6 +1756,7 @@ final class MainViewController: UIViewController {
         if stream.isEmpty && !safeMode {
             peerPollBusy = false
             peerPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
+                self?.expirePeerFrameIfNeeded()
                 self?.pollPeerFrame()
             }
         }
@@ -1876,6 +1889,8 @@ final class MainViewController: UIViewController {
                       let img = UIImage(data: data) else { return }
                 self.peerMediaGeneration = media
                 self.peerFrameSequence = sequence
+                self.peerDisplayedFrameIdentity = identity
+                self.peerLastValidFrameAt = self.peerFrameMonotonicTime
                 self.peerVideo.image = img
             }
         }
@@ -1903,6 +1918,25 @@ final class MainViewController: UIViewController {
                                  revision: revision.intValue, owner: owner)
     }
 
+    private var peerFrameMonotonicTime: TimeInterval {
+#if DEBUG
+        if let clock = peerFrameClockForTesting { return clock() }
+#endif
+        return ProcessInfo.processInfo.systemUptime
+    }
+
+    private func expirePeerFrameIfNeeded(now: TimeInterval? = nil) {
+        guard let displayed = peerDisplayedFrameIdentity else { return }
+        let current = currentPeerFrameIdentity()
+        let received = peerLastValidFrameAt ?? 0
+        let elapsed = (now ?? peerFrameMonotonicTime) - received
+        guard current != displayed || received <= 0 || elapsed < 0 || elapsed > 3.0 else { return }
+        peerVideo.image = nil
+        peerVideo.transform = .identity
+        peerDisplayedFrameIdentity = nil
+        peerLastValidFrameAt = nil
+    }
+
     private func retirePeerFrameRequest() {
         peerPollGeneration &+= 1
         peerPollTask?.cancel()
@@ -1910,6 +1944,8 @@ final class MainViewController: UIViewController {
         peerPollBusy = false
         peerMediaGeneration = ""
         peerFrameSequence = 0
+        peerDisplayedFrameIdentity = nil
+        peerLastValidFrameAt = nil
     }
 
 #if DEBUG
@@ -1919,8 +1955,10 @@ final class MainViewController: UIViewController {
         if inCall { showInCall(streamUrl: nil) } else { closeInCall() }
     }
     func pollPeerFrameForTesting() { pollPeerFrame() }
+    func expirePeerFrameForTesting(now: TimeInterval? = nil) { expirePeerFrameIfNeeded(now: now) }
     var peerFrameForTesting: UIImage? { peerVideo.image }
     var peerPollBusyForTesting: Bool { peerPollBusy }
+    var inCallForTesting: Bool { inCall }
 #endif
 
 

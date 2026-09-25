@@ -183,6 +183,55 @@
     };
   }
 
+  function attachSnapshotPoll(url, frame, failed) {
+    if (!root.fetch || !root.URL || !root.URL.createObjectURL || !sameOrigin(url)) return null;
+    var stopped = false, timer = null, aborter = null, requestTimer = null, failures = 0;
+    function schedule(delay) {
+      if (!stopped) timer = root.setTimeout(poll, delay);
+    }
+    function poll() {
+      if (stopped) return;
+      aborter = root.AbortController ? new root.AbortController() : null;
+      requestTimer = root.setTimeout(function () {
+        try { if (aborter) aborter.abort(); } catch (e) {}
+      }, 2200);
+      var request = { cache: "no-store", credentials: "same-origin" };
+      if (aborter) request.signal = aborter.signal;
+      root.fetch(url, request).then(function (resp) {
+        if (!resp.ok || !resp.headers ||
+            !/^image\/jpeg(?:\s*;|$)/i.test(resp.headers.get("content-type") || ""))
+          throw new Error("invalid snapshot response");
+        var length = Number(resp.headers.get("content-length") || 0);
+        if (length > 300 * 1024) throw new Error("snapshot too large");
+        return resp.blob();
+      }).then(function (blob) {
+        if (requestTimer) root.clearTimeout(requestTimer);
+        requestTimer = null;
+        if (stopped) return;
+        if (!blob || blob.size < 4 || blob.size > 300 * 1024 ||
+            (blob.type && blob.type.toLowerCase().indexOf("image/jpeg") !== 0))
+          throw new Error("invalid snapshot body");
+        failures = 0;
+        frame(blob);
+        schedule(300);
+      }).catch(function () {
+        if (requestTimer) root.clearTimeout(requestTimer);
+        requestTimer = null;
+        if (stopped) return;
+        failures++;
+        if (failures >= 5) failed();
+        else schedule(Math.min(1500, 250 * failures));
+      });
+    }
+    poll();
+    return function () {
+      stopped = true;
+      if (timer) root.clearTimeout(timer);
+      if (requestTimer) root.clearTimeout(requestTimer);
+      try { if (aborter) aborter.abort(); } catch (e) {}
+    };
+  }
+
   function start(options) {
     var list = strategies(options.profile), video = options.video, img = options.img;
     var mp4 = options.mp4 || "", mjpeg = options.mjpeg || "";
@@ -223,8 +272,20 @@
         if (current && current.id === "mjpeg") advance("stream_error");
       }
       img.onerror = failedMjpeg;
-      mjpegStop = options.mjpegMode === "image" || !sameOrigin(mjpeg) ? null :
-        attachMjpeg(mjpeg, function (blob) {
+      if (options.mjpegMode === "poll") {
+        if (!sameOrigin(mjpeg)) { failedMjpeg(); return; }
+        mjpegPrecise = true;
+        mjpegStop = attachSnapshotPoll(mjpeg, function (blob) {
+          if (stopped) return;
+          var old = mjpegObjectUrl;
+          mjpegObjectUrl = root.URL.createObjectURL(blob);
+          img.src = mjpegObjectUrl;
+          lastActivity = new Date().getTime();
+          if (old) try { root.URL.revokeObjectURL(old); } catch (e) {}
+        }, failedMjpeg);
+      } else {
+        mjpegStop = options.mjpegMode === "image" || !sameOrigin(mjpeg) ? null :
+          attachMjpeg(mjpeg, function (blob) {
         if (stopped) return;
         var old = mjpegObjectUrl;
         mjpegObjectUrl = root.URL.createObjectURL(blob);
@@ -232,9 +293,10 @@
         mjpegPrecise = true;
         lastActivity = new Date().getTime();
         if (old) try { root.URL.revokeObjectURL(old); } catch (e) {}
-        }, failedMjpeg);
+          }, failedMjpeg);
+      }
       if (mjpegStop) mjpegPrecise = true;
-      else img.src = mjpeg;
+      else if (options.mjpegMode !== "poll") img.src = mjpeg;
     }
     function selectMjpeg() {
       if (stopped || !current || current.id !== "mjpeg" || playing) return;

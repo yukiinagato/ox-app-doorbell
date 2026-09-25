@@ -455,7 +455,7 @@ function selectDoor(d, forcePlaybackRefresh) {
     const mp4 = DoorbellPlayback.proxyMp4Url(d.id, K, d.stream_mp4, window.location);
     const mjpeg = "/snapshot-proxy?door=" + encodeURIComponent(d.id) + "&live=1";
     playback = DoorbellPlayback.start({ profile: d.playback_profile,
-      mp4, mjpeg, mjpegMode: "image", video: els.liveVideo, img: els.live,
+      mp4, mjpeg, mjpegMode: "poll", video: els.liveVideo, img: els.live,
       onState: (state) => { els.noVideo.style.display = state === "failed" ? "" : "none"; } });
   }
   updateCallButton();

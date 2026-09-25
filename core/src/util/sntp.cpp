@@ -95,9 +95,12 @@ Sample computeSample(int64_t t1, int64_t t2, int64_t t3, int64_t t4) {
 }
 
 bool sampleSane(const Sample& sample) {
-  if (sample.rtt_ms < 0 || sample.rtt_ms > kMaxRttMs) return false;
-  const int64_t magnitude = sample.offset_ms < 0 ? -sample.offset_ms : sample.offset_ms;
-  return magnitude <= kMaxOffsetMs;
+  if (!sampleRttSane(sample)) return false;
+  return sample.offset_ms >= -kMaxOffsetMs && sample.offset_ms <= kMaxOffsetMs;
+}
+
+bool sampleRttSane(const Sample& sample) {
+  return sample.rtt_ms >= 0 && sample.rtt_ms <= kMaxRttMs;
 }
 
 bool parseServer(const std::string& spec, std::string* host, int* port) {
@@ -142,8 +145,13 @@ bool parseServer(const std::string& spec, std::string* host, int* port) {
 }
 
 bool exchange(const std::string& host, int port, int timeout_ms,
-              const uint8_t request[kPacketSize], uint8_t response[kPacketSize]) {
-  if (host.empty() || port < 1 || port > 65535 || !request || !response) return false;
+              const std::function<int64_t()>& wall_now,
+              const std::function<int64_t()>& mono_now, uint8_t response[kPacketSize],
+              int64_t* sent_unix_ms, int64_t* received_unix_ms, bool* clock_changed) {
+  if (host.empty() || port < 1 || port > 65535 || !wall_now || !mono_now || !response ||
+      !sent_unix_ms || !received_unix_ms || !clock_changed) return false;
+  *clock_changed = false;
+  const int64_t deadline = mono_now() + timeout_ms;
   addrinfo hints{};
   hints.ai_family = AF_UNSPEC;
   hints.ai_socktype = SOCK_DGRAM;
@@ -154,21 +162,37 @@ bool exchange(const std::string& host, int port, int timeout_ms,
     return false;
   bool ok = false;
   for (addrinfo* p = addresses; p && !ok; p = p->ai_next) {
+    const int64_t remaining = deadline - mono_now();
+    if (remaining <= 0) break;
     net::socket_t fd = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol);
     if (!net::valid(fd)) continue;
     net::setNonBlock(fd);
+    uint8_t request[kPacketSize];
+    const int64_t mono_t1 = mono_now();
+    const int64_t t1 = wall_now();
+    buildRequest(request, t1);
     const int sent = net::sendTo(fd, request, kPacketSize, p->ai_addr,
                                  static_cast<net::socklen_v>(p->ai_addrlen));
     if (sent == static_cast<int>(kPacketSize)) {
       net::pollfd_t pfd{};
       pfd.fd = fd;
       pfd.events = POLLIN;
-      if (net::poll(&pfd, 1, timeout_ms) > 0 && (pfd.revents & POLLIN)) {
+      if (net::poll(&pfd, 1, static_cast<int>(remaining)) > 0 && (pfd.revents & POLLIN)) {
         uint8_t buffer[256];
         const int received = net::recvFrom(fd, buffer, sizeof(buffer));
         if (received >= static_cast<int>(kPacketSize)) {
           std::memcpy(response, buffer, kPacketSize);
-          ok = true;
+          *sent_unix_ms = t1;
+          *received_unix_ms = wall_now();
+          const int64_t mono_t4 = mono_now();
+          const int64_t wall_elapsed = *received_unix_ms - t1;
+          const int64_t mono_elapsed = mono_t4 - mono_t1;
+          const int64_t clock_step = wall_elapsed - mono_elapsed;
+          if (clock_step < -1000 || clock_step > 1000) {
+            *clock_changed = true;
+          } else {
+            ok = true;
+          }
         }
       }
     }

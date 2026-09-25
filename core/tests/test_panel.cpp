@@ -303,6 +303,10 @@ TEST_CASE("panel API: token auth / state / press / snapshot proxy / motion detec
   }
 
 
+  panel_auth = "invalid-panel-token";
+  CHECK(panelReq(http_port, "POST", "/api/panel/press", "door=d_front",
+                 "application/x-www-form-urlencoded").find("403") != std::string::npos);
+  panel_auth = k;
   const std::string first_press = panelReq(http_port, "POST", "/api/panel/press",
                                            "door=d_front&k=" + k,
                                            "application/x-www-form-urlencoded");
@@ -311,6 +315,8 @@ TEST_CASE("panel API: token auth / state / press / snapshot proxy / motion detec
   REQUIRE(first_press_json);
   const std::string first_call_id = json::getString(first_press_json.get(), "call_id");
   REQUIRE(!first_call_id.empty());
+  CHECK(panelReq(http_port, "POST", "/api/panel/media-authorize?door=d_front&call_id=" +
+      first_call_id + "&stage_revision=0").find("403") != std::string::npos);
   const std::string browser_dialog = "0123456789abcdef0123456789abcdef";
   st = panelReq(http_port, "GET", "/api/panel/state?k=" + k);
   CHECK(st.find("\"calling\":true") != std::string::npos);

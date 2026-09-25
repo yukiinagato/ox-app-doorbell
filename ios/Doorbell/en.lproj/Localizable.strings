@@ -1137,8 +1137,12 @@
 "theme.unsampled_too_large" = "Image too large";
 "time.err_bad_reply" = "The server's answer wasn't valid";
 "time.err_bad_server" = "A server entry isn't written correctly";
+"time.err_clock_changed" = "The device clock changed during sync; try syncing again";
 "time.err_implausible" = "The measured time wasn't plausible and was discarded";
+"time.err_large_offset_confirming" = "Confirming the large clock difference with more server responses";
 "time.err_no_response" = "No answer from the time servers";
+"time.err_offset_unreasonable" = "The clock difference is too large; check the device date and time server";
+"time.err_rtt_unreasonable" = "The server response took too long to trust";
 "time.interval_hint" = "The default is 86400 seconds (one day), and the range is 3600 seconds (one hour) to 604800 seconds (seven days). A clock correction only drifts over days, so syncing more often costs battery and traffic for nothing. After a failure the service retries from one minute, doubling up to an hour.";
 "time.interval_s" = "Sync interval (seconds)";
 "time.invalid_interval" = "The sync interval must be between 3600 and 604800 seconds";
@@ -1162,7 +1166,9 @@
 "time.status" = "Current state";
 "time.sync_failed" = "Couldn't start the sync";
 "time.sync_now" = "Sync now";
+"time.sync_result_failed" = "Time sync failed";
 "time.sync_started" = "Sync started";
+"time.sync_succeeded" = "Time sync succeeded";
 "time.title" = "Time";
 "time.zone" = "Time zone";
 "time.zone_hint" = "This sets the clock, call history, and rule schedules for the whole cluster";

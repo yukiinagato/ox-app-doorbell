@@ -243,12 +243,20 @@ durable replication coverage vector; until one exists, retention is a no-op.
 }
 ```
 
-`source` is `ntp` only while `time.ntp.enabled` is true *and* a sync succeeded within three
-intervals; otherwise it is `system` and `offset_ms` is 0. `measured_offset_ms` keeps the last
+`source` is `ntp` only while `time.ntp.enabled` is true *and* a sync has succeeded; Core projects
+that trusted sample from a monotonic anchor until a later sync replaces it or NTP is disabled.
+Otherwise it is `system` and `offset_ms` is 0. `measured_offset_ms` keeps the last
 measurement either way, so the card can show what was measured after NTP is switched off.
-`err` is present after a failed round and is one of `no_response`, `bad_server`, `bad_reply`, or
-`implausible`. Admin must render `source` and never infer it from `enabled` alone: an enabled but
+`err` is present after a failed round and is one of `no_response`, `bad_server`, `bad_reply`,
+`implausible`, `rtt_unreasonable`, `offset_unreasonable`, `large_offset_confirming`, or
+`clock_changed`. Admin must
+render `source` and never infer it from `enabled` alone: an enabled but
 unreachable time service is still running on system time.
+
+Samples over 24 hours are not accepted as ordinary corrections. Initial recovery allows a
+correction up to 30 days only after three consistent, low-RTT responses; otherwise Core keeps the
+previous trusted time and reports why it rejected the sample. Check the device date and configured
+time server when `offset_unreasonable` persists.
 
 `time.ntp.interval_s` defaults to 86400 (once a day) and accepts 3600 to 604800 -- one hour to
 seven days. A measured correction does not drift meaningfully over hours, so a shorter interval

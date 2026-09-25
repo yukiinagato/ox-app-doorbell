@@ -3,14 +3,13 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <mutex>
 
 namespace db {
 
-// wallMs() is the corrected wall clock: the raw platform clock plus the offset the optional
-// time service (SNTP) measured. Every consumer -- the HLC, event timestamps, schedules and
-// displayed clocks -- reads it, so enabling NTP corrects all of them at once. The offset is zero
-// unless time.ntp.enabled is on and a recent sync succeeded, and the platform clock itself is
-// never modified.
+// When SNTP has a nonzero correction, wallMs projects a calibrated wall-time anchor from the
+// monotonic clock. This keeps OS clock steps from being added to or subtracting from that sample.
+// Without a correction it follows the raw platform wall clock. The platform clock is never set.
 class IClock {
  public:
   virtual ~IClock() = default;
@@ -19,15 +18,37 @@ class IClock {
   virtual int64_t systemWallMs() = 0;
 
   int64_t wallMs() {
-    return systemWallMs() + wall_offset_ms_.load(std::memory_order_relaxed);
+    if (wall_offset_ms_.load(std::memory_order_relaxed) == 0) return systemWallMs();
+    std::lock_guard<std::mutex> lock(anchor_mutex_);
+    if (wall_offset_ms_.load(std::memory_order_relaxed) == 0) return systemWallMs();
+    if (!anchored_) {
+      anchor_wall_ms_.store(systemWallMs() + wall_offset_ms_.load(std::memory_order_relaxed),
+                            std::memory_order_relaxed);
+      anchor_mono_ms_.store(monoMs(), std::memory_order_relaxed);
+      anchored_ = true;
+    }
+    return anchor_wall_ms_.load(std::memory_order_relaxed) +
+           (monoMs() - anchor_mono_ms_.load(std::memory_order_relaxed));
   }
   void setWallOffsetMs(int64_t offset_ms) {
+    std::lock_guard<std::mutex> lock(anchor_mutex_);
     wall_offset_ms_.store(offset_ms, std::memory_order_relaxed);
+    if (offset_ms == 0) {
+      anchored_ = false;
+      return;
+    }
+    anchor_wall_ms_.store(systemWallMs() + offset_ms, std::memory_order_relaxed);
+    anchor_mono_ms_.store(monoMs(), std::memory_order_relaxed);
+    anchored_ = true;
   }
   int64_t wallOffsetMs() const { return wall_offset_ms_.load(std::memory_order_relaxed); }
 
  private:
   std::atomic<int64_t> wall_offset_ms_{0};
+  std::atomic<int64_t> anchor_wall_ms_{0};
+  std::atomic<int64_t> anchor_mono_ms_{0};
+  std::mutex anchor_mutex_;
+  bool anchored_ = false;
 };
 
 class RealClock : public IClock {

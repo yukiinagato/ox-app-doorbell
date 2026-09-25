@@ -391,7 +391,7 @@ int emFreePort(std::mt19937& /*rng*/) {
 
 std::string emHttp(int port, const std::string& method, const std::string& path,
                    const std::string& body = "", const std::string& ctype = "",
-                   const std::string& cookie = "") {
+                   const std::string& cookie = "", const std::string& extra_headers = "") {
   int fd = ::socket(AF_INET, SOCK_STREAM, 0);
   REQUIRE(fd >= 0);
   sockaddr_in sa{};
@@ -400,6 +400,7 @@ std::string emHttp(int port, const std::string& method, const std::string& path,
   sa.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
   REQUIRE(::connect(fd, reinterpret_cast<sockaddr*>(&sa), sizeof(sa)) == 0);
   std::string r = method + " " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
+  r += extra_headers;
   if (!cookie.empty()) {
     if (cookie.rfind("Bearer ", 0) == 0) r += "Authorization: " + cookie + "\r\n";
     else r += "Cookie: " + cookie + "\r\n";
@@ -478,10 +479,24 @@ TEST_CASE("emergency API: panels may activate, while only admins may clear") {
 
   std::string login = emHttp(http_port, "POST", "/api/login", "{\"password\":\"test123\"}");
   REQUIRE(login.rfind("HTTP/1.1 200", 0) == 0);
+  const size_t body_start = login.find("\r\n\r\n");
+  auto login_json = json::parse(body_start == std::string::npos ? "" : login.substr(body_start + 4));
+  REQUIRE(login_json);
+  const std::string csrf = json::getString(login_json.get(), "csrf_token");
+  REQUIRE_FALSE(csrf.empty());
   auto cpos = login.find("dbsess=");
   REQUIRE(cpos != std::string::npos);
   std::string cookie = login.substr(cpos, login.find(';', cpos) - cpos);
   CHECK(emHttp(http_port, "POST", "/api/emergency", "{\"active\":false}", "", cookie)
+            .rfind("HTTP/1.1 403", 0) == 0);
+  {
+    auto st = json::parse(node.statusJson());
+    REQUIRE(st);
+    CHECK(json::getBool(json::get(st.get(), "emergency"), "active"));
+  }
+  CHECK(emHttp(http_port, "POST", "/api/emergency", "{\"active\":false}", "", cookie,
+      "Origin: http://127.0.0.1:" + std::to_string(http_port) +
+          "\r\nX-Doorbell-CSRF: " + csrf + "\r\n")
             .find("{\"ok\":true}") != std::string::npos);
   {
     auto st = json::parse(node.statusJson());
@@ -489,7 +504,9 @@ TEST_CASE("emergency API: panels may activate, while only admins may clear") {
     CHECK(json::getBool(json::get(st.get(), "emergency"), "active") == false);
   }
 
-  CHECK(emHttp(http_port, "POST", "/api/emergency", "{}", "", cookie)
+  CHECK(emHttp(http_port, "POST", "/api/emergency", "{}", "", cookie,
+      "Origin: http://127.0.0.1:" + std::to_string(http_port) +
+          "\r\nX-Doorbell-CSRF: " + csrf + "\r\n")
             .find("400") != std::string::npos);
 
   node.stop();

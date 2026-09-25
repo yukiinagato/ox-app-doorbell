@@ -9,6 +9,12 @@ import UIKit
 
 typealias UiEventHandler = ([String: Any]) -> Void
 
+enum CallLifecycleReportResult: Equatable {
+    case accepted
+    case pending
+    case rejected
+}
+
 private final class CoreUiCallbackRegistration {
     weak var bridge: CoreBridge?
     let generation: UInt64
@@ -369,6 +375,23 @@ final class CoreBridge {
         } ?? false
     }
 
+    func reportCallAnsweredResult(door: String, callId: String, stageRevision: Int,
+                                  coreGeneration: UInt64?) -> CallLifecycleReportResult {
+        return withCore(generation: coreGeneration) { c -> CallLifecycleReportResult in
+            guard !door.isEmpty, !callId.isEmpty, stageRevision >= 0 else { return .rejected }
+            guard db_core_call_lifecycle_api_version() >= Int32(DB_CALL_LIFECYCLE_RESULT_API_VERSION)
+            else {
+                return db_core_report_call_answered_v2(c, door, callId, Int32(stageRevision)) == 0
+                    ? .accepted : .rejected
+            }
+            switch db_core_report_call_answered_result_v3(c, door, callId, Int32(stageRevision)).rawValue {
+            case 0: return .accepted
+            case 1: return .pending
+            default: return .rejected
+            }
+        } ?? .rejected
+    }
+
     @discardableResult
     func reportCallEnded(door: String, callId: String, stageRevision: Int,
                          reason: String = "sip_ended") -> Bool {
@@ -376,6 +399,24 @@ final class CoreBridge {
             guard !door.isEmpty, !callId.isEmpty else { return false }
             return db_core_report_call_ended_v2(c, door, callId, Int32(stageRevision), reason) == 0
         } ?? false
+    }
+
+    func reportCallEndedResult(door: String, callId: String, stageRevision: Int,
+                               reason: String = "sip_ended",
+                               coreGeneration: UInt64?) -> CallLifecycleReportResult {
+        return withCore(generation: coreGeneration) { c -> CallLifecycleReportResult in
+            guard !door.isEmpty, !callId.isEmpty, stageRevision >= 0 else { return .rejected }
+            guard db_core_call_lifecycle_api_version() >= Int32(DB_CALL_LIFECYCLE_RESULT_API_VERSION)
+            else {
+                return db_core_report_call_ended_v2(c, door, callId, Int32(stageRevision), reason) == 0
+                    ? .accepted : .rejected
+            }
+            switch db_core_report_call_ended_result_v3(c, door, callId, Int32(stageRevision), reason).rawValue {
+            case 0: return .accepted
+            case 1: return .pending
+            default: return .rejected
+            }
+        } ?? .rejected
     }
 
     func setVisitorLang(door: String, lang: String) {
@@ -403,12 +444,14 @@ final class CoreBridge {
 
     /// Starts a SIP call to an extension or direct `sip:host:port` target.
     /// tvOS publishes a real backend but invokes only the listen-only `monitor` mode.
-    func sipCall(target: String, mode: String) {
-        if !target.isEmpty { withCore { c in db_core_sip_call(c, target, mode) } }
+    func sipCall(target: String, mode: String, coreGeneration: UInt64? = nil) {
+        if !target.isEmpty {
+            withCore(generation: coreGeneration) { c in db_core_sip_call(c, target, mode) }
+        }
     }
 
-    func sipHangup() {
-        withCore { c in db_core_sip_hangup(c) }
+    func sipHangup(coreGeneration: UInt64? = nil) {
+        withCore(generation: coreGeneration) { c in db_core_sip_hangup(c) }
     }
 
     @discardableResult

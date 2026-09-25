@@ -264,8 +264,7 @@ int freeTcpPort() {
 
 }  // namespace
 
-TEST_CASE("mqtt: client connects, publishes retained data, and emits LWT on disconnect") {
-  if (!mqttTestEnabled()) return;
+TEST_CASE("mqtt: client connects, publishes retained data, and emits LWT on disconnect" * doctest::skip(!mqttTestEnabled())) {
   const std::string ns = "dbtest" + uniqueSuffix();
 
 
@@ -313,8 +312,7 @@ TEST_CASE("mqtt: client connects, publishes retained data, and emits LWT on disc
   b.cli->publish(ns + "/state", "", true);
 }
 
-TEST_CASE("mqtt: Node handles retained discovery, press, reply, and HA republish") {
-  if (!mqttTestEnabled()) return;
+TEST_CASE("mqtt: Node handles retained discovery, press, reply, and HA republish" * doctest::skip(!mqttTestEnabled())) {
   const std::string ns = "dbtest" + uniqueSuffix();
   const std::string base = ns + "-db";     // base_topic
   const std::string prefix = ns + "-ha";   // discovery_prefix
