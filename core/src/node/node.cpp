@@ -5,6 +5,7 @@
 #include "node/config_edit_journal.h"
 #include "node/config_import.h"
 #include "node/operation_dispatcher.h"
+#include "node/media_relay_bounds.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -2240,12 +2241,7 @@ struct Node::Impl {
   Bytes peer_frame;
   int64_t peer_frame_mono = 0;
   std::string peer_frame_generation;
-  struct MediaAuthorization {
-    std::string door, call_id, owner, session, generation;
-    int stage_revision = -1;
-    int64_t deadline_mono = 0;
-    uint64_t last_sequence = 0;
-  };
+#include "node/media_relay_authority.inc"
   std::map<std::string, MediaAuthorization> media_authorizations;
   std::string dtmf_buf;
   uint64_t dtmf_timer = 0;
@@ -2396,6 +2392,8 @@ struct Node::Impl {
   // ---------- helpers ----------
 #include "node/operation_service.inc"
 #include "node/panel_identity_service.inc"
+#include "node/media_relay_service.inc"
+#include "node/panel_session_revocation.inc"
 
   bool uiNotify(const std::string& event_json) {
 
@@ -6563,6 +6561,7 @@ struct Node::Impl {
     ms.runtime_json = meshRuntimeJson();
     Mesh::Callbacks cbs;
     cbs.on_peers_changed = [this] {
+      mediaPrune();
       cachePeerContracts();
       updateSipAllowedSources();
       schedulePrefetch();
@@ -6583,6 +6582,7 @@ struct Node::Impl {
       uiNotify(json::dump(o.get()));
     };
     cbs.on_peer_alive_changed = [this](const std::string& id, bool alive) {
+      mediaPrune();
       updateSipAllowedSources();
       rearmCallTimeouts();
       rearmCallRecoveryTakeovers();
@@ -6819,6 +6819,7 @@ struct Node::Impl {
     event_retention_timer = loop->postEvery(6 * 3600'000, [this] { pruneEventsTick(); });
 
     started = true;
+    startMediaOnLoop();
     reapplyTimeSchedule();
     pollPowerState();
     pruneDoorNotices();
@@ -7336,13 +7337,7 @@ struct Node::Impl {
   }
 
   void cancelWebDialogLease(const std::string& call_id) {
-    for (auto it = media_authorizations.begin(); it != media_authorizations.end();) {
-      if (it->second.call_id != call_id) { ++it; continue; }
-      if (peer_frame_generation == it->first) {
-        peer_frame.clear(); peer_frame_generation.clear();
-      }
-      it = media_authorizations.erase(it);
-    }
+    revokeMediaForCall(call_id);
     auto timer = web_dialog_timers.find(call_id);
     if (timer == web_dialog_timers.end()) return;
     if (timer->second.timer) loop->cancel(timer->second.timer);
@@ -7404,29 +7399,9 @@ struct Node::Impl {
   }
 
   bool mediaAuthorityCurrent(const MediaAuthorization& auth) {
-    if (auth.deadline_mono <= clock->monoMs() ||
-        !panelSessionAllowed(auth.session, auth.door, "media.publish") ||
-        opts.role != "door_station" || auth.door != opts.door) return false;
-    const auto active = active_calls.find(auth.door);
-    const auto lease = web_dialog_timers.find(auth.call_id);
-    return active != active_calls.end() && active->second.state == "in_call" &&
-        active->second.call_id == auth.call_id &&
-        active->second.stage_revision == auth.stage_revision &&
-        active->second.dialog_owner == auth.owner && lease != web_dialog_timers.end() &&
-        lease->second.publisher_session == auth.session &&
-        webDialogLeaseRemaining(auth.door, auth.call_id, auth.stage_revision, auth.owner) > 0;
+    return mediaBindingCurrent(auth);
   }
-
-  void pruneMediaAuthorizations() {
-    for (auto it = media_authorizations.begin(); it != media_authorizations.end();) {
-      if (mediaAuthorityCurrent(it->second)) { ++it; continue; }
-      if (peer_frame_generation == it->first) {
-        peer_frame.clear(); peer_frame_generation.clear();
-      }
-      it = media_authorizations.erase(it);
-    }
-  }
-
+  void pruneMediaAuthorizations() { mediaPrune(); }
   static bool mediaDecimal(const std::string& text, uint64_t maximum, uint64_t* result,
                            bool allow_zero = false) {
     if (text.empty() || text.size() > 19 || (text.size() > 1 && text[0] == '0')) return false;
@@ -8098,9 +8073,14 @@ struct Node::Impl {
   }
 
   void onCommand(const std::string& from, const std::string& cmd_json) {
+    if (cmd_json.rfind("{\"cmd\":\"media_", 0) == 0) {
+      onMediaWireCommand(from, cmd_json);
+      return;
+    }
     auto c = json::parse(cmd_json);
     if (!c) return;
     std::string cmd = json::getString(c.get(), "cmd");
+    if (cmd.rfind("media_", 0) == 0) return;
     if (cmd == "operation_request_v1" || cmd == "operation_response_v1") {
       if (cmd_json.size() <= 16384) onOperationCommand(from, c.get());
       return;
@@ -10236,7 +10216,7 @@ struct Node::Impl {
         return HttpResp::json("{\"ok\":false,\"err\":\"bad secret_ref or value\"}", 400);
       if (!putSecret(ref, value))
         return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_failed\"}", 500);
-      invalidatePanelSessions();
+      revokePanelSessionsForSecretRef(ref);
       applyEffectiveCaps();
       scheduleBridgeReapply();
       scheduleSipReapply();
@@ -10606,7 +10586,7 @@ struct Node::Impl {
         return HttpResp::json("{\"ok\":false,\"err\":\"panel_ref_not_active\"}", 409);
       if (!putSecret(ref, token))
         return HttpResp::json("{\"ok\":false,\"err\":\"secure_store_failed\"}", 500);
-      invalidatePanelSessions();
+      revokePanelSessionsForSecretRef(ref);
       HttpResp response = HttpResp::json("{\"ok\":true}");
       response.headers["Cache-Control"] = "no-store";
       return response;
@@ -11285,6 +11265,9 @@ struct Node::Impl {
         json::set(response.get(), "err", message);
         return HttpResp::json(json::dump(response.get()), status);
       };
+      PanelPrincipal principal;
+      if (!panelRequestPrincipal(req, &principal))
+        return failure(403, "auth_required", "panel authentication required");
       if (!panelRequestAllowed(req, req.param("door").empty() ? opts.door : req.param("door"),
           "call.answer", true, false))
         return failure(403, "permission_denied", "panel permission denied");
@@ -11577,137 +11560,12 @@ struct Node::Impl {
 
 
 
-    httpd->route("POST", "/api/panel/media-authorize", [this](const HttpReq& req) {
-      const auto session = panelMutationSession(req);
-      if (session.empty()) return mediaFailure(403, "permission_denied");
-      const std::string door = req.param("door");
-      if (!panelSessionAllowed(session, door, "media.publish"))
-        return mediaFailure(403, "permission_denied");
-      if (opts.role != "door_station" || door != opts.door)
-        return mediaFailure(501, "media_transport_unsupported");
-      const std::string call_id = req.param("call_id");
-      uint64_t revision = 0;
-      if (call_id.empty() || !mediaDecimal(req.param("stage_revision"), 2147483647,
-                                         &revision, true))
-        return mediaFailure(400, "identity_required");
-      pruneMediaAuthorizations();
-      const auto active = active_calls.find(door);
-      if (active == active_calls.end() || active->second.call_id != call_id ||
-          active->second.stage_revision != static_cast<int>(revision) ||
-          active->second.state != "in_call") return mediaFailure(409, "stale_call");
-      const auto lease = web_dialog_timers.find(call_id);
-      if (lease == web_dialog_timers.end() || lease->second.publisher_session != session)
-        return mediaFailure(403, "publisher_not_owner");
-      const auto remaining = std::min(panelSessionRemaining(session),
-          webDialogLeaseRemaining(door, call_id, static_cast<int>(revision),
-                                  active->second.dialog_owner));
-      if (remaining <= 0) return mediaFailure(409, "lease_expired");
-      for (auto it = media_authorizations.begin(); it != media_authorizations.end();) {
-        if (it->second.call_id != call_id) { ++it; continue; }
-        if (peer_frame_generation == it->first) {
-          peer_frame.clear(); peer_frame_generation.clear();
-        }
-        it = media_authorizations.erase(it);
-      }
-      if (media_authorizations.size() >= 8) return mediaFailure(429, "publisher_limit");
-      MediaAuthorization authorization;
-      authorization.door = door; authorization.call_id = call_id;
-      authorization.stage_revision = static_cast<int>(revision);
-      authorization.owner = active->second.dialog_owner;
-      authorization.session = session;
-      authorization.generation = genTokenHex(16);
-      authorization.deadline_mono = clock->monoMs() + std::min<int64_t>(10000, remaining);
-      media_authorizations.emplace(authorization.generation, authorization);
-      auto result = json::obj();
-      json::setBool(result.get(), "ok", true);
-      json::set(result.get(), "schema_version", static_cast<int64_t>(1));
-      json::set(result.get(), "door", door);
-      json::set(result.get(), "call_id", call_id);
-      json::set(result.get(), "stage_revision", static_cast<int64_t>(revision));
-      json::set(result.get(), "dialog_owner", authorization.owner);
-      json::set(result.get(), "media_generation", authorization.generation);
-      json::set(result.get(), "publish_remaining_ms", std::min<int64_t>(10000, remaining));
-      json::set(result.get(), "upload_path", "/call-frame");
-      auto response = HttpResp::json(json::dump(result.get()));
-      response.headers["Cache-Control"] = "no-store";
-      return response;
-    });
-
-    httpd->route("POST", "/call-frame", [this](const HttpReq& req) {
-      const auto session = panelMutationSession(req);
-      if (session.empty()) return mediaFailure(403, "permission_denied");
-      const std::string generation = req.param("media_generation");
-      const std::string door = req.param("door"), call_id = req.param("call_id");
-      uint64_t revision = 0, sequence = 0;
-      if (door.empty() || call_id.empty() || generation.size() != 32 ||
-          generation.find_first_not_of("0123456789abcdef") != std::string::npos ||
-          !mediaDecimal(req.param("stage_revision"), 2147483647, &revision, true) ||
-          !mediaDecimal(req.param("frame_sequence"), 9223372036854775807ULL, &sequence))
-        return mediaFailure(400, "invalid_media_identity");
-      pruneMediaAuthorizations();
-      auto found = media_authorizations.find(generation);
-      if (found == media_authorizations.end()) return mediaFailure(409, "stale_media_generation");
-      MediaAuthorization& authorization = found->second;
-      if (authorization.session != session) return mediaFailure(403, "publisher_not_owner");
-      if (authorization.door != door || authorization.call_id != call_id ||
-          authorization.stage_revision != static_cast<int>(revision) ||
-          sequence <= authorization.last_sequence)
-        return mediaFailure(409, "stale_media_frame");
-      const auto type = req.headers.find("content-type");
-      if (req.body.size() > 1024 * 1024) return mediaFailure(413, "frame_too_large");
-      if (type == req.headers.end() || type->second != "image/jpeg" || req.body.size() < 4 ||
-          static_cast<uint8_t>(req.body[0]) != 0xff || static_cast<uint8_t>(req.body[1]) != 0xd8)
-        return mediaFailure(400, "invalid_jpeg");
-      int width = 0, height = 0, components = 0;
-      if (!stbi_info_from_memory(reinterpret_cast<const stbi_uc*>(req.body.data()),
-          static_cast<int>(req.body.size()), &width, &height, &components) ||
-          width <= 0 || height <= 0 || width > 1024 || height > 1024 || width * height > 307200)
-        return mediaFailure(400, "invalid_jpeg_dimensions");
-      // Decoding/transport may later move off-loop; the final slot write must retain this check.
-      if (!mediaAuthorityCurrent(authorization) || sequence <= authorization.last_sequence)
-        return mediaFailure(409, "stale_media_frame");
-      peer_frame.assign(req.body.begin(), req.body.end());
-      peer_frame_mono = clock->monoMs();
-      peer_frame_generation = generation;
-      authorization.last_sequence = sequence;
-      auto result = json::obj();
-      json::setBool(result.get(), "ok", true);
-      json::set(result.get(), "media_generation", generation);
-      json::set(result.get(), "frame_sequence", std::to_string(sequence));
-      json::set(result.get(), "acceptance", "remote_core_accepted");
-      return HttpResp::json(json::dump(result.get()));
-    });
-
-    httpd->route("GET", "/peer-frame.jpg", [this](const HttpReq& req) {
-      const bool loopback = req.remote_addr == "127.0.0.1" || req.remote_addr == "::1" ||
-          req.remote_addr == "::ffff:127.0.0.1";
-      if ((!loopback && panelSessionRemaining(req.cookie("dbpanel")) <= 0) ||
-          (req.headers.count("origin") && !trustedWebOrigin(req)))
-        return mediaFailure(403, "permission_denied");
-      uint64_t revision = 0;
-      if (req.param("call_id").empty() ||
-          !mediaDecimal(req.param("stage_revision"), 2147483647, &revision, true))
-        return mediaFailure(409, "identity_required");
-      if (opts.role != "door_station" || req.param("door", opts.door) != opts.door)
-        return mediaFailure(403, "wrong_door");
-      pruneMediaAuthorizations();
-      const auto authorization = media_authorizations.find(peer_frame_generation);
-      if (peer_frame.empty() || clock->monoMs() - peer_frame_mono > 3000 ||
-          authorization == media_authorizations.end() ||
-          authorization->second.call_id != req.param("call_id") ||
-          authorization->second.stage_revision != static_cast<int>(revision))
-        return mediaFailure(404, "no_current_frame");
-      HttpResp r;
-      r.content_type = "image/jpeg";
-      r.body.assign(peer_frame.begin(), peer_frame.end());
-      r.headers["Cache-Control"] = "no-store";
-      r.headers["X-Doorbell-Call-Id"] = authorization->second.call_id;
-      r.headers["X-Doorbell-Dialog-Owner"] = authorization->second.owner;
-      r.headers["X-Doorbell-Stage-Revision"] = std::to_string(authorization->second.stage_revision);
-      r.headers["X-Doorbell-Media-Generation"] = authorization->second.generation;
-      r.headers["X-Doorbell-Frame-Sequence"] = std::to_string(authorization->second.last_sequence);
-      return r;
-    });
+    httpd->routeWorker("POST", "/api/panel/media-authorize",
+        [this](const HttpReq& req) { return mediaWorkerRequest(req); });
+    httpd->routeWorker("POST", "/call-frame",
+        [this](const HttpReq& req) { return mediaWorkerRequest(req); });
+    httpd->route("GET", "/peer-frame.jpg",
+        [this](const HttpReq& req) { return mediaReadFrame(req); });
   }
 
   // Legacy bearer authentication cannot establish independent media publication authority.
@@ -11988,6 +11846,7 @@ Node::Node(NodeOptions opts, NodeDeps deps) : impl_(new Impl) {
   impl_->transport = std::move(deps.transport);
   impl_->discovery = std::move(deps.discovery);
   impl_->operation_dispatcher.reset(new OperationDispatcher(*impl_->loop));
+  impl_->media_dispatcher.reset(new OperationDispatcher(*impl_->loop, Impl::mediaDispatcherLimits()));
 }
 
 Node::~Node() { stop(); }
@@ -12020,6 +11879,7 @@ bool Node::start() {
 
 void Node::stop() {
   if (!impl_ || !impl_->started) return;
+  impl_->media_dispatcher->stop();
   impl_->operation_dispatcher->stop();
   impl_->started = false;
   // The SNTP worker holds a raw pointer to Impl, so it is stopped before anything else is torn
@@ -12036,6 +11896,7 @@ void Node::stop() {
   impl_->frame_bus.setWarmCacheFps(0);
 
   impl_->loop->callSync([&] {
+    impl_->stopMediaOnLoop();
     impl_->stopQrScanOnLoop();
     impl_->stopOperationsOnLoop();
     impl_->stopNetMonitor();

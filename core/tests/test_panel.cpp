@@ -17,6 +17,7 @@
 #include "doctest.h"
 #include "test_env.h"
 #include "node/node.h"
+#include "media/frame_bus.h"
 #include "util/clock.h"
 #include "util/json.h"
 
@@ -877,28 +878,70 @@ TEST_CASE("panel API: call-frame / peer-frame.jpg / call-info web call contract"
   const std::string k = kPanelCredential;
 
 
-  std::string jpg = "\xFF\xD8\xFF\xE0 fake-jpeg-body";
+  FrameBus jpeg_bus;
+  RawFrame jpeg_frame;
+  jpeg_frame.format = 3;
+  jpeg_frame.w = jpeg_frame.h = 8;
+  jpeg_frame.stride = 32;
+  jpeg_frame.ts_ms = 1;
+  jpeg_frame.data.assign(8 * 8 * 4, 128);
+  jpeg_bus.push(std::move(jpeg_frame));
+  const auto jpeg_bytes = jpeg_bus.latestJpeg();
+  const std::string jpg(jpeg_bytes.begin(), jpeg_bytes.end());
+  REQUIRE(jpg.size() > 100);
+  const std::string media_identity = "&call_id=" + std::string(32, 'a') +
+      "&stage_revision=0&media_generation=" + std::string(32, 'b') + "&frame_sequence=1";
+  const auto expect_media_error = [](const std::string& response, int status,
+                                    const std::string& code) {
+    INFO(response);
+    CHECK(response.find("HTTP/1.1 " + std::to_string(status) + " ") == 0);
+    const auto body = panelBodyJson(response);
+    REQUIRE(body);
+    CHECK(json::getString(body.get(), "error_code") == code);
+    CHECK(response.find("Access-Control-Allow-Origin") == std::string::npos);
+  };
 
 
   panel_auth.clear();
   std::string r = panelReq(http_port, "POST", "/call-frame?door=d_front", jpg, "image/jpeg");
-  CHECK(r.find("403") != std::string::npos);
-  CHECK(r.find("Access-Control-Allow-Origin") == std::string::npos);
+  expect_media_error(r, 400, "invalid_media_identity");
+  r = panelReq(http_port, "POST", "/call-frame?door=d_front" + media_identity, jpg, "image/jpeg");
+  expect_media_error(r, 403, "permission_denied");
   panel_auth = k;
 
-  r = panelReq(http_port, "POST", "/call-frame?door=d_front&k=" + k, jpg, "image/jpeg");
+  // Bearer credentials are not publisher sessions, even with well-formed media identity.
+  r = panelReq(http_port, "POST", "/call-frame?door=d_front" + media_identity, jpg, "image/jpeg");
+  expect_media_error(r, 403, "permission_denied");
   CHECK(r.find("403") != std::string::npos);
   CHECK(r.find("permission_denied") != std::string::npos);
 
-  r = panelReq(http_port, "POST", "/call-frame?door=d_other&k=" + k, jpg, "image/jpeg");
+  r = panelReq(http_port, "POST", "/call-frame?door=d_other" + media_identity, jpg, "image/jpeg");
+  expect_media_error(r, 403, "permission_denied");
   CHECK(r.find("403") != std::string::npos);
+  for (const auto* method : {"GET", "OPTIONS"}) {
+    const auto response = panelReq(http_port, method, "/api/panel/media-authorize");
+    INFO(response);
+    CHECK(response.find("HTTP/1.1 404 ") == 0);
+    CHECK(response.find("incomplete_or_invalid_body") == std::string::npos);
+    CHECK(response.find("Access-Control-Allow-Origin") == std::string::npos);
+  }
+  r = panelReq(http_port, "GET", "/call-frame");
+  CHECK(r.find("HTTP/1.1 404 ") == 0);
+  CHECK(r.find("incomplete_or_invalid_body") == std::string::npos);
+  CHECK(r.find("Access-Control-Allow-Origin") == std::string::npos);
   r = panelReq(http_port, "OPTIONS", "/call-frame");
-  CHECK(r.find("404") != std::string::npos);
+  CHECK(r.find("HTTP/1.1 404 ") == 0);
+  CHECK(r.find("incomplete_or_invalid_body") == std::string::npos);
   CHECK(r.find("Access-Control-Allow-Origin") == std::string::npos);
 
 
+  // Loopback does not convert an explicit web credential into native read authority.
   r = panelReq(http_port, "GET", "/peer-frame.jpg");
-  CHECK(r.find("409") != std::string::npos);
+  expect_media_error(r, 403, "permission_denied");
+  panel_auth.clear();
+  r = panelReq(http_port, "GET", "/peer-frame.jpg");
+  expect_media_error(r, 409, "identity_required");
+  panel_auth = k;
 
 
   r = panelReq(http_port, "GET", "/api/panel/call-info?k=" + k);

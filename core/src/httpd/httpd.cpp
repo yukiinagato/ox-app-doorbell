@@ -248,8 +248,9 @@ HttpReq buildReq(struct mg_connection* conn) {
 
 int readRequestBody(struct mg_connection* conn, HttpReq* req) {
   const auto* info = mg_get_request_info(conn);
-  const bool media = req->uri == "/call-frame";
-  const size_t limit = media ? 1024 * 1024 : kMaxBodyBytes;
+  const bool media = req->method == "POST" && req->uri == "/call-frame";
+  const bool media_authorize = req->method == "POST" && req->uri == "/api/panel/media-authorize";
+  const size_t limit = media ? 1024 * 1024 : (media_authorize ? 2048 : kMaxBodyBytes);
   if (info->content_length > static_cast<long long>(limit)) return 413;
   if (media) {
     const auto type = req->headers.find("content-type");
@@ -607,7 +608,8 @@ int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
     std::atomic<unsigned>* count = nullptr;
     ~MediaAdmission() { if (count) count->fetch_sub(1); }
   } media_admission;
-  if (req.uri == "/call-frame") {
+  if (req.method == "POST" &&
+      (req.uri == "/call-frame" || req.uri == "/api/panel/media-authorize")) {
     if (impl->media_uploads.fetch_add(1) >= 4) {
       impl->media_uploads.fetch_sub(1);
       writeResp(conn, HttpResp::json("{\"ok\":false,\"error_code\":\"media_capacity_exceeded\"}", 429));

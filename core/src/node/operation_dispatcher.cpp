@@ -89,7 +89,7 @@ HttpResp OperationDispatcher::request(HttpReq request) {
   using State = Shared::Pending::State;
   auto p = std::make_shared<Shared::Pending>(shared->limits.timeout_ms);
   p->request = std::move(request);
-  const auto body = json::parse(p->request.body);
+  const auto body = shared->limits.inspect_json_body ? json::parse(p->request.body) : json::Doc{};
   p->request_id = json::getString(body.get(), "request_id");
   if (!operationIdValid(p->request_id)) p->request_id = genTokenHex(16);
   std::unique_lock<std::mutex> lock(shared->mu);

@@ -1,0 +1,20 @@
+{
+  "task_id": "T16",
+  "base_commit": "39b57222b45d83e2116a65b3d5242718d56fac79",
+  "implementation_status": "IMPLEMENTED_CANDIDATE",
+  "verification_status": "BLOCKED_ENV",
+  "release_gate": "NOT_READY",
+  "component_verification": "PASS_IN_COMPONENT_SCOPE",
+  "acceptance_cases": {
+    "T16-01": "NOT_RUN_IN_REQUIRED_PRODUCTION_SCOPE",
+    "T16-02": "NOT_RUN_IN_REQUIRED_PRODUCTION_SCOPE",
+    "T16-03": "NOT_RUN_IN_REQUIRED_PRODUCTION_SCOPE",
+    "T16-04": "NOT_RUN_IN_REQUIRED_PRODUCTION_SCOPE",
+    "T16-05": "NOT_RUN_IN_REQUIRED_PRODUCTION_SCOPE"
+  },
+  "independent_review": "NOT_RUN",
+  "global_ledger_modified": false,
+  "report": "relay-implementation.md",
+  "report_zh": "relay-implementation.zh.md",
+  "report_ja": "relay-implementation.ja.md"
+}

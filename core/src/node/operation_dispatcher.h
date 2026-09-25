@@ -23,6 +23,7 @@ class OperationDispatcher {
     size_t body_bytes = 8192;
     int64_t timeout_ms = kTimeoutMs;
     std::function<HttpResp(const std::string&, int)> failure;
+    bool inspect_json_body = true;
   };
 
   explicit OperationDispatcher(Runloop& loop);

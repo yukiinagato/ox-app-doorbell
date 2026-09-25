@@ -67,8 +67,8 @@ android {
     minSdk = 19
     targetSdk = 35
     testInstrumentationRunner = "jp.ox.doorbell.VisitorUiInstrumentation"
-    versionCode = 22
-    versionName = "0.3.21+${doorbellGitRevision.take(7)}"
+    versionCode = 23
+    versionName = "0.3.22+${doorbellGitRevision.take(7)}"
     buildConfigField("String", "DOORBELL_SOURCE_ID", "\"$doorbellSourceIdentity\"")
 
     externalNativeBuild {

@@ -3,6 +3,9 @@
 #include <unistd.h>
 
 #include <map>
+#include <chrono>
+#include <functional>
+#include <thread>
 #include <string>
 
 #include "doctest.h"
@@ -220,10 +223,11 @@ TEST_CASE("media publishing binds session call owner generation and ordered fram
     CHECK(mediaRequest(port, "GET", read).status == 404);
     CHECK(mediaRequest(port, "GET", "/api/panel/session", "", owner).status == 403);
   }
-  SUBCASE("background session reads do not extend idle expiry and peer publication is unsupported") {
+#include "media_relay_http_cases.inc"
+  SUBCASE("background session reads do not extend idle expiry and unknown media targets fail closed") {
     CHECK(mediaRequest(port, "POST", "/api/panel/media-authorize",
         "door=other&call_id=" + call_a + "&stage_revision=0", owner,
-        "application/x-www-form-urlencoded").status == 501);
+        "application/x-www-form-urlencoded").status == 409);
     clock.advance(29 * 60 * 1000);
     CHECK(mediaRequest(port, "GET", "/api/panel/session", "", owner).status == 200);
     clock.advance(60 * 1000);
@@ -232,3 +236,5 @@ TEST_CASE("media publishing binds session call owner generation and ordered fram
   }
   node.stop(); loop.stop();
 }
+
+#include "media_relay_node_cases.inc"
