@@ -47,6 +47,7 @@
         state.stream = stream;
         deps.preview.srcObject = stream;
         deps.preview.style.display = "block";
+        if (deps.onReady) deps.onReady(state.binding);
         state.timer = deps.setInterval(function () {
           if (!stillCurrent(state)) { dispose(state); return; }
           if (state.busy || !deps.preview.videoWidth) return;

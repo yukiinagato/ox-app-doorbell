@@ -17,6 +17,7 @@ function fixture(onError) {
   const preview = { style: {}, srcObject: null, videoWidth: 320, videoHeight: 240 };
   const blobs = [];
   let canvases = 0, posts = 0;
+  const ready = [];
   const session = Video.create({
     getUserMedia() { const request = deferred(); media.push(request); return request.promise; }, preview,
     createCanvas() {
@@ -26,11 +27,12 @@ function fixture(onError) {
     setInterval(fn) { const id = nextTimer++; timers.set(id, fn); return id; },
     clearInterval(id) { timers.delete(id); },
     isCurrent(binding) { return current === binding; },
+    onReady(binding) { ready.push(binding); },
     postFrame() { posts++; return Promise.resolve(); },
     onError(error, binding) { if (onError) onError(error, binding); else throw error; }
   });
   return { session, media, preview, timers, blobs, setCurrent(v) { current = v; },
-    canvases: () => canvases, posts: () => posts };
+    canvases: () => canvases, posts: () => posts, ready };
 }
 
 (async function main() {
@@ -79,6 +81,7 @@ function fixture(onError) {
     f.setCurrent(binding); f.session.start(binding);
     f.media[0].resolve({ getTracks() { return []; } });
     await Promise.resolve(); await Promise.resolve();
+    assert.deepStrictEqual(f.ready, [binding], "local readiness follows successful media acquisition");
     const tick = Array.from(f.timers.values())[0];
     tick();
     assert.strictEqual(f.canvases(), 1, "encoding reserves busy before toBlob returns");

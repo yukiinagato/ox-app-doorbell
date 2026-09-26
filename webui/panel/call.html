@@ -209,6 +209,7 @@ let activeLifecycle = null;
 let registered = false;
 let frameTimer = null;
 let videoBinding = null;
+let videoState = "OFF";
 let playback = null;
 let latestPanelState = null;
 let sessionRefreshPending = false;
@@ -928,31 +929,74 @@ async function startSendingVideo() {
     els.sendVideo.checked = false; setStatus(t("panel.video_unavailable"), true); return;
   }
   const binding = { session: session, door: selected.id, lifecycle: activeLifecycle,
-    target: "/call-frame", grant: null, sequence: 0, handle: null };
+    callId: activeLifecycle.callId, revision: activeLifecycle.stageRevision,
+    owner: activeLifecycle.owner, target: "/call-frame", grant: null, sequence: 0,
+    handle: null, retryTimer: null, failures: 0, acceptedAt: 0, acceptedSequence: 0 };
   videoBinding = binding;
+  videoState = "AUTHORIZING";
   try {
     await authorizeVideo(binding);
-    if (currentVideo(binding) && !videoSession.start(binding)) videoBinding = null;
-  } catch (error) { failVideo(binding); }
+    if (currentVideo(binding)) {
+      if (!videoSession.start(binding)) { videoBinding = null; videoState = "OFF"; }
+      else binding.started = true;
+    }
+  } catch (error) { failVideo(binding, error); }
 }
 
 function stopSendingVideo() {
   const binding = videoBinding;
   videoBinding = null;
-  if (binding && binding.handle) binding.handle.cancel();
+  videoState = "OFF";
+  if (binding) {
+    if (binding.retryTimer !== null) clearTimeout(binding.retryTimer);
+    binding.retryTimer = null;
+    if (binding.handle) binding.handle.cancel();
+  }
   videoSession.stop();
 }
 
 function currentVideo(binding) {
   return videoBinding === binding && binding.session === session &&
     binding.lifecycle === activeLifecycle && activeLifecycle.answered &&
+    binding.callId === activeLifecycle.callId && binding.revision === activeLifecycle.stageRevision &&
+    binding.owner === activeLifecycle.owner &&
     selected && binding.door === selected.id && els.sendVideo.checked;
 }
 
-function failVideo(binding) {
+function failVideo(binding, error) {
   if (videoBinding !== binding) return;
-  stopSendingVideo(); els.sendVideo.checked = false;
-  setStatus(t("panel.video_unavailable"), true);
+  if (binding.retryTimer !== null) { clearTimeout(binding.retryTimer); binding.retryTimer = null; }
+  const code = error && error.code || "";
+  const status = error && error.status || 0;
+  const permanent = status === 401 || status === 403 || status === 409 ||
+    /invalid|revoked|stale|wrong|not_owner|forbidden|unauthorized/i.test(code);
+  if (permanent || !currentVideo(binding)) {
+    stopSendingVideo(); els.sendVideo.checked = false; videoState = permanent ? "DENIED" : "STALE";
+    setStatus(t("panel.video_unavailable"), true); return;
+  }
+  binding.failures++;
+  if (binding.failures > 5) {
+    videoState = "INTERRUPTED";
+    videoSession.stop();
+    setStatus(t("panel.video_unavailable"), true); return;
+  }
+  videoState = "RECOVERING";
+  const delays = [250, 500, 1000, 2000, 4000];
+  const wait = delays[binding.failures - 1];
+  binding.retryTimer = setTimeout(async function () {
+    binding.retryTimer = null;
+    if (!currentVideo(binding)) { if (videoBinding === binding) videoState = "STALE"; return; }
+    if (!binding.grant || binding.grant.deadline - monotonicNow() <= 3000) {
+      videoState = "AUTHORIZING";
+      try { await authorizeVideo(binding); }
+      catch (retryError) { failVideo(binding, retryError); return; }
+    }
+    if (!binding.started) {
+      if (!videoSession.start(binding)) { failVideo(binding, new Error("camera_restart_failed")); return; }
+      binding.started = true;
+    }
+    videoState = "SENDING";
+  }, wait);
 }
 
 function videoRequest(binding, options) {
@@ -962,7 +1006,12 @@ function videoRequest(binding, options) {
       if (!currentVideo(binding)) { reject(new Error("stale_media")); return; }
       binding.handle = null;
       if (result.ok && result.data && result.data.ok === true) resolve(result.data);
-      else reject(new Error(result.error_code || result.kind || "media_failed"));
+      else {
+        const error = new Error(result.error_code || result.kind || "media_failed");
+        error.code = result.error_code || result.kind || "media_failed";
+        error.status = result.status || 0;
+        reject(error);
+      }
     });
   });
 }
@@ -977,15 +1026,17 @@ async function authorizeVideo(binding) {
       data.stage_revision !== identity.stageRevision || data.dialog_owner !== identity.owner ||
       !/^[0-9a-f]{32}$/.test(data.media_generation || "") ||
       !Number.isInteger(data.publish_remaining_ms) || data.publish_remaining_ms <= 0 ||
-      data.publish_remaining_ms > 10000 || started + data.publish_remaining_ms <= monotonicNow())
-    throw new Error("invalid_media_authority");
+      data.publish_remaining_ms > 10000 || started + data.publish_remaining_ms <= monotonicNow()) {
+    const error = new Error("invalid_media_authority"); error.code = "invalid_media_authority"; throw error;
+  }
   binding.grant = { generation: data.media_generation, deadline: started + data.publish_remaining_ms };
   binding.sequence = 0;
 }
 
 async function postVideoFrame(binding, blob) {
   try {
-    if (!currentVideo(binding)) return;
+    if (!currentVideo(binding) || videoState === "RECOVERING" || videoState === "INTERRUPTED") return;
+    videoState = "SENDING";
     if (!binding.grant || binding.grant.deadline - monotonicNow() <= 3000) await authorizeVideo(binding);
     if (!currentVideo(binding)) return;
     const generation = binding.grant.generation, sequence = String(++binding.sequence);
@@ -996,15 +1047,24 @@ async function postVideoFrame(binding, blob) {
       method: "POST", body: blob, deadline_ms: Math.max(1, Math.min(3000,
         Math.floor(binding.grant.deadline - monotonicNow()))),
       headers: { "Content-Type": "image/jpeg", "X-Doorbell-CSRF": panelCsrf } });
-    if (data.media_generation !== generation || data.frame_sequence !== sequence)
-      throw new Error("invalid_media_ack");
-  } catch (error) { failVideo(binding); throw error; }
+    if (data.media_generation !== generation || data.frame_sequence !== sequence) {
+      const error = new Error("invalid_media_ack"); error.code = "stale_media_ack"; throw error;
+    }
+    if (data.acceptance === "remote_core_accepted") {
+      binding.acceptedAt = monotonicNow(); binding.acceptedSequence = Number(sequence);
+      videoState = "REMOTE_CORE_ACCEPTED";
+    } else {
+      videoState = "SENDING";
+    }
+    binding.failures = 0;
+  } catch (error) { failVideo(binding, error); throw error; }
 }
 
 const videoSession = DoorbellPanelVideo.create({
   getUserMedia: () => navigator.mediaDevices.getUserMedia({
     video: { width: { ideal: 320 }, height: { ideal: 240 } }, audio: false }),
   preview: els.self,
+  onReady: binding => { if (currentVideo(binding)) videoState = "LOCAL_READY"; },
   createCanvas: () => document.createElement("canvas"),
   setInterval: (fn, delay) => { frameTimer = setInterval(fn, delay); return frameTimer; },
   clearInterval: timer => { clearInterval(timer); if (frameTimer === timer) frameTimer = null; },
@@ -1013,6 +1073,7 @@ const videoSession = DoorbellPanelVideo.create({
   onError: (error, binding) => {
     if (videoBinding !== binding) return;
     videoBinding = null;
+    videoState = "DENIED";
     setStatus(t("panel.camera_failed", { reason: error.name || "error" }), true);
     els.sendVideo.checked = false;
   }

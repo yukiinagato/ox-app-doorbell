@@ -35,8 +35,12 @@ function setup() {
     assert(!("Authorization" in upload.headers), "no empty or long-lived bearer is forwarded");
     assert.strictEqual(upload.headers["X-Doorbell-CSRF"], csrf);
     assert(upload.url.includes("frame_sequence=1"));
-    await answer(upload, { ok: true, media_generation: generation, frame_sequence: "1" });
+    await answer(upload, { ok: true, media_generation: generation, frame_sequence: "1",
+      acceptance: "remote_core_accepted" });
     assert.strictEqual(r.run("videoBinding.sequence"), 1);
+    assert.strictEqual(r.run("videoState"), "REMOTE_CORE_ACCEPTED");
+    assert.strictEqual(r.run("videoBinding.acceptedSequence"), 1);
+    assert.strictEqual(r.run("videoBinding.acceptedAt"), 0, "monotonic acceptance time is recorded at the test clock origin");
   }
   {
     const { r, driver } = setup(); r.run("startSendingVideo()");
@@ -48,8 +52,8 @@ function setup() {
     assert.strictEqual(driver.starts.length, 1);
     assert.strictEqual(r.run("videoBinding.door"), "B");
   }
-  for (const response of [{ status: 501, data: { ok: false, error_code: "media_transport_unsupported" } },
-                          { status: 403, data: { ok: false, error_code: "publisher_not_owner" } },
+  for (const response of [{ status: 403, data: { ok: false, error_code: "publisher_not_owner" } },
+                          { status: 409, data: { ok: false, error_code: "stale_media_generation" } },
                           { status: 200, data: grant("other-call") }]) {
     const { r, driver } = setup(); r.run("startSendingVideo()");
     await answer(r.requests.shift(), response.data, response.status);
@@ -59,10 +63,71 @@ function setup() {
   }
   {
     const { r, driver } = setup(); r.run("startSendingVideo()");
+    await answer(r.requests.shift(), grant());
+    r.context.frameBlob = { type: "image/jpeg" }; r.run("postVideoFrame(videoBinding,frameBlob).catch(()=>{})");
+    await answer(r.requests.shift(), { ok: false, error_code: "temporary_peer_unavailable" }, 503);
+    assert.strictEqual(r.run("videoState"), "RECOVERING");
+    assert.strictEqual(r.elements.get("sendVideo").checked, true);
+    assert.strictEqual(driver.stopped, 0);
+    r.advance(250);
+    assert.strictEqual(r.run("videoState"), "SENDING");
+  }
+  {
+    const { r } = setup(); r.run("startSendingVideo()");
+    await answer(r.requests.shift(), grant());
+    r.context.frameBlob = { type: "image/jpeg" }; r.run("postVideoFrame(videoBinding,frameBlob).catch(()=>{})");
+    await answer(r.requests.shift(), { ok: false, error_code: "temporary_peer_unavailable" }, 503);
+    const staleRetry = Array.from(r.timers.values()).find(timer => timer.at > 0).fn;
+    r.run("stopSendingVideo()");
+    r.activate("B", "call-B", 2); r.run("activeLifecycle.answered=true;els.sendVideo.checked=true;startSendingVideo()");
+    const next = r.run("videoBinding"); staleRetry();
+    assert.strictEqual(r.run("videoBinding"), next, "obsolete retry never touches the next call binding");
+  }
+  {
+    const { r } = setup(); r.run("startSendingVideo()");
+    await answer(r.requests.shift(), grant());
+    r.context.frameBlob = { type: "image/jpeg" }; r.run("postVideoFrame(videoBinding,frameBlob).catch(()=>{})");
+    await answer(r.requests.shift(), { ok: false, error_code: "temporary_peer_unavailable" }, 503);
+    assert.strictEqual(r.timers.size, 1);
+    r.run("els.sendVideo.checked=false;stopSendingVideo()");
+    assert.strictEqual(r.timers.size, 0, "manual video-off cancels recovery retry");
+    assert.strictEqual(r.run("videoState"), "OFF");
+  }
+  {
+    const { r } = setup(); r.run("startSendingVideo()");
+    await answer(r.requests.shift(), grant());
+    r.context.frameBlob = { type: "image/jpeg" }; r.run("postVideoFrame(videoBinding,frameBlob).catch(()=>{})");
+    const pending = r.requests.shift();
+    r.run("stopSendingVideo()");
+    r.activate("B", "call-B", 2); r.run("activeLifecycle.answered=true;els.sendVideo.checked=true;startSendingVideo()");
+    await answer(pending, { ok: true, media_generation: generation, frame_sequence: "1",
+      acceptance: "remote_core_accepted" });
+    assert.notStrictEqual(r.run("videoState"), "REMOTE_CORE_ACCEPTED", "stale accepted result cannot update a replacement call");
+    assert.strictEqual(r.run("videoBinding.callId"), "call-B");
+    r.run("stopSendingVideo()");
+  }
+  {
+    const { r, driver } = setup(); r.run("startSendingVideo()");
     r.advance(1500); await flush();
     assert.strictEqual(driver.starts.length, 0);
-    assert.strictEqual(r.run("videoBinding"), null);
+    assert.strictEqual(r.run("videoState"), "RECOVERING");
+    assert.strictEqual(r.elements.get("sendVideo").checked, true);
+    assert.strictEqual(r.timers.size, 1, "timeout schedules a bounded retry");
+  }
+  {
+    const { r } = setup(); r.run("startSendingVideo()");
+    await answer(r.requests.shift(), { ok: false, error_code: "temporary_peer_unavailable" }, 503);
+    const delays = [250, 500, 1000, 2000, 4000];
+    for (const delay of delays) {
+      r.advance(delay); await flush();
+      const retry = r.requests.shift();
+      assert(retry, "each bounded backoff attempts a fresh authorization");
+      await answer(retry, { ok: false, error_code: "temporary_peer_unavailable" }, 503);
+    }
+    assert.strictEqual(r.run("videoState"), "INTERRUPTED");
+    assert.strictEqual(r.elements.get("sendVideo").checked, true, "bounded exhaustion reports interrupted without erasing intent");
     assert.strictEqual(r.timers.size, 0);
+    r.run("stopSendingVideo()");
   }
   {
     const { r } = setup(); r.run('panelCsrf="";loadPanelSession()');
@@ -71,5 +136,5 @@ function setup() {
     assert.strictEqual(r.run("panelCsrf"), "", "late page metadata cannot reauthorize a hidden page");
     assert.strictEqual(r.run("panelCsrfRequest"), null);
   }
-  console.log("T15 production page media authority, same-origin requests and stale callbacks: PASS");
+  console.log("T17 production page media authority, recovery and stale callback regressions: PASS");
 })().catch(error => { console.error(error); process.exitCode = 1; });
