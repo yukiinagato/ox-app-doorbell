@@ -69,7 +69,8 @@ else
   PORT=2222; HOST=localhost; SSHHOST="root@localhost"
 fi
 
-OPTS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa)
+KNOWN_HOSTS="${DOORBELL_SSH_KNOWN_HOSTS:-$HOME/.ssh/known_hosts}"
+OPTS=(-o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$KNOWN_HOSTS" -o ConnectTimeout=10 -o HostKeyAlgorithms=+ssh-rsa)
 REMOTE_APP="/Applications/Doorbell.app"
 REMOTE_STAGE="/Applications/.Doorbell.app.deploying"
 MAINTENANCE_MARKER="/var/mobile/Documents/.doorbell-maintenance-restart"
