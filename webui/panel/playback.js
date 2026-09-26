@@ -300,7 +300,7 @@
     }
     function selectMjpeg() {
       if (stopped || !current || current.id !== "mjpeg" || playing) return;
-      if (mjpegPrecise && !mjpegReady) return;
+      if (!mjpegReady) return;
       clearTimer(); stopMse(); playing = true;
       if (video) video.style.display = "none";
       img.style.display = "";
@@ -337,9 +337,8 @@
       if (current.id === "mjpeg") {
         if (!mjpeg) { advance("no_url"); return; }
         prewarmMjpeg();
-        // Modern fetch mode waits for a decoded JPEG; legacy multipart <img> has no
-        // portable per-frame signal, so reveal it immediately once selected.
-        if (mjpegPrecise && !mjpegReady) {
+        // Every MJPEG path waits for the first image load before reporting playback.
+        if (!mjpegReady) {
           timer = root.setTimeout(function () {
             if (!stopped && mine === attempt && !playing) advance("startup_timeout");
           }, current.startup_timeout_ms);

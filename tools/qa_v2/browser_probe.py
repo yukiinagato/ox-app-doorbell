@@ -129,18 +129,18 @@ def main() -> int:
                 finally:
                     context.close()
 
-            def start(page: Any, url: str, image_mode: bool) -> None:
+            def start(page: Any, url: str, mode: str) -> None:
                 page.evaluate("""o => {
                   window.probeStates = [];
                   window.probe = DoorbellPlayback.start({
                     profile: {strategies: [{id:'mjpeg', enabled:true,
                       startup_timeout_ms:3000, stall_timeout_ms:1500}]},
-                    mjpeg:o.url, mjpegMode:o.image ? 'image' : undefined,
+                    mjpeg:o.url, mjpegMode:o.mode,
                     img:document.querySelector('#picture'),
                     video:document.querySelector('#video'),
                     onState:(state,strategy,reason) => probeStates.push({state,strategy,reason})
                   });
-                }""", {"url": url, "image": image_mode})
+                }""", {"url": url, "mode": mode})
 
             def sample(page: Any) -> dict[str, Any]:
                 # Read DECODED pixels over time, not packet counts, src assignment, or "playing".
@@ -162,7 +162,7 @@ def main() -> int:
             def withheld(page: Any) -> dict[str, Any]:
                 held = []
                 page.route("**/stream.mjpeg", lambda route: held.append(route))
-                start(page, "/stream.mjpeg", True)
+                start(page, "/stream.mjpeg", "image")
                 page.wait_for_timeout(500)
                 state = page.evaluate("({states:probeStates,width:document.querySelector('#picture').naturalWidth})")
                 if not held or state["width"] != 0:
@@ -173,17 +173,17 @@ def main() -> int:
                 return state
 
             def direct(page: Any) -> dict[str, Any]:
-                start(page, "/stream.mjpeg", True)
+                start(page, "/stream.mjpeg", "image")
                 observed = sample(page)
                 assert len(observed["distinct"]) >= 3, (
                     "The live positive control must decode multiple distinct frames: " + json.dumps(observed))
                 return observed
 
             def live_proxy(page: Any) -> dict[str, Any]:
-                # Match both the URL and mjpegMode:"image" in call.html:456-458.
+                # Match call.html's poll fallback; live=1 may still return one JPEG.
                 # live=1 is an optional server upgrade, so the player must also
                 # keep moving when the documented fallback response is one JPEG.
-                start(page, "/snapshot-proxy?door=front&live=1", True)
+                start(page, "/snapshot-proxy?door=front&live=1", "poll")
                 observed = sample(page)
                 page.screenshot(path=str(args.out / "live-proxy.png"))
                 assert len(observed["distinct"]) >= 3, (
@@ -192,7 +192,7 @@ def main() -> int:
                 return observed
 
             def stopped(page: Any) -> dict[str, Any]:
-                start(page, "/stream.mjpeg", True)
+                start(page, "/stream.mjpeg", "image")
                 page.wait_for_function("document.querySelector('#picture').naturalWidth > 0", timeout=5000)
                 page.evaluate("probe.stop(); window.eventsAtStop=probeStates.length")
                 page.wait_for_timeout(300)

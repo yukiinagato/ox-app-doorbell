@@ -35,6 +35,20 @@ assert.strictEqual(P.proxyMp4Url("d front", "a+b", "http://peer/stream.mp4"),
 assert.strictEqual(P.proxyMp4Url("", "", "/stream.mp4"), "/stream.mp4");
 assert.strictEqual(P.proxyMp4Url("", "", "http://peer/stream.mp4"), "");
 
+const imageStates = [];
+const imageOnly = { style: {}, removeAttribute(name) { if (name === "src") this.src = ""; } };
+const imageVideo = { style: {}, removeAttribute() {}, load() {}, pause() {} };
+const imageSession = P.start({ profile: { strategies: [
+  { id: "mjpeg", enabled: true, startup_timeout_ms: 5000, stall_timeout_ms: 3000 }
+] }, mjpeg: "/snapshot.jpg", mjpegMode: "image", img: imageOnly, video: imageVideo,
+onState(state) { imageStates.push(state); } });
+assert(!imageStates.includes("playing"), "image transport must wait for a decoded frame");
+imageOnly.naturalWidth = 64;
+imageOnly.naturalHeight = 48;
+imageOnly.onload();
+assert(imageStates.includes("playing"), "decoded image should start playback");
+imageSession.stop();
+
 const states = [];
 const img = { style: {}, removeAttribute(name) { if (name === "src") this.src = ""; } };
 const video = { style: {}, removeAttribute() {}, load() {}, pause() {} };
