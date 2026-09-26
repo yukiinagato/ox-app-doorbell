@@ -18,7 +18,8 @@ TEST_CASE("operations HTTP: remote door retries dispatch one MQTT packet and que
   fleet.a->setConfigKey("integrations.mqtt.base_topic", "\"operation-test\"");
   REQUIRE(operationWait([&] {
     auto status = json::parse(fleet.b->statusJson());
-    return json::getString(json::get(status.get(), "bridge"), "mqtt") == "connected";
+    return broker.connections() >= 1 &&
+           json::getString(json::get(status.get(), "bridge"), "mqtt") == "connected";
   }));
   const auto prepared = fleet.prepare("door_open");
   CAPTURE(prepared.body);

@@ -44,7 +44,8 @@ void configureAck(OperationFleet& fleet, OperationBroker& broker, const AckSigne
   if (signer) fleet.a->setConfigKey("doors.front.operations.ack", signer->config());
   REQUIRE(operationWait([&] {
     auto status = json::parse(fleet.b->statusJson());
-    return json::getString(json::get(status.get(), "bridge"), "mqtt") == "connected";
+    return broker.connections() >= 1 &&
+           json::getString(json::get(status.get(), "bridge"), "mqtt") == "connected";
   }));
 }
 std::string dispatchAckOperation(OperationFleet& fleet, OperationBroker& broker) {
@@ -160,7 +161,8 @@ TEST_CASE("operations ACK: no commissioned feedback stays sent and reconnect nev
   REQUIRE(operationWait([&] { return operationField(fleet.query("door_open", id), "execution_state") == "unknown_after_dispatch"; }));
   REQUIRE(operationWait([&] {
     auto status = json::parse(fleet.b->statusJson());
-    return json::getString(json::get(status.get(), "bridge"), "mqtt") == "connected";
+    return broker.connections() >= 2 &&
+           json::getString(json::get(status.get(), "bridge"), "mqtt") == "connected";
   }));
   CHECK(operationField(fleet.query("door_open", id), "unknown_reason") == "transport_ambiguous");
   for (int i = 0; i < 3; ++i) CHECK(fleet.execute("door_open", id).status == 202);
@@ -287,7 +289,8 @@ TEST_CASE("operations ACK: restart recovers unknown and accepts only the origina
   REQUIRE(fleet.b->nodeId() == authority);
   REQUIRE(operationWait([&] {
     auto status = json::parse(fleet.b->statusJson());
-    return json::getString(json::get(status.get(), "bridge"), "mqtt") == "connected";
+    return broker.connections() >= 2 &&
+           json::getString(json::get(status.get(), "bridge"), "mqtt") == "connected";
   }));
   REQUIRE(operationWait([&] { return operationField(fleet.query("door_open", id), "execution_state") == "unknown_after_dispatch"; }));
   CHECK(fleet.execute("door_open", id).status == 202);

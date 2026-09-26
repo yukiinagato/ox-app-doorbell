@@ -105,6 +105,7 @@ class OperationBroker {
     std::lock_guard<std::mutex> lock(mu);
     return counts[id];
   }
+  size_t connections() const { return connection_count.load(); }
   std::string command(const std::string& id) {
     std::lock_guard<std::mutex> lock(mu);
     return commands[id];
@@ -158,6 +159,7 @@ class OperationBroker {
         while ((used = mqtt::decodePacket(it->second.data(), it->second.size(), &packet)) > 0) {
           it->second.erase(it->second.begin(), it->second.begin() + used);
           if (packet.type == mqtt::kConnect) {
+            ++connection_count;
             const uint8_t ack[] = {0x20, 2, 0, 0};
             ::send(it->first, ack, sizeof(ack), 0);
           } else if (packet.type == mqtt::kPingReq) {
@@ -185,6 +187,7 @@ class OperationBroker {
   }
   int listener;
   std::atomic<bool> stopped{false};
+  std::atomic<size_t> connection_count{0};
   std::thread worker;
   std::mutex mu;
   std::map<std::string, size_t> counts;
