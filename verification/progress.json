@@ -1,0 +1,90 @@
+{
+  "schema_version": 1,
+  "purpose": "Canonical status ledger for the 2026-09-26 production review. Historical reports remain historical evidence; this file controls current task state.",
+  "baseline_commit": "d9547b3b4f5b0d5dafb9698a3681a0ddc7a0d252",
+  "implementation_commit": "86f61e6b146f9ebe505fbdb3496278b7ba88fcd3",
+  "release_gate": "NOT_RELEASE_READY",
+  "tasks": [
+    {
+      "id": "T16",
+      "implementation_status": "IMPLEMENTED_CANDIDATE",
+      "verification_status": "BLOCKED_ENV",
+      "independent_review_status": "NOT_RUN",
+      "release_gate": "NOT_READY",
+      "evidence": ["verification/remediation-q01-q18/T16/relay-progress.json", "verification/latest/execution-evidence.json"],
+      "blocking_reason": "Component tests and selected ASan/UBSan tests ran, but required separate-process Node A/Node B, slow peer, revoke, and peer-epoch production scenarios were not qualified."
+    },
+    {
+      "id": "T17",
+      "implementation_status": "PASS",
+      "verification_status": "PASS_COMPONENT_ONLY",
+      "independent_review_status": "NOT_RUN",
+      "release_gate": "NOT_READY",
+      "evidence": ["verification/latest/execution-evidence.json", "feature-parity.json"],
+      "blocking_reason": "State-machine and regression behavior pass Web tests; real HTTPS/two-node/browser and platform qualification remain unrun."
+    },
+    {
+      "id": "T18",
+      "implementation_status": "NOT_REVIEWED",
+      "verification_status": "BLOCKED_ENV",
+      "independent_review_status": "NOT_RUN",
+      "release_gate": "NOT_READY",
+      "evidence": ["verification/latest/execution-evidence.json"],
+      "blocking_reason": "No configured HTTPS Node A/Node B deployment; browser runner lacks the Playwright module."
+    },
+    {
+      "id": "T30",
+      "implementation_status": "IMPLEMENTED_INTEGRATION_PENDING",
+      "verification_status": "NOT_RUN",
+      "independent_review_status": "NOT_RUN",
+      "release_gate": "NOT_READY",
+      "evidence": ["verification/remediation-q01-q18/T30/report.zh.md", "verification/latest/execution-evidence.json"],
+      "blocking_reason": "Existing report names the missing gate: current frozen Web plus native Core/SQLite HTTP integration. That integration was not run against the current candidate."
+    },
+    {
+      "id": "T31",
+      "implementation_status": "IN_PROGRESS",
+      "verification_status": "NOT_RUN",
+      "independent_review_status": "NOT_RUN",
+      "release_gate": "NOT_READY",
+      "evidence": ["verification/remediation-q01-q18/T31/checkpoint.json"],
+      "blocking_reason": "Current checkpoint still lists production media-grant security review, migration documentation, frozen final source, and independent review."
+    },
+    {
+      "id": "T32",
+      "implementation_status": "NOT_REVIEWED",
+      "verification_status": "NOT_RUN",
+      "independent_review_status": "NOT_RUN",
+      "release_gate": "NOT_READY",
+      "evidence": [],
+      "blocking_reason": "No T32 lifecycle implementation or current evidence package was found in the repository inventory."
+    },
+    {
+      "id": "production-core-full-suite",
+      "implementation_status": "NOT_APPLICABLE",
+      "verification_status": "FAIL",
+      "independent_review_status": "NOT_RUN",
+      "release_gate": "NOT_READY",
+      "evidence": ["verification/latest/execution-evidence.json"],
+      "blocking_reason": "Clean full doorbell_tests did not finish within 180 seconds; selected media/HTTP/relay tests passed, but the whole suite is not green."
+    },
+    {
+      "id": "jailbroken-ipads",
+      "implementation_status": "NOT_APPLICABLE",
+      "verification_status": "BLOCKED_ENV",
+      "independent_review_status": "NOT_RUN",
+      "release_gate": "NOT_READY",
+      "evidence": ["verification/device-inventory.json"],
+      "blocking_reason": "No device was inventoried, deployed, or exercised. SSH failures and missing authentication/reachability are recorded without addresses or credentials."
+    },
+    {
+      "id": "windows-native-vms",
+      "implementation_status": "NOT_APPLICABLE",
+      "verification_status": "BLOCKED_ENV",
+      "independent_review_status": "NOT_RUN",
+      "release_gate": "NOT_READY",
+      "evidence": ["verification/device-inventory.json"],
+      "blocking_reason": "No Windows VM runtime or licensed XP/7 image was available; no native Windows runtime test ran."
+    }
+  ]
+}

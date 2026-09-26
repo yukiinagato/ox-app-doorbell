@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "run_date": "2026-09-26",
+  "baseline_commit": "d9547b3b4f5b0d5dafb9698a3681a0ddc7a0d252",
+  "tested_commit": "86f61e6b146f9ebe505fbdb3496278b7ba88fcd3",
+  "results": [
+    {
+      "id": "T17-call-media-authority",
+      "status": "PASS",
+      "command": "node webui/tests/call_media_authority.test.js",
+      "coverage": ["remote_core_accepted matches active binding", "HTTP 503 recovery", "timeout recovery", "403/409 do not retry", "old generation retry cannot touch replacement call", "manual video-off cancels retry", "bounded retries reach INTERRUPTED"]
+    },
+    {
+      "id": "T17-video-session",
+      "status": "PASS",
+      "command": "node webui/tests/video_session.test.js",
+      "coverage": ["local media readiness fires only after successful getUserMedia", "stopped and stale streams are released"]
+    },
+    {
+      "id": "web-regressions",
+      "status": "PASS",
+      "command": "node each webui/tests/*.test.js",
+      "count": 22
+    },
+    {
+      "id": "source-checks",
+      "status": "PASS",
+      "commands": ["python3 tools/gen_i18n.py --check", "python3 tools/check_english_source.py"]
+    },
+    {
+      "id": "clean-core-configure-build",
+      "status": "PASS",
+      "command": "cmake -S core -B /tmp/doorbell-prod-clean-d9547b3-1 -DDB_WITH_PJSIP=OFF && cmake --build /tmp/doorbell-prod-clean-d9547b3-1 -j4",
+      "limitation": "PJSIP disabled; the build selected sipctl_stub. This is not SIP qualification."
+    },
+    {
+      "id": "clean-core-full-suite",
+      "status": "FAIL",
+      "command": "doorbell_tests --no-colors",
+      "result": "Did not finish within the 180 second bound; process was terminated. No failing test case was isolated."
+    },
+    {
+      "id": "core-cas-stop-targeted",
+      "status": "PASS",
+      "command": "doorbell_tests --test-case='config CAS: materialized schema rejects child writes that corrupt typed parents' --no-colors",
+      "result": "17 assertions passed"
+    },
+    {
+      "id": "asan-ubsan-build",
+      "status": "PASS",
+      "command": "cmake build with -fsanitize=address,undefined -fno-omit-frame-pointer",
+      "limitation": "macOS AddressSanitizer reports detect_leaks is unsupported; leak detection was disabled for the run."
+    },
+    {
+      "id": "asan-ubsan-media-http-relay-selection",
+      "status": "PASS",
+      "command": "ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=halt_on_error=1 doorbell_tests --test-case='*media*' --test-case='*T16*' --test-case='*httpd*' --test-case='*secure_channel*' --no-colors",
+      "result": "8 test cases and 64 assertions passed"
+    },
+    {
+      "id": "qa-v2-clean-core-and-clock",
+      "status": "PASS",
+      "evidence": "verification/latest/qa-v2-summary.json",
+      "result": "clean Core build, five Core clock cases, and eight Swift clock cases passed"
+    },
+    {
+      "id": "qa-v2-real-chromium-component",
+      "status": "BLOCKED_ENV",
+      "evidence": "verification/latest/browser-results.json",
+      "reason": "Python playwright module is not installed; browser cases were not collected."
+    },
+    {
+      "id": "docker-linux-qa",
+      "status": "BLOCKED_ENV",
+      "command": "docker version",
+      "reason": "Docker daemon is unavailable at the configured socket."
+    },
+    {
+      "id": "https-two-node-browser-e2e",
+      "status": "NOT_RUN",
+      "reason": "No real Node A/Node B HTTPS deployment and browser session were available."
+    },
+    {
+      "id": "jailbroken-ipad-deployment",
+      "status": "BLOCKED_ENV",
+      "evidence": "verification/device-inventory.json",
+      "reason": "SSH inventory could not be completed; no device build, install, launch, audio, video, or lifecycle run was performed."
+    },
+    {
+      "id": "native-windows-vm",
+      "status": "BLOCKED_ENV",
+      "evidence": "verification/device-inventory.json",
+      "reason": "No VM runtime/image; Docker is not a Windows XP/7 substitute."
+    },
+    {
+      "id": "independent-review-T16-T17-T18-T30-T31-T32",
+      "status": "NOT_RUN",
+      "reason": "No separate independent reviewer completed this turn."
+    }
+  ]
+}

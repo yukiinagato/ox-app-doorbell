@@ -1,0 +1,10 @@
+{
+  "suite": "chromium-component-and-core-network-integration",
+  "results": [
+    {
+      "id": "qa_v2.browser.infrastructure",
+      "status": "BLOCKED",
+      "detail": "ModuleNotFoundError(\"No module named 'playwright'\")"
+    }
+  ]
+}

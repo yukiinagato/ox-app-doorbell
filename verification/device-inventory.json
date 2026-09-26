@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "collected_at": "2026-09-26",
+  "policy": "No LAN addresses, credentials, or key material are stored in this repository.",
+  "devices": [
+    {
+      "device": "iPad 1",
+      "ip": "REDACTED",
+      "product_type": null,
+      "ios": null,
+      "build": null,
+      "arch": null,
+      "jailbroken": true,
+      "status": "BLOCKED_ENV",
+      "attempt": "SSH to documented LAN endpoint on port 22 using BatchMode failed: server offered only ssh-rsa/ssh-dss; retry with documented legacy algorithms reached authentication but returned Permission denied (publickey,password,keyboard-interactive).",
+      "missing": "A usable SSH key or securely supplied password; current OS/model inventory and device deployment were not performed."
+    },
+    {
+      "device": "iPad mini 3",
+      "ip": "REDACTED",
+      "product_type": null,
+      "ios": null,
+      "build": null,
+      "arch": null,
+      "jailbroken": true,
+      "status": "BLOCKED_ENV",
+      "attempt": "SSH to documented LAN endpoint on port 44 returned Connection refused.",
+      "missing": "Reachable device SSH service; current OS/model inventory and device deployment were not performed."
+    },
+    {
+      "device": "iPad Air 1",
+      "ip": "REDACTED",
+      "product_type": null,
+      "ios": null,
+      "build": null,
+      "arch": null,
+      "jailbroken": true,
+      "status": "BLOCKED_ENV",
+      "attempt": "SSH using the documented local alias on port 44 returned Connection refused.",
+      "missing": "Reachable device SSH service; current OS/model inventory and device deployment were not performed."
+    }
+  ],
+  "windows": [
+    {
+      "device": "Windows XP SP3",
+      "status": "BLOCKED_ENV_MISSING_WINDOWS_IMAGE",
+      "attempt": "Checked for UTM, VMware Fusion, VirtualBox, Parallels, and QEMU; none were found. Docker daemon is not running.",
+      "missing": "A legal XP SP3 image and a native VM runtime."
+    },
+    {
+      "device": "Windows 7 SP1",
+      "status": "BLOCKED_ENV_MISSING_WINDOWS_IMAGE",
+      "attempt": "Checked for UTM, VMware Fusion, VirtualBox, Parallels, and QEMU; none were found. Docker daemon is not running.",
+      "missing": "A legal Windows 7 SP1 image and a native VM runtime."
+    },
+    {
+      "device": "Modern Windows",
+      "status": "BLOCKED_ENV",
+      "attempt": "No Windows VM runtime or installed Windows guest was available.",
+      "missing": "A Windows host or VM for native installation and runtime qualification."
+    }
+  ]
+}
