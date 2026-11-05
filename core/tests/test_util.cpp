@@ -271,17 +271,32 @@ TEST_CASE("hlc monotonic + lexicographic order") {
 TEST_CASE("hlc observe merges logical order without changing wall time") {
   SimClock clock(1000);
   HlcClock hlc(clock, "aa");
-  hlc.observe(HlcClock::format(999'999, 3, "bb"));
+  CHECK(hlc.observe(HlcClock::format(200'000, 3, "bb")));
   std::string t = hlc.tick();
   int64_t ms;
   int cnt;
   REQUIRE(HlcClock::parse(t, &ms, &cnt, nullptr));
-  CHECK(ms == 999'999);
+  CHECK(ms == 200'000);
   CHECK(cnt == 4);
   CHECK(hlc.correctedWallMs() == 1000);
   clock.setWallOffsetMs(-500);
   CHECK(hlc.correctedWallMs() == 500);
   CHECK(hlc.tick() > t);
+}
+
+TEST_CASE("hlc observe ignores a remote clock far in the future") {
+  SimClock clock(1'700'000'000'000LL);
+  HlcClock hlc(clock, "aa");
+  const int64_t far = 1'700'000'000'000LL + HlcClock::kMaxObserveAheadMs + 1;
+  CHECK_FALSE(hlc.observe(HlcClock::format(far, 0, "bb")));
+  CHECK(hlc.rejectedAhead() == 1);
+  int64_t ms = 0;
+  REQUIRE(HlcClock::parse(hlc.tick(), &ms, nullptr, nullptr));
+  CHECK(ms == 1'700'000'000'000LL);
+  // This replica's own persisted history is honoured even after the wall clock went backwards.
+  hlc.observePersisted(HlcClock::format(far, 0, "aa"));
+  REQUIRE(HlcClock::parse(hlc.tick(), &ms, nullptr, nullptr));
+  CHECK(ms == far);
 }
 
 TEST_CASE("json helpers") {

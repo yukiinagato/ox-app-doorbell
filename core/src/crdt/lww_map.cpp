@@ -70,12 +70,55 @@ LwwEntry makeCoverageMarker(const std::string& covered_author, uint64_t covered_
 
 LwwMap::LwwMap(std::string self_id, HlcClock& hlc) : self_id_(std::move(self_id)), hlc_(hlc) {}
 
+// Records rollback state for the lifetime of one tentative operation. Without a commit hook the
+// operation cannot be rejected, so nothing is recorded.
+class LwwMap::UndoScope {
+ public:
+  explicit UndoScope(LwwMap& map) : map_(map) {
+    if (!map_.on_commit_) return;
+    state_.emplace(map_.snapshot());
+    map_.undo_ = &*state_;
+  }
+  ~UndoScope() { map_.undo_ = nullptr; }
+  void rollback() {
+    map_.undo_ = nullptr;
+    if (state_) map_.restore(std::move(*state_));
+  }
+
+ private:
+  LwwMap& map_;
+  std::optional<StateSnapshot> state_;
+};
+
 LwwMap::StateSnapshot LwwMap::snapshot() const {
-  return {map_, vv_, out_of_order_sequences_, durable_remote_frontier_, self_seq_};
+  return {{}, vv_, out_of_order_sequences_, durable_remote_frontier_, self_seq_};
+}
+
+void LwwMap::remember(const std::string& key) {
+  if (!undo_ || undo_->touched.count(key)) return;
+  auto it = map_.find(key);
+  undo_->touched.emplace(key, it == map_.end() ? std::nullopt
+                                               : std::optional<LwwEntry>(it->second));
+}
+
+bool LwwMap::remoteHlcAcceptable(const std::string& hlc) {
+  int64_t physical = 0;
+  int counter = 0;
+  std::string node8;
+  if (hlc.size() > 64 || !HlcClock::parse(hlc, &physical, &counter, &node8) ||
+      HlcClock::format(physical, counter, node8) != hlc)
+    return false;
+  return physical <= hlc_.correctedWallMs() + kMaxRemoteAheadMs;
 }
 
 void LwwMap::restore(StateSnapshot&& state) {
-  map_ = std::move(state.map);
+  for (auto& [key, previous] : state.touched) {
+    if (previous) {
+      map_[key] = std::move(*previous);
+    } else {
+      map_.erase(key);
+    }
+  }
   vv_ = std::move(state.vv);
   out_of_order_sequences_ = std::move(state.out_of_order_sequences);
   durable_remote_frontier_ = std::move(state.durable_remote_frontier);
@@ -161,7 +204,7 @@ void LwwMap::load(const std::vector<LwwEntry>& entries) {
       durable = std::max(durable, covered_seq);
       continue;
     }
-    hlc_.observe(e.hlc);
+    hlc_.observePersisted(e.hlc);
     if (e.author == self_id_) {
       self_seq_ = std::max(self_seq_, e.seq);
       // A persisted mutation authored by this replica proves that every earlier local sequence
@@ -181,8 +224,7 @@ void LwwMap::load(const std::vector<LwwEntry>& entries) {
 }
 
 const LwwEntry& LwwMap::set(const std::string& key, const std::string& value_json) {
-  std::optional<StateSnapshot> before;
-  if (on_commit_) before = snapshot();
+  UndoScope undo(*this);
   LwwEntry e;
   e.key = key;
   e.value_json = value_json;
@@ -190,12 +232,13 @@ const LwwEntry& LwwMap::set(const std::string& key, const std::string& value_jso
   e.author = self_id_;
   e.seq = ++self_seq_;
   trustSequencePrefix(self_id_, self_seq_);
+  remember(key);
   LwwEntry& slot = map_[key];
   slot = std::move(e);
   const std::vector<LwwEntry> changed{slot};
   if (!commit(changed, true, false)) {
     rejected_entry_ = changed.front();
-    restore(std::move(*before));
+    undo.rollback();
     last_mutation_committed_ = false;
     return rejected_entry_;
   }
@@ -204,8 +247,7 @@ const LwwEntry& LwwMap::set(const std::string& key, const std::string& value_jso
 }
 
 const LwwEntry& LwwMap::remove(const std::string& key) {
-  std::optional<StateSnapshot> before;
-  if (on_commit_) before = snapshot();
+  UndoScope undo(*this);
   LwwEntry e;
   e.key = key;
   e.deleted = true;
@@ -213,12 +255,13 @@ const LwwEntry& LwwMap::remove(const std::string& key) {
   e.author = self_id_;
   e.seq = ++self_seq_;
   trustSequencePrefix(self_id_, self_seq_);
+  remember(key);
   LwwEntry& slot = map_[key];
   slot = std::move(e);
   const std::vector<LwwEntry> changed{slot};
   if (!commit(changed, true, false)) {
     rejected_entry_ = changed.front();
-    restore(std::move(*before));
+    undo.rollback();
     last_mutation_committed_ = false;
     return rejected_entry_;
   }
@@ -227,8 +270,7 @@ const LwwEntry& LwwMap::remove(const std::string& key) {
 }
 
 std::vector<LwwEntry> LwwMap::mutate(const std::vector<LwwMutation>& mutations) {
-  std::optional<StateSnapshot> before;
-  if (on_commit_) before = snapshot();
+  UndoScope undo(*this);
   std::vector<LwwEntry> changed;
   changed.reserve(mutations.size());
   for (const auto& mutation : mutations) {
@@ -240,12 +282,41 @@ std::vector<LwwEntry> LwwMap::mutate(const std::vector<LwwMutation>& mutations) 
     e.author = self_id_;
     e.seq = ++self_seq_;
     trustSequencePrefix(self_id_, self_seq_);
+    remember(e.key);
     LwwEntry& slot = map_[e.key];
     slot = std::move(e);
     changed.push_back(slot);
   }
   if (!changed.empty() && !commit(changed, true, true)) {
-    restore(std::move(*before));
+    undo.rollback();
+    last_mutation_committed_ = false;
+    return {};
+  }
+  last_mutation_committed_ = true;
+  return changed;
+}
+
+std::string LwwMap::seedHlc() const { return HlcClock::format(0, 0, self_id_.substr(0, 8)); }
+
+std::vector<LwwEntry> LwwMap::seed(const std::vector<LwwMutation>& mutations) {
+  UndoScope undo(*this);
+  std::vector<LwwEntry> changed;
+  for (const auto& mutation : mutations) {
+    if (mutation.deleted || map_.count(mutation.key)) continue;
+    LwwEntry e;
+    e.key = mutation.key;
+    e.value_json = mutation.value_json;
+    e.hlc = seedHlc();
+    e.author = self_id_;
+    e.seq = ++self_seq_;
+    trustSequencePrefix(self_id_, self_seq_);
+    remember(e.key);
+    LwwEntry& slot = map_[e.key];
+    slot = std::move(e);
+    changed.push_back(slot);
+  }
+  if (!changed.empty() && !commit(changed, true, true)) {
+    undo.rollback();
     last_mutation_committed_ = false;
     return {};
   }
@@ -255,31 +326,27 @@ std::vector<LwwEntry> LwwMap::mutate(const std::vector<LwwMutation>& mutations) 
 
 bool LwwMap::applyRemote(const LwwEntry& e) {
   if (parseCoverageMarker(e, nullptr, nullptr)) return false;
-  std::optional<StateSnapshot> before;
-  if (on_commit_) before = snapshot();
-  hlc_.observe(e.hlc);
-
+  UndoScope undo(*this);
   observeSequence(e.author, e.seq);
   bool winner_changed = false;
   std::vector<LwwEntry> changed;
-  auto it = map_.find(e.key);
-  if (it != map_.end()) {
-    if (wins(e, it->second)) {
-      it->second = e;
-      winner_changed = true;
-      changed.push_back(it->second);
-    }
+  if (!remoteHlcAcceptable(e.hlc)) {
+    ++rejected_remote_entries_;
   } else {
-    it = map_.emplace(e.key, e).first;
-    winner_changed = true;
-    changed.push_back(it->second);
+    hlc_.observe(e.hlc);
+    auto it = map_.find(e.key);
+    if (it == map_.end() || wins(e, it->second)) {
+      remember(e.key);
+      map_[e.key] = e;
+      winner_changed = true;
+      changed.push_back(e);
+    }
   }
-
   std::vector<LwwEntry> durable_changed = changed;
   auto markers = advanceDurableRemoteFrontiers();
   durable_changed.insert(durable_changed.end(), markers.begin(), markers.end());
   if (!durable_changed.empty() && !commit(durable_changed, changed, false, false)) {
-    restore(std::move(*before));
+    undo.rollback();
     last_mutation_committed_ = false;
     return false;
   }
@@ -298,20 +365,20 @@ std::vector<LwwEntry> LwwMap::applyRemoteSnapshot(
 
 std::vector<LwwEntry> LwwMap::applyRemoteBatchImpl(
     const std::vector<LwwEntry>& entries, const VersionVector* complete_frontier) {
-  std::optional<StateSnapshot> before;
-  if (on_commit_) before = snapshot();
+  UndoScope undo(*this);
   std::set<std::string> changed_keys;
   for (const auto& e : entries) {
     if (parseCoverageMarker(e, nullptr, nullptr)) continue;
-    hlc_.observe(e.hlc);
     observeSequence(e.author, e.seq);
-    auto it = map_.find(e.key);
-    if (it != map_.end()) {
-      if (!wins(e, it->second)) continue;
-      it->second = e;
-    } else {
-      map_.emplace(e.key, e);
+    if (!remoteHlcAcceptable(e.hlc)) {
+      ++rejected_remote_entries_;
+      continue;
     }
+    hlc_.observe(e.hlc);
+    auto it = map_.find(e.key);
+    if (it != map_.end() && !wins(e, it->second)) continue;
+    remember(e.key);
+    map_[e.key] = e;
     changed_keys.insert(e.key);
   }
   if (complete_frontier) {
@@ -319,7 +386,6 @@ std::vector<LwwEntry> LwwMap::applyRemoteBatchImpl(
       if (author != self_id_) trustSequencePrefix(author, seq);
     }
   }
-
   std::vector<LwwEntry> changed;
   changed.reserve(changed_keys.size());
   for (const auto& key : changed_keys) changed.push_back(map_.at(key));
@@ -327,7 +393,7 @@ std::vector<LwwEntry> LwwMap::applyRemoteBatchImpl(
   auto markers = advanceDurableRemoteFrontiers();
   durable_changed.insert(durable_changed.end(), markers.begin(), markers.end());
   if (!durable_changed.empty() && !commit(durable_changed, changed, false, true)) {
-    restore(std::move(*before));
+    undo.rollback();
     last_mutation_committed_ = false;
     return {};
   }
@@ -386,15 +452,38 @@ std::vector<LwwEntry> LwwMap::all() const {
   return out;
 }
 
-size_t LwwMap::gcTombstones(const VersionVector& fleet_min_vv, const std::string& older_than_hlc) {
-  size_t erased = 0;
+std::vector<std::string> LwwMap::gcTombstones(const VersionVector& fleet_min_vv,
+                                              const std::string& older_than_hlc) {
+  std::vector<std::string> erased;
   for (auto it = map_.begin(); it != map_.end();) {
     const LwwEntry& e = it->second;
-
-
-    if (e.deleted && e.hlc < older_than_hlc && covered(fleet_min_vv, e)) {
+    bool removable = e.deleted && e.hlc < older_than_hlc && covered(fleet_min_vv, e);
+    if (removable) {
+      // A live descendant this tombstone dominates is hidden only by this tombstone.
+      const std::string child_prefix = e.key + ".";
+      for (auto child = map_.lower_bound(child_prefix);
+           child != map_.end() && child->first.compare(0, child_prefix.size(), child_prefix) == 0;
+           ++child) {
+        if (!child->second.deleted && wins(e, child->second)) {
+          removable = false;
+          break;
+        }
+      }
+    }
+    if (removable) {
+      // An older live ancestor object would regain the member this tombstone removed.
+      for (size_t dot = e.key.find('.'); dot != std::string::npos;
+           dot = e.key.find('.', dot + 1)) {
+        auto ancestor = map_.find(e.key.substr(0, dot));
+        if (ancestor != map_.end() && !ancestor->second.deleted && wins(e, ancestor->second)) {
+          removable = false;
+          break;
+        }
+      }
+    }
+    if (removable) {
+      erased.push_back(it->first);
       it = map_.erase(it);
-      erased++;
     } else {
       ++it;
     }

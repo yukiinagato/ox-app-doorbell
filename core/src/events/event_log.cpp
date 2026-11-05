@@ -23,7 +23,7 @@ void EventLog::loadHeads() {
   for (const auto& origin : origins)
     drainContiguous(origin, nullptr, /*dispatch=*/false);
   const auto latest = store_.recentEvents(1);
-  if (!latest.empty()) hlc_.observe(latest.front().hlc);
+  if (!latest.empty()) hlc_.observePersisted(latest.front().hlc);
 }
 
 void EventLog::replayRecovered() { dispatchPending(); }

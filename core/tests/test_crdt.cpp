@@ -567,20 +567,20 @@ TEST_CASE("gcTombstones respects coverage and age requirements") {
 
 
   VersionVector vv_partial{{kIdA, 2}};
-  CHECK(a.map.gcTombstones(vv_partial, cutoff) == 1);
+  CHECK(a.map.gcTombstones(vv_partial, cutoff).size() == 1);
   REQUIRE(a.map.all().size() == 1);
   CHECK(a.map.all()[0].key == "k2");
 
   VersionVector vv_full{{kIdA, 3}};
-  CHECK(a.map.gcTombstones(vv_full, t2.hlc) == 0);
+  CHECK(a.map.gcTombstones(vv_full, t2.hlc).empty());
 
-  CHECK(a.map.gcTombstones(vv_full, cutoff) == 1);
+  CHECK(a.map.gcTombstones(vv_full, cutoff).size() == 1);
   CHECK(a.map.all().empty());
 
   Replica b(kIdB, 1000);
   b.map.remove("k");
   b.clock.advance(10);
-  CHECK(b.map.gcTombstones(VersionVector{}, b.hlc.tick()) == 0);
+  CHECK(b.map.gcTombstones(VersionVector{}, b.hlc.tick()).empty());
   CHECK(b.map.all().size() == 1);
 }
 
@@ -637,4 +637,89 @@ TEST_CASE("subtree tombstones hide stale leaves and embedded parent members acro
   current = json::parse(a.map.materializeJson());
   CHECK(json::getString(json::get(json::get(json::get(current.get(), "visit_purposes"),
                                            "visit"), "label"), "en") == "New visit");
+}
+
+TEST_CASE("gcTombstones keeps a tombstone that still hides an older value") {
+  Replica a(kIdA, 1000);
+  a.map.set("rules.r1.enabled", "true");
+  a.clock.advance(1);
+  a.map.remove("rules.r1");  // hides the older child
+  a.clock.advance(1);
+  a.map.set("doors.d1", "{\"name\":\"x\",\"note\":\"y\"}");
+  a.clock.advance(1);
+  a.map.remove("doors.d1.note");  // removes a member of the older parent object
+  a.clock.advance(1);
+  a.map.remove("plain");
+  a.clock.advance(1);
+  const std::string before = a.map.materializeJson();
+  const auto erased = a.map.gcTombstones(a.map.versionVector(), a.hlc.tick());
+  CHECK(erased == std::vector<std::string>{"plain"});
+  CHECK(a.map.materializeJson() == before);
+}
+
+TEST_CASE("seeded defaults lose to every real write and tombstone") {
+  Replica cluster(kIdA, 1000);
+  cluster.map.set("ui.call_flow", "\"ring_then_purpose\"");
+  cluster.clock.advance(1);
+  cluster.map.remove("trigger_rules.r_default");
+
+  Replica joiner(kIdB, 900000);  // boots long after the cluster's edits
+  joiner.map.seed({{"ui.call_flow", "\"purpose_first\"", false},
+                   {"trigger_rules.r_default", "{\"enabled\":true}", false},
+                   {"reply.display_ttl_s", "30", false}});
+  REQUIRE(joiner.map.get("ui.call_flow") == std::string("\"purpose_first\""));
+
+  for (const auto& e : cluster.map.deltaSince(joiner.map.versionVector()))
+    joiner.map.applyRemote(e);
+  for (const auto& e : joiner.map.deltaSince(cluster.map.versionVector()))
+    cluster.map.applyRemote(e);
+
+  CHECK(joiner.map.get("ui.call_flow") == std::string("\"ring_then_purpose\""));
+  CHECK(cluster.map.get("ui.call_flow") == std::string("\"ring_then_purpose\""));
+  CHECK_FALSE(joiner.map.get("trigger_rules.r_default").has_value());
+  CHECK_FALSE(cluster.map.get("trigger_rules.r_default").has_value());
+  // A default the cluster never decided is adopted.
+  CHECK(cluster.map.get("reply.display_ttl_s") == std::string("30"));
+  // Seeding never overwrites an existing entry.
+  CHECK(joiner.map.seed({{"ui.call_flow", "\"x\"", false}}).empty());
+}
+
+TEST_CASE("rejected commits restore only the touched keys") {
+  Replica a(kIdA, 1000);
+  a.map.set("keep", "1");
+  a.map.set("edit", "1");
+  bool accept = false;
+  a.map.onCommit([&](const std::vector<LwwEntry>&, bool, bool) { return accept; });
+  a.map.mutate({{"edit", "2", false}, {"fresh", "3", false}, {"keep", "", true}});
+  CHECK_FALSE(a.map.lastMutationCommitted());
+  CHECK(a.map.get("edit") == std::string("1"));
+  CHECK_FALSE(a.map.get("fresh").has_value());
+  CHECK(a.map.get("keep") == std::string("1"));
+  const auto vv = a.map.versionVector();
+  LwwEntry remote{"edit", "9", false, a.hlc.tick(), kIdB, 1};
+  CHECK_FALSE(a.map.applyRemote(remote));
+  CHECK(a.map.get("edit") == std::string("1"));
+  CHECK(a.map.versionVector() == vv);
+  accept = true;
+  CHECK(a.map.applyRemote(remote));
+  CHECK(a.map.get("edit") == std::string("9"));
+}
+
+TEST_CASE("remote entries with malformed or far-future HLCs never win") {
+  Replica a(kIdA, 1'700'000'000'000LL);
+  a.map.set("k", "\"local\"");
+  const int64_t ahead = 1'700'000'000'000LL + LwwMap::kMaxRemoteAheadMs + 60'000;
+  LwwEntry future{"k", "\"future\"", false, HlcClock::format(ahead, 0, "bbbb0000"), kIdB, 1};
+  LwwEntry junk{"k", "\"junk\"", false, "~~~~~~~~~~~~-~~~~-bbbb0000", kIdB, 2};
+  CHECK_FALSE(a.map.applyRemote(future));
+  CHECK(a.map.applyRemoteBatch({junk}).empty());
+  CHECK(a.map.get("k") == std::string("\"local\""));
+  CHECK(a.map.rejectedRemoteEntries() == 2);
+  // The author's sequence still advances, so its later valid writes are not blocked.
+  CHECK(a.map.versionVector().at(kIdB) == 2);
+  const std::string local_hlc = a.hlc.tick();
+  CHECK(local_hlc.compare(0, 12, HlcClock::format(ahead, 0, "").substr(0, 12)) < 0);
+  LwwEntry ok{"k", "\"remote\"", false, a.hlc.tick(), kIdB, 3};
+  CHECK(a.map.applyRemote(ok));
+  CHECK(a.map.get("k") == std::string("\"remote\""));
 }

@@ -47,10 +47,22 @@ std::string HlcClock::tick() {
   return format(last_ms_, counter_, node8_);
 }
 
-void HlcClock::observe(const std::string& remote_hlc) {
+bool HlcClock::observe(const std::string& remote_hlc) {
   int64_t ms = 0;
   int cnt = 0;
-  if (!parse(remote_hlc, &ms, &cnt, nullptr)) return;
+  if (!parse(remote_hlc, &ms, &cnt, nullptr)) return false;
+  if (ms > clock_.wallMs() + kMaxObserveAheadMs) {
+    rejected_ahead_.fetch_add(1);
+    return false;
+  }
+  observePersisted(remote_hlc);
+  return true;
+}
+
+void HlcClock::observePersisted(const std::string& persisted_hlc) {
+  int64_t ms = 0;
+  int cnt = 0;
+  if (!parse(persisted_hlc, &ms, &cnt, nullptr)) return;
   std::lock_guard<std::mutex> lk(mu_);
   if (ms > last_ms_) {
     last_ms_ = ms;

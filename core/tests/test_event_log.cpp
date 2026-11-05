@@ -337,7 +337,7 @@ TEST_CASE("event_log: applyRemote is idempotent for duplicates and reflected loc
     last_local = is_local;
   });
 
-  EventRecord r = mkRemote("bbbbbbbb1111", 1, 999'999);
+  EventRecord r = mkRemote("bbbbbbbb1111", 1, 200'000);
   CHECK(log.applyRemote(r));
   CHECK_FALSE(log.applyRemote(r));
   CHECK(cb_count == 1);
