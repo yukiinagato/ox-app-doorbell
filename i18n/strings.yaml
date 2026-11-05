@@ -1917,6 +1917,9 @@ core.ivr.reply_back: { ja: "前のメニューに戻るには 0 を押してく�
 core.ivr.invalid: { ja: "入力が正しくありません。", en: "That is not a valid choice.", zh: "输入无效。" }
 core.ivr.reply_sent: { ja: "返事を来客に伝えました。", en: "Your reply has been sent to the visitor.", zh: "已将回复告知访客。" }
 core.ivr.declined: { ja: "この電話では応答しません。ほかの端末では呼び出しが続きます。", en: "This phone will not answer. Other devices keep ringing.", zh: "此电话不接听，其他设备继续响铃。" }
+video.connecting: { ja: "映像に接続しています…", en: "Connecting to video…", zh: "正在连接视频…" }
+ring.ignored: { ja: "この画面では無視しました。ほかの端末では鳴り続けます", en: "Ignored on this screen. Other devices keep ringing", zh: "已在本画面忽略，其他设备仍在响铃" }
+ring.answer_unavailable: { ja: "この画面では応答できません", en: "Answering isn't available on this screen", zh: "此画面无法接听" }
 # Android background call alert (2026-11 review): the call notification that opens the incoming
 # screen full screen when the platform blocks a background activity start.
 incoming.channel_name: { ja: "来客の呼び出し", en: "Visitor calls", zh: "访客呼叫" }

@@ -50,7 +50,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role=button]:f
                     border:1px solid var(--line); color:var(--on-surface); }
 #dashTabs { display:none; }
 #dashBody { padding:16px; padding:var(--s4) clamp(12px, 2.5vw, 32px);
-            padding-bottom:calc(112px + env(safe-area-inset-bottom)); }
+            padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
 #snapGrid { padding:0; }
 .snapCard { position:relative; display:inline-block; vertical-align:top; width:46%; margin:6px;
             padding:0; overflow:hidden; cursor:pointer; background:var(--surface-2);
@@ -107,7 +107,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role=button]:f
 @media (max-width: 599.98px) {
   #dashTabs { display:-webkit-flex; display:flex; position:fixed; left:0; right:0; bottom:0; z-index:6;
               background:var(--surface-2); border-top:1px solid var(--line);
-              padding:4px 112px calc(4px + env(safe-area-inset-bottom)) 8px; gap:4px; }
+              padding:6px 8px calc(6px + env(safe-area-inset-bottom)); gap:6px; -webkit-align-items:center; align-items:center; }
   #dashTabs button { -webkit-flex:1; flex:1; min-height:56px; background:none; border:0;
                      color:var(--muted); font-size:15px; border-radius:10px; }
   #dashTabs button[aria-selected="true"] { color:var(--on-surface); background:var(--surface-3); font-weight:600; }
@@ -117,7 +117,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role=button]:f
 /* Medium: two tile columns, history below. Expanded: tiles beside history. */
 @media (min-width: 600px) {
   @supports (display:grid) { #snapGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-  #dashBody { padding-bottom:calc(112px + env(safe-area-inset-bottom)); }
+  #dashBody { padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
   #historyPane { margin-top:var(--s5); }
 }
 @media (min-width: 900px) {
@@ -148,7 +148,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role=button]:f
 /* Fixed action zone: Answer (positive, largest), Reply, Ignore. */
 #callActions { position:-webkit-sticky; position:sticky; bottom:0; z-index:2; display:-webkit-flex; display:flex;
                -webkit-flex-wrap:wrap; flex-wrap:wrap; gap:12px; padding:16px 0;
-               padding-bottom:calc(120px + env(safe-area-inset-bottom));
+               padding-bottom:calc(16px + env(safe-area-inset-bottom));
                background:var(--surface); }
 #callActions button { margin:0; border-radius:14px; font-size:18px; min-height:56px; padding:10px 18px;
                       background:var(--surface-3); border:1px solid var(--line); color:var(--on-surface); }
@@ -199,7 +199,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role=button]:f
 #controls { gap:12px 18px; padding-bottom:calc(4px + env(safe-area-inset-bottom)); }
 #videoToggle { min-height:44px; }
 #videoToggle input { width:24px; height:24px; min-height:0; }
-#status { color:var(--muted); padding-bottom:calc(104px + env(safe-area-inset-bottom)); }
+#status { color:var(--muted); }
 @media (max-width: 599.98px) {
   header h1 { font-size:20px; }
   #selfPreview { width:28%; }
@@ -212,7 +212,7 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role=button]:f
     body.callPage #videoBox { grid-row:1 / span 2; max-width:none; }
     body.callPage #controls { -webkit-flex-direction:column; flex-direction:column; -webkit-align-items:stretch;
                               align-items:stretch; -webkit-justify-content:flex-end; justify-content:flex-end; padding-top:0; }
-    body.callPage #status { text-align:left; padding-bottom:calc(112px + env(safe-area-inset-bottom)); }
+    body.callPage #status { text-align:left; }
   }
 }
 
@@ -251,8 +251,87 @@ button:focus-visible, select:focus-visible, input:focus-visible, [role=button]:f
 .dbEmergencyOverlay p { font-size:clamp(1.1rem, .9rem + 1vw, 1.6rem) !important; }
 .dbSosTrigger { bottom:calc(18px + env(safe-area-inset-bottom)); right:calc(18px + env(safe-area-inset-right));
                 background:var(--negative); }
+/* Docked SOS: part of a fixed action zone (leading edge), never floating over content. */
+#controls .dbSosTrigger, #callActions .dbSosTrigger, #dashTabs .dbSosTrigger, #dashHeader .dbSosTrigger {
+  position:static; -webkit-flex:none; flex:none; min-width:72px; min-height:56px; margin:0;
+  border-radius:16px; padding:6px 10px; background:#8f1010; background:var(--negative);
+  color:#fff; color:var(--on-negative); border:2px solid #fff; font-weight:bold; }
+#dashHeader .dbSosTrigger { min-height:48px; min-width:64px; padding:4px 12px; border-radius:24px; }
+#dashHeader .dbSosTrigger .dbSosLabel, #dashTabs .dbSosTrigger .dbSosLabel { font-size:18px; }
+#dashHeader .dbSosTrigger .dbSosHint, #dashTabs .dbSosTrigger .dbSosHint { font-size:10px; margin-top:2px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { -webkit-animation:none !important; animation:none !important;
                            transition-duration:.01ms !important; scroll-behavior:auto !important; }
+}
+
+/* ================================================================ Video placeholders */
+.videoPh { position:absolute; left:0; top:0; right:0; bottom:0; z-index:1; display:-webkit-flex; display:flex;
+           -webkit-flex-direction:column; flex-direction:column; -webkit-align-items:center; align-items:center;
+           -webkit-justify-content:center; justify-content:center; gap:8px; padding:12px; text-align:center;
+           background:#1a2027; background:linear-gradient(160deg, var(--surface-2), var(--surface-3));
+           color:var(--on-surface); font-size:18px; }
+.videoPh .phDoor { font-weight:600; font-size:1.15em; overflow-wrap:anywhere; }
+.videoPh .phText { color:var(--muted); font-size:.9em; }
+.videoPh .phSpin { display:none; width:28px; height:28px; border-radius:50%; border:3px solid var(--line);
+                   border-top-color:var(--accent); -webkit-animation:dbSpin 1s linear infinite; animation:dbSpin 1s linear infinite; }
+.videoPh.connecting .phSpin { display:block; }
+.videoPh.offline { background:var(--surface-2); }
+@-webkit-keyframes dbSpin { to { -webkit-transform:rotate(360deg); } }
+@keyframes dbSpin { to { transform:rotate(360deg); } }
+#videoBox #noVideo { position:absolute; color:var(--on-surface); font-size:20px; }
+.callMedia { position:relative; }
+
+/* ================================================================ Call page action zone */
+body.callPage #controls { display:grid; grid-template-columns:auto minmax(0, 1fr);
+  grid-template-areas:"sos primary" "sos secondary" "status status"; gap:8px 12px; -webkit-align-items:start;
+  align-items:start; width:100%; max-width:960px; position:-webkit-sticky; position:sticky; bottom:0; z-index:3;
+  background:var(--surface); padding:12px 0 calc(12px + env(safe-area-inset-bottom)); }
+body.callPage #controls > .dbSosTrigger { grid-area:sos; }
+#primaryRow { grid-area:primary; display:-webkit-flex; display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap; gap:8px; }
+#primaryRow #callBtn { -webkit-flex:1 1 100%; flex:1 1 100%; padding-left:16px; padding-right:16px; }
+#primaryRow #replyBtn, #primaryRow #ignoreBtn, #secondaryRow button {
+  -webkit-flex:1 1 40%; flex:1 1 40%; min-height:56px; font-size:17px; border-radius:14px; padding:8px 14px;
+  background:var(--surface-3); border:1px solid var(--line); color:var(--on-surface); }
+#primaryRow #ignoreBtn { background:transparent; color:var(--muted); }
+#primaryRow [hidden], #secondaryRow [hidden], #replySheet[hidden] { display:none !important; }
+#secondaryRow { grid-area:secondary; display:-webkit-flex; display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap;
+                gap:8px; -webkit-align-items:center; align-items:center; }
+#secondaryRow #micBtn[aria-pressed="true"] { background:var(--warning); color:var(--on-warning); }
+body.callPage #controls #status { grid-area:status; text-align:left; padding:0; min-height:0; }
+body.callPage #controls > :not(.dbSosTrigger):first-child { grid-column:1 / -1; }
+@media (min-width: 900px), (orientation: landscape) and (min-width: 600px) {
+  @supports (display:grid) {
+    body.callPage #controls { grid-template-columns:auto minmax(0, 1fr); align-self:end; }
+  }
+}
+
+/* ================================================================ Door strip (call page) */
+#doorTabs { -webkit-mask-image:linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
+            mask-image:linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
+            scroll-snap-type:x proximity; scroll-padding:0 16px; padding-right:28px; }
+#doorTabs button { scroll-snap-align:start; max-width:70vw; }
+#doorTabs button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
+
+/* ================================================================ Dashboard: expanded fill */
+@media (min-width: 900px) {
+  @supports (display:grid) {
+    #snapGrid { grid-auto-rows:minmax(0, 1fr); }
+    #snapGrid .snapCard { display:-webkit-flex; display:flex; -webkit-flex-direction:column; flex-direction:column; min-height:0; }
+    #snapGrid .snapCard .tileMedia { -webkit-flex:1 1 auto; flex:1 1 auto; aspect-ratio:auto; min-height:0; }
+    #snapGrid .snapCard .tileMedia img, #snapGrid .snapCard .tileMedia video { object-fit:contain; position:absolute;
+      left:0; top:0; }
+    #historyPane { height:var(--dash-avail, auto); overflow:auto; overscroll-behavior:contain; }
+    #historyPane #evCard { min-height:100%; }
+  }
+}
+
+/* Incoming-call actions: SOS in the leading column, Answer across the top, Reply and Ignore below. */
+@supports (display:grid) {
+  #callActions { display:grid; grid-template-columns:auto minmax(0, 1fr) minmax(0, 1fr); gap:12px; }
+  #callActions .dbSosTrigger { grid-column:1; grid-row:1 / span 2; -webkit-align-self:stretch; align-self:stretch; }
+  #callActions #answerBtn { grid-column:2 / span 2; grid-row:1; }
+  #callActions #replyBtn { grid-column:2; grid-row:2; }
+  #callActions #monitorClose { grid-column:3; grid-row:2; }
+  #callActions #replyBtn[style*="none"] + #monitorClose { grid-column:2 / span 2; }
 }
