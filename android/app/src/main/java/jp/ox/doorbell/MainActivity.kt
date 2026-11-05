@@ -9,7 +9,6 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.media.AudioManager
-import android.media.MediaPlayer
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
@@ -33,7 +32,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import java.io.File
 import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Calendar
 import java.util.Locale
 import org.json.JSONArray
@@ -128,11 +126,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private var choosingPurpose = false
     private var themeColor: String? = null
     private var themeHash: String? = null
-    private var audio: MediaPlayer? = null
-    private var effectAudio: MediaPlayer? = null
-    private var callFeedbackAudio: MediaPlayer? = null
-    private var launchAudio: MediaPlayer? = null
-    private var chimeTone: ToneGenerator? = null
+    private val audio by lazy(LazyThreadSafetyMode.NONE) { ShellAudio(this) }
     private var callTitleOverride: String? = null
     private var callFlowMode = CallFlowMode.PURPOSE_FIRST
     private var callUiPhase = CallUiPhase.IDLE
@@ -156,6 +150,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             }
         }
     }
+    /** When the visitor's purpose choice times out, on the elapsed-realtime clock. */
+    private var purposeDeadlineElapsedMs = 0L
     private val purposeTimeout = Runnable {
         if (!choosingPurpose) return@Runnable
         if (uiCallId.isNotEmpty()) continueWithoutPurpose(false)
@@ -236,12 +232,18 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         // Re-register on every resume: a pairing or maintenance screen closing above this one
         // must hand the event stream back, or chimes and display events are lost until restart.
         app.bindForeground(this)
-        // Keep unenrolled devices in the pairing flow.
-        if (maybeShowPairing()) return
-        refreshMembership()
+        // Keep unenrolled devices in the pairing flow. The pairing document is read off the main
+        // thread: core may be holding its run loop (SQLite, sync) and the visitor screen must not
+        // freeze while it answers.
+        checkPairingAsync()
         enterImmersive()
         ui.post(clockTick)
-        if (choosingPurpose) ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
+        if (choosingPurpose) {
+            // Resume the remaining choice time; a pause must not restart the full window.
+            val remaining = purposeDeadlineElapsedMs - SystemClock.elapsedRealtime()
+            if (remaining <= 0L) ui.post(purposeTimeout)
+            else ui.postDelayed(purposeTimeout, remaining)
+        }
         enterKioskIfConfigured()
         maybeStartCamera()
         dashboard?.onResume()
@@ -254,13 +256,26 @@ class MainActivity : Activity(), DoorbellCore.Listener {
      * reference. Once the operator chose "set up later" the main UI stays visible and only the
      * banner remains, so there is no relaunch loop.
      */
-    private fun maybeShowPairing(): Boolean {
-        if (!app.coreOk) return false
-        val pairing = app.core.pairingInfo() ?: return false
-        if (app.pairingReadyFrom(pairing)) return false
-        if (app.pairingDeferred) return false
-        PairingActivity.launch(this)
-        return true
+    private fun checkPairingAsync(onReady: () -> Unit = {}) {
+        val worker = homeHandler
+        if (!app.coreOk || worker == null) {
+            onReady()
+            return
+        }
+        val generation = app.runtime.coreGeneration
+        worker.post {
+            val pairing = app.core.pairingInfo()
+            val ready = app.pairingReadyFrom(pairing)
+            ui.post {
+                if (isFinishing || !app.runtime.isCurrentGeneration(generation)) return@post
+                if (pairing != null && !ready && !app.pairingDeferred) {
+                    PairingActivity.launch(this)
+                    return@post
+                }
+                renderMembership(pairing, ready)
+                onReady()
+            }
+        }
     }
 
     /**
@@ -271,8 +286,16 @@ class MainActivity : Activity(), DoorbellCore.Listener {
      * renders through [renderMembership].
      */
     private fun refreshMembership() {
-        val pairing = if (app.coreOk) app.core.pairingInfo() else null
-        renderMembership(pairing, app.pairingReadyFrom(pairing))
+        val worker = homeHandler
+        if (!app.coreOk || worker == null) {
+            renderMembership(null, false)
+            return
+        }
+        worker.post {
+            val pairing = app.core.pairingInfo()
+            val ready = app.pairingReadyFrom(pairing)
+            ui.post { if (!isFinishing) renderMembership(pairing, ready) }
+        }
     }
 
     /** Render the membership pill and the pairing banner from an already-read pairing document. */
@@ -390,12 +413,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         homeHandler = null
         app.unbindForeground(this)
         tts?.shutdown()
-        try { audio?.release() } catch (_: Exception) { }
-        audio = null
-        releasePlayer(effectAudio); effectAudio = null
-        releasePlayer(callFeedbackAudio); callFeedbackAudio = null
-        releasePlayer(launchAudio); launchAudio = null
         stopRinging()
+        audio.releaseAll()
         super.onDestroy()
     }
 
@@ -996,7 +1015,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             var bmp: Bitmap? = null
             var conn: HttpURLConnection? = null
             try {
-                conn = URL(url).openConnection() as HttpURLConnection
+                conn = LocalMedia.open(url)
                 conn.connectTimeout = 4000
                 conn.readTimeout = 8000
                 val bytes = BoundedBitmapDecoder.readLimited(conn.inputStream, 4 * 1024 * 1024)
@@ -1007,7 +1026,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
                 // asset_ready triggers another attempt after mesh prefetch completes.
                 Log.w(TAG, "Theme background is not available yet: $e")
             } finally {
-                try { conn?.disconnect() } catch (_: Exception) { }
+                try { conn?.disconnect() } catch (e: Exception) { ShellLog.ignored("MainActivity", e) }
             }
             val b = bmp ?: return@Thread
             ui.post {
@@ -1261,6 +1280,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         purposeCancelButton.isEnabled = app.coreOk
         langBar.visibility = if (langBar.childCount > 0) View.VISIBLE else View.GONE
         ui.removeCallbacks(purposeTimeout)
+        purposeDeadlineElapsedMs = SystemClock.elapsedRealtime() + PURPOSE_TIMEOUT_MS
         ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
         scheduleCallTimeout()
     }
@@ -1420,7 +1440,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
                 tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "reply")
             else
                 tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null)
-        } catch (_: Exception) { }
+        } catch (e: Exception) { ShellLog.ignored("MainActivity", e) }
     }
 
     private fun handleUiEvent(ev: JSONObject) {
@@ -1429,19 +1449,18 @@ class MainActivity : Activity(), DoorbellCore.Listener {
                 if (ev.optString("state") == "ready") {
                     // Core only publishes pairing state once its runtime is up, so the
                     // membership check is repeated here rather than only in onResume.
-                    if (maybeShowPairing()) return
-                    refreshNodeInfo()
-                    restoreCurrentCallUi()
-                    restoreRequestedCall(intent)
-                    maybeStartCamera()
+                    checkPairingAsync {
+                        refreshNodeInfo()
+                        restoreCurrentCallUi()
+                        restoreRequestedCall(intent)
+                        maybeStartCamera()
+                    }
                 } else showOffline()
             }
             "memory_pressure" -> {
                 if (ev.optInt("level") >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
                     themeBg.setImageDrawable(null)
-                    releasePlayer(effectAudio); effectAudio = null
-                    releasePlayer(callFeedbackAudio); callFeedbackAudio = null
-                    releasePlayer(launchAudio); launchAudio = null
+                    audio.releaseOptional()
                 }
             }
             // peers_changed lands in the coalesced refresh below, which renders membership too.
@@ -1477,18 +1496,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
                     }
                 }
             }
-            // Prefer the configured asset and fall back to a built-in tone.
-            "chime" -> playAudio(ev.optString("audio_path")) {
-                val sound = ev.optString("sound", "ding1")
-                if (!playConfiguredInto(sound, false) { audio = it }) playChimeTone(sound)
-            }
+            // The chime sound is played by App.incomingAlerts, which rings whatever is in front.
             "reply" -> {
                 // Core already spoke replies without custom audio, so avoid duplicate TTS.
                 val path = ev.optString("audio_path")
                 if (path.isNotEmpty()) {
                     val spoken = ev.optString("text")
                     val spokenLang = ev.optString("lang")
-                    playAudio(path) { speakNow(spoken, spokenLang) }
+                    audio.playFile(path) { speakNow(spoken, spokenLang) }
                 }
                 replyText.text = ev.optString("text")
                 replyBanner.visibility = View.VISIBLE
@@ -1597,71 +1612,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     // Audio.
 
-    /** Play a local asset, falling back to TTS or a built-in sound. */
-    private fun playAudio(path: String, fallback: () -> Unit) {
-        if (path.isEmpty() || !File(path).exists()) {
-            fallback()
-            return
-        }
-        try {
-            try { audio?.release() } catch (_: Exception) { }
-            audio = null
-            val mp = MediaPlayer()
-            audio = mp
-            mp.setOnErrorListener { _, what, extra ->
-                Log.w(TAG, "Custom audio playback failed ($what/$extra); using fallback")
-                try { mp.release() } catch (_: Exception) { }
-                if (audio === mp) audio = null
-                ui.post { fallback() }
-                true
-            }
-            mp.setOnCompletionListener {
-                try { it.release() } catch (_: Exception) { }
-                if (audio === mp) audio = null
-            }
-            mp.setDataSource(path)
-            mp.prepare()
-            mp.start()
-        } catch (e: Exception) {
-            Log.w(TAG, "Cannot open custom audio; using fallback: $e")
-            fallback()
-        }
-    }
-
-    private fun playChimeTone(sound: String) {
-        try {
-            try { chimeTone?.release() } catch (_: Exception) { }
-            val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 90)
-            chimeTone = tone
-            val kind = when (sound) {
-                "ding2" -> ToneGenerator.TONE_PROP_BEEP
-                "classic" -> ToneGenerator.TONE_SUP_RINGTONE
-                else -> ToneGenerator.TONE_PROP_BEEP2
-            }
-            val duration = if (sound == "classic") 1400 else if (sound == "ding2") 700 else 450
-            tone.startTone(kind, duration)
-            ui.postDelayed({
-                if (chimeTone === tone) {
-                    try { tone.release() } catch (_: Exception) { }
-                    chimeTone = null
-                }
-            }, (duration + 100).toLong())
-        } catch (_: Exception) { }
-    }
-
     /** Play immediate feedback after accepting the visitor's call action. */
     private fun playCallFeedback() {
         stopCallFeedback()
         val value = configuredSound("call_sound", "outdoor_call_alert")
         if (value.isEmpty()) return
         val loop = (app.core.dig(cfg, "ui.call_sound_loop") as? Boolean) ?: false
-        if (!playConfiguredInto(value, loop) { callFeedbackAudio = it }) {
-            try {
-                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 75)
-                tone.startTone(ToneGenerator.TONE_PROP_ACK, 140)
-                ui.postDelayed({ try { tone.release() } catch (_: Exception) { } }, 220)
-            } catch (_: Exception) { }
-        }
+        if (!audio.playConfigured(ShellAudio.Channel.CALL_FEEDBACK, value, loop))
+            audio.playTone(AudioManager.STREAM_MUSIC, 75, ToneGenerator.TONE_PROP_ACK, 140)
     }
 
     private fun configuredSound(key: String, fallback: String): String {
@@ -1669,94 +1627,30 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         return if (value is String) value else fallback
     }
 
-    private fun bundledSoundFile(value: String): String? = when (value) {
-        "outdoor_call_alert" -> "outdoor_call_alert.mp3"
-        "button_click" -> "button_click.mp3"
-        "school_chime" -> "学校のチャイム.mp3"
-        "indoor_update" -> "indoor_update.mp3"
-        "title_display" -> "title_display.mp3"
-        else -> null
-    }
-
-    private fun makeConfiguredPlayer(value: String, loop: Boolean): MediaPlayer? {
-        if (value.isEmpty()) return null
-        return try {
-            val mp = MediaPlayer()
-            if (value.startsWith("asset:") && value.length == 70) {
-                val file = File(File(filesDir, "assets"), value.substring(6))
-                if (!file.exists()) { mp.release(); return null }
-                mp.setDataSource(file.absolutePath)
-            } else {
-                val name = bundledSoundFile(value) ?: run { mp.release(); return null }
-                assets.openFd("audio/$name").use { fd ->
-                    mp.setDataSource(fd.fileDescriptor, fd.startOffset, fd.length)
-                }
-            }
-            mp.isLooping = loop
-            mp.prepare()
-            mp
-        } catch (e: Exception) {
-            Log.w(TAG, "Cannot open bundled or configured audio: $value ($e)")
-            null
-        }
-    }
-
-    private fun playConfiguredInto(value: String, loop: Boolean,
-                                   assign: (MediaPlayer?) -> Unit): Boolean {
-        val mp = makeConfiguredPlayer(value, loop) ?: return false
-        assign(mp)
-        mp.setOnCompletionListener {
-            if (!it.isLooping) {
-                try { it.release() } catch (_: Exception) { }
-                assign(null)
-            }
-        }
-        mp.start()
-        return true
-    }
-
-    private fun releasePlayer(player: MediaPlayer?) {
-        try { player?.stop() } catch (_: Exception) { }
-        try { player?.release() } catch (_: Exception) { }
-    }
-
     private fun playButtonSound() {
-        releasePlayer(effectAudio)
-        effectAudio = null
-        playConfiguredInto(configuredSound("button_sound", "button_click"), false) {
-            effectAudio = it
-        }
+        audio.playConfigured(ShellAudio.Channel.EFFECT,
+                             configuredSound("button_sound", "button_click"), false)
     }
 
     private fun playUpdateSound() {
-        releasePlayer(effectAudio)
-        effectAudio = null
-        playConfiguredInto(configuredSound("update_sound", "indoor_update"), false) {
-            effectAudio = it
-        }
+        audio.playConfigured(ShellAudio.Channel.EFFECT,
+                             configuredSound("update_sound", "indoor_update"), false)
     }
 
     private fun playLaunchSound() {
-        releasePlayer(launchAudio)
-        launchAudio = null
-        playConfiguredInto(configuredSound("launch_sound", "title_display"), false) {
-            launchAudio = it
-        }
+        audio.playConfigured(ShellAudio.Channel.LAUNCH,
+                             configuredSound("launch_sound", "title_display"), false)
     }
 
     private fun stopCallFeedback() {
-        releasePlayer(callFeedbackAudio)
-        callFeedbackAudio = null
+        audio.stop(ShellAudio.Channel.CALL_FEEDBACK)
     }
 
     private fun stopRinging() {
         stopCallFeedback()
-        try { audio?.stop() } catch (_: Exception) { }
-        try { audio?.release() } catch (_: Exception) { }
-        audio = null
-        try { chimeTone?.stopTone() } catch (_: Exception) { }
-        try { chimeTone?.release() } catch (_: Exception) { }
-        chimeTone = null
+        audio.stop(ShellAudio.Channel.CUSTOM)
+        audio.stopTone()
+        app.incomingAlerts.stopChime()
     }
 
     // Visitor actions.
@@ -1873,6 +1767,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>,
                                             grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // Newly granted camera/microphone permissions become foreground-service types.
+        app.refreshResidentForegroundTypes()
         maybeStartCamera()
     }
 

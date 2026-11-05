@@ -103,19 +103,26 @@
         android:id="@+id/video_box"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
-        <TextureView
-            android:id="@+id/live_texture"
+        android:layout_weight="1"
+        android:clipChildren="true">
+        <!-- Pinch-zoom and pan apply to this layer only, so the overlays below keep their size. -->
+        <FrameLayout
+            android:id="@+id/video_zoom_layer"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:alpha="0"
-            android:visibility="visible"/>
-        <ImageView
-            android:id="@+id/live_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="fitCenter"/>
+            android:layout_height="match_parent">
+            <TextureView
+                android:id="@+id/live_texture"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:alpha="0"
+                android:visibility="visible"/>
+            <ImageView
+                android:id="@+id/live_view"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:importantForAccessibility="no"
+                android:scaleType="fitCenter"/>
+        </FrameLayout>
         <TextView
             android:id="@+id/no_video_text"
             android:layout_width="wrap_content"

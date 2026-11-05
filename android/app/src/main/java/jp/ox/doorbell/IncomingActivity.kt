@@ -104,6 +104,7 @@ class IncomingActivity : Activity() {
         stageRevision = intent?.getIntExtra(EXTRA_STAGE_REVISION, 0) ?: 0
         revisionLifecycle = CallRevisionLifecycle(stageRevision)
         expiresAtMs = intent?.getLongExtra(EXTRA_EXPIRES_AT_MS, 0L) ?: 0L
+        app.incomingAlerts.onIncomingShown(callId)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // Alert on the lock screen when Device Owner policy has not disabled keyguard.
         if (Build.VERSION.SDK_INT >= 27) {
@@ -165,6 +166,9 @@ class IncomingActivity : Activity() {
             if (SosSlideState.visibleForRole(cfg, app.boot.role)) android.view.View.VISIBLE
             else android.view.View.GONE
         applyAppearance()
+        val videoBox = findViewById<android.view.View>(R.id.video_box)
+        VideoZoom(findViewById(R.id.video_zoom_layer), videoBox)
+        videoBox.contentDescription = texts.t("ring.video_zoom_hint", R.string.ring_video_zoom_hint)
         buildControlRow(cfg)
         buildNoticeChip()
         buildAdminQr(st)
@@ -317,7 +321,7 @@ class IncomingActivity : Activity() {
         if (sipCalling) app.core.sipHangup()
         if (micMuted) {
             app.core.sipSetMicMuted(false)
-            try { audioManager.isMicrophoneMute = false } catch (_: Exception) { }
+            try { audioManager.isMicrophoneMute = false } catch (e: Exception) { ShellLog.ignored("IncomingActivity", e) }
         }
         app.abandonPendingManualSipAnswer(callId)
         @Suppress("DEPRECATION")
@@ -605,7 +609,7 @@ class IncomingActivity : Activity() {
         val sip = app.core.status()?.optJSONObject("sip")
         monitorTxAtStart = sip?.optLong("rtp_tx", 0L) ?: 0L
         monitorRxAtStart = sip?.optLong("rtp_rx", 0L) ?: 0L
-        app.core.sipCall("sip:$host:$directPort", "monitor")
+        app.core.sipCall(sipUri(host), "monitor")
         sipCalling = true
         findViewById<TextView>(R.id.audio_hint).visibility = View.VISIBLE
     }
@@ -615,7 +619,9 @@ class IncomingActivity : Activity() {
      * "maybe", so the backoff — not this — is what protects an older door station.
      */
     private fun doorHasAudio(): Boolean {
-        val caps = findDoorPeer(app.core.status())?.optJSONObject("caps") ?: return true
+        // Capabilities change rarely; the screen's status snapshot avoids a main-thread core read.
+        val caps = findDoorPeer(cachedStatus ?: app.core.status())?.optJSONObject("caps")
+            ?: return true
         if (!caps.has("audio")) return true
         val audio = caps.opt("audio")
         return when (audio) {
@@ -680,19 +686,19 @@ class IncomingActivity : Activity() {
             finish()
             return
         }
-        app.core.sipCall("sip:$host:$directPort", "answer")
+        app.core.sipCall(sipUri(host), "answer")
         sipCalling = true
     }
 
-    /** Extract the host from the peer's first mesh address for direct SIP. */
-    private fun resolvePeerHost(peer: JSONObject?): String? {
-        val addrs = peer?.optJSONArray("addrs") ?: return null
-        if (addrs.length() == 0) return null
-        val a = addrs.optString(0)
-        val i = a.lastIndexOf(':')
-        val host = if (i > 0) a.substring(0, i) else a
-        return host.ifEmpty { null }
-    }
+    /**
+     * The peer host for direct SIP, chosen from all of its mesh addresses in preference order
+     * (IPv4 before IPv6, link-local last), so one unreachable interface does not hide the door.
+     */
+    private fun resolvePeerHost(peer: JSONObject?): String? =
+        PeerAddresses.first(peer?.optJSONArray("addrs"))
+
+    /** A SIP URI for the peer; IPv6 literals are bracketed. */
+    private fun sipUri(host: String): String = "sip:" + PeerAddresses.authority(host, directPort)
 
     // Quick replies.
 
@@ -857,7 +863,7 @@ class IncomingActivity : Activity() {
         if (!inCall) return
         micMuted = !micMuted
         if (!app.core.sipSetMicMuted(micMuted)) {
-            try { audioManager.isMicrophoneMute = micMuted } catch (_: Exception) { }
+            try { audioManager.isMicrophoneMute = micMuted } catch (e: Exception) { ShellLog.ignored("IncomingActivity", e) }
         }
         updateControlLabels()
     }
@@ -877,7 +883,7 @@ class IncomingActivity : Activity() {
         try {
             @Suppress("DEPRECATION")
             audioManager.setStreamMute(AudioManager.STREAM_VOICE_CALL, muted)
-        } catch (_: Exception) { }
+        } catch (e: Exception) { ShellLog.ignored("IncomingActivity", e) }
     }
 
     /**
@@ -897,6 +903,8 @@ class IncomingActivity : Activity() {
                         DoorUnlocks.unconfigured(result) -> texts.t(
                             "unlock.not_configured", R.string.unlock_not_configured,
                         )
+                        DoorUnlocks.executionFailed(result) ->
+                            texts.t("ring.open_failed", R.string.ring_open_failed)
                         else -> texts.t("admin.save_failed", R.string.admin_save_failed)
                     },
                 )
@@ -1028,29 +1036,32 @@ class IncomingActivity : Activity() {
         private const val ANSWER_REPLACE_TIMEOUT_MS = 2_000L
         private const val DIRECT_PORT = 47190
 
-        /** Launch from an application-level Core callback using a new task. */
-        fun launch(
-            ctx: Context,
-            door: String,
-            purpose: String = "",
-            visitorLang: String = "",
-            callId: String = "",
-            stageRevision: Int = 0,
-            expiresAtMs: Long = 0L,
-        ) {
+        /** The intent that opens this screen for one call, also used by the call notification. */
+        internal fun intent(ctx: Context, call: VisitorCallSnapshot): Intent =
+            Intent(ctx, IncomingActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(EXTRA_DOOR, call.door)
+                .putExtra(EXTRA_PURPOSE, call.purpose)
+                .putExtra(EXTRA_LANG, call.visitorLang)
+                .putExtra(EXTRA_CALL_ID, call.callId)
+                .putExtra(EXTRA_STAGE_REVISION, call.stageRevision)
+                .putExtra(EXTRA_EXPIRES_AT_MS, call.expiresAtMs)
+
+        /**
+         * Launch from an application-level Core callback using a new task. Returns false when the
+         * platform refused the start, so the caller can fall back to the call notification.
+         */
+        internal fun launch(ctx: Context, call: VisitorCallSnapshot): Boolean =
             try {
-                ctx.startActivity(
-                    Intent(ctx, IncomingActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .putExtra(EXTRA_DOOR, door)
-                        .putExtra(EXTRA_PURPOSE, purpose)
-                        .putExtra(EXTRA_LANG, visitorLang)
-                        .putExtra(EXTRA_CALL_ID, callId)
-                        .putExtra(EXTRA_STAGE_REVISION, stageRevision)
-                        .putExtra(EXTRA_EXPIRES_AT_MS, expiresAtMs))
-            } catch (_: Exception) {
-                // Background launch may be denied when overlay authorization is unavailable.
+                ctx.startActivity(intent(ctx, call))
+                true
+            } catch (e: Exception) {
+                android.util.Log.w("doorbell-incoming", "incoming screen launch refused: $e")
+                false
             }
-        }
+
+        /** Open the monitor for a door without a call, as a dashboard tile does. */
+        internal fun launch(ctx: Context, door: String): Boolean =
+            launch(ctx, VisitorCallSnapshot(door = door))
     }
 }

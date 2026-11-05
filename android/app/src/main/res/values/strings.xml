@@ -461,7 +461,7 @@ Delete it?</string>
     <string name="dashboard_offline_doors">Offline door stations</string>
     <string name="dashboard_offline_doors_empty">No offline door stations</string>
     <string name="dashboard_offline_doors_title">Offline door stations</string>
-    <string name="dashboard_preview_rate_format">%@ fps</string>
+    <string name="dashboard_preview_rate_format">%1$s fps</string>
     <string name="dashboard_preview_rate_title">Preview refresh rate</string>
     <string name="date_full">%1$s-%2$s-%3$s (%4$s)</string>
     <string name="day_fri">Fri</string>
@@ -561,6 +561,8 @@ Delete it?</string>
     <string name="incall_end">End</string>
     <string name="incall_end_call">End call</string>
     <string name="incall_title">In call</string>
+    <string name="incoming_channel_name">Visitor calls</string>
+    <string name="incoming_notification_tap">Tap to open the call screen</string>
     <string name="info_absent">Absent</string>
     <string name="info_active_calls">Active calls</string>
     <string name="info_address_cycle">Change address (%1$s/%2$s) ▸</string>

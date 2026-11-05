@@ -28,7 +28,6 @@ import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Locale
 import org.json.JSONObject
 
@@ -224,9 +223,13 @@ internal class DashboardView(
     private val stillTick = object : Runnable {
         override fun run() {
             refreshStills()
-            ui.postDelayed(this, STILL_INTERVAL_MS)
+            // Re-read every tick so a change in settings applies without rebuilding the view.
+            ui.postDelayed(this, PreviewRate.intervalMs(PreviewRate.saved(activity)))
         }
     }
+
+    /** Opens the list of door stations that are not serving their door right now. */
+    private var offlineDoorsButton: Button? = null
 
     init {
         build()
@@ -626,7 +629,7 @@ internal class DashboardView(
                 var bytes: ByteArray? = null
                 var connection: HttpURLConnection? = null
                 try {
-                    connection = URL(url).openConnection() as HttpURLConnection
+                    connection = LocalMedia.open(url)
                     connection.connectTimeout = 4000
                     connection.readTimeout = 8000
                     bytes = BoundedBitmapDecoder.readLimited(connection.inputStream, 4 * 1024 * 1024)
@@ -634,7 +637,7 @@ internal class DashboardView(
                     // The mesh prefetch may not have finished; the next refresh tries again.
                     android.util.Log.w(TAG, "Theme backdrop is not available yet: $error")
                 } finally {
-                    try { connection?.disconnect() } catch (_: Exception) { }
+                    try { connection?.disconnect() } catch (e: Exception) { ShellLog.ignored("DashboardView", e) }
                 }
                 prepared = ThemeBackdrop.build(bytes, hash, width, height, overlay)
             }
@@ -893,6 +896,12 @@ internal class DashboardView(
                     .also { doorsHeading = it },
                 ShellUi.matchWrap(),
             )
+            offlineDoorsButton = ShellUi.button(activity, "", palette) { showOfflineDoors() }
+                .also { button ->
+                    button.textSize = 13f
+                    button.visibility = View.GONE
+                    tileColumn.addView(button, ShellUi.matchWrap())
+                }
             if (doors.isEmpty()) {
                 tileColumn.addView(
                     ShellUi.text(activity, texts.t("dash.no_doors", R.string.dash_no_doors), 14f,
@@ -911,6 +920,7 @@ internal class DashboardView(
                 )
             }
         }
+        renderOfflineDoorsButton()
         val nowMs = clock.cached().wallMs
         for ((door, tile) in tiles) updateTile(door, tile, NoticeModel.resolve(
             status, config, door, nowMs,
@@ -1021,9 +1031,9 @@ internal class DashboardView(
         tile.noticeText.visibility = if (notice != null) View.VISIBLE else View.GONE
     }
 
-    /** Live stills refresh every five seconds; a failure simply leaves the previous frame. */
     /**
-     * Refresh every tile's picture.
+     * Refresh every tile's picture, at the per-device preview rate ([PreviewRate]); a failure
+     * simply leaves the previous frame.
      *
      * The peer is resolved per door on each pass rather than captured with the tile, so a station
      * that joins after its tile was built starts showing a picture on the next tick instead of
@@ -1088,7 +1098,7 @@ internal class DashboardView(
     private fun fetchStill(door: String, url: String): Bitmap? {
         var connection: HttpURLConnection? = null
         return try {
-            connection = URL(url).openConnection() as HttpURLConnection
+            connection = LocalMedia.open(url)
             connection.connectTimeout = 2000
             connection.readTimeout = 3000
             connection.useCaches = false
@@ -1115,7 +1125,7 @@ internal class DashboardView(
             logStill(door, "$url -> ${error.javaClass.simpleName}: ${error.message}")
             null
         } finally {
-            try { connection?.disconnect() } catch (_: Exception) { }
+            try { connection?.disconnect() } catch (e: Exception) { ShellLog.ignored("DashboardView", e) }
         }
     }
 
@@ -1338,6 +1348,36 @@ internal class DashboardView(
         return promoted + available.filterNot { promoted.contains(it) }
     }
 
+    private fun renderOfflineDoorsButton() {
+        val button = offlineDoorsButton ?: return
+        val offline = DoorStations.offlineDoors(status, config)
+        button.visibility = if (offline.isEmpty()) View.GONE else View.VISIBLE
+        if (offline.isNotEmpty()) {
+            button.text = "${texts.t("dashboard.offline_doors", R.string.dashboard_offline_doors)}" +
+                " · ${offline.size} ›"
+        }
+    }
+
+    private fun showOfflineDoors() {
+        val offline = DoorStations.offlineDoors(status, config)
+        val title = texts.t("dashboard.offline_doors_title", R.string.dashboard_offline_doors_title)
+        val builder = android.app.AlertDialog.Builder(activity).setTitle(title)
+        if (offline.isEmpty()) {
+            builder.setMessage(
+                texts.t("dashboard.offline_doors_empty", R.string.dashboard_offline_doors_empty))
+        } else {
+            val statusText = texts.t("dashboard.device_status_offline",
+                                     R.string.dashboard_device_status_offline)
+            builder.setItems(offline.map { door ->
+                val peer = DoorStations.peerFor(status, config, door)
+                val name = peer?.optString("name").orEmpty()
+                listOf(name, doorLabel(door), statusText).filter { it.isNotEmpty() }
+                    .distinct().joinToString(" · ") as CharSequence
+            }.toTypedArray(), null)
+        }
+        builder.setPositiveButton(texts.t("settings.close", R.string.settings_close), null).show()
+    }
+
     private fun doorLabel(door: String): String {
         if (door.isEmpty()) return ""
         val value = app.core.dig(config, "doors.$door.label.${texts.lang}")
@@ -1358,6 +1398,5 @@ internal class DashboardView(
     private companion object {
         const val TAG = "doorbell-dash"
         const val CLOCK_TAG = "doorbell-clock"
-        const val STILL_INTERVAL_MS = 5_000L
     }
 }

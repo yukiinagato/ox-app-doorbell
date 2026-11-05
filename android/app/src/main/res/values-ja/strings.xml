@@ -461,7 +461,7 @@
     <string name="dashboard_offline_doors">オフラインの門口機</string>
     <string name="dashboard_offline_doors_empty">オフラインの門口機はありません</string>
     <string name="dashboard_offline_doors_title">オフラインの門口機</string>
-    <string name="dashboard_preview_rate_format">%@ fps</string>
+    <string name="dashboard_preview_rate_format">%1$s fps</string>
     <string name="dashboard_preview_rate_title">プレビュー更新頻度</string>
     <string name="date_full">%1$s年%2$s月%3$s日 (%4$s)</string>
     <string name="day_fri">金</string>
@@ -561,6 +561,8 @@
     <string name="incall_end">終了</string>
     <string name="incall_end_call">通話終了</string>
     <string name="incall_title">通話中</string>
+    <string name="incoming_channel_name">来客の呼び出し</string>
+    <string name="incoming_notification_tap">タップして応答画面を開く</string>
     <string name="info_absent">無</string>
     <string name="info_active_calls">進行中の呼出</string>
     <string name="info_address_cycle">アドレス切替 (%1$s/%2$s) ▸</string>

@@ -73,9 +73,26 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         super.onPause()
     }
 
+    override fun onStop() {
+        // Leaving settings closes the native admin window; returning asks for the password again.
+        if (isFinishing) app.core.adminLock()
+        super.onStop()
+    }
+
     override fun onDestroy() {
         writer = null
         super.onDestroy()
+    }
+
+    /**
+     * Core closed the native admin window (timeout or app backgrounding). Ask for the password
+     * again, then repeat the write that was refused.
+     */
+    private fun reauthenticateThen(retry: () -> Unit) {
+        AdminGate.unlock(this, app.boot.httpPort, texts) { session ->
+            if (session != null) writer = ConfigWriters.choose(app.core, session)
+            retry()
+        }
     }
 
     override fun onUiEvent(ev: JSONObject) {
@@ -196,6 +213,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             { Texts.langDisplayName(it) },
             currentString("devices.$nodeId.local.ui_lang", app.boot.uiLang),
         ))
+        if (app.boot.role != "door_station") card.row(previewRateRow())
         card.row(choiceRow(
             texts.t("settings.video_playback", R.string.settings_video_playback),
             "devices.$nodeId.local.video.playback",
@@ -587,6 +605,23 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         return row
     }
 
+    /** The dashboard still rate is this panel's own preference, so it bypasses core writes. */
+    private fun previewRateRow(): View {
+        val title = texts.t("dashboard.preview_rate_title", R.string.dashboard_preview_rate_title)
+        fun label(rate: Double) = texts.t("dashboard.preview_rate_format",
+            R.string.dashboard_preview_rate_format, PreviewRate.valueText(rate))
+        return ShellUi.row(this, palette, title, label(PreviewRate.saved(this))) {
+            AlertDialog.Builder(this)
+                .setTitle(title)
+                .setItems(PreviewRate.RATES.map { label(it) as CharSequence }.toTypedArray()) { _, which ->
+                    PreviewRate.save(this, PreviewRate.RATES[which])
+                    render()
+                }
+                .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+                .show()
+        }
+    }
+
     private fun choiceRow(
         title: String,
         key: String,
@@ -847,6 +882,9 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
                     refreshSnapshots()
                     texts.setConfig(config)
                     render()
+                } else if (result.adminRequired) {
+                    reauthenticateThen { write(key, valueJson, done) }
+                    return@post
                 } else {
                     toast(
                         if (result.unauthorized)
@@ -868,6 +906,10 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             val result = active.deleteKey(key)
             ui.post {
                 if (isFinishing) return@post
+                if (result.adminRequired) {
+                    reauthenticateThen { deleteKey(key) }
+                    return@post
+                }
                 toast(
                     if (result.ok) texts.t("admin.saved", R.string.admin_saved)
                     else texts.t("admin.save_failed", R.string.admin_save_failed),
@@ -890,8 +932,8 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             }
             val tone = android.media.ToneGenerator(stream, value.coerceIn(0, 100))
             tone.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 250)
-            ui.postDelayed({ try { tone.release() } catch (_: Exception) { } }, 400)
-        } catch (_: Exception) { }
+            ui.postDelayed({ try { tone.release() } catch (e: Exception) { ShellLog.ignored("SettingsActivity", e) } }, 400)
+        } catch (e: Exception) { ShellLog.ignored("SettingsActivity", e) }
     }
 
     private fun confirmUnpair() {
