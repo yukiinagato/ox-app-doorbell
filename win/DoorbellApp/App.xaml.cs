@@ -1,6 +1,9 @@
 using System;
 using System.IO;
 using System.Collections.Generic;
+using System.Linq;
+using System.Net;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
@@ -11,15 +14,25 @@ namespace DoorbellApp
 {
     public partial class App : Application
     {
+        // Exit codes the supervisor understands (win/watchdog/recovery_policy.h).
+        public const int ExitClean = 0;
+        public const int ExitRestartRequested = 3;
+        public const int ExitSessionEnded = 4;
+        public const int ExitAlreadyRunning = 5;
+
         public static CoreClient Core { get; private set; }
         public static string DataDir { get; private set; }
         public static BootConfig Boot { get; private set; }
         public static bool SafeMode { get; private set; }
-        private WatchdogHeartbeat _heartbeat;
+        /// <summary>True when the watchdog service launched this process.</summary>
+        public static bool Supervised { get; private set; }
+        public static WatchdogChannel Watchdog { get; private set; }
         private CameraProbe _cameraProbe;
         private RuntimeProcessState _runtimeProcess;
         private DispatcherTimer _runtimeStatusTimer;
         private bool _uiRunning;
+        private static Mutex _instance;
+        private static bool _instanceOwned;
 
         protected override void OnStartup(StartupEventArgs e)
         {
@@ -30,22 +43,32 @@ namespace DoorbellApp
                 Shutdown(WindowsFirewall.Configure(WindowsFirewall.PortsFromArguments(e.Args)) ? 0 : 1);
                 return;
             }
-            SafeMode = false;
+            Supervised = e.Args.Contains("--supervised");
+            SafeMode = e.Args.Contains("--safe-mode");
+            int waitForPid = WaitForPidArgument(e.Args);
 
-            DataDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Doorbell");
-            Directory.CreateDirectory(DataDir);
-            _runtimeProcess = RuntimeProcessState.Begin(
-                Path.Combine(DataDir, "runtime-process-v1.json"));
-            try { File.Delete(Path.Combine(DataDir, "admin_unlocked.flag")); } catch { }
+            DataDir = ResolveDataDir();
             Boot = BootConfig.Load(Path.Combine(DataDir, "boot.json"));
             L10n.SetLanguage(Boot.UiLang);
+            if (!AcquireSingleInstance(waitForPid))
+            {
+                if (!Supervised)
+                    MessageBox.Show(L10n.T("app.already_running"), "Doorbell",
+                                    MessageBoxButton.OK, MessageBoxImage.Information);
+                Shutdown(ExitAlreadyRunning);
+                return;
+            }
+            // Loopback media connections are long-lived; the default of two per host would let a
+            // live stream and a fallback stream starve the next request.
+            ServicePointManager.DefaultConnectionLimit = 16;
+            _runtimeProcess = RuntimeProcessState.Begin(
+                Path.Combine(DataDir, "runtime-process-v1.json"));
             if (Boot.SetupRequired)
             {
                 var setup = new BootstrapSetupWindow(Boot);
                 if (setup.ShowDialog() != true || setup.ResultConfig == null)
                 {
-                    Shutdown(0);
+                    Shutdown(ExitClean);
                     return;
                 }
                 Boot = setup.ResultConfig;
@@ -57,12 +80,14 @@ namespace DoorbellApp
             if (!Core.Start(DataDir, Boot.RawJson))
             {
                 _runtimeProcess.RecordExit("core_start_failed");
-                MessageBox.Show("core の起動に失敗しました。ログを確認してください。", "Doorbell",
+                MessageBox.Show(L10n.T("app.core_start_failed"), "Doorbell",
                                 MessageBoxButton.OK, MessageBoxImage.Error);
                 Shutdown(1);
                 return;
             }
-            _heartbeat = new WatchdogHeartbeat();
+            Watchdog = new WatchdogChannel(Dispatcher, Supervised);
+            Watchdog.ExitRequested += reason =>
+                Dispatcher.BeginInvoke(new Action(() => ExitForSupervisor(reason)));
             // The capture device may appear or disappear while the app runs, so caps.camera is
             // watched rather than sampled once at startup.
             _cameraProbe = new CameraProbe(Boot.HttpPort, OnCameraAvailabilityChanged);
@@ -83,6 +108,84 @@ namespace DoorbellApp
             _runtimeStatusTimer.Start();
         }
 
+        private static int WaitForPidArgument(string[] args)
+        {
+            for (int i = 0; i + 1 < args.Length; i++)
+            {
+                int pid;
+                if (args[i] == "--wait-for-pid" && int.TryParse(args[i + 1], out pid) && pid > 0)
+                    return pid;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// One instance per device, across console sessions: two would fight over the mesh and
+        /// HTTP ports and the SQLite store. A relaunch after a factory reset passes the old PID
+        /// and waits for that process to release everything first.
+        /// </summary>
+        private static bool AcquireSingleInstance(int waitForPid)
+        {
+            if (waitForPid > 0)
+            {
+                try
+                {
+                    using (var previous = System.Diagnostics.Process.GetProcessById(waitForPid))
+                        previous.WaitForExit(30000);
+                }
+                catch (ArgumentException) { }
+                catch (InvalidOperationException) { }
+            }
+            try
+            {
+                _instance = new Mutex(false, @"Global\DoorbellApp.Instance.v1");
+                try { _instanceOwned = _instance.WaitOne(waitForPid > 0 ? 30000 : 0, false); }
+                catch (AbandonedMutexException) { _instanceOwned = true; }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                // Another user's instance holds the name.
+                _instanceOwned = false;
+            }
+            return _instanceOwned;
+        }
+
+        /// <summary>
+        /// The app's data lives in %ProgramData%\Doorbell\data. The installer gives that
+        /// directory to the app's users and keeps the parent and the supervisor's own directory
+        /// administrator-only. Files left at the old top level by an earlier version are moved in
+        /// once, so a manual (non-installer) upgrade keeps its pairing and history.
+        /// </summary>
+        private static string ResolveDataDir()
+        {
+            string root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData), "Doorbell");
+            string data = Path.Combine(root, "data");
+            Directory.CreateDirectory(data);
+            if (File.Exists(Path.Combine(data, "boot.json")) ||
+                !File.Exists(Path.Combine(root, "boot.json")))
+                return data;
+            var skip = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "data", "service", "watchdog-state.txt", "watchdog-state.txt.tmp", "watchdog.log",
+                "admin_unlocked.flag", "updates",
+            };
+            foreach (string entry in Directory.EnumerateFileSystemEntries(root))
+            {
+                string name = Path.GetFileName(entry);
+                if (skip.Contains(name)) continue;
+                try
+                {
+                    string target = Path.Combine(data, name);
+                    if (Directory.Exists(entry)) Directory.Move(entry, target);
+                    else File.Move(entry, target);
+                }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+            return data;
+        }
+
         /// <summary>
         /// Runs on the probe's own timer thread. CoreClient serialises native access, so the
         /// republish needs no dispatcher hop.
@@ -98,8 +201,8 @@ namespace DoorbellApp
         {
             if (Core == null || _runtimeProcess == null) return;
             Core.PublishRuntimeHealth(Boot.Role, SafeMode, _runtimeProcess.Snapshot(),
-                _heartbeat != null && _heartbeat.Available,
-                _heartbeat == null ? 0L : _heartbeat.LastSignalWallMs, _uiRunning);
+                Watchdog != null && Watchdog.Available,
+                Watchdog == null ? 0L : Watchdog.LastSignalWallMs, _uiRunning);
         }
 
         private void CheckWindowsFirewall()
@@ -146,8 +249,9 @@ namespace DoorbellApp
         /// Revoke, and "leave the Cluster" confirmed on this device, are a factory reset
         /// (spec 5.4): the DPAPI mesh key, the boot.json pairing fields, and the operator's own
         /// name/role/door/setup_complete confirmation are all removed, then the app restarts into
-        /// first-run setup. A watchdog-managed install is restarted by the watchdog; without one
-        /// the process relaunches itself so a kiosk never sits on a blank screen.
+        /// first-run setup. Under the watchdog the exit code asks for an immediate restart, which
+        /// is not counted as a crash. Without one the process relaunches itself; the new process
+        /// waits for this one to exit and release its ports and store before it starts Core.
         /// </summary>
         internal static void FactoryResetAndRestart(string reason)
         {
@@ -164,27 +268,37 @@ namespace DoorbellApp
             }
             catch { }
             if (app != null) app._runtimeProcess?.RecordExit("factory_reset");
-            bool watchdog = app != null && app._heartbeat != null && app._heartbeat.Available;
+            bool watchdog = Watchdog != null && Watchdog.Available;
             if (!watchdog)
             {
                 try
                 {
                     string exe = System.Reflection.Assembly.GetEntryAssembly() == null ? null :
                         System.Reflection.Assembly.GetEntryAssembly().Location;
-                    if (!string.IsNullOrEmpty(exe)) System.Diagnostics.Process.Start(exe);
+                    int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+                    if (!string.IsNullOrEmpty(exe))
+                        System.Diagnostics.Process.Start(exe, "--wait-for-pid " + pid);
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine("relaunch after factory reset failed: " +
-                                                       ex.Message);
+                    CoreClient.WriteAppLog("relaunch after factory reset failed: " + ex.Message);
                 }
             }
             // Shutdown must run on the UI thread; core delivers this event on its own thread.
             if (app != null)
-                app.Dispatcher.BeginInvoke(new Action(() => app.Shutdown(0)));
+                app.Dispatcher.BeginInvoke(new Action(() =>
+                    app.Shutdown(watchdog ? ExitRestartRequested : ExitClean)));
         }
 
         private static bool _factoryResetStarted;
+
+        /// <summary>The supervisor asked this instance to go: session change or service stop.</summary>
+        private void ExitForSupervisor(string reason)
+        {
+            _runtimeProcess?.RecordExit(reason == "session" ? "session_moved" : "service_stop");
+            if (MainWindow is MainWindow main) main.AllowClose();
+            Shutdown(reason == "session" ? ExitSessionEnded : ExitClean);
+        }
 
         private void OnCoreLifecycleEvent(UiEvent ev)
         {
@@ -232,7 +346,7 @@ namespace DoorbellApp
             if (updated != null)
             {
                 Boot = BootConfig.Load(Boot.FilePath);
-                System.Diagnostics.Debug.WriteLine("paired: boot.json persisted atomically");
+                CoreClient.WriteAppLog("paired: boot.json persisted atomically");
             }
             else
             {
@@ -242,7 +356,7 @@ namespace DoorbellApp
 
         private void ReportPairingPersistenceFailure(string detail)
         {
-            System.Diagnostics.Debug.WriteLine("paired: " + detail);
+            CoreClient.WriteAppLog("paired: " + detail);
             try
             {
                 File.AppendAllText(Path.Combine(DataDir, "pairing-error.log"),
@@ -250,29 +364,45 @@ namespace DoorbellApp
             }
             catch { }
             Dispatcher.BeginInvoke(new Action(() => MessageBox.Show(MainWindow,
-                "Pairing succeeded but secure persistence failed. The device has not been " +
-                "marked ready; check pairing-error.log and free disk/permissions.",
-                "Doorbell pairing", MessageBoxButton.OK, MessageBoxImage.Error)));
+                L10n.T("pairing.persist_failed_detail"), L10n.T("pairing.persist_failed_title"),
+                MessageBoxButton.OK, MessageBoxImage.Error)));
         }
 
         private void OnUnhandled(object sender, DispatcherUnhandledExceptionEventArgs e)
         {
             _runtimeProcess?.RecordExit("unhandled_exception");
             PublishRuntimeHealth();
-            File.AppendAllText(Path.Combine(DataDir, "crash.log"),
-                DateTime.Now + " " + e.Exception + Environment.NewLine);
+            try
+            {
+                File.AppendAllText(Path.Combine(DataDir, "crash.log"),
+                    DateTime.Now + " " + e.Exception + Environment.NewLine);
+            }
+            catch { }
             // Keep the exception unhandled so the service watchdog applies bounded restart policy.
         }
 
         protected override void OnExit(ExitEventArgs e)
         {
             _runtimeStatusTimer?.Stop();
-            _runtimeProcess?.RecordExit("clean_exit");
+            if (!_factoryResetStarted && _runtimeProcess != null &&
+                e.ApplicationExitCode == ExitClean)
+                _runtimeProcess.RecordExit("clean_exit");
             _uiRunning = false;
             PublishRuntimeHealth();
+            // Only deliberate exits are announced; any other code stays a failure for the
+            // supervisor's crash-loop accounting.
+            if (e.ApplicationExitCode == ExitClean) Watchdog?.ExpectExit("clean");
+            else if (e.ApplicationExitCode == ExitRestartRequested) Watchdog?.ExpectExit("restart");
+            else if (e.ApplicationExitCode == ExitSessionEnded) Watchdog?.ExpectExit("session");
             _cameraProbe?.Dispose();
-            _heartbeat?.Dispose();
+            Core?.AdminLock();
             Core?.Dispose();
+            Watchdog?.Dispose();
+            if (_instanceOwned)
+            {
+                try { _instance.ReleaseMutex(); } catch (ApplicationException) { }
+            }
+            _instance?.Dispose();
             base.OnExit(e);
         }
     }

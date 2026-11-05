@@ -709,6 +709,9 @@ namespace DoorbellApp
         {
             var window = new WebAdminWindow(App.Boot.HttpPort) { Owner = this, Topmost = Topmost };
             window.ShowDialog();
+            // The password typed to get here opened Core's native admin window; close it with
+            // the web admin unless the operator unlocked the whole kiosk.
+            if (!_adminUnlocked) App.Core?.AdminLock();
         }
 
         private bool LoadVideoStatsPreference()

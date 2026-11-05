@@ -392,7 +392,14 @@ namespace DoorbellApp
                     Topmost = true;
                     _kiosk = new KioskHooks();
                     _kiosk.Enable();
+                    // Under the service the supervisor runs in session 0 and cannot raise this
+                    // window, so the kiosk keeps itself in front.
+                    _foregroundGuard.Interval = TimeSpan.FromSeconds(3);
+                    _foregroundGuard.Tick += (sender, args) => KeepKioskInFront();
+                    _foregroundGuard.Start();
                 }
+                CoreClient.AdminPrompt = PromptAdminForWrite;
+                Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch;
                 KioskHooks.KeepDisplayOn();
                 // The first paint does not wait out the coalescing window, but still reads
                 // core off the UI thread.
@@ -404,13 +411,94 @@ namespace DoorbellApp
             };
             Closing += (s, e) =>
             {
-                if (App.Boot.Kiosk && !_adminUnlocked) e.Cancel = true;
+                if (App.Boot.Kiosk && !_adminUnlocked && !_closingForExit) e.Cancel = true;
                 else _kiosk?.Disable();
-                if (!e.Cancel) _alertNotifier.Dispose();
+                if (!e.Cancel)
+                {
+                    _alertNotifier.Dispose();
+                    _foregroundGuard.Stop();
+                    _relockTimer.Stop();
+                    Microsoft.Win32.SystemEvents.SessionSwitch -= OnSessionSwitch;
+                    CoreClient.AdminPrompt = null;
+                }
             };
         }
 
         private bool _adminUnlocked;
+        private bool _closingForExit;
+        private readonly DispatcherTimer _foregroundGuard = new DispatcherTimer();
+        private readonly DispatcherTimer _relockTimer = new DispatcherTimer();
+        // The kiosk relocks itself after this long; the supervisor's unlock window matches it.
+        private static readonly TimeSpan KioskUnlockDuration = TimeSpan.FromMinutes(30);
+
+        /// <summary>The supervisor asked the app to exit; the kiosk must not veto it.</summary>
+        public void AllowClose() => _closingForExit = true;
+
+        private void KeepKioskInFront()
+        {
+            if (_adminUnlocked || IsActive || OwnedWindows.Count > 0) return;
+            if (WindowState == WindowState.Minimized) WindowState = WindowState.Maximized;
+            Topmost = true;
+            Activate();
+        }
+
+        /// <summary>
+        /// Leaves kiosk mode after the administrator password was accepted. The supervisor is
+        /// told over its channel (not through a file any user could create), and both the kiosk
+        /// and Core's native admin window close again after KioskUnlockDuration.
+        /// </summary>
+        private void UnlockKiosk()
+        {
+            _adminUnlocked = true;
+            _kiosk?.Disable();
+            Topmost = false;
+            WindowState = WindowState.Normal;
+            WindowStyle = WindowStyle.SingleBorderWindow;
+            ResizeMode = ResizeMode.CanResize;
+            App.Watchdog?.Unlock(KioskUnlockDuration);
+            _relockTimer.Stop();
+            _relockTimer.Interval = KioskUnlockDuration;
+            _relockTimer.Tick -= OnRelockTick;
+            _relockTimer.Tick += OnRelockTick;
+            _relockTimer.Start();
+        }
+
+        private void OnRelockTick(object sender, EventArgs e) => RelockKiosk();
+
+        private void RelockKiosk()
+        {
+            _relockTimer.Stop();
+            App.Core?.AdminLock();
+            if (!_adminUnlocked) return;
+            _adminUnlocked = false;
+            App.Watchdog?.Lock();
+            if (!App.Boot.Kiosk) return;
+            WindowStyle = WindowStyle.None;
+            ResizeMode = ResizeMode.NoResize;
+            WindowState = WindowState.Maximized;
+            Topmost = true;
+            _kiosk?.Enable();
+        }
+
+        private void OnSessionSwitch(object sender, Microsoft.Win32.SessionSwitchEventArgs e)
+        {
+            if (e.Reason != Microsoft.Win32.SessionSwitchReason.SessionLock &&
+                e.Reason != Microsoft.Win32.SessionSwitchReason.ConsoleDisconnect &&
+                e.Reason != Microsoft.Win32.SessionSwitchReason.SessionLogoff) return;
+            Dispatcher.BeginInvoke(new Action(RelockKiosk));
+        }
+
+        /// <summary>
+        /// Core refused a native configuration write because its admin window is closed. Ask
+        /// for the password once; CoreClient retries the write when this returns true.
+        /// </summary>
+        private bool PromptAdminForWrite()
+        {
+            if (!Dispatcher.CheckAccess())
+                return (bool)Dispatcher.Invoke(new Func<bool>(PromptAdminForWrite));
+            var prompt = new AdminDialog { Owner = this, Topmost = Topmost };
+            return prompt.ShowDialog() == true;
+        }
 
         private static Brush Frozen(SolidColorBrush b) { b.Freeze(); return b; }
 

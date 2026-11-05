@@ -101,6 +101,7 @@ namespace DoorbellApp
             }
             var panel = new AddDeviceWindow { Owner = this, Topmost = Topmost };
             panel.ShowDialog();
+            if (!_adminUnlocked) App.Core?.AdminLock();
             if (panel.OnboardingRequested)
             {
                 _pairingSkipped = false;
@@ -117,21 +118,7 @@ namespace DoorbellApp
             if (++_secretTaps < 7) return;
             _secretTaps = 0;
             var dlg = new AdminDialog { Owner = this };
-            if (dlg.ShowDialog() == true)
-            {
-                _adminUnlocked = true;
-                _kiosk?.Disable();
-                Topmost = false;
-                WindowState = WindowState.Normal;
-                WindowStyle = WindowStyle.SingleBorderWindow;
-                ResizeMode = ResizeMode.CanResize;
-                try
-                {
-                    File.WriteAllText(Path.Combine(App.DataDir, "admin_unlocked.flag"),
-                                      DateTime.Now.ToString("s"));
-                }
-                catch {  }
-            }
+            if (dlg.ShowDialog() == true) UnlockKiosk();
         }
     }
 }

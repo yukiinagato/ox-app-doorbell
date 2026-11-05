@@ -361,13 +361,17 @@ namespace DoorbellApp
         {
             // _cancelRequiresPin already carries core's own answer, which folds in "a password
             // is actually set". The second test only covers a core that does not report it.
+            bool prompted = false;
             if (_cancelRequiresPin && !AdminDialog.ClusterPasswordUnset())
             {
                 var dlg = new AdminDialog { Owner = this };
                 if (dlg.ShowDialog() != true) return;
+                prompted = true;
             }
             if (App.Core.Emergency(false)) HideEmergency();
-            else System.Diagnostics.Debug.WriteLine("SOS clear was not durably committed");
+            else CoreClient.WriteAppLog("SOS clear was not durably committed");
+            // The password only authorised this clear, not a lasting native admin session.
+            if (prompted && !_adminUnlocked) App.Core.AdminLock();
         }
 
         private void StartSiren(UiEvent ev, int volume, bool sticky)
