@@ -12,7 +12,21 @@ ROOT = Path(__file__).resolve().parents[2]
 WIN = ROOT / "win"
 
 
+# MainWindow.xaml.cs is split into partial classes by concern; the parts below were cut from it
+# in this order, so their concatenation reads like the original single file.
+MAIN_WINDOW_PARTS = (
+    "MainWindow.xaml.cs", "MainWindow.Clock.cs", "MainWindow.PeerPolling.cs",
+    "MainWindow.Theme.cs", "MainWindow.Purposes.cs", "MainWindow.Audio.cs",
+    "MainWindow.Display.cs", "MainWindow.Emergency.cs", "MainWindow.CallFlow.cs",
+    "MainWindow.IncomingVideo.cs", "MainWindow.CallControls.cs", "MainWindow.InCallVideo.cs",
+    "MainWindow.Calling.cs", "MainWindow.Pairing.cs",
+)
+
+
 def read(relative: str) -> str:
+    if relative == "win/DoorbellApp/MainWindow.xaml.cs":
+        return "\n".join((WIN / "DoorbellApp" / part).read_text(encoding="utf-8")
+                         for part in MAIN_WINDOW_PARTS)
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
