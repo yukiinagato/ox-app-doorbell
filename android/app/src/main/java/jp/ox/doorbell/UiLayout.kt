@@ -51,6 +51,9 @@ internal object UiTokens {
 
     fun sp(scale: Float): Float = BODY_SP * scale
 
+    /** Widest a single reading column grows; wider windows centre it. */
+    const val MAX_CONTENT_DP = 600
+
     const val MOTION_MS = 200L
 
     /** Overlay controls on live video hide after this long without a touch. */
