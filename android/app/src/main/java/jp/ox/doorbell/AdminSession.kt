@@ -41,9 +41,17 @@ internal data class ConfigWriteResult(
 internal class AdminSession private constructor(
     private val port: Int,
     private val cookie: String,
+    /** X-Doorbell-CSRF value from the login reply; the session-bound core entry points need it. */
+    val csrf: String = "",
 ) : ConfigWriter {
 
     /** Write one configuration key. [valueJson] is a JSON document, not a bare display string. */
+    /** The dbsess value alone, as db_core_config_import_json_v2 / panel identity v2 take it. */
+    val sessionToken: String get() = cookie.substringAfter('=', "")
+
+    /** True when the session-bound core calls (import, panel identities) can be made. */
+    val canCallSessionApis: Boolean get() = sessionToken.isNotEmpty() && csrf.isNotEmpty()
+
     override fun setKey(key: String, valueJson: String): ConfigWriteResult {
         val body = JSONObject().put("key", key).put("value", valueJson)
         return post("/api/config", body.toString())
@@ -62,6 +70,35 @@ internal class AdminSession private constructor(
 
     override fun deleteKey(key: String): ConfigWriteResult =
         post("/api/config/delete", JSONObject().put("key", key).toString())
+
+    /**
+     * One authenticated loopback call outside the config writer (the Telegram test). Blocking.
+     * Sends the session cookie, the CSRF header and the loopback Origin the server trusts.
+     */
+    fun request(method: String, path: String, body: JSONObject?): Pair<Int, JSONObject?> {
+        var connection: HttpURLConnection? = null
+        return try {
+            connection = connect(port, path)
+            connection.requestMethod = method
+            connection.setRequestProperty("Cookie", cookie)
+            connection.setRequestProperty("Origin", "http://127.0.0.1:$port")
+            if (csrf.isNotEmpty()) connection.setRequestProperty("X-Doorbell-CSRF", csrf)
+            if (body != null) {
+                connection.doOutput = true
+                connection.setRequestProperty("Content-Type", "application/json")
+                connection.outputStream.use { it.write(body.toString().toByteArray(Charsets.UTF_8)) }
+            }
+            val status = connection.responseCode
+            val payload = readBody(
+                if (status in 200..299) connection.inputStream else connection.errorStream,
+            )
+            status to (try { JSONObject(payload) } catch (_: Exception) { null })
+        } catch (_: Exception) {
+            0 to null
+        } finally {
+            try { connection?.disconnect() } catch (e: Exception) { ShellLog.ignored("AdminSession", e) }
+        }
+    }
 
     private fun post(path: String, body: String): ConfigWriteResult {
         var connection: HttpURLConnection? = null
@@ -109,7 +146,12 @@ internal class AdminSession private constructor(
                 if (status == 401 || status == 403) return null to ERR_PASSWORD
                 if (status !in 200..299) return null to ERR_UNREACHABLE
                 val cookie = sessionCookie(connection) ?: return null to ERR_UNREACHABLE
-                AdminSession(port, cookie) to ""
+                val reply = try {
+                    JSONObject(readBody(connection.inputStream))
+                } catch (_: Exception) {
+                    null
+                }
+                AdminSession(port, cookie, reply?.optString("csrf_token").orEmpty()) to ""
             } catch (_: Exception) {
                 null to ERR_UNREACHABLE
             } finally {

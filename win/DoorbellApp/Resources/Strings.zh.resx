@@ -697,6 +697,129 @@
   <data name="notify_answered_by" xml:space="preserve"><value>{0} 于 {1} 接听</value></data>
   <data name="notify_replied_by" xml:space="preserve"><value>{0} 于 {1} 回应：{2}</value></data>
   <data name="notify_test" xml:space="preserve"><value>门铃测试通知</value></data>
+  <data name="nset_act_auto_reply" xml:space="preserve"><value>自动回复</value></data>
+  <data name="nset_action_unknown" xml:space="preserve"><value>此动作（{0}）无法在此编辑，只能删除</value></data>
+  <data name="nset_actions" xml:space="preserve"><value>动作</value></data>
+  <data name="nset_all" xml:space="preserve"><value>全部</value></data>
+  <data name="nset_all_households" xml:space="preserve"><value>所有通知对象</value></data>
+  <data name="nset_audio_tts" xml:space="preserve"><value>语音合成朗读</value></data>
+  <data name="nset_camera_add" xml:space="preserve"><value>添加外部摄像头</value></data>
+  <data name="nset_camera_clear_credentials" xml:space="preserve"><value>删除已保存的认证信息</value></data>
+  <data name="nset_camera_credentials" xml:space="preserve"><value>认证（保存在本设备的安全存储中）</value></data>
+  <data name="nset_camera_id" xml:space="preserve"><value>标识（小写字母、数字、_）</value></data>
+  <data name="nset_camera_invalid" xml:space="preserve"><value>请检查 URL（不能使用包含认证信息的 URL）</value></data>
+  <data name="nset_camera_mjpeg" xml:space="preserve"><value>MJPEG URL（http/https）</value></data>
+  <data name="nset_camera_note" xml:space="preserve"><value>请勿在 URL 中包含认证信息，请在下方另行输入用户名和密码</value></data>
+  <data name="nset_camera_rtsp" xml:space="preserve"><value>H.264 URL（rtsp）</value></data>
+  <data name="nset_camera_snapshot" xml:space="preserve"><value>快照 URL（http/https）</value></data>
+  <data name="nset_camera_transport" xml:space="preserve"><value>RTSP 传输方式</value></data>
+  <data name="nset_days" xml:space="preserve"><value>星期</value></data>
+  <data name="nset_default_sound" xml:space="preserve"><value>默认声音</value></data>
+  <data name="nset_door_delete" xml:space="preserve"><value>删除此门口</value></data>
+  <data name="nset_door_delete_in_use" xml:space="preserve"><value>有 {0} 台门口机分配给此门口。仍要删除吗？</value></data>
+  <data name="nset_doors_count" xml:space="preserve"><value>{0} 个门口</value></data>
+  <data name="nset_dtmf_action" xml:space="preserve"><value>动作</value></data>
+  <data name="nset_dtmf_add" xml:space="preserve"><value>添加 DTMF 动作</value></data>
+  <data name="nset_dtmf_code" xml:space="preserve"><value>按键（0-9 * # A-D，最多 8 个）</value></data>
+  <data name="nset_dtmf_code_invalid" xml:space="preserve"><value>请使用 1 到 8 个 0-9 * # A-D 字符</value></data>
+  <data name="nset_dtmf_decline" xml:space="preserve"><value>拒接</value></data>
+  <data name="nset_dtmf_ha" xml:space="preserve"><value>HA 命令 {0}（{1}）</value></data>
+  <data name="nset_dtmf_ha_type" xml:space="preserve"><value>Home Assistant 命令</value></data>
+  <data name="nset_dtmf_hangup" xml:space="preserve"><value>挂断</value></data>
+  <data name="nset_dtmf_none" xml:space="preserve"><value>没有 DTMF 动作</value></data>
+  <data name="nset_dtmf_note" xml:space="preserve"><value>通话中按电话按键执行的动作</value></data>
+  <data name="nset_dtmf_reply" xml:space="preserve"><value>回复：{0}</value></data>
+  <data name="nset_dtmf_reply_type" xml:space="preserve"><value>快捷回复</value></data>
+  <data name="nset_dtmf_self" xml:space="preserve"><value>通话中的门口</value></data>
+  <data name="nset_dtmf_voice_menu" xml:space="preserve"><value>添加语音菜单映射</value></data>
+  <data name="nset_dtmf_voice_menu_note" xml:space="preserve"><value>将 #21–#29 按顺序映射到快捷回复，#90 映射到拒接</value></data>
+  <data name="nset_dtmf_voice_menu_present" xml:space="preserve"><value>语音菜单映射已存在</value></data>
+  <data name="nset_export_done" xml:space="preserve"><value>已导出</value></data>
+  <data name="nset_export_note" xml:space="preserve"><value>不包含密码、声音和图片</value></data>
+  <data name="nset_ha_allow_note" xml:space="preserve"><value>仅检查代理服务器的认证</value></data>
+  <data name="nset_ha_allow_notice" xml:space="preserve"><value>允许从 HA 发布公告</value></data>
+  <data name="nset_ha_allow_sos" xml:space="preserve"><value>允许从 HA 控制 SOS</value></data>
+  <data name="nset_ha_event_note" xml:space="preserve"><value>Home Assistant 已接收所有事件，无需设置</value></data>
+  <data name="nset_ha_language" xml:space="preserve"><value>Home Assistant 实体名称语言</value></data>
+  <data name="nset_household_summary" xml:space="preserve"><value>Telegram {0} 个 · 分机 {1}</value></data>
+  <data name="nset_image_choose" xml:space="preserve"><value>选择图片…</value></data>
+  <data name="nset_image_remove" xml:space="preserve"><value>移除背景图片</value></data>
+  <data name="nset_import_note" xml:space="preserve"><value>应用前会显示变更内容</value></data>
+  <data name="nset_import_summary" xml:space="preserve"><value>变更 {0} 项 · 缺少秘密信息 {1} 项 · 缺少资源 {2} 项 · 问题 {3} 项</value></data>
+  <data name="nset_move_down" xml:space="preserve"><value>下移</value></data>
+  <data name="nset_move_up" xml:space="preserve"><value>上移</value></data>
+  <data name="nset_mqtt" xml:space="preserve"><value>MQTT 与 Home Assistant</value></data>
+  <data name="nset_mqtt_base_topic" xml:space="preserve"><value>基础主题</value></data>
+  <data name="nset_mqtt_discovery" xml:space="preserve"><value>Discovery 前缀</value></data>
+  <data name="nset_mqtt_fingerprint" xml:space="preserve"><value>代理服务器证书 SHA-256</value></data>
+  <data name="nset_mqtt_host_note" xml:space="preserve"><value>留空则停止 MQTT 集成</value></data>
+  <data name="nset_mqtt_status" xml:space="preserve"><value>当前状态：{0}</value></data>
+  <data name="nset_mqtt_tls" xml:space="preserve"><value>通过 TLS 连接</value></data>
+  <data name="nset_mqtt_tls_note" xml:space="preserve"><value>TLS 需要下方的证书指纹</value></data>
+  <data name="nset_needs_session" xml:space="preserve"><value>无法建立管理会话，请重新打开设置后再试</value></data>
+  <data name="nset_never_suppress" xml:space="preserve"><value>静音时段也不屏蔽</value></data>
+  <data name="nset_no_picker" xml:space="preserve"><value>本设备上没有可选择文件的应用</value></data>
+  <data name="nset_no_replies" xml:space="preserve"><value>没有快捷回复</value></data>
+  <data name="nset_none" xml:space="preserve"><value>无</value></data>
+  <data name="nset_panel_note" xml:space="preserve"><value>凭据保存在本设备上，请通过本设备的 HTTPS 地址打开面板</value></data>
+  <data name="nset_panel_rotate" xml:space="preserve"><value>重新签发凭据</value></data>
+  <data name="nset_password" xml:space="preserve"><value>密码</value></data>
+  <data name="nset_purpose_hide" xml:space="preserve"><value>不向访客显示</value></data>
+  <data name="nset_purpose_show" xml:space="preserve"><value>向访客显示</value></data>
+  <data name="nset_quiet_legacy" xml:space="preserve"><value>删除旧的静音时段设置</value></data>
+  <data name="nset_quiet_legacy_note" xml:space="preserve"><value>旧版应用写入的未使用值</value></data>
+  <data name="nset_quiet_none" xml:space="preserve"><value>未设置静音时段</value></data>
+  <data name="nset_quiet_suppress" xml:space="preserve"><value>静音时段屏蔽的动作</value></data>
+  <data name="nset_record_again" xml:space="preserve"><value>重新录音</value></data>
+  <data name="nset_record_default_name" xml:space="preserve"><value>录音</value></data>
+  <data name="nset_record_done" xml:space="preserve"><value>已录制 {0} 秒</value></data>
+  <data name="nset_record_empty" xml:space="preserve"><value>没有录音内容</value></data>
+  <data name="nset_record_failed" xml:space="preserve"><value>无法使用麦克风</value></data>
+  <data name="nset_record_note" xml:space="preserve"><value>保存为 WAV，最长 {0} 秒</value></data>
+  <data name="nset_record_permission" xml:space="preserve"><value>请允许使用麦克风后再试</value></data>
+  <data name="nset_record_ready" xml:space="preserve"><value>按“开始录音”后说话</value></data>
+  <data name="nset_record_running" xml:space="preserve"><value>录音中… {0} 秒</value></data>
+  <data name="nset_record_start" xml:space="preserve"><value>开始录音</value></data>
+  <data name="nset_record_stop" xml:space="preserve"><value>停止录音</value></data>
+  <data name="nset_record_title" xml:space="preserve"><value>录音</value></data>
+  <data name="nset_rename" xml:space="preserve"><value>重命名</value></data>
+  <data name="nset_rule_disabled" xml:space="preserve"><value>已停用</value></data>
+  <data name="nset_rule_problem_actions_required" xml:space="preserve"><value>请至少添加一个动作</value></data>
+  <data name="nset_rule_problem_reply_id" xml:space="preserve"><value>请选择要发送的快捷回复</value></data>
+  <data name="nset_rule_problem_sip_target" xml:space="preserve"><value>请输入要呼叫的分机号</value></data>
+  <data name="nset_rule_problem_window_time" xml:space="preserve"><value>请检查时间段的时间</value></data>
+  <data name="nset_rule_problem_windows_required" xml:space="preserve"><value>请添加时间段或选择“始终”</value></data>
+  <data name="nset_secret_hint" xml:space="preserve"><value>输入的值不会再次显示，且不能为空</value></data>
+  <data name="nset_secret_leader_note" xml:space="preserve"><value>仅保存在本设备上。请在每台可能承担此职责的设备上输入</value></data>
+  <data name="nset_secret_local_note" xml:space="preserve"><value>仅保存在本设备的安全存储中，不会复制到其他设备</value></data>
+  <data name="nset_secret_missing_here" xml:space="preserve"><value>已设置（本设备未保存）</value></data>
+  <data name="nset_secret_store_failed" xml:space="preserve"><value>无法保存到安全存储</value></data>
+  <data name="nset_sip_extensions" xml:space="preserve"><value>分机号（每行一个）</value></data>
+  <data name="nset_sos_alarm_sound" xml:space="preserve"><value>SOS 警报音</value></data>
+  <data name="nset_sound_add_file" xml:space="preserve"><value>添加音频文件…</value></data>
+  <data name="nset_sound_formats" xml:space="preserve"><value>MP3 或 WAV，最大 3 MB</value></data>
+  <data name="nset_sound_record" xml:space="preserve"><value>用麦克风录音…</value></data>
+  <data name="nset_telegram_poll" xml:space="preserve"><value>接受 Telegram 按钮回复</value></data>
+  <data name="nset_telegram_poll_note" xml:space="preserve"><value>负责的设备会持续向 Telegram 查询</value></data>
+  <data name="nset_telegram_template" xml:space="preserve"><value>通知文字</value></data>
+  <data name="nset_telegram_template_note" xml:space="preserve"><value>会填入 {0} 和 {1}</value></data>
+  <data name="nset_test_failed" xml:space="preserve"><value>发送失败（{0}）</value></data>
+  <data name="nset_this_device" xml:space="preserve"><value>本设备</value></data>
+  <data name="nset_use_as_ringtone" xml:space="preserve"><value>设为室内机铃声</value></data>
+  <data name="nset_use_as_sos_alarm" xml:space="preserve"><value>设为 SOS 警报音</value></data>
+  <data name="nset_webrtc" xml:space="preserve"><value>网页通话（WebRTC）</value></data>
+  <data name="nset_webrtc_note" xml:space="preserve"><value>留空则停用网页面板的通话按钮</value></data>
+  <data name="nset_webrtc_password" xml:space="preserve"><value>浏览器用分机密码</value></data>
+  <data name="nset_webrtc_user" xml:space="preserve"><value>浏览器用分机号</value></data>
+  <data name="nset_webrtc_ws_url" xml:space="preserve"><value>Asterisk WebSocket URL</value></data>
+  <data name="nset_when_call_missed" xml:space="preserve"><value>未接呼叫</value></data>
+  <data name="nset_wording" xml:space="preserve"><value>显示文字</value></data>
+  <data name="nset_wording_add" xml:space="preserve"><value>查找并修改文字…</value></data>
+  <data name="nset_wording_blank_resets" xml:space="preserve"><value>留空则恢复内置文字</value></data>
+  <data name="nset_wording_builtin" xml:space="preserve"><value>内置</value></data>
+  <data name="nset_wording_none" xml:space="preserve"><value>没有修改过的文字</value></data>
+  <data name="nset_wording_note" xml:space="preserve"><value>将应用到所有设备。至少输入两个字符进行搜索</value></data>
+  <data name="nset_wording_placeholders" xml:space="preserve"><value>请保留与内置文字相同数量的 {…} 占位符</value></data>
   <data name="offline_body" xml:space="preserve"><value>无法呼叫，请直接敲门。</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>{0} 秒后重连</value></data>
   <data name="offline_title" xml:space="preserve"><value>系统离线</value></data>

@@ -226,6 +226,36 @@ class DoorbellCore(context: Context) {
         return parse(nativeConfigBatchJson(handle, opsJson))
     }
 
+    /**
+     * Add an image or sound to the asset ledger (db_core_asset_add_json). [type] is one of
+     * image/jpeg, image/png, audio/mpeg, audio/wav; at most 3 MiB. Admin-gated in core.
+     */
+    fun assetAdd(data: ByteArray, type: String, label: String): JSONObject? =
+        if (handle == 0L) null else parse(nativeAssetAddJson(handle, data, type, label))
+
+    /** Remove one ledger entry by its sha256 (db_core_asset_remove_json). Admin-gated. */
+    fun assetRemove(sha256: String): JSONObject? =
+        if (handle == 0L) null else parse(nativeAssetRemoveJson(handle, sha256))
+
+    /** {schema_version:2,revision,config}; password digests omitted (config export). */
+    fun configSnapshotV2(): JSONObject? =
+        if (handle == 0L) null else parse(nativeConfigSnapshotJsonV2(handle))
+
+    /** Compare-and-commit {schema_version:2,expected_revision,ops}. Admin-gated. */
+    fun configCommitV2(requestJson: String): JSONObject? =
+        if (handle == 0L) null else parse(nativeConfigCommitJsonV2(handle, requestJson))
+
+    /** The HTTP-session config import (stage/preflight/commit/cancel/query). */
+    fun configImportV2(action: String, requestJson: String, session: String, csrf: String): JSONObject? =
+        if (handle == 0L) null else parse(nativeConfigImportJsonV2(handle, action, requestJson, session, csrf))
+
+    /** Panel identity list/create/update/revoke/rotate behind an HTTP admin session. */
+    fun panelIdentityV2(action: String, requestJson: String, session: String, csrf: String): JSONObject? =
+        if (handle == 0L) null else parse(nativePanelIdentityJsonV2(handle, action, requestJson, session, csrf))
+
+    /** 0 removed, -1 invalid id, -2 role cannot, -3 not persisted, RESULT_ADMIN_REQUIRED. */
+    fun removeDevice(nodeId: String): Int = if (handle == 0L) -1 else nativeRemoveDeviceV2(handle, nodeId)
+
     fun deleteConfigKey(key: String): Int? {
         if (handle == 0L || !exports.configWrite) return null
         return nativeDeleteConfigKey(handle, key)
@@ -457,6 +487,9 @@ class DoorbellCore(context: Context) {
     /** Remove one platform secret; used by the factory reset that follows a revocation. */
     internal fun deletePlatformSecret(key: String): Boolean = secureStore.delete(key)
 
+    /** Whether this device's secure store holds [key]; the value itself never leaves it. */
+    internal fun hasPlatformSecret(key: String): Boolean = !secureStore.get(key).isNullOrEmpty()
+
     internal fun platformDeviceInfo(): JSONObject = parse(deviceInfo.snapshot()) ?: JSONObject()
 
     // ---------- native ----------
@@ -533,6 +566,17 @@ class DoorbellCore(context: Context) {
     private external fun nativeConfigBatchJson(handle: Long, opsJson: String): String?
     private external fun nativeLastWriteWarningsJson(handle: Long): String?
     private external fun nativeDeleteConfigKey(handle: Long, key: String): Int
+    private external fun nativeAssetAddJson(handle: Long, data: ByteArray, type: String, label: String): String?
+    private external fun nativeAssetRemoveJson(handle: Long, hash: String): String?
+    private external fun nativeConfigSnapshotJsonV2(handle: Long): String?
+    private external fun nativeConfigCommitJsonV2(handle: Long, request: String): String?
+    private external fun nativeConfigImportJsonV2(
+        handle: Long, action: String, request: String, session: String, csrf: String,
+    ): String?
+    private external fun nativePanelIdentityJsonV2(
+        handle: Long, action: String, request: String, session: String, csrf: String,
+    ): String?
+    private external fun nativeRemoveDeviceV2(handle: Long, nodeId: String): Int
     private external fun nativeAdminPasswordVerify(handle: Long, password: String): Int
     private external fun nativeAdminPasswordSet(
         handle: Long,

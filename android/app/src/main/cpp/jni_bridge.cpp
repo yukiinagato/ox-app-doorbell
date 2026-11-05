@@ -1237,3 +1237,96 @@ Java_jp_ox_doorbell_DoorbellCore_nativeAdminLock(JNIEnv*, jobject, jlong h) {
   Bridge* b = lease.get();
   if (b && b->core) db_core_admin_lock(b->core);
 }
+
+// ---- Native settings: asset ledger, configuration snapshot/commit/import, panel identities ----
+// Each returns core's owned JSON result unchanged so the Kotlin side reads ok/err/error_code the
+// same way the web admin does. Asset bytes are copied out of the Java array before core sees them.
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeAssetAddJson(JNIEnv* env, jobject, jlong h, jbyteArray data,
+                                                    jstring type, jstring label) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core || !data) return nullptr;
+  const jsize len = env->GetArrayLength(data);
+  std::vector<uint8_t> bytes(static_cast<size_t>(len));
+  if (len > 0) env->GetByteArrayRegion(data, 0, len, reinterpret_cast<jbyte*>(bytes.data()));
+  char* s = db_core_asset_add_json(b->core, bytes.empty() ? nullptr : bytes.data(), bytes.size(),
+                                   toUtf8(env, type).c_str(), toUtf8(env, label).c_str());
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeAssetRemoveJson(JNIEnv* env, jobject, jlong h, jstring hash) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_asset_remove_json(b->core, toUtf8(env, hash).c_str());
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeConfigSnapshotJsonV2(JNIEnv* env, jobject, jlong h) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_config_snapshot_json_v2(b->core);
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeConfigCommitJsonV2(JNIEnv* env, jobject, jlong h,
+                                                          jstring request) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_config_commit_json_v2(b->core, toUtf8(env, request).c_str());
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeConfigImportJsonV2(JNIEnv* env, jobject, jlong h,
+                                                          jstring action, jstring request,
+                                                          jstring session, jstring csrf) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_config_import_json_v2(b->core, toUtf8(env, action).c_str(),
+                                          toUtf8(env, request).c_str(),
+                                          toUtf8(env, session).c_str(), toUtf8(env, csrf).c_str());
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativePanelIdentityJsonV2(JNIEnv* env, jobject, jlong h,
+                                                           jstring action, jstring request,
+                                                           jstring session, jstring csrf) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  char* s = db_core_panel_identity_json_v2(b->core, toUtf8(env, action).c_str(),
+                                           toUtf8(env, request).c_str(),
+                                           toUtf8(env, session).c_str(), toUtf8(env, csrf).c_str());
+  jstring out = toJString(env, b, s);
+  db_free(s);
+  return out;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeRemoveDeviceV2(JNIEnv* env, jobject, jlong h,
+                                                      jstring node_id) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return -1;
+  return static_cast<jint>(db_core_remove_device_v2(b->core, toUtf8(env, node_id).c_str()));
+}

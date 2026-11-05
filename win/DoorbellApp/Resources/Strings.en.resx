@@ -697,6 +697,129 @@ Delete it?</value></data>
   <data name="notify_answered_by" xml:space="preserve"><value>Answered by {0} at {1}</value></data>
   <data name="notify_replied_by" xml:space="preserve"><value>{0} replied at {1}: {2}</value></data>
   <data name="notify_test" xml:space="preserve"><value>Doorbell test notification</value></data>
+  <data name="nset_act_auto_reply" xml:space="preserve"><value>Automatic reply</value></data>
+  <data name="nset_action_unknown" xml:space="preserve"><value>This action ({0}) can't be edited here; it can only be removed</value></data>
+  <data name="nset_actions" xml:space="preserve"><value>Actions</value></data>
+  <data name="nset_all" xml:space="preserve"><value>All</value></data>
+  <data name="nset_all_households" xml:space="preserve"><value>All recipients</value></data>
+  <data name="nset_audio_tts" xml:space="preserve"><value>Read aloud (speech)</value></data>
+  <data name="nset_camera_add" xml:space="preserve"><value>Add an external camera</value></data>
+  <data name="nset_camera_clear_credentials" xml:space="preserve"><value>Remove the saved credentials</value></data>
+  <data name="nset_camera_credentials" xml:space="preserve"><value>Authentication (kept in this device's secure storage)</value></data>
+  <data name="nset_camera_id" xml:space="preserve"><value>ID (lowercase letters, digits, _)</value></data>
+  <data name="nset_camera_invalid" xml:space="preserve"><value>Check the URLs (URLs with credentials are refused)</value></data>
+  <data name="nset_camera_mjpeg" xml:space="preserve"><value>MJPEG URL (http/https)</value></data>
+  <data name="nset_camera_note" xml:space="preserve"><value>Don't put credentials in a URL; enter the user name and password below</value></data>
+  <data name="nset_camera_rtsp" xml:space="preserve"><value>H.264 URL (rtsp)</value></data>
+  <data name="nset_camera_snapshot" xml:space="preserve"><value>Snapshot URL (http/https)</value></data>
+  <data name="nset_camera_transport" xml:space="preserve"><value>RTSP transport</value></data>
+  <data name="nset_days" xml:space="preserve"><value>Days</value></data>
+  <data name="nset_default_sound" xml:space="preserve"><value>Default sound</value></data>
+  <data name="nset_door_delete" xml:space="preserve"><value>Delete this door</value></data>
+  <data name="nset_door_delete_in_use" xml:space="preserve"><value>{0} door stations are assigned to this door. Delete it anyway?</value></data>
+  <data name="nset_doors_count" xml:space="preserve"><value>{0} doors</value></data>
+  <data name="nset_dtmf_action" xml:space="preserve"><value>Action</value></data>
+  <data name="nset_dtmf_add" xml:space="preserve"><value>Add a DTMF action</value></data>
+  <data name="nset_dtmf_code" xml:space="preserve"><value>Keys (0-9 * # A-D, up to 8)</value></data>
+  <data name="nset_dtmf_code_invalid" xml:space="preserve"><value>Use 1 to 8 of 0-9 * # A-D</value></data>
+  <data name="nset_dtmf_decline" xml:space="preserve"><value>Decline</value></data>
+  <data name="nset_dtmf_ha" xml:space="preserve"><value>HA command {0} ({1})</value></data>
+  <data name="nset_dtmf_ha_type" xml:space="preserve"><value>Home Assistant command</value></data>
+  <data name="nset_dtmf_hangup" xml:space="preserve"><value>Hang up</value></data>
+  <data name="nset_dtmf_none" xml:space="preserve"><value>No DTMF actions</value></data>
+  <data name="nset_dtmf_note" xml:space="preserve"><value>Actions run by keys pressed on the phone during a call</value></data>
+  <data name="nset_dtmf_reply" xml:space="preserve"><value>Reply: {0}</value></data>
+  <data name="nset_dtmf_reply_type" xml:space="preserve"><value>Quick reply</value></data>
+  <data name="nset_dtmf_self" xml:space="preserve"><value>The door in the call</value></data>
+  <data name="nset_dtmf_voice_menu" xml:space="preserve"><value>Add the voice-menu mapping</value></data>
+  <data name="nset_dtmf_voice_menu_note" xml:space="preserve"><value>Maps #21–#29 to the quick replies in order and #90 to decline</value></data>
+  <data name="nset_dtmf_voice_menu_present" xml:space="preserve"><value>The voice-menu mapping is already present</value></data>
+  <data name="nset_export_done" xml:space="preserve"><value>Exported</value></data>
+  <data name="nset_export_note" xml:space="preserve"><value>Passwords, sounds and images are not included</value></data>
+  <data name="nset_ha_allow_note" xml:space="preserve"><value>Only the broker's authentication is checked</value></data>
+  <data name="nset_ha_allow_notice" xml:space="preserve"><value>Allow announcements from HA</value></data>
+  <data name="nset_ha_allow_sos" xml:space="preserve"><value>Allow SOS control from HA</value></data>
+  <data name="nset_ha_event_note" xml:space="preserve"><value>Home Assistant receives every event already; there is nothing to set</value></data>
+  <data name="nset_ha_language" xml:space="preserve"><value>Home Assistant entity language</value></data>
+  <data name="nset_household_summary" xml:space="preserve"><value>Telegram {0} · Extensions {1}</value></data>
+  <data name="nset_image_choose" xml:space="preserve"><value>Choose an image…</value></data>
+  <data name="nset_image_remove" xml:space="preserve"><value>Remove the background image</value></data>
+  <data name="nset_import_note" xml:space="preserve"><value>Changes are shown before anything is applied</value></data>
+  <data name="nset_import_summary" xml:space="preserve"><value>{0} changes · {1} missing secrets · {2} missing assets · {3} problems</value></data>
+  <data name="nset_move_down" xml:space="preserve"><value>Move down</value></data>
+  <data name="nset_move_up" xml:space="preserve"><value>Move up</value></data>
+  <data name="nset_mqtt" xml:space="preserve"><value>MQTT and Home Assistant</value></data>
+  <data name="nset_mqtt_base_topic" xml:space="preserve"><value>Base topic</value></data>
+  <data name="nset_mqtt_discovery" xml:space="preserve"><value>Discovery prefix</value></data>
+  <data name="nset_mqtt_fingerprint" xml:space="preserve"><value>Broker certificate SHA-256</value></data>
+  <data name="nset_mqtt_host_note" xml:space="preserve"><value>Leave blank to turn the MQTT bridge off</value></data>
+  <data name="nset_mqtt_status" xml:space="preserve"><value>Current state: {0}</value></data>
+  <data name="nset_mqtt_tls" xml:space="preserve"><value>Connect over TLS</value></data>
+  <data name="nset_mqtt_tls_note" xml:space="preserve"><value>TLS requires the certificate fingerprint below</value></data>
+  <data name="nset_needs_session" xml:space="preserve"><value>Couldn't open an admin session. Reopen settings and try again</value></data>
+  <data name="nset_never_suppress" xml:space="preserve"><value>Never silence during quiet hours</value></data>
+  <data name="nset_no_picker" xml:space="preserve"><value>No app can pick a file on this device</value></data>
+  <data name="nset_no_replies" xml:space="preserve"><value>There are no quick replies</value></data>
+  <data name="nset_none" xml:space="preserve"><value>None</value></data>
+  <data name="nset_panel_note" xml:space="preserve"><value>The credential is stored on this device; open the panel at this device's HTTPS address</value></data>
+  <data name="nset_panel_rotate" xml:space="preserve"><value>Issue a new credential</value></data>
+  <data name="nset_password" xml:space="preserve"><value>Password</value></data>
+  <data name="nset_purpose_hide" xml:space="preserve"><value>Hide from visitors</value></data>
+  <data name="nset_purpose_show" xml:space="preserve"><value>Show to visitors</value></data>
+  <data name="nset_quiet_legacy" xml:space="preserve"><value>Remove the old quiet-hours setting</value></data>
+  <data name="nset_quiet_legacy_note" xml:space="preserve"><value>An unused value written by an older app</value></data>
+  <data name="nset_quiet_none" xml:space="preserve"><value>No quiet hours are set</value></data>
+  <data name="nset_quiet_suppress" xml:space="preserve"><value>Silenced during quiet hours</value></data>
+  <data name="nset_record_again" xml:space="preserve"><value>Record again</value></data>
+  <data name="nset_record_default_name" xml:space="preserve"><value>Recording</value></data>
+  <data name="nset_record_done" xml:space="preserve"><value>Recorded {0} s</value></data>
+  <data name="nset_record_empty" xml:space="preserve"><value>Nothing was recorded</value></data>
+  <data name="nset_record_failed" xml:space="preserve"><value>The microphone isn't available</value></data>
+  <data name="nset_record_note" xml:space="preserve"><value>Saved as WAV, up to {0} seconds</value></data>
+  <data name="nset_record_permission" xml:space="preserve"><value>Allow microphone access, then try again</value></data>
+  <data name="nset_record_ready" xml:space="preserve"><value>Press Start recording and speak</value></data>
+  <data name="nset_record_running" xml:space="preserve"><value>Recording… {0} s</value></data>
+  <data name="nset_record_start" xml:space="preserve"><value>Start recording</value></data>
+  <data name="nset_record_stop" xml:space="preserve"><value>Stop recording</value></data>
+  <data name="nset_record_title" xml:space="preserve"><value>Record</value></data>
+  <data name="nset_rename" xml:space="preserve"><value>Rename</value></data>
+  <data name="nset_rule_disabled" xml:space="preserve"><value>Disabled</value></data>
+  <data name="nset_rule_problem_actions_required" xml:space="preserve"><value>Add at least one action</value></data>
+  <data name="nset_rule_problem_reply_id" xml:space="preserve"><value>Choose the quick reply to send</value></data>
+  <data name="nset_rule_problem_sip_target" xml:space="preserve"><value>Enter the extension to call</value></data>
+  <data name="nset_rule_problem_window_time" xml:space="preserve"><value>Check the time-window times</value></data>
+  <data name="nset_rule_problem_windows_required" xml:space="preserve"><value>Add a time window or choose Always</value></data>
+  <data name="nset_secret_hint" xml:space="preserve"><value>The value is never shown again. It cannot be blank</value></data>
+  <data name="nset_secret_leader_note" xml:space="preserve"><value>Stored on this device only. Enter it on every device that may take over this duty</value></data>
+  <data name="nset_secret_local_note" xml:space="preserve"><value>Stored only in this device's secure storage; it is not copied to other devices</value></data>
+  <data name="nset_secret_missing_here" xml:space="preserve"><value>Set (not stored on this device)</value></data>
+  <data name="nset_secret_store_failed" xml:space="preserve"><value>Couldn't save to secure storage</value></data>
+  <data name="nset_sip_extensions" xml:space="preserve"><value>Extensions (one per line)</value></data>
+  <data name="nset_sos_alarm_sound" xml:space="preserve"><value>SOS alarm sound</value></data>
+  <data name="nset_sound_add_file" xml:space="preserve"><value>Add a sound file…</value></data>
+  <data name="nset_sound_formats" xml:space="preserve"><value>MP3 or WAV, up to 3 MB</value></data>
+  <data name="nset_sound_record" xml:space="preserve"><value>Record with the microphone…</value></data>
+  <data name="nset_telegram_poll" xml:space="preserve"><value>Accept Telegram button replies</value></data>
+  <data name="nset_telegram_poll_note" xml:space="preserve"><value>The leader keeps polling Telegram for updates</value></data>
+  <data name="nset_telegram_template" xml:space="preserve"><value>Message text</value></data>
+  <data name="nset_telegram_template_note" xml:space="preserve"><value>{0} and {1} are filled in</value></data>
+  <data name="nset_test_failed" xml:space="preserve"><value>Couldn't send ({0})</value></data>
+  <data name="nset_this_device" xml:space="preserve"><value>This device</value></data>
+  <data name="nset_use_as_ringtone" xml:space="preserve"><value>Use as the indoor ringtone</value></data>
+  <data name="nset_use_as_sos_alarm" xml:space="preserve"><value>Use as the SOS alarm</value></data>
+  <data name="nset_webrtc" xml:space="preserve"><value>Web calls (WebRTC)</value></data>
+  <data name="nset_webrtc_note" xml:space="preserve"><value>Leave blank to disable the Web panel's call button</value></data>
+  <data name="nset_webrtc_password" xml:space="preserve"><value>Browser extension password</value></data>
+  <data name="nset_webrtc_user" xml:space="preserve"><value>Browser extension</value></data>
+  <data name="nset_webrtc_ws_url" xml:space="preserve"><value>Asterisk WebSocket URL</value></data>
+  <data name="nset_when_call_missed" xml:space="preserve"><value>Missed call</value></data>
+  <data name="nset_wording" xml:space="preserve"><value>Wording</value></data>
+  <data name="nset_wording_add" xml:space="preserve"><value>Find and change wording…</value></data>
+  <data name="nset_wording_blank_resets" xml:space="preserve"><value>Leave a language blank to use the built-in text</value></data>
+  <data name="nset_wording_builtin" xml:space="preserve"><value>Built-in</value></data>
+  <data name="nset_wording_none" xml:space="preserve"><value>No wording has been changed</value></data>
+  <data name="nset_wording_note" xml:space="preserve"><value>Applies to every device. Type at least two characters to search</value></data>
+  <data name="nset_wording_placeholders" xml:space="preserve"><value>Keep the same {…} placeholders as the built-in text</value></data>
   <data name="offline_body" xml:space="preserve"><value>Calling unavailable. Please knock.</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
   <data name="offline_title" xml:space="preserve"><value>System offline</value></data>

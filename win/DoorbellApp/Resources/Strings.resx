@@ -697,6 +697,129 @@
   <data name="notify_answered_by" xml:space="preserve"><value>{0} が {1} に応答しました</value></data>
   <data name="notify_replied_by" xml:space="preserve"><value>{0} が {1} に返信: {2}</value></data>
   <data name="notify_test" xml:space="preserve"><value>ドアホン テスト通知</value></data>
+  <data name="nset_act_auto_reply" xml:space="preserve"><value>自動返答</value></data>
+  <data name="nset_action_unknown" xml:space="preserve"><value>この端末では編集できない動作です ({0})。削除のみできます</value></data>
+  <data name="nset_actions" xml:space="preserve"><value>動作</value></data>
+  <data name="nset_all" xml:space="preserve"><value>すべて</value></data>
+  <data name="nset_all_households" xml:space="preserve"><value>すべての通知先</value></data>
+  <data name="nset_audio_tts" xml:space="preserve"><value>音声合成で読み上げ</value></data>
+  <data name="nset_camera_add" xml:space="preserve"><value>外部カメラを追加</value></data>
+  <data name="nset_camera_clear_credentials" xml:space="preserve"><value>保存済みの認証情報を削除</value></data>
+  <data name="nset_camera_credentials" xml:space="preserve"><value>認証 (この端末の安全な保管領域に保存)</value></data>
+  <data name="nset_camera_id" xml:space="preserve"><value>識別名 (英小文字・数字・_)</value></data>
+  <data name="nset_camera_invalid" xml:space="preserve"><value>URL を確認してください (認証情報入りの URL は使えません)</value></data>
+  <data name="nset_camera_mjpeg" xml:space="preserve"><value>MJPEG の URL (http/https)</value></data>
+  <data name="nset_camera_note" xml:space="preserve"><value>URL に認証情報を含めないでください。ユーザー名とパスワードは別欄に入力します</value></data>
+  <data name="nset_camera_rtsp" xml:space="preserve"><value>H.264 の URL (rtsp)</value></data>
+  <data name="nset_camera_snapshot" xml:space="preserve"><value>静止画の URL (http/https)</value></data>
+  <data name="nset_camera_transport" xml:space="preserve"><value>RTSP の転送方式</value></data>
+  <data name="nset_days" xml:space="preserve"><value>曜日</value></data>
+  <data name="nset_default_sound" xml:space="preserve"><value>既定の音</value></data>
+  <data name="nset_door_delete" xml:space="preserve"><value>この門口を削除</value></data>
+  <data name="nset_door_delete_in_use" xml:space="preserve"><value>{0} 台の門口機がこの門口に割り当てられています。削除しますか？</value></data>
+  <data name="nset_doors_count" xml:space="preserve"><value>門口 {0} か所</value></data>
+  <data name="nset_dtmf_action" xml:space="preserve"><value>動作</value></data>
+  <data name="nset_dtmf_add" xml:space="preserve"><value>DTMF の動作を追加</value></data>
+  <data name="nset_dtmf_code" xml:space="preserve"><value>キー (0-9 * # A-D、最大 8 文字)</value></data>
+  <data name="nset_dtmf_code_invalid" xml:space="preserve"><value>キーは 0-9 * # A-D で 1～8 文字にしてください</value></data>
+  <data name="nset_dtmf_decline" xml:space="preserve"><value>応答しない</value></data>
+  <data name="nset_dtmf_ha" xml:space="preserve"><value>HA コマンド {0} ({1})</value></data>
+  <data name="nset_dtmf_ha_type" xml:space="preserve"><value>Home Assistant のコマンド</value></data>
+  <data name="nset_dtmf_hangup" xml:space="preserve"><value>通話を切る</value></data>
+  <data name="nset_dtmf_none" xml:space="preserve"><value>DTMF の動作はありません</value></data>
+  <data name="nset_dtmf_note" xml:space="preserve"><value>通話中に電話機のキーで実行する動作です</value></data>
+  <data name="nset_dtmf_reply" xml:space="preserve"><value>返答: {0}</value></data>
+  <data name="nset_dtmf_reply_type" xml:space="preserve"><value>クイック返答</value></data>
+  <data name="nset_dtmf_self" xml:space="preserve"><value>通話中の門口</value></data>
+  <data name="nset_dtmf_voice_menu" xml:space="preserve"><value>音声メニューの割り当てを追加</value></data>
+  <data name="nset_dtmf_voice_menu_note" xml:space="preserve"><value>#21〜#29 をクイック返答 (表示順)、#90 を応答しないに割り当てます</value></data>
+  <data name="nset_dtmf_voice_menu_present" xml:space="preserve"><value>音声メニューの割り当てはすでにあります</value></data>
+  <data name="nset_export_done" xml:space="preserve"><value>書き出しました</value></data>
+  <data name="nset_export_note" xml:space="preserve"><value>パスワードや音声・画像は含まれません</value></data>
+  <data name="nset_ha_allow_note" xml:space="preserve"><value>ブローカーの認証だけが確認されます</value></data>
+  <data name="nset_ha_allow_notice" xml:space="preserve"><value>HA からのお知らせ操作を許可</value></data>
+  <data name="nset_ha_allow_sos" xml:space="preserve"><value>HA からの SOS 操作を許可</value></data>
+  <data name="nset_ha_event_note" xml:space="preserve"><value>Home Assistant にはすべてのイベントが送られるため、設定項目はありません</value></data>
+  <data name="nset_ha_language" xml:space="preserve"><value>Home Assistant のエンティティ名の言語</value></data>
+  <data name="nset_household_summary" xml:space="preserve"><value>Telegram {0} 件 · 内線 {1}</value></data>
+  <data name="nset_image_choose" xml:space="preserve"><value>画像を選ぶ…</value></data>
+  <data name="nset_image_remove" xml:space="preserve"><value>背景画像を外す</value></data>
+  <data name="nset_import_note" xml:space="preserve"><value>読み込む前に変更点を確認できます</value></data>
+  <data name="nset_import_summary" xml:space="preserve"><value>変更 {0} 件 · 未登録の秘密情報 {1} 件 · 未取得の資産 {2} 件 · 問題 {3} 件</value></data>
+  <data name="nset_move_down" xml:space="preserve"><value>下へ移動</value></data>
+  <data name="nset_move_up" xml:space="preserve"><value>上へ移動</value></data>
+  <data name="nset_mqtt" xml:space="preserve"><value>MQTT と Home Assistant</value></data>
+  <data name="nset_mqtt_base_topic" xml:space="preserve"><value>基本トピック</value></data>
+  <data name="nset_mqtt_discovery" xml:space="preserve"><value>Discovery の接頭辞</value></data>
+  <data name="nset_mqtt_fingerprint" xml:space="preserve"><value>ブローカー証明書の SHA-256</value></data>
+  <data name="nset_mqtt_host_note" xml:space="preserve"><value>空欄にすると MQTT 連携を止めます</value></data>
+  <data name="nset_mqtt_status" xml:space="preserve"><value>現在の状態: {0}</value></data>
+  <data name="nset_mqtt_tls" xml:space="preserve"><value>TLS で接続</value></data>
+  <data name="nset_mqtt_tls_note" xml:space="preserve"><value>TLS には下の証明書フィンガープリントが必要です</value></data>
+  <data name="nset_needs_session" xml:space="preserve"><value>管理セッションを開けませんでした。設定を開き直してください</value></data>
+  <data name="nset_never_suppress" xml:space="preserve"><value>静音時間でも止めない</value></data>
+  <data name="nset_no_picker" xml:space="preserve"><value>ファイルを選べるアプリがありません</value></data>
+  <data name="nset_no_replies" xml:space="preserve"><value>クイック返答がありません</value></data>
+  <data name="nset_none" xml:space="preserve"><value>なし</value></data>
+  <data name="nset_panel_note" xml:space="preserve"><value>資格情報はこの端末に保存されます。パネルはこの端末の HTTPS アドレスで開いてください</value></data>
+  <data name="nset_panel_rotate" xml:space="preserve"><value>資格情報を再発行</value></data>
+  <data name="nset_password" xml:space="preserve"><value>パスワード</value></data>
+  <data name="nset_purpose_hide" xml:space="preserve"><value>来訪者に表示しない</value></data>
+  <data name="nset_purpose_show" xml:space="preserve"><value>来訪者に表示する</value></data>
+  <data name="nset_quiet_legacy" xml:space="preserve"><value>古い静音時間の設定を削除</value></data>
+  <data name="nset_quiet_legacy_note" xml:space="preserve"><value>以前のアプリが書いた使われていない値です</value></data>
+  <data name="nset_quiet_none" xml:space="preserve"><value>静音時間は設定されていません</value></data>
+  <data name="nset_quiet_suppress" xml:space="preserve"><value>静音時間に止める動作</value></data>
+  <data name="nset_record_again" xml:space="preserve"><value>録り直す</value></data>
+  <data name="nset_record_default_name" xml:space="preserve"><value>録音</value></data>
+  <data name="nset_record_done" xml:space="preserve"><value>{0} 秒録音しました</value></data>
+  <data name="nset_record_empty" xml:space="preserve"><value>録音がありません</value></data>
+  <data name="nset_record_failed" xml:space="preserve"><value>マイクを使えませんでした</value></data>
+  <data name="nset_record_note" xml:space="preserve"><value>最長 {0} 秒の WAV として保存します</value></data>
+  <data name="nset_record_permission" xml:space="preserve"><value>マイクの使用を許可してから、もう一度お試しください</value></data>
+  <data name="nset_record_ready" xml:space="preserve"><value>「録音開始」を押して話してください</value></data>
+  <data name="nset_record_running" xml:space="preserve"><value>録音中… {0} 秒</value></data>
+  <data name="nset_record_start" xml:space="preserve"><value>録音開始</value></data>
+  <data name="nset_record_stop" xml:space="preserve"><value>録音停止</value></data>
+  <data name="nset_record_title" xml:space="preserve"><value>録音</value></data>
+  <data name="nset_rename" xml:space="preserve"><value>名前を変更</value></data>
+  <data name="nset_rule_disabled" xml:space="preserve"><value>無効</value></data>
+  <data name="nset_rule_problem_actions_required" xml:space="preserve"><value>動作を 1 つ以上追加してください</value></data>
+  <data name="nset_rule_problem_reply_id" xml:space="preserve"><value>自動返答のクイック返答を選んでください</value></data>
+  <data name="nset_rule_problem_sip_target" xml:space="preserve"><value>発呼先の内線番号を入力してください</value></data>
+  <data name="nset_rule_problem_window_time" xml:space="preserve"><value>時間帯の時刻を確認してください</value></data>
+  <data name="nset_rule_problem_windows_required" xml:space="preserve"><value>時間帯を 1 つ以上追加するか「常に」を選んでください</value></data>
+  <data name="nset_secret_hint" xml:space="preserve"><value>入力した値は表示されません。空のまま保存はできません</value></data>
+  <data name="nset_secret_leader_note" xml:space="preserve"><value>この端末にだけ保存されます。担当になり得る端末それぞれで入力してください</value></data>
+  <data name="nset_secret_local_note" xml:space="preserve"><value>この端末の安全な保管領域にだけ保存されます。ほかの端末には複製されません</value></data>
+  <data name="nset_secret_missing_here" xml:space="preserve"><value>設定済み (この端末には未保存)</value></data>
+  <data name="nset_secret_store_failed" xml:space="preserve"><value>安全な保管領域に保存できませんでした</value></data>
+  <data name="nset_sip_extensions" xml:space="preserve"><value>内線番号 (1 行に 1 つ)</value></data>
+  <data name="nset_sos_alarm_sound" xml:space="preserve"><value>SOS の警報音</value></data>
+  <data name="nset_sound_add_file" xml:space="preserve"><value>音声ファイルを追加…</value></data>
+  <data name="nset_sound_formats" xml:space="preserve"><value>MP3 または WAV、3 MB まで</value></data>
+  <data name="nset_sound_record" xml:space="preserve"><value>マイクで録音…</value></data>
+  <data name="nset_telegram_poll" xml:space="preserve"><value>Telegram のボタン返信を受け付ける</value></data>
+  <data name="nset_telegram_poll_note" xml:space="preserve"><value>担当の端末が Telegram に問い合わせ続けます</value></data>
+  <data name="nset_telegram_template" xml:space="preserve"><value>通知の文面</value></data>
+  <data name="nset_telegram_template_note" xml:space="preserve"><value>{0} と {1} が差し込まれます</value></data>
+  <data name="nset_test_failed" xml:space="preserve"><value>送信できませんでした ({0})</value></data>
+  <data name="nset_this_device" xml:space="preserve"><value>この端末</value></data>
+  <data name="nset_use_as_ringtone" xml:space="preserve"><value>室内機の呼出音にする</value></data>
+  <data name="nset_use_as_sos_alarm" xml:space="preserve"><value>SOS の警報音にする</value></data>
+  <data name="nset_webrtc" xml:space="preserve"><value>Web からの通話 (WebRTC)</value></data>
+  <data name="nset_webrtc_note" xml:space="preserve"><value>空欄にすると Web パネルの通話ボタンを無効にします</value></data>
+  <data name="nset_webrtc_password" xml:space="preserve"><value>ブラウザ用内線のパスワード</value></data>
+  <data name="nset_webrtc_user" xml:space="preserve"><value>ブラウザ用の内線番号</value></data>
+  <data name="nset_webrtc_ws_url" xml:space="preserve"><value>Asterisk の WebSocket URL</value></data>
+  <data name="nset_when_call_missed" xml:space="preserve"><value>不在着信</value></data>
+  <data name="nset_wording" xml:space="preserve"><value>表示文言の変更</value></data>
+  <data name="nset_wording_add" xml:space="preserve"><value>文言を探して変更…</value></data>
+  <data name="nset_wording_blank_resets" xml:space="preserve"><value>空欄にすると標準の文言に戻ります</value></data>
+  <data name="nset_wording_builtin" xml:space="preserve"><value>標準</value></data>
+  <data name="nset_wording_none" xml:space="preserve"><value>変更した文言はありません</value></data>
+  <data name="nset_wording_note" xml:space="preserve"><value>全端末に反映されます。2 文字以上で検索します</value></data>
+  <data name="nset_wording_placeholders" xml:space="preserve"><value>{…} の差し込み項目は標準の文言と同じ数にしてください</value></data>
   <data name="offline_body" xml:space="preserve"><value>呼び出しできません。直接ノックしてください。</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>再接続まで {0} 秒</value></data>
   <data name="offline_title" xml:space="preserve"><value>システムオフライン</value></data>
