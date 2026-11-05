@@ -10,7 +10,7 @@ using DoorbellApp.Util;
 
 namespace DoorbellApp.Settings
 {
-    // Read-only values, commands, "Open in Admin" rows, and the writes that are not plain Core
+    // Read-only values, commands, and the writes that are not plain Core
     // configuration: boot.json fields, the device identity, the shell language, local flags.
     internal sealed partial class SettingsWindow
     {
@@ -92,6 +92,13 @@ namespace DoorbellApp.Settings
                 case "core_version": return App.Core == null ? "" : App.Core.CoreVersion;
                 case "sip_backend": return App.Core == null ? "" : App.Core.SipBackend;
                 case "addresses": return string.Join("\n", AdminLink.Hosts());
+                case "admin_urls":
+                {
+                    var urls = new List<string>();
+                    foreach (string host in AdminLink.Hosts())
+                        urls.Add(AdminLink.Url(host, AdminLink.HttpsPort));
+                    return urls.Count == 0 ? Texts.T("web_admin.none") : string.Join("\n", urls);
+                }
                 case "tls_fingerprint":
                 {
                     object fingerprint = _store.Get("devices.{self}.tls_sha256");
@@ -111,20 +118,6 @@ namespace DoorbellApp.Settings
             }
             button.Click += (s, e) => RunAction(item, parts);
             return button;
-        }
-
-        private FrameworkElement BuildWebOnly(SettingItem item)
-        {
-            var button = CommandButton(Texts.T("settings.open_in_admin"));
-            button.Click += (s, e) => OpenWebAdmin();
-            return button;
-        }
-
-        private void OpenWebAdmin()
-        {
-            if (App.Boot == null) return;
-            var window = new WebAdminWindow(App.Boot.HttpPort) { Owner = this, Topmost = Topmost };
-            window.ShowDialog();
         }
 
         private void RunAction(SettingItem item, RowParts parts)
@@ -178,8 +171,21 @@ namespace DoorbellApp.Settings
                     }
                     catch (Exception ex) { ShowStatus(ex.Message, true); }
                     break;
-                case "web_admin":
-                    OpenWebAdmin();
+                case "rebuild_cluster":
+                    RebuildCluster();
+                    break;
+                case "telegram_test":
+                    TelegramTest();
+                    break;
+                case "change_password":
+                    ChangeAdminPassword();
+                    break;
+                case "goto_rules":
+                    if (_query.Length > 0) _search.Text = "";
+                    _categoryId = "rules";
+                    _showingCategory = true;
+                    if (_wide == true) { RenderNav(); RenderContent(); }
+                    else RenderNarrowBody();
                     break;
             }
         }

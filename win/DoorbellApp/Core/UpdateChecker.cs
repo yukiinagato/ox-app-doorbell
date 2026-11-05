@@ -81,6 +81,33 @@ namespace DoorbellApp.Core
             return installed;
         }
 
+        private const string ChannelKey = @"Software\Doorbell";
+        private const string PrereleaseFeed =
+            "https://api.github.com/repos/yukiinagato/ox-app-doorbell/releases?per_page=10";
+
+        /// <summary>
+        /// The operator's update channel, "stable" (the latest release) or "prerelease" (the
+        /// newest published release including pre-releases). Kept per Windows user so the kiosk
+        /// account can change it without elevation; an administrator's HKLM UpdateFeed still wins.
+        /// </summary>
+        public static string Channel
+        {
+            get
+            {
+                try
+                {
+                    using (var key = Registry.CurrentUser.OpenSubKey(ChannelKey))
+                        return (key?.GetValue("UpdateChannel") as string) == "prerelease" ? "prerelease" : "stable";
+                }
+                catch { return "stable"; }
+            }
+            set
+            {
+                using (var key = Registry.CurrentUser.CreateSubKey(ChannelKey))
+                    key?.SetValue("UpdateChannel", value == "prerelease" ? "prerelease" : "stable");
+            }
+        }
+
         public static string FeedUrl()
         {
             try
@@ -94,14 +121,27 @@ namespace DoorbellApp.Core
                 }
             }
             catch { }
-            return DefaultFeed;
+            return Channel == "prerelease" ? PrereleaseFeed : DefaultFeed;
         }
 
         /// <summary>Blocking; call from a worker thread. Throws on network or feed errors.</summary>
         public static Release Check(Installed installed)
         {
             string json = DownloadString(FeedUrl());
-            var doc = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
+            var parsed = new JavaScriptSerializer().DeserializeObject(json);
+            var doc = parsed as Dictionary<string, object>;
+            // The pre-release feed is a list, newest first: take the first published entry.
+            if (doc == null && parsed is object[])
+                foreach (object entry in (object[])parsed)
+                {
+                    var candidate = entry as Dictionary<string, object>;
+                    if (candidate == null) continue;
+                    object draft;
+                    if (candidate.TryGetValue("draft", out draft) && draft is bool && (bool)draft) continue;
+                    doc = candidate;
+                    break;
+                }
+            if (doc == null) throw new InvalidOperationException("the release feed is unreadable");
             var release = new Release
             {
                 Tag = Convert.ToString(doc.ContainsKey("tag_name") ? doc["tag_name"] : "") ?? "",

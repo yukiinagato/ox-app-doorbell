@@ -3,9 +3,10 @@ using System.Collections.Generic;
 namespace DoorbellApp.Settings
 {
     /// <summary>
-    /// The Windows settings inventory. Everything a device-side administrator can reasonably
-    /// edit is a native row; what genuinely needs the web admin (file uploads, secrets, rule
-    /// graphs, other devices, integrations) is a WebOnly row that opens it.
+    /// The Windows settings inventory. Every setting an administrator can change is a native
+    /// control here (docs: native-settings spec, zero web-only rows): file uploads use the
+    /// Windows file dialog and the Core asset ledger, secrets go to DPAPI with "secret:" config
+    /// references, and rules, devices, doors, panels and imports have structured editors.
     /// </summary>
     internal static class SettingsCatalog
     {
@@ -17,7 +18,8 @@ namespace DoorbellApp.Settings
             var all = new List<SettingCategory>
             {
                 Device(), Sound(), Display(), Calls(), Replies(), Purposes(), Notices(),
-                Emergency(), Camera(), Sip(), Time(), Pairing(), Kiosk(), About(), MoreInAdmin(),
+                Emergency(), Rules(), Camera(), Sip(), Integrations(), Time(), Pairing(),
+                Places(), Wording(), Backup(), Kiosk(), About(),
             };
             return all;
         }
@@ -132,11 +134,26 @@ namespace DoorbellApp.Settings
             return item;
         }
 
-        private static SettingItem Web(string id)
+        /// <summary>A full-width native editor; its description is settings.&lt;id&gt;_native.</summary>
+        private static SettingItem Editor(string id, string handler, string key = null)
         {
-            var item = SettingItem.Make(id, SettingKind.WebOnly, null);
-            item.Handler = "web_admin";
-            item.DescriptionKey = "settings." + id + "_desc";
+            var item = SettingItem.Make(id, SettingKind.Editor, key);
+            item.Handler = handler;
+            item.DescriptionKey = "settings." + id + "_native";
+            return item;
+        }
+
+        private static SettingItem Secret(string id, string key, string secretName, SettingScope scope)
+        {
+            var item = Editor(id, "secret", key);
+            item.Secret = secretName;
+            item.Scope = scope;
+            return item;
+        }
+
+        private static SettingItem SoundChoice(SettingItem item)
+        {
+            item.Handler = "sound";
             return item;
         }
 
@@ -211,20 +228,20 @@ namespace DoorbellApp.Settings
             Add(fleet, Slider("volume_idle_default", "audio.volume.idle", 0, 100, 1, 60,
                 SettingScope.AllDevices, "settings.unit_percent"));
             var sounds = Group(c, "settings.grp_sounds");
-            Add(sounds, Choice("ringtone", "ui.ringtone", "school_chime", SettingScope.AllDevices,
+            Add(sounds, SoundChoice(Choice("ringtone", "ui.ringtone", "school_chime", SettingScope.AllDevices,
                 O("school_chime", "sound.school_chime"), O("ding1", "settings.sound_ding1"),
-                O("ding2", "settings.sound_ding2"), O("classic", "settings.sound_classic")));
-            Add(sounds, Choice("call_sound", "ui.call_sound", "outdoor_call_alert",
-                SettingScope.AllDevices, Sounds("outdoor_call_alert")));
+                O("ding2", "settings.sound_ding2"), O("classic", "settings.sound_classic"))));
+            Add(sounds, SoundChoice(Choice("call_sound", "ui.call_sound", "outdoor_call_alert",
+                SettingScope.AllDevices, Sounds("outdoor_call_alert"))));
             Add(sounds, Describe(Toggle("call_sound_loop", "ui.call_sound_loop", false,
                 SettingScope.AllDevices)));
-            Add(sounds, Choice("button_sound", "ui.button_sound", "button_click",
-                SettingScope.AllDevices, Sounds("button_click")));
-            Add(sounds, Choice("update_sound", "ui.update_sound", "indoor_update",
-                SettingScope.AllDevices, Sounds("indoor_update")));
-            Add(sounds, Choice("launch_sound", "ui.launch_sound", "title_display",
-                SettingScope.AllDevices, Sounds("title_display")));
-            Add(sounds, Web("custom_sounds"));
+            Add(sounds, SoundChoice(Choice("button_sound", "ui.button_sound", "button_click",
+                SettingScope.AllDevices, Sounds("button_click"))));
+            Add(sounds, SoundChoice(Choice("update_sound", "ui.update_sound", "indoor_update",
+                SettingScope.AllDevices, Sounds("indoor_update"))));
+            Add(sounds, SoundChoice(Choice("launch_sound", "ui.launch_sound", "title_display",
+                SettingScope.AllDevices, Sounds("title_display"))));
+            Add(sounds, Editor("custom_sounds", "assets_audio")).Scope = SettingScope.AllDevices;
             return c;
         }
 
@@ -262,15 +279,16 @@ namespace DoorbellApp.Settings
                 SettingScope.AllDevices, "settings.unit_percent"));
             Add(night, Toggle("night_red_tint", "display.night.red_tint", true, SettingScope.AllDevices));
             var theme = Group(c, "settings.grp_theme");
-            Add(theme, Describe(Text("bg_color", "display.theme.bg_color", "#101418",
-                SettingScope.AllDevices)));
+            var color = Add(theme, Editor("bg_color", "color", "display.theme.bg_color"));
+            color.Default = "#101418";
+            color.Scope = SettingScope.AllDevices;
             Add(theme, Toggle("backdrop", "display.theme.backdrop.enabled", true,
                 SettingScope.AllDevices));
             Add(theme, Slider("backdrop_opacity", "display.theme.backdrop.opacity", 0, 100, 1, 62,
                 SettingScope.AllDevices, "settings.unit_percent"));
             Add(theme, Slider("glass_blur", "display.theme.glass.blur_radius", 0, 40, 1, 32,
                 SettingScope.AllDevices));
-            Add(theme, Web("bg_image"));
+            Add(theme, Editor("bg_image", "bg_image", "display.theme.bg_image")).Scope = SettingScope.AllDevices;
             return c;
         }
 
@@ -332,6 +350,8 @@ namespace DoorbellApp.Settings
             Add(g, Describe(Toggle("sos_cancel_pin", "emergency.cancel_requires_pin", true,
                 SettingScope.AllDevices)));
             var alarm = Group(c, "settings.grp_sos_alarm");
+            Add(alarm, SoundChoice(Choice("sos_sound", "emergency.alarm_sound", "siren1",
+                SettingScope.AllDevices, O("siren1", "prefs.sound_siren1"))));
             Add(alarm, Slider("sos_volume", "emergency.alarm_volume", 0, 100, 1, 100,
                 SettingScope.AllDevices, "settings.unit_percent"));
             Add(alarm, Describe(Toggle("sos_web", "emergency.web_active_page_alerts", true,
@@ -339,7 +359,8 @@ namespace DoorbellApp.Settings
             Add(alarm, Toggle("sos_sip", "emergency.sip_call.enabled", false, SettingScope.AllDevices));
             Add(alarm, Text("sos_sip_target", "emergency.sip_call.target_extension", "",
                 SettingScope.AllDevices));
-            Add(alarm, Web("sos_rules"));
+            var rules = Add(alarm, Action("sos_rules", "goto_rules"));
+            rules.DescriptionKey = "settings.sos_rules_native";
             return c;
         }
 
@@ -369,6 +390,10 @@ namespace DoorbellApp.Settings
                 700, SettingScope.ThisDevice, "settings.unit_kbps")).Visible = door;
             Add(cam, Text("cam_hint", Local + ".camera.device_hint", "", SettingScope.ThisDevice))
                 .Visible = door;
+            var source = Add(cam, Describe(Choice("cam_source", Local + ".camera.source_ref", "",
+                SettingScope.ThisDevice, O("", "settings.cam_source_builtin"))));
+            source.Handler = "media_source";
+            source.Visible = door;
             var video = Group(c, "settings.grp_video");
             Add(video, Choice("video_rotation", Local + ".video.rotation", "auto",
                 SettingScope.ThisDevice, O("auto", "admin.rotation_auto"), O("0", "settings.deg_0"),
@@ -377,7 +402,7 @@ namespace DoorbellApp.Settings
             Add(video, Choice("video_playback", Local + ".video.playback", "low_latency",
                 SettingScope.ThisDevice, O("low_latency", "admin.video_low_latency"),
                 O("hls", "admin.video_hls"), O("mjpeg", "settings.codec_mjpeg")));
-            Add(video, Web("video_policy"));
+            Add(video, Editor("video_policy", "video_policy")).Scope = SettingScope.AllDevices;
             var motion = Group(c, "admin.motion");
             Add(motion, Toggle("motion_enabled", Local + ".motion.enabled", true,
                 SettingScope.ThisDevice)).Visible = door;
@@ -399,13 +424,16 @@ namespace DoorbellApp.Settings
                 O("tls", "settings.transport_tls")));
             Add(server, Describe(Stepper("sip_direct_port", "sip.direct_port", 1024, 65535, 1, 47190,
                 SettingScope.AllDevices)));
+            Add(server, Describe(Choice("sip_srtp", "sip.srtp", "optional", SettingScope.AllDevices,
+                O("optional", "settings.srtp_optional"), O("mandatory", "settings.srtp_mandatory"))));
             var account = Group(c, "settings.grp_sip_account");
             Add(account, Text("sip_user", "sip.accounts.{self}.user", "", SettingScope.ThisDevice));
             Add(account, Choice("sip_answer_mode", "sip.accounts.{self}.answer_mode", "auto",
                 SettingScope.ThisDevice, O("auto", "settings.answer_auto"),
                 O("manual", "settings.answer_manual")));
-            Add(account, Web("sip_password"));
-            Add(account, Web("sip_dtmf"));
+            Add(account, Secret("sip_password", "sip.accounts.{self}.pass_ref", "sip.{self}",
+                SettingScope.ThisDevice));
+            Add(Group(c, "settings.sip_dtmf"), Editor("sip_dtmf", "dtmf")).Scope = SettingScope.AllDevices;
             return c;
         }
 
@@ -431,17 +459,18 @@ namespace DoorbellApp.Settings
 
         private static SettingCategory Pairing()
         {
-            var c = Category("pairing", "IconTopologyStar");
+            var c = Category("pairing", "IconTopologyStar3");
             var g = Group(c, "settings.grp_cluster");
             Add(g, Info("pairing_state_cluster", "pairing_state"));
             Add(g, Describe(Action("add_device", "add_device")));
             var security = Group(c, "settings.grp_security");
             Add(security, Info("cluster_key", "cluster_key"));
             Add(security, Describe(Info("peer_alerts", "peer_alerts")));
+            Add(security, Describe(Action("change_password", "change_password")));
             Add(security, Destructive(Describe(Action("rotate_cluster_key", "rotate_cluster_key"))));
-            Add(g, Web("devices_manage"));
-            Add(g, Web("doors_manage"));
-            Add(g, Web("panels_manage"));
+            Add(security, Destructive(Describe(Action("rebuild_cluster", "rebuild_cluster"))));
+            Add(Group(c, "admin.devices"), Editor("devices_manage", "devices"));
+            Add(Group(c, "panels.title"), Editor("panels_manage", "panels"));
             return c;
         }
 
@@ -470,19 +499,74 @@ namespace DoorbellApp.Settings
             Add(g, Info("addresses", "addresses"));
             Add(g, Info("tls_fingerprint", "tls_fingerprint"));
             var tools = Group(c, "settings.grp_maintenance");
-            Add(tools, Describe(Action("software_update", "web_admin")));
+            Add(g, Describe(Info("web_admin_link", "admin_urls")));
+            Add(tools, Editor("software_update", "software_update"));
             Add(tools, Action("open_logs", "open_logs"));
-            Add(tools, Describe(Action("web_admin_link", "web_admin")));
             return c;
         }
 
-        private static SettingCategory MoreInAdmin()
+        private static SettingCategory Rules()
         {
-            var c = Category("more", "IconWorld");
-            var g = Group(c, "settings.grp_web_only");
-            foreach (string id in new[] { "rules", "integrations", "households", "assets",
-                                          "texts", "media_sources", "import_export", "secrets" })
-                Add(g, Web(id));
+            var c = Category("rules", "IconBell");
+            Add(Group(c, "admin.rules"), Editor("rules", "rules"));
+            Add(Group(c, "admin.quiet_hours"), Editor("quiet_hours", "quiet_hours"));
+            Add(Group(c, "admin.households"), Editor("households", "households"));
+            return c;
+        }
+
+        private static SettingCategory Integrations()
+        {
+            var c = Category("integrations", "IconLink");
+            var mqtt = Group(c, "settings.grp_mqtt");
+            Add(mqtt, Describe(Text("mqtt_host", "integrations.mqtt.host", "", SettingScope.AllDevices)));
+            Add(mqtt, Stepper("mqtt_port", "integrations.mqtt.port", 1, 65535, 1, 1883, SettingScope.AllDevices));
+            Add(mqtt, Text("mqtt_user", "integrations.mqtt.user", "", SettingScope.AllDevices));
+            Add(mqtt, Secret("mqtt_password", "integrations.mqtt.pass_ref", "mqtt", SettingScope.AllDevices));
+            Add(mqtt, Text("mqtt_base_topic", "integrations.mqtt.base_topic", "doorbell", SettingScope.AllDevices));
+            Add(mqtt, Text("mqtt_discovery", "integrations.mqtt.discovery_prefix", "homeassistant",
+                SettingScope.AllDevices));
+            Add(mqtt, Describe(Toggle("mqtt_tls", "integrations.mqtt.tls", false, SettingScope.AllDevices)));
+            Add(mqtt, Describe(Text("mqtt_tls_sha256", "integrations.mqtt.tls_sha256", "", SettingScope.AllDevices)));
+            var ha = Group(c, "settings.grp_ha");
+            Add(ha, Choice("ha_language", "integrations.ha.language", "ja", SettingScope.AllDevices,
+                O("ja", "language.name_ja"), O("en", "language.name_en"), O("zh", "language.name_zh")));
+            Add(ha, Describe(Toggle("ha_allow_sos", "integrations.ha.allow_sos_control", false,
+                SettingScope.AllDevices)));
+            Add(ha, Describe(Toggle("ha_allow_notice", "integrations.ha.allow_notice_control", false,
+                SettingScope.AllDevices)));
+            var tg = Group(c, "settings.grp_telegram");
+            Add(tg, Secret("telegram_token", "integrations.telegram.bot_token_ref", "tg_bot",
+                SettingScope.AllDevices));
+            Add(tg, Describe(Toggle("telegram_poll", "integrations.telegram.poll_updates", true,
+                SettingScope.AllDevices)));
+            Add(tg, Describe(Text("telegram_template", "integrations.telegram.text_template.ja", "",
+                SettingScope.AllDevices)));
+            Add(tg, Describe(Action("telegram_test", "telegram_test")));
+            return c;
+        }
+
+        private static SettingCategory Places()
+        {
+            var c = Category("places", "IconBuildingCommunity");
+            Add(Group(c, "admin.door_list"), Editor("doors_manage", "doors"));
+            Add(Group(c, "admin.buildings"), Editor("buildings_manage", "buildings"));
+            Add(Group(c, "settings.media_sources"), Editor("media_sources", "media_sources"));
+            return c;
+        }
+
+        private static SettingCategory Wording()
+        {
+            var c = Category("wording", "IconWorld");
+            Add(Group(c, "admin.texts"), Editor("texts", "texts"));
+            Add(Group(c, "admin.assets"), Editor("assets", "assets_all"));
+            return c;
+        }
+
+        private static SettingCategory Backup()
+        {
+            var c = Category("backup", "IconDownload");
+            Add(Group(c, "settings.import_export"), Editor("import_export", "backup"));
+            Add(Group(c, "settings.secrets"), Editor("secrets", "secrets"));
             return c;
         }
     }

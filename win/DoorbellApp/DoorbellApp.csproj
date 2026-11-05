@@ -27,6 +27,9 @@
     <Reference Include="System.Speech" />
     <!-- WMI provides remote brightness through WmiMonitorBrightnessMethods. -->
     <Reference Include="System.Management" />
+    <!-- The native colour dialog for theme colours (Win7 SP1 compatible). -->
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Security" />
     <Reference Include="System.Drawing" />
