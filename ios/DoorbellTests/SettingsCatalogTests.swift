@@ -160,9 +160,19 @@ final class SettingsCatalogTests: XCTestCase {
         }
     }
 
-    func testWebOnlyRowsAreLabelled() {
-        guard case .web? = item(catalog(), ["cluster"], "panels")?.control else {
-            return XCTFail("panel identities stay in the web admin")
+    func testFormerlyWebOnlyItemsAreNative() {
+        guard case .shell("panels")? = item(catalog(), ["cluster"], "panels")?.control else {
+            return XCTFail("panel identities open the native panel editor")
+        }
+        guard case .list? = item(catalog(), ["notifications"], "rule_edit")?.control else {
+            return XCTFail("rules are edited natively")
+        }
+        guard case .secret? = item(catalog(), ["sip"], "sip_password")?.control else {
+            return XCTFail("the SIP password is a native secret field")
+        }
+        guard case .local(let action)? = item(catalog(), ["sip"], "sip_password")?.commit?(.string("pw")),
+              action.hasPrefix("secret|") else {
+            return XCTFail("a typed secret goes to the Keychain, never into configuration")
         }
     }
 }

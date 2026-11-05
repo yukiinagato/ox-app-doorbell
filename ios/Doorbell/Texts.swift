@@ -51,6 +51,22 @@ final class Texts {
         return out
     }
 
+    private static var builtinCache: [String: [String: String]] = [:]
+
+    /// The shipped wording for one language, key to text, as the wording editor lists it.
+    /// Placeholders appear in their platform form (`%@`).
+    static func builtinStrings(_ lang: String) -> [String: String] {
+        if let cached = builtinCache[lang] { return cached }
+        var result: [String: String] = [:]
+        if let path = Bundle.main.path(forResource: "Localizable", ofType: "strings",
+                                       inDirectory: nil, forLocalization: lang),
+           let table = NSDictionary(contentsOfFile: path) as? [String: String] {
+            result = table
+        }
+        builtinCache[lang] = result
+        return result
+    }
+
     static func langDisplayName(_ lang: String) -> String {
         switch lang {
         case "ja": return "日本語"

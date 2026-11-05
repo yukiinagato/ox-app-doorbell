@@ -213,3 +213,96 @@ enum AdminReauthentication {
         for callback in callbacks { callback(unlocked) }
     }
 }
+
+/// An administrator HTTP session on this device's own Core, over loopback only. Core's panel
+/// identity and configuration import entry points, and the Telegram test, need an administrator
+/// session and its CSRF value; ordinary native writes do not. The password is used once to log in
+/// and never kept, and the cookie never enters the shared cookie store.
+final class LoopbackAdminSession {
+    let session: String
+    let csrf: String
+    private let port: Int
+
+    private init(session: String, csrf: String, port: Int) {
+        self.session = session
+        self.csrf = csrf
+        self.port = port
+    }
+
+    private static func request(port: Int, method: String, path: String,
+                                body: [String: Any]?) -> URLRequest? {
+        guard let url = URL(string: "http://127.0.0.1:\(port)\(path)") else { return nil }
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData,
+                                 timeoutInterval: 12)
+        request.httpMethod = method
+        request.httpShouldHandleCookies = false
+        request.setValue("http://127.0.0.1:\(port)", forHTTPHeaderField: "Origin")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let body = body, JSONSerialization.isValidJSONObject(body) {
+            request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        return request
+    }
+
+    private static func decode(_ data: Data?) -> [String: Any] {
+        guard let data = data,
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        else { return [:] }
+        return object
+    }
+
+    /// `completion` runs on the main queue with a session, or nil and "password" / "unreachable".
+    static func open(password: String, port: Int,
+                     completion: @escaping (LoopbackAdminSession?, String) -> Void) {
+        guard let request = request(port: port, method: "POST", path: "/api/login",
+                                    body: ["password": password]) else {
+            completion(nil, "unreachable")
+            return
+        }
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            let http = response as? HTTPURLResponse
+            let status = http?.statusCode ?? 0
+            var result: LoopbackAdminSession?
+            var error = ""
+            if status == 401 || status == 403 {
+                error = "password"
+            } else if !(200...299).contains(status) {
+                error = "unreachable"
+            } else {
+                let cookie = (http?.allHeaderFields["Set-Cookie"] as? String) ?? ""
+                var token = ""
+                for part in cookie.components(separatedBy: ";") {
+                    let trimmed = part.trimmingCharacters(in: .whitespaces)
+                    if let range = trimmed.range(of: "dbsess=") {
+                        token = String(trimmed[range.upperBound...])
+                        break
+                    }
+                }
+                let csrf = ConfigUtil.str(decode(data), "csrf_token") ?? ""
+                if !token.isEmpty && !csrf.isEmpty {
+                    result = LoopbackAdminSession(session: token, csrf: csrf, port: port)
+                } else {
+                    error = "unreachable"
+                }
+            }
+            DispatchQueue.main.async { completion(result, error) }
+        }.resume()
+    }
+
+    func request(_ method: String, _ path: String, body: [String: Any]?,
+                 completion: @escaping (Int, [String: Any]) -> Void) {
+        guard var request = LoopbackAdminSession.request(port: port, method: method, path: path,
+                                                         body: body) else {
+            completion(0, [:])
+            return
+        }
+        request.setValue("dbsess=\(session)", forHTTPHeaderField: "Cookie")
+        request.setValue(csrf, forHTTPHeaderField: "X-Doorbell-CSRF")
+        URLSession.shared.dataTask(with: request) { data, response, _ in
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            let json = LoopbackAdminSession.decode(data)
+            DispatchQueue.main.async { completion(status, json) }
+        }.resume()
+    }
+}

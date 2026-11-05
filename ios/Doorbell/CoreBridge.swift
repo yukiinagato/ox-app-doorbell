@@ -585,6 +585,96 @@ final class CoreBridge {
         if !id.isEmpty { withCore { c in db_core_remove_device(c, id) } }
     }
 
+    // MARK: Native assets, configuration snapshot/import and panel identities
+
+    private typealias AssetAddFn = @convention(c) (OpaquePointer?, UnsafePointer<UInt8>?, Int,
+                                                   UnsafePointer<CChar>?, UnsafePointer<CChar>?)
+        -> UnsafeMutablePointer<CChar>?
+    private typealias AssetRemoveFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?)
+        -> UnsafeMutablePointer<CChar>?
+    private typealias SnapshotFn = @convention(c) (OpaquePointer?) -> UnsafeMutablePointer<CChar>?
+    private typealias SessionCallFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
+                                                      UnsafePointer<CChar>?, UnsafePointer<CChar>?,
+                                                      UnsafePointer<CChar>?)
+        -> UnsafeMutablePointer<CChar>?
+    private typealias RemoveDeviceV2Fn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?)
+        -> Int32
+
+    private static let assetAddFn: AssetAddFn? = symbol("db_core_asset_add_json")
+        .map { unsafeBitCast($0, to: AssetAddFn.self) }
+    private static let assetRemoveFn: AssetRemoveFn? = symbol("db_core_asset_remove_json")
+        .map { unsafeBitCast($0, to: AssetRemoveFn.self) }
+    private static let snapshotFn: SnapshotFn? = symbol("db_core_config_snapshot_json_v2")
+        .map { unsafeBitCast($0, to: SnapshotFn.self) }
+    private static let configImportFn: SessionCallFn? = symbol("db_core_config_import_json_v2")
+        .map { unsafeBitCast($0, to: SessionCallFn.self) }
+    private static let panelIdentityFn: SessionCallFn? = symbol("db_core_panel_identity_json_v2")
+        .map { unsafeBitCast($0, to: SessionCallFn.self) }
+    private static let removeDeviceV2Fn: RemoveDeviceV2Fn? = symbol("db_core_remove_device_v2")
+        .map { unsafeBitCast($0, to: RemoveDeviceV2Fn.self) }
+
+    var supportsAssets: Bool { return CoreBridge.assetAddFn != nil && CoreBridge.assetRemoveFn != nil }
+
+    /// Adds bytes to the shared asset ledger (image/jpeg, image/png, audio/mpeg, audio/wav, at most
+    /// 3 MiB). Needs the native admin window; `{"ok":true,"hash":...}` or Core's error document.
+    func addAsset(_ data: Data, type: String, label: String) -> [String: Any]? {
+        guard let add = CoreBridge.assetAddFn, !data.isEmpty else { return nil }
+        return withCore { c -> [String: Any]? in
+            return data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) -> [String: Any]? in
+                let base = raw.bindMemory(to: UInt8.self).baseAddress
+                return takeJson(add(c, base, data.count, type, label))
+            }
+        } ?? nil
+    }
+
+    func removeAsset(_ hash: String) -> [String: Any]? {
+        guard let remove = CoreBridge.assetRemoveFn, !hash.isEmpty else { return nil }
+        return withCore { c in takeJson(remove(c, hash)) } ?? nil
+    }
+
+    /// `{schema_version:2, revision, config}`; nil on an older Core.
+    func configSnapshot() -> [String: Any]? {
+        guard let snapshot = CoreBridge.snapshotFn else { return nil }
+        return withCore { c in takeJson(snapshot(c)) } ?? nil
+    }
+
+    private func sessionCall(_ fn: SessionCallFn?, action: String, request: [String: Any],
+                             session: String, csrf: String) -> [String: Any]? {
+        guard let fn = fn, JSONSerialization.isValidJSONObject(request),
+              let data = try? JSONSerialization.data(withJSONObject: request),
+              let body = String(data: data, encoding: .utf8) else { return nil }
+        return withCore { c in takeJson(fn(c, action, body, session, csrf)) } ?? nil
+    }
+
+    /// Configuration import (stage/preflight/commit/cancel/query). Needs an administrator HTTP
+    /// session and its CSRF value (`LoopbackAdminSession`).
+    func configImport(_ action: String, request: [String: Any], session: String,
+                      csrf: String) -> [String: Any]? {
+        return sessionCall(CoreBridge.configImportFn, action: action, request: request,
+                           session: session, csrf: csrf)
+    }
+
+    /// Panel identities (list/create/update/revoke/rotate), same session requirement.
+    func panelIdentity(_ action: String, request: [String: Any], session: String,
+                       csrf: String) -> [String: Any]? {
+        return sessionCall(CoreBridge.panelIdentityFn, action: action, request: request,
+                           session: session, csrf: csrf)
+    }
+
+    /// 0 on success, `resultAdminRequired` when the admin window is closed, -100 when this Core
+    /// has no gated removal (the caller then uses `removeDevice`).
+    func removeDeviceV2(_ id: String) -> Int32 {
+        guard let remove = CoreBridge.removeDeviceV2Fn else { return -100 }
+        guard !id.isEmpty else { return -1 }
+        return withCore { c in remove(c, id) } ?? -1
+    }
+
+    /// Stores a shell secret in the Keychain under `name`, the key Core's secure_get reads for
+    /// the configuration reference `secret:<name>`.
+    func storeSecret(_ name: String, _ value: String) -> Bool {
+        return Keychain.put(name, value)
+    }
+
     func inviteDevice(_ id: String) {
         if !id.isEmpty { withCore { c in db_core_invite_device(c, id) } }
     }

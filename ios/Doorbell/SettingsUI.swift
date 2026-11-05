@@ -436,10 +436,6 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
         case .page, .list, .shell:
             cell.detailTextLabel?.text = item.detail
             cell.accessoryType = .disclosureIndicator
-        case .web:
-            cell.detailTextLabel?.text = item.detail
-            cell.detailTextLabel?.textColor = palette.accent
-            cell.accessoryType = .disclosureIndicator
         }
     }
 
@@ -526,8 +522,6 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
             push(SettingsListController(host: host, path: path + [item.id]))
         case .shell(let id):
             host.openShell(id, title: item.title, from: self)
-        case .web(let reason):
-            host.openWeb(title: item.title, reason: reason, from: self)
         }
     }
 
@@ -1103,6 +1097,19 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
     private weak var host: SettingsHosting?
     private let path: [String]
     private var model = SettingsListModel(id: "", title: "", rows: [])
+    private var filter = ""
+    #if os(iOS)
+    private let search = UISearchBar()
+    #endif
+
+    /// The rows shown: all of them, or those matching the search text.
+    private var rows: [SettingsListRow] {
+        let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !needle.isEmpty else { return model.rows }
+        return model.rows.filter {
+            $0.title.lowercased().contains(needle) || $0.detail.lowercased().contains(needle)
+        }
+    }
 
     init(host: SettingsHosting, path: [String]) {
         self.host = host
@@ -1123,6 +1130,14 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
         if model.reorder != nil || model.delete != nil {
             navigationItem.rightBarButtonItem = editButtonItem
         }
+        if model.searchable {
+            search.delegate = self
+            search.autocapitalizationType = .none
+            search.autocorrectionType = .no
+            search.barTintColor = host.palette.background
+            search.sizeToFit()
+            tableView.tableHeaderView = search
+        }
         #endif
     }
 
@@ -1138,7 +1153,7 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
     override func numberOfSections(in tableView: UITableView) -> Int { return hasAdd ? 2 : 1 }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        return section == 0 ? model.rows.count : 1
+        return section == 0 ? rows.count : 1
     }
 
     override func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
@@ -1157,7 +1172,7 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
             cell.accessibilityIdentifier = model.id + "_add"
             return cell
         }
-        let row = model.rows[indexPath.row]
+        let row = rows[indexPath.row]
         cell.textLabel?.text = row.title
         cell.textLabel?.numberOfLines = 0
         cell.detailTextLabel?.text = row.detail
@@ -1182,7 +1197,8 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
     }
 
     @objc private func rowToggled(_ sender: UISwitch) {
-        guard sender.tag < model.rows.count, let toggle = model.rows[sender.tag].toggle else { return }
+        let shown = rows
+        guard sender.tag < shown.count, let toggle = shown[sender.tag].toggle else { return }
         host?.perform(toggle(sender.isOn), item: nil, value: nil, from: self, completion: nil)
     }
 
@@ -1201,7 +1217,7 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
             }
             return
         }
-        let row = model.rows[indexPath.row]
+        let row = rows[indexPath.row]
         guard row.edit != nil else { return }
         host.show(SettingsPageController(host: host, path: path + [row.id]), from: self)
     }
@@ -1218,12 +1234,12 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle,
                             forRowAt indexPath: IndexPath) {
         guard editingStyle == .delete, let delete = model.delete else { return }
-        host?.perform(delete(model.rows[indexPath.row].id), item: nil, value: nil, from: self,
+        host?.perform(delete(rows[indexPath.row].id), item: nil, value: nil, from: self,
                       completion: nil)
     }
 
     override func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {
-        return indexPath.section == 0 && model.reorder != nil && !SettingsStyle.isTV
+        return indexPath.section == 0 && model.reorder != nil && !SettingsStyle.isTV && filter.isEmpty
     }
 
     override func tableView(_ tableView: UITableView,
@@ -1243,7 +1259,18 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
     }
 }
 
-// MARK: - "Open in Admin"
+#if os(iOS)
+extension SettingsListController: UISearchBarDelegate {
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        filter = searchText
+        tableView.reloadData()
+    }
+
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
+}
+#endif
+
+// MARK: - Web admin address (About)
 
 /// The web admin's address as a QR code and URL, with the reason this item is edited there.
 final class SettingsWebAdminController: UIViewController {

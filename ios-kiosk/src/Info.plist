@@ -64,6 +64,8 @@
 		<string>UIInterfaceOrientationLandscapeRight</string>
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>門口機の背景画像を選ぶときに使います。</string>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>voip</string>
