@@ -55,6 +55,11 @@ internal class AdminSession private constructor(
         return post("/api/config/batch", ConfigOps.build(values))
     }
 
+    override fun applyOps(ops: List<ConfigOp>): ConfigWriteResult {
+        if (ops.isEmpty()) return ConfigWriteResult(true)
+        return post("/api/config/batch", ConfigOps.buildOps(ops))
+    }
+
     override fun deleteKey(key: String): ConfigWriteResult =
         post("/api/config/delete", JSONObject().put("key", key).toString())
 

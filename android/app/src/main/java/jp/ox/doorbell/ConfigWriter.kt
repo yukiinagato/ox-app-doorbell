@@ -15,6 +15,9 @@ internal interface ConfigWriter {
     fun setBatch(values: List<Pair<String, String>>): ConfigWriteResult
     fun deleteKey(key: String): ConfigWriteResult
 
+    /** One atomic batch mixing sets and deletes; the same document /api/config/batch takes. */
+    fun applyOps(ops: List<ConfigOp>): ConfigWriteResult
+
     fun setString(key: String, value: String): ConfigWriteResult =
         setKey(key, JSONObject.quote(value))
 
@@ -37,9 +40,12 @@ internal class NativeConfigWriter(private val core: DoorbellCore) : ConfigWriter
     override fun deleteKey(key: String): ConfigWriteResult =
         resultOf(core.deleteConfigKey(key))
 
-    override fun setBatch(values: List<Pair<String, String>>): ConfigWriteResult {
-        if (values.isEmpty()) return ConfigWriteResult(true)
-        val document = core.configBatchJson(ConfigOps.build(values)) ?: return UNSUPPORTED
+    override fun setBatch(values: List<Pair<String, String>>): ConfigWriteResult =
+        applyOps(values.map { ConfigOp.Set(it.first, it.second) })
+
+    override fun applyOps(ops: List<ConfigOp>): ConfigWriteResult {
+        if (ops.isEmpty()) return ConfigWriteResult(true)
+        val document = core.configBatchJson(ConfigOps.buildOps(ops)) ?: return UNSUPPORTED
         val ok = document.optBoolean("ok", false)
         val error = document.optString("err").ifEmpty { document.optString("error") }
         if (!ok && error == ConfigWriters.ERR_ADMIN_REQUIRED) return ADMIN_REQUIRED
@@ -83,11 +89,17 @@ internal object ConfigWriters {
 
 internal object ConfigOps {
     /** The ops document shared by db_core_config_batch_json and POST /api/config/batch. */
-    fun build(values: List<Pair<String, String>>): String {
-        val ops = JSONArray()
-        for ((key, valueJson) in values)
-            ops.put(JSONObject().put("op", "set").put("key", key).put("value", parse(valueJson)))
-        return JSONObject().put("ops", ops).toString()
+    fun build(values: List<Pair<String, String>>): String =
+        buildOps(values.map { ConfigOp.Set(it.first, it.second) })
+
+    fun buildOps(ops: List<ConfigOp>): String {
+        val array = JSONArray()
+        for (op in ops) when (op) {
+            is ConfigOp.Set -> array.put(
+                JSONObject().put("op", "set").put("key", op.key).put("value", parse(op.valueJson)))
+            is ConfigOp.Delete -> array.put(JSONObject().put("op", "delete").put("key", op.key))
+        }
+        return JSONObject().put("ops", array).toString()
     }
 
     /** A key's value is a JSON document, not a display string; fall back to a bare string. */
