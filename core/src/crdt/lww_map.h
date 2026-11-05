@@ -95,8 +95,11 @@ class LwwMap {
   // A tombstone is kept while it still hides an older live descendant or removes a member from an
   // older live ancestor object, because erasing it would make that older value visible again.
   // Returns the erased keys; the caller deletes them from durable storage.
-  std::vector<std::string> gcTombstones(const VersionVector& fleet_min_vv,
-                                        const std::string& older_than_hlc);
+  // keep, when set, protects keys whose tombstone must outlive GC (for example a key a first-run
+  // seed could recreate on a device that joins after the tombstone was collected).
+  std::vector<std::string> gcTombstones(
+      const VersionVector& fleet_min_vv, const std::string& older_than_hlc,
+      const std::function<bool(const std::string&)>& keep = {});
 
   // Remote entries whose HLC is malformed or further ahead of local wall time than
   // kMaxRemoteAheadMs are counted here and never become winners. Their sequence numbers still

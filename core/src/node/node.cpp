@@ -4676,8 +4676,144 @@ struct Node::Impl {
     return static_cast<int>(std::max<int64_t>(1, std::min<int64_t>(days, 3650)));
   }
 
-  // Retention runs against whatever replicated coverage the store has recorded. Without a
-  // coverage snapshot the store still refuses to delete anything, so this tick is a no-op.
+  // Replication progress each peer last advertised in anti-entropy: its configuration version
+  // vector and event heads. Persisted, and only ever advanced, so a restart keeps what the cluster
+  // is known to hold. Event retention and tombstone collection act only on the minimum over every
+  // configured member, so an offline member simply defers both.
+  struct PeerReplication {
+    VersionVector vv;
+    std::map<std::string, uint64_t> heads;
+  };
+  std::map<std::string, PeerReplication> peer_replication;
+  bool peer_replication_loaded = false;
+
+  static json::Doc counterMapJson(const std::map<std::string, uint64_t>& values) {
+    auto o = json::obj();
+    for (const auto& [key, value] : values)
+      json::set(o.get(), key.c_str(),
+                static_cast<int64_t>(std::min<uint64_t>(value, INT64_MAX)));
+    return o;
+  }
+  static std::map<std::string, uint64_t> counterMapFrom(const cJSON* object) {
+    std::map<std::string, uint64_t> out;
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, object) {
+      if (item->string && cJSON_IsNumber(item) && item->valuedouble > 0)
+        out[item->string] = static_cast<uint64_t>(item->valuedouble);
+    }
+    return out;
+  }
+
+  void loadPeerReplication() {
+    if (peer_replication_loaded) return;
+    peer_replication_loaded = true;
+    auto raw = store.metaGet("replication_progress_v1");
+    auto doc = raw ? json::parse(*raw) : json::Doc();
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, doc.get()) {
+      if (!peer->string) continue;
+      auto& progress = peer_replication[peer->string];
+      progress.vv = counterMapFrom(json::get(peer, "vv"));
+      progress.heads = counterMapFrom(json::get(peer, "heads"));
+    }
+  }
+
+  void notePeerReplication(const std::string& peer, const VersionVector& vv,
+                           const std::map<std::string, uint64_t>& heads) {
+    if (peer.empty() || peer == node_id) return;
+    loadPeerReplication();
+    auto& progress = peer_replication[peer];
+    bool changed = false;
+    auto advance = [&changed](std::map<std::string, uint64_t>& into,
+                              const std::map<std::string, uint64_t>& from) {
+      for (const auto& [key, value] : from) {
+        uint64_t& current = into[key];
+        if (value > current) {
+          current = value;
+          changed = true;
+        }
+      }
+    };
+    advance(progress.vv, vv);
+    advance(progress.heads, heads);
+    if (!changed) return;
+    auto doc = json::obj();
+    for (const auto& [id, entry] : peer_replication) {
+      cJSON* item = json::addObj(doc.get(), id.c_str());
+      json::setItem(item, "vv", counterMapJson(entry.vv));
+      json::setItem(item, "heads", counterMapJson(entry.heads));
+    }
+    store.metaSet("replication_progress_v1", json::dump(doc.get()));
+  }
+
+  // The minimum every configured member is known to hold. False while any member has never
+  // reported, because nothing may be discarded that such a member could still need.
+  bool fleetReplicationMinimum(VersionVector* vv, std::map<std::string, uint64_t>* heads) {
+    loadPeerReplication();
+    *vv = config->versionVector();
+    *heads = events->heads();
+    std::set<std::string> members;
+    const cJSON* device = nullptr;
+    cJSON_ArrayForEach(device, json::get(cfg.get(), "devices")) {
+      if (device->string) members.insert(device->string);
+    }
+    if (mesh) {
+      for (const auto& peer : mesh->peers()) members.insert(peer.id);
+    }
+    for (const auto& id : members) {
+      if (id.empty() || id == node_id || cfgAt("removed_devices." + id)) continue;
+      auto found = peer_replication.find(id);
+      if (found == peer_replication.end()) return false;
+      for (auto& [key, value] : *vv) {
+        auto other = found->second.vv.find(key);
+        value = std::min(value, other == found->second.vv.end() ? 0 : other->second);
+      }
+      for (auto& [key, value] : *heads) {
+        auto other = found->second.heads.find(key);
+        value = std::min(value, other == found->second.heads.end() ? 0 : other->second);
+      }
+    }
+    return true;
+  }
+
+  // Keys a first-run seed can write. Their tombstones are kept forever: collecting one would let
+  // a device that joins later re-seed a default the administrator deliberately deleted.
+  static bool seedableKey(const std::string& key) {
+    for (const char* prefix : {"schema_version", "reply", "integrations", "time", "audio",
+                               "emergency", "quick_replies", "ui", "visit_purposes",
+                               "notice.presets", "trigger_rules.r_sos_default_on",
+                               "trigger_rules.r_sos_default_off",
+                               "trigger_rules.r_missed_call_default"}) {
+      const size_t n = std::strlen(prefix);
+      if (key.compare(0, n, prefix) == 0 && (key.size() == n || key[n] == '.')) return true;
+    }
+    return false;
+  }
+
+  static constexpr int64_t kTombstoneRetentionMs = 30LL * 86'400'000;
+
+  void replicationMaintenanceTick() {
+    VersionVector vv;
+    std::map<std::string, uint64_t> heads;
+    if (fleetReplicationMinimum(&vv, &heads)) {
+      std::map<std::string, uint64_t> coverage;
+      for (const auto& [origin, seq] : heads)
+        if (seq > 0) coverage[origin] = seq;
+      store.eventCoverageSet(coverage);
+      const int64_t cutoff_ms = hlc->correctedWallMs() - kTombstoneRetentionMs;
+      if (cutoff_ms > 0) {
+        const auto erased = config->gcTombstones(vv, HlcClock::format(cutoff_ms, 0, ""),
+                                                 seedableKey);
+        for (const auto& key : erased) store.configDelete(key);
+        if (!erased.empty())
+          DB_LOGI(kTag, "collected " + std::to_string(erased.size()) + " configuration tombstones");
+      }
+    }
+    pruneEventsTick();
+  }
+
+  // Retention runs against the replicated coverage the store has recorded. Without a coverage
+  // snapshot the store still refuses to delete anything, so this tick is then a no-op.
   void pruneEventsTick() {
     const int64_t cutoff =
         hlc->correctedWallMs() - static_cast<int64_t>(eventRetentionDays()) * 86'400'000LL;
@@ -6873,7 +7009,8 @@ struct Node::Impl {
     minute_timer = loop->postEvery(60'000, [this] { minuteTick(); });
     // Retention is a slow background sweep; six hours is frequent enough for a daily policy and
     // cheap enough for the oldest hardware in the fleet.
-    event_retention_timer = loop->postEvery(6 * 3600'000, [this] { pruneEventsTick(); });
+    event_retention_timer =
+        loop->postEvery(6 * 3600'000, [this] { replicationMaintenanceTick(); });
 
     started = true;
     startMediaOnLoop();
@@ -12472,6 +12609,19 @@ std::string Node::callLogJson(int64_t since_ms, int64_t before_ms, int limit) {
       out.empty())
     out = R"({"rows":[],"unread_missed":0,"seen_hlc":"","server_ts":0})";
   return out;
+}
+
+void Node::notePeerReplication(const std::string& peer, const VersionVector& vv,
+                               const std::map<std::string, uint64_t>& heads) {
+  impl_->loop->callSync([&] {
+    if (impl_->started) impl_->notePeerReplication(peer, vv, heads);
+  });
+}
+
+void Node::runReplicationMaintenance() {
+  impl_->loop->callSync([&] {
+    if (impl_->started) impl_->replicationMaintenanceTick();
+  });
 }
 
 bool Node::markCallLogSeen(const std::string& up_to_hlc) {

@@ -452,12 +452,14 @@ std::vector<LwwEntry> LwwMap::all() const {
   return out;
 }
 
-std::vector<std::string> LwwMap::gcTombstones(const VersionVector& fleet_min_vv,
-                                              const std::string& older_than_hlc) {
+std::vector<std::string> LwwMap::gcTombstones(
+    const VersionVector& fleet_min_vv, const std::string& older_than_hlc,
+    const std::function<bool(const std::string&)>& keep) {
   std::vector<std::string> erased;
   for (auto it = map_.begin(); it != map_.end();) {
     const LwwEntry& e = it->second;
-    bool removable = e.deleted && e.hlc < older_than_hlc && covered(fleet_min_vv, e);
+    bool removable = e.deleted && e.hlc < older_than_hlc && covered(fleet_min_vv, e) &&
+                     !(keep && keep(e.key));
     if (removable) {
       // A live descendant this tombstone dominates is hidden only by this tombstone.
       const std::string child_prefix = e.key + ".";

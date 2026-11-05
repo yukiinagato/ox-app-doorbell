@@ -1667,12 +1667,13 @@ size_t Store::pruneEvents(size_t max_events, int64_t cutoff_wall_ms) {
   // every cluster member, so anti-entropy can never be asked for an event this node destroyed.
   Stmt del(db_,
            "DELETE FROM events WHERE rowid IN ("
-           " SELECT e.rowid FROM events e"
-           " JOIN event_origin_state s ON s.origin=e.origin"
-           " JOIN event_prune_coverage c ON c.origin=e.origin"
-           " WHERE e.wall_ms<?1 AND e.seq<=MIN(s.frontier,s.dispatch_frontier)"
-           " AND e.seq<=c.covered"
-           " AND (SELECT COUNT(*) FROM events n WHERE n.origin=e.origin AND n.seq>e.seq)>=?2)");
+           " SELECT r.rid FROM (SELECT rowid AS rid,origin,seq,wall_ms,"
+           "  ROW_NUMBER() OVER (PARTITION BY origin ORDER BY seq DESC) AS newer_rank"
+           "  FROM events) r"
+           " JOIN event_origin_state s ON s.origin=r.origin"
+           " JOIN event_prune_coverage c ON c.origin=r.origin"
+           " WHERE r.wall_ms<?1 AND r.seq<=MIN(s.frontier,s.dispatch_frontier)"
+           " AND r.seq<=c.covered AND r.newer_rank>?2)");
   if (!del.ok()) return 0;
   del.bind(1, cutoff_wall_ms);
   del.bind(2, static_cast<int64_t>(std::min(

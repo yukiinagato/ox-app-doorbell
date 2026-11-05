@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <random>
@@ -23,6 +24,8 @@
 #include "sipctl/sipctl.h"
 #include "store/store.h"
 #include "util/clock.h"
+#include "util/common.h"
+#include "util/ids.h"
 #include "util/json.h"
 #include "util/runloop.h"
 
@@ -2562,4 +2565,57 @@ TEST_CASE("node: a device joining later never overrides the cluster with its fir
   }
   joiner.node->stop();
   host.node->stop();
+}
+
+TEST_CASE("node: retention and tombstone collection wait for every member's progress") {
+  const std::string dir = tempDir() + "/doorbell_retention_" + genTokenHex(8);
+  REQUIRE(makeDir(dir));
+  struct Cleanup {
+    std::string path;
+    ~Cleanup() {
+      std::error_code ignored;
+      std::filesystem::remove_all(path, ignored);
+    }
+  } cleanup{dir};
+  auto storedKeys = [&dir] {
+    Store probe;
+    REQUIRE(probe.open(dir + "/doorbell.db"));
+    std::map<std::string, bool> keys;
+    for (const auto& entry : probe.configLoadAll()) keys[entry.key] = entry.deleted;
+    return std::make_pair(keys, probe.eventCoverage());
+  };
+
+  NFleet f;
+  auto& a = f.add("A:1", "panel-a", "indoor_panel", "", false, false, dir);
+  auto& b = f.add("B:1", "panel-b", "indoor_panel", "", false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  f.run(1000);
+  REQUIRE(json::getBool(json::parse(a.node->setConfigJson("doors.d_gone", "{\"name\":\"x\"}")).get(), "ok"));
+  f.run(300);
+  REQUIRE(json::getBool(json::parse(a.node->deleteConfigKeyJson("doors.d_gone")).get(), "ok"));
+  f.run(500);
+  f.clock.advance(31LL * 86'400'000);
+  f.run(200);
+
+  a.node->runReplicationMaintenance();
+  {
+    auto [keys, coverage] = storedKeys();
+    REQUIRE(keys.count("doors.d_gone"));
+    CHECK(keys["doors.d_gone"]);
+    CHECK(coverage.empty());
+  }
+
+  const uint64_t all = 1'000'000;
+  const std::map<std::string, uint64_t> everything{{a.node->nodeId(), all},
+                                                   {b.node->nodeId(), all}};
+  a.node->notePeerReplication(b.node->nodeId(), everything, everything);
+  a.node->runReplicationMaintenance();
+  {
+    auto [keys, coverage] = storedKeys();
+    CHECK_FALSE(keys.count("doors.d_gone"));
+    CHECK_FALSE(coverage.empty());
+  }
+  b.node->stop();
+  a.node->stop();
 }
