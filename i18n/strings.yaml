@@ -1308,3 +1308,12 @@ core.seed.purpose.p_other: { ja: "その他", en: "Other", zh: "其他" }
 core.seed.notice.np_absent: { ja: "不在です。荷物は玄関前へお願いします", en: "Nobody is home. Please leave parcels at the front door", zh: "家中无人，包裹请放在门口" }
 core.seed.notice.np_back_door: { ja: "裏口へお回りください", en: "Please come round to the back door", zh: "请绕到后门" }
 core.seed.notice.np_construction: { ja: "工事中です。足元にご注意ください", en: "Building work in progress. Please watch your step", zh: "正在施工，请注意脚下" }
+
+# Asterisk voice menu prompts (tools/gen_asterisk_prompts.sh renders them to audio; Core only).
+core.ivr.menu: { ja: "来客です。お話しする場合は 1、メッセージで返事をする場合は 2、応答しない場合は 9 を押してください。", en: "There is a visitor at the door. Press 1 to talk, 2 to send a reply, or 9 to decline.", zh: "门口有访客。通话请按 1，用消息回复请按 2，不接听请按 9。" }
+core.ivr.reply_menu: { ja: "返事を選んでください。", en: "Choose a reply.", zh: "请选择回复。" }
+core.ivr.reply_option: { ja: "「{label}」は {digit} 番。", en: "For \"{label}\", press {digit}.", zh: "“{label}”请按 {digit}。" }
+core.ivr.reply_back: { ja: "前のメニューに戻るには 0 を押してください。", en: "Press 0 to go back.", zh: "返回上一级请按 0。" }
+core.ivr.invalid: { ja: "入力が正しくありません。", en: "That is not a valid choice.", zh: "输入无效。" }
+core.ivr.reply_sent: { ja: "返事を来客に伝えました。", en: "Your reply has been sent to the visitor.", zh: "已将回复告知访客。" }
+core.ivr.declined: { ja: "この電話では応答しません。ほかの端末では呼び出しが続きます。", en: "This phone will not answer. Other devices keep ringing.", zh: "此电话不接听，其他设备继续响铃。" }

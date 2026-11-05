@@ -1,6 +1,11 @@
 # Development Asterisk instance for SIP integration tests. Production uses the operator's PBX.
 #   docker compose up -d
-#   Door station: server=<host IP>, user=8001, pass=devpass8001, target=600 (answer/audio/echo)
+#   Door station: server=<host IP>, user=8001, pass=devpass8001
+#   Targets: 600 answer/audio/echo, 601 softphone 201, 602 ring forever,
+#            620 voice menu on softphone 201, 621-624 voice menu answered by a scripted phone.
+#   Voice menu prompts: run tools/gen_asterisk_prompts.sh first (macOS), then restart.
+#   Automated door-side check without a door station: tools/dev_ivr_test.sh (uses the sipp
+#   service below, profile "ivr-test").
 services:
   asterisk:
     image: andrius/asterisk:20.20.1_debian-trixie
@@ -12,4 +17,17 @@ services:
     volumes:
       - ./conf/pjsip.conf:/etc/asterisk/pjsip.conf:ro
       - ./conf/extensions.conf:/etc/asterisk/extensions.conf:ro
+      - ../../asterisk/doorbell-menu.conf:/etc/asterisk/doorbell-menu.conf:ro
       - ./conf/rtp.conf:/etc/asterisk/rtp.conf:ro
+      # Generated prompts (tools/gen_asterisk_prompts.sh); empty directories are harmless.
+      - ../../asterisk/sounds/en:/var/lib/asterisk/sounds/en/doorbell:ro
+      - ../../asterisk/sounds/ja:/var/lib/asterisk/sounds/ja/doorbell:ro
+      - ../../asterisk/sounds/zh:/var/lib/asterisk/sounds/zh/doorbell:ro
+
+  sipp:
+    image: pbertera/sipp:latest
+    profiles: ["ivr-test"]
+    depends_on: [asterisk]
+    volumes:
+      - ./sipp:/sipp:ro
+    entrypoint: ["sipp"]
