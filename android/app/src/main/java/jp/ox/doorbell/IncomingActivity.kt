@@ -41,6 +41,9 @@ class IncomingActivity : Activity() {
     private lateinit var clusterClock: ClusterClock
     private lateinit var sosSlider: SosSlideView
     private var palette: Palette = Palette.DARK
+    private var roles: UiRoles = UiRoles.from(Palette.DARK)
+    private lateinit var screen: IncomingScreen
+    private var replySheet: UiKit.Sheet? = null
     private var cachedConfig: JSONObject? = null
     private var cachedStatus: JSONObject? = null
 
@@ -166,6 +169,11 @@ class IncomingActivity : Activity() {
             if (SosSlideState.visibleForRole(cfg, app.boot.role)) android.view.View.VISIBLE
             else android.view.View.GONE
         applyAppearance()
+        roles = UiRoles.from(palette, CoreDisplays.callButton(
+            CoreDisplays.parse(st?.optJSONObject("display")).theme, palette.ground))
+        screen = IncomingScreen(this)
+        updateDoorSwitcher()
+        screen.arrange(roles, liveView = callId.isEmpty())
         val videoBox = findViewById<android.view.View>(R.id.video_box)
         VideoZoom(findViewById(R.id.video_zoom_layer), videoBox)
         videoBox.contentDescription = texts.t("ring.video_zoom_hint", R.string.ring_video_zoom_hint)
@@ -304,8 +312,46 @@ class IncomingActivity : Activity() {
             text = texts.t("ring.answer", R.string.ring_answer)
             isEnabled = peerHost != null
         }
+        replySheet?.dismiss()
+        updateDoorSwitcher()
+        screen.arrange(roles, liveView = callId.isEmpty())
         applySemanticUi(cfg, st)
         scheduleAutoClose()
+    }
+
+    /** Live view: chips for every door with a station, so the resident can switch cameras. */
+    private fun updateDoorSwitcher() {
+        screen.setDoorSwitcher(doorIds().map { it to doorLabel(it) }, door) { picked ->
+            try {
+                startActivity(IncomingActivity.intent(this, VisitorCallSnapshot(door = picked))
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            } catch (e: Exception) {
+                ShellLog.ignored("IncomingActivity", e)
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Rotation or a window resize re-chooses portrait/side-by-side live.
+        val sheetOpen = replySheet?.showing == true
+        replySheet?.dismiss()
+        screen.arrange(roles, liveView = callId.isEmpty())
+        applySemanticUi(cachedConfig, cachedStatus)
+        if (sheetOpen) openReplySheet()
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (::screen.isInitialized) screen.onUserTouch(ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun openReplySheet() {
+        val list = findViewById<LinearLayout>(R.id.reply_list)
+        if (list.childCount == 0) return
+        replySheet?.dismiss()
+        replySheet = screen.replySheet(list).also { it.show() }
+        list.getChildAt(0).requestFocus()
     }
 
     override fun onDestroy() {
@@ -313,6 +359,7 @@ class IncomingActivity : Activity() {
         ui.removeCallbacks(debugTick)
         ui.removeCallbacks(returnTick)
         if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
+        if (::screen.isInitialized) screen.release()
         ui.removeCallbacksAndMessages(null)
         answerRequested = false
         answerDelayPending = false
@@ -726,31 +773,27 @@ class IncomingActivity : Activity() {
             val label = labelOf(q, lang, id)
             val b = Button(this)
             b.text = label
-            b.textSize = 17f
-            b.maxLines = 2
-            b.isAllCaps = false
-            @Suppress("DEPRECATION")
-            b.setTextColor(resources.getColor(R.color.fg))
-            @Suppress("DEPRECATION")
-            b.background = resources.getDrawable(R.drawable.bg_tv_button)
+            b.textSize = UiTokens.sp(UiTokens.BODY)
+            b.maxLines = 3
             b.isFocusable = true
-            b.minHeight = dp(52)
+            IncomingScreen.styleReply(b, roles, UiKit.window(this))
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             )
-            lp.topMargin = dp(4)
+            lp.topMargin = dp(UiTokens.SPACE_S)
             b.layoutParams = lp
             b.setOnClickListener { sendReply(id, label) }
             list.addView(b)
         }
-        if (list.visibility == View.VISIBLE && list.childCount > 0)
-            list.getChildAt(0).requestFocus()
+        if (replySheet?.showing == true && list.childCount > 0) list.getChildAt(0).requestFocus()
     }
 
     private fun applySemanticUi(cfg: JSONObject?, status: JSONObject?) {
         val nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
         val styleConfig = if (app.safeMode) null else cfg
+        // Role colours first; Core's semantic overrides are then applied on top of them.
+        if (::screen.isInitialized) screen.styleActions(inCall || answerRequested)
         SemanticUi.apply(findViewById(R.id.door_label), "ring.title", styleConfig, nodeId)
         SemanticUi.apply(findViewById(R.id.status_text), "ring.title", styleConfig, nodeId)
         SemanticUi.apply(
@@ -768,6 +811,7 @@ class IncomingActivity : Activity() {
 
     private fun sendReply(replyId: String, label: String) {
         if (inCall || answerRequested) return
+        replySheet?.dismiss()
         val accepted = app.core.quickReplyV2(replyId, door, callId, stageRevision)
         val sent = findViewById<TextView>(R.id.sent_text)
         sent.text = if (accepted)
@@ -783,7 +827,7 @@ class IncomingActivity : Activity() {
     // ---------- batch 2: one control row, notice chip, debug line, admin QR ----------
 
     private fun applyAppearance() {
-        findViewById<View>(R.id.incoming_root).setBackgroundColor(ShellUi.opaque(palette.ground))
+        findViewById<View>(R.id.incoming_frame).setBackgroundColor(ShellUi.opaque(palette.ground))
         findViewById<TextView>(R.id.door_label).setTextColor(ShellUi.opaque(palette.ink))
         findViewById<TextView>(R.id.status_text).setTextColor(ShellUi.opaque(palette.accent))
         findViewById<TextView>(R.id.audio_hint).setTextColor(ShellUi.opaque(palette.muted))
@@ -804,12 +848,7 @@ class IncomingActivity : Activity() {
         val mic = findViewById<Button>(R.id.mic_button)
         mic.setOnClickListener { toggleMic() }
         val reply = findViewById<Button>(R.id.reply_button)
-        reply.setOnClickListener {
-            val list = findViewById<LinearLayout>(R.id.reply_list)
-            list.visibility = if (list.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-            if (list.visibility == View.VISIBLE && list.childCount > 0)
-                list.getChildAt(0).requestFocus()
-        }
+        reply.setOnClickListener { openReplySheet() }
         reply.text = texts.t("ring.quick_reply", R.string.ring_quick_reply)
         val unlock = findViewById<Button>(R.id.unlock_button)
         unlock.text = texts.t("ring.unlock", R.string.ring_unlock)

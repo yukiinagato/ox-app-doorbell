@@ -17,7 +17,6 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
-import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.View
 import android.view.KeyEvent
@@ -33,7 +32,6 @@ import android.widget.TextView
 import java.io.File
 import java.net.HttpURLConnection
 import java.util.Calendar
-import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -112,8 +110,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private var homeThread: HandlerThread? = null
     private var homeHandler: Handler? = null
 
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    private lateinit var speech: ShellSpeech
+    private lateinit var purposePanel: VisitorPurposePanel
+    private lateinit var languageBar: VisitorLanguageBar
 
     private var secretTaps = 0
     private var secretFirstMs = 0L
@@ -124,8 +123,17 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private var nodeId = ""
     private var visitorLang = "ja"
     private var choosingPurpose = false
-    private var themeColor: String? = null
-    private var themeHash: String? = null
+    private val backdrop by lazy(LazyThreadSafetyMode.NONE) {
+        VisitorBackdrop(this, app, rootView, themeBg, nightTint, ui,
+            config = { cfg }, nodeId = { nodeId }, palette = { palette },
+            coreDisplay = { coreDisplay },
+            inkRegions = {
+                listOf(
+                    InkRegion(clockText, "clock", false), InkRegion(dateText, "date", true),
+                    InkRegion(touchHint, "hint", true), InkRegion(nodeInfo, "footer", true),
+                )
+            })
+    }
     private val audio by lazy(LazyThreadSafetyMode.NONE) { ShellAudio(this) }
     private var callTitleOverride: String? = null
     private var callFlowMode = CallFlowMode.PURPOSE_FIRST
@@ -176,6 +184,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
         bindViews()
+        purposePanel = VisitorPurposePanel(this, purposeGrid) { id, label -> onPurposeClick(id, label) }
+        languageBar = VisitorLanguageBar(this, langBar) { lang -> onLangClick(lang) }
         installRoleHome()
 
         val worker = HandlerThread("doorbell-home", Process.THREAD_PRIORITY_BACKGROUND)
@@ -201,7 +211,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             PairingActivity.launch(this)
         }
 
-        tts = TextToSpeech(this) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+        speech = ShellSpeech(this)
 
         requestPermissionsIfNeeded()
 
@@ -412,7 +422,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         homeThread = null
         homeHandler = null
         app.unbindForeground(this)
-        tts?.shutdown()
+        if (::speech.isInitialized) speech.shutdown()
         stopRinging()
         audio.releaseAll()
         super.onDestroy()
@@ -562,9 +572,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         noticeCard.setTextColor(ShellUi.opaque(palette.noticeInk))
         clockText.textSize = VisitorLayout.clockTextSizeSp(widthDp, heightDp)
         touchHint.textSize = VisitorLayout.hintTextSizeSp(widthDp)
-        callButton.minHeight = dp(VisitorLayout.callButtonHeightDp(widthDp))
-        cancelButton.minHeight = callButton.minHeight
-        purposeCancelButton.minHeight = callButton.minHeight
+        styleVisitorActions()
         VisitorLayout.apply(
             visitorSplit, visitorColumnA, visitorColumnB,
             idleHeader, noticeCard, langBar,
@@ -573,6 +581,31 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         applyFooterLayout(widthDp, heightDp)
         scheduleGroupSpacing()
         scheduleRegionInk()
+    }
+
+    /**
+     * The fixed action zone (guidelines "Visitor"): one full-width primary Call button in Core's
+     * region accent, Cancel/End in the negative role, "call without choosing" secondary. All are
+     * at least the 72 dp visitor target and grow with large text so a 200 % label never clips.
+     */
+    private fun styleVisitorActions() {
+        val window = UiKit.window(this)
+        val height = ScreenLayouts.visitorActionHeightDp(window)
+        val roles = visitorRoles()
+        callButton.minHeight = dp(height)
+        callButton.minimumHeight = dp(height)
+        callButton.textSize = UiTokens.sp(UiTokens.HEADLINE)
+        UiKit.styleAction(cancelButton, roles, ActionRole.NEGATIVE, height, emphasis = true)
+        UiKit.styleAction(purposeCancelButton, roles, ActionRole.NEGATIVE, height, emphasis = true)
+        UiKit.styleAction(purposeSkipButton, roles, ActionRole.SECONDARY,
+                          ScreenLayouts.touchTargetDp(window, 56))
+        for (button in listOf(cancelButton, purposeCancelButton))
+            button.textSize = UiTokens.sp(UiTokens.TITLE)
+        pairingBanner.background = ShellUi.rounded(this, roles.warning, UiTokens.RADIUS_CARD)
+        pairingBanner.setTextColor(ShellUi.opaque(roles.onWarning))
+        applyCallButtonAccent()
+        // Core's semantic overrides go on top of the freshly styled roles.
+        applySemanticUi()
     }
 
     /**
@@ -657,86 +690,30 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         // A configured background colour or image wins; the palette ground is the fallback.
         if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
             rootView.setBackgroundColor(ShellUi.opaque(palette.ground))
-        regionInkApplied.clear()
+        backdrop.clearInk()
         applyRegionInk()
         sosSlider.applyPalette(palette)
         applyCallButtonAccent()
     }
 
-    /**
-     * Automatic ink per text region (§5). Core averages the whole background image because it has
-     * no layout geometry, so each region is sampled locally and the result refines core's answer;
-     * an administrator override still wins, and a flat background colour leaves core's value
-     * standing. A region that misses 4.5:1 gets the 40 % opposite-ink shadow behind it.
-     */
-    private fun applyRegionInk() {
-        paintRegion(clockText, "clock", muted = false)
-        paintRegion(dateText, "date", muted = true)
-        paintRegion(touchHint, "hint", muted = true)
-        paintRegion(nodeInfo, "footer", muted = true)
-    }
+    private fun applyRegionInk() = backdrop.applyRegionInk()
 
-    /** The last ink applied per region, so a layout pass that changes nothing does no work. */
-    private val regionInkApplied = HashMap<String, Int>()
-
-    private fun paintRegion(view: TextView, region: String, muted: Boolean) {
-        // The flat colour a visitor would see with no picture on screen; never core's average of
-        // the picture, which is only meaningful while the picture is actually painted.
-        val ground = flatBackgroundRgb()
-        val drawn = themeBg.visibility == View.VISIBLE && themeBg.drawable != null
-        val sample = if (drawn) RegionInk.sample(themeBg, view, ground) else null
-        val result = CoreDisplays.inkFor(
-            coreDisplay.theme, region, ground, sample?.averageRgb, drawn, sample = sample,
-        )
-        val ink = if (muted) ShellUi.mute(result.inkRgb, palette.dark) else result.inkRgb
-        val signature = (if (result.needsShadow) 1 shl 25 else 0) or (ink and 0xffffff)
-        if (regionInkApplied[region] == signature) return
-        regionInkApplied[region] = signature
-        view.setTextColor(ShellUi.opaque(ink))
-        if (result.needsShadow) {
-            val shadow = ShellUi.opaque(result.shadowRgb) and 0x00ffffff or
-                (RegionInkPolicy.SHADOW_ALPHA shl 24)
-            view.setShadowLayer(1f * resources.displayMetrics.density, 0f, 0f, shadow)
-        } else {
-            view.setShadowLayer(0f, 0f, 0f, 0)
-        }
-    }
-
-    /**
-     * The regions move under the picture on every layout, and the picture itself arrives long
-     * after the first one. Both have to re-run the decision, or the screen keeps the ink it chose
-     * against a background nobody is looking at any more -- which is how a light illustration ended
-     * up carrying light text.
-     */
     private fun scheduleRegionInk() {
         if (dashboard != null) return
-        rootView.post { if (!isFinishing) applyRegionInk() }
-    }
-
-    private val regionInkOnLayout = android.view.ViewTreeObserver.OnGlobalLayoutListener {
-        if (!isFinishing) applyRegionInk()
+        backdrop.scheduleRegionInk()
     }
 
     private fun startRegionInkWatch() {
         if (dashboard != null) return
-        rootView.viewTreeObserver.addOnGlobalLayoutListener(regionInkOnLayout)
+        backdrop.startWatch()
     }
 
     private fun stopRegionInkWatch() {
         if (dashboard != null) return
-        @Suppress("DEPRECATION")
-        rootView.viewTreeObserver.removeGlobalOnLayoutListener(regionInkOnLayout)
+        backdrop.stopWatch()
     }
 
-    /** The flat colour behind the visitor screen, with no background image taken into account. */
-    private fun flatBackgroundRgb(): Int =
-        UiContrast.parseRgb(themeValue("bg_color")) ?: palette.ground
-
-    /** The colour actually behind the visitor screen, averaged by core when it is an image. */
-    private fun effectiveBackgroundRgb(): Int =
-        coreDisplay.theme?.backgroundRgb
-            ?: UiContrast.parseRgb(themeValue("bg_color"))
-            ?: palette.ground
+    private fun effectiveBackgroundRgb(): Int = backdrop.effectiveBackgroundRgb()
 
     /**
      * The call button's background comes from core, which has already folded in the administrator
@@ -747,8 +724,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         val (background, ink) = CoreDisplays.callButton(
             coreDisplay.theme, effectiveBackgroundRgb(),
         )
-        callButton.background = ShellUi.rounded(this, background, 14)
+        callButton.background = ShellUi.rounded(this, background, UiTokens.RADIUS_CARD)
         callButton.setTextColor(ShellUi.opaque(ink))
+        SemanticUi.invalidate(callButton)
     }
 
     /**
@@ -966,85 +944,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     }
 
     /** Resolve device-local theme values before fleet defaults. */
-    private fun themeValue(leaf: String): String? {
-        val v = (if (nodeId.isNotEmpty()) app.core.dig(cfg, "devices.$nodeId.local.theme.$leaf")
-                 else null)
-            ?: app.core.dig(cfg, "display.theme.$leaf")
-        val s = v?.toString().orEmpty()
-        return if (s.isEmpty() || s == "null") null else s
-    }
+    private fun themeValue(leaf: String): String? = backdrop.themeValue(leaf)
 
-    private fun applyTheme() {
-        if (app.safeMode) {
-            themeHash = null
-            themeColor = null
-            themeBg.setImageDrawable(null)
-            themeBg.visibility = View.GONE
-            @Suppress("DEPRECATION")
-            rootView.setBackgroundColor(resources.getColor(R.color.bg))
-            return
-        }
-        val color = themeValue("bg_color")
-        if (color != themeColor) {
-            themeColor = color
-            try {
-                @Suppress("DEPRECATION")
-                rootView.setBackgroundColor(
-                    if (color != null) Color.parseColor(color) else resources.getColor(R.color.bg))
-            } catch (e: Exception) {
-                Log.w(TAG, "Ignoring invalid theme background color: $color ($e)")
-            }
-        }
-        val hash = themeValue("bg_image")
-        if (hash.isNullOrEmpty()) {
-            themeHash = null
-            themeBg.setImageDrawable(null)
-            themeBg.visibility = View.GONE
-            return
-        }
-        if (hash == themeHash && themeBg.drawable != null) return
-        themeHash = hash
-        loadThemeImage(hash)
-    }
+    private fun applyTheme() = backdrop.applyTheme()
 
-    /** Load a bounded background image from the LAN-public local asset endpoint. */
-    private fun loadThemeImage(hash: String) {
-        if (app.safeMode) return
-        val url = "http://127.0.0.1:${app.boot.httpPort}/asset/$hash"
-        Thread({
-            var bmp: Bitmap? = null
-            var conn: HttpURLConnection? = null
-            try {
-                conn = LocalMedia.open(url)
-                conn.connectTimeout = 4000
-                conn.readTimeout = 8000
-                val bytes = BoundedBitmapDecoder.readLimited(conn.inputStream, 4 * 1024 * 1024)
-                val width = themeBg.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
-                val height = themeBg.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
-                bmp = bytes?.let { BoundedBitmapDecoder.decodeAspectFill(it, width, height) }
-            } catch (e: Exception) {
-                // asset_ready triggers another attempt after mesh prefetch completes.
-                Log.w(TAG, "Theme background is not available yet: $e")
-            } finally {
-                try { conn?.disconnect() } catch (e: Exception) { ShellLog.ignored("MainActivity", e) }
-            }
-            val b = bmp ?: return@Thread
-            ui.post {
-                if (themeHash != hash || app.safeMode) return@post
-                themeBg.setImageBitmap(b)
-                themeBg.visibility = View.VISIBLE
-                // The background under every region just changed, so nothing decided against the
-                // previous one may be kept.
-                regionInkApplied.clear()
-                scheduleRegionInk()
-            }
-        }, "theme-bg").apply { isDaemon = true }.start()
-    }
+    private fun loadThemeImage(hash: String) = backdrop.loadThemeImage(hash)
 
-    /** Apply a night tint above potentially bright theme imagery. */
-    private fun applyNightTint(night: Boolean, redTint: Boolean) {
-        nightTint.visibility = if (night && redTint) View.VISIBLE else View.GONE
-    }
+    private fun applyNightTint(night: Boolean, redTint: Boolean) =
+        backdrop.applyNightTint(night, redTint)
 
     /**
      * Build visit-purpose controls for the door-station idle screen. A purpose an administrator
@@ -1052,58 +959,18 @@ class MainActivity : Activity(), DoorbellCore.Listener {
      * with none configured, so the visitor goes straight on with the call.
      */
     private fun buildPurposeButtons() {
-        purposeGrid.removeAllViews()
         if (app.boot.role != "door_station") {
+            purposeGrid.removeAllViews()
             purposeSection.visibility = View.GONE
             return
         }
-        val ids = VisitPurposes.enabled(cfg)
-        if (ids.isEmpty()) {
-            purposeGrid.columnCount = 1
-            updatePurposeVisibility()
-            return
-        }
-        val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
-        val columns = when {
-            ids.size <= 1 || resources.configuration.fontScale > 1.3f -> 1
-            widthDp < 520f -> 2
-            else -> minOf(3, ids.size)
-        }
-        purposeGrid.columnCount = columns
-        val rows = (ids.size + columns - 1) / columns
-        val buttonHeight = when {
-            rows >= 3 -> 48
-            rows == 2 -> 50
-            else -> 64
-        }
-        val textSize = if (rows >= 2 || columns == 2) 14f else 16f
-        for ((index, id) in ids.withIndex()) {
-            val label = VisitPurposes.label(cfg, id, texts.lang)
-            val b = Button(this)
-            b.text = VisitPurposes.decoratedLabel(cfg, id, texts.lang)
-            b.textSize = textSize
-            b.isAllCaps = false
-            b.setSingleLine(false)
-            b.maxLines = 4
-            b.minHeight = dp(buttonHeight)
-            b.gravity = android.view.Gravity.CENTER
-            b.setPadding(dp(8), 0, dp(8), 0)
-            @Suppress("DEPRECATION")
-            b.setTextColor(resources.getColor(R.color.fg))
-            @Suppress("DEPRECATION")
-            b.background = resources.getDrawable(R.drawable.bg_tv_button)
-            b.isFocusable = true
-            b.setOnClickListener { onPurposeClick(id, label) }
-            val lp = GridLayout.LayoutParams()
-            lp.rowSpec = GridLayout.spec(index / columns)
-            lp.columnSpec = GridLayout.spec(index % columns)
-            lp.width = (resources.displayMetrics.widthPixels - dp(48)) / columns - dp(8)
-            lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            lp.setMargins(dp(4), dp(3), dp(4), dp(3))
-            purposeGrid.addView(b, lp)
-        }
+        purposePanel.build(cfg, texts.lang, visitorRoles())
         updatePurposeVisibility()
     }
+
+    /** Colour roles for the visitor screen; the call button keeps Core's region accent. */
+    private fun visitorRoles(): UiRoles =
+        UiRoles.from(palette, CoreDisplays.callButton(coreDisplay.theme, effectiveBackgroundRgb()))
 
     private fun showsHomePurposes(): Boolean = app.boot.role == "door_station" &&
         callFlowMode == CallFlowMode.PURPOSE_FIRST && VisitPurposes.enabled(cfg).isNotEmpty()
@@ -1140,53 +1007,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     /** Build the configured visitor-language controls. */
     private fun buildLangBar() {
-        langBar.removeAllViews()
-        val arr = app.core.dig(cfg, "ui.languages") as? JSONArray
-        val list = ArrayList<String>()
-        if (arr != null) {
-            for (i in 0 until arr.length()) {
-                val s = arr.optString(i)
-                if (s.isNotEmpty()) list.add(s)
-            }
-        }
-        if (app.boot.role != "door_station" || list.size < 2) {
-            langBar.visibility = View.GONE
-            return
-        }
-        for (l in list) {
-            val b = Button(this)
-            b.text = Texts.langDisplayName(l)
-            b.textSize = 15f
-            b.isAllCaps = false
-            b.isFocusable = true
-            b.gravity = android.view.Gravity.CENTER
-            b.includeFontPadding = false
-            b.minWidth = 0
-            b.minHeight = 0
-            b.minimumWidth = 0
-            b.minimumHeight = 0
-            b.setPadding(0, 0, 0, 0)
-            b.tag = l
-            @Suppress("DEPRECATION")
-            b.background = resources.getDrawable(R.drawable.bg_tv_button)
-            b.setOnClickListener { onLangClick(l) }
-            val lp = LinearLayout.LayoutParams(dp(104), dp(42))
-            lp.leftMargin = dp(4)
-            lp.rightMargin = dp(4)
-            langBar.addView(b, lp)
-        }
+        val shown = languageBar.build(cfg, visitorRoles(), app.boot.role == "door_station")
         // The visitor keeps the language row on the idle screen, not only while choosing.
-        langBar.visibility = View.VISIBLE
-        updateLangBarSelection()
+        langBar.visibility = if (shown) View.VISIBLE else View.GONE
+        if (shown) updateLangBarSelection()
     }
 
     private fun updateLangBarSelection() {
-        for (i in 0 until langBar.childCount) {
-            val b = langBar.getChildAt(i) as? Button ?: continue
-            @Suppress("DEPRECATION")
-            b.setTextColor(resources.getColor(
-                if (b.tag == visitorLang) R.color.accent else R.color.dim))
-        }
+        languageBar.select(visitorLang)
     }
 
     private fun onLangClick(lang: String) {
@@ -1432,15 +1260,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun speakNow(text: String, lang: String) {
-        if (!ttsReady || text.isEmpty()) return
-        try {
-            tts?.language = Locale(if (lang.isEmpty()) "ja" else lang)
-            @Suppress("DEPRECATION")
-            if (Build.VERSION.SDK_INT >= 21)
-                tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "reply")
-            else
-                tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null)
-        } catch (e: Exception) { ShellLog.ignored("MainActivity", e) }
+        if (::speech.isInitialized) speech.speak(text, lang)
     }
 
     private fun handleUiEvent(ev: JSONObject) {
@@ -1526,7 +1346,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             }
             // Retry a pending background after asset prefetch completes.
             "asset_ready" -> {
-                val h = themeHash
+                val h = backdrop.themeHash
                 if (!app.safeMode && h != null && ev.optString("hash") == h &&
                     themeBg.drawable == null)
                     loadThemeImage(h)
