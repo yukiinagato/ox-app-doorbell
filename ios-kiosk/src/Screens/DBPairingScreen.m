@@ -33,7 +33,6 @@ static UIColor *DBPairOk(void) {
   UILabel *_confirmCaption;
   UILabel *_confirmCode;
   BOOL _upgradeRejoin;
-  BOOL _ntpOff;
   UIActivityIndicatorView *_spinner;
   UILabel *_status;
   UILabel *_hint;
@@ -378,9 +377,6 @@ static UIColor *DBPairOk(void) {
   __weak DBPairingScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSDictionary *info = [core pairingInfo];
-    // Beacons only count within ±120 s; Core does not report skew, so the
-    // useful hint is "network time is off" while this device is still searching.
-    BOOL ntpOff = ![DBConfigUtil boolVal:[core lastConfig] path:@"time.ntp.enabled" def:YES];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBPairingScreen *screen = weakSelf;
       if (!screen) return;
@@ -388,7 +384,6 @@ static UIColor *DBPairOk(void) {
       // The very first snapshot can land before the router has attached the
       // view; the poll timer, not the view tree, is what says we are live.
       if (!screen.superview && !screen->_poll) return;
-      screen->_ntpOff = ntpOff;
       [screen applyPairingInfo:info];
     });
   });
@@ -402,19 +397,30 @@ static UIColor *DBPairOk(void) {
   if ([info isKindOfClass:[NSDictionary class]]) {
     NSDictionary *selfInfo = [info objectForKey:@"self"];
     if ([selfInfo isKindOfClass:[NSDictionary class]]) {
-      NSString *name = [DBConfigUtil evStr:selfInfo key:@"name"];
-      NSString *model = [DBConfigUtil evStr:selfInfo key:@"model"];
+      // Localized role, the device's own name and the app version. Core's
+      // default name is "<role> · <id>" and its model may still read "unknown"
+      // on an older boot document, so neither is shown raw.
+      DBTexts *texts = [_router texts];
+      DBBootConfig *boot = [_router boot];
+      NSString *nodeId = [DBConfigUtil evStr:selfInfo key:@"node_id"];
+      if ([nodeId length] == 0) nodeId = [DBConfigUtil evStr:selfInfo key:@"id"];
+      NSString *name = [nodeId length] > 0
+          ? [DBConfigUtil str:[[_router core] lastConfig]
+                         path:[NSString stringWithFormat:@"devices.%@.name", nodeId]] : nil;
+      if ([name length] == 0) name = boot.name;
+      NSString *coreName = [DBConfigUtil evStr:selfInfo key:@"name"];
+      if ([name length] == 0 && [coreName rangeOfString:@" · "].location == NSNotFound)
+        name = coreName;
+      NSString *role = [texts ts:[boot.role isEqualToString:@"door_station"]
+                                     ? @"pair.role_door_station" : @"pair.role_indoor_panel"];
+      NSString *version =
+          [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
       NSString *addr = [DBConfigUtil evStr:selfInfo key:@"addr"];
-      NSMutableArray *parts = [NSMutableArray array];
+      NSMutableArray *parts = [NSMutableArray arrayWithObject:role];
       if ([name length] > 0) [parts addObject:name];
-      if ([model length] > 0) [parts addObject:model];
+      if ([version length] > 0) [parts addObject:[NSString stringWithFormat:@"v%@", version]];
       NSString *head = [parts componentsJoinedByString:@" · "];
-      if ([head length] > 0 && [addr length] > 0)
-        _identity.text = [NSString stringWithFormat:@"%@\n%@", head, addr];
-      else if ([addr length] > 0)
-        _identity.text = addr;
-      else
-        _identity.text = head;
+      _identity.text = [addr length] > 0 ? [NSString stringWithFormat:@"%@\n%@", head, addr] : head;
       NSString *code = [DBConfigUtil evStr:selfInfo key:@"confirm_code"];
       _confirmCode.text = [code length] == 8
           ? [NSString stringWithFormat:@"%@ %@", [code substringToIndex:4], [code substringFromIndex:4]]
@@ -555,8 +561,8 @@ static UIColor *DBPairOk(void) {
   _confirmCode.hidden = !unpaired || persistError || showCard || [_confirmCode.text length] == 0;
   _confirmCaption.hidden = _confirmCode.hidden;
   if (!_upgradeRejoin || ready || joining) _title.text = [texts ts:@"pair.title_unpaired"];
-  _hint.text = [texts ts:((unpaired && !joining && _ntpOff) ? @"pair.clock_skew"
-                                                            : @"pair.searching_hint")];
+  // Core does not report clock skew, so a skew warning would only be a guess.
+  _hint.text = [texts ts:@"pair.searching_hint"];
   [self setNeedsLayout];
 }
 
@@ -838,53 +844,66 @@ static UIColor *DBPairOk(void) {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
   CGFloat pad = 24;
-  CGFloat width = size.width - pad * 2;
   _scroll.frame = CGRectMake(0, 12, size.width, size.height - 12);
+  // Landscape on a tablet has room for two columns: what this device is and
+  // its status on the left, the join form on the right. Stacked, the code
+  // keypad ran off the bottom of a 768-point-tall screen.
+  BOOL twoColumns = size.width > size.height && size.width >= 900;
+  CGFloat width = twoColumns ? floor((size.width - pad * 3) / 2) : size.width - pad * 2;
+  CGFloat leftX = pad;
+  CGFloat rightX = twoColumns ? pad * 2 + width : pad;
 
   CGFloat y = 8;
-  _title.frame = CGRectMake(pad, y, width, 34);
+  _title.frame = CGRectMake(leftX, y, width, 34);
   y += 40;
   CGFloat identityHeight = [_identity sizeThatFits:CGSizeMake(width, 9999)].height;
-  _identity.frame = CGRectMake(pad, y, width, identityHeight);
+  _identity.frame = CGRectMake(leftX, y, width, identityHeight);
   y += identityHeight + 12;
   if (!_confirmCode.hidden) {
     CGFloat captionHeight = [_confirmCaption sizeThatFits:CGSizeMake(width, 9999)].height;
-    _confirmCaption.frame = CGRectMake(pad, y, width, captionHeight);
+    _confirmCaption.frame = CGRectMake(leftX, y, width, captionHeight);
     y += captionHeight + 4;
-    _confirmCode.frame = CGRectMake(pad, y, width, 64);
+    _confirmCode.frame = CGRectMake(leftX, y, width, 64);
     y += 64 + 12;
   }
 
-  CGFloat statusHeight = MAX(24, [_status sizeThatFits:CGSizeMake(width - 40, 9999)].height);
-  _status.frame = CGRectMake(pad + 34, y, width - 68, statusHeight);
-  _spinner.center = CGPointMake(pad + 16, y + statusHeight / 2);
+  // The spinner sits right beside the status text, the pair centred together.
+  BOOL spinning = [_spinner isAnimating];
+  CGFloat spinnerSpace = spinning ? 28 : 0;
+  CGSize statusFit = [_status sizeThatFits:CGSizeMake(width - spinnerSpace, 9999)];
+  CGFloat statusWidth = MIN(width - spinnerSpace, ceil(statusFit.width));
+  CGFloat statusHeight = MAX(24, ceil(statusFit.height));
+  CGFloat groupX = leftX + floor((width - statusWidth - spinnerSpace) / 2);
+  _status.frame = CGRectMake(groupX + spinnerSpace, y, statusWidth, statusHeight);
+  _spinner.center = CGPointMake(groupX + 10, y + statusHeight / 2);
   y += statusHeight + 6;
 
   if (!_hint.hidden) {
     CGFloat hintHeight = [_hint sizeThatFits:CGSizeMake(width, 9999)].height;
-    _hint.frame = CGRectMake(pad, y, width, hintHeight);
+    _hint.frame = CGRectMake(leftX, y, width, hintHeight);
     y += hintHeight + 12;
   }
 
   if (!_persistTitle.hidden) {
     CGFloat titleHeight = [_persistTitle sizeThatFits:CGSizeMake(width, 9999)].height;
-    _persistTitle.frame = CGRectMake(pad, y, width, titleHeight);
+    _persistTitle.frame = CGRectMake(leftX, y, width, titleHeight);
     y += titleHeight + 8;
     CGFloat bodyHeight = [_persistBody sizeThatFits:CGSizeMake(width, 9999)].height;
-    _persistBody.frame = CGRectMake(pad, y, width, bodyHeight);
+    _persistBody.frame = CGRectMake(leftX, y, width, bodyHeight);
     y += bodyHeight + 14;
-    _retryButton.frame = CGRectMake(pad, y, width, 48);
+    _retryButton.frame = CGRectMake(leftX, y, width, 48);
     y += 58;
   }
 
   if (!_qr.hidden) {
     CGFloat side = MIN(width * 0.62, 300);
     if (side < 240) side = MIN(width, 240);
-    _qr.frame = CGRectMake((size.width - side) / 2, y, side, side);
+    if (twoColumns) side = MIN(side, MAX(200, size.height - y - 120));
+    _qr.frame = CGRectMake(leftX + floor((width - side) / 2), y, side, side);
     _qrPlaceholder.frame = CGRectMake(8, side / 2 - 20, side - 16, 40);
     y += side + 8;
     CGFloat captionHeight = [_qrCaption sizeThatFits:CGSizeMake(width, 9999)].height;
-    _qrCaption.frame = CGRectMake(pad, y, width, captionHeight);
+    _qrCaption.frame = CGRectMake(leftX, y, width, captionHeight);
     y += captionHeight + 14;
   }
 
@@ -908,50 +927,54 @@ static UIColor *DBPairOk(void) {
         [_cardInstructions sizeThatFits:CGSizeMake(inner, 9999)].height;
     _cardInstructions.frame = CGRectMake(16, cy, inner, instructionsHeight);
     cy += instructionsHeight + 16;
-    _card.frame = CGRectMake(pad, y, width, cy);
+    _card.frame = CGRectMake(leftX, y, width, cy);
     y += cy + 16;
   }
 
+  CGFloat leftBottom = y;
+  if (twoColumns) y = 8;
+
   if (!_joinTitle.hidden) {
-    _joinTitle.frame = CGRectMake(pad, y, width, 24);
+    _joinTitle.frame = CGRectMake(rightX, y, width, 24);
     y += 30;
-    _hostLabel.frame = CGRectMake(pad, y, width, 18);
+    _hostLabel.frame = CGRectMake(rightX, y, width, 18);
     y += 20;
-    _hostField.frame = CGRectMake(pad, y, width, 40);
+    _hostField.frame = CGRectMake(rightX, y, width, 40);
     y += 48;
-    _codeLabel.frame = CGRectMake(pad, y, width, 18);
+    _codeLabel.frame = CGRectMake(rightX, y, width, 18);
     y += 20;
     _codeDisplay.hidden = YES;
     CGFloat keypadWidth = MIN(width, 330);
     CGFloat keypadHeight = [DBNumericKeypad heightForWidth:keypadWidth];
-    _keypad.frame = CGRectMake((size.width - keypadWidth) / 2, y, keypadWidth, keypadHeight);
+    _keypad.frame = CGRectMake(rightX + floor((width - keypadWidth) / 2), y, keypadWidth,
+                               keypadHeight);
     y += keypadHeight + 12;
   }
 
   CGFloat errorHeight = [_errorLabel.text length] > 0
       ? [_errorLabel sizeThatFits:CGSizeMake(width, 9999)].height : 0;
-  _errorLabel.frame = CGRectMake(pad, y, width, errorHeight);
+  _errorLabel.frame = CGRectMake(rightX, y, width, errorHeight);
   y += errorHeight > 0 ? errorHeight + 4 : 0;
   CGFloat detailHeight = [_errorDetail.text length] > 0 ? 16 : 0;
-  _errorDetail.frame = CGRectMake(pad, y, width, detailHeight);
+  _errorDetail.frame = CGRectMake(rightX, y, width, detailHeight);
   y += detailHeight > 0 ? detailHeight + 10 : 0;
 
   if (!_createButton.hidden) {
-    _createButton.frame = CGRectMake(pad, y, width, 44);
+    _createButton.frame = CGRectMake(rightX, y, width, 44);
     y += 50;
     if (!_createConfirm.hidden) {
       CGFloat confirmHeight = [_createConfirm sizeThatFits:CGSizeMake(width, 9999)].height;
-      _createConfirm.frame = CGRectMake(pad, y, width, confirmHeight);
+      _createConfirm.frame = CGRectMake(rightX, y, width, confirmHeight);
       y += confirmHeight + 10;
     }
   }
 
   if (!_laterButton.hidden) {
-    _laterButton.frame = CGRectMake(pad, y, width, 40);
+    _laterButton.frame = CGRectMake(rightX, y, width, 40);
     y += 52;
   }
 
-  _scroll.contentSize = CGSizeMake(size.width, y + 20);
+  _scroll.contentSize = CGSizeMake(size.width, MAX(y, leftBottom) + 20);
 }
 
 @end
