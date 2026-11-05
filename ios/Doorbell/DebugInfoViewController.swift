@@ -423,7 +423,7 @@ final class DebugInfoViewController: UIViewController {
         }
         let address = list[addressIndex]
         let host = ipSelector.selectedSegmentIndex == 1 ? "[\(address)]" : address
-        let url = "http://\(host):\(boot.httpPort)/admin/"
+        let url = "https://\(host):\(ConfigUtil.peerAdminHttpsPort)/admin/"
         currentQRURL = url
         qrImageView.isHidden = false
         qrURLLabel.text = "\(texts.t("info.scan_admin"))\n\(url)"

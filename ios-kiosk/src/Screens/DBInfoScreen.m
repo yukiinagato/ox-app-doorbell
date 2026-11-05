@@ -335,9 +335,9 @@ static BOOL DBPortListening(int port) {
   NSString *url = nil;
   if (addr) {
     if (_ipSeg.selectedSegmentIndex == 1)
-      url = [NSString stringWithFormat:@"http://[%@]:%ld/admin/", addr, (long)_boot.httpPort];
+      url = [NSString stringWithFormat:@"https://[%@]:47443/admin/", addr];
     else
-      url = [NSString stringWithFormat:@"http://%@:%ld/admin/", addr, (long)_boot.httpPort];
+      url = [NSString stringWithFormat:@"https://%@:47443/admin/", addr];
   }
   if ([list count] > 1) {
     _cycleBtn.hidden = NO;
