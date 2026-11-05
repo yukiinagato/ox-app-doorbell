@@ -42,6 +42,7 @@ namespace DoorbellApp.Core
         private CoreInterop.LogLineCb _logCb;
         private CoreInterop.TtsSpeakCb _ttsCb;
         private CoreInterop.HttpsRequestCb _httpsCb;
+        private CoreInterop.HttpsRequestV3Cb _httpsV3Cb;
         private CoreInterop.SecureGetCb _secureGetCb;
         private CoreInterop.SecurePutCb _securePutCb;
         private CoreInterop.SecureDeleteCb _secureDeleteCb;
@@ -57,6 +58,9 @@ namespace DoorbellApp.Core
         private CoreInterop.ConfigBatchJsonFn _configBatchJson;
         private CoreInterop.DeleteConfigKeyFn _deleteConfigKey;
         private CoreInterop.CallLogJsonV2Fn _callLogJsonV2;
+        private CoreInterop.LocalTokenFn _localToken;
+        private CoreInterop.AdminLockFn _adminLock;
+        private string _localTokenValue;
         private bool _optionalProbed;
         private bool _cameraAvailable;
         private DpapiSecretStore _secretStore;
@@ -74,15 +78,26 @@ namespace DoorbellApp.Core
 
         public event Action<UiEvent> UiEventReceived;
 
+        /// <summary>
+        /// Asked when a configuration write comes back admin_required because the native admin
+        /// window is closed. Runs on the caller's thread with no Core lock held; returns true when
+        /// the administrator re-entered the password, and the write is then retried once.
+        /// </summary>
+        public static Func<bool> AdminPrompt;
+
+        /// <summary>Shell diagnostics that belong next to Core's own log lines.</summary>
+        public static void WriteAppLog(string line) => AppLog.Write("app", 1, line);
+
         public bool Start(string dataDir, string bootJson)
         {
             CoreInterop.Preload();
             try { _tts = new SpeechSynthesizer(); } catch { _tts = null;  }
             _secretStore = new DpapiSecretStore(dataDir);
+            AppLog.Init(dataDir);
 
             _logCb = (user, level, line) =>
             {
-                try { Debug.WriteLine("[core] " + CoreInterop.ReadUtf8(line)); }
+                try { AppLog.Write("core", level, CoreInterop.ReadUtf8(line)); }
                 catch { /* managed exceptions must never cross the native callback boundary */ }
             };
             _ttsCb = (user, text, lang) =>
@@ -109,6 +124,35 @@ namespace DoorbellApp.Core
                     if (statusOut != IntPtr.Zero) Marshal.WriteInt32(statusOut, status);
                     if (responseOut != IntPtr.Zero)
                         Marshal.WriteIntPtr(responseOut, NativeUtf8.Alloc(response));
+                    return 0;
+                }
+                catch { return -1; }
+            };
+            _httpsV3Cb = (user, method, url, headers, body, bodyLength, responseOut, lengthOut,
+                          statusOut) =>
+            {
+                try
+                {
+                    if (responseOut != IntPtr.Zero) Marshal.WriteIntPtr(responseOut, IntPtr.Zero);
+                    if (lengthOut != IntPtr.Zero) Marshal.WriteIntPtr(lengthOut, IntPtr.Zero);
+                    if (statusOut != IntPtr.Zero) Marshal.WriteInt32(statusOut, 0);
+                    byte[] response;
+                    int status;
+                    int rc = WinHttpTransport.Request(CoreInterop.ReadUtf8(method),
+                        CoreInterop.ReadUtf8(url), CoreInterop.ReadUtf8(headers), body, bodyLength,
+                        out response, out status);
+                    if (rc != 0) return rc;
+                    if (statusOut != IntPtr.Zero) Marshal.WriteInt32(statusOut, status);
+                    byte[] bytes = response ?? new byte[0];
+                    // One spare byte keeps the buffer non-empty and NUL-terminated for callers
+                    // that also treat it as text; the reported length excludes it.
+                    IntPtr buffer = Marshal.AllocHGlobal(bytes.Length + 1);
+                    if (bytes.Length != 0) Marshal.Copy(bytes, 0, buffer, bytes.Length);
+                    Marshal.WriteByte(buffer, bytes.Length, 0);
+                    if (responseOut != IntPtr.Zero) Marshal.WriteIntPtr(responseOut, buffer);
+                    else Marshal.FreeHGlobal(buffer);
+                    if (lengthOut != IntPtr.Zero)
+                        Marshal.WriteIntPtr(lengthOut, new IntPtr(bytes.Length));
                     return 0;
                 }
                 catch { return -1; }
@@ -173,6 +217,7 @@ namespace DoorbellApp.Core
                 release_buffer = Marshal.GetFunctionPointerForDelegate(_releaseBufferCb),
                 secure_delete = Marshal.GetFunctionPointerForDelegate(_secureDeleteCb),
                 power_state = Marshal.GetFunctionPointerForDelegate(_powerStateCb),
+                https_request_v3 = Marshal.GetFunctionPointerForDelegate(_httpsV3Cb),
             };
             _core = CoreInterop.db_core_create_v2(ref plat, dataDir, bootJson);
             if (_core == IntPtr.Zero) return false;
@@ -192,7 +237,7 @@ namespace DoorbellApp.Core
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine("ui event parse error: " + ex.Message);
+                    AppLog.Write("app", 2, "ui event parse error: " + ex.Message);
                 }
             };
             CoreInterop.db_core_set_ui_callback(_core, _uiCb, IntPtr.Zero);
@@ -226,7 +271,7 @@ namespace DoorbellApp.Core
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("tts error: " + ex.Message);
+                AppLog.Write("app", 2, "tts error: " + ex.Message);
             }
         }
 
@@ -404,6 +449,10 @@ namespace DoorbellApp.Core
                     "db_core_config_batch_json");
                 _deleteConfigKey = CoreInterop.OptionalExport<CoreInterop.DeleteConfigKeyFn>(
                     "db_core_delete_config_key");
+                _localToken = CoreInterop.OptionalExport<CoreInterop.LocalTokenFn>(
+                    "db_core_local_token");
+                _adminLock = CoreInterop.OptionalExport<CoreInterop.AdminLockFn>(
+                    "db_core_admin_lock");
                 _callLogJsonV2 = CoreInterop.OptionalExport<CoreInterop.CallLogJsonV2Fn>(
                     "db_core_call_log_json_v2");
             }
@@ -514,9 +563,56 @@ namespace DoorbellApp.Core
         {
             ProbeOptionalExports();
             if (_setConfigJson == null || string.IsNullOrEmpty(key)) return false;
+            return AdminWrite(() =>
+            {
+                lock (_nativeLock)
+                    return _core == IntPtr.Zero ? -1 : _setConfigJson(_core, key, valueJson ?? "null");
+            }) == 0;
+        }
+
+        /// <summary>
+        /// Runs one int-valued write. When Core reports that the native admin window is closed,
+        /// the administrator is asked once (AdminPrompt) and the write is retried.
+        /// </summary>
+        private int AdminWrite(Func<int> write)
+        {
+            int rc = write();
+            if (rc != CoreInterop.DbResultAdminRequired) return rc;
+            Func<bool> prompt = AdminPrompt;
+            if (prompt == null || !prompt()) return rc;
+            return write();
+        }
+
+        private static bool IsAdminRequired(string resultJson) =>
+            resultJson != null &&
+            resultJson.IndexOf("\"admin_required\"", StringComparison.Ordinal) >= 0;
+
+        /// <summary>
+        /// Loopback media token for X-Doorbell-Local (security protocol v3). Null when this Core
+        /// predates it; requests then go out without the header and Core answers 401.
+        /// </summary>
+        public string LocalToken
+        {
+            get
+            {
+                ProbeOptionalExports();
+                lock (_nativeLock)
+                {
+                    if (_localTokenValue != null) return _localTokenValue;
+                    if (_core == IntPtr.Zero || _localToken == null) return null;
+                    _localTokenValue = CoreInterop.ReadUtf8(_localToken(_core));
+                    return _localTokenValue;
+                }
+            }
+        }
+
+        /// <summary>Closes the native admin window. Safe to call at any time.</summary>
+        public void AdminLock()
+        {
+            ProbeOptionalExports();
+            if (_adminLock == null) return;
             lock (_nativeLock)
-                return _core != IntPtr.Zero &&
-                    _setConfigJson(_core, key, valueJson ?? "null") == 0;
+                if (_core != IntPtr.Zero) _adminLock(_core);
         }
 
         /// <summary>
@@ -541,17 +637,27 @@ namespace DoorbellApp.Core
         {
             ProbeOptionalExports();
             if (_configBatchJson == null || string.IsNullOrEmpty(json)) return null;
-            lock (_nativeLock)
-                return _core == IntPtr.Zero ? null :
-                    CoreInterop.TakeUtf8(_configBatchJson(_core, json));
+            Func<string> write = () =>
+            {
+                lock (_nativeLock)
+                    return _core == IntPtr.Zero ? null :
+                        CoreInterop.TakeUtf8(_configBatchJson(_core, json));
+            };
+            string result = write();
+            if (!IsAdminRequired(result)) return result;
+            Func<bool> prompt = AdminPrompt;
+            return prompt != null && prompt() ? write() : result;
         }
 
         public bool DeleteConfigKey(string key)
         {
             ProbeOptionalExports();
             if (_deleteConfigKey == null || string.IsNullOrEmpty(key)) return false;
-            lock (_nativeLock)
-                return _core != IntPtr.Zero && _deleteConfigKey(_core, key) == 0;
+            return AdminWrite(() =>
+            {
+                lock (_nativeLock)
+                    return _core == IntPtr.Zero ? -1 : _deleteConfigKey(_core, key);
+            }) == 0;
         }
 
         /// <summary>
@@ -572,7 +678,8 @@ namespace DoorbellApp.Core
 
         /// <summary>
         /// Triggers the configured unlock action. Returns core's code: 0 queued, -2 unknown door,
-        /// and -3 when nothing is configured, which the shell must say out loud.
+        /// -3 when nothing is configured and -4 when the configured command failed, both of which
+        /// the shell must say out loud.
         /// </summary>
         public int OpenDoor(string door)
         {
@@ -609,10 +716,12 @@ namespace DoorbellApp.Core
         /// <summary>Local wall clock rendered by core in the cluster time zone.</summary>
         public Dictionary<string, object> LocalTime(long wallMs)
         {
-            if (_core == IntPtr.Zero) return null;
             string s;
             lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
                 s = CoreInterop.TakeUtf8(CoreInterop.db_core_local_time_json(_core, wallMs));
+            }
             if (s == null) return null;
             try { return _json.Deserialize<Dictionary<string, object>>(s); }
             catch { return null; }
@@ -627,10 +736,12 @@ namespace DoorbellApp.Core
         /// <summary>Effective {call,sos,idle} volumes for this device, 0-100.</summary>
         public Dictionary<string, object> AudioVolumes(string deviceId)
         {
-            if (_core == IntPtr.Zero) return null;
             string s;
             lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
                 s = CoreInterop.TakeUtf8(CoreInterop.db_core_audio_json(_core, deviceId ?? ""));
+            }
             if (s == null) return null;
             try { return _json.Deserialize<Dictionary<string, object>>(s); }
             catch { return null; }
@@ -639,27 +750,35 @@ namespace DoorbellApp.Core
         public bool SetDoorNotice(string door, string text, long expiresMs)
         {
             if (string.IsNullOrEmpty(door) || string.IsNullOrEmpty(text)) return false;
-            lock (_nativeLock)
-                return _core != IntPtr.Zero && CoreInterop.db_core_set_door_notice(
-                    _core, door, text, expiresMs) == 0;
+            return AdminWrite(() =>
+            {
+                lock (_nativeLock)
+                    return _core == IntPtr.Zero ? -1 : CoreInterop.db_core_set_door_notice(
+                        _core, door, text, expiresMs);
+            }) == 0;
         }
 
         public bool ClearDoorNotice(string door)
         {
             if (string.IsNullOrEmpty(door)) return false;
-            lock (_nativeLock)
-                return _core != IntPtr.Zero &&
-                    CoreInterop.db_core_clear_door_notice(_core, door) == 0;
+            return AdminWrite(() =>
+            {
+                lock (_nativeLock)
+                    return _core == IntPtr.Zero ? -1 :
+                        CoreInterop.db_core_clear_door_notice(_core, door);
+            }) == 0;
         }
 
         /// <summary>Call history, newest first. limit is clamped by core to 1..500.</summary>
         public Dictionary<string, object> CallLog(long sinceMs, int limit)
         {
-            if (_core == IntPtr.Zero) return null;
             string s;
             lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
                 s = CoreInterop.TakeUtf8(
                     CoreInterop.db_core_call_log_json(_core, sinceMs, limit));
+            }
             if (s == null) return null;
             try { return _json.Deserialize<Dictionary<string, object>>(s); }
             catch { return null; }
@@ -698,9 +817,12 @@ namespace DoorbellApp.Core
 
         public Dictionary<string, object> Config()
         {
-            if (_core == IntPtr.Zero) return null;
             string s;
-            lock (_nativeLock) s = CoreInterop.TakeUtf8(CoreInterop.db_core_config_json(_core));
+            lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
+                s = CoreInterop.TakeUtf8(CoreInterop.db_core_config_json(_core));
+            }
             if (s == null) return null;
             try { return _json.Deserialize<Dictionary<string, object>>(s); }
             catch { return null; }
@@ -708,9 +830,12 @@ namespace DoorbellApp.Core
 
         public Dictionary<string, object> PairingInfo()
         {
-            if (_core == IntPtr.Zero) return null;
             string s;
-            lock (_nativeLock) s = CoreInterop.TakeUtf8(CoreInterop.db_core_pairing_json(_core));
+            lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
+                s = CoreInterop.TakeUtf8(CoreInterop.db_core_pairing_json(_core));
+            }
             if (s == null) return null;
             try { return _json.Deserialize<Dictionary<string, object>>(s); }
             catch { return null; }
@@ -748,7 +873,7 @@ namespace DoorbellApp.Core
             ProbeOptionalExports();
             if (_mintJoinToken == null)
             {
-                Debug.WriteLine("core has no db_core_mint_join_token_json; no PIN minted");
+                AppLog.Write("app", 2, "core has no db_core_mint_join_token_json; no PIN minted");
                 return null;
             }
             string s;
@@ -979,6 +1104,7 @@ namespace DoorbellApp.Core
             }
             lock (_eventLock) _pendingRecovery = null;
             _tts?.Dispose();
+            AppLog.Close();
         }
     }
 }

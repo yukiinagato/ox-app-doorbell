@@ -33,6 +33,7 @@ namespace DoorbellApp.Core
         private readonly bool _lowResource;
         private volatile bool _running;
         private Thread _thread;
+        private volatile HttpWebRequest _request;
         private readonly object _statsLock = new object();
         private readonly double[] _intervals = new double[16];
         private int _intervalCount;
@@ -61,11 +62,20 @@ namespace DoorbellApp.Core
             _thread.Start();
         }
 
+        /// <summary>
+        /// Aborts the open request so its connection is released now rather than after the
+        /// 10-second read timeout, then waits briefly for the reader thread to leave.
+        /// </summary>
         public void Stop()
         {
             _running = false;
-            try { _thread?.Interrupt(); } catch { }
+            var request = _request;
+            if (request != null) try { request.Abort(); } catch { }
+            var thread = _thread;
             _thread = null;
+            if (thread == null) return;
+            try { thread.Interrupt(); } catch { }
+            if (thread != Thread.CurrentThread) thread.Join(1000);
         }
 
         /// <summary>Snapshot of the counters. Safe to call from the dispatcher thread.</summary>
@@ -130,9 +140,9 @@ namespace DoorbellApp.Core
             {
                 try
                 {
-                    var req = (HttpWebRequest)WebRequest.Create(_url);
-                    req.Timeout = 4000;
-                    req.ReadWriteTimeout = 10000;
+                    var req = LocalMedia.Create(_url, 4000, 10000);
+                    _request = req;
+                    if (!_running) break;
                     using (var resp = req.GetResponse())
                     using (var raw = resp.GetResponseStream())
                     using (var ins = new BufferedStream(raw, 64 * 1024))
@@ -160,6 +170,7 @@ namespace DoorbellApp.Core
                     }
                 }
                 catch {  }
+                _request = null;
                 if (!_running) break;
                 try { Thread.Sleep(2000); } catch (ThreadInterruptedException) { }
             }

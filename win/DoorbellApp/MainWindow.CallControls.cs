@@ -359,12 +359,18 @@ namespace DoorbellApp
         private void OnOpenDoorClick(object sender, RoutedEventArgs e)
         {
             // db_core_open_door publishes the same ha_command the SIP feature code does, so the
-            // control works from the monitor page too, and -3 means nothing is configured: the
-            // shell says so rather than reporting a success that did nothing.
+            // control works from the monitor page too. -3 means nothing is configured and -4 that
+            // the configured command failed: the shell says which, rather than reporting a
+            // success that did nothing.
             int result = App.Core.OpenDoor(CurrentCallDoor());
             if (result == -3)
             {
                 ShowCallMessage(Texts.T("unlock.not_configured"));
+                return;
+            }
+            if (result == -4)
+            {
+                ShowCallMessage(Texts.T("unlock.command_failed"));
                 return;
             }
             ShowCallMessage(Texts.T(result == 0 ? "ring.open_sent" : "ring.open_failed"));

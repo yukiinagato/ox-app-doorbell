@@ -41,6 +41,7 @@ namespace DoorbellApp
                 StartIncomingNativeH264();
                 return;
             }
+            if (!MediaElementCanOpen("incoming", _incomingStreamMp4Url)) return;
             try
             {
                 VideoDiagnostics.RecordAttempt("incoming", _incomingStreamMp4Url);
@@ -59,6 +60,20 @@ namespace DoorbellApp
                     "start_exception", ex);
                 ScheduleIncomingH264Retry();
             }
+        }
+
+        /// <summary>
+        /// MediaElement opens a URL itself and cannot send X-Doorbell-Local, so Core refuses it on
+        /// loopback media routes. It remains only for an explicitly configured external camera;
+        /// for Core media without the native player the shell stays on MJPEG.
+        /// </summary>
+        private static bool MediaElementCanOpen(string screen, string url)
+        {
+            Uri uri;
+            if (!Uri.TryCreate(url, UriKind.Absolute, out uri)) return false;
+            if (!uri.IsLoopback) return true;
+            VideoDiagnostics.RecordFailure(screen, url, "mediaelement_cannot_authenticate", null);
+            return false;
         }
 
         private void StartIncomingNativeH264()

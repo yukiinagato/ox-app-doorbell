@@ -79,6 +79,7 @@ namespace DoorbellApp
                 StartInCallNativeH264();
                 return;
             }
+            if (!MediaElementCanOpen("in_call", _inCallH264Url)) return;
             try
             {
                 VideoDiagnostics.RecordAttempt("in_call", _inCallH264Url);
@@ -216,11 +217,7 @@ namespace DoorbellApp
                 PeerVideo.Source = null;
                 return;
             }
-            var request = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(
-                peerFrameUrl);
-            request.Timeout = 2000;
-            request.ReadWriteTimeout = 1500;
-            request.AllowAutoRedirect = false;
+            var request = LocalMedia.Create(peerFrameUrl, 2000, 1500);
             request.CachePolicy = new System.Net.Cache.RequestCachePolicy(System.Net.Cache.RequestCacheLevel.NoCacheNoStore);
             _peerFrameRequest = request;
             _peerPollBusy = true;

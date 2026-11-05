@@ -7,15 +7,24 @@ using System.Web.Script.Serialization;
 
 namespace DoorbellApp.Core
 {
-    /// <summary>Synchronous HTTPS transport for db_platform_v2, pinned to TLS 1.2.</summary>
+    /// <summary>
+    /// Synchronous HTTPS transport for db_platform_v2: TLS 1.3 where WinHTTP offers it, otherwise
+    /// TLS 1.2, never anything older. Windows 7 SP1 can only do TLS 1.2 through WinHTTP after
+    /// KB3140245; without it the option is rejected, every request fails with
+    /// TlsUnavailable, and the reason is logged once so the missing update is visible.
+    /// </summary>
     internal static class WinHttpTransport
     {
+        /// <summary>Returned when WinHTTP on this system cannot be limited to TLS 1.2+.</summary>
+        public const int TlsUnavailable = -2;
+        private static int _tlsWarningLogged;
         private const uint AccessDefaultProxy = 0;
         private const uint FlagSecure = 0x00800000;
         private const uint OptionSecureProtocols = 84;
         private const uint OptionRedirectPolicy = 88;
         private const uint RedirectNever = 0;
         private const uint SecureProtocolTls12 = 0x00000800;
+        private const uint SecureProtocolTls13 = 0x00002000;
         private const uint QueryStatusCode = 19;
         private const uint QueryFlagNumber = 0x20000000;
         private const int MaxResponseBytes = 16 * 1024 * 1024;
@@ -87,8 +96,7 @@ namespace DoorbellApp.Core
                 session = WinHttpOpen("DoorbellApp/1 db-platform-v2", AccessDefaultProxy,
                                       null, null, 0);
                 if (session == IntPtr.Zero) return -1;
-                uint tls = SecureProtocolTls12;
-                if (!WinHttpSetOption(session, OptionSecureProtocols, ref tls, sizeof(uint))) return -1;
+                if (!RestrictToModernTls(session)) return TlsUnavailable;
                 WinHttpSetTimeouts(session, 10000, 10000, 30000, 45000);
 
                 connect = WinHttpConnect(session, uri.IdnHost, checked((ushort)uri.Port), 0);
@@ -148,6 +156,20 @@ namespace DoorbellApp.Core
                 if (connect != IntPtr.Zero) WinHttpCloseHandle(connect);
                 if (session != IntPtr.Zero) WinHttpCloseHandle(session);
             }
+        }
+
+        private static bool RestrictToModernTls(IntPtr session)
+        {
+            uint tls = SecureProtocolTls12 | SecureProtocolTls13;
+            if (WinHttpSetOption(session, OptionSecureProtocols, ref tls, sizeof(uint))) return true;
+            tls = SecureProtocolTls12;
+            if (WinHttpSetOption(session, OptionSecureProtocols, ref tls, sizeof(uint))) return true;
+            int error = Marshal.GetLastWin32Error();
+            if (System.Threading.Interlocked.Exchange(ref _tlsWarningLogged, 1) == 0)
+                AppLog.Write("https", 3, "WinHTTP cannot restrict this connection to TLS 1.2 " +
+                    "(error " + error + "). On Windows 7 SP1 install KB3140245; HTTPS " +
+                    "integrations (Telegram, Web Push, updates) stay unavailable until then.");
+            return false;
         }
 
         private static bool AddHeaders(IntPtr request, string headersJson)

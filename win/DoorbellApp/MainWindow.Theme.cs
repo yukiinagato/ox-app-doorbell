@@ -108,16 +108,12 @@ namespace DoorbellApp
             Task.Run(() =>
             {
                 byte[] data = null;
-                try
+                data = LocalMedia.Download(url, 10000, 32 * 1024 * 1024);
+                if (data == null)
                 {
-                    using (var wc = new System.Net.WebClient())
-                        data = wc.DownloadData(url);
+                    CoreClient.WriteAppLog("theme image fetch failed; waiting for asset_ready");
+                    return;
                 }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("Theme image fetch failed; waiting for asset_ready: " + ex.Message);
-                }
-                if (data == null) return;
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     if (_themeHash != hash) return;
