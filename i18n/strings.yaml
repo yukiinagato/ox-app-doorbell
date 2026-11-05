@@ -669,7 +669,7 @@ pair.added: { ja: "追加しました", en: "Added", zh: "已添加" }
 pair.add_failed: { ja: "追加できませんでした", en: "Couldn't add", zh: "添加失败" }
 pair.deny: { ja: "無視", en: "Ignore", zh: "忽略" }
 pair.add_all: { ja: "まとめて追加 (10 分)", en: "Add all nearby (10 min)", zh: "批量添加（10 分钟）" }
-pair.add_all_warning: { ja: "10 分間、見つかった端末をすべて自動で追加します", en: "Every device found in the next 10 minutes will be added automatically", zh: "10 分钟内发现的所有设备都将被自动添加" }
+pair.add_all_warning: { ja: "10 分間、近くの端末を一覧に表示します。追加するには各端末の確認コードが必要です", en: "Nearby devices are listed for 10 minutes. Each one is added with the confirmation code shown on it", zh: "10 分钟内列出附近的设备，添加每台设备都需要其屏幕上的确认码" }
 pair.add_all_on: { ja: "まとめて追加 ON — あと {m}:{s} ({n} 台追加)", en: "Adding all — {m}:{s} left ({n} added)", zh: "批量添加已开启 — 剩余 {m}:{s}（已添加 {n} 台）" }
 pair.add_all_stop: { ja: "停止", en: "Stop", zh: "停止" }
 pair.qr_caption: { ja: "別の端末でこの QR を読み取ると追加できます", en: "Scan this QR from another device to add this one", zh: "用另一台设备扫描此二维码即可添加" }
@@ -1297,3 +1297,188 @@ admin.import_new_preview: { en: "Review a new import", ja: "新しいインポ�
 # iOS and iOS 5 shells: review fixes 2026-11
 dashboard.device_status_missing: { ja: "門口機が登録されていません", en: "No door station registered", zh: "未登记门口机" }
 ring.unlock_failed: { ja: "開錠の操作を実行できませんでした", en: "The unlock action could not be run", zh: "开锁操作未能执行" }
+
+# Native settings (iOS, tvOS, iOS 5): categories, controls and validation messages
+prefs.identity: { ja: "名前と役割", en: "Name and role", zh: "名称与角色" }
+prefs.sounds: { ja: "サウンドと音量", en: "Sounds and volume", zh: "声音与音量" }
+prefs.display: { ja: "画面表示と明るさ", en: "Display and brightness", zh: "显示与亮度" }
+prefs.calls: { ja: "呼出と応答", en: "Calls and replies", zh: "呼叫与回复" }
+prefs.sos: { ja: "緊急通報 (SOS)", en: "Emergency (SOS)", zh: "紧急求助 (SOS)" }
+prefs.sip: { ja: "通話 (SIP)", en: "Calling (SIP)", zh: "通话 (SIP)" }
+prefs.about: { ja: "情報", en: "About", zh: "关于" }
+prefs.video: { ja: "映像", en: "Video", zh: "视频" }
+prefs.camera: { ja: "カメラ", en: "Camera", zh: "摄像头" }
+prefs.camera_codec: { ja: "映像方式", en: "Video format", zh: "视频格式" }
+prefs.camera_codec_footer: { ja: "自動は H.264 が使える端末で H.264 を、使えない端末で MJPEG を使います。", en: "Automatic uses H.264 where this device supports it and MJPEG otherwise.", zh: "自动：设备支持时使用 H.264，否则使用 MJPEG。" }
+prefs.resolution: { ja: "解像度", en: "Resolution", zh: "分辨率" }
+prefs.frame_rate: { ja: "フレームレート", en: "Frame rate", zh: "帧率" }
+prefs.quality: { ja: "画質", en: "Quality", zh: "画质" }
+prefs.bitrate: { ja: "ビットレート", en: "Bit rate", zh: "码率" }
+prefs.motion: { ja: "動き検知", en: "Motion detection", zh: "移动侦测" }
+prefs.motion_enabled: { ja: "動きを検知する", en: "Detect motion", zh: "侦测移动" }
+prefs.motion_sensitivity: { ja: "感度", en: "Sensitivity", zh: "灵敏度" }
+prefs.motion_interval: { ja: "通知の最短間隔", en: "Minimum interval", zh: "最短间隔" }
+prefs.playback_low_latency: { ja: "低遅延", en: "Low latency", zh: "低延迟" }
+prefs.tones: { ja: "効果音", en: "Sound effects", zh: "提示音" }
+prefs.ringtone: { ja: "呼出音", en: "Ringtone", zh: "铃声" }
+prefs.button_sound: { ja: "ボタンの音", en: "Button sound", zh: "按键音" }
+prefs.update_sound: { ja: "更新の音", en: "Update sound", zh: "更新提示音" }
+prefs.launch_sound: { ja: "起動音", en: "Startup sound", zh: "启动音" }
+prefs.call_sound: { ja: "門口機の呼出確認音", en: "Door station call sound", zh: "门口机呼叫提示音" }
+prefs.call_sound_loop: { ja: "応答まで繰り返す", en: "Repeat until answered", zh: "重复直到应答" }
+prefs.sound_none: { ja: "なし", en: "None", zh: "无" }
+prefs.sound_school_chime: { ja: "学校のチャイム", en: "School chime", zh: "学校钟声" }
+prefs.sound_ding1: { ja: "ピンポン 1", en: "Ding 1", zh: "叮咚 1" }
+prefs.sound_ding2: { ja: "ピンポン 2", en: "Ding 2", zh: "叮咚 2" }
+prefs.sound_classic: { ja: "クラシック", en: "Classic", zh: "经典" }
+prefs.sound_button_click: { ja: "クリック", en: "Click", zh: "点击" }
+prefs.sound_indoor_update: { ja: "お知らせ音", en: "Notification", zh: "通知音" }
+prefs.sound_title_display: { ja: "タイトル", en: "Title", zh: "标题" }
+prefs.sound_outdoor_call_alert: { ja: "呼出確認", en: "Call alert", zh: "呼叫提示" }
+prefs.sound_siren1: { ja: "サイレン", en: "Siren", zh: "警报" }
+prefs.sound_upload: { ja: "音声ファイルを追加", en: "Add audio files", zh: "添加音频文件" }
+prefs.theme: { ja: "背景", en: "Background", zh: "背景" }
+prefs.backdrop: { ja: "文字の下地", en: "Text backdrop", zh: "文字衬底" }
+prefs.backdrop_opacity: { ja: "下地の濃さ", en: "Backdrop opacity", zh: "衬底浓度" }
+prefs.backdrop_color: { ja: "下地の色", en: "Backdrop colour", zh: "衬底颜色" }
+prefs.blur_radius: { ja: "すりガラスのぼかし", en: "Frosted-glass blur", zh: "磨砂模糊" }
+prefs.blur_system_managed: { ja: "システムが管理", en: "Managed by the system", zh: "由系统管理" }
+prefs.image_upload: { ja: "画像を追加", en: "Add images", zh: "添加图片" }
+prefs.brightness: { ja: "明るさ", en: "Brightness", zh: "亮度" }
+prefs.night_mode: { ja: "夜間モード", en: "Night mode", zh: "夜间模式" }
+prefs.night_brightness: { ja: "夜間の明るさ", en: "Night brightness", zh: "夜间亮度" }
+prefs.red_tint: { ja: "赤みを付ける", en: "Red tint", zh: "偏红显示" }
+prefs.from: { ja: "開始", en: "From", zh: "开始" }
+prefs.to: { ja: "終了", en: "To", zh: "结束" }
+prefs.screensaver: { ja: "スクリーンセーバー", en: "Screen saver", zh: "屏幕保护" }
+prefs.screensaver_after: { ja: "開始までの時間", en: "Start after", zh: "启动前等待" }
+prefs.screensaver_mode: { ja: "表示", en: "Style", zh: "样式" }
+prefs.screensaver_brightness: { ja: "セーバー中の明るさ", en: "Brightness while saving", zh: "屏保亮度" }
+prefs.screensaver_schedule: { ja: "時間帯", en: "When", zh: "时段" }
+prefs.saver_dim: { ja: "暗くする", en: "Dim", zh: "调暗" }
+prefs.saver_minimal: { ja: "最小表示", en: "Minimal", zh: "简洁" }
+prefs.saver_clock: { ja: "時計", en: "Clock", zh: "时钟" }
+prefs.saver_always: { ja: "常に", en: "Always", zh: "始终" }
+prefs.saver_daily: { ja: "毎日の時間帯", en: "Daily window", zh: "每日时段" }
+prefs.pixel_shift: { ja: "焼き付き防止の移動間隔", en: "Burn-in shift interval", zh: "防烧屏位移间隔" }
+prefs.call_flow: { ja: "呼出の流れ", en: "Call flow", zh: "呼叫流程" }
+prefs.call_flow_footer: { ja: "用件を先に選ぶか、先に呼び出してから用件を選ぶかを決めます。", en: "Choose whether visitors pick a purpose first or ring first and pick it afterwards.", zh: "选择访客先选来访目的，还是先呼叫再选择目的。" }
+prefs.flow_purpose_first: { ja: "用件を先に", en: "Purpose first", zh: "先选目的" }
+prefs.flow_ring_then_purpose: { ja: "呼出を先に", en: "Ring first", zh: "先呼叫" }
+prefs.call_ttl: { ja: "呼出を続ける時間", en: "Ring duration", zh: "呼叫持续时间" }
+prefs.reply_ttl: { ja: "返答の表示時間", en: "Reply display time", zh: "回复显示时间" }
+prefs.visitor_languages: { ja: "来客向けの言語", en: "Visitor languages", zh: "访客语言" }
+prefs.visitor_languages_footer: { ja: "門口機の言語切り替えに表示する順番です。最初の言語が既定になります。", en: "The order shown on the door station's language switch. The first language is the default.", zh: "门口机语言切换中显示的顺序，第一个为默认语言。" }
+prefs.visitor_lang_revert: { ja: "既定の言語に戻るまで", en: "Return to the default language after", zh: "恢复默认语言前" }
+prefs.quick_replies: { ja: "クイック返答", en: "Quick replies", zh: "快捷回复" }
+prefs.reply_audio: { ja: "返答の録音音声", en: "Recorded reply audio", zh: "回复录音" }
+prefs.list_footer: { ja: "「編集」で並べ替えと削除ができます。", en: "Tap Edit to reorder or delete.", zh: "点按“编辑”可排序或删除。" }
+prefs.purpose_footer: { ja: "オフにした用件は来客に表示されませんが、文言と順番は残ります。", en: "A switched-off purpose is hidden from visitors; its wording and order are kept.", zh: "关闭的目的不会显示给访客，但会保留文字和顺序。" }
+prefs.speak: { ja: "読み上げる", en: "Speak aloud", zh: "朗读" }
+prefs.speak_footer: { ja: "門口機で返答を音声で読み上げます。", en: "The door station reads the reply aloud.", zh: "门口机会朗读该回复。" }
+prefs.icon: { ja: "アイコン", en: "Icon", zh: "图标" }
+prefs.label: { ja: "表示名", en: "Label", zh: "显示名称" }
+prefs.add_reply: { ja: "返答を追加", en: "Add reply", zh: "添加回复" }
+prefs.add_purpose: { ja: "用件を追加", en: "Add purpose", zh: "添加目的" }
+prefs.add_preset: { ja: "定型文を追加", en: "Add preset", zh: "添加常用语" }
+prefs.add_server: { ja: "サーバーを追加", en: "Add server", zh: "添加服务器" }
+prefs.add_window: { ja: "時間帯を追加", en: "Add time window", zh: "添加时段" }
+prefs.doors_footer: { ja: "門口は門口機を追加すると作られます。", en: "A door is created when its door station is added.", zh: "添加门口机时会自动创建门口。" }
+prefs.no_doors: { ja: "門口はまだありません", en: "No doors yet", zh: "尚无门口" }
+prefs.notice_global: { ja: "家全体のお知らせ", en: "Home-wide announcement", zh: "全家公告" }
+prefs.notice_presets: { ja: "お知らせの定型文", en: "Announcement presets", zh: "公告常用语" }
+prefs.presets_footer: { ja: "最大 8 件まで保存できます。", en: "Up to eight presets.", zh: "最多 8 条。" }
+prefs.presets_full: { ja: "定型文は 8 件までです", en: "There are already eight presets", zh: "常用语已达 8 条上限" }
+prefs.buildings: { ja: "建物と門口の構成", en: "Buildings and doors", zh: "建筑与门口结构" }
+prefs.sos_trigger: { ja: "SOS ボタン", en: "SOS control", zh: "SOS 控件" }
+prefs.sos_trigger_footer: { ja: "SOS は警察や消防には自動で通報しません。", en: "SOS never calls the police or fire services by itself.", zh: "SOS 不会自动拨打报警或消防电话。" }
+prefs.sos_roles: { ja: "表示する端末", en: "Shown on", zh: "显示于" }
+prefs.sos_countdown: { ja: "取り消せる時間", en: "Cancellable countdown", zh: "可取消倒计时" }
+prefs.sos_cancel_pin: { ja: "解除に管理パスワードが必要", en: "Clearing needs the admin password", zh: "解除需要管理密码" }
+prefs.sos_web_alerts: { ja: "開いている Web 画面にも表示", en: "Show on open web panels", zh: "在已打开的网页面板显示" }
+prefs.sos_alarm: { ja: "警報音", en: "Alarm", zh: "警报音" }
+prefs.sos_sound: { ja: "警報音", en: "Alarm sound", zh: "警报音" }
+prefs.sos_sip: { ja: "SOS の電話発信", en: "SOS phone call", zh: "SOS 电话呼叫" }
+prefs.sos_sip_footer: { ja: "SIP サーバーを通して指定の内線に発信します。", en: "Calls the given extension through the SIP server.", zh: "通过 SIP 服务器呼叫指定分机。" }
+prefs.sos_sip_enabled: { ja: "発信する", en: "Place a call", zh: "发起呼叫" }
+prefs.sos_sip_target: { ja: "発信先の内線", en: "Extension", zh: "分机号" }
+prefs.sos_presentation: { ja: "警報の見え方と通知先", en: "Alert appearance and recipients", zh: "警报外观与接收方" }
+prefs.ntp: { ja: "インターネット時刻", en: "Internet time", zh: "互联网时间" }
+prefs.sync_interval: { ja: "同期間隔", en: "Sync interval", zh: "同步间隔" }
+prefs.rules: { ja: "ルール", en: "Rules", zh: "规则" }
+prefs.rule_edit: { ja: "ルールの内容を編集", en: "Edit what rules do", zh: "编辑规则内容" }
+prefs.rule_sos_on: { ja: "SOS 発生の通知", en: "SOS raised", zh: "SOS 触发通知" }
+prefs.rule_sos_off: { ja: "SOS 解除の通知", en: "SOS cleared", zh: "SOS 解除通知" }
+prefs.rule_missed: { ja: "不在着信の通知", en: "Missed call", zh: "未接来电通知" }
+prefs.quiet_footer: { ja: "この時間帯は室内機のチャイムを鳴らしません。", en: "Indoor chimes stay silent during these windows.", zh: "这些时段内室内机不响铃。" }
+prefs.history: { ja: "履歴", en: "History", zh: "记录" }
+prefs.retention: { ja: "保存期間", en: "Keep history for", zh: "保留期限" }
+prefs.integrations: { ja: "外部連携の設定", en: "Integration settings", zh: "外部集成设置" }
+prefs.sip_server: { ja: "SIP サーバー", en: "SIP server", zh: "SIP 服务器" }
+prefs.sip_server_footer: { ja: "空にすると端末同士の直接通話だけを使います。", en: "Leave empty to use direct calls between devices only.", zh: "留空则仅使用设备之间的直接通话。" }
+prefs.sip_host: { ja: "サーバー", en: "Server", zh: "服务器" }
+prefs.port: { ja: "ポート", en: "Port", zh: "端口" }
+prefs.transport: { ja: "通信方式", en: "Transport", zh: "传输方式" }
+prefs.direct_port: { ja: "直接通話のポート", en: "Direct call port", zh: "直接通话端口" }
+prefs.sip_account: { ja: "この端末の内線", en: "This device's extension", zh: "本设备分机" }
+prefs.sip_account_footer: { ja: "パスワードは安全な保存先にあるため Web 管理で設定します。", en: "The password lives in secure storage and is set in the web admin.", zh: "密码保存在安全存储中，请在网页管理中设置。" }
+prefs.sip_user: { ja: "内線番号", en: "Extension", zh: "分机号" }
+prefs.answer_mode: { ja: "応答", en: "Answer", zh: "应答" }
+prefs.answer_ring: { ja: "手動", en: "Manual", zh: "手动" }
+prefs.answer_auto: { ja: "自動", en: "Automatic", zh: "自动" }
+prefs.sip_password: { ja: "SIP パスワード", en: "SIP password", zh: "SIP 密码" }
+prefs.dtmf: { ja: "ダイヤル操作 (DTMF)", en: "Keypad actions (DTMF)", zh: "按键操作 (DTMF)" }
+prefs.web_only_dtmf: { ja: "ダイヤル操作は外部機器への命令を含むため Web 管理で編集します。", en: "Keypad actions send commands to other systems, so they are edited in the web admin.", zh: "按键操作会向其他系统发送命令，请在网页管理中编辑。" }
+prefs.members: { ja: "メンバー", en: "Members", zh: "成员" }
+prefs.add_device: { ja: "端末を追加", en: "Add a device", zh: "添加设备" }
+prefs.cluster_key: { ja: "クラスタの鍵", en: "Cluster key", zh: "集群密钥" }
+prefs.members_need_rejoin: { ja: "再登録が必要な端末", en: "Devices that must re-join", zh: "需要重新加入的设备" }
+prefs.rotate_key: { ja: "鍵を新しくする", en: "Rotate the cluster key", zh: "更换集群密钥" }
+prefs.rotate_key_footer: { ja: "端末を外したあとに行います。7 日以上オフラインの端末は再登録が必要になります。", en: "Do this after removing a device. Devices offline for more than seven days must join again.", zh: "移除设备后执行。离线超过 7 天的设备需要重新加入。" }
+prefs.rotate_key_confirm: { ja: "接続中のすべての端末に新しい鍵を配ります。7 日以内に接続しない端末は再登録が必要です。", en: "Every connected device receives the new key. A device that does not connect within seven days must join again.", zh: "所有已连接设备都会收到新密钥。7 天内未连接的设备需要重新加入。" }
+prefs.rotate_key_failed: { ja: "鍵を新しくできませんでした", en: "The cluster key could not be rotated", zh: "未能更换集群密钥" }
+prefs.panels: { ja: "Web パネルの権限", en: "Web panel access", zh: "网页面板权限" }
+prefs.web_only_panels: { ja: "パネルの資格情報は一度だけ表示されるため Web 管理で発行します。", en: "Panel credentials are shown only once, so they are issued in the web admin.", zh: "面板凭据只显示一次，因此在网页管理中签发。" }
+prefs.media_sources: { ja: "外部カメラ", en: "External cameras", zh: "外部摄像头" }
+prefs.households: { ja: "世帯", en: "Households", zh: "住户" }
+prefs.import_export: { ja: "設定の読み込みと書き出し", en: "Import and export", zh: "导入与导出" }
+prefs.web_only_structure: { ja: "複数の項目をまとめて検証する必要があるため Web 管理で編集します。", en: "These are validated together across many keys, so they are edited in the web admin.", zh: "这些项目需要跨多个键一起验证，请在网页管理中编辑。" }
+prefs.version: { ja: "バージョン", en: "Version", zh: "版本" }
+prefs.open_in_admin: { ja: "Web 管理で開く", en: "Open in Admin", zh: "在网页管理中打开" }
+prefs.selected: { ja: "選択中", en: "Selected", zh: "已选择" }
+prefs.available: { ja: "追加できる項目", en: "Available", zh: "可添加" }
+prefs.order_footer: { ja: "右端をドラッグして並べ替えます。", en: "Drag the handles to reorder.", zh: "拖动右侧手柄排序。" }
+prefs.save: { ja: "保存", en: "Save", zh: "保存" }
+prefs.unit_seconds: { ja: "秒", en: "s", zh: "秒" }
+prefs.unit_hours: { ja: "時間", en: "h", zh: "小时" }
+prefs.unit_days: { ja: "日", en: "days", zh: "天" }
+prefs.no_node: { ja: "この端末の ID がまだ分かりません", en: "This device's ID is not known yet", zh: "尚未获知本设备 ID" }
+prefs.out_of_range: { ja: "範囲外の値です", en: "That value is out of range", zh: "数值超出范围" }
+prefs.invalid_time: { ja: "時刻は 00:00 から 23:59 で指定してください", en: "Enter a time from 00:00 to 23:59", zh: "请输入 00:00 至 23:59 之间的时间" }
+prefs.invalid_color: { ja: "色は #RRGGBB で指定してください", en: "Enter a colour as #RRGGBB", zh: "请以 #RRGGBB 格式输入颜色" }
+prefs.invalid_door_id: { ja: "門口 ID は英数字で始め、英数字・_・- の 64 文字以内にしてください", en: "A door ID starts with a letter or digit and uses up to 64 letters, digits, _ or -", zh: "门口 ID 须以字母或数字开头，最多 64 个字母、数字、_ 或 -" }
+prefs.invalid_extension: { ja: "内線番号が正しくありません", en: "That extension is not valid", zh: "分机号无效" }
+prefs.invalid_host: { ja: "サーバー名が正しくありません", en: "That server name is not valid", zh: "服务器名称无效" }
+prefs.invalid_port: { ja: "ポートは 1 から 65535 で指定してください", en: "Enter a port from 1 to 65535", zh: "请输入 1 至 65535 之间的端口" }
+prefs.label_required: { ja: "日本語の表示名は空にできません", en: "The Japanese label cannot be empty", zh: "日语显示名称不能为空" }
+prefs.label_invalid: { ja: "表示名が長すぎるか、使えない文字が含まれています", en: "The label is too long or contains characters that cannot be used", zh: "名称过长或包含无法使用的字符" }
+prefs.need_one_language: { ja: "言語を 1 つ以上選んでください", en: "Choose at least one language", zh: "请至少选择一种语言" }
+prefs.password_too_short: { ja: "管理パスワードは 8 文字以上にしてください", en: "The admin password needs at least eight characters", zh: "管理密码至少需要 8 个字符" }
+
+# Pairing with security protocol v3
+pair.confirm_code_caption: { ja: "確認コード — 追加する人に伝えてください", en: "Confirmation code — read it to the person adding this device", zh: "确认码 — 请告诉添加此设备的人" }
+pair.confirm_code_title: { ja: "確認コード", en: "Confirmation code", zh: "确认码" }
+pair.confirm_code_prompt: { ja: "追加する端末の画面に表示されている 8 桁の数字を入力してください。", en: "Enter the eight digits shown on the device you are adding.", zh: "请输入要添加的设备屏幕上显示的 8 位数字。" }
+pair.upgrade_title: { ja: "アップデート後の再登録が必要です", en: "Re-pair required after upgrade", zh: "升级后需要重新配对" }
+pair.upgrade_body: { ja: "新しい安全方式のため、この端末をもう一度クラスタに参加させてください。履歴は残っています。", en: "The new security protocol needs this device to join the cluster again. Its history is kept.", zh: "新的安全协议要求此设备重新加入集群，历史记录会保留。" }
+pair.peer_rejected: { ja: "接続を拒否した端末があります: {reason}", en: "A device was refused: {reason}", zh: "有设备被拒绝连接：{reason}" }
+pair.cluster_key_changed: { ja: "クラスタの鍵を新しくしました", en: "The cluster key was rotated", zh: "集群密钥已更换" }
+pair.members_need_rejoin: { ja: "{n} 台の端末はアップデートと再登録が必要です", en: "{n} devices must be upgraded and join again", zh: "{n} 台设备需要升级并重新加入" }
+pair.err.confirm_code_required: { ja: "確認コードを入力してください", en: "Enter the confirmation code", zh: "请输入确认码" }
+pair.err.confirm_code_mismatch: { ja: "確認コードが違います。相手の画面の 8 桁をもう一度確認してください", en: "The confirmation code does not match. Check the eight digits on that device again", zh: "确认码不匹配，请再次核对该设备上的 8 位数字" }
+pair.err.pk_conflict: { ja: "この端末は異なる鍵を名乗っています。安全のため追加できません", en: "This device announced a different key. It cannot be added safely", zh: "此设备声明了不同的密钥，无法安全添加" }
+pair.err.protocol_upgrade_required: { ja: "古いバージョンの端末です。アップデートしてから再登録してください", en: "That device runs an older version. Update it, then pair it again", zh: "该设备版本过旧，请更新后重新配对" }
+pair.err.rekey_required: { ja: "鍵の更新を受け取っていない端末です。再登録してください", en: "That device missed a key rotation. Pair it again", zh: "该设备未收到密钥更新，请重新配对" }
+pair.err.unauthorized_peer: { ja: "クラスタに登録されていない端末です", en: "That device is not a member of this cluster", zh: "该设备不是此集群的成员" }
+pair.err.bad_signature: { ja: "端末の身元を確認できませんでした", en: "That device's identity could not be verified", zh: "无法验证该设备的身份" }
+pair.clock_skew: { ja: "時計が大きくずれていると近くの端末を見つけられません。「インターネットで時刻を合わせる」を有効にしてください", en: "With a clock that is far off, nearby devices cannot be found. Turn on Set the time from the internet", zh: "时钟偏差过大时无法发现附近设备，请开启“通过互联网校时”" }
