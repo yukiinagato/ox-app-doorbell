@@ -1,7 +1,3 @@
-
-
-
-
 #include "media/camera_win.h"
 
 #include <mfapi.h>
@@ -10,9 +6,13 @@
 #include <mfreadwrite.h>
 #include <windows.h>
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <memory>
+#include <mutex>
+#include <string>
 #include <vector>
 
 #include "media/frame_bus.h"
@@ -204,95 +204,244 @@ HRESULT openSource(const std::string& hint, IMFMediaSource** out, std::string* p
 
 }  // namespace
 
+struct CameraWin::State {
+  FrameSink sink;
+  std::atomic<bool> stopped{false};
+  std::atomic<bool> alive{true};
+  std::atomic<bool> capturing{false};
+  // Held for every sink call; stop() takes it after setting stopped, so no sink call starts or
+  // remains in flight once stop() has returned.
+  std::mutex sink_mu;
+  // The open media source, AddRef'd. stop() shuts it down from another thread so a ReadSample
+  // that is blocked in the driver returns instead of holding stop() forever.
+  std::mutex src_mu;
+  IMFMediaSource* source = nullptr;
+  HANDLE wake = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
+  HANDLE done = ::CreateEventW(nullptr, TRUE, FALSE, nullptr);
+
+  ~State() {
+    if (wake) ::CloseHandle(wake);
+    if (done) ::CloseHandle(done);
+  }
+
+  // Waits up to ms, returning early (false) once stop() was requested.
+  bool sleepUnlessStopped(DWORD ms) {
+    if (stopped.load()) return false;
+    if (wake) ::WaitForSingleObject(wake, ms);
+    else ::Sleep(ms);
+    return !stopped.load();
+  }
+
+  void publishSource(IMFMediaSource* s) {
+    std::lock_guard<std::mutex> lk(src_mu);
+    if (s) s->AddRef();
+    source = s;
+  }
+
+  void retireSource() {
+    IMFMediaSource* s = nullptr;
+    {
+      std::lock_guard<std::mutex> lk(src_mu);
+      s = source;
+      source = nullptr;
+    }
+    if (s) {
+      s->Shutdown();
+      s->Release();
+    }
+  }
+
+  void deliver(RawFrame&& frame) {
+    std::lock_guard<std::mutex> lk(sink_mu);
+    if (stopped.load() || !sink) return;
+    sink(std::move(frame));
+  }
+};
+
+namespace {
+
+// Reopen delays after a failed or ended capture session. A missing device is polled at the
+// short end so a camera that is plugged in later starts within a few seconds.
+constexpr DWORD kRetryDelaysMs[] = {1000, 2000, 5000, 10000, 30000};
+constexpr DWORD kMissingDevicePollMs = 3000;
+constexpr ULONGLONG kHealthySessionMs = 10000;
+constexpr DWORD kStopWaitMs = 3000;
+
+DWORD retryDelay(size_t attempt) {
+  const size_t n = sizeof(kRetryDelaysMs) / sizeof(kRetryDelaysMs[0]);
+  return kRetryDelaysMs[attempt < n ? attempt : n - 1];
+}
+
+enum class SessionEnd { stopped, failed, device_missing };
+
+// One open-negotiate-read session. Returns why it ended; *delivered reports whether any frame
+// reached the sink.
+SessionEnd captureSession(CameraWin::State& st, const std::string& hint, int tw, int th,
+                          bool* delivered) {
+  *delivered = false;
+  ComPtr<IMFMediaSource> source;
+  ComPtr<IMFSourceReader> reader;
+  std::string name;
+  HRESULT hr = openSource(hint, source.put(), &name);
+  if (hr == MF_E_NOT_FOUND) return SessionEnd::device_missing;
+  if (FAILED(hr)) {
+    DB_LOGE(kTag, "cannot open camera (hint='" + hint + "'): " + hrStr(hr));
+    return SessionEnd::failed;
+  }
+  st.publishSource(source.get());
+  if (st.stopped.load()) {
+    st.retireSource();
+    return SessionEnd::stopped;
+  }
+  SessionEnd end = SessionEnd::failed;
+  if (FAILED(hr = MFCreateSourceReaderFromMediaSource(source.get(), nullptr, reader.put()))) {
+    DB_LOGE(kTag, "SourceReader creation failed: " + hrStr(hr));
+  } else {
+    Negotiated neg;
+    if (!negotiate(reader.get(), tw, th, &neg)) {
+      DB_LOGE(kTag, "MediaType negotiation failed for both NV12 and YUY2: " + name);
+    } else {
+      DB_LOGI(kTag, "capture started: " + name + " " + std::to_string(neg.w) + "x" +
+                        std::to_string(neg.h) + (neg.format == 1 ? " NV12" : " YUY2"));
+      st.capturing = true;
+      for (;;) {
+        if (st.stopped.load()) {
+          end = SessionEnd::stopped;
+          break;
+        }
+        DWORD stream = 0, flags = 0;
+        LONGLONG ts = 0;
+        ComPtr<IMFSample> sample;
+        hr = reader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &stream, &flags, &ts,
+                                sample.put());
+        if (st.stopped.load()) {
+          end = SessionEnd::stopped;
+          break;
+        }
+        if (FAILED(hr)) {
+          DB_LOGW(kTag, "ReadSample failed (device lost or unplugged?): " + hrStr(hr));
+          break;
+        }
+        if (flags & MF_SOURCE_READERF_ENDOFSTREAM) {
+          DB_LOGW(kTag, "camera stream ended");
+          break;
+        }
+        if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) {
+          if (!queryCurrent(reader.get(), &neg)) {
+            DB_LOGE(kTag, "failed to query MediaType after a format change");
+            break;
+          }
+        }
+        if (!sample) continue;
+        ComPtr<IMFMediaBuffer> buf;
+        if (FAILED(sample->ConvertToContiguousBuffer(buf.put()))) continue;
+        BYTE* p = nullptr;
+        DWORD maxlen = 0, curlen = 0;
+        if (SUCCEEDED(buf->Lock(&p, &maxlen, &curlen))) {
+          RawFrame f;
+          f.format = neg.format;
+          f.w = neg.w;
+          f.h = neg.h;
+          f.stride = neg.stride;
+          f.ts_ms = ts / 10000;  // 100ns -> ms
+          f.data.assign(p, p + curlen);
+          buf->Unlock();
+          st.deliver(std::move(f));
+          *delivered = true;
+        }
+      }
+      st.capturing = false;
+    }
+  }
+  reader.reset();
+  st.retireSource();
+  return end;
+}
+
+void captureThread(std::shared_ptr<CameraWin::State> st, std::string hint, int tw, int th) {
+  HRESULT co = ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+  const bool co_ok = SUCCEEDED(co);
+  HRESULT hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
+  if (FAILED(hr)) {
+    DB_LOGE(kTag, "MFStartup failed: " + hrStr(hr));
+  } else {
+    size_t attempt = 0;
+    bool reported_missing = false;
+    while (!st->stopped.load()) {
+      const ULONGLONG began = ::GetTickCount64();
+      bool delivered = false;
+      const SessionEnd end = captureSession(*st, hint, tw, th, &delivered);
+      if (end == SessionEnd::stopped) break;
+      if (end == SessionEnd::device_missing) {
+        if (!reported_missing) DB_LOGW(kTag, "no capture device present; waiting for one");
+        reported_missing = true;
+        if (!st->sleepUnlessStopped(kMissingDevicePollMs)) break;
+        continue;
+      }
+      reported_missing = false;
+      if (delivered && ::GetTickCount64() - began >= kHealthySessionMs) attempt = 0;
+      const DWORD delay = retryDelay(attempt++);
+      DB_LOGI(kTag, "reopening camera in " + std::to_string(delay) + " ms");
+      if (!st->sleepUnlessStopped(delay)) break;
+    }
+    MFShutdown();
+  }
+  if (co_ok) ::CoUninitialize();
+  st->capturing = false;
+  st->alive = false;
+  DB_LOGI(kTag, "capture thread stopped");
+  if (st->done) ::SetEvent(st->done);
+}
+
+}  // namespace
+
 bool CameraWin::start(const std::string& device_hint, int target_w, int target_h) {
   stop();
-  running_ = true;
-  th_ = std::thread([this, device_hint, target_w, target_h] {
-    run(device_hint, target_w, target_h);
-  });
+  auto st = std::make_shared<State>();
+  st->sink = sink_;
+  if (!st->wake || !st->done) {
+    DB_LOGE(kTag, "cannot create camera thread events");
+    return false;
+  }
+  state_ = st;
+  try {
+    th_ = std::thread(captureThread, st, device_hint, target_w, target_h);
+  } catch (...) {
+    state_.reset();
+    DB_LOGE(kTag, "cannot start the camera thread");
+    return false;
+  }
   return true;
 }
 
 void CameraWin::stop() {
-  running_ = false;
-  if (th_.joinable()) th_.join();
-}
-
-void CameraWin::run(std::string hint, int tw, int th) {
-
-  HRESULT co = ::CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-  bool co_ok = SUCCEEDED(co);
-  HRESULT hr = MFStartup(MF_VERSION, MFSTARTUP_LITE);
-  if (FAILED(hr)) {
-    DB_LOGE(kTag, "MFStartup failed: " + hrStr(hr));
-    if (co_ok) ::CoUninitialize();
-    running_ = false;
+  std::shared_ptr<State> st = std::move(state_);
+  if (!st) {
+    if (th_.joinable()) th_.join();
     return;
   }
-
+  st->stopped = true;
+  ::SetEvent(st->wake);
   {
-    ComPtr<IMFMediaSource> source;
-    ComPtr<IMFSourceReader> reader;
-    std::string name;
-    hr = openSource(hint, source.put(), &name);
-    if (FAILED(hr)) {
-      DB_LOGE(kTag, "cannot open camera (hint='" + hint + "'): " + hrStr(hr));
-    } else if (FAILED(hr = MFCreateSourceReaderFromMediaSource(source.get(), nullptr,
-                                                               reader.put()))) {
-      DB_LOGE(kTag, "SourceReader creation failed: " + hrStr(hr));
-    } else {
-      Negotiated neg;
-      if (!negotiate(reader.get(), tw, th, &neg)) {
-        DB_LOGE(kTag, "MediaType negotiation failed for both NV12 and YUY2: " + name);
-      } else {
-        DB_LOGI(kTag, "capture started: " + name + " " + std::to_string(neg.w) + "x" +
-                          std::to_string(neg.h) + (neg.format == 1 ? " NV12" : " YUY2"));
-        while (running_.load()) {
-          DWORD stream = 0, flags = 0;
-          LONGLONG ts = 0;
-          ComPtr<IMFSample> sample;
-          hr = reader->ReadSample(MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, &stream, &flags,
-                                  &ts, sample.put());
-          if (FAILED(hr)) {
-            DB_LOGE(kTag, "ReadSample failed: " + hrStr(hr));
-            break;
-          }
-          if (flags & MF_SOURCE_READERF_ENDOFSTREAM) {
-            DB_LOGW(kTag, "camera stream ended");
-            break;
-          }
-          if (flags & MF_SOURCE_READERF_CURRENTMEDIATYPECHANGED) {
-            if (!queryCurrent(reader.get(), &neg)) {
-              DB_LOGE(kTag, "failed to query MediaType after a format change");
-              break;
-            }
-          }
-          if (!sample) continue;
-          ComPtr<IMFMediaBuffer> buf;
-          if (FAILED(sample->ConvertToContiguousBuffer(buf.put()))) continue;
-          BYTE* p = nullptr;
-          DWORD maxlen = 0, curlen = 0;
-          if (SUCCEEDED(buf->Lock(&p, &maxlen, &curlen))) {
-            RawFrame f;
-            f.format = neg.format;
-            f.w = neg.w;
-            f.h = neg.h;
-            f.stride = neg.stride;
-            f.ts_ms = ts / 10000;  // 100ns → ms
-            f.data.assign(p, p + curlen);
-            buf->Unlock();
-            sink_(std::move(f));
-          }
-        }
-      }
-    }
-    if (source) source->Shutdown();
+    std::lock_guard<std::mutex> lk(st->src_mu);
+    if (st->source) st->source->Shutdown();
   }
-
-  MFShutdown();
-  if (co_ok) ::CoUninitialize();
-  running_ = false;
-  DB_LOGI(kTag, "capture thread stopped");
+  // After this no sink call is in flight and none can start.
+  { std::lock_guard<std::mutex> lk(st->sink_mu); }
+  if (!th_.joinable()) return;
+  if (::WaitForSingleObject(st->done, kStopWaitMs) == WAIT_OBJECT_0) {
+    th_.join();
+  } else {
+    DB_LOGW(kTag, "camera driver did not return within " + std::to_string(kStopWaitMs) +
+                      " ms; detaching the capture thread");
+    th_.detach();
+  }
 }
+
+bool CameraWin::running() const {
+  return state_ && state_->alive.load() && !state_->stopped.load();
+}
+
+bool CameraWin::capturing() const { return state_ && state_->capturing.load(); }
 
 }  // namespace db
