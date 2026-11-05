@@ -46,6 +46,9 @@ struct ConnectOpts {
 
 
 
+// A broker may not make the client buffer more than this for one packet.
+constexpr uint32_t kMaxPacketBytes = 256 * 1024;
+
 size_t encodeRemainingLength(uint32_t len, uint8_t out[4]);
 
 int decodeRemainingLength(const uint8_t* data, size_t len, uint32_t* value, size_t* used);
@@ -63,6 +66,7 @@ struct Packet {
   Bytes body;
 };
 
+// >0 bytes consumed, 0 incomplete, <0 malformed or larger than kMaxPacketBytes.
 int decodePacket(const uint8_t* data, size_t len, Packet* out);
 
 bool parseConnack(const Packet& p, uint8_t* return_code);
@@ -84,6 +88,10 @@ class MqttClient {
     std::string will_topic;
     std::string will_payload;
     bool will_retain = false;
+    // TLS to the broker. The broker certificate is trusted only by its SHA-256 pin (lowercase
+    // hex of the DER); TLS without a pin is refused rather than left unverified.
+    bool tls = false;
+    std::string tls_sha256;
   };
   struct Callbacks {
     std::function<void()> on_connected;

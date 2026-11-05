@@ -35,6 +35,7 @@
 #include "monocypher.h"
 #include "stb_image.h"
 #include "sipctl/sipctl.h"
+#include "sipctl/sip_auth.h"
 #include "tls/tls.h"
 #ifdef _WIN32
 #include "media/camera_win.h"
@@ -2223,6 +2224,16 @@ struct Node::Impl {
   static constexpr int kAdminAuthMaxFailures = 5;
   tls::Identity tls_identity;
   bool tls_identity_persistent = false;
+  // SIP admission state shared with the SIP thread and with ABI callers (MiniSIP shells).
+  SipPeerAuth sip_peer_auth;
+  struct SipAdmission {
+    std::mutex mu;
+    std::set<std::string> peers;
+    std::set<std::string> registrar;
+    std::string registrar_host;
+  };
+  // Shared so a resolver thread that outlives this node writes into memory it still owns.
+  std::shared_ptr<SipAdmission> sip_admission = std::make_shared<SipAdmission>();
   static constexpr int64_t kPeerAuthSkewMs = 60'000;
   static constexpr int64_t kAdminLockoutMs = 10 * 60 * 1000;
   AdminSessions sessions;
@@ -4899,6 +4910,7 @@ struct Node::Impl {
     }
     s.display_name = opts.name;
     s.null_audio = opts.sip_null_audio;
+    s.srtp = json::getString(sip, "srtp", "optional") == "mandatory" ? "mandatory" : "optional";
 
 
 
@@ -4926,6 +4938,7 @@ struct Node::Impl {
     sip_reapply_timer = loop->postDelayed(300, [this] {
       sip_reapply_timer = 0;
       if (sipctl) sipctl->updateSettings(sipSettings());
+      updateSipAllowedSources();
     });
   }
 
@@ -4933,14 +4946,53 @@ struct Node::Impl {
 
 
   void updateSipAllowedSources() {
-    if (!sipctl || !mesh) return;
-    std::vector<std::string> ips;
-    ips.push_back("127.0.0.1");
+    if (!mesh) return;
+    std::set<std::string> ips;
     for (const auto& p : mesh->peers()) {
-      if (p.status == "dead") continue;
-      for (const auto& a : p.addrs) ips.push_back(hostOf(a));
+      if (p.status == "dead" || p.id == node_id || cfgAt("removed_devices." + p.id)) continue;
+      for (const auto& a : p.addrs) {
+        std::string host = hostOf(a);
+        if (host.size() > 2 && host.front() == '[' && host.back() == ']')
+          host = host.substr(1, host.size() - 2);
+        ips.insert(host);
+        if (host.find(':') == std::string::npos) ips.insert("::ffff:" + host);
+      }
     }
-    sipctl->setAllowedSources(ips);
+    sip_peer_auth.setKey(node_id, mesh->deriveClusterKey("doorbell-sip-v3"));
+    const std::string server = json::getString(json::get(cfg.get(), "sip"), "server");
+    auto admission = sip_admission;
+    bool resolve = false;
+    std::vector<std::string> legacy(ips.begin(), ips.end());
+    {
+      std::lock_guard<std::mutex> lk(admission->mu);
+      admission->peers = std::move(ips);
+      if (server != admission->registrar_host) {
+        admission->registrar_host = server;
+        admission->registrar.clear();
+        resolve = !server.empty();
+      }
+    }
+    if (sipctl) sipctl->setAllowedSources(legacy);
+    if (resolve) {
+      // A host name may take the resolver seconds; never on the state loop.
+      std::thread([admission, server] {
+        std::set<std::string> found = resolveSipHost(server);
+        std::set<std::string> mapped = found;
+        for (const auto& ip : found)
+          if (ip.find(':') == std::string::npos) mapped.insert("::ffff:" + ip);
+        std::lock_guard<std::mutex> lk(admission->mu);
+        if (admission->registrar_host == server) admission->registrar = std::move(mapped);
+      }).detach();
+    }
+  }
+
+  // Thread-safe: called on the SIP thread and from ABI callers.
+  SipInboundPath sipInboundPath(const std::string& source, const std::string& auth,
+                                const std::string& mode) {
+    std::string peer;
+    const bool valid = !auth.empty() && sip_peer_auth.verify(auth, mode, clock->wallMs(), &peer);
+    std::lock_guard<std::mutex> lk(sip_admission->mu);
+    return classifySipInbound(source, valid, sip_admission->peers, sip_admission->registrar);
   }
 
 
@@ -6658,6 +6710,11 @@ struct Node::Impl {
       };
       scb.on_dtmf = [this](char d) { onSipDtmf(d); };
       sipctl.reset(new SipCtl(*loop, std::move(scb)));
+      sipctl->setInboundPolicy(
+          [this](const std::string& source, const std::string& auth, const std::string& mode) {
+            return sipInboundPath(source, auth, mode);
+          },
+          [this](const std::string& mode) { return sip_peer_auth.sign(mode, clock->wallMs()); });
       sipctl->start(sipSettings());
       updateSipAllowedSources();
     }
@@ -12913,6 +12970,19 @@ std::string Node::tlsFingerprint() {
 }
 
 void Node::emitUiEvent(const std::string& event_json) { impl_->uiNotify(event_json); }
+
+std::string Node::sipPeerAuthHeader(const std::string& mode) {
+  return impl_->sip_peer_auth.sign(mode, impl_->clock->wallMs());
+}
+
+int Node::sipInboundCheck(const std::string& source, const std::string& auth,
+                          const std::string& mode) {
+  switch (impl_->sipInboundPath(source, auth, mode)) {
+    case SipInboundPath::Peer: return 1;
+    case SipInboundPath::Registrar: return 2;
+    default: return 0;
+  }
+}
 
 std::string Node::startPairingJson(int seconds) {
   std::string out;

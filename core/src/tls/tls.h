@@ -35,13 +35,14 @@ struct Endpoint {
   std::string pin_sha256;  // Required when tls is true.
 };
 
-// One bounded HTTP/1.1 GET. open() connects, completes the handshake, sends the request and
+// One bounded HTTP/1.1 request (GET unless method says otherwise). open() connects, completes the handshake, sends the request and
 // reads the response head within the timeout; pull() then streams the body. All calls block
 // for at most their stated bound and may run on any single thread at a time.
 class HttpStream {
  public:
   HttpStream(Endpoint endpoint, std::string path_and_query,
-             std::map<std::string, std::string> headers);
+             std::map<std::string, std::string> headers, std::string method = "GET",
+             std::string body = "");
   ~HttpStream();
   HttpStream(const HttpStream&) = delete;
   HttpStream& operator=(const HttpStream&) = delete;
@@ -64,6 +65,8 @@ class HttpStream {
   Endpoint endpoint_;
   std::string path_;
   std::map<std::string, std::string> headers_;
+  std::string method_;
+  std::string body_;
   std::unique_ptr<Impl> impl_;
   int status_ = 0;
   std::map<std::string, std::string> response_headers_;

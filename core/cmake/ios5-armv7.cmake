@@ -55,6 +55,8 @@ set(CMAKE_CXX_STANDARD_LIBRARIES
 # The legacy iPad target does not build PJSIP or host tests.
 set(DB_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(DB_WITH_PJSIP  OFF CACHE BOOL "" FORCE)
+# The iOS 5 shell places calls with its own MiniSIP stack, so the Core stub is intended here.
+set(DB_REQUIRE_PJSIP OFF CACHE BOOL "" FORCE)
 
 # Restrict cross-build dependency searches to the target SDK.
 set(CMAKE_FIND_ROOT_PATH_MODE_PROGRAM BEFORE)

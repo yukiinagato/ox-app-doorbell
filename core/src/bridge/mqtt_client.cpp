@@ -5,13 +5,19 @@
 #include "bridge/mqtt_client.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <memory>
 #include <cstring>
 #include <deque>
 #include <mutex>
 #include <thread>
 
+#include "mbedtls/net_sockets.h"
+#include "mbedtls/ssl.h"
+#include "mbedtls/x509_crt.h"
 #include "mesh/socket_compat.h"
+#include "tls/tls.h"
 #include "util/log.h"
 
 #if !defined(_WIN32)
@@ -138,6 +144,7 @@ int decodePacket(const uint8_t* data, size_t len, Packet* out) {
   size_t rl_used = 0;
   int r = decodeRemainingLength(data + 1, len - 1, &rl, &rl_used);
   if (r <= 0) return r;
+  if (rl > kMaxPacketBytes) return -1;
   const size_t total = 1 + rl_used + rl;
   if (len < total) return 0;
   out->type = data[0] >> 4;
@@ -198,6 +205,101 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
   std::deque<Bytes> outbox;
   uint16_t next_packet_id = 1;
   net::socket_t wake[2] = {net::kInvalidSocket, net::kInvalidSocket};
+
+  // One TLS session per connection; owned by the I/O thread only.
+  struct TlsLink {
+    net::socket_t fd = net::kInvalidSocket;
+    mbedtls_ssl_context ssl;
+    mbedtls_ssl_config conf;
+    TlsLink() {
+      mbedtls_ssl_init(&ssl);
+      mbedtls_ssl_config_init(&conf);
+    }
+    ~TlsLink() {
+      mbedtls_ssl_free(&ssl);
+      mbedtls_ssl_config_free(&conf);
+    }
+    static int bioSend(void* ctx, const unsigned char* b, size_t n) {
+      const int r = net::sendSome(static_cast<TlsLink*>(ctx)->fd, b, n);
+      if (r >= 0) return r;
+      return net::errWouldBlock(net::lastError()) ? MBEDTLS_ERR_SSL_WANT_WRITE
+                                                  : MBEDTLS_ERR_NET_SEND_FAILED;
+    }
+    static int bioRecv(void* ctx, unsigned char* b, size_t n) {
+      const int r = net::recvSome(static_cast<TlsLink*>(ctx)->fd, b, n);
+      if (r >= 0) return r;
+      return net::errWouldBlock(net::lastError()) ? MBEDTLS_ERR_SSL_WANT_READ
+                                                  : MBEDTLS_ERR_NET_RECV_FAILED;
+    }
+  };
+  std::unique_ptr<TlsLink> link;
+
+  // >0 bytes, 0 EOF, -1 would block, -2 error.
+  int ioSend(net::socket_t fd, const uint8_t* data, size_t len) {
+    if (link) {
+      const int n = mbedtls_ssl_write(&link->ssl, data, len);
+      if (n >= 0) return n;
+      return (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) ? -1 : -2;
+    }
+    const int n = net::sendSome(fd, data, len);
+    if (n >= 0) return n;
+    return net::errWouldBlock(net::lastError()) ? -1 : -2;
+  }
+  int ioRecv(net::socket_t fd, uint8_t* buf, size_t len) {
+    if (link) {
+      const int n = mbedtls_ssl_read(&link->ssl, buf, len);
+      if (n > 0) return n;
+      if (n == 0 || n == MBEDTLS_ERR_SSL_PEER_CLOSE_NOTIFY) return 0;
+      return (n == MBEDTLS_ERR_SSL_WANT_READ || n == MBEDTLS_ERR_SSL_WANT_WRITE) ? -1 : -2;
+    }
+    const int n = net::recvSome(fd, buf, len);
+    if (n >= 0) return n;
+    return net::errWouldBlock(net::lastError()) ? -1 : -2;
+  }
+  bool tlsPending() { return link && mbedtls_ssl_get_bytes_avail(&link->ssl) > 0; }
+
+  bool startTls(net::socket_t fd) {
+    link.reset();
+    if (!opts.tls) return true;
+    if (opts.tls_sha256.size() != 64) {
+      DB_LOGW(kTag, "MQTT TLS requires integrations.mqtt.tls_sha256; not connecting unverified");
+      return false;
+    }
+    std::unique_ptr<TlsLink> next(new TlsLink());
+    next->fd = fd;
+    if (mbedtls_ssl_config_defaults(&next->conf, MBEDTLS_SSL_IS_CLIENT,
+                                    MBEDTLS_SSL_TRANSPORT_STREAM, MBEDTLS_SSL_PRESET_DEFAULT) != 0)
+      return false;
+    mbedtls_ssl_conf_authmode(&next->conf, MBEDTLS_SSL_VERIFY_OPTIONAL);
+    mbedtls_ssl_conf_rng(&next->conf, db_tls_random, nullptr);
+    mbedtls_ssl_conf_min_tls_version(&next->conf, MBEDTLS_SSL_VERSION_TLS1_2);
+    if (mbedtls_ssl_setup(&next->ssl, &next->conf) != 0) return false;
+    mbedtls_ssl_set_hostname(&next->ssl, opts.host.c_str());
+    mbedtls_ssl_set_bio(&next->ssl, next.get(), &TlsLink::bioSend, &TlsLink::bioRecv, nullptr);
+    const int64_t deadline = steadyMs() + kConnectTimeoutMs;
+    for (;;) {
+      const int rc = mbedtls_ssl_handshake(&next->ssl);
+      if (rc == 0) break;
+      if ((rc != MBEDTLS_ERR_SSL_WANT_READ && rc != MBEDTLS_ERR_SSL_WANT_WRITE) || stopping() ||
+          steadyMs() >= deadline) {
+        DB_LOGW(kTag, "MQTT TLS handshake failed (" + std::to_string(rc) + ")");
+        return false;
+      }
+      net::pollfd_t fds[1] = {
+          {fd, static_cast<short>(rc == MBEDTLS_ERR_SSL_WANT_WRITE ? POLLOUT : POLLIN), 0}};
+      net::poll(fds, 1, 200);
+    }
+    const mbedtls_x509_crt* peer = mbedtls_ssl_get_peer_cert(&next->ssl);
+    std::string pin = opts.tls_sha256;
+    std::transform(pin.begin(), pin.end(), pin.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    if (!peer || sha256Hex(peer->raw.p, peer->raw.len) != pin) {
+      DB_LOGW(kTag, "MQTT broker certificate does not match integrations.mqtt.tls_sha256");
+      return false;
+    }
+    link = std::move(next);
+    return true;
+  }
 
   Impl(Runloop& l, Options o, Callbacks c) : loop(l), opts(std::move(o)), cbs(std::move(c)) {}
   ~Impl() {
@@ -316,12 +418,12 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
     size_t off = 0;
     while (off < data.size()) {
       if (steadyMs() >= deadline) return false;
-      int n = net::sendSome(fd, data.data() + off, data.size() - off);
+      int n = ioSend(fd, data.data() + off, data.size() - off);
       if (n > 0) {
         off += static_cast<size_t>(n);
         continue;
       }
-      if (n < 0 && !net::errWouldBlock(net::lastError())) return false;
+      if (n == -2) return false;
       net::pollfd_t fds[1] = {{fd, POLLOUT, 0}};
       net::poll(fds, 1, 100);
     }
@@ -339,17 +441,17 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
         return true;
       }
       if (stopping() || steadyMs() >= deadline) return false;
-      net::pollfd_t fds[2] = {{wake[0], POLLIN, 0}, {fd, POLLIN, 0}};
-      net::poll(fds, 2, 200);
-      if (fds[0].revents & POLLIN) net::wakeDrain(wake[0]);
-      if (!(fds[1].revents & (POLLIN | POLLERR | POLLHUP))) continue;
-      uint8_t buf[4096];
-      int n = net::recvSome(fd, buf, sizeof(buf));
-      if (n == 0) return false;  // EOF
-      if (n < 0) {
-        if (net::errWouldBlock(net::lastError())) continue;
-        return false;
+      if (!tlsPending()) {
+        net::pollfd_t fds[2] = {{wake[0], POLLIN, 0}, {fd, POLLIN, 0}};
+        net::poll(fds, 2, 200);
+        if (fds[0].revents & POLLIN) net::wakeDrain(wake[0]);
+        if (!(fds[1].revents & (POLLIN | POLLERR | POLLHUP))) continue;
       }
+      uint8_t buf[4096];
+      int n = ioRecv(fd, buf, sizeof(buf));
+      if (n == 0) return false;  // EOF
+      if (n == -1) continue;
+      if (n < 0) return false;
       inbuf->insert(inbuf->end(), buf, buf + n);
     }
   }
@@ -396,8 +498,8 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
         chunk = outbox.front();
         off = out_off;
       }
-      int n = net::sendSome(fd, chunk.data() + off, chunk.size() - off);
-      if (n < 0) return net::errWouldBlock(net::lastError());
+      int n = ioSend(fd, chunk.data() + off, chunk.size() - off);
+      if (n < 0) return n == -1;
       *wrote = true;
       std::lock_guard<std::mutex> lk(mu);
       out_off += static_cast<size_t>(n);
@@ -456,16 +558,16 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
         net::closeSocket(fd);
         return true;
       }
-      if (rev & POLLIN) {
+      if ((rev & POLLIN) || tlsPending()) {
         uint8_t buf[65536];
         for (;;) {
-          int n = net::recvSome(fd, buf, sizeof(buf));
+          int n = ioRecv(fd, buf, sizeof(buf));
           if (n == 0) {  // EOF
             net::closeSocket(fd);
             return true;
           }
           if (n < 0) {
-            if (net::errWouldBlock(net::lastError())) break;
+            if (n == -1) break;
             net::closeSocket(fd);
             return true;
           }
@@ -522,7 +624,8 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
       net::socket_t fd = connectTcp();
       if (!net::valid(fd)) continue;
       std::vector<uint8_t> inbuf;
-      if (!mqttHandshake(fd, &inbuf)) {
+      if (!startTls(fd) || !mqttHandshake(fd, &inbuf)) {
+        link.reset();
         net::closeSocket(fd);
         continue;
       }
@@ -535,6 +638,7 @@ struct MqttClient::Impl : public std::enable_shared_from_this<MqttClient::Impl> 
       DB_LOGI(kTag, "connected to " + opts.host + ":" + std::to_string(opts.port));
       postConnected();
       const bool err = pump(fd, &inbuf);
+      link.reset();
       {
         std::lock_guard<std::mutex> lk(mu);
         is_connected = false;

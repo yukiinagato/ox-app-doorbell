@@ -20,7 +20,15 @@ option(DB_BUILD_TESTS "Build tests and the host development runner" ON)
 #                          where platform is iphoneos or iphonesimulator)
 # Other targets use the unregistered stub (sipctl_stub.cpp).
 option(DB_WITH_PJSIP "Enable PJSIP integration and link the sipctl implementation" ON)
-option(DB_REQUIRE_PJSIP "Fail configuration when the real PJSIP backend is unavailable" OFF)
+# Release builds require the real backend unless DB_REQUIRE_PJSIP=OFF is passed explicitly, which
+# marks a development or display-only artifact (or a shell with its own SIP stack, like iOS 5).
+if(NOT DEFINED DB_REQUIRE_PJSIP AND CMAKE_BUILD_TYPE STREQUAL "Release")
+  set(_db_require_pjsip_default ON)
+else()
+  set(_db_require_pjsip_default OFF)
+endif()
+option(DB_REQUIRE_PJSIP "Fail configuration when the real PJSIP backend is unavailable"
+       ${_db_require_pjsip_default})
 set(DB_PJSIP_OK OFF)
 set(PJSIP_ROOT "")
 set(PJ_LIBS "")

@@ -332,6 +332,8 @@ static db_core* createCore(const db_platform_v2& platform, const char* data_dir,
   opts.listen_addr = "0.0.0.0:" + std::to_string(listen_port);
   opts.advertise_addr = json::getString(b.get(), "advertise_addr");
   opts.http_port = static_cast<int>(json::getInt(b.get(), "http_port", 47180));
+  // Browsers and peers use HTTPS; 0 in boot.json disables it (loopback-only plain HTTP).
+  opts.https_port = static_cast<int>(json::getInt(b.get(), "https_port", 47443));
   if (cJSON* caps = json::get(b.get(), "caps")) {
     opts.caps_json = cJSON_IsString(caps) ? caps->valuestring : json::dump(caps);
   } else {
@@ -681,6 +683,17 @@ DB_API int db_core_sip_set_mic_muted(db_core* c, int muted) {
   if (!c || !c->node) return -1;
   c->node->setSipMicMuted(muted != 0);
   return 0;
+}
+
+DB_API char* db_core_sip_peer_auth(db_core* c, const char* mode) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->sipPeerAuthHeader(mode ? mode : ""));
+}
+
+DB_API int db_core_sip_inbound_check(db_core* c, const char* source, const char* auth,
+                                     const char* mode) {
+  if (!c || !c->node || !source) return 0;
+  return c->node->sipInboundCheck(source, auth ? auth : "", mode ? mode : "");
 }
 
 DB_API int db_core_admin_password_verify(db_core* c, const char* pw) {

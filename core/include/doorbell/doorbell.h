@@ -619,6 +619,18 @@ DB_API int db_core_sip_send_dtmf(db_core* c, const char* digits);
  * status.call = {"state":"idle|calling|in_call|ended","mic_muted":bool}. Returns 0. */
 DB_API int db_core_sip_set_mic_muted(db_core* c, int muted);
 
+/* ---- SIP admission for shells with their own SIP stack (iOS 5 MiniSIP) ----
+ * Every direct INVITE to another member must carry
+ *   X-Doorbell-Auth: <db_core_sip_peer_auth(c, mode)>
+ * where mode is the X-Doorbell-Mode value ("" for a normal call). The value is single-use and
+ * valid for 60 s. db_core_sip_peer_auth returns an owned string (db_free), empty while unpaired.
+ * For an inbound INVITE pass the packet source address, the X-Doorbell-Auth value (or "") and
+ * the X-Doorbell-Mode value: 1 = authenticated peer, 2 = the configured registrar (sip.server;
+ * no header needed and the usual auto-answer rules apply), 0 = refuse with 403. */
+DB_API char* db_core_sip_peer_auth(db_core* c, const char* mode);
+DB_API int db_core_sip_inbound_check(db_core* c, const char* source, const char* auth,
+                                     const char* mode);
+
 /* ---- Administrator password ----
  * One password for the whole cluster: the same secret opens the web admin and the device-side
  * settings screen. It is stored as a salted digest in replicated configuration

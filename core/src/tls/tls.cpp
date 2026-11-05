@@ -226,9 +226,10 @@ struct HttpStream::Impl {
 };
 
 HttpStream::HttpStream(Endpoint endpoint, std::string path_and_query,
-                       std::map<std::string, std::string> headers)
+                       std::map<std::string, std::string> headers, std::string method,
+                       std::string body)
     : endpoint_(std::move(endpoint)), path_(std::move(path_and_query)),
-      headers_(std::move(headers)) {}
+      headers_(std::move(headers)), method_(std::move(method)), body_(std::move(body)) {}
 
 HttpStream::~HttpStream() { close(); }
 
@@ -342,15 +343,21 @@ bool HttpStream::open(int timeout_ms) {
   std::string authority = endpoint_.host;
   if (authority.find(':') != std::string::npos && authority.front() != '[')
     authority = "[" + authority + "]";
-  std::string request = "GET " + path_ + " HTTP/1.1\r\nHost: " + authority + ":" + service +
-                        "\r\nConnection: close\r\n";
+  if (method_.empty() || method_.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ") != std::string::npos) {
+    error_ = "bad_method";
+    return false;
+  }
+  std::string request = method_ + " " + path_ + " HTTP/1.1\r\nHost: " + authority + ":" +
+                        service + "\r\nConnection: close\r\n";
+  if (method_ != "GET" || !body_.empty())
+    request += "Content-Length: " + std::to_string(body_.size()) + "\r\n";
   for (const auto& kv : headers_) {
     if (kv.first.find_first_of("\r\n:") != std::string::npos ||
         kv.second.find_first_of("\r\n") != std::string::npos)
       continue;
     request += kv.first + ": " + kv.second + "\r\n";
   }
-  request += "\r\n";
+  request += "\r\n" + body_;
   if (!impl_->writeAll(request, deadline)) {
     error_ = "send_failed";
     return false;

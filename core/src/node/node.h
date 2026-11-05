@@ -214,6 +214,11 @@ class Node {
   std::string tlsFingerprint();
   // Deliver a core-originated UI event (for example admin_required) to the shell callback.
   void emitUiEvent(const std::string& event_json);
+  // SIP admission for shells with their own SIP stack. sipPeerAuthHeader returns the
+  // X-Doorbell-Auth value for an outbound direct INVITE (empty while unpaired);
+  // sipInboundCheck returns 1 peer, 2 registrar, 0 reject. Thread-safe.
+  std::string sipPeerAuthHeader(const std::string& mode);
+  int sipInboundCheck(const std::string& source, const std::string& auth, const std::string& mode);
 
 
 
