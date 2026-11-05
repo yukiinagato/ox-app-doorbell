@@ -13593,6 +13593,36 @@ std::string Node::setConfigJson(const std::string& key, const std::string& value
   return out;
 }
 
+std::string Node::addAssetJson(const std::vector<uint8_t>& data, const std::string& type,
+                               const std::string& label) {
+  if (!assetTypeAllowed(type)) return R"({"ok":false,"err":"bad_type"})";
+  if (data.empty()) return R"({"ok":false,"err":"empty"})";
+  if (data.size() > kAssetMaxBytes) return R"({"ok":false,"err":"too_large"})";
+  std::string hash;
+  const Bytes bytes(data.begin(), data.end());
+  if (!impl_->loop->callSync([&] { hash = impl_->addAssetOnLoop(bytes, type, label); }))
+    return R"({"ok":false,"err":"not_started"})";
+  if (hash.empty()) return R"({"ok":false,"err":"store_failed"})";
+  return std::string(R"({"ok":true,"hash":")") + hash + "\"}";
+}
+
+std::string Node::removeAssetJson(const std::string& hash) {
+  if (!isSha256HexStr(hash)) return R"({"ok":false,"err":"bad_hash"})";
+  std::string out;
+  if (!impl_->loop->callSync([&] {
+        impl_->config->remove("assets." + hash);
+        if (!impl_->config->lastMutationCommitted()) {
+          out = R"({"ok":false,"err":"config_persistence_failed"})";
+          return;
+        }
+        removeFile(impl_->assetFilePath(hash));
+        impl_->asset_unref_since.erase(hash);
+        out = R"({"ok":true})";
+      }))
+    return R"({"ok":false,"err":"not_started"})";
+  return out;
+}
+
 std::string Node::configBatchJson(const std::string& ops_json) {
   std::string out;
   if (!impl_->loop->callSync([&] { out = impl_->configBatchJsonOnLoop(ops_json, nullptr); }))

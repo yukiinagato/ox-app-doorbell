@@ -746,6 +746,21 @@ DB_API char* db_core_config_batch_json(db_core* c, const char* ops_json) {
   return dupString(c->node->configBatchJson(ops_json));
 }
 
+DB_API char* db_core_asset_add_json(db_core* c, const uint8_t* data, size_t len,
+                                    const char* type, const char* label) {
+  if (!c || !c->node || !type) return nullptr;
+  if (!adminWindowOpen(c)) return dupString(kAdminRequiredJson);
+  std::vector<uint8_t> bytes;
+  if (data && len) bytes.assign(data, data + len);
+  return dupString(c->node->addAssetJson(bytes, type, label ? label : ""));
+}
+
+DB_API char* db_core_asset_remove_json(db_core* c, const char* sha256_hex) {
+  if (!c || !c->node || !sha256_hex) return nullptr;
+  if (!adminWindowOpen(c)) return dupString(kAdminRequiredJson);
+  return dupString(c->node->removeAssetJson(sha256_hex));
+}
+
 DB_API char* db_core_config_snapshot_json_v2(db_core* c) {
   if (!c || !c->node) return nullptr;
   return dupString(c->node->configSnapshotJson());

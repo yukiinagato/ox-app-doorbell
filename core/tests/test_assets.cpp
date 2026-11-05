@@ -252,6 +252,30 @@ TEST_CASE("assets: addAsset replicates config and other nodes prefetch automatic
   b.node->stop();
 }
 
+TEST_CASE("assets: native add and remove report JSON results") {
+  AFleet f;
+  auto& a = f.add("A:1", "front", "door_station", "d_front", true);
+  REQUIRE(a.node->start());
+  f.run(300);
+  const Bytes img = toBytes("\x89PNG***fake-png-bytes***");
+  auto added = json::parse(a.node->addAssetJson(std::vector<uint8_t>(img.begin(), img.end()),
+                                                "image/png", "bg.png"));
+  REQUIRE(added);
+  CHECK(json::getBool(added.get(), "ok"));
+  const std::string hash = json::getString(added.get(), "hash");
+  CHECK(hash == sha256Hex(img));
+  CHECK(a.node->assetPath(hash) != "");
+  CHECK(json::getString(json::parse(a.node->addAssetJson({1, 2}, "application/zip", "")).get(),
+                        "err") == "bad_type");
+  CHECK(json::getString(json::parse(a.node->addAssetJson({}, "image/png", "")).get(), "err") ==
+        "empty");
+  CHECK(json::getBool(json::parse(a.node->removeAssetJson(hash)).get(), "ok"));
+  CHECK(a.node->configJson().find(hash) == std::string::npos);
+  CHECK(json::getString(json::parse(a.node->removeAssetJson("nothex")).get(), "err") ==
+        "bad_hash");
+  a.node->stop();
+}
+
 TEST_CASE("assets: a transferred theme image refreshes automatic background sampling") {
   AFleet f;
   auto& a = f.add("A:1", "front", "door_station", "d_front", true);
