@@ -65,9 +65,13 @@ namespace DoorbellApp.Settings
             _categoryId = _catalog[0].Id;
             _previousPrompt = CoreClient.AdminPrompt;
             CoreClient.AdminPrompt = PromptAdmin;
+            AdminHttpSession.PasswordPrompt = PromptSessionPassword;
             Closed += (s, e) =>
             {
                 CoreClient.AdminPrompt = _previousPrompt;
+                // The loopback admin session lives exactly as long as this window.
+                AdminHttpSession.PasswordPrompt = null;
+                AdminHttpSession.Clear();
                 _statusTimer.Stop();
             };
             _statusTimer.Interval = TimeSpan.FromSeconds(4);

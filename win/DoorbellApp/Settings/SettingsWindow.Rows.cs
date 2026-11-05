@@ -28,6 +28,7 @@ namespace DoorbellApp.Settings
         private FrameworkElement BuildRow(SettingItem item)
         {
             if (item.Kind == SettingKind.ListEditor) return BuildListEditor(item);
+            if (item.Kind == SettingKind.Editor) return BuildEditor(item);
             var parts = new RowParts();
             FrameworkElement control = BuildControl(item, parts);
             if (control == null) return null;
@@ -103,7 +104,7 @@ namespace DoorbellApp.Settings
             var parts = new List<string>();
             if (!string.IsNullOrEmpty(item.DescriptionKey)) parts.Add(Texts.T(item.DescriptionKey));
             if (item.Kind != SettingKind.Info && item.Kind != SettingKind.Action &&
-                item.Kind != SettingKind.WebOnly)
+                item.Kind != SettingKind.Editor)
             {
                 if (item.Scope == SettingScope.ThisDevice) parts.Add(Texts.T("settings.scope_device"));
                 else if (item.Scope == SettingScope.AllDevices) parts.Add(Texts.T("settings.scope_all"));
@@ -125,7 +126,6 @@ namespace DoorbellApp.Settings
                 case SettingKind.Time: return BuildText(item, parts);
                 case SettingKind.Info: return BuildInfo(item);
                 case SettingKind.Action: return BuildAction(item, parts);
-                case SettingKind.WebOnly: return BuildWebOnly(item);
                 default: return null;
             }
         }
@@ -310,6 +310,8 @@ namespace DoorbellApp.Settings
 
         private FrameworkElement BuildChoice(SettingItem item, RowParts parts)
         {
+            if (item.Handler == "sound" || item.Handler == "media_source")
+                item = WithConfiguredOptions(item);
             object stored = _store.Effective(item);
             if (item.Handler == "identity" && item.Id == "device_role") stored = _store.Context.Role;
             if (item.Handler == "ui_lang" && App.Boot != null) stored = App.Boot.UiLang;
@@ -336,7 +338,7 @@ namespace DoorbellApp.Settings
             for (int i = 0; i < item.Options.Count; i++)
             {
                 int index = i;
-                var button = CommandButton(Texts.T(item.Options[i].LabelKey));
+                var button = CommandButton(OptionText(item.Options[i]));
                 button.Margin = new Thickness(i == 0 ? 0 : 6, 0, 0, 0);
                 button.Click += (s, e) =>
                 {
@@ -376,7 +378,7 @@ namespace DoorbellApp.Settings
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
             };
             Action paint = () => label.Text = current >= 0
-                ? Texts.T(item.Options[current].LabelKey) : Texts.T("settings.not_set");
+                ? OptionText(item.Options[current]) : Texts.T("settings.not_set");
             paint();
             var list = new StackPanel();
             var popup = new Popup
@@ -419,7 +421,7 @@ namespace DoorbellApp.Settings
                     }
                     line.Children.Add(new TextBlock
                     {
-                        Text = Texts.T(item.Options[index].LabelKey),
+                        Text = OptionText(item.Options[index]),
                         FontSize = 16,
                         VerticalAlignment = VerticalAlignment.Center,
                     });
@@ -452,7 +454,7 @@ namespace DoorbellApp.Settings
                 string value = option.Value.ToString();
                 var chip = new ToggleButton
                 {
-                    Content = Texts.T(option.LabelKey),
+                    Content = OptionText(option),
                     IsChecked = chosen.Contains(value),
                     MinHeight = MinTouchTarget,
                     Padding = new Thickness(14, 6, 14, 6),
@@ -537,6 +539,11 @@ namespace DoorbellApp.Settings
                 Style = (Style)FindResource("SettingsCommandButton"),
                 Content = text,
             };
+        }
+
+        internal static string OptionText(SettingOption option)
+        {
+            return option.Text ?? Texts.T(option.LabelKey);
         }
 
         private static int IndexOf(List<SettingOption> options, object value)

@@ -12,7 +12,9 @@ namespace DoorbellApp.Settings
     internal enum SettingKind
     {
         Toggle, Slider, Stepper, Choice, Text, Time, MultiChoice,
-        ListEditor, Action, Info, WebOnly,
+        ListEditor, Action, Info,
+        /// <summary>A full-width native editor (records, assets, panels, rules) named by Handler.</summary>
+        Editor,
     }
 
     /// <summary>Where a value applies, shown under the label so the operator knows the reach.</summary>
@@ -22,10 +24,19 @@ namespace DoorbellApp.Settings
     {
         public readonly object Value;
         public readonly string LabelKey;
+        /// <summary>Literal label for options built from configuration (asset names, doors).</summary>
+        public readonly string Text;
         public SettingOption(object value, string labelKey)
         {
             Value = value;
             LabelKey = labelKey;
+        }
+
+        public SettingOption(object value, string labelKey, string text)
+        {
+            Value = value;
+            LabelKey = labelKey;
+            Text = text;
         }
     }
 
@@ -41,7 +52,7 @@ namespace DoorbellApp.Settings
         public double Min, Max, Step = 1;
         public string UnitKey;
         public List<SettingOption> Options;
-        /// <summary>For ListEditor: which editor; for Action/WebOnly/Info: what to do or show.</summary>
+        /// <summary>For ListEditor/Editor: which editor; for Action/Info: what to do or show.</summary>
         public string Handler;
         /// <summary>Writes that cannot take effect live: boot.json fields, role changes.</summary>
         public bool RequiresRestart;
@@ -54,6 +65,18 @@ namespace DoorbellApp.Settings
         public Func<SettingsContext, bool> Visible;
         /// <summary>Further keys written to the same value, in the same batch.</summary>
         public string[] AlsoWrites;
+        /// <summary>
+        /// For a secret row: the secure-store name ("{self}" allowed). The value goes to this
+        /// device's DPAPI store and Key receives the reference "secret:&lt;name&gt;".
+        /// </summary>
+        public string Secret;
+
+        public SettingItem Clone()
+        {
+            var copy = (SettingItem)MemberwiseClone();
+            if (Options != null) copy.Options = new List<SettingOption>(Options);
+            return copy;
+        }
 
         public static SettingItem Make(string id, SettingKind kind, string key)
         {

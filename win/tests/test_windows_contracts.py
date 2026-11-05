@@ -797,27 +797,20 @@ class WindowsContracts(unittest.TestCase):
                     '"time.zone"', 'Local + ".camera.codec"', '"boot:kiosk"'):
             with self.subTest(key=key):
                 self.assertIn(key, catalog)
-        # Only genuinely web-only items open the admin.
-        web = set(re.findall(r'Web\("([a-z_]+)"\)', catalog))
-        loop = re.search(r'foreach \(string id in new\[\] \{([^}]*)\}\)\s*Add\(g, Web\(id\)\)',
-                         catalog)
-        self.assertIsNotNone(loop)
-        web |= set(re.findall(r'"([a-z_]+)"', loop.group(1)))
-        self.assertTrue({"rules", "integrations", "assets", "secrets", "panels_manage",
-                         "sip_password", "bg_image"} <= web)
-        # Every category, item, description and action label is translated.
+        # Nothing opens the web admin any more: every row is a native control or editor.
+        self.assertNotIn("Web(", catalog)
+        self.assertNotIn("WebOnly", catalog)
+        self.assertNotIn("MoreInAdmin", catalog)
         keys = set(re.findall(r"^([a-z_.0-9]+):", strings, re.M))
-        for ident in web:
-            self.assertIn("settings." + ident + "_desc", keys)
         for kind, ident in re.findall(
-                r"\b(Toggle|Slider|Stepper|Choice|Multi|Text|TimeOfDay|Action|Info|Web|ListEditor)"
+                r"\b(Toggle|Slider|Stepper|Choice|Multi|Text|TimeOfDay|Action|Info|ListEditor|Editor|Secret)"
                 r'\("([a-z_0-9]+)"', catalog):
             with self.subTest(item=ident):
                 self.assertIn("settings." + ident, keys)
                 if kind == "Action":
                     self.assertIn("settings." + ident + "_action", keys)
-                if kind == "Web":
-                    self.assertIn("settings." + ident + "_desc", keys)
+                if kind in ("Editor", "Secret") and "ListEditor" not in kind:
+                    self.assertIn("settings." + ident + "_native", keys)
         for ident in re.findall(r'Category\("([a-z]+)"', catalog):
             self.assertIn("settings.cat_" + ident, keys)
         for label in re.findall(r'O\([^,]+, "([a-z_.0-9]+)"\)', catalog):
@@ -1012,6 +1005,90 @@ class WindowsContracts(unittest.TestCase):
                     self.assertIn(key.replace(".", "_"), available)
 
 
+    def test_every_admin_setting_is_native(self):
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        model = read("win/DoorbellApp/Settings/SettingsModel.cs")
+        editors = read("win/DoorbellApp/Settings/SettingsWindow.Editors.cs")
+        admin = read("win/DoorbellApp/Settings/SettingsWindow.Admin.cs")
+        forms = read("win/DoorbellApp/Settings/SettingsWindow.Forms.cs")
+        records = read("win/DoorbellApp/Settings/SettingsWindow.Records.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.Admin.cs")
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        session = read("win/DoorbellApp/Core/AdminHttpSession.cs")
+        project = read("win/DoorbellApp/DoorbellApp.csproj")
+        settings_dir = WIN / "DoorbellApp" / "Settings"
+        # No row anywhere in settings says "open in Admin" or opens the web admin.
+        self.assertNotIn("WebOnly", model)
+        for path in settings_dir.glob("*.cs"):
+            text = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertNotIn("settings.open_in_admin", text)
+                self.assertNotIn("OpenWebAdmin", text)
+                self.assertNotIn('"web_admin"', text)
+        # Every item of the native settings spec has its editor.
+        for handler in ("secret", "buildings", "doors", "households", "media_sources", "dtmf",
+                        "rules", "quiet_hours", "devices", "secrets", "texts", "assets_audio",
+                        "assets_all", "bg_image", "color", "video_policy", "panels", "backup",
+                        "software_update"):
+            with self.subTest(handler=handler):
+                self.assertIn('case "' + handler + '":', editors)
+                self.assertIn('"' + handler + '"', catalog)
+        for action in ("rebuild_cluster", "change_password", "telegram_test", "rotate_cluster_key",
+                       "add_device", "time_sync"):
+            self.assertIn('Action("' + action + '", "' + action + '")', catalog)
+        # Secrets: DPAPI on this device, configuration keeps only "secret:<name>".
+        for key, name in (('"sip.accounts.{self}.pass_ref"', '"sip.{self}"'),
+                          ('"integrations.mqtt.pass_ref"', '"mqtt"'),
+                          ('"integrations.telegram.bot_token_ref"', '"tg_bot"')):
+            self.assertIn(key + ", " + name, catalog)
+        self.assertIn('"secret:" + name', forms)
+        self.assertIn('AdminHttpSession.Request("POST", "/api/secrets", body, out status)', forms)
+        self.assertIn("App.Core.PutSecret(SecretNameOf(reference), value)", forms)
+        # Files come from the Windows dialogs and go through the Core asset ledger.
+        self.assertIn("new Microsoft.Win32.OpenFileDialog", admin)
+        self.assertIn("new Microsoft.Win32.SaveFileDialog", admin)
+        self.assertIn("App.Core.AssetAdd(bytes, type, Path.GetFileName(path))", admin)
+        self.assertIn("App.Core.AssetRemove(hash)", admin)
+        self.assertIn("new System.Windows.Forms.ColorDialog", forms)
+        self.assertIn('<Reference Include="System.Windows.Forms" />', project)
+        # The new ABI is bound optionally and called with the admin session where required.
+        for export in ("db_core_asset_add_json", "db_core_asset_remove_json",
+                       "db_core_config_snapshot_json_v2", "db_core_config_commit_json_v2",
+                       "db_core_config_import_json_v2", "db_core_panel_identity_json_v2",
+                       "db_core_remove_device_v2"):
+            self.assertIn('"' + export + '"', client)
+        self.assertIn("public delegate IntPtr AssetAddJsonFn(IntPtr core, byte[] data, UIntPtr len,", interop)
+        self.assertIn("public delegate int RemoveDeviceV2Fn(IntPtr core,", interop)
+        self.assertIn("tokens.Session, tokens.Csrf", client)
+        self.assertIn('"/api/login"', session)
+        self.assertIn('request.Headers["X-Doorbell-CSRF"] = tokens.Csrf;', session)
+        # Only the session cookie and CSRF value are kept; the password is never stored.
+        tokens = session[session.index("public sealed class Tokens"):session.index("private static readonly object Gate")]
+        self.assertEqual(re.findall(r"public string (\w+);", tokens), ["Session", "Csrf"])
+        self.assertNotRegex(session, r"static string _?[Pp]assword")
+        # Import is staged, previewed, and committed only after confirmation.
+        for action in ('"stage"', '"preflight"', '"commit"', '"cancel"'):
+            self.assertIn("App.Core.ConfigImport(" + action, admin)
+        self.assertIn("ConfirmImport(preflight, canCommit)", admin)
+        # Panels: list/create/update/rotate/revoke, credential provisioned first, shown once as QR.
+        for action in ('"list"', '"create"', '"update"', '"rotate"', '"revoke"'):
+            self.assertIn(action, admin)
+        self.assertIn('"secret:panel." + RandomHex(8)', admin)
+        self.assertIn('"/panel/" + page + "#k=" + credential', admin)
+        # Devices are removed with the v2 result, never this device.
+        self.assertIn("App.Core.RemoveDevice(id)", editors)
+        self.assertIn("remove.IsEnabled = !self;", editors)
+        # Whole-map writes for ids that are not dot-path safe (DTMF codes).
+        self.assertIn('Key = "sip.dtmf_actions"', editors)
+        self.assertIn("WholeMap = true", editors)
+        self.assertIn("result = _store.Set(spec.Key, map);", records)
+        # Rebuild and update channel are native.
+        self.assertIn('"/api/pairing/rebuild"', admin)
+        self.assertIn("UpdateChecker.Channel = value;", admin)
+        self.assertIn('Category("pairing", "IconTopologyStar3")', catalog)
+        # The Windows version moved with this change.
+        self.assertIn("<Version>0.1.21</Version>", project)
+
     # ---- batch 2 (WP-N-win) ----------------------------------------------------------
 
     def test_power_state_spi_reports_battery_charging_and_mains(self):
@@ -1043,7 +1120,12 @@ class WindowsContracts(unittest.TestCase):
                       shell.index("private void OpenWebAdmin")]
         self.assertIn("new AdminDialog { Owner = this }", entry)
         self.assertIn("OpenSettings();", entry)
-        self.assertIn("new WebAdminWindow(App.Boot.HttpPort)", actions)
+        # The settings screen never hands off to the web admin; the dashboard card still shows
+        # the HTTPS address and QR for other devices.
+        self.assertNotIn("WebAdminWindow", actions)
+        self.assertIn("new WebAdminWindow(AdminLink.HttpsPort)", shell)
+        self.assertIn('"https://" + host + ":" + effective + "/admin/"', link)
+        self.assertIn("public const int DefaultHttpsPort = 47443;", link)
         # QR, URL and an open button; the URL never points at loopback.
         self.assertIn("QrCodeImage.Render(url, 200)", window)
         self.assertIn('Texts.T("web_admin.open_browser")', window)

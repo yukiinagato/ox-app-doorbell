@@ -2015,3 +2015,174 @@ settings.search_empty: { ja: "一致する設定はありません", en: "No mat
 sos.hold_to_clear: { ja: "長押しで解除", en: "Press and hold to clear", zh: "长按以解除" }
 sos.since: { ja: "{time} から", en: "Since {time}", zh: "自 {time} 起" }
 pair.upgrade_rejoin_action: { ja: "もう一度ペアリングする", en: "Pair again", zh: "重新配对" }
+
+# ---- Windows native settings: every former "Open in Admin" row (2026-11-06) ----
+settings.cat_rules: { ja: "通知とルール", en: "Alerts and rules", zh: "通知与规则" }
+settings.cat_integrations: { ja: "連携", en: "Integrations", zh: "集成" }
+settings.cat_places: { ja: "ドアと建物", en: "Doors and buildings", zh: "门与建筑" }
+settings.cat_wording: { ja: "文言と素材", en: "Texts and assets", zh: "文字与素材" }
+settings.cat_backup: { ja: "バックアップ", en: "Backup", zh: "备份" }
+settings.grp_mqtt: { ja: "MQTT ブローカー", en: "MQTT broker", zh: "MQTT 代理" }
+settings.grp_ha: { ja: "Home Assistant", en: "Home Assistant", zh: "Home Assistant" }
+settings.grp_telegram: { ja: "Telegram", en: "Telegram", zh: "Telegram" }
+settings.custom_sounds_native: { ja: "音声ファイル (MP3・WAV、3 MB まで) を追加すると、上の音の選択肢に表示されます", en: "Add an audio file (MP3 or WAV, up to 3 MB) and it appears in the sound choices above", zh: "添加音频文件（MP3 或 WAV，最大 3 MB）后会出现在上方的声音选项中" }
+settings.bg_color_native: { ja: "背景画像がないときの背景色", en: "Background colour when there is no image", zh: "没有背景图片时的背景颜色" }
+settings.bg_image_native: { ja: "JPEG・PNG。3 MB を超える写真は縮小してから登録します", en: "JPEG or PNG. Photos over 3 MB are scaled down first", zh: "JPEG 或 PNG。超过 3 MB 的照片会先缩小" }
+settings.bg_choose_existing: { ja: "登録済みから選ぶ", en: "Choose an uploaded image", zh: "从已上传图片中选择" }
+settings.bg_clear: { ja: "画像を外す", en: "Remove image", zh: "移除图片" }
+settings.color_pick: { ja: "色を選ぶ…", en: "Pick…", zh: "选择颜色…" }
+settings.sos_sound: { ja: "警報音", en: "Alarm sound", zh: "警报声" }
+settings.sos_rules_native: { ja: "誰にどの方法で知らせるかは「通知とルール」で設定します", en: "Who is alerted, and how, is set under Alerts and rules", zh: "通知谁以及如何通知请在“通知与规则”中设置" }
+settings.sos_rules_action: { ja: "ルールを開く", en: "Open rules", zh: "打开规则" }
+settings.cam_source: { ja: "映像の入力元", en: "Video source", zh: "视频来源" }
+settings.cam_source_desc: { ja: "外部カメラを選ぶと、この門口機はその映像を使います", en: "With an external camera selected, this door station uses its video", zh: "选择外部摄像头后，此门口机使用其视频" }
+settings.cam_source_builtin: { ja: "内蔵カメラ", en: "Built-in camera", zh: "内置摄像头" }
+settings.video_policy_native: { ja: "上から順に試し、使えなければ次の方式に切り替えます", en: "Tried from the top; the next one is used when one fails", zh: "从上往下尝试，失败时切换到下一种" }
+settings.strategy_timeouts: { ja: "初回 {startup} ms・停止判定 {stall} ms", en: "First frame {startup} ms · stall {stall} ms", zh: "首帧 {startup} 毫秒 · 卡顿 {stall} 毫秒" }
+settings.enable: { ja: "有効にする", en: "Enable", zh: "启用" }
+settings.disable: { ja: "無効にする", en: "Disable", zh: "停用" }
+settings.sip_srtp: { ja: "SRTP (端末間の暗号化)", en: "SRTP (encryption between devices)", zh: "SRTP（设备间加密）" }
+settings.sip_srtp_desc: { ja: "「必須」にすると iOS 5 の端末とは通話できません", en: "Mandatory excludes iOS 5 devices", zh: "设为“必须”时无法与 iOS 5 设备通话" }
+settings.srtp_optional: { ja: "可能なら使う", en: "Optional", zh: "可选" }
+settings.srtp_mandatory: { ja: "必須", en: "Mandatory", zh: "必须" }
+settings.sip_password_native: { ja: "この端末の安全な保存領域 (DPAPI) に保存し、設定には参照だけを書きます", en: "Stored in this device's secure store (DPAPI); configuration keeps only a reference", zh: "保存在本设备的安全存储（DPAPI）中，配置中只保存引用" }
+settings.sip_dtmf_native: { ja: "通話中に押されたキーと動作の対応", en: "What a key pressed during a call does", zh: "通话中按键对应的动作" }
+settings.dtmf_code: { ja: "キー (例: *1)", en: "Keys (for example *1)", zh: "按键（例如 *1）" }
+settings.dtmf_type: { ja: "動作", en: "Action", zh: "动作" }
+settings.dtmf_hangup: { ja: "通話を切る", en: "Hang up", zh: "挂断" }
+settings.dtmf_ha_command: { ja: "Home Assistant コマンド", en: "Home Assistant command", zh: "Home Assistant 命令" }
+settings.dtmf_quick_reply: { ja: "定型返信", en: "Quick reply", zh: "快捷回复" }
+settings.dtmf_decline: { ja: "この電話では応答しない", en: "Decline on this phone", zh: "此电话不接听" }
+settings.dtmf_command: { ja: "コマンド", en: "Command", zh: "命令" }
+settings.dtmf_command_hint: { ja: "<base>/cmd/<コマンド> に送られます (例: unlock)", en: "Published to <base>/cmd/<command> (for example unlock)", zh: "发送到 <base>/cmd/<命令>（例如 unlock）" }
+settings.dtmf_door_self: { ja: "この通話のドア", en: "The door of this call", zh: "本次通话的门" }
+settings.dtmf_reply: { ja: "返信", en: "Reply", zh: "回复" }
+settings.dtmf_need_command: { ja: "コマンドを入力してください", en: "Enter a command", zh: "请输入命令" }
+settings.dtmf_need_reply: { ja: "返信を選んでください", en: "Choose a reply", zh: "请选择回复" }
+settings.mqtt_host: { ja: "ブローカーのアドレス", en: "Broker address", zh: "代理地址" }
+settings.mqtt_host_desc: { ja: "空欄にすると MQTT 連携を止めます", en: "Leave empty to turn MQTT off", zh: "留空则关闭 MQTT" }
+settings.mqtt_port: { ja: "ポート", en: "Port", zh: "端口" }
+settings.mqtt_user: { ja: "ユーザー名", en: "User name", zh: "用户名" }
+settings.mqtt_password: { ja: "パスワード", en: "Password", zh: "密码" }
+settings.mqtt_password_native: { ja: "MQTT を使う各端末で登録します。値は表示されません", en: "Enter it on every device that runs MQTT; the value is never shown", zh: "请在每台使用 MQTT 的设备上输入；该值不会显示" }
+settings.mqtt_base_topic: { ja: "ベーストピック", en: "Base topic", zh: "基础主题" }
+settings.mqtt_discovery: { ja: "Discovery プレフィックス", en: "Discovery prefix", zh: "Discovery 前缀" }
+settings.mqtt_tls: { ja: "TLS で接続", en: "Connect over TLS", zh: "使用 TLS 连接" }
+settings.mqtt_tls_desc: { ja: "下の証明書指紋が必要です", en: "Requires the certificate fingerprint below", zh: "需要下方的证书指纹" }
+settings.mqtt_tls_sha256: { ja: "証明書の SHA-256 指紋", en: "Certificate SHA-256 fingerprint", zh: "证书 SHA-256 指纹" }
+settings.mqtt_tls_sha256_desc: { ja: "小文字 16 進 64 文字", en: "64 lowercase hexadecimal characters", zh: "64 位小写十六进制字符" }
+settings.ha_language: { ja: "エンティティ名の言語", en: "Entity name language", zh: "实体名称语言" }
+settings.ha_allow_sos: { ja: "HA から SOS を操作", en: "Allow SOS control from HA", zh: "允许 HA 控制 SOS" }
+settings.ha_allow_sos_desc: { ja: "ブローカーの認証だけが確認になります", en: "The broker's authentication is the only check", zh: "仅以代理的认证作为检查" }
+settings.ha_allow_notice: { ja: "HA からお知らせを操作", en: "Allow announcements from HA", zh: "允许 HA 控制公告" }
+settings.ha_allow_notice_desc: { ja: "ブローカーの認証だけが確認になります", en: "The broker's authentication is the only check", zh: "仅以代理的认证作为检查" }
+settings.telegram_token: { ja: "ボットトークン", en: "Bot token", zh: "机器人令牌" }
+settings.telegram_token_native: { ja: "登録するとほかの端末へ暗号化して共有されます。外すと Telegram 通知が止まります", en: "Shared encrypted with the other devices; clearing it stops Telegram alerts", zh: "会加密共享给其他设备；清除后停止 Telegram 通知" }
+settings.telegram_poll: { ja: "ボタンでの返信を受け取る", en: "Receive button replies", zh: "接收按钮回复" }
+settings.telegram_poll_desc: { ja: "通知のボタンから定型返信を送れるようにします", en: "Lets residents send a quick reply from the alert's buttons", zh: "允许从通知按钮发送快捷回复" }
+settings.telegram_template: { ja: "通知文 (日本語)", en: "Message template (Japanese)", zh: "通知模板（日语）" }
+settings.telegram_template_desc: { ja: "{door} と {time} が置き換わります。空欄は既定の文", en: "{door} and {time} are filled in; empty uses the default", zh: "{door} 和 {time} 会被替换；留空使用默认文字" }
+settings.telegram_test: { ja: "テスト送信", en: "Test message", zh: "测试发送" }
+settings.telegram_test_desc: { ja: "送信担当の端末から 1 通送ります", en: "Sends one message through the elected sender", zh: "通过当选的发送设备发送一条消息" }
+settings.telegram_test_action: { ja: "送信", en: "Send", zh: "发送" }
+settings.telegram_test_hint: { ja: "チャット ID。空欄は世帯に登録された宛先", en: "Chat ID; empty sends to the households' chats", zh: "聊天 ID；留空则发送给住户的聊天" }
+settings.rules_native: { ja: "押下・動体・不在着信・SOS などで何をするか", en: "What happens on a press, motion, a missed call, SOS and more", zh: "按下、移动侦测、未接来电、SOS 等情况下执行的动作" }
+settings.quiet_hours_native: { ja: "この時間帯は選んだ動作を止めます", en: "During these times the selected actions are held back", zh: "在这些时段内暂停所选动作" }
+settings.quiet_none: { ja: "設定されていません", en: "Not set", zh: "未设置" }
+settings.quiet_never_hint: { ja: "ここで選んだ動作は静かな時間帯でも止めません", en: "Actions chosen here are never held back", zh: "此处选择的动作在静音时段也不暂停" }
+settings.households_native: { ja: "Telegram のチャットと内線の宛先", en: "Telegram chats and extensions to alert", zh: "要通知的 Telegram 聊天与分机" }
+settings.household_chats: { ja: "Telegram {count} 件", en: "{count} Telegram chats", zh: "Telegram {count} 个" }
+settings.when_button: { ja: "呼び出しボタン", en: "Call button", zh: "呼叫按钮" }
+settings.when_purpose_selected: { ja: "用件の選択", en: "Purpose chosen", zh: "选择来访目的" }
+settings.when_motion: { ja: "動体検知", en: "Motion", zh: "移动侦测" }
+settings.when_call_missed: { ja: "不在着信", en: "Missed call", zh: "未接来电" }
+settings.when_device_offline: { ja: "端末がオフライン", en: "Device offline", zh: "设备离线" }
+settings.when_device_online: { ja: "端末がオンライン", en: "Device back online", zh: "设备恢复在线" }
+settings.when_emergency_on: { ja: "SOS 発報", en: "SOS raised", zh: "SOS 触发" }
+settings.when_emergency_off: { ja: "SOS 解除", en: "SOS cleared", zh: "SOS 解除" }
+settings.act_device_alert: { ja: "端末への警報", en: "Device alert", zh: "设备警报" }
+settings.act_sip_call: { ja: "内線発信", en: "Call an extension", zh: "呼叫分机" }
+settings.act_telegram: { ja: "Telegram 通知", en: "Telegram message", zh: "Telegram 通知" }
+settings.act_ha_event: { ja: "Home Assistant イベント", en: "Home Assistant event", zh: "Home Assistant 事件" }
+settings.act_ha_command: { ja: "Home Assistant コマンド", en: "Home Assistant command", zh: "Home Assistant 命令" }
+settings.act_chime: { ja: "チャイム", en: "Chime", zh: "门铃声" }
+settings.act_auto_reply: { ja: "自動返信", en: "Automatic reply", zh: "自动回复" }
+settings.action_type: { ja: "動作の種類", en: "Action type", zh: "动作类型" }
+settings.rule_doors_hint: { ja: "何も選ばないとすべてのドア", en: "None selected means every door", zh: "不选择表示所有门" }
+settings.rule_purposes_hint: { ja: "用件の選択のときだけ使います。何も選ばないとすべて", en: "Used for a chosen purpose; none selected means any", zh: "仅用于选择来访目的；不选择表示全部" }
+settings.rule_devices_hint: { ja: "オフライン・オンラインのときだけ使います", en: "Used for offline and online triggers", zh: "仅用于离线和在线触发" }
+settings.rule_need_schedule: { ja: "「常に」をオンにするか、時間帯を追加してください", en: "Turn on Always or add a time window", zh: "请开启“始终”或添加时段" }
+settings.rule_no_actions: { ja: "動作がありません", en: "No actions", zh: "没有动作" }
+settings.never_suppress_hint: { ja: "静かな時間帯でも実行します", en: "Runs even during quiet hours", zh: "静音时段也执行" }
+settings.alert_need_target: { ja: "役割か端末を選んでください", en: "Choose roles or devices", zh: "请选择角色或设备" }
+settings.devices_manage_native: { ja: "ほかの端末の名前・役割・ドアの変更と削除。変更した端末は再起動して反映します", en: "Rename, change role or door, or remove other devices. A changed device restarts to apply it", zh: "重命名、更改角色或门，或移除其他设备。更改的设备会重启以生效" }
+settings.device_self_hint: { ja: "この端末は「端末」の項目で変更します", en: "Change this device under Device", zh: "本设备请在“设备”中更改" }
+settings.device_door_hint: { ja: "門口機のときに必要です", en: "Required for a door station", zh: "门口机必须设置" }
+settings.remove_invalid: { ja: "この端末は削除できません", en: "This device cannot be removed", zh: "无法移除此设备" }
+settings.remove_role: { ja: "この役割の端末からは削除できません", en: "Devices cannot be removed from this role", zh: "此角色的设备无法移除设备" }
+settings.remove_persist: { ja: "削除を保存できませんでした", en: "The removal could not be saved", zh: "无法保存移除操作" }
+settings.panels_manage_native: { ja: "Web パネルごとの資格情報。対象のドアと操作を決め、不要になれば無効にします", en: "One credential per Web panel, scoped to doors and actions, revocable on its own", zh: "每个网页面板一个凭据，可限定门与操作并单独吊销" }
+settings.panels_load: { ja: "パネルを表示", en: "Show panels", zh: "显示面板" }
+settings.panels_unavailable: { ja: "パネルを読み込めませんでした", en: "The panels could not be loaded", zh: "无法加载面板" }
+settings.change_password_desc: { ja: "8 文字以上。すべての端末と管理画面で共通です", en: "At least 8 characters, shared by every device and the web admin", zh: "至少 8 个字符，所有设备与网页管理共用" }
+settings.change_password_action: { ja: "変更", en: "Change", zh: "更改" }
+settings.rebuild_cluster: { ja: "この端末でクラスターを作り直す", en: "Rebuild the cluster from this device", zh: "以本设备重建集群" }
+settings.rebuild_cluster_desc: { ja: "創設端末がなくなったときに使います。ほかの端末はすべて配対し直します", en: "For when the founding device is gone. Every other device pairs again", zh: "在创建设备已不在时使用。其他所有设备需重新配对" }
+settings.rebuild_cluster_action: { ja: "作り直す", en: "Rebuild", zh: "重建" }
+settings.doors_manage_native: { ja: "ドアの追加・名前の変更・削除", en: "Add, rename and remove doors", zh: "添加、重命名和删除门" }
+settings.buildings_manage: { ja: "建物", en: "Buildings", zh: "建筑" }
+settings.buildings_manage_native: { ja: "ドアをまとめる建物", en: "Buildings that group doors", zh: "对门进行分组的建筑" }
+settings.door_id: { ja: "ドア ID (英数字・_・-)", en: "Door ID (letters, digits, _ or -)", zh: "门 ID（字母、数字、_ 或 -）" }
+settings.media_sources_native: { ja: "IP カメラを登録し、門口機の映像として使えます。URL に認証情報は書けません", en: "Register IP cameras and use them as a door station's video. URLs cannot carry credentials", zh: "登记 IP 摄像头并用作门口机视频。URL 中不能包含凭据" }
+settings.media_source_id: { ja: "カメラ ID (英数字・_・-)", en: "Camera ID (letters, digits, _ or -)", zh: "摄像头 ID（字母、数字、_ 或 -）" }
+settings.media_mjpeg_url: { ja: "MJPEG の URL", en: "MJPEG URL", zh: "MJPEG 地址" }
+settings.media_snapshot_url: { ja: "静止画の URL", en: "Snapshot URL", zh: "快照地址" }
+settings.media_h264_url: { ja: "H.264 (RTSP) の URL", en: "H.264 (RTSP) URL", zh: "H.264（RTSP）地址" }
+settings.media_url_hint: { ja: "http://・https://・rtsp:// で始まり、ユーザー名やパスワードを含めないでください", en: "Starts with http://, https:// or rtsp:// and contains no user name or password", zh: "以 http://、https:// 或 rtsp:// 开头，且不含用户名或密码" }
+settings.media_credential: { ja: "カメラの認証情報", en: "Camera credential", zh: "摄像头凭据" }
+settings.media_credential_hint: { ja: "ユーザー名:パスワード またはトークン。この端末の安全な保存領域に保存します", en: "user:password or a token, kept in this device's secure store", zh: "用户名:密码 或令牌，保存在本设备的安全存储中" }
+settings.media_bind: { ja: "使う門口機", en: "Use on door station", zh: "用于门口机" }
+settings.media_need_url: { ja: "URL を 1 つ以上入力してください", en: "Enter at least one URL", zh: "请至少输入一个地址" }
+settings.texts_native: { ja: "画面の文言を言語ごとに上書きします。空欄に戻すと既定の文言になります", en: "Override screen texts per language; empty restores the built-in text", zh: "按语言覆盖界面文字；留空则恢复默认文字" }
+settings.texts_search: { ja: "キーまたは文言で検索", en: "Search keys or texts", zh: "按键名或文字搜索" }
+settings.texts_none: { ja: "上書きはありません。検索して変更する文言を探してください", en: "No overrides yet. Search for a text to change", zh: "还没有覆盖。请搜索要更改的文字" }
+settings.texts_more: { ja: "ほかに {count} 件。検索を絞り込んでください", en: "{count} more; narrow the search", zh: "还有 {count} 条，请缩小搜索范围" }
+settings.texts_reset: { ja: "既定に戻す", en: "Reset", zh: "恢复默认" }
+settings.texts_default: { ja: "既定: {text}", en: "Built-in: {text}", zh: "默认：{text}" }
+settings.assets_native: { ja: "登録済みの画像と音声。使われている素材を削除すると既定に戻ります", en: "Uploaded images and sounds. Removing one in use falls back to the default", zh: "已上传的图片与声音。删除正在使用的素材会恢复默认" }
+settings.asset_used: { ja: "使用中: {users}", en: "Used by {users}", zh: "使用中：{users}" }
+settings.asset_limits: { ja: "JPEG・PNG・MP3・WAV、1 ファイル 3 MB まで", en: "JPEG, PNG, MP3 or WAV, up to 3 MB each", zh: "JPEG、PNG、MP3 或 WAV，每个最大 3 MB" }
+settings.asset_delete_in_use: { ja: "{name} は {users} で使われています。削除しますか？", en: "{name} is used by {users}. Delete it?", zh: "{name} 正被 {users} 使用。要删除吗？" }
+settings.filter_images: { ja: "画像 (JPEG・PNG)", en: "Images (JPEG, PNG)", zh: "图片（JPEG、PNG）" }
+settings.filter_sounds: { ja: "音声 (MP3・WAV)", en: "Sounds (MP3, WAV)", zh: "声音（MP3、WAV）" }
+settings.filter_assets: { ja: "画像と音声", en: "Images and sounds", zh: "图片与声音" }
+settings.import_export_native: { ja: "設定を JSON ファイルに書き出し、確認してから読み込みます", en: "Export the configuration to a JSON file, and import one after reviewing the changes", zh: "将配置导出为 JSON 文件，并在确认更改后导入" }
+settings.backup_hint: { ja: "秘密情報と素材のファイルは含まれません。読み込み前に変更点を確認できます", en: "Secrets and asset files are not included. Changes are shown before anything is imported", zh: "不包含秘密信息与素材文件。导入前会显示更改" }
+settings.export_done: { ja: "{file} に書き出しました", en: "Exported to {file}", zh: "已导出到 {file}" }
+settings.export_failed: { ja: "ファイルを書き出せませんでした", en: "The file could not be written", zh: "无法写入文件" }
+settings.import_changes: { ja: "変更 {count} 件", en: "{count} changes", zh: "{count} 处更改" }
+settings.secrets_native: { ja: "設定が参照している秘密情報と、この端末に保存されているか。値は表示されません", en: "Secrets the configuration refers to, and whether this device holds them. Values are never shown", zh: "配置引用的秘密信息，以及本设备是否保存。不会显示值" }
+settings.secret_stored: { ja: "この端末に保存済み", en: "Stored on this device", zh: "已保存在本设备" }
+settings.secret_none: { ja: "未設定", en: "Not set", zh: "未设置" }
+settings.secret_missing_here: { ja: "設定はありますが、この端末には保存されていません", en: "Configured, but not stored on this device", zh: "已配置，但本设备未保存" }
+settings.secret_clear: { ja: "消去", en: "Clear", zh: "清除" }
+settings.secret_clear_confirm: { ja: "この秘密情報を消去しますか？使っている連携は止まります", en: "Clear this secret? Anything using it stops working", zh: "要清除此秘密信息吗？使用它的功能将停止" }
+settings.secret_enter: { ja: "登録", en: "Enter", zh: "输入" }
+settings.secret_replace: { ja: "置き換え", en: "Replace", zh: "替换" }
+settings.secret_value: { ja: "値", en: "Value", zh: "值" }
+settings.secret_list_empty: { ja: "秘密情報を参照している設定はありません", en: "No setting refers to a secret", zh: "没有引用秘密信息的设置" }
+settings.secret_failed: { ja: "安全な保存領域に保存できませんでした", en: "The secure store could not save it", zh: "无法保存到安全存储" }
+settings.secret_bad_name: { ja: "秘密情報の名前が正しくありません", en: "The secret name is not valid", zh: "秘密信息名称无效" }
+settings.session_title: { ja: "管理パスワード", en: "Admin password", zh: "管理密码" }
+settings.session_hint: { ja: "この操作には管理パスワードの確認が必要です", en: "This action needs the admin password", zh: "此操作需要确认管理密码" }
+settings.software_update_native: { ja: "インストーラーで導入した端末のみ。更新は署名を確認してから実行します", en: "Installer-based installations only. Updates run after their signature is verified", zh: "仅限通过安装程序安装的设备。更新在验证签名后执行" }
+settings.update_channel: { ja: "更新チャンネル", en: "Update channel", zh: "更新通道" }
+settings.update_channel_stable: { ja: "安定版", en: "Stable", zh: "稳定版" }
+settings.update_channel_prerelease: { ja: "プレリリース", en: "Pre-release", zh: "预发布版" }
+settings.update_confirm: { ja: "{tag} に更新しますか？アプリは再起動します", en: "Update to {tag}? The app restarts", zh: "要更新到 {tag} 吗？应用将重启" }
+settings.form_number_range: { ja: "{label} は {min}〜{max} の数値で入力してください", en: "{label} must be a number from {min} to {max}", zh: "{label} 必须是 {min} 到 {max} 之间的数字" }
+settings.form_number_list: { ja: "{label} は数値をカンマで区切って入力してください", en: "{label} takes numbers separated by commas", zh: "{label} 请输入用逗号分隔的数字" }
+settings.form_invalid: { ja: "{label} の「{value}」は使えません", en: "{label}: \"{value}\" is not valid", zh: "{label}：“{value}”无效" }
+settings.form_list_hint: { ja: "カンマまたは改行で区切ります", en: "Separate with commas or new lines", zh: "用逗号或换行分隔" }
+settings.form_days_required: { ja: "曜日を 1 つ以上選んでください", en: "Choose at least one day", zh: "请至少选择一天" }
+settings.form_id_taken: { ja: "この ID はすでに使われています", en: "This ID is already used", zh: "此 ID 已被使用" }

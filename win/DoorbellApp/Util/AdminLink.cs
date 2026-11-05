@@ -6,16 +6,29 @@ using System.Net.Sockets;
 namespace DoorbellApp.Util
 {
     /// <summary>
-    /// Builds the address of this node's own web admin. Windows has no native settings screen
-    /// (spec 0.1), so this URL plus its QR is the whole entry point.
+    /// Builds the address of this node's own web admin for another device to open. Since
+    /// security protocol v3 Core serves Admin to the LAN only over TLS (plain HTTP answers 308),
+    /// so the address is https://&lt;ip&gt;:&lt;https_port&gt;/admin/, port 47443 by default.
     /// </summary>
     internal static class AdminLink
     {
+        public const int DefaultHttpsPort = 47443;
+
+        /// <summary>The TLS listener port from boot.json (https_port), 47443 by default.</summary>
+        public static int HttpsPort
+        {
+            get
+            {
+                int port = App.Boot == null ? 0 : App.Boot.HttpsPort;
+                return port > 0 && port < 65536 ? port : DefaultHttpsPort;
+            }
+        }
+
         public static string Url(string host, int port)
         {
             if (string.IsNullOrEmpty(host)) return "";
-            int effective = port > 0 && port < 65536 ? port : 47180;
-            return "http://" + host + ":" + effective + "/admin/";
+            int effective = port > 0 && port < 65536 ? port : DefaultHttpsPort;
+            return "https://" + host + ":" + effective + "/admin/";
         }
 
         /// <summary>
@@ -66,6 +79,11 @@ namespace DoorbellApp.Util
         }
 
         /// <summary>The address to show by default, or an empty string when there is none.</summary>
+        public static string PrimaryUrl()
+        {
+            return PrimaryUrl(HttpsPort);
+        }
+
         public static string PrimaryUrl(int port)
         {
             List<string> hosts = Hosts();

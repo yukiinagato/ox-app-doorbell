@@ -669,7 +669,7 @@ namespace DoorbellApp
         /// <summary>Renders this node's own /admin/ URL and its QR (spec 6, N-win).</summary>
         private void RefreshAdminLink()
         {
-            string url = AdminLink.PrimaryUrl(App.Boot.HttpPort);
+            string url = AdminLink.PrimaryUrl();
             _adminUrl = url;
             bool available = !string.IsNullOrEmpty(url);
             AdminUrlText.Text = available ? url : Texts.T("web_admin.none");
@@ -710,7 +710,7 @@ namespace DoorbellApp
 
         private void OpenWebAdmin()
         {
-            var window = new WebAdminWindow(App.Boot.HttpPort) { Owner = this, Topmost = Topmost };
+            var window = new WebAdminWindow(AdminLink.HttpsPort) { Owner = this, Topmost = Topmost };
             window.ShowDialog();
             // The password typed to get here opened Core's native admin window; close it with
             // the web admin unless the operator unlocked the whole kiosk.

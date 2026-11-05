@@ -17,6 +17,8 @@ namespace DoorbellApp
         public bool Kiosk = true;
         public int ListenPort = 47172;
         public int HttpPort = 47180;
+        /// <summary>Core's TLS listener (boot.json https_port); serves Admin to the LAN.</summary>
+        public int HttpsPort = 47443;
         public string FilePath;
         public bool SetupRequired;
         public string SuggestedDoor;
@@ -55,6 +57,12 @@ namespace DoorbellApp
                         int p;
                         if (int.TryParse(hp.ToString(), out p) && p >= 0 && p <= 65535)
                             c.HttpPort = p;
+                    }
+                    if (d.TryGetValue("https_port", out var tp) && tp != null)
+                    {
+                        int p;
+                        if (int.TryParse(tp.ToString(), out p) && p > 0 && p <= 65535)
+                            c.HttpsPort = p;
                     }
                     if (d.TryGetValue("listen_port", out var lp) && lp != null)
                     {

@@ -14,8 +14,8 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <PathMap>$(MSBuildProjectDirectory)=X:\src\win\DoorbellApp</PathMap>
-    <Version>0.1.20</Version>
-    <FileVersion>0.1.20.17</FileVersion>
+    <Version>0.1.21</Version>
+    <FileVersion>0.1.21.18</FileVersion>
     <EnableDefaultEmbeddedResourceItems>true</EnableDefaultEmbeddedResourceItems>
   </PropertyGroup>
   <ItemGroup>
@@ -27,6 +27,9 @@
     <Reference Include="System.Speech" />
     <!-- WMI provides remote brightness through WmiMonitorBrightnessMethods. -->
     <Reference Include="System.Management" />
+    <!-- The native colour dialog for theme colours (Win7 SP1 compatible). -->
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Drawing" />
     <Reference Include="Microsoft.CSharp" />
     <Reference Include="System.Security" />
     <Reference Include="System.Drawing" />

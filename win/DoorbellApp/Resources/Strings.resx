@@ -1228,10 +1228,19 @@ ON</value></data>
   <data name="security_rotate_key_hint" xml:space="preserve"><value>端末を外したあとや漏えいが疑われるときに使います。7 日以内にオンラインにならない端末は再配対が必要です。</value></data>
   <data name="security_title" xml:space="preserve"><value>クラスターのセキュリティ</value></data>
   <data name="settings_about" xml:space="preserve"><value>本機情報</value></data>
+  <data name="settings_act_auto_reply" xml:space="preserve"><value>自動返信</value></data>
+  <data name="settings_act_chime" xml:space="preserve"><value>チャイム</value></data>
+  <data name="settings_act_device_alert" xml:space="preserve"><value>端末への警報</value></data>
+  <data name="settings_act_ha_command" xml:space="preserve"><value>Home Assistant コマンド</value></data>
+  <data name="settings_act_ha_event" xml:space="preserve"><value>Home Assistant イベント</value></data>
+  <data name="settings_act_sip_call" xml:space="preserve"><value>内線発信</value></data>
+  <data name="settings_act_telegram" xml:space="preserve"><value>Telegram 通知</value></data>
+  <data name="settings_action_type" xml:space="preserve"><value>動作の種類</value></data>
   <data name="settings_add_device" xml:space="preserve"><value>端末を追加</value></data>
   <data name="settings_add_device_action" xml:space="preserve"><value>追加</value></data>
   <data name="settings_add_device_desc" xml:space="preserve"><value>PIN、QR コード、または近くの端末から追加します</value></data>
   <data name="settings_addresses" xml:space="preserve"><value>アドレス</value></data>
+  <data name="settings_alert_need_target" xml:space="preserve"><value>役割か端末を選んでください</value></data>
   <data name="settings_answer_auto" xml:space="preserve"><value>自動応答</value></data>
   <data name="settings_answer_manual" xml:space="preserve"><value>手動で応答</value></data>
   <data name="settings_answer_mode_auto" xml:space="preserve"><value>すぐに応答する</value></data>
@@ -1247,20 +1256,31 @@ ON</value></data>
   <data name="settings_appearance_range" xml:space="preserve"><value>ダーク {0} → ライト {1}</value></data>
   <data name="settings_appearance_schedule" xml:space="preserve"><value>時間帯で切り替え</value></data>
   <data name="settings_appearance_system" xml:space="preserve"><value>システムに合わせる</value></data>
+  <data name="settings_asset_delete_in_use" xml:space="preserve"><value>{0} は {1} で使われています。削除しますか？</value></data>
+  <data name="settings_asset_limits" xml:space="preserve"><value>JPEG・PNG・MP3・WAV、1 ファイル 3 MB まで</value></data>
+  <data name="settings_asset_used" xml:space="preserve"><value>使用中: {0}</value></data>
   <data name="settings_assets" xml:space="preserve"><value>素材 (画像・音声)</value></data>
   <data name="settings_assets_desc" xml:space="preserve"><value>ファイルのアップロードと配布</value></data>
+  <data name="settings_assets_native" xml:space="preserve"><value>登録済みの画像と音声。使われている素材を削除すると既定に戻ります</value></data>
   <data name="settings_back" xml:space="preserve"><value>設定</value></data>
   <data name="settings_backdrop" xml:space="preserve"><value>背景を暗くする層</value></data>
   <data name="settings_backdrop_opacity" xml:space="preserve"><value>暗くする強さ</value></data>
   <data name="settings_background_color" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_background_image" xml:space="preserve"><value>背景画像</value></data>
   <data name="settings_background_none" xml:space="preserve"><value>画像を使わない</value></data>
+  <data name="settings_backup_hint" xml:space="preserve"><value>秘密情報と素材のファイルは含まれません。読み込み前に変更点を確認できます</value></data>
+  <data name="settings_bg_choose_existing" xml:space="preserve"><value>登録済みから選ぶ</value></data>
+  <data name="settings_bg_clear" xml:space="preserve"><value>画像を外す</value></data>
   <data name="settings_bg_color" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_bg_color_desc" xml:space="preserve"><value>#RRGGBB 形式</value></data>
+  <data name="settings_bg_color_native" xml:space="preserve"><value>背景画像がないときの背景色</value></data>
   <data name="settings_bg_image" xml:space="preserve"><value>背景画像</value></data>
   <data name="settings_bg_image_desc" xml:space="preserve"><value>画像のアップロードは管理画面で行います</value></data>
+  <data name="settings_bg_image_native" xml:space="preserve"><value>JPEG・PNG。3 MB を超える写真は縮小してから登録します</value></data>
   <data name="settings_brightness_default" xml:space="preserve"><value>画面の明るさ</value></data>
   <data name="settings_brightness_here" xml:space="preserve"><value>画面の明るさ</value></data>
+  <data name="settings_buildings_manage" xml:space="preserve"><value>建物</value></data>
+  <data name="settings_buildings_manage_native" xml:space="preserve"><value>ドアをまとめる建物</value></data>
   <data name="settings_button_sound" xml:space="preserve"><value>ボタン音</value></data>
   <data name="settings_call_flow" xml:space="preserve"><value>来訪者の呼出手順</value></data>
   <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>用件を選んで呼び出す</value></data>
@@ -1276,7 +1296,11 @@ ON</value></data>
   <data name="settings_cam_hint" xml:space="preserve"><value>カメラ名の指定</value></data>
   <data name="settings_cam_quality" xml:space="preserve"><value>JPEG 画質</value></data>
   <data name="settings_cam_resolution" xml:space="preserve"><value>MJPEG の解像度</value></data>
+  <data name="settings_cam_source" xml:space="preserve"><value>映像の入力元</value></data>
+  <data name="settings_cam_source_builtin" xml:space="preserve"><value>内蔵カメラ</value></data>
+  <data name="settings_cam_source_desc" xml:space="preserve"><value>外部カメラを選ぶと、この門口機はその映像を使います</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>情報</value></data>
+  <data name="settings_cat_backup" xml:space="preserve"><value>バックアップ</value></data>
   <data name="settings_cat_calls" xml:space="preserve"><value>呼び出し</value></data>
   <data name="settings_cat_camera" xml:space="preserve"><value>カメラと映像</value></data>
   <data name="settings_cat_cluster" xml:space="preserve"><value>端末の追加と管理</value></data>
@@ -1284,20 +1308,26 @@ ON</value></data>
   <data name="settings_cat_display" xml:space="preserve"><value>画面と外観</value></data>
   <data name="settings_cat_doors" xml:space="preserve"><value>門口とお知らせ</value></data>
   <data name="settings_cat_emergency" xml:space="preserve"><value>SOS</value></data>
+  <data name="settings_cat_integrations" xml:space="preserve"><value>連携</value></data>
   <data name="settings_cat_kiosk" xml:space="preserve"><value>キオスクと復旧</value></data>
   <data name="settings_cat_more" xml:space="preserve"><value>管理画面のその他の設定</value></data>
   <data name="settings_cat_network" xml:space="preserve"><value>ネットワーク</value></data>
   <data name="settings_cat_notices" xml:space="preserve"><value>お知らせ</value></data>
   <data name="settings_cat_notifications" xml:space="preserve"><value>通知とルール</value></data>
   <data name="settings_cat_pairing" xml:space="preserve"><value>クラスタと端末</value></data>
+  <data name="settings_cat_places" xml:space="preserve"><value>ドアと建物</value></data>
   <data name="settings_cat_purposes" xml:space="preserve"><value>来訪目的</value></data>
   <data name="settings_cat_replies" xml:space="preserve"><value>クイック返答</value></data>
+  <data name="settings_cat_rules" xml:space="preserve"><value>通知とルール</value></data>
   <data name="settings_cat_sip" xml:space="preserve"><value>通話 (SIP)</value></data>
   <data name="settings_cat_sos" xml:space="preserve"><value>緊急呼出 (SOS)</value></data>
   <data name="settings_cat_sound" xml:space="preserve"><value>サウンド</value></data>
   <data name="settings_cat_time" xml:space="preserve"><value>日付と時刻</value></data>
+  <data name="settings_cat_wording" xml:space="preserve"><value>文言と素材</value></data>
   <data name="settings_categories" xml:space="preserve"><value>設定の項目</value></data>
   <data name="settings_change_password" xml:space="preserve"><value>管理パスワードを変更</value></data>
+  <data name="settings_change_password_action" xml:space="preserve"><value>変更</value></data>
+  <data name="settings_change_password_desc" xml:space="preserve"><value>8 文字以上。すべての端末と管理画面で共通です</value></data>
   <data name="settings_close" xml:space="preserve"><value>閉じる</value></data>
   <data name="settings_cluster" xml:space="preserve"><value>クラスタ</value></data>
   <data name="settings_cluster_key" xml:space="preserve"><value>クラスタ鍵</value></data>
@@ -1305,11 +1335,13 @@ ON</value></data>
   <data name="settings_cluster_members" xml:space="preserve"><value>参加している機器</value></data>
   <data name="settings_codec_h264" xml:space="preserve"><value>H.264</value></data>
   <data name="settings_codec_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
+  <data name="settings_color_pick" xml:space="preserve"><value>色を選ぶ…</value></data>
   <data name="settings_configured" xml:space="preserve"><value>設定済み</value></data>
   <data name="settings_contrast_warning" xml:space="preserve"><value>読みにくい可能性があります ({0}:1)</value></data>
   <data name="settings_core_version" xml:space="preserve"><value>コアのバージョン</value></data>
   <data name="settings_custom_sounds" xml:space="preserve"><value>独自の音声ファイル</value></data>
   <data name="settings_custom_sounds_desc" xml:space="preserve"><value>音声ファイルのアップロードと割り当ては管理画面で行います</value></data>
+  <data name="settings_custom_sounds_native" xml:space="preserve"><value>音声ファイル (MP3・WAV、3 MB まで) を追加すると、上の音の選択肢に表示されます</value></data>
   <data name="settings_dark_from" xml:space="preserve"><value>ダークにする時刻</value></data>
   <data name="settings_day_1" xml:space="preserve"><value>1 日</value></data>
   <data name="settings_decrease" xml:space="preserve"><value>減らす</value></data>
@@ -1319,20 +1351,50 @@ ON</value></data>
   <data name="settings_deg_90" xml:space="preserve"><value>90°</value></data>
   <data name="settings_device_door" xml:space="preserve"><value>担当ドア</value></data>
   <data name="settings_device_door_desc" xml:space="preserve"><value>英字か数字で始まり、英数字・_・- のみ</value></data>
+  <data name="settings_device_door_hint" xml:space="preserve"><value>門口機のときに必要です</value></data>
   <data name="settings_device_name" xml:space="preserve"><value>端末の名前</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>役割</value></data>
+  <data name="settings_device_self_hint" xml:space="preserve"><value>この端末は「端末」の項目で変更します</value></data>
   <data name="settings_devices_manage" xml:space="preserve"><value>端末の管理と削除</value></data>
   <data name="settings_devices_manage_desc" xml:space="preserve"><value>他の端末の設定と削除は管理画面で行います</value></data>
+  <data name="settings_devices_manage_native" xml:space="preserve"><value>ほかの端末の名前・役割・ドアの変更と削除。変更した端末は再起動して反映します</value></data>
+  <data name="settings_disable" xml:space="preserve"><value>無効にする</value></data>
   <data name="settings_door" xml:space="preserve"><value>担当する門口</value></data>
+  <data name="settings_door_id" xml:space="preserve"><value>ドア ID (英数字・_・-)</value></data>
   <data name="settings_doors" xml:space="preserve"><value>門口</value></data>
   <data name="settings_doors_manage" xml:space="preserve"><value>ドアと建物</value></data>
   <data name="settings_doors_manage_desc" xml:space="preserve"><value>ドア名と建物の割り当ては管理画面で行います</value></data>
+  <data name="settings_doors_manage_native" xml:space="preserve"><value>ドアの追加・名前の変更・削除</value></data>
+  <data name="settings_dtmf_code" xml:space="preserve"><value>キー (例: *1)</value></data>
+  <data name="settings_dtmf_command" xml:space="preserve"><value>コマンド</value></data>
+  <data name="settings_dtmf_command_hint" xml:space="preserve"><value>&lt;base&gt;/cmd/&lt;コマンド&gt; に送られます (例: unlock)</value></data>
+  <data name="settings_dtmf_decline" xml:space="preserve"><value>この電話では応答しない</value></data>
+  <data name="settings_dtmf_door_self" xml:space="preserve"><value>この通話のドア</value></data>
+  <data name="settings_dtmf_ha_command" xml:space="preserve"><value>Home Assistant コマンド</value></data>
+  <data name="settings_dtmf_hangup" xml:space="preserve"><value>通話を切る</value></data>
+  <data name="settings_dtmf_need_command" xml:space="preserve"><value>コマンドを入力してください</value></data>
+  <data name="settings_dtmf_need_reply" xml:space="preserve"><value>返信を選んでください</value></data>
+  <data name="settings_dtmf_quick_reply" xml:space="preserve"><value>定型返信</value></data>
+  <data name="settings_dtmf_reply" xml:space="preserve"><value>返信</value></data>
+  <data name="settings_dtmf_type" xml:space="preserve"><value>動作</value></data>
+  <data name="settings_enable" xml:space="preserve"><value>有効にする</value></data>
   <data name="settings_err_admin_required" xml:space="preserve"><value>管理パスワードが必要です</value></data>
   <data name="settings_err_core_unavailable" xml:space="preserve"><value>コアが応答しません</value></data>
   <data name="settings_err_door_id" xml:space="preserve"><value>ドア ID の形式が正しくありません</value></data>
   <data name="settings_err_required" xml:space="preserve"><value>入力してください</value></data>
   <data name="settings_err_time_format" xml:space="preserve"><value>HH:MM 形式 (例 22:00) で入力してください</value></data>
   <data name="settings_exit_kiosk" xml:space="preserve"><value>キオスクを終了</value></data>
+  <data name="settings_export_done" xml:space="preserve"><value>{0} に書き出しました</value></data>
+  <data name="settings_export_failed" xml:space="preserve"><value>ファイルを書き出せませんでした</value></data>
+  <data name="settings_filter_assets" xml:space="preserve"><value>画像と音声</value></data>
+  <data name="settings_filter_images" xml:space="preserve"><value>画像 (JPEG・PNG)</value></data>
+  <data name="settings_filter_sounds" xml:space="preserve"><value>音声 (MP3・WAV)</value></data>
+  <data name="settings_form_days_required" xml:space="preserve"><value>曜日を 1 つ以上選んでください</value></data>
+  <data name="settings_form_id_taken" xml:space="preserve"><value>この ID はすでに使われています</value></data>
+  <data name="settings_form_invalid" xml:space="preserve"><value>{0} の「{1}」は使えません</value></data>
+  <data name="settings_form_list_hint" xml:space="preserve"><value>カンマまたは改行で区切ります</value></data>
+  <data name="settings_form_number_list" xml:space="preserve"><value>{0} は数値をカンマで区切って入力してください</value></data>
+  <data name="settings_form_number_range" xml:space="preserve"><value>{0} は {1}〜{2} の数値で入力してください</value></data>
   <data name="settings_fps_15" xml:space="preserve"><value>15 fps</value></data>
   <data name="settings_fps_24" xml:space="preserve"><value>24 fps</value></data>
   <data name="settings_fps_30" xml:space="preserve"><value>30 fps</value></data>
@@ -1346,9 +1408,11 @@ ON</value></data>
   <data name="settings_grp_all_devices" xml:space="preserve"><value>全端末の既定値</value></data>
   <data name="settings_grp_appearance" xml:space="preserve"><value>外観</value></data>
   <data name="settings_grp_cluster" xml:space="preserve"><value>クラスタ</value></data>
+  <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>識別</value></data>
   <data name="settings_grp_kiosk" xml:space="preserve"><value>キオスク</value></data>
   <data name="settings_grp_maintenance" xml:space="preserve"><value>メンテナンス</value></data>
+  <data name="settings_grp_mqtt" xml:space="preserve"><value>MQTT ブローカー</value></data>
   <data name="settings_grp_night" xml:space="preserve"><value>夜間モード</value></data>
   <data name="settings_grp_security" xml:space="preserve"><value>セキュリティ</value></data>
   <data name="settings_grp_sip_account" xml:space="preserve"><value>この端末のアカウント</value></data>
@@ -1356,20 +1420,30 @@ ON</value></data>
   <data name="settings_grp_sos_alarm" xml:space="preserve"><value>警報と通知</value></data>
   <data name="settings_grp_sos_trigger" xml:space="preserve"><value>発報</value></data>
   <data name="settings_grp_sounds" xml:space="preserve"><value>サウンド</value></data>
+  <data name="settings_grp_telegram" xml:space="preserve"><value>Telegram</value></data>
   <data name="settings_grp_theme" xml:space="preserve"><value>テーマ</value></data>
   <data name="settings_grp_this_device" xml:space="preserve"><value>この端末</value></data>
   <data name="settings_grp_time" xml:space="preserve"><value>時刻</value></data>
   <data name="settings_grp_video" xml:space="preserve"><value>映像の再生</value></data>
   <data name="settings_grp_visitor" xml:space="preserve"><value>来訪者の操作</value></data>
   <data name="settings_grp_web_only" xml:space="preserve"><value>管理画面 (Web) でのみ設定できる項目</value></data>
+  <data name="settings_ha_allow_notice" xml:space="preserve"><value>HA からお知らせを操作</value></data>
+  <data name="settings_ha_allow_notice_desc" xml:space="preserve"><value>ブローカーの認証だけが確認になります</value></data>
+  <data name="settings_ha_allow_sos" xml:space="preserve"><value>HA から SOS を操作</value></data>
+  <data name="settings_ha_allow_sos_desc" xml:space="preserve"><value>ブローカーの認証だけが確認になります</value></data>
+  <data name="settings_ha_language" xml:space="preserve"><value>エンティティ名の言語</value></data>
   <data name="settings_helper_mode" xml:space="preserve"><value>復帰ヘルパー</value></data>
   <data name="settings_hour_1" xml:space="preserve"><value>1 時間</value></data>
   <data name="settings_hour_6" xml:space="preserve"><value>6 時間</value></data>
+  <data name="settings_household_chats" xml:space="preserve"><value>Telegram {0} 件</value></data>
   <data name="settings_households" xml:space="preserve"><value>通知先 (世帯)</value></data>
   <data name="settings_households_desc" xml:space="preserve"><value>Telegram と内線の宛先</value></data>
+  <data name="settings_households_native" xml:space="preserve"><value>Telegram のチャットと内線の宛先</value></data>
   <data name="settings_identity_restart_confirm" xml:space="preserve"><value>端末の識別を変更するとアプリが再起動します。続けますか？</value></data>
+  <data name="settings_import_changes" xml:space="preserve"><value>変更 {0} 件</value></data>
   <data name="settings_import_export" xml:space="preserve"><value>設定の書き出しと読み込み</value></data>
   <data name="settings_import_export_desc" xml:space="preserve"><value>バックアップと移行</value></data>
+  <data name="settings_import_export_native" xml:space="preserve"><value>設定を JSON ファイルに書き出し、確認してから読み込みます</value></data>
   <data name="settings_increase" xml:space="preserve"><value>増やす</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>クラスタの既定に合わせる</value></data>
   <data name="settings_integrations" xml:space="preserve"><value>連携 (Telegram・MQTT・Web Push)</value></data>
@@ -1436,8 +1510,18 @@ ON</value></data>
   <data name="settings_launch_sound" xml:space="preserve"><value>起動音</value></data>
   <data name="settings_light_from" xml:space="preserve"><value>ライトにする時刻</value></data>
   <data name="settings_list_empty" xml:space="preserve"><value>項目はありません</value></data>
+  <data name="settings_media_bind" xml:space="preserve"><value>使う門口機</value></data>
+  <data name="settings_media_credential" xml:space="preserve"><value>カメラの認証情報</value></data>
+  <data name="settings_media_credential_hint" xml:space="preserve"><value>ユーザー名:パスワード またはトークン。この端末の安全な保存領域に保存します</value></data>
+  <data name="settings_media_h264_url" xml:space="preserve"><value>H.264 (RTSP) の URL</value></data>
+  <data name="settings_media_mjpeg_url" xml:space="preserve"><value>MJPEG の URL</value></data>
+  <data name="settings_media_need_url" xml:space="preserve"><value>URL を 1 つ以上入力してください</value></data>
+  <data name="settings_media_snapshot_url" xml:space="preserve"><value>静止画の URL</value></data>
+  <data name="settings_media_source_id" xml:space="preserve"><value>カメラ ID (英数字・_・-)</value></data>
   <data name="settings_media_sources" xml:space="preserve"><value>外部カメラ</value></data>
   <data name="settings_media_sources_desc" xml:space="preserve"><value>IP カメラの登録</value></data>
+  <data name="settings_media_sources_native" xml:space="preserve"><value>IP カメラを登録し、門口機の映像として使えます。URL に認証情報は書けません</value></data>
+  <data name="settings_media_url_hint" xml:space="preserve"><value>http://・https://・rtsp:// で始まり、ユーザー名やパスワードを含めないでください</value></data>
   <data name="settings_min_1" xml:space="preserve"><value>1 分</value></data>
   <data name="settings_min_10" xml:space="preserve"><value>10 分</value></data>
   <data name="settings_min_15" xml:space="preserve"><value>15 分</value></data>
@@ -1449,6 +1533,19 @@ ON</value></data>
   <data name="settings_motion_sensitivity" xml:space="preserve"><value>感度</value></data>
   <data name="settings_move_down" xml:space="preserve"><value>下へ</value></data>
   <data name="settings_move_up" xml:space="preserve"><value>上へ</value></data>
+  <data name="settings_mqtt_base_topic" xml:space="preserve"><value>ベーストピック</value></data>
+  <data name="settings_mqtt_discovery" xml:space="preserve"><value>Discovery プレフィックス</value></data>
+  <data name="settings_mqtt_host" xml:space="preserve"><value>ブローカーのアドレス</value></data>
+  <data name="settings_mqtt_host_desc" xml:space="preserve"><value>空欄にすると MQTT 連携を止めます</value></data>
+  <data name="settings_mqtt_password" xml:space="preserve"><value>パスワード</value></data>
+  <data name="settings_mqtt_password_native" xml:space="preserve"><value>MQTT を使う各端末で登録します。値は表示されません</value></data>
+  <data name="settings_mqtt_port" xml:space="preserve"><value>ポート</value></data>
+  <data name="settings_mqtt_tls" xml:space="preserve"><value>TLS で接続</value></data>
+  <data name="settings_mqtt_tls_desc" xml:space="preserve"><value>下の証明書指紋が必要です</value></data>
+  <data name="settings_mqtt_tls_sha256" xml:space="preserve"><value>証明書の SHA-256 指紋</value></data>
+  <data name="settings_mqtt_tls_sha256_desc" xml:space="preserve"><value>小文字 16 進 64 文字</value></data>
+  <data name="settings_mqtt_user" xml:space="preserve"><value>ユーザー名</value></data>
+  <data name="settings_never_suppress_hint" xml:space="preserve"><value>静かな時間帯でも実行します</value></data>
   <data name="settings_night_brightness" xml:space="preserve"><value>夜間の明るさ</value></data>
   <data name="settings_night_enabled" xml:space="preserve"><value>夜間モード</value></data>
   <data name="settings_night_enabled_desc" xml:space="preserve"><value>指定した時間帯は画面を暗くします</value></data>
@@ -1484,8 +1581,11 @@ ON</value></data>
   <data name="settings_pairing_state" xml:space="preserve"><value>ペアリング</value></data>
   <data name="settings_pairing_state_cluster" xml:space="preserve"><value>この端末の状態</value></data>
   <data name="settings_pairing_unpaired" xml:space="preserve"><value>未ペアリング</value></data>
+  <data name="settings_panels_load" xml:space="preserve"><value>パネルを表示</value></data>
   <data name="settings_panels_manage" xml:space="preserve"><value>Web パネル</value></data>
   <data name="settings_panels_manage_desc" xml:space="preserve"><value>パネルの作成・権限・失効は管理画面で行います</value></data>
+  <data name="settings_panels_manage_native" xml:space="preserve"><value>Web パネルごとの資格情報。対象のドアと操作を決め、不要になれば無効にします</value></data>
+  <data name="settings_panels_unavailable" xml:space="preserve"><value>パネルを読み込めませんでした</value></data>
   <data name="settings_password_changed" xml:space="preserve"><value>管理パスワードを変更しました</value></data>
   <data name="settings_password_confirm" xml:space="preserve"><value>もう一度入力</value></data>
   <data name="settings_password_current" xml:space="preserve"><value>今のパスワード</value></data>
@@ -1511,6 +1611,15 @@ ON</value></data>
   <data name="settings_quick_replies" xml:space="preserve"><value>クイック返答</value></data>
   <data name="settings_quick_replies_desc" xml:space="preserve"><value>室内機から門口機へ送る定型の返答</value></data>
   <data name="settings_quiet_hours" xml:space="preserve"><value>静かにする時間帯</value></data>
+  <data name="settings_quiet_hours_native" xml:space="preserve"><value>この時間帯は選んだ動作を止めます</value></data>
+  <data name="settings_quiet_never_hint" xml:space="preserve"><value>ここで選んだ動作は静かな時間帯でも止めません</value></data>
+  <data name="settings_quiet_none" xml:space="preserve"><value>設定されていません</value></data>
+  <data name="settings_rebuild_cluster" xml:space="preserve"><value>この端末でクラスターを作り直す</value></data>
+  <data name="settings_rebuild_cluster_action" xml:space="preserve"><value>作り直す</value></data>
+  <data name="settings_rebuild_cluster_desc" xml:space="preserve"><value>創設端末がなくなったときに使います。ほかの端末はすべて配対し直します</value></data>
+  <data name="settings_remove_invalid" xml:space="preserve"><value>この端末は削除できません</value></data>
+  <data name="settings_remove_persist" xml:space="preserve"><value>削除を保存できませんでした</value></data>
+  <data name="settings_remove_role" xml:space="preserve"><value>この役割の端末からは削除できません</value></data>
   <data name="settings_reply_ttl" xml:space="preserve"><value>返答の表示時間</value></data>
   <data name="settings_reply_ttl_desc" xml:space="preserve"><value>門口機にクイック返答を表示する秒数</value></data>
   <data name="settings_requires_restart" xml:space="preserve"><value>再起動して反映</value></data>
@@ -1537,10 +1646,16 @@ ON</value></data>
   <data name="settings_rotate_cluster_key_desc" xml:space="preserve"><value>端末を失くしたときなどに行います。旧鍵は接続中の端末に 7 日間だけ有効です</value></data>
   <data name="settings_rotate_cluster_key_done" xml:space="preserve"><value>クラスタ鍵を更新しました</value></data>
   <data name="settings_rotate_cluster_key_failed" xml:space="preserve"><value>クラスタ鍵を更新できませんでした</value></data>
+  <data name="settings_rule_devices_hint" xml:space="preserve"><value>オフライン・オンラインのときだけ使います</value></data>
+  <data name="settings_rule_doors_hint" xml:space="preserve"><value>何も選ばないとすべてのドア</value></data>
   <data name="settings_rule_enabled" xml:space="preserve"><value>有効</value></data>
+  <data name="settings_rule_need_schedule" xml:space="preserve"><value>「常に」をオンにするか、時間帯を追加してください</value></data>
+  <data name="settings_rule_no_actions" xml:space="preserve"><value>動作がありません</value></data>
+  <data name="settings_rule_purposes_hint" xml:space="preserve"><value>用件の選択のときだけ使います。何も選ばないとすべて</value></data>
   <data name="settings_rules" xml:space="preserve"><value>通知とルール</value></data>
   <data name="settings_rules_count" xml:space="preserve"><value>{0} 件</value></data>
   <data name="settings_rules_desc" xml:space="preserve"><value>押下・動体・オフライン時の動作</value></data>
+  <data name="settings_rules_native" xml:space="preserve"><value>押下・動体・不在着信・SOS などで何をするか</value></data>
   <data name="settings_safe_mode" xml:space="preserve"><value>セーフモード</value></data>
   <data name="settings_save_failed" xml:space="preserve"><value>保存できませんでした</value></data>
   <data name="settings_save_failed_reason" xml:space="preserve"><value>保存できませんでした: {0}</value></data>
@@ -1554,8 +1669,20 @@ ON</value></data>
   <data name="settings_search_hint" xml:space="preserve"><value>設定を検索</value></data>
   <data name="settings_search_none" xml:space="preserve"><value>一致する設定はありません</value></data>
   <data name="settings_sec_30" xml:space="preserve"><value>30 秒</value></data>
+  <data name="settings_secret_bad_name" xml:space="preserve"><value>秘密情報の名前が正しくありません</value></data>
+  <data name="settings_secret_clear" xml:space="preserve"><value>消去</value></data>
+  <data name="settings_secret_clear_confirm" xml:space="preserve"><value>この秘密情報を消去しますか？使っている連携は止まります</value></data>
+  <data name="settings_secret_enter" xml:space="preserve"><value>登録</value></data>
+  <data name="settings_secret_failed" xml:space="preserve"><value>安全な保存領域に保存できませんでした</value></data>
+  <data name="settings_secret_list_empty" xml:space="preserve"><value>秘密情報を参照している設定はありません</value></data>
+  <data name="settings_secret_missing_here" xml:space="preserve"><value>設定はありますが、この端末には保存されていません</value></data>
+  <data name="settings_secret_none" xml:space="preserve"><value>未設定</value></data>
+  <data name="settings_secret_replace" xml:space="preserve"><value>置き換え</value></data>
+  <data name="settings_secret_stored" xml:space="preserve"><value>この端末に保存済み</value></data>
+  <data name="settings_secret_value" xml:space="preserve"><value>値</value></data>
   <data name="settings_secrets" xml:space="preserve"><value>秘密情報</value></data>
   <data name="settings_secrets_desc" xml:space="preserve"><value>パスワードとトークンは各端末の管理画面で登録します</value></data>
+  <data name="settings_secrets_native" xml:space="preserve"><value>設定が参照している秘密情報と、この端末に保存されているか。値は表示されません</value></data>
   <data name="settings_section_cluster" xml:space="preserve"><value>クラスタ</value></data>
   <data name="settings_section_device" xml:space="preserve"><value>この端末</value></data>
   <data name="settings_section_doors" xml:space="preserve"><value>門口</value></data>
@@ -1567,6 +1694,8 @@ ON</value></data>
   <data name="settings_section_volume" xml:space="preserve"><value>音量</value></data>
   <data name="settings_section_web" xml:space="preserve"><value>Web 管理を開く</value></data>
   <data name="settings_select_at_least_one" xml:space="preserve"><value>少なくとも 1 つ選んでください</value></data>
+  <data name="settings_session_hint" xml:space="preserve"><value>この操作には管理パスワードの確認が必要です</value></data>
+  <data name="settings_session_title" xml:space="preserve"><value>管理パスワード</value></data>
   <data name="settings_set_password" xml:space="preserve"><value>管理パスワードを設定</value></data>
   <data name="settings_set_password_hint" xml:space="preserve"><value>この端末と Web 管理で共通のパスワードです</value></data>
   <data name="settings_sip_answer_mode" xml:space="preserve"><value>応答方法</value></data>
@@ -1575,16 +1704,21 @@ ON</value></data>
   <data name="settings_sip_direct_port_desc" xml:space="preserve"><value>変更後は各端末のファイアウォール規則も合わせてください</value></data>
   <data name="settings_sip_dtmf" xml:space="preserve"><value>DTMF の動作</value></data>
   <data name="settings_sip_dtmf_desc" xml:space="preserve"><value>通話中のキー操作 (開錠など) は管理画面で設定します</value></data>
+  <data name="settings_sip_dtmf_native" xml:space="preserve"><value>通話中に押されたキーと動作の対応</value></data>
   <data name="settings_sip_password" xml:space="preserve"><value>SIP パスワード</value></data>
   <data name="settings_sip_password_desc" xml:space="preserve"><value>秘密情報は対象の端末上の管理画面で登録します</value></data>
+  <data name="settings_sip_password_native" xml:space="preserve"><value>この端末の安全な保存領域 (DPAPI) に保存し、設定には参照だけを書きます</value></data>
   <data name="settings_sip_port" xml:space="preserve"><value>ポート</value></data>
   <data name="settings_sip_server" xml:space="preserve"><value>サーバー</value></data>
   <data name="settings_sip_server_desc" xml:space="preserve"><value>空欄なら端末同士で直接通話します</value></data>
+  <data name="settings_sip_srtp" xml:space="preserve"><value>SRTP (端末間の暗号化)</value></data>
+  <data name="settings_sip_srtp_desc" xml:space="preserve"><value>「必須」にすると iOS 5 の端末とは通話できません</value></data>
   <data name="settings_sip_transport" xml:space="preserve"><value>転送方式</value></data>
   <data name="settings_sip_user" xml:space="preserve"><value>ユーザー名</value></data>
   <data name="settings_software_update" xml:space="preserve"><value>ソフトウェア更新</value></data>
   <data name="settings_software_update_action" xml:space="preserve"><value>確認</value></data>
   <data name="settings_software_update_desc" xml:space="preserve"><value>インストーラーで導入した端末のみ</value></data>
+  <data name="settings_software_update_native" xml:space="preserve"><value>インストーラーで導入した端末のみ。更新は署名を確認してから実行します</value></data>
   <data name="settings_sos_cancel_pin" xml:space="preserve"><value>解除に管理パスワードが必要</value></data>
   <data name="settings_sos_cancel_pin_desc" xml:space="preserve"><value>管理パスワードが未設定の間は誰でも解除できます</value></data>
   <data name="settings_sos_countdown" xml:space="preserve"><value>発報までの猶予</value></data>
@@ -1593,10 +1727,13 @@ ON</value></data>
   <data name="settings_sos_mode" xml:space="preserve"><value>発報の操作</value></data>
   <data name="settings_sos_roles" xml:space="preserve"><value>SOS ボタンを表示する端末</value></data>
   <data name="settings_sos_rules" xml:space="preserve"><value>通知先と通知ルール</value></data>
+  <data name="settings_sos_rules_action" xml:space="preserve"><value>ルールを開く</value></data>
   <data name="settings_sos_rules_desc" xml:space="preserve"><value>誰にどの方法で知らせるかは管理画面で設定します</value></data>
+  <data name="settings_sos_rules_native" xml:space="preserve"><value>誰にどの方法で知らせるかは「通知とルール」で設定します</value></data>
   <data name="settings_sos_sip" xml:space="preserve"><value>SOS 時に電話をかける</value></data>
   <data name="settings_sos_sip_target" xml:space="preserve"><value>発信先の内線</value></data>
   <data name="settings_sos_slide" xml:space="preserve"><value>スライド</value></data>
+  <data name="settings_sos_sound" xml:space="preserve"><value>警報音</value></data>
   <data name="settings_sos_volume" xml:space="preserve"><value>警報の音量</value></data>
   <data name="settings_sos_web" xml:space="preserve"><value>開いている Web パネルに表示</value></data>
   <data name="settings_sos_web_desc" xml:space="preserve"><value>SOS の状態を開いているブラウザー画面に表示します</value></data>
@@ -1610,9 +1747,28 @@ ON</value></data>
   <data name="settings_sound_outdoor_call_alert" xml:space="preserve"><value>呼び出し音</value></data>
   <data name="settings_sound_school_chime" xml:space="preserve"><value>学校のチャイム</value></data>
   <data name="settings_sound_title_display" xml:space="preserve"><value>起動音</value></data>
+  <data name="settings_srtp_mandatory" xml:space="preserve"><value>必須</value></data>
+  <data name="settings_srtp_optional" xml:space="preserve"><value>可能なら使う</value></data>
+  <data name="settings_strategy_timeouts" xml:space="preserve"><value>初回 {0} ms・停止判定 {1} ms</value></data>
   <data name="settings_telegram" xml:space="preserve"><value>Telegram</value></data>
+  <data name="settings_telegram_poll" xml:space="preserve"><value>ボタンでの返信を受け取る</value></data>
+  <data name="settings_telegram_poll_desc" xml:space="preserve"><value>通知のボタンから定型返信を送れるようにします</value></data>
+  <data name="settings_telegram_template" xml:space="preserve"><value>通知文 (日本語)</value></data>
+  <data name="settings_telegram_template_desc" xml:space="preserve"><value>{0} と {1} が置き換わります。空欄は既定の文</value></data>
+  <data name="settings_telegram_test" xml:space="preserve"><value>テスト送信</value></data>
+  <data name="settings_telegram_test_action" xml:space="preserve"><value>送信</value></data>
+  <data name="settings_telegram_test_desc" xml:space="preserve"><value>送信担当の端末から 1 通送ります</value></data>
+  <data name="settings_telegram_test_hint" xml:space="preserve"><value>チャット ID。空欄は世帯に登録された宛先</value></data>
+  <data name="settings_telegram_token" xml:space="preserve"><value>ボットトークン</value></data>
+  <data name="settings_telegram_token_native" xml:space="preserve"><value>登録するとほかの端末へ暗号化して共有されます。外すと Telegram 通知が止まります</value></data>
   <data name="settings_texts" xml:space="preserve"><value>画面の文言</value></data>
+  <data name="settings_texts_default" xml:space="preserve"><value>既定: {0}</value></data>
   <data name="settings_texts_desc" xml:space="preserve"><value>表示文言の上書き</value></data>
+  <data name="settings_texts_more" xml:space="preserve"><value>ほかに {0} 件。検索を絞り込んでください</value></data>
+  <data name="settings_texts_native" xml:space="preserve"><value>画面の文言を言語ごとに上書きします。空欄に戻すと既定の文言になります</value></data>
+  <data name="settings_texts_none" xml:space="preserve"><value>上書きはありません。検索して変更する文言を探してください</value></data>
+  <data name="settings_texts_reset" xml:space="preserve"><value>既定に戻す</value></data>
+  <data name="settings_texts_search" xml:space="preserve"><value>キーまたは文言で検索</value></data>
   <data name="settings_theme_bg" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_theme_bg_image" xml:space="preserve"><value>背景画像</value></data>
@@ -1645,11 +1801,16 @@ ON</value></data>
   <data name="settings_unit_seconds" xml:space="preserve"><value>{0} 秒</value></data>
   <data name="settings_unlock_button" xml:space="preserve"><value>開錠ボタンを表示</value></data>
   <data name="settings_unlock_show_button" xml:space="preserve"><value>開錠ボタンを表示する</value></data>
+  <data name="settings_update_channel" xml:space="preserve"><value>更新チャンネル</value></data>
+  <data name="settings_update_channel_prerelease" xml:space="preserve"><value>プレリリース</value></data>
+  <data name="settings_update_channel_stable" xml:space="preserve"><value>安定版</value></data>
+  <data name="settings_update_confirm" xml:space="preserve"><value>{0} に更新しますか？アプリは再起動します</value></data>
   <data name="settings_update_sound" xml:space="preserve"><value>更新通知音</value></data>
   <data name="settings_value_unset" xml:space="preserve"><value>未設定</value></data>
   <data name="settings_video_playback" xml:space="preserve"><value>映像の再生</value></data>
   <data name="settings_video_policy" xml:space="preserve"><value>再生方式の詳細ポリシー</value></data>
   <data name="settings_video_policy_desc" xml:space="preserve"><value>端末の組み合わせごとの優先順位は管理画面で設定します</value></data>
+  <data name="settings_video_policy_native" xml:space="preserve"><value>上から順に試し、使えなければ次の方式に切り替えます</value></data>
   <data name="settings_video_rotation" xml:space="preserve"><value>映像の向き</value></data>
   <data name="settings_video_stats" xml:space="preserve"><value>映像の統計を表示</value></data>
   <data name="settings_video_stats_desc" xml:space="preserve"><value>通話画面に遅延とフレームレートを表示します</value></data>
@@ -1686,6 +1847,14 @@ ON</value></data>
   <data name="settings_web_only_wording" xml:space="preserve"><value>文言の書き換えは Web 管理から行います</value></data>
   <data name="settings_web_push" xml:space="preserve"><value>Web Push</value></data>
   <data name="settings_week_1" xml:space="preserve"><value>1 週間</value></data>
+  <data name="settings_when_button" xml:space="preserve"><value>呼び出しボタン</value></data>
+  <data name="settings_when_call_missed" xml:space="preserve"><value>不在着信</value></data>
+  <data name="settings_when_device_offline" xml:space="preserve"><value>端末がオフライン</value></data>
+  <data name="settings_when_device_online" xml:space="preserve"><value>端末がオンライン</value></data>
+  <data name="settings_when_emergency_off" xml:space="preserve"><value>SOS 解除</value></data>
+  <data name="settings_when_emergency_on" xml:space="preserve"><value>SOS 発報</value></data>
+  <data name="settings_when_motion" xml:space="preserve"><value>動体検知</value></data>
+  <data name="settings_when_purpose_selected" xml:space="preserve"><value>用件の選択</value></data>
   <data name="settings_zone_search" xml:space="preserve"><value>タイムゾーンを検索</value></data>
   <data name="setup_confirm_new_cluster" xml:space="preserve"><value>もう一度タップして新規作成（既存クラスタへ参加する場合はキャンセル）</value></data>
   <data name="setup_door" xml:space="preserve"><value>ドア ID</value></data>

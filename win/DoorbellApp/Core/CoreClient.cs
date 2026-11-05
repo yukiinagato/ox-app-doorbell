@@ -31,7 +31,7 @@ namespace DoorbellApp.Core
         NotSet,
     }
 
-    public sealed class CoreClient : IDisposable
+    public sealed partial class CoreClient : IDisposable
     {
         private IntPtr _core;
         private long _generation;
