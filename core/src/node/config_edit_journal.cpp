@@ -4,6 +4,7 @@
 #include <cctype>
 #include <map>
 #include <set>
+#include <tuple>
 
 #include "util/common.h"
 
@@ -12,8 +13,19 @@ namespace {
 constexpr char kRoot[] = "_config_changes";
 constexpr char kPrefix[] = "_config_changes.";
 constexpr size_t kRecordBytes = 64 * 1024;
+// Hard limits a writer must stay under, and the smaller working set compaction keeps. Compaction
+// prunes the oldest records that are no longer branch heads, so the limits bound history size
+// without ever refusing an edit or discarding an unresolved conflict.
+constexpr size_t kEntityRecordLimit = 64;
+constexpr size_t kTotalRecordLimit = 512;
+constexpr size_t kTotalByteLimit = 512 * 1024;
+constexpr size_t kEntityKeep = 48;
+constexpr size_t kTotalKeep = 384;
+// Merged partitions may legitimately exceed the writer limits until the next local compaction.
+// Remote ingress only rejects history far beyond anything compaction can produce.
+constexpr size_t kRemoteMultiplier = 8;
 struct Edit {
-  std::string id, entity, encoded;
+  std::string id, entity, encoded, key, hlc;
   std::set<std::string> parents;
 };
 using Edits = std::map<std::string, Edit>;
@@ -124,6 +136,7 @@ Edits edits(const std::vector<LwwEntry>& records) {
     auto doc = json::parse(entry.value_json);
     Edit e; e.id = json::getString(doc.get(), "change_id");
     e.entity = json::getString(doc.get(), "entity"); e.encoded = entry.value_json;
+    e.key = entry.key; e.hlc = entry.hlc;
     const cJSON* parent = nullptr;
     cJSON_ArrayForEach(parent, json::get(doc.get(), "parents"))
       if (cJSON_IsString(parent) && parent->valuestring) e.parents.insert(parent->valuestring);
@@ -144,14 +157,65 @@ json::Doc strings(const std::set<std::string>& values) {
   return result;
 }
 bool withinBudget(const Edits& all, bool remote) {
-  const size_t multiplier = remote ? 2 : 1;
-  if (all.size() > 512 * multiplier) return false;
+  const size_t multiplier = remote ? kRemoteMultiplier : 1;
+  if (all.size() > kTotalRecordLimit * multiplier) return false;
   size_t bytes = 0; std::map<std::string, size_t> count;
   for (const auto& pair : all) {
     bytes += pair.second.encoded.size();
-    if (++count[pair.second.entity] > 64 * multiplier || bytes > 512 * 1024 * multiplier) return false;
+    if (++count[pair.second.entity] > kEntityRecordLimit * multiplier ||
+        bytes > kTotalByteLimit * multiplier) return false;
   }
   return true;
+}
+
+// Removes the oldest non-head records until every entity holds at most kEntityKeep records and
+// the journal at most kTotalKeep records and kTotalByteLimit / 2 bytes. Heads are never pruned,
+// so an unresolved conflict keeps every competing branch tip. Pruned records become ordinary
+// CRDT tombstones and replicate like any other deletion.
+void compact(Edits* all, const std::set<std::string>& keep, std::vector<LwwMutation>* output) {
+  const auto tips = heads(*all);
+  auto prunable = [&](const Edit& e) {
+    if (keep.count(e.id)) return false;
+    const auto found = tips.find(e.entity);
+    return found == tips.end() || !found->second.count(e.id);
+  };
+  auto oldest_first = [](const Edit* a, const Edit* b) {
+    return std::tie(a->hlc, a->id) < std::tie(b->hlc, b->id);
+  };
+  std::map<std::string, std::vector<const Edit*>> by_entity;
+  for (const auto& pair : *all) by_entity[pair.second.entity].push_back(&pair.second);
+  std::set<std::string> pruned;
+  for (auto& group : by_entity) {
+    if (group.second.size() <= kEntityKeep) continue;
+    std::sort(group.second.begin(), group.second.end(), oldest_first);
+    size_t excess = group.second.size() - kEntityKeep;
+    for (const Edit* e : group.second) {
+      if (excess == 0) break;
+      if (!prunable(*e)) continue;
+      pruned.insert(e->id);
+      --excess;
+    }
+  }
+  std::vector<const Edit*> remaining;
+  size_t bytes = 0;
+  for (const auto& pair : *all) {
+    if (pruned.count(pair.first)) continue;
+    remaining.push_back(&pair.second);
+    bytes += pair.second.encoded.size();
+  }
+  std::sort(remaining.begin(), remaining.end(), oldest_first);
+  size_t count = remaining.size();
+  for (const Edit* e : remaining) {
+    if (count <= kTotalKeep && bytes <= kTotalByteLimit / 2) break;
+    if (!prunable(*e)) continue;
+    pruned.insert(e->id);
+    --count;
+    bytes -= e->encoded.size();
+  }
+  for (const auto& id : pruned) {
+    output->push_back({all->at(id).key, "", true});
+    all->erase(id);
+  }
 }
 }
 
@@ -176,7 +240,9 @@ bool configEditRecordsValid(const std::vector<LwwEntry>& records, std::string* e
   std::set<std::string> ids;
   for (const auto& entry : records) {
     if (!configEditReserved(entry.key)) continue;
-    if (entry.deleted || entry.value_json.size() > kRecordBytes) return false;
+    // A tombstone is a record removed by compaction; it carries no history.
+    if (entry.deleted) continue;
+    if (entry.value_json.size() > kRecordBytes) return false;
     auto doc = json::parse(entry.value_json);
     const auto id = json::getString(doc.get(), "change_id");
     const auto entity = json::getString(doc.get(), "entity");
@@ -253,14 +319,25 @@ json::Doc configEditSummary(const std::vector<LwwEntry>& records) {
   const auto all = edits(records);
   auto result = json::obj();
   json::set(result.get(), "records", static_cast<int64_t>(all.size()));
-  json::set(result.get(), "local_record_limit", int64_t{512});
-  json::set(result.get(), "entity_record_limit", int64_t{64});
+  json::set(result.get(), "local_record_limit", static_cast<int64_t>(kTotalRecordLimit));
+  json::set(result.get(), "entity_record_limit", static_cast<int64_t>(kEntityRecordLimit));
   size_t bytes = 0; std::map<std::string, size_t> counts;
   for (const auto& pair : all) { bytes += pair.second.encoded.size(); ++counts[pair.second.entity]; }
-  json::setBool(result.get(), "capacity_available", all.size() < 512 && bytes < 512 * 1024);
+  json::set(result.get(), "bytes", static_cast<int64_t>(bytes));
+  // Compaction keeps room for new edits; an entity is blocked only when every one of its records
+  // is an unresolved branch head that compaction must keep.
+  const auto tips = heads(all);
+  bool any_blocked = false;
   auto* blocked = json::addArr(result.get(), "blocked_entities");
-  for (const auto& pair : counts) if (pair.second >= 64)
-    json::push(blocked, json::Doc(cJSON_CreateString(pair.first.c_str())));
+  for (const auto& pair : counts) {
+    const auto found = tips.find(pair.first);
+    const size_t head_count = found == tips.end() ? 0 : found->second.size();
+    if (pair.second >= kEntityRecordLimit && head_count >= kEntityKeep) {
+      any_blocked = true;
+      json::push(blocked, json::Doc(cJSON_CreateString(pair.first.c_str())));
+    }
+  }
+  json::setBool(result.get(), "capacity_available", !any_blocked);
   return result;
 }
 json::Doc configEditConflicts(const std::vector<LwwEntry>& records, const cJSON* current) {
@@ -293,6 +370,8 @@ std::string appendConfigEdits(const std::vector<LwwEntry>& records,
                              const cJSON* candidate, const std::string& author,
                              const cJSON* resolves, std::vector<LwwMutation>* output) {
   auto all = edits(records); const auto frontier = heads(all);
+  std::set<std::string> added;
+  std::vector<LwwMutation> pending;
   std::map<std::string, std::vector<LwwMutation>> groups;
   for (const auto& change : changes) {
     if (configEditReserved(change.key)) return "reserved_config_key";
@@ -359,10 +438,15 @@ std::string appendConfigEdits(const std::vector<LwwEntry>& records,
     json::setBool(record.get(), "requires_reentry", redacted);
     auto encoded = json::dump(record.get());
     if (encoded.size() > kRecordBytes) return "config_history_capacity_exceeded";
-    all.emplace(id, Edit{id, group.first, encoded, parents});
-    if (!withinBudget(all, false)) return "config_history_capacity_exceeded";
-    output->push_back({std::string(kPrefix) + id + "." + sha256Hex(toBytes(encoded)), encoded, false});
+    const std::string key = std::string(kPrefix) + id + "." + sha256Hex(toBytes(encoded));
+    // The new record sorts after every existing one, whatever the local clock says.
+    all.emplace(id, Edit{id, group.first, encoded, key, "~", parents});
+    added.insert(id);
+    pending.push_back({key, encoded, false});
   }
+  compact(&all, added, output);
+  if (!withinBudget(all, false)) return "config_history_capacity_exceeded";
+  output->insert(output->end(), pending.begin(), pending.end());
   return "";
 }
 }  // namespace db
