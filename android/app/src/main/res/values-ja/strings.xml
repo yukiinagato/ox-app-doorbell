@@ -546,7 +546,6 @@
     <string name="history_load_more">さらに読み込む</string>
     <string name="history_mark_seen">すべて既読にする</string>
     <string name="history_missed_badge">不在着信 %1$s 件</string>
-    <string name="history_no_snapshot">画像はありません</string>
     <string name="history_outcome_answered">応答</string>
     <string name="history_outcome_cancelled">取消</string>
     <string name="history_outcome_missed">不在着信</string>

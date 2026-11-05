@@ -1411,7 +1411,6 @@ dash.chip_sos: { ja: "SOS 発報中", en: "SOS active", zh: "SOS 报警中" }
 dash.chip_offline: { ja: "{n} 台オフライン", en: "{n} offline", zh: "{n} 台离线" }
 history.select_call: { ja: "呼出を選ぶと詳細が表示されます", en: "Select a call to see its details", zh: "选择一条呼叫即可查看详情" }
 history.unread: { ja: "未確認", en: "Unread", zh: "未读" }
-history.no_snapshot: { ja: "画像はありません", en: "No picture", zh: "没有图像" }
 settings.search_hint: { ja: "設定を検索", en: "Search settings", zh: "搜索设置" }
 settings.search_empty: { ja: "一致する設定はありません", en: "No matching settings", zh: "没有匹配的设置" }
 sos.hold_to_clear: { ja: "長押しで解除", en: "Press and hold to clear", zh: "长按以解除" }

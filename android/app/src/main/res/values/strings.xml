@@ -546,7 +546,6 @@ Delete it?</string>
     <string name="history_load_more">Load more</string>
     <string name="history_mark_seen">Mark all as seen</string>
     <string name="history_missed_badge">%1$s missed</string>
-    <string name="history_no_snapshot">No picture</string>
     <string name="history_outcome_answered">Answered</string>
     <string name="history_outcome_cancelled">Cancelled</string>
     <string name="history_outcome_missed">Missed</string>

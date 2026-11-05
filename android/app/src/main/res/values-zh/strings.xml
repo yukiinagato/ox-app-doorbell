@@ -546,7 +546,6 @@
     <string name="history_load_more">加载更多</string>
     <string name="history_mark_seen">全部标为已读</string>
     <string name="history_missed_badge">%1$s 个未接来电</string>
-    <string name="history_no_snapshot">没有图像</string>
     <string name="history_outcome_answered">已接听</string>
     <string name="history_outcome_cancelled">已取消</string>
     <string name="history_outcome_missed">未接</string>
