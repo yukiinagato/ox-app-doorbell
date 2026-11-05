@@ -46,6 +46,10 @@ internal class IncomingScreen(private val activity: Activity) {
     private val switcherScroll = HorizontalScrollView(activity).apply {
         isHorizontalScrollBarEnabled = false
     }
+    private val sideList = ScrollView(activity)
+    private var doors: List<Pair<String, String>> = emptyList()
+    private var currentDoor = ""
+    private var onPickDoor: (String) -> Unit = {}
     private var liveView = false
     private var overlaysShown = true
     private val hideOverlays = Runnable { setOverlaysShown(false) }
@@ -58,7 +62,8 @@ internal class IncomingScreen(private val activity: Activity) {
         this.liveView = liveView
         window = UiKit.window(activity)
         for (view in listOf(videoBox, details, actions, footer, sideColumn, detailsScroll,
-                            overlayTop, overlayBottom, switcherScroll)) UiKit.detach(view)
+                            overlayTop, overlayBottom, switcherScroll, sideList)) UiKit.detach(view)
+        UiKit.detach(switcher)
         sideColumn.removeAllViews()
         detailsScroll.removeAllViews()
         overlayTop.removeAllViews()
@@ -102,13 +107,30 @@ internal class IncomingScreen(private val activity: Activity) {
      * and the action zone at the bottom, on a translucent surface, hidden after four seconds.
      */
     private fun arrangeLiveView() {
-        root.orientation = LinearLayout.VERTICAL
-        root.addView(videoBox, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        // Door switcher: a side list on expanded windows, a horizontal strip otherwise.
+        val asList = ScreenLayouts.monitorSideList(window) && doors.size >= 2
+        buildSwitcher(vertical = asList)
+        if (asList) {
+            root.orientation = LinearLayout.HORIZONTAL
+            sideList.removeAllViews()
+            sideList.setBackgroundColor(ShellUi.opaque(roles.surface))
+            val pad = ShellUi.dp(activity, UiTokens.SPACE_M)
+            sideList.setPadding(pad, pad, pad, pad)
+            sideList.addView(switcher, ViewGroup.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            root.addView(sideList, LinearLayout.LayoutParams(
+                ShellUi.dp(activity, SIDE_LIST_DP), ViewGroup.LayoutParams.MATCH_PARENT))
+            root.addView(videoBox, LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
+        } else {
+            root.orientation = LinearLayout.VERTICAL
+            root.addView(videoBox, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
         val scrim = ShellUi.scrim(activity, roles.surface, 0)
         overlayTop.background = scrim
         overlayTop.addView(details, ShellUi.matchWrap())
-        if (switcher.childCount > 0) {
+        if (!asList && switcher.childCount > 0) {
             switcherScroll.removeAllViews()
             switcherScroll.addView(switcher)
             overlayTop.addView(switcherScroll, ShellUi.matchWrap().apply {
@@ -164,12 +186,21 @@ internal class IncomingScreen(private val activity: Activity) {
 
     /** Door chips for the live view; tapping one opens that door's live view. */
     fun setDoorSwitcher(doors: List<Pair<String, String>>, current: String, onPick: (String) -> Unit) {
+        this.doors = doors
+        currentDoor = current
+        onPickDoor = onPick
+        if (liveView) arrange(roles, true)
+    }
+
+    /** Door chips (strip) or full-width rows (side list); tapping one opens that door. */
+    private fun buildSwitcher(vertical: Boolean) {
         switcher.removeAllViews()
+        switcher.orientation = if (vertical) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
         if (doors.size < 2) return
-        val pad = ShellUi.dp(activity, UiTokens.SPACE_L)
+        val pad = if (vertical) 0 else ShellUi.dp(activity, UiTokens.SPACE_L)
         switcher.setPadding(pad, 0, pad, 0)
         for ((id, label) in doors) {
-            val active = id == current
+            val active = id == currentDoor
             val chip = ShellUi.pill(activity, label,
                 if (active) roles.accent else roles.surface,
                 if (active) roles.onAccent else roles.onSurface, UiTokens.sp(UiTokens.BODY),
@@ -177,14 +208,21 @@ internal class IncomingScreen(private val activity: Activity) {
                 minHeight = ShellUi.dp(activity, UiTokens.TOUCH_MIN_DP)
                 isClickable = true
                 isFocusable = true
-                setOnClickListener { if (!active) onPick(id) }
+                isSelected = active
+                if (vertical) {
+                    gravity = Gravity.CENTER_VERTICAL or Gravity.START
+                    background = ShellUi.rounded(activity, if (active) roles.accent else roles.surface,
+                                                 UiTokens.RADIUS_CARD, if (active) null else roles.line)
+                }
+                setOnClickListener { if (!active) onPickDoor(id) }
             }
-            switcher.addView(chip, LinearLayout.LayoutParams(
+            switcher.addView(chip, if (vertical) ShellUi.matchWrap().apply {
+                bottomMargin = ShellUi.dp(activity, UiTokens.SPACE_S)
+            } else LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                 rightMargin = ShellUi.dp(activity, UiTokens.SPACE_S)
             })
         }
-        if (liveView) arrange(roles, true)
     }
 
     /** Call on any touch; in the live view it shows the controls and restarts the timer. */
@@ -232,5 +270,8 @@ internal class IncomingScreen(private val activity: Activity) {
                               ScreenLayouts.touchTargetDp(window, 56))
             button.gravity = Gravity.CENTER_VERTICAL or Gravity.START
         }
+
+        /** Width of the expanded live view's door list. */
+        const val SIDE_LIST_DP = 240
     }
 }
