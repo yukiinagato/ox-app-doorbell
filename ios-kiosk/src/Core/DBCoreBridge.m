@@ -1682,4 +1682,127 @@ static DBMicMuteFn DBMicMute(void) {
   return status;
 }
 
+
+// ---- Native assets, snapshot/import and panel identities ----
+typedef char *(*DBAssetAddFn)(db_core *, const uint8_t *, size_t, const char *, const char *);
+typedef char *(*DBAssetRemoveFn)(db_core *, const char *);
+typedef char *(*DBSnapshotFn)(db_core *);
+typedef char *(*DBSessionCallFn)(db_core *, const char *, const char *, const char *, const char *);
+typedef int (*DBRemoveDeviceV2Fn)(db_core *, const char *);
+
+static DBAssetAddFn DBAssetAdd(void) {
+  static DBAssetAddFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBAssetAddFn)DBCoreSymbol("db_core_asset_add_json"); });
+  return fn;
+}
+
+static DBAssetRemoveFn DBAssetRemove(void) {
+  static DBAssetRemoveFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBAssetRemoveFn)DBCoreSymbol("db_core_asset_remove_json"); });
+  return fn;
+}
+
+static NSString *DBJsonString(NSDictionary *object) {
+  NSData *data = object ? [NSJSONSerialization dataWithJSONObject:object options:0 error:NULL] : nil;
+  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+}
+
++ (BOOL)supportsAssets {
+  return DBAssetAdd() != NULL && DBAssetRemove() != NULL;
+}
+
+- (NSDictionary *)resultAdminChecked:(NSDictionary *)result {
+  if ([[result objectForKey:@"err"] isEqual:@"admin_required"] ||
+      [[result objectForKey:@"error_code"] isEqual:@"admin_required"])
+    DBPostAdminRequired();
+  return result;
+}
+
+- (NSDictionary *)addAsset:(NSData *)data type:(NSString *)type label:(NSString *)label {
+  DBAssetAddFn add = DBAssetAdd();
+  if (add == NULL || [data length] == 0 || [type length] == 0) return nil;
+  NSData *bytes = [data copy];
+  NSString *mime = [type copy];
+  NSString *name = [label copy] ?: @"";
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:add(self->_core, (const uint8_t *)[bytes bytes], [bytes length],
+                               [mime UTF8String], [name UTF8String])];
+  });
+  return [self resultAdminChecked:out];
+}
+
+- (NSDictionary *)removeAsset:(NSString *)sha256 {
+  DBAssetRemoveFn remove = DBAssetRemove();
+  if (remove == NULL || [sha256 length] == 0) return nil;
+  NSString *hash = [sha256 copy];
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:remove(self->_core, [hash UTF8String])];
+  });
+  return [self resultAdminChecked:out];
+}
+
+- (NSDictionary *)configSnapshot {
+  static DBSnapshotFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBSnapshotFn)DBCoreSymbol("db_core_config_snapshot_json_v2"); });
+  if (fn == NULL) return nil;
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:fn(self->_core)];
+  });
+  return out;
+}
+
+- (NSDictionary *)sessionCall:(DBSessionCallFn)fn action:(NSString *)action
+                      request:(NSDictionary *)request session:(NSString *)session
+                         csrf:(NSString *)csrf {
+  NSString *body = DBJsonString(request ?: @{});
+  if (fn == NULL || [action length] == 0 || body == nil || [session length] == 0 ||
+      [csrf length] == 0) return nil;
+  NSString *a = [action copy], *s = [session copy], *t = [csrf copy];
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:fn(self->_core, [a UTF8String], [body UTF8String], [s UTF8String],
+                              [t UTF8String])];
+  });
+  return out;
+}
+
+- (NSDictionary *)configImport:(NSString *)action request:(NSDictionary *)request
+                       session:(NSString *)session csrf:(NSString *)csrf {
+  static DBSessionCallFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBSessionCallFn)DBCoreSymbol("db_core_config_import_json_v2"); });
+  return [self sessionCall:fn action:action request:request session:session csrf:csrf];
+}
+
+- (NSDictionary *)panelIdentity:(NSString *)action request:(NSDictionary *)request
+                        session:(NSString *)session csrf:(NSString *)csrf {
+  static DBSessionCallFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBSessionCallFn)DBCoreSymbol("db_core_panel_identity_json_v2"); });
+  return [self sessionCall:fn action:action request:request session:session csrf:csrf];
+}
+
+- (int)removeDeviceV2:(NSString *)nodeId {
+  static DBRemoveDeviceV2Fn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBRemoveDeviceV2Fn)DBCoreSymbol("db_core_remove_device_v2"); });
+  if (fn == NULL) return -100;
+  if ([nodeId length] == 0) return -1;
+  NSString *target = [nodeId copy];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = fn(self->_core, [target UTF8String]);
+  });
+  if (status == DBAdminRequiredResult) DBPostAdminRequired();
+  return status;
+}
+
 @end
