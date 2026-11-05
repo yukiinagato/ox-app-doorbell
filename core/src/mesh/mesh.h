@@ -178,6 +178,8 @@ class Mesh {
 
 
   bool isPaired() const;
+  // BLAKE2b keyed by the current cluster PSK over label; all-zero while unpaired. Loop thread.
+  std::array<uint8_t, 32> deriveClusterKey(const std::string& label) const;
   bool foundCluster();  // Generates a new cluster key only while unpaired.
   // True when this node created the cluster rather than joining one. Node persists it in store
   // metadata so the badge survives a restart.

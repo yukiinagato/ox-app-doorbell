@@ -4,7 +4,9 @@
 
 #include "httpd/httpd.h"
 
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
@@ -95,9 +97,11 @@ const char* statusText(int code) {
   switch (code) {
     case 200: return "OK";
     case 201: return "Created";
+    case 202: return "Accepted";
     case 204: return "No Content";
     case 301: return "Moved Permanently";
     case 302: return "Found";
+    case 308: return "Permanent Redirect";
     case 304: return "Not Modified";
     case 400: return "Bad Request";
     case 401: return "Unauthorized";
@@ -106,6 +110,7 @@ const char* statusText(int code) {
     case 405: return "Method Not Allowed";
     case 409: return "Conflict";
     case 413: return "Payload Too Large";
+    case 429: return "Too Many Requests";
     case 500: return "Internal Server Error";
     case 501: return "Not Implemented";
     case 503: return "Service Unavailable";
@@ -227,6 +232,16 @@ struct Httpd::Impl {
   Mp4ProxyProvider mp4_proxy_provider;
   std::function<bool(const HttpReq&)> gate;
   std::vector<std::string> public_prefixes;
+  std::function<int(const HttpReq&)> media_auth;
+  std::atomic<unsigned> active_streams{0};
+  std::atomic<unsigned> max_streams{8};
+  struct StreamRoute {
+    std::string prefix;
+    Httpd::StreamFactory factory;
+  };
+  std::vector<StreamRoute> stream_routes;
+  Httpd::TlsConfig tls_config;
+  std::atomic<bool> tls_active{false};
 };
 
 namespace {
@@ -239,6 +254,7 @@ HttpReq buildReq(struct mg_connection* conn) {
   req.uri = ri->local_uri ? ri->local_uri : "";
   req.query = ri->query_string ? ri->query_string : "";
   req.remote_addr = ri->remote_addr;
+  req.tls = ri->is_ssl != 0;
   for (int i = 0; i < ri->num_headers; i++) {
     req.headers[toLowerCopy(ri->http_headers[i].name)] =
         ri->http_headers[i].value ? ri->http_headers[i].value : "";
@@ -304,7 +320,7 @@ int handleStream(struct mg_connection* conn, Httpd::Impl* impl) {
   std::snprintf(head, sizeof(head),
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: multipart/x-mixed-replace; boundary=frame\r\n"
-      "Access-Control-Allow-Origin: *\r\n"
+      "Cache-Control: no-store\r\n"
       "X-Doorbell-Server-Time-Ms: %lld\r\n"
       "Connection: close\r\n\r\n", static_cast<long long>(server_wall_ms));
   if (mg_write(conn, head, std::strlen(head)) <= 0) return 200;
@@ -400,7 +416,6 @@ int handleStreamMp4(struct mg_connection* conn, Httpd::Impl* impl) {
       "HTTP/1.1 200 OK\r\n"
       "Content-Type: video/mp4\r\n"
       "Cache-Control: no-store\r\n"
-      "Access-Control-Allow-Origin: *\r\n"
       "X-Doorbell-Server-Time-Ms: %lld\r\n"
       "Connection: close\r\n\r\n",
       static_cast<long long>(server_wall_ms));
@@ -550,9 +565,17 @@ HttpResp runOnLoop(Httpd::Impl* impl, const Httpd::Handler& h, const HttpReq& re
       if (p->state == State::Queued) {
         p->state = State::Expired;
       }
-      const char* error = p->state == State::Expired ? "not_started" : "outcome_unknown";
-      response = HttpResp::json(std::string("{\"ok\":false,\"err\":\"") + error +
-                                "\",\"error_code\":\"" + error + "\"}", 503);
+      if (p->state == State::Expired) {
+        response = HttpResp::json(
+            "{\"ok\":false,\"err\":\"not_started\",\"error_code\":\"not_started\"}", 503);
+      } else {
+        // The handler is still running on the loop and may complete the mutation. 503 would
+        // invite a blind retry; 202 tells the caller to re-read state instead.
+        response = HttpResp::json(
+            "{\"ok\":false,\"outcome\":\"unknown\",\"err\":\"outcome_unknown\","
+            "\"error_code\":\"outcome_unknown\"}", 202);
+        response.headers["Cache-Control"] = "no-store";
+      }
     }
   }
   if (timed_out) {
@@ -580,9 +603,93 @@ int requestHandler(struct mg_connection* conn, void* cbdata) {
   return 500;
 }
 
+// Holds one long-lived media slot for the lifetime of a streamed response.
+struct StreamSlot {
+  explicit StreamSlot(Httpd::Impl* impl) : impl_(impl) {
+    const unsigned limit = impl->max_streams.load();
+    if (impl->active_streams.fetch_add(1) >= limit) {
+      impl->active_streams.fetch_sub(1);
+      impl_ = nullptr;
+    }
+  }
+  ~StreamSlot() { if (impl_) impl_->active_streams.fetch_sub(1); }
+  bool held() const { return impl_ != nullptr; }
+  StreamSlot(const StreamSlot&) = delete;
+  StreamSlot& operator=(const StreamSlot&) = delete;
+
+ private:
+  Httpd::Impl* impl_;
+};
+
+int refuseBusy(struct mg_connection* conn) {
+  HttpResp r = HttpResp::json("{\"ok\":false,\"error_code\":\"media_capacity_exceeded\"}", 503);
+  r.headers["Retry-After"] = "2";
+  writeResp(conn, r);
+  return 503;
+}
+
+int handleStreamRoute(struct mg_connection* conn, Httpd::Impl* impl,
+                      const Httpd::StreamFactory& factory, const HttpReq& req) {
+  Httpd::StreamResponse response = factory(req);
+  if (!response.pull || response.status != 200) {
+    HttpResp r;
+    r.status = response.status;
+    r.content_type = response.content_type;
+    r.headers = response.headers;
+    r.body = response.body;
+    writeResp(conn, r);
+    return r.status;
+  }
+  StreamSlot slot(impl);
+  if (!slot.held()) return refuseBusy(conn);
+  Bytes chunk;
+  bool ended = false;
+  const auto deadline = std::chrono::steady_clock::now() +
+                        std::chrono::milliseconds(kMp4FirstChunkTimeoutMs);
+  while (!impl->stopping.load() && !ended && chunk.empty() &&
+         std::chrono::steady_clock::now() < deadline)
+    chunk = response.pull(&ended);
+  if (chunk.empty() && !ended) {
+    writeResp(conn, HttpResp::json("{\"ok\":false,\"error_code\":\"upstream_unavailable\"}", 503));
+    return 503;
+  }
+  std::string head = "HTTP/1.1 200 OK\r\nContent-Type: " + response.content_type +
+                     "\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n";
+  for (const auto& kv : response.headers) head += kv.first + ": " + kv.second + "\r\n";
+  head += "Connection: close\r\n\r\n";
+  if (mg_write(conn, head.data(), head.size()) <= 0) return 200;
+  for (;;) {
+    if (!chunk.empty() && mg_write(conn, chunk.data(), chunk.size()) <= 0) break;
+    if (ended || impl->stopping.load()) break;
+    chunk = response.pull(&ended);
+  }
+  return 200;
+}
+
 int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
   auto* impl = static_cast<Httpd::Impl*>(cbdata);
   HttpReq req = buildReq(conn);
+
+  // The plain listener serves this device's own shell only. Everything else moves to HTTPS.
+  if (!req.tls && !req.loopback()) {
+    if (impl->tls_active.load()) {
+      const auto host = req.headers.find("host");
+      const std::string location = httpsRedirectLocation(
+          host == req.headers.end() ? std::string() : host->second, impl->tls_config.port,
+          req.uri, req.query);
+      if (!location.empty()) {
+        HttpResp r = HttpResp::text("use https", 308);
+        r.headers["Location"] = location;
+        r.headers["Cache-Control"] = "no-store";
+        writeResp(conn, r);
+        return 308;
+      }
+      writeResp(conn, HttpResp::text("bad host", 400));
+      return 400;
+    }
+    writeResp(conn, HttpResp::json("{\"ok\":false,\"error_code\":\"tls_required\"}", 403));
+    return 403;
+  }
 
 
   std::function<bool(const HttpReq&)> gate;
@@ -638,6 +745,22 @@ int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
     }
   }
 
+  const bool own_media = req.uri == "/snapshot.jpg" || req.uri == "/stream.mjpeg" ||
+                         req.uri == "/stream.mp4";
+  if (own_media) {
+    std::function<int(const HttpReq&)> media_auth;
+    {
+      std::lock_guard<std::mutex> lk(impl->mu);
+      media_auth = impl->media_auth;
+    }
+    const int refused = media_auth ? media_auth(req) : 0;
+    if (refused) {
+      writeResp(conn, HttpResp::json("{\"ok\":false,\"error_code\":\"media_auth_required\"}",
+                                     refused));
+      return refused;
+    }
+  }
+
   // --- 2. /snapshot.jpg ---
   if (req.uri == "/snapshot.jpg") {
     std::function<Bytes(int64_t*)> prov;
@@ -658,9 +781,25 @@ int requestHandlerImpl(struct mg_connection* conn, void* cbdata) {
   }
 
   // --- 3. local streams and authenticated same-origin H.264 proxy ---
-  if (req.uri == "/stream.mjpeg") return handleStream(conn, impl);
-  if (req.uri == "/stream.mp4") return handleStreamMp4(conn, impl);
-  if (req.uri == "/stream-proxy.mp4") return handleStreamProxyMp4(conn, impl, req);
+  if (req.uri == "/stream.mjpeg" || req.uri == "/stream.mp4" || req.uri == "/stream-proxy.mp4") {
+    StreamSlot slot(impl);
+    if (!slot.held()) return refuseBusy(conn);
+    if (req.uri == "/stream.mjpeg") return handleStream(conn, impl);
+    if (req.uri == "/stream.mp4") return handleStreamMp4(conn, impl);
+    return handleStreamProxyMp4(conn, impl, req);
+  }
+  if (req.method == "GET" || req.method == "HEAD") {
+    Httpd::StreamFactory factory;
+    {
+      std::lock_guard<std::mutex> lk(impl->mu);
+      for (const auto& route : impl->stream_routes)
+        if (req.uri.compare(0, route.prefix.size(), route.prefix) == 0) {
+          factory = route.factory;
+          break;
+        }
+    }
+    if (factory) return handleStreamRoute(conn, impl, factory, req);
+  }
 
 
   Httpd::Handler h;
@@ -824,6 +963,63 @@ std::string httpdListeningPorts(int port, bool ipv6_usable) {
   return ipv6_usable ? text + ",[::]:" + text : text;
 }
 
+bool httpLoopbackAddress(const std::string& address) {
+  if (address == "::1" || address == "[::1]") return true;
+  std::string v4 = address;
+  if (v4.rfind("::ffff:", 0) == 0) v4 = v4.substr(7);
+  return v4.rfind("127.", 0) == 0;
+}
+
+std::string httpsRedirectLocation(const std::string& host_header, int https_port,
+                                  const std::string& uri, const std::string& query) {
+  if (https_port < 1 || https_port > 65535 || host_header.empty() || host_header.size() > 255 ||
+      uri.empty() || uri[0] != '/')
+    return "";
+  for (unsigned char c : host_header)
+    if (!(std::isalnum(c) || c == '.' || c == '-' || c == ':' || c == '[' || c == ']'))
+      return "";
+  std::string host = host_header;
+  if (host.front() == '[') {
+    const size_t close = host.find(']');
+    if (close == std::string::npos) return "";
+    host = host.substr(0, close + 1);
+  } else if (std::count(host.begin(), host.end(), ':') == 1) {
+    host = host.substr(0, host.find(':'));
+  } else if (host.find(':') != std::string::npos) {
+    host = "[" + host + "]";
+  }
+  if (host.empty() || host == "[]") return "";
+  for (unsigned char c : uri + query)
+    if (c < 0x21 || c == 0x7f) return "";
+  return "https://" + host + ":" + std::to_string(https_port) + uri +
+         (query.empty() ? "" : "?" + query);
+}
+
+void Httpd::setTls(TlsConfig config) {
+  std::lock_guard<std::mutex> lk(impl_->mu);
+  impl_->tls_config = std::move(config);
+}
+
+bool Httpd::tlsActive() const { return impl_->tls_active.load(); }
+
+int Httpd::tlsPort() const { return impl_->tls_active.load() ? impl_->tls_config.port : 0; }
+
+void Httpd::setMediaAuth(std::function<int(const HttpReq&)> check) {
+  std::lock_guard<std::mutex> lk(impl_->mu);
+  impl_->media_auth = std::move(check);
+}
+
+void Httpd::setMaxStreams(unsigned max_streams) {
+  impl_->max_streams.store(max_streams == 0 ? 1 : max_streams);
+}
+
+unsigned Httpd::activeStreams() const { return impl_->active_streams.load(); }
+
+void Httpd::routeStream(const std::string& path_prefix, StreamFactory factory) {
+  std::lock_guard<std::mutex> lk(impl_->mu);
+  impl_->stream_routes.push_back(Impl::StreamRoute{path_prefix, std::move(factory)});
+}
+
 bool Httpd::start(int port, Ipv6Mode ipv6) {
   if (impl_->ctx) return false;
   impl_->stopping = false;
@@ -841,13 +1037,24 @@ bool Httpd::start(int port, Ipv6Mode ipv6) {
   // loop; civetweb serves the request either way.
   const bool nodelay = httpdFamilyServable(AF_INET);
 
-  auto tryStart = [&](const std::string& ports) -> struct mg_context* {
+  Httpd::TlsConfig tls;
+  {
+    std::lock_guard<std::mutex> lk(impl_->mu);
+    tls = impl_->tls_config;
+  }
+  const bool want_tls = tls.port > 0 && tls.port <= 65535 && tls.port != port && !tls.pem.empty();
+  auto tryStart = [&](const std::string& ports, bool with_tls) -> struct mg_context* {
     // Every live stream holds one worker for as long as it runs, so the pool has to be larger
     // than the number of viewers a house can open at once. With four workers, four live views
     // pinned the pool and the port stopped accepting anything -- the process kept running and
     // the mesh kept heartbeating on its own thread, so it looked like the listener had died.
+    // Control APIs must keep free workers while up to max_streams media responses are open.
     std::vector<const char*> opts = {"listening_ports", ports.c_str(),
-                                     "num_threads", "16", "request_timeout_ms", "5000"};
+                                     "num_threads", "32", "request_timeout_ms", "5000"};
+    if (with_tls) {
+      opts.push_back("ssl_certificate");
+      opts.push_back(tls.pem.c_str());
+    }
     if (nodelay) {
       opts.push_back("tcp_nodelay");
       opts.push_back("1");
@@ -856,14 +1063,37 @@ bool Httpd::start(int port, Ipv6Mode ipv6) {
     return mg_start(&cb, nullptr, opts.data());
   };
 
-  const std::string preferred = httpdListeningPorts(port, ipv6_usable);
-  struct mg_context* ctx = tryStart(preferred);
-  std::string mode = preferred;
-  // Second net: a listener string the platform probed as usable can still be refused, and an
-  // IPv4-only server is worth far more than none.
-  if (!ctx && ipv6_usable) {
-    ctx = tryStart(p);
-    mode = p;
+  auto portsFor = [&](bool v6, bool with_tls) {
+    std::string ports = httpdListeningPorts(port, v6);
+    if (with_tls) {
+      const std::string t = std::to_string(tls.port) + "s";
+      ports += "," + t;
+      if (v6) ports += ",[::]:" + t;
+    }
+    return ports;
+  };
+  struct mg_context* ctx = nullptr;
+  std::string mode;
+  bool tls_on = false;
+  const std::vector<bool> attempts = want_tls ? std::vector<bool>{true, false}
+                                             : std::vector<bool>{false};
+  for (const bool with_tls : attempts) {
+    const std::string preferred = portsFor(ipv6_usable, with_tls);
+    ctx = tryStart(preferred, with_tls);
+    mode = preferred;
+    // Second net: a listener string the platform probed as usable can still be refused, and an
+    // IPv4-only server is worth far more than none.
+    if (!ctx && ipv6_usable) {
+      mode = portsFor(false, with_tls);
+      ctx = tryStart(mode, with_tls);
+    }
+    if (ctx) {
+      tls_on = with_tls;
+      break;
+    }
+    if (with_tls)
+      DB_LOGE("httpd", "HTTPS listener on " + std::to_string(tls.port) +
+                           " failed; serving loopback only");
   }
   if (!ctx) {
     // Say who holds the port, not just that we failed to take it.
@@ -884,6 +1114,7 @@ bool Httpd::start(int port, Ipv6Mode ipv6) {
   }
   impl_->ctx = ctx;
   impl_->port = port;
+  impl_->tls_active = tls_on;
   mg_set_request_handler(ctx, "/", &requestHandler, impl_.get());
   DB_LOGI("httpd", "listening on " + mode);
   return true;
@@ -934,6 +1165,7 @@ void Httpd::stop() {
   }
   mg_stop(impl_->ctx);
   impl_->ctx = nullptr;
+  impl_->tls_active = false;
   DB_LOGI("httpd", "stopped");
 }
 

@@ -99,7 +99,7 @@ TEST_CASE("operations HTTP: changed configuration rejects an unstarted immutable
   CHECK(response.status == 409);
   CHECK(operationField(response, "error_code") == "config_conflict");
   CHECK(operationField(fleet.query("sos_start", id), "execution_state") == "rejected_not_started");
-  REQUIRE(fleet.a->setAdminPassword("testpw", "new-operation-password") == 0);
+  REQUIRE(fleet.a->setAdminPassword("testpw-12", "new-operation-password") == 0);
   CHECK(fleet.prepare("sos_start").status == 401);
 }
 
@@ -111,7 +111,7 @@ TEST_CASE("operations HTTP: current grants and CSRF guard prepare execute and qu
   auto prepared = fleet.prepare("sos_start");
   REQUIRE(prepared.status == 200);
   const auto id = operationField(prepared, "operation_id");
-  const auto b_login = operationHttp(fleet.b_opts.http_port, "POST", "/api/login", "{\"password\":\"testpw\"}");
+  const auto b_login = operationHttp(fleet.b_opts.http_port, "POST", "/api/login", "{\"password\":\"testpw-12\"}");
   REQUIRE(b_login.status == 200);
   const auto b_csrf = operationField(b_login, "csrf_token");
   const auto other = operationHttp(fleet.b_opts.http_port, "POST", "/api/operations/" + id + "/execute",

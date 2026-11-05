@@ -27,6 +27,8 @@ namespace {
 
 const std::string kPanelCredential = "test-panel-credential";
 std::string panel_auth;
+// The native shell's X-Doorbell-Local value, sent only on requests without a panel credential.
+std::string panel_local_token;
 
 struct PanelSecrets {
   std::mutex mutex;
@@ -109,6 +111,7 @@ std::string panelReq(int port, const std::string& method, const std::string& pat
   stripTestCredential(&safe_body);
   std::string r = method + " " + safe_path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
   if (!panel_auth.empty()) r += "Authorization: Bearer " + panel_auth + "\r\n";
+  else if (!panel_local_token.empty()) r += "X-Doorbell-Local: " + panel_local_token + "\r\n";
   if (!safe_body.empty())
     r += "Content-Type: " + (ctype.empty() ? "application/json" : ctype) +
          "\r\nContent-Length: " + std::to_string(safe_body.size()) + "\r\n";
@@ -946,7 +949,11 @@ TEST_CASE("panel API: call-frame / peer-frame.jpg / call-info web call contract"
   expect_media_error(r, 403, "permission_denied");
   panel_auth.clear();
   r = panelReq(http_port, "GET", "/peer-frame.jpg");
+  expect_media_error(r, 403, "permission_denied");  // loopback alone is not the native shell
+  panel_local_token = node.localToken();
+  r = panelReq(http_port, "GET", "/peer-frame.jpg");
   expect_media_error(r, 409, "identity_required");
+  panel_local_token.clear();
   panel_auth = k;
 
 

@@ -45,7 +45,7 @@ struct RevocationFixture {
         R"({"credential_ref":"secret:panel.a","credential_generation":"cccccccccccccccccccccccccccccccc","revoked":false,"door_scope":["front"],"grants":["view","call.answer","media.publish"]})");
     config("panel.identities." + std::string(32, 'b'),
         R"({"credential_ref":"secret:panel.b","credential_generation":"dddddddddddddddddddddddddddddddd","revoked":false,"door_scope":["front"],"grants":["view"]})");
-    admin = operationHttp(options.http_port, "POST", "/api/login", R"({"password":"testpw"})");
+    admin = operationHttp(options.http_port, "POST", "/api/login", R"({"password":"testpw-12"})");
     REQUIRE(admin.status == 200);
     a = login("revocation-a");
     b = login("revocation-b");

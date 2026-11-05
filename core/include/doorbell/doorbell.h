@@ -81,6 +81,13 @@ typedef struct db_platform_v2 {
    * becomes the node's mains_power capability. NULL, a failure, or an empty document leaves the
    * previous reading in place and the device simply reports no power state. */
   int (*power_state)(void* user, char** out_json);
+  /* Optional binary-safe HTTPS transport. When present (and struct_size covers it), core uses it
+   * instead of https_request. Same threading and return contract; the response body is
+   * resp_len_out bytes and may contain NUL. Allocate resp_body_out with malloc; core releases it
+   * with release_buffer (or free() when that is NULL). */
+  int (*https_request_v3)(void* user, const char* method, const char* url,
+                          const char* headers_json, const uint8_t* body, size_t body_len,
+                          uint8_t** resp_body_out, size_t* resp_len_out, int* http_status_out);
 } db_platform_v2;
 
 /* JSON events delivered from core to the platform UI. Examples:
@@ -250,10 +257,43 @@ DB_API int db_core_call_log_mark_seen(db_core* c, const char* up_to_hlc);
 /* Return fully materialized configuration JSON. Release with db_free. */
 DB_API char* db_core_config_json(db_core* c);
 
+/* ---- Native administrator window ----
+ * Configuration writes and device administration through this ABI require an open native admin
+ * window. A successful db_core_admin_password_verify (positive result) or
+ * db_core_admin_password_set opens it for ten minutes; each gated call renews it; and
+ * db_core_admin_lock closes it. Shells close it when the settings screen closes or the app goes
+ * to the background. While the cluster has no password at all, the window is treated as open so
+ * first-run setup works.
+ *
+ * Gated calls and their refusal:
+ *   db_core_set_config_json, db_core_delete_config_key, db_core_remove_device_v2
+ *                                         -> DB_RESULT_ADMIN_REQUIRED
+ *   db_core_config_batch_json, db_core_config_commit_json_v2, db_core_start_pairing_json,
+ *   db_core_mint_join_token_json         -> {"ok":false,"err":"admin_required",
+ *                                             "error_code":"admin_required"}
+ *   db_core_pairing_mode, db_core_invite_device, db_core_invite_direct, db_core_deny_device,
+ *   db_core_remove_device, db_core_unpair, db_core_qr_scan_start
+ *                                         -> ignored; the UI callback receives
+ *                                            {"t":"admin_required","op":"<function name>"}
+ * Not gated (household and device operations): calls and replies, SOS trigger and clear,
+ * visitor language, door notices, door unlock, operation requests (they carry their own
+ * grants), joining or founding a cluster, pairing persistence retry, call-history reads and
+ * seen marks, camera/encoder/runtime/capability/manifest reports, and every read. */
+#define DB_RESULT_ADMIN_REQUIRED (-20)
+DB_API void db_core_admin_lock(db_core* c);
+/* 1 while the window is open (or no password exists), 0 otherwise. */
+DB_API int db_core_admin_window_open(db_core* c);
+
+/* Random token for X-Doorbell-Local on loopback media requests (/stream.mjpeg, /stream.mp4,
+ * /snapshot.jpg, /video-meta, /peer-frame.jpg and /media/peer/<id>/...). It changes on every
+ * db_core_create. Owned by core and valid until db_core_destroy; do not free. */
+DB_API const char* db_core_local_token(db_core* c);
+
 /* ---- Configuration writes ----
  * These mirror POST /api/config, /api/config/batch and /api/config/delete exactly: the same
  * validation, the same result documents, and the same advisory warnings. A native shell uses
- * them instead of talking to its own loopback HTTP server.
+ * them instead of talking to its own loopback HTTP server. They are gated by the native admin
+ * window above.
  *
  * db_core_set_config_json writes one key. value_json is the JSON encoding of the value; a
  * document that does not parse as JSON is stored as a string, matching the HTTP endpoint.
@@ -383,7 +423,8 @@ DB_API int db_core_clear_door_notice(db_core* c, const char* door);
  * doors.<id>.unlock.command; unrelated SIP feature codes are never an unlock fallback.
  *
  * Returns 0 when the action was queued, -1 for a null core or empty door, -2 for an unknown
- * door, and -3 when that door has no configured unlock action. This legacy one-shot entry point
+ * door, -3 when that door has no configured unlock action, and -4 when an unlock action is
+ * configured but could not be dispatched. This legacy one-shot entry point
  * has no operation ID and must not automatically retry an uncertain result. A shell showing it
  * must say so on -3 rather than reporting a silent success: status.doors.<id>.unlock reports
  * {"configured":bool,"command":"…","show_button":bool,"source":"default"|"admin"} so the button
@@ -523,6 +564,9 @@ DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri);
  * Persist and replicate subtree deletion and a removal marker; upgraded peers reset pairing
  * on reconnect. The current device cannot remove itself. */
 DB_API void db_core_remove_device(db_core* c, const char* node_id);
+/* Same, with a result: 0 removed, -1 invalid id (including this device), -2 this role cannot
+ * remove devices, -3 the removal could not be persisted, DB_RESULT_ADMIN_REQUIRED. */
+DB_API int db_core_remove_device_v2(db_core* c, const char* node_id);
 /* Approve and invite one pending node. */
 DB_API void db_core_invite_device(db_core* c, const char* id);
 /* Invite an address, ID, and public key directly without discovery, for QR or routed networks. */
@@ -596,7 +640,9 @@ DB_API int db_core_sip_set_mic_muted(db_core* c, int muted);
  *
  * db_core_admin_password_set changes it. An empty current is accepted only while the cluster has
  * no password -- that is the trust-on-first-use path the first web login already takes; once one
- * exists, current must verify. new_pw is 4..128 characters. Returns 0 on success, -1 on invalid
+ * exists, current must verify. new_pw is 8..128 characters. The digest is Argon2id; a legacy
+ * BLAKE2b digest is verified once and replaced on the next successful verification. Both calls
+ * may take about a second on old hardware; never call them on a UI thread. Returns 0 on success, -1 on invalid
  * arguments, -2 when current is wrong, -3 while locked out, and -4 when the new digest could not
  * be persisted. A successful change invalidates every existing admin session.
  *

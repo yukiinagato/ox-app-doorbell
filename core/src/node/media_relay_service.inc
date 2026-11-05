@@ -683,7 +683,8 @@
         request.remote_addr == "::ffff:127.0.0.1";
     const auto session = request.cookie("dbpanel");
     // A presented web credential is never upgraded to native access merely by using loopback.
-    const bool local_native = loopback && session.empty() && !request.headers.count("authorization");
+    const bool local_native = loopback && localTokenOk(request) && session.empty() &&
+                              !request.headers.count("authorization");
     if ((!local_native && panelSessionRemaining(session) <= 0) ||
         (request.headers.count("origin") && !trustedWebOrigin(request)))
       return mediaFailure(403, "permission_denied");

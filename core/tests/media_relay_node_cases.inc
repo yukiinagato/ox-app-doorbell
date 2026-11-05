@@ -7,6 +7,7 @@ TEST_CASE("T16 real two-node HTTP to authenticated Mesh return-frame relay") {
   target_options.door = "front";
   source_options.enable_beacon = target_options.enable_beacon = false;
   source_options.psk.fill(0x39); target_options.psk.fill(0x39);
+  source_options.local_token = target_options.local_token = kMediaLocalToken;
   source_options.listen_addr = "127.0.0.1:" + std::to_string(db::testing::freeListenPort());
   target_options.listen_addr = "127.0.0.1:" + std::to_string(db::testing::freeListenPort());
   source_options.advertise_addr = source_options.listen_addr;

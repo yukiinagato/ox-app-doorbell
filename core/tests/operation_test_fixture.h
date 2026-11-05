@@ -225,13 +225,13 @@ struct OperationFleet {
     a_opts.use_mesh_timing_template = b_opts.use_mesh_timing_template = true;
     a.reset(new Node(a_opts)); b.reset(new Node(b_opts));
     REQUIRE(b->start()); REQUIRE(a->start());
-    const auto login = operationHttp(a_opts.http_port, "POST", "/api/login", "{\"password\":\"testpw\"}");
+    const auto login = operationHttp(a_opts.http_port, "POST", "/api/login", "{\"password\":\"testpw-12\"}");
     REQUIRE(login.status == 200);
     cookie = login.cookie;
     auto body = json::parse(login.body);
     csrf = json::getString(body.get(), "csrf_token");
     REQUIRE(!csrf.empty());
-    REQUIRE(operationWait([&] { return b->verifyAdminPassword("testpw") == 1; }));
+    REQUIRE(operationWait([&] { return b->verifyAdminPassword("testpw-12") == 1; }));
     a->setConfigKey("devices." + a->nodeId() + ".operations", "{\"doors\":[\"front\"],\"sos_start\":true,\"sos_clear\":true}");
     a->setConfigKey("devices." + b->nodeId() + ".operations", "{\"doors\":[\"front\"],\"sos_start\":true,\"sos_clear\":true}");
     a->setConfigKey("doors.front.unlock.command", "\"unlock\"");

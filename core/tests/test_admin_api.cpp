@@ -84,7 +84,7 @@ std::string adminReq(int port, const std::string& method, const std::string& pat
 
 
 std::string adminLogin(int port) {
-  std::string r = adminReq(port, "POST", "/api/login", "{\"password\":\"testpw\"}");
+  std::string r = adminReq(port, "POST", "/api/login", "{\"password\":\"testpw-12\"}");
   REQUIRE(r.find("HTTP/1.1 200") == 0);
   size_t p = r.find("dbsess=");
   REQUIRE(p != std::string::npos);
@@ -454,12 +454,14 @@ TEST_CASE("admin API: session gate + config delete/import + join-token + panel-t
   node.setUiManifest(
       R"({"schema_version":1,"units":"logical","viewport":{"minimum_touch":44,"scale_min":1.0,"scale_max":1.5},"elements":{"call.primary":{"properties":["scale","foreground","background"],"defaults":{"scale":1.0,"foreground":"#FFFFFF","background":"#000000"},"safety_critical":false},"cancel.call":{"properties":["scale","foreground","background","border"],"defaults":{"scale":1.0,"foreground":"#FFFFFF","background":"#000000","border":"#FFFFFF"},"safety_critical":true},"sos.trigger":{"properties":["scale","foreground","background"],"defaults":{"scale":1.0,"foreground":"#FFFFFF","background":"#7F1D1D"},"safety_critical":true}}})");
 
-  // Panels read video orientation from this LAN-visible endpoint without an admin cookie.
-  std::string video_meta = adminReq(http_port, "GET", "/video-meta");
+  // Video orientation is media metadata: the shell reads it with its local token, never anonymously.
+  CHECK(adminReq(http_port, "GET", "/video-meta").find("HTTP/1.1 401") == 0);
+  std::string video_meta = adminReq(http_port, "GET", "/video-meta", "", "",
+                                    "X-Doorbell-Local: " + node.localToken() + "\r\n");
   CHECK(video_meta.find("HTTP/1.1 200") == 0);
   CHECK(video_meta.find("{\"rotation\":0}") != std::string::npos);
   CHECK(video_meta.find("Cache-Control: no-store") != std::string::npos);
-  CHECK(video_meta.find("Access-Control-Allow-Origin: *") != std::string::npos);
+  CHECK(video_meta.find("Access-Control-Allow-Origin") == std::string::npos);
 
 
   CHECK(adminReq(http_port, "POST", "/api/config/delete", "{\"key\":\"x\"}").find("401") !=
@@ -1859,7 +1861,7 @@ TEST_CASE("admin API: the cluster-wide notice, the unlock trigger, and PIN minti
   REQUIRE(opened);
   CHECK(json::getBool(json::get(opened.get(), "pending"), "pairing_mode"));
 
-  CHECK(node.setAdminPassword("testpw", "rotated-test-password") == 0);
+  CHECK(node.setAdminPassword("testpw-12", "rotated-test-password") == 0);
   CHECK(adminReq(http_port, "POST", "/api/doors/d_front/open", "{}", session)
             .find("HTTP/1.1 403") == 0);
   CHECK(adminReq(http_port, "GET", "/api/status", "", session)
@@ -1894,7 +1896,7 @@ TEST_CASE("admin API: a door station with no working camera keeps serving HTTP a
   const std::string session = adminLogin(http_port);
 
   // No camera: the snapshot source never yields a frame.
-  CHECK(adminReq(http_port, "GET", "/snapshot.jpg").find("HTTP/1.1 503") == 0);
+  CHECK(adminReq(http_port, "GET", "/snapshot.jpg", "", session).find("HTTP/1.1 503") == 0);
 
   auto press = bodyJson(adminReq(http_port, "POST", "/api/press",
                                  "{\"door\":\"door-ipad1\"}", session));
@@ -1906,7 +1908,7 @@ TEST_CASE("admin API: a door station with no working camera keeps serving HTTP a
     auto status = bodyJson(adminReq(http_port, "GET", "/api/status", "", session));
     REQUIRE(status);
     CHECK(json::getString(json::get(status.get(), "node"), "role") == "door_station");
-    CHECK(adminReq(http_port, "GET", "/video-meta").find("HTTP/1.1 200") == 0);
+    CHECK(adminReq(http_port, "GET", "/video-meta", "", session).find("HTTP/1.1 200") == 0);
   }
 
   // A live view against a camera-less station must not pin a worker thread for good. Several
@@ -2299,7 +2301,7 @@ TEST_CASE("admin sessions: replicated credentials revoke after partition healing
   const std::string token_b = adminLogin(port_b);
   REQUIRE(adminReq(port_b, "GET", "/api/status", "", token_b).find("HTTP/1.1 200") == 0);
   loop.callSync([&] { net.partition({{"session-a:1"}, {"session-b:1"}}); });
-  REQUIRE(a.setAdminPassword("testpw", "next-password") == 0);
+  REQUIRE(a.setAdminPassword("testpw-12", "next-password") == 0);
   CHECK(adminReq(port_a, "GET", "/api/status", "", token_a).find("HTTP/1.1 401") == 0);
   CHECK(adminReq(port_b, "GET", "/api/status", "", token_b).find("HTTP/1.1 200") == 0);
   const std::string partition_login = adminLogin(port_b);
@@ -2358,18 +2360,18 @@ TEST_CASE("admin sessions: credential and version roll back together on either s
     const std::string token = adminLogin(options.http_port);
     const std::string before = node.configJson();
     REQUIRE(setAdminMetaWriteFailure(dir + "/doorbell.db", true));
-    CHECK(node.setAdminPassword("testpw", "not-committed-meta") == -4);
+    CHECK(node.setAdminPassword("testpw-12", "not-committed-meta") == -4);
     CHECK(node.configJson() == before);
-    CHECK(node.verifyAdminPassword("testpw") == 1);
+    CHECK(node.verifyAdminPassword("testpw-12") == 1);
     CHECK(node.verifyAdminPassword("not-committed-meta") == 0);
     CHECK(adminReq(options.http_port, "GET", "/api/status", "", token).find("HTTP/1.1 200") == 0);
     REQUIRE(setAdminMetaWriteFailure(dir + "/doorbell.db", false));
     REQUIRE(setAdminConfigWriteFailure(dir + "/doorbell.db", true));
-    CHECK(node.setAdminPassword("testpw", "not-committed-config") == -4);
+    CHECK(node.setAdminPassword("testpw-12", "not-committed-config") == -4);
     CHECK(node.configJson() == before);
-    CHECK(node.verifyAdminPassword("testpw") == 1);
+    CHECK(node.verifyAdminPassword("testpw-12") == 1);
     REQUIRE(setAdminConfigWriteFailure(dir + "/doorbell.db", false));
-    REQUIRE(node.setAdminPassword("testpw", "committed-password") == 0);
+    REQUIRE(node.setAdminPassword("testpw-12", "committed-password") == 0);
     CHECK(adminReq(options.http_port, "GET", "/api/status", "", token).find("HTTP/1.1 401") == 0);
     node.stop();
   }

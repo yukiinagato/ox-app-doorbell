@@ -50,7 +50,7 @@ struct ImportFixture {
     return json::parse(split == std::string::npos ? "" : response.substr(split + 4));
   }
   void login() {
-    const auto response = wire("/api/login", R"({"password":"testpw"})", false);
+    const auto response = wire("/api/login", R"({"password":"testpw-12"})", false);
     REQUIRE(response.find("HTTP/1.1 200") == 0);
     const auto begin = response.find("dbsess="); REQUIRE(begin != std::string::npos);
     session = response.substr(begin + 7, response.find(';', begin) - begin - 7);

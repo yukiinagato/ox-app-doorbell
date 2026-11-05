@@ -100,13 +100,19 @@ add_library(db_third_party STATIC
   # Theme background averaging decodes one uploaded image; nothing else needs a decoder.
   third_party/stb/stb_image_impl.c
 )
+# mbedTLS (Apache-2.0) serves the HTTPS listener, Core-to-Core HTTPS and MQTT over TLS.
+file(GLOB DB_MBEDTLS_SRC CONFIGURE_DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/third_party/mbedtls/library/*.c)
+target_sources(db_third_party PRIVATE ${DB_MBEDTLS_SRC})
 target_include_directories(db_third_party PUBLIC
   third_party/sqlite third_party/civetweb third_party/cjson third_party/monocypher
-  third_party/qrcodegen third_party/quirc third_party/stb)
+  third_party/qrcodegen third_party/quirc third_party/stb third_party/mbedtls/include src/tls)
+target_include_directories(db_third_party PRIVATE third_party/mbedtls/library)
 target_compile_definitions(db_third_party PUBLIC
-  # Assets are embedded, so civetweb does not need TLS, CGI, or filesystem serving.
+  MBEDTLS_USER_CONFIG_FILE="mbedtls_user_config.h"
+  # Assets are embedded, so civetweb needs neither CGI nor filesystem serving. TLS comes from
+  # mbedTLS; NO_SSL_DL keeps civetweb from trying to dlopen OpenSSL.
   # USE_IPV6 makes the HTTP service listen on both IPv4 and IPv6 with a "+port".
-  NO_SSL NO_CGI NO_CACHING USE_IPV6
+  USE_MBEDTLS NO_SSL_DL NO_CGI NO_CACHING USE_IPV6
   # Keep the SQLite feature surface small.
   SQLITE_OMIT_LOAD_EXTENSION SQLITE_DQS=0 SQLITE_DEFAULT_WAL_SYNCHRONOUS=1
   SQLITE_THREADSAFE=1

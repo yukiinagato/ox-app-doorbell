@@ -7,8 +7,13 @@
 
 
 // Embedded CivetWeb wrapper. Route handlers are marshaled synchronously to Runloop with a bounded
-// timeout. Queued expiry prevents execution; a running timeout reports an unknown outcome.
+// timeout. Queued expiry prevents execution with 503 not_started. A handler that is still running
+// at the deadline reports 202 with "outcome":"unknown": a mutation may already have taken effect,
+// so callers must re-read state instead of retrying blindly.
 // Authentication and media providers run on HTTP workers and must be thread-safe.
+//
+// Listeners: the plain port serves only loopback clients; any other plain request is redirected
+// to the HTTPS port (or refused with 403 tls_required while TLS is unavailable).
 #pragma once
 
 #include <cstdint>
@@ -40,6 +45,13 @@ bool httpdShouldLogCivetwebMessage(const std::string& text);
 // options civetweb sets on every accept. Probed on an ephemeral port over loopback.
 bool httpdFamilyServable(int family);
 
+// 127.0.0.0/8, ::1 and IPv4-mapped loopback.
+bool httpLoopbackAddress(const std::string& address);
+
+// The redirect for a plain non-loopback request, or empty when the Host header is unusable.
+std::string httpsRedirectLocation(const std::string& host_header, int https_port,
+                                  const std::string& uri, const std::string& query);
+
 struct HttpReq {
   std::string method;  // GET/POST/...
   std::string uri;
@@ -47,7 +59,9 @@ struct HttpReq {
   std::string body;
   std::map<std::string, std::string> headers;
   std::string remote_addr;
+  bool tls = false;
 
+  bool loopback() const { return httpLoopbackAddress(remote_addr); }
   std::string param(const std::string& key, const std::string& def = "") const;
   std::string cookie(const std::string& name) const;
 };
@@ -76,6 +90,15 @@ class Httpd {
   // itself proof that the platform can serve from it. A shell that already knows better can
   // pass Off and skip the probe.
   enum class Ipv6Mode { Auto, Off };
+
+  // TLS listener settings; set before start(). pem is the certificate followed by its key.
+  struct TlsConfig {
+    int port = 0;
+    std::string pem;
+  };
+  void setTls(TlsConfig config);
+  bool tlsActive() const;
+  int tlsPort() const;
 
   bool start(int port, Ipv6Mode ipv6 = Ipv6Mode::Auto);  // 0.0.0.0:port
   void stop();
@@ -128,6 +151,25 @@ class Httpd {
 
   void setAuth(std::function<bool(const HttpReq&)> gate,
                std::vector<std::string> public_prefixes);
+
+  // Checked before /stream.mjpeg, /stream.mp4 and /snapshot.jpg are served. Returns 0 to allow,
+  // otherwise the HTTP status to answer with. Runs on HTTP workers.
+  void setMediaAuth(std::function<int(const HttpReq&)> check);
+
+  // Concurrent long-lived media responses; more receive 503 with Retry-After.
+  void setMaxStreams(unsigned max_streams);
+  unsigned activeStreams() const;
+
+  // A GET prefix route whose response body is streamed from a bounded pull on the worker.
+  struct StreamResponse {
+    int status = 503;
+    std::string content_type = "application/json; charset=utf-8";
+    std::map<std::string, std::string> headers;
+    std::string body;  // Used when pull is empty.
+    Mp4Pull pull;      // Streams until ended; counts against setMaxStreams.
+  };
+  using StreamFactory = std::function<StreamResponse(const HttpReq&)>;
+  void routeStream(const std::string& path_prefix, StreamFactory factory);
 
   struct Impl;
 

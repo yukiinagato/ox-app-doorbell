@@ -439,7 +439,7 @@ TEST_CASE("visitor: panel language affects state, press, and events, then resets
   node.setConfigKey("ui.visitor_lang_revert_s", "30");
 
 
-  std::string login = visReq(http_port, "POST", "/api/login", "{\"password\":\"pw\"}");
+  std::string login = visReq(http_port, "POST", "/api/login", "{\"password\":\"pw-12345\"}");
   REQUIRE(login.rfind("HTTP/1.1 200", 0) == 0);
   size_t cpos = login.find("dbsess=");
   REQUIRE(cpos != std::string::npos);

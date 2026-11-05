@@ -4,6 +4,8 @@
 #include "qrcodegen.h"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <ctime>
 #include <cstddef>
@@ -207,11 +209,47 @@ struct UiCallbackSlot {
 struct db_core {
   std::unique_ptr<Node> node;
   db_platform_v2 plat{};
+  // Serializes whole installs so two concurrent registrations cannot leave Node holding the
+  // callback of the one that lost the slot (and was therefore disabled).
+  std::mutex ui_install_mu;
   std::mutex ui_callback_mu;
   std::shared_ptr<UiCallbackSlot> ui_callback;
   std::vector<std::shared_ptr<UiCallbackSlot>> retired_ui_callbacks;
   std::shared_ptr<HttpsInflight> https_inflight = std::make_shared<HttpsInflight>();
+  std::string local_token;
+  // Steady-clock deadline of the native admin window, in milliseconds; 0 when closed.
+  std::atomic<int64_t> admin_until_ms{0};
 };
+
+namespace {
+constexpr int64_t kAdminWindowMs = 10 * 60 * 1000;
+
+int64_t steadyMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
+// The process has one log sink. Only the core that installed it may clear it.
+std::mutex g_log_owner_mu;
+db_core* g_log_owner = nullptr;
+
+void openAdminWindow(db_core* c) { c->admin_until_ms = steadyMs() + kAdminWindowMs; }
+
+bool adminWindowOpen(db_core* c) {
+  if (!c->node->adminPasswordConfigured()) return true;
+  const int64_t now = steadyMs();
+  if (c->admin_until_ms.load() <= now) return false;
+  c->admin_until_ms = now + kAdminWindowMs;
+  return true;
+}
+
+const char* kAdminRequiredJson =
+    "{\"ok\":false,\"err\":\"admin_required\",\"error_code\":\"admin_required\"}";
+
+void reportAdminRequired(db_core* c, const char* op) {
+  c->node->emitUiEvent(std::string("{\"t\":\"admin_required\",\"op\":\"") + op + "\"}");
+}
+}  // namespace
 
 static void drainRetiredUiCallbacks(db_core* c) {
   std::vector<std::shared_ptr<UiCallbackSlot>> retired;
@@ -237,25 +275,30 @@ static void drainRetiredUiCallbacks(db_core* c) {
 
 static void setUiCallback(db_core* c, db_ui_event_cb cb, void* user) {
   if (!c || !c->node) return;
-  std::shared_ptr<UiCallbackSlot> retired;
-  std::shared_ptr<UiCallbackSlot> published;
   {
-    std::lock_guard<std::mutex> lk(c->ui_callback_mu);
-    retired = c->ui_callback;
-    if (retired) {
-      retired->disable();
-      c->retired_ui_callbacks.push_back(retired);
+    std::lock_guard<std::mutex> install(c->ui_install_mu);
+    std::shared_ptr<UiCallbackSlot> retired;
+    std::shared_ptr<UiCallbackSlot> published;
+    {
+      std::lock_guard<std::mutex> lk(c->ui_callback_mu);
+      retired = c->ui_callback;
+      if (retired) {
+        retired->disable();
+        c->retired_ui_callbacks.push_back(retired);
+      }
+      if (cb) published = std::make_shared<UiCallbackSlot>(cb, user);
+      c->ui_callback = published;
     }
-    if (cb) published = std::make_shared<UiCallbackSlot>(cb, user);
-    c->ui_callback = published;
+    if (published) {
+      c->node->setUiEventCb([published](const std::string& event_json) {
+        published->invoke(event_json);
+      });
+    } else {
+      c->node->setUiEventCb(nullptr);
+    }
   }
-  if (published) {
-    c->node->setUiEventCb([published](const std::string& event_json) {
-      published->invoke(event_json);
-    });
-  } else {
-    c->node->setUiEventCb(nullptr);
-  }
+  // Draining happens outside the install lock: a callback still running on another thread may
+  // itself be registering a replacement.
   drainRetiredUiCallbacks(c);
 }
 
@@ -343,15 +386,42 @@ static db_core* createCore(const db_platform_v2& platform, const char* data_dir,
 
   auto* c = new db_core;
   c->plat = platform;
+  c->local_token = hexEncode(randomBytes(32));
+  opts.local_token = c->local_token;
   if (c->plat.log_line) {
     void* user = c->plat.user;
     auto fn = c->plat.log_line;
+    std::lock_guard<std::mutex> lk(g_log_owner_mu);
     setLogSink([fn, user](LogLevel lv, const std::string& line) {
       fn(user, static_cast<int>(lv), line.c_str());
     });
+    g_log_owner = c;
   }
   c->node.reset(new Node(std::move(opts)));
-  if (c->plat.https_request) {
+  if (c->plat.https_request_v3) {
+    void* user = c->plat.user;
+    auto fn = c->plat.https_request_v3;
+    auto inflight = c->https_inflight;
+    db_platform_v2 copied_platform = c->plat;
+    c->node->setHttpsFn([user, fn, inflight, copied_platform](
+                            const std::string& method, const std::string& url,
+                            const std::string& headers_json, const Bytes& body,
+                            std::function<void(int, std::string)> done) {
+      inflight->add();
+      std::thread([user, fn, inflight, copied_platform, method, url, headers_json, body, done] {
+        uint8_t* resp = nullptr;
+        size_t resp_len = 0;
+        int status = 0;
+        int rc = fn(user, method.c_str(), url.c_str(), headers_json.c_str(),
+                    body.empty() ? nullptr : body.data(), body.size(), &resp, &resp_len, &status);
+        std::string resp_body = resp ? std::string(reinterpret_cast<const char*>(resp), resp_len)
+                                     : std::string();
+        releasePlatformBuffer(copied_platform, resp);
+        done(rc == 0 ? status : -1, std::move(resp_body));
+        inflight->done();
+      }).detach();
+    });
+  } else if (c->plat.https_request) {
     void* user = c->plat.user;
     auto fn = c->plat.https_request;
     auto inflight = c->https_inflight;
@@ -461,10 +531,12 @@ DB_API db_core* db_core_create_v2(const db_platform_v2* platform, const char* da
     // after the size it declares stay NULL and the corresponding feature is simply absent.
     const size_t kSizeBeforeSecureDelete = offsetof(db_platform_v2, secure_delete);
     const size_t kSizeBeforePowerState = offsetof(db_platform_v2, power_state);
+    const size_t kSizeBeforeHttpsV3 = offsetof(db_platform_v2, https_request_v3);
     if (platform->version != DB_PLATFORM_V2_VERSION ||
         (platform->struct_size != sizeof(db_platform_v2) &&
          platform->struct_size != kSizeBeforeSecureDelete &&
-         platform->struct_size != kSizeBeforePowerState)) {
+         platform->struct_size != kSizeBeforePowerState &&
+         platform->struct_size != kSizeBeforeHttpsV3)) {
       return nullptr;
     }
     std::memcpy(&v2, platform, platform->struct_size);
@@ -484,7 +556,13 @@ DB_API void db_core_stop(db_core* c) {
 
 DB_API void db_core_destroy(db_core* c) {
   if (!c) return;
-  setLogSink(nullptr);
+  {
+    std::lock_guard<std::mutex> lk(g_log_owner_mu);
+    if (g_log_owner == c) {
+      setLogSink(nullptr);
+      g_log_owner = nullptr;
+    }
+  }
   setUiCallback(c, nullptr, nullptr);
   c->https_inflight->waitIdle();
   delete c;
@@ -608,17 +686,36 @@ DB_API int db_core_sip_set_mic_muted(db_core* c, int muted) {
 DB_API int db_core_admin_password_verify(db_core* c, const char* pw) {
   // -1 is "locked out" in this contract, so a bad argument reports -3 instead.
   if (!c || !c->node || !pw) return -3;
-  return c->node->verifyAdminPassword(pw);
+  const int result = c->node->verifyAdminPassword(pw);
+  if (result > 0) openAdminWindow(c);
+  return result;
 }
 
 DB_API int db_core_admin_password_set(db_core* c, const char* current_or_empty,
                                       const char* new_pw) {
   if (!c || !c->node || !new_pw) return -1;
-  return c->node->setAdminPassword(current_or_empty ? current_or_empty : "", new_pw);
+  const int result = c->node->setAdminPassword(current_or_empty ? current_or_empty : "", new_pw);
+  if (result == 0) openAdminWindow(c);
+  return result;
+}
+
+DB_API void db_core_admin_lock(db_core* c) {
+  if (c) c->admin_until_ms = 0;
+}
+
+DB_API int db_core_admin_window_open(db_core* c) {
+  if (!c || !c->node) return 0;
+  if (!c->node->adminPasswordConfigured()) return 1;
+  return c->admin_until_ms.load() > steadyMs() ? 1 : 0;
+}
+
+DB_API const char* db_core_local_token(db_core* c) {
+  return c ? c->local_token.c_str() : "";
 }
 
 DB_API int db_core_set_config_json(db_core* c, const char* key, const char* value_json) {
   if (!c || !c->node || !key || !*key || !value_json) return -1;
+  if (!adminWindowOpen(c)) return DB_RESULT_ADMIN_REQUIRED;
   auto result = json::parse(c->node->setConfigJson(key, value_json));
   return (result && json::getBool(result.get(), "ok")) ? 0 : -2;
 }
@@ -630,6 +727,7 @@ DB_API char* db_core_last_write_warnings_json(db_core* c) {
 
 DB_API char* db_core_config_batch_json(db_core* c, const char* ops_json) {
   if (!c || !c->node || !ops_json) return nullptr;
+  if (!adminWindowOpen(c)) return dupString(kAdminRequiredJson);
   return dupString(c->node->configBatchJson(ops_json));
 }
 
@@ -640,6 +738,7 @@ DB_API char* db_core_config_snapshot_json_v2(db_core* c) {
 
 DB_API char* db_core_config_commit_json_v2(db_core* c, const char* request_json) {
   if (!c || !c->node || !request_json) return nullptr;
+  if (!adminWindowOpen(c)) return dupString(kAdminRequiredJson);
   return dupString(c->node->configCommitJson(request_json));
 }
 
@@ -651,6 +750,7 @@ DB_API char* db_core_config_import_json_v2(db_core* c, const char* action,
 
 DB_API int db_core_delete_config_key(db_core* c, const char* key) {
   if (!c || !c->node || !key || !*key) return -1;
+  if (!adminWindowOpen(c)) return DB_RESULT_ADMIN_REQUIRED;
   auto result = json::parse(c->node->deleteConfigKeyJson(key));
   return (result && json::getBool(result.get(), "ok")) ? 0 : -2;
 }
@@ -702,7 +802,7 @@ DB_API int db_core_open_door(db_core* c, const char* door) {
       status ? json::get(json::get(status.get(), "doors"), door) : nullptr;
   if (!cJSON_IsObject(entry)) return -2;
   if (!json::getBool(json::get(entry, "unlock"), "configured", false)) return -3;
-  return c->node->openDoor(door) ? 0 : -3;
+  return c->node->openDoor(door) ? 0 : -4;
 }
 
 DB_API char* db_core_operation_prepare_json_v2(db_core* c, const char* request_json) {
@@ -749,7 +849,10 @@ DB_API void db_core_join_cluster(db_core* c, const char* host, const char* pin) 
 }
 
 DB_API void db_core_pairing_mode(db_core* c, int seconds) {
-  if (c && c->node) c->node->setPairingMode(seconds);
+  if (!c || !c->node) return;
+  // Closing the window is always allowed; opening it adds devices.
+  if (seconds > 0 && !adminWindowOpen(c)) return reportAdminRequired(c, "db_core_pairing_mode");
+  c->node->setPairingMode(seconds);
 }
 
 DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri) {
@@ -759,16 +862,25 @@ DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri) {
 
 DB_API char* db_core_mint_join_token_json(db_core* c, int seconds) {
   if (!c || !c->node) return nullptr;
+  if (!adminWindowOpen(c)) return dupString(kAdminRequiredJson);
   return dupString(c->node->mintJoinTokenJson(seconds));
 }
 
 DB_API char* db_core_start_pairing_json(db_core* c, int seconds) {
   if (!c || !c->node) return nullptr;
+  if (!adminWindowOpen(c)) return dupString(kAdminRequiredJson);
   return dupString(c->node->startPairingJson(seconds));
 }
 
 DB_API void db_core_remove_device(db_core* c, const char* node_id) {
-  if (c && c->node && node_id && *node_id) c->node->removeDevice(node_id);
+  if (db_core_remove_device_v2(c, node_id) == DB_RESULT_ADMIN_REQUIRED)
+    reportAdminRequired(c, "db_core_remove_device");
+}
+
+DB_API int db_core_remove_device_v2(db_core* c, const char* node_id) {
+  if (!c || !c->node || !node_id || !*node_id) return -1;
+  if (!adminWindowOpen(c)) return DB_RESULT_ADMIN_REQUIRED;
+  return c->node->removeDevice(node_id);
 }
 
 DB_API int db_core_found_cluster(db_core* c) {
@@ -777,16 +889,21 @@ DB_API int db_core_found_cluster(db_core* c) {
 }
 
 DB_API void db_core_invite_device(db_core* c, const char* id) {
-  if (c && c->node && id && *id) c->node->inviteDevice(id);
+  if (!c || !c->node || !id || !*id) return;
+  if (!adminWindowOpen(c)) return reportAdminRequired(c, "db_core_invite_device");
+  c->node->inviteDevice(id);
 }
 
 DB_API void db_core_invite_direct(db_core* c, const char* addr, const char* id, const char* pk) {
-  if (c && c->node && addr && *addr && id && *id && pk && *pk)
-    c->node->inviteDeviceDirect(addr, id, pk);
+  if (!c || !c->node || !addr || !*addr || !id || !*id || !pk || !*pk) return;
+  if (!adminWindowOpen(c)) return reportAdminRequired(c, "db_core_invite_direct");
+  c->node->inviteDeviceDirect(addr, id, pk);
 }
 
 DB_API void db_core_deny_device(db_core* c, const char* id) {
-  if (c && c->node && id && *id) c->node->denyDevice(id);
+  if (!c || !c->node || !id || !*id) return;
+  if (!adminWindowOpen(c)) return reportAdminRequired(c, "db_core_deny_device");
+  c->node->denyDevice(id);
 }
 
 DB_API int db_core_retry_pairing_persistence(db_core* c) {
@@ -795,7 +912,9 @@ DB_API int db_core_retry_pairing_persistence(db_core* c) {
 }
 
 DB_API void db_core_unpair(db_core* c) {
-  if (c && c->node) c->node->unpair();
+  if (!c || !c->node) return;
+  if (!adminWindowOpen(c)) return reportAdminRequired(c, "db_core_unpair");
+  c->node->unpair();
 }
 
 
@@ -832,7 +951,9 @@ DB_API int db_core_qr_decode(const uint8_t* gray, int w, int h, char** text_out)
 }
 
 DB_API void db_core_qr_scan_start(db_core* c) {
-  if (c && c->node) c->node->startQrScan();
+  if (!c || !c->node) return;
+  if (!adminWindowOpen(c)) return reportAdminRequired(c, "db_core_qr_scan_start");
+  c->node->startQrScan();
 }
 
 DB_API void db_core_qr_scan_stop(db_core* c) {
@@ -929,6 +1050,9 @@ DB_API db_h264_player* db_h264_player_create(db_h264_frame_cb frame_cb,
   db_h264_player* raw = p;
   p->decoder = std::make_unique<DecoderWin>(
       [raw](const DecoderWin::Frame& f) {
+        // destroy() clears frame_cb under state_mu; one locked read keeps a stop from racing
+        // the decoder thread into a null call.
+        std::lock_guard<std::mutex> lk(raw->state_mu);
         if (raw->frame_cb)
           raw->frame_cb(raw->user, f.bgra, f.width, f.height, f.stride, f.capture_ms);
       },

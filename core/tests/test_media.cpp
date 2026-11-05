@@ -322,10 +322,12 @@ int connectTo(int port) {
 }
 
 
-std::string httpGet(int port, const std::string& path) {
+std::string httpGet(int port, const std::string& path, const std::string& local_token = "") {
   int fd = connectTo(port);
   REQUIRE(fd >= 0);
-  std::string req = "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+  std::string req = "GET " + path + " HTTP/1.1\r\nHost: 127.0.0.1\r\n";
+  if (!local_token.empty()) req += "X-Doorbell-Local: " + local_token + "\r\n";
+  req += "Connection: close\r\n\r\n";
   REQUIRE(::send(fd, req.data(), req.size(), 0) == static_cast<ssize_t>(req.size()));
   std::string resp;
   char buf[4096];
@@ -360,13 +362,16 @@ TEST_CASE("media: Node serves pushed camera frames as snapshots and MJPEG") {
   REQUIRE(node.start());
 
 
-  CHECK(httpGet(http_port, "/snapshot.jpg").rfind("HTTP/1.1 503", 0) == 0);
+  // Media is never anonymous: a loopback request without the shell's token is refused.
+  CHECK(httpGet(http_port, "/snapshot.jpg").rfind("HTTP/1.1 401", 0) == 0);
+  CHECK(httpGet(http_port, "/snapshot.jpg", "not-the-token").rfind("HTTP/1.1 401", 0) == 0);
+  CHECK(httpGet(http_port, "/snapshot.jpg", node.localToken()).rfind("HTTP/1.1 503", 0) == 0);
 
 
   RawFrame f = makeBgra(64, 48);
   node.pushCameraFrame(f.data.data(), f.format, f.w, f.h, f.stride, 12345);
 
-  std::string snap = httpGet(http_port, "/snapshot.jpg");
+  std::string snap = httpGet(http_port, "/snapshot.jpg", node.localToken());
   REQUIRE(snap.rfind("HTTP/1.1 200", 0) == 0);
   CHECK(snap.find("Content-Type: image/jpeg") != std::string::npos);
   size_t body = snap.find("\r\n\r\n");
@@ -379,7 +384,8 @@ TEST_CASE("media: Node serves pushed camera frames as snapshots and MJPEG") {
   int fd = connectTo(http_port);
   REQUIRE(fd >= 0);
   std::string req =
-      "GET /stream.mjpeg HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+      "GET /stream.mjpeg HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Doorbell-Local: " +
+      node.localToken() + "\r\nConnection: close\r\n\r\n";
   REQUIRE(::send(fd, req.data(), req.size(), 0) == static_cast<ssize_t>(req.size()));
   std::string got;
   char buf[4096];

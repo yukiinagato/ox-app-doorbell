@@ -43,6 +43,11 @@ struct NodeOptions {
   std::string psk_source = "none";
   std::string psk_ref;               // "secret:<name>" when the PSK was read from secure storage.
   int http_port = 0;
+  // HTTPS listener for browsers and Core-to-Core requests; 0 disables it (tests, host tools).
+  // While disabled the plain port answers loopback clients only.
+  int https_port = 0;
+  // X-Doorbell-Local value accepted from loopback media clients. Empty generates one.
+  std::string local_token;
   bool seed_default_config = true;
 
   std::string sip_user;
@@ -201,6 +206,14 @@ class Node {
   // empty, when no password has been set.
   int verifyAdminPassword(const std::string& password);
   int setAdminPassword(const std::string& current, const std::string& next);
+  bool adminPasswordConfigured();
+
+  // Token native shells send as X-Doorbell-Local on loopback media requests.
+  const std::string& localToken() const;
+  // Lowercase hex SHA-256 of this node's TLS certificate, or empty while TLS is unavailable.
+  std::string tlsFingerprint();
+  // Deliver a core-originated UI event (for example admin_required) to the shell callback.
+  void emitUiEvent(const std::string& event_json);
 
 
 
@@ -286,7 +299,8 @@ class Node {
   // Validate a scanned doorbell://pair URI. Uses corrected cluster time for the expiry check
   // when this node is running, so every shell reaches the same verdict.
   std::string parsePairUriJson(const std::string& uri);
-  void removeDevice(const std::string& node_id);
+  // 0 removed, -1 invalid id, -2 this role cannot remove devices, -3 not persisted.
+  int removeDevice(const std::string& node_id);
   void inviteDevice(const std::string& id);
 
   void inviteDeviceDirect(const std::string& addr, const std::string& id, const std::string& pk);

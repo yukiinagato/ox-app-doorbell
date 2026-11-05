@@ -83,7 +83,7 @@ struct CrashNode {
     options.http_port = testing::freeListenPort();
     NodeDeps deps; deps.clock = &clock;
     node.reset(new Node(options, std::move(deps))); REQUIRE(node->start());
-    auto response = post("/api/login", R"({"password":"testpw"})", false);
+    auto response = post("/api/login", R"({"password":"testpw-12"})", false);
     REQUIRE(response.find("HTTP/1.1 200") == 0);
     const auto begin = response.find("dbsess="); REQUIRE(begin != std::string::npos);
     session = response.substr(begin + 7, response.find(';', begin) - begin - 7);

@@ -155,7 +155,7 @@ TEST_CASE("config conflict review: legacy HTTP import commits an edit record ato
   NodeOptions options; options.data_dir = ":memory:"; options.enable_beacon = false;
   options.listen_addr = "127.0.0.1:" + std::to_string(testing::freeListenPort());
   options.http_port = testing::freeListenPort(); Node node(options); REQUIRE(node.start());
-  const auto login = request(options.http_port, "POST", "/api/login", R"({"password":"testpw"})");
+  const auto login = request(options.http_port, "POST", "/api/login", R"({"password":"testpw-12"})");
   REQUIRE(login.find("HTTP/1.1 200") == 0);
   const auto cookie_begin = login.find("dbsess="); REQUIRE(cookie_begin != std::string::npos);
   const auto cookie = login.substr(cookie_begin + 7, login.find(';', cookie_begin) - cookie_begin - 7);
