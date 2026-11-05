@@ -7,9 +7,17 @@ using System.Text;
 
 namespace DoorbellApp.Core
 {
-    /// <summary>Machine-scoped DPAPI store used by core secret:* references.</summary>
+    /// <summary>
+    /// Machine-scoped DPAPI store used by core secret:* references. LocalMachine scope means any
+    /// account on the machine can decrypt a file it can read, so the protection is the directory
+    /// ACL: SYSTEM, Administrators and the "Doorbell Operators" group the installer creates for
+    /// the accounts that run the app (the installing user and /KIOSKUSER=). The watchdog may
+    /// launch the app as whichever user is at the console, so the ACL must never be narrowed to
+    /// the one account that happened to create it.
+    /// </summary>
     internal sealed class DpapiSecretStore
     {
+        public const string OperatorsGroup = "Doorbell Operators";
         private const int MaxValueBytes = 1024 * 1024;
         private static readonly byte[] Entropy = Encoding.UTF8.GetBytes("DoorbellApp/db_platform_v2/1");
         private readonly string _directory;
@@ -57,8 +65,7 @@ namespace DoorbellApp.Core
                 if (clear.Length > MaxValueBytes) return false;
                 byte[] protectedBytes = ProtectedData.Protect(clear, Entropy,
                     DataProtectionScope.LocalMachine);
-                Directory.CreateDirectory(_directory);
-                HardenDirectory();
+                EnsureDirectory();
                 string target = PathFor(key);
                 temporary = Path.Combine(_directory, Path.GetRandomFileName());
                 using (var output = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write,
@@ -96,6 +103,28 @@ namespace DoorbellApp.Core
             catch (ArgumentException) { return false; }
         }
 
+        /// <summary>
+        /// Creates the directory with its ACL. An existing directory keeps the ACL the installer
+        /// (or an earlier run) gave it: replacing it here would lock out every other operator.
+        /// </summary>
+        private void EnsureDirectory()
+        {
+            if (Directory.Exists(_directory)) return;
+            Directory.CreateDirectory(_directory);
+            HardenDirectory();
+        }
+
+        private static SecurityIdentifier OperatorsSid()
+        {
+            try
+            {
+                return (SecurityIdentifier)new NTAccount(OperatorsGroup)
+                    .Translate(typeof(SecurityIdentifier));
+            }
+            catch (IdentityNotMappedException) { return null; }
+            catch (SystemException) { return null; }
+        }
+
         private void HardenDirectory()
         {
             var security = new DirectorySecurity();
@@ -112,6 +141,10 @@ namespace DoorbellApp.Core
             security.AddAccessRule(new FileSystemAccessRule(
                 new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
                 FileSystemRights.FullControl, inheritance, propagation, AccessControlType.Allow));
+            SecurityIdentifier operators = OperatorsSid();
+            if (operators != null)
+                security.AddAccessRule(new FileSystemAccessRule(operators,
+                    FileSystemRights.FullControl, inheritance, propagation, AccessControlType.Allow));
             Directory.SetAccessControl(_directory, security);
         }
     }
