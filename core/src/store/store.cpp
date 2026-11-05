@@ -213,6 +213,10 @@ bool Store::migrate() {
       "CREATE TABLE IF NOT EXISTS event_origin_state("
       "  origin TEXT PRIMARY KEY, frontier INT NOT NULL, max_seq INT NOT NULL,"
       "  dispatch_frontier INT NOT NULL DEFAULT 0);"
+      // Remote events that arrived through anti-entropy and are not yet dispatched. Durable, so a
+      // restart still dispatches them as history rather than re-enacting their side effects.
+      "CREATE TABLE IF NOT EXISTS event_backfill("
+      "  origin TEXT NOT NULL, seq INT NOT NULL, PRIMARY KEY(origin, seq));"
       "CREATE TABLE IF NOT EXISTS tg_queue("
       "  id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, chat_id TEXT, payload TEXT,"
       "  snapshot BLOB, attempts INT, next_retry_ms INT, created_ms INT);"
@@ -677,18 +681,38 @@ std::optional<EventRecord> Store::eventAppendLocal(
   return e;
 }
 
-bool Store::eventIngest(const EventRecord& e) {
+bool Store::eventIngest(const EventRecord& e, bool backfill) {
   std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_ || e.origin.empty() || e.seq == 0 ||
       e.seq > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
     return false;
   if (!exec("BEGIN IMMEDIATE")) return false;
   bool inserted = false;
-  if (!persistEventLocked(e, /*allow_existing=*/true, &inserted) || !exec("COMMIT")) {
+  bool ok = persistEventLocked(e, /*allow_existing=*/true, &inserted);
+  if (ok && inserted && backfill) {
+    Stmt mark(db_, "INSERT OR IGNORE INTO event_backfill(origin,seq) VALUES(?1,?2)");
+    ok = mark.ok();
+    if (ok) {
+      mark.bind(1, e.origin);
+      mark.bind(2, static_cast<int64_t>(e.seq));
+      ok = mark.step() == SQLITE_DONE;
+    }
+  }
+  if (!ok || !exec("COMMIT")) {
     exec("ROLLBACK");
     return false;
   }
   return inserted;
+}
+
+bool Store::eventIsBackfill(const std::string& origin, uint64_t seq) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+  if (!db_) return false;
+  Stmt st(db_, "SELECT 1 FROM event_backfill WHERE origin=?1 AND seq=?2");
+  if (!st.ok()) return false;
+  st.bind(1, origin);
+  st.bind(2, static_cast<int64_t>(std::min<uint64_t>(seq, INT64_MAX)));
+  return st.step() == SQLITE_ROW;
 }
 
 Store::EventApplyResult Store::eventApplyNextLocked(const std::string& origin,
@@ -1327,14 +1351,31 @@ bool Store::eventAckDispatched(const std::string& origin, uint64_t seq) {
   if (!db_ || origin.empty() || seq == 0 ||
       seq > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
     return false;
+  if (!exec("BEGIN IMMEDIATE")) return false;
   Stmt st(db_,
           "UPDATE event_origin_state SET dispatch_frontier=?2"
           " WHERE origin=?1 AND dispatch_frontier=?3 AND frontier>=?2");
-  if (!st.ok()) return false;
-  st.bind(1, origin);
-  st.bind(2, static_cast<int64_t>(seq));
-  st.bind(3, static_cast<int64_t>(seq - 1));
-  return st.step() == SQLITE_DONE && sqlite3_changes(db_) == 1;
+  bool ok = st.ok();
+  if (ok) {
+    st.bind(1, origin);
+    st.bind(2, static_cast<int64_t>(seq));
+    st.bind(3, static_cast<int64_t>(seq - 1));
+    ok = st.step() == SQLITE_DONE && sqlite3_changes(db_) == 1;
+  }
+  if (ok) {
+    Stmt clear(db_, "DELETE FROM event_backfill WHERE origin=?1 AND seq<=?2");
+    ok = clear.ok();
+    if (ok) {
+      clear.bind(1, origin);
+      clear.bind(2, static_cast<int64_t>(seq));
+      ok = clear.step() == SQLITE_DONE;
+    }
+  }
+  if (!ok || !exec("COMMIT")) {
+    exec("ROLLBACK");
+    return false;
+  }
+  return true;
 }
 
 uint64_t Store::eventDispatchFrontier(const std::string& origin) {

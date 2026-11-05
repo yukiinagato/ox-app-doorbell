@@ -80,8 +80,6 @@ class EventLog {
   std::map<std::string, uint64_t> frontiers_;
   std::deque<EventRecord> dispatch_queue_;
   DispatchCb on_event_;
-  // Identities ingested through anti-entropy and not yet dispatched.
-  std::set<std::pair<std::string, uint64_t>> backfill_pending_;
   bool dispatching_ = false;
 
   void drainContiguous(const std::string& origin,

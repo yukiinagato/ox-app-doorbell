@@ -99,7 +99,10 @@ class Store {
   // the returned empty optional must be treated as an emission failure.
   std::optional<EventRecord> eventAppendLocal(EventRecord e,
                                               std::vector<EventRecord>* newly_applied = nullptr);
-  bool eventIngest(const EventRecord& e);
+  // backfill marks a record that arrived through anti-entropy; the mark is committed with the
+  // record and cleared when its dispatch is acknowledged.
+  bool eventIngest(const EventRecord& e, bool backfill = false);
+  bool eventIsBackfill(const std::string& origin, uint64_t seq);
   std::optional<EventRecord> eventApplyNext(const std::string& origin);
   bool eventExists(const std::string& origin, uint64_t seq);
   void eventSetNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
