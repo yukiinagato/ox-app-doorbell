@@ -810,3 +810,105 @@ TEST_CASE("config: events.retention_days rejects values outside the supported ra
       R"({"key":"events","value":"{\"retention_days\":30,\"bogus\":1}"})", admin);
   CHECK(unknown_field.find("\"ok\":true") == std::string::npos);
 }
+
+namespace {
+
+bool configWriteOk(Node& node, const std::string& key, const std::string& value_json) {
+  auto result = json::parse(node.setConfigJson(key, value_json));
+  return result && json::getBool(result.get(), "ok");
+}
+
+std::string dtmfEventsBody(CallLogNode& node) {
+  const std::string admin = callLogAdminLogin(node.http_port);
+  return callLogReq(node.http_port, "GET", "/api/events?type=dtmf_action", "", admin);
+}
+
+std::string latestOutcome(Node& node) {
+  auto log = json::parse(node.callLogJson(0, 10));
+  if (!log) return "";
+  const cJSON* first = cJSON_GetArrayItem(json::get(log.get(), "rows"), 0);
+  return first ? json::getString(first, "outcome") : "";
+}
+
+}  // namespace
+
+TEST_CASE("sip dtmf: a quick_reply code replies to the ringing call like a panel reply") {
+  CallLogNode door(0x1a71, "door_station");
+  REQUIRE(configWriteOk(*door.node, "sip.dtmf_actions",
+                        R"({"#21":{"type":"quick_reply","reply_id":"qr_away"},)"
+                        R"("#90":{"type":"decline"}})"));
+  const std::string call_id = door.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call_id.empty());
+  door.drain();
+
+  door.node->injectSipDtmfForTesting("#21");
+  REQUIRE(door.waitFor("\"t\":\"reply\""));
+  REQUIRE(door.waitFor("\"t\":\"call_log_changed\""));
+  CHECK(latestOutcome(*door.node) == "replied");
+  CHECK(door.node->statusJson().find(call_id) == std::string::npos);
+}
+
+TEST_CASE("sip dtmf: decline releases only this leg and the call keeps ringing") {
+  CallLogNode door(0x1a72, "door_station");
+  REQUIRE(configWriteOk(*door.node, "sip.dtmf_actions.#90", R"({"type":"decline"})"));
+  const std::string call_id = door.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call_id.empty());
+  door.drain();
+
+  door.node->injectSipDtmfForTesting("#90");
+  REQUIRE(door.waitFor("dtmf_action"));
+  for (const auto& event : door.drain())
+    CHECK(event.find("\"t\":\"reply\"") == std::string::npos);
+  const std::string body = dtmfEventsBody(door);
+  CHECK(body.find("decline") != std::string::npos);
+  CHECK(body.find(call_id) != std::string::npos);
+  CHECK(door.node->statusJson().find(call_id) != std::string::npos);
+}
+
+TEST_CASE("sip dtmf: action validation rejects unknown replies, codes and types") {
+  CallLogNode door(0x1a73, "door_station");
+  CHECK_FALSE(configWriteOk(*door.node, "sip.dtmf_actions.#29",
+                            R"({"type":"quick_reply","reply_id":"qr_missing"})"));
+  CHECK_FALSE(configWriteOk(*door.node, "sip.dtmf_actions",
+                            R"({"#2x":{"type":"decline"}})"));
+  CHECK_FALSE(configWriteOk(*door.node, "sip.dtmf_actions.#91", R"({"type":"reboot"})"));
+  CHECK_FALSE(configWriteOk(*door.node, "sip.dtmf_actions.#92",
+                            R"({"type":"quick_reply"})"));
+  CHECK(configWriteOk(*door.node, "sip.dtmf_actions.#21",
+                      R"({"type":"quick_reply","reply_id":"qr_away"})"));
+  CHECK(configWriteOk(*door.node, "sip.dtmf_actions.*0", R"({"type":"hangup"})"));
+}
+
+TEST_CASE("sip dtmf: an unknown or stale reply leaves the call ringing") {
+  CallLogNode door(0x1a74, "door_station");
+  REQUIRE(configWriteOk(*door.node, "sip.dtmf_actions.#21",
+                        R"({"type":"quick_reply","reply_id":"qr_away"})"));
+  // Without a ringing call the code is a no-op.
+  door.node->injectSipDtmfForTesting("#21");
+  door.drain();
+  const std::string call_id = door.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call_id.empty());
+  // The reply was deleted after the mapping was written; the code must not end the call.
+  auto deleted = json::parse(door.node->deleteConfigKeyJson("quick_replies.qr_away"));
+  REQUIRE((deleted && json::getBool(deleted.get(), "ok")));
+  door.node->injectSipDtmfForTesting("#21");
+  CHECK_FALSE(door.waitFor("\"t\":\"reply\"", 15));
+  CHECK(door.node->statusJson().find(call_id) != std::string::npos);
+}
+
+TEST_CASE("sip dtmf: prefix matching between feature codes is unchanged") {
+  CallLogNode door(0x1a75, "door_station");
+  REQUIRE(configWriteOk(*door.node, "sip.dtmf_actions",
+                        R"({"*1":{"type":"ha_command","command":"light_on","door":"self"},)"
+                        R"("#21":{"type":"quick_reply","reply_id":"qr_away"}})"));
+  const std::string call_id = door.node->pressV2("d_front", "");
+  REQUIRE_FALSE(call_id.empty());
+  door.drain();
+  // A stray digit before a valid code restarts matching at that code.
+  door.node->injectSipDtmfForTesting("5*1");
+  REQUIRE(door.waitFor("dtmf_action"));
+  CHECK(dtmfEventsBody(door).find("light_on") != std::string::npos);
+  CHECK(door.node->statusJson().find(call_id) != std::string::npos);
+  door.node->injectSipDtmfForTesting("#21");
+  REQUIRE(door.waitFor("\"t\":\"reply\""));
+}

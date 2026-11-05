@@ -1731,6 +1731,92 @@ bool callReturnValid(const std::string& key, const cJSON* value, std::string* er
   return true;
 }
 
+bool sipDtmfCodeValid(const std::string& code) {
+  if (code.empty() || code.size() > 8) return false;
+  for (char c : code) {
+    const bool digit = c >= '0' && c <= '9';
+    if (!digit && c != '*' && c != '#' && !(c >= 'A' && c <= 'D')) return false;
+  }
+  return true;
+}
+
+bool sipDtmfActionValid(const std::string& code, const cJSON* action, std::string* error) {
+  if (!sipDtmfCodeValid(code)) {
+    *error = "DTMF codes are 1-8 characters of 0-9, *, # and A-D";
+    return false;
+  }
+  if (!cJSON_IsObject(action)) {
+    *error = "sip.dtmf_actions." + code + " must be an object";
+    return false;
+  }
+  const std::string type = json::getString(action, "type");
+  if (type == "hangup" || type == "decline") return true;
+  if (type == "ha_command") {
+    if (json::getString(action, "command").empty()) {
+      *error = "sip.dtmf_actions." + code + " needs a command";
+      return false;
+    }
+    return true;
+  }
+  if (type == "quick_reply") {
+    const std::string reply_id = json::getString(action, "reply_id");
+    if (reply_id.empty() || reply_id.size() > 64 ||
+        reply_id.find_first_of(". /\\") != std::string::npos) {
+      *error = "sip.dtmf_actions." + code + " needs a quick reply id";
+      return false;
+    }
+    return true;
+  }
+  *error = "unknown DTMF action type: " + type;
+  return false;
+}
+
+// Validates sip, sip.dtmf_actions and sip.dtmf_actions.<code> writes.
+bool sipDtmfActionsValid(const std::string& key, const cJSON* value, std::string* error) {
+  const std::string prefix = "sip.dtmf_actions.";
+  if (key.rfind(prefix, 0) == 0) {
+    if (cJSON_IsNull(value)) return true;
+    return sipDtmfActionValid(key.substr(prefix.size()), value, error);
+  }
+  const cJSON* actions = nullptr;
+  if (key == "sip.dtmf_actions") actions = value;
+  else if (key == "sip" && cJSON_IsObject(value)) actions = json::get(value, "dtmf_actions");
+  else return true;
+  if (!actions || cJSON_IsNull(actions)) return true;
+  if (!cJSON_IsObject(actions)) {
+    *error = "sip.dtmf_actions must be an object";
+    return false;
+  }
+  const cJSON* item = nullptr;
+  cJSON_ArrayForEach(item, actions) {
+    if (!sipDtmfActionValid(item->string ? item->string : "", item, error)) return false;
+  }
+  return true;
+}
+
+// Every quick_reply action must name a configured reply; checked against the live replica.
+template <typename Lookup>
+bool sipDtmfRepliesExist(const std::string& key, const cJSON* value, Lookup reply_exists,
+                         std::string* error) {
+  auto check = [&](const cJSON* action) {
+    if (json::getString(action, "type") != "quick_reply") return true;
+    const std::string reply_id = json::getString(action, "reply_id");
+    if (reply_exists(reply_id)) return true;
+    *error = "sip DTMF quick reply names an unknown reply: " + reply_id;
+    return false;
+  };
+  if (key.rfind("sip.dtmf_actions.", 0) == 0) return check(value);
+  const cJSON* actions = key == "sip.dtmf_actions" ? value
+      : key == "sip" ? json::get(value, "dtmf_actions") : nullptr;
+  const cJSON* item = nullptr;
+  if (cJSON_IsObject(actions)) {
+    cJSON_ArrayForEach(item, actions) {
+      if (!check(item)) return false;
+    }
+  }
+  return true;
+}
+
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
                       std::vector<ConfigWarning>* warnings = nullptr,
                       bool enforce_write_scope = true) {
@@ -1739,6 +1825,7 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
   if (!callReturnValid(key, value, error)) return false;
   if (!secretContractValid(key, value, error)) return false;
   if (!visitPurposeValid(key, value, error)) return false;
+  if (!sipDtmfActionsValid(key, value, error)) return false;
   const std::string wake_suffix = ".motion.wake_screen";
   if (key.size() >= wake_suffix.size() &&
       key.compare(key.size() - wake_suffix.size(), wake_suffix.size(), wake_suffix) == 0 &&
@@ -5809,9 +5896,66 @@ struct Node::Impl {
       DB_LOGI(kTag, "HA command queued for the MQTT bridge: " + json::dump(p.get()));
       std::string door = opts.door.empty() ? last_press_door : opts.door;
       events->append("dtmf_action", door, node_id, json::dump(p.get()));
+    } else if (type == "quick_reply") {
+      execDtmfQuickReply(code, json::getString(action, "reply_id"));
+    } else if (type == "decline") {
+      execDtmfDecline(code);
     } else {
       DB_LOGW(kTag, "unknown DTMF action: " + type);
     }
+  }
+
+  // The ringing call this node's SIP leg belongs to. A door station serves one door; any other
+  // role falls back to the door of the most recent press. The SIP call identity wins when known.
+  const ActiveCall* dtmfTargetCall() const {
+    const std::string door = opts.door.empty() ? last_press_door : opts.door;
+    if (!sip_call_id.empty()) {
+      for (const auto& entry : active_calls)
+        if (entry.second.call_id == sip_call_id) return &entry.second;
+    }
+    auto it = active_calls.find(door);
+    return it == active_calls.end() ? nullptr : &it->second;
+  }
+
+  // A remote responder (for example the Asterisk voice menu on a mobile phone) chose a quick
+  // reply instead of talking. It takes the same Core path as a panel reply, so the visitor sees
+  // and hears it, the call ends with outcome "reply", and the SIP leg is released afterwards.
+  void execDtmfQuickReply(const std::string& code, const std::string& reply_id) {
+    const ActiveCall* call = dtmfTargetCall();
+    if (reply_id.empty() || !cfgAt("quick_replies." + reply_id)) {
+      DB_LOGW(kTag, "DTMF " + code + " names an unknown quick reply: " + reply_id);
+      return;
+    }
+    if (!call || call->state != "ringing") {
+      DB_LOGW(kTag, "DTMF quick reply " + code + " ignored: no ringing call on this leg");
+      return;
+    }
+    const std::string door = call->door;
+    const std::string call_id = call->call_id;
+    const int revision = call->stage_revision;
+    if (!quickReply(reply_id, "", door, "sip_dtmf", call_id, revision)) {
+      DB_LOGW(kTag, "DTMF quick reply " + code + " was not applied to " + call_id);
+      return;
+    }
+    if (sipctl) sipctl->hangup();
+  }
+
+  // The remote responder declined to talk. Like a resident's Ignore this is local to the leg:
+  // the SIP dialog is released, other indoor devices keep ringing, and the call ends as
+  // answered elsewhere or missed by the normal timeout.
+  void execDtmfDecline(const std::string& code) {
+    const ActiveCall* call = dtmfTargetCall();
+    auto p = json::obj();
+    json::set(p.get(), "type", "decline");
+    json::set(p.get(), "code", code);
+    std::string door = opts.door.empty() ? last_press_door : opts.door;
+    if (call) {
+      door = call->door;
+      json::set(p.get(), "call_id", call->call_id);
+      json::set(p.get(), "stage_revision", static_cast<int64_t>(call->stage_revision));
+    }
+    events->append("dtmf_action", door, node_id, json::dump(p.get()));
+    if (sipctl) sipctl->hangup();
   }
 
   static const char* sipRegName(SipRegState s) {
@@ -6225,6 +6369,12 @@ struct Node::Impl {
                                  std::string* error,
                                  std::vector<ConfigWarning>* warnings = nullptr) {
     if (!configWriteValid(key, value, error, warnings)) return false;
+    if (!sipDtmfRepliesExist(key, value,
+                             [this](const std::string& id) {
+                               return cfgAt("quick_replies." + id) != nullptr;
+                             },
+                             error))
+      return false;
     themeContrastWarnings(key, value, warnings);
     const std::string marker = ".local.ui.elements.";
     const size_t marker_pos = key.find(marker);
@@ -12426,6 +12576,12 @@ Node::~Node() { stop(); }
 #if defined(DB_HTTPD_TEST_HOOKS)
 size_t Node::operationPendingForTesting() const {
   return impl_->operation_dispatcher->pendingCountForTesting();
+}
+
+void Node::injectSipDtmfForTesting(const std::string& digits) {
+  impl_->loop->callSync([&] {
+    for (char digit : digits) impl_->onSipDtmf(digit);
+  });
 }
 #endif
 
