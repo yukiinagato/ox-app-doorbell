@@ -1,7 +1,7 @@
-// Native settings (spec §3): the device-level and common cluster settings, always behind the
+// Native settings (spec §3): every device-level and cluster setting, always behind the
 // 管理パスワード. Every write goes through the same configuration keys and the same server-side
-// validation the web admin uses; everything deliberately left to the web admin says so in place
-// and links to the administration page rather than silently disappearing.
+// validation the web admin uses. Nothing here hands off to the web admin any more: the editors
+// that replaced those rows live in NativeSettingsSections.
 package jp.ox.doorbell
 
 import android.app.Activity
@@ -29,11 +29,11 @@ import org.json.JSONObject
 
 class SettingsActivity : Activity(), DoorbellCore.Listener {
 
-    private val ui = Handler(Looper.getMainLooper())
-    private lateinit var app: App
-    private lateinit var texts: Texts
+    internal val ui = Handler(Looper.getMainLooper())
+    internal lateinit var app: App
+    internal lateinit var texts: Texts
     private lateinit var clock: ClusterClock
-    private lateinit var palette: Palette
+    internal lateinit var palette: Palette
     /** The detail pane that every section renders into. */
     private lateinit var listView: LinearLayout
     private lateinit var categoryList: LinearLayout
@@ -50,15 +50,27 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     /** The open category; null shows the category list on a phone. */
     private var selected: SettingsCategory? = null
 
-    private var config: JSONObject? = null
-    private var status: JSONObject? = null
-    private var nodeId = ""
+    internal var config: JSONObject? = null
+    internal var status: JSONObject? = null
+    internal var nodeId = ""
     private var pairing: JSONObject? = null
     /** Where writes go: core when it exports them, otherwise the loopback session. */
     private var writer: ConfigWriter? = null
 
     /** Set when neither core nor a loopback session can write, so the screen is read-only. */
-    private var readOnly = false
+    internal var readOnly = false
+
+    /**
+     * The loopback administrator session from the password gate. Core's session-bound entry
+     * points (config import, panel identities) and the Telegram test need its cookie and CSRF.
+     */
+    internal var adminSession: AdminSession? = null
+
+    private val native by lazy { NativeSettingsSections(this) }
+
+    /** Pending file pickers / document creators, by request code. */
+    private val resultHandlers = HashMap<Int, (Intent?) -> Unit>()
+    private var nextRequestCode = 7100
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -68,6 +80,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         selected = SettingsCategory.byId(savedInstanceState?.getString(STATE_CATEGORY))
         writer = ConfigWriters.choose(app.core, pendingSession)
         readOnly = writer == null
+        adminSession = pendingSession
         pendingSession = null
         refreshSnapshots()
         texts.setConfig(config)
@@ -104,11 +117,60 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
      * Core closed the native admin window (timeout or app backgrounding). Ask for the password
      * again, then repeat the write that was refused.
      */
-    private fun reauthenticateThen(retry: () -> Unit) {
+    internal fun reauthenticateThen(retry: () -> Unit) {
         AdminGate.unlock(this, app.boot.httpPort, texts) { session ->
-            if (session != null) writer = ConfigWriters.choose(app.core, session)
+            if (session != null) {
+                writer = ConfigWriters.choose(app.core, session)
+                adminSession = session
+            }
             retry()
         }
+    }
+
+    /** Start a picker; [onResult] gets the result data, or null when cancelled. */
+    internal fun launchForResult(intent: Intent, onResult: (Intent?) -> Unit) {
+        val code = nextRequestCode++
+        resultHandlers[code] = onResult
+        try {
+            startActivityForResult(intent, code)
+        } catch (e: android.content.ActivityNotFoundException) {
+            resultHandlers.remove(code)
+            toast(label("nset.no_picker"))
+        }
+    }
+
+    @Deprecated("Activity result API is unavailable on API 19 without AndroidX")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        val handler = resultHandlers.remove(requestCode)
+        if (handler == null) {
+            @Suppress("DEPRECATION")
+            super.onActivityResult(requestCode, resultCode, data)
+            return
+        }
+        handler(if (resultCode == RESULT_OK) data else null)
+    }
+
+    /**
+     * Run an admin-gated Core call off the main thread. A refusal because the native admin window
+     * closed asks for the password again and repeats the call.
+     */
+    internal fun coreCall(work: () -> JSONObject?, done: (JSONObject?) -> Unit) {
+        Thread({
+            val result = try { work() } catch (e: Exception) {
+                ShellLog.ignored("SettingsActivity", e)
+                null
+            }
+            ui.post {
+                if (isFinishing) return@post
+                val error = result?.optString("err").orEmpty()
+                    .ifEmpty { result?.optString("error_code").orEmpty() }
+                if (error == ConfigWriters.ERR_ADMIN_REQUIRED) {
+                    reauthenticateThen { coreCall(work, done) }
+                    return@post
+                }
+                done(result)
+            }
+        }, "doorbell-settings-core").apply { isDaemon = true }.start()
     }
 
     override fun onUiEvent(ev: JSONObject) {
@@ -126,7 +188,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
 
     override fun onTts(text: String, lang: String) {}
 
-    private fun refreshSnapshots() {
+    internal fun refreshSnapshots() {
         config = if (app.coreOk) app.core.config() else null
         status = if (app.coreOk) app.core.status() else null
         pairing = if (app.coreOk) app.core.pairingInfo() else null
@@ -273,7 +335,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         render()
     }
 
-    private fun render() {
+    internal fun render() {
         renderCategoryList()
         val category = selected
         listView.removeAllViews()
@@ -298,7 +360,8 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         val role = app.boot.role
         return SettingsSearch.filter(query) { category ->
             listOf(label(category.titleKey)) +
-                SettingsModel.specs(category, role).map { label(it.titleKey) }
+                SettingsModel.specs(category, role).map { label(it.titleKey) } +
+                native.searchLabels(category)
         }
     }
 
@@ -389,7 +452,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
      * A destructive or security action (guidelines "Settings"): a full-width button in the
      * negative role with its consequence written under it; the caller confirms before acting.
      */
-    private fun destructiveRow(title: String, note: String, onClick: () -> Unit): View =
+    internal fun destructiveRow(title: String, note: String, onClick: () -> Unit): View =
         LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(UiKit.actionButton(this@SettingsActivity, title, roles, ActionRole.NEGATIVE) {
@@ -411,30 +474,45 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             SettingsCategory.SOUND -> {
                 sectionVolume()
                 specSection(category)
+                native.soundLibrary()
             }
             SettingsCategory.DISPLAY -> {
                 specSection(category)
                 sectionAppearance()
+                native.wording()
             }
             SettingsCategory.CALLS -> {
                 specSection(category)
                 sectionQuickReplies()
-                sectionPurposes()
+                native.purposes()
             }
-            SettingsCategory.DOORS -> sectionDoors()
+            SettingsCategory.DOORS -> {
+                sectionDoors()
+                native.buildings()
+                native.noticePresets()
+                native.mediaSources()
+            }
             SettingsCategory.EMERGENCY -> specSection(category)
-            SettingsCategory.NOTIFICATIONS -> sectionRules()
+            SettingsCategory.NOTIFICATIONS -> {
+                native.rules()
+                native.quietHours()
+                native.households()
+                native.telegram()
+                native.webPush()
+                native.mqtt()
+            }
             SettingsCategory.TIME -> sectionTime()
             SettingsCategory.SIP -> {
-                val card = specSection(category)
-                card.row(webOnlyRow(
-                    texts.t("settings.item_sip_password", R.string.settings_item_sip_password),
-                    texts.t("settings.web_only_secrets", R.string.settings_web_only_secrets),
-                ))
+                native.sipExtras(specSection(category))
+                native.dtmf()
+                native.webrtc()
             }
             SettingsCategory.NETWORK -> sectionNetwork()
             SettingsCategory.CLUSTER -> {
                 sectionCluster()
+                native.devices()
+                native.panels()
+                native.transfer()
                 sectionHistory()
             }
             SettingsCategory.ABOUT -> {
@@ -445,21 +523,21 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     /** Text for a catalogue key, through the generated Android resource of the same name. */
-    private fun label(key: String, vararg args: Any): String {
+    internal fun label(key: String, vararg args: Any): String {
         val id = resources.getIdentifier(key.replace('.', '_'), "string", packageName)
         return texts.t(key, id, *args)
     }
 
     // ---------- sections ----------
 
-    private fun section(title: String): LinearLayout {
+    internal fun section(title: String): LinearLayout {
         listView.addView(ShellUi.sectionHeading(this, palette, title), ShellUi.matchWrap())
         val card = ShellUi.card(this, palette)
         listView.addView(card, ShellUi.matchWrap())
         return card
     }
 
-    private fun LinearLayout.row(view: View) {
+    internal fun LinearLayout.row(view: View) {
         addView(view, ShellUi.matchWrap().apply {
             topMargin = if (childCount == 0) 0 else ShellUi.dp(this@SettingsActivity, 6)
         })
@@ -522,10 +600,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             "display.theme.bg_color",
             currentString("display.theme.bg_color", "#10151B"),
         ))
-        card.row(webOnlyRow(
-            texts.t("settings.background_image", R.string.settings_background_image),
-            texts.t("settings.web_only_upload", R.string.settings_web_only_upload),
-        ))
+        native.backgroundImageRow(card)
     }
 
     private fun sectionVolume() {
@@ -623,6 +698,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         if (doors.isEmpty()) {
             card.row(ShellUi.text(this, texts.t("dash.no_doors", R.string.dash_no_doors), 14f,
                                   palette.muted))
+            native.addDoorRow(card)
             return
         }
         val nowMs = clock.now().wallMs
@@ -650,79 +726,9 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             card.row(textRow(label("unlock.command"), commandKey, TextKind.UNLOCK_COMMAND,
                              SettingsModel.currentString(config, commandKey, ""),
                              label("unlock.binding_hint")))
+            native.doorExtras(card, door)
         }
-        card.row(webOnlyRow(
-            texts.t("settings.item_doors_add", R.string.settings_item_doors_add),
-            texts.t("settings.web_only_text", R.string.settings_web_only_text),
-        ))
-    }
-
-    private fun sectionPurposes() {
-        val card = section(texts.t("settings.purposes", R.string.settings_purposes))
-        // Every purpose is listed, disabled ones included: this is where the flag is turned
-        // back on, so hiding them here would make that impossible.
-        val ids = VisitPurposes.all(config)
-        if (ids.isEmpty()) {
-            card.row(ShellUi.text(this, texts.t("info.no_data", R.string.info_no_data), 14f,
-                                  palette.muted))
-        } else {
-            for (id in ids) card.row(toggleRow(
-                purposeLabel(id),
-                VisitPurposes.enabledKey(id),
-                VisitPurposes.isEnabled(config, id),
-            ))
-        }
-    }
-
-    private fun sectionRules() {
-        val card = section(texts.t("settings.rules", R.string.settings_rules))
-        val rules = app.core.dig(config, "rules") as? JSONObject
-        if (rules != null) {
-            for (id in sortedByOrder(rules)) {
-                val rule = rules.optJSONObject(id)
-                val name = rule?.optString("name").orEmpty().ifEmpty { id }
-                card.row(toggleRow(
-                    name, "rules.$id.enabled", rule?.optBoolean("enabled", true) ?: true,
-                    ruleSummary(rule),
-                ))
-            }
-        }
-        val quiet = app.core.dig(config, "notify.quiet_hours") as? JSONObject
-        val quietFrom = quiet?.optString("from").orEmpty()
-        val quietTo = quiet?.optString("to").orEmpty()
-        val unset = texts.t("settings.value_unset", R.string.settings_value_unset)
-        card.row(ShellUi.text(this, texts.t("settings.quiet_hours", R.string.settings_quiet_hours),
-                              14f, palette.muted, bold = true))
-        card.row(timeRow(label("settings.item_quiet_from"), "notify.quiet_hours",
-                         quietFrom.ifEmpty { unset }) { picked ->
-            SettingsModel.quietHoursJson(picked, quietTo.ifEmpty { picked })
-                ?.let { listOf(ConfigOp.Set("notify.quiet_hours", it)) }
-        })
-        card.row(timeRow(label("settings.item_quiet_to"), "notify.quiet_hours",
-                         quietTo.ifEmpty { unset }) { picked ->
-            SettingsModel.quietHoursJson(quietFrom.ifEmpty { picked }, picked)
-                ?.let { listOf(ConfigOp.Set("notify.quiet_hours", it)) }
-        })
-        if (quiet != null) card.row(ShellUi.row(this, palette, label("settings.item_quiet_clear"),
-                                                enabled = !readOnly) {
-            writeOps(listOf(ConfigOp.Delete("notify.quiet_hours")))
-        })
-        for ((label, key) in listOf(
-            "Telegram" to "notify.telegram.token_ref",
-            "Web Push" to "notify.web_push.vapid_public",
-        )) {
-            val configured = app.core.dig(config, key)?.toString().orEmpty().isNotEmpty()
-            card.row(ShellUi.row(
-                this, palette, label,
-                if (configured) texts.t("admin.configured", R.string.admin_configured)
-                else texts.t("settings.value_unset", R.string.settings_value_unset),
-                texts.t("settings.web_only_secrets", R.string.settings_web_only_secrets),
-            ) { openAdminPage() })
-        }
-        card.row(webOnlyRow(
-            texts.t("admin.rules", R.string.admin_rules),
-            texts.t("settings.web_only_rule_actions", R.string.settings_web_only_rule_actions),
-        ))
+        native.addDoorRow(card)
     }
 
     private fun sectionCluster() {
@@ -753,7 +759,6 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
                 card.row(ShellUi.row(this, palette, name, detail))
             }
         }
-        sectionPanelsLink(card)
         sectionClusterSecurity(card)
         card.row(ShellUi.row(this, palette, label("settings.item_password_change"),
                              enabled = !readOnly) { changePassword() })
@@ -854,13 +859,6 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             }
             .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
             .show()
-    }
-
-    private fun sectionPanelsLink(card: LinearLayout) {
-        card.row(webOnlyRow(
-            texts.t("settings.item_panels", R.string.settings_item_panels),
-            texts.t("settings.item_panels_note", R.string.settings_item_panels_note),
-        ))
     }
 
     private fun sectionHistory() {
@@ -1020,7 +1018,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     /** A time picker; [ops] turns the picked "HH:MM" into the batch to write (null = invalid). */
-    private fun timeRow(
+    internal fun timeRow(
         title: String,
         key: String,
         current: String,
@@ -1038,7 +1036,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     /** Free text with per-kind validation; a blank value deletes the key so it inherits. */
-    private fun textRow(title: String, key: String, kind: TextKind, current: String,
+    internal fun textRow(title: String, key: String, kind: TextKind, current: String,
                         note: String): View =
         ShellUi.row(this, palette, title,
                     current.ifEmpty { texts.t("settings.value_unset", R.string.settings_value_unset) },
@@ -1065,7 +1063,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         }
 
     /** Three label fields (ja/en/zh) in one dialog. */
-    private fun labelDialog(
+    internal fun labelDialog(
         title: String,
         current: JSONObject?,
         extra: View? = null,
@@ -1097,7 +1095,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         builder.show()
     }
 
-    private fun localizedLabel(labels: JSONObject?, fallback: String): String =
+    internal fun localizedLabel(labels: JSONObject?, fallback: String): String =
         labels?.optString(texts.lang).orEmpty().ifEmpty { labels?.optString("ja").orEmpty() }
             .ifEmpty { fallback }
 
@@ -1110,21 +1108,21 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             val reply = replies.optJSONObject(id) ?: continue
             val labels = reply.optJSONObject("label")
             val speak = reply.optBoolean("speak", true)
+            val audio = reply.optJSONObject("audio")?.length() ?: 0
+            val detail = listOfNotNull(
+                if (speak) label("admin.qr_speak") else null,
+                if (audio > 0) label("settings.item_reply_audio") else null,
+            ).joinToString(" · ")
             card.row(ShellUi.row(
-                this, palette, localizedLabel(labels, id),
-                if (speak) label("admin.qr_speak") else "", enabled = !readOnly,
-            ) { editQuickReply(id, reply) })
+                this, palette, localizedLabel(labels, id), detail, enabled = !readOnly,
+            ) { native.quickReplyMenu(id, reply) { editQuickReply(id, reply) } })
         }
         card.row(ShellUi.row(this, palette, label("admin.add_reply"), enabled = !readOnly) {
             editQuickReply(null, null)
         })
-        card.row(webOnlyRow(
-            texts.t("settings.item_reply_audio", R.string.settings_item_reply_audio),
-            texts.t("settings.web_only_upload", R.string.settings_web_only_upload),
-        ))
     }
 
-    private fun editQuickReply(id: String?, reply: JSONObject?) {
+    internal fun editQuickReply(id: String?, reply: JSONObject?) {
         val speak = android.widget.CheckBox(this).apply {
             text = label("admin.qr_speak")
             isChecked = reply?.optBoolean("speak", true) ?: true
@@ -1144,8 +1142,11 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             }
             val target = id ?: SettingsModel.nextQuickReplyId(
                 replies?.keys()?.asSequence()?.toList().orEmpty(), System.nanoTime())
-            // Replace the whole entry so a removed language does not linger as a stale leaf.
-            writeOps(listOf(ConfigOp.Set("quick_replies.$target", json)))
+            // Replace the whole entry so a removed language does not linger as a stale leaf, but
+            // keep the per-language audio chosen in the reply's audio menu.
+            val entry = JSONObject(json)
+            reply?.optJSONObject("audio")?.let { entry.put("audio", it) }
+            writeOps(listOf(ConfigOp.Set("quick_replies.$target", entry.toString())))
         }
     }
 
@@ -1172,7 +1173,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     /** Batch write with the same admin-window handling as a single key. */
-    private fun writeOps(ops: List<ConfigOp>) {
+    internal fun writeOps(ops: List<ConfigOp>) {
         val active = writer ?: run {
             toast(texts.t("settings.offline", R.string.settings_offline))
             return
@@ -1197,9 +1198,6 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     // ---------- row builders ----------
-
-    private fun webOnlyRow(title: String, reason: String): View =
-        ShellUi.row(this, palette, title, note = reason) { openAdminPage() }
 
     /** 開錠ボタン: 自動 (follow the configured action) / 常に表示 / 表示しない. */
     private fun unlockRow(door: String, unlock: DoorUnlock): View {
@@ -1231,7 +1229,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         }
     }
 
-    private fun toggleRow(
+    internal fun toggleRow(
         title: String,
         key: String,
         value: Boolean,
@@ -1287,7 +1285,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         }
     }
 
-    private fun choiceRow(
+    internal fun choiceRow(
         title: String,
         key: String,
         options: List<String>,
@@ -1308,7 +1306,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             .show()
     }
 
-    private fun numberRow(title: String, key: String, current: Int, min: Int, max: Int): View =
+    internal fun numberRow(title: String, key: String, current: Int, min: Int, max: Int): View =
         ShellUi.row(this, palette, title, current.toString(), enabled = !readOnly) {
             val field = EditText(this).apply {
                 inputType = InputType.TYPE_CLASS_NUMBER
@@ -1524,7 +1522,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
 
     // ---------- writes ----------
 
-    private fun write(key: String, valueJson: String, done: (Boolean) -> Unit) {
+    internal fun write(key: String, valueJson: String, done: (Boolean) -> Unit) {
         val active = writer
         if (active == null) {
             toast(texts.t("settings.offline", R.string.settings_offline))
@@ -1562,7 +1560,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         }, "doorbell-config-write").apply { isDaemon = true }.start()
     }
 
-    private fun deleteKey(key: String) {
+    internal fun deleteKey(key: String) {
         val active = writer ?: run {
             toast(texts.t("settings.offline", R.string.settings_offline))
             return
@@ -1615,24 +1613,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             .show()
     }
 
-    private fun openAdminPage() {
-        val link = AdminLinks.resolve(status, app.boot.httpPort)
-        AlertDialog.Builder(this)
-            .setTitle(texts.t("web_admin.open", R.string.web_admin_open))
-            .setView(
-                AdminLinks.view(
-                    this, palette, app.core, link,
-                    texts.t("web_admin.scan_hint", R.string.web_admin_scan_hint), 140,
-                ).apply {
-                    val pad = ShellUi.dp(this@SettingsActivity, 16)
-                    setPadding(pad, pad, pad, pad)
-                },
-            )
-            .setPositiveButton(texts.t("admin.menu_close", R.string.admin_menu_close), null)
-            .show()
-    }
-
-    private fun currentString(key: String, fallback: String): String =
+    internal fun currentString(key: String, fallback: String): String =
         app.core.dig(config, key)?.toString()?.takeIf { it.isNotEmpty() && it != "null" }
             ?: fallback
 
@@ -1642,22 +1623,22 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         else -> 80
     }
 
-    private fun doorIds(): List<String> {
+    internal fun doorIds(): List<String> {
         val doors = app.core.dig(config, "doors") as? JSONObject ?: return emptyList()
         return doors.keys().asSequence().sorted().toList()
     }
 
-    private fun doorLabel(door: String): String {
+    internal fun doorLabel(door: String): String {
         if (door.isEmpty()) return ""
         val value = app.core.dig(config, "doors.$door.label.${texts.lang}")
             ?: app.core.dig(config, "doors.$door.label.ja")
         return value?.toString() ?: door
     }
 
-    private fun purposeLabel(purpose: String): String =
+    internal fun purposeLabel(purpose: String): String =
         VisitPurposes.label(config, purpose, texts.lang)
 
-    private fun roleLabel(role: String): String = when (role) {
+    internal fun roleLabel(role: String): String = when (role) {
         "door_station" -> texts.t("pair.role_door_station", R.string.pair_role_door_station)
         "indoor_panel" -> texts.t("pair.role_indoor_panel", R.string.pair_role_indoor_panel)
         else -> role
@@ -1669,14 +1650,6 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         "light" -> texts.t("theme.appearance_light", R.string.theme_appearance_light)
         "dark" -> texts.t("theme.appearance_dark", R.string.theme_appearance_dark)
         else -> texts.t("theme.appearance_auto_system", R.string.theme_appearance_auto_system)
-    }
-
-    private fun ruleSummary(rule: JSONObject?): String {
-        if (rule == null) return ""
-        val parts = ArrayList<String>(2)
-        rule.optString("when").takeIf { it.isNotEmpty() }?.let(parts::add)
-        rule.optJSONArray("actions")?.let { parts.add("${it.length()}") }
-        return parts.joinToString(" · ")
     }
 
     private fun sortedByOrder(value: JSONObject): List<String> {
@@ -1691,7 +1664,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         ""
     }
 
-    private fun toast(message: String) {
+    internal fun toast(message: String) {
         android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
     }
 

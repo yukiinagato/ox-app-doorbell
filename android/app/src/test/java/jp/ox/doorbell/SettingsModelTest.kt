@@ -150,13 +150,6 @@ class SettingsModelTest {
     }
 
     @Test
-    fun quietHoursAreOneObject() {
-        assertEquals(JSONObject().put("from", "22:00").put("to", "07:00").toString(),
-                     SettingsModel.quietHoursJson("22:00", "7:00"))
-        assertNull(SettingsModel.quietHoursJson("25:00", "07:00"))
-    }
-
-    @Test
     fun newPasswordsFollowTheV3Policy() {
         assertEquals(PasswordCheck.TOO_SHORT, SettingsModel.checkNewPassword("1234567", "1234567"))
         assertEquals(PasswordCheck.MISMATCH, SettingsModel.checkNewPassword("12345678", "12345679"))
@@ -181,7 +174,7 @@ class SettingsModelTest {
     fun batchDocumentsCarrySetsAndDeletes() {
         val doc = JSONObject(ConfigOps.buildOps(listOf(
             ConfigOp.Set("display.brightness", "40"),
-            ConfigOp.Delete("notify.quiet_hours"),
+            ConfigOp.Delete("quiet_hours.default"),
         )))
         val ops = doc.getJSONArray("ops")
         assertEquals("set", ops.getJSONObject(0).getString("op"))

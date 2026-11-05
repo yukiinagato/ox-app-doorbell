@@ -321,13 +321,6 @@ internal object SettingsModel {
         return max + 10
     }
 
-    /** notify.quiet_hours as one object; null clears it. */
-    fun quietHoursJson(from: String, to: String): String? {
-        val start = normalizeTime(from) ?: return null
-        val end = normalizeTime(to) ?: return null
-        return JSONObject().put("from", start).put("to", end).toString()
-    }
-
     /**
      * Two panes like Android Settings on tablets: at least 600 dp in the smallest width, or a
      * small tablet (smallest width 480 dp and up) held in landscape at least 720 dp wide. A phone
