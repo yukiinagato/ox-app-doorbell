@@ -228,6 +228,7 @@
     try {
       xhr.open("POST", "/api/panel/ui-report", true);
       xhr.setRequestHeader("Content-Type", "application/json");
+      if (panelCsrf) xhr.setRequestHeader("X-Doorbell-CSRF", panelCsrf);
       xhr.onload = function () { finish(xhr.status >= 200 && xhr.status < 300); };
       xhr.onerror = function () { finish(false); };
       xhr.ontimeout = function () { finish(false); };
@@ -566,19 +567,97 @@
     root.history.replaceState(null, "", root.location.pathname + search + hash);
   }
 
+  // Core requires X-Doorbell-CSRF on every mutation of a cookie-backed panel session. The token
+  // is learned from /api/panel/session (POST on sign-in, GET for an existing session) and is
+  // shared by every page helper so no mutation path can forget it.
+  var panelCsrf = "";
+  function rememberPanelCsrf(token) {
+    panelCsrf = /^[0-9a-f]{32}$/i.test(String(token || "")) ? String(token) : "";
+    return panelCsrf;
+  }
+  function panelCsrfToken() { return panelCsrf; }
+
+  function parseJson(text) {
+    if (!text) return null;
+    try { return JSON.parse(text); } catch (ignored) { return null; }
+  }
+
+  function rawPanelRequest(method, path, body, headers, cb) {
+    var xhr;
+    try {
+      xhr = new root.XMLHttpRequest();
+      xhr.open(method, path, true);
+      for (var name in headers) if (own(headers, name)) xhr.setRequestHeader(name, headers[name]);
+    } catch (error) { cb(0, null); return; }
+    var done = false;
+    xhr.onreadystatechange = function () {
+      if (xhr.readyState !== 4 || done) return;
+      done = true;
+      cb(xhr.status, parseJson(xhr.responseText));
+    };
+    try { xhr.send(body === undefined ? null : body); }
+    catch (sendError) { if (!done) { done = true; cb(0, null); } }
+  }
+
+  function refreshPanelCsrf(cb) {
+    rawPanelRequest("GET", "/api/panel/session", null, {}, function (status, json) {
+      rememberPanelCsrf(status === 200 && json ? json.csrf_token : "");
+      cb(panelCsrf);
+    });
+  }
+
+  // panelRequest(method, path, body, cb): body is a form string, a JSON-able object, or null.
+  // A mutation is sent with the session CSRF token. A 403 is retried once with a fresh token:
+  // Core rejects a missing or stale token before the mutation executes, so the retry cannot
+  // duplicate an effect.
+  function panelRequest(method, path, body, cb) {
+    method = String(method || "GET").toUpperCase();
+    cb = cb || function () {};
+    var headers = {}, payload = null;
+    if (typeof body === "string") {
+      headers["Content-Type"] = "application/x-www-form-urlencoded";
+      payload = body;
+    } else if (body !== null && body !== undefined) {
+      headers["Content-Type"] = "application/json";
+      payload = JSON.stringify(body);
+    }
+    if (method === "GET" || method === "HEAD") {
+      rawPanelRequest(method, path, payload, headers, cb);
+      return;
+    }
+    function send(retried) {
+      var sendHeaders = {};
+      for (var name in headers) if (own(headers, name)) sendHeaders[name] = headers[name];
+      if (panelCsrf) sendHeaders["X-Doorbell-CSRF"] = panelCsrf;
+      rawPanelRequest(method, path, payload, sendHeaders, function (status, json) {
+        if (status === 403 && !retried) {
+          refreshPanelCsrf(function (token) {
+            if (token) send(true); else cb(status, json);
+          });
+          return;
+        }
+        cb(status, json);
+      });
+    }
+    if (panelCsrf) send(false);
+    else refreshPanelCsrf(function () { send(true); });
+  }
+
   function establishSession(cb, explicitCredential) {
     var credential = explicitCredential || locationCredential();
-    if (!credential) { cb({ ok: true, existing: true }); return; }
-    var xhr = new root.XMLHttpRequest();
-    xhr.open("POST", "/api/panel/session", true);
-    xhr.setRequestHeader("Content-Type", "application/json");
-    xhr.onreadystatechange = function () {
-      if (xhr.readyState !== 4) return;
-      var ok = xhr.status === 200;
-      if (ok) stripCredentialLocation();
-      cb({ ok: ok, status: xhr.status, credential: ok ? credential : "" });
-    };
-    xhr.send(JSON.stringify({ credential: credential }));
+    if (!credential) {
+      refreshPanelCsrf(function () { cb({ ok: true, existing: true }); });
+      return;
+    }
+    rawPanelRequest("POST", "/api/panel/session", JSON.stringify({ credential: credential }),
+      { "Content-Type": "application/json" }, function (status, json) {
+        var ok = status === 200;
+        if (ok) {
+          stripCredentialLocation();
+          rememberPanelCsrf(json && json.csrf_token);
+        }
+        cb({ ok: ok, status: status, credential: ok ? credential : "" });
+      });
   }
 
   function createSosOperationController(onChange) {
@@ -720,7 +799,7 @@
   function installEmergencyOverlay(options) {
     options = options || {};
     var doc = root.document, overlay = null, title = null, detail = null;
-    var trigger = null, triggerLabel = null, triggerHint = null;
+    var trigger = null, triggerLabel = null, triggerHint = null, sosWhen = null;
     var current = { known: false, active: false, source: "none" };
     var expiryTimer = null, expiryKey = "", expired = {}, alarm = null;
     var operationBox = null, operationText = null, operationReason = null, operationHelp = null;
@@ -734,6 +813,7 @@
         ".dbEmergencyOverlay .dbEmergencyInner{position:absolute;left:5%;right:5%;top:18%;}" +
         ".dbEmergencyOverlay h2{font-size:64px;line-height:1.2;margin:0 0 24px;}" +
         ".dbEmergencyOverlay p{font-size:26px;line-height:1.5;margin:8px;}" +
+        ".dbEmergencyOverlay .dbSosWhen{font-size:22px;opacity:.9;margin:16px 0 0;}" +
         ".dbSosTrigger{position:fixed;right:18px;bottom:18px;z-index:2147483645;" +
         "min-width:88px;min-height:88px;padding:10px;border:2px solid #fff;border-radius:44px;" +
         "background:#8f1010;color:#fff;font-weight:bold;line-height:1.1;touch-action:none;}" +
@@ -762,6 +842,10 @@
       title.appendChild(doc.createTextNode(options.title || "SOS"));
       detail.appendChild(doc.createTextNode(options.detail || ""));
       clearInstruction.appendChild(doc.createTextNode(options.clearInstruction || ""));
+      // Source and time of the active SOS (UI guidelines: SOS overlay).
+      sosWhen = doc.createElement("div");
+      sosWhen.className = "dbSosWhen";
+      (overlay.firstChild || overlay).appendChild(sosWhen);
       doc.body.appendChild(overlay);
 
       trigger = doc.createElement("button");
@@ -854,6 +938,16 @@
       if (overlay) {
         overlay.style.display = current.presented ? "block" : "none";
         paintPalette(presentation, rawFallback);
+        if (sosWhen) {
+          var parts = [];
+          if (current.device) parts.push(String(current.device));
+          if (current.wall_ms > 0) {
+            var at = new Date(current.wall_ms);
+            parts.push((at.getHours() < 10 ? "0" : "") + at.getHours() + ":" +
+                       (at.getMinutes() < 10 ? "0" : "") + at.getMinutes());
+          }
+          sosWhen.textContent = current.active ? parts.join(" \u00B7 ") : "";
+        }
       }
       if (trigger) trigger.disabled = current.active || !!(operation && operation.state().busy);
       if (current.active && triggerHold) cancelTriggerHold();
@@ -1038,13 +1132,31 @@
   }
   function apiUnavailable(resp) { return resp.status === 404 || resp.status === 501; }
 
+  function mutationHeaders() {
+    var headers = { "Content-Type": "application/json" };
+    if (panelCsrf) headers["X-Doorbell-CSRF"] = panelCsrf;
+    return headers;
+  }
+
+  // The service worker re-enrolls a rotated subscription on its own (pushsubscriptionchange), so
+  // it needs the page and group this browser last registered.
+  function rememberPushEnrollment(page, group) {
+    var sw = root.navigator && root.navigator.serviceWorker;
+    if (!sw || !sw.ready || typeof sw.ready.then !== "function") return;
+    sw.ready.then(function (reg) {
+      var target = reg && (reg.active || reg.waiting || reg.installing);
+      if (target && target.postMessage)
+        target.postMessage({ t: "doorbell-push-enrollment", page: page, group: group });
+    }).catch(function () {});
+  }
+
   function registerPushSubscription(sub, page) {
     var payload = { subscription: sub.toJSON ? sub.toJSON() : sub,
                     page: page || (root.location && root.location.pathname) || "/panel/monitor",
                     group: webGroup() };
     return root.fetch("/api/panel/push-subscription", {
       method: "POST", credentials: "same-origin",
-      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload)
+      headers: mutationHeaders(), body: JSON.stringify(payload)
     }).then(responseJson).then(function (result) {
       if (!result.response.ok || result.json.ok !== true) {
         if (apiUnavailable(result.response))
@@ -1052,6 +1164,7 @@
         throw pushFailure("panel.push_failed",
           result.json.err || ("subscription: HTTP " + result.response.status), false);
       }
+      rememberPushEnrollment(payload.page, payload.group);
       return sub;
     });
   }
@@ -1144,7 +1257,7 @@
         pushStatus("panel.push_disabled", { ok: true, subscribed: false }));
       return root.fetch("/api/panel/push-subscription", {
         method: "DELETE", credentials: "same-origin",
-        headers: { "Content-Type": "application/json" },
+        headers: mutationHeaders(),
         body: JSON.stringify({ endpoint: sub.endpoint })
       }).then(responseJson).then(function (result) {
         if (!result.response.ok || result.json.ok !== true) {
@@ -1168,7 +1281,8 @@
   return { emergencyState: emergencyState, activePage: activePage, panelUrl: panelUrl,
            requestWithDeadline: requestWithDeadline, createRequestLane: createRequestLane,
            webGroup: webGroup, panelStateUrl: panelStateUrl,
-           establishSession: establishSession,
+           establishSession: establishSession, panelRequest: panelRequest,
+           panelCsrfToken: panelCsrfToken, refreshPanelCsrf: refreshPanelCsrf,
            installEmergencyOverlay: installEmergencyOverlay, pushCapability: pushCapability,
            pushSubscriptionState: pushSubscriptionState, subscribePush: subscribePush,
            unsubscribePush: unsubscribePush,

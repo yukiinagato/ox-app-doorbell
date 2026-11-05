@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title></title>
 
 <style>
@@ -53,39 +53,60 @@
   #callActions { padding: 14px; }
   #replyActions { display: inline-flex; flex-wrap: wrap; justify-content: center; }
 </style>
+<link rel="stylesheet" href="/panel/panel.css">
 </head>
 <body>
 <div id="soundBand"></div>
 <div id="offlineBand" data-semantic-id="status.offline"></div>
-<div id="pushBar"><button id="pushBtn" type="button"></button>
-  <span id="pushStatus"></span></div>
-<h1 id="title" data-semantic-id="ring.title"><span id="titleText"></span><span
-  id="missedBadge"></span></h1>
-<div id="snapGrid"></div>
-<div id="evCard">
-  <div id="evHead"><h2 id="historyTitle"></h2>
-    <button id="markSeen" type="button"></button></div>
-  <table>
-    <thead><tr><th id="eventTime"></th><th id="eventOutcome"></th><th id="eventDoor"></th>
-      <th id="eventDetail"></th></tr></thead>
-    <tbody id="evBody"></tbody>
-  </table>
-  <div class="evEmpty" id="evEmpty"></div>
+<header id="dashHeader">
+  <h1 id="title" data-semantic-id="ring.title"><span id="titleText"></span></h1>
+  <div id="statusChips" role="status">
+    <span id="clock" class="chip clock"></span>
+    <span id="missedBadge" class="chip negative"></span>
+    <span id="offlineChip" class="chip warning"></span>
+  </div>
+  <div id="pushBar"><button id="pushBtn" type="button"></button>
+    <span id="pushStatus"></span></div>
+</header>
+<nav id="dashTabs" role="tablist">
+  <button type="button" role="tab" id="tabDoors" data-pane="doors" aria-selected="true"></button>
+  <button type="button" role="tab" id="tabHistory" data-pane="history" aria-selected="false"></button>
+</nav>
+<div id="dashBody" data-pane="doors">
+  <section id="doorsPane" aria-labelledby="tabDoors"><div id="snapGrid"></div></section>
+  <section id="historyPane" aria-labelledby="tabHistory">
+    <div id="evCard">
+      <div id="evHead"><h2 id="historyTitle"></h2>
+        <button id="markSeen" type="button"></button></div>
+      <div id="evBody"></div>
+      <div class="evEmpty" id="evEmpty"></div>
+    </div>
+  </section>
 </div>
-<div id="callView">
-  <div class="msg" id="callMsg" data-semantic-id="ring.title"></div>
-  <img id="callImg" alt="">
-
-  <video id="callVideo" style="display:none" muted playsinline autoplay></video>
-  <div id="callActions">
-    <button id="answerBtn" data-semantic-id="ring.action" type="button"></button>
-    <span id="replyActions"></span>
-    <button id="monitorClose" data-semantic-id="monitor.close" type="button"></button>
+<div id="callView" role="dialog" aria-modal="true" aria-labelledby="callMsg">
+  <div class="callMedia">
+    <img id="callImg" alt="">
+    <video id="callVideo" style="display:none" muted playsinline autoplay></video>
+  </div>
+  <div class="callSide">
+    <div class="msg" id="callMsg" data-semantic-id="ring.title"></div>
+    <div id="callBadges"></div>
+    <div id="callActions">
+      <button id="answerBtn" class="positive" data-semantic-id="ring.action" type="button"></button>
+      <button id="replyBtn" type="button" aria-expanded="false" aria-controls="replySheet"></button>
+      <button id="monitorClose" data-semantic-id="monitor.close" type="button"></button>
+    </div>
+  </div>
+  <div id="replySheet" role="dialog" aria-labelledby="replyTitle" hidden>
+    <div class="sheetHead"><h2 id="replyTitle"></h2>
+      <button id="replySheetClose" type="button"></button></div>
+    <div id="replyActions"></div>
   </div>
 </div>
 
 <script src="/panel/playback.js"></script>
 <script src="/panel/runtime.js"></script>
+<script src="/panel/panel-common.js"></script>
 <script>
 (function () {
   "use strict";
@@ -93,16 +114,9 @@
   var SNAP_MS = 5000;
   var OFFLINE_AFTER = 5;
 
+  var C = DoorbellPanelCommon, R = DoorbellPanelRuntime;
   function $(id) { return document.getElementById(id); }
-  function esc(s) {
-    var d = document.createElement("div");
-    d.appendChild(document.createTextNode(s == null ? "" : String(s)));
-    return d.innerHTML;
-  }
-  function qs(name) {
-    var m = window.location.search.match(new RegExp("[?&]" + name + "=([^&]*)"));
-    return m ? decodeURIComponent(m[1].replace(/\+/g, "%20")) : "";
-  }
+  var esc = C.esc, qs = C.qs, normalizeLang = C.normalizeLang;
   function fmtTime(ms) {
     if (!ms) return "-";
     var d = new Date(ms);
@@ -112,7 +126,6 @@
   }
 
   var TOKEN = qs("k");
-  var MOCK = qs("mock") === "1";
   var QUERY_LANG = normalizeLang(qs("lang"));
   var emergencyOverlay = null;
 
@@ -120,55 +133,14 @@
 
   var gridStreams = {};  // door id → {stop}
   var callStream = null;
-  var I18N = {};
   var LANG = "";
-  var LOADING_LANG = "";
-  var LOCALE_WAITERS = [];
-  var LOCALE_SERIAL = 0;
+  var catalog = C.createCatalog(R.panelRequest, function (lang) { LANG = lang; });
   var pushSubscribed = false;
   var pushAction = "";
   var pushPaintState = null;
 
-  function normalizeLang(value) {
-    value = String(value || "").toLowerCase().split("-")[0];
-    return value === "ja" || value === "en" || value === "zh" ? value : "";
-  }
-  function t(key, values) {
-    var value = typeof I18N[key] === "string" ? I18N[key] : key;
-    values = values || {};
-    for (var name in values) if (Object.prototype.hasOwnProperty.call(values, name))
-      value = value.split("{" + name + "}").join(String(values[name]));
-    return value;
-  }
-  function finishLanguage(lang, catalog) {
-    LANG = lang;
-    I18N = catalog || {};
-    LOADING_LANG = "";
-    document.documentElement.setAttribute("lang", lang);
-    var waiters = LOCALE_WAITERS;
-    LOCALE_WAITERS = [];
-    for (var i = 0; i < waiters.length; i++) waiters[i]();
-  }
-  function loadLanguage(requested, cb) {
-    var lang = normalizeLang(requested) || "ja";
-    if (cb) LOCALE_WAITERS.push(cb);
-    if (LANG === lang && !LOADING_LANG) {
-      var ready = LOCALE_WAITERS;
-      LOCALE_WAITERS = [];
-      for (var i = 0; i < ready.length; i++) ready[i]();
-      return;
-    }
-    if (LOADING_LANG === lang) return;
-    LOADING_LANG = lang;
-    var serial = ++LOCALE_SERIAL;
-    xhr("GET", "/locale/" + lang + ".json", null, function (st, j) {
-      if (serial !== LOCALE_SERIAL) return;
-      if (st === 200 && j) { finishLanguage(lang, j); return; }
-      LOADING_LANG = "";
-      if (lang !== "en") { loadLanguage("en"); return; }
-      finishLanguage("en", {});
-    });
-  }
+  function t(key, values) { return catalog.t(key, values); }
+  function loadLanguage(requested, cb) { catalog.load(requested, cb); }
   function languageForState(state) {
     if (QUERY_LANG) return QUERY_LANG;
     var doors = (state && state.doors) || [], i, lang;
@@ -182,26 +154,7 @@
     }
     return "ja";
   }
-  function applyEmergencyI18n() {
-    if (emergencyOverlay && emergencyOverlay.refreshText) emergencyOverlay.refreshText();
-    var overlays = document.getElementsByClassName("dbEmergencyOverlay");
-    if (overlays.length) {
-      var headings = overlays[0].getElementsByTagName("h2");
-      var paragraphs = overlays[0].getElementsByTagName("p");
-      if (headings.length) headings[0].innerHTML = esc(t("emergency.title"));
-      if (paragraphs.length) paragraphs[0].innerHTML = esc(t("emergency.active_detail"));
-      if (paragraphs.length > 1)
-        paragraphs[1].innerHTML = esc(t("emergency.clear_instruction"));
-    }
-    var triggers = document.getElementsByClassName("dbSosTrigger");
-    if (triggers.length) {
-      var spans = triggers[0].getElementsByTagName("span");
-      triggers[0].setAttribute("aria-label", t("emergency.button"));
-      if (spans.length) spans[0].innerHTML = esc(t("emergency.button"));
-      if (spans.length > 1)
-        spans[1].innerHTML = esc(t("emergency.hold_hint", { sec: "2" }));
-    }
-  }
+  function applyEmergencyI18n() { C.applyEmergencyText(emergencyOverlay, t); }
   function installEmergency() {
     emergencyOverlay = DoorbellPanelRuntime.installEmergencyOverlay({
       translate: t,
@@ -219,12 +172,14 @@
     $("soundBand").innerHTML = esc(t("panel.tap_sound"));
     $("offlineBand").innerHTML = esc(t("panel.offline"));
     $("answerBtn").innerHTML = esc(t("ring.answer"));
-    $("monitorClose").innerHTML = esc(t("monitor.close"));
     $("historyTitle").innerHTML = esc(t("history.title"));
     $("markSeen").innerHTML = esc(t("history.mark_seen"));
-    $("eventTime").innerHTML = esc(t("panel.event_time"));
-    $("eventOutcome").innerHTML = esc(t("panel.event_type"));
-    $("eventDoor").innerHTML = esc(t("panel.event_door"));
+    C.setText($("tabDoors"), t("dash.doors"));
+    C.setText($("tabHistory"), t("history.title"));
+    C.setText($("replyBtn"), t("ring.quick_replies"));
+    C.setText($("replyTitle"), t("reply.choose"));
+    C.setText($("replySheetClose"), t("monitor.close"));
+    C.setText($("monitorClose"), t("ring.ignore"));
     renderCallLog();
     $("pushBtn").innerHTML = esc(pushSubscribed ? t("panel.push_disable") :
       t("panel.push_enable"));
@@ -251,51 +206,15 @@
     if (callStream) { try { callStream.stop(); } catch (e) {} callStream = null; }
   }
 
-  function xhr(method, path, formBody, cb) {
-    var x = new XMLHttpRequest();
-    x.open(method, path, true);
-    if (formBody) x.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-    x.onreadystatechange = function () {
-      if (x.readyState !== 4) return;
-      var j = null;
-      try { j = JSON.parse(x.responseText); } catch (e) {}
-      cb(x.status, j);
-    };
-    try { x.send(formBody || null); } catch (e2) { cb(0, null); }
-  }
-
-
-  var mockTick = 0;
-  function mockState() {
-    mockTick++;
-    var calling = mockTick > 8 && mockTick < 20;
-    return {
-      doors: [
-        { id: "d_front", label: "Front door", calling: calling },
-        { id: "d_back", label: "Back door", calling: false }
-      ],
-      events: [
-        { type: "press", door: "Front door", wall_ms: 1756300000000 },
-        { type: "motion", door: "Back door", wall_ms: 1756290000000 }
-      ],
-      reply: null,
-      quick_replies: [
-        { id: "soon", label: "Coming now" },
-        { id: "leave", label: "Please leave it at the door" }
-      ],
-      server_ts: mockTick
-    };
-  }
-
-  var GRAY = "data:image/gif;base64,R0lGODlhAQABAIAAADg4OAAAACwAAAAAAQABAAACAkQBADs=";
   function snapshotUrl(doorId, ts) {
-    if (MOCK) return GRAY;
     return "/snapshot-proxy?door=" + encodeURIComponent(doorId) +
            (LIVE ? "&live=1" : "&t=" + ts);
   }
-  function fetchState(cb) {
-    if (MOCK) { cb(200, mockState()); return; }
-    xhr("GET", DoorbellPanelRuntime.panelStateUrl(), null, cb);
+  function fetchState(cb) { R.panelRequest("GET", R.panelStateUrl(), null, cb); }
+  // Browsers only fetch same-origin, session-authenticated media (protocol v3). A peer's own
+  // origin is never used directly: it would be cross-origin and, under HTTPS, mixed content.
+  function liveMjpegUrl(d) {
+    return DoorbellPlayback.peerMediaUrl(d, "mjpeg", window.location) || snapshotUrl(d.id, +new Date());
   }
 
 
@@ -333,22 +252,97 @@
     grid.innerHTML = "";
     for (var k = 0; k < doors.length; k++) {
       var d = doors[k];
+      // A door tile: preview, name, state chip and last activity. Tapping it opens live view.
       var card = document.createElement("div");
       card.className = "snapCard";
-      card.innerHTML = "<div class='lbl'>" + esc(d.label) + "</div>";
+      card.setAttribute("data-door", d.id);
+      card.setAttribute("role", "button");
+      card.setAttribute("tabindex", "0");
+      card.onclick = (function (doorId) {
+        return function () { openLive(doorId); };
+      })(d.id);
+      card.onkeydown = (function (doorId) {
+        return function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLive(doorId); } };
+      })(d.id);
+      var media = document.createElement("div");
+      media.className = "tileMedia";
       var v = makeVideo();
       var img = document.createElement("img");
       img.alt = "";
-      if (!LIVE && !d.stream_mjpeg) img.setAttribute("data-snapshot-door", d.id);
-      card.appendChild(img);
-      card.appendChild(v);
-      var fallback = d.stream_mjpeg || snapshotUrl(d.id, +new Date());
+      var live = DoorbellPlayback.peerMediaUrl(d, "mjpeg", window.location);
+      if (!LIVE && !live) img.setAttribute("data-snapshot-door", d.id);
+      media.appendChild(img);
+      media.appendChild(v);
+      card.appendChild(media);
+      var foot = document.createElement("div");
+      foot.className = "tileFoot";
+      var labelEl = document.createElement("div");
+      labelEl.className = "lbl";
+      C.setText(labelEl, d.label);
+      var chip = document.createElement("span");
+      chip.className = "chip state";
+      var last = document.createElement("div");
+      last.className = "tileLast";
+      foot.appendChild(labelEl); foot.appendChild(chip); foot.appendChild(last);
+      card.appendChild(foot);
+      var fallback = live || snapshotUrl(d.id, +new Date());
       gridStreams[d.id] = DoorbellPlayback.start({ profile: d.playback_profile,
         mp4: DoorbellPlayback.proxyMp4Url(d.id, TOKEN, d.stream_mp4, window.location),
         mjpeg: fallback, mjpegMode: "image", video: v, img: img });
       grid.appendChild(card);
     }
   }
+  function openLive(doorId) {
+    var url = DoorbellPanelRuntime.panelUrl("call", TOKEN, false, doorId);
+    var hashAt = url.indexOf("#"), hash = hashAt >= 0 ? url.substring(hashAt) : "";
+    var base = hashAt >= 0 ? url.substring(0, hashAt) : url;
+    window.location.href = base + (base.indexOf("?") >= 0 ? "&" : "?") +
+      "lang=" + encodeURIComponent(LANG) + hash;
+  }
+  var TILE_STATE_KEYS = { idle: "dash.state_idle", ringing: "dash.state_ringing",
+                          in_call: "dash.state_in_call", offline: "dash.tile_offline" };
+  // State chips and "last activity" change every poll; they never restart the previews.
+  function updateTiles(doors) {
+    var lastByDoor = {}, rows = callLog.rows || [], offline = 0, i;
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i] || {};
+      if (r.door && !(Number(lastByDoor[r.door]) >= Number(r.ts))) lastByDoor[r.door] = r.ts;
+    }
+    for (i = 0; i < doors.length; i++) {
+      var d = doors[i], state = C.doorTileState(d);
+      if (state === "offline") offline++;
+      var cards = $("snapGrid").children;
+      for (var c = 0; c < cards.length; c++) {
+        if (cards[c].getAttribute("data-door") !== d.id) continue;
+        cards[c].className = "snapCard is-" + state;
+        var chip = cards[c].getElementsByClassName("state")[0];
+        if (chip) { C.setText(chip, t(TILE_STATE_KEYS[state])); chip.className = "chip state " + state; }
+        var last = cards[c].getElementsByClassName("tileLast")[0];
+        if (last) C.setText(last, lastByDoor[d.id] ? t("dash.last_activity", { time: fmtTime(lastByDoor[d.id]) }) : "");
+        cards[c].setAttribute("aria-label", d.label + ", " + t(TILE_STATE_KEYS[state]));
+      }
+    }
+    var chipEl = $("offlineChip");
+    C.setText(chipEl, offline ? t("dash.offline_count", { n: offline }) : "");
+    chipEl.style.display = offline ? "" : "none";
+  }
+  // Cluster clock: the server's time, ticking locally between polls.
+  var clockSkewMs = 0;
+  function renderClock() {
+    var now = new Date(new Date().getTime() + clockSkewMs);
+    function p(n) { return n < 10 ? "0" + n : n; }
+    C.setText($("clock"), p(now.getHours()) + ":" + p(now.getMinutes()));
+  }
+  setInterval(renderClock, 15000);
+  function selectPane(pane) {
+    $("dashBody").setAttribute("data-pane", pane);
+    var tabs = $("dashTabs").getElementsByTagName("button");
+    for (var i = 0; i < tabs.length; i++)
+      tabs[i].setAttribute("aria-selected", tabs[i].getAttribute("data-pane") === pane ? "true" : "false");
+  }
+  $("tabDoors").onclick = function () { selectPane("doors"); };
+  $("tabHistory").onclick = function () { selectPane("history"); };
+
   setInterval(function () {
     if (LIVE || $("callView").style.display === "block") return;
     var imgs = $("snapGrid").getElementsByTagName("img");
@@ -363,7 +357,6 @@
   var callLog = { rows: [], unread_missed: 0, seen_hlc: "" };
   var callLogPending = false;
   var callLogTick = 0;
-  var markedSeenOnOpen = false;
   var lastEventKey = "";
   var doorLabels = {};
 
@@ -380,20 +373,45 @@
     var mm = Math.floor(total / 60), ss = total % 60;
     return t("history.duration", { mm_ss: mm + ":" + (ss < 10 ? "0" + ss : ss) });
   }
+  var OUTCOME_ICONS = { answered: "\u2713", replied: "\u21A9", missed: "!", cancelled: "\u00D7" };
+  function hhmm(ms) {
+    var d = new Date(ms);
+    function p(n) { return n < 10 ? "0" + n : n; }
+    return p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  function dayLabel(group) {
+    if (group.kind === "today") return t("history.today");
+    if (group.kind === "yesterday") return t("history.yesterday");
+    var d = new Date(group.ms);
+    return (d.getMonth() + 1) + "/" + d.getDate();
+  }
+  // Grouped by day; each row is time, door, purpose, outcome (icon + word) and a thumbnail when
+  // the call recorded one. Unread missed calls are marked.
   function renderCallLog() {
-    var rows = callLog.rows || [];
-    var html = "";
-    for (var i = 0; i < rows.length && i < 10; i++) {
-      var r = rows[i] || {};
-      var cls = r.outcome === "missed" ? " class='outMissed'" : "";
-      var detail = "";
-      if (r.answered_by) detail = t("history.answered_by", { device: r.answered_by });
-      var dur = durationLabel(r.duration_ms);
-      if (dur) detail = detail ? detail + " · " + dur : dur;
-      html += "<tr><td class='dim'>" + fmtTime(r.ts) + "</td><td" + cls + ">" +
-              esc(outcomeLabel(r.outcome)) + "</td><td>" +
-              esc(doorLabels[r.door] || r.door || "") + "</td><td class='dim'>" +
-              esc(detail) + "</td></tr>";
+    var rows = displayedRows();
+    var html = "", groups = C.groupByDay(rows, new Date().getTime() + clockSkewMs);
+    for (var g = 0; g < groups.length; g++) {
+      html += "<h3 class='hday'>" + esc(dayLabel(groups[g])) + "</h3><ul class='hlist'>";
+      for (var i = 0; i < groups[g].rows.length; i++) {
+        var r = groups[g].rows[i] || {};
+        var detail = "";
+        if (r.answered_by) detail = t("history.answered_by", { device: r.answered_by });
+        var dur = durationLabel(r.duration_ms);
+        if (dur) detail = detail ? detail + " · " + dur : dur;
+        var purpose = r.purpose ? purposeLabel(r.purpose) : "";
+        var outcome = /^(answered|replied|missed|cancelled)$/.test(r.outcome) ? r.outcome : "other";
+        var unread = outcome === "missed" && r.seen === false;
+        var thumb = /^[0-9a-f]{64}$/.test(String(r.snapshot || "")) ?
+          "<img class='hthumb' alt='' loading='lazy' src='/asset/" + r.snapshot + "'>" : "";
+        html += "<li class='hrow out-" + outcome + (unread ? " unread" : "") + "'>" +
+          "<span class='hicon' aria-hidden='true'>" + esc(OUTCOME_ICONS[outcome] || "\u2022") + "</span>" +
+          "<span class='htime'>" + esc(hhmm(r.ts)) + "</span>" +
+          "<span class='hmain'><span class='hdoor'>" + esc(doorLabels[r.door] || r.door || "") + "</span>" +
+          (purpose ? " <span class='hpurpose'>" + esc(purpose) + "</span>" : "") +
+          "<span class='hout'>" + esc(outcomeLabel(r.outcome)) + (detail ? " · " + esc(detail) : "") +
+          "</span></span>" + thumb + "</li>";
+      }
+      html += "</ul>";
     }
     $("evBody").innerHTML = html;
     $("evEmpty").innerHTML = rows.length ? "" : esc(t("history.empty"));
@@ -401,39 +419,62 @@
     var unread = Number(callLog.unread_missed || 0);
     var badge = $("missedBadge");
     badge.innerHTML = unread > 0 ? esc(t("history.missed_badge", { n: unread })) : "";
-    badge.style.display = unread > 0 ? "inline-block" : "none";
+    badge.style.display = unread > 0 ? "" : "none";
     $("markSeen").style.display = unread > 0 ? "inline-block" : "none";
-  }
-  function mockCallLog() {
-    return { rows: [
-      { id: "mock:1", call_id: "mock1", ts: 1756300000000, door: "d_front",
-        outcome: "missed", answered_by: "", duration_ms: 0, hlc: "1", seen: false },
-      { id: "mock:2", call_id: "mock2", ts: 1756290000000, door: "d_back",
-        outcome: "answered", answered_by: "Living room", duration_ms: 42000, hlc: "0",
-        seen: true }
-    ], unread_missed: 1, seen_hlc: "", server_ts: 0 };
   }
   function fetchCallLog(force) {
     if (callLogPending) return;
     if (!force && (callLogTick++ % 3) !== 0) return;
-    if (MOCK) { callLog = mockCallLog(); renderCallLog(); return; }
     callLogPending = true;
-    xhr("GET", "/api/call-log?limit=10", null, function (st, j) {
+    R.panelRequest("GET", "/api/call-log?limit=10", null, function (st, j) {
       callLogPending = false;
       if (st !== 200 || !j) return;
       callLog = j;
       renderCallLog();
-      // Opening the monitor is the "opened the history" gesture: clear the badge once, then let
-      // later missed calls raise it again.
-      if (!markedSeenOnOpen) {
-        markedSeenOnOpen = true;
-        if (Number(j.unread_missed || 0) > 0) markSeen();
-      }
     });
   }
+  // Marking is an explicit resident action and is bounded by the newest row this page has
+  // actually displayed. Opening a monitor never clears missed calls for other surfaces, and a
+  // call that arrives after the list was drawn stays unread.
+  function displayedRows() { return (callLog.rows || []).slice(0, 10); }
+  var purposes = [];
+  function purposeLabel(id) {
+    for (var i = 0; i < purposes.length; i++) {
+      var p = purposes[i] || {};
+      if (p.id !== id) continue;
+      var l = p.label;
+      if (l && typeof l === "object") l = l[LANG] || l.ja || l.en || l.zh;
+      return (p.icon ? p.icon + " " : "") + (l || id);
+    }
+    return id;
+  }
+  var LANGUAGE_NAME_KEYS = { ja: "language.name_ja", en: "language.name_en", zh: "language.name_zh" };
+  function renderCallBadges(calling) {
+    var box = $("callBadges");
+    while (box.firstChild) box.removeChild(box.firstChild);
+    function badge(text) {
+      var el = document.createElement("span");
+      el.className = "chip";
+      C.setText(el, text);
+      box.appendChild(el);
+    }
+    if (calling.purpose) badge(t("ring.purpose_badge", { purpose: purposeLabel(calling.purpose) }));
+    var vl = normalizeLang(calling.visitor_lang);
+    if (vl) badge(t("ring.lang_badge", { lang: t(LANGUAGE_NAME_KEYS[vl]) }));
+  }
+  // Quick replies open as a sheet over the ringing call; the call view stays underneath.
+  function setReplySheet(open) {
+    var sheet = $("replySheet");
+    if (open) sheet.removeAttribute("hidden"); else sheet.setAttribute("hidden", "");
+    $("replyBtn").setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) { var first = $("replyActions").getElementsByTagName("button")[0]; if (first) first.focus(); }
+  }
+  $("replyBtn").onclick = function () { setReplySheet($("replySheet").hasAttribute("hidden")); };
+  $("replySheetClose").onclick = function () { setReplySheet(false); $("replyBtn").focus(); };
   function markSeen() {
-    if (MOCK) { callLog.unread_missed = 0; renderCallLog(); return; }
-    xhr("POST", "/api/call-log/seen", "up_to_hlc=", function (st, j) {
+    var upTo = C.newestHlc(displayedRows());
+    if (!upTo) return;
+    R.panelRequest("POST", "/api/call-log/seen", { up_to_hlc: upTo }, function (st, j) {
       if (st !== 200 || !j) return;
       callLog.unread_missed = Number(j.unread_missed || 0);
       callLog.seen_hlc = j.seen_hlc || "";
@@ -484,9 +525,10 @@
             "&door=" + encodeURIComponent(calling.id) +
             "&call_id=" + encodeURIComponent(calling.call_id || "") +
             "&stage_revision=" + encodeURIComponent(calling.stage_revision || 0);
-          xhr("POST", "/api/panel/reply", body, function (status) {
+          R.panelRequest("POST", "/api/panel/reply", body, function (status) {
             if (status >= 200 && status < 300) {
               $("callMsg").innerHTML = esc(t("reply.sent", { text: chosen.label }));
+              setReplySheet(false);
             } else {
               el.disabled = false;
               $("callMsg").innerHTML = esc(t("reply.failed"));
@@ -509,7 +551,7 @@
         callingDoorId = null;
         callingDoorKey = "";
         stopCallStream();
-        $("callView").style.display = "none";
+        $("callView").style.display = "none"; setReplySheet(false);
         return;
       }
       activeCalling = calling;
@@ -522,7 +564,7 @@
         stopCallStream();
         callStream = DoorbellPlayback.start({ profile: calling.playback_profile,
           mp4: DoorbellPlayback.proxyMp4Url(calling.id, TOKEN, calling.stream_mp4, window.location),
-          mjpeg: calling.stream_mjpeg || snapshotUrl(calling.id, +new Date()),
+          mjpeg: liveMjpegUrl(calling),
           mjpegMode: "image", video: vid, img: img });
         callingDoorKey = streamKey;
       }
@@ -530,19 +572,21 @@
       cancelledUntil = 0;
       $("answerBtn").style.display = "";
       $("answerBtn").onclick = function () {
-        var url = DoorbellPanelRuntime.panelUrl("call", TOKEN, MOCK, calling.id);
+        var url = DoorbellPanelRuntime.panelUrl("call", TOKEN, false, calling.id);
         var hashAt = url.indexOf("#"), hash = hashAt >= 0 ? url.substring(hashAt) : "";
         var base = hashAt >= 0 ? url.substring(0, hashAt) : url;
         window.location.href = base + (base.indexOf("?") >= 0 ? "&" : "?") +
           "lang=" + encodeURIComponent(LANG) + hash;
       };
       renderQuickReplies(calling, quickReplies);
+      renderCallBadges(calling);
+      $("replyBtn").style.display = $("replyActions").getElementsByTagName("button").length ? "" : "none";
       $("monitorClose").onclick = function () {
         dismissedCallKey = callKey;
         callingDoorId = null;
         callingDoorKey = "";
         stopCallStream();
-        $("callView").style.display = "none";
+        $("callView").style.display = "none"; setReplySheet(false);
       };
       $("callView").style.display = "block";
     } else {
@@ -575,8 +619,10 @@
         $("callMsg").innerHTML = esc(t("ring.cancelled") +
           (cancelledDoor ? " (" + cancelledDoor + ")" : ""));
         $("answerBtn").style.display = "none";
+        $("replyBtn").style.display = "none";
+        $("callBadges").innerHTML = "";
         $("callView").style.display = "block";
-      } else $("callView").style.display = "none";
+      } else $("callView").style.display = "none"; setReplySheet(false);
     }
   }
 
@@ -589,10 +635,16 @@
       return;
     }
     emergencyOverlay.update(state);
+    if (state.display && state.display.theme) C.applyColorRoles(state.display.theme);
+    var serverMs = Number(state.server_ts);
+    if (serverMs > 1e12) clockSkewMs = serverMs - new Date().getTime();
+    renderClock();
     var doors = state.doors || [];
+    purposes = state.purposes || [];
     doorLabels = {};
     for (var di = 0; di < doors.length; di++) doorLabels[doors[di].id] = doors[di].label;
     renderSnapGrid(doors);
+    updateTiles(doors);
     fetchCallLog(noteEventStream(state.events || []));
     renderCall(doors, state.events || [], state.quick_replies || []);
     DoorbellPanelRuntime.applySemanticUi(state, { page: "monitor" });
@@ -615,7 +667,7 @@
     pushPaintState = state;
     if (state.subscribed !== undefined) pushSubscribed = !!state.subscribed;
     var message = "";
-    if (state.message_key && typeof I18N[state.message_key] === "string")
+    if (state.message_key && catalog.has(state.message_key))
       message = t(state.message_key);
     else if (state.unavailable) message = t("panel.push_unavailable");
     else if (state.pending) message = t(pushAction === "disable" ?
@@ -645,7 +697,6 @@
     $("markSeen").onclick = function () { markSeen(); };
     installEmergency();
     setupPushButton();
-    if (MOCK) { poll(); return; }
     DoorbellPanelRuntime.establishSession(function (result) {
       TOKEN = result.credential || "";
       if (result.ok) poll();

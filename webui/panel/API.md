@@ -17,6 +17,13 @@ HTTP. The page exchanges it with `POST /api/panel/session` and then uses the Htt
 cookie. Query/form credentials are rejected. Cross-node browser uploads may use an
 `Authorization: Bearer <credential>` header; bearer values must never appear in URLs or logs.
 
+Every mutation made with the `dbpanel` cookie (press, purpose, cancel, hangup, reply, recovery,
+visitor-lang, call-lifecycle, call-log/seen, emergency and operations) must carry
+`X-Doorbell-CSRF` with the session's `csrf_token`, which `POST /api/panel/session` and
+`GET /api/panel/session` return. The pages send every mutation through
+`DoorbellPanelRuntime.panelRequest`, which attaches the token and retries a 403 once with a
+freshly read token; Core rejects a missing or stale token before the mutation executes.
+
 ## GET /api/panel/state
 
 The optional `group=<name>` query selects the Web subscription group used for this page's
@@ -120,6 +127,11 @@ missing, stale, or unsupported call returns 409.
 
 ### POST /api/panel/call-lifecycle
 
+An answered, unended Web call keeps sending `heartbeat` while the page is hidden (tab switch or
+screen lock); hidden pages stop only their state, config and call-info reads. A page whose call is
+not answered makes no ownership claims while hidden. Device sleep stops the timers, so the server
+lease still ends an abandoned call.
+
 Body: `door=<id>&call_id=<opaque>&stage_revision=<n>&dialog_id=<32-hex>&state=<answered|heartbeat|ended>[&reason=<token>]`.
 
 Resident WebRTC clients create one cryptographically random `dialog_id` for an answer attempt.
@@ -194,6 +206,11 @@ may ignore custom sound/volume and do not offer arbitrary background/foreground/
 those limitations must not be reported as successful OS presentation.
 
 ## Images and streams
+
+Browsers fetch camera media only from the serving node's origin, authenticated by the panel or
+admin session (security protocol v3). A door's `stream_mjpeg`/`stream_mp4` that names another
+node's origin is never fetched directly; pages use `/media/peer/<source_node_id>/stream.mjpeg`
+(and `stream.mp4`, `snapshot.jpg`, `video-meta`) on the serving node instead.
 
 ### GET /snapshot-proxy?door=<id>
 
@@ -283,8 +300,9 @@ that are still ringing or connected are never returned.
 
 `POST /api/call-log/seen` with `{"up_to_hlc":"<row hlc>"}` (or an empty value for "everything")
 moves the **device-local** seen watermark forward and answers with the new `unread_missed`. The
-watermark never replicates and never moves backwards. `monitor.html` calls it once when the page
-opens so the missed badge clears.
+watermark never replicates and never moves backwards. `monitor.html` calls it only when the
+resident presses "mark as seen", always with the newest `hlc` among the rows it displayed; opening
+the page marks nothing, and a call that arrives after the list was drawn stays unread.
 
 ## Web call information
 

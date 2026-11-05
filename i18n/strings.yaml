@@ -399,8 +399,6 @@ panel.other_answered: { ja: "別の端末が先に応答しました", en: "Anot
 panel.call_ended: { ja: "通話は終了しました", en: "The call has ended", zh: "通话已结束" }
 panel.call_expired: { ja: "呼出は期限切れになりました", en: "The call expired", zh: "呼叫已过期" }
 panel.auth_failed: { ja: "パネル認証に失敗しました", en: "Panel authentication failed", zh: "面板认证失败" }
-panel.mock_incall: { ja: "通話中 (mock)", en: "In call (mock)", zh: "通话中 (mock)" }
-panel.mock_registered: { ja: "内線 {extension} 登録済み (mock)", en: "Extension {extension} registered (mock)", zh: "分机 {extension} 已注册 (mock)" }
 panel.back: { ja: "戻る", en: "Back", zh: "返回" }
 panel.not_sent: { ja: "まだ発報していません", en: "Not sent yet", zh: "尚未发出呼叫" }
 panel.sending: { ja: "送信中…", en: "Sending…", zh: "发送中…" }
@@ -669,7 +667,7 @@ pair.added: { ja: "追加しました", en: "Added", zh: "已添加" }
 pair.add_failed: { ja: "追加できませんでした", en: "Couldn't add", zh: "添加失败" }
 pair.deny: { ja: "無視", en: "Ignore", zh: "忽略" }
 pair.add_all: { ja: "まとめて追加 (10 分)", en: "Add all nearby (10 min)", zh: "批量添加（10 分钟）" }
-pair.add_all_warning: { ja: "10 分間、見つかった端末をすべて自動で追加します", en: "Every device found in the next 10 minutes will be added automatically", zh: "10 分钟内发现的所有设备都将被自动添加" }
+pair.add_all_warning: { ja: "10 分間、近くの端末を探して一覧に表示します。追加するには各端末に表示されたコードを入力してください", en: "For 10 minutes, nearby devices are listed here. To add one, type the code shown on that device", zh: "10 分钟内会列出附近的设备。要添加设备，请输入该设备上显示的代码" }
 pair.add_all_on: { ja: "まとめて追加 ON — あと {m}:{s} ({n} 台追加)", en: "Adding all — {m}:{s} left ({n} added)", zh: "批量添加已开启 — 剩余 {m}:{s}（已添加 {n} 台）" }
 pair.add_all_stop: { ja: "停止", en: "Stop", zh: "停止" }
 pair.qr_caption: { ja: "別の端末でこの QR を読み取ると追加できます", en: "Scan this QR from another device to add this one", zh: "用另一台设备扫描此二维码即可添加" }
@@ -1109,7 +1107,7 @@ settings.password_empty: { ja: "パスワードを入力してください", en:
 settings.password_set_failed: { ja: "パスワードを設定できませんでした", en: "Couldn't set the password", zh: "无法设置密码" }
 settings.password_length: { ja: "パスワードは {min}〜{max} 文字にしてください", en: "The password must be {min}–{max} characters", zh: "密码需为 {min}–{max} 个字符" }
 admin.password_set_prompt: { ja: "管理パスワードを設定", en: "Set the admin password", zh: "设置管理密码" }
-admin.password_too_short: { ja: "4 文字以上にしてください", en: "Use at least four characters", zh: "请至少输入 4 个字符" }
+admin.password_too_short: { ja: "8 文字以上にしてください", en: "Use at least eight characters", zh: "请至少输入 8 个字符" }
 idle.call: { ja: "呼出", en: "Call", zh: "呼叫" }
 door.call_action: { ja: "呼出", en: "Call", zh: "呼叫" }
 pair.join_this_cluster: { ja: "このクラスタに参加", en: "Join this cluster", zh: "加入此集群" }
@@ -1308,3 +1306,99 @@ core.seed.purpose.p_other: { ja: "その他", en: "Other", zh: "其他" }
 core.seed.notice.np_absent: { ja: "不在です。荷物は玄関前へお願いします", en: "Nobody is home. Please leave parcels at the front door", zh: "家中无人，包裹请放在门口" }
 core.seed.notice.np_back_door: { ja: "裏口へお回りください", en: "Please come round to the back door", zh: "请绕到后门" }
 core.seed.notice.np_construction: { ja: "工事中です。足元にご注意ください", en: "Building work in progress. Please watch your step", zh: "正在施工，请注意脚下" }
+# ---- Web: panel identities and security protocol v3 (2026-11 review) ----
+panels.tab: { ja: "パネル", en: "Panels", zh: "面板" }
+panels.title: { ja: "パネルの資格情報", en: "Panel credentials", zh: "面板凭据" }
+panels.intro: { ja: "Web パネルごとに資格情報を発行し、使えるドアと操作を決めます。紛失した端末だけを無効にでき、ほかのパネルには影響しません。", en: "Issue one credential per Web panel and choose which doors and actions it may use. A lost device can be revoked on its own without affecting other panels.", zh: "为每个网页面板单独签发凭据，并指定其可用的门和操作。设备丢失时可以只吊销它，不影响其他面板。" }
+panels.door_scope: { ja: "対象のドア", en: "Doors", zh: "适用的门" }
+panels.grants: { ja: "許可する操作", en: "Allowed actions", zh: "允许的操作" }
+panels.no_doors: { ja: "ドアがまだありません", en: "No doors yet", zh: "还没有门" }
+panels.grant_view: { ja: "状態の表示", en: "View status", zh: "查看状态" }
+panels.grant_call_monitor: { ja: "映像の確認", en: "Watch video", zh: "查看视频" }
+panels.grant_call_answer: { ja: "応答", en: "Answer calls", zh: "接听" }
+panels.grant_call_initiate: { ja: "呼び出し", en: "Start calls", zh: "发起呼叫" }
+panels.grant_sos_trigger: { ja: "SOS の発報", en: "Trigger SOS", zh: "触发 SOS" }
+panels.grant_door_open: { ja: "解錠", en: "Unlock the door", zh: "开锁" }
+panels.grant_media_publish: { ja: "映像の送信", en: "Send video", zh: "发送视频" }
+panels.grant_notice_write: { ja: "お知らせの編集", en: "Edit announcements", zh: "编辑公告" }
+panels.create: { ja: "資格情報を発行", en: "Issue credential", zh: "签发凭据" }
+panels.created: { ja: "パネルの資格情報を発行しました", en: "Panel credential issued", zh: "已签发面板凭据" }
+panels.scope_required: { ja: "ドアと操作をそれぞれ 1 つ以上選んでください", en: "Choose at least one door and one action", zh: "请至少选择一个门和一个操作" }
+panels.one_time_title: { ja: "パネル用リンク", en: "Panel links", zh: "面板链接" }
+panels.one_time_warning: { ja: "このリンクは今回だけ表示されます。パネル端末で開いてから閉じてください。資格情報はこのノードにだけ保存されます。", en: "These links are shown only once. Open one on the panel device, then close this box. The credential is stored on this node only.", zh: "这些链接只显示这一次。请在面板设备上打开后再关闭此框。凭据只保存在本节点。" }
+panels.one_time_done: { ja: "保存しました", en: "Done", zh: "已完成" }
+panels.link_door: { ja: "門口画面", en: "Door screen", zh: "门口画面" }
+panels.link_monitor: { ja: "モニター画面", en: "Monitor screen", zh: "监视画面" }
+panels.link_call: { ja: "通話画面", en: "Call screen", zh: "通话画面" }
+panels.last_activity: { ja: "最終利用", en: "Last activity", zh: "最近使用" }
+panels.never: { ja: "記録なし", en: "Not recorded", zh: "无记录" }
+panels.loading: { ja: "読み込み中…", en: "Loading…", zh: "加载中…" }
+panels.empty: { ja: "発行済みの資格情報はありません", en: "No panel credentials issued yet", zh: "尚未签发面板凭据" }
+panels.active: { ja: "有効", en: "Active", zh: "有效" }
+panels.revoked: { ja: "無効化済み", en: "Revoked", zh: "已吊销" }
+panels.provisioning_required: { ja: "通話設定が必要", en: "Call setup needed", zh: "需要通话设置" }
+panels.revoke: { ja: "無効にする", en: "Revoke", zh: "吊销" }
+panels.revoke_confirm: { ja: "このパネルを無効にしますか？この資格情報ではもう操作できなくなります。", en: "Revoke this panel? Its credential will stop working immediately.", zh: "要吊销此面板吗？其凭据将立即失效。" }
+panels.revoked_done: { ja: "パネルを無効にしました", en: "Panel revoked", zh: "已吊销面板" }
+panels.rotate_confirm: { ja: "資格情報を新しくしますか？古いリンクは使えなくなります。", en: "Replace this credential? The old link stops working.", zh: "要更换此凭据吗？旧链接将失效。" }
+panels.rotated: { ja: "資格情報を新しくしました", en: "Credential replaced", zh: "已更换凭据" }
+panels.failed_reason: { ja: "操作できませんでした: {reason}", en: "Couldn't complete the action: {reason}", zh: "操作未完成：{reason}" }
+panels.crypto_unavailable: { ja: "このブラウザーでは安全な資格情報を作成できません", en: "This browser cannot create a secure credential", zh: "此浏览器无法生成安全的凭据" }
+panels.legacy_title: { ja: "共有パネルトークン", en: "Shared panel token", zh: "共享面板令牌" }
+panels.legacy_detected: { ja: "すべてのパネルが共有する旧方式のトークンが使われています。1 台が漏れると全パネルを入れ替える必要があります。", en: "The older shared token is in use. If one device leaks it, every panel has to be changed.", zh: "仍在使用所有面板共用的旧令牌。一台设备泄露就必须更换所有面板。" }
+panels.legacy_step_create: { ja: "パネルごとに上で資格情報を発行します", en: "Issue a credential above for each panel", zh: "在上方为每个面板签发凭据" }
+panels.legacy_step_move: { ja: "各パネル端末で新しいリンクを開き直します", en: "Reopen each panel device with its new link", zh: "在每台面板设备上用新链接重新打开" }
+panels.legacy_step_retire: { ja: "すべて移行したら、システムで共有トークンを更新して旧リンクを止めます", en: "When every panel has moved, rotate the shared token under System to retire the old links", zh: "全部迁移后，在“系统”中轮换共享令牌，使旧链接失效" }
+security.title: { ja: "クラスターのセキュリティ", en: "Cluster security", zh: "集群安全" }
+security.fingerprint: { ja: "証明書の指紋", en: "Certificate fingerprint", zh: "证书指纹" }
+security.fingerprint_unavailable: { ja: "取得できません", en: "Not available", zh: "无法获取" }
+security.fingerprint_hint: { ja: "ブラウザーの警告に表示される指紋がこれと一致する場合だけ、この接続を信頼してください。", en: "Trust this connection only if the fingerprint your browser shows matches this one.", zh: "只有当浏览器显示的指纹与此一致时，才信任此连接。" }
+security.membership: { ja: "メンバー状態", en: "Membership", zh: "成员状态" }
+security.membership_member: { ja: "参加中", en: "Member", zh: "已加入" }
+security.membership_rekey_required: { ja: "再配対が必要（鍵の更新に遅れ）", en: "Pair again (missed a key change)", zh: "需重新配对（错过密钥更新）" }
+security.membership_protocol_upgrade_required: { ja: "アプリの更新が必要", en: "App update needed", zh: "需要更新应用" }
+security.membership_upgrade_rejoin_required: { ja: "更新後に再配対が必要", en: "Pair again after the update", zh: "升级后需重新配对" }
+security.membership_unknown: { ja: "不明", en: "Unknown", zh: "未知" }
+security.rotate_key: { ja: "クラスター鍵を更新", en: "Rotate the cluster key", zh: "轮换集群密钥" }
+security.rotate_key_hint: { ja: "端末を外したあとや漏えいが疑われるときに使います。7 日以内にオンラインにならない端末は再配対が必要です。", en: "Use this after removing a device or if a leak is suspected. Devices that stay offline for more than 7 days must be paired again.", zh: "在移除设备或怀疑泄露时使用。离线超过 7 天的设备需要重新配对。" }
+security.rotate_key_confirm: { ja: "クラスター鍵を更新しますか？", en: "Rotate the cluster key now?", zh: "现在轮换集群密钥吗？" }
+security.rotate_key_done: { ja: "クラスター鍵の更新を始めました", en: "Cluster key rotation started", zh: "已开始轮换集群密钥" }
+security.rebuild: { ja: "この端末でクラスターを作り直す", en: "Rebuild the cluster from this device", zh: "以本设备重建集群" }
+security.rebuild_hint: { ja: "元の創設端末がないまま更新した場合に使います。この端末の設定と履歴を引き継ぎ、ほかの端末は再配対します。", en: "Use this when the original founding device is gone after an upgrade. This device keeps its settings and history; every other device pairs again.", zh: "在升级后原始创建设备已不在时使用。本设备保留设置和记录，其他设备需重新配对。" }
+security.rebuild_confirm: { ja: "この端末を基準にクラスターを作り直しますか？ほかの端末はすべて再配対が必要になります。", en: "Rebuild the cluster from this device? Every other device will need to pair again.", zh: "要以本设备重建集群吗？其他所有设备都需要重新配对。" }
+security.rebuild_done: { ja: "クラスターを作り直しました。ほかの端末を配対してください。", en: "Cluster rebuilt. Pair the other devices.", zh: "已重建集群，请为其他设备配对。" }
+security.failed: { ja: "操作できませんでした: {reason}", en: "Couldn't complete the action: {reason}", zh: "操作未完成：{reason}" }
+
+# ---- Web: settings navigation and pairing confirmation codes (2026-11 review) ----
+settings.categories: { ja: "設定の項目", en: "Settings categories", zh: "设置类别" }
+settings.search: { ja: "設定を検索", en: "Search settings", zh: "搜索设置" }
+settings.no_match: { ja: "一致する項目はありません", en: "No matching settings", zh: "没有匹配的设置" }
+settings.back: { ja: "設定", en: "Settings", zh: "设置" }
+settings.group_overview: { ja: "概要", en: "Overview", zh: "概览" }
+settings.group_site: { ja: "ドアと端末", en: "Doors and devices", zh: "门与设备" }
+settings.group_calls: { ja: "呼び出し", en: "Calls", zh: "呼叫" }
+settings.group_appearance: { ja: "表示", en: "Appearance", zh: "外观" }
+settings.group_system: { ja: "システム", en: "System", zh: "系统" }
+pair.confirm_code_title: { ja: "この端末の確認コード", en: "This device's confirmation code", zh: "本设备的确认码" }
+pair.confirm_code_show: { ja: "この端末を追加する人に、このコードを伝えてください", en: "Give this code to the person adding this device", zh: "请把此代码告诉添加本设备的人" }
+pair.confirm_code_input: { ja: "端末に表示された 8 桁のコード", en: "8-digit code shown on the device", zh: "设备上显示的 8 位代码" }
+pair.confirm_code_hint: { ja: "追加する端末の画面に表示された 8 桁のコードを入力してください", en: "Type the 8-digit code shown on the device you are adding", zh: "请输入要添加的设备屏幕上显示的 8 位代码" }
+pair.err.confirm_code_mismatch: { ja: "コードが違います。追加する端末に表示されたコードを確認してください", en: "Wrong code. Check the code shown on the device you are adding", zh: "代码不正确。请核对要添加的设备上显示的代码" }
+pair.err.confirm_code_required: { ja: "追加する端末に表示された 8 桁のコードを入力してください", en: "Enter the 8-digit code shown on the device you are adding", zh: "请输入要添加的设备上显示的 8 位代码" }
+pair.err.pk_conflict: { ja: "同じ名前で別の鍵を名乗る端末があります。なりすましの可能性があるため、端末を確認してから追加してください", en: "Another device answered with a different key for this one. It may be an impostor; check the device before adding it", zh: "有另一台设备以不同的密钥冒用此设备。可能是仿冒设备，请先核实再添加" }
+pair.err.not_upgrade_pending: { ja: "この端末は再構築の対象ではありません", en: "This device is not waiting to rebuild a cluster", zh: "此设备不需要重建集群" }
+pair.pk_conflict_warning: { ja: "注意: この端末の鍵が一致しません。なりすましの可能性があります。表示された確認コードを本体で必ず確かめてください", en: "Warning: this device's key does not match. It may be an impostor. Check the confirmation code on the device itself", zh: "警告：此设备的密钥不一致，可能是仿冒设备。请务必在设备本机上核对确认码" }
+pair.upgrade_title: { ja: "再配対が必要です", en: "Pair this device again", zh: "需要重新配对" }
+pair.upgrade_body: { ja: "アプリの更新でクラスターへの参加方法が変わりました。元の創設端末から、この端末をもう一度追加してください。", en: "The app update changed how devices join a cluster. Add this device again from the original founding device.", zh: "应用升级改变了设备加入集群的方式。请从原始创建设备重新添加本设备。" }
+pair.security_title: { ja: "クラスター鍵", en: "Cluster key", zh: "集群密钥" }
+pair.security_key: { ja: "現在の鍵", en: "Current key", zh: "当前密钥" }
+pair.security_previous_key: { ja: "旧い鍵", en: "Previous key", zh: "旧密钥" }
+pair.security_previous_until: { ja: "{id} は {time} まで受け付けます", en: "{id} is accepted until {time}", zh: "{id} 在 {time} 之前仍被接受" }
+pair.security_legacy_peers: { ja: "更新が必要な端末", en: "Devices that need an update", zh: "需要升级的设备" }
+pair.security_rekey_required: { ja: "再配対が必要な端末", en: "Devices that must pair again", zh: "需要重新配对的设备" }
+security.rotate_key_done_id: { ja: "クラスター鍵を {id} に更新しました", en: "Cluster key rotated to {id}", zh: "集群密钥已轮换为 {id}" }
+dash.state_idle: { ja: "待機中", en: "Idle", zh: "待机" }
+dash.state_ringing: { ja: "呼び出し中", en: "Ringing", zh: "正在呼叫" }
+dash.state_in_call: { ja: "通話中", en: "In call", zh: "通话中" }
+dash.last_activity: { ja: "最後の呼び出し {time}", en: "Last call {time}", zh: "最近呼叫 {time}" }
+dash.offline_count: { ja: "{n} 台オフライン", en: "{n} offline", zh: "{n} 台离线" }

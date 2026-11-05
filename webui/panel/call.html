@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title></title>
 
 <style>
@@ -48,8 +48,9 @@
   #status.err { color: #ff8f85; }
   #status a { color: #4da3ff; }
 </style>
+<link rel="stylesheet" href="/panel/panel.css">
 </head>
-<body>
+<body class="callPage">
 <div id="offlineBand" data-semantic-id="status.offline"></div>
 <div id="configBand" role="status"></div>
 <div id="connectionBand" role="status"></div>
@@ -79,7 +80,6 @@
 "use strict";
 const qs = new URLSearchParams(location.search);
 let K = qs.get("k") || "";
-const MOCK = qs.get("mock") === "1";
 const INITIAL_DOOR = qs.get("door") || "";
 const QUERY_LANG = normalizeLang(qs.get("lang"));
 let I18N = {};
@@ -214,7 +214,6 @@ let playback = null;
 let latestPanelState = null;
 let sessionRefreshPending = false;
 let registrationState = { state: "", reason: "" };
-let mockSessionActive = false;
 let selectionRevision = 0;
 let pageRevision = 0;
 let pageActive = true;
@@ -326,8 +325,7 @@ function readPoll(poll, url, apply, onFailure) {
 
 function renderRegistration() {
   if (registrationState.state === "registered") {
-    els.reg.textContent = t(registrationState.mock ? "panel.mock_registered" :
-      "panel.registered", { extension: registrationState.extension || webrtc && webrtc.sip_user || "" });
+    els.reg.textContent = t("panel.registered", { extension: registrationState.extension || webrtc && webrtc.sip_user || "" });
   } else if (registrationState.state === "unregistered") {
     els.reg.textContent = t("panel.unregistered");
   } else if (registrationState.state === "failed") {
@@ -360,7 +358,7 @@ function applyI18n() {
   els.noVideo.textContent = t("panel.no_video");
   els.sendVideoText.textContent = t("panel.send_video");
   renderFreshness();
-  if (session || mockSessionActive) els.call.textContent = t("incall.end");
+  if (session) els.call.textContent = t("incall.end");
   else els.call.textContent = selected && (selected.calling ||
     selected.call_state === "ringing" || selected.call_state === "purpose_pending") ?
     t("ring.answer") : t("panel.call");
@@ -448,17 +446,11 @@ function selectDoor(d, forcePlaybackRefresh) {
   selected = d;
   renderTabs();
   if (playback) { playback.stop(); playback = null; }
-  if (MOCK) {
-    els.live.style.display = "none";
-    els.liveVideo.style.display = "none";
-    els.noVideo.style.display = "";
-  } else {
-    const mp4 = DoorbellPlayback.proxyMp4Url(d.id, K, d.stream_mp4, window.location);
-    const mjpeg = "/snapshot-proxy?door=" + encodeURIComponent(d.id) + "&live=1";
-    playback = DoorbellPlayback.start({ profile: d.playback_profile,
-      mp4, mjpeg, mjpegMode: "poll", video: els.liveVideo, img: els.live,
-      onState: (state) => { els.noVideo.style.display = state === "failed" ? "" : "none"; } });
-  }
+  const mp4 = DoorbellPlayback.proxyMp4Url(d.id, K, d.stream_mp4, window.location);
+  const mjpeg = "/snapshot-proxy?door=" + encodeURIComponent(d.id) + "&live=1";
+  playback = DoorbellPlayback.start({ profile: d.playback_profile,
+    mp4, mjpeg, mjpegMode: "poll", video: els.liveVideo, img: els.live,
+    onState: (state) => { els.noVideo.style.display = state === "failed" ? "" : "none"; } });
   updateCallButton();
   if (latestPanelState) ensureLanguage(languageForState(latestPanelState, d.id));
 }
@@ -491,7 +483,7 @@ function updateCallButton() {
     setStatus(t("panel.lifecycle_identity_missing"), true);
     return;
   }
-  els.call.disabled = (!registered || !panelCsrf) && !MOCK;
+  els.call.disabled = !registered || !panelCsrf;
 }
 
 function receiveWebrtc(value) {
@@ -570,7 +562,7 @@ function revokeCalling() {
 }
 
 function initUa() {
-  if (MOCK || !pageActive || !configurationReceived || configurationRevoked || session || uaRetirement) return;
+  if (!pageActive || !configurationReceived || configurationRevoked || session || uaRetirement) return;
   if (uaBinding && uaBinding.config === desiredWebrtc && !uaBinding.failed) return;
   if (uaBinding) { retireUa(false); return; }
   if (!desiredWebrtc || attemptedConfig === desiredWebrtc) return;
@@ -635,7 +627,7 @@ function initUa() {
 
 function startCall() {
   if (!ua || !selected || !selected.extension) return;
-  if (!MOCK && !panelCsrf) { loadPanelSession(); return; }
+  if (!panelCsrf) { loadPanelSession(); return; }
   const answering = selected.calling || selected.call_state === "ringing" ||
     selected.call_state === "purpose_pending";
   if (answering && !selected.call_id) {
@@ -778,18 +770,28 @@ function acceptLease(binding, result) {
   return true;
 }
 
+// Lifecycle visibility policy: an answered, unended call keeps renewing its lease while the page
+// is hidden (tab switch, phone screen lock) because the resident is still talking and media keeps
+// flowing. Hidden pages stop only reads (state, config, call info). A call that is not yet
+// answered, or a page that is only monitoring, makes no ownership claims while hidden. Real
+// device sleep still stops timers, so the server-side lease bound remains the safety net.
+function heartbeatPausedWhileHidden(binding) {
+  return document.hidden && !(binding && binding.answered && !binding.ended);
+}
+
 function scheduleHeartbeat(binding, delay) {
   if (!heartbeatCurrent(binding) || !Number.isFinite(binding.leaseDeadline)) return;
   clearTimeout(binding.heartbeatTimer);
   const remaining = binding.leaseDeadline - monotonicNow();
   if (remaining <= 0) { expireLease(binding, session); return; }
-  if (document.hidden || binding.awaitingAuthority) return;
+  if (heartbeatPausedWhileHidden(binding) || binding.awaitingAuthority) return;
   binding.heartbeatTimer = setTimeout(() => heartbeatLifecycle(binding), Math.min(delay, remaining));
 }
 
 function heartbeatLifecycle(binding) {
   if (!binding || !binding.answered || !heartbeatCurrent(binding) || binding.heartbeatPending ||
-      document.hidden || binding.awaitingAuthority || !Number.isFinite(binding.leaseDeadline)) return;
+      heartbeatPausedWhileHidden(binding) || binding.awaitingAuthority ||
+      !Number.isFinite(binding.leaseDeadline)) return;
   if (monotonicNow() >= binding.leaseDeadline) { expireLease(binding, session); return; }
   if (binding.recoveryPending) { scheduleHeartbeat(binding, 500); return; }
   clearTimeout(binding.heartbeatTimer);
@@ -859,18 +861,6 @@ function endCall(reason, expectedBinding, expectedSession) {
 }
 
 els.call.onclick = () => {
-  if (MOCK) {
-    if (!mockSessionActive) {
-      mockSessionActive = true;
-      els.call.textContent = t("incall.end");
-      els.call.classList.add("hang"); setStatus(t("panel.mock_incall"));
-    } else {
-      mockSessionActive = false;
-      els.call.textContent = t("panel.call");
-      els.call.classList.remove("hang"); setStatus("");
-    }
-    return;
-  }
   if (session) endCall("local_hangup");
   else startCall();
 };
@@ -884,7 +874,7 @@ window.addEventListener("pagehide", () => {
   if (playback) { playback.stop(); playback = null; }
   stopSendingVideo();
   const binding = activeLifecycle;
-  if (!binding || !binding.answered || binding.ended || MOCK) {
+  if (!binding || !binding.answered || binding.ended) {
     endCall("page_closed"); retireUa(true); return;
   }
   binding.ended = true;
@@ -913,18 +903,21 @@ document.addEventListener("visibilitychange", () => {
   if (!pageActive) return;
   pageRevision++;
   retireReads();
-  if (activeLifecycle) {
+  if (activeLifecycle && heartbeatPausedWhileHidden(activeLifecycle)) {
     activeLifecycle.awaitingAuthority = true;
     stopHeartbeat(activeLifecycle, true);
     setStatus(t("panel.control_reconnecting"), true);
     if (monotonicNow() >= activeLifecycle.leaseDeadline) expireLease(activeLifecycle, session);
+  } else if (activeLifecycle && !document.hidden &&
+      monotonicNow() >= activeLifecycle.leaseDeadline) {
+    expireLease(activeLifecycle, session);
   }
   if (!document.hidden) start();
 });
 
 
 async function startSendingVideo() {
-  if (videoBinding || frameTimer || !selected || (!session && !MOCK)) return;
+  if (videoBinding || frameTimer || !selected || !session) return;
   if (!panelCsrf || !activeLifecycle || !activeLifecycle.answered || !sessionConfirmed) {
     els.sendVideo.checked = false; setStatus(t("panel.video_unavailable"), true); return;
   }
@@ -1080,7 +1073,7 @@ const videoSession = DoorbellPanelVideo.create({
 });
 
 els.sendVideo.onchange = () => {
-  if (els.sendVideo.checked) { if (session || MOCK) startSendingVideo(); }
+  if (els.sendVideo.checked) { if (session) startSendingVideo(); }
   else stopSendingVideo();
 };
 
@@ -1184,18 +1177,6 @@ function loadCallInfo() {
 
 function load() {
   if (!readsAllowed()) return;
-  if (MOCK) {
-    doors = [
-      { id: "d_front", label: "Front door", extension: "8001", station: "", online: true },
-      { id: "d_back", label: "Back door", extension: "", station: "", online: false },
-    ];
-    webrtc = { ws_url: "ws://mock:8088/ws", sip_user: "260", server: "mock" };
-    registered = true;
-    registrationState = { state: "registered", reason: "", mock: true };
-    renderRegistration();
-    selectDoor(doors[0]);
-    return;
-  }
   loadState();
   loadCallInfo();
 }
@@ -1205,7 +1186,6 @@ function start() {
   ensureLanguage(latestPanelState ? languageForState(latestPanelState, selected && selected.id) : QUERY_LANG || "ja");
   applyI18n();
   installEmergency();
-  if (MOCK) { load(); return; }
   DoorbellPanelRuntime.establishSession(result => {
     if (!pageActive || activation !== pageRevision) return;
     K = result.credential || "";
@@ -1215,7 +1195,7 @@ function start() {
 }
 
 function loadPanelSession() {
-  if (panelCsrfRequest || MOCK) return;
+  if (panelCsrfRequest) return;
   const request = { page: pageRevision };
   panelCsrfRequest = request;
   request.handle = DoorbellPanelRuntime.requestWithDeadline({ url: "/api/panel/session", deadline_ms: 1500 }, result => {

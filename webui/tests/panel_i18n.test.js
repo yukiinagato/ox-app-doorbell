@@ -5,6 +5,7 @@ const fs = require("fs");
 const vm = require("vm");
 
 const pages = ["door", "call", "monitor"];
+const common = fs.readFileSync("webui/panel/panel-common.js", "utf8");
 const catalogs = Object.fromEntries(["ja", "en", "zh"].map(lang => [
   lang, JSON.parse(fs.readFileSync("webui/locale/" + lang + ".json", "utf8")),
 ]));
@@ -22,8 +23,9 @@ function functionSource(source, name) {
 }
 
 function languageSelector(source, queryLanguage) {
+  const normalize = source.includes("function normalizeLang(") ? source : common;
   return vm.runInNewContext("(function () { var QUERY_LANG = " +
-    JSON.stringify(queryLanguage || "") + ";" + functionSource(source, "normalizeLang") +
+    JSON.stringify(queryLanguage || "") + ";" + functionSource(normalize, "normalizeLang") +
     functionSource(source, "languageForState") + "; return languageForState; })()");
 }
 
@@ -31,13 +33,14 @@ for (const page of pages) {
   const source = fs.readFileSync("webui/panel/" + page + ".html", "utf8");
   assert.strictEqual(/[\u3040-\u30ff\u3400-\u9fff]/.test(source), false,
     page + ".html must not embed Japanese UI text");
-  assert.strictEqual(/t\(\s*["'][^"']+["']\s*,\s*["']/.test(source), false,
+  assert.strictEqual(/\bt\(\s*["'][^"']+["']\s*,\s*["']/.test(source), false,
     page + ".html must not provide a hard-coded UI-text fallback to t()");
   assert(source.includes('qs("lang")') || source.includes('qs.get("lang")'),
     page + ".html must honor ?lang=");
   assert(source.includes("visitor_lang"),
     page + ".html must honor the replicated visitor language");
-  assert(source.includes('"/locale/" + lang + ".json"'),
+  assert(source.includes('"/locale/" + lang + ".json"') ||
+    (source.includes("C.createCatalog(") && common.includes('"/locale/" + lang + ".json"')),
     page + ".html must load the selected generated catalog");
 
   const selectLanguage = languageSelector(source, "");
@@ -64,7 +67,6 @@ for (const page of pages) {
 for (const key of [
   "panel.call_end_failed",
   "panel.cancel_failed",
-  "panel.mock_registered",
   "panel.push_unavailable",
   "panel.event_emergency_cancel",
   "emergency.clear_instruction",

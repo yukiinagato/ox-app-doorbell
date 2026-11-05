@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
 <meta http-equiv="refresh" content="300">
 <title></title>
@@ -69,6 +69,7 @@
   @media (min-width: 700px) { #main { padding: 24px 32px; } #visitorActions { padding-left: 32px; padding-right: 32px; } }
   @media (max-height: 500px) { #main { padding: 12px 16px; } .visitorHeading { margin-bottom: 8px; } .languageChoice span { display: none; } }
 </style>
+<link rel="stylesheet" href="/panel/panel.css">
 </head>
 <body>
 <div id="layout">
@@ -100,6 +101,7 @@
 </div>
 
 <script src="/panel/runtime.js"></script>
+<script src="/panel/panel-common.js"></script>
 <script src="/panel/call-flow.js"></script>
 <script>
 (function () {
@@ -108,67 +110,18 @@
   var REPLY_MS = 30000;
   var OFFLINE_AFTER = 5;
 
+  var C = DoorbellPanelCommon, R = DoorbellPanelRuntime;
   function $(id) { return document.getElementById(id); }
-  function esc(s) {
-    var d = document.createElement("div");
-    d.appendChild(document.createTextNode(s == null ? "" : String(s)));
-    return d.innerHTML;
-  }
-  function qs(name) {
-    var m = window.location.search.match(new RegExp("[?&]" + name + "=([^&]*)"));
-    return m ? decodeURIComponent(m[1].replace(/\+/g, "%20")) : "";
-  }
+  var esc = C.esc, qs = C.qs, normalizeLang = C.normalizeLang;
 
   var TOKEN = qs("k");
-  var MOCK = qs("mock") === "1";
-  var I18N = {};
   var LANG = "";
-  var LOADING_LANG = "";
-  var LOCALE_WAITERS = [];
-  var LOCALE_SERIAL = 0;
+  var catalog = C.createCatalog(R.panelRequest, function (lang) { LANG = lang; });
   var QUERY_LANG = normalizeLang(qs("lang"));
   var emergencyOverlay = null;
 
-  function normalizeLang(value) {
-    value = String(value || "").toLowerCase().split("-")[0];
-    return value === "ja" || value === "en" || value === "zh" ? value : "";
-  }
-  function t(key, values) {
-    var value = typeof I18N[key] === "string" ? I18N[key] : key;
-    values = values || {};
-    for (var name in values) if (Object.prototype.hasOwnProperty.call(values, name))
-      value = value.split("{" + name + "}").join(String(values[name]));
-    return value;
-  }
-  function finishLanguage(lang, catalog) {
-    LANG = lang;
-    I18N = catalog || {};
-    LOADING_LANG = "";
-    document.documentElement.setAttribute("lang", lang);
-    var waiters = LOCALE_WAITERS;
-    LOCALE_WAITERS = [];
-    for (var i = 0; i < waiters.length; i++) waiters[i]();
-  }
-  function loadLanguage(requested, cb) {
-    var lang = normalizeLang(requested) || "ja";
-    if (cb) LOCALE_WAITERS.push(cb);
-    if (LANG === lang && !LOADING_LANG) {
-      var ready = LOCALE_WAITERS;
-      LOCALE_WAITERS = [];
-      for (var i = 0; i < ready.length; i++) ready[i]();
-      return;
-    }
-    if (LOADING_LANG === lang) return;
-    LOADING_LANG = lang;
-    var serial = ++LOCALE_SERIAL;
-    xhr("GET", "/locale/" + lang + ".json", null, function (st, j) {
-      if (serial !== LOCALE_SERIAL) return;
-      if (st === 200 && j) { finishLanguage(lang, j); return; }
-      LOADING_LANG = "";
-      if (lang !== "en") { loadLanguage("en"); return; }
-      finishLanguage("en", {});
-    });
-  }
+  function t(key, values) { return catalog.t(key, values); }
+  function loadLanguage(requested, cb) { catalog.load(requested, cb); }
   function languageForState(state, doorId) {
     if (QUERY_LANG) return QUERY_LANG;
     var doors = (state && state.doors) || [], i, lang;
@@ -186,26 +139,7 @@
     }
     return "ja";
   }
-  function applyEmergencyI18n() {
-    if (emergencyOverlay && emergencyOverlay.refreshText) emergencyOverlay.refreshText();
-    var overlays = document.getElementsByClassName("dbEmergencyOverlay");
-    if (overlays.length) {
-      var headings = overlays[0].getElementsByTagName("h2");
-      var paragraphs = overlays[0].getElementsByTagName("p");
-      if (headings.length) headings[0].innerHTML = esc(t("emergency.title"));
-      if (paragraphs.length) paragraphs[0].innerHTML = esc(t("emergency.active_detail"));
-      if (paragraphs.length > 1)
-        paragraphs[1].innerHTML = esc(t("emergency.clear_instruction"));
-    }
-    var triggers = document.getElementsByClassName("dbSosTrigger");
-    if (triggers.length) {
-      var spans = triggers[0].getElementsByTagName("span");
-      triggers[0].setAttribute("aria-label", t("emergency.button"));
-      if (spans.length) spans[0].innerHTML = esc(t("emergency.button"));
-      if (spans.length > 1)
-        spans[1].innerHTML = esc(t("emergency.hold_hint", { sec: "2" }));
-    }
-  }
+  function applyEmergencyI18n() { C.applyEmergencyText(emergencyOverlay, t); }
   function installEmergency() {
     emergencyOverlay = DoorbellPanelRuntime.installEmergencyOverlay({
       translate: t,
@@ -241,84 +175,38 @@
     applyEmergencyI18n();
   }
 
-  function xhr(method, path, formBody, cb) {
-    var x = new XMLHttpRequest();
-    x.open(method, path, true);
-    if (formBody) x.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-    x.onreadystatechange = function () {
-      if (x.readyState !== 4) return;
-      var j = null;
-      try { j = JSON.parse(x.responseText); } catch (e) {}
-      cb(x.status, j);
-    };
-    try { x.send(formBody || null); } catch (e2) { cb(0, null); }
-  }
-
-
-  var mockTick = 0;
-  var mockState = {
-    doors: [
-      { id: "d_front", label: "Front door", calling: false },
-      { id: "d_back", label: "Back door", calling: false },
-      { id: "d_garage", label: "Garage", calling: false }
-    ],
-    events: [], reply: null, server_ts: 0
-  };
-  function fetchState(cb) {
-    if (MOCK) {
-      mockTick++;
-
-      if (mockTick === Math.round(15000 / POLL_MS)) {
-        mockState.reply = { text: "Coming now", ts: mockTick };
-      }
-      mockState.server_ts = mockTick;
-      cb(200, mockState);
-      return;
-    }
-    xhr("GET", DoorbellPanelRuntime.panelStateUrl(), null, cb);
-  }
+  function fetchState(cb) { R.panelRequest("GET", R.panelStateUrl(), null, cb); }
   function sendPress(doorId, purpose, cb) {
-    if (MOCK) {
-      var callId = "mock-call-" + (++mockTick);
-      for (var i = 0; i < mockState.doors.length; i++) if (mockState.doors[i].id === doorId) {
-        mockState.doors[i].calling = true; mockState.doors[i].call_id = callId;
-        mockState.doors[i].call_state = "ringing"; mockState.doors[i].stage_revision = 0;
-        mockState.doors[i].expires_at_ms = new Date().getTime() + 60000;
-      }
-      cb(200, { ok: true, call_id: callId, call_state: "ringing", stage_revision: 0,
-                expires_at_ms: new Date().getTime() + 60000 }); return;
-    }
-    xhr("POST", "/api/panel/press",
-        DoorbellCallFlow.pressForm(doorId, TOKEN, purpose), cb);
+    R.panelRequest("POST", "/api/panel/press", DoorbellCallFlow.pressForm(doorId, TOKEN, purpose), cb);
   }
   function sendPurpose(doorId, callId, purpose, cb) {
-    if (MOCK) { cb(200, { ok: true, call_id: callId, stage_revision: 2 }); return; }
-    xhr("POST", "/api/panel/purpose",
-        DoorbellCallFlow.purposeForm(doorId, callId, purpose, TOKEN), cb);
+    R.panelRequest("POST", "/api/panel/purpose",
+      DoorbellCallFlow.purposeForm(doorId, callId, purpose, TOKEN), cb);
   }
   function sendCancel(doorId, callId, cb) {
     if (!callId) { cb(409, { ok: false, err: "call_id unavailable" }); return; }
-    if (MOCK) {
-      for (var i = 0; i < mockState.doors.length; i++) if (mockState.doors[i].id === doorId) {
-        mockState.doors[i].calling = false; mockState.doors[i].call_state = "cancelled";
-      }
-      mockState.events.unshift({ type: "call_cancelled", door: doorId, call_id: callId,
-                                 wall_ms: new Date().getTime() });
-      cb(200, { ok: true, call_id: callId }); return;
-    }
-    xhr("POST", "/api/panel/cancel",
-        DoorbellCallFlow.cancelForm(doorId, callId, TOKEN), cb);
+    R.panelRequest("POST", "/api/panel/cancel", DoorbellCallFlow.cancelForm(doorId, callId, TOKEN), cb);
   }
   function sendHangup(doorId, callId, cb) {
     if (!callId) { cb(409, { ok: false, err: "call_id unavailable" }); return; }
-    if (MOCK) {
-      for (var i = 0; i < mockState.doors.length; i++) if (mockState.doors[i].id === doorId) {
-        mockState.doors[i].calling = false; mockState.doors[i].call_state = "ended";
-      }
-      cb(200, { ok: true, call_id: callId }); return;
-    }
-    xhr("POST", "/api/panel/hangup",
-        DoorbellCallFlow.cancelForm(doorId, callId, TOKEN), cb);
+    R.panelRequest("POST", "/api/panel/hangup", DoorbellCallFlow.cancelForm(doorId, callId, TOKEN), cb);
+  }
+  // Only the visitor's explicit choice in the language selector is replicated, so indoor panels
+  // and quick replies use it. A ?lang= default configured on the kiosk is not a visitor choice.
+  var reportedVisitorLang = "", visitorChoseLang = false;
+  function reportVisitorLang(doorId) {
+    if (!visitorChoseLang || !QUERY_LANG) return;
+    var key = (doorId || "") + "|" + QUERY_LANG;
+    if (reportedVisitorLang === key) return;
+    reportedVisitorLang = key;
+    R.panelRequest("POST", "/api/panel/visitor-lang",
+      "door=" + encodeURIComponent(doorId || "") + "&lang=" + encodeURIComponent(QUERY_LANG),
+      function (status) { if (status < 200 || status >= 300) reportedVisitorLang = ""; });
+  }
+  function visitorLangDoor() {
+    if (currentCall) return currentCall.door;
+    var doors = (lastState && lastState.doors) || [];
+    return doors.length === 1 ? doors[0].id : "";
   }
 
 
@@ -329,18 +217,29 @@
     if (jsonNow === lastDoorsJson) return;
     lastDoorsJson = jsonNow;
     var list = $("doorList");
-    list.innerHTML = "";
+    while (list.firstChild) list.removeChild(list.firstChild);
     var half = doors.length > 4;
     for (var k = 0; k < doors.length; k++) {
       var b = document.createElement("button");
       b.className = "doorBtn" + (half ? " half" : "");
+      b.type = "button";
       b.setAttribute("data-door", doors[k].id);
       b.setAttribute("data-label", doors[k].label);
       b.setAttribute("data-semantic-id", "call.primary");
-      b.innerHTML = "<span>" + esc(t("idle.call_button_verb")) + "</span><span class='doorName'>" + esc(doors[k].label) + "</span>";
+      var verb = document.createElement("span"), name = document.createElement("span");
+      C.setText(verb, t("idle.call_button_verb"));
+      name.className = "doorName";
+      C.setText(name, doors[k].label);
+      b.appendChild(verb); b.appendChild(name);
       b.onclick = onPress;
       list.appendChild(b);
     }
+    // One door: its Call button is the primary action in the fixed bottom zone. Several doors:
+    // they are listed in the content area and the zone keeps only Cancel and SOS.
+    var zone = $("visitorActions"), main = $("main");
+    if (doors.length === 1) {
+      if (list.parentNode !== zone) zone.insertBefore(list, zone.firstChild);
+    } else if (list.parentNode !== main) main.insertBefore(list, $("callingView"));
   }
 
   // purpose_first selects before ringing; ring_then_purpose selects after call_id creation.
@@ -354,7 +253,7 @@
     // A pending visitor call is recoverable once this page has rebuilt its waiting UI. An
     // established SIP dialog is owned by the answering client and cannot be restored here.
     var restored = state === "ringing" || state === "purpose_pending";
-    xhr("POST", "/api/panel/recovery",
+    R.panelRequest("POST", "/api/panel/recovery",
       DoorbellCallFlow.recoveryForm(door, callId, restored, TOKEN), function (st) {
         recoveryPendingCall = "";
         if (st >= 200 && st < 300) recoveryReportedCall = callId;
@@ -368,23 +267,42 @@
     if (!value || typeof value !== "object") return value || "";
     return value[LANG] || value.ja || value.en || value.zh || "";
   }
+  // Purpose ids and labels are configuration data: they are only ever assigned as text or
+  // attribute values through DOM APIs, never concatenated into markup.
   function purposeButtons(afterRing) {
-    var box = $("purposeStep"), h = "";
-    for (var i = 0; i < lastPurposes.length; i++) {
+    var box = $("purposeStep"), items = [], i;
+    for (i = 0; i < lastPurposes.length; i++) {
       var p = lastPurposes[i] || {}, label = labelIn(p.label) || p.id;
-      h += "<button class='purposeBtn' data-semantic-id='purpose.button' data-purpose='" + esc(p.id) + "'>" +
-           esc((p.icon || "") + " " + label) + "</button>";
+      items.push({ id: String(p.id || ""), icon: String(p.icon || ""), text: label });
     }
-    h += "<button class='purposeBtn' data-semantic-id='purpose.button' data-purpose=''>" +
-      esc(t("purpose.skip")) + "</button>";
+    items.push({ id: "", icon: "", text: t("purpose.skip"), skip: true });
     box.style.display = "block";
-    var signature = String(afterRing) + ":" + h;
+    var signature = String(afterRing) + ":" + JSON.stringify(items);
     if (purposeMarkup === signature) return;
-    purposeMarkup = signature; box.innerHTML = h;
-    var bs = box.getElementsByTagName("button");
-    for (var k = 0; k < bs.length; k++) bs[k].onclick = (function (b) {
-      return function () { choosePurpose(b.getAttribute("data-purpose"), afterRing); };
-    })(bs[k]);
+    purposeMarkup = signature;
+    while (box.firstChild) box.removeChild(box.firstChild);
+    for (i = 0; i < items.length; i++) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "purposeBtn" + (items[i].skip ? " skip" : "");
+      b.setAttribute("data-semantic-id", "purpose.button");
+      b.setAttribute("data-purpose", items[i].id);
+      if (items[i].icon) {
+        var icon = document.createElement("span");
+        icon.className = "pIcon";
+        icon.setAttribute("aria-hidden", "true");
+        C.setText(icon, items[i].icon);
+        b.appendChild(icon);
+      }
+      var text = document.createElement("span");
+      text.className = "pLabel";
+      C.setText(text, items[i].text);
+      b.appendChild(text);
+      b.onclick = (function (purpose) {
+        return function () { choosePurpose(purpose, afterRing); };
+      })(items[i].id);
+      box.appendChild(b);
+    }
   }
   function showCall(id, label, preflight) {
     currentCall = { door: id, label: label, call_id: "", observed: false,
@@ -462,6 +380,7 @@
     if (currentCall) return;
     var purposeFirst = lastCallFlow === "purpose_first" && lastPurposes.length;
     showCall(id, label, purposeFirst);
+    reportVisitorLang(id);
     if (purposeFirst) purposeButtons(false); else beginPress("");
   }
 
@@ -698,6 +617,9 @@
         scheduleReset(currentCall, 800);
       }
     }
+    if (state.display && state.display.theme) C.applyColorRoles(state.display.theme);
+    var pending = currentCall && !currentCall.preflight && !currentCall.inCall && !currentCall.terminal;
+    $("callingView").className = pending ? "pending" : "";
     DoorbellPanelRuntime.applySemanticUi(state, { page: "door" });
   }
   function poll() {
@@ -720,12 +642,13 @@
   }
   $("visitorLanguage").onchange = function () {
     QUERY_LANG = normalizeLang(this.value) || LANG;
+    visitorChoseLang = true;
+    reportVisitorLang(visitorLangDoor());
     loadLanguage(QUERY_LANG, function () { applyI18n(); if (lastState) render(lastState); });
   };
   loadLanguage(QUERY_LANG || "ja", function () {
     applyI18n();
     installEmergency();
-    if (MOCK) { poll(); return; }
     DoorbellPanelRuntime.establishSession(function (result) {
       TOKEN = result.credential || "";
       if (result.ok) poll();

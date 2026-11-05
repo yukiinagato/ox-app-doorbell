@@ -2,6 +2,13 @@
 (function (root) {
   "use strict";
 
+  // Cancelling a stream reader returns a promise that rejects once the fetch was aborted; that
+  // rejection is expected and must not surface as an unhandled error.
+  function quiet(promise) {
+    if (promise && typeof promise.catch === "function") promise.catch(function () {});
+    return promise;
+  }
+
   function supportedMse() {
     return !!(root.MediaSource && root.fetch && root.ReadableStream && root.URL &&
               root.URL.createObjectURL);
@@ -27,6 +34,79 @@
     if (door) return "/stream-proxy.mp4?door=" + encodeURIComponent(door);
     return sameOrigin(direct, locationLike) ? String(direct || "") : "";
   }
+
+  // Protocol v3 serves another node's camera through this node's session-authenticated proxy.
+  // A same-origin URL published by Core is used as-is; a cross-origin peer URL is rewritten to
+  // /media/peer/<node>/...; anything else yields no URL rather than a mixed-content request.
+  var MEDIA_SUFFIX = { mjpeg: "stream.mjpeg", mp4: "stream.mp4", snapshot: "snapshot.jpg",
+                       meta: "video-meta" };
+  function peerMediaUrl(door, kind, locationLike) {
+    var suffix = MEDIA_SUFFIX[kind];
+    if (!door || !suffix) return "";
+    var direct = kind === "mjpeg" ? door.stream_mjpeg : kind === "mp4" ? door.stream_mp4 :
+      (door.stream_mjpeg || door.stream_mp4);
+    if (!direct) return "";
+    if (sameOrigin(direct, locationLike)) {
+      if (kind === "mjpeg" || kind === "mp4") return String(direct);
+      return String(direct).replace(/\/stream\.(?:mjpeg|mp4)(\?.*)?$/, "/" + suffix);
+    }
+    var peer = String(door.source_node_id || "");
+    if (!/^[A-Za-z0-9_.:-]{1,128}$/.test(peer)) return "";
+    return "/media/peer/" + encodeURIComponent(peer) + "/" + suffix;
+  }
+
+  function readUint32(bytes, at) {
+    return ((bytes[at] << 24) >>> 0) + (bytes[at + 1] << 16) + (bytes[at + 2] << 8) + bytes[at + 3];
+  }
+  function boxType(bytes, at) {
+    return String.fromCharCode(bytes[at], bytes[at + 1], bytes[at + 2], bytes[at + 3]);
+  }
+  function hex2(value) { return (value < 16 ? "0" : "") + value.toString(16).toUpperCase(); }
+
+  // Returns {complete, end, codec} for the leading ftyp/moov of a live fMP4 byte prefix. The codec
+  // string comes from the AVCDecoderConfigurationRecord (profile, compatibility, level), so a
+  // Main/High or level >3.0 encoder is announced correctly to MediaSource.
+  function initSegmentInfo(bytes) {
+    var at = 0, n = bytes.length;
+    while (at + 8 <= n) {
+      var size = readUint32(bytes, at), type = boxType(bytes, at + 4), header = 8;
+      if (size === 1) {
+        if (at + 16 > n) return { complete: false };
+        if (readUint32(bytes, at + 8) !== 0) return { complete: true, error: true };
+        size = readUint32(bytes, at + 12); header = 16;
+      } else if (size === 0) return { complete: true, error: true };
+      if (size < header) return { complete: true, error: true };
+      if (type === "moov") {
+        if (at + size > n) return { complete: false };
+        var codec = "";
+        for (var i = at + header; i + 8 <= at + size; i++) {
+          if (bytes[i + 4] === 0x61 && bytes[i + 5] === 0x76 && bytes[i + 6] === 0x63 &&
+              bytes[i + 7] === 0x43) {
+            var record = i + 8;
+            if (record + 4 <= at + size && bytes[record] === 1)
+              codec = "avc1." + hex2(bytes[record + 1]) + hex2(bytes[record + 2]) +
+                hex2(bytes[record + 3]);
+            break;
+          }
+        }
+        return { complete: true, end: at + size, codec: codec };
+      }
+      if (type !== "ftyp" && type !== "free" && type !== "styp") return { complete: true, error: true };
+      if (at + size > n) return { complete: false };
+      at += size;
+    }
+    return { complete: false };
+  }
+
+  function concatBytes(a, b) {
+    var out = new root.Uint8Array(a.length + b.length);
+    out.set(a, 0); out.set(b, a.length);
+    return out;
+  }
+
+  var MSE_DEFAULT_CODEC = "avc1.42E01E";
+  var MSE_MAX_PENDING_BYTES = 8 * 1024 * 1024;
+  var MSE_MAX_INIT_BYTES = 1024 * 1024;
 
   function strategies(profile) {
     var raw = profile && profile.strategies;
@@ -62,7 +142,7 @@
       if (stopped) return;
       stopped = true;
       try { if (aborter) aborter.abort(); } catch (e0) {}
-      try { if (reader) reader.cancel(); } catch (e) {}
+      try { if (reader) quiet(reader.cancel()); } catch (e) {}
       failed();
     }
     function frame() { if (!stopped) { activity(); ready(); } }
@@ -72,23 +152,51 @@
     video.addEventListener("timeupdate", activity);
     var ms = new root.MediaSource();
     ms.addEventListener("sourceopen", function () {
-      var sb;
-      try { sb = ms.addSourceBuffer('video/mp4; codecs="avc1.42E01E"'); }
-      catch (e) { fail(); return; }
-      var queue = [];
-      sb.addEventListener("error", fail);
-      sb.addEventListener("updateend", pump);
+      // The SourceBuffer is created once the init segment has arrived, so its codec matches the
+      // stream. Pending bytes are bounded: a subscriber that falls this far behind restarts
+      // instead of growing memory without limit.
+      var sb = null, queue = [], queuedBytes = 0, head = new root.Uint8Array(0);
       function pump() {
-        if (stopped || sb.updating) return;
+        if (stopped || !sb || sb.updating) return;
         try {
           if (sb.buffered.length && video.currentTime - sb.buffered.start(0) > 30) {
             sb.remove(0, video.currentTime - 10);
             return;
           }
-          if (queue.length) sb.appendBuffer(queue.shift());
+          if (queue.length) {
+            var next = queue.shift();
+            queuedBytes -= next.length;
+            sb.appendBuffer(next);
+          }
         } catch (e2) { fail(); }
       }
-      var fetchOptions = { cache: "no-store" };
+      function enqueue(chunk) {
+        queue.push(chunk);
+        queuedBytes += chunk.length;
+        if (queuedBytes > MSE_MAX_PENDING_BYTES) { fail(); return false; }
+        return true;
+      }
+      function openBuffer(codec) {
+        var type = 'video/mp4; codecs="' + (codec || MSE_DEFAULT_CODEC) + '"';
+        if (root.MediaSource.isTypeSupported && !root.MediaSource.isTypeSupported(type)) {
+          fail(); return false;
+        }
+        try { sb = ms.addSourceBuffer(type); } catch (e) { fail(); return false; }
+        sb.addEventListener("error", fail);
+        sb.addEventListener("updateend", pump);
+        return true;
+      }
+      function accept(chunk) {
+        if (sb) return enqueue(chunk);
+        head = concatBytes(head, chunk);
+        var info = initSegmentInfo(head);
+        if (info.error || (!info.complete && head.length > MSE_MAX_INIT_BYTES)) { fail(); return false; }
+        if (!info.complete) return true;
+        var buffered = head;
+        head = new root.Uint8Array(0);
+        return openBuffer(info.codec) && enqueue(buffered);
+      }
+      var fetchOptions = { cache: "no-store", credentials: "same-origin" };
       if (aborter) fetchOptions.signal = aborter.signal;
       root.fetch(url, fetchOptions).then(function (resp) {
         if (!resp.ok || !resp.body) { fail(); return; }
@@ -97,10 +205,10 @@
           reader.read().then(function (r) {
             if (stopped) return;
             if (r.done) { fail(); return; }
-            queue.push(r.value);
+            if (!accept(r.value)) return;
             pump();
             try {
-              if (sb.buffered.length) {
+              if (sb && sb.buffered.length) {
                 var end = sb.buffered.end(sb.buffered.length - 1);
                 if (end - video.currentTime > 3) video.currentTime = end - 0.5;
               }
@@ -117,7 +225,7 @@
     return function () {
       stopped = true;
       try { if (aborter) aborter.abort(); } catch (e0) {}
-      try { if (reader) reader.cancel(); } catch (e) {}
+      try { if (reader) quiet(reader.cancel()); } catch (e) {}
       try {
         video.removeEventListener("loadeddata", frame);
         video.removeEventListener("playing", frame);
@@ -139,7 +247,7 @@
       if (stopped) return;
       stopped = true;
       try { if (aborter) aborter.abort(); } catch (e0) {}
-      try { if (reader) reader.cancel(); } catch (e1) {}
+      try { if (reader) quiet(reader.cancel()); } catch (e1) {}
       failed();
     }
     function append(chunk) {
@@ -179,7 +287,7 @@
     return function () {
       stopped = true;
       try { if (aborter) aborter.abort(); } catch (e0) {}
-      try { if (reader) reader.cancel(); } catch (e1) {}
+      try { if (reader) quiet(reader.cancel()); } catch (e1) {}
     };
   }
 
@@ -396,5 +504,6 @@
   }
 
   root.DoorbellPlayback = { start: start, strategies: strategies, mseSupported: supportedMse,
-                            sameOrigin: sameOrigin, proxyMp4Url: proxyMp4Url };
+                            sameOrigin: sameOrigin, proxyMp4Url: proxyMp4Url,
+                            peerMediaUrl: peerMediaUrl, initSegmentInfo: initSegmentInfo };
 })(window);

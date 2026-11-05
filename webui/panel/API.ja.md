@@ -18,6 +18,11 @@
   拒否する。failover に使う各 panel-serving node には、同じ ref の実値を Admin から個別に配備する。
 - query/form の token は拒否する。cross-node upload だけは URL ではなく
   `Authorization: Bearer <credential>` を使用できる。
+- `dbpanel` cookie による更新系要求 (press、purpose、cancel、hangup、reply、recovery、
+  visitor-lang、call-lifecycle、call-log/seen、emergency、operations) はすべて、
+  `POST /api/panel/session` または `GET /api/panel/session` が返す `csrf_token` を
+  `X-Doorbell-CSRF` に付ける。各ページは `DoorbellPanelRuntime.panelRequest` 経由で送信し、
+  403 のときは token を読み直して一度だけ再送する。Core は token が無い・古い要求を実行前に拒否する。
 - token 不一致・欠落は `403` + `{"ok":false,"err":"bad token"}`。
 - 静的ページ `/panel/door` `/panel/monitor` 自体は既存どおり認証免除 prefix
   (`/panel/`) で配信される。守るのは API と snapshot 転発のみ。
@@ -135,6 +140,11 @@ ringing、欠落、古い、または未対応の call は `409`。
 
 ## POST /api/panel/call-lifecycle
 
+応答済みで終了していない網頁通話は、ページが非表示 (タブ切替・画面ロック) でも `heartbeat` を
+送り続ける。非表示ページが止めるのは state/config/call-info の読み取りだけ。未応答のページは
+非表示の間に所有権を主張しない。端末のスリープでは timer が止まるため、放置された通話は
+サーバー側の lease で終了する。
+
 Body は
 `door=<id>&call_id=<opaque>&stage_revision=<n>&dialog_id=<32-hex>&state=<answered|heartbeat|ended>[&reason=<token>]`。
 
@@ -200,6 +210,13 @@ Body は
   presentation success と報告してはならない。
 - Core の `delivery_result` は dispatch の試行結果であり、画面表示や音の成功証明ではない。
   client の runtime status にある channel 別 presentation report が適用、抑制、未対応、失敗を示す。
+
+## カメラ映像の取得元 (セキュリティプロトコル v3)
+
+ブラウザーは、表示中の node と同じ origin から、panel/admin session で認証された映像だけを取得する。
+door の `stream_mjpeg`/`stream_mp4` が別 node の origin を示していても直接は取得せず、
+同じ node の `/media/peer/<source_node_id>/stream.mjpeg` (`stream.mp4`、`snapshot.jpg`、
+`video-meta` も同様) を使う。
 
 ## GET /snapshot-proxy?door=\<id\>
 
@@ -279,7 +296,8 @@ before_ms&limit&door&outcome` は新しい順、`limit` 既定 50 / 上限 500�
 
 `POST /api/call-log/seen` に `{"up_to_hlc":"<行の hlc>"}` (空ならすべて) を送ると**端末ローカルの**
 既読ウォーターマークが前進し、新しい `unread_missed` を返す。複製されず、後退もしない。
-monitor.html はページを開いた時に一度だけ呼び、不在着信バッジを消す。
+monitor.html は住人が「既読にする」を押したときだけ呼び、表示した行の中で最新の `hlc` を
+必ず指定する。ページを開いただけでは何も既読にせず、一覧を描いた後に届いた着信は未読のまま残る。
 
 ## GET /api/panel/call-info  (網頁通話 — call.html 用)
 

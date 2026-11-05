@@ -35,6 +35,45 @@ assert.strictEqual(P.proxyMp4Url("d front", "a+b", "http://peer/stream.mp4"),
 assert.strictEqual(P.proxyMp4Url("", "", "/stream.mp4"), "/stream.mp4");
 assert.strictEqual(P.proxyMp4Url("", "", "http://peer/stream.mp4"), "");
 
+// Protocol v3: peer media goes through this node's session-authenticated proxy.
+assert.strictEqual(P.peerMediaUrl({ stream_mjpeg: "/stream.mjpeg" }, "mjpeg"), "/stream.mjpeg");
+assert.strictEqual(P.peerMediaUrl({ stream_mjpeg: "http://10.0.0.5:47180/stream.mjpeg",
+  source_node_id: "a1b2" }, "mjpeg"), "/media/peer/a1b2/stream.mjpeg");
+assert.strictEqual(P.peerMediaUrl({ stream_mjpeg: "http://10.0.0.5:47180/stream.mjpeg" }, "mjpeg"),
+  "", "an unknown peer is never fetched cross-origin");
+assert.strictEqual(P.peerMediaUrl({ stream_mjpeg: "/media/peer/a1b2/stream.mjpeg" }, "snapshot"),
+  "/media/peer/a1b2/snapshot.jpg");
+assert.strictEqual(P.peerMediaUrl({ source_node_id: "a1b2" }, "mjpeg"), "",
+  "no published stream means no URL");
+assert.strictEqual(P.peerMediaUrl({ stream_mjpeg: "https://x/stream.mjpeg", source_node_id: "a/b" },
+  "mjpeg"), "", "node ids are validated before they enter a path");
+
+function box(type, payload) {
+  const out = new Uint8Array(8 + payload.length);
+  const n = out.length;
+  out.set([n >>> 24 & 255, n >>> 16 & 255, n >>> 8 & 255, n & 255], 0);
+  for (let i = 0; i < 4; i++) out[4 + i] = type.charCodeAt(i);
+  out.set(payload, 8);
+  return out;
+}
+function concat(...parts) {
+  const out = new Uint8Array(parts.reduce((a, p) => a + p.length, 0));
+  let at = 0; for (const p of parts) { out.set(p, at); at += p.length; }
+  return out;
+}
+const avcC = box("avcC", new Uint8Array([1, 0x64, 0x00, 0x28, 0xff, 0xe1]));
+const moov = box("moov", box("trak", box("mdia", box("minf", box("stbl", box("stsd",
+  concat(new Uint8Array(8), box("avc1", concat(new Uint8Array(78), avcC)))))))));
+const init = concat(box("ftyp", new Uint8Array([0x69, 0x73, 0x6f, 0x6d, 0, 0, 0, 1])), moov);
+const info = P.initSegmentInfo(concat(init, box("moof", new Uint8Array(4))));
+assert.strictEqual(info.complete, true);
+assert.strictEqual(info.codec, "avc1.640028", "High profile level 4.0 is announced from avcC");
+assert.strictEqual(info.end, init.length);
+assert.strictEqual(P.initSegmentInfo(init.subarray(0, init.length - 3)).complete, false,
+  "a partial moov waits for more bytes");
+assert.strictEqual(P.initSegmentInfo(box("mdat", new Uint8Array(4))).error, true,
+  "media before an init segment is rejected");
+
 const imageStates = [];
 const imageOnly = { style: {}, removeAttribute(name) { if (name === "src") this.src = ""; } };
 const imageVideo = { style: {}, removeAttribute() {}, load() {}, pause() {} };

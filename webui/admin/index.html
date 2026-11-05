@@ -2,7 +2,8 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
 <title></title>
 <script>
 
@@ -14,39 +15,40 @@
   })();
 </script>
 <style>
-  :root { --bg:#101418; --card:#1a2027; --fg:#e8edf2; --dim:#8a97a5; --acc:#4da3ff; --warn:#ffb454; --err:#ff6b6b; --ok:#5dd39e; }
+  :root { --bg:#101418; --card:#1a2027; --fg:#e8edf2; --dim:#8a97a5; --acc:#4da3ff; --warn:#ffb454; --err:#ff6b6b; --ok:#5dd39e;
+          --line:#2a333d; --line2:#242d36; --field:#0c1014; --chip:#243040; --card2:#141a21; --on-acc:#04121f; }
   * { box-sizing:border-box; margin:0; }
   body { background:var(--bg); color:var(--fg); font-family:"Hiragino Sans","Yu Gothic UI",system-ui,sans-serif; font-size:15px; }
-  header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--card); border-bottom:1px solid #2a333d; }
+  header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
   header h1 { font-size:17px; font-weight:600; }
   header .node { color:var(--dim); font-size:12px; margin-left:auto; }
   nav { display:flex; gap:4px; padding:8px 12px; flex-wrap:wrap; }
-  nav button { background:none; border:1px solid #2a333d; color:var(--fg); padding:7px 14px; border-radius:8px; cursor:pointer; font-size:14px; display:inline-flex; align-items:center; gap:6px; }
-  nav button.on { background:var(--acc); border-color:var(--acc); color:#04121f; font-weight:600; }
+  nav button { background:none; border:1px solid var(--line); color:var(--fg); padding:7px 14px; border-radius:8px; cursor:pointer; font-size:14px; display:inline-flex; align-items:center; gap:6px; }
+  nav button.on { background:var(--acc); border-color:var(--acc); color:var(--on-acc); font-weight:600; }
   .ic { width:1.05em; height:1.05em; vertical-align:-0.16em; fill:none;
         stroke:currentColor; flex:none; }
   .btn .ic, .btn2 .ic { vertical-align:-0.16em; }
   main { padding:12px 16px 40px; max-width:960px; margin:0 auto; }
-  .card { background:var(--card); border:1px solid #2a333d; border-radius:10px; padding:14px; margin-bottom:12px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:12px; }
   .card h2 { font-size:15px; font-weight:600; margin-bottom:8px; }
   .chead { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
   .chead h2 { margin-bottom:0; }
   table { width:100%; border-collapse:collapse; font-size:13px; }
-  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid #242d36; }
+  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line2); }
   th { color:var(--dim); font-weight:500; }
   .ok { color:var(--ok); } .warn { color:var(--warn); } .err { color:var(--err); } .dim { color:var(--dim); }
-  .tag { display:inline-block; padding:1px 8px; border-radius:99px; font-size:11px; border:1px solid #2a333d; }
-  .chip { display:inline-block; padding:2px 10px; margin:2px 4px 2px 0; border-radius:99px; font-size:12px; background:#243040; }
-  textarea { width:100%; min-height:300px; background:#0c1014; color:var(--fg); border:1px solid #2a333d; border-radius:8px; padding:10px; font:12px/1.5 ui-monospace,Menlo,monospace; }
-  input,select { background:#0c1014; color:var(--fg); border:1px solid #2a333d; border-radius:8px; padding:9px 12px; font-size:15px; }
-  .dropzone { border:2px dashed #2a333d; border-radius:10px; padding:18px; text-align:center; color:var(--dim); margin:8px 0; cursor:pointer; user-select:none; transition:border-color .12s, background .12s; }
+  .tag { display:inline-block; padding:1px 8px; border-radius:99px; font-size:11px; border:1px solid var(--line); }
+  .chip { display:inline-block; padding:2px 10px; margin:2px 4px 2px 0; border-radius:99px; font-size:12px; background:var(--chip); }
+  textarea { width:100%; min-height:300px; background:var(--field); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:10px; font:12px/1.5 ui-monospace,Menlo,monospace; }
+  input,select { background:var(--field); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-size:15px; }
+  .dropzone { border:2px dashed var(--line); border-radius:10px; padding:18px; text-align:center; color:var(--dim); margin:8px 0; cursor:pointer; user-select:none; transition:border-color .12s, background .12s; }
   .dropzone.drag { border-color:var(--acc); background:rgba(90,200,250,0.08); color:var(--fg); }
   input[type=password],input[type=text],input[type=number],input[type=time] { width:100%; }
   input[type=checkbox],input[type=radio] { width:auto; }
-  .btn { background:var(--acc); color:#04121f; border:none; border-radius:8px; padding:9px 18px; font-size:14px; font-weight:600; cursor:pointer; }
+  .btn { background:var(--acc); color:var(--on-acc); border:none; border-radius:8px; padding:9px 18px; font-size:14px; font-weight:600; cursor:pointer; }
   .btn.small { padding:6px 14px; font-size:13px; }
-  .btn.ghost { background:none; color:var(--fg); border:1px solid #2a333d; }
-  .btn2 { background:none; color:var(--acc); border:1px solid #2a333d; border-radius:7px; padding:4px 10px; font-size:12px; cursor:pointer; }
+  .btn.ghost { background:none; color:var(--fg); border:1px solid var(--line); }
+  .btn2 { background:none; color:var(--acc); border:1px solid var(--line); border-radius:7px; padding:4px 10px; font-size:12px; cursor:pointer; }
   .btn2.danger { color:var(--err); }
   .ops { white-space:nowrap; }
   tr.offline td { opacity:.45; }
@@ -58,7 +60,7 @@
   .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
   .mcwrap { display:inline-flex; flex-wrap:wrap; gap:2px 10px; }
   .mc { display:inline-flex; align-items:center; gap:4px; font-size:13px; cursor:pointer; padding:2px 0; }
-  .arow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 0; border-bottom:1px dashed #242d36; }
+  .arow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 0; border-bottom:1px dashed var(--line2); }
   .arow input[type=time] { width:auto; padding:5px 8px; }
   .arow input[type=text] { width:auto; padding:5px 8px; }
   .arow select { padding:5px 8px; }
@@ -68,7 +70,7 @@
   #login h2 { margin-bottom:14px; font-size:16px; }
   #login .row { margin-bottom:10px; }
   .hidden { display:none !important; }
-  #msg { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:#243040; padding:8px 18px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s; z-index:30; }
+  #msg { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:var(--chip); padding:8px 18px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s; z-index:30; }
   #modal { position:fixed; inset:0; background:rgba(4,8,12,.62); z-index:20; overflow:auto; padding:5vh 12px; }
   .mbox { max-width:640px; margin:0 auto; }
   .mbtns { display:flex; gap:8px; margin-top:14px; }
@@ -85,23 +87,23 @@
   .live-frame>img,.live-frame>video { position:absolute; left:50%; top:50%; width:100%; height:100%;
                 object-fit:contain; background:#000; transform:translate(-50%,-50%); transform-origin:center; }
   .agrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
-  .acard { background:#141a21; border:1px solid #2a333d; border-radius:9px; padding:9px; }
-  .athumb { width:100%; height:92px; border-radius:6px; background:#0c1014 center/cover no-repeat;
+  .acard { background:var(--card2); border:1px solid var(--line); border-radius:9px; padding:9px; }
+  .athumb { width:100%; height:92px; border-radius:6px; background:var(--field) center/cover no-repeat;
             display:block; }
   .acard audio { width:100%; margin-top:6px; }
   .acard .lbl { font-size:13px; margin:6px 0 2px; word-break:break-all; }
   .refs { font-size:11px; line-height:1.5; }
-  .prog { height:6px; background:#0c1014; border-radius:4px; overflow:hidden; margin-top:8px;
+  .prog { height:6px; background:var(--field); border-radius:4px; overflow:hidden; margin-top:8px;
           display:none; }
   .prog > div { height:100%; width:0; background:var(--acc); }
   input[type=file] { background:none; border:none; padding:0; font-size:13px; }
   input[type=color] { width:56px; height:36px; padding:2px; vertical-align:middle; }
   .swatches { display:inline-block; vertical-align:middle; margin-left:8px; }
-  .sw { width:24px; height:24px; border-radius:6px; border:1px solid #2a333d; padding:0;
+  .sw { width:24px; height:24px; border-radius:6px; border:1px solid var(--line); padding:0;
         cursor:pointer; margin-right:4px; vertical-align:middle; }
 
   .tprev { position:relative; width:300px; height:210px; border-radius:12px; overflow:hidden;
-           border:1px solid #2a333d; background:#101418 center/cover no-repeat; color:#fff;
+           border:1px solid var(--line); background:#101418 center/cover no-repeat; color:#fff;
            text-shadow:0 1px 3px rgba(0,0,0,.75); text-align:center; }
   /* The darkening layer sits over the background and under everything drawn on it, exactly
      where a shell composites it. */
@@ -121,18 +123,18 @@
   .i18ntbl .k { font-family:ui-monospace,Menlo,monospace; font-size:12px; white-space:nowrap;
                 padding-top:14px; }
   .spin { display:inline-block; width:11px; height:11px; margin-right:7px; border-radius:50%;
-          border:2px solid #2a333d; border-top-color:var(--acc); vertical-align:-1px;
+          border:2px solid var(--line); border-top-color:var(--acc); vertical-align:-1px;
           animation:spin 0.9s linear infinite; }
   @keyframes spin { to { transform:rotate(360deg); } }
   .pairrow { display:flex; justify-content:space-between; align-items:center; gap:10px;
-             padding:9px; border:1px solid #2a333d; border-radius:8px; margin-bottom:6px; }
+             padding:9px; border:1px solid var(--line); border-radius:8px; margin-bottom:6px; }
   .pairwho { min-width:0; word-break:break-word; }
   .pairaddr { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
   .qrbox { margin-top:12px; text-align:center; }
   .qrbox canvas { image-rendering:pixelated; border-radius:6px; background:#fff; padding:0;
                   max-width:280px; }
   .qrph { display:flex; align-items:center; justify-content:center; width:100%; max-width:280px;
-          height:240px; margin:0 auto; border:1px dashed #2a333d; border-radius:6px; }
+          height:240px; margin:0 auto; border:1px dashed var(--line); border-radius:6px; }
   .pairscan { position:fixed; inset:0; background:#04080c; z-index:40; display:flex;
               align-items:center; justify-content:center; }
   .pairscan video { width:100%; height:100%; object-fit:cover; }
@@ -245,6 +247,7 @@
 
   [data-ui="retro"] a { color:#000080; }
 </style>
+<link rel="stylesheet" href="layout.css">
 </head>
 <body>
 
@@ -272,23 +275,41 @@
       <option value="retro">Retro (90s)</option>
     </select>
   </header>
-  <nav>
-    <button data-tab="dash" class="on"><svg class="ic"><use href="#i-home"/></svg><span data-i18n="admin.dashboard"></span></button>
-    <button data-tab="doors"><svg class="ic"><use href="#i-building-community"/></svg><span data-i18n="admin.doors"></span></button>
-    <button data-tab="devices"><svg class="ic"><use href="#i-device-tablet"/></svg><span data-i18n="admin.devices"></span></button>
-    <button data-tab="rules"><svg class="ic"><use href="#i-adjustments"/></svg><span data-i18n="admin.rules"></span></button>
-    <button data-tab="qr"><svg class="ic"><use href="#i-message-reply"/></svg><span data-i18n="admin.quick_replies"></span></button>
-    <button data-tab="purposes"><svg class="ic"><use href="#i-list"/></svg><span data-i18n="admin.purposes"></span></button>
-    <button data-tab="texts"><svg class="ic"><use href="#i-note"/></svg><span data-i18n="admin.texts"></span></button>
-    <button data-tab="theme"><svg class="ic"><use href="#i-brush"/></svg><span data-i18n="admin.theme"></span></button>
-    <button data-tab="assets"><svg class="ic"><use href="#i-photo"/></svg><span data-i18n="admin.assets"></span></button>
-    <button data-tab="households"><svg class="ic"><use href="#i-users"/></svg><span data-i18n="admin.households"></span></button>
-    <button data-tab="integrations"><svg class="ic"><use href="#i-link"/></svg><span data-i18n="admin.integrations"></span></button>
-    <button data-tab="events"><svg class="ic"><use href="#i-clock"/></svg><span data-i18n="admin.events"></span></button>
-    <button data-tab="pair"><svg class="ic"><use href="#i-plus"/></svg><span data-i18n="pair.tab"></span></button>
-    <button data-tab="system"><svg class="ic"><use href="#i-settings"/></svg><span data-i18n="admin.system"></span></button>
+  <div id="settingsShell">
+  <nav id="settingsNav" data-i18n-aria="settings.categories">
+    <div class="navsearch"><input type="search" id="navSearch" autocomplete="off" data-i18n-ph="settings.search" data-i18n-aria="settings.search"></div>
+    <div class="navgroup" data-group="overview" role="group" aria-labelledby="navg-overview"><div class="navgrouphead" id="navg-overview" data-i18n="settings.group_overview"></div>
+      <button type="button" data-tab="dash" class="on" aria-current="page"><span class="navic"><svg class="ic"><use href="#i-home"/></svg></span><span data-i18n="admin.dashboard"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="events"><span class="navic"><svg class="ic"><use href="#i-clock"/></svg></span><span data-i18n="admin.events"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+    </div>
+    <div class="navgroup" data-group="site" role="group" aria-labelledby="navg-site"><div class="navgrouphead" id="navg-site" data-i18n="settings.group_site"></div>
+      <button type="button" data-tab="doors"><span class="navic"><svg class="ic"><use href="#i-building-community"/></svg></span><span data-i18n="admin.doors"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="devices"><span class="navic"><svg class="ic"><use href="#i-device-tablet"/></svg></span><span data-i18n="admin.devices"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="panels"><span class="navic"><svg class="ic"><use href="#i-shield-lock"/></svg></span><span data-i18n="panels.tab"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="pair"><span class="navic"><svg class="ic"><use href="#i-plus"/></svg></span><span data-i18n="pair.tab"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+    </div>
+    <div class="navgroup" data-group="calls" role="group" aria-labelledby="navg-calls"><div class="navgrouphead" id="navg-calls" data-i18n="settings.group_calls"></div>
+      <button type="button" data-tab="rules"><span class="navic"><svg class="ic"><use href="#i-adjustments"/></svg></span><span data-i18n="admin.rules"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="qr"><span class="navic"><svg class="ic"><use href="#i-message-reply"/></svg></span><span data-i18n="admin.quick_replies"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="purposes"><span class="navic"><svg class="ic"><use href="#i-list"/></svg></span><span data-i18n="admin.purposes"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="households"><span class="navic"><svg class="ic"><use href="#i-users"/></svg></span><span data-i18n="admin.households"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+    </div>
+    <div class="navgroup" data-group="appearance" role="group" aria-labelledby="navg-appearance"><div class="navgrouphead" id="navg-appearance" data-i18n="settings.group_appearance"></div>
+      <button type="button" data-tab="texts"><span class="navic"><svg class="ic"><use href="#i-note"/></svg></span><span data-i18n="admin.texts"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="theme"><span class="navic"><svg class="ic"><use href="#i-brush"/></svg></span><span data-i18n="admin.theme"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="assets"><span class="navic"><svg class="ic"><use href="#i-photo"/></svg></span><span data-i18n="admin.assets"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+    </div>
+    <div class="navgroup" data-group="system" role="group" aria-labelledby="navg-system"><div class="navgrouphead" id="navg-system" data-i18n="settings.group_system"></div>
+      <button type="button" data-tab="integrations"><span class="navic"><svg class="ic"><use href="#i-link"/></svg></span><span data-i18n="admin.integrations"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="system"><span class="navic"><svg class="ic"><use href="#i-settings"/></svg></span><span data-i18n="admin.system"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+    </div>
+    <div id="navEmpty" class="dim hidden" data-i18n="settings.no_match"></div>
   </nav>
-  <main>
+  <main id="settingsDetail">
+    <div id="detailBar">
+      <button type="button" id="navBack" class="btn ghost"><svg class="ic back" aria-hidden="true"><use href="#i-chevron-right"/></svg><span data-i18n="settings.back"></span></button>
+      <h2 id="detailTitle" tabindex="-1"></h2>
+    </div>
     <section id="tab-dash">
       <div id="adminEmergency" class="card hidden" role="alert" style="background:#8f1010;border-color:#ff8f85">
         <div class="chead"><h2 style="font-size:24px;color:#fff" data-i18n="admin.sos_active"></h2>
@@ -299,13 +320,14 @@
       <div class="card"><div class="dim" id="bridgeInfo" style="margin-bottom:8px"></div>
         <div class="dim mono" id="localAddrs" style="margin-bottom:8px; font-size:12px"></div>
         <table id="peersTbl" class="bounded-table">
-        <colgroup><col style="width:11%"><col style="width:13%"><col style="width:8%"><col style="width:13%"><col style="width:20%"><col style="width:10%"><col style="width:25%"></colgroup>
-        <thead><tr><th data-i18n="info.node"></th><th data-i18n="info.role"></th><th data-i18n="admin.status"></th><th data-i18n="admin.duty"></th><th data-i18n="info.version"></th><th data-i18n="power.title"></th><th data-i18n="admin.addresses"></th></tr></thead>
+        <colgroup><col style="width:10%"><col style="width:11%"><col style="width:7%"><col style="width:11%"><col style="width:14%"><col style="width:9%"><col style="width:17%"><col style="width:9%"><col style="width:12%"></colgroup>
+        <thead><tr><th data-i18n="info.node"></th><th data-i18n="info.role"></th><th data-i18n="admin.status"></th><th data-i18n="admin.duty"></th><th data-i18n="info.version"></th><th data-i18n="power.title"></th><th data-i18n="admin.addresses"></th><th data-i18n="security.membership"></th><th data-i18n="security.fingerprint"></th></tr></thead>
         <tbody></tbody></table></div>
-      <div id="liveGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px"></div>
+      <div id="liveGrid"></div>
     </section>
     <section id="tab-doors" class="hidden"></section>
     <section id="tab-devices" class="hidden"></section>
+    <section id="tab-panels" class="hidden"></section>
     <section id="tab-rules" class="hidden"></section>
     <section id="tab-qr" class="hidden"></section>
     <section id="tab-purposes" class="hidden"></section>
@@ -318,8 +340,9 @@
     <section id="tab-pair" class="hidden"></section>
     <section id="tab-system" class="hidden"></section>
   </main>
+  </div>
 </div>
-<div id="modal" class="hidden"></div>
+<div id="modal" class="hidden" role="dialog" aria-modal="true"></div>
 <div id="msg"></div>
 <script src="/panel/playback.js"></script>
 <script src="app.js"></script>
