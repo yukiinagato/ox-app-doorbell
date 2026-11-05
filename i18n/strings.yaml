@@ -50,7 +50,7 @@ dashboard.offline_doors_title: { ja: "オフラインの門口機", en: "Offline
 dashboard.offline_doors_empty: { ja: "オフラインの門口機はありません", en: "No offline door stations", zh: "没有离线门口机" }
 dashboard.device_status_offline: { ja: "オフライン", en: "Offline", zh: "离线" }
 dashboard.preview_rate_title: { ja: "プレビュー更新頻度", en: "Preview refresh rate", zh: "预览更新频率" }
-dashboard.preview_rate_format: { ja: "%@ fps", en: "%@ fps", zh: "%@ fps" }
+dashboard.preview_rate_format: { ja: "{rate} fps", en: "{rate} fps", zh: "{rate} fps" }
 ring.monitor: { ja: "モニタ", en: "Monitor", zh: "监听" }
 ring.monitoring: { ja: "玄関の音声を再生中", en: "Live door audio is on", zh: "正在播放门口声音" }
 # The number beside the incoming-call title: how long until this panel returns to its home
@@ -1293,3 +1293,7 @@ admin.import_omitted: { en: "Sensitive fields omitted from this export; review a
 
 admin.import_unknown_ack: { en: "I saved the recovery reference and understand that the previous import result is still unknown. I want to review a new import explicitly.", ja: "復旧情報を保存し、前回の結果が不明なままであることを理解しました。別のインポートを新たに確認します。", zh: "我已保存恢复记录，并理解上次导入结果仍未知；我明确选择重新预检另一次导入。" }
 admin.import_new_preview: { en: "Review a new import", ja: "新しいインポートを確認", zh: "预检新的导入" }
+
+# iOS and iOS 5 shells: review fixes 2026-11
+dashboard.device_status_missing: { ja: "門口機が登録されていません", en: "No door station registered", zh: "未登记门口机" }
+ring.unlock_failed: { ja: "開錠の操作を実行できませんでした", en: "The unlock action could not be run", zh: "开锁操作未能执行" }

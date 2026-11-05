@@ -452,6 +452,7 @@
 "dash.tile_offline" = "离线";
 "dash.tile_open" = "查看";
 "dash.tile_watch" = "查看";
+"dashboard.device_status_missing" = "未登记门口机";
 "dashboard.device_status_offline" = "离线";
 "dashboard.offline_doors" = "离线门口机";
 "dashboard.offline_doors_empty" = "没有离线门口机";
@@ -922,6 +923,7 @@
 "ring.quick_reply" = "快捷回复";
 "ring.return_countdown_a11y" = "自动返回主页的秒数（点按可取消）";
 "ring.unlock" = "开锁";
+"ring.unlock_failed" = "开锁操作未能执行";
 "ring.unlock_sent" = "已发送开锁信号";
 "ring.unlock_unconfigured" = "此门口机尚未配置开锁操作";
 "ring.video_zoom_hint" = "双指缩放，双击复位";

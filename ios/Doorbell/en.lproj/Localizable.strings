@@ -452,6 +452,7 @@
 "dash.tile_offline" = "Offline";
 "dash.tile_open" = "View";
 "dash.tile_watch" = "View";
+"dashboard.device_status_missing" = "No door station registered";
 "dashboard.device_status_offline" = "Offline";
 "dashboard.offline_doors" = "Offline door stations";
 "dashboard.offline_doors_empty" = "No offline door stations";
@@ -922,6 +923,7 @@
 "ring.quick_reply" = "Quick reply";
 "ring.return_countdown_a11y" = "Seconds until this panel returns home (tap to stop)";
 "ring.unlock" = "Unlock";
+"ring.unlock_failed" = "The unlock action could not be run";
 "ring.unlock_sent" = "Unlock signal sent";
 "ring.unlock_unconfigured" = "No unlock action is configured for this door";
 "ring.video_zoom_hint" = "Pinch to zoom; double-tap to reset";

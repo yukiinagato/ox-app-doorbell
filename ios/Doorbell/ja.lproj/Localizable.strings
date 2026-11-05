@@ -452,6 +452,7 @@
 "dash.tile_offline" = "オフライン";
 "dash.tile_open" = "見る";
 "dash.tile_watch" = "見る";
+"dashboard.device_status_missing" = "門口機が登録されていません";
 "dashboard.device_status_offline" = "オフライン";
 "dashboard.offline_doors" = "オフラインの門口機";
 "dashboard.offline_doors_empty" = "オフラインの門口機はありません";
@@ -922,6 +923,7 @@
 "ring.quick_reply" = "クイック返信";
 "ring.return_countdown_a11y" = "自動で戻るまでの秒数（タップで解除）";
 "ring.unlock" = "解錠";
+"ring.unlock_failed" = "開錠の操作を実行できませんでした";
 "ring.unlock_sent" = "解錠信号を送信しました";
 "ring.unlock_unconfigured" = "この門口機には開錠の操作が設定されていません";
 "ring.video_zoom_hint" = "ピンチで拡大、ダブルタップで元に戻します";
