@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -76,6 +77,7 @@ struct Opt {
   std::string door;
   std::string model;
   std::string platform;
+  bool enroll = true;  // false: strict v3 membership, as production shells run
 };
 
 
@@ -157,6 +159,7 @@ struct Fleet {
     if (!opt.model.empty()) st.model = opt.model;
     if (!opt.platform.empty()) st.platform = opt.platform;
     st.caps_json = caps;
+    st.enroll_psk_holders = opt.enroll;
     st.heartbeat_ms = 30;
     st.suspect_ms = 90;
     st.dead_ms = 150;
@@ -630,18 +633,23 @@ TEST_CASE("mesh: delta push and periodic sync converge config with deterministic
 TEST_CASE("mesh: full config sync acknowledges compacted same-key history") {
   Fleet f;
   f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/false});
+  // A paired node starts by recording its own membership.
+  REQUIRE(f.at(kIdA).config->get("mesh.members." + kIdA));
+  const uint64_t base = f.at(kIdA).config->versionVector().at(kIdA);
   f.at(kIdA).config->set("cluster.name", R"("Old")");
   f.at(kIdA).config->set("cluster.name", R"("Current")");
-  REQUIRE(f.at(kIdA).config->all().size() == 1);
-  REQUIRE(f.at(kIdA).config->versionVector().at(kIdA) == 2);
+  REQUIRE(f.at(kIdA).config->all().size() == 2);
+  REQUIRE(f.at(kIdA).config->versionVector().at(kIdA) == base + 2);
 
   f.add(kIdB, "B", capsJson(9), {{"A"}, /*beacon=*/false});
   REQUIRE(f.runUntil([&] {
     const auto vv = f.at(kIdB).config->versionVector();
     const auto it = vv.find(kIdA);
+    // Enrollment adds A's record of B after the two connect, so compare against A's own frontier.
     return f.at(kIdB).config->get("cluster.name") ==
                std::optional<std::string>(R"("Current")") &&
-           it != vv.end() && it->second == 2;
+           it != vv.end() && it->second >= base + 2 &&
+           it->second == f.at(kIdA).config->versionVector().at(kIdA);
   }, 3000));
   CHECK(f.at(kIdA).config->deltaSince(f.at(kIdB).config->versionVector()).empty());
 }
@@ -1494,6 +1502,15 @@ std::vector<std::string> pendingIds(const std::string& js) {
   return out;
 }
 
+namespace {
+const cJSON* pendingDevice(const std::string& js, const std::string& id);
+}  // namespace
+
+std::string confirmCodeOf(Fleet::Node& n) {
+  json::Doc self = json::parse(n.mesh->pairingSelfJson());
+  return self ? json::getString(self.get(), "confirm_code") : std::string();
+}
+
 TEST_CASE("mesh: pairing discovery and invite provide PSK and config to an unpaired node") {
   Fleet f;
 
@@ -1511,9 +1528,10 @@ TEST_CASE("mesh: pairing discovery and invite provide PSK and config to an unpai
     return std::find(ids.begin(), ids.end(), kIdJ) != ids.end();
   }, 3000));
   CHECK(host.pending_changes >= 1);
+  REQUIRE(confirmCodeOf(joiner).size() == 8);
 
 
-  host.mesh->inviteDevice(kIdJ);
+  host.mesh->inviteDevice(kIdJ, confirmCodeOf(joiner));
   REQUIRE(f.runUntil([&] { return joiner.mesh->isPaired(); }, 3000));
   CHECK(joiner.paired_count >= 1);
 
@@ -1550,15 +1568,32 @@ TEST_CASE("mesh: inviteDeviceDirect accepts address and public key without disco
   REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 4000));
 }
 
-TEST_CASE("mesh: pairing mode automatically invites newly discovered unpaired nodes") {
+TEST_CASE("mesh: a discovered device is invited only with the code shown on that device") {
   Fleet f;
   Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
   host.config->set("cluster.name", "\"京阪ハウス\"");
 
   host.mesh->setPairingMode(10 * 60 * 1000);
 
-
   Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
+                     3000));
+  // The beacon key is unauthenticated: the window lists the device but never sends it the key.
+  f.run(2000);
+  CHECK_FALSE(joiner.mesh->isPaired());
+
+  host.mesh->inviteDevice(kIdJ);
+  REQUIRE(f.runUntil([&] { return host.invite_results.size() == 1; }, 1000));
+  CHECK(host.invite_results[0].err == "confirm_code_required");
+  std::string wrong = confirmCodeOf(joiner);
+  wrong[0] = wrong[0] == '9' ? '0' : static_cast<char>(wrong[0] + 1);
+  host.mesh->inviteDevice(kIdJ, wrong);
+  REQUIRE(f.runUntil([&] { return host.invite_results.size() == 2; }, 1000));
+  CHECK(host.invite_results[1].err == "confirm_code_mismatch");
+  f.run(500);
+  CHECK_FALSE(joiner.mesh->isPaired());
+
+  host.mesh->inviteDevice(kIdJ, confirmCodeOf(joiner));
   REQUIRE(f.runUntil([&] { return joiner.mesh->isPaired(); }, 4000));
   CHECK(joiner.config->get("cluster.name") == std::optional<std::string>("\"京阪ハウス\""));
   REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 4000));
@@ -1660,7 +1695,7 @@ TEST_CASE("mesh: an acknowledged invitation reports invite_result, then device_j
   CHECK(json::getString(card, "role") == "indoor_panel");
   CHECK(json::getString(card, "invite_state") == "none");
 
-  host.mesh->inviteDevice(kIdJ);
+  host.mesh->inviteDevice(kIdJ, confirmCodeOf(joiner));
   REQUIRE(f.runUntil([&] { return !host.invite_results.empty(); }, 4000));
   CHECK(host.invite_results[0].ok);
   CHECK(host.invite_results[0].id == kIdJ);
@@ -1676,12 +1711,13 @@ TEST_CASE("mesh: an acknowledged invitation reports invite_result, then device_j
 TEST_CASE("mesh: a manual invitation to a silent device retries and then reports no_ack") {
   Fleet f;
   Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
-  f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  Fleet::Node& silent = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
   REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
                      3000));
 
+  const std::string code = confirmCodeOf(silent);
   f.net.killNode("J");
-  host.mesh->inviteDevice(kIdJ);
+  host.mesh->inviteDevice(kIdJ, code);
   REQUIRE(f.runUntil([&] { return !host.invite_results.empty(); }, 20000));
   CHECK_FALSE(host.invite_results[0].ok);
   CHECK(host.invite_results[0].err == "no_ack");
@@ -1731,7 +1767,7 @@ TEST_CASE("mesh: unpair clears the key, drops peers, and allows joining another 
                                                        /*zero_psk=*/true});
   REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
                      3000));
-  host.mesh->inviteDevice(kIdJ);
+  host.mesh->inviteDevice(kIdJ, confirmCodeOf(joiner));
   REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 5000));
 
   joiner.mesh->unpair();
@@ -1743,7 +1779,7 @@ TEST_CASE("mesh: unpair clears the key, drops peers, and allows joining another 
   // Announcing resumes, so the same node can be added again without a restart.
   REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
                      4000));
-  host.mesh->inviteDevice(kIdJ);
+  host.mesh->inviteDevice(kIdJ, confirmCodeOf(joiner));
   REQUIRE(f.runUntil([&] { return joiner.mesh->isPaired(); }, 4000));
   REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 6000));
 }
@@ -1878,6 +1914,9 @@ TEST_CASE("mesh: pairing mode reports start, stop, and how many devices it added
 
   Fleet::Node& joiner = f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1,
                                                        /*zero_psk=*/true});
+  REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
+                     3000));
+  host.mesh->inviteDevice(kIdJ, confirmCodeOf(joiner));
   REQUIRE(f.runUntil([&] { return joiner.mesh->isPaired(); }, 4000));
   REQUIRE(f.runUntil([&] { return !host.joined.empty(); }, 5000));
 
@@ -1906,7 +1945,7 @@ TEST_CASE("mesh: discovery is rekeyed when a node creates or joins a cluster at 
   REQUIRE(founder.mesh->foundCluster());
   REQUIRE(f.runUntil([&] { return pendingDevice(founder.mesh->pendingJson(), kIdJ) != nullptr; },
                      3000));
-  founder.mesh->inviteDevice(kIdJ);
+  founder.mesh->inviteDevice(kIdJ, confirmCodeOf(other));
   REQUIRE(f.runUntil([&] { return other.mesh->isPaired(); }, 4000));
 
   // Without the beacon rekey the two would never find each other until a restart.
@@ -1928,24 +1967,17 @@ TEST_CASE("udp_beacon: a keyed HELLO is discovered and a zero-key HELLO is ignor
   });
   loop.callSync([&] { beacon.announce(kIdA, "127.0.0.1:47172"); });
 
-  auto mac = [](const std::array<uint8_t, 32>& key, const std::string& id,
-                const std::string& addr) {
-    static const uint8_t kTag[6] = {'b', 'e', 'a', 'c', 'o', 'n'};
-    crypto_blake2b_ctx ctx;
-    crypto_blake2b_keyed_init(&ctx, 32, key.data(), key.size());
-    crypto_blake2b_update(&ctx, kTag, sizeof(kTag));
-    crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(id.data()), id.size());
-    crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(addr.data()), addr.size());
-    uint8_t out[32];
-    crypto_blake2b_final(&ctx, out);
-    return hexEncode(out, 16);
-  };
-  auto hello = [&](const std::string& id, const std::string& addr, const std::string& m) {
+  const int64_t now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+                             std::chrono::system_clock::now().time_since_epoch())
+                             .count();
+  auto hello = [&](const std::string& id, const std::string& addr,
+                   const std::array<uint8_t, 32>& key, int64_t ts) {
     auto o = json::obj();
-    json::set(o.get(), "v", int64_t{1});
+    json::set(o.get(), "v", int64_t{3});
     json::set(o.get(), "id", id);
     json::set(o.get(), "addr", addr);
-    json::set(o.get(), "mac", m);
+    json::set(o.get(), "ts", ts);
+    json::set(o.get(), "mac", UdpBeacon::helloMac(key, id, addr, ts));
     return json::dump(o.get());
   };
 
@@ -1957,9 +1989,12 @@ TEST_CASE("udp_beacon: a keyed HELLO is discovered and a zero-key HELLO is ignor
   ::inet_pton(AF_INET, "127.0.0.1", &dst.sin_addr);
 
   const std::array<uint8_t, 32> zero{};
-  const std::string spoof = hello(kIdC, "10.0.0.9:47172", mac(zero, kIdC, "10.0.0.9:47172"));
-  const std::string real = hello(kIdB, "10.0.0.8:47172", mac(psk, kIdB, "10.0.0.8:47172"));
+  const std::string spoof = hello(kIdC, "10.0.0.9:47172", zero, now_ms);
+  // A replay of an old HELLO carries a timestamp outside the acceptance window.
+  const std::string stale = hello(kIdD, "10.0.0.7:47172", psk, now_ms - 10 * 60 * 1000);
+  const std::string real = hello(kIdB, "10.0.0.8:47172", psk, now_ms);
   ::sendto(fd, spoof.data(), spoof.size(), 0, reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
+  ::sendto(fd, stale.data(), stale.size(), 0, reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
   ::sendto(fd, real.data(), real.size(), 0, reinterpret_cast<sockaddr*>(&dst), sizeof(dst));
   ::usleep(400 * 1000);
   ::close(fd);
@@ -1968,6 +2003,7 @@ TEST_CASE("udp_beacon: a keyed HELLO is discovered and a zero-key HELLO is ignor
 
   std::lock_guard<std::mutex> lk(mu);
   CHECK(std::find(found.begin(), found.end(), kIdC) == found.end());
+  CHECK(std::find(found.begin(), found.end(), kIdD) == found.end());
   WARN_MESSAGE(std::find(found.begin(), found.end(), kIdB) != found.end(),
                "loopback UDP delivery unavailable in this environment");
 }
@@ -2059,4 +2095,202 @@ TEST_CASE("mesh: measured Telegram reachability does not qualify unrelated WAN d
   fleet.run(100);
   CHECK(fleet.at(kIdA).mesh->isLeader("telegram"));
   CHECK(fleet.at(kIdA).mesh->leaderFor("web_push").empty());
+}
+
+namespace {
+
+Opt strictOpt(std::vector<std::string> seeds = {}) {
+  Opt o;
+  o.beacon = false;
+  o.enroll = false;
+  o.seeds = std::move(seeds);
+  return o;
+}
+
+// Admit a new strict node into the cluster hosted at `host_addr` through a PIN join.
+Fleet::Node& joinStrict(Fleet& f, Fleet::Node& host, const std::string& host_addr,
+                        const std::string& id, const std::string& addr) {
+  Opt o = strictOpt();
+  o.zero_psk = true;
+  Fleet::Node& n = f.add(id, addr, capsJson(3), o);
+  const auto token = host.mesh->createJoinToken();
+  bool ok = false;
+  n.mesh->joinCluster(host_addr, token.pin, [&ok](bool r, const std::string&) { ok = r; });
+  REQUIRE(f.runUntil([&] { return ok; }, 3000));
+  return n;
+}
+
+std::vector<std::string> securityList(Fleet::Node& n, const char* key) {
+  std::vector<std::string> out;
+  json::Doc d = json::parse(n.mesh->securityJson());
+  const cJSON* it = nullptr;
+  cJSON_ArrayForEach(it, json::get(d.get(), key)) out.push_back(it->valuestring);
+  return out;
+}
+
+}  // namespace
+
+TEST_CASE("mesh v3: only replicated members connect, and a PIN join admits the joiner") {
+  Fleet f;
+  Fleet::Node& a = f.add(kIdA, "A", capsJson(10), strictOpt());
+  CHECK(a.mesh->isMember(kIdA));
+  // Holding the cluster key is not membership.
+  Fleet::Node& outsider = f.add(kIdB, "B", capsJson(9), strictOpt({"A"}));
+  f.run(1000);
+  CHECK_FALSE(a.peer(kIdB).connected);
+  CHECK_FALSE(outsider.peer(kIdA).connected);
+
+  Fleet::Node& j = joinStrict(f, a, "A", kIdJ, "J");
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 4000));
+  CHECK(a.mesh->isMember(kIdJ));
+  CHECK(j.mesh->isMember(kIdA));
+  CHECK(j.mesh->isMember(kIdJ));
+  f.run(500);
+  CHECK_FALSE(a.peer(kIdB).connected);
+}
+
+TEST_CASE("mesh v3: removal rotates the key and the removed device cannot return") {
+  Fleet f;
+  Fleet::Node& a = f.add(kIdA, "A", capsJson(10), strictOpt());
+  Fleet::Node& b = joinStrict(f, a, "A", kIdB, "B");
+  Fleet::Node& c = joinStrict(f, a, "A", kIdC, "C");
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdB, kIdC}); }, 6000));
+  const std::string old_id = a.mesh->settings().psk_id;
+
+  a.config->mutate({{"removed_devices." + kIdC, "true", false}, {"mesh.members." + kIdC, "", true}});
+  REQUIRE(a.mesh->rotatePsk());
+  const std::string new_id = a.mesh->settings().psk_id;
+  CHECK(new_id != old_id);
+  REQUIRE(f.runUntil([&] { return b.mesh->settings().psk_id == new_id; }, 3000));
+  CHECK(b.mesh->settings().prev_psk_id == old_id);
+  CHECK(c.mesh->settings().psk_id == old_id);
+  REQUIRE(f.runUntil([&] { return !a.peer(kIdC).connected && !b.peer(kIdC).connected; }, 3000));
+  f.run(2000);
+  CHECK_FALSE(a.peer(kIdC).connected);
+  CHECK_FALSE(b.peer(kIdC).connected);
+
+  // The key it still holds is only the previous key, accepted from members alone, so the
+  // removed device cannot return under a fresh node ID either.
+  Fleet::Node& impostor = f.add(kIdD, "D", capsJson(1), strictOpt({"A", "B"}));
+  f.run(2000);
+  CHECK_FALSE(a.peer(kIdD).connected);
+  CHECK_FALSE(impostor.peer(kIdA).connected);
+}
+
+TEST_CASE("mesh v3: an offline member catches up through the previous key") {
+  Fleet f;
+  Fleet::Node& a = f.add(kIdA, "A", capsJson(10), strictOpt());
+  Fleet::Node& b = joinStrict(f, a, "A", kIdB, "B");
+  Fleet::Node& c = joinStrict(f, a, "A", kIdC, "C");
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdB, kIdC}); }, 6000));
+
+  f.net.partition({{"A", "B"}, {"C"}});
+  REQUIRE(a.mesh->rotatePsk());
+  const std::string new_id = a.mesh->settings().psk_id;
+  REQUIRE(f.runUntil([&] { return b.mesh->settings().psk_id == new_id; }, 3000));
+  CHECK(c.mesh->settings().psk_id != new_id);
+
+  f.net.heal();
+  REQUIRE(f.runUntil([&] { return c.mesh->settings().psk_id == new_id; }, 8000));
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdB, kIdC}); }, 8000));
+}
+
+TEST_CASE("mesh v3: a member left behind by a rotation without grace is rekey_required") {
+  Fleet f;
+  Fleet::Node& a = f.add(kIdA, "A", capsJson(10), strictOpt());
+  Fleet::Node& b = joinStrict(f, a, "A", kIdB, "B");
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdB}); }, 4000));
+  f.net.partition({{"A"}, {"B"}});
+  REQUIRE(a.mesh->rotatePsk(/*keep_previous=*/false));
+  f.net.heal();
+  REQUIRE(f.runUntil([&] {
+    const auto ids = securityList(a, "rekey_required");
+    return std::find(ids.begin(), ids.end(), kIdB) != ids.end();
+  }, 4000));
+  CHECK_FALSE(a.peer(kIdB).connected);
+  CHECK(b.mesh->settings().psk_id != a.mesh->settings().psk_id);
+}
+
+TEST_CASE("mesh v3: concurrent rotations converge on one key") {
+  Fleet f;
+  Fleet::Node& a = f.add(kIdA, "A", capsJson(10), strictOpt());
+  Fleet::Node& b = joinStrict(f, a, "A", kIdB, "B");
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdB}); }, 4000));
+  f.net.partition({{"A"}, {"B"}});
+  REQUIRE(a.mesh->rotatePsk());
+  REQUIRE(b.mesh->rotatePsk());
+  CHECK(a.mesh->settings().psk_id != b.mesh->settings().psk_id);
+  f.net.heal();
+  REQUIRE(f.runUntil([&] {
+    return a.mesh->settings().psk_id == b.mesh->settings().psk_id &&
+           a.mesh->settings().psk == b.mesh->settings().psk;
+  }, 8000));
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdB}); }, 8000));
+}
+
+TEST_CASE("mesh v3: a v2 peer is listed as protocol_upgrade_required") {
+  Fleet f;
+  Fleet::Node& a = f.add(kIdA, "A", capsJson(10), strictOpt());
+  auto tp = f.net.makeTransport("V2");
+  bool closed = false;
+  ConnPtr held;
+  tp->connect("A", [&](ConnPtr conn) {
+    if (!conn) return;
+    held = conn;
+    conn->setCallbacks([](const Bytes&) {}, [&closed] { closed = true; });
+    Bytes v2(1 + 32, 0x42);
+    v2[0] = kFrameHs1;
+    v2.insert(v2.end(), kIdD.begin(), kIdD.end());
+    conn->send(v2);
+  });
+  REQUIRE(f.runUntil([&] { return closed; }, 2000));
+  const auto legacy = securityList(a, "legacy_peers");
+  CHECK(std::find(legacy.begin(), legacy.end(), kIdD) != legacy.end());
+}
+
+TEST_CASE("mesh v3: unauthenticated connections and pre-handshake frames are bounded") {
+  Fleet f;
+  f.add(kIdA, "A", capsJson(10), strictOpt());
+  std::vector<std::unique_ptr<ITransport>> tps;
+  std::vector<ConnPtr> conns;
+  int closed = 0;
+  for (int i = 0; i < 24; i++) {
+    tps.push_back(f.net.makeTransport("R" + std::to_string(i)));
+    tps.back()->connect("A", [&](ConnPtr conn) {
+      if (!conn) return;
+      conns.push_back(conn);
+      conn->setCallbacks([](const Bytes&) {}, [&closed] { closed++; });
+    });
+  }
+  f.run(50);
+  CHECK(closed == 24 - 16);
+
+  // Four from one address at most.
+  auto same = f.net.makeTransport("S");
+  int same_closed = 0;
+  for (int i = 0; i < 6; i++) {
+    same->connect("A", [&](ConnPtr conn) {
+      if (!conn) return;
+      conns.push_back(conn);
+      conn->setCallbacks([](const Bytes&) {}, [&same_closed] { same_closed++; });
+    });
+  }
+  f.run(50);
+  CHECK(same_closed >= 2);
+
+  // A frame above the pre-handshake limit closes the connection.
+  for (auto& c : conns) c->close();
+  conns.clear();
+  f.run(50);
+  auto big = f.net.makeTransport("BIG");
+  bool big_closed = false;
+  big->connect("A", [&](ConnPtr conn) {
+    if (!conn) return;
+    conns.push_back(conn);
+    conn->setCallbacks([](const Bytes&) {}, [&big_closed] { big_closed = true; });
+    Bytes frame(kPreHandshakeFrameBytes + 1, 0);
+    frame[0] = kFrameHs1;
+    conn->send(frame);
+  });
+  REQUIRE(f.runUntil([&] { return big_closed; }, 2000));
 }

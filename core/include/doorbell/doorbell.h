@@ -523,8 +523,18 @@ DB_API char* db_core_parse_pair_uri_json(db_core* c, const char* uri);
  * Persist and replicate subtree deletion and a removal marker; upgraded peers reset pairing
  * on reconnect. The current device cannot remove itself. */
 DB_API void db_core_remove_device(db_core* c, const char* node_id);
-/* Approve and invite one pending node. */
+/* Approve and invite one pending node. Its public key arrived in an unauthenticated beacon, so
+ * since protocol v3 this always reports invite_result{ok:false,err:"confirm_code_required"};
+ * use db_core_invite_device_code with the code shown on the device. */
 DB_API void db_core_invite_device(db_core* c, const char* id);
+/* Approve one pending node with the eight-digit confirmation code displayed on that device
+ * (pairing self.confirm_code there). A wrong code reports confirm_code_mismatch; a device that
+ * announced two different keys reports pk_conflict. */
+DB_API void db_core_invite_device_code(db_core* c, const char* id, const char* code);
+/* Replace the cluster key and send it to every connected member; the previous key stays valid
+ * from members for seven days. Returns 0, -1 for bad arguments, -2 when unpaired or the new key
+ * could not be stored. Emits {"t":"cluster_key_changed","psk_id":...}. */
+DB_API int db_core_rotate_cluster_key(db_core* c);
 /* Invite an address, ID, and public key directly without discovery, for QR or routed networks. */
 DB_API void db_core_invite_direct(db_core* c, const char* addr, const char* id, const char* pk);
 /* Drop one pending device and ignore its announcements for a while. */

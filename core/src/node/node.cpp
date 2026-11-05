@@ -2333,6 +2333,8 @@ struct Node::Impl {
   bool pairing_is_founder = false;
   bool pairing_joining = false;   // a code join or an arriving invitation is being applied
   bool pairing_revoked = false;   // removed by an administrator; the shell wipes and restarts
+  // A v2 founder upgrades in place after the mesh starts (docs/en/security-v3.md section 6).
+  bool mesh_upgrade_founder = false;
   // A PIN join succeeded on the wire; its join_result waits for the secure-store outcome.
   bool pairing_join_awaiting_persist = false;
   std::string pairing_psk_source = "none";
@@ -2770,8 +2772,12 @@ struct Node::Impl {
 
   static const char* webPushSealAad() { return "doorbell.web_push.subscription.v1"; }
 
-  bool webPushSealKey(std::array<uint8_t, 32>* key) const {
-    const std::array<uint8_t, 32>& live_psk = mesh ? mesh->settings().psk : opts.psk;
+  // previous selects the cluster key that was current before the last rotation, so records
+  // sealed under it can still be opened and resealed during the rotation grace period.
+  bool webPushSealKey(std::array<uint8_t, 32>* key, bool previous = false) const {
+    if (previous && !mesh) return false;
+    const std::array<uint8_t, 32>& live_psk =
+        previous ? mesh->settings().prev_psk : (mesh ? mesh->settings().psk : opts.psk);
     const bool configured = std::any_of(live_psk.begin(), live_psk.end(),
                                         [](uint8_t value) { return value != 0; });
     if (!configured) return false;
@@ -2831,7 +2837,41 @@ struct Node::Impl {
     return record;
   }
 
-  json::Doc openWebPushRecord(const cJSON* record) const {
+  json::Doc openWebPushRecord(const cJSON* record, bool* under_previous = nullptr) const {
+    if (under_previous) *under_previous = false;
+    auto opened = openWebPushRecordWith(record, /*previous=*/false);
+    if (opened) return opened;
+    opened = openWebPushRecordWith(record, /*previous=*/true);
+    if (opened && under_previous) *under_previous = true;
+    return opened;
+  }
+
+  // After a cluster key rotation, reseal every subscription still sealed under the previous
+  // key. Other nodes doing the same converge through LWW; any of the results opens.
+  void resealWebPushSubscriptionsOnLoop() {
+    std::vector<LwwMutation> updates;
+    const cJSON* records = cfgAt("web_push.subscriptions");
+    const cJSON* record = nullptr;
+    cJSON_ArrayForEach(record, records) {
+      if (!record->string) continue;
+      bool under_previous = false;
+      auto opened = openWebPushRecord(record, &under_previous);
+      if (!opened || !under_previous) continue;
+      auto resealed = sealWebPushRecord(json::get(opened.get(), "subscription"),
+                                        json::getString(opened.get(), "page"),
+                                        json::getString(opened.get(), "group"),
+                                        json::getInt(opened.get(), "updated_at_ms"));
+      if (resealed)
+        updates.push_back({std::string("web_push.subscriptions.") + record->string,
+                           json::dump(resealed.get()), false});
+    }
+    if (updates.empty()) return;
+    config->mutate(updates);
+    if (!config->lastMutationCommitted())
+      DB_LOGW(kTag, "web push subscriptions could not be resealed under the new cluster key");
+  }
+
+  json::Doc openWebPushRecordWith(const cJSON* record, bool previous) const {
     if (!cJSON_IsObject(record) || json::getInt(record, "schema_version") != 2) return {};
     const cJSON* sealed = json::get(record, "sealed_subscription");
     if (!cJSON_IsObject(sealed) ||
@@ -2843,7 +2883,7 @@ struct Node::Impl {
         cipher.size() > 16 * 1024)
       return {};
     std::array<uint8_t, 32> key{};
-    if (!webPushSealKey(&key)) return {};
+    if (!webPushSealKey(&key, previous)) return {};
     Bytes plain(cipher.size() - 16);
     const char* aad = webPushSealAad();
     const int rc = crypto_aead_unlock(
@@ -6601,6 +6641,8 @@ struct Node::Impl {
     }
     ms.seed_peers = opts.seed_peers;
     ms.psk = opts.psk;
+    ms.enroll_psk_holders = opts.mesh_enroll_psk_holders;
+    loadMeshKeys(ms);
     ms.role = opts.role;
     ms.door = opts.role == "door_station" ? opts.door : "";
     ms.sw_version = opts.sw_version;
@@ -6685,6 +6727,14 @@ struct Node::Impl {
       uiNotify(json::dump(o.get()));
     };
     cbs.on_unpaired = [this] { pairing_joining = false; };
+    cbs.on_keys_changed = [this] { return persistMeshKeysOnLoop(); };
+    cbs.on_peer_rejected = [this](const std::string& id, const std::string& reason) {
+      auto o = json::obj();
+      json::set(o.get(), "t", "peer_rejected");
+      json::set(o.get(), "id", id);
+      json::set(o.get(), "reason", reason);
+      uiNotify(json::dump(o.get()));
+    };
     cbs.on_sync_converged = [this](const std::string&) {
       if (emergency_settle_pending) settleEmergencyPresentation();
     };
@@ -6774,6 +6824,7 @@ struct Node::Impl {
       return false;
     }
     mesh->start();
+    if (mesh_upgrade_founder) migrateFounderOnLoop();
     reevalBridge();
     reevalTelegram();
 
@@ -8150,11 +8201,11 @@ struct Node::Impl {
     if (handleTelegramSecret(from, c.get()) || handleTelegramTest(from, c.get())) return;
     if (cmd == "pairing_revoked") {
       if (json::getString(c.get(), "target") != node_id) return;
-      const auto peers = mesh ? mesh->peers() : std::vector<PeerInfo>{};
-      const auto sender = std::find_if(peers.begin(), peers.end(), [&](const PeerInfo& peer) {
-        return peer.id == from && peer.role == "indoor_panel";
-      });
-      if (sender == peers.end()) {
+      // The sender's role comes from its replicated device record, bound to its member
+      // identity by the handshake, never from what the sender claims about itself.
+      const bool authorized = mesh && mesh->isMember(from) &&
+                              json::getString(cfgAt("devices." + from), "role") == "indoor_panel";
+      if (!authorized) {
         DB_LOGW(kTag, "ignored pairing reset from unauthorized peer");
         return;
       }
@@ -8499,6 +8550,14 @@ struct Node::Impl {
       json::set(o.get(), "psk_ref", pairing_psk_ref);
     }
     json::set(o.get(), "role", opts.role);
+    {
+      auto upgrade = store.metaGet("mesh.upgrade_rejoin_required");
+      const bool pending_upgrade = !mesh->isPaired() && upgrade && *upgrade == "1";
+      json::setBool(o.get(), "upgrade_rejoin_required", pending_upgrade);
+      if (pending_upgrade) json::set(o.get(), "reason", "upgrade_rejoin_required");
+      json::Doc security = json::parse(mesh->securityJson());
+      if (security) json::setItem(o.get(), "security", std::move(security));
+    }
 
     json::Doc self = json::parse(mesh->pairingSelfJson());
     if (self) {
@@ -8681,6 +8740,126 @@ struct Node::Impl {
   }
 
 
+  static bool keyUsable(const std::array<uint8_t, 32>& key) {
+    return std::any_of(key.begin(), key.end(), [](uint8_t byte) { return byte != 0; });
+  }
+
+  // The identity seed lives in platform secure storage. A host without one (tests, embedded
+  // hosts) keeps it in local metadata so the node keeps its identity across restarts.
+  std::array<uint8_t, 32> loadIdentitySeed() {
+    std::array<uint8_t, 32> seed{};
+    Bytes raw;
+    const bool secure = secureStoreReadWrite();
+    if (secure && hexDecode(secretValue("secret:mesh.identity"), raw) && raw.size() == 32) {
+      std::copy(raw.begin(), raw.end(), seed.begin());
+      return seed;
+    }
+    if (!secure) {
+      auto local = store.metaGet("mesh.identity_local");
+      if (local && hexDecode(*local, raw) && raw.size() == 32) {
+        std::copy(raw.begin(), raw.end(), seed.begin());
+        return seed;
+      }
+    }
+    raw = randomBytes(32);
+    std::copy(raw.begin(), raw.end(), seed.begin());
+    const std::string hex = hexEncode(seed.data(), seed.size());
+    const bool stored = secure ? putSecret("secret:mesh.identity", hex)
+                               : store.metaSet("mesh.identity_local", hex);
+    if (!stored) DB_LOGE(kTag, "mesh identity could not be stored; it changes on restart");
+    return seed;
+  }
+
+  // Identity, key IDs, the previous cluster key, and the v2 upgrade decision. Runs before the
+  // Mesh exists, so a v2 non-founder never offers its old key to anyone.
+  void loadMeshKeys(MeshSettings& ms) {
+    ms.identity_seed = loadIdentitySeed();
+    if (auto id = store.metaGet("mesh.psk_id"))
+      if (!id->empty()) ms.psk_id = *id;
+    Bytes prev;
+    auto prev_id = store.metaGet("mesh.psk_prev_id");
+    auto prev_until = store.metaGet("mesh.psk_prev_until");
+    if (prev_id && prev_until && hexDecode(secretValue("secret:mesh.psk_prev"), prev) &&
+        prev.size() == 32) {
+      std::copy(prev.begin(), prev.end(), ms.prev_psk.begin());
+      ms.prev_psk_id = *prev_id;
+      ms.prev_psk_until_wall_ms = std::strtoll(prev_until->c_str(), nullptr, 10);
+    }
+    mesh_upgrade_founder = false;
+    auto protocol = store.metaGet("mesh.protocol");
+    if (!keyUsable(ms.psk) || opts.mesh_enroll_psk_holders || (protocol && *protocol == "3"))
+      return;
+    if (pairing_is_founder) {
+      mesh_upgrade_founder = true;
+      return;
+    }
+    // A v2 member cannot carry its old key into v3: it waits to join the migrated founder by
+    // PIN or invitation, keeping its configuration replica and history meanwhile.
+    ms.psk.fill(0);
+    store.metaSet("mesh.upgrade_rejoin_required", "1");
+    pairing_psk_source = "none";
+    pairing_psk_ref.clear();
+    Node::SecureDeleteFn del;
+    {
+      std::lock_guard<std::mutex> lk(cb_mu);
+      del = secure_delete_fn;
+    }
+    if (del) del("mesh.psk");
+    DB_LOGW(kTag, "v2 cluster membership dropped: this device must join the cluster again");
+  }
+
+  void migrateFounderOnLoop() {
+    mesh_upgrade_founder = false;
+    if (!mesh || !mesh->isPaired()) return;
+    if (!mesh->ensureSelfMember() || !mesh->rotatePsk(/*keep_previous=*/false)) {
+      DB_LOGE(kTag, "v2 founder migration could not store the new cluster key; retrying later");
+      return;
+    }
+    store.metaSet("mesh.protocol", "3");
+    store.metaDeletePrefix("mesh.upgrade_rejoin_required");
+    DB_LOGI(kTag, "v2 cluster migrated to protocol v3 on this founder");
+  }
+
+  // Mesh rotated, received, or expired a cluster key: store the current and previous keys
+  // before the new key is used. Hosts without secure storage keep keys in memory only.
+  bool persistMeshKeysOnLoop() {
+    if (!mesh) return false;
+    const auto& s = mesh->settings();
+    if (secureStoreReadWrite()) {
+      if (keyUsable(s.psk) && !putSecret("secret:mesh.psk", hexEncode(s.psk.data(), s.psk.size())))
+        return false;
+      if (keyUsable(s.prev_psk)) {
+        if (!putSecret("secret:mesh.psk_prev", hexEncode(s.prev_psk.data(), s.prev_psk.size())))
+          return false;
+      } else {
+        Node::SecureDeleteFn del;
+        {
+          std::lock_guard<std::mutex> lk(cb_mu);
+          del = secure_delete_fn;
+        }
+        if (del) del("mesh.psk_prev");
+      }
+      pairing_persistence_ready = true;
+      pairing_psk_source = "secure_store";
+      pairing_psk_ref = "secret:mesh.psk";
+    } else {
+      DB_LOGW(kTag, "no platform secure storage: the rotated cluster key is kept in memory");
+    }
+    store.metaSet("mesh.psk_id", s.psk_id);
+    if (keyUsable(s.prev_psk)) {
+      store.metaSet("mesh.psk_prev_id", s.prev_psk_id);
+      store.metaSet("mesh.psk_prev_until", std::to_string(s.prev_psk_until_wall_ms));
+    } else {
+      store.metaDeletePrefix("mesh.psk_prev");
+    }
+    if (keyUsable(s.prev_psk)) resealWebPushSubscriptionsOnLoop();
+    auto o = json::obj();
+    json::set(o.get(), "t", "cluster_key_changed");
+    json::set(o.get(), "psk_id", s.psk_id);
+    uiNotify(json::dump(o.get()));
+    return true;
+  }
+
   // Persist the cluster PSK into platform secure storage. Returns false when the platform has no
   // writable store or the write failed; the caller decides which event to emit.
   bool storePairingSecret() {
@@ -8688,6 +8867,7 @@ struct Node::Impl {
     const auto& s = mesh->settings();
     const std::string secret_ref = "secret:mesh.psk";
     if (!putSecret(secret_ref, hexEncode(s.psk.data(), s.psk.size()))) return false;
+    store.metaSet("mesh.psk_id", s.psk_id);
     pairing_persistence_ready = true;
     pairing_psk_source = "secure_store";
     pairing_psk_ref = secret_ref;
@@ -8734,6 +8914,8 @@ struct Node::Impl {
     pairing_revoked = false;
     pairing_is_founder = mesh->isFounder();
     store.metaSet("pairing.is_founder", pairing_is_founder ? "1" : "0");
+    store.metaSet("mesh.protocol", "3");
+    store.metaDeletePrefix("mesh.upgrade_rejoin_required");
     const bool stored = storePairingSecret();
     // C5: 鍵の保存に失敗した参加を ok:true と報告してはいけない。join_result は
     // 保存の成否が確定してから、paired / pairing_state より前に必ず出す。
@@ -8815,6 +8997,17 @@ struct Node::Impl {
     scheduleSnapshotRefresh();
   }
 
+  std::string rebuildClusterOnLoop() {
+    if (!mesh) return "no_mesh";
+    if (mesh->isPaired()) return "already_paired";
+    auto upgrade = store.metaGet("mesh.upgrade_rejoin_required");
+    if (!upgrade || *upgrade != "1") return "not_upgrade_pending";
+    // foundCluster keeps the configuration replica, so this device's settings and history
+    // become the new cluster's starting point.
+    if (!mesh->foundCluster()) return "already_paired";
+    return pairing_persistence_ready ? "ok" : "persist_failed";
+  }
+
   void unpairOnLoop() {
     if (mesh) mesh->unpair();
     forgetClusterStateOnLoop();
@@ -8825,7 +9018,11 @@ struct Node::Impl {
     }
     // Deletion is optional: a platform without it keeps an orphaned entry that no boot.json
     // reference points at any more.
-    if (del) del("mesh.psk");
+    if (del) {
+      del("mesh.psk");
+      del("mesh.psk_prev");
+    }
+    store.metaDeletePrefix("mesh.psk_");
     pairing_persistence_ready = false;
     pairing_is_founder = false;
     pairing_joining = false;
@@ -9893,7 +10090,12 @@ struct Node::Impl {
     if (!mesh || target == node_id || target.size() != 32 ||
         target.find_first_not_of("0123456789abcdef") != std::string::npos) return false;
     std::vector<LwwMutation> removals = {{"removed_devices." + target, "true", false},
-                                       {"devices." + target, "", true}};
+                                       {"devices." + target, "", true},
+                                       {"mesh.members." + target, "", true}};
+    // The removed identity may still connect once with its old key, only to hear that it was
+    // removed (docs/en/security-v3.md section 4).
+    if (auto member = config->get("mesh.members." + target))
+      removals.push_back({"mesh.revoked." + target, *member, false});
     for (const auto& entry : config->byPrefix("devices." + target + "."))
       removals.push_back({entry.first, "", true});
     const auto pairs = cfgAt("video_playback.pairs");
@@ -9909,6 +10111,9 @@ struct Node::Impl {
     config->mutate(removals);
     if (!config->lastMutationCommitted()) return false;
     sendPendingRevocations();
+    // The removed device still holds the cluster key; replacing it is what actually locks the
+    // device out. The revocation above is already queued on its channel.
+    if (!mesh->rotatePsk()) DB_LOGW(kTag, "cluster key rotation after removal failed");
     return true;
   }
 
@@ -10525,9 +10730,33 @@ struct Node::Impl {
       if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
       auto b = json::parse(req.body);
       std::string id = b ? json::getString(b.get(), "id") : "";
+      const std::string code = b ? json::getString(b.get(), "code") : "";
       if (id.empty()) return HttpResp::json("{\"ok\":false,\"err\":\"no_id\"}", 400);
-      mesh->inviteDevice(id);
+      if (code.empty())
+        return HttpResp::json("{\"ok\":false,\"err\":\"confirm_code_required\"}", 400);
+      mesh->inviteDevice(id, code);
       return HttpResp::json("{\"ok\":true}");
+    });
+
+    httpd->route("POST", "/api/pairing/rotate", [this](const HttpReq&) {
+      if (!mesh) return HttpResp::json("{\"ok\":false,\"err\":\"no_mesh\"}", 503);
+      if (!mesh->isPaired())
+        return HttpResp::json("{\"ok\":false,\"err\":\"host_unpaired\"}", 409);
+      const bool ok = mesh->rotatePsk();
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", ok);
+      if (ok) json::set(o.get(), "psk_id", mesh->settings().psk_id);
+      else json::set(o.get(), "err", "persist_failed");
+      return HttpResp::json(json::dump(o.get()), ok ? 200 : 500);
+    });
+
+    httpd->route("POST", "/api/pairing/rebuild", [this](const HttpReq&) {
+      const std::string result = rebuildClusterOnLoop();
+      auto o = json::obj();
+      json::setBool(o.get(), "ok", result == "ok");
+      if (result != "ok") json::set(o.get(), "err", result);
+      const int status = result == "ok" ? 200 : (result == "persist_failed" ? 500 : 409);
+      return HttpResp::json(json::dump(o.get()), status);
     });
 
     httpd->route("POST", "/api/pairing/invite-direct", [this](const HttpReq& req) {
@@ -12701,11 +12930,24 @@ std::string Node::mintJoinTokenJson(int seconds) {
   return out;
 }
 
-void Node::inviteDevice(const std::string& id) {
+void Node::inviteDevice(const std::string& id, const std::string& code) {
   std::string did = id;
-  impl_->loop->post([this, did] {
-    if (impl_->mesh) impl_->mesh->inviteDevice(did);
+  std::string c = code;
+  impl_->loop->post([this, did, c] {
+    if (impl_->mesh) impl_->mesh->inviteDevice(did, c);
   });
+}
+
+bool Node::rotateClusterKey() {
+  bool ok = false;
+  impl_->loop->callSync([&] { ok = impl_->mesh && impl_->mesh->rotatePsk(); });
+  return ok;
+}
+
+std::string Node::rebuildClusterFromThisDevice() {
+  std::string out;
+  impl_->loop->callSync([&] { out = impl_->rebuildClusterOnLoop(); });
+  return out;
 }
 
 void Node::inviteDeviceDirect(const std::string& addr, const std::string& id,

@@ -183,7 +183,7 @@ TEST_CASE("secret contract: loaded runtime credentials migrate before export or 
     CHECK(json::getString(telegram, "bot_token_ref").rfind("secret:", 0) == 0);
     CHECK(json::getString(webrtc, "sip_pass").empty());
     CHECK(json::getString(webrtc, "sip_pass_ref").rfind("secret:", 0) == 0);
-    CHECK(secure_values.size() == 4);
+    CHECK(secure_values.size() - secure_values.count("mesh.identity") == 4);
     for (const char* plaintext : {"sip-legacy", "mqtt-legacy", "telegram-legacy",
                                   "webrtc-legacy"}) {
       bool found = false;
@@ -233,8 +233,8 @@ TEST_CASE("secret contract: failed migration removes plaintext and reports boot 
     Node node(options);
     node.setSecureStore(
         [](const std::string&) { return std::string(); },
-        [&](const std::string&, const std::string&) {
-          ++put_attempts;
+        [&](const std::string& key, const std::string&) {
+          if (key != "mesh.identity") ++put_attempts;
           return false;
         });
     REQUIRE(node.start());

@@ -289,6 +289,8 @@ static db_core* createCore(const db_platform_v2& platform, const char* data_dir,
   opts.listen_addr = "0.0.0.0:" + std::to_string(listen_port);
   opts.advertise_addr = json::getString(b.get(), "advertise_addr");
   opts.http_port = static_cast<int>(json::getInt(b.get(), "http_port", 47180));
+  // Production shells admit only replicated mesh members (docs/en/security-v3.md section 2).
+  opts.mesh_enroll_psk_holders = false;
   if (cJSON* caps = json::get(b.get(), "caps")) {
     opts.caps_json = cJSON_IsString(caps) ? caps->valuestring : json::dump(caps);
   } else {
@@ -778,6 +780,15 @@ DB_API int db_core_found_cluster(db_core* c) {
 
 DB_API void db_core_invite_device(db_core* c, const char* id) {
   if (c && c->node && id && *id) c->node->inviteDevice(id);
+}
+
+DB_API void db_core_invite_device_code(db_core* c, const char* id, const char* code) {
+  if (c && c->node && id) c->node->inviteDevice(id, code ? code : "");
+}
+
+DB_API int db_core_rotate_cluster_key(db_core* c) {
+  if (!c || !c->node) return -1;
+  return c->node->rotateClusterKey() ? 0 : -2;
 }
 
 DB_API void db_core_invite_direct(db_core* c, const char* addr, const char* id, const char* pk) {
