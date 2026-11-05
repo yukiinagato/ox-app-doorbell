@@ -119,6 +119,43 @@ static NSString *DBDefaultGatewayIPv4(void) {
 
 
 
+// Hardware identifier such as "iPad2,7". UIDevice.model only says "iPad".
+static NSString *DBHardwareMachine(void) {
+  size_t size = 0;
+  if (sysctlbyname("hw.machine", NULL, &size, NULL, 0) != 0 || size == 0) return nil;
+  char *buf = (char *)malloc(size);
+  if (buf == NULL) return nil;
+  NSString *machine = nil;
+  if (sysctlbyname("hw.machine", buf, &size, NULL, 0) == 0)
+    machine = [NSString stringWithUTF8String:buf];
+  free(buf);
+  return [machine length] > 0 ? machine : nil;
+}
+
+// Core takes the node's model and platform from boot.json and otherwise reports
+// "unknown"; the kiosk boot document never carried them. Fill both in from the
+// hardware without overriding what an installer wrote.
+static NSString *DBBootJsonWithIdentity(NSString *bootJson) {
+  NSData *data = [bootJson dataUsingEncoding:NSUTF8StringEncoding];
+  id root = data ? [NSJSONSerialization JSONObjectWithData:data
+                                                   options:NSJSONReadingMutableContainers
+                                                     error:NULL] : nil;
+  if (![root isKindOfClass:[NSMutableDictionary class]]) return bootJson;
+  NSMutableDictionary *boot = (NSMutableDictionary *)root;
+  NSString *model = DBHardwareMachine() ?: [[UIDevice currentDevice] model];
+  id current = [boot objectForKey:@"model"];
+  if (![current isKindOfClass:[NSString class]] || [current length] == 0 ||
+      [current isEqualToString:@"unknown"]) {
+    if ([model length] > 0) [boot setObject:model forKey:@"model"];
+  }
+  current = [boot objectForKey:@"platform"];
+  if (![current isKindOfClass:[NSString class]] || [current length] == 0 ||
+      [current isEqualToString:@"unknown"]) [boot setObject:@"ios" forKey:@"platform"];
+  NSData *out = [NSJSONSerialization dataWithJSONObject:boot options:0 error:NULL];
+  NSString *json = out ? [[NSString alloc] initWithData:out encoding:NSUTF8StringEncoding] : nil;
+  return [json length] > 0 ? json : bootJson;
+}
+
 static int DBDeviceInfo(void *user, char **out_json) {
   if (out_json == NULL || user == NULL) return -1;
   @autoreleasepool {
@@ -482,6 +519,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   plat.power_state = DBPowerState;
   plat.user = (__bridge void *)self;
 
+  bootJson = DBBootJsonWithIdentity(bootJson ?: @"{}");
   _core = db_core_create_v2(&plat, [dataDir UTF8String], [bootJson UTF8String]);
   if (_core == NULL) return NO;
   db_core_set_ui_callback(_core, DBUiEventCb, (__bridge void *)self);
@@ -1097,6 +1135,13 @@ static DBRotateKeyFn DBRotateKey(void) {
     case UIDeviceBatteryStateUnplugged: state = @"unplugged"; break;
     default: break;
   }
+  NSString *machine = DBHardwareMachine();
+  [root setObject:machine ?: ([dev model] ?: @"") forKey:@"model"];
+  [root setObject:@"ios" forKey:@"platform"];
+  [root setObject:[dev systemVersion] ?: @"" forKey:@"os_version"];
+  NSString *appVersion =
+      [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
+  if ([appVersion length] > 0) [root setObject:appVersion forKey:@"app_version"];
   NSMutableDictionary *bat = [NSMutableDictionary dictionary];
   if (lvl >= 0) [bat setObject:[NSNumber numberWithFloat:lvl] forKey:@"level"];
   [bat setObject:state forKey:@"state"];
