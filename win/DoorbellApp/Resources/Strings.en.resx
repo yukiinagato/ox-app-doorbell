@@ -1215,10 +1215,19 @@ On</value></data>
   <data name="security_rotate_key_hint" xml:space="preserve"><value>Use this after removing a device or if a leak is suspected. Devices that stay offline for more than 7 days must be paired again.</value></data>
   <data name="security_title" xml:space="preserve"><value>Cluster security</value></data>
   <data name="settings_about" xml:space="preserve"><value>About this device</value></data>
+  <data name="settings_act_auto_reply" xml:space="preserve"><value>Automatic reply</value></data>
+  <data name="settings_act_chime" xml:space="preserve"><value>Chime</value></data>
+  <data name="settings_act_device_alert" xml:space="preserve"><value>Device alert</value></data>
+  <data name="settings_act_ha_command" xml:space="preserve"><value>Home Assistant command</value></data>
+  <data name="settings_act_ha_event" xml:space="preserve"><value>Home Assistant event</value></data>
+  <data name="settings_act_sip_call" xml:space="preserve"><value>Call an extension</value></data>
+  <data name="settings_act_telegram" xml:space="preserve"><value>Telegram message</value></data>
+  <data name="settings_action_type" xml:space="preserve"><value>Action type</value></data>
   <data name="settings_add_device" xml:space="preserve"><value>Add a device</value></data>
   <data name="settings_add_device_action" xml:space="preserve"><value>Add</value></data>
   <data name="settings_add_device_desc" xml:space="preserve"><value>Add by PIN, QR code or from nearby devices</value></data>
   <data name="settings_addresses" xml:space="preserve"><value>Addresses</value></data>
+  <data name="settings_alert_need_target" xml:space="preserve"><value>Choose roles or devices</value></data>
   <data name="settings_answer_auto" xml:space="preserve"><value>Answer automatically</value></data>
   <data name="settings_answer_manual" xml:space="preserve"><value>Answer manually</value></data>
   <data name="settings_app_version" xml:space="preserve"><value>App version</value></data>
@@ -1232,20 +1241,31 @@ On</value></data>
   <data name="settings_appearance_range" xml:space="preserve"><value>Dark {0} → light {1}</value></data>
   <data name="settings_appearance_schedule" xml:space="preserve"><value>Switch by time of day</value></data>
   <data name="settings_appearance_system" xml:space="preserve"><value>Follow the system</value></data>
+  <data name="settings_asset_delete_in_use" xml:space="preserve"><value>{0} is used by {1}. Delete it?</value></data>
+  <data name="settings_asset_limits" xml:space="preserve"><value>JPEG, PNG, MP3 or WAV, up to 3 MB each</value></data>
+  <data name="settings_asset_used" xml:space="preserve"><value>Used by {0}</value></data>
   <data name="settings_assets" xml:space="preserve"><value>Assets (images, audio)</value></data>
   <data name="settings_assets_desc" xml:space="preserve"><value>Uploading and distributing files</value></data>
+  <data name="settings_assets_native" xml:space="preserve"><value>Uploaded images and sounds. Removing one in use falls back to the default</value></data>
   <data name="settings_back" xml:space="preserve"><value>Settings</value></data>
   <data name="settings_backdrop" xml:space="preserve"><value>Dimming layer</value></data>
   <data name="settings_backdrop_opacity" xml:space="preserve"><value>Dimming strength</value></data>
   <data name="settings_background_color" xml:space="preserve"><value>Background colour</value></data>
   <data name="settings_background_image" xml:space="preserve"><value>Background image</value></data>
   <data name="settings_background_none" xml:space="preserve"><value>No image</value></data>
+  <data name="settings_backup_hint" xml:space="preserve"><value>Secrets and asset files are not included. Changes are shown before anything is imported</value></data>
+  <data name="settings_bg_choose_existing" xml:space="preserve"><value>Choose an uploaded image</value></data>
+  <data name="settings_bg_clear" xml:space="preserve"><value>Remove image</value></data>
   <data name="settings_bg_color" xml:space="preserve"><value>Background color</value></data>
   <data name="settings_bg_color_desc" xml:space="preserve"><value>#RRGGBB format</value></data>
+  <data name="settings_bg_color_native" xml:space="preserve"><value>Background colour when there is no image</value></data>
   <data name="settings_bg_image" xml:space="preserve"><value>Background image</value></data>
   <data name="settings_bg_image_desc" xml:space="preserve"><value>Upload images in the web admin</value></data>
+  <data name="settings_bg_image_native" xml:space="preserve"><value>JPEG or PNG. Photos over 3 MB are scaled down first</value></data>
   <data name="settings_brightness_default" xml:space="preserve"><value>Screen brightness</value></data>
   <data name="settings_brightness_here" xml:space="preserve"><value>Screen brightness</value></data>
+  <data name="settings_buildings_manage" xml:space="preserve"><value>Buildings</value></data>
+  <data name="settings_buildings_manage_native" xml:space="preserve"><value>Buildings that group doors</value></data>
   <data name="settings_button_sound" xml:space="preserve"><value>Button sound</value></data>
   <data name="settings_call_flow" xml:space="preserve"><value>Visitor call flow</value></data>
   <data name="settings_call_sound" xml:space="preserve"><value>Door-station call sound</value></data>
@@ -1259,23 +1279,33 @@ On</value></data>
   <data name="settings_cam_hint" xml:space="preserve"><value>Camera name hint</value></data>
   <data name="settings_cam_quality" xml:space="preserve"><value>JPEG quality</value></data>
   <data name="settings_cam_resolution" xml:space="preserve"><value>MJPEG resolution</value></data>
+  <data name="settings_cam_source" xml:space="preserve"><value>Video source</value></data>
+  <data name="settings_cam_source_builtin" xml:space="preserve"><value>Built-in camera</value></data>
+  <data name="settings_cam_source_desc" xml:space="preserve"><value>With an external camera selected, this door station uses its video</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>About</value></data>
+  <data name="settings_cat_backup" xml:space="preserve"><value>Backup</value></data>
   <data name="settings_cat_calls" xml:space="preserve"><value>Calls</value></data>
   <data name="settings_cat_camera" xml:space="preserve"><value>Camera &amp; video</value></data>
   <data name="settings_cat_device" xml:space="preserve"><value>This device</value></data>
   <data name="settings_cat_display" xml:space="preserve"><value>Display &amp; appearance</value></data>
+  <data name="settings_cat_integrations" xml:space="preserve"><value>Integrations</value></data>
   <data name="settings_cat_kiosk" xml:space="preserve"><value>Kiosk &amp; recovery</value></data>
   <data name="settings_cat_more" xml:space="preserve"><value>More in Admin</value></data>
   <data name="settings_cat_notices" xml:space="preserve"><value>Announcements</value></data>
   <data name="settings_cat_pairing" xml:space="preserve"><value>Cluster &amp; devices</value></data>
+  <data name="settings_cat_places" xml:space="preserve"><value>Doors and buildings</value></data>
   <data name="settings_cat_purposes" xml:space="preserve"><value>Visit purposes</value></data>
   <data name="settings_cat_replies" xml:space="preserve"><value>Quick replies</value></data>
+  <data name="settings_cat_rules" xml:space="preserve"><value>Alerts and rules</value></data>
   <data name="settings_cat_sip" xml:space="preserve"><value>Calling (SIP)</value></data>
   <data name="settings_cat_sos" xml:space="preserve"><value>Emergency (SOS)</value></data>
   <data name="settings_cat_sound" xml:space="preserve"><value>Sound</value></data>
   <data name="settings_cat_time" xml:space="preserve"><value>Date &amp; time</value></data>
+  <data name="settings_cat_wording" xml:space="preserve"><value>Texts and assets</value></data>
   <data name="settings_categories" xml:space="preserve"><value>Settings categories</value></data>
   <data name="settings_change_password" xml:space="preserve"><value>Change the admin password</value></data>
+  <data name="settings_change_password_action" xml:space="preserve"><value>Change</value></data>
+  <data name="settings_change_password_desc" xml:space="preserve"><value>At least 8 characters, shared by every device and the web admin</value></data>
   <data name="settings_close" xml:space="preserve"><value>Close</value></data>
   <data name="settings_cluster" xml:space="preserve"><value>Cluster</value></data>
   <data name="settings_cluster_key" xml:space="preserve"><value>Cluster key</value></data>
@@ -1283,11 +1313,13 @@ On</value></data>
   <data name="settings_cluster_members" xml:space="preserve"><value>Devices in this home</value></data>
   <data name="settings_codec_h264" xml:space="preserve"><value>H.264</value></data>
   <data name="settings_codec_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
+  <data name="settings_color_pick" xml:space="preserve"><value>Pick…</value></data>
   <data name="settings_configured" xml:space="preserve"><value>Configured</value></data>
   <data name="settings_contrast_warning" xml:space="preserve"><value>This may be hard to read ({0}:1)</value></data>
   <data name="settings_core_version" xml:space="preserve"><value>Core version</value></data>
   <data name="settings_custom_sounds" xml:space="preserve"><value>Custom sound files</value></data>
   <data name="settings_custom_sounds_desc" xml:space="preserve"><value>Upload and assign audio files in the web admin</value></data>
+  <data name="settings_custom_sounds_native" xml:space="preserve"><value>Add an audio file (MP3 or WAV, up to 3 MB) and it appears in the sound choices above</value></data>
   <data name="settings_dark_from" xml:space="preserve"><value>Dark from</value></data>
   <data name="settings_day_1" xml:space="preserve"><value>1 day</value></data>
   <data name="settings_decrease" xml:space="preserve"><value>Decrease</value></data>
@@ -1297,20 +1329,50 @@ On</value></data>
   <data name="settings_deg_90" xml:space="preserve"><value>90°</value></data>
   <data name="settings_device_door" xml:space="preserve"><value>Assigned door</value></data>
   <data name="settings_device_door_desc" xml:space="preserve"><value>Starts with a letter or digit; letters, digits, _ and - only</value></data>
+  <data name="settings_device_door_hint" xml:space="preserve"><value>Required for a door station</value></data>
   <data name="settings_device_name" xml:space="preserve"><value>Device name</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>Role</value></data>
+  <data name="settings_device_self_hint" xml:space="preserve"><value>Change this device under Device</value></data>
   <data name="settings_devices_manage" xml:space="preserve"><value>Manage and remove devices</value></data>
   <data name="settings_devices_manage_desc" xml:space="preserve"><value>Other devices' settings and removal are in the web admin</value></data>
+  <data name="settings_devices_manage_native" xml:space="preserve"><value>Rename, change role or door, or remove other devices. A changed device restarts to apply it</value></data>
+  <data name="settings_disable" xml:space="preserve"><value>Disable</value></data>
   <data name="settings_door" xml:space="preserve"><value>Assigned door</value></data>
+  <data name="settings_door_id" xml:space="preserve"><value>Door ID (letters, digits, _ or -)</value></data>
   <data name="settings_doors" xml:space="preserve"><value>Doors</value></data>
   <data name="settings_doors_manage" xml:space="preserve"><value>Doors and buildings</value></data>
   <data name="settings_doors_manage_desc" xml:space="preserve"><value>Door names and buildings are set in the web admin</value></data>
+  <data name="settings_doors_manage_native" xml:space="preserve"><value>Add, rename and remove doors</value></data>
+  <data name="settings_dtmf_code" xml:space="preserve"><value>Keys (for example *1)</value></data>
+  <data name="settings_dtmf_command" xml:space="preserve"><value>Command</value></data>
+  <data name="settings_dtmf_command_hint" xml:space="preserve"><value>Published to &lt;base&gt;/cmd/&lt;command&gt; (for example unlock)</value></data>
+  <data name="settings_dtmf_decline" xml:space="preserve"><value>Decline on this phone</value></data>
+  <data name="settings_dtmf_door_self" xml:space="preserve"><value>The door of this call</value></data>
+  <data name="settings_dtmf_ha_command" xml:space="preserve"><value>Home Assistant command</value></data>
+  <data name="settings_dtmf_hangup" xml:space="preserve"><value>Hang up</value></data>
+  <data name="settings_dtmf_need_command" xml:space="preserve"><value>Enter a command</value></data>
+  <data name="settings_dtmf_need_reply" xml:space="preserve"><value>Choose a reply</value></data>
+  <data name="settings_dtmf_quick_reply" xml:space="preserve"><value>Quick reply</value></data>
+  <data name="settings_dtmf_reply" xml:space="preserve"><value>Reply</value></data>
+  <data name="settings_dtmf_type" xml:space="preserve"><value>Action</value></data>
+  <data name="settings_enable" xml:space="preserve"><value>Enable</value></data>
   <data name="settings_err_admin_required" xml:space="preserve"><value>The admin password is required</value></data>
   <data name="settings_err_core_unavailable" xml:space="preserve"><value>The core is not responding</value></data>
   <data name="settings_err_door_id" xml:space="preserve"><value>The door ID is not valid</value></data>
   <data name="settings_err_required" xml:space="preserve"><value>This field is required</value></data>
   <data name="settings_err_time_format" xml:space="preserve"><value>Use HH:MM, for example 22:00</value></data>
   <data name="settings_exit_kiosk" xml:space="preserve"><value>Exit kiosk</value></data>
+  <data name="settings_export_done" xml:space="preserve"><value>Exported to {0}</value></data>
+  <data name="settings_export_failed" xml:space="preserve"><value>The file could not be written</value></data>
+  <data name="settings_filter_assets" xml:space="preserve"><value>Images and sounds</value></data>
+  <data name="settings_filter_images" xml:space="preserve"><value>Images (JPEG, PNG)</value></data>
+  <data name="settings_filter_sounds" xml:space="preserve"><value>Sounds (MP3, WAV)</value></data>
+  <data name="settings_form_days_required" xml:space="preserve"><value>Choose at least one day</value></data>
+  <data name="settings_form_id_taken" xml:space="preserve"><value>This ID is already used</value></data>
+  <data name="settings_form_invalid" xml:space="preserve"><value>{0}: &quot;{1}&quot; is not valid</value></data>
+  <data name="settings_form_list_hint" xml:space="preserve"><value>Separate with commas or new lines</value></data>
+  <data name="settings_form_number_list" xml:space="preserve"><value>{0} takes numbers separated by commas</value></data>
+  <data name="settings_form_number_range" xml:space="preserve"><value>{0} must be a number from {1} to {2}</value></data>
   <data name="settings_fps_15" xml:space="preserve"><value>15 fps</value></data>
   <data name="settings_fps_24" xml:space="preserve"><value>24 fps</value></data>
   <data name="settings_fps_30" xml:space="preserve"><value>30 fps</value></data>
@@ -1324,9 +1386,11 @@ On</value></data>
   <data name="settings_grp_all_devices" xml:space="preserve"><value>Default for all devices</value></data>
   <data name="settings_grp_appearance" xml:space="preserve"><value>Appearance</value></data>
   <data name="settings_grp_cluster" xml:space="preserve"><value>Cluster</value></data>
+  <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>Identity</value></data>
   <data name="settings_grp_kiosk" xml:space="preserve"><value>Kiosk</value></data>
   <data name="settings_grp_maintenance" xml:space="preserve"><value>Maintenance</value></data>
+  <data name="settings_grp_mqtt" xml:space="preserve"><value>MQTT broker</value></data>
   <data name="settings_grp_night" xml:space="preserve"><value>Night mode</value></data>
   <data name="settings_grp_security" xml:space="preserve"><value>Security</value></data>
   <data name="settings_grp_sip_account" xml:space="preserve"><value>This device's account</value></data>
@@ -1334,20 +1398,30 @@ On</value></data>
   <data name="settings_grp_sos_alarm" xml:space="preserve"><value>Alarm &amp; alerts</value></data>
   <data name="settings_grp_sos_trigger" xml:space="preserve"><value>Trigger</value></data>
   <data name="settings_grp_sounds" xml:space="preserve"><value>Sounds</value></data>
+  <data name="settings_grp_telegram" xml:space="preserve"><value>Telegram</value></data>
   <data name="settings_grp_theme" xml:space="preserve"><value>Theme</value></data>
   <data name="settings_grp_this_device" xml:space="preserve"><value>This device</value></data>
   <data name="settings_grp_time" xml:space="preserve"><value>Time</value></data>
   <data name="settings_grp_video" xml:space="preserve"><value>Video playback</value></data>
   <data name="settings_grp_visitor" xml:space="preserve"><value>Visitor flow</value></data>
   <data name="settings_grp_web_only" xml:space="preserve"><value>Only in the web admin</value></data>
+  <data name="settings_ha_allow_notice" xml:space="preserve"><value>Allow announcements from HA</value></data>
+  <data name="settings_ha_allow_notice_desc" xml:space="preserve"><value>The broker's authentication is the only check</value></data>
+  <data name="settings_ha_allow_sos" xml:space="preserve"><value>Allow SOS control from HA</value></data>
+  <data name="settings_ha_allow_sos_desc" xml:space="preserve"><value>The broker's authentication is the only check</value></data>
+  <data name="settings_ha_language" xml:space="preserve"><value>Entity name language</value></data>
   <data name="settings_helper_mode" xml:space="preserve"><value>Recovery helper</value></data>
   <data name="settings_hour_1" xml:space="preserve"><value>1 hour</value></data>
   <data name="settings_hour_6" xml:space="preserve"><value>6 hours</value></data>
+  <data name="settings_household_chats" xml:space="preserve"><value>{0} Telegram chats</value></data>
   <data name="settings_households" xml:space="preserve"><value>Recipients (households)</value></data>
   <data name="settings_households_desc" xml:space="preserve"><value>Telegram and extension recipients</value></data>
+  <data name="settings_households_native" xml:space="preserve"><value>Telegram chats and extensions to alert</value></data>
   <data name="settings_identity_restart_confirm" xml:space="preserve"><value>Changing the device identity restarts the app. Continue?</value></data>
+  <data name="settings_import_changes" xml:space="preserve"><value>{0} changes</value></data>
   <data name="settings_import_export" xml:space="preserve"><value>Export and import settings</value></data>
   <data name="settings_import_export_desc" xml:space="preserve"><value>Backup and migration</value></data>
+  <data name="settings_import_export_native" xml:space="preserve"><value>Export the configuration to a JSON file, and import one after reviewing the changes</value></data>
   <data name="settings_increase" xml:space="preserve"><value>Increase</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
   <data name="settings_integrations" xml:space="preserve"><value>Integrations (Telegram, MQTT, Web Push)</value></data>
@@ -1366,8 +1440,18 @@ On</value></data>
   <data name="settings_launch_sound" xml:space="preserve"><value>Startup sound</value></data>
   <data name="settings_light_from" xml:space="preserve"><value>Light from</value></data>
   <data name="settings_list_empty" xml:space="preserve"><value>No entries</value></data>
+  <data name="settings_media_bind" xml:space="preserve"><value>Use on door station</value></data>
+  <data name="settings_media_credential" xml:space="preserve"><value>Camera credential</value></data>
+  <data name="settings_media_credential_hint" xml:space="preserve"><value>user:password or a token, kept in this device's secure store</value></data>
+  <data name="settings_media_h264_url" xml:space="preserve"><value>H.264 (RTSP) URL</value></data>
+  <data name="settings_media_mjpeg_url" xml:space="preserve"><value>MJPEG URL</value></data>
+  <data name="settings_media_need_url" xml:space="preserve"><value>Enter at least one URL</value></data>
+  <data name="settings_media_snapshot_url" xml:space="preserve"><value>Snapshot URL</value></data>
+  <data name="settings_media_source_id" xml:space="preserve"><value>Camera ID (letters, digits, _ or -)</value></data>
   <data name="settings_media_sources" xml:space="preserve"><value>External cameras</value></data>
   <data name="settings_media_sources_desc" xml:space="preserve"><value>Registering IP cameras</value></data>
+  <data name="settings_media_sources_native" xml:space="preserve"><value>Register IP cameras and use them as a door station's video. URLs cannot carry credentials</value></data>
+  <data name="settings_media_url_hint" xml:space="preserve"><value>Starts with http://, https:// or rtsp:// and contains no user name or password</value></data>
   <data name="settings_min_1" xml:space="preserve"><value>1 minute</value></data>
   <data name="settings_min_10" xml:space="preserve"><value>10 minutes</value></data>
   <data name="settings_min_15" xml:space="preserve"><value>15 minutes</value></data>
@@ -1379,6 +1463,19 @@ On</value></data>
   <data name="settings_motion_sensitivity" xml:space="preserve"><value>Sensitivity</value></data>
   <data name="settings_move_down" xml:space="preserve"><value>Move down</value></data>
   <data name="settings_move_up" xml:space="preserve"><value>Move up</value></data>
+  <data name="settings_mqtt_base_topic" xml:space="preserve"><value>Base topic</value></data>
+  <data name="settings_mqtt_discovery" xml:space="preserve"><value>Discovery prefix</value></data>
+  <data name="settings_mqtt_host" xml:space="preserve"><value>Broker address</value></data>
+  <data name="settings_mqtt_host_desc" xml:space="preserve"><value>Leave empty to turn MQTT off</value></data>
+  <data name="settings_mqtt_password" xml:space="preserve"><value>Password</value></data>
+  <data name="settings_mqtt_password_native" xml:space="preserve"><value>Enter it on every device that runs MQTT; the value is never shown</value></data>
+  <data name="settings_mqtt_port" xml:space="preserve"><value>Port</value></data>
+  <data name="settings_mqtt_tls" xml:space="preserve"><value>Connect over TLS</value></data>
+  <data name="settings_mqtt_tls_desc" xml:space="preserve"><value>Requires the certificate fingerprint below</value></data>
+  <data name="settings_mqtt_tls_sha256" xml:space="preserve"><value>Certificate SHA-256 fingerprint</value></data>
+  <data name="settings_mqtt_tls_sha256_desc" xml:space="preserve"><value>64 lowercase hexadecimal characters</value></data>
+  <data name="settings_mqtt_user" xml:space="preserve"><value>User name</value></data>
+  <data name="settings_never_suppress_hint" xml:space="preserve"><value>Runs even during quiet hours</value></data>
   <data name="settings_night_brightness" xml:space="preserve"><value>Night brightness</value></data>
   <data name="settings_night_enabled" xml:space="preserve"><value>Night mode</value></data>
   <data name="settings_night_enabled_desc" xml:space="preserve"><value>Dims the screen during the hours below</value></data>
@@ -1414,8 +1511,11 @@ On</value></data>
   <data name="settings_pairing_state" xml:space="preserve"><value>Pairing</value></data>
   <data name="settings_pairing_state_cluster" xml:space="preserve"><value>This device</value></data>
   <data name="settings_pairing_unpaired" xml:space="preserve"><value>Not paired</value></data>
+  <data name="settings_panels_load" xml:space="preserve"><value>Show panels</value></data>
   <data name="settings_panels_manage" xml:space="preserve"><value>Web panels</value></data>
   <data name="settings_panels_manage_desc" xml:space="preserve"><value>Create, scope and revoke panels in the web admin</value></data>
+  <data name="settings_panels_manage_native" xml:space="preserve"><value>One credential per Web panel, scoped to doors and actions, revocable on its own</value></data>
+  <data name="settings_panels_unavailable" xml:space="preserve"><value>The panels could not be loaded</value></data>
   <data name="settings_password_changed" xml:space="preserve"><value>The admin password was changed</value></data>
   <data name="settings_password_confirm" xml:space="preserve"><value>Enter it again</value></data>
   <data name="settings_password_current" xml:space="preserve"><value>Current password</value></data>
@@ -1438,6 +1538,15 @@ On</value></data>
   <data name="settings_quick_replies" xml:space="preserve"><value>Quick replies</value></data>
   <data name="settings_quick_replies_desc" xml:space="preserve"><value>Canned replies an indoor panel sends to the door</value></data>
   <data name="settings_quiet_hours" xml:space="preserve"><value>Quiet hours</value></data>
+  <data name="settings_quiet_hours_native" xml:space="preserve"><value>During these times the selected actions are held back</value></data>
+  <data name="settings_quiet_never_hint" xml:space="preserve"><value>Actions chosen here are never held back</value></data>
+  <data name="settings_quiet_none" xml:space="preserve"><value>Not set</value></data>
+  <data name="settings_rebuild_cluster" xml:space="preserve"><value>Rebuild the cluster from this device</value></data>
+  <data name="settings_rebuild_cluster_action" xml:space="preserve"><value>Rebuild</value></data>
+  <data name="settings_rebuild_cluster_desc" xml:space="preserve"><value>For when the founding device is gone. Every other device pairs again</value></data>
+  <data name="settings_remove_invalid" xml:space="preserve"><value>This device cannot be removed</value></data>
+  <data name="settings_remove_persist" xml:space="preserve"><value>The removal could not be saved</value></data>
+  <data name="settings_remove_role" xml:space="preserve"><value>Devices cannot be removed from this role</value></data>
   <data name="settings_reply_ttl" xml:space="preserve"><value>Reply display time</value></data>
   <data name="settings_reply_ttl_desc" xml:space="preserve"><value>How long a quick reply stays on the door station</value></data>
   <data name="settings_requires_restart" xml:space="preserve"><value>Applies after a restart</value></data>
@@ -1462,10 +1571,16 @@ On</value></data>
   <data name="settings_rotate_cluster_key_desc" xml:space="preserve"><value>For example after losing a device. The old key stays valid for members for seven days</value></data>
   <data name="settings_rotate_cluster_key_done" xml:space="preserve"><value>The cluster key was changed</value></data>
   <data name="settings_rotate_cluster_key_failed" xml:space="preserve"><value>The cluster key could not be changed</value></data>
+  <data name="settings_rule_devices_hint" xml:space="preserve"><value>Used for offline and online triggers</value></data>
+  <data name="settings_rule_doors_hint" xml:space="preserve"><value>None selected means every door</value></data>
   <data name="settings_rule_enabled" xml:space="preserve"><value>On</value></data>
+  <data name="settings_rule_need_schedule" xml:space="preserve"><value>Turn on Always or add a time window</value></data>
+  <data name="settings_rule_no_actions" xml:space="preserve"><value>No actions</value></data>
+  <data name="settings_rule_purposes_hint" xml:space="preserve"><value>Used for a chosen purpose; none selected means any</value></data>
   <data name="settings_rules" xml:space="preserve"><value>Notifications and rules</value></data>
   <data name="settings_rules_count" xml:space="preserve"><value>{0}</value></data>
   <data name="settings_rules_desc" xml:space="preserve"><value>What happens on a press, motion or a device going offline</value></data>
+  <data name="settings_rules_native" xml:space="preserve"><value>What happens on a press, motion, a missed call, SOS and more</value></data>
   <data name="settings_safe_mode" xml:space="preserve"><value>Safe mode</value></data>
   <data name="settings_save_failed" xml:space="preserve"><value>Couldn't save</value></data>
   <data name="settings_save_failed_reason" xml:space="preserve"><value>Not saved: {0}</value></data>
@@ -1477,8 +1592,20 @@ On</value></data>
   <data name="settings_search" xml:space="preserve"><value>Search settings</value></data>
   <data name="settings_search_none" xml:space="preserve"><value>No matching settings</value></data>
   <data name="settings_sec_30" xml:space="preserve"><value>30 seconds</value></data>
+  <data name="settings_secret_bad_name" xml:space="preserve"><value>The secret name is not valid</value></data>
+  <data name="settings_secret_clear" xml:space="preserve"><value>Clear</value></data>
+  <data name="settings_secret_clear_confirm" xml:space="preserve"><value>Clear this secret? Anything using it stops working</value></data>
+  <data name="settings_secret_enter" xml:space="preserve"><value>Enter</value></data>
+  <data name="settings_secret_failed" xml:space="preserve"><value>The secure store could not save it</value></data>
+  <data name="settings_secret_list_empty" xml:space="preserve"><value>No setting refers to a secret</value></data>
+  <data name="settings_secret_missing_here" xml:space="preserve"><value>Configured, but not stored on this device</value></data>
+  <data name="settings_secret_none" xml:space="preserve"><value>Not set</value></data>
+  <data name="settings_secret_replace" xml:space="preserve"><value>Replace</value></data>
+  <data name="settings_secret_stored" xml:space="preserve"><value>Stored on this device</value></data>
+  <data name="settings_secret_value" xml:space="preserve"><value>Value</value></data>
   <data name="settings_secrets" xml:space="preserve"><value>Secrets</value></data>
   <data name="settings_secrets_desc" xml:space="preserve"><value>Passwords and tokens are entered in each device's web admin</value></data>
+  <data name="settings_secrets_native" xml:space="preserve"><value>Secrets the configuration refers to, and whether this device holds them. Values are never shown</value></data>
   <data name="settings_section_cluster" xml:space="preserve"><value>Cluster</value></data>
   <data name="settings_section_device" xml:space="preserve"><value>This device</value></data>
   <data name="settings_section_doors" xml:space="preserve"><value>Doors</value></data>
@@ -1489,6 +1616,8 @@ On</value></data>
   <data name="settings_section_time" xml:space="preserve"><value>Time</value></data>
   <data name="settings_section_volume" xml:space="preserve"><value>Volume</value></data>
   <data name="settings_section_web" xml:space="preserve"><value>Open the web admin</value></data>
+  <data name="settings_session_hint" xml:space="preserve"><value>This action needs the admin password</value></data>
+  <data name="settings_session_title" xml:space="preserve"><value>Admin password</value></data>
   <data name="settings_set_password" xml:space="preserve"><value>Set the admin password</value></data>
   <data name="settings_set_password_hint" xml:space="preserve"><value>One password for this device and the web admin</value></data>
   <data name="settings_sip_answer_mode" xml:space="preserve"><value>Answer mode</value></data>
@@ -1497,16 +1626,21 @@ On</value></data>
   <data name="settings_sip_direct_port_desc" xml:space="preserve"><value>Update each device's firewall rule after a change</value></data>
   <data name="settings_sip_dtmf" xml:space="preserve"><value>DTMF actions</value></data>
   <data name="settings_sip_dtmf_desc" xml:space="preserve"><value>Key actions during a call (such as unlock) are set in the web admin</value></data>
+  <data name="settings_sip_dtmf_native" xml:space="preserve"><value>What a key pressed during a call does</value></data>
   <data name="settings_sip_password" xml:space="preserve"><value>SIP password</value></data>
   <data name="settings_sip_password_desc" xml:space="preserve"><value>Secrets are entered in the web admin on the target device</value></data>
+  <data name="settings_sip_password_native" xml:space="preserve"><value>Stored in this device's secure store (DPAPI); configuration keeps only a reference</value></data>
   <data name="settings_sip_port" xml:space="preserve"><value>Port</value></data>
   <data name="settings_sip_server" xml:space="preserve"><value>Server</value></data>
   <data name="settings_sip_server_desc" xml:space="preserve"><value>Leave blank for direct calls between devices</value></data>
+  <data name="settings_sip_srtp" xml:space="preserve"><value>SRTP (encryption between devices)</value></data>
+  <data name="settings_sip_srtp_desc" xml:space="preserve"><value>Mandatory excludes iOS 5 devices</value></data>
   <data name="settings_sip_transport" xml:space="preserve"><value>Transport</value></data>
   <data name="settings_sip_user" xml:space="preserve"><value>User name</value></data>
   <data name="settings_software_update" xml:space="preserve"><value>Software update</value></data>
   <data name="settings_software_update_action" xml:space="preserve"><value>Check</value></data>
   <data name="settings_software_update_desc" xml:space="preserve"><value>Installer-based installations only</value></data>
+  <data name="settings_software_update_native" xml:space="preserve"><value>Installer-based installations only. Updates run after their signature is verified</value></data>
   <data name="settings_sos_cancel_pin" xml:space="preserve"><value>Clearing requires the admin password</value></data>
   <data name="settings_sos_cancel_pin_desc" xml:space="preserve"><value>Anyone can clear while no admin password is set</value></data>
   <data name="settings_sos_countdown" xml:space="preserve"><value>Countdown before alarm</value></data>
@@ -1515,19 +1649,41 @@ On</value></data>
   <data name="settings_sos_mode" xml:space="preserve"><value>Trigger gesture</value></data>
   <data name="settings_sos_roles" xml:space="preserve"><value>Show the SOS button on</value></data>
   <data name="settings_sos_rules" xml:space="preserve"><value>Alert recipients and rules</value></data>
+  <data name="settings_sos_rules_action" xml:space="preserve"><value>Open rules</value></data>
   <data name="settings_sos_rules_desc" xml:space="preserve"><value>Who is alerted, and how, is set in the web admin</value></data>
+  <data name="settings_sos_rules_native" xml:space="preserve"><value>Who is alerted, and how, is set under Alerts and rules</value></data>
   <data name="settings_sos_sip" xml:space="preserve"><value>Place a call on SOS</value></data>
   <data name="settings_sos_sip_target" xml:space="preserve"><value>Extension to call</value></data>
   <data name="settings_sos_slide" xml:space="preserve"><value>Slide</value></data>
+  <data name="settings_sos_sound" xml:space="preserve"><value>Alarm sound</value></data>
   <data name="settings_sos_volume" xml:space="preserve"><value>Alarm volume</value></data>
   <data name="settings_sos_web" xml:space="preserve"><value>Show on open Web panels</value></data>
   <data name="settings_sos_web_desc" xml:space="preserve"><value>Shows the SOS state on browser panels that are open</value></data>
   <data name="settings_sound_classic" xml:space="preserve"><value>Classic</value></data>
   <data name="settings_sound_ding1" xml:space="preserve"><value>Ding-dong 1</value></data>
   <data name="settings_sound_ding2" xml:space="preserve"><value>Ding-dong 2</value></data>
+  <data name="settings_srtp_mandatory" xml:space="preserve"><value>Mandatory</value></data>
+  <data name="settings_srtp_optional" xml:space="preserve"><value>Optional</value></data>
+  <data name="settings_strategy_timeouts" xml:space="preserve"><value>First frame {0} ms · stall {1} ms</value></data>
   <data name="settings_telegram" xml:space="preserve"><value>Telegram</value></data>
+  <data name="settings_telegram_poll" xml:space="preserve"><value>Receive button replies</value></data>
+  <data name="settings_telegram_poll_desc" xml:space="preserve"><value>Lets residents send a quick reply from the alert's buttons</value></data>
+  <data name="settings_telegram_template" xml:space="preserve"><value>Message template (Japanese)</value></data>
+  <data name="settings_telegram_template_desc" xml:space="preserve"><value>{0} and {1} are filled in; empty uses the default</value></data>
+  <data name="settings_telegram_test" xml:space="preserve"><value>Test message</value></data>
+  <data name="settings_telegram_test_action" xml:space="preserve"><value>Send</value></data>
+  <data name="settings_telegram_test_desc" xml:space="preserve"><value>Sends one message through the elected sender</value></data>
+  <data name="settings_telegram_test_hint" xml:space="preserve"><value>Chat ID; empty sends to the households' chats</value></data>
+  <data name="settings_telegram_token" xml:space="preserve"><value>Bot token</value></data>
+  <data name="settings_telegram_token_native" xml:space="preserve"><value>Shared encrypted with the other devices; clearing it stops Telegram alerts</value></data>
   <data name="settings_texts" xml:space="preserve"><value>Screen texts</value></data>
+  <data name="settings_texts_default" xml:space="preserve"><value>Built-in: {0}</value></data>
   <data name="settings_texts_desc" xml:space="preserve"><value>Overrides for displayed texts</value></data>
+  <data name="settings_texts_more" xml:space="preserve"><value>{0} more; narrow the search</value></data>
+  <data name="settings_texts_native" xml:space="preserve"><value>Override screen texts per language; empty restores the built-in text</value></data>
+  <data name="settings_texts_none" xml:space="preserve"><value>No overrides yet. Search for a text to change</value></data>
+  <data name="settings_texts_reset" xml:space="preserve"><value>Reset</value></data>
+  <data name="settings_texts_search" xml:space="preserve"><value>Search keys or texts</value></data>
   <data name="settings_theme_bg" xml:space="preserve"><value>Background colour</value></data>
   <data name="settings_theme_bg_color" xml:space="preserve"><value>Background colour</value></data>
   <data name="settings_theme_bg_image" xml:space="preserve"><value>Background image</value></data>
@@ -1560,11 +1716,16 @@ On</value></data>
   <data name="settings_unit_seconds" xml:space="preserve"><value>{0} s</value></data>
   <data name="settings_unlock_button" xml:space="preserve"><value>Show the unlock button</value></data>
   <data name="settings_unlock_show_button" xml:space="preserve"><value>Show the unlock button</value></data>
+  <data name="settings_update_channel" xml:space="preserve"><value>Update channel</value></data>
+  <data name="settings_update_channel_prerelease" xml:space="preserve"><value>Pre-release</value></data>
+  <data name="settings_update_channel_stable" xml:space="preserve"><value>Stable</value></data>
+  <data name="settings_update_confirm" xml:space="preserve"><value>Update to {0}? The app restarts</value></data>
   <data name="settings_update_sound" xml:space="preserve"><value>Update sound</value></data>
   <data name="settings_value_unset" xml:space="preserve"><value>Not set</value></data>
   <data name="settings_video_playback" xml:space="preserve"><value>Video playback</value></data>
   <data name="settings_video_policy" xml:space="preserve"><value>Detailed playback policy</value></data>
   <data name="settings_video_policy_desc" xml:space="preserve"><value>Per device pair priorities are set in the web admin</value></data>
+  <data name="settings_video_policy_native" xml:space="preserve"><value>Tried from the top; the next one is used when one fails</value></data>
   <data name="settings_video_rotation" xml:space="preserve"><value>Video rotation</value></data>
   <data name="settings_video_stats" xml:space="preserve"><value>Show video statistics</value></data>
   <data name="settings_video_stats_desc" xml:space="preserve"><value>Shows latency and frame rate on the call screen</value></data>
@@ -1601,6 +1762,14 @@ On</value></data>
   <data name="settings_web_only_wording" xml:space="preserve"><value>Reword the interface from the web admin</value></data>
   <data name="settings_web_push" xml:space="preserve"><value>Web Push</value></data>
   <data name="settings_week_1" xml:space="preserve"><value>1 week</value></data>
+  <data name="settings_when_button" xml:space="preserve"><value>Call button</value></data>
+  <data name="settings_when_call_missed" xml:space="preserve"><value>Missed call</value></data>
+  <data name="settings_when_device_offline" xml:space="preserve"><value>Device offline</value></data>
+  <data name="settings_when_device_online" xml:space="preserve"><value>Device back online</value></data>
+  <data name="settings_when_emergency_off" xml:space="preserve"><value>SOS cleared</value></data>
+  <data name="settings_when_emergency_on" xml:space="preserve"><value>SOS raised</value></data>
+  <data name="settings_when_motion" xml:space="preserve"><value>Motion</value></data>
+  <data name="settings_when_purpose_selected" xml:space="preserve"><value>Purpose chosen</value></data>
   <data name="settings_zone_search" xml:space="preserve"><value>Search time zones</value></data>
   <data name="setup_confirm_new_cluster" xml:space="preserve"><value>Tap again to create a cluster (cancel to join an existing cluster)</value></data>
   <data name="setup_door" xml:space="preserve"><value>Door ID</value></data>
