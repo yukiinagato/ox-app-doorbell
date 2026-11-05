@@ -459,6 +459,12 @@ Delete it?</value></data>
   <data name="dash_tile_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>View</value></data>
   <data name="dash_tile_watch" xml:space="preserve"><value>View</value></data>
+  <data name="dashboard_device_status_offline" xml:space="preserve"><value>Offline</value></data>
+  <data name="dashboard_offline_doors" xml:space="preserve"><value>Offline door stations</value></data>
+  <data name="dashboard_offline_doors_empty" xml:space="preserve"><value>No offline door stations</value></data>
+  <data name="dashboard_offline_doors_title" xml:space="preserve"><value>Offline door stations</value></data>
+  <data name="dashboard_preview_rate_format" xml:space="preserve"><value>%@ fps</value></data>
+  <data name="dashboard_preview_rate_title" xml:space="preserve"><value>Preview refresh rate</value></data>
   <data name="date_full" xml:space="preserve"><value>{0}-{1}-{2} ({3})</value></data>
   <data name="day_fri" xml:space="preserve"><value>Fri</value></data>
   <data name="day_mon" xml:space="preserve"><value>Mon</value></data>
@@ -929,6 +935,7 @@ On</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>Unlock</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>No unlock action is configured for this door</value></data>
+  <data name="ring_video_zoom_hint" xml:space="preserve"><value>Pinch to zoom; double-tap to reset</value></data>
   <data name="settings_about" xml:space="preserve"><value>About this device</value></data>
   <data name="settings_appearance" xml:space="preserve"><value>Appearance</value></data>
   <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>Switch by time of day</value></data>

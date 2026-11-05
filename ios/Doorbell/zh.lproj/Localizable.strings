@@ -452,6 +452,12 @@
 "dash.tile_offline" = "离线";
 "dash.tile_open" = "查看";
 "dash.tile_watch" = "查看";
+"dashboard.device_status_offline" = "离线";
+"dashboard.offline_doors" = "离线门口机";
+"dashboard.offline_doors_empty" = "没有离线门口机";
+"dashboard.offline_doors_title" = "离线门口机";
+"dashboard.preview_rate_format" = "%@ fps";
+"dashboard.preview_rate_title" = "预览更新频率";
 "date.full" = "%@年%@月%@日（%@）";
 "day.fri" = "五";
 "day.mon" = "一";
@@ -918,6 +924,7 @@
 "ring.unlock" = "开锁";
 "ring.unlock_sent" = "已发送开锁信号";
 "ring.unlock_unconfigured" = "此门口机尚未配置开锁操作";
+"ring.video_zoom_hint" = "双指缩放，双击复位";
 "settings.about" = "本机信息";
 "settings.appearance" = "外观";
 "settings.appearance_auto_schedule" = "按时间切换";

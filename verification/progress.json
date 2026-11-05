@@ -2,7 +2,7 @@
   "schema_version": 1,
   "purpose": "Canonical status ledger for the 2026-09-26 production review. Historical reports remain historical evidence; this file controls current task state.",
   "baseline_commit": "d9547b3b4f5b0d5dafb9698a3681a0ddc7a0d252",
-  "implementation_commit": "86f61e6b146f9ebe505fbdb3496278b7ba88fcd3",
+  "implementation_commit": "f63e53041412ba9a4f942d27db6a1c3fb1e6040e",
   "release_gate": "NOT_RELEASE_READY",
   "tasks": [
     {
@@ -11,8 +11,11 @@
       "verification_status": "BLOCKED_ENV",
       "independent_review_status": "NOT_RUN",
       "release_gate": "NOT_READY",
-      "evidence": ["verification/remediation-q01-q18/T16/relay-progress.json", "verification/latest/execution-evidence.json"],
-      "blocking_reason": "Component tests and selected ASan/UBSan tests ran, but required separate-process Node A/Node B, slow peer, revoke, and peer-epoch production scenarios were not qualified."
+      "evidence": [
+        "verification/remediation-q01-q18/T16/relay-progress.json",
+        "verification/latest/execution-evidence.json"
+      ],
+      "blocking_reason": "Source and bounded relay behavior reviewed; selected host sanitizer tests pass. Required separate-process Node A/B relay tests for slow peer, in-flight call replacement, revoke and epoch change remain unrun."
     },
     {
       "id": "T17",
@@ -20,26 +23,35 @@
       "verification_status": "PASS_COMPONENT_ONLY",
       "independent_review_status": "NOT_RUN",
       "release_gate": "NOT_READY",
-      "evidence": ["verification/latest/execution-evidence.json", "feature-parity.json"],
-      "blocking_reason": "State-machine and regression behavior pass Web tests; real HTTPS/two-node/browser and platform qualification remain unrun."
+      "evidence": [
+        "verification/latest/execution-evidence.json",
+        "verification/latest/browser-results.json"
+      ],
+      "blocking_reason": "Transient retry state machine and browser playback startup behavior pass automated tests and 6 real Chromium/Core-fixture cases. T18 HTTPS dual-node, camera, relay acceptance, hardware and independent review remain incomplete."
     },
     {
       "id": "T18",
       "implementation_status": "NOT_REVIEWED",
-      "verification_status": "BLOCKED_ENV",
+      "verification_status": "NOT_RUN",
       "independent_review_status": "NOT_RUN",
       "release_gate": "NOT_READY",
-      "evidence": ["verification/latest/execution-evidence.json"],
-      "blocking_reason": "No configured HTTPS Node A/Node B deployment; browser runner lacks the Playwright module."
+      "evidence": [
+        "verification/latest/execution-evidence.json",
+        "verification/latest/browser-results.json"
+      ],
+      "blocking_reason": "Chromium ran against one Core QA fixture over HTTP. No two independent nodes, HTTPS, real Cookie/session, camera stream, authorization-to-relay workflow, or call-switch E2E."
     },
     {
       "id": "T30",
       "implementation_status": "IMPLEMENTED_INTEGRATION_PENDING",
-      "verification_status": "NOT_RUN",
+      "verification_status": "PARTIAL",
       "independent_review_status": "NOT_RUN",
       "release_gate": "NOT_READY",
-      "evidence": ["verification/remediation-q01-q18/T30/report.zh.md", "verification/latest/execution-evidence.json"],
-      "blocking_reason": "Existing report names the missing gate: current frozen Web plus native Core/SQLite HTTP integration. That integration was not run against the current candidate."
+      "evidence": [
+        "verification/remediation-q01-q18/T30/report.zh.md",
+        "verification/latest/execution-evidence.json"
+      ],
+      "blocking_reason": "Operation ACK and HTTP integration fixtures pass after waiting for the target MQTT broker connection. Full Core suite and frozen Web + native Core/SQLite HTTP integration have not closed."
     },
     {
       "id": "T31",
@@ -47,17 +59,19 @@
       "verification_status": "NOT_RUN",
       "independent_review_status": "NOT_RUN",
       "release_gate": "NOT_READY",
-      "evidence": ["verification/remediation-q01-q18/T31/checkpoint.json"],
-      "blocking_reason": "Current checkpoint still lists production media-grant security review, migration documentation, frozen final source, and independent review."
+      "evidence": [
+        "verification/remediation-q01-q18/T31/checkpoint.json"
+      ],
+      "blocking_reason": "Production grant/security lifecycle, migration documentation and independent review remain outstanding."
     },
     {
       "id": "T32",
-      "implementation_status": "NOT_REVIEWED",
+      "implementation_status": "NOT_IMPLEMENTED",
       "verification_status": "NOT_RUN",
       "independent_review_status": "NOT_RUN",
       "release_gate": "NOT_READY",
       "evidence": [],
-      "blocking_reason": "No T32 lifecycle implementation or current evidence package was found in the repository inventory."
+      "blocking_reason": "Panel create/list/scope/edit/revoke, media grant revoke, last activity, legacy_shared identification and safe migration workflow are not complete."
     },
     {
       "id": "production-core-full-suite",
@@ -65,17 +79,21 @@
       "verification_status": "FAIL",
       "independent_review_status": "NOT_RUN",
       "release_gate": "NOT_READY",
-      "evidence": ["verification/latest/execution-evidence.json"],
-      "blocking_reason": "Clean full doorbell_tests did not finish within 180 seconds; selected media/HTTP/relay tests passed, but the whole suite is not green."
+      "evidence": [
+        "verification/latest/execution-evidence.json"
+      ],
+      "blocking_reason": "Clean macOS full suite exceeded 180 seconds. Linux full run exceeded its earlier 300 second bound at media TCP bounds although that test passes alone; corrected full run is in progress."
     },
     {
       "id": "jailbroken-ipads",
-      "implementation_status": "NOT_APPLICABLE",
-      "verification_status": "BLOCKED_ENV",
+      "implementation_status": "PARTIAL",
+      "verification_status": "PARTIAL",
       "independent_review_status": "NOT_RUN",
       "release_gate": "NOT_READY",
-      "evidence": ["verification/device-inventory.json"],
-      "blocking_reason": "No device was inventoried, deployed, or exercised. SSH failures and missing authentication/reachability are recorded without addresses or credentials."
+      "evidence": [
+        "verification/device-inventory.json"
+      ],
+      "blocking_reason": "iPad1 inventory, clean iOS5 armv7 build, install and launch observed. Air1 inventory plus current arm64 Release jailbreak signing, LaunchServices registration and process launch observed. No authenticated UI, SIP/audio/video, lifecycle or reconnect testing. Mini3 SSH refused connection."
     },
     {
       "id": "windows-native-vms",
@@ -83,8 +101,11 @@
       "verification_status": "BLOCKED_ENV",
       "independent_review_status": "NOT_RUN",
       "release_gate": "NOT_READY",
-      "evidence": ["verification/device-inventory.json"],
-      "blocking_reason": "No Windows VM runtime or licensed XP/7 image was available; no native Windows runtime test ran."
+      "evidence": [
+        "verification/device-inventory.json"
+      ],
+      "blocking_reason": "No native Windows VM runtime or legal XP/7 images. Docker provides Linux only."
     }
-  ]
+  ],
+  "latest_tested_commit": "f63e53041412ba9a4f942d27db6a1c3fb1e6040e"
 }

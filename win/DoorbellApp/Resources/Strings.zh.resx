@@ -459,6 +459,12 @@
   <data name="dash_tile_offline" xml:space="preserve"><value>离线</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>查看</value></data>
   <data name="dash_tile_watch" xml:space="preserve"><value>查看</value></data>
+  <data name="dashboard_device_status_offline" xml:space="preserve"><value>离线</value></data>
+  <data name="dashboard_offline_doors" xml:space="preserve"><value>离线门口机</value></data>
+  <data name="dashboard_offline_doors_empty" xml:space="preserve"><value>没有离线门口机</value></data>
+  <data name="dashboard_offline_doors_title" xml:space="preserve"><value>离线门口机</value></data>
+  <data name="dashboard_preview_rate_format" xml:space="preserve"><value>%@ fps</value></data>
+  <data name="dashboard_preview_rate_title" xml:space="preserve"><value>预览更新频率</value></data>
   <data name="date_full" xml:space="preserve"><value>{0}年{1}月{2}日（{3}）</value></data>
   <data name="day_fri" xml:space="preserve"><value>五</value></data>
   <data name="day_mon" xml:space="preserve"><value>一</value></data>
@@ -929,6 +935,7 @@
   <data name="ring_unlock" xml:space="preserve"><value>开锁</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>已发送开锁信号</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>此门口机尚未配置开锁操作</value></data>
+  <data name="ring_video_zoom_hint" xml:space="preserve"><value>双指缩放，双击复位</value></data>
   <data name="settings_about" xml:space="preserve"><value>本机信息</value></data>
   <data name="settings_appearance" xml:space="preserve"><value>外观</value></data>
   <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>按时间切换</value></data>

@@ -47,6 +47,16 @@ final class SettingsViewController: SettingsFormViewController {
         return [
             .action(title: texts.t("settings.section_device"), detail: boot.name,
                     identifier: "settings_device") { [weak self] in self?.openDevice() },
+            .choice(title: texts.t("dashboard.preview_rate_title"),
+                    value: DashboardView.previewRateValue(
+                        DashboardView.savedPreviewFramesPerSecond),
+                    options: DashboardView.previewRates.map { rate in
+                        let value = DashboardView.previewRateValue(rate)
+                        return (value, texts.t("dashboard.preview_rate_format", value))
+                    }, identifier: "settings_preview_rate") { value in
+                guard let rate = Double(value) else { return }
+                UserDefaults.standard.set(rate, forKey: DashboardView.previewRateDefaultsKey)
+            },
             .action(title: texts.t("settings.section_volume"), detail: volumeSummary(),
                     identifier: "settings_volume") { [weak self] in self?.openVolume() },
             .action(title: texts.t("settings.section_time"), detail: timeSummary(),

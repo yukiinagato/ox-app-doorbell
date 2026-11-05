@@ -5,6 +5,7 @@ import UIKit
 final class MonitorViewController: UIViewController {
     private let core: CoreBridge
     private let boot: BootConfig
+    private let initialDoor: String?
     private let texts = Texts()
     private let styleApplier = UIStyleApplier()
     private var nodeId = ""
@@ -36,9 +37,10 @@ final class MonitorViewController: UIViewController {
     private let closeButton = UIButton(type: .system)
     private var skin = DoorbellSkin.plain(.dark)
 
-    init(core: CoreBridge, boot: BootConfig) {
+    init(core: CoreBridge, boot: BootConfig, initialDoor: String? = nil) {
         self.core = core
         self.boot = boot
+        self.initialDoor = initialDoor
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
     }
@@ -229,7 +231,17 @@ final class MonitorViewController: UIViewController {
         // Restarting here on every peers_changed is what produced the retry storm: no video
         // frame meant "start again", and starting again is what kept the door too busy to send
         // one. The first open picks a door; after that only the user does.
-        if selectedPeerId.isEmpty, let first = peers.first { start(peer: first) }
+        if selectedPeerId.isEmpty, let first = Self.preferredPeer(peers, door: initialDoor) {
+            start(peer: first)
+        }
+    }
+
+    static func preferredPeer(_ peers: [[String: Any]], door: String?) -> [String: Any]? {
+        if let door = door, !door.isEmpty,
+           let match = peers.first(where: { ConfigUtil.evStr($0, "door") == door }) {
+            return match
+        }
+        return peers.first
     }
 
     @objc private func selectDevice(_ sender: UIButton) {

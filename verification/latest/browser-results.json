@@ -2,9 +2,155 @@
   "suite": "chromium-component-and-core-network-integration",
   "results": [
     {
-      "id": "qa_v2.browser.infrastructure",
-      "status": "BLOCKED",
-      "detail": "ModuleNotFoundError(\"No module named 'playwright'\")"
+      "id": "qa_v2.browser_component.real_jpeg_decodes_control",
+      "status": "PASS",
+      "observed": {
+        "states": [
+          {
+            "state": "loading",
+            "strategy": "mjpeg",
+            "reason": ""
+          },
+          {
+            "state": "playing",
+            "strategy": "mjpeg",
+            "reason": "prewarmed"
+          }
+        ],
+        "width": 64
+      }
+    },
+    {
+      "id": "qa_v2.browser_component.invalid_image_never_playing",
+      "status": "PASS",
+      "observed": {
+        "states": [
+          {
+            "state": "loading",
+            "strategy": "mjpeg",
+            "reason": ""
+          },
+          {
+            "state": "failed",
+            "strategy": "mjpeg",
+            "reason": "exhausted"
+          }
+        ],
+        "width": 0
+      }
+    },
+    {
+      "id": "qa_v2.browser.no_frame_must_not_report_playing",
+      "status": "PASS",
+      "observed": {
+        "states": [
+          {
+            "state": "loading",
+            "strategy": "mjpeg",
+            "reason": ""
+          }
+        ],
+        "width": 0
+      }
+    },
+    {
+      "id": "qa_v2.browser.real_mjpeg_decodes_moving_pixels_control",
+      "status": "PASS",
+      "observed": {
+        "samples": [
+          83,
+          109,
+          135,
+          161,
+          187,
+          31,
+          57,
+          83,
+          109,
+          161,
+          187,
+          31,
+          31,
+          83,
+          109
+        ],
+        "distinct": [
+          83,
+          109,
+          135,
+          161,
+          187,
+          31,
+          57
+        ],
+        "states": [
+          {
+            "state": "loading",
+            "strategy": "mjpeg",
+            "reason": ""
+          },
+          {
+            "state": "playing",
+            "strategy": "mjpeg",
+            "reason": "prewarmed"
+          }
+        ],
+        "width": 64,
+        "src": "/stream.mjpeg"
+      }
+    },
+    {
+      "id": "qa_v2.browser.call_fallback_keeps_moving_after_single_jpeg",
+      "status": "PASS",
+      "observed": {
+        "samples": [
+          213,
+          213,
+          57,
+          57,
+          135,
+          135,
+          187,
+          187,
+          57,
+          57,
+          109,
+          109,
+          187,
+          187,
+          31
+        ],
+        "distinct": [
+          213,
+          57,
+          135,
+          187,
+          109,
+          31
+        ],
+        "states": [
+          {
+            "state": "loading",
+            "strategy": "mjpeg",
+            "reason": ""
+          },
+          {
+            "state": "playing",
+            "strategy": "mjpeg",
+            "reason": "prewarmed"
+          }
+        ],
+        "width": 64,
+        "src": "blob:http://127.0.0.1:22637/b7955c04-b367-4147-90b1-309ff65df475"
+      }
+    },
+    {
+      "id": "qa_v2.browser.stop_releases_image_control",
+      "status": "PASS",
+      "observed": {
+        "src": null,
+        "laterEvents": 0
+      }
     }
   ]
 }

@@ -5,7 +5,7 @@
   "repository": "yukiinagato/ox-app-doorbell",
   "visible_baseline": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
   "pushed_revision": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
-  "review_status": "T17_WEB_PANEL_CELL_UPDATED; GLOBAL_MATRIX_INCOMPLETE",
+  "review_status": "PARTIAL_CURRENT_EVIDENCE_RECORDED; GLOBAL_MATRIX_INCOMPLETE",
   "purpose": "Full-platform acceptance catalog and audit overlays. NOT a completed inventory or a certificate of all-platform parity.",
   "policy": {
     "no_inferred_pass": true,
@@ -14,17 +14,34 @@
     "same_role_same_capability_same_deployment_requires_semantic_parity": true
   },
   "current_inventory_overlay": {
-    "source_revision": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
-    "working_tree_status": "M01-M08 repairs applied locally; no target/device qualification inferred",
+    "source_revision": "f63e53041412ba9a4f942d27db6a1c3fb1e6040e",
+    "working_tree_status": "T17 and playback changes committed; real iPad inventory and Chromium/Core-fixture evidence recorded; no broad platform qualification inferred.",
     "production_entrypoints": "verification/production-entrypoints.json",
     "preserved_traceability": "verification/r1-r6-traceability.json",
-    "newly_mapped_features": ["F03", "F04", "F10", "F18", "F20", "F34", "F40"],
+    "newly_mapped_features": [
+      "F03",
+      "F04",
+      "F10",
+      "F18",
+      "F20",
+      "F34",
+      "F40"
+    ],
     "unmapped_entries_remain": true
   },
   "review_main_e76100b_overlay": {
     "baseline": "e76100b7582ef7dd4b898c881c36d2f0b5046373",
     "status": "LOCAL_IMPLEMENTED_AND_HOST_TESTED",
-    "issues": ["M01", "M02", "M03", "M04", "M05", "M06", "M07", "M08"],
+    "issues": [
+      "M01",
+      "M02",
+      "M03",
+      "M04",
+      "M05",
+      "M06",
+      "M07",
+      "M08"
+    ],
     "evidence": "verification/review-main-e76100b-overlay.json",
     "platform_qualification": {
       "windows_x86": "M01_CROSS_TRANSLATION_UNIT_PASS_FULL_CORE_BLOCKED_IN_CIVETWEB",
@@ -6139,27 +6156,41 @@
         },
         {
           "profile_id": "P12",
-          "applicability": "NOT_RUN",
+          "applicability": "PASS",
           "conditions": [],
-          "implementation": "NOT_RUN",
+          "implementation": "PASS",
           "validation": {
-            "unit": "NOT_RUN",
-            "integration": "NOT_RUN",
+            "unit": "PASS",
+            "integration": "BLOCKED_ENV",
             "sanitizer": "NOT_RUN",
             "target_build": "NOT_RUN",
-            "device_or_browser": "NOT_RUN"
+            "device_or_browser": "PASS"
           },
-          "runtime_availability": "NOT_RUN",
-          "reason": null,
-          "test_ids": [],
-          "evidence": [],
-          "remaining_work": [],
+          "runtime_availability": "PASS",
+          "reason": "Real Chromium decoded frames and verified playback state/resource release against the clean Core fixture. This validates the playback component only; it does not qualify HTTPS, authenticated panel session, camera, media relay, or remote Core acceptance.",
+          "test_ids": [
+            "webui/tests/playback.test.js",
+            "qa_v2.browser.real_mjpeg_decodes_moving_pixels_control",
+            "qa_v2.browser.call_fallback_keeps_moving_after_single_jpeg",
+            "qa_v2.browser.invalid_image_never_playing",
+            "qa_v2.browser.no_frame_must_not_report_playing",
+            "qa_v2.browser.stop_releases_image_control"
+          ],
+          "evidence": [
+            "verification/latest/execution-evidence.json",
+            "verification/latest/browser-results.json"
+          ],
+          "remaining_work": [
+            "T18 HTTPS dual-node authenticated browser E2E",
+            "camera permission and capture on target browser",
+            "real relay and matching remote_core_accepted response"
+          ],
           "exception": {
             "requested": false,
             "approved": false,
             "rationale": null
           },
-          "tested_sha": null,
+          "tested_sha": "f63e53041412ba9a4f942d27db6a1c3fb1e6040e",
           "inventory_status": "NOT_RUN"
         }
       ],

@@ -42,7 +42,7 @@ struct IncomingCallLifecycleState {
     mutating func reset() { self = IncomingCallLifecycleState() }
 }
 
-final class IncomingViewController: UIViewController {
+final class IncomingViewController: UIViewController, UIGestureRecognizerDelegate {
 
     private let core: CoreBridge
     private let coreGeneration: UInt64?
@@ -75,6 +75,7 @@ final class IncomingViewController: UIViewController {
 
     private let themeBg = ThemeBackgroundView()
     private let videoBackdrop = UIView()
+    private let videoZoomView = UIView()
     private let liveView = UIImageView()
     private let h264View = UIView()
     private let noVideoLabel = UILabel()
@@ -100,6 +101,11 @@ final class IncomingViewController: UIViewController {
     private var monitorOn = false
     private var replyExpanded = false
     private var videoAspect: NSLayoutConstraint?
+    private var zoomScale: CGFloat = 1
+    private var pinchStartScale: CGFloat = 1
+    private var zoomOffset = CGPoint.zero
+    private var panStartOffset = CGPoint.zero
+    private var lastDeviceInfoRefresh: CFTimeInterval = 0
     private var palette = DoorbellPalette.dark
     private var skin = DoorbellSkin.plain(.dark)
     private var displayDoc: [String: Any]?
@@ -176,6 +182,7 @@ final class IncomingViewController: UIViewController {
         answerDelayTimer?.invalidate()
         videoPlayer?.stop()
         videoPlayer = nil
+        resetVideoZoom()
         if !sipMode.isEmpty {
             reportEndedIfNeeded()
             core.sipHangup(coreGeneration: coreGeneration)
@@ -189,6 +196,7 @@ final class IncomingViewController: UIViewController {
         videoPlayer = nil
         liveView.image = nil
         liveView.transform = .identity
+        resetVideoZoom()
         themeBg.releaseImage()
         noVideoLabel.isHidden = false
         // Keep the established audio dialog and its End Call button visible. viewDidDisappear is
@@ -242,6 +250,7 @@ final class IncomingViewController: UIViewController {
         revisionLifecycle = CallRevisionLifecycle(stageRevision: stageRevision)
         lastChimeRevision = stageRevision
         callLifecycle.reset()
+        resetVideoZoom()
         cfg = core.config()
         texts.setConfig(cfg)
         directPort = ConfigUtil.int(cfg, "sip.direct_port", 47190)
@@ -267,21 +276,37 @@ final class IncomingViewController: UIViewController {
         videoBackdrop.backgroundColor = .black
         videoBackdrop.layer.cornerRadius = 12
         videoBackdrop.clipsToBounds = true
+        videoBackdrop.accessibilityIdentifier = "incoming_video"
+        videoBackdrop.accessibilityHint = texts.t("ring.video_zoom_hint")
         videoBackdrop.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(videoBackdrop)
 
+        videoZoomView.translatesAutoresizingMaskIntoConstraints = false
+        videoBackdrop.addSubview(videoZoomView)
+
         liveView.contentMode = .scaleAspectFit
         liveView.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(liveView)
+        videoZoomView.addSubview(liveView)
 
         h264View.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(h264View)
+        videoZoomView.addSubview(h264View)
 
         noVideoLabel.font = .systemFont(ofSize: 22)
         noVideoLabel.textColor = UIColor(white: 1, alpha: 0.45)
         noVideoLabel.textAlignment = .center
         noVideoLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(noVideoLabel)
+        videoBackdrop.addSubview(noVideoLabel)
+
+        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(onVideoPinch(_:)))
+        pinch.delegate = self
+        videoBackdrop.addGestureRecognizer(pinch)
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(onVideoPan(_:)))
+        pan.delegate = self
+        videoBackdrop.addGestureRecognizer(pan)
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(onVideoDoubleTap))
+        doubleTap.numberOfTapsRequired = 2
+        doubleTap.delegate = self
+        videoBackdrop.addGestureRecognizer(doubleTap)
 
         titleLabel.font = .systemFont(ofSize: 30, weight: .bold)
         titleLabel.textColor = .white
@@ -381,13 +406,25 @@ final class IncomingViewController: UIViewController {
         micButton.isHidden = true
         unlockButton.isHidden = true
         #endif
-        // A single control row, as the owner asked: monitor · answer/end · mic · unlock · replies.
-        let actionRow = UIStackView(arrangedSubviews: [monitorButton, answerButton, micButton,
-                                                        unlockButton, quickReplyButton,
-                                                        ignoreButton])
-        actionRow.axis = .horizontal
-        actionRow.spacing = 10
-        actionRow.distribution = .fillEqually
+        // Two compact rows keep the controls touch-sized while preserving the video area.
+        let primaryActions = UIStackView(arrangedSubviews: [monitorButton, answerButton, micButton])
+        primaryActions.axis = .horizontal
+        primaryActions.spacing = 8
+        primaryActions.distribution = .fillEqually
+        let secondaryActions = UIStackView(arrangedSubviews: [unlockButton, quickReplyButton,
+                                                               ignoreButton])
+        secondaryActions.axis = .horizontal
+        secondaryActions.spacing = 8
+        secondaryActions.distribution = .fillEqually
+        let actionRows = UIStackView(arrangedSubviews: [primaryActions, secondaryActions])
+        actionRows.axis = .vertical
+        actionRows.spacing = 8
+        for button in [monitorButton, answerButton, micButton, unlockButton,
+                       quickReplyButton, ignoreButton] {
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 56).isActive = true
+        }
+        quickReplyButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
+        quickReplyButton.contentEdgeInsets = UIEdgeInsets(top: 12, left: 4, bottom: 12, right: 4)
 
         replyStack.isHidden = true
 
@@ -408,7 +445,7 @@ final class IncomingViewController: UIViewController {
         debugLine.heightAnchor.constraint(greaterThanOrEqualToConstant: 16).isActive = true
 
         let rightCol = UIStackView(arrangedSubviews: [purposeSlot, statusLabel, replyStack,
-                                                      hintLabel, UIView(), actionRow, debugLine,
+                                                      hintLabel, UIView(), actionRows, debugLine,
                                                       adminQr])
         rightCol.axis = .vertical
         rightCol.spacing = 12
@@ -421,37 +458,41 @@ final class IncomingViewController: UIViewController {
             themeBg.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             themeBg.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             themeBg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            videoBackdrop.topAnchor.constraint(equalTo: liveView.topAnchor),
-            videoBackdrop.bottomAnchor.constraint(equalTo: liveView.bottomAnchor),
-            videoBackdrop.leadingAnchor.constraint(equalTo: liveView.leadingAnchor),
-            videoBackdrop.trailingAnchor.constraint(equalTo: liveView.trailingAnchor),
+            videoZoomView.topAnchor.constraint(equalTo: videoBackdrop.topAnchor),
+            videoZoomView.bottomAnchor.constraint(equalTo: videoBackdrop.bottomAnchor),
+            videoZoomView.leadingAnchor.constraint(equalTo: videoBackdrop.leadingAnchor),
+            videoZoomView.trailingAnchor.constraint(equalTo: videoBackdrop.trailingAnchor),
+            liveView.topAnchor.constraint(equalTo: videoZoomView.topAnchor),
+            liveView.bottomAnchor.constraint(equalTo: videoZoomView.bottomAnchor),
+            liveView.leadingAnchor.constraint(equalTo: videoZoomView.leadingAnchor),
+            liveView.trailingAnchor.constraint(equalTo: videoZoomView.trailingAnchor),
+            h264View.topAnchor.constraint(equalTo: videoZoomView.topAnchor),
+            h264View.bottomAnchor.constraint(equalTo: videoZoomView.bottomAnchor),
+            h264View.leadingAnchor.constraint(equalTo: videoZoomView.leadingAnchor),
+            h264View.trailingAnchor.constraint(equalTo: videoZoomView.trailingAnchor),
             badgeRow.topAnchor.constraint(equalTo: g.topAnchor, constant: 18),
             badgeRow.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
             badgeRow.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
 
-            noVideoLabel.centerXAnchor.constraint(equalTo: liveView.centerXAnchor),
-            noVideoLabel.centerYAnchor.constraint(equalTo: liveView.centerYAnchor),
+            noVideoLabel.centerXAnchor.constraint(equalTo: videoBackdrop.centerXAnchor),
+            noVideoLabel.centerYAnchor.constraint(equalTo: videoBackdrop.centerYAnchor),
 
-            liveView.topAnchor.constraint(equalTo: badgeRow.bottomAnchor, constant: 14),
-            liveView.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
-            liveView.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
-            h264View.topAnchor.constraint(equalTo: liveView.topAnchor),
-            h264View.bottomAnchor.constraint(equalTo: liveView.bottomAnchor),
-            h264View.leadingAnchor.constraint(equalTo: liveView.leadingAnchor),
-            h264View.trailingAnchor.constraint(equalTo: liveView.trailingAnchor),
+            videoBackdrop.topAnchor.constraint(equalTo: badgeRow.bottomAnchor, constant: 14),
+            videoBackdrop.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
+            videoBackdrop.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
             rightCol.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
             rightCol.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -18),
         ])
         landscapeCs = [
-            liveView.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -18),
-            liveView.widthAnchor.constraint(equalTo: g.widthAnchor, multiplier: 0.58),
+            videoBackdrop.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -18),
+            videoBackdrop.widthAnchor.constraint(equalTo: g.widthAnchor, multiplier: 0.68),
             rightCol.topAnchor.constraint(equalTo: badgeRow.bottomAnchor, constant: 14),
-            rightCol.leadingAnchor.constraint(equalTo: liveView.trailingAnchor, constant: 24),
+            rightCol.leadingAnchor.constraint(equalTo: videoBackdrop.trailingAnchor, constant: 20),
         ]
         portraitCs = [
-            liveView.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
-            liveView.heightAnchor.constraint(equalTo: g.heightAnchor, multiplier: 0.38),
-            rightCol.topAnchor.constraint(equalTo: liveView.bottomAnchor, constant: 16),
+            videoBackdrop.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
+            videoBackdrop.heightAnchor.constraint(equalTo: g.heightAnchor, multiplier: 0.38),
+            rightCol.topAnchor.constraint(equalTo: videoBackdrop.bottomAnchor, constant: 16),
             rightCol.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
         ]
         applyOrientationConstraints()
@@ -524,6 +565,10 @@ final class IncomingViewController: UIViewController {
                                        focusColor: palette.onAccent)
         }
         micButton.isEnabled = inCall
+        monitorButton.isHidden = inCall
+        micButton.isHidden = !inCall
+        quickReplyButton.isHidden = inCall
+        ignoreButton.isHidden = inCall
     }
 
     /// The unlock control stays, and an administrator decides whether it is offered. When it is
@@ -538,15 +583,25 @@ final class IncomingViewController: UIViewController {
     }
 
     private func updateNoticeChip() {
-        let notice = DoorbellNotice.effective(status: core.status(), config: cfg, door: door,
+        let status = core.status()
+        let notice = DoorbellNotice.effective(status: status, config: cfg, door: door,
                                               nowMs: DoorbellClock.nowMs(core))
-        displayDoc = core.status()?["display"] as? [String: Any]
+        displayDoc = status?["display"] as? [String: Any]
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
             display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
         applySkin()
         noticeChip.update(active: notice != nil, palette: palette)
         adminQr.skin = skin
+        updateDoorStationAdminEntry(status: status)
         adminQr.reload()
+    }
+
+    private func updateDoorStationAdminEntry(status: [String: Any]?) {
+        let peer = ConfigUtil.findDoorPeer(status, door: door)
+        adminQr.setTargetURL(ConfigUtil.peerAdminURL(peer))
+        let power = (status?["self"] as? [String: Any])?["power"] as? [String: Any]
+        adminQr.setDetailText(DoorbellTheme.versionLine(name: boot.name,
+            coreVersion: DoorbellTheme.coreVersion(), texts: texts, power: power))
     }
 
     /// The bare text on this screen — the door name, the prompt, the counters line — takes Core's
@@ -665,12 +720,74 @@ final class IncomingViewController: UIViewController {
     private func applyVideoAspect(_ size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
         if let existing = videoAspect { existing.isActive = false }
-        let constraint = liveView.heightAnchor.constraint(equalTo: liveView.widthAnchor,
-                                                          multiplier: size.height / size.width)
+        let constraint = videoBackdrop.heightAnchor.constraint(equalTo: videoBackdrop.widthAnchor,
+                                                                multiplier: size.height / size.width)
         constraint.priority = UILayoutPriority(999)
         constraint.isActive = true
         videoAspect = constraint
         view.setNeedsLayout()
+    }
+
+    @objc private func onVideoPinch(_ gesture: UIPinchGestureRecognizer) {
+        switch gesture.state {
+        case .began:
+            pinchStartScale = zoomScale
+        case .changed, .ended:
+            zoomScale = min(4, max(1, pinchStartScale * gesture.scale))
+            if zoomScale == 1 { zoomOffset = .zero }
+            applyVideoZoom()
+        default:
+            break
+        }
+    }
+
+    @objc private func onVideoPan(_ gesture: UIPanGestureRecognizer) {
+        guard zoomScale > 1 else { return }
+        switch gesture.state {
+        case .began:
+            panStartOffset = zoomOffset
+        case .changed, .ended:
+            let delta = gesture.translation(in: videoBackdrop)
+            zoomOffset = CGPoint(x: panStartOffset.x + delta.x,
+                                 y: panStartOffset.y + delta.y)
+            applyVideoZoom()
+        default:
+            break
+        }
+    }
+
+    @objc private func onVideoDoubleTap() {
+        zoomScale = zoomScale > 1 ? 1 : 2
+        zoomOffset = .zero
+        applyVideoZoom()
+    }
+
+    private func applyVideoZoom() {
+        let size = videoBackdrop.bounds.size
+        let maxX = max(0, size.width * (zoomScale - 1) / 2)
+        let maxY = max(0, size.height * (zoomScale - 1) / 2)
+        zoomOffset.x = min(maxX, max(-maxX, zoomOffset.x))
+        zoomOffset.y = min(maxY, max(-maxY, zoomOffset.y))
+        videoZoomView.transform = CGAffineTransform(translationX: zoomOffset.x,
+                                                    y: zoomOffset.y)
+            .scaledBy(x: zoomScale, y: zoomScale)
+    }
+
+    private func resetVideoZoom() {
+        zoomScale = 1
+        pinchStartScale = 1
+        zoomOffset = .zero
+        panStartOffset = .zero
+        videoZoomView.transform = .identity
+    }
+
+    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        return !(gestureRecognizer is UIPanGestureRecognizer) || zoomScale > 1
+    }
+
+    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
+                           shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
+        return true
     }
 
 
@@ -811,8 +928,13 @@ final class IncomingViewController: UIViewController {
     /// Core remembers the mute across a call and reapplies it when media becomes active, so the
     /// toggle follows `status.call.mic_muted` rather than only what this screen last pressed.
     private func syncMicFromStatus() {
-        guard let call = core.status()?["call"] as? [String: Any],
-              call["mic_muted"] != nil else { return }
+        guard let status = core.status() else { return }
+        let now = CACurrentMediaTime()
+        if now - lastDeviceInfoRefresh >= 30 {
+            lastDeviceInfoRefresh = now
+            updateDoorStationAdminEntry(status: status)
+        }
+        guard let call = status["call"] as? [String: Any], call["mic_muted"] != nil else { return }
         let reported = ConfigUtil.evBool(call, "mic_muted")
         guard reported != micMuted else { return }
         micMuted = reported

@@ -459,6 +459,12 @@
   <data name="dash_tile_offline" xml:space="preserve"><value>オフライン</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>見る</value></data>
   <data name="dash_tile_watch" xml:space="preserve"><value>見る</value></data>
+  <data name="dashboard_device_status_offline" xml:space="preserve"><value>オフライン</value></data>
+  <data name="dashboard_offline_doors" xml:space="preserve"><value>オフラインの門口機</value></data>
+  <data name="dashboard_offline_doors_empty" xml:space="preserve"><value>オフラインの門口機はありません</value></data>
+  <data name="dashboard_offline_doors_title" xml:space="preserve"><value>オフラインの門口機</value></data>
+  <data name="dashboard_preview_rate_format" xml:space="preserve"><value>%@ fps</value></data>
+  <data name="dashboard_preview_rate_title" xml:space="preserve"><value>プレビュー更新頻度</value></data>
   <data name="date_full" xml:space="preserve"><value>{0}年{1}月{2}日 ({3})</value></data>
   <data name="day_fri" xml:space="preserve"><value>金</value></data>
   <data name="day_mon" xml:space="preserve"><value>月</value></data>
@@ -929,6 +935,7 @@ ON</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>解錠</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>解錠信号を送信しました</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>この門口機には開錠の操作が設定されていません</value></data>
+  <data name="ring_video_zoom_hint" xml:space="preserve"><value>ピンチで拡大、ダブルタップで元に戻します</value></data>
   <data name="settings_about" xml:space="preserve"><value>本機情報</value></data>
   <data name="settings_appearance" xml:space="preserve"><value>外観</value></data>
   <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>時刻で切り替える</value></data>

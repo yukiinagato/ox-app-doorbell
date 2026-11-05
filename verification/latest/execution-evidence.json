@@ -2,19 +2,30 @@
   "schema_version": 1,
   "run_date": "2026-09-26",
   "baseline_commit": "d9547b3b4f5b0d5dafb9698a3681a0ddc7a0d252",
-  "tested_commit": "86f61e6b146f9ebe505fbdb3496278b7ba88fcd3",
+  "tested_commit": "f63e53041412ba9a4f942d27db6a1c3fb1e6040e",
   "results": [
     {
       "id": "T17-call-media-authority",
       "status": "PASS",
       "command": "node webui/tests/call_media_authority.test.js",
-      "coverage": ["remote_core_accepted matches active binding", "HTTP 503 recovery", "timeout recovery", "403/409 do not retry", "old generation retry cannot touch replacement call", "manual video-off cancels retry", "bounded retries reach INTERRUPTED"]
+      "coverage": [
+        "remote_core_accepted matches active binding",
+        "HTTP 503 recovery",
+        "timeout recovery",
+        "403/409 do not retry",
+        "old generation retry cannot touch replacement call",
+        "manual video-off cancels retry",
+        "bounded retries reach INTERRUPTED"
+      ]
     },
     {
       "id": "T17-video-session",
       "status": "PASS",
       "command": "node webui/tests/video_session.test.js",
-      "coverage": ["local media readiness fires only after successful getUserMedia", "stopped and stale streams are released"]
+      "coverage": [
+        "local media readiness fires only after successful getUserMedia",
+        "stopped and stale streams are released"
+      ]
     },
     {
       "id": "web-regressions",
@@ -25,7 +36,10 @@
     {
       "id": "source-checks",
       "status": "PASS",
-      "commands": ["python3 tools/gen_i18n.py --check", "python3 tools/check_english_source.py"]
+      "commands": [
+        "python3 tools/gen_i18n.py --check",
+        "python3 tools/check_english_source.py"
+      ]
     },
     {
       "id": "clean-core-configure-build",
@@ -65,15 +79,18 @@
     },
     {
       "id": "qa-v2-real-chromium-component",
-      "status": "BLOCKED_ENV",
+      "status": "PASS",
       "evidence": "verification/latest/browser-results.json",
-      "reason": "Python playwright module is not installed; browser cases were not collected."
+      "reason": "Python playwright module is not installed; browser cases were not collected.",
+      "command": "/tmp/doorbell-playwright-venv/bin/python tools/qa_v2/browser_probe.py --fixture <clean Core fixture> --out <temporary output>",
+      "result": "6/6 real Chromium cases passed against the Core QA fixture: decoded JPEG, invalid-image and no-frame state correctness, moving MJPEG pixels, repeated single-JPEG call fallback, and image resource release.",
+      "limitation": "Not HTTPS, not two independent Core nodes, no real Cookie/session, no camera, no relay or remote Core acceptance."
     },
     {
       "id": "docker-linux-qa",
-      "status": "BLOCKED_ENV",
-      "command": "docker version",
-      "reason": "Docker daemon is unavailable at the configured socket."
+      "status": "FAIL",
+      "command": "Docker Ubuntu 24.04 clean Core build/test run; full-suite rerun currently in progress",
+      "reason": "Docker became available and Linux build passed. Previous full suite exceeded 300 seconds at media TCP bounds; isolated media TCP bounds passed 1 case / 32 assertions. A corrected full-suite rerun is being collected."
     },
     {
       "id": "https-two-node-browser-e2e",
@@ -82,20 +99,45 @@
     },
     {
       "id": "jailbroken-ipad-deployment",
-      "status": "BLOCKED_ENV",
+      "status": "PARTIAL",
       "evidence": "verification/device-inventory.json",
-      "reason": "SSH inventory could not be completed; no device build, install, launch, audio, video, or lifecycle run was performed."
+      "reason": "SSH inventory could not be completed; no device build, install, launch, audio, video, or lifecycle run was performed.",
+      "result": "iPad 1 clean iOS5 armv7 app installed and launch command returned process. iPad Air 1 modern arm64 Release app and embedded Swift dylibs re-signed with jailbreak platform entitlement, registered through LaunchServices at a second bundle path, and launched; process remained present after 6 seconds. No device call/audio/video interactions."
     },
     {
       "id": "native-windows-vm",
       "status": "BLOCKED_ENV",
       "evidence": "verification/device-inventory.json",
-      "reason": "No VM runtime/image; Docker is not a Windows XP/7 substitute."
+      "reason": "No native VM runtime or legal XP/7 images; Docker used only for Linux."
     },
     {
       "id": "independent-review-T16-T17-T18-T30-T31-T32",
       "status": "NOT_RUN",
       "reason": "No separate independent reviewer completed this turn."
+    },
+    {
+      "id": "playback-real-chromium-core-fixture",
+      "status": "PASS",
+      "evidence": "verification/latest/browser-results.json",
+      "result": "6 cases passed in real Chromium against the clean Core fixture; this is component/network fixture evidence, not T18 dual-node HTTPS E2E."
+    },
+    {
+      "id": "ios5-ipad1-install-launch",
+      "status": "PASS_PARTIAL",
+      "evidence": "verification/device-inventory.json",
+      "result": "Clean app build installed and launch process observed on iPad1,1 iOS 5.1.1 armv7. No calls or media tested."
+    },
+    {
+      "id": "ios12-ipad-air1-modern-app-install",
+      "status": "PASS_PARTIAL",
+      "evidence": "verification/device-inventory.json",
+      "result": "Jailbreak signing and LaunchServices registration succeeded for app 0.1.40 build 41. Candidate process PID 3158 remained present 6 seconds after launch. No UI screenshot or user flow, auth, SIP/audio/video, lifecycle, or reconnect test; Xcode iOS 12 DDI unavailable."
+    },
+    {
+      "id": "ios12-ipad-air1-jailbreak-sign-install-launch",
+      "status": "PASS_PARTIAL",
+      "evidence": "verification/device-inventory.json",
+      "result": "ldid platform-app signing on app executable and embedded Swift dylibs; LaunchServices registered candidate in a separate bundle directory; version 0.1.40 build 41 process alive after 6 seconds; original app bundle/data were not removed."
     }
   ]
 }

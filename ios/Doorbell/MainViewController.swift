@@ -539,7 +539,8 @@ final class MainViewController: UIViewController {
                                       sosControl: sosSlider)
             board.onOpenAdmin = { [weak self] in self?.onAdminEntry() }
             board.onOpenHistory = { [weak self] in self?.openCallHistory() }
-            board.onOpenDoor = { [weak self] _ in self?.onMonitorOpen() }
+            board.onOpenDoor = { [weak self] door in self?.openMonitor(door: door) }
+            board.onOpenOfflineDoors = { [weak self] in self?.openOfflineDoorStations() }
             board.onOpenNotice = { [weak self] door in self?.openNoticeDialog(door: door) }
             dashboard = board
             content = board
@@ -2038,8 +2039,12 @@ final class MainViewController: UIViewController {
     }
 
     @objc private func onMonitorOpen() {
+        openMonitor(door: nil)
+    }
+
+    private func openMonitor(door: String?) {
         guard boot.role != "door_station", presentedViewController == nil else { return }
-        present(MonitorViewController(core: core, boot: boot), animated: true)
+        present(MonitorViewController(core: core, boot: boot, initialDoor: door), animated: true)
     }
 
     /// The visible 管理 entry on an indoor panel. It always asks for the admin password; a door
@@ -2066,6 +2071,12 @@ final class MainViewController: UIViewController {
     private func openCallHistory() {
         guard presentedViewController == nil else { return }
         present(CallHistoryViewController(core: core, texts: texts, lang: texts.lang),
+                animated: true)
+    }
+
+    private func openOfflineDoorStations() {
+        guard presentedViewController == nil else { return }
+        present(OfflineDoorStationsViewController(core: core, config: core.config(), texts: texts),
                 animated: true)
     }
 

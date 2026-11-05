@@ -114,6 +114,33 @@ enum ConfigUtil {
         return nil
     }
 
+    static func onlineDoorPeer(_ status: [String: Any]?, door: String) -> [String: Any]? {
+        guard let peers = status?["peers"] as? [[String: Any]] else { return nil }
+        return peers.first {
+            ($0["self"] as? Bool) != true && evStr($0, "role") == "door_station" &&
+                evStr($0, "door") == door && evStr($0, "status") == "alive"
+        }
+    }
+
+    static func offlineDoorPeers(config: [String: Any]?, status: [String: Any]?) -> [[String: Any]] {
+        guard let peers = status?["peers"] as? [[String: Any]] else { return [] }
+        let configuredDoors = Set((dig(config, "doors") as? [String: Any]).map {
+            Array($0.keys)
+        } ?? [])
+        let onlineDoors = Set(peers.filter {
+            evStr($0, "role") == "door_station" && evStr($0, "status") == "alive"
+        }.map { evStr($0, "door") })
+        return peers.filter {
+            ($0["self"] as? Bool) != true && evStr($0, "role") == "door_station" &&
+                evStr($0, "status") != "alive" && configuredDoors.contains(evStr($0, "door")) &&
+                !onlineDoors.contains(evStr($0, "door"))
+        }.sorted {
+            let left = evStr($0, "name")
+            let right = evStr($1, "name")
+            return left == right ? evStr($0, "id") < evStr($1, "id") : left < right
+        }
+    }
+
     /// Whether a door station has a camera to watch. A peer that says nothing about it is
     /// assumed to have one: every door station shipped so far does, and hiding a tile because a
     /// field is missing would take a working camera off the dashboard.
@@ -122,13 +149,12 @@ enum ConfigUtil {
         return bool(peer, "caps.camera", true)
     }
 
-    /// The doors an indoor panel draws a tile for: every configured door except one whose peer is
-    /// present and says it has no camera. There is nothing to watch on those, and the door is
-    /// still reachable from the monitor page and still carries its notices.
+    /// Configured doors with an online camera station. Removed cluster members and offline peers
+    /// are excluded; offline peers remain available from the secondary offline-device screen.
     static func doorsWithCamera(config: [String: Any]?, status: [String: Any]?) -> [String] {
         let doors = (dig(config, "doors") as? [String: Any]).map { sortedByOrder($0) } ?? []
         return doors.filter { door in
-            guard let peer = findDoorPeer(status, door: door) else { return true }
+            guard let peer = onlineDoorPeer(status, door: door) else { return false }
             return doorHasCamera(peer)
         }
     }
@@ -144,6 +170,19 @@ enum ConfigUtil {
             return s
         }
         return nil
+    }
+
+    static func peerAdminURL(_ peer: [String: Any]?) -> String? {
+        guard let stream = str(peer, "stream"),
+              var components = URLComponents(string: stream),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              components.host != nil,
+              components.user == nil, components.password == nil else { return nil }
+        components.path = "/admin/"
+        components.query = nil
+        components.fragment = nil
+        return components.url?.absoluteString
     }
 
     /// Whether this device offers the SOS slider at all. Core's default is the indoor panel

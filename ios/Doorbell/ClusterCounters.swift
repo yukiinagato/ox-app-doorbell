@@ -110,47 +110,98 @@ final class ClusterCounterView: UIStackView {
 
     private let icon: ClusterIconView
     private let value = UILabel()
+    private let title = UILabel()
 
-    init(kind: ClusterIconView.Kind, identifier: String) {
+    init(kind: ClusterIconView.Kind, identifier: String, title: String) {
         icon = ClusterIconView(kind: kind)
         super.init(frame: .zero)
         axis = .horizontal
         spacing = 5
         alignment = .center
-        value.font = .monospacedDigitSystemFont(ofSize: 15, weight: .semibold)
+        self.title.text = title
+        self.title.font = .systemFont(ofSize: 11, weight: .semibold)
+        self.title.numberOfLines = 1
+        self.title.adjustsFontSizeToFitWidth = true
+        self.title.minimumScaleFactor = 0.75
+        self.title.textColor = UIColor(white: 0.08, alpha: 1)
+        value.font = .monospacedDigitSystemFont(ofSize: 18, weight: .bold)
+        value.textColor = UIColor(white: 0.08, alpha: 1)
+        let labels = UIStackView(arrangedSubviews: [self.title, value])
+        labels.axis = .vertical
+        labels.spacing = 1
         addArrangedSubview(icon)
-        addArrangedSubview(value)
+        addArrangedSubview(labels)
         accessibilityIdentifier = identifier
         isAccessibilityElement = true
         accessibilityTraits = .staticText
+        isLayoutMarginsRelativeArrangement = true
+        directionalLayoutMargins = NSDirectionalEdgeInsets(top: 5, leading: 6,
+                                                           bottom: 5, trailing: 6)
     }
 
     required init(coder: NSCoder) { fatalError("not supported") }
 
     func update(text: String, ink: UIColor, accessibility: String) {
         if value.text != text { value.text = text }
-        if value.textColor != ink { value.textColor = ink }
-        icon.apply(ink: ink)
+        let labelInk = UIColor(white: 0.08, alpha: 1)
+        if title.textColor != labelInk { title.textColor = labelInk }
+        if value.textColor != labelInk { value.textColor = labelInk }
+        icon.apply(ink: labelInk)
         accessibilityLabel = accessibility
     }
 }
 
 /// The cluster's three counts, in place of the old membership pill: how many devices there are,
 /// and how many of each kind can be reached.
-final class ClusterCountersView: UIStackView {
+final class ClusterCountersView: UIView {
 
     private let texts: Texts
-    private let devices = ClusterCounterView(kind: .cluster, identifier: "count_devices")
-    private let doors = ClusterCounterView(kind: .doorStation, identifier: "count_door_stations")
-    private let panels = ClusterCounterView(kind: .indoorPanel, identifier: "count_indoor_panels")
+    private let devices: ClusterCounterView
+    private let doors: ClusterCounterView
+    private let panels: ClusterCounterView
+    private let row = UIStackView()
+    private let dividers = (0..<2).map { _ in UIView() }
 
     init(texts: Texts) {
         self.texts = texts
+        devices = ClusterCounterView(kind: .cluster, identifier: "count_devices",
+                                     title: texts.t("admin.devices"))
+        doors = ClusterCounterView(kind: .doorStation, identifier: "count_door_stations",
+                                   title: texts.t("pair.role_door_station"))
+        panels = ClusterCounterView(kind: .indoorPanel, identifier: "count_indoor_panels",
+                                    title: texts.t("admin.role_indoor"))
         super.init(frame: .zero)
-        axis = .horizontal
-        spacing = 14
-        alignment = .center
-        for counter in [devices, doors, panels] { addArrangedSubview(counter) }
+        backgroundColor = UIColor(white: 0.94, alpha: 1)
+        layer.cornerRadius = 9
+        clipsToBounds = true
+        row.axis = .horizontal
+        row.spacing = 0
+        row.alignment = .fill
+        row.distribution = .fillEqually
+        row.isLayoutMarginsRelativeArrangement = true
+        row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 5,
+                                                               bottom: 0, trailing: 5)
+        for counter in [devices, doors, panels] { row.addArrangedSubview(counter) }
+        addSubview(row)
+        row.translatesAutoresizingMaskIntoConstraints = false
+        NSLayoutConstraint.activate([
+            row.topAnchor.constraint(equalTo: topAnchor),
+            row.bottomAnchor.constraint(equalTo: bottomAnchor),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor),
+        ])
+        for (index, divider) in dividers.enumerated() {
+            divider.backgroundColor = UIColor(white: 0.45, alpha: 0.55)
+            divider.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(divider)
+            let anchor = index == 0 ? devices.trailingAnchor : doors.trailingAnchor
+            NSLayoutConstraint.activate([
+                divider.centerYAnchor.constraint(equalTo: centerYAnchor),
+                divider.centerXAnchor.constraint(equalTo: anchor),
+                divider.widthAnchor.constraint(equalToConstant: 1),
+                divider.heightAnchor.constraint(equalToConstant: 18),
+            ])
+        }
     }
 
     required init(coder: NSCoder) { fatalError("not supported") }

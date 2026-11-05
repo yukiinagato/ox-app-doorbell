@@ -452,6 +452,12 @@
 "dash.tile_offline" = "Offline";
 "dash.tile_open" = "View";
 "dash.tile_watch" = "View";
+"dashboard.device_status_offline" = "Offline";
+"dashboard.offline_doors" = "Offline door stations";
+"dashboard.offline_doors_empty" = "No offline door stations";
+"dashboard.offline_doors_title" = "Offline door stations";
+"dashboard.preview_rate_format" = "%@ fps";
+"dashboard.preview_rate_title" = "Preview refresh rate";
 "date.full" = "%@-%@-%@ (%@)";
 "day.fri" = "Fri";
 "day.mon" = "Mon";
@@ -918,6 +924,7 @@
 "ring.unlock" = "Unlock";
 "ring.unlock_sent" = "Unlock signal sent";
 "ring.unlock_unconfigured" = "No unlock action is configured for this door";
+"ring.video_zoom_hint" = "Pinch to zoom; double-tap to reset";
 "settings.about" = "About this device";
 "settings.appearance" = "Appearance";
 "settings.appearance_auto_schedule" = "Switch by time of day";

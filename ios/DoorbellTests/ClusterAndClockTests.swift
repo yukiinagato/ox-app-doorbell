@@ -91,14 +91,74 @@ final class ClusterAndClockTests: XCTestCase {
                                                   status: doorStatus(camera: true)), ["front"])
     }
 
-    /// Every door station shipped so far has a camera, so an absent capability means it has one.
-    /// Hiding a working camera because a field is missing would be the worse failure.
-    func testAnAbsentCapabilityShowsTheTile() {
+    /// Only a live cluster peer can have a dashboard tile. An absent peer is not an online door.
+    func testAnAbsentCapabilityShowsTheOnlineTileButMissingPeerDoesNot() {
         XCTAssertEqual(ConfigUtil.doorsWithCamera(config: doorsConfig,
                                                   status: doorStatus(camera: nil)), ["front"])
-        XCTAssertEqual(ConfigUtil.doorsWithCamera(config: doorsConfig, status: [:]), ["front"],
-                       "an unreachable door keeps its tile; its capabilities are unknown")
+        XCTAssertEqual(ConfigUtil.doorsWithCamera(config: doorsConfig, status: [:]), [],
+                       "a removed cluster member must not be restored from stale door config")
         XCTAssertTrue(ConfigUtil.doorHasCamera(nil))
+    }
+
+    func testOnlyOnlineDoorsAreOnDashboardAndOfflinePeersAreSecondary() {
+        let config: [String: Any] = ["doors": ["front": [:], "back": [:], "removed": [:]]]
+        let status: [String: Any] = ["peers": [
+            ["id": "front-node", "role": "door_station", "door": "front",
+             "status": "alive", "caps": ["camera": true]],
+            ["id": "back-node", "role": "door_station", "door": "back",
+             "status": "dead", "caps": ["camera": true]],
+        ]]
+        XCTAssertEqual(ConfigUtil.doorsWithCamera(config: config, status: status), ["front"])
+        XCTAssertEqual(ConfigUtil.offlineDoorPeers(config: config, status: status).map {
+            ConfigUtil.evStr($0, "door")
+        }, ["back"])
+    }
+
+    func testDoorPreviewGridAdaptsFromOneThroughFiveAndKeepsEveryDoor() {
+        let doors = ["one", "two", "three", "four", "five"]
+        XCTAssertEqual(DashboardView.previewRows(for: []), [])
+        XCTAssertEqual(DashboardView.previewRows(for: Array(doors.prefix(1))), [["one"]])
+        XCTAssertEqual(DashboardView.previewRows(for: Array(doors.prefix(2))), [["one", "two"]])
+        XCTAssertEqual(DashboardView.previewRows(for: Array(doors.prefix(3))),
+                       [["one", "two"], ["three"]])
+        XCTAssertEqual(DashboardView.previewRows(for: Array(doors.prefix(4))),
+                       [["one", "two"], ["three", "four"]])
+        XCTAssertEqual(DashboardView.previewRows(for: doors),
+                       [["one", "two"], ["three", "four"], ["five"]])
+    }
+
+    func testDoorPreviewDefaultsToTwoFramesPerSecondAndMapsFrequencyToInterval() {
+        XCTAssertEqual(DashboardView.defaultPreviewFramesPerSecond, 2)
+        XCTAssertEqual(DashboardView.previewInterval(for: 0.5), 2)
+        XCTAssertEqual(DashboardView.previewInterval(for: 1), 1)
+        XCTAssertEqual(DashboardView.previewInterval(for: 2), 0.5)
+        XCTAssertEqual(DashboardView.previewInterval(for: 4), 0.25)
+    }
+
+    func testDoorTileOpensMonitorOnTheSelectedDoor() {
+        let peers: [[String: Any]] = [
+            ["id": "node-a", "door": "front"],
+            ["id": "node-b", "door": "back"],
+        ]
+        XCTAssertEqual(MonitorViewController.preferredPeer(peers, door: "back")
+            .map { ConfigUtil.evStr($0, "id") }, "node-b")
+        XCTAssertEqual(MonitorViewController.preferredPeer(peers, door: "missing")
+            .map { ConfigUtil.evStr($0, "id") }, "node-a")
+    }
+
+    func testDoorPreviewRotationUsesOnlyClockwiseQuarterTurns() {
+        XCTAssertEqual(DoorTileView.normalizedRotation(90), 90)
+        XCTAssertEqual(DoorTileView.normalizedRotation(450), 90)
+        XCTAssertEqual(DoorTileView.normalizedRotation(-90), 270)
+        XCTAssertEqual(DoorTileView.normalizedRotation(45), 0)
+    }
+
+    func testIncomingAdminLinkUsesTheSelectedDoorStationsOrigin() {
+        let peer: [String: Any] = ["id": "station-a", "role": "door_station",
+                                   "door": "front", "stream": "http://10.0.0.9:47180/stream.mjpeg"]
+        XCTAssertEqual(ConfigUtil.peerAdminURL(peer), "http://10.0.0.9:47180/admin/")
+        XCTAssertNil(ConfigUtil.peerAdminURL(["stream": "file:///etc/passwd"]))
+        XCTAssertNil(ConfigUtil.peerAdminURL(nil))
     }
 
     // MARK: - The clock advances without asking Core

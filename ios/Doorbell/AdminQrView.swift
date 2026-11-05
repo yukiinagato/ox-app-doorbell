@@ -15,17 +15,22 @@ final class AdminQrView: UIView {
     private let boot: BootConfig
     private let texts: Texts
     private let compact: Bool
+    private let showsCaption: Bool
     private let imageView = UIImageView()
     private let urlLabel = HaloLabel()
     private let captionLabel = HaloLabel()
     private let detailLabel = HaloLabel()
     private var renderedUrl = ""
+    private var hasTargetOverride = false
+    private var targetUrlOverride: String?
 
-    init(core: CoreBridge, boot: BootConfig, texts: Texts, compact: Bool) {
+    init(core: CoreBridge, boot: BootConfig, texts: Texts, compact: Bool,
+         qrSide: CGFloat? = nil, showsCaption: Bool = true) {
         self.core = core
         self.boot = boot
         self.texts = texts
         self.compact = compact
+        self.showsCaption = showsCaption
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         accessibilityIdentifier = "admin_qr"
@@ -39,20 +44,21 @@ final class AdminQrView: UIView {
         captionLabel.text = texts.t("web_admin.open")
         captionLabel.font = .systemFont(ofSize: compact ? 12 : 15, weight: .semibold)
         captionLabel.numberOfLines = 1
-        captionLabel.isHidden = !compact
+        captionLabel.isHidden = !compact || !showsCaption
 
         urlLabel.font = .monospacedDigitSystemFont(ofSize: compact ? 11 : 13, weight: .regular)
-        urlLabel.numberOfLines = 1
+        urlLabel.numberOfLines = compact && showsCaption ? 2 : 1
         urlLabel.adjustsFontSizeToFitWidth = true
         urlLabel.minimumScaleFactor = 0.6
         urlLabel.accessibilityIdentifier = "admin_qr_url"
 
-        detailLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .regular)
-        detailLabel.numberOfLines = 1
+        detailLabel.font = .monospacedDigitSystemFont(ofSize: compact ? 10 : 13,
+                                                     weight: .regular)
+        detailLabel.numberOfLines = compact && showsCaption ? 2 : 1
         detailLabel.adjustsFontSizeToFitWidth = true
         detailLabel.minimumScaleFactor = 0.6
         detailLabel.accessibilityIdentifier = "app_version"
-        detailLabel.isHidden = compact
+        detailLabel.isHidden = false
 
         let column = UIStackView(arrangedSubviews: [captionLabel, urlLabel, detailLabel])
         column.axis = .vertical
@@ -65,7 +71,7 @@ final class AdminQrView: UIView {
         row.translatesAutoresizingMaskIntoConstraints = false
         addSubview(row)
 
-        let side: CGFloat = compact ? 64 : 72
+        let side = qrSide ?? 72
         NSLayoutConstraint.activate([
             row.topAnchor.constraint(equalTo: topAnchor),
             row.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -92,6 +98,13 @@ final class AdminQrView: UIView {
 
     func setDetailText(_ text: String) {
         detailLabel.text = text
+    }
+
+    func setTargetURL(_ url: String?) {
+        guard !hasTargetOverride || targetUrlOverride != url else { return }
+        hasTargetOverride = true
+        targetUrlOverride = url
+        reload()
     }
 
     /// Rebuilds the QR when the node's reachable address changes. Rendering is cheap enough to run
@@ -125,6 +138,7 @@ final class AdminQrView: UIView {
     /// debug document — meant two more Core round-trips and two more JSON parses on every reload,
     /// to almost always arrive at the address it had last time.
     private func adminUrl(status: [String: Any]? = nil) -> String {
+        if hasTargetOverride { return targetUrlOverride ?? "" }
         var addresses = Set<String>()
         let snapshot = status ?? core.status()
         if let node = snapshot?["node"] as? [String: Any],

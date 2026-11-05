@@ -32,11 +32,11 @@ final class SosSlideControl: UIControl {
     private weak var accessibleConfirmation: UIAlertController?
     private var confirmationRevision: UInt64 = 0
 
-    private static let thumbSide: CGFloat = 52
+    private static let thumbSide: CGFloat = 48
     /// The bar is a bar. Inside a filling stack it has no intrinsic height to defend, so it took
     /// whatever slack was going — a third of an iPad screen on the device. This is the same
     /// compact band the Android shell uses.
-    static let barHeight: CGFloat = 78
+    static let barHeight: CGFloat = 64
 
     init(texts: Texts) {
         self.texts = texts
@@ -129,17 +129,21 @@ final class SosSlideControl: UIControl {
             track.trailingAnchor.constraint(equalTo: trailingAnchor),
             track.heightAnchor.constraint(equalToConstant: SosSlideControl.barHeight),
             label.centerYAnchor.constraint(equalTo: track.centerYAnchor),
-            label.leadingAnchor.constraint(equalTo: track.leadingAnchor,
+            label.centerXAnchor.constraint(equalTo: track.centerXAnchor),
+            label.leadingAnchor.constraint(greaterThanOrEqualTo: track.leadingAnchor,
                                            constant: SosSlideControl.thumbSide + 16),
-            label.trailingAnchor.constraint(equalTo: track.trailingAnchor, constant: -12),
+            label.trailingAnchor.constraint(lessThanOrEqualTo: track.trailingAnchor,
+                                            constant: -12),
             leading,
             thumb.centerYAnchor.constraint(equalTo: track.centerYAnchor),
             thumb.widthAnchor.constraint(equalToConstant: SosSlideControl.thumbSide),
             thumb.heightAnchor.constraint(equalToConstant: SosSlideControl.thumbSide),
             countdownLabel.centerYAnchor.constraint(equalTo: track.centerYAnchor),
-            countdownLabel.leadingAnchor.constraint(equalTo: track.leadingAnchor, constant: 14),
-            countdownLabel.trailingAnchor.constraint(equalTo: cancelButton.leadingAnchor,
-                                                     constant: -12),
+            countdownLabel.centerXAnchor.constraint(equalTo: track.centerXAnchor),
+            countdownLabel.leadingAnchor.constraint(greaterThanOrEqualTo: track.leadingAnchor,
+                                                     constant: 14),
+            countdownLabel.trailingAnchor.constraint(lessThanOrEqualTo: cancelButton.leadingAnchor,
+                                                      constant: -12),
             cancelButton.centerYAnchor.constraint(equalTo: track.centerYAnchor),
             cancelButton.trailingAnchor.constraint(equalTo: track.trailingAnchor, constant: -8),
             cancelButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 96),

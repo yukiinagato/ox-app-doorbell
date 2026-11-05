@@ -44,6 +44,13 @@ offline.reconnect: { ja: "再接続まで {sec} 秒", en: "Reconnecting in {sec}
 ring.incoming: { ja: "{door} で呼び出し中", en: "Visitor at {door}", zh: "{door} 有访客" }
 ring.answer: { ja: "応答", en: "Answer", zh: "接听" }
 ring.ignore: { ja: "無視", en: "Ignore", zh: "忽略" }
+ring.video_zoom_hint: { ja: "ピンチで拡大、ダブルタップで元に戻します", en: "Pinch to zoom; double-tap to reset", zh: "双指缩放，双击复位" }
+dashboard.offline_doors: { ja: "オフラインの門口機", en: "Offline door stations", zh: "离线门口机" }
+dashboard.offline_doors_title: { ja: "オフラインの門口機", en: "Offline door stations", zh: "离线门口机" }
+dashboard.offline_doors_empty: { ja: "オフラインの門口機はありません", en: "No offline door stations", zh: "没有离线门口机" }
+dashboard.device_status_offline: { ja: "オフライン", en: "Offline", zh: "离线" }
+dashboard.preview_rate_title: { ja: "プレビュー更新頻度", en: "Preview refresh rate", zh: "预览更新频率" }
+dashboard.preview_rate_format: { ja: "%@ fps", en: "%@ fps", zh: "%@ fps" }
 ring.monitor: { ja: "モニタ", en: "Monitor", zh: "监听" }
 ring.monitoring: { ja: "玄関の音声を再生中", en: "Live door audio is on", zh: "正在播放门口声音" }
 # The number beside the incoming-call title: how long until this panel returns to its home

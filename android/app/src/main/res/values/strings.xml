@@ -457,6 +457,12 @@ Delete it?</string>
     <string name="dash_tile_offline">Offline</string>
     <string name="dash_tile_open">View</string>
     <string name="dash_tile_watch">View</string>
+    <string name="dashboard_device_status_offline">Offline</string>
+    <string name="dashboard_offline_doors">Offline door stations</string>
+    <string name="dashboard_offline_doors_empty">No offline door stations</string>
+    <string name="dashboard_offline_doors_title">Offline door stations</string>
+    <string name="dashboard_preview_rate_format">%@ fps</string>
+    <string name="dashboard_preview_rate_title">Preview refresh rate</string>
     <string name="date_full">%1$s-%2$s-%3$s (%4$s)</string>
     <string name="day_fri">Fri</string>
     <string name="day_mon">Mon</string>
@@ -927,6 +933,7 @@ On</string>
     <string name="ring_unlock">Unlock</string>
     <string name="ring_unlock_sent">Unlock signal sent</string>
     <string name="ring_unlock_unconfigured">No unlock action is configured for this door</string>
+    <string name="ring_video_zoom_hint">Pinch to zoom; double-tap to reset</string>
     <string name="settings_about">About this device</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_appearance_auto_schedule">Switch by time of day</string>
