@@ -6,8 +6,10 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <cstdio>
 #include <filesystem>
+#include <map>
 #include <functional>
 #include <memory>
 #include <random>
@@ -1018,7 +1020,10 @@ TEST_CASE("node: pairing discovers and invites an unpaired device and supplies P
   }());
 
 
-  host.node->inviteDevice(joiner.node->nodeId());
+  host.node->inviteDevice(
+      joiner.node->nodeId(),
+      json::getString(json::get(json::parse(joiner.node->pairingJson()).get(), "self"),
+                      "confirm_code"));
   REQUIRE([&] {
     for (int i = 0; i < 200; i++) {
       f.run(50);
@@ -1433,8 +1438,9 @@ TEST_CASE("pairing: unpair clears the stored secret and returns to the unpaired 
   f.run(20);
   CHECK(pairingState(*node.node) == "unpaired");
   CHECK(lastEventField(node.ui, "pairing_state", "state") == "unpaired");
-  REQUIRE(deleted.size() == 1);
+  REQUIRE(deleted.size() == 2);
   CHECK(deleted[0] == "mesh.psk");
+  CHECK(deleted[1] == "mesh.psk_prev");
   CHECK(secrets.find("mesh.psk") == secrets.end());
 
   auto d = pairingDoc(*node.node);
@@ -1530,7 +1536,10 @@ TEST_CASE("pairing: an invited device reports invite_result, device_joined, and 
     return false;
   }());
 
-  host.node->inviteDevice(joiner.node->nodeId());
+  host.node->inviteDevice(
+      joiner.node->nodeId(),
+      json::getString(json::get(json::parse(joiner.node->pairingJson()).get(), "self"),
+                      "confirm_code"));
   REQUIRE([&] {
     for (int i = 0; i < 200; i++) {
       f.run(50);
@@ -2645,4 +2654,135 @@ TEST_CASE("node: retention and tombstone collection wait for every member's prog
   }
   b.node->stop();
   a.node->stop();
+}
+
+namespace {
+
+struct StrictNode {
+  std::unique_ptr<Node> node;
+  std::map<std::string, std::string> secrets;
+  std::vector<std::string> deleted;
+  std::vector<std::string> ui;
+};
+
+std::unique_ptr<StrictNode> makeStrictNode(NFleet& f, const std::string& dir,
+                                           const std::array<uint8_t, 32>& psk) {
+  auto out = std::make_unique<StrictNode>();
+  StrictNode* raw = out.get();
+  NodeOptions o;
+  o.data_dir = dir;
+  o.name = "panel";
+  o.role = "indoor_panel";
+  o.listen_addr = "S:1";
+  o.advertise_addr = "S:1";
+  o.psk = psk;
+  o.psk_source = "secure_store";
+  o.psk_ref = "secret:mesh.psk";
+  o.enable_beacon = false;
+  o.http_port = 0;
+  o.mesh_enroll_psk_holders = false;
+  o.mesh_timing_template = NFleet::timing();
+  o.use_mesh_timing_template = true;
+  NodeDeps d;
+  d.clock = &f.clock;
+  d.loop = &f.loop;
+  d.transport = f.net.makeTransport("S:1");
+  out->node.reset(new Node(o, std::move(d)));
+  out->node->setSecureStore(
+      [raw](const std::string& key) {
+        auto it = raw->secrets.find(key);
+        return it == raw->secrets.end() ? std::string() : it->second;
+      },
+      [raw](const std::string& key, const std::string& value) {
+        raw->secrets[key] = value;
+        return true;
+      });
+  out->node->setSecureDelete([raw](const std::string& key) {
+    raw->deleted.push_back(key);
+    raw->secrets.erase(key);
+    return true;
+  });
+  out->node->setUiEventCb([raw](const std::string& e) { raw->ui.push_back(e); });
+  return out;
+}
+
+std::string v3TempDir() {
+  const std::string dir = tempDir() + "/doorbell_v3_" + genTokenHex(8);
+  REQUIRE(makeDir(dir));
+  return dir;
+}
+
+}  // namespace
+
+TEST_CASE("v3 migration: a v2 founder keeps its configuration and moves to a fresh key") {
+  NFleet f;
+  const std::string dir = v3TempDir();
+  {
+    Store st;
+    REQUIRE(st.open(dir + "/doorbell.db"));
+    REQUIRE(st.metaSet("pairing.is_founder", "1"));
+  }
+  auto n = makeStrictNode(f, dir, f.psk);
+  REQUIRE(n->node->start());
+  f.run(100);
+  CHECK(pairingState(*n->node) == "ready");
+  auto d = pairingDoc(*n->node);
+  REQUIRE(d);
+  const std::string psk_id = json::getString(json::get(d.get(), "security"), "psk_id");
+  CHECK(psk_id.rfind("k2.", 0) == 0);
+  CHECK(cJSON_IsNull(json::get(json::get(d.get(), "security"), "prev_psk_id")));
+  CHECK_FALSE(json::getBool(d.get(), "upgrade_rejoin_required"));
+  REQUIRE(n->secrets.count("mesh.psk"));
+  CHECK(n->secrets["mesh.psk"] != hexEncode(f.psk.data(), f.psk.size()));
+  CHECK(n->secrets.count("mesh.identity"));
+  n->node->stop();
+}
+
+TEST_CASE("v3 migration: a v2 member waits to rejoin and can rebuild the cluster from itself") {
+  NFleet f;
+  const std::string dir = v3TempDir();
+  auto n = makeStrictNode(f, dir, f.psk);
+  n->secrets["mesh.psk"] = hexEncode(f.psk.data(), f.psk.size());
+  REQUIRE(n->node->start());
+  f.run(100);
+  CHECK(pairingState(*n->node) == "unpaired");
+  auto d = pairingDoc(*n->node);
+  REQUIRE(d);
+  CHECK(json::getBool(d.get(), "upgrade_rejoin_required"));
+  CHECK(json::getString(d.get(), "reason") == "upgrade_rejoin_required");
+  CHECK(std::find(n->deleted.begin(), n->deleted.end(), "mesh.psk") != n->deleted.end());
+
+  n->node->setConfigKey("cluster.name", R"("Kept")");
+  f.run(50);
+  CHECK(n->node->rebuildClusterFromThisDevice() == "ok");
+  f.run(50);
+  CHECK(pairingState(*n->node) == "ready");
+  auto after = pairingDoc(*n->node);
+  CHECK(json::getBool(after.get(), "is_founder"));
+  CHECK_FALSE(json::getBool(after.get(), "upgrade_rejoin_required"));
+  CHECK(n->node->configJson().find("Kept") != std::string::npos);
+  CHECK(n->node->rebuildClusterFromThisDevice() == "already_paired");
+  n->node->stop();
+
+  // The decision is persisted: a restarted, now-v3 device keeps its new cluster.
+  NFleet g;
+  std::array<uint8_t, 32> stored{};
+  Bytes raw;
+  REQUIRE(hexDecode(n->secrets["mesh.psk"], raw));
+  std::copy(raw.begin(), raw.end(), stored.begin());
+  auto restarted = makeStrictNode(g, dir, stored);
+  restarted->secrets = n->secrets;
+  REQUIRE(restarted->node->start());
+  g.run(100);
+  CHECK(pairingState(*restarted->node) == "ready");
+  restarted->node->stop();
+}
+
+TEST_CASE("v3: a node that is not upgrade-pending cannot rebuild") {
+  NFleet f;
+  auto n = makeStrictNode(f, v3TempDir(), std::array<uint8_t, 32>{});
+  REQUIRE(n->node->start());
+  f.run(50);
+  CHECK(n->node->rebuildClusterFromThisDevice() == "not_upgrade_pending");
+  n->node->stop();
 }

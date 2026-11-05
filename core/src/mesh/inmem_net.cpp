@@ -27,6 +27,7 @@ struct NetState {
   std::map<std::string, std::function<void(const PairBeacon&)>> pair_found;
   // Mirrors the UDP beacon MAC: a HELLO is delivered only between nodes that share a cluster key.
   std::map<std::string, std::array<uint8_t, 32>> disc_psk;
+  std::map<std::string, std::array<uint8_t, 32>> disc_prev_psk;
   std::set<std::string> killed;
   std::map<std::string, int> group;
   double drop_prob = 0.0;
@@ -72,7 +73,10 @@ class InMemConnEnd : public IConn, public std::enable_shared_from_this<InMemConn
     net_->loop.postDelayed(net_->delay_ms, [wp, frame]() {
       if (auto p = wp.lock()) {
         if (!p->open_) return;
-
+        if (frame.size() > p->max_in_) {
+          p->close();
+          return;
+        }
         auto cb = p->on_frame_;
         if (cb) cb(frame);
       }
@@ -97,6 +101,8 @@ class InMemConnEnd : public IConn, public std::enable_shared_from_this<InMemConn
     on_close_ = std::move(on_close);
   }
 
+  void setMaxInboundFrame(size_t bytes) override { max_in_ = bytes; }
+
 
   void faultClose() {
     if (!open_) return;
@@ -116,6 +122,7 @@ class InMemConnEnd : public IConn, public std::enable_shared_from_this<InMemConn
   std::string local_, remote_;
   std::weak_ptr<InMemConnEnd> peer_;
   bool open_ = true;
+  size_t max_in_ = kMaxTransportFrameBytes;
   std::function<void(const Bytes&)> on_frame_;
   std::function<void()> on_close_;
 };
@@ -209,6 +216,7 @@ class InMemDiscovery : public IDiscovery {
     if (pit != net_->pair_found.end()) net_->pair_found.erase(pit);
     auto kit = net_->disc_psk.find(addr_);
     if (kit != net_->disc_psk.end()) net_->disc_psk.erase(kit);
+    net_->disc_prev_psk.erase(addr_);
   }
 
   void setPairAnnounce(const PairAnnounce& announce) override { pair_ = announce; }
@@ -220,6 +228,10 @@ class InMemDiscovery : public IDiscovery {
   void setPsk(const std::array<uint8_t, 32>& psk) override {
     psk_ = psk;
     net_->disc_psk[addr_] = psk;
+  }
+
+  void setPreviousPsk(const std::array<uint8_t, 32>& psk) override {
+    net_->disc_prev_psk[addr_] = psk;
   }
 
  private:
@@ -250,7 +262,10 @@ class InMemDiscovery : public IDiscovery {
       if (kv.first == addr_ || !kv.second) continue;
       if (!net_->reachable(addr_, kv.first)) continue;
       auto peer_key = net_->disc_psk.find(kv.first);
-      if (peer_key == net_->disc_psk.end() || peer_key->second != psk_) continue;
+      auto peer_prev = net_->disc_prev_psk.find(kv.first);
+      const bool current = peer_key != net_->disc_psk.end() && peer_key->second == psk_;
+      const bool previous = peer_prev != net_->disc_prev_psk.end() && peer_prev->second == psk_;
+      if (!current && !previous) continue;
       if (net_->dropFrame()) continue;
       DiscoveredPeer p{node_id_, adv_addr_};
       auto cb = kv.second;

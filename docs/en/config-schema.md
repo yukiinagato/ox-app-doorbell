@@ -982,7 +982,9 @@ it keeps `UIBlurEffect`, whose radius is system-managed and has no public numeri
 
 ## Membership cleanup, resource synchronization, and motion wake
 
-`POST /api/devices/remove` accepts `{ "id": "<node-id>" }` in an authenticated administrator session. It refuses the current device, deletes the target device subtree and its video playback overrides atomically, and replicates `removed_devices.<id>: true`. Offline records disappear immediately; an upgraded removed node resets pairing when it reconnects. The marker prevents stale peer entries from returning to the device list or winning a notification duty. This is membership cleanup, not rotation of the shared cluster key.
+`POST /api/devices/remove` accepts `{ "id": "<node-id>" }` in an authenticated administrator session. It refuses the current device, deletes the target device subtree and its video playback overrides atomically, and replicates `removed_devices.<id>: true`. Offline records disappear immediately; an upgraded removed node resets pairing when it reconnects. The marker prevents stale peer entries from returning to the device list or winning a notification duty. Removal also deletes `mesh.members.<id>`, keeps the removed identity as `mesh.revoked.<id>` so it can be told it was removed, and rotates the cluster key; see [security](security.md).
+
+`mesh.members.<node_id>` is written by Core only: `{ "pk": "<64 hex Ed25519 public key>", "added_hlc": "...", "added_by": "<node-id>" }`. A PIN join or acknowledged invitation writes the joiner's record and clears an earlier `removed_devices` marker for it. `mesh.revoked.<node_id>` has the same shape. Neither key is a secret, and neither should be edited by hand.
 
 Configuration deletion removes the complete stored subtree. Tombstones also mask older descendants and members embedded in parent objects, so deleting all visit purposes leaves an empty list after synchronization. Recreating a purpose explicitly is supported.
 

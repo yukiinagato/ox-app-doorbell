@@ -101,6 +101,7 @@ int main(int argc, char** argv) {
   o.data_dir = "/tmp/doorbell-host";
   o.listen_addr = "0.0.0.0:47172";
   o.http_port = 47180;
+  o.mesh_enroll_psk_holders = false;
   std::string psk_hex;
   for (int i = 1; i < argc - 1; i++) {
     std::string k = argv[i], v = argv[i + 1];

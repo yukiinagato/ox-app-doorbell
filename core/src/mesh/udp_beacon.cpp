@@ -15,17 +15,10 @@ namespace db {
 namespace {
 
 
-std::string beaconMac(const std::array<uint8_t, 32>& psk, const std::string& id,
-                      const std::string& addr) {
-  static const uint8_t kTag[6] = {'b', 'e', 'a', 'c', 'o', 'n'};
-  crypto_blake2b_ctx ctx;
-  crypto_blake2b_keyed_init(&ctx, 32, psk.data(), psk.size());
-  crypto_blake2b_update(&ctx, kTag, sizeof(kTag));
-  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(id.data()), id.size());
-  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(addr.data()), addr.size());
-  uint8_t mac[32];
-  crypto_blake2b_final(&ctx, mac);
-  return hexEncode(mac, 16);
+int64_t wallUnixMs() {
+  return std::chrono::duration_cast<std::chrono::milliseconds>(
+             std::chrono::system_clock::now().time_since_epoch())
+      .count();
 }
 
 // An all-zero key means the node is unpaired. Such a node has no cluster to discover, and a MAC
@@ -49,6 +42,28 @@ std::string withBeaconSource(const sockaddr_in& source, const std::string& adver
 }
 
 }  // namespace
+
+std::string UdpBeacon::helloMac(const std::array<uint8_t, 32>& psk, const std::string& id,
+                                const std::string& addr, int64_t unix_ms) {
+  static const uint8_t kTag[9] = {'b', 'e', 'a', 'c', 'o', 'n', '-', 'v', '3'};
+  uint8_t ts[8];
+  uint64_t v = static_cast<uint64_t>(unix_ms);
+  for (int i = 7; i >= 0; i--) {
+    ts[i] = static_cast<uint8_t>(v & 0xff);
+    v >>= 8;
+  }
+  const uint8_t id_len = static_cast<uint8_t>(std::min<size_t>(id.size(), 255));
+  crypto_blake2b_ctx ctx;
+  crypto_blake2b_keyed_init(&ctx, 32, psk.data(), psk.size());
+  crypto_blake2b_update(&ctx, kTag, sizeof(kTag));
+  crypto_blake2b_update(&ctx, &id_len, 1);
+  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(id.data()), id_len);
+  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(addr.data()), addr.size());
+  crypto_blake2b_update(&ctx, ts, sizeof(ts));
+  uint8_t mac[32];
+  crypto_blake2b_final(&ctx, mac);
+  return hexEncode(mac, 16);
+}
 
 UdpBeacon::UdpBeacon(Runloop& loop, const std::array<uint8_t, 32>& psk, const std::string& group,
                      uint16_t port, int64_t period_ms)
@@ -150,6 +165,11 @@ void UdpBeacon::setPsk(const std::array<uint8_t, 32>& psk) {
   psk_ = psk;
 }
 
+void UdpBeacon::setPreviousPsk(const std::array<uint8_t, 32>& psk) {
+  std::lock_guard<std::mutex> lk(mu_);
+  prev_psk_ = psk;
+}
+
 void UdpBeacon::sendMulticast_(const std::string& packet) {
   sockaddr_in dst{};
   dst.sin_family = AF_INET;
@@ -178,17 +198,19 @@ void UdpBeacon::sendHello_() {
     return;
   }
   std::string node_id, adv_addr, mac;
+  const int64_t ts = wallUnixMs();
   {
     std::lock_guard<std::mutex> lk(mu_);
     if (!pskUsable(psk_)) return;
     node_id = node_id_;
     adv_addr = adv_addr_;
-    mac = beaconMac(psk_, node_id, adv_addr);
+    mac = helloMac(psk_, node_id, adv_addr, ts);
   }
   auto o = json::obj();
-  json::set(o.get(), "v", int64_t{1});
+  json::set(o.get(), "v", int64_t{3});
   json::set(o.get(), "id", node_id);
   json::set(o.get(), "addr", adv_addr);
+  json::set(o.get(), "ts", ts);
   json::set(o.get(), "mac", mac);
   const std::string pkt = json::dump(o.get());
   sendMulticast_(pkt);
@@ -267,12 +289,23 @@ void UdpBeacon::recvLoop_() {
       continue;
     }
     const std::string mac = json::getString(doc.get(), "mac");
+    const int64_t ts = json::getInt(doc.get(), "ts", 0);
+    const int64_t skew = ts - wallUnixMs();
+    if (mac.size() != 32 || ts <= 0 || skew > kBeaconSkewMs || skew < -kBeaconSkewMs) continue;
+    auto matches = [&](const std::array<uint8_t, 32>& key) {
+      if (!pskUsable(key)) return false;
+      const std::string expect = helloMac(key, id, addr, ts);
+      return crypto_verify16(reinterpret_cast<const uint8_t*>(expect.data()),
+                             reinterpret_cast<const uint8_t*>(mac.data())) == 0 &&
+             crypto_verify16(reinterpret_cast<const uint8_t*>(expect.data()) + 16,
+                             reinterpret_cast<const uint8_t*>(mac.data()) + 16) == 0;
+    };
     std::function<void(const DiscoveredPeer&)> cb;
     {
       std::lock_guard<std::mutex> lk(mu_);
       if (id == node_id_) continue;
       // A node that holds a real cluster key never accepts a HELLO MACed with the zero key.
-      if (!pskUsable(psk_) || mac != beaconMac(psk_, id, addr)) continue;
+      if (!pskUsable(psk_) || !(matches(psk_) || matches(prev_psk_))) continue;
       cb = on_found_;
     }
     DiscoveredPeer p{id, addr};

@@ -52,14 +52,53 @@ otherwise removes it fail-closed. A removed subscription must be enrolled again 
 The Web page's non-secret group and page metadata remain outside the ciphertext; a validated
 `?group=<name>` is persisted locally and reused for both state polling and Push enrollment.
 
-Rotating the mesh PSK deliberately makes records sealed by the previous PSK unreadable. After a
-PSK rotation or re-pair, open every enrolled browser/profile, re-enable Push for each required
-group, and verify a real delivery before treating Push as recovered. `configured` or backend-ready
-status alone does not prove that closed browsers were re-enrolled.
+A cluster key rotation (section below) reseals every subscription under the new key while the
+previous key is still held, so Push survives a device removal. Re-pairing into a different
+cluster, or a rotation after the seven-day grace period has expired on every node, makes records
+sealed by the old key unreadable. In that case open every enrolled browser/profile, re-enable Push
+for each required group, and verify a real delivery before treating Push as recovered.
+`configured` or backend-ready status alone does not prove that closed browsers were re-enrolled.
+
+## Mesh identity, pairing, and cluster keys (protocol v3)
+
+The wire protocol is specified in [security-v3](security-v3.md). In short:
+
+- Every node has an Ed25519 identity whose seed is stored only as `secret:mesh.identity`. The
+  replicated `mesh.members.<node_id>` record holds its public key. A peer is accepted only when the
+  handshake proves possession of the identity key in its member record; holding the cluster key
+  is not membership. Roles used for authorization (for example who may send `pairing_revoked`)
+  come from the replicated `devices.<id>` record of an authenticated member.
+- Each mesh connection runs an ephemeral X25519 exchange keyed with the cluster PSK, so recorded
+  traffic stays confidential even if the PSK leaks later. v2 peers are refused and reported as
+  `protocol_upgrade_required` in `GET /api/pairing` (`security.legacy_peers`).
+- PIN join uses CPace: a captured exchange cannot be tested offline against PIN guesses, and the
+  three-attempt limit bounds online guessing. The host records the joiner's member identity
+  before it sends the cluster key and configuration.
+- A device discovered through the unauthenticated pairing beacon is invited only with the
+  eight-digit confirmation code shown on that device (`self.confirm_code`). The bulk-add window
+  lists devices but never sends the key without that code. A QR invitation carries the device's
+  key directly and needs no code.
+- Removing a device deletes its member record, records its identity as `mesh.revoked.<id>`, and
+  rotates the cluster key (`k<n>.<fingerprint>`). Members that were offline catch up through the
+  previous key, which only members may use, for seven days. The removed identity may complete one
+  handshake with its old key only to receive its revocation and is then disconnected. A member
+  that misses the whole grace period is listed in `security.rekey_required` and must be paired
+  again. `POST /api/pairing/rotate` (and `db_core_rotate_cluster_key`) rotates on demand.
+- Production shells run strict membership. `NodeOptions::mesh_enroll_psk_holders` (trust any key
+  holder) exists only for tests and embedded hosts.
+
+Upgrading from v2: the persisted founder migrates in place on its first v3 start, keeping its
+configuration and history and moving to a fresh key. Every other v2 member drops its old key,
+keeps its local configuration replica, reports `reason:"upgrade_rejoin_required"`, and must join
+the founder by PIN or invitation. If the founder is gone, `POST /api/pairing/rebuild` on any such
+device founds the cluster again from that device's configuration.
 
 ## Access and transport boundaries
 
-The mesh authenticates/encrypts peer traffic with the cluster PSK. HTTP traffic on port 47180 is
+The mesh authenticates every peer by member identity and encrypts its traffic with keys derived
+from the cluster PSK and a per-connection ephemeral exchange. Before a handshake completes, a node
+accepts frames of at most 4 KiB, at most 16 unauthenticated connections (4 per address), and 64
+connections in total. HTTP traffic on port 47180 is
 not automatically Internet-grade: Admin and panel routes use their respective sessions, but the
 LAN interoperability endpoints `/stream.mjpeg`, `/stream.mp4`, `/snapshot.jpg`, `/video-meta`, and
 an exact `GET /asset/<64-lowercase-hex-sha256>` and `/peer-frame.jpg` are intentionally readable without a session for
@@ -85,7 +124,8 @@ parent directories root-owned, and never infer helper availability from configur
 
 1. Remove the affected node from service and preserve bounded diagnostics if investigation is
    required.
-2. Rotate the mesh PSK and re-pair remaining nodes.
+2. Remove the device in Admin: its membership is deleted and the cluster key rotates
+   automatically. Check `security.rekey_required` and re-pair any member listed there.
 3. Rotate SIP, MQTT, Telegram, WebRTC, media-camera, admin, and panel credentials/tokens that the
    device could access.
 4. Update secure stores first, then their `secret:` references if the reference name changes.

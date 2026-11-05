@@ -14,6 +14,7 @@
 #include <tuple>
 
 #include "mesh/secure_channel.h"
+#include "monocypher-ed25519.h"
 #include "monocypher.h"
 #include "store/store.h"
 #include "util/common.h"
@@ -584,29 +585,89 @@ bool configPayloadFromJson(const cJSON* payload, ConfigWirePayload* out) {
 
 
 
-// K = BLAKE2b-256(pin || salt)
-std::array<uint8_t, 32> joinKey(const std::string& pin, const Bytes& salt) {
+// CPace over X25519. The generator binds the PIN, the session ID chosen by the host, and both
+// node IDs; each side contributes a random scalar. A wrong PIN yields an unrelated key, and the
+// exchanged points reveal nothing that can be tested offline against a guessed PIN.
+std::array<uint8_t, 32> cpaceGenerator(const std::string& pin, const Bytes& sid,
+                                       const std::string& host_id, const std::string& joiner_id) {
+  static const char kTag[] = "doorbell-cpace-v3";
+  auto field = [](crypto_blake2b_ctx* ctx, const uint8_t* p, size_t n) {
+    const uint8_t len = static_cast<uint8_t>(n > 255 ? 255 : n);
+    crypto_blake2b_update(ctx, &len, 1);
+    crypto_blake2b_update(ctx, p, len);
+  };
   crypto_blake2b_ctx ctx;
   crypto_blake2b_init(&ctx, 32);
-  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(pin.data()), pin.size());
-  crypto_blake2b_update(&ctx, salt.data(), salt.size());
-  std::array<uint8_t, 32> k{};
-  crypto_blake2b_final(&ctx, k.data());
-  return k;
+  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(kTag), sizeof(kTag) - 1);
+  field(&ctx, reinterpret_cast<const uint8_t*>(pin.data()), pin.size());
+  field(&ctx, sid.data(), sid.size());
+  field(&ctx, reinterpret_cast<const uint8_t*>(host_id.data()), host_id.size());
+  field(&ctx, reinterpret_cast<const uint8_t*>(joiner_id.data()), joiner_id.size());
+  uint8_t hidden[32];
+  crypto_blake2b_final(&ctx, hidden);
+  std::array<uint8_t, 32> g{};
+  crypto_elligator_map(g.data(), hidden);
+  crypto_wipe(hidden, sizeof(hidden));
+  return g;
 }
 
-// HMAC(K, challenge || joiner_id)
-std::array<uint8_t, 32> joinProof(const std::array<uint8_t, 32>& k, const Bytes& challenge,
-                                  const std::string& joiner_id) {
+bool allZero32(const uint8_t* p) {
+  uint8_t acc = 0;
+  for (int i = 0; i < 32; i++) acc |= p[i];
+  return acc == 0;
+}
+
+// Intermediate session key from the CPace shared point and the full transcript. Returns false
+// for a low-order point.
+bool cpaceSessionKey(const std::array<uint8_t, 32>& scalar, const Bytes& peer_point,
+                     const Bytes& sid, const Bytes& y_host, const Bytes& y_joiner,
+                     const std::string& host_id, const std::string& joiner_id,
+                     std::array<uint8_t, 32>* out) {
+  if (peer_point.size() != 32 || y_host.size() != 32 || y_joiner.size() != 32) return false;
+  uint8_t shared[32];
+  crypto_x25519(shared, scalar.data(), peer_point.data());
+  if (allZero32(shared)) return false;
   crypto_blake2b_ctx ctx;
-  crypto_blake2b_keyed_init(&ctx, 32, k.data(), k.size());
-  crypto_blake2b_update(&ctx, challenge.data(), challenge.size());
+  crypto_blake2b_init(&ctx, 32);
+  crypto_blake2b_update(&ctx, shared, sizeof(shared));
+  crypto_blake2b_update(&ctx, sid.data(), sid.size());
+  crypto_blake2b_update(&ctx, y_host.data(), y_host.size());
+  crypto_blake2b_update(&ctx, y_joiner.data(), y_joiner.size());
+  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(host_id.data()), host_id.size());
   crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(joiner_id.data()),
                         joiner_id.size());
-  std::array<uint8_t, 32> mac{};
-  crypto_blake2b_final(&ctx, mac.data());
-  return mac;
+  crypto_blake2b_final(&ctx, out->data());
+  crypto_wipe(shared, sizeof(shared));
+  return true;
 }
+
+std::array<uint8_t, 32> labeledKey(const std::array<uint8_t, 32>& key, const std::string& label,
+                                   const std::string& extra = "") {
+  crypto_blake2b_ctx ctx;
+  crypto_blake2b_keyed_init(&ctx, 32, key.data(), key.size());
+  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(label.data()), label.size());
+  crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(extra.data()), extra.size());
+  std::array<uint8_t, 32> out{};
+  crypto_blake2b_final(&ctx, out.data());
+  return out;
+}
+
+bool equal32(const Bytes& a, const std::array<uint8_t, 32>& b) {
+  return a.size() == 32 && crypto_verify32(a.data(), b.data()) == 0;
+}
+
+// "k<n>[.suffix]" generation number; anything else is zero.
+uint64_t pskGeneration(const std::string& id) {
+  if (id.size() < 2 || id[0] != 'k') return 0;
+  uint64_t n = 0;
+  for (size_t i = 1; i < id.size() && id[i] != '.'; i++) {
+    if (id[i] < '0' || id[i] > '9' || n > (uint64_t{1} << 50)) return 0;
+    n = n * 10 + static_cast<uint64_t>(id[i] - '0');
+  }
+  return n;
+}
+
+bool usableKey(const std::array<uint8_t, 32>& key) { return !allZero32(key.data()); }
 
 // Core-owned power section: exactly three scalars, clamped, so peers[].power can never become a
 // channel for arbitrary platform data.
@@ -728,8 +789,12 @@ struct Mesh::Impl {
 
   struct Inbound {
     ConnPtr conn;
-    Bytes challenge, salt;
+    // CPace host state for one PIN join attempt.
+    Bytes sid, y_host;
+    std::array<uint8_t, 32> scalar{};
+    std::string joiner_id;
     bool challenged = false;
+    bool decided = false;
   };
   std::vector<std::shared_ptr<Inbound>> inbound;
 
@@ -737,7 +802,7 @@ struct Mesh::Impl {
   struct JoinRun {
     ConnPtr conn;
     std::string pin;
-    std::array<uint8_t, 32> k{};
+    std::array<uint8_t, 32> k{};  // CPace session key once the challenge is answered
     bool key_ready = false;
     std::function<void(bool, const std::string&)> done;
     uint64_t timeout_id = 0;
@@ -756,6 +821,9 @@ struct Mesh::Impl {
     int64_t last_seen = 0;
     // none | sent | acked | joined | failed
     std::string invite_state = "none";
+    // The device announced a different public key while pending: someone else may be
+    // announcing under its ID, so it cannot be invited until the entry expires.
+    bool pk_conflict = false;
     int attempts = 0;
     std::string last_error;
   };
@@ -812,6 +880,19 @@ struct Mesh::Impl {
 
   std::shared_ptr<char> alive = std::make_shared<char>(0);
 
+  // Ed25519 identity of this node; the seed lives in st.identity_seed.
+  std::array<uint8_t, 32> identity_pk{};
+  // Peers rejected by the v3 handshake, keyed by node ID, with the monotonic time last seen.
+  std::map<std::string, int64_t> legacy_peers_;
+  std::map<std::string, int64_t> rekey_required_;
+  // Removed devices that completed a handshake only to be told they were removed.
+  std::set<std::string> revoked_chans_;
+  static constexpr int64_t kRevocationWindowMs = 1500;
+  static constexpr int64_t kRejectionMemoryMs = 10 * 60 * 1000;
+  static constexpr size_t kMaxUnauthenticated = 16;
+  static constexpr size_t kMaxUnauthenticatedPerHost = 4;
+  static constexpr size_t kMaxConnections = 64;
+
 
   void postGuarded(std::function<void()> fn) {
     std::weak_ptr<char> w = alive;
@@ -823,7 +904,16 @@ struct Mesh::Impl {
   Impl(Runloop& l, IClock& c, HlcClock& h, ITransport& t, IDiscovery* d, Store& s, LwwMap& cfg,
        EventLog& ev, MeshSettings& settings, Callbacks callbacks)
       : loop(l), clock(c), hlc(h), tp(t), disc(d), store(s), config(cfg), events(ev),
-        st(settings), cbs(std::move(callbacks)) {}
+        st(settings), cbs(std::move(callbacks)) {
+    if (allZero32(st.identity_seed.data())) {
+      Bytes seed = randomBytes(32);
+      std::copy(seed.begin(), seed.end(), st.identity_seed.begin());
+    }
+    std::array<uint8_t, 32> seed = st.identity_seed;
+    uint8_t sk[64];
+    crypto_ed25519_key_pair(sk, identity_pk.data(), seed.data());
+    crypto_wipe(sk, sizeof(sk));
+  }
 
   int64_t now() { return clock.monoMs(); }
   int64_t hsTimeoutMs() const { return st.reconnect_ms; }
@@ -859,13 +949,15 @@ struct Mesh::Impl {
       if (!isSelfAddr(a)) known_addrs.insert(a);
     }
 
+    if (isPaired() && !ensureSelfMember())
+      DB_LOGW("mesh", "own member record could not be written");
     tp.listen(st.listen_addr, [this](ConnPtr c) { onAccept(std::move(c)); });
     if (disc) {
       disc->start([this](const DiscoveredPeer& p) { onDiscovered(p); });
 
 
       std::weak_ptr<char> w = alive;
-      disc->setPsk(st.psk);
+      applyDiscoveryKeys();
       if (isPaired()) {
 
         disc->setPairFound([this, w](const PairBeacon& pb) {
@@ -940,11 +1032,42 @@ struct Mesh::Impl {
 
 
 
+  static std::string hostOf(const std::string& addr) {
+    const auto colon = addr.rfind(':');
+    return colon == std::string::npos ? addr : addr.substr(0, colon);
+  }
+
+  size_t unauthenticatedCount(const std::string& host, size_t* same_host) const {
+    size_t total = 0, same = 0;
+    for (const auto& ib : inbound) {
+      total++;
+      if (!host.empty() && hostOf(ib->conn->remoteAddr()) == host) same++;
+    }
+    for (const auto& ch : pending) {
+      if (ch->isInitiator()) continue;
+      total++;
+      if (!host.empty() && hostOf(ch->remoteAddr()) == host) same++;
+    }
+    if (same_host) *same_host = same;
+    return total;
+  }
+
   void onAccept(ConnPtr conn) {
     if (!running) {
       conn->close();
       return;
     }
+    size_t same_host = 0;
+    const std::string host = hostOf(conn->remoteAddr());
+    const size_t unauthenticated = unauthenticatedCount(host, &same_host);
+    if (unauthenticated >= kMaxUnauthenticated || same_host >= kMaxUnauthenticatedPerHost ||
+        chans.size() + pending.size() + inbound.size() >= kMaxConnections) {
+      conn->close();
+      return;
+    }
+    // An unpaired node receives its invitation (configuration snapshot included) on an
+    // accepted connection; everyone else stays at the pre-handshake limit until authenticated.
+    conn->setMaxInboundFrame(isPaired() ? kPreHandshakeFrameBytes : kMaxTransportFrameBytes);
     auto ib = std::make_shared<Inbound>();
     ib->conn = std::move(conn);
     inbound.push_back(ib);
@@ -987,9 +1110,261 @@ struct Mesh::Impl {
 
 
 
+  // ---------------------------------------------------------------- membership and keys
+
+  bool memberPk(const std::string& id, std::array<uint8_t, 32>* pk) const {
+    auto raw = config.get("mesh.members." + id);
+    if (!raw) return false;
+    json::Doc doc = json::parse(*raw);
+    Bytes decoded;
+    if (!doc || !hexDecode(json::getString(doc.get(), "pk"), decoded) || decoded.size() != 32)
+      return false;
+    if (pk) std::copy(decoded.begin(), decoded.end(), pk->begin());
+    return true;
+  }
+
+  bool removed(const std::string& id) const {
+    return static_cast<bool>(config.get("removed_devices." + id));
+  }
+
+  bool isMember(const std::string& id) const { return !removed(id) && memberPk(id, nullptr); }
+
+  std::string memberRecordJson(const std::array<uint8_t, 32>& pk) {
+    auto o = json::obj();
+    json::set(o.get(), "pk", hexEncode(pk.data(), pk.size()));
+    json::set(o.get(), "added_hlc", hlc.tick());
+    json::set(o.get(), "added_by", st.node_id);
+    return json::dump(o.get());
+  }
+
+  // Admit `id` with `pk`. A rejoin clears an earlier removal marker: re-admission is an explicit
+  // PIN or invitation decision.
+  bool writeMember(const std::string& id, const std::array<uint8_t, 32>& pk) {
+    std::vector<LwwMutation> m = {{"mesh.members." + id, memberRecordJson(pk), false}};
+    if (removed(id)) m.push_back({"removed_devices." + id, "", true});
+    if (config.get("mesh.revoked." + id)) m.push_back({"mesh.revoked." + id, "", true});
+    config.mutate(m);
+    return config.lastMutationCommitted();
+  }
+
+  bool ensureSelfMember() {
+    if (!isPaired() || removed(st.node_id)) return true;
+    std::array<uint8_t, 32> pk{};
+    if (memberPk(st.node_id, &pk) && crypto_verify32(pk.data(), identity_pk.data()) == 0)
+      return true;
+    config.mutate({{"mesh.members." + st.node_id, memberRecordJson(identity_pk), false}});
+    return config.lastMutationCommitted();
+  }
+
+  bool prevKeyLive() const {
+    return usableKey(st.prev_psk) && !st.prev_psk_id.empty() &&
+           clock.wallMs() < st.prev_psk_until_wall_ms;
+  }
+
+  std::vector<PskSlot> keySlots() const {
+    std::vector<PskSlot> slots;
+    if (usableKey(st.psk)) slots.push_back(PskSlot{st.psk_id.empty() ? "k1" : st.psk_id, st.psk});
+    if (prevKeyLive() && st.prev_psk_id != st.psk_id)
+      slots.push_back(PskSlot{st.prev_psk_id, st.prev_psk});
+    return slots;
+  }
+
+  bool revokedPk(const std::string& id, std::array<uint8_t, 32>* pk) const {
+    auto raw = config.get("mesh.revoked." + id);
+    if (!raw) return false;
+    json::Doc doc = json::parse(*raw);
+    Bytes decoded;
+    if (!doc || !hexDecode(json::getString(doc.get(), "pk"), decoded) || decoded.size() != 32)
+      return false;
+    std::copy(decoded.begin(), decoded.end(), pk->begin());
+    return true;
+  }
+
+  bool authorizePeer(const std::string& id, const std::array<uint8_t, 32>& pk,
+                     const std::string& psk_id) {
+    if (id == st.node_id || id.size() > 64) return false;
+    if (removed(id)) {
+      std::array<uint8_t, 32> revoked{};
+      return revokedPk(id, &revoked) && crypto_verify32(revoked.data(), pk.data()) == 0;
+    }
+    std::array<uint8_t, 32> known{};
+    if (memberPk(id, &known) && crypto_verify32(known.data(), pk.data()) == 0) return true;
+    // Only members may use the previous key during the rotation grace period. Enrollment mode
+    // trusts every holder of the current key and re-records an identity that changed.
+    return psk_id == st.psk_id && st.enroll_psk_holders;
+  }
+
+  void noteRejected(const std::string& id, const std::string& reason) {
+    if (id.empty() || id.size() > 64) return;
+    std::string reported = reason;
+    bool fresh = true;
+    if (reason == "protocol_upgrade_required") {
+      fresh = legacy_peers_.find(id) == legacy_peers_.end();
+      legacy_peers_[id] = now();
+    } else if (reason == "no_common_psk") {
+      if (!isMember(id)) return;
+      fresh = rekey_required_.find(id) == rekey_required_.end();
+      rekey_required_[id] = now();
+      reported = "rekey_required";
+    }
+    // Reconnect attempts repeat every few seconds; report a peer once per remembered state.
+    if (fresh && cbs.on_peer_rejected) cbs.on_peer_rejected(id, reported);
+  }
+
+  void applyDiscoveryKeys() {
+    if (!disc) return;
+    disc->setPsk(st.psk);
+    disc->setPreviousPsk(prevKeyLive() ? st.prev_psk : std::array<uint8_t, 32>{});
+  }
+
+  // Adopt `key` as the current cluster key. A higher generation demotes the current key to the
+  // previous slot; the same generation (a concurrent rotation) replaces it and keeps the slot.
+  bool adoptKey(const std::string& id, const std::array<uint8_t, 32>& key, bool keep_previous) {
+    const std::array<uint8_t, 32> old_psk = st.psk, old_prev = st.prev_psk;
+    const std::string old_id = st.psk_id, old_prev_id = st.prev_psk_id;
+    const int64_t old_until = st.prev_psk_until_wall_ms;
+    if (!keep_previous) {
+      st.prev_psk.fill(0);
+      st.prev_psk_id.clear();
+      st.prev_psk_until_wall_ms = 0;
+    } else if (pskGeneration(id) > pskGeneration(st.psk_id)) {
+      st.prev_psk = st.psk;
+      st.prev_psk_id = st.psk_id;
+      st.prev_psk_until_wall_ms = clock.wallMs() + Mesh::kPskGraceMs;
+    }
+    st.psk = key;
+    st.psk_id = id;
+    if (cbs.on_keys_changed && !cbs.on_keys_changed()) {
+      st.psk = old_psk;
+      st.psk_id = old_id;
+      st.prev_psk = old_prev;
+      st.prev_psk_id = old_prev_id;
+      st.prev_psk_until_wall_ms = old_until;
+      return false;
+    }
+    applyDiscoveryKeys();
+    return true;
+  }
+
+  void sendKeyTo(SecureChannel& ch) {
+    auto o = json::obj();
+    json::set(o.get(), "t", "PSK_ROTATE");
+    json::set(o.get(), "id", st.psk_id);
+    json::set(o.get(), "key", hexEncode(st.psk.data(), st.psk.size()));
+    ch.sendMessage(json::dump(o.get()));
+    std::string wiped = json::dump(o.get());
+    crypto_wipe(reinterpret_cast<uint8_t*>(&wiped[0]), wiped.size());
+  }
+
+  void announceKey() {
+    for (auto& kv : chans) {
+      if (!kv.second->established()) continue;
+      if (!st.enroll_psk_holders && !isMember(kv.first)) continue;
+      sendKeyTo(*kv.second);
+    }
+  }
+
+  bool rotatePsk(bool keep_previous) {
+    if (!isPaired()) return false;
+    Bytes raw = randomBytes(32);
+    std::array<uint8_t, 32> key{};
+    std::copy(raw.begin(), raw.end(), key.begin());
+    crypto_wipe(raw.data(), raw.size());
+    uint8_t fp[32];
+    crypto_blake2b(fp, 32, key.data(), key.size());
+    const std::string id =
+        "k" + std::to_string(pskGeneration(st.psk_id) + 1) + "." + hexEncode(fp, 4);
+    if (!adoptKey(id, key, keep_previous)) return false;
+    crypto_wipe(key.data(), key.size());
+    announceKey();
+    return true;
+  }
+
+  void handlePskRotate(const std::shared_ptr<SecureChannel>& ch, const cJSON* doc) {
+    const std::string from = ch->peerId();
+    if (!st.enroll_psk_holders && !isMember(from)) return;
+    const std::string id = json::getString(doc, "id");
+    Bytes key;
+    if (id.empty() || id.size() > 32 || pskGeneration(id) == 0 ||
+        !hexDecode(json::getString(doc, "key"), key) || key.size() != 32)
+      return;
+    std::array<uint8_t, 32> k{};
+    std::copy(key.begin(), key.end(), k.begin());
+    crypto_wipe(key.data(), key.size());
+    if (!usableKey(k) || comparePskIds(id, st.psk_id) <= 0) {
+      // The sender is behind: hand it the newer key this node holds.
+      if (comparePskIds(id, st.psk_id) < 0) sendKeyTo(*ch);
+      return;
+    }
+    if (!adoptKey(id, k, /*keep_previous=*/true)) return;
+    crypto_wipe(k.data(), k.size());
+    rekey_required_.erase(from);
+    announceKey();
+  }
+
+  // Periodic key hygiene: expire the previous key after the grace period and drop channels to
+  // devices that are no longer members.
+  void keyTick() {
+    if (usableKey(st.prev_psk) && !prevKeyLive()) {
+      const std::array<uint8_t, 32> prev = st.prev_psk;
+      const std::string prev_id = st.prev_psk_id;
+      const int64_t until = st.prev_psk_until_wall_ms;
+      st.prev_psk.fill(0);
+      st.prev_psk_id.clear();
+      st.prev_psk_until_wall_ms = 0;
+      if (cbs.on_keys_changed && !cbs.on_keys_changed()) {
+        st.prev_psk = prev;
+        st.prev_psk_id = prev_id;
+        st.prev_psk_until_wall_ms = until;
+      } else {
+        applyDiscoveryKeys();
+      }
+    }
+    std::vector<std::shared_ptr<SecureChannel>> drop;
+    for (const auto& kv : chans) {
+      if (revoked_chans_.count(kv.first)) continue;
+      if (removed(kv.first) || (!st.enroll_psk_holders && !memberPk(kv.first, nullptr)))
+        drop.push_back(kv.second);
+    }
+    for (const auto& ch : drop) ch->close();
+    const int64_t t = now();
+    for (auto* m : {&legacy_peers_, &rekey_required_}) {
+      for (auto it = m->begin(); it != m->end();)
+        it = t - it->second > kRejectionMemoryMs ? m->erase(it) : std::next(it);
+    }
+  }
+
+  std::string securityJson() const {
+    auto o = json::obj();
+    cJSON* legacy = json::addArr(o.get(), "legacy_peers");
+    for (const auto& kv : legacy_peers_)
+      json::push(legacy, json::Doc(cJSON_CreateString(kv.first.c_str())));
+    cJSON* rekey = json::addArr(o.get(), "rekey_required");
+    for (const auto& kv : rekey_required_)
+      json::push(rekey, json::Doc(cJSON_CreateString(kv.first.c_str())));
+    json::set(o.get(), "psk_id", isPaired() ? st.psk_id : std::string());
+    if (prevKeyLive()) {
+      json::set(o.get(), "prev_psk_id", st.prev_psk_id);
+      json::set(o.get(), "prev_psk_until_ms", st.prev_psk_until_wall_ms);
+    } else {
+      json::setItem(o.get(), "prev_psk_id", json::Doc(cJSON_CreateNull()));
+      json::set(o.get(), "prev_psk_until_ms", int64_t{0});
+    }
+    json::set(o.get(), "identity_pk", hexEncode(identity_pk.data(), identity_pk.size()));
+    return json::dump(o.get());
+  }
+
   std::shared_ptr<SecureChannel> makeChannel(ConnPtr conn, bool initiator) {
-    auto ch = std::make_shared<SecureChannel>(loop, std::move(conn), initiator, st.psk,
-                                              st.node_id, hsTimeoutMs());
+    ChannelIdentity identity;
+    identity.psks = keySlots();
+    identity.identity_seed = st.identity_seed;
+    std::weak_ptr<char> wa = alive;
+    identity.authorize = [this, wa](const std::string& id, const std::array<uint8_t, 32>& pk,
+                                    const std::string& psk_id) {
+      return !wa.expired() && authorizePeer(id, pk, psk_id);
+    };
+    auto ch = std::make_shared<SecureChannel>(loop, std::move(conn), initiator,
+                                              std::move(identity), st.node_id, hsTimeoutMs());
     pending.push_back(ch);
     std::weak_ptr<SecureChannel> wch = ch;
     SecureChannel::Callbacks c;
@@ -1001,6 +1376,9 @@ struct Mesh::Impl {
     };
     c.on_close = [this, wch] {
       if (auto p = wch.lock()) onChanClosed(p);
+    };
+    c.on_rejected = [this, wa](const std::string& reason, const std::string& peer) {
+      if (!wa.expired()) noteRejected(peer, reason);
     };
     ch->setCallbacks(std::move(c));
     return ch;
@@ -1019,6 +1397,44 @@ struct Mesh::Impl {
       detachAndClose(ch);
       return;
     }
+    if (removed(pid)) {
+      // A removed device may finish one handshake with its old key so it can be told it was
+      // removed. It receives no peers, config, or events, and is disconnected shortly after.
+      auto existing = chans.find(pid);
+      if (existing != chans.end() && existing->second != ch) detachAndClose(existing->second);
+      chans[pid] = ch;
+      revoked_chans_.insert(pid);
+      Peer& p = peers[pid];
+      if (p.info.id.empty()) {
+        p.info.id = pid;
+        p.info.status = "alive";
+        p.last_adv_mono = now();
+      }
+      p.info.connected = true;
+      if (cbs.on_peers_changed) cbs.on_peers_changed();
+      std::weak_ptr<SecureChannel> wch = ch;
+      std::weak_ptr<char> wa = alive;
+      loop.postDelayed(kRevocationWindowMs, [wch, wa] {
+        if (wa.expired()) return;
+        if (auto c = wch.lock()) c->close();
+      });
+      return;
+    }
+    if (!st.enroll_psk_holders && !isMember(pid)) {
+      detachAndClose(ch);
+      return;
+    }
+    if (st.enroll_psk_holders && !removed(pid)) {
+      std::array<uint8_t, 32> known{};
+      if (!memberPk(pid, &known) ||
+          crypto_verify32(known.data(), ch->peerIdentity().data()) != 0)
+        writeMember(pid, ch->peerIdentity());
+    }
+    ch->setMaxInboundFrame(kMaxTransportFrameBytes);
+    legacy_peers_.erase(pid);
+    rekey_required_.erase(pid);
+    // A member that connected with the previous key catches up with the current one.
+    if (ch->pskId() != st.psk_id) sendKeyTo(*ch);
     auto it = chans.find(pid);
     if (it != chans.end() && it->second != ch) {
 
@@ -1072,6 +1488,7 @@ struct Mesh::Impl {
     auto it = chans.find(pid);
     if (it != chans.end() && it->second == ch) {
       chans.erase(it);
+      revoked_chans_.erase(pid);
       auto p = peers.find(pid);
       if (p != peers.end()) p->second.info.connected = false;
       if (cbs.on_peers_changed) cbs.on_peers_changed();
@@ -1188,6 +1605,7 @@ struct Mesh::Impl {
     fillHb(ping.get());
     broadcast(json::dump(ping.get()));
     checkLiveness();
+    keyTick();
   }
 
   void fillHb(cJSON* o) {
@@ -1908,6 +2326,7 @@ struct Mesh::Impl {
       return;
     }
     const std::string t = json::getString(doc.get(), "t");
+    if (revoked_chans_.count(ch->peerId())) return;
     if (t == "PEERS") {
       handlePeers(doc.get(), ch->peerId());
     } else if (t == "PING" || t == "PONG") {
@@ -1938,6 +2357,8 @@ struct Mesh::Impl {
       handleBlobReq(*ch, doc.get());
     } else if (t == "BLOB_RESP") {
       handleBlobResp(doc.get());
+    } else if (t == "PSK_ROTATE") {
+      handlePskRotate(ch, doc.get());
     } else if (t == "CMD") {
       if (cbs.on_command) {
         cbs.on_command(ch->peerId(), json::getString(doc.get(), "cmd"));
@@ -1963,6 +2384,10 @@ struct Mesh::Impl {
         sendJoinErr(ib->conn, "host_unpaired");
         return;
       }
+      if (json::getInt(doc.get(), "v", 0) != kMeshProtocolVersion) {
+        sendJoinErr(ib->conn, "protocol_upgrade_required");
+        return;
+      }
       if (expireToken()) notifyToken();
       if (!token.active) {
         const bool just_expired = token.expired_unreported;
@@ -1970,44 +2395,72 @@ struct Mesh::Impl {
         sendJoinErr(ib->conn, just_expired ? "expired" : "no_token");
         return;
       }
-      ib->challenge = randomBytes(32);
-      ib->salt = randomBytes(16);
+      const std::string joiner_id = json::getString(doc.get(), "id");
+      if (joiner_id.empty() || joiner_id.size() > 64 || joiner_id == st.node_id || ib->challenged) {
+        sendJoinErr(ib->conn, "bad_request");
+        return;
+      }
+      ib->joiner_id = joiner_id;
+      ib->sid = randomBytes(32);
+      Bytes scalar = randomBytes(32);
+      std::copy(scalar.begin(), scalar.end(), ib->scalar.begin());
+      crypto_wipe(scalar.data(), scalar.size());
+      const auto g = cpaceGenerator(token.pin, ib->sid, st.node_id, joiner_id);
+      ib->y_host.assign(32, 0);
+      crypto_x25519(ib->y_host.data(), ib->scalar.data(), g.data());
       ib->challenged = true;
       auto o = json::obj();
       json::set(o.get(), "t", "JOIN_CHALLENGE");
-      json::set(o.get(), "challenge", hexEncode(ib->challenge));
-      json::set(o.get(), "salt", hexEncode(ib->salt));
+      json::set(o.get(), "v", int64_t{kMeshProtocolVersion});
+      json::set(o.get(), "sid", hexEncode(ib->sid));
+      json::set(o.get(), "host", st.node_id);
+      json::set(o.get(), "y", hexEncode(ib->y_host));
       sendJoinFrame(ib->conn, o.get());
     } else if (t == "JOIN_PROOF") {
-      if (!ib->challenged || !token.active || now() >= token.expires_mono) {
+      if (!ib->challenged || ib->decided || !token.active || now() >= token.expires_mono) {
         sendJoinErr(ib->conn, "no_token");
         return;
       }
+      ib->decided = true;
+      Bytes y_joiner, mac, idpk;
       const std::string joiner_id = json::getString(doc.get(), "id");
-      Bytes mac;
-      if (!hexDecode(json::getString(doc.get(), "hmac"), mac) || mac.size() != 32) {
-        sendJoinErr(ib->conn, "bad_pin");
-        return;
-      }
-      const auto k = joinKey(token.pin, ib->salt);
-      const auto expect = joinProof(k, ib->challenge, joiner_id);
-      if (crypto_verify32(mac.data(), expect.data()) != 0) {
+      std::array<uint8_t, 32> k{};
+      const bool parsed = joiner_id == ib->joiner_id &&
+                          hexDecode(json::getString(doc.get(), "y"), y_joiner) &&
+                          hexDecode(json::getString(doc.get(), "mac"), mac) &&
+                          hexDecode(json::getString(doc.get(), "idpk"), idpk) &&
+                          idpk.size() == 32 && mac.size() == 32;
+      const bool keyed = parsed && cpaceSessionKey(ib->scalar, y_joiner, ib->sid, ib->y_host,
+                                                   y_joiner, st.node_id, joiner_id, &k);
+      crypto_wipe(ib->scalar.data(), ib->scalar.size());
+      const std::string idpk_hex = parsed ? hexEncode(idpk) : std::string();
+      if (!keyed || !equal32(mac, labeledKey(k, "join-proof", idpk_hex))) {
         if (++token.fails >= kInviteAttempts) token.active = false;
         notifyToken();
         sendJoinErr(ib->conn, "bad_pin");
         return;
       }
-
+      // Admit the joiner before the snapshot is built, so its member record travels with it.
+      std::array<uint8_t, 32> joiner_pk{};
+      std::copy(idpk.begin(), idpk.end(), joiner_pk.begin());
+      if (!writeMember(joiner_id, joiner_pk)) {
+        sendJoinErr(ib->conn, "host_persist_failed");
+        return;
+      }
       const std::string plain = buildJoinPayloadJson();
+      const auto enc = labeledKey(k, "join-payload");
+      const auto confirm = labeledKey(k, "join-ok");
       Bytes nonce = randomBytes(24);
       Bytes out(16 + plain.size());  // mac(16) || cipher
-      crypto_aead_lock(out.data() + 16, out.data(), k.data(), nonce.data(), nullptr, 0,
+      crypto_aead_lock(out.data() + 16, out.data(), enc.data(), nonce.data(), nullptr, 0,
                        reinterpret_cast<const uint8_t*>(plain.data()), plain.size());
       auto o = json::obj();
       json::set(o.get(), "t", "JOIN_OK");
+      json::set(o.get(), "confirm", hexEncode(confirm.data(), confirm.size()));
       json::set(o.get(), "n", hexEncode(nonce));
       json::set(o.get(), "c", hexEncode(out));
       sendJoinFrame(ib->conn, o.get());
+      crypto_wipe(k.data(), k.size());
       token.active = false;
       notifyToken();
     } else if (t == "INVITE") {
@@ -2046,11 +2499,19 @@ struct Mesh::Impl {
       }
       // The acknowledgement precedes onBecamePaired so the inviter learns the outcome even if
       // rekeying immediately drops this unencrypted join connection.
+      // The acknowledgement proves this device opened the invitation and carries the identity
+      // the inviter records as this device's membership.
+      const std::string idpk = hexEncode(identity_pk.data(), identity_pk.size());
+      const auto ack_mac = labeledKey(key, "invite-ack", st.node_id + "|" + idpk);
+      crypto_wipe(key.data(), key.size());
       auto ack = json::obj();
       json::set(ack.get(), "t", "INVITE_ACK");
+      json::set(ack.get(), "v", int64_t{kMeshProtocolVersion});
       json::set(ack.get(), "id", st.node_id);
       json::set(ack.get(), "name", pairName());
       json::set(ack.get(), "role", st.role);
+      json::set(ack.get(), "idpk", idpk);
+      json::set(ack.get(), "mac", hexEncode(ack_mac.data(), ack_mac.size()));
       sendJoinFrame(ib->conn, ack.get());
       onBecamePaired();
     }
@@ -2204,6 +2665,9 @@ struct Mesh::Impl {
     json::set(o.get(), "name", pairName());
     json::set(o.get(), "role", st.role);
     json::set(o.get(), "pk", hexEncode(pair_pk_.data(), pair_pk_.size()));
+    if (!isPaired())
+      json::set(o.get(), "confirm_code",
+                confirmCode(hexEncode(pair_pk_.data(), pair_pk_.size()), st.node_id));
     json::set(o.get(), "model", st.model);
     json::set(o.get(), "platform", st.platform);
     json::set(o.get(), "sw", st.sw_version);
@@ -2233,6 +2697,7 @@ struct Mesh::Impl {
       json::set(d.get(), "invite_state", kv.second.invite_state);
       json::set(d.get(), "attempts", static_cast<int64_t>(kv.second.attempts));
       json::set(d.get(), "last_error", kv.second.last_error);
+      json::setBool(d.get(), "pk_conflict", kv.second.pk_conflict);
       json::push(arr, std::move(d));
     }
     return json::dump(o.get());
@@ -2323,7 +2788,12 @@ struct Mesh::Impl {
     }
     auto it = pending_.find(pb.id);
     const bool isNew = it == pending_.end();
+    const bool conflict = !isNew && !it->second.pk.empty() && it->second.pk != pb.pk;
     Pending& p = pending_[pb.id];
+    if (conflict && !p.pk_conflict) {
+      p.pk_conflict = true;
+      DB_LOGW("mesh", "pending device " + pb.id + " announced a second pairing key");
+    }
     const auto addrs = pb.addrs.empty() ? std::vector<std::string>{pb.addr} : pb.addrs;
     const bool changed = isNew || p.addr != pb.addr || p.addrs != addrs || p.name != pb.name ||
                          p.role != pb.role || p.model != pb.model || p.platform != pb.platform ||
@@ -2333,15 +2803,12 @@ struct Mesh::Impl {
     p.addrs = addrs;
     p.name = pb.name;
     p.role = pb.role;
-    p.pk = pb.pk;
+    if (!p.pk_conflict) p.pk = pb.pk;
     p.model = pb.model;
     p.platform = pb.platform;
     p.sw = pb.sw;
     p.last_seen = now();
-    if (now() < pairing_mode_until_) {
-      inviteDevice(pb.id, /*manual=*/false);
-    }
-    if (changed && cbs.on_pending_changed) cbs.on_pending_changed();
+    if ((changed || conflict) && cbs.on_pending_changed) cbs.on_pending_changed();
   }
 
 
@@ -2350,7 +2817,11 @@ struct Mesh::Impl {
     if (isPaired()) return false;
     Bytes psk = randomBytes(32);
     std::copy(psk.begin(), psk.end(), st.psk.begin());
-    if (st.psk_id.empty()) st.psk_id = "k1";
+    crypto_wipe(psk.data(), psk.size());
+    st.psk_id = "k1";
+    st.prev_psk.fill(0);
+    st.prev_psk_id.clear();
+    st.prev_psk_until_wall_ms = 0;
     is_founder_ = true;
     onBecamePaired();
     return true;
@@ -2363,25 +2834,58 @@ struct Mesh::Impl {
       notifyPairingMode();
       return;
     }
+    // The window collects discovered devices; each one is still approved with its own
+    // confirmation code, because an unauthenticated beacon cannot be trusted with the key.
     pairing_mode_until_ = now() + ttl_ms;
     auto_added_count_ = 0;
-    std::vector<std::string> ids;
-    for (const auto& kv : pending_) ids.push_back(kv.first);
-    for (const auto& id : ids) inviteDevice(id, /*manual=*/false);
     notifyPairingMode();
   }
 
 
-  void inviteDevice(const std::string& id, bool manual) {
+  static std::string confirmCode(const std::string& pk_hex, const std::string& id) {
+    static const char kTag[] = "doorbell-pair-confirm-v3";
+    Bytes pk;
+    if (!hexDecode(pk_hex, pk) || pk.size() != 32) return "";
+    crypto_blake2b_ctx ctx;
+    crypto_blake2b_init(&ctx, 32);
+    crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(kTag), sizeof(kTag) - 1);
+    crypto_blake2b_update(&ctx, pk.data(), pk.size());
+    crypto_blake2b_update(&ctx, reinterpret_cast<const uint8_t*>(id.data()), id.size());
+    uint8_t digest[32];
+    crypto_blake2b_final(&ctx, digest);
+    uint64_t v = 0;
+    for (int i = 0; i < 8; i++) v = (v << 8) | digest[i];
+    std::string code = std::to_string(v % 100000000ULL);
+    return std::string(8 - code.size(), '0') + code;
+  }
+
+  void inviteDevice(const std::string& id, const std::string& code) {
     auto it = pending_.find(id);
     if (it == pending_.end()) {
-      if (manual && cbs.on_invite_result) cbs.on_invite_result(id, false, "unknown_device");
+      if (cbs.on_invite_result) cbs.on_invite_result(id, false, "unknown_device");
       return;
     }
     if (!isPaired()) {
-      if (manual && cbs.on_invite_result) cbs.on_invite_result(id, false, "host_unpaired");
+      if (cbs.on_invite_result) cbs.on_invite_result(id, false, "host_unpaired");
       return;
     }
+    // The beacon that delivered this key is unauthenticated; the code the user read off the
+    // device's own screen is what binds the key to the device in front of them.
+    std::string digits;
+    for (char ch : code)
+      if (ch >= '0' && ch <= '9') digits.push_back(ch);
+    const char* refusal = nullptr;
+    if (it->second.pk_conflict) refusal = "pk_conflict";
+    else if (digits.empty()) refusal = "confirm_code_required";
+    else if (digits != confirmCode(it->second.pk, id)) refusal = "confirm_code_mismatch";
+    if (refusal) {
+      it->second.invite_state = "failed";
+      it->second.last_error = refusal;
+      if (cbs.on_invite_result) cbs.on_invite_result(id, false, refusal);
+      if (cbs.on_pending_changed) cbs.on_pending_changed();
+      return;
+    }
+    const bool manual = true;
     auto run = invites_.find(id);
     if (run != invites_.end()) {
       // An automatic re-announcement must not restart an invitation that is already in flight.
@@ -2484,7 +2988,9 @@ struct Mesh::Impl {
   }
 
 
-  void onInviteAck(const std::shared_ptr<InviteRun>& run, const cJSON* doc) {
+  void onInviteAck(const std::shared_ptr<InviteRun>& run, const cJSON* doc,
+                   const std::array<uint8_t, 32>& key) {
+    if (run->finished) return;
     const std::string t = json::getString(doc, "t");
     if (t == "INVITE_NAK") {
       finishInvite(run, false, json::getString(doc, "err", "rejected"));
@@ -2492,7 +2998,25 @@ struct Mesh::Impl {
     }
     if (t != "INVITE_ACK") return;
     const std::string id = json::getString(doc, "id");
-    if (run->id.empty() && !id.empty()) run->id = id;
+    const std::string idpk_hex = json::getString(doc, "idpk");
+    Bytes idpk, mac;
+    if (json::getInt(doc, "v", 0) != kMeshProtocolVersion || !hexDecode(idpk_hex, idpk) ||
+        idpk.size() != 32 || !hexDecode(json::getString(doc, "mac"), mac) ||
+        !equal32(mac, labeledKey(key, "invite-ack", id + "|" + idpk_hex))) {
+      finishInvite(run, false, "protocol_upgrade_required");
+      return;
+    }
+    if (id.empty() || id.size() > 64 || (!run->id.empty() && run->id != id)) {
+      finishInvite(run, false, "bad_ack");
+      return;
+    }
+    if (run->id.empty()) run->id = id;
+    std::array<uint8_t, 32> pk{};
+    std::copy(idpk.begin(), idpk.end(), pk.begin());
+    if (!writeMember(id, pk)) {
+      finishInvite(run, false, "host_persist_failed");
+      return;
+    }
     finishInvite(run, true, "");
   }
 
@@ -2514,6 +3038,7 @@ struct Mesh::Impl {
                      reinterpret_cast<const uint8_t*>(plain.data()), plain.size());
     auto o = json::obj();
     json::set(o.get(), "t", "INVITE");
+    json::set(o.get(), "v", int64_t{kMeshProtocolVersion});
     json::set(o.get(), "epk", hexEncode(epk.data(), epk.size()));
     json::set(o.get(), "n", hexEncode(nonce));
     json::set(o.get(), "c", hexEncode(out));
@@ -2523,7 +3048,7 @@ struct Mesh::Impl {
     frame.push_back(kFrameJoin);
     frame.insert(frame.end(), s.begin(), s.end());
     std::weak_ptr<char> w = alive;
-    tp.connect(addr, [this, w, frame, run](ConnPtr conn) {
+    tp.connect(addr, [this, w, frame, run, key](ConnPtr conn) {
       // A device that is rebooting refuses the connection; the retry timer tries again and only
       // gives up as "no_ack" after the last attempt.
       if (w.expired() || !conn) {
@@ -2533,10 +3058,10 @@ struct Mesh::Impl {
       if (run) {
         std::weak_ptr<char> wr = alive;
         conn->setCallbacks(
-            [this, wr, run](const Bytes& f) {
+            [this, wr, run, key](const Bytes& f) {
               if (wr.expired() || f.empty() || f[0] != kFrameJoin) return;
               json::Doc doc = json::parse(std::string(f.begin() + 1, f.end()));
-              if (doc) onInviteAck(run, doc.get());
+              if (doc) onInviteAck(run, doc.get(), key);
             },
             [] {});
       } else {
@@ -2569,11 +3094,12 @@ struct Mesh::Impl {
 
 
   void onBecamePaired() {
+    if (!ensureSelfMember()) DB_LOGW("mesh", "own member record could not be written");
     if (disc) {
       disc->setPairAnnounce(PairAnnounce{});
       // HELLO packets must be authenticated with the key this node just adopted; without the
       // rekey, discovery stays broken until the process restarts.
-      disc->setPsk(st.psk);
+      applyDiscoveryKeys();
       std::weak_ptr<char> w = alive;
       disc->setPairFound([this, w](const PairBeacon& pb) {
         if (!w.expired() && running) onPairFound(pb);
@@ -2610,6 +3136,12 @@ struct Mesh::Impl {
     is_founder_ = false;
     notifyToken();
     st.psk.fill(0);
+    st.psk_id = "k1";
+    st.prev_psk.fill(0);
+    st.prev_psk_id.clear();
+    st.prev_psk_until_wall_ms = 0;
+    legacy_peers_.clear();
+    rekey_required_.clear();
     st.seed_peers.clear();
     if (join) abortJoin("unpaired");
 
@@ -2636,7 +3168,7 @@ struct Mesh::Impl {
     dialing.clear();
 
     if (disc) {
-      disc->setPsk(st.psk);
+      applyDiscoveryKeys();
       disc->setPairFound(nullptr);
       startPairAnnounce();
     }
@@ -2690,6 +3222,7 @@ struct Mesh::Impl {
           });
       auto o = json::obj();
       json::set(o.get(), "t", "JOIN_REQ1");
+      json::set(o.get(), "v", int64_t{kMeshProtocolVersion});
       json::set(o.get(), "id", st.node_id);
       sendJoinFrame(conn, o.get());
     });
@@ -2701,19 +3234,38 @@ struct Mesh::Impl {
     if (!doc) return;
     const std::string t = json::getString(doc.get(), "t");
     if (t == "JOIN_CHALLENGE") {
-      Bytes challenge, salt;
-      if (!hexDecode(json::getString(doc.get(), "challenge"), challenge) ||
-          !hexDecode(json::getString(doc.get(), "salt"), salt)) {
+      Bytes sid, y_host;
+      const std::string host_id = json::getString(doc.get(), "host");
+      if (j->key_ready || json::getInt(doc.get(), "v", 0) != kMeshProtocolVersion ||
+          !hexDecode(json::getString(doc.get(), "sid"), sid) || sid.size() != 32 ||
+          !hexDecode(json::getString(doc.get(), "y"), y_host) || y_host.size() != 32 ||
+          host_id.empty() || host_id.size() > 64) {
         finishJoin(j, false, "bad_challenge");
         return;
       }
-      j->k = joinKey(j->pin, salt);
+      Bytes raw = randomBytes(32);
+      std::array<uint8_t, 32> scalar{};
+      std::copy(raw.begin(), raw.end(), scalar.begin());
+      crypto_wipe(raw.data(), raw.size());
+      const auto g = cpaceGenerator(j->pin, sid, host_id, st.node_id);
+      Bytes y_joiner(32);
+      crypto_x25519(y_joiner.data(), scalar.data(), g.data());
+      const bool keyed = cpaceSessionKey(scalar, y_host, sid, y_host, y_joiner, host_id,
+                                         st.node_id, &j->k);
+      crypto_wipe(scalar.data(), scalar.size());
+      if (!keyed) {
+        finishJoin(j, false, "bad_challenge");
+        return;
+      }
       j->key_ready = true;
-      const auto proof = joinProof(j->k, challenge, st.node_id);
+      const std::string idpk = hexEncode(identity_pk.data(), identity_pk.size());
+      const auto proof = labeledKey(j->k, "join-proof", idpk);
       auto o = json::obj();
       json::set(o.get(), "t", "JOIN_PROOF");
       json::set(o.get(), "id", st.node_id);
-      json::set(o.get(), "hmac", hexEncode(proof.data(), proof.size()));
+      json::set(o.get(), "y", hexEncode(y_joiner));
+      json::set(o.get(), "idpk", idpk);
+      json::set(o.get(), "mac", hexEncode(proof.data(), proof.size()));
       sendJoinFrame(j->conn, o.get());
     } else if (t == "JOIN_OK") {
       // An invitation may have paired this node while the code join was in flight. Applying a
@@ -2722,20 +3274,28 @@ struct Mesh::Impl {
         finishJoin(j, false, "already_paired");
         return;
       }
-      Bytes nonce, enc;
-      if (!j->key_ready || !hexDecode(json::getString(doc.get(), "n"), nonce) ||
+      Bytes nonce, enc, confirm;
+      if (!j->key_ready || !hexDecode(json::getString(doc.get(), "confirm"), confirm) ||
+          !hexDecode(json::getString(doc.get(), "n"), nonce) ||
           !hexDecode(json::getString(doc.get(), "c"), enc) || nonce.size() != 24 ||
           enc.size() < 16) {
         finishJoin(j, false, "bad_payload");
         return;
       }
-      Bytes plain(enc.size() - 16);
-      if (crypto_aead_unlock(plain.data(), enc.data(), j->k.data(), nonce.data(), nullptr, 0,
-                             enc.data() + 16, plain.size()) != 0) {
+      if (!equal32(confirm, labeledKey(j->k, "join-ok"))) {
         finishJoin(j, false, "decrypt_failed");
         return;
       }
+      const auto payload_key = labeledKey(j->k, "join-payload");
+      Bytes plain(enc.size() - 16);
+      if (crypto_aead_unlock(plain.data(), enc.data(), payload_key.data(), nonce.data(), nullptr,
+                             0, enc.data() + 16, plain.size()) != 0) {
+        finishJoin(j, false, "decrypt_failed");
+        return;
+      }
+      crypto_wipe(j->k.data(), j->k.size());
       json::Doc payload = json::parse(std::string(plain.begin(), plain.end()));
+      crypto_wipe(plain.data(), plain.size());
       if (!payload) {
         finishJoin(j, false, "bad_payload");
         return;
@@ -2861,7 +3421,19 @@ bool Mesh::isFounder() const { return impl_->is_founder_; }
 std::string Mesh::pairingSelfJson() { return impl_->pairingSelfJson(); }
 std::string Mesh::pendingJson() { return impl_->pendingJson(); }
 std::string Mesh::tokenJson() { return impl_->tokenJson(); }
-void Mesh::inviteDevice(const std::string& id) { impl_->inviteDevice(id, /*manual=*/true); }
+void Mesh::inviteDevice(const std::string& id, const std::string& code) {
+  impl_->inviteDevice(id, code);
+}
+std::string Mesh::pairConfirmCode(const std::string& pk_hex, const std::string& id) {
+  return Impl::confirmCode(pk_hex, id);
+}
+bool Mesh::isMember(const std::string& id) const { return impl_->isMember(id); }
+bool Mesh::ensureSelfMember() { return impl_->ensureSelfMember(); }
+bool Mesh::rotatePsk(bool keep_previous) { return impl_->rotatePsk(keep_previous); }
+std::string Mesh::identityPublicKeyHex() const {
+  return hexEncode(impl_->identity_pk.data(), impl_->identity_pk.size());
+}
+std::string Mesh::securityJson() const { return impl_->securityJson(); }
 void Mesh::inviteDeviceDirect(const std::string& addr, const std::string& pk) {
   impl_->inviteDeviceDirect(addr, pk);
 }

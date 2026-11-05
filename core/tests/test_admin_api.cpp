@@ -864,6 +864,11 @@ TEST_CASE("admin API: session gate + config delete/import + join-token + panel-t
   CHECK(sealed_push_config.find("https://push.example/sub/one") == std::string::npos);
   CHECK(sealed_push_config.find("client-key") == std::string::npos);
   CHECK(sealed_push_config.find("auth-key") == std::string::npos);
+  // A cluster key rotation reseals the subscription under the new key, so delivery below keeps
+  // working after a device removal.
+  REQUIRE(node.rotateClusterKey());
+  CHECK(node.configJson() != sealed_push_config);
+  CHECK(node.configJson().find("sealed_subscription") != std::string::npos);
 
   secure_values["webpush.private"] = "private-vapid-material";
   node.setConfigKey("integrations.web_push.vapid_private_key_ref",
@@ -1025,6 +1030,8 @@ TEST_CASE("admin API: failed panel rotation keeps the previous fleet credential 
   CHECK(adminReq(http_port, "GET", "/api/config", "", admin_session) == config_before);
   CHECK(adminReq(http_port, "GET", "/api/panel/state", "",
                  "dbpanel=" + panel_session).find("HTTP/1.1 200") == 0);
+  // The node's own mesh identity seed is the only other secret it keeps.
+  secure_values.erase("mesh.identity");
   CHECK(secure_values.size() == 1);
   CHECK(secure_values.begin()->second == token);
   node.stop();
@@ -1452,7 +1459,7 @@ TEST_CASE("admin API: pairing routes expose state, PIN, deny, scan, retry, and u
   // 成功応答になる。書き直しが要るのは persist_error のときだけ。
   CHECK(json::getBool(
       bodyJson(adminReq(http_port, "POST", "/api/pairing/retry-persist", "{}", sess)).get(), "ok"));
-  CHECK(secrets.empty());
+  CHECK(secrets.size() == secrets.count("mesh.identity"));
   {
     auto d = bodyJson(adminReq(http_port, "GET", "/api/pairing", "", sess));
     REQUIRE(d);
@@ -1462,7 +1469,7 @@ TEST_CASE("admin API: pairing routes expose state, PIN, deny, scan, retry, and u
 
   CHECK(json::getBool(bodyJson(adminReq(http_port, "POST", "/api/pairing/unpair", "{}", sess)).get(),
                       "ok"));
-  CHECK(deleted == std::vector<std::string>{"mesh.psk"});
+  CHECK(deleted == std::vector<std::string>{"mesh.psk", "mesh.psk_prev"});
   CHECK(adminReq(http_port, "GET", "/api/pairing", "", sess).find("401") != std::string::npos);
   const std::string unpaired_session = adminLogin(http_port);
   {

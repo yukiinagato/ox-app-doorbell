@@ -32,6 +32,17 @@ struct MeshSettings {
   std::vector<std::string> seed_peers;
   std::array<uint8_t, 32> psk{};  // An all-zero key means the node is unpaired.
   std::string psk_id = "k1";
+  // Cluster key that was current before the last rotation. Members may still use it until
+  // prev_psk_until_wall_ms so devices that were offline during a rotation can catch up.
+  std::array<uint8_t, 32> prev_psk{};
+  std::string prev_psk_id;
+  int64_t prev_psk_until_wall_ms = 0;
+  // Ed25519 seed of this node's identity. All-zero makes Mesh generate an ephemeral identity,
+  // which only tests rely on; Node supplies the seed it keeps as secret:mesh.identity.
+  std::array<uint8_t, 32> identity_seed{};
+  // Accept any holder of the cluster key and record its identity on first contact. Only tests
+  // and embedded hosts use this; production shells require a replicated mesh.members record.
+  bool enroll_psk_holders = true;
   std::string role = "door_station";  // door_station | indoor_panel
   std::string door;                  // Operational door identity; empty for indoor panels.
   std::string sw_version = "0.0.1";
@@ -114,6 +125,15 @@ class Mesh {
     // Fires after each such SYNC_RESP. A consumer that withheld presentation for backfilled
     // history presents the converged state here, once, instead of replaying it event by event.
     std::function<void(const std::string& peer)> on_sync_converged;
+
+    // The cluster key set changed (rotation, a received PSK_ROTATE, grace expiry, migration).
+    // Persist settings().psk/psk_id and prev_psk/prev_psk_id/prev_psk_until_wall_ms before
+    // returning. Returning false restores the previous key set.
+    std::function<bool()> on_keys_changed;
+
+    // A peer failed the v3 handshake: protocol_upgrade_required | rekey_required |
+    // unauthorized_peer | bad_signature. peer_id may be empty.
+    std::function<void(const std::string& peer_id, const std::string& reason)> on_peer_rejected;
   };
 
   Mesh(Runloop& loop, IClock& clock, HlcClock& hlc, ITransport& transport,
@@ -187,7 +207,13 @@ class Mesh {
   // {"active":bool,"expires_s":int,"attempts_left":int,"host":"<addr>","pin":"<6>"}.
   // pin appears only while the token is active.
   std::string tokenJson();
-  void inviteDevice(const std::string& id);
+  // Approve one discovered device. Its public key arrived in an unauthenticated beacon, so the
+  // invitation is sent only when `code` equals the confirmation code shown on that device
+  // (pairingSelfJson().confirm_code there). Otherwise invite_result reports
+  // confirm_code_required, confirm_code_mismatch, or pk_conflict.
+  void inviteDevice(const std::string& id, const std::string& code = "");
+  // Eight decimal digits derived from a device's pairing public key and node ID.
+  static std::string pairConfirmCode(const std::string& pk_hex, const std::string& id);
 
   void inviteDeviceDirect(const std::string& addr, const std::string& pk);
   // Drop one pending device and ignore its announcements for a short while.
@@ -195,6 +221,23 @@ class Mesh {
   void setPairingMode(int64_t ttl_ms);
   // Leave the cluster: zero the PSK, drop cluster state, and start announcing for pairing again.
   void unpair();
+
+  // True when `id` has a replicated mesh.members record and no removal marker.
+  bool isMember(const std::string& id) const;
+  // Write this node's own mesh.members record when it has none. Returns false when the write
+  // could not be committed.
+  bool ensureSelfMember();
+  // Generate a new cluster key, persist it through on_keys_changed, and send it to every
+  // connected member. With keep_previous the old key stays accepted from members for
+  // kPskGraceMs; migration drops it. Returns false while unpaired or when persistence fails.
+  bool rotatePsk(bool keep_previous = true);
+  // Hex Ed25519 identity public key of this node.
+  std::string identityPublicKeyHex() const;
+  // {"legacy_peers":[ids],"rekey_required":[ids],"psk_id":"...","prev_psk_id":"..."|null,
+  //  "prev_psk_until_ms":int}
+  std::string securityJson() const;
+
+  static constexpr int64_t kPskGraceMs = 7LL * 24 * 60 * 60 * 1000;
 
   const MeshSettings& settings() const { return settings_; }
 

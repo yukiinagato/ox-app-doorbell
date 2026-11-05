@@ -1,5 +1,6 @@
-// UDP multicast discovery at 239.255.71.71:47171. Paired HELLO packets authenticate cluster
-// membership with a keyed MAC; the receiver thread posts discovery callbacks to Runloop.
+// UDP multicast discovery at 239.255.71.71:47171. Paired HELLO packets carry a timestamped keyed
+// MAC; a receiver accepts only a MAC under the current (or previous) cluster key within +-120 s
+// of its wall clock. The receiver thread posts discovery callbacks to Runloop.
 
 
 
@@ -32,6 +33,12 @@ class UdpBeacon : public IDiscovery {
   void setPairAnnounce(const PairAnnounce& announce) override;
   void setPairFound(std::function<void(const PairBeacon&)> cb) override;
   void setPsk(const std::array<uint8_t, 32>& psk) override;
+  void setPreviousPsk(const std::array<uint8_t, 32>& psk) override;
+  // HELLO MAC over tag || id || addr || unix_ms, truncated to 16 bytes and hex encoded. Exposed
+  // for tests; receivers accept a timestamp within kBeaconSkewMs of their wall clock.
+  static std::string helloMac(const std::array<uint8_t, 32>& psk, const std::string& id,
+                              const std::string& addr, int64_t unix_ms);
+  static constexpr int64_t kBeaconSkewMs = 120 * 1000;
 
 
   int64_t sentCount() const { return sent_.load(); }
@@ -51,6 +58,7 @@ class UdpBeacon : public IDiscovery {
   // verify a HELLO MAC, and the discovery callbacks that Mesh reassigns when the node pairs.
   mutable std::mutex mu_;
   std::array<uint8_t, 32> psk_;
+  std::array<uint8_t, 32> prev_psk_{};
   std::string group_;
   uint16_t port_;
   int64_t period_ms_;

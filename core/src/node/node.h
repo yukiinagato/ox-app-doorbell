@@ -45,6 +45,10 @@ struct NodeOptions {
   std::string psk_ref;               // "secret:<name>" when the PSK was read from secure storage.
   int http_port = 0;
   bool seed_default_config = true;
+  // Accept any holder of the cluster key as a mesh member (trust on first contact). Only tests
+  // and embedded hosts may use this; db_core_create sets it to false so a removed or
+  // impersonating device cannot connect (docs/en/security-v3.md section 2).
+  bool mesh_enroll_psk_holders = true;
 
   std::string sip_user;
   std::string sip_pass;
@@ -294,7 +298,17 @@ class Node {
   // when this node is running, so every shell reaches the same verdict.
   std::string parsePairUriJson(const std::string& uri);
   void removeDevice(const std::string& node_id);
-  void inviteDevice(const std::string& id);
+  // Approve a discovered device. `code` is the eight-digit confirmation code shown on that
+  // device; without the matching code the invitation is refused (invite_result).
+  void inviteDevice(const std::string& id, const std::string& code = "");
+  // Replace the cluster key and hand the new one to every connected member. The previous key
+  // stays valid from members for seven days. Returns false while unpaired or when the new key
+  // could not be stored.
+  bool rotateClusterKey();
+  // After a v2 upgrade left this device waiting to rejoin: found a new cluster here, keeping
+  // this device's configuration and history. Returns "ok" or an error code
+  // (no_mesh | already_paired | not_upgrade_pending | persist_failed).
+  std::string rebuildClusterFromThisDevice();
 
   void inviteDeviceDirect(const std::string& addr, const std::string& id, const std::string& pk);
   // Ignore one pending device for a while and drop it from the pending list.

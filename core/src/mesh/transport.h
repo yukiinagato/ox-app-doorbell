@@ -31,7 +31,14 @@ class IConn {
 
   virtual void setCallbacks(std::function<void(const Bytes&)> on_frame,
                             std::function<void()> on_close) = 0;
+  // Largest inbound frame accepted before the connection is dropped. Accepted connections start
+  // at kPreHandshakeFrameBytes so an unauthenticated peer cannot make this node buffer large
+  // frames; the owner raises the limit once the peer is authenticated.
+  virtual void setMaxInboundFrame(size_t /*bytes*/) {}
 };
+
+constexpr size_t kPreHandshakeFrameBytes = 4 * 1024;
+constexpr size_t kMaxTransportFrameBytes = 8 * 1024 * 1024;
 using ConnPtr = std::shared_ptr<IConn>;
 
 class ITransport {
@@ -98,6 +105,9 @@ class IDiscovery {
   // Rekey authenticated discovery in place. A node that pairs at runtime must MAC its HELLO with
   // the live cluster key; implementations are called from Runloop and may have a receive thread.
   virtual void setPsk(const std::array<uint8_t, 32>& /*psk*/) {}
+  // The cluster key that was current before the last rotation, accepted on receive during the
+  // rotation grace period. An all-zero key disables it.
+  virtual void setPreviousPsk(const std::array<uint8_t, 32>& /*psk*/) {}
 };
 
 }  // namespace db

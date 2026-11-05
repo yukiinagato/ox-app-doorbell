@@ -10,8 +10,8 @@ HTTP into a public transport-security boundary; see [security](security.md).
 
 | Purpose | Protocol/Port | Direction | Notes |
 |---|---|---|---|
-| mesh UDP beacon | UDP 47171 (multicast 239.255.71.71) | station ⇔ station | HMAC-signed HELLO; use explicit seed peers where multicast is unavailable |
-| mesh TCP (gossip/sync/cmd) | TCP 47172 | station ⇔ station | PSK AEAD |
+| mesh UDP beacon | UDP 47171 (multicast 239.255.71.71) | station ⇔ station | Keyed MAC over ID, address, and timestamp, accepted within ±120 s of the receiver's clock; use explicit seed peers where multicast is unavailable or clocks are not synchronized |
+| mesh TCP (gossip/sync/cmd) | TCP 47172 | station ⇔ station | Protocol v3: member identity (Ed25519), ephemeral X25519, PSK-keyed XChaCha20-Poly1305; 4 KiB pre-handshake frame limit |
 | httpd (admin/panel/MJPEG/snapshot) | TCP 47180 | browser/HA/go2rtc → station | Admin/panel routes use sessions; LAN compatibility media routes (`/stream.mjpeg`, `/stream.mp4`, `/snapshot.jpg`, `/video-meta`, `/peer-frame.jpg`) and exact `GET /asset/<64-lowercase-hex-sha256>` are unauthenticated, so restrict the whole port to a trusted media LAN or authenticated TLS proxy |
 | mDNS | UDP 5353 | station ⇔ LAN | Optional discovery only; not required for explicit seed peers |
 | SIP (Asterisk registration — for the phone leg) | UDP 5060 | station → Asterisk | Intercom survives PBX outages (see next row) |

@@ -5,6 +5,7 @@
 #include "mesh/tcp_transport.h"
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
 #include <deque>
 #include <mutex>
@@ -18,7 +19,11 @@ namespace db {
 
 namespace {
 
-constexpr size_t kMaxFrame = 8 * 1024 * 1024;
+constexpr size_t kMaxFrame = kMaxTransportFrameBytes;
+// Frames delivered before the owner installs callbacks; bounded so a flood cannot queue memory.
+constexpr size_t kMaxBacklogFrames = 64;
+// Accepted sockets beyond this are closed at once, before any byte is read.
+constexpr size_t kMaxAcceptedConns = 256;
 constexpr size_t kMaxQueuedBytes = kMaxFrame + 4;
 constexpr size_t kMaxQueuedFrames = 1024;
 constexpr int64_t kConnectTimeoutMs = 10000;
@@ -88,8 +93,14 @@ struct TcpTransport::Impl : public std::enable_shared_from_this<TcpTransport::Im
 
 class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
  public:
-  TcpConn(std::shared_ptr<TcpTransport::Impl> impl, net::socket_t fd, std::string remote)
-      : impl_(std::move(impl)), fd_(fd), remote_(std::move(remote)) {}
+  TcpConn(std::shared_ptr<TcpTransport::Impl> impl, net::socket_t fd, std::string remote,
+          size_t max_inbound_frame)
+      : impl_(std::move(impl)), fd_(fd), remote_(std::move(remote)),
+        max_in_(max_inbound_frame) {}
+
+  void setMaxInboundFrame(size_t bytes) override {
+    max_in_.store(std::min(bytes, kMaxFrame));
+  }
 
   void send(const Bytes& frame) override {
     std::lock_guard<std::mutex> lk(impl_->mu);
@@ -213,7 +224,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
     while (inbuf_.size() - pos >= 4) {
       const uint32_t len = (uint32_t(inbuf_[pos]) << 24) | (uint32_t(inbuf_[pos + 1]) << 16) |
                            (uint32_t(inbuf_[pos + 2]) << 8) | uint32_t(inbuf_[pos + 3]);
-      if (len > kMaxFrame) return false;
+      if (len > max_in_.load()) return false;
       if (inbuf_.size() - pos - 4 < len) break;
       Bytes frame(inbuf_.begin() + pos + 4, inbuf_.begin() + pos + 4 + len);
       deliver(std::move(frame));
@@ -231,6 +242,12 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
         std::lock_guard<std::mutex> lk(self->impl_->mu);
         cb = self->on_frame_;
         if (!cb) {
+          if (self->pre_frames_.size() >= kMaxBacklogFrames) {
+            self->abort_ = true;
+            self->closing_ = true;
+            self->impl_->wake();
+            return;
+          }
           self->pre_frames_.push_back(frame);
           return;
         }
@@ -284,6 +301,7 @@ class TcpConn : public IConn, public std::enable_shared_from_this<TcpConn> {
   size_t out_bytes_ = 0;
   std::vector<uint8_t> inbuf_;
   std::vector<Bytes> pre_frames_;
+  std::atomic<size_t> max_in_;
   std::function<void(const Bytes&)> on_frame_;
   std::function<void()> on_close_;
 };
@@ -380,10 +398,18 @@ void TcpTransport::Impl::ioMain() {
         for (;;) {
           net::socket_t fd = ::accept(lfd, nullptr, nullptr);
           if (!net::valid(fd)) break;
+          {
+            std::lock_guard<std::mutex> lk(mu);
+            if (conns.size() >= kMaxAcceptedConns) {
+              net::closeSocket(fd);
+              continue;
+            }
+          }
           net::setNonBlock(fd);
           int yes = 1;
           net::setSockOpt(fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
-          auto conn = std::make_shared<TcpConn>(shared_from_this(), fd, peerName(fd));
+          auto conn = std::make_shared<TcpConn>(shared_from_this(), fd, peerName(fd),
+                                                kPreHandshakeFrameBytes);
           std::function<void(ConnPtr)> cb;
           {
             std::lock_guard<std::mutex> lk(mu);
@@ -417,7 +443,8 @@ void TcpTransport::Impl::ioMain() {
         if (err == 0) {
           int yes = 1;
           net::setSockOpt(pc.fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
-          auto conn = std::make_shared<TcpConn>(shared_from_this(), pc.fd, peerName(pc.fd));
+          auto conn = std::make_shared<TcpConn>(shared_from_this(), pc.fd, peerName(pc.fd),
+                                                kMaxFrame);
           {
             std::lock_guard<std::mutex> lk(mu);
             conns.push_back(conn);
