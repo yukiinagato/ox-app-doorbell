@@ -37,6 +37,9 @@ internal class VideoEncoder(
 
     private data class QueuedTime(val ptsUs: Long, val captureMs: Long)
 
+    /** Transient failures back a candidate off; only structural failures reject it for good. */
+    private data class CandidateHealth(val transientFailures: Int, val retryAtElapsedMs: Long)
+
     @Volatile private var codec: MediaCodec? = null
     @Volatile private var drainRunning = false
     @Volatile private var started = false
@@ -64,7 +67,13 @@ internal class VideoEncoder(
     private var bufferAccess: CodecBufferAccess? = null
     private var currentCandidate: Candidate? = null
     private var drainThread: Thread? = null
+    // Guarded by this object's monitor.
     private val rejectedCandidates = LinkedHashSet<String>()
+    private val candidateHealth = HashMap<String, CandidateHealth>()
+    private var cachedCandidates: List<Candidate>? = null
+    // The output thread maps presentation times without taking the codec monitor, so a release
+    // on the camera thread never waits for the output thread to leave a synchronized method.
+    private val timeLock = Any()
     private val queuedTimes = ArrayDeque<QueuedTime>()
 
     val isRunning: Boolean get() = started
@@ -84,6 +93,8 @@ internal class VideoEncoder(
         this.allowSoftware = allowSoftware
         releaseCodecLocked()
         rejectedCandidates.clear()
+        candidateHealth.clear()
+        cachedCandidates = null
         terminalFailure = false
         width = 0
         height = 0
@@ -141,7 +152,7 @@ internal class VideoEncoder(
             val input = bufferAccess?.input(active, index)
             if (input == null) {
                 active.queueInputBuffer(index, 0, 0, nextPtsUs(), 0)
-                failCurrent(active, "input buffer unavailable")
+                failCurrent(active, "input buffer unavailable", transient = true)
                 return
             }
             input.clear()
@@ -149,21 +160,28 @@ internal class VideoEncoder(
             val color = currentCandidate?.colorFormat ?: 0
             if (!AvcByteStream.copyNv21(data, w, h, color, input)) {
                 active.queueInputBuffer(index, 0, 0, ptsUs, 0)
-                failCurrent(active, "unsupported input layout or capacity")
+                failCurrent(active, "unsupported input layout or capacity", transient = false)
                 return
             }
             rememberCaptureTime(ptsUs, captureMs)
             active.queueInputBuffer(index, 0, w * h * 3 / 2, ptsUs, 0)
         } catch (e: Exception) {
-            failCurrent(active, "input failed: ${e.javaClass.simpleName}")
+            failCurrent(active, "input failed: ${e.javaClass.simpleName}", transient = true)
         }
     }
 
     @Synchronized
     private fun createNextCodec(w: Int, h: Int): MediaCodec? {
-        val candidates = codecCandidates()
+        val candidates = cachedCandidates ?: codecCandidates().also { cachedCandidates = it }
+        val now = SystemClock.elapsedRealtime()
+        var backingOff = false
         for (candidate in candidates) {
             if (candidate.id in rejectedCandidates) continue
+            val health = candidateHealth[candidate.id]
+            if (health != null && now < health.retryAtElapsedMs) {
+                backingOff = true
+                continue
+            }
             var local: MediaCodec? = null
             try {
                 val format = MediaFormat.createVideoFormat(AVC_MIME, w, h)
@@ -198,7 +216,7 @@ internal class VideoEncoder(
                 probeStartedMs = SystemClock.elapsedRealtime()
                 sessionStartNs = System.nanoTime()
                 lastPtsUs = -1L
-                queuedTimes.clear()
+                synchronized(timeLock) { queuedTimes.clear() }
                 publish(Snapshot(
                     if (certified) "probing" else "probing_uncommissioned",
                     candidate.codecName, candidate.colorFormat, w, h, fps, certified,
@@ -208,10 +226,14 @@ internal class VideoEncoder(
                 return local
             } catch (e: Exception) {
                 rejectedCandidates.add(candidate.id)
-                try { local?.stop() } catch (_: Exception) { }
-                try { local?.release() } catch (_: Exception) { }
+                try { local?.stop() } catch (e: Exception) { ShellLog.ignored("VideoEncoder", e) }
+                try { local?.release() } catch (e: Exception) { ShellLog.ignored("VideoEncoder", e) }
                 Log.w(TAG, "reject ${candidate.id}: ${e.javaClass.simpleName}: ${e.message}")
             }
+        }
+        if (backingOff) {
+            // A candidate is only waiting out its backoff; feed() tries again on a later frame.
+            return null
         }
         terminalFailure = true
         publish(Snapshot("degraded", width = w, height = h, fps = fps,
@@ -274,7 +296,7 @@ internal class VideoEncoder(
                         failure = "output failed: ${e.javaClass.simpleName}"
                 }
                 if (failure != null) {
-                    failCurrent(active, failure)
+                    failCurrent(active, failure, transient = isTransientFailure(failure))
                     break
                 }
             }
@@ -336,7 +358,7 @@ internal class VideoEncoder(
                 }
             }
         } finally {
-            try { active.releaseOutputBuffer(index, false) } catch (_: Exception) { }
+            try { active.releaseOutputBuffer(index, false) } catch (e: Exception) { ShellLog.ignored("VideoEncoder", e) }
         }
         return failure
     }
@@ -420,32 +442,49 @@ internal class VideoEncoder(
         return if (idc == 66) null else "encoder ignored Baseline profile (profile_idc=$idc)"
     }
 
+    private fun isTransientFailure(reason: String): Boolean =
+        !(reason.startsWith("encoder ignored Baseline profile") ||
+            reason.startsWith("invalid AVC framing") ||
+            reason.startsWith("AVC commissioning"))
+
     @Synchronized
-    private fun failCurrent(active: MediaCodec, reason: String) {
+    private fun failCurrent(active: MediaCodec, reason: String, transient: Boolean) {
         if (codec !== active) return
-        currentCandidate?.let { rejectedCandidates.add(it.id) }
-        Log.w(TAG, "AVC candidate failed: $reason")
+        currentCandidate?.let { candidate ->
+            if (!transient) {
+                rejectedCandidates.add(candidate.id)
+            } else {
+                val previous = candidateHealth[candidate.id]?.transientFailures ?: 0
+                val failures = previous + 1
+                if (failures >= MAX_TRANSIENT_FAILURES) {
+                    rejectedCandidates.add(candidate.id)
+                } else {
+                    val backoff = TRANSIENT_BACKOFF_MS shl (failures - 1)
+                    candidateHealth[candidate.id] = CandidateHealth(
+                        failures, SystemClock.elapsedRealtime() + backoff)
+                }
+            }
+        }
+        Log.w(TAG, "AVC candidate failed (${if (transient) "transient" else "permanent"}): $reason")
         publish(Snapshot("retrying", currentCandidate?.codecName.orEmpty(),
                          currentCandidate?.colorFormat ?: 0, width, height, fps,
                          certified, reason))
         releaseCodecLocked()
     }
 
-    @Synchronized
-    private fun rememberCaptureTime(ptsUs: Long, captureMs: Long) {
+    private fun rememberCaptureTime(ptsUs: Long, captureMs: Long) = synchronized(timeLock) {
         queuedTimes.addLast(QueuedTime(ptsUs, captureMs))
         while (queuedTimes.size > MAX_TIME_MAP) queuedTimes.removeFirst()
     }
 
-    @Synchronized
-    private fun captureTimeFor(ptsUs: Long): Long {
+    private fun captureTimeFor(ptsUs: Long): Long = synchronized(timeLock) {
         while (queuedTimes.size > 1) {
             val second = queuedTimes.elementAt(1)
             if (second.ptsUs > ptsUs) break
             queuedTimes.removeFirst()
         }
         val match = queuedTimes.peekFirst()
-        return if (match != null && kotlin.math.abs(match.ptsUs - ptsUs) <= 1_000_000L)
+        if (match != null && kotlin.math.abs(match.ptsUs - ptsUs) <= 1_000_000L)
             match.captureMs else System.currentTimeMillis()
     }
 
@@ -460,15 +499,20 @@ internal class VideoEncoder(
         val active = codec
         codec = null
         drainRunning = false
-        try { active?.stop() } catch (_: Exception) { }
+        // Join the output thread before stop(): it polls dequeueOutputBuffer with a 5 ms timeout
+        // and never takes this monitor while it holds a codec buffer, so it exits promptly and
+        // the codec is not stopped underneath a buffer it still owns.
         val thread = drainThread
         if (thread != null && thread !== Thread.currentThread()) {
-            try { thread.join(250) } catch (_: InterruptedException) {
+            try { thread.join(DRAIN_JOIN_MS) } catch (_: InterruptedException) {
                 Thread.currentThread().interrupt()
             }
         }
+        try { active?.stop() } catch (e: Exception) {
+            Log.w(TAG, "codec stop failed: ${e.javaClass.simpleName}")
+        }
         drainThread = null
-        try { active?.release() } catch (_: Exception) { }
+        try { active?.release() } catch (e: Exception) { ShellLog.ignored("VideoEncoder", e) }
         bufferAccess = null
         currentCandidate = null
         configData = null
@@ -477,7 +521,7 @@ internal class VideoEncoder(
         sawSps = false
         sawPps = false
         forwardingStarted = false
-        queuedTimes.clear()
+        synchronized(timeLock) { queuedTimes.clear() }
     }
 
     private fun publish(value: Snapshot) {
@@ -491,5 +535,8 @@ internal class VideoEncoder(
         private const val GOP_SECONDS = 1
         private const val PROBE_MS = 2_000L
         private const val MAX_TIME_MAP = 90
+        private const val MAX_TRANSIENT_FAILURES = 4
+        private const val TRANSIENT_BACKOFF_MS = 2_000L
+        private const val DRAIN_JOIN_MS = 500L
     }
 }

@@ -13,7 +13,9 @@ import org.json.JSONObject
 
 /** Foreground-service-owned core, camera, encoder, retries, and watchdog heartbeat. */
 class RuntimeSupervisor(private val app: App) {
-    private val thread = HandlerThread("doorbell-runtime", Process.THREAD_PRIORITY_BACKGROUND)
+    // Camera1 delivers preview frames on the thread that opened it, which is this one, and the
+    // H.264 submission and MJPEG copy run from those callbacks; background priority lost frames.
+    private val thread = HandlerThread("doorbell-runtime", Process.THREAD_PRIORITY_DISPLAY)
     private val contractStore = RuntimeStatusStore(File(app.filesDir, "core-contract.json"))
     private val statusStore = RuntimeStatusStore(File(app.filesDir, "runtime-status.json")) {
         app.core.setRuntimeStatus(it)
@@ -21,13 +23,13 @@ class RuntimeSupervisor(private val app: App) {
     }
     private val helper = RootKeepaliveClient()
     val kioskController = KioskController(app, app.boot, helper, statusStore)
-    private val camera = CameraFeeder(app.core)
     private val buildTier = try {
         app.getString(R.string.android_build_tier)
     } catch (_: Exception) {
         "unknown"
     }
     private val legacy19 = buildTier == "legacy19"
+    private val camera = CameraFeeder(app, app.core, allowCamera2 = !legacy19)
     private val commissioningStore = H264CommissioningStore.forDevice(app, app.core.version())
     private val releaseQualification = if (legacy19)
         Api19ReleaseQualification.load(app) else null
@@ -335,6 +337,13 @@ class RuntimeSupervisor(private val app: App) {
 
     private fun ensureCamera() {
         if (scannerActive) return
+        if (cameraStarted && camera.lost) {
+            // The camera reported an error or was taken away; release it and reopen it below.
+            Log.w(TAG, "camera ${camera.backend} lost; restarting capture")
+            camera.encoder = null
+            camera.stop()
+            cameraStarted = false
+        }
         if (app.boot.role != "door_station" || cameraStarted) return
         if (SystemClock.elapsedRealtime() < cameraRetryAtMs) return
         if (!hasCameraPermission()) {
@@ -349,6 +358,7 @@ class RuntimeSupervisor(private val app: App) {
             triedActualResolutions.add(currentActualResolution)
             statusStore.update("camera", JSONObject()
                 .put("state", "active")
+                .put("backend", camera.backend)
                 .put("width", camera.frameWidth)
                 .put("height", camera.frameHeight)
                 .put("requested_width", target.first)
@@ -356,7 +366,7 @@ class RuntimeSupervisor(private val app: App) {
         } else {
             cameraRetryAtMs = SystemClock.elapsedRealtime() + CAMERA_RETRY_MS
             statusStore.update("camera", JSONObject().put("state", "degraded")
-                .put("error", "Camera1 start failed"))
+                .put("error", "camera start failed"))
         }
     }
 

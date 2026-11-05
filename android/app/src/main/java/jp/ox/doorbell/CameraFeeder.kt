@@ -1,9 +1,15 @@
-// Camera1 sends NV21 preview frames to Core.
-// Legacy devices have inconsistent Camera2 implementations, so Camera1 is intentional.
-// Three reusable callback buffers reduce garbage-collection pressure on API19 hardware.
+// Sends NV21 camera frames to Core and the optional H.264 encoder.
+//
+// Headless door-station capture uses Camera2 on API 21+ devices whose camera hardware level is
+// native (not LEGACY), and Camera1 everywhere else: legacy19 builds, LEGACY-level devices, the
+// on-screen QR preview, and any device where Camera2 once failed to deliver a first frame (that
+// verdict is remembered per OS build). Camera1 uses three reusable callback buffers to reduce
+// garbage-collection pressure on API 19 hardware.
 package jp.ox.doorbell
 
+import android.content.Context
 import android.graphics.ImageFormat
+import android.os.Build
 import android.graphics.SurfaceTexture
 import android.hardware.Camera
 import android.util.Log
@@ -11,7 +17,11 @@ import android.view.SurfaceHolder
 import kotlin.math.abs
 
 @Suppress("DEPRECATION")
-internal class CameraFeeder(private val core: DoorbellCore) {
+internal class CameraFeeder(
+    private val context: Context,
+    private val core: DoorbellCore,
+    private val allowCamera2: Boolean,
+) {
 
     private data class CameraMount(val id: Int, val facing: Int, val orientation: Int)
 
@@ -23,6 +33,18 @@ internal class CameraFeeder(private val core: DoorbellCore) {
 
     val frameWidth: Int get() = width
     val frameHeight: Int get() = height
+
+    private var camera2: Camera2Capture? = null
+
+    /** "camera2", "camera1", or "" while stopped; published in runtime status. */
+    @Volatile
+    var backend: String = ""
+        private set
+
+    /** Set when the running camera reported an error or disconnect; the supervisor restarts. */
+    @Volatile
+    var lost = false
+        private set
 
     /** Optional H.264 encoder sink, enabled only while Core requests an encoded stream. */
     @Volatile
@@ -46,6 +68,10 @@ internal class CameraFeeder(private val core: DoorbellCore) {
     /** Clockwise correction needed to show a native camera frame upright remotely. */
     fun frameRotationForDeviceRotation(deviceRotation: Int): Int {
         val degrees = ((deviceRotation % 360) + 360) % 360
+        camera2?.mount?.let { m ->
+            return if (m.facingFront) (m.orientation + degrees) % 360
+            else (m.orientation - degrees + 360) % 360
+        }
         val mount = activeCameraMount ?: selectedCamera ?: return degrees
         return if (mount.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) {
             (mount.orientation + degrees) % 360
@@ -64,8 +90,44 @@ internal class CameraFeeder(private val core: DoorbellCore) {
 
     /** Service-owned capture path; no Activity surface is required. */
     fun startHeadless(targetW: Int = 640, targetH: Int = 480,
-                      targetFps: Int = 0): Boolean =
-        startInternal(null, targetW, targetH, targetFps, preferBack = false)
+                      targetFps: Int = 0): Boolean {
+        stop()
+        if (camera2Usable()) {
+            val capture = Camera2Capture(
+                context,
+                onFrame = { data, w, h, now ->
+                    encoder?.feed(data, w, h, now)
+                    core.onCameraFrame(data, 0, w, h, w, now)
+                },
+                onLost = { lost = true },
+            )
+            if (capture.start(targetW, targetH, targetFps)) {
+                camera2 = capture
+                width = capture.width
+                height = capture.height
+                backend = "camera2"
+                return true
+            }
+            rememberCamera2Failure()
+            Log.w(TAG, "Camera2 unavailable here; falling back to Camera1")
+        }
+        return startInternal(null, targetW, targetH, targetFps, preferBack = false)
+    }
+
+    private fun camera2Usable(): Boolean {
+        if (!allowCamera2 || Build.VERSION.SDK_INT < 21) return false
+        if (prefs().getBoolean(camera2FailureKey(), false)) return false
+        return Camera2Capture.supported(context)
+    }
+
+    private fun rememberCamera2Failure() {
+        prefs().edit().putBoolean(camera2FailureKey(), true).apply()
+    }
+
+    private fun prefs() = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+
+    // Keyed by OS build so an OS update gets a fresh Camera2 attempt.
+    private fun camera2FailureKey(): String = "camera2_failed:${Build.FINGERPRINT}"
 
     private fun startInternal(holder: SurfaceHolder?, targetW: Int, targetH: Int,
                               targetFps: Int, preferBack: Boolean): Boolean {
@@ -110,8 +172,13 @@ internal class CameraFeeder(private val core: DoorbellCore) {
                 headlessTexture = SurfaceTexture(0)
                 cam.setPreviewTexture(headlessTexture)
             }
+            cam.setErrorCallback { error, _ ->
+                Log.w(TAG, "Camera1 error $error")
+                lost = true
+            }
             cam.startPreview()
             camera = cam
+            backend = "camera1"
             true
         } catch (e: Exception) {
             Log.w(TAG, "camera start failed: $e")
@@ -121,14 +188,20 @@ internal class CameraFeeder(private val core: DoorbellCore) {
     }
 
     fun stop() {
+        camera2?.stop()
+        camera2 = null
         try {
             camera?.setPreviewCallbackWithBuffer(null)
             camera?.stopPreview()
             camera?.release()
-        } catch (_: Exception) { }
+        } catch (e: Exception) {
+            Log.w(TAG, "camera release failed: $e")
+        }
+        backend = ""
+        lost = false
         camera = null
         activeCameraMount = null
-        try { headlessTexture?.release() } catch (_: Exception) { }
+        try { headlessTexture?.release() } catch (e: Exception) { ShellLog.ignored("CameraFeeder", e) }
         headlessTexture = null
         width = 0
         height = 0
@@ -171,6 +244,7 @@ internal class CameraFeeder(private val core: DoorbellCore) {
 
     companion object {
         private const val TAG = "doorbell-camera"
+        private const val PREFS = "doorbell-camera"
 
         /** Whether this hardware has any camera at all; TV boxes and some panels have none. */
         fun deviceHasCamera(): Boolean = try {
