@@ -2509,3 +2509,57 @@ TEST_CASE("node: an offline removed member leaves after reconnecting") {
   admin.node->stop();
   old.node->stop();
 }
+
+TEST_CASE("node: a device joining later never overrides the cluster with its first-run defaults") {
+  NFleet f;
+  auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  REQUIRE(host.node->start());
+  f.run(300);
+  REQUIRE(json::getBool(
+      json::parse(host.node->setConfigJson("ui.call_flow", "\"ring_then_purpose\"")).get(), "ok"));
+  REQUIRE(json::getBool(
+      json::parse(host.node->deleteConfigKeyJson("trigger_rules.r_missed_call_default")).get(),
+      "ok"));
+  f.run(300);
+
+  // The new tablet's first boot, and so its seeded defaults, happens days after the edits.
+  f.clock.advance(3LL * 86'400'000);
+  auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/true,
+                       /*zero_psk=*/true);
+  joiner.node->setSecureStore([](const std::string&) { return std::string(); },
+                              [](const std::string&, const std::string&) { return true; });
+  REQUIRE(joiner.node->start());
+  REQUIRE(joiner.node->configJson().find("purpose_first") != std::string::npos);
+  REQUIRE(joiner.node->configJson().find("r_missed_call_default") != std::string::npos);
+
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto pj = json::parse(host.node->pairingJson());
+      cJSON* devs = json::get(json::get(pj.get(), "pending"), "devices");
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, devs) {
+        if (json::getString(it, "id") == joiner.node->nodeId()) return true;
+      }
+    }
+    return false;
+  }());
+  host.node->inviteDevice(joiner.node->nodeId());
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      if (joiner.uiCount("paired") >= 1) return true;
+    }
+    return false;
+  }());
+  f.run(2000);
+
+  for (auto* n : {&host, &joiner}) {
+    auto cfg = json::parse(n->node->configJson());
+    CHECK(json::getString(json::get(cfg.get(), "ui"), "call_flow") == "ring_then_purpose");
+    CHECK(json::get(json::get(cfg.get(), "trigger_rules"), "r_missed_call_default") == nullptr);
+    CHECK(json::get(json::get(cfg.get(), "trigger_rules"), "r_sos_default_on") != nullptr);
+  }
+  joiner.node->stop();
+  host.node->stop();
+}

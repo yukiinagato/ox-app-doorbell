@@ -1293,3 +1293,18 @@ admin.import_omitted: { en: "Sensitive fields omitted from this export; review a
 
 admin.import_unknown_ack: { en: "I saved the recovery reference and understand that the previous import result is still unknown. I want to review a new import explicitly.", ja: "復旧情報を保存し、前回の結果が不明なままであることを理解しました。別のインポートを新たに確認します。", zh: "我已保存恢复记录，并理解上次导入结果仍未知；我明确选择重新预检另一次导入。" }
 admin.import_new_preview: { en: "Review a new import", ja: "新しいインポートを確認", zh: "预检新的导入" }
+
+# Core first-run seed values (Core only; not shipped to client string tables).
+core.seed.quick_reply.qr_away: { ja: "ただいま留守にしています", en: "We are away right now", zh: "现在不在家" }
+core.seed.quick_reply.qr_no: { ja: "結構です", en: "Not interested", zh: "不需要，谢谢" }
+core.seed.quick_reply.qr_wrong: { ja: "お間違いのようです", en: "Wrong address", zh: "您可能找错地方了" }
+core.seed.quick_reply.qr_wait: { ja: "少々お待ちください", en: "One moment please", zh: "请稍等" }
+core.seed.purpose.p_visit: { ja: "訪問", en: "Visit", zh: "访客" }
+core.seed.purpose.p_delivery: { ja: "宅配便", en: "Delivery", zh: "快递" }
+core.seed.purpose.p_mail: { ja: "郵便", en: "Mail", zh: "邮件" }
+core.seed.purpose.p_sales: { ja: "営業・集金", en: "Sales", zh: "推销/收费" }
+core.seed.purpose.p_work: { ja: "検針・工事", en: "Utility", zh: "检修/施工" }
+core.seed.purpose.p_other: { ja: "その他", en: "Other", zh: "其他" }
+core.seed.notice.np_absent: { ja: "不在です。荷物は玄関前へお願いします", en: "Nobody is home. Please leave parcels at the front door", zh: "家中无人，包裹请放在门口" }
+core.seed.notice.np_back_door: { ja: "裏口へお回りください", en: "Please come round to the back door", zh: "请绕到后门" }
+core.seed.notice.np_construction: { ja: "工事中です。足元にご注意ください", en: "Building work in progress. Please watch your step", zh: "正在施工，请注意脚下" }

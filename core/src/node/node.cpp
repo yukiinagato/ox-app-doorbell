@@ -4998,7 +4998,7 @@ struct Node::Impl {
   void restoreEmergency() {
     auto ev = store.latestEventOfTypes("emergency", "emergency_cancel");
     if (!ev) return;
-    hlc->observe(ev->hlc);
+    hlc->observePersisted(ev->hlc);
     emergency_hlc = ev->hlc;
     emergency_active = (ev->type == "emergency");
   }
@@ -6276,7 +6276,13 @@ struct Node::Impl {
 
   bool onConfigChanges(const std::vector<LwwEntry>& entries, bool is_local, bool batch) {
     if (entries.empty() || suppress_config_callbacks) return true;
-    if (!configEditRecordsValid(config->all(), &config_edit_error)) {
+    // The edit journal can only change through its own reserved keys, so a batch without them
+    // leaves a previously valid journal valid. Full validation is linear in the journal size.
+    const bool touches_journal =
+        std::any_of(entries.begin(), entries.end(),
+                    [](const LwwEntry& entry) { return configEditReserved(entry.key); });
+    if ((touches_journal || !config_edit_error.empty()) &&
+        !configEditRecordsValid(config->all(), &config_edit_error)) {
       config_persistence_failed = true; ++config_persistence_failures;
       if (started) scheduleSnapshotRefresh();
       return false;
@@ -6898,6 +6904,21 @@ struct Node::Impl {
   }
 
 
+  static void setSeedLabels(cJSON* label, const std::string& key) {
+    for (const char* lang : {"ja", "en", "zh"}) {
+      const char* text = builtinText(key, lang);
+      json::set(label, lang, text ? text : "");
+    }
+  }
+
+  // Single-language seed text (announcement presets) follows the first configured UI language.
+  std::string seedLanguage() const {
+    const cJSON* languages = json::get(json::get(cfg.get(), "ui"), "languages");
+    const cJSON* first = cJSON_IsArray(languages) ? cJSON_GetArrayItem(languages, 0) : nullptr;
+    const std::string lang = cJSON_IsString(first) ? first->valuestring : "";
+    return lang == "en" || lang == "zh" ? lang : "ja";
+  }
+
   bool seedConfig() {
     if (opts.seed_default_config && !config->get("schema_version")) {
       std::vector<LwwMutation> defaults = {
@@ -6915,21 +6936,19 @@ struct Node::Impl {
           {"audio.volume.idle", "60", false},
           {"emergency.trigger.mode", "\"slide\"", false},
           {"emergency.trigger.countdown_s", "3", false}};
-      auto qr = [&](const char* id, const char* ja, const char* en, const char* zh, int order) {
+      auto qr = [&](const char* id, int order) {
         auto o = json::obj();
-        cJSON* label = json::addObj(o.get(), "label");
-        json::set(label, "ja", ja);
-        json::set(label, "en", en);
-        json::set(label, "zh", zh);
+        setSeedLabels(json::addObj(o.get(), "label"),
+                      std::string("core.seed.quick_reply.") + id);
         json::setBool(o.get(), "speak", true);
         json::set(o.get(), "order", static_cast<int64_t>(order));
         defaults.push_back(
             {std::string("quick_replies.") + id, json::dump(o.get()), false});
       };
-      qr("qr_away", "ただいま留守にしています", "We are away right now", "现在不在家", 1);
-      qr("qr_no", "結構です", "Not interested", "不需要，谢谢", 2);
-      qr("qr_wrong", "お間違いのようです", "Wrong address", "您可能找错地方了", 3);
-      qr("qr_wait", "少々お待ちください", "One moment please", "请稍等", 4);
+      qr("qr_away", 1);
+      qr("qr_no", 2);
+      qr("qr_wrong", 3);
+      qr("qr_wait", 4);
 
       defaults.insert(defaults.end(), {
           {"ui.languages", "[\"ja\",\"en\",\"zh\"]", false},
@@ -6943,25 +6962,22 @@ struct Node::Impl {
           {"ui.call_flow", "\"purpose_first\"", false},
           {"ui.call_ttl_s", "60", false}});
 
-      auto vp = [&](const char* id, const char* ja, const char* en, const char* zh,
-                    const char* icon, int order) {
+      auto vp = [&](const char* id, const char* icon, int order) {
         auto o = json::obj();
-        cJSON* label = json::addObj(o.get(), "label");
-        json::set(label, "ja", ja);
-        json::set(label, "en", en);
-        json::set(label, "zh", zh);
+        setSeedLabels(json::addObj(o.get(), "label"), std::string("core.seed.purpose.") + id);
         json::set(o.get(), "icon", icon);
         json::set(o.get(), "order", static_cast<int64_t>(order));
         defaults.push_back(
             {std::string("visit_purposes.") + id, json::dump(o.get()), false});
       };
-      vp("p_visit", "訪問", "Visit", "访客", "🏠", 1);
-      vp("p_delivery", "宅配便", "Delivery", "快递", "📦", 2);
-      vp("p_mail", "郵便", "Mail", "邮件", "✉️", 3);
-      vp("p_sales", "営業・集金", "Sales", "推销/收费", "💼", 4);
-      vp("p_work", "検針・工事", "Utility", "检修/施工", "🔧", 5);
-      vp("p_other", "その他", "Other", "其他", "❓", 6);
-      config->mutate(defaults);
+      vp("p_visit", "🏠", 1);
+      vp("p_delivery", "📦", 2);
+      vp("p_mail", "✉️", 3);
+      vp("p_sales", "💼", 4);
+      vp("p_work", "🔧", 5);
+      vp("p_other", "❓", 6);
+      // Seeded at the minimum HLC: a joining device never overrides what the cluster decided.
+      config->seed(defaults);
       if (!config->lastMutationCommitted()) return false;
     }
     // One-release migration: move legacy bearer values out of the replicated/exported CRDT.
@@ -6996,8 +7012,8 @@ struct Node::Impl {
             "\"never_suppress\":true,\"presentation\":{\"visual\":true,"
             "\"sticky\":false,\"ttl_s\":10}},{\"type\":\"telegram\","
             "\"never_suppress\":true,\"households\":\"all\"}]}";
-        config->mutate({{"trigger_rules.r_sos_default_on", on, false},
-                        {"trigger_rules.r_sos_default_off", off, false}});
+        config->seed({{"trigger_rules.r_sos_default_on", on, false},
+                      {"trigger_rules.r_sos_default_off", off, false}});
         if (!config->lastMutationCommitted()) return false;
       }
       if (!store.metaSet("seed_sos_rules_v1", "1")) return false;
@@ -7007,15 +7023,17 @@ struct Node::Impl {
     if (!store.metaGet("seed_notice_presets_v1")) {
       if (!json::get(json::get(cfg.get(), "notice"), "presets")) {
         auto presets = json::arr();
-        auto add = [&presets](const char* id, const char* text) {
+        const std::string lang = seedLanguage();
+        auto add = [&presets, &lang](const char* id) {
           cJSON* entry = json::pushObj(presets.get());
           json::set(entry, "id", id);
-          json::set(entry, "text", text);
+          const char* text = builtinText(std::string("core.seed.notice.") + id, lang);
+          json::set(entry, "text", text ? text : "");
         };
-        add("np_absent", "不在です。荷物は玄関前へお願いします");
-        add("np_back_door", "裏口へお回りください");
-        add("np_construction", "工事中です。足元にご注意ください");
-        config->mutate({{"notice.presets", json::dump(presets.get()), false}});
+        add("np_absent");
+        add("np_back_door");
+        add("np_construction");
+        config->seed({{"notice.presets", json::dump(presets.get()), false}});
         if (!config->lastMutationCommitted()) return false;
       }
       if (!store.metaSet("seed_notice_presets_v1", "1")) return false;
@@ -7039,7 +7057,7 @@ struct Node::Impl {
             "[\"indoor_panel\"],\"web_profiles\":\"all\"},"
             "\"channels\":[\"in_app\",\"system_notification\",\"web_push\"],"
             "\"presentation\":{\"visual\":true,\"sticky\":false,\"ttl_s\":30}}]}";
-        config->mutate({{"trigger_rules.r_missed_call_default", missed, false}});
+        config->seed({{"trigger_rules.r_missed_call_default", missed, false}});
         if (!config->lastMutationCommitted()) return false;
       }
       if (!store.metaSet("seed_missed_call_rule_v1", "1")) return false;
