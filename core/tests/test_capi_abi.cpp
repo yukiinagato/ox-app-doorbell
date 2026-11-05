@@ -416,8 +416,8 @@ TEST_CASE("capi: one cluster administrator password, shared lockout, SOS never b
   CHECK(db_core_admin_password_set(core, "", "first-password") == 0);
   CHECK(db_core_admin_password_verify(core, "first-password") > 0);
   CHECK(db_core_admin_password_verify(core, "wrong") == 0);
-  CHECK(db_core_admin_password_set(core, "", "second") == -2);
-  CHECK(db_core_admin_password_set(core, "wrong", "second") == -2);
+  CHECK(db_core_admin_password_set(core, "", "second-pw") == -2);
+  CHECK(db_core_admin_password_set(core, "wrong", "second-pw") == -2);
 
   // The digest is replicated, never the plaintext.
   char* config = db_core_config_json(core);

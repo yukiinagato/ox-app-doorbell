@@ -23,6 +23,7 @@
 #include <string>
 #include <vector>
 
+#include "sipctl/sip_auth.h"
 #include "util/runloop.h"
 
 namespace db {
@@ -58,6 +59,10 @@ struct SipSettings {
   bool auto_answer = true;
   int reg_retry_s = 30;
   bool null_audio = false;  // Headless test mode; RTP remains active.
+  // SRTP (SDES) policy: "optional" negotiates SRTP whenever the far end supports it, which every
+  // PJSIP peer does; "mandatory" refuses plain RTP and therefore excludes shells without SRTP
+  // (the iOS 5 MiniSIP shell). Toward a configured server SRTP is always optional.
+  std::string srtp = "optional";
 
 
 
@@ -103,8 +108,17 @@ class SipCtl {
 
 
 
-  // Restrict direct INVITEs by source IP. Empty allows all sources.
+  // Legacy source list; admission is decided by setInboundPolicy. Kept for shells/tests.
   void setAllowedSources(const std::vector<std::string>& ips);
+
+  // Inbound admission and outbound signing. classify receives the packet source address, the
+  // X-Doorbell-Auth value (possibly empty) and X-Doorbell-Mode; sign returns the header value
+  // for an outbound direct call. Both are called on the SIP thread and must be thread-safe.
+  // Until set, every inbound INVITE is refused.
+  using InboundClassifier = std::function<SipInboundPath(
+      const std::string& source, const std::string& auth, const std::string& mode)>;
+  using AuthSigner = std::function<std::string(const std::string& mode)>;
+  void setInboundPolicy(InboundClassifier classify, AuthSigner sign);
 
   // The X-Doorbell-Mode of the dialog currently in the primary slot: "" for an ordinary
   // two-way call, "answer" for an explicit takeover, "monitor" for one-way listen-in. An

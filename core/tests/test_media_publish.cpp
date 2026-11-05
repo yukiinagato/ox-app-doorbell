@@ -25,6 +25,11 @@ struct MediaReply {
 
 struct MediaSession { std::string cookie, csrf; };
 
+// Every node in these tests uses this X-Doorbell-Local value; a request without a panel session
+// models the native shell on the same device.
+const char* kMediaLocalToken = "media-test-local-token-0123456789abcdef";
+bool g_send_local_token = true;
+
 MediaReply mediaRequest(int port, const std::string& method, const std::string& path,
                         const std::string& body = "", const MediaSession& session = {},
                         const std::string& type = "application/json",
@@ -39,6 +44,7 @@ MediaReply mediaRequest(int port, const std::string& method, const std::string& 
   std::string request = method + " " + path + " HTTP/1.1\r\nHost: 127.0.0.1:" +
       std::to_string(port) + "\r\nConnection: close\r\n";
   if (!session.cookie.empty()) request += "Cookie: " + session.cookie + "\r\n";
+  else if (g_send_local_token) request += std::string("X-Doorbell-Local: ") + kMediaLocalToken + "\r\n";
   if (!session.csrf.empty()) request += "X-Doorbell-CSRF: " + session.csrf + "\r\n";
   if (!origin.empty()) request += "Origin: " + (origin == "local" ?
       "http://127.0.0.1:" + std::to_string(port) : origin) + "\r\n";
@@ -111,6 +117,7 @@ TEST_CASE("media publishing binds session call owner generation and ordered fram
   options.listen_addr = "127.0.0.1:" + std::to_string(db::testing::freeListenPort());
   options.http_port = db::testing::freeListenPort(); options.enable_beacon = false;
   options.psk.fill(0x39);
+  options.local_token = kMediaLocalToken;
   NodeDeps deps; deps.clock = &clock; deps.loop = &loop;
   Node node(options, std::move(deps));
   node.setSecureStore([](const std::string& key) {
@@ -201,6 +208,13 @@ TEST_CASE("media publishing binds session call owner generation and ordered fram
     CHECK(json::getString(body.get(), "media_generation") != generation);
     CHECK(mediaRequest(port, "POST", upload + "9223372036854775807", jpeg, owner, "image/jpeg").status == 409);
     CHECK(mediaRequest(port, "GET", read).status == 404);
+  }
+  SUBCASE("a loopback read without the local token is not native") {
+    REQUIRE(mediaRequest(port, "POST", upload + "1", jpeg, owner, "image/jpeg").status == 200);
+    g_send_local_token = false;
+    CHECK(mediaRequest(port, "GET", read).status == 403);
+    g_send_local_token = true;
+    CHECK(mediaRequest(port, "GET", read).body == jpeg);
   }
   SUBCASE("csrf origin expiry revocation and metadata are required") {
     auto no_csrf = owner; no_csrf.csrf.clear();

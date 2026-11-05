@@ -419,7 +419,7 @@ TEST_CASE("assets: HTTP API (POST /api/assets / GET /asset/<hash>)") {
   REQUIRE(node.start());
 
 
-  std::string login = assetReq(http_port, "POST", "/api/login", "{\"password\":\"pw\"}", "",
+  std::string login = assetReq(http_port, "POST", "/api/login", "{\"password\":\"pw-12345\"}", "",
                                "application/json");
   REQUIRE(login.rfind("HTTP/1.1 200", 0) == 0);
   size_t cpos = login.find("dbsess=");

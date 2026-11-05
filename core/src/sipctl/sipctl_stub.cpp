@@ -61,6 +61,7 @@ bool SipCtl::hangupOwned(const std::string&) { return false; }
 void SipCtl::hangup() {}
 void SipCtl::answer() {}
 bool SipCtl::sendDtmf(const std::string&) { return false; }
+void SipCtl::setInboundPolicy(InboundClassifier, AuthSigner) {}
 void SipCtl::setAllowedSources(const std::vector<std::string>&) {}
 
 void SipCtl::setMicMuted(bool muted) { impl_->mic_muted.store(muted); }

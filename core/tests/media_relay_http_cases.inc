@@ -29,7 +29,7 @@
   SUBCASE("T16 same-value secret write revokes publisher session grant and cached frame") {
     REQUIRE(mediaRequest(port, "POST", upload + "1", jpeg, owner, "image/jpeg").status == 200);
     REQUIRE(mediaRequest(port, "GET", read).body == jpeg);
-    const auto login = mediaRequest(port, "POST", "/api/login", R"({"password":"testpw"})");
+    const auto login = mediaRequest(port, "POST", "/api/login", R"({"password":"testpw-12"})");
     REQUIRE(login.status == 200);
     const auto cookie = login.headers.find("Set-Cookie");
     REQUIRE(cookie != login.headers.end());
@@ -52,7 +52,7 @@
   }
   SUBCASE("T16 unrelated secret write preserves publisher session grant and cached frame") {
     REQUIRE(mediaRequest(port, "POST", upload + "1", jpeg, owner, "image/jpeg").status == 200);
-    const auto login = mediaRequest(port, "POST", "/api/login", R"({"password":"testpw"})");
+    const auto login = mediaRequest(port, "POST", "/api/login", R"({"password":"testpw-12"})");
     REQUIRE(login.status == 200);
     const auto cookie = login.headers.find("Set-Cookie");
     REQUIRE(cookie != login.headers.end());

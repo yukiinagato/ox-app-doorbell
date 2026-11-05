@@ -10,12 +10,13 @@
 
 streams:
   # ---- codec=h264 door station: copy without transcoding ----
+  # Basic credentials: any user name, password = a panel credential with the view grant.
   genkan_front:
-    - ffmpeg:http://10.0.1.11:47180/stream.mp4#video=copy
+    - ffmpeg:https://ha:CAMERA_CREDENTIAL@10.0.1.11:47443/stream.mp4#video=copy
 
   # ---- codec=mjpeg door station: transcode on the HA host ----
   genkan_annex:
-    - ffmpeg:http://10.0.1.12:47180/stream.mjpeg#video=h264#hardware
+    - ffmpeg:https://ha:CAMERA_CREDENTIAL@10.0.1.12:47443/stream.mjpeg#video=h264#hardware
 
 # Notes:
 # - The device encoder starts after /stream.mp4 gets a subscriber, with up to about five seconds
@@ -23,5 +24,6 @@ streams:
 #   matters; this keeps the device encoder running.
 # - On a codec=auto device without hardware encoding, /stream.mp4 returns 503. Configure that
 #   device with an /stream.mjpeg source like genkan_annex instead.
-# - If door-station authentication is enabled, append ?k=<panel_token> to either stream URL.
+# - Plain http://<station>:47180 only redirects; use the HTTPS port. ffmpeg does not verify the
+#   station's self-signed certificate by default.
 # - go2rtc starts ffmpeg only while a consumer is connected. See the README in this directory.

@@ -77,6 +77,8 @@ void HaBridge::configure(const std::string& cfg_json, const std::string& node_id
   mo.will_topic = base_ + "/bridge/availability";
   mo.will_payload = "offline";
   mo.will_retain = true;
+  mo.tls = json::getBool(mq, "tls", false);
+  mo.tls_sha256 = json::getString(mq, "tls_sha256");
 
   if (!active || mo.host.empty()) {
     if (client_) DB_LOGI(kTag, "bridge stopped because this node is not leader or mqtt.host is unset");
@@ -88,7 +90,8 @@ void HaBridge::configure(const std::string& cfg_json, const std::string& node_id
 
   const bool opts_changed =
       mo.host != mopts_.host || mo.port != mopts_.port || mo.username != mopts_.username ||
-      mo.password != mopts_.password || mo.will_topic != mopts_.will_topic;
+      mo.password != mopts_.password || mo.will_topic != mopts_.will_topic ||
+      mo.tls != mopts_.tls || mo.tls_sha256 != mopts_.tls_sha256;
   if (!client_ || opts_changed) {
     stopClient(true);
     startClient(mo);

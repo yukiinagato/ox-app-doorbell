@@ -47,7 +47,7 @@ bool sameSettings(const SipSettings& a, const SipSettings& b) {
          a.user == b.user && a.password == b.password && a.display_name == b.display_name &&
          a.rtp_port_start == b.rtp_port_start && a.ec_tail_ms == b.ec_tail_ms &&
          a.auto_answer == b.auto_answer && a.reg_retry_s == b.reg_retry_s &&
-         a.null_audio == b.null_audio && a.direct_port == b.direct_port;
+         a.null_audio == b.null_audio && a.direct_port == b.direct_port && a.srtp == b.srtp;
 }
 
 
@@ -55,14 +55,16 @@ constexpr int kMaxMonitorCalls = 2;
 
 
 
-std::string doorbellMode(pjsip_rx_data* rdata) {
+std::string headerValue(pjsip_rx_data* rdata, const char* name) {
   if (!rdata || !rdata->msg_info.msg) return "";
-  pj_str_t hname = pj_str(const_cast<char*>("X-Doorbell-Mode"));
+  pj_str_t hname = pj_str(const_cast<char*>(name));
   auto* h = static_cast<pjsip_generic_string_hdr*>(
       pjsip_msg_find_hdr_by_name(rdata->msg_info.msg, &hname, nullptr));
   if (!h) return "";
   return std::string(h->hvalue.ptr, static_cast<size_t>(h->hvalue.slen));
 }
+
+std::string doorbellMode(pjsip_rx_data* rdata) { return headerValue(rdata, "X-Doorbell-Mode"); }
 
 
 void ensurePjThread() {
@@ -152,6 +154,8 @@ struct SipCtl::Impl {
 
   std::mutex src_mu;
   std::set<std::string> allowed_sources;
+  SipCtl::InboundClassifier classify_inbound;
+  SipCtl::AuthSigner sign_outbound;
 
   // Conference port 0 is the sound device; muting its receive level silences the microphone
   // without tearing down the leg, so the far end simply stops hearing us.
@@ -200,13 +204,24 @@ struct SipCtl::Impl {
 
 
 
-  bool sourceAllowed(pjsip_rx_data* rdata) {
-    std::lock_guard<std::mutex> lk(src_mu);
-    if (allowed_sources.empty()) return true;
-    if (!rdata) return false;
-    const std::string src = rdata->pkt_info.src_name;
-    if (!st.server.empty() && src == st.server) return true;
-    return allowed_sources.count(src) > 0;
+  // Deny by default: an unauthenticated INVITE is accepted only from the configured registrar.
+  SipInboundPath inboundPath(pjsip_rx_data* rdata, const std::string& mode) {
+    SipCtl::InboundClassifier classify;
+    {
+      std::lock_guard<std::mutex> lk(src_mu);
+      classify = classify_inbound;
+    }
+    if (!classify || !rdata) return SipInboundPath::Rejected;
+    return classify(rdata->pkt_info.src_name, headerValue(rdata, "X-Doorbell-Auth"), mode);
+  }
+
+  std::string outboundAuth(const std::string& mode) {
+    SipCtl::AuthSigner sign;
+    {
+      std::lock_guard<std::mutex> lk(src_mu);
+      sign = sign_outbound;
+    }
+    return sign ? sign(mode) : std::string();
   }
 
   std::shared_ptr<std::atomic<bool>> alive{new std::atomic<bool>(true)};
@@ -401,17 +416,15 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
   Impl* im = g_impl.load();
   if (!im) return;
 
-  if (!im->sourceAllowed(rdata)) {
-    DB_LOGW(kTag, std::string("incoming call rejected with 403 (unlisted source ") +
+  const std::string mode = doorbellMode(rdata);
+  const SipInboundPath path = im->inboundPath(rdata, mode);
+  if (path == SipInboundPath::Rejected) {
+    DB_LOGW(kTag, std::string("incoming call rejected with 403 (no valid peer authentication "
+                              "and not the registrar: ") +
                       (rdata ? rdata->pkt_info.src_name : "?") + ")");
     pjsua_call_answer(call_id, PJSIP_SC_FORBIDDEN, nullptr, nullptr);
     return;
   }
-
-
-
-
-  const std::string mode = doorbellMode(rdata);
   const bool busy = im->call_id.load() != PJSUA_INVALID_ID;
   bool want_monitor = (mode == "monitor") || (mode.empty() && busy);
 
@@ -662,6 +675,9 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
       if (pjsua_acc_get_config(acc, pool, &lcfg) == PJ_SUCCESS) {
         lcfg.rtp_cfg.port = static_cast<unsigned>(st.rtp_port_start);
         lcfg.rtp_cfg.port_range = 99;
+        // SDES keys travel in SIP over UDP; the signed INVITE is what authenticates the peer.
+        lcfg.use_srtp = st.srtp == "mandatory" ? PJMEDIA_SRTP_MANDATORY : PJMEDIA_SRTP_OPTIONAL;
+        lcfg.srtp_secure_signaling = 0;
         pjsua_acc_modify(acc, &lcfg);
       }
       pj_pool_release(pool);
@@ -695,6 +711,9 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   acfg.reg_retry_interval = static_cast<unsigned>(st.reg_retry_s > 0 ? st.reg_retry_s : 30);
   acfg.rtp_cfg.port = static_cast<unsigned>(st.rtp_port_start);
   acfg.rtp_cfg.port_range = 99;
+  // Toward a PBX SRTP is offered but never required.
+  acfg.use_srtp = PJMEDIA_SRTP_OPTIONAL;
+  acfg.srtp_secure_signaling = 0;
 
 
 
@@ -802,10 +821,20 @@ bool SipCtl::callOwned(const std::string& owner, const std::string& target,
     pjsip_generic_string_hdr_init2(&mode_hdr, &hname, &hval);
     pj_list_push_back(&md.hdr_list, &mode_hdr);
   }
+  // Direct calls to a peer are signed; the registrar path does not need it but forwards no
+  // harm when present.
+  const std::string auth = im->outboundAuth(mode);
+  pjsip_generic_string_hdr auth_hdr;
+  pj_str_t auth_name = pj_str(const_cast<char*>("X-Doorbell-Auth"));
+  pj_str_t auth_value = pstr(auth);
+  if (!auth.empty()) {
+    pjsip_generic_string_hdr_init2(&auth_hdr, &auth_name, &auth_value);
+    pj_list_push_back(&md.hdr_list, &auth_hdr);
+  }
   pj_str_t dst = pstr(uri);
   pjsua_call_id cid = PJSUA_INVALID_ID;
   pj_status_t rc = pjsua_call_make_call(im->acc, &dst, nullptr, nullptr,
-                                        mode.empty() ? nullptr : &md, &cid);
+                                        (mode.empty() && auth.empty()) ? nullptr : &md, &cid);
   if (rc != PJ_SUCCESS) {
     DB_LOGE(kTag, "outbound call failed " + uri + ": " + std::to_string(rc));
     return false;
@@ -815,6 +844,13 @@ bool SipCtl::callOwned(const std::string& owner, const std::string& target,
   im->setCallMode(mode);
   DB_LOGI(kTag, "calling " + uri + (mode.empty() ? "" : " (mode=" + mode + ")"));
   return true;
+}
+
+void SipCtl::setInboundPolicy(InboundClassifier classify, AuthSigner sign) {
+  Impl* im = impl_.get();
+  std::lock_guard<std::mutex> lk(im->src_mu);
+  im->classify_inbound = std::move(classify);
+  im->sign_outbound = std::move(sign);
 }
 
 void SipCtl::setAllowedSources(const std::vector<std::string>& ips) {

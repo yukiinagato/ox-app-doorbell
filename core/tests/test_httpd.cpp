@@ -205,7 +205,8 @@ TEST_CASE("httpd: scheduling running timeout reports unknown and completes once"
   auto request = std::async(std::launch::async, [port] { return writeRequest(port); });
   REQUIRE(barrier->waitEntered());
   const auto response = request.get();
-  CHECK(response.status == 503);
+  CHECK(response.status == 202);
+  CHECK(response.body.find("\"outcome\":\"unknown\"") != std::string::npos);
   CHECK(response.body.find("outcome_unknown") != std::string::npos);
   CHECK(response.body.find("not_started") == std::string::npos);
   CHECK(calls.load() == 1);
@@ -242,7 +243,7 @@ TEST_CASE("httpd: scheduling boundary orders permit only expired or running") {
       auto request = std::async(std::launch::async, [port] { return writeRequest(port); });
       REQUIRE(barrier->waitEntered());
       const auto response = request.get();
-      CHECK(response.status == 503);
+      CHECK(response.status == (start_first ? 202 : 503));
       CHECK(response.body.find(start_first ? "outcome_unknown" : "not_started") !=
             std::string::npos);
       CHECK(calls.load() == (start_first ? 1 : 0));
@@ -563,7 +564,7 @@ TEST_CASE("httpd: snapshot + stream") {
     got.append(buf, static_cast<size_t>(n));
   }
   CHECK(got.find("multipart/x-mixed-replace; boundary=frame") != std::string::npos);
-  CHECK(got.find("Access-Control-Allow-Origin: *") != std::string::npos);
+  CHECK(got.find("Access-Control-Allow-Origin") == std::string::npos);
   CHECK(got.find("X-Doorbell-Video-Rotation: 270") != std::string::npos);
   ::close(fd);
 

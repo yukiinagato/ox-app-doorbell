@@ -44,6 +44,11 @@ struct NodeOptions {
   std::string psk_source = "none";
   std::string psk_ref;               // "secret:<name>" when the PSK was read from secure storage.
   int http_port = 0;
+  // HTTPS listener for browsers and Core-to-Core requests; 0 disables it (tests, host tools).
+  // While disabled the plain port answers loopback clients only.
+  int https_port = 0;
+  // X-Doorbell-Local value accepted from loopback media clients. Empty generates one.
+  std::string local_token;
   bool seed_default_config = true;
   // Accept any holder of the cluster key as a mesh member (trust on first contact). Only tests
   // and embedded hosts may use this; db_core_create sets it to false so a removed or
@@ -206,6 +211,19 @@ class Node {
   // empty, when no password has been set.
   int verifyAdminPassword(const std::string& password);
   int setAdminPassword(const std::string& current, const std::string& next);
+  bool adminPasswordConfigured();
+
+  // Token native shells send as X-Doorbell-Local on loopback media requests.
+  const std::string& localToken() const;
+  // Lowercase hex SHA-256 of this node's TLS certificate, or empty while TLS is unavailable.
+  std::string tlsFingerprint();
+  // Deliver a core-originated UI event (for example admin_required) to the shell callback.
+  void emitUiEvent(const std::string& event_json);
+  // SIP admission for shells with their own SIP stack. sipPeerAuthHeader returns the
+  // X-Doorbell-Auth value for an outbound direct INVITE (empty while unpaired);
+  // sipInboundCheck returns 1 peer, 2 registrar, 0 reject. Thread-safe.
+  std::string sipPeerAuthHeader(const std::string& mode);
+  int sipInboundCheck(const std::string& source, const std::string& auth, const std::string& mode);
 
 
 
@@ -297,7 +315,8 @@ class Node {
   // Validate a scanned doorbell://pair URI. Uses corrected cluster time for the expiry check
   // when this node is running, so every shell reaches the same verdict.
   std::string parsePairUriJson(const std::string& uri);
-  void removeDevice(const std::string& node_id);
+  // 0 removed, -1 invalid id, -2 this role cannot remove devices, -3 not persisted.
+  int removeDevice(const std::string& node_id);
   // Approve a discovered device. `code` is the eight-digit confirmation code shown on that
   // device; without the matching code the invitation is refused (invite_result).
   void inviteDevice(const std::string& id, const std::string& code = "");

@@ -98,18 +98,41 @@ device founds the cluster again from that device's configuration.
 The mesh authenticates every peer by member identity and encrypts its traffic with keys derived
 from the cluster PSK and a per-connection ephemeral exchange. Before a handshake completes, a node
 accepts frames of at most 4 KiB, at most 16 unauthenticated connections (4 per address), and 64
-connections in total. HTTP traffic on port 47180 is
-not automatically Internet-grade: Admin and panel routes use their respective sessions, but the
-LAN interoperability endpoints `/stream.mjpeg`, `/stream.mp4`, `/snapshot.jpg`, `/video-meta`, and
-an exact `GET /asset/<64-lowercase-hex-sha256>` and `/peer-frame.jpg` are intentionally readable without a session for
-native clients, HA, and go2rtc. Other `/asset` methods, malformed hashes, and suffix paths remain
-authenticated or rejected. Keep
-47180 on the trusted media LAN or put the entire port behind an authenticated TLS proxy; a panel
-cookie is not video authorization. Panel launch credentials are fragment-delivered and exchanged
-for an HttpOnly cookie; query credentials are rejected. Rotate access when a recipient or device
-is removed.
+connections in total. The full v3 contract is in [security protocol v3](security-v3.md); its HTTP
+and SIP parts are summarized here.
 
-Direct MiniSIP on legacy iOS is LAN-only UDP/PCMU and does not provide TLS or SRTP. Browser WebRTC
+- Port 47180 is plain HTTP for the device's own shell over loopback only. Any other client is
+  redirected to HTTPS on 47443; while TLS is unavailable it is refused (`403 tls_required`).
+- Each node creates an ECDSA P-256 key (secure-store entry `tls.key`) and a self-signed
+  certificate, and publishes the certificate SHA-256 as `devices.<id>.tls_sha256`. Core-to-Core
+  requests pin it. Browsers show a certificate warning until the operator trusts that certificate;
+  Admin shows the fingerprint to compare.
+- Media (`/stream.mjpeg`, `/stream.mp4`, `/snapshot.jpg`, `/video-meta`, `/peer-frame.jpg`,
+  `/stream-proxy.mp4`, `/snapshot-proxy`, `/media/peer/<id>/...`) is never anonymous. A request
+  needs one of: `X-Doorbell-Local` from loopback (the value of `db_core_local_token`), an admin
+  session, a panel credential with the view grant (cookie, Bearer, or Basic password for Home
+  Assistant and go2rtc), or a peer `X-Doorbell-Peer` MAC. No media response carries CORS headers.
+  `GET /asset/<sha256>` stays public because assets are content-addressed theme images.
+- Native shells read other nodes' cameras through their own Core at
+  `http://127.0.0.1:<http_port>/media/peer/<peer_id>/...`; Core fetches the peer over pinned HTTPS.
+- Cookies are `HttpOnly; SameSite=Strict`, plus `Secure` on HTTPS. Panel launch credentials are
+  fragment-delivered; query credentials are rejected.
+- Administrator digests are Argon2id (`m=8192 KiB, t=3, p=1`); a legacy BLAKE2b digest is replaced
+  on the next successful login. New passwords need at least 8 characters. The first password can
+  be set only by the device itself (native ABI, or a loopback client without `Origin`) or by an
+  Admin page on this node over HTTPS/loopback.
+- Native configuration writes require the native admin window (`DB_RESULT_ADMIN_REQUIRED`), opened
+  for ten minutes by a successful password verification and closed by `db_core_admin_lock`.
+- A handler still running at its five-second deadline answers `202` with `"outcome":"unknown"`;
+  clients re-read state instead of retrying a mutation.
+- Direct SIP INVITEs from members carry a single-use `X-Doorbell-Auth` MAC. INVITEs from the
+  configured registrar (Asterisk) need no header and keep the registrar's auto-answer behavior.
+  Everything else is refused with 403. SRTP is negotiated between PJSIP peers (`sip.srtp:
+  "mandatory"` refuses plain RTP); toward a PBX it is optional.
+
+Direct MiniSIP on legacy iOS is LAN-only UDP/PCMU without SRTP; it signs and checks INVITEs through
+`db_core_sip_peer_auth` and `db_core_sip_inbound_check`. Clusters that include it must keep
+`sip.srtp` at `optional`. Browser WebRTC
 requires a secure browser context and a separately hardened Asterisk deployment. A jailbroken iOS
 device belongs on an isolated trusted LAN; disable unnecessary services and use unique host access
 credentials established by the operator. No default credential is documented or accepted here.

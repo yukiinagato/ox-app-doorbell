@@ -13,14 +13,24 @@
 
 # ---------- Snapshot: generic camera fetching /snapshot.jpg directly ----------
 # Use this for notification images and camera_proxy. Use go2rtc entities for live video.
+# Media is never anonymous: the password is a panel credential with the view grant (any user
+# name). Each station presents its own self-signed certificate; verify_ssl stays off unless that
+# certificate is installed in the HA host's trust store.
 camera:
   - platform: generic
     name: genkan_front_still
-    still_image_url: "http://10.0.1.11:47180/snapshot.jpg"
-    # If door-station authentication is enabled, append ?k=<panel_token> to still_image_url.
+    still_image_url: "https://10.0.1.11:47443/snapshot.jpg"
+    username: ha
+    password: !secret doorbell_camera_credential
+    authentication: basic
+    verify_ssl: false
   - platform: generic
     name: genkan_annex_still
-    still_image_url: "http://10.0.1.12:47180/snapshot.jpg"
+    still_image_url: "https://10.0.1.12:47443/snapshot.jpg"
+    username: ha
+    password: !secret doorbell_camera_credential
+    authentication: basic
+    verify_ssl: false
 
 # ---------- HomeKit Bridge: entrance cameras and doorbells in Apple Home ----------
 # First expose the go2rtc.yaml streams to HA as camera.genkan_front and similar entities

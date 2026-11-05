@@ -966,7 +966,8 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
 
   int fd = connectTo(http_port, 200);
   REQUIRE(fd >= 0);
-  std::string req = "GET /stream.mp4 HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n";
+  std::string req = "GET /stream.mp4 HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Doorbell-Local: " +
+                    node.localToken() + "\r\nConnection: close\r\n\r\n";
   REQUIRE(::send(fd, req.data(), req.size(), 0) == static_cast<ssize_t>(req.size()));
 
   std::string got;
@@ -985,7 +986,7 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
   CHECK(wanted_seen);
   REQUIRE(got.rfind("HTTP/1.1 200", 0) == 0);
   CHECK(got.find("Content-Type: video/mp4") != std::string::npos);
-  CHECK(got.find("Access-Control-Allow-Origin: *") != std::string::npos);
+  CHECK(got.find("Access-Control-Allow-Origin") == std::string::npos);
 
   size_t body = got.find("\r\n\r\n");
   REQUIRE(body != std::string::npos);
@@ -1007,9 +1008,14 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
     cJSON* video = json::get(j.get(), "video");
     REQUIRE(video);
     CHECK(json::getString(video, "codec") == "h264");
-    CHECK(!json::getBool(video, "active", true));
     CHECK(st.find("stream_mp4") != std::string::npos);
   }
+  // The status snapshot is republished asynchronously; what matters is that the closed client
+  // releases its subscription rather than pinning the encoder.
+  CHECK(waitFor([&] {
+    auto j = json::parse(node.statusJson());
+    return j && json::getInt(json::get(j.get(), "video"), "subscribers", -1) == 0;
+  }, 5'000));
 
 
   {
@@ -1021,7 +1027,8 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
 
   node.setConfigKey("devices." + node.nodeId() + ".local.camera", "{\"codec\":\"mjpeg\"}");
   CHECK(!node.videoEncoderWanted());
-  std::string resp = httpGet(http_port, "/stream.mp4");
+  CHECK(httpGet(http_port, "/stream.mp4").rfind("HTTP/1.1 401", 0) == 0);
+  std::string resp = httpGet(http_port, "/stream.mp4", "fmp4-panel-token");
   CHECK(resp.rfind("HTTP/1.1 503", 0) == 0);
 
   node.stop();
@@ -1103,8 +1110,9 @@ TEST_CASE("fmp4: authenticated same-origin proxy streams from an alive mesh peer
   REQUIRE(waitFor([&] {
     const std::string info = httpGet(panel_http_port,
         "/api/panel/call-info", "proxy-contract-token");
-    return info.find("http://127.0.0.1:" + std::to_string(door_http_port)) !=
-           std::string::npos;
+    // The browser is given a same-origin proxy path, never the station's own address.
+    return info.find("/media/peer/" + door.nodeId() + "/stream.mp4") != std::string::npos &&
+           info.find("http://127.0.0.1:" + std::to_string(door_http_port)) == std::string::npos;
   }, 3'000));
   std::vector<uint8_t> snapshot_pixels(64 * 48 * 4, 0xff);
   for (size_t i = 0; i < snapshot_pixels.size(); i += 4) {

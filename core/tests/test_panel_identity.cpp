@@ -32,7 +32,7 @@ struct IdentityFixture {
     node->setConfigKey("doors.front", R"({"label":{"en":"Front"},"unlock":{"command":"unlock"}})");
     node->setConfigKey("doors.back", R"({"label":{"en":"Back"}})");
     node->setConfigKey("integrations.webrtc", R"({"ws_url":"wss://pbx.invalid/ws","sip_user":"shared","sip_pass_ref":"secret:sip.shared"})");
-    admin = operationHttp(options.http_port, "POST", "/api/login", R"({"password":"testpw"})");
+    admin = operationHttp(options.http_port, "POST", "/api/login", R"({"password":"testpw-12"})");
     REQUIRE(admin.status == 200);
   }
   ~IdentityFixture() { node->stop(); loop.stop(); }

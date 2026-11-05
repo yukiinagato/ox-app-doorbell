@@ -1235,7 +1235,7 @@ TEST_CASE("node: real TCP and HTTP API smoke test covers login, status, press, a
   CHECK(simpleReq(http_port, "GET", "/admin/").find("200") != std::string::npos);
 
 
-  std::string login = simpleReq(http_port, "POST", "/api/login", "{\"password\":\"test123\"}");
+  std::string login = simpleReq(http_port, "POST", "/api/login", "{\"password\":\"test1234\"}");
   REQUIRE(login.rfind("HTTP/1.1 200", 0) == 0);
   auto cpos = login.find("dbsess=");
   REQUIRE(cpos != std::string::npos);

@@ -483,7 +483,7 @@ TEST_CASE("emergency API: panels may activate, while only admins may clear") {
             .rfind("HTTP/1.1 401", 0) == 0);
 
 
-  std::string login = emHttp(http_port, "POST", "/api/login", "{\"password\":\"test123\"}");
+  std::string login = emHttp(http_port, "POST", "/api/login", "{\"password\":\"test1234\"}");
   REQUIRE(login.rfind("HTTP/1.1 200", 0) == 0);
   const size_t body_start = login.find("\r\n\r\n");
   auto login_json = json::parse(body_start == std::string::npos ? "" : login.substr(body_start + 4));

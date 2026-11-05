@@ -6,6 +6,7 @@
 #include "node/config_import.h"
 #include "node/operation_dispatcher.h"
 #include "node/media_relay_bounds.h"
+#include "node/admin_password.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -34,6 +35,8 @@
 #include "monocypher.h"
 #include "stb_image.h"
 #include "sipctl/sipctl.h"
+#include "sipctl/sip_auth.h"
+#include "tls/tls.h"
 #ifdef _WIN32
 #include "media/camera_win.h"
 #include "media/encoder_win.h"
@@ -58,16 +61,6 @@ std::string sanitizeCaps(const std::string& caps_json, bool has_https) {
 
 namespace {
 constexpr const char* kTag = "node";
-
-std::string hashPassword(const std::string& pw, const std::string& salt_hex) {
-  Bytes salt;
-  hexDecode(salt_hex, salt);
-  Bytes buf = salt;
-  buf.insert(buf.end(), pw.begin(), pw.end());
-  uint8_t out[32];
-  crypto_blake2b(out, sizeof(out), buf.data(), buf.size());
-  return hexEncode(out, sizeof(out));
-}
 
 // Comparison whose duration does not depend on where two digests first differ.
 bool constantTimeEquals(const std::string& a, const std::string& b) {
@@ -1836,151 +1829,6 @@ bool configCandidateValid(const cJSON* value, const std::string& path, std::stri
   return true;
 }
 
-class RemoteMp4Stream {
- public:
-  RemoteMp4Stream(std::string host, int port) : host_(std::move(host)), port_(port) {}
-  ~RemoteMp4Stream() { close(); }
-
-  Bytes pull(bool* ended) {
-    if (ended) *ended = false;
-    if (!opened_ && !open()) {
-      if (ended) *ended = true;
-      return {};
-    }
-    if (!pending_.empty()) {
-      Bytes out;
-      const size_t n = std::min<size_t>(pending_.size(), 64 * 1024);
-      out.insert(out.end(), pending_.begin(), pending_.begin() + n);
-      pending_.erase(pending_.begin(), pending_.begin() + n);
-      return out;
-    }
-    net::pollfd_t pfd{};
-    pfd.fd = fd_;
-    pfd.events = POLLIN;
-    const int pr = net::poll(&pfd, 1, 500);
-    if (pr == 0) return {};
-    if (pr < 0 || (pfd.revents & (POLLERR | POLLHUP | POLLNVAL))) {
-      close();
-      if (ended) *ended = true;
-      return {};
-    }
-    uint8_t buf[64 * 1024];
-    const int n = net::recvSome(fd_, buf, sizeof(buf));
-    if (n > 0) return Bytes(buf, buf + n);
-    if (n < 0 && net::errWouldBlock(net::lastError())) return {};
-    close();
-    if (ended) *ended = true;
-    return {};
-  }
-
- private:
-  bool open() {
-    opened_ = true;
-    addrinfo hints{};
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    addrinfo* addresses = nullptr;
-    if (port_ < 1 || port_ > 65535) return false;
-    const std::string service = std::to_string(port_);
-    std::string resolver_host = host_;
-    if (resolver_host.size() > 2 && resolver_host.front() == '[' &&
-        resolver_host.back() == ']')
-      resolver_host = resolver_host.substr(1, resolver_host.size() - 2);
-    if (::getaddrinfo(resolver_host.c_str(), service.c_str(), &hints, &addresses) != 0 || !addresses)
-      return false;
-    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
-    for (addrinfo* p = addresses; p && !net::valid(fd_); p = p->ai_next) {
-      net::socket_t candidate = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol);
-      if (!net::valid(candidate)) continue;
-      net::setNonBlock(candidate);
-      const int rc = ::connect(candidate, p->ai_addr, static_cast<net::socklen_v>(p->ai_addrlen));
-      if (rc != 0 && !net::errConnectInProgress(net::lastError())) {
-        net::closeSocket(candidate);
-        continue;
-      }
-      net::pollfd_t pfd{};
-      pfd.fd = candidate;
-      pfd.events = POLLOUT;
-      const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
-          deadline - std::chrono::steady_clock::now()).count();
-      if (rc == 0 || (left > 0 && net::poll(&pfd, 1, static_cast<int>(left)) > 0 &&
-                      net::getSockError(candidate) == 0)) {
-        fd_ = candidate;
-      } else {
-        net::closeSocket(candidate);
-      }
-    }
-    ::freeaddrinfo(addresses);
-    if (!net::valid(fd_)) return false;
-    int yes = 1;
-    net::setSockOpt(fd_, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
-    const std::string authority = host_.find(':') != std::string::npos && host_.front() != '['
-        ? "[" + host_ + "]:" + service : host_ + ":" + service;
-    const std::string request = "GET /stream.mp4 HTTP/1.1\r\nHost: " + authority +
-                                "\r\nAccept: video/mp4\r\nConnection: close\r\n\r\n";
-    size_t sent = 0;
-    while (sent < request.size()) {
-      const int n = net::sendSome(fd_, request.data() + sent, request.size() - sent);
-      if (n > 0) {
-        sent += static_cast<size_t>(n);
-        continue;
-      }
-      if (n < 0 && net::errWouldBlock(net::lastError())) {
-        net::pollfd_t pfd{};
-        pfd.fd = fd_;
-        pfd.events = POLLOUT;
-        if (net::poll(&pfd, 1, 500) > 0) continue;
-      }
-      close();
-      return false;
-    }
-    std::string response;
-    const auto header_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
-    while (response.find("\r\n\r\n") == std::string::npos && response.size() < 64 * 1024 &&
-           std::chrono::steady_clock::now() < header_deadline) {
-      net::pollfd_t pfd{};
-      pfd.fd = fd_;
-      pfd.events = POLLIN;
-      if (net::poll(&pfd, 1, 500) <= 0) continue;
-      char buf[8192];
-      const int n = net::recvSome(fd_, buf, sizeof(buf));
-      if (n <= 0) {
-        if (n < 0 && net::errWouldBlock(net::lastError())) continue;
-        close();
-        return false;
-      }
-      response.append(buf, static_cast<size_t>(n));
-    }
-    const size_t end = response.find("\r\n\r\n");
-    if (end == std::string::npos ||
-        (response.rfind("HTTP/1.1 200", 0) != 0 && response.rfind("HTTP/1.0 200", 0) != 0)) {
-      close();
-      return false;
-    }
-    std::string headers = response.substr(0, end);
-    std::transform(headers.begin(), headers.end(), headers.begin(),
-                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
-    if (headers.find("content-type: video/mp4") == std::string::npos) {
-      close();
-      return false;
-    }
-    pending_.assign(response.begin() + static_cast<std::ptrdiff_t>(end + 4), response.end());
-    return true;
-  }
-
-  void close() {
-    if (net::valid(fd_)) net::closeSocket(fd_);
-    fd_ = net::kInvalidSocket;
-  }
-
-  std::string host_;
-  int port_ = 0;
-  net::socket_t fd_ = net::kInvalidSocket;
-  bool opened_ = false;
-  Bytes pending_;
-};
-
-
 bool isSha256HexStr(const std::string& s) {
   if (s.size() != 64) return false;
   for (char c : s) {
@@ -2378,6 +2226,19 @@ struct Node::Impl {
   int admin_auth_failures = 0;
   int64_t admin_lockout_until_mono = 0;
   static constexpr int kAdminAuthMaxFailures = 5;
+  tls::Identity tls_identity;
+  bool tls_identity_persistent = false;
+  // SIP admission state shared with the SIP thread and with ABI callers (MiniSIP shells).
+  SipPeerAuth sip_peer_auth;
+  struct SipAdmission {
+    std::mutex mu;
+    std::set<std::string> peers;
+    std::set<std::string> registrar;
+    std::string registrar_host;
+  };
+  // Shared so a resolver thread that outlives this node writes into memory it still owns.
+  std::shared_ptr<SipAdmission> sip_admission = std::make_shared<SipAdmission>();
+  static constexpr int64_t kPeerAuthSkewMs = 60'000;
   static constexpr int64_t kAdminLockoutMs = 10 * 60 * 1000;
   AdminSessions sessions;
   ConfigImportStage import_stage;
@@ -3878,6 +3739,11 @@ struct Node::Impl {
   }
 
 
+  unsigned mediaMaxStreams() {
+    const int64_t configured = json::getInt(cfgAt("media"), "max_streams", 8);
+    return static_cast<unsigned>(std::max<int64_t>(1, std::min<int64_t>(configured, 32)));
+  }
+
   void applyMotionSettings() {
     cJSON* m = cfgAt("devices." + node_id + ".local.motion");
     MotionConfig mc;
@@ -5225,6 +5091,7 @@ struct Node::Impl {
     }
     s.display_name = opts.name;
     s.null_audio = opts.sip_null_audio;
+    s.srtp = json::getString(sip, "srtp", "optional") == "mandatory" ? "mandatory" : "optional";
 
 
 
@@ -5252,6 +5119,7 @@ struct Node::Impl {
     sip_reapply_timer = loop->postDelayed(300, [this] {
       sip_reapply_timer = 0;
       if (sipctl) sipctl->updateSettings(sipSettings());
+      updateSipAllowedSources();
     });
   }
 
@@ -5259,14 +5127,56 @@ struct Node::Impl {
 
 
   void updateSipAllowedSources() {
-    if (!sipctl || !mesh) return;
-    std::vector<std::string> ips;
-    ips.push_back("127.0.0.1");
+    if (!mesh) return;
+    std::set<std::string> ips;
     for (const auto& p : mesh->peers()) {
-      if (p.status == "dead") continue;
-      for (const auto& a : p.addrs) ips.push_back(hostOf(a));
+      if (p.status == "dead" || p.id == node_id || !mesh->isMember(p.id) ||
+          cfgAt("removed_devices." + p.id))
+        continue;
+      for (const auto& a : p.addrs) {
+        std::string host = hostOf(a);
+        if (host.size() > 2 && host.front() == '[' && host.back() == ']')
+          host = host.substr(1, host.size() - 2);
+        ips.insert(host);
+        if (host.find(':') == std::string::npos) ips.insert("::ffff:" + host);
+      }
     }
-    sipctl->setAllowedSources(ips);
+    sip_peer_auth.setKey(node_id, mesh->deriveClusterKey("doorbell-sip-v3"));
+    sip_peer_auth.setPreviousKey(mesh->derivePreviousClusterKey("doorbell-sip-v3"));
+    const std::string server = json::getString(json::get(cfg.get(), "sip"), "server");
+    auto admission = sip_admission;
+    bool resolve = false;
+    std::vector<std::string> legacy(ips.begin(), ips.end());
+    {
+      std::lock_guard<std::mutex> lk(admission->mu);
+      admission->peers = std::move(ips);
+      if (server != admission->registrar_host) {
+        admission->registrar_host = server;
+        admission->registrar.clear();
+        resolve = !server.empty();
+      }
+    }
+    if (sipctl) sipctl->setAllowedSources(legacy);
+    if (resolve) {
+      // A host name may take the resolver seconds; never on the state loop.
+      std::thread([admission, server] {
+        std::set<std::string> found = resolveSipHost(server);
+        std::set<std::string> mapped = found;
+        for (const auto& ip : found)
+          if (ip.find(':') == std::string::npos) mapped.insert("::ffff:" + ip);
+        std::lock_guard<std::mutex> lk(admission->mu);
+        if (admission->registrar_host == server) admission->registrar = std::move(mapped);
+      }).detach();
+    }
+  }
+
+  // Thread-safe: called on the SIP thread and from ABI callers.
+  SipInboundPath sipInboundPath(const std::string& source, const std::string& auth,
+                                const std::string& mode) {
+    std::string peer;
+    const bool valid = !auth.empty() && sip_peer_auth.verify(auth, mode, clock->wallMs(), &peer);
+    std::lock_guard<std::mutex> lk(sip_admission->mu);
+    return classifySipInbound(source, valid, sip_admission->peers, sip_admission->registrar);
   }
 
 
@@ -5309,9 +5219,8 @@ struct Node::Impl {
     }
     for (const auto& p : mesh->peers()) {
       if (p.id == *node && p.status != "dead") {
-        const std::string origin = peerHttpOrigin(p);
-        if (origin.empty()) return;
-        *stream = origin + "/stream.mjpeg";
+        if (peerHttpOrigin(p).empty()) return;
+        *stream = peerMediaLoopbackUrl(p.id, "stream.mjpeg");
         return;
       }
     }
@@ -5871,6 +5780,10 @@ struct Node::Impl {
       json::set(measured.get(), "http_port", static_cast<int64_t>(opts.http_port));
     else
       cJSON_DeleteItemFromObjectCaseSensitive(measured.get(), "http_port");
+    if (httpd && httpd->tlsActive())
+      json::set(measured.get(), "https_port", static_cast<int64_t>(httpd->tlsPort()));
+    else
+      cJSON_DeleteItemFromObjectCaseSensitive(measured.get(), "https_port");
     std::string mqtt_source = cJSON_IsBool(json::get(measured.get(), "mqtt_reachable"))
         ? "shell" : "unmeasured";
     if (!mqtt_probe_host.empty() && mqtt_probe_known) {
@@ -6523,8 +6436,16 @@ struct Node::Impl {
       const cJSON* record = json::get(json::get(candidate.get(), "admin"), "password_hash");
       const std::string salt = json::getString(record, "salt");
       const std::string hash = json::getString(record, "hash");
-      if (!salt.empty() && !hash.empty())
-        credential_meta = {{"admin_pw_salt", salt}, {"admin_pw_hash", hash}};
+      if (!salt.empty() && !hash.empty()) {
+        const std::string algo = json::getString(record, "algo", "blake2b-256");
+        const std::string params = algo == "argon2id"
+            ? "argon2id:" + std::to_string(json::getInt(record, "m_kib", 8192)) + ":" +
+                  std::to_string(json::getInt(record, "t", 3)) + ":" +
+                  std::to_string(json::getInt(record, "p", 1))
+            : "blake2b-256";
+        credential_meta = {{"admin_pw_salt", salt}, {"admin_pw_hash", hash},
+                           {"admin_pw_params", params}};
+      }
     }
     if (is_local && !pending_import_operation.empty()) {
       const auto import_metadata = configImportReceiptMetadata();
@@ -6631,8 +6552,12 @@ struct Node::Impl {
           e.key == "panel.identities" || e.key.rfind("panel.identities.", 0) == 0;
     }
     if (panel_credential_changed) invalidatePanelSessions();
+    if (httpd) httpd->setMaxStreams(mediaMaxStreams());
     if (self_device_changed) {
       if (httpd) applyCameraSettings();
+      // A replica reset or a stale peer write must not leave this node's pin wrong. Posted:
+      // this runs inside a configuration commit.
+      if (httpd && httpd->tlsActive()) loop->post([this] { publishTlsFingerprintOnLoop(); });
       applyMotionSettings();
       applyVideoRotation();
       applyEffectiveCaps();
@@ -6874,7 +6799,12 @@ struct Node::Impl {
       uiNotify(json::dump(o.get()));
     };
     cbs.on_unpaired = [this] { pairing_joining = false; };
-    cbs.on_keys_changed = [this] { return persistMeshKeysOnLoop(); };
+    cbs.on_keys_changed = [this] {
+      const bool stored = persistMeshKeysOnLoop();
+      // SIP peer signatures and the media MAC derive from the cluster key; refresh both keys.
+      updateSipAllowedSources();
+      return stored;
+    };
     cbs.on_peer_rejected = [this](const std::string& id, const std::string& reason) {
       auto o = json::obj();
       json::set(o.get(), "t", "peer_rejected");
@@ -6990,6 +6920,11 @@ struct Node::Impl {
       };
       scb.on_dtmf = [this](char d) { onSipDtmf(d); };
       sipctl.reset(new SipCtl(*loop, std::move(scb)));
+      sipctl->setInboundPolicy(
+          [this](const std::string& source, const std::string& auth, const std::string& mode) {
+            return sipInboundPath(source, auth, mode);
+          },
+          [this](const std::string& mode) { return sip_peer_auth.sign(mode, clock->wallMs()); });
       sipctl->start(sipSettings());
       updateSipAllowedSources();
     }
@@ -7002,10 +6937,16 @@ struct Node::Impl {
     if (opts.http_port > 0) {
       httpd.reset(new Httpd(*loop));
       registerHttp();
+      prepareTlsIdentity();
+      if (!tls_identity.cert_pem.empty())
+        httpd->setTls(Httpd::TlsConfig{opts.https_port, tls::listenerPem(tls_identity)});
+      httpd->setMaxStreams(mediaMaxStreams());
       if (!httpd->start(opts.http_port)) {
         DB_LOGE(kTag, "httpd start failed on port " + std::to_string(opts.http_port));
         return false;
       }
+      publishTlsFingerprintOnLoop();
+      applyEffectiveCaps();
       applyCameraSettings();
       applyVideoRotation();
       httpd->setVideoRotationProvider([this] { return effective_video_rotation.load(); });
@@ -8563,10 +8504,16 @@ struct Node::Impl {
     const std::string port = opts.http_port == 80 ? "" : ":" + std::to_string(opts.http_port);
     if (origin == "http://localhost" + port || origin == "http://127.0.0.1" + port ||
         origin == "http://[::1]" + port) return true;
+    const int tls_port = httpd ? httpd->tlsPort() : 0;
+    const std::string secure_port = tls_port == 443 ? "" : ":" + std::to_string(tls_port);
     for (const auto& ip : db::net::localAddresses(true)) {
       const std::string host = ip.find(':') == std::string::npos ? ip : "[" + ip + "]";
       if (origin == "http://" + host + port) return true;
+      if (tls_port > 0 && origin == "https://" + host + secure_port) return true;
     }
+    if (tls_port > 0 && (origin == "https://localhost" + secure_port ||
+                         origin == "https://127.0.0.1" + secure_port))
+      return true;
     const cJSON* allowed = json::get(json::get(cfg.get(), "web"), "allowed_origins");
     if (cJSON_IsArray(allowed)) {
       const int count = std::min(32, cJSON_GetArraySize(allowed));
@@ -9629,11 +9576,19 @@ struct Node::Impl {
         json::set(e, "name", peer_name);
         const std::string peer_origin = peerHttpOrigin(p);
         if (peer_role == "door_station" && !peer_origin.empty()) {
-          const std::string origin = peer_origin;
-          json::set(e, "stream", origin + "/stream.mjpeg");
-          json::set(e, "video_meta", origin + "/video-meta");
+          // Absolute URLs are loopback proxies for native shells (send X-Doorbell-Local);
+          // *_path fields are the same routes for a browser on this node.
+          json::set(e, "stream", peerMediaLoopbackUrl(p.id, "stream.mjpeg"));
+          json::set(e, "video_meta", peerMediaLoopbackUrl(p.id, "video-meta"));
+          json::set(e, "snapshot", peerMediaLoopbackUrl(p.id, "snapshot.jpg"));
+          json::set(e, "stream_path", peerMediaPath(p.id, "stream.mjpeg"));
+          json::set(e, "video_meta_path", peerMediaPath(p.id, "video-meta"));
+          json::set(e, "snapshot_path", peerMediaPath(p.id, "snapshot.jpg"));
           // Treat an unregistered peer as auto-capable; clients fall back to MJPEG on 503.
-          if (codec != "mjpeg") json::set(e, "stream_mp4", origin + "/stream.mp4");
+          if (codec != "mjpeg") {
+            json::set(e, "stream_mp4", peerMediaLoopbackUrl(p.id, "stream.mp4"));
+            json::set(e, "stream_mp4_path", peerMediaPath(p.id, "stream.mp4"));
+          }
           json::setItem(e, "playback_profile", playbackProfileDoc(node_id, p.id));
         }
       }
@@ -9698,6 +9653,7 @@ struct Node::Impl {
     std::string hash;
     bool present = false;
     bool from_local_meta = false;
+    admin_password::Record record;
   };
 
   AdminCredential adminCredentialOnLoop() {
@@ -9707,6 +9663,12 @@ struct Node::Impl {
     out.hash = json::getString(record, "hash");
     if (!out.salt.empty() && !out.hash.empty()) {
       out.present = true;
+      out.record.algo = json::getString(record, "algo", "blake2b-256");
+      out.record.salt = out.salt;
+      out.record.hash = out.hash;
+      out.record.m_kib = static_cast<uint32_t>(json::getInt(record, "m_kib", 8192));
+      out.record.t = static_cast<uint32_t>(json::getInt(record, "t", 3));
+      out.record.p = static_cast<uint32_t>(json::getInt(record, "p", 1));
       return out;
     }
     // Before the cluster-wide password existed, each node kept its own digest in local meta.
@@ -9718,6 +9680,17 @@ struct Node::Impl {
       out.hash = *hash;
       out.present = true;
       out.from_local_meta = true;
+      out.record.algo = "blake2b-256";
+      out.record.salt = out.salt;
+      out.record.hash = out.hash;
+      const auto params = store.metaGet("admin_pw_params");
+      unsigned m = 0, t = 0, p = 0;
+      if (params && std::sscanf(params->c_str(), "argon2id:%u:%u:%u", &m, &t, &p) == 3) {
+        out.record.algo = "argon2id";
+        out.record.m_kib = m;
+        out.record.t = t;
+        out.record.p = p;
+      }
     }
     return out;
   }
@@ -9745,15 +9718,16 @@ struct Node::Impl {
     return sha256Hex(toBytes(json::dump(identity.get())));
   }
 
-  // Replicate the digest and keep the local meta copy in step, so a downgrade to an older build
-  // still finds a working password on this node.
-  bool storeAdminCredentialOnLoop(const std::string& password) {
-    const std::string salt = genTokenHex(16);
-    const std::string hash = hashPassword(password, salt);
+  // Replicate the digest. Hashing happened off the loop; this only commits the record.
+  bool storeAdminRecordOnLoop(const admin_password::Record& digest) {
+    if (digest.hash.empty() || digest.salt.empty()) return false;
     auto record = json::obj();
-    json::set(record.get(), "salt", salt);
-    json::set(record.get(), "hash", hash);
-    json::set(record.get(), "algo", "blake2b-256");
+    json::set(record.get(), "salt", digest.salt);
+    json::set(record.get(), "hash", digest.hash);
+    json::set(record.get(), "algo", digest.algo);
+    json::set(record.get(), "m_kib", static_cast<int64_t>(digest.m_kib));
+    json::set(record.get(), "t", static_cast<int64_t>(digest.t));
+    json::set(record.get(), "p", static_cast<int64_t>(digest.p));
     json::set(record.get(), "updated_ms", hlc->correctedWallMs());
     config->mutate({{"admin.password_hash", json::dump(record.get()), false}});
     if (!config->lastMutationCommitted()) {
@@ -9765,14 +9739,22 @@ struct Node::Impl {
     return true;
   }
 
-  // 1 accepted, 0 wrong, -1 locked out, -2 no cluster password set yet.
-  int verifyAdminPasswordOnLoop(const std::string& password, bool migrate) {
-    const AdminCredential credential = adminCredentialOnLoop();
+  // Lockout and presence, read before the (slow) digest is computed off the loop.
+  int adminVerifyPrecheckOnLoop(AdminCredential* credential) {
+    *credential = adminCredentialOnLoop();
+    if (admin_lockout_until_mono > clock->monoMs()) return -1;
+    if (!credential->present) return -2;
+    return 1;
+  }
+
+  // Records the outcome of an off-loop comparison. A credential that changed meanwhile is
+  // judged again against the new record by the caller's next attempt, never accepted here.
+  int adminVerifyOutcomeOnLoop(const AdminCredential& checked, bool matched, bool* upgrade) {
     const int64_t now = clock->monoMs();
     if (admin_lockout_until_mono > now) return -1;
-    if (!credential.present) return -2;
-    if (password.empty()) return 0;
-    if (!constantTimeEquals(hashPassword(password, credential.salt), credential.hash)) {
+    const AdminCredential current = adminCredentialOnLoop();
+    if (current.salt != checked.salt || current.hash != checked.hash) return 0;
+    if (!matched) {
       if (++admin_auth_failures >= kAdminAuthMaxFailures) {
         admin_auth_failures = 0;
         admin_lockout_until_mono = now + kAdminLockoutMs;
@@ -9782,47 +9764,75 @@ struct Node::Impl {
     }
     admin_auth_failures = 0;
     admin_lockout_until_mono = 0;
-    if (migrate && credential.from_local_meta) {  // first correct entry after the upgrade
-      // First correct entry after the upgrade: publish the digest so every device shares it.
-      const std::string accepted = password;
-      if (storeAdminCredentialOnLoop(accepted))
-        DB_LOGI(kTag, "migrated the local administrator digest to replicated configuration");
-      else
-        DB_LOGW(kTag, "administrator digest migration will be retried after a storage failure");
-    }
+    if (upgrade) *upgrade = current.from_local_meta || admin_password::needsUpgrade(current.record);
     return 1;
   }
 
-  int verifyAdminPassword(const std::string& password) {
-    int result = 0;
-    if (!loop->callSync([&] { result = verifyAdminPasswordOnLoop(password, true); })) {
+  // 1 accepted, 0 wrong, -1 locked out, -2 no cluster password set yet. Never call on the loop:
+  // the Argon2id comparison takes noticeable time on old hardware.
+  int verifyAdminPassword(const std::string& password, bool allow_upgrade = true) {
+    AdminCredential credential;
+    int precheck = 0;
+    if (!loop->callSync([&] { precheck = adminVerifyPrecheckOnLoop(&credential); })) {
       DB_LOGW(kTag, "administrator password verification was not scheduled");
       return 0;
+    }
+    if (precheck != 1) return precheck;
+    if (password.empty()) return 0;
+    const bool matched = admin_password::verify(credential.record, password);
+    int result = 0;
+    bool upgrade = false;
+    if (!loop->callSync([&] { result = adminVerifyOutcomeOnLoop(credential, matched, &upgrade); }))
+      return 0;
+    if (result == 1 && upgrade && allow_upgrade) {
+      const admin_password::Record next = admin_password::create(password);
+      bool stored = false;
+      loop->callSync([&] {
+        const AdminCredential current = adminCredentialOnLoop();
+        if (current.salt == credential.salt && current.hash == credential.hash)
+          stored = storeAdminRecordOnLoop(next);
+      });
+      if (stored)
+        DB_LOGI(kTag, "replaced the administrator digest with Argon2id");
+      else
+        DB_LOGW(kTag, "administrator digest upgrade will be retried after the next login");
     }
     return result;
   }
 
+  bool adminPasswordConfigured() {
+    bool present = false;
+    loop->callSync([&] { present = adminCredentialOnLoop().present; });
+    return present;
+  }
+
   // 0 changed, -1 bad arguments, -2 current password wrong, -3 locked out, -4 not persisted.
-  int setAdminPasswordOnLoop(const std::string& current, const std::string& next) {
-    if (next.size() < 4 || next.size() > 128) return -1;
-    const AdminCredential credential = adminCredentialOnLoop();
-    if (credential.present) {
+  int setAdminPassword(const std::string& current, const std::string& next) {
+    if (next.size() < admin_password::kMinLength || next.size() > admin_password::kMaxLength)
+      return -1;
+    AdminCredential before;
+    if (!loop->callSync([&] { before = adminCredentialOnLoop(); })) return -4;
+    if (before.present) {
       // An empty current password is accepted only while the cluster has none.
-      const int verified = verifyAdminPasswordOnLoop(current, false);
+      const int verified = verifyAdminPassword(current, false);
       if (verified == -1) return -3;
       if (verified <= 0) return -2;
     }
-    if (!storeAdminCredentialOnLoop(next)) return -4;
-    admin_auth_failures = 0;
-    admin_lockout_until_mono = 0;
-    // A password change invalidates every session established with the old one.
-    sessions.clear();
-    return 0;
-  }
-
-  int setAdminPassword(const std::string& current, const std::string& next) {
+    const admin_password::Record digest = admin_password::create(next);
     int result = -4;
-    if (!loop->callSync([&] { result = setAdminPasswordOnLoop(current, next); })) {
+    if (!loop->callSync([&] {
+          const AdminCredential now = adminCredentialOnLoop();
+          if (now.present != before.present || now.salt != before.salt) {
+            result = -2;  // Someone else changed it while this one was hashing.
+            return;
+          }
+          if (!storeAdminRecordOnLoop(digest)) return;
+          admin_auth_failures = 0;
+          admin_lockout_until_mono = 0;
+          // A password change invalidates every session established with the old one.
+          sessions.clear();
+          result = 0;
+        })) {
       DB_LOGW(kTag, "administrator password update was not scheduled");
       return -4;
     }
@@ -10360,6 +10370,281 @@ struct Node::Impl {
     return sessions.check(tok, clock->monoMs());
   }
 
+  // ---------- transport security and media authentication ----------
+  static std::string sessionCookie(const std::string& name, const std::string& value,
+                                   const HttpReq& req) {
+    return name + "=" + value + "; Path=/; HttpOnly; SameSite=Strict" +
+           (req.tls ? "; Secure" : "");
+  }
+
+  bool localTokenOk(const HttpReq& req) const {
+    if (!req.loopback() || opts.local_token.empty()) return false;
+    const auto header = req.headers.find("x-doorbell-local");
+    return header != req.headers.end() && constantTimeEquals(header->second, opts.local_token);
+  }
+
+  static bool peerIdShape(const std::string& id) {
+    return id.size() == 32 && id.find_first_not_of("0123456789abcdef") == std::string::npos;
+  }
+
+  std::array<uint8_t, 32> mediaPeerKeyOnLoop() {
+    return mesh ? mesh->deriveClusterKey("doorbell-media-v3") : std::array<uint8_t, 32>{};
+  }
+
+  static std::string peerMac(const std::array<uint8_t, 32>& key, const std::string& method,
+                             const std::string& path_and_query, const std::string& stamp) {
+    const std::string text = method + "\n" + path_and_query + "\n" + stamp;
+    uint8_t mac[32];
+    crypto_blake2b_keyed(mac, sizeof(mac), key.data(), key.size(),
+                         reinterpret_cast<const uint8_t*>(text.data()), text.size());
+    return hexEncode(mac, sizeof(mac));
+  }
+
+  // X-Doorbell-Peer: v1.<node_id>.<unix_ms>.<mac>
+  std::string peerAuthHeaderOnLoop(const std::string& method, const std::string& path_and_query) {
+    const auto key = mediaPeerKeyOnLoop();
+    if (std::all_of(key.begin(), key.end(), [](uint8_t b) { return b == 0; })) return "";
+    const std::string stamp = std::to_string(hlc->correctedWallMs());
+    return "v1." + node_id + "." + stamp + "." + peerMac(key, method, path_and_query, stamp);
+  }
+
+  bool verifyPeerAuthOnLoop(const HttpReq& req, std::string* peer_out = nullptr) {
+    const auto header = req.headers.find("x-doorbell-peer");
+    if (header == req.headers.end() || !mesh) return false;
+    const std::string& value = header->second;
+    if (value.size() > 200 || value.compare(0, 3, "v1.") != 0) return false;
+    const size_t a = value.find('.', 3);
+    const size_t b = a == std::string::npos ? a : value.find('.', a + 1);
+    if (b == std::string::npos) return false;
+    const std::string peer = value.substr(3, a - 3);
+    const std::string stamp = value.substr(a + 1, b - a - 1);
+    const std::string mac = value.substr(b + 1);
+    if (!peerIdShape(peer) || peer == node_id || stamp.empty() || stamp.size() > 15 ||
+        stamp.find_first_not_of("0123456789") != std::string::npos || mac.size() != 64)
+      return false;
+    const int64_t sent = std::strtoll(stamp.c_str(), nullptr, 10);
+    if (std::llabs(hlc->correctedWallMs() - sent) > kPeerAuthSkewMs) return false;
+    if (!mesh->isMember(peer) || cfgAt("removed_devices." + peer)) return false;
+    const std::string path = req.uri + (req.query.empty() ? "" : "?" + req.query);
+    const bool current_ok =
+        constantTimeEquals(peerMac(mediaPeerKeyOnLoop(), req.method, path, stamp), mac);
+    const auto previous = mesh->derivePreviousClusterKey("doorbell-media-v3");
+    const bool previous_ok =
+        std::any_of(previous.begin(), previous.end(), [](uint8_t b) { return b != 0; }) &&
+        constantTimeEquals(peerMac(previous, req.method, path, stamp), mac);
+    if (!current_ok && !previous_ok) return false;
+    if (peer_out) *peer_out = peer;
+    return true;
+  }
+
+  // 0 when the request may read media for door (empty means "this node's own camera"),
+  // otherwise the HTTP status to refuse with.
+  int mediaAccessOnLoop(const HttpReq& req, const std::string& door) {
+    if (localTokenOk(req)) return 0;
+    if (!req.tls && !req.loopback()) return 403;
+    if (checkSession(req)) return 0;
+    const std::string media_door = door.empty() ? opts.door : door;
+    if (!media_door.empty() && panelRequestAllowed(req, media_door, "view", false, false)) return 0;
+    // Home Assistant's generic camera and go2rtc can send only Basic credentials; the password
+    // is a panel credential with the view grant, never the administrator password.
+    const auto authorization = req.headers.find("authorization");
+    if (!media_door.empty() && authorization != req.headers.end() &&
+        authorization->second.compare(0, 6, "Basic ") == 0) {
+      Bytes decoded;
+      if (base64Decode(authorization->second.substr(6), decoded)) {
+        const std::string pair(decoded.begin(), decoded.end());
+        const size_t colon = pair.find(':');
+        if (colon != std::string::npos && colon + 1 < pair.size()) {
+          HttpReq bearer = req;
+          bearer.headers["authorization"] = "Bearer " + pair.substr(colon + 1);
+          if (panelRequestAllowed(bearer, media_door, "view", false, false)) return 0;
+        }
+      }
+    }
+    if (verifyPeerAuthOnLoop(req)) return 0;
+    return 401;
+  }
+
+  // How this node reaches a peer's HTTP service. A loopback peer (same host, tests) is reached
+  // over the plain loopback listener; everyone else over pinned HTTPS.
+  bool peerEndpointOnLoop(const std::string& peer_id, tls::Endpoint* out) {
+    if (!mesh) return false;
+    for (const auto& peer : mesh->peers()) {
+      if (peer.id != peer_id || peer.status == "dead") continue;
+      const std::string host = preferredPeerHost(peer.addrs);
+      if (host.empty()) return false;
+      auto caps = json::parse(peer.caps_json);
+      const int https_port = caps ? static_cast<int>(json::getInt(caps.get(), "https_port", 0)) : 0;
+      const std::string pin = json::getString(cfgAt("devices." + peer_id), "tls_sha256");
+      if (https_port > 0 && https_port <= 65535 && isSha256HexStr(pin)) {
+        *out = tls::Endpoint{host, https_port, true, pin};
+        return true;
+      }
+      if (httpLoopbackAddress(host)) {
+        const int port = peerHttpPort(peer);
+        if (port == 0) return false;
+        *out = tls::Endpoint{host, port, false, ""};
+        return true;
+      }
+      return false;
+    }
+    return false;
+  }
+
+  static std::string peerMediaPath(const std::string& peer_id, const char* leaf) {
+    return "/media/peer/" + peer_id + "/" + leaf;
+  }
+
+  std::string peerMediaLoopbackUrl(const std::string& peer_id, const char* leaf) const {
+    return "http://127.0.0.1:" + std::to_string(opts.http_port) + peerMediaPath(peer_id, leaf);
+  }
+
+  // Load or create this node's TLS identity. The private key lives only in secure storage.
+  void prepareTlsIdentity() {
+    tls_identity = tls::Identity{};
+    tls_identity_persistent = false;
+    if (opts.https_port <= 0) return;
+    SecureGetFn get;
+    SecurePutFn put;
+    {
+      std::lock_guard<std::mutex> lk(cb_mu);
+      get = secure_get_fn;
+      put = secure_put_fn;
+    }
+    const auto cert = store.metaGet("tls.cert");
+    if (get && cert && tls::loadIdentity(*cert, get("tls.key"), &tls_identity)) {
+      tls_identity_persistent = true;
+      return;
+    }
+    std::string error;
+    if (!tls::generateIdentity("doorbell-" + node_id.substr(0, 12), &tls_identity, &error)) {
+      DB_LOGE(kTag, "TLS identity generation failed: " + error);
+      tls_identity = tls::Identity{};
+      return;
+    }
+    if (get && put && put("tls.key", tls_identity.key_pem) &&
+        get("tls.key") == tls_identity.key_pem && store.metaSet("tls.cert", tls_identity.cert_pem)) {
+      tls_identity_persistent = true;
+      DB_LOGI(kTag, "created TLS identity " + tls_identity.sha256_hex.substr(0, 16));
+    } else {
+      DB_LOGW(kTag, "TLS key could not be kept in secure storage; this certificate lasts until "
+                    "restart and peers must learn its fingerprint again");
+    }
+  }
+
+  // Each member publishes its own certificate fingerprint; peers pin it.
+  void publishTlsFingerprintOnLoop() {
+    if (!httpd || !httpd->tlsActive() || tls_identity.sha256_hex.empty()) return;
+    const std::string key = "devices." + node_id + ".tls_sha256";
+    if (json::getString(cfgAt("devices." + node_id), "tls_sha256") == tls_identity.sha256_hex)
+      return;
+    auto value = json::Doc(cJSON_CreateString(tls_identity.sha256_hex.c_str()));
+    config->mutate({{key, json::dump(value.get()), false}});
+    if (!config->lastMutationCommitted())
+      DB_LOGW(kTag, "TLS fingerprint could not be published");
+  }
+
+  // A bounded pull over a peer HTTP(S) response; the connection opens on the first pull, on the
+  // HTTP worker, so the state loop never waits on the network.
+  static Httpd::Mp4Pull peerStreamPull(const tls::Endpoint& upstream, const std::string& path,
+                                       const std::string& peer_auth,
+                                       const std::string& content_prefix) {
+    std::map<std::string, std::string> headers;
+    if (!peer_auth.empty()) headers["X-Doorbell-Peer"] = peer_auth;
+    auto stream = std::make_shared<tls::HttpStream>(upstream, path, headers);
+    auto opened = std::make_shared<bool>(false);
+    return [stream, opened, content_prefix](bool* ended) -> Bytes {
+      if (!*opened) {
+        *opened = true;
+        if (!stream->open(5000) || stream->status() != 200 ||
+            stream->header("content-type").compare(0, content_prefix.size(), content_prefix) != 0) {
+          if (ended) *ended = true;
+          return {};
+        }
+      }
+      return stream->pull(ended);
+    };
+  }
+
+  Httpd::StreamResponse peerMediaResponse(const HttpReq& req) {
+    Httpd::StreamResponse out;
+    auto fail = [&out](int status, const char* code) {
+      out.status = status;
+      out.body = std::string("{\"ok\":false,\"error_code\":\"") + code + "\"}";
+      out.headers["Cache-Control"] = "no-store";
+      return out;
+    };
+    const std::string prefix = "/media/peer/";
+    const std::string rest = req.uri.substr(prefix.size());
+    const size_t slash = rest.find('/');
+    if (slash == std::string::npos) return fail(404, "not_found");
+    const std::string peer = rest.substr(0, slash);
+    const std::string leaf = rest.substr(slash + 1);
+    static const std::set<std::string> kLeaves = {"stream.mjpeg", "stream.mp4", "snapshot.jpg",
+                                                  "video-meta"};
+    if (!peerIdShape(peer) || !kLeaves.count(leaf)) return fail(404, "not_found");
+    tls::Endpoint upstream;
+    std::string peer_auth;
+    int refused = 503;
+    const char* refusal = "peer_unreachable";
+    loop->callSync([&] {
+      std::string door;
+      if (peer == node_id) {
+        door = opts.door;
+      } else if (mesh) {
+        for (const auto& p : mesh->peers())
+          if (p.id == peer) door = p.door;
+        if (door.empty()) door = json::getString(cfgAt("devices." + peer), "door");
+      }
+      refused = mediaAccessOnLoop(req, door);
+      if (refused) {
+        refusal = "media_auth_required";
+        return;
+      }
+      refused = 503;
+      if (peer == node_id) {
+        // Our own camera, read back through the loopback listener with the local token.
+        upstream = tls::Endpoint{"127.0.0.1", opts.http_port, false, ""};
+        refused = 0;
+        return;
+      }
+      if (!peerEndpointOnLoop(peer, &upstream)) return;
+      peer_auth = peerAuthHeaderOnLoop("GET", "/" + leaf);
+      if (!peer_auth.empty()) refused = 0;
+    });
+    if (refused) return fail(refused, refusal);
+    std::map<std::string, std::string> headers;
+    if (peer == node_id)
+      headers["X-Doorbell-Local"] = opts.local_token;
+    else
+      headers["X-Doorbell-Peer"] = peer_auth;
+    auto stream = std::make_shared<tls::HttpStream>(upstream, "/" + leaf, headers);
+    if (!stream->open(5000)) return fail(502, "peer_unreachable");
+    const std::string type = stream->header("content-type");
+    if (stream->status() != 200) return fail(stream->status() == 503 ? 503 : 502, "peer_refused");
+    if (leaf == "snapshot.jpg" || leaf == "video-meta") {
+      Bytes body;
+      if (!stream->readAll(leaf == "snapshot.jpg" ? 1024 * 1024 : 4096, 5000, &body))
+        return fail(502, "peer_response_invalid");
+      out.status = 200;
+      out.content_type = type.empty() ? "application/octet-stream" : type;
+      out.body.assign(body.begin(), body.end());
+      out.headers["Cache-Control"] = "no-store";
+      out.headers["X-Content-Type-Options"] = "nosniff";
+      return out;
+    }
+    const bool mp4 = leaf == "stream.mp4";
+    if (type.compare(0, mp4 ? 9 : 25, mp4 ? "video/mp4" : "multipart/x-mixed-replace") != 0)
+      return fail(502, "peer_response_invalid");
+    out.status = 200;
+    out.content_type = type;
+    const std::string server_time = stream->header("x-doorbell-server-time-ms");
+    if (!server_time.empty() && server_time.find_first_not_of("0123456789") == std::string::npos)
+      out.headers["X-Doorbell-Server-Time-Ms"] = server_time;
+    out.pull = [stream](bool* ended) { return stream->pull(ended); };
+    return out;
+  }
+
   void registerHttp() {
     httpd->routeWorker("POST", "/api/operations/prepare",
         [this](const HttpReq& request) { return operationHttp(request); });
@@ -10383,8 +10668,11 @@ struct Node::Impl {
           isSha256HexStr(r.uri.substr(7));
       return r.uri == "/" || public_asset_get || checkSession(r);
     },
+                   // Media routes are public to this gate only; each one checks
+                   // mediaAccessOnLoop (local token, session, panel grant, or peer MAC).
                    {"/api/login", "/locale/", "/panel/", "/admin/", "/stream.mjpeg",
                     "/stream.mp4", "/stream-proxy.mp4", "/video-meta", "/snapshot.jpg",
+                    "/media/peer/",
                     "/api/panel/", "/snapshot-proxy", "/call-frame", "/peer-frame.jpg",
                     // The call history is readable by a panel credential and by an admin
                     // session; both handlers below re-check the caller explicitly.
@@ -10393,7 +10681,11 @@ struct Node::Impl {
                     // as well as an admin session. The handlers re-check the caller explicitly.
                     "/api/doors/", "/api/notice", "/api/operations/"});
 
-    // /stream.mp4 follows the same LAN-public policy as /stream.mjpeg.
+    httpd->setMediaAuth([this](const HttpReq& req) {
+      int refused = 503;
+      loop->callSync([&] { refused = mediaAccessOnLoop(req, ""); });
+      return refused;
+    });
 
     httpd->setMp4Provider([this]() -> Httpd::Mp4Pull {
       if (!video_track.enabled()) return nullptr;  // codec=mjpeg → 503
@@ -10402,8 +10694,8 @@ struct Node::Impl {
     });
 
     httpd->setMp4ProxyProvider([this](const HttpReq& req, int* status) -> Httpd::Mp4Pull {
-      std::string upstream_host;
-      int upstream_port = 0;
+      tls::Endpoint upstream;
+      std::string peer_auth;
       bool local = false;
       int resolved_status = 503;
       loop->callSync([&] {
@@ -10431,17 +10723,9 @@ struct Node::Impl {
           resolved_status = 200;
           return;
         }
-        if (mesh) {
-          for (const auto& peer : mesh->peers()) {
-            if (peer.id == target && peer.status == "alive") {
-              upstream_host = preferredPeerHost(peer.addrs);
-              upstream_port = peerHttpPort(peer);
-              if (upstream_host.empty() || upstream_port == 0) return;
-              resolved_status = 200;
-              return;
-            }
-          }
-        }
+        if (!peerEndpointOnLoop(target, &upstream)) return;
+        peer_auth = peerAuthHeaderOnLoop("GET", "/stream.mp4");
+        if (!peer_auth.empty()) resolved_status = 200;
       });
       if (status) *status = resolved_status;
       if (resolved_status != 200) return nullptr;
@@ -10453,9 +10737,13 @@ struct Node::Impl {
         auto reader = video_track.subscribe();
         return [reader](bool* ended) { return reader->pull(500, ended); };
       }
-      if (upstream_host.empty()) return nullptr;
-      auto stream = std::make_shared<RemoteMp4Stream>(upstream_host, upstream_port);
-      return [stream](bool* ended) { return stream->pull(ended); };
+      return peerStreamPull(upstream, "/stream.mp4", peer_auth, "video/mp4");
+    });
+
+    // Native shells and browsers read other nodes' cameras through this node. Core fetches the
+    // peer over pinned HTTPS with X-Doorbell-Peer, so no device ever needs peer credentials.
+    httpd->routeStream("/media/peer/", [this](const HttpReq& req) {
+      return peerMediaResponse(req);
     });
 
     httpd->route("GET", "/", [](const HttpReq&) {
@@ -10467,47 +10755,75 @@ struct Node::Impl {
     });
 
     // Lightweight orientation metadata for panels currently playing H.264.
-    httpd->route("GET", "/video-meta", [this](const HttpReq&) {
+    httpd->route("GET", "/video-meta", [this](const HttpReq& req) {
+      if (const int refused = mediaAccessOnLoop(req, ""))
+        return HttpResp::json("{\"ok\":false,\"error_code\":\"media_auth_required\"}", refused);
       HttpResp r = HttpResp::json("{\"rotation\":" +
                                   std::to_string(effective_video_rotation.load()) + "}");
       r.headers["Cache-Control"] = "no-store";
-      r.headers["Access-Control-Allow-Origin"] = "*";
       return r;
     });
 
-    httpd->route("POST", "/api/login", [this](const HttpReq& req) {
+    // A worker route: the Argon2id comparison must not stall the state loop.
+    httpd->routeWorker("POST", "/api/login", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       std::string pw = b ? json::getString(b.get(), "password") : "";
-      if (pw.empty()) return HttpResp::json("{\"ok\":false}", 401);
+      if (pw.empty() || pw.size() > admin_password::kMaxLength)
+        return HttpResp::json("{\"ok\":false}", 401);
       // Same credential, same lockout counter as the device-side settings screen.
       const int verified = verifyAdminPassword(pw);
       if (verified == -1)
         return HttpResp::json("{\"ok\":false,\"err\":\"locked\"}", 429);
       if (verified == -2) {
-        // Trust on first use: the first password offered on any surface becomes the cluster's.
-        if (!storeAdminCredentialOnLoop(pw))
+        // First password: from this device's own non-browser loopback client (no Origin), or
+        // from an HTTPS/loopback page whose Origin is this node. A page elsewhere on the LAN
+        // cannot claim an unconfigured cluster through a visitor's browser.
+        bool trusted = false;
+        if (!req.headers.count("origin"))
+          trusted = req.loopback();
+        else
+          loop->callSync([&] { trusted = trustedWebOrigin(req) && (req.tls || req.loopback()); });
+        if (!trusted)
+          return HttpResp::json("{\"ok\":false,\"err\":\"first_password_untrusted_origin\","
+                                "\"error_code\":\"permission_denied\"}", 403);
+        if (pw.size() < admin_password::kMinLength)
+          return HttpResp::json("{\"ok\":false,\"err\":\"password_too_short\","
+                                "\"min_length\":8}", 400);
+        const admin_password::Record digest = admin_password::create(pw);
+        int stored = -1;
+        loop->callSync([&] {
+          if (adminCredentialOnLoop().present) {
+            stored = 0;
+            return;
+          }
+          stored = storeAdminRecordOnLoop(digest) ? 1 : -1;
+        });
+        if (stored == 0) return HttpResp::json("{\"ok\":false}", 401);
+        if (stored < 0)
           return HttpResp::json(
               "{\"ok\":false,\"err\":\"credential_persistence_failed\"}", 500);
         DB_LOGI(kTag, "initialized the cluster administrator password");
       } else if (verified <= 0) {
         return HttpResp::json("{\"ok\":false}", 401);
       }
-      const std::string version = adminCredentialVersionOnLoop();
-      sessions.publishCredential(version);
       std::string tok;
       const std::string csrf = genTokenHex(16);
-      for (int attempt = 0; attempt < 4; ++attempt) {
-        tok = genTokenHex(16);
-        if (sessions.issue(tok, version, clock->monoMs(), csrf)) break;
-        tok.clear();
-      }
+      loop->callSync([&] {
+        const std::string version = adminCredentialVersionOnLoop();
+        sessions.publishCredential(version);
+        for (int attempt = 0; attempt < 4; ++attempt) {
+          tok = genTokenHex(16);
+          if (sessions.issue(tok, version, clock->monoMs(), csrf)) break;
+          tok.clear();
+        }
+      });
       if (tok.empty()) return HttpResp::json("{\"ok\":false,\"error_code\":\"session_unavailable\"}", 503);
       auto result = json::obj();
       json::setBool(result.get(), "ok", true);
       json::set(result.get(), "csrf_token", csrf);
       HttpResp r = HttpResp::json(json::dump(result.get()));
       r.headers["Cache-Control"] = "no-store";
-      r.headers["Set-Cookie"] = "dbsess=" + tok + "; Path=/; HttpOnly; SameSite=Strict";
+      r.headers["Set-Cookie"] = sessionCookie("dbsess", tok, req);
       return r;
     });
 
@@ -10730,8 +11046,7 @@ struct Node::Impl {
       if (panelSessionPrincipal(session, &principal)) panelIdentityResponse(result.get(), principal);
       HttpResp response = HttpResp::json(json::dump(result.get()));
       response.headers["Cache-Control"] = "no-store";
-      response.headers["Set-Cookie"] =
-          "dbpanel=" + session + "; Path=/; HttpOnly; SameSite=Strict";
+      response.headers["Set-Cookie"] = sessionCookie("dbpanel", session, req);
       return response;
     });
 
@@ -11452,17 +11767,14 @@ struct Node::Impl {
         if (!station.empty()) {
           json::set(e, "source_node_id", station);
           json::setItem(e, "playback_profile", playbackProfileDoc(node_id, station));
-          std::string origin = station == node_id ? "" : nodeOrigin(station);
-          if (station == node_id || !origin.empty())
-            json::set(e, "stream_mjpeg", origin + "/stream.mjpeg");
+          const bool reachable = station == node_id || !nodeOrigin(station).empty();
+          if (reachable)
+            json::set(e, "stream_mjpeg", station == node_id ? std::string("/stream.mjpeg")
+                                                            : peerMediaPath(station, "stream.mjpeg"));
           cJSON* cam = json::get(json::get(cfgAt("devices." + station), "local"), "camera");
-          if (json::getString(cam, "codec", "auto") != "mjpeg") {
-            if (station == node_id) {
-              json::set(e, "stream_mp4", "/stream.mp4");
-            } else {
-              if (!origin.empty()) json::set(e, "stream_mp4", origin + "/stream.mp4");
-            }
-          }
+          if (json::getString(cam, "codec", "auto") != "mjpeg" && reachable)
+            json::set(e, "stream_mp4", station == node_id ? std::string("/stream.mp4")
+                                                          : peerMediaPath(station, "stream.mp4"));
         }
       }
       cJSON* quick_replies = json::addArr(o.get(), "quick_replies");
@@ -12078,13 +12390,13 @@ struct Node::Impl {
         } else if (mesh) {
           for (const auto& p : mesh->peers()) {
             if (p.id == station) {
-              const std::string origin = peerHttpOrigin(p);
-              if (origin.empty()) continue;
-              json::set(e, "station", origin);
-              json::set(e, "stream_mjpeg", origin + "/stream.mjpeg");
+              if (peerHttpOrigin(p).empty()) continue;
+              // Same-origin proxy base; the browser never contacts the station directly.
+              json::set(e, "station", "/media/peer/" + station);
+              json::set(e, "stream_mjpeg", peerMediaPath(station, "stream.mjpeg"));
               if (json::getString(json::get(json::get(cfgAt("devices." + station), "local"),
                                                    "camera"), "codec", "auto") != "mjpeg")
-                json::set(e, "stream_mp4", origin + "/stream.mp4");
+                json::set(e, "stream_mp4", peerMediaPath(station, "stream.mp4"));
               json::setBool(e, "online", p.status != "dead");
             }
           }
@@ -12398,6 +12710,7 @@ struct Node::Impl {
 
 Node::Node(NodeOptions opts, NodeDeps deps) : impl_(new Impl) {
   impl_->opts = std::move(opts);
+  if (impl_->opts.local_token.empty()) impl_->opts.local_token = hexEncode(randomBytes(32));
   impl_->pairing_persistence_ready = std::any_of(
       impl_->opts.psk.begin(), impl_->opts.psk.end(), [](uint8_t byte) { return byte != 0; });
   impl_->measured_caps_json = impl_->opts.caps_json;
@@ -13096,10 +13409,41 @@ bool Node::inviteFromQrText(const std::string& text) {
   return ok;
 }
 
-void Node::removeDevice(const std::string& target) {
-  impl_->loop->post([this, target] {
-    if (impl_->opts.role == "indoor_panel") impl_->removeDeviceOnLoop(target);
+int Node::removeDevice(const std::string& target) {
+  if (target.size() != 32 || target.find_first_not_of("0123456789abcdef") != std::string::npos ||
+      target == node_id_)
+    return -1;
+  if (impl_->opts.role != "indoor_panel") return -2;
+  int result = -3;
+  impl_->loop->callSync([&] { result = impl_->removeDeviceOnLoop(target) ? 0 : -3; });
+  return result;
+}
+
+bool Node::adminPasswordConfigured() { return impl_->adminPasswordConfigured(); }
+
+const std::string& Node::localToken() const { return impl_->opts.local_token; }
+
+std::string Node::tlsFingerprint() {
+  std::string out;
+  impl_->loop->callSync([&] {
+    if (impl_->httpd && impl_->httpd->tlsActive()) out = impl_->tls_identity.sha256_hex;
   });
+  return out;
+}
+
+void Node::emitUiEvent(const std::string& event_json) { impl_->uiNotify(event_json); }
+
+std::string Node::sipPeerAuthHeader(const std::string& mode) {
+  return impl_->sip_peer_auth.sign(mode, impl_->clock->wallMs());
+}
+
+int Node::sipInboundCheck(const std::string& source, const std::string& auth,
+                          const std::string& mode) {
+  switch (impl_->sipInboundPath(source, auth, mode)) {
+    case SipInboundPath::Peer: return 1;
+    case SipInboundPath::Registrar: return 2;
+    default: return 0;
+  }
 }
 
 std::string Node::startPairingJson(int seconds) {

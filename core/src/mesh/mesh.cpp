@@ -3419,6 +3419,20 @@ Mesh::JoinToken Mesh::createJoinToken(int64_t ttl_ms) {
 }
 
 bool Mesh::isPaired() const { return impl_->isPaired(); }
+std::array<uint8_t, 32> Mesh::deriveClusterKey(const std::string& label) const {
+  std::array<uint8_t, 32> out{};
+  if (!impl_->isPaired()) return out;
+  crypto_blake2b_keyed(out.data(), out.size(), impl_->st.psk.data(), impl_->st.psk.size(),
+                       reinterpret_cast<const uint8_t*>(label.data()), label.size());
+  return out;
+}
+std::array<uint8_t, 32> Mesh::derivePreviousClusterKey(const std::string& label) const {
+  std::array<uint8_t, 32> out{};
+  if (!impl_->isPaired() || !impl_->prevKeyLive()) return out;
+  crypto_blake2b_keyed(out.data(), out.size(), impl_->st.prev_psk.data(), impl_->st.prev_psk.size(),
+                       reinterpret_cast<const uint8_t*>(label.data()), label.size());
+  return out;
+}
 bool Mesh::foundCluster() { return impl_->foundCluster(); }
 bool Mesh::isFounder() const { return impl_->is_founder_; }
 std::string Mesh::pairingSelfJson() { return impl_->pairingSelfJson(); }
