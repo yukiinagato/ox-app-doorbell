@@ -18,7 +18,7 @@ internal class H264DecoderPool {
             synchronized(this) {
                 if (generation == warmGeneration) warming = false
                 if (generation == warmGeneration && prepared == null) prepared = codec
-                else try { codec?.release() } catch (_: Exception) { }
+                else try { codec?.release() } catch (e: Exception) { ShellLog.ignored("H264DecoderPool", e) }
             }
         }, "doorbell-h264-warmup").apply { isDaemon = true }.start()
     }
@@ -33,12 +33,12 @@ internal class H264DecoderPool {
     @Synchronized
     fun recycle(codec: MediaCodec) {
         if (prepared == null) prepared = codec
-        else try { codec.release() } catch (_: Exception) { }
+        else try { codec.release() } catch (e: Exception) { ShellLog.ignored("H264DecoderPool", e) }
     }
 
     @Synchronized
     fun discard(codec: MediaCodec?) {
-        try { codec?.release() } catch (_: Exception) { }
+        try { codec?.release() } catch (e: Exception) { ShellLog.ignored("H264DecoderPool", e) }
         warm()
     }
 
@@ -48,7 +48,7 @@ internal class H264DecoderPool {
         warming = false
         val codec = prepared
         prepared = null
-        try { codec?.release() } catch (_: Exception) { }
+        try { codec?.release() } catch (e: Exception) { ShellLog.ignored("H264DecoderPool", e) }
     }
 
     private companion object { const val AVC_MIME = "video/avc" }

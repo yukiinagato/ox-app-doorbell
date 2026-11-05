@@ -328,7 +328,7 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
                 context.startActivity(
                     Intent(context, HistoryActivity::class.java).putExtra(EXTRA_DOOR, door),
                 )
-            } catch (_: Exception) { }
+            } catch (e: Exception) { ShellLog.ignored("HistoryActivity", e) }
         }
 
         /**

@@ -79,7 +79,7 @@ class BootConfig private constructor(
                 }
                 httpPort = d.optInt("http_port", httpPort)
                 if (d.has("setup_complete")) setupComplete = d.optBoolean("setup_complete", false)
-            } catch (_: Exception) { }
+            } catch (e: Exception) { ShellLog.ignored("BootConfig", e) }
             val roleValid = validRole(role)
             val doorValid = validDoor(door)
             val suggestedDoor = if (doorValid) door else suggestedDoorId()

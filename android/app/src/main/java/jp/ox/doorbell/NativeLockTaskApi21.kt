@@ -35,6 +35,6 @@ internal object NativeLockTaskApi21 {
     } catch (_: Exception) { false }
 
     fun leave(activity: Activity) {
-        try { activity.stopLockTask() } catch (_: Exception) { }
+        try { activity.stopLockTask() } catch (e: Exception) { ShellLog.ignored("NativeLockTaskApi21", e) }
     }
 }
