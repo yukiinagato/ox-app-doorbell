@@ -87,6 +87,8 @@
   <div class="callMedia">
     <img id="callImg" alt="">
     <video id="callVideo" style="display:none" muted playsinline autoplay></video>
+    <div id="callPh" class="videoPh connecting" role="status"><span class="phSpin" aria-hidden="true"></span>
+      <span class="phDoor" id="callPhDoor"></span><span class="phText"></span></div>
   </div>
   <div class="callSide">
     <div class="msg" id="callMsg" data-semantic-id="ring.title"></div>
@@ -164,7 +166,19 @@
       triggerLabel: t("emergency.button"),
       triggerHint: t("emergency.hold_hint", { sec: "2" })
     });
+    if (typeof dockSos === "function") dockSos();
     applyEmergencyI18n();
+  }
+  // SOS sits at the leading edge of the current fixed action zone: the incoming-call actions,
+  // the bottom tab bar on phones, or the header on wider screens. It never floats over content.
+  function dockSos() {
+    var trigger = emergencyOverlay && emergencyOverlay.trigger && emergencyOverlay.trigger();
+    if (!trigger || !document.getElementById) return;
+    var callOpen = $("callView") && $("callView").style.display === "block";
+    var zone = callOpen ? $("callActions") :
+      $(C.sizeClass(window.innerWidth) === "compact" ? "dashTabs" : "dashHeader");
+    if (zone && (trigger.parentNode !== zone || zone.firstChild !== trigger))
+      zone.insertBefore(trigger, zone.firstChild);
   }
   function applyI18n() {
     document.title = t("panel.monitor_title");
@@ -273,6 +287,7 @@
       if (!LIVE && !live) img.setAttribute("data-snapshot-door", d.id);
       media.appendChild(img);
       media.appendChild(v);
+      media.appendChild(makePlaceholder(d.label));
       card.appendChild(media);
       var foot = document.createElement("div");
       foot.className = "tileFoot";
@@ -286,12 +301,59 @@
       foot.appendChild(labelEl); foot.appendChild(chip); foot.appendChild(last);
       card.appendChild(foot);
       var fallback = live || snapshotUrl(d.id, +new Date());
+      tilePlayback[d.id] = "loading";
       gridStreams[d.id] = DoorbellPlayback.start({ profile: d.playback_profile,
         mp4: DoorbellPlayback.proxyMp4Url(d.id, TOKEN, d.stream_mp4, window.location),
-        mjpeg: fallback, mjpegMode: "image", video: v, img: img });
+        mjpeg: fallback, mjpegMode: "image", video: v, img: img,
+        onState: (function (doorId) {
+          return function (state) { tilePlayback[doorId] = state; if (lastDoors) updateTiles(lastDoors); };
+        })(d.id) });
       grid.appendChild(card);
     }
   }
+  // A video area never shows an empty black box: it names the door and says what is happening.
+  var tilePlayback = {}, lastDoors = null;
+  function makePlaceholder(label) {
+    var ph = document.createElement("div");
+    ph.className = "videoPh connecting";
+    ph.setAttribute("role", "status");
+    var spin = document.createElement("span");
+    spin.className = "phSpin"; spin.setAttribute("aria-hidden", "true");
+    var name = document.createElement("span");
+    name.className = "phDoor"; C.setText(name, label || "");
+    var text = document.createElement("span");
+    text.className = "phText";
+    ph.appendChild(spin); ph.appendChild(name); ph.appendChild(text);
+    return ph;
+  }
+  function paintPlaceholder(ph, doorState, playbackState) {
+    if (!ph) return;
+    var key = C.videoPlaceholder(doorState, playbackState);
+    ph.style.display = key ? "" : "none";
+    ph.className = "videoPh" + (key === "video.connecting" ? " connecting" : "") +
+      (doorState === "offline" ? " offline" : "");
+    var text = ph.getElementsByClassName("phText")[0];
+    if (text) C.setText(text, key ? t(key) : "");
+  }
+  // Expanded screens: tiles fill the available height with the largest 16:9 video the door count
+  // allows, and history keeps its own scroll. Smaller screens use the CSS flow layout.
+  function layoutTiles() {
+    var grid = $("snapGrid"), body = $("dashBody");
+    var expanded = C.sizeClass(window.innerWidth) === "expanded";
+    var count = grid.children.length;
+    if (!expanded || !count || !grid.getBoundingClientRect) {
+      grid.style.gridTemplateColumns = grid.style.gridTemplateRows = grid.style.height = "";
+      body.style.removeProperty && body.style.removeProperty("--dash-avail");
+      return;
+    }
+    var top = grid.getBoundingClientRect().top, avail = Math.max(320, window.innerHeight - top - 24);
+    var shape = C.tileGrid(count, grid.clientWidth, avail, 16, 56);
+    grid.style.gridTemplateColumns = "repeat(" + shape.cols + ", minmax(0, 1fr))";
+    grid.style.gridTemplateRows = "repeat(" + shape.rows + ", minmax(0, 1fr))";
+    grid.style.height = avail + "px";
+    if (body.style.setProperty) body.style.setProperty("--dash-avail", avail + "px");
+  }
+  window.addEventListener("resize", function () { dockSos(); layoutTiles(); });
   function openLive(doorId) {
     var url = DoorbellPanelRuntime.panelUrl("call", TOKEN, false, doorId);
     var hashAt = url.indexOf("#"), hash = hashAt >= 0 ? url.substring(hashAt) : "";
@@ -303,6 +365,7 @@
                           in_call: "dash.state_in_call", offline: "dash.tile_offline" };
   // State chips and "last activity" change every poll; they never restart the previews.
   function updateTiles(doors) {
+    lastDoors = doors;
     var lastByDoor = {}, rows = callLog.rows || [], offline = 0, i;
     for (i = 0; i < rows.length; i++) {
       var r = rows[i] || {};
@@ -320,6 +383,7 @@
         var last = cards[c].getElementsByClassName("tileLast")[0];
         if (last) C.setText(last, lastByDoor[d.id] ? t("dash.last_activity", { time: fmtTime(lastByDoor[d.id]) }) : "");
         cards[c].setAttribute("aria-label", d.label + ", " + t(TILE_STATE_KEYS[state]));
+        paintPlaceholder(cards[c].getElementsByClassName("videoPh")[0], state, tilePlayback[d.id]);
       }
     }
     var chipEl = $("offlineChip");
@@ -562,10 +626,15 @@
                       JSON.stringify(calling.playback_profile || {});
       if (callingDoorKey !== streamKey || !callStream) {
         stopCallStream();
+        C.setText($("callPhDoor"), calling.label || calling.id);
+        paintPlaceholder($("callPh"), C.doorTileState(calling), "loading");
         callStream = DoorbellPlayback.start({ profile: calling.playback_profile,
           mp4: DoorbellPlayback.proxyMp4Url(calling.id, TOKEN, calling.stream_mp4, window.location),
           mjpeg: liveMjpegUrl(calling),
-          mjpegMode: "image", video: vid, img: img });
+          mjpegMode: "image", video: vid, img: img,
+          onState: (function (door) {
+            return function (state) { paintPlaceholder($("callPh"), C.doorTileState(door), state); };
+          })(calling) });
         callingDoorKey = streamKey;
       }
       callingDoorId = calling.id;
@@ -647,6 +716,8 @@
     updateTiles(doors);
     fetchCallLog(noteEventStream(state.events || []));
     renderCall(doors, state.events || [], state.quick_replies || []);
+    dockSos();
+    layoutTiles();
     DoorbellPanelRuntime.applySemanticUi(state, { page: "monitor" });
   }
   function poll() {

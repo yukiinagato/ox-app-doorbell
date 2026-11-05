@@ -169,6 +169,32 @@
     return "idle";
   }
 
+  // Columns and rows for n 16:9 tiles filling a width x height area (expanded dashboards): the
+  // layout that gives each tile the largest video. Each tile also carries a footer of footerPx.
+  function tileGrid(n, width, height, gapPx, footerPx) {
+    n = Math.max(1, Math.floor(Number(n) || 1));
+    width = Math.max(1, Number(width) || 1); height = Math.max(1, Number(height) || 1);
+    gapPx = Math.max(0, Number(gapPx) || 0); footerPx = Math.max(0, Number(footerPx) || 0);
+    var best = { cols: 1, rows: n, video: 0 };
+    for (var cols = 1; cols <= n; cols++) {
+      var rows = Math.ceil(n / cols);
+      var cellW = (width - gapPx * (cols - 1)) / cols;
+      var cellH = (height - gapPx * (rows - 1)) / rows - footerPx;
+      if (cellW <= 0 || cellH <= 0) continue;
+      var videoW = Math.min(cellW, cellH * 16 / 9);
+      if (videoW > best.video + 0.5) best = { cols: cols, rows: rows, video: videoW };
+    }
+    return { cols: best.cols, rows: best.rows };
+  }
+
+  // Placeholder text key for a video area that has no picture yet.
+  function videoPlaceholder(doorState, playbackState) {
+    if (doorState === "offline") return "dash.tile_offline";
+    if (playbackState === "playing") return "";
+    if (playbackState === "failed") return "ring.no_video";
+    return "video.connecting";
+  }
+
   function dayKey(ms) {
     var d = new Date(Number(ms) || 0);
     return d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate();
@@ -196,5 +222,6 @@
            createCatalog: createCatalog, setText: setText,
            applyEmergencyText: applyEmergencyText, newestHlc: newestHlc,
            sizeClass: sizeClass, colorRoles: colorRoles, applyColorRoles: applyColorRoles,
-           doorTileState: doorTileState, groupByDay: groupByDay };
+           doorTileState: doorTileState, groupByDay: groupByDay, tileGrid: tileGrid,
+           videoPlaceholder: videoPlaceholder };
 });

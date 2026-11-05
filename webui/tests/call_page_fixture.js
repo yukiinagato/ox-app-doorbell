@@ -67,6 +67,8 @@ function runtime(options = {}) {
     }
   });
   vm.runInContext(fs.readFileSync(path.join(__dirname, "../panel/runtime.js"), "utf8"), context);
+  vm.runInContext(fs.readFileSync(path.join(__dirname, "../panel/panel-common.js"), "utf8"), context);
+  context.DoorbellPanelCommon = context.window.DoorbellPanelCommon;
   Object.assign(context.DoorbellPanelRuntime, {
     requestWithDeadline: context.window.DoorbellPanelRuntime.requestWithDeadline,
     createRequestLane: context.window.DoorbellPanelRuntime.createRequestLane

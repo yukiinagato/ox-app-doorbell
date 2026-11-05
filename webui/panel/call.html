@@ -60,19 +60,33 @@
   <div id="videoBox">
     <img id="liveImg" alt="">
     <video id="liveVideo" muted autoplay playsinline></video>
-    <div id="noVideo"></div>
+    <div id="noVideo" class="videoPh" role="status"><span class="phSpin" aria-hidden="true"></span>
+      <span class="phDoor" id="phDoor"></span><span class="phText" id="phText"></span></div>
     <video id="selfPreview" muted autoplay playsinline></video>
   </div>
   <div id="controls">
-    <button id="callBtn" data-semantic-id="ring.action" disabled></button>
-    <label id="videoToggle"><input type="checkbox" id="sendVideo"> <span id="videoToggleText"></span></label>
+    <div id="primaryRow">
+      <button id="callBtn" data-semantic-id="ring.action" disabled></button>
+      <button id="replyBtn" type="button" aria-controls="replySheet" aria-expanded="false" hidden></button>
+      <button id="ignoreBtn" type="button" hidden></button>
+    </div>
+    <div id="secondaryRow">
+      <button id="micBtn" type="button" aria-pressed="false" hidden></button>
+      <button id="unlockBtn" type="button" hidden></button>
+      <label id="videoToggle"><input type="checkbox" id="sendVideo"> <span id="videoToggleText"></span></label>
+    </div>
+    <div id="status"></div>
   </div>
-  <div id="status"></div>
 </main>
+<div id="replySheet" role="dialog" aria-labelledby="replyTitle" hidden>
+  <div class="sheetHead"><h2 id="replyTitle"></h2><button id="replySheetClose" type="button"></button></div>
+  <div id="replyActions"></div>
+</div>
 <audio id="remoteAudio" autoplay></audio>
 
 <script src="vendor/jssip.min.js"></script>
 <script src="/panel/playback.js"></script>
+<script src="/panel/panel-common.js"></script>
 <script src="/panel/call-flow.js"></script>
 <script src="/panel/runtime.js"></script>
 <script src="/panel/video-session.js"></script>
@@ -165,6 +179,10 @@ function installEmergency() {
     triggerLabel: t("emergency.button"),
     triggerHint: t("emergency.hold_hint", { sec: "2" }),
   });
+  // SOS lives at the leading edge of the fixed action zone, so it never covers content.
+  const zone = document.getElementById && document.getElementById("controls");
+  const trigger = emergencyOverlay.trigger && emergencyOverlay.trigger();
+  if (zone && trigger && trigger.parentNode !== zone) zone.insertBefore(trigger, zone.firstChild);
   applyEmergencyI18n();
 }
 
@@ -174,6 +192,14 @@ const els = {
   live: document.getElementById("liveImg"),
   liveVideo: document.getElementById("liveVideo"),
   noVideo: document.getElementById("noVideo"),
+  phDoor: document.getElementById("phDoor"),
+  phText: document.getElementById("phText"),
+  reply: document.getElementById("replyBtn"),
+  ignore: document.getElementById("ignoreBtn"),
+  mic: document.getElementById("micBtn"),
+  unlock: document.getElementById("unlockBtn"),
+  replySheet: document.getElementById("replySheet"),
+  replyActions: document.getElementById("replyActions"),
   self: document.getElementById("selfPreview"),
   call: document.getElementById("callBtn"),
   sendVideo: document.getElementById("sendVideo"),
@@ -355,7 +381,12 @@ function renderConnection() {
 function applyI18n() {
   document.title = t("panel.call_title");
   els.title.textContent = t("panel.call_title");
-  els.noVideo.textContent = t("panel.no_video");
+  els.reply.textContent = t("ring.quick_replies");
+  els.ignore.textContent = t("ring.ignore");
+  els.unlock.textContent = t("ring.unlock");
+  document.getElementById("replyTitle").textContent = t("reply.choose");
+  document.getElementById("replySheetClose").textContent = t("monitor.close");
+  renderPlaceholder();
   els.sendVideoText.textContent = t("panel.send_video");
   renderFreshness();
   if (session) els.call.textContent = t("incall.end");
@@ -450,12 +481,130 @@ function selectDoor(d, forcePlaybackRefresh) {
   const mjpeg = "/snapshot-proxy?door=" + encodeURIComponent(d.id) + "&live=1";
   playback = DoorbellPlayback.start({ profile: d.playback_profile,
     mp4, mjpeg, mjpegMode: "poll", video: els.liveVideo, img: els.live,
-    onState: (state) => { els.noVideo.style.display = state === "failed" ? "" : "none"; } });
+    onState: (state) => { playbackState = state; renderPlaceholder(); } });
+  playbackState = "loading";
+  renderPlaceholder();
   updateCallButton();
   if (latestPanelState) ensureLanguage(languageForState(latestPanelState, d.id));
 }
 
+// ---- Action zone: Answer | Reply | Ignore, and End | Mic | Unlock in a call ----
+let playbackState = "loading";
+let ignoredRing = "";
+let micMuted = false;
+
+function ringKey(d) {
+  return d ? d.id + "|" + (d.call_id || "") : "";
+}
+
+function selectedRinging() {
+  return !!selected && !!(selected.calling || selected.call_state === "ringing" ||
+    selected.call_state === "purpose_pending") && ignoredRing !== ringKey(selected);
+}
+
+// A video area never shows an empty black box: it names the door and says what is happening.
+function renderPlaceholder() {
+  const doorState = selected ? DoorbellPanelCommon.doorTileState(selected) : "idle";
+  const key = selected ? DoorbellPanelCommon.videoPlaceholder(doorState, playbackState) : "";
+  els.noVideo.style.display = key ? "" : "none";
+  els.noVideo.className = "videoPh" + (key === "video.connecting" ? " connecting" : "");
+  els.phDoor.textContent = selected ? selected.label || selected.id : "";
+  els.phText.textContent = key ? t(key) : "";
+}
+
+function quickReplies() {
+  return (latestPanelState && latestPanelState.quick_replies) || [];
+}
+
+function renderReplySheet() {
+  const host = els.replyActions;
+  while (host.firstChild) host.removeChild(host.firstChild);
+  const lang = DoorbellPanelCommon.normalizeLang(selected && selected.visitor_lang);
+  for (const reply of quickReplies()) {
+    const label = (reply.labels && (reply.labels[lang] || reply.labels[LANG] || reply.labels.ja ||
+      reply.labels.en || reply.labels.zh)) || reply.label;
+    if (!reply.id || !label) continue;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.textContent = label;
+    button.onclick = () => sendQuickReply(reply.id, label, button);
+    host.appendChild(button);
+  }
+}
+
+function setReplySheet(open) {
+  if (open) renderReplySheet();
+  els.replySheet.hidden = !open;
+  els.reply.setAttribute("aria-expanded", open ? "true" : "false");
+  if (open && els.replyActions.querySelector) {
+    const first = els.replyActions.querySelector("button");
+    if (first) first.focus();
+  }
+}
+
+// Quick replies need no WebRTC: they go through the panel reply API.
+function sendQuickReply(id, label, button) {
+  const door = selected;
+  if (!door) return;
+  button.disabled = true;
+  const body = "reply_id=" + encodeURIComponent(id) + "&door=" + encodeURIComponent(door.id) +
+    "&call_id=" + encodeURIComponent(door.call_id || "") +
+    "&stage_revision=" + encodeURIComponent(door.stage_revision || 0);
+  DoorbellPanelRuntime.panelRequest("POST", "/api/panel/reply", body, (status) => {
+    button.disabled = false;
+    if (status >= 200 && status < 300) { setStatus(t("reply.sent", { text: label })); setReplySheet(false); }
+    else setStatus(t("reply.failed"), true);
+  });
+}
+
+function sendUnlock() {
+  if (!selected) return;
+  els.unlock.disabled = true;
+  DoorbellPanelRuntime.panelRequest("POST", "/api/doors/" + encodeURIComponent(selected.id) + "/open", {},
+    (status, body) => {
+      els.unlock.disabled = false;
+      if (status >= 200 && status < 300) setStatus(t("ring.open_sent"));
+      else if (body && body.err === "unlock_not_configured") setStatus(t("ring.open_unconfigured"), true);
+      else setStatus(t("ring.open_failed"), true);
+    });
+}
+
+function toggleMic() {
+  if (!session) return;
+  try {
+    if (micMuted) session.unmute({ audio: true }); else session.mute({ audio: true });
+    micMuted = !micMuted;
+  } catch (e) { setStatus(t("ring.mic_unavailable"), true); }
+  renderSecondaryActions();
+}
+
+function renderSecondaryActions() {
+  const ringing = selectedRinging();
+  els.reply.hidden = !(ringing && !session && quickReplies().length);
+  els.ignore.hidden = !(ringing && !session);
+  if (els.reply.hidden && !els.replySheet.hidden) setReplySheet(false);
+  els.mic.hidden = !session;
+  if (!session) micMuted = false;
+  els.mic.textContent = t(micMuted ? "ring.mic_off" : "ring.mic_on");
+  els.mic.setAttribute("aria-pressed", micMuted ? "true" : "false");
+  const unlock = selected && selected.unlock;
+  els.unlock.hidden = !((ringing || session) && unlock && unlock.show_button === true);
+  renderPlaceholder();
+}
+
+els.reply.onclick = () => setReplySheet(!!els.replySheet.hidden);
+document.getElementById("replySheetClose").onclick = () => { setReplySheet(false); els.reply.focus(); };
+els.ignore.onclick = () => {
+  ignoredRing = ringKey(selected);
+  setReplySheet(false);
+  updateCallButton();
+  setStatus(t("ring.ignored"));
+};
+els.unlock.onclick = sendUnlock;
+els.mic.onclick = toggleMic;
+
 function updateCallButton() {
+  renderSecondaryActions();
   if (session) {
     els.call.setAttribute("data-semantic-id", "call.end");
     els.call.textContent = t("incall.end");
@@ -464,11 +613,12 @@ function updateCallButton() {
     return;
   }
   els.call.setAttribute("data-semantic-id", "ring.action");
-  els.call.textContent = selected && (selected.calling || selected.call_state === "ringing" ||
-    selected.call_state === "purpose_pending") ? t("ring.answer") : t("panel.call");
+  els.call.textContent = selectedRinging() ? t("ring.answer") : t("panel.call");
   if (!webrtc || !webrtc.ws_url) {
     els.call.disabled = true;
-    setStatus(t("panel.webrtc_required"));
+    // The reason sits in the action zone next to the disabled control.
+    setStatus(selectedRinging() ? t("ring.answer_unavailable") + " — " + t("panel.webrtc_required") :
+      t("panel.webrtc_required"));
     return;
   }
   if (!selected || !selected.extension) {
