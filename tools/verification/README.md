@@ -1,8 +1,10 @@
 # Production-path verification
 
-T01's command inventory and observed results are in
-`verification/remediation-q01-q18/T01/command-map.json`. Each executed command
-has a separate JSON record and raw log. The source manifest hashes the tested
+T01's command inventory is in
+`verification/remediation-q01-q18/T01/command-map.json`. The per-command JSON
+records and raw logs of the 2026-09 remediation were moved out of the working
+tree; `verification/remediation-q01-q18/INDEX.md` explains how to read them from
+git history. The source manifest hashes the tested
 files, including untracked inputs; a Git revision alone does not identify a
 dirty tree. Preserve old records when rerunning a command by choosing a new ID.
 

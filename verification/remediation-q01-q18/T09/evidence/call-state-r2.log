@@ -1,4 +1,0 @@
-T09 production read deadline: PASS
-T09 early state failure recovery: PASS
-T09 rejected admission and restored-page ownership: PASS
-call state controller tests: ok
