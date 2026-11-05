@@ -1298,15 +1298,16 @@ bool Store::eventExists(const std::string& origin, uint64_t seq) {
   return st.step() == SQLITE_ROW;
 }
 
-void Store::eventSetNotify(const std::string& origin, uint64_t seq,
+bool Store::eventSetNotify(const std::string& origin, uint64_t seq,
                            const std::string& notify_json) {
   std::lock_guard<std::recursive_mutex> lk(mu_);
+  if (!db_) return false;
   Stmt st(db_, "UPDATE events SET notify_json=?3 WHERE origin=?1 AND seq=?2");
-  if (!st.ok()) return;
+  if (!st.ok()) return false;
   st.bind(1, origin);
   st.bind(2, static_cast<int64_t>(seq));
   st.bind(3, notify_json);
-  st.step();
+  return st.step() == SQLITE_DONE && sqlite3_changes(db_) == 1;
 }
 
 std::optional<EventRecord> Store::eventGet(const std::string& origin, uint64_t seq) {

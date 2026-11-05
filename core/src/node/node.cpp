@@ -3160,6 +3160,7 @@ struct Node::Impl {
     std::string best_server;
     std::string last_error = "no_response";
     std::vector<int64_t> recovery_offsets;
+    int64_t latest_recovery_offset = 0;
     for (const auto& spec : servers) {
       std::string host;
       int port = sntp::kDefaultPort;
@@ -3193,11 +3194,13 @@ struct Node::Impl {
             last_error = !sntp::sampleRttSane(sample) ? "rtt_unreasonable" : "offset_unreasonable";
             continue;
           }
+          // Continuity is judged against the previous sample, not the largest one so far.
           if (!recovery_offsets.empty()) {
-            const int64_t delta = sample.offset_ms - recovery_offsets.back();
+            const int64_t delta = sample.offset_ms - latest_recovery_offset;
             if (delta < -1500 || delta > 1500) recovery_offsets.clear();
           }
           recovery_offsets.push_back(sample.offset_ms);
+          latest_recovery_offset = sample.offset_ms;
           std::sort(recovery_offsets.begin(), recovery_offsets.end());
           if (recovery_offsets.size() < 3 ||
               recovery_offsets.back() - recovery_offsets.front() > 1500) {
@@ -6701,8 +6704,8 @@ struct Node::Impl {
       pairing_is_founder = founder && *founder == "1";
       const bool has_psk = std::any_of(opts.psk.begin(), opts.psk.end(),
                                        [](uint8_t byte) { return byte != 0; });
-      // "none" は「鍵がない」という意味なので、鍵を持っているのにそう名乗ることはできない。
-      // 出所を申告しないホスト（doorbell_host や組み込み利用）は平文鍵として扱う。
+      // "none" means there is no key, so a node holding one cannot claim it. A host that does not
+      // declare the key's provenance (doorbell_host, embedded use) is treated as plaintext.
       const bool declared = opts.psk_source == "secure_store" || opts.psk_source == "boot_plaintext";
       pairing_psk_source = !has_psk ? "none" : (declared ? opts.psk_source : "boot_plaintext");
       pairing_psk_ref = pairing_psk_source == "secure_store" ? opts.psk_ref : "";
@@ -7931,7 +7934,25 @@ struct Node::Impl {
   }
 
   void restoreActiveCalls(bool notify = true) {
-    for (const auto& projection : store.activeCallProjections()) {
+    const auto projections = store.activeCallProjections();
+    // A resync replaces in-memory calls with the durable projection. A call the projection no
+    // longer holds is cleared through the normal path, and a replaced entry's timers are
+    // cancelled rather than left to fire against the new state.
+    std::map<std::string, std::string> projected;
+    for (const auto& projection : projections) projected[projection.door] = projection.call_id;
+    std::vector<std::string> stale;
+    for (const auto& entry : active_calls) {
+      auto found = projected.find(entry.first);
+      if (found == projected.end() || found->second != entry.second.call_id)
+        stale.push_back(entry.first);
+    }
+    for (const auto& door : stale) clearActiveCall(door);
+    for (const auto& projection : projections) {
+      auto existing = active_calls.find(projection.door);
+      if (existing != active_calls.end()) {
+        if (existing->second.timeout_timer) loop->cancel(existing->second.timeout_timer);
+        if (existing->second.recovery_timer) loop->cancel(existing->second.recovery_timer);
+      }
       ActiveCall call;
       call.call_id = projection.call_id;
       call.door = projection.door;
@@ -8165,7 +8186,11 @@ struct Node::Impl {
     // The history projection is already committed at this point, so the badge count delivered
     // here is the one a client would read back from /api/call-log.
     if (callLifecycleType(ev.type)) notifyCallLogChanged();
-    auto actions = rules.evaluate(ev, hlc->correctedWallMs(), tzOffsetMin());
+    // Schedules and quiet hours apply to when the event happened, not to when a delayed copy
+    // reached this node. A timestamp from the future (a wrong origin clock) falls back to now.
+    const int64_t now_ms = hlc->correctedWallMs();
+    const int64_t rule_time_ms = ev.wall_ms > 0 && ev.wall_ms <= now_ms ? ev.wall_ms : now_ms;
+    auto actions = rules.evaluate(ev, rule_time_ms, tzOffsetMin());
     bool chime_notified = false;
     bool chime_action_seen = false;
     for (const auto& a : actions) {
@@ -8900,8 +8925,8 @@ struct Node::Impl {
     pairing_is_founder = mesh->isFounder();
     store.metaSet("pairing.is_founder", pairing_is_founder ? "1" : "0");
     const bool stored = storePairingSecret();
-    // C5: 鍵の保存に失敗した参加を ok:true と報告してはいけない。join_result は
-    // 保存の成否が確定してから、paired / pairing_state より前に必ず出す。
+    // C5: a join whose key could not be stored must never report ok:true. join_result is emitted
+    // once the store outcome is known, and always before paired / pairing_state.
     if (pairing_join_awaiting_persist) {
       pairing_join_awaiting_persist = false;
       emitJoinResult(stored, stored ? "" : "persist_failed");

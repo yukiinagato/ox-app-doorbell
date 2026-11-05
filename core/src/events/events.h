@@ -67,6 +67,7 @@ class EventLog {
                                       size_t limit) const;
 
 
+  // Returns true only when the merged notification state changed and was persisted.
   bool mergeNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
 
   void onEvent(EventCb cb);

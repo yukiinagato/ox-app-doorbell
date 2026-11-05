@@ -155,8 +155,8 @@ bool EventLog::mergeNotify(const std::string& origin, uint64_t seq,
     cJSON_AddItemToObject(merged.get(), it->string, cJSON_Duplicate(it, 1));
   }
   if (cJSON_Compare(merged.get(), cur.get(), 1)) return false;
-  store_.eventSetNotify(origin, seq, json::dump(merged.get()));
-  return true;
+  // The caller re-broadcasts only what this replica actually persisted.
+  return store_.eventSetNotify(origin, seq, json::dump(merged.get()));
 }
 
 }  // namespace db

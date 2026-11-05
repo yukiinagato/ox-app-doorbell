@@ -28,7 +28,8 @@ int parseHhmm(const std::string& s) {
   int h = 0, m = 0;
   char tail = 0;
   if (std::sscanf(s.c_str(), "%d:%d%c", &h, &m, &tail) != 2) return -1;
-  if (h < 0 || h > 24 || m < 0 || m > 59) return -1;
+  // 24:00 is the end of the day; any other hour past 23 is invalid.
+  if (h < 0 || m < 0 || m > 59 || h > 24 || (h == 24 && m != 0)) return -1;
   return h * 60 + m;
 }
 
@@ -211,12 +212,18 @@ std::vector<Action> RuleEngine::evaluate(const EventRecord& ev, int64_t correcte
     if (!json::getBool(rule, "enabled", true)) continue;
     if (!whenMatch(json::get(rule, "when"), ev, purpose, reason)) continue;
     if (!scheduleMatch(json::get(rule, "schedule"), day, minute)) continue;
+    // A purpose selection refines a call that its press already announced. A rule that does not
+    // filter on purpose already acted on the press, so only its chime (which carries the new
+    // purpose to the indoor UI) runs again; purpose-specific rules act now for the first time.
+    const bool already_acted =
+        ev.type == "purpose_selected" && !cJSON_IsArray(json::get(json::get(rule, "when"), "purposes"));
 
     const cJSON* action = nullptr;
     cJSON_ArrayForEach(action, json::get(rule, "actions")) {
       if (!cJSON_IsObject(action)) continue;
       const std::string type = json::getString(action, "type");
       if (type.empty()) continue;
+      if (already_acted && type != "chime") continue;
       if (quiet.shouldDrop(type) && !json::getBool(action, "never_suppress")) continue;
 
       json::Doc params(cJSON_Duplicate(action, 1));

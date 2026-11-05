@@ -108,7 +108,7 @@ class Store {
   bool rebuildCallProjection();
   std::optional<EventRecord> eventApplyNext(const std::string& origin);
   bool eventExists(const std::string& origin, uint64_t seq);
-  void eventSetNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
+  bool eventSetNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
   std::optional<EventRecord> eventGet(const std::string& origin, uint64_t seq);
   // The advertised head is the largest contiguous sequence starting at one. max_seq is a
   // separate durable allocation watermark and is not reduced when old events are pruned.
