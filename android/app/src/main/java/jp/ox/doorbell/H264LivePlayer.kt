@@ -8,7 +8,6 @@ import android.util.Log
 import android.view.Surface
 import android.view.TextureView
 import java.net.HttpURLConnection
-import java.net.URL
 
 /** API19-safe MediaCodec surface decoder for the repository's live fMP4 stream. */
 internal class H264LivePlayer(
@@ -60,14 +59,14 @@ internal class H264LivePlayer(
         drainRunning = false
         val active = decoder
         decoder = null
-        try { active?.stop() } catch (_: Exception) { }
+        try { active?.stop() } catch (e: Exception) { ShellLog.ignored("H264LivePlayer", e) }
         joinUnlessCurrent(networkThread)
         joinUnlessCurrent(drainThread)
         networkThread = null
         drainThread = null
         if (active != null) decoderPool().recycle(active)
         buffers = null
-        try { surface?.release() } catch (_: Exception) { }
+        try { surface?.release() } catch (e: Exception) { ShellLog.ignored("H264LivePlayer", e) }
         surface = null
         if (view.surfaceTextureListener === this)
             view.surfaceTextureListener = null
@@ -99,7 +98,7 @@ internal class H264LivePlayer(
     private fun stream() {
         var local: HttpURLConnection? = null
         try {
-            local = URL(url).openConnection() as HttpURLConnection
+            local = LocalMedia.open(url)
             connection = local
             local.connectTimeout = CONNECT_TIMEOUT_MS
             local.readTimeout = READ_TIMEOUT_MS
@@ -114,7 +113,7 @@ internal class H264LivePlayer(
         } catch (e: Exception) {
             if (running) fail("${e.javaClass.simpleName}: ${e.message.orEmpty()}")
         } finally {
-            try { local?.disconnect() } catch (_: Exception) { }
+            try { local?.disconnect() } catch (e: Exception) { ShellLog.ignored("H264LivePlayer", e) }
             if (connection === local) connection = null
         }
     }
@@ -146,7 +145,7 @@ internal class H264LivePlayer(
             listener.onConfigured(name, config.width, config.height)
             trace("decoder_configured")
         } catch (e: Exception) {
-            try { active?.stop() } catch (_: Exception) { }
+            try { active?.stop() } catch (e: Exception) { ShellLog.ignored("H264LivePlayer", e) }
             decoderPool().discard(active)
             fail("decoder configure failed: ${e.javaClass.simpleName}")
         }
@@ -226,7 +225,7 @@ internal class H264LivePlayer(
         drainRunning = false
         val active = decoder
         decoder = null
-        try { active?.stop() } catch (_: Exception) { }
+        try { active?.stop() } catch (e: Exception) { ShellLog.ignored("H264LivePlayer", e) }
         decoderPool().discard(active)
         listener.onFailure(reason)
     }

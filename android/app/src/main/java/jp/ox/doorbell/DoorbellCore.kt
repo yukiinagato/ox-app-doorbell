@@ -48,24 +48,28 @@ class DoorbellCore(context: Context) {
         if (handle == 0L) return
         nativeDestroy(handle)
         handle = 0
+        localTokenCache = null
     }
 
-    fun press(doorId: String) {
-        if (handle != 0L) nativePress(handle, doorId)
+    @Volatile
+    private var localTokenCache: String? = null
+
+    /**
+     * Token for X-Doorbell-Local on loopback media requests (security v3 section 8). It is random
+     * per Core instance, so it is re-read after every restart; empty while Core is not running.
+     */
+    fun localToken(): String {
+        val h = handle
+        if (h == 0L) return ""
+        localTokenCache?.let { return it }
+        val value = nativeLocalToken(h).orEmpty()
+        if (value.isNotEmpty() && handle == h) localTokenCache = value
+        return value
     }
 
-    /** Legacy press API carrying a configured visit-purpose identifier. */
-    fun pressPurpose(doorId: String, purpose: String) {
-        if (handle != 0L) nativePressPurpose(handle, doorId, purpose)
-    }
-
-    /** Legacy purpose-selection API retained for one compatibility cycle. */
-    fun selectPurpose(doorId: String, purpose: String) {
-        if (handle != 0L) nativeSelectPurpose(handle, doorId, purpose)
-    }
-
-    fun cancelCall(doorId: String) {
-        if (handle != 0L) nativeCancelCall(handle, doorId)
+    /** Close the native admin window that a successful [adminPasswordVerify] opened. */
+    fun adminLock() {
+        if (handle != 0L) nativeAdminLock(handle)
     }
 
     fun pressV2(doorId: String, purpose: String = ""): String? {
@@ -158,7 +162,8 @@ class DoorbellCore(context: Context) {
 
     /**
      * Trigger the configured unlock action for one door. Returns core's result: zero when the
-     * action was queued and [DoorUnlocks.NOT_CONFIGURED] when nothing is configured anywhere.
+     * action was queued, [DoorUnlocks.NOT_CONFIGURED] when nothing is configured anywhere, and
+     * [DoorUnlocks.EXECUTION_FAILED] when a configured command could not be executed.
      */
     fun openDoor(door: String): Int =
         if (handle != 0L && door.isNotEmpty()) nativeOpenDoor(handle, door) else -1
@@ -384,7 +389,10 @@ class DoorbellCore(context: Context) {
     fun foundCluster(): Boolean = handle != 0L && nativeFoundCluster(handle)
 
     private fun parse(s: String?): JSONObject? =
-        try { if (s == null) null else JSONObject(s) } catch (_: Exception) { null }
+        try { if (s == null) null else JSONObject(s) } catch (e: Exception) {
+            android.util.Log.w("doorbell-core-kt", "Core returned unparseable JSON: ${e.message}")
+            null
+        }
 
     /** Traverse the configuration tree by dotted path. */
     fun dig(root: JSONObject?, dotpath: String): Any? {
@@ -452,10 +460,6 @@ class DoorbellCore(context: Context) {
     private external fun nativeStop(handle: Long)
     private external fun nativeDestroy(handle: Long)
     private external fun nativeSetUiCallback(handle: Long, enabled: Boolean)
-    private external fun nativePress(handle: Long, doorId: String)
-    private external fun nativePressPurpose(handle: Long, doorId: String, purpose: String)
-    private external fun nativeSelectPurpose(handle: Long, doorId: String, purpose: String)
-    private external fun nativeCancelCall(handle: Long, doorId: String)
     private external fun nativePressV2(handle: Long, doorId: String, purpose: String): String?
     private external fun nativeSelectPurposeV2(
         handle: Long,
@@ -565,10 +569,15 @@ class DoorbellCore(context: Context) {
     private external fun nativeQrEncode(text: String): IntArray?
     private external fun nativeParsePairUriJson(handle: Long, uri: String): String?
     private external fun nativeFoundCluster(handle: Long): Boolean
+    private external fun nativeLocalToken(handle: Long): String?
+    private external fun nativeAdminLock(handle: Long)
 
     companion object {
         /** The door identifier that addresses the cluster-wide announcement (notice.global). */
         const val GLOBAL_DOOR = "*"
+
+        /** Int-valued configuration writes return this while the native admin window is closed. */
+        const val RESULT_ADMIN_REQUIRED = -20
 
 
         init {

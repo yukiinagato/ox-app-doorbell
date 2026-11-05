@@ -47,11 +47,17 @@ internal object DoorUnlocks {
         )
     }
 
-    /** db_core_open_door results: 0 queued, -3 nothing configured, anything else a failure. */
+    /**
+     * db_core_open_door results: 0 queued, -3 nothing configured, -4 a configured command failed
+     * to execute, anything else an unavailable core or bad argument.
+     */
     const val OK = 0
     const val NOT_CONFIGURED = -3
+    const val EXECUTION_FAILED = -4
 
     fun queued(result: Int): Boolean = result == OK
 
     fun unconfigured(result: Int): Boolean = result == NOT_CONFIGURED
+
+    fun executionFailed(result: Int): Boolean = result == EXECUTION_FAILED
 }

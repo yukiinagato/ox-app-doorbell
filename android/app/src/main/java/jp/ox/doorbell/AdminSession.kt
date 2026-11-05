@@ -29,6 +29,9 @@ internal data class ConfigWriteResult(
 
     val unauthorized: Boolean get() = status == 401 || status == 403
     val unsupported: Boolean get() = error == ConfigWriters.ERR_UNSUPPORTED
+
+    /** Core refused the write because the native admin window had closed (security v3 §10). */
+    val adminRequired: Boolean get() = error == ConfigWriters.ERR_ADMIN_REQUIRED
 }
 
 /**
@@ -75,7 +78,7 @@ internal class AdminSession private constructor(
         } catch (e: Exception) {
             ConfigWriteResult(false, e.javaClass.simpleName, 0)
         } finally {
-            try { connection?.disconnect() } catch (_: Exception) { }
+            try { connection?.disconnect() } catch (e: Exception) { ShellLog.ignored("AdminSession", e) }
         }
     }
 
@@ -105,7 +108,7 @@ internal class AdminSession private constructor(
             } catch (_: Exception) {
                 null to ERR_UNREACHABLE
             } finally {
-                try { connection?.disconnect() } catch (_: Exception) { }
+                try { connection?.disconnect() } catch (e: Exception) { ShellLog.ignored("AdminSession", e) }
             }
         }
 
@@ -151,7 +154,7 @@ internal class AdminSession private constructor(
             } catch (_: Exception) {
                 ""
             } finally {
-                try { stream.close() } catch (_: Exception) { }
+                try { stream.close() } catch (e: Exception) { ShellLog.ignored("AdminSession", e) }
             }
         }
 
