@@ -115,19 +115,26 @@ const tests = {
   {
     const r = runtime(), { binding, sip } = await connect(r);
     r.context.document.hidden = true; r.listeners.visibilitychange();
-    r.advance(2500); await flush();
-    assert(!pending(r, "heartbeat"), "hidden page does not issue more ownership claims");
+    r.advance(2000); await flush();
+    const hidden = pending(r, "heartbeat");
+    assert(hidden, "an answered call keeps renewing its lease while the page is hidden");
+    await reply(hidden, lease());
+    assert.strictEqual(binding.leaseDeadline, 12000, "a hidden-page heartbeat renews the lease");
+    assert.strictEqual(sip.terminated, 0, "backgrounding the page does not hang up an answered call");
+    assert(!r.requests.some(x => x.url === "/state" && !x.completed && !(x.xhr && x.xhr.aborted)),
+      "hidden pages stop state reads");
     r.context.document.hidden = false; r.listeners.visibilitychange();
-    assert(!pending(r, "heartbeat"), "foreground waits for authority before claiming its old owner");
-    const request = r.requests.find(x => x.url === "/state" && !x.completed && !x.xhr.aborted);
-    await reply(request, { doors: [{ id: "door", call_id: "A", stage_revision: 2,
-      call_state: "in_call", dialog_owner: "owner-A" }] });
-    assert(pending(r, "heartbeat"), "fresh matching state permits ownership verification");
-    assert.strictEqual(binding.leaseDeadline, 10000, "foreground snapshot alone does not renew lease");
-    assert.strictEqual(sip.terminated, 0);
+    assert.strictEqual(sip.terminated, 0, "returning to the foreground keeps the call");
     r.context.document.hidden = true; r.listeners.visibilitychange();
-    r.advance(8000); await flush();
-    assert.strictEqual(sip.terminated, 1, "sleep cannot extend the old lease");
+    r.advance(10500); await flush();
+    assert.strictEqual(sip.terminated, 1, "a lease that is never acknowledged still ends the call");
+  }
+  {
+    const r = runtime();
+    r.activate("door", "A", 2);
+    r.context.document.hidden = true; r.listeners.visibilitychange();
+    r.advance(3000); await flush();
+    assert(!pending(r, "heartbeat"), "an unanswered page makes no ownership claims while hidden");
   }
   {
     const r = runtime(), { sip } = await connect(r);
