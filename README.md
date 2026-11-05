@@ -40,9 +40,9 @@ power, enclosure, or long-soak gates.
 
 The old `ios-legacy` UI is frozen at the local, unpushed
 `ios-legacy-0.2.0-final` archival tag. Neutral iOS 5 build, package, install,
-MiniSIP test, and recovery tooling is staged in the currently untracked
-`ios-compat` tree; fresh-clone, real-device, and rollback gates have not passed,
-so `ios-legacy` remains in this working tree. The
+MiniSIP test, and recovery tooling lives in the tracked `ios-compat` tree;
+fresh-clone, real-device, and rollback gates have not passed, so `ios-legacy`
+remains in this working tree. The
 current, test-backed matrix is maintained in
 [docs/en/capability-matrix.md](docs/en/capability-matrix.md); a successful
 hosted build is a contract check, not legacy-device certification.
@@ -159,7 +159,8 @@ original iPad while preserving a low-latency path where it works.
 # Core and Web contracts
 cmake -S core -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DDB_WITH_PJSIP=OFF
 cmake --build build -j4
-./build/doorbell_tests
+./build/doorbell_tests            # about 530 cases; several minutes on a small host
+./build/doorbell_tests -tc='mesh*' # run a subset while iterating
 
 # Generated localization must be current
 python3 tools/gen_i18n.py --check
@@ -203,6 +204,10 @@ the whole OS automatically. Helper artifacts are not considered available
 until their host tests and target-device installation gate pass. Stock
 iOS/tvOS instead rely on supervised Single App Mode/MDM and cannot promise
 automatic relaunch in every failure mode.
+
+Verification records live under `verification/`. `verification/progress.json`
+is the current task ledger; the raw 2026-09 remediation evidence is indexed in
+`verification/remediation-q01-q18/INDEX.md` and kept in git history.
 
 See [AGENTS.md](AGENTS.md) for repository rules and build constraints. Do not
 push code, tags, releases, Wiki changes, or deployment state without explicit
