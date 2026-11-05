@@ -1010,6 +1010,7 @@
 "prefs.screensaver_brightness" = "屏保亮度";
 "prefs.screensaver_mode" = "样式";
 "prefs.screensaver_schedule" = "时段";
+"prefs.search" = "搜索设置";
 "prefs.selected" = "已选择";
 "prefs.sip" = "通话 (SIP)";
 "prefs.sip_account" = "本设备分机";

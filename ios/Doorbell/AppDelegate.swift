@@ -18,7 +18,10 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private let callAudioMonitor = CallAudioSessionMonitor()
     private lazy var incomingRouter = IncomingCallRouter(
         root: { [weak self] in self?.window?.rootViewController },
-        blocked: { [weak self] in self?.pairingGate != nil },
+        blocked: { [weak self] in
+            self?.pairingGate != nil ||
+                (self?.window?.rootViewController as? MainViewController)?.isEmergencyVisible == true
+        },
         makeScreen: { [weak self] request in
             guard let self = self else { return nil }
             return IncomingViewController(core: self.core, boot: self.boot, door: request.door,

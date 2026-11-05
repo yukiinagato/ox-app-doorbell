@@ -1010,6 +1010,7 @@
 "prefs.screensaver_brightness" = "セーバー中の明るさ";
 "prefs.screensaver_mode" = "表示";
 "prefs.screensaver_schedule" = "時間帯";
+"prefs.search" = "設定を検索";
 "prefs.selected" = "選択中";
 "prefs.sip" = "通話 (SIP)";
 "prefs.sip_account" = "この端末の内線";

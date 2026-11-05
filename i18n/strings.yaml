@@ -1449,6 +1449,7 @@ prefs.selected: { ja: "選択中", en: "Selected", zh: "已选择" }
 prefs.available: { ja: "追加できる項目", en: "Available", zh: "可添加" }
 prefs.order_footer: { ja: "右端をドラッグして並べ替えます。", en: "Drag the handles to reorder.", zh: "拖动右侧手柄排序。" }
 prefs.save: { ja: "保存", en: "Save", zh: "保存" }
+prefs.search: { ja: "設定を検索", en: "Search settings", zh: "搜索设置" }
 prefs.unit_seconds: { ja: "秒", en: "s", zh: "秒" }
 prefs.unit_hours: { ja: "時間", en: "h", zh: "小时" }
 prefs.unit_days: { ja: "日", en: "days", zh: "天" }

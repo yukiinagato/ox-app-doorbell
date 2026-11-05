@@ -303,7 +303,7 @@ final class MainViewController: UIViewController {
     private func updateVisitorActionMetrics() {
         let line = max(cancelButton.titleLabel?.font.lineHeight ?? 0,
                        endCallButton.titleLabel?.font.lineHeight ?? 0)
-        var height = max(56, ceil(line * 2 + 28))
+        var height = max(TouchTarget.visitor, ceil(line * 2 + 28))
         for button in [cancelButton, endCallButton, emergencyCancel] {
             let width = max(1, min(420, view.bounds.width - 40) - button.contentEdgeInsets.left -
                             button.contentEdgeInsets.right)
@@ -637,7 +637,8 @@ final class MainViewController: UIViewController {
         let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
         let width = button.widthAnchor.constraint(equalToConstant: 420)
         width.priority = UILayoutPriority(750)
-        let height = button.heightAnchor.constraint(greaterThanOrEqualToConstant: 56)
+        // Visitor targets are pressed from a standing distance (ui-guidelines §3).
+        let height = button.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.visitor)
         visitorActionHeights.append(height)
         NSLayoutConstraint.activate([
             button.centerXAnchor.constraint(equalTo: container.centerXAnchor),
@@ -1430,6 +1431,10 @@ final class MainViewController: UIViewController {
             }
         }
     }
+
+    /// The SOS overlay cannot be covered by another screen (ui-guidelines §4); the incoming-call
+    /// router waits while it is showing.
+    var isEmergencyVisible: Bool { return emergencyActive && !emergencyView.isHidden }
 
     private func showEmergency(visual: Bool) {
         if emergencyActive {

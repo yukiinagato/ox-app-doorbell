@@ -132,9 +132,14 @@ enum SettingsStyle {
 final class SettingsCategoryListController: UITableViewController, SettingsRefreshable {
 
     private weak var host: SettingsHosting?
+    private var allCategories: [SettingsCategory] = []
     private var categories: [SettingsCategory] = []
     private var selectedId: String?
+    private var query = ""
     var onClose: (() -> Void)?
+    #if os(iOS)
+    private let search = UISearchBar()
+    #endif
 
     init(host: SettingsHosting) {
         self.host = host
@@ -155,8 +160,33 @@ final class SettingsCategoryListController: UITableViewController, SettingsRefre
                                                            action: #selector(close))
         navigationItem.leftBarButtonItem?.accessibilityIdentifier = "settings_close"
         #endif
+        #if os(iOS)
+        search.placeholder = host.texts.t("prefs.search")
+        search.delegate = self
+        search.autocapitalizationType = .none
+        search.barTintColor = host.palette.background
+        search.sizeToFit()
+        tableView.tableHeaderView = search
+        #endif
         host.register(self)
         refreshFromHost()
+    }
+
+    /// A category matches when its title, its summary or any item title on its page does.
+    private func applyFilter() {
+        let needle = query.lowercased()
+        guard !needle.isEmpty else {
+            categories = allCategories
+            return
+        }
+        categories = allCategories.filter { category in
+            if category.title.lowercased().contains(needle) ||
+                category.summary.lowercased().contains(needle) { return true }
+            return category.page().sections.contains { section in
+                section.header.lowercased().contains(needle) ||
+                    section.items.contains { $0.title.lowercased().contains(needle) }
+            }
+        }
     }
 
     func select(_ id: String) {
@@ -169,7 +199,8 @@ final class SettingsCategoryListController: UITableViewController, SettingsRefre
 
     func refreshFromHost() {
         guard let host = host else { return }
-        categories = host.catalog().categories()
+        allCategories = host.catalog().categories()
+        applyFilter()
         tableView.reloadData()
         if host.usesSplit, let id = selectedId { select(id) }
     }
@@ -224,6 +255,18 @@ final class SettingsCategoryListController: UITableViewController, SettingsRefre
         if let palette = host?.palette { SettingsStyle.header(palette, view) }
     }
 }
+
+#if os(iOS)
+extension SettingsCategoryListController: UISearchBarDelegate {
+    func searchBar(_ searchBar: UISearchBar, textDidChange searchText: String) {
+        query = searchText
+        applyFilter()
+        tableView.reloadData()
+    }
+
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) { searchBar.resignFirstResponder() }
+}
+#endif
 
 // MARK: - One settings page
 

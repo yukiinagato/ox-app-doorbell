@@ -1010,6 +1010,7 @@
 "prefs.screensaver_brightness" = "Brightness while saving";
 "prefs.screensaver_mode" = "Style";
 "prefs.screensaver_schedule" = "When";
+"prefs.search" = "Search settings";
 "prefs.selected" = "Selected";
 "prefs.sip" = "Calling (SIP)";
 "prefs.sip_account" = "This device's extension";

@@ -411,25 +411,13 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         unlockButton.accessibilityIdentifier = "incoming_unlock"
         quickReplyButton.accessibilityIdentifier = "incoming_quick_reply"
         applyButtonVisibility()
-        // Two compact rows keep the controls touch-sized while preserving the video area.
-        let primaryActions = UIStackView(arrangedSubviews: [monitorButton, answerButton, micButton])
-        primaryActions.axis = .horizontal
-        primaryActions.spacing = 8
-        primaryActions.distribution = .fillEqually
-        let secondaryActions = UIStackView(arrangedSubviews: [unlockButton, quickReplyButton,
-                                                               ignoreButton])
-        secondaryActions.axis = .horizontal
-        secondaryActions.spacing = 8
-        secondaryActions.distribution = .fillEqually
-        let actionRows = UIStackView(arrangedSubviews: [primaryActions, secondaryActions])
-        actionRows.axis = .vertical
-        actionRows.spacing = 8
-        for button in [monitorButton, answerButton, micButton, unlockButton,
-                       quickReplyButton, ignoreButton] {
-            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 56).isActive = true
-        }
-        quickReplyButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
-        quickReplyButton.contentEdgeInsets = UIEdgeInsets(top: 12, left: 4, bottom: 12, right: 4)
+        // The fixed action zone (ui-guidelines §4): Answer — the largest, positive control —
+        // then Reply and Ignore; Monitor, Unlock and the in-call microphone below. In a call,
+        // End takes Answer's place, so the hand never has to look for it.
+        let actionRows = ActionZoneView()
+        actionRows.setActions(primary: [answerButton, quickReplyButton, ignoreButton],
+                              secondary: [monitorButton, unlockButton, micButton])
+        actionRows.accessibilityIdentifier = "incoming_actions"
 
         replyStack.isHidden = true
 
@@ -520,15 +508,13 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     }
 
     private func styleActionButton(_ b: UIButton, prominent: Bool) {
-        b.titleLabel?.font = .systemFont(ofSize: 22, weight: .semibold)
+        b.titleLabel?.font = TypeRole.title.font(weight: .semibold, base: prominent ? 20 : 17)
         b.titleLabel?.adjustsFontSizeToFitWidth = true
         b.titleLabel?.minimumScaleFactor = 0.6
         #if os(iOS)
         b.setTitleColor(prominent ? .black : .white, for: .normal)
-        b.backgroundColor = prominent
-            ? UIColor(red: 0.35, green: 0.78, blue: 0.42, alpha: 1)
-            : UIColor(white: 1, alpha: 0.14)
-        b.layer.cornerRadius = 12
+        b.backgroundColor = prominent ? ColorRole.positive : UIColor(white: 1, alpha: 0.14)
+        b.layer.cornerRadius = Radius.card
         b.contentEdgeInsets = UIEdgeInsets(top: 14, left: 10, bottom: 14, right: 10)
         #endif
     }
@@ -972,9 +958,22 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         updateToggleTitles()
     }
 
+    /// Quick replies open as a bottom sheet (compact) or a popover (wider windows). The call
+    /// screen stays underneath and alive, and one tap sends.
     @objc private func onToggleReplies() {
-        replyExpanded.toggle()
-        replyStack.isHidden = !replyExpanded || replyStack.arrangedSubviews.isEmpty
+        guard !inCall, presentedViewController == nil,
+              let replies = ConfigUtil.dig(cfg, "quick_replies") as? [String: Any],
+              !replies.isEmpty else { return }
+        let lang = visitorLang.isEmpty ? "ja" : visitorLang
+        let choices = ConfigUtil.sortedByOrder(replies).map { id in
+            ActionSheetController.Choice(id: id, title: ConfigUtil.labelOf(
+                replies[id] as? [String: Any], lang, id))
+        }
+        let sheet = ActionSheetController(title: texts.t("ring.quick_reply"), choices: choices,
+                                          palette: palette, source: quickReplyButton) {
+            [weak self] choice in self?.sendQuickReply(id: choice.id, title: choice.title)
+        }
+        present(sheet, animated: !Motion.reduced)
     }
 
     /// The debug line is opt-in and the choice is remembered on this device.
@@ -1005,13 +1004,15 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     }
 
     @objc private func onReply(_ sender: UIButton) {
-        guard !inCall else { return }
         guard let id = sender.accessibilityIdentifier?.dropFirst("qr_button_".count) else { return }
-        let accepted = core.quickReplyV2(replyId: String(id), door: door, callId: callId,
+        sendQuickReply(id: String(id), title: sender.currentTitle ?? "")
+    }
+
+    private func sendQuickReply(id: String, title: String) {
+        guard !inCall else { return }
+        let accepted = core.quickReplyV2(replyId: id, door: door, callId: callId,
                                          stageRevision: stageRevision)
-        hintLabel.text = accepted
-            ? texts.t("reply.sent", sender.currentTitle ?? "")
-            : texts.t("reply.failed")
+        hintLabel.text = accepted ? texts.t("reply.sent", title) : texts.t("reply.failed")
         hintLabel.isHidden = false
         if accepted && !inCall { restartReturnCountdown() }
     }
