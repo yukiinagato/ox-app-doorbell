@@ -1171,9 +1171,11 @@
   <data name="reply_failed" xml:space="preserve"><value>クイック返信の送信に失敗しました</value></data>
   <data name="reply_sent" xml:space="preserve"><value>送信しました: {0}</value></data>
   <data name="ring_answer" xml:space="preserve"><value>応答</value></data>
+  <data name="ring_answer_unavailable" xml:space="preserve"><value>この画面では応答できません</value></data>
   <data name="ring_cancelled" xml:space="preserve"><value>訪客が呼び出しを取り消しました</value></data>
   <data name="ring_debug_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>無視</value></data>
+  <data name="ring_ignored" xml:space="preserve"><value>この画面では無視しました。ほかの端末では鳴り続けます</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>{0} で呼び出し中</value></data>
   <data name="ring_lang_badge" xml:space="preserve"><value>訪客言語: {0}</value></data>
   <data name="ring_mic_off" xml:space="preserve"><value>マイク OFF</value></data>
@@ -1859,6 +1861,7 @@ PIN: {1}</value></data>
   <data name="unlock_show" xml:space="preserve"><value>常に表示</value></data>
   <data name="unlock_title" xml:space="preserve"><value>開錠ボタン</value></data>
   <data name="version_line" xml:space="preserve"><value>core {0} · app {1}</value></data>
+  <data name="video_connecting" xml:space="preserve"><value>映像に接続しています…</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="visitor_restoring" xml:space="preserve"><value>通話状態を復元しています…</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼出</value></data>

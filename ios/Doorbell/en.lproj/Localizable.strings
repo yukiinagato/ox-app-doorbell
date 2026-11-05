@@ -1164,9 +1164,11 @@
 "reply.failed" = "Failed to send the quick reply";
 "reply.sent" = "Sent: %@";
 "ring.answer" = "Answer";
+"ring.answer_unavailable" = "Answering isn't available on this screen";
 "ring.cancelled" = "The visitor cancelled the call";
 "ring.debug_stats" = "%@ · %@ ms · ±%@ ms · %@ fps · drop %@";
 "ring.ignore" = "Ignore";
+"ring.ignored" = "Ignored on this screen. Other devices keep ringing";
 "ring.incoming" = "Visitor at %@";
 "ring.lang_badge" = "Visitor language: %@";
 "ring.mic_off" = "Mic off";
@@ -1843,6 +1845,7 @@
 "unlock.show" = "Always show";
 "unlock.title" = "Unlock button";
 "version.line" = "core %@ · app %@";
+"video.connecting" = "Connecting to video…";
 "video.stats" = "%@ · %@ ms · ±%@ ms · %@ fps · drop %@";
 "visitor.restoring" = "Restoring call status…";
 "volume.call" = "Call";

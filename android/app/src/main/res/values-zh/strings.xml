@@ -1169,9 +1169,11 @@
     <string name="reply_failed">发送快捷回复失败</string>
     <string name="reply_sent">已发送：%1$s</string>
     <string name="ring_answer">接听</string>
+    <string name="ring_answer_unavailable">此画面无法接听</string>
     <string name="ring_cancelled">访客已取消呼叫</string>
     <string name="ring_debug_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="ring_ignore">忽略</string>
+    <string name="ring_ignored">已在本画面忽略，其他设备仍在响铃</string>
     <string name="ring_incoming">%1$s 有访客</string>
     <string name="ring_lang_badge">访客语言：%1$s</string>
     <string name="ring_mic_off">麦克风 关</string>
@@ -1857,6 +1859,7 @@ PIN：%2$s</string>
     <string name="unlock_show">始终显示</string>
     <string name="unlock_title">开锁按钮</string>
     <string name="version_line">core %1$s · app %2$s</string>
+    <string name="video_connecting">正在连接视频…</string>
     <string name="video_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="visitor_restoring">正在恢复通话状态…</string>
     <string name="volume_call">呼叫</string>

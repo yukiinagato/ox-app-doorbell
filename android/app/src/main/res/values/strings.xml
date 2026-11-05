@@ -1169,9 +1169,11 @@ Delete it?</string>
     <string name="reply_failed">Failed to send the quick reply</string>
     <string name="reply_sent">Sent: %1$s</string>
     <string name="ring_answer">Answer</string>
+    <string name="ring_answer_unavailable">Answering isn\'t available on this screen</string>
     <string name="ring_cancelled">The visitor cancelled the call</string>
     <string name="ring_debug_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="ring_ignore">Ignore</string>
+    <string name="ring_ignored">Ignored on this screen. Other devices keep ringing</string>
     <string name="ring_incoming">Visitor at %1$s</string>
     <string name="ring_lang_badge">Visitor language: %1$s</string>
     <string name="ring_mic_off">Mic off</string>
@@ -1857,6 +1859,7 @@ Sends in %1$ss</string>
     <string name="unlock_show">Always show</string>
     <string name="unlock_title">Unlock button</string>
     <string name="version_line">core %1$s · app %2$s</string>
+    <string name="video_connecting">Connecting to video…</string>
     <string name="video_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="visitor_restoring">Restoring call status…</string>
     <string name="volume_call">Call</string>

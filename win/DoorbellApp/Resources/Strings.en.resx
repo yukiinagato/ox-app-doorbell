@@ -1171,9 +1171,11 @@ Delete it?</value></data>
   <data name="reply_failed" xml:space="preserve"><value>Failed to send the quick reply</value></data>
   <data name="reply_sent" xml:space="preserve"><value>Sent: {0}</value></data>
   <data name="ring_answer" xml:space="preserve"><value>Answer</value></data>
+  <data name="ring_answer_unavailable" xml:space="preserve"><value>Answering isn't available on this screen</value></data>
   <data name="ring_cancelled" xml:space="preserve"><value>The visitor cancelled the call</value></data>
   <data name="ring_debug_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>Ignore</value></data>
+  <data name="ring_ignored" xml:space="preserve"><value>Ignored on this screen. Other devices keep ringing</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>Visitor at {0}</value></data>
   <data name="ring_lang_badge" xml:space="preserve"><value>Visitor language: {0}</value></data>
   <data name="ring_mic_off" xml:space="preserve"><value>Mic off</value></data>
@@ -1859,6 +1861,7 @@ Sends in {0}s</value></data>
   <data name="unlock_show" xml:space="preserve"><value>Always show</value></data>
   <data name="unlock_title" xml:space="preserve"><value>Unlock button</value></data>
   <data name="version_line" xml:space="preserve"><value>core {0} · app {1}</value></data>
+  <data name="video_connecting" xml:space="preserve"><value>Connecting to video…</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="visitor_restoring" xml:space="preserve"><value>Restoring call status…</value></data>
   <data name="volume_call" xml:space="preserve"><value>Call</value></data>

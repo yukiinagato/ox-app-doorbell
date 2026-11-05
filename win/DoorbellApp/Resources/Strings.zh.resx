@@ -1171,9 +1171,11 @@
   <data name="reply_failed" xml:space="preserve"><value>发送快捷回复失败</value></data>
   <data name="reply_sent" xml:space="preserve"><value>已发送：{0}</value></data>
   <data name="ring_answer" xml:space="preserve"><value>接听</value></data>
+  <data name="ring_answer_unavailable" xml:space="preserve"><value>此画面无法接听</value></data>
   <data name="ring_cancelled" xml:space="preserve"><value>访客已取消呼叫</value></data>
   <data name="ring_debug_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="ring_ignore" xml:space="preserve"><value>忽略</value></data>
+  <data name="ring_ignored" xml:space="preserve"><value>已在本画面忽略，其他设备仍在响铃</value></data>
   <data name="ring_incoming" xml:space="preserve"><value>{0} 有访客</value></data>
   <data name="ring_lang_badge" xml:space="preserve"><value>访客语言：{0}</value></data>
   <data name="ring_mic_off" xml:space="preserve"><value>麦克风 关</value></data>
@@ -1859,6 +1861,7 @@ PIN：{1}</value></data>
   <data name="unlock_show" xml:space="preserve"><value>始终显示</value></data>
   <data name="unlock_title" xml:space="preserve"><value>开锁按钮</value></data>
   <data name="version_line" xml:space="preserve"><value>core {0} · app {1}</value></data>
+  <data name="video_connecting" xml:space="preserve"><value>正在连接视频…</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="visitor_restoring" xml:space="preserve"><value>正在恢复通话状态…</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼叫</value></data>

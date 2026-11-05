@@ -1169,9 +1169,11 @@
     <string name="reply_failed">クイック返信の送信に失敗しました</string>
     <string name="reply_sent">送信しました: %1$s</string>
     <string name="ring_answer">応答</string>
+    <string name="ring_answer_unavailable">この画面では応答できません</string>
     <string name="ring_cancelled">訪客が呼び出しを取り消しました</string>
     <string name="ring_debug_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="ring_ignore">無視</string>
+    <string name="ring_ignored">この画面では無視しました。ほかの端末では鳴り続けます</string>
     <string name="ring_incoming">%1$s で呼び出し中</string>
     <string name="ring_lang_badge">訪客言語: %1$s</string>
     <string name="ring_mic_off">マイク OFF</string>
@@ -1857,6 +1859,7 @@ PIN: %2$s</string>
     <string name="unlock_show">常に表示</string>
     <string name="unlock_title">開錠ボタン</string>
     <string name="version_line">core %1$s · app %2$s</string>
+    <string name="video_connecting">映像に接続しています…</string>
     <string name="video_stats">%1$s · %2$s ms · ±%3$s ms · %4$s fps · drop %5$s</string>
     <string name="visitor_restoring">通話状態を復元しています…</string>
     <string name="volume_call">呼出</string>
