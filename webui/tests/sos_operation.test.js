@@ -67,7 +67,9 @@ function fixture(page, storage = new Map()) {
     const functionSource = name => html.match(new RegExp("function " + name + "\\(\\) \\{[\\s\\S]*?\\n" + indent + "\\}(?=\\n)"))[0];
     const install = functionSource("installEmergency");
     const translate = functionSource("applyEmergencyI18n");
-    Object.assign(context, { DoorbellPanelRuntime: root.DoorbellPanelRuntime, emergencyOverlay: null, t: key => key, esc: value => value });
+    vm.runInContext(fs.readFileSync(path.join(__dirname, "../panel/panel-common.js"), "utf8"), context);
+    Object.assign(context, { DoorbellPanelRuntime: root.DoorbellPanelRuntime, C: root.DoorbellPanelCommon,
+      emergencyOverlay: null, t: key => key, esc: value => value });
     vm.runInContext(translate + "\n" + install + "\ninstallEmergency();", context);
     overlay = context.emergencyOverlay;
   } else overlay = root.DoorbellPanelRuntime.installEmergencyOverlay({ translate: key => key, onTriggerResult: (ok, status, result) => notices.push(result) });
