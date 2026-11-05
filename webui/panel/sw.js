@@ -105,11 +105,13 @@ function startPush(p) {
   if (!isFinite(volume)) volume = 100;
   volume = Math.max(0, Math.min(100, volume));
   var requestedSound = typeof presentation.sound === "string" && presentation.sound.length > 0;
+  var expiresAt = !sticky && ttl > 0 ? Date.now() + ttl * 1000 : 0;
   var options = { body: typeof p.body === "string" ? p.body : "",
                   tag: pushTag(p),
                   renotify: true, requireInteraction: sticky,
                   silent: volume <= 0 || !requestedSound,
-                  data: { payload: p, url: safePanelUrl(p.url) } };
+                  timestamp: Date.now(),
+                  data: { payload: p, url: safePanelUrl(p.url), expires_at: expiresAt } };
   var shown = self.registration.showNotification(typeof p.title === "string" ? p.title : "", options);
   var expire = Promise.resolve();
   if (!sticky && ttl > 0) {
@@ -134,6 +136,118 @@ function startPush(p) {
   ]);
 }
 
+// A worker may be terminated long before a TTL elapses, so the in-memory timer above is only the
+// fast path. Every notification records its absolute expiry, and every worker wake-up (push,
+// click, close, message, subscription change, activation) closes whatever has expired.
+function closeExpiredNotifications() {
+  if (!self.registration || !self.registration.getNotifications) return Promise.resolve();
+  var now = Date.now();
+  return self.registration.getNotifications().then(function (notifications) {
+    for (var i = 0; i < notifications.length; i++) {
+      var data = notifications[i].data || {};
+      var expiresAt = Number(data.expires_at);
+      if (isFinite(expiresAt) && expiresAt > 0 && expiresAt <= now) notifications[i].close();
+    }
+  }, function () {});
+}
+
+var ENROLLMENT_KEY = "/panel/.doorbell-push-enrollment-v1";
+
+function enrollmentOf(value) {
+  value = value || {};
+  var page = typeof value.page === "string" && value.page.indexOf("/panel/") === 0 &&
+    value.page.length <= 256 ? value.page : "/panel/monitor";
+  var group = typeof value.group === "string" && /^[A-Za-z0-9_.:-]{1,64}$/.test(value.group) ?
+    value.group : "all";
+  return { page: page, group: group };
+}
+
+function writeEnrollment(value) {
+  if (!(self.caches && self.caches.open)) return Promise.resolve();
+  return self.caches.open(ORDER_CACHE).then(function (cache) {
+    return cache.put(ENROLLMENT_KEY, new Response(JSON.stringify(enrollmentOf(value)), {
+      headers: { "Content-Type": "application/json", "Cache-Control": "no-store" }
+    }));
+  }).catch(function () {});
+}
+
+function readEnrollment() {
+  if (!(self.caches && self.caches.open)) return Promise.resolve(enrollmentOf(null));
+  return self.caches.open(ORDER_CACHE).then(function (cache) {
+    return cache.match(ENROLLMENT_KEY);
+  }).then(function (response) {
+    return response ? response.json() : null;
+  }).then(enrollmentOf, function () { return enrollmentOf(null); });
+}
+
+function base64Key(s) {
+  var padding = "=".repeat((4 - s.length % 4) % 4);
+  var raw = atob((s + padding).replace(/-/g, "+").replace(/_/g, "/"));
+  var out = new Uint8Array(raw.length);
+  for (var i = 0; i < raw.length; i++) out[i] = raw.charCodeAt(i);
+  return out;
+}
+
+function vapidKey() {
+  return fetch("/api/panel/push-vapid-public-key", { cache: "no-store", credentials: "same-origin" })
+    .then(function (response) { return response.json(); })
+    .then(function (json) {
+      var key = json && (json.public_key || json.vapid_public_key);
+      if (!key) throw new Error("vapid_public_key_missing");
+      return base64Key(key);
+    });
+}
+
+function subscriptionJson(sub) { return sub && sub.toJSON ? sub.toJSON() : sub; }
+
+// The browser rotated or revoked the subscription. Without re-enrollment Core would keep a dead
+// endpoint and SOS Push would stop silently until someone reopened a panel.
+function reenroll(event) {
+  var oldSub = event.oldSubscription || null;
+  var created = event.newSubscription ? Promise.resolve(event.newSubscription) :
+    vapidKey().then(function (key) {
+      return self.registration.pushManager.subscribe({ userVisibleOnly: true,
+                                                       applicationServerKey: key });
+    });
+  return Promise.all([created, readEnrollment()]).then(function (all) {
+    var sub = all[0], enrollment = all[1];
+    return fetch("/api/panel/push-subscription", {
+      method: "POST", credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ subscription: subscriptionJson(sub), page: enrollment.page,
+                             group: enrollment.group })
+    }).then(function () {
+      if (!oldSub || !oldSub.endpoint || (sub && sub.endpoint === oldSub.endpoint)) return null;
+      return fetch("/api/panel/push-subscription", {
+        method: "DELETE", credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: oldSub.endpoint })
+      });
+    });
+  }).catch(function () {});
+}
+
+self.addEventListener("pushsubscriptionchange", function (event) {
+  event.waitUntil(Promise.all([reenroll(event), closeExpiredNotifications()]));
+});
+
+self.addEventListener("message", function (event) {
+  var data = event.data || {};
+  if (data.t === "doorbell-push-enrollment") {
+    if (event.waitUntil) event.waitUntil(writeEnrollment(data));
+    else writeEnrollment(data);
+  }
+  if (event.waitUntil) event.waitUntil(closeExpiredNotifications());
+});
+
+self.addEventListener("activate", function (event) {
+  event.waitUntil(closeExpiredNotifications());
+});
+
+self.addEventListener("notificationclose", function (event) {
+  event.waitUntil(closeExpiredNotifications());
+});
+
 self.addEventListener("push", function (event) {
   var p = payloadOf(event);
   var started = pushOrdering.then(function () {
@@ -144,12 +258,14 @@ self.addEventListener("push", function (event) {
   // Serialize only ordering and notification creation. A non-sticky notification's TTL must not
   // delay a newer SOS while its waitUntil promise keeps the worker alive.
   pushOrdering = started.then(function () {}, function () {});
-  event.waitUntil(started.then(function (result) { return result ? result.wait : null; }));
+  event.waitUntil(Promise.all([closeExpiredNotifications(),
+    started.then(function (result) { return result ? result.wait : null; })]));
 });
 
 self.addEventListener("notificationclick", function (event) {
   event.notification.close();
   var data = event.notification.data || {}, p = data.payload || {}, target = safePanelUrl(data.url);
+  closeExpiredNotifications();
   event.waitUntil(self.clients.matchAll({ type: "window", includeUncontrolled: true })
     .then(function (list) {
       // Prefer the page the resident already has open. It receives the payload and can render

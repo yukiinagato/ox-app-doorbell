@@ -8,6 +8,7 @@ const notifications = [];
 const messages = [];
 const opened = [];
 const timers = [];
+const fetches = [];
 const cacheValues = {};
 let closed = 0;
 let focused = 0;
@@ -61,6 +62,11 @@ vm.runInNewContext(fs.readFileSync("webui/panel/sw.js", "utf8"),
                    { self: self, URL: URL, Promise: Promise, decodeURIComponent: decodeURIComponent,
                      encodeURIComponent: encodeURIComponent,
                      Response: FakeResponse,
+                     fetch: function (url, options) {
+                       fetches.push({ url: url, options: options || {} });
+                       return Promise.resolve({ ok: true, json: function () {
+                         return Promise.resolve({ ok: true }); } });
+                     },
                      setTimeout: function (fn) { timers.push(fn); return timers.length; },
                      isFinite: isFinite });
 
@@ -195,6 +201,44 @@ async function run() {
   const lastNotification = notifications[notifications.length - 1];
   assert.strictEqual(lastNotification.title, "");
   assert.strictEqual(lastNotification.options.body, "");
+
+  // A TTL survives worker termination: the absolute expiry is swept on the next wake-up even
+  // though the in-memory timer never fired.
+  timers.length = 0;
+  listeners.push({
+    data: { json: function () { return { kind: "press", title: "Ring", tag: "doorbell-ttl",
+      presentation: { sticky: false, ttl_s: 30 }, event_id: "node:9" }; } },
+    waitUntil: function (p) { waiting = p; }
+  });
+  await settle();
+  const ttlNotification = notifications[notifications.length - 1];
+  assert(ttlNotification.options.data.expires_at > Date.now(), "expiry is recorded");
+  timers.length = 0;  // the worker was terminated: its timer is gone
+  ttlNotification.options.data.expires_at = Date.now() - 1;
+  listeners.message({ data: {}, waitUntil: function (p) { waiting = p; } });
+  await waiting;
+  assert.strictEqual(ttlNotification.closed, true, "an expired notification closes on wake-up");
+
+  // Enrollment remembered from the page is reused when the browser rotates the subscription.
+  listeners.message({ data: { t: "doorbell-push-enrollment", page: "/panel/door", group: "west" },
+                      waitUntil: function (p) { waiting = p; } });
+  await waiting;
+  fetches.length = 0;
+  listeners.pushsubscriptionchange({
+    oldSubscription: { endpoint: "https://push.example/old" },
+    newSubscription: { endpoint: "https://push.example/new",
+      toJSON: function () { return { endpoint: "https://push.example/new", keys: {} }; } },
+    waitUntil: function (p) { waiting = p; }
+  });
+  await waiting;
+  assert.strictEqual(fetches.length, 2, "registers the new endpoint and retires the old one");
+  assert.strictEqual(fetches[0].options.method, "POST");
+  const posted = JSON.parse(fetches[0].options.body);
+  assert.strictEqual(posted.subscription.endpoint, "https://push.example/new");
+  assert.strictEqual(posted.page, "/panel/door");
+  assert.strictEqual(posted.group, "west");
+  assert.strictEqual(fetches[1].options.method, "DELETE");
+  assert.strictEqual(JSON.parse(fetches[1].options.body).endpoint, "https://push.example/old");
   console.log("service worker tests: ok");
 }
 
