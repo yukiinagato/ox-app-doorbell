@@ -437,9 +437,12 @@ inactive. It does not replace the supervised kiosk restart path with an unqualif
 
 `admin.password_hash` is the single administrator credential for the whole cluster: the same
 secret opens the web admin and every device's settings screen. It replicates as
-`{"salt":"<hex>","hash":"<hex>","algo":"blake2b-256","updated_ms":…}` and never as plaintext, so
-an offline device verifies against the copy it already holds. The first password offered on any
-surface becomes the cluster's (the web login's existing trust-on-first-use path). Five failed
+`{"salt":"<hex>","hash":"<hex>","algo":"argon2id","m_kib":8192,"t":3,"p":1,"updated_ms":…}` and
+never as plaintext, so an offline device verifies against the copy it already holds. A record with
+`"algo":"blake2b-256"` (or no `algo`) is a legacy digest; it is verified once and replaced with
+Argon2id on the next successful login. New passwords are 8..128 characters. The first password may
+be set only by the device itself or by an Admin page served by this node over HTTPS or loopback
+with a matching `Origin`. Five failed
 attempts create a ten-minute in-memory lockout on the Core node that received them; the counter is
 shared between that node's `POST /api/login` and `db_core_admin_password_verify`. It is not
 replicated to other nodes and is therefore not a cluster-wide rate limiter.
@@ -881,6 +884,25 @@ one bulk-add window may auto-add.
   requires that the record is applied, dispatched, and covered by a durable replication coverage
   vector; no such vector is produced yet, so pruning is still a logged no-op in practice.
 
+## Transport security keys (security protocol v3)
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `devices.<id>.tls_sha256` | lowercase hex | written by `<id>` | SHA-256 of that node's TLS certificate (DER). Peers pin it for Core-to-Core HTTPS. Only the node itself writes it. |
+| `media.max_streams` | integer 1..32 | 8 | Concurrent long-lived media responses per node; more receive `503` with `Retry-After`. |
+| `sip.srtp` | `"optional"` \| `"mandatory"` | `"optional"` | SRTP between direct peers. `mandatory` refuses plain RTP and therefore excludes the iOS 5 MiniSIP shell. Toward `sip.server` SRTP is always optional. |
+| `integrations.mqtt.tls` | boolean | false | Connect to the broker over TLS. |
+| `integrations.mqtt.tls_sha256` | lowercase hex | — | Required with `tls`: SHA-256 of the broker certificate (DER). TLS without a pin is refused. |
+
+`boot.json` accepts `https_port` (default 47443; `0` disables HTTPS so only loopback is served).
+
+Status and panel projections publish peer media as this node's proxy routes. In
+`status.peers[]` a door station carries `stream`, `stream_mp4`, `video_meta` and `snapshot` as
+loopback URLs for the native shell (send `X-Doorbell-Local`), and `stream_path`,
+`stream_mp4_path`, `video_meta_path` and `snapshot_path` as same-origin paths for a browser. Panel
+state and call-info use the same-origin `/media/peer/<id>/...` paths; `call-info` `station` is the
+base path `/media/peer/<id>`.
+
 ## MQTT (Phase 2 — implemented)
 
 The plan's topic table + `doorbell/<door_id>/reply/set` (subscribed; payload = a scoped JSON object
@@ -904,7 +926,8 @@ legacy reply_id/free-text announcement only when no call is active). Implementat
   `<base>/emergency` retain — SOS emergency mode. ON/OFF follows whichever of emergency /
   emergency_cancel has the greater hlc).
 - Snapshots/cameras are not carried over MQTT — live video goes through go2rtc, and stills are
-  fetched by an HA generic camera directly from the door station's `/snapshot.jpg`
+  fetched by an HA generic camera from the door station's `https://<host>:47443/snapshot.jpg`
+  with Basic credentials whose password is a panel credential with the view grant
   (see `deploy/ha/`).
 - MQTT authentication uses `user` plus `pass_ref`; the referenced value is resolved from the
   platform secure store immediately before configuring the bridge. Plaintext `pass` writes are

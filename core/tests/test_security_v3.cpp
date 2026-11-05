@@ -17,6 +17,7 @@
 #include "test_env.h"
 #include "tls/tls.h"
 #include "util/clock.h"
+#include "util/common.h"
 #include "util/json.h"
 #include "util/runloop.h"
 
@@ -132,7 +133,11 @@ TEST_CASE("security v3: media requires a local token, a session, or a peer MAC")
   options.psk.fill(0x44);
   options.local_token = "local-media-token-for-tests-000000000000";
   Node node(options);
+  node.setSecureStore(
+      [](const std::string& key) { return key == "panel.ha" ? "ha-camera-credential" : ""; },
+      [](const std::string&, const std::string&) { return true; });
   REQUIRE(node.start());
+  node.setConfigKey("panel.token_refs", "[\"secret:panel.ha\"]");
   CHECK(node.localToken() == options.local_token);
   const tls::Endpoint self{"127.0.0.1", options.http_port, false, ""};
   for (const char* path : {"/snapshot.jpg", "/video-meta", "/stream.mjpeg", "/stream.mp4"}) {
@@ -144,6 +149,12 @@ TEST_CASE("security v3: media requires a local token, a session, or a peer MAC")
   }
   const Reply meta = fetch(self, "/video-meta", {{"X-Doorbell-Local", options.local_token}});
   CHECK(meta.status == 200);
+  // Home Assistant / go2rtc: Basic credentials carrying a panel credential with the view grant.
+  const std::string good = "Basic " + base64Encode(toBytes("ha:ha-camera-credential"));
+  const std::string bad = "Basic " + base64Encode(toBytes("ha:not-the-credential"));
+  CHECK(fetch(self, "/video-meta", {{"Authorization", good}}).status == 200);
+  CHECK(fetch(self, "/snapshot.jpg", {{"Authorization", good}}).status == 503);  // no frame yet
+  CHECK(fetch(self, "/video-meta", {{"Authorization", bad}}).status == 401);
   CHECK(meta.body.find("rotation") != std::string::npos);
   // A /media/peer route for an unknown peer refuses before contacting anyone.
   CHECK(fetch(self, "/media/peer/0123456789abcdef0123456789abcdef/video-meta",

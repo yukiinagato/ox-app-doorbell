@@ -130,8 +130,9 @@ new local proxy routes below. Each request must present one of:
 
 1. Loopback request with `X-Doorbell-Local: <token>`. The token is random per
    Core instance and returned by the new ABI call `db_core_local_token()`.
-2. An admin session, or a panel session whose grant covers the door (existing
-   checks), over HTTPS.
+2. An admin session, or a panel credential whose grant covers the door (cookie
+   session, Bearer, or the password of Basic credentials for Home Assistant and
+   go2rtc), over HTTPS or loopback.
 3. A peer request over HTTPS with
    `X-Doorbell-Peer: v1.<node_id>.<unix_ms>.<mac>` where
    `mac = BLAKE2b-keyed(media_key, method ‖ path_and_query ‖ unix_ms)`,
@@ -184,13 +185,24 @@ interactions, pairing join, local media settings the shell owns).
 
 ## 11. SIP between peers
 
-- The SIP allow list is deny-by-default until it is populated from membership.
-- Peer INVITEs carry `X-Doorbell-Auth: v1.<node_id>.<unix_ms>.<mac>` over
-  `Call-ID ‖ From ‖ To ‖ X-Doorbell-Mode ‖ unix_ms` with a key derived from the
-  PSK. A missing or invalid header is rejected with `403`; monitor auto-answer
-  requires a valid header.
-- SRTP (SDES) is mandatory between peers and optional toward a configured
-  external SIP server.
+- Admission is deny-by-default. Two paths are admitted:
+  - **Peer**: the source address belongs to a current member and the INVITE carries
+    `X-Doorbell-Auth: v1.<node_id>.<unix_ms>.<nonce>.<mac>` with
+    `mac = BLAKE2b-keyed(BLAKE2b-keyed(psk, "doorbell-sip-v3"), node_id "\n" unix_ms "\n" nonce "\n" X-Doorbell-Mode)`,
+    a timestamp within ±60 s, and a nonce not seen before. The Call-ID is chosen by
+    the SIP stack after the header is built, so the single-use nonce binds the
+    request instead.
+  - **Registrar**: the source is the resolved address of `sip.server` (Asterisk
+    calling a station, including `800X` monitor calls with
+    `Alert-Info: answer-after=0`). No header is needed and the existing
+    auto-answer rules apply.
+  Everything else receives `403`.
+- SRTP (SDES, `srtp_secure_signaling = 0`) is offered on every PJSIP account, so
+  PJSIP peers always negotiate it. `sip.srtp: "mandatory"` refuses plain RTP on
+  direct calls; it stays `optional` by default because the iOS 5 MiniSIP shell
+  has no SRTP. Toward the registrar SRTP is optional.
+- Shells with their own SIP stack call `db_core_sip_peer_auth` and
+  `db_core_sip_inbound_check` (section 13).
 
 ## 12. Transport limits
 
@@ -216,6 +228,12 @@ DB_API void db_core_admin_lock(db_core* c);
 
 `db_core_open_door` keeps `-3` for "unlock not configured" and returns `-4` when a
 configured unlock command fails to execute.
+
+Also added: `db_core_admin_window_open`, `db_core_remove_device_v2` (result-reporting
+form of `db_core_remove_device`), `db_core_sip_peer_auth` and
+`db_core_sip_inbound_check`. Void administrative calls refused by the admin window
+emit the UI event `{"t":"admin_required","op":"<function>"}`. `doorbell.h` lists every
+gated and exempt call.
 
 `db_platform_v2` gains one optional field appended after `power_state`:
 

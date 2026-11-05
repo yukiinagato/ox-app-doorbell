@@ -10036,6 +10036,22 @@ struct Node::Impl {
     if (checkSession(req)) return 0;
     const std::string media_door = door.empty() ? opts.door : door;
     if (!media_door.empty() && panelRequestAllowed(req, media_door, "view", false, false)) return 0;
+    // Home Assistant's generic camera and go2rtc can send only Basic credentials; the password
+    // is a panel credential with the view grant, never the administrator password.
+    const auto authorization = req.headers.find("authorization");
+    if (!media_door.empty() && authorization != req.headers.end() &&
+        authorization->second.compare(0, 6, "Basic ") == 0) {
+      Bytes decoded;
+      if (base64Decode(authorization->second.substr(6), decoded)) {
+        const std::string pair(decoded.begin(), decoded.end());
+        const size_t colon = pair.find(':');
+        if (colon != std::string::npos && colon + 1 < pair.size()) {
+          HttpReq bearer = req;
+          bearer.headers["authorization"] = "Bearer " + pair.substr(colon + 1);
+          if (panelRequestAllowed(bearer, media_door, "view", false, false)) return 0;
+        }
+      }
+    }
     if (verifyPeerAuthOnLoop(req)) return 0;
     return 401;
   }

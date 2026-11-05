@@ -7,10 +7,19 @@ enclosure, and signed artifact before relying on it.
 ## 1. Prepare the trusted network and integrations
 
 - Place nodes on a trusted LAN and restrict the ports listed in [network ports](network-ports.md).
-  Use a maintained VPN or authenticated TLS reverse proxy for remote access; do not expose node
-  HTTP, mesh, MiniSIP, MQTT, or camera endpoints directly to the Internet.
+  Use a maintained VPN for remote access; do not expose node HTTPS, mesh, MiniSIP, MQTT, or camera
+  endpoints directly to the Internet.
+- Open Admin at `https://<node>:47443/admin/`. Each node presents its own self-signed certificate.
+  Compare the browser's certificate SHA-256 with the fingerprint Admin shows for that device before
+  trusting it, then add it to the browser or operating-system trust store. Plain
+  `http://<node>:47180` only redirects there.
+- Upgrading from v2 is a re-pairing event: see [security protocol v3](security-v3.md#6-migration-from-v2).
 - Configure Asterisk, MQTT/Home Assistant, Telegram, go2rtc, and HomeKit only if required. Treat
   each as an optional failure boundary and test behavior with it stopped.
+- Home Assistant and go2rtc read cameras over HTTPS with Basic credentials. Provision a panel
+  credential with the view grant for them and use it as the password (any user name); never use
+  the administrator password. Asterisk keeps calling stations directly; set `sip.server` to its
+  address so its INVITEs are admitted without the peer header.
 - Inspect device batteries and power supplies. An entrance device needs a suitable outdoor
   enclosure; a software `door_station` role is not a weather rating.
 
