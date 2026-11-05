@@ -56,7 +56,14 @@ namespace DoorbellApp.Pairing
             Title = PairingText.DisplayName(device);
             Subtitle = PairingText.Subtitle(device);
             Waiting = Texts.T("pair.nearby_waiting_since", Math.Max(0, device.AgeS).ToString());
+            if (device.PkConflict && !_pkConflict)
+            {
+                _pkConflict = true;
+                MarkFailed("pk_conflict");
+            }
         }
+
+        private bool _pkConflict;
 
         public string Title
         {
@@ -84,7 +91,7 @@ namespace DoorbellApp.Pairing
 
         public bool CanAct
         {
-            get { return !_busy && !_added; }
+            get { return !_busy && !_added && !_pkConflict; }
         }
 
         public Visibility BusyVisibility

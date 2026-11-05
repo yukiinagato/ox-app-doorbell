@@ -19,6 +19,8 @@ namespace DoorbellApp.Pairing
         public string LastError = "";
         public int AgeS;
         public int Attempts;
+        /// <summary>The device announced two different keys; it cannot be approved.</summary>
+        public bool PkConflict;
     }
 
     /// <summary>
@@ -61,6 +63,21 @@ namespace DoorbellApp.Pairing
 
         public readonly List<PairingDevice> Devices = new List<PairingDevice>();
 
+        /// <summary>
+        /// Eight-digit code this unpaired device shows; an administrator types it on the device
+        /// that approves it (security protocol v3), because the key in a beacon is unauthenticated.
+        /// </summary>
+        public string SelfConfirmCode = "";
+        /// <summary>A v2 member after the upgrade: it must be paired again.</summary>
+        public bool UpgradeRejoinRequired;
+        public string UpgradeReason = "";
+        public string PskId = "";
+        public string PrevPskId = "";
+        public long PrevPskUntilMs;
+        public string IdentityPk = "";
+        public readonly List<string> LegacyPeers = new List<string>();
+        public readonly List<string> RekeyRequired = new List<string>();
+
         public bool IsReady { get { return State == StateReady; } }
         public bool IsUnpaired { get { return State == StateUnpaired; } }
 
@@ -83,6 +100,21 @@ namespace DoorbellApp.Pairing
                 snapshot.SelfModel = Str(self, "model");
                 snapshot.SelfPlatform = Str(self, "platform");
                 snapshot.SelfSw = Str(self, "sw");
+                snapshot.SelfConfirmCode = Str(self, "confirm_code");
+            }
+            snapshot.UpgradeRejoinRequired = Bool(root, "upgrade_rejoin_required");
+            snapshot.UpgradeReason = Str(root, "reason");
+            var security = Obj(root, "security");
+            if (security != null)
+            {
+                snapshot.PskId = Str(security, "psk_id");
+                snapshot.PrevPskId = Str(security, "prev_psk_id");
+                long until;
+                if (long.TryParse(Str(security, "prev_psk_until_ms"), out until))
+                    snapshot.PrevPskUntilMs = until;
+                snapshot.IdentityPk = Str(security, "identity_pk");
+                AddStrings(security, "legacy_peers", snapshot.LegacyPeers);
+                AddStrings(security, "rekey_required", snapshot.RekeyRequired);
             }
 
             var home = Obj(root, "home");
@@ -129,12 +161,29 @@ namespace DoorbellApp.Pairing
                             LastError = Str(entry, "last_error"),
                             AgeS = Int(entry, "age_s", 0),
                             Attempts = Int(entry, "attempts", 0),
+                            PkConflict = Bool(entry, "pk_conflict"),
                         };
                         if (!string.IsNullOrEmpty(device.Id)) snapshot.Devices.Add(device);
                     }
                 }
             }
             return snapshot;
+        }
+
+        private static void AddStrings(Dictionary<string, object> d, string key, List<string> into)
+        {
+            object raw;
+            if (d == null || !d.TryGetValue(key, out raw) || !(raw is IEnumerable) || raw is string)
+                return;
+            foreach (object value in (IEnumerable)raw)
+                if (value != null && value.ToString().Length > 0) into.Add(value.ToString());
+        }
+
+        /// <summary>The confirmation code grouped for reading aloud: "1234 5678".</summary>
+        public static string GroupedCode(string code)
+        {
+            if (string.IsNullOrEmpty(code) || code.Length != 8) return code ?? "";
+            return code.Substring(0, 4) + " " + code.Substring(4);
         }
 
         public static string Str(Dictionary<string, object> d, string key)

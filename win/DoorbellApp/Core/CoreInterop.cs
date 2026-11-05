@@ -139,6 +139,17 @@ namespace DoorbellApp.Core
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate IntPtr LocalTokenFn(IntPtr core);
 
+        // Approves a pending device with the eight-digit code shown on that device
+        // (pairing self.confirm_code there). The outcome arrives as invite_result.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void InviteDeviceCodeFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string id,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string code);
+
+        // Replaces the cluster key: 0 ok, -1 bad arguments, -2 unpaired or not stored.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int RotateClusterKeyFn(IntPtr core);
+
         // Closes the native admin window that a successful password check opened.
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void AdminLockFn(IntPtr core);

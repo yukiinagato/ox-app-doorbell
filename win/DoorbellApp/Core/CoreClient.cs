@@ -60,6 +60,8 @@ namespace DoorbellApp.Core
         private CoreInterop.CallLogJsonV2Fn _callLogJsonV2;
         private CoreInterop.LocalTokenFn _localToken;
         private CoreInterop.AdminLockFn _adminLock;
+        private CoreInterop.InviteDeviceCodeFn _inviteDeviceCode;
+        private CoreInterop.RotateClusterKeyFn _rotateClusterKey;
         private string _localTokenValue;
         private bool _optionalProbed;
         private bool _cameraAvailable;
@@ -453,6 +455,10 @@ namespace DoorbellApp.Core
                     "db_core_local_token");
                 _adminLock = CoreInterop.OptionalExport<CoreInterop.AdminLockFn>(
                     "db_core_admin_lock");
+                _inviteDeviceCode = CoreInterop.OptionalExport<CoreInterop.InviteDeviceCodeFn>(
+                    "db_core_invite_device_code");
+                _rotateClusterKey = CoreInterop.OptionalExport<CoreInterop.RotateClusterKeyFn>(
+                    "db_core_rotate_cluster_key");
                 _callLogJsonV2 = CoreInterop.OptionalExport<CoreInterop.CallLogJsonV2Fn>(
                     "db_core_call_log_json_v2");
             }
@@ -855,6 +861,33 @@ namespace DoorbellApp.Core
         public void SetPairingMode(int seconds)
         {
             lock (_nativeLock) if (_core != IntPtr.Zero) CoreInterop.db_core_pairing_mode(_core, seconds);
+        }
+
+        /// <summary>
+        /// Approves a pending device with the confirmation code shown on it (protocol v3).
+        /// Returns false when this Core predates the export; plain InviteDevice then applies.
+        /// </summary>
+        public bool InviteDeviceWithCode(string nodeId, string code)
+        {
+            ProbeOptionalExports();
+            if (_inviteDeviceCode == null || string.IsNullOrEmpty(nodeId)) return false;
+            lock (_nativeLock)
+                if (_core != IntPtr.Zero) _inviteDeviceCode(_core, nodeId, code ?? "");
+            return true;
+        }
+
+        public bool ClusterKeyRotationAvailable
+        {
+            get { ProbeOptionalExports(); return _rotateClusterKey != null; }
+        }
+
+        /// <summary>Core's code: 0 ok, -1 bad arguments, -2 unpaired or not stored; -3 no export.</summary>
+        public int RotateClusterKey()
+        {
+            ProbeOptionalExports();
+            if (_rotateClusterKey == null) return -3;
+            lock (_nativeLock)
+                return _core == IntPtr.Zero ? -2 : _rotateClusterKey(_core);
         }
 
         public void InviteDevice(string nodeId)

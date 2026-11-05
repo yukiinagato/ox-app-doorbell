@@ -91,6 +91,7 @@ namespace DoorbellApp.Pairing
             PersistErrorBody.Text = Texts.T("pair.persist_error_body");
             RetryButton.Content = Texts.T("pair.retry");
             QrCaption.Text = Texts.T("pair.qr_caption");
+            ConfirmCodeLabel.Text = Texts.T("pair.confirm_code_self");
             QrPlaceholder.Text = Texts.T("pair.searching");
             CreatedCodeCard.ApplyStrings();
         }
@@ -187,6 +188,11 @@ namespace DoorbellApp.Pairing
             var snapshot = _snapshot;
             IdentityText.Text = IdentityLine(snapshot);
             RenderQr(snapshot.PairQr);
+            bool showCode = !string.IsNullOrEmpty(snapshot.SelfConfirmCode) &&
+                            snapshot.State != PairingSnapshot.StateReady;
+            ConfirmCodeText.Text = PairingSnapshot.GroupedCode(snapshot.SelfConfirmCode);
+            ConfirmCodeLabel.Visibility = showCode ? Visibility.Visible : Visibility.Collapsed;
+            ConfirmCodeText.Visibility = ConfirmCodeLabel.Visibility;
 
             bool persistError = snapshot.State == PairingSnapshot.StatePersistError;
             bool joiningState = snapshot.State == PairingSnapshot.StateJoining || _joining;
@@ -209,6 +215,13 @@ namespace DoorbellApp.Pairing
                 StatusSpinner.Visibility = Visibility.Collapsed;
                 StatusText.Text = Texts.T("pair.persist_error_title");
                 StatusHint.Text = "";
+            }
+            else if (snapshot.UpgradeRejoinRequired && !ready && !joiningState)
+            {
+                // A v2 member after the upgrade: its old key no longer opens the cluster.
+                StatusSpinner.Visibility = Visibility.Collapsed;
+                StatusText.Text = Texts.T("pair.upgrade_rejoin_title");
+                StatusHint.Text = Texts.T("pair.upgrade_rejoin_hint");
             }
             else if (revoked)
             {
