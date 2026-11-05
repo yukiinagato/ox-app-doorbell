@@ -589,6 +589,30 @@ final class CoreBridge {
         if !id.isEmpty { withCore { c in db_core_invite_device(c, id) } }
     }
 
+    private typealias InviteCodeFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
+                                                     UnsafePointer<CChar>?) -> Void
+    private static let inviteCodeFn: InviteCodeFn? = symbol("db_core_invite_device_code")
+        .map { unsafeBitCast($0, to: InviteCodeFn.self) }
+    private typealias RotateKeyFn = @convention(c) (OpaquePointer?) -> Int32
+    private static let rotateKeyFn: RotateKeyFn? = symbol("db_core_rotate_cluster_key")
+        .map { unsafeBitCast($0, to: RotateKeyFn.self) }
+
+    /// Approve a discovered device with the eight-digit code shown on it (security protocol v3).
+    /// The result arrives as invite_result: confirm_code_mismatch or pk_conflict on failure.
+    func inviteDevice(_ id: String, confirmCode: String) {
+        guard !id.isEmpty, let invite = CoreBridge.inviteCodeFn else { return }
+        withCore { c in invite(c, id, confirmCode) }
+    }
+
+    var supportsKeyRotation: Bool { return CoreBridge.rotateKeyFn != nil }
+
+    /// Replaces the cluster key; 0 on success, -2 while unpaired or when the key could not be
+    /// stored. Emits cluster_key_changed.
+    func rotateClusterKey() -> Int32 {
+        guard let rotate = CoreBridge.rotateKeyFn else { return -1 }
+        return withCore { c in rotate(c) } ?? -1
+    }
+
     /// Invite an address/id/public-key triple straight from a scanned Add QR, bypassing discovery.
     func inviteDirect(addr: String, id: String, pk: String) {
         withCore { c -> Void in

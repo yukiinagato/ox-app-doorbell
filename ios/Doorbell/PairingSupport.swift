@@ -52,6 +52,9 @@ struct PairingDevice {
     let inviteState: String
     let attempts: Int
     let lastError: String
+    /// The device announced two different pairing keys; it must not be invited until it is
+    /// re-pairing from a clean state (security protocol v3).
+    let pkConflict: Bool
 
     init(_ raw: [String: Any]) {
         id = ConfigUtil.evStr(raw, "id")
@@ -65,6 +68,7 @@ struct PairingDevice {
         inviteState = ConfigUtil.evStr(raw, "invite_state")
         attempts = ConfigUtil.int(raw, "attempts", 0)
         lastError = ConfigUtil.evStr(raw, "last_error")
+        pkConflict = ConfigUtil.evBool(raw, "pk_conflict")
     }
 
     /// Human row title. Never a bare machine identifier when a friendlier value exists.
@@ -102,6 +106,11 @@ struct PairingSnapshot {
     let selfAddr: String
     let selfModel: String
     let selfPlatform: String
+    /// Eight digits an unpaired device shows so the administrator can confirm its key.
+    let confirmCode: String
+    /// This device was paired under protocol v2 and must join again (security protocol v3 §6).
+    let upgradeRejoinRequired: Bool
+    let security: PairingSecurity
 
     let pairQr: String
     let memberCount: Int
@@ -129,7 +138,10 @@ struct PairingSnapshot {
                 "\(memberCount)", "\(connectedCount)", tokenActive ? "1" : "0",
                 "\(tokenExpiresS)", "\(tokenAttemptsLeft)", tokenHost, tokenPin, tokenUri,
                 pairingMode ? "1" : "0", "\(pairingModeLeftS)", "\(autoAddedCount)",
-                "\(devices.count)"].joined(separator: "|")
+                "\(devices.count)", confirmCode, upgradeRejoinRequired ? "1" : "0",
+                security.fingerprint,
+                devices.filter { $0.pkConflict }.map { $0.id }.joined(separator: ",")]
+            .joined(separator: "|")
     }
 
     init(_ raw: [String: Any]?) {
@@ -149,6 +161,9 @@ struct PairingSnapshot {
         selfAddr = ConfigUtil.evStr(me, "addr")
         selfModel = ConfigUtil.evStr(me, "model")
         selfPlatform = ConfigUtil.evStr(me, "platform")
+        confirmCode = ConfigUtil.evStr(me, "confirm_code")
+        upgradeRejoinRequired = ConfigUtil.evBool(root, "upgrade_rejoin_required")
+        security = PairingSecurity(root["security"] as? [String: Any])
 
         pairQr = ConfigUtil.evStr(root, "pair_qr")
         let home = root["home"] as? [String: Any] ?? [:]
@@ -185,8 +200,45 @@ struct PairingSnapshot {
     }
 }
 
+/// The cluster-key part of the pairing snapshot (`security`).
+struct PairingSecurity {
+    let pskId: String
+    let previousPskId: String
+    let previousPskUntilMs: Int64
+    /// Members still speaking protocol v2; they must be upgraded and paired again.
+    let legacyPeers: [String]
+    /// Members that missed a key rotation past its grace period.
+    let rekeyRequired: [String]
+
+    init(_ raw: [String: Any]?) {
+        pskId = ConfigUtil.evStr(raw ?? [:], "psk_id")
+        previousPskId = ConfigUtil.evStr(raw ?? [:], "prev_psk_id")
+        previousPskUntilMs = Int64(ConfigUtil.double(raw, "prev_psk_until_ms", 0))
+        legacyPeers = (raw?["legacy_peers"] as? [Any])?.compactMap { $0 as? String } ?? []
+        rekeyRequired = (raw?["rekey_required"] as? [Any])?.compactMap { $0 as? String } ?? []
+    }
+
+    var fingerprint: String {
+        return [pskId, previousPskId, "\(previousPskUntilMs)", legacyPeers.joined(separator: ","),
+                rekeyRequired.joined(separator: ",")].joined(separator: "/")
+    }
+}
+
 /// Localized copy helpers. No user-facing literal ever appears outside i18n/strings.yaml.
 enum PairingCopy {
+
+    /// "12345678" → "1234 5678", the grouping people read aloud.
+    static func groupedCode(_ code: String) -> String {
+        guard code.count == 8 else { return code }
+        return String(code.prefix(4)) + " " + String(code.suffix(4))
+    }
+
+    /// Accepts digits with spaces or dashes; nil unless exactly eight digits remain.
+    static func normalizedCode(_ raw: String) -> String? {
+        let digits = raw.filter { $0.isNumber }
+        guard digits.count == 8, digits.allSatisfy({ ("0"..."9").contains($0) }) else { return nil }
+        return String(digits)
+    }
 
     /// Maps a Core error code onto `pair.err.<code>`, falling back to `pair.err.unknown`.
     static func error(_ texts: Texts, _ code: String) -> String {
