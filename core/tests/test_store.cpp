@@ -565,3 +565,43 @@ TEST_CASE("store: pruneEvents fails closed until a replicated coverage snapshot 
   CHECK(joining_peer.eventFrontier("aaaaaaaa") == 10);
   CHECK(joining_peer.eventsSince({}, 100).size() == 10);
 }
+
+TEST_CASE("store: a rebuilt call projection equals the one applied live") {
+  auto press = [](const std::string& origin, uint64_t seq, int64_t ms, const char* call) {
+    EventRecord e = mkEv(origin, seq, ms);
+    e.payload_json = std::string(R"({"schema_version":2,"stage_revision":0,"call_id":")") +
+                     call + "\"}";
+    return e;
+  };
+  EventRecord reply_a = mkEv("bbbbbbbb", 1, 2000);
+  reply_a.type = "reply";
+  reply_a.payload_json =
+      R"({"schema_version":2,"reply_id":"not_home","call_id":"call-a","stage_revision":0,"call_origin":"aaaaaaaa"})";
+  EventRecord cancel_c = mkEv("cccccccc", 2, 1500);
+  cancel_c.type = "call_cancelled";
+  cancel_c.payload_json =
+      R"({"schema_version":2,"call_id":"call-c","stage_revision":0,"reason":"visitor"})";
+  // Delivery order differs from HLC order and interleaves origins and concurrent presses.
+  const std::vector<EventRecord> delivery = {
+      press("cccccccc", 1, 1200, "call-c"), reply_a, press("aaaaaaaa", 1, 1000, "call-a"),
+      cancel_c, press("dddddddd", 1, 1100, "call-d"), press("aaaaaaaa", 2, 3000, "call-e")};
+
+  const std::string dir = makeTempDir();
+  Store store;
+  REQUIRE(store.open(dir + "/doorbell.db"));
+  for (const auto& e : delivery) REQUIRE(store.eventPut(e));
+  auto dump = [&store] {
+    std::string out;
+    for (const char* id : {"call-a", "call-c", "call-d", "call-e"}) {
+      auto p = store.callProjection(id);
+      out += std::string(id) + "=";
+      if (p)
+        out += p->state + "|" + p->terminal_reason + "|" + p->updated_hlc + "|" +
+               std::to_string(p->stage_revision) + "|" + p->dialog_owner + ";";
+    }
+    return out;
+  };
+  const std::string live = dump();
+  REQUIRE(store.rebuildCallProjection());
+  CHECK(dump() == live);
+}

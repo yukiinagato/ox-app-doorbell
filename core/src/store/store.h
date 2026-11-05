@@ -103,6 +103,9 @@ class Store {
   // record and cleared when its dispatch is acknowledged.
   bool eventIngest(const EventRecord& e, bool backfill = false);
   bool eventIsBackfill(const std::string& origin, uint64_t seq);
+  // Recomputes call_projection and the door fence from applied history in local application
+  // order, exactly as a schema migration does.
+  bool rebuildCallProjection();
   std::optional<EventRecord> eventApplyNext(const std::string& origin);
   bool eventExists(const std::string& origin, uint64_t seq);
   void eventSetNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
@@ -232,6 +235,7 @@ class Store {
  private:
   bool exec(const char* sql);
   bool migrate();  // Requires mu_.
+  bool rebuildCallProjectionLocked(bool clear_fence);
   bool migrateOperationsLocked();
   bool operationReadyLocked();
   bool operationExpireLocked(int64_t now_mono_ms, int64_t now_wall_ms);
