@@ -1060,6 +1060,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   [_close setTitle:[_texts ts:@"settings.close"] forState:UIControlStateNormal];
   [_qr setUrl:[self adminUrl] caption:[_texts ts:@"web_admin.scan"]];
   [_qr setVersionLine:[self versionLine]];
+  [self updateDetailHeader];
   [_table reloadData];
   [self setNeedsLayout];
 }
@@ -1518,28 +1519,33 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   return (NSInteger)[[self selectedRows] count];
 }
 
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-  if (tableView != _table) return nil;
+- (NSString *)detailTitle {
   if (_selectedSection < 0 || _selectedSection >= (NSInteger)[_sections count]) return nil;
   return [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"title"];
 }
 
-- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-  return tableView == _table ? 56 : 0;
-}
-
-- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-  if (tableView != _table) return nil;
-  // The detail pane's large title names the chosen category.
-  UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width, 56)];
-  header.backgroundColor = _palette.surface;
-  UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(8, 14, tableView.bounds.size.width - 16, 30)];
-  label.backgroundColor = [UIColor clearColor];
-  label.font = [UIFont boldSystemFontOfSize:24];
+// The detail pane's large title is the table header view, not a section
+// header: a plain table's section header floats over the rows beneath it, which
+// is what clipped the first row on a 1024x768 iPad mini.
+- (void)updateDetailHeader {
+  CGFloat width = CGRectGetWidth(_table.bounds);
+  if (width <= 0) return;
+  UIView *header = _table.tableHeaderView;
+  UILabel *label = (UILabel *)[header viewWithTag:41];
+  if (header == nil || label == nil || CGRectGetWidth(header.bounds) != width) {
+    header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 60)];
+    label = [[UILabel alloc] initWithFrame:CGRectMake(8, 12, width - 16, 32)];
+    label.tag = 41;
+    label.backgroundColor = [UIColor clearColor];
+    label.font = [UIFont boldSystemFontOfSize:24];
+    label.adjustsFontSizeToFitWidth = YES;
+    label.minimumFontSize = 16;
+    [header addSubview:label];
+  }
+  header.backgroundColor = [UIColor clearColor];
   label.textColor = _palette.ink;
-  label.text = [self tableView:tableView titleForHeaderInSection:section];
-  [header addSubview:label];
-  return header;
+  label.text = [self detailTitle];
+  _table.tableHeaderView = header;
 }
 
 - (UITableViewCell *)categoryCellForRow:(NSInteger)index {
@@ -1768,7 +1774,8 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
     _selectedSection = indexPath.row;
     _selectedId = [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"id"];
     [_categoryTable reloadData];
-    [_table reloadData];
+    [self updateDetailHeader];
+  [_table reloadData];
     [_table setContentOffset:CGPointZero animated:NO];
     return;
   }
@@ -1807,6 +1814,10 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   CGFloat detailX = 12 + paneWidth + 16;
   CGFloat contentWidth = width - detailX - 16;
   _table.frame = CGRectMake(detailX, 56, contentWidth, MAX(0, size.height - 56));
+  _table.contentInset = UIEdgeInsetsZero;
+  _table.scrollIndicatorInsets = UIEdgeInsetsZero;
+  _categoryTable.contentInset = UIEdgeInsetsZero;
+  if (CGRectGetWidth(_table.tableHeaderView.bounds) != contentWidth) [self updateDetailHeader];
   _adminFooter.frame = CGRectMake(0, 20, contentWidth, 116);
   _qr.frame = CGRectMake(20, 22, contentWidth - 40, 72);
   if (_footerWidth != contentWidth) {
