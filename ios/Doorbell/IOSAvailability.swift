@@ -95,6 +95,19 @@ enum IOSAvailability {
     }
 #endif
 
+    /// Leading/trailing margins. Directional margins need iOS 11; iOS 9 and 10 use the physical
+    /// margins, which match for the left-to-right languages this app ships.
+    static func setLayoutMargins(_ view: UIView, top: CGFloat, leading: CGFloat,
+                                 bottom: CGFloat, trailing: CGFloat) {
+        if #available(iOS 11.0, tvOS 11.0, *) {
+            view.directionalLayoutMargins = NSDirectionalEdgeInsets(
+                top: top, leading: leading, bottom: bottom, trailing: trailing)
+        } else {
+            view.layoutMargins = UIEdgeInsets(top: top, left: leading, bottom: bottom,
+                                              right: trailing)
+        }
+    }
+
     static func setCustomSpacing(_ spacing: CGFloat, after view: UIView,
                                  in stack: UIStackView) {
         if #available(iOS 11.0, tvOS 11.0, *) {
@@ -467,3 +480,56 @@ enum TablerIcon {
         return image.withRenderingMode(.alwaysTemplate)
     }
 }
+
+#if os(iOS)
+/// Keeps the call audio session usable after the system takes it away. Siri, an alarm, a phone
+/// call or a headset unplug interrupts or reroutes the session; without re-activation the SIP
+/// audio units stay silent until the app restarts. Background audio is not requested: a panel
+/// that must keep ringing while locked runs as a kiosk (Guided Access or single-app mode), as
+/// docs/en/capability-matrix.md states.
+final class CallAudioSessionMonitor {
+    private var observers: [NSObjectProtocol] = []
+
+    func start() {
+        guard observers.isEmpty else { return }
+        let center = NotificationCenter.default
+        let session = AVAudioSession.sharedInstance()
+        observers.append(center.addObserver(
+            forName: AVAudioSession.interruptionNotification, object: session, queue: .main) {
+                note in
+                guard let raw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt,
+                      AVAudioSession.InterruptionType(rawValue: raw) == .ended else { return }
+                ShellLog.note("audio interruption ended; reactivating call session")
+                IOSAvailability.configureCallAudioSession(session)
+            })
+        observers.append(center.addObserver(
+            forName: AVAudioSession.routeChangeNotification, object: session, queue: .main) {
+                note in
+                guard let raw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt,
+                      let reason = AVAudioSession.RouteChangeReason(rawValue: raw) else { return }
+                switch reason {
+                case .oldDeviceUnavailable, .categoryChange, .override:
+                    // A removed headset falls back to the speaker; another component changing the
+                    // category would otherwise leave the call on the earpiece or muted.
+                    if session.category != .playAndRecord ||
+                        reason == .oldDeviceUnavailable {
+                        ShellLog.note("audio route change reason=\(raw); reapplying call session")
+                        IOSAvailability.configureCallAudioSession(session)
+                    }
+                default:
+                    break
+                }
+            })
+        observers.append(center.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification, object: session,
+            queue: .main) { _ in
+                ShellLog.note("audio media services reset; reconfiguring call session")
+                IOSAvailability.configureCallAudioSession(session)
+            })
+    }
+
+    deinit {
+        for observer in observers { NotificationCenter.default.removeObserver(observer) }
+    }
+}
+#endif

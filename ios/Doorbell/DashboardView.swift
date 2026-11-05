@@ -286,7 +286,7 @@ final class DashboardView: UIView {
         skin.apply("status_line", to: historyHeader)
         footerEffect.contentView.backgroundColor = skin.surface.withAlphaComponent(0.65)
         footerEffect.layer.borderColor = skin.cardInk("footer").withAlphaComponent(0.35).cgColor
-        counters.update(lastCounts, ink: skin.cardInk("status_line"))
+        counters.update(lastCounts, ink: skin.cardInk("status_line"), surface: skin.surface)
         DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
                            ink: DoorbellTheme.readableInk(on: skin.palette.danger), fontSize: 15)
         for button in [adminButton, noticeButton, doorPageButton,
@@ -485,27 +485,23 @@ final class DashboardView: UIView {
         }
     }
 
+    /// Core publishes peer media as loopback proxy URLs (security protocol v3 §8); the still is
+    /// the stream's sibling. A peer is never fetched directly, so there is no host fallback.
     private func snapshotUrl(peer: [String: Any]) -> URL? {
-        if let stream = ConfigUtil.str(peer, "stream"),
-           var components = URLComponents(string: stream) {
-            components.path = "/snapshot.jpg"
-            components.query = nil
-            if let url = components.url { return url }
+        guard let stream = ConfigUtil.str(peer, "stream"), let url = URL(string: stream) else {
+            return nil
         }
-        guard let host = ConfigUtil.peerHost(peer) else { return nil }
-        return URL(string: "http://\(host):47180/snapshot.jpg")
+        return LocalMediaAuth.sibling(url, "snapshot.jpg")
     }
 
     private func videoMetaUrl(peer: [String: Any]) -> URL? {
         if let value = ConfigUtil.str(peer, "video_meta"), let url = URL(string: value) {
             return url
         }
-        guard let stream = ConfigUtil.str(peer, "stream"),
-              var components = URLComponents(string: stream) else { return nil }
-        components.path = "/video-meta"
-        components.query = nil
-        components.fragment = nil
-        return components.url
+        guard let stream = ConfigUtil.str(peer, "stream"), let url = URL(string: stream) else {
+            return nil
+        }
+        return LocalMediaAuth.sibling(url, "video-meta")
     }
 
     // MARK: - Actions
@@ -550,9 +546,12 @@ final class OfflineDoorStationsViewController: SettingsFormViewController {
             let entry = ConfigUtil.dig(config, "doors.\(door)") as? [String: Any]
             let label = ConfigUtil.labelOf(entry, texts.lang, door)
             let name = ConfigUtil.evStr(peer, "name")
-            let detail = [label, texts.t("dashboard.device_status_offline")]
-                .filter { !$0.isEmpty }.joined(separator: " · ")
-            return .value(title: name.isEmpty ? door : name, detail: detail)
+            let state = ConfigUtil.evStr(peer, "status") == "missing"
+                ? texts.t("dashboard.device_status_missing")
+                : texts.t("dashboard.device_status_offline")
+            let detail = [label, state].filter { !$0.isEmpty }.joined(separator: " · ")
+            return .value(title: name.isEmpty ? (label.isEmpty ? door : label) : name,
+                          detail: detail)
         }
     }
 }
@@ -560,6 +559,14 @@ final class OfflineDoorStationsViewController: SettingsFormViewController {
 /// One door: its most recent still, its name, whether it is reachable, and whether an
 /// announcement is showing there.
 final class DoorTileView: UIView, UIGestureRecognizerDelegate {
+
+    /// One session for every tile. Tiles are rebuilt whenever the door set changes; a session per
+    /// tile was never invalidated and accumulated for the life of the process.
+    private static let sharedSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 4
+        return URLSession(configuration: configuration)
+    }()
 
     var door = ""
     var onOpen: (() -> Void)?
@@ -576,20 +583,20 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
     private var videoRotation = 0
     private var lastRotationRefresh: TimeInterval = 0
     private var rotationRequestActive = false
+    /// Identifies the rotation request in flight, so a reply to a superseded one cannot clear the
+    /// flag that belongs to its replacement.
+    private var rotationRequestSerial = 0
     private var stillRequestActive = false
     private var pendingStillRefresh: (url: URL, rotation: Int)?
     /// The last frame actually painted, so an unchanged scene costs nothing.
     private var lastStillData: Data?
-    private let session: URLSession
+    private var session: URLSession { return DoorTileView.sharedSession }
     private let texts: Texts
     private var minimumHeightConstraint: NSLayoutConstraint!
 
     init(texts: Texts) {
         self.texts = texts
         self.noticeChip = NoticeChipView(texts: texts)
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 4
-        self.session = URLSession(configuration: configuration)
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         accessibilityIdentifier = "door_tile"
@@ -709,12 +716,16 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
             lastRotationRefresh = 0
             lastStillData = nil
             rotationRequestActive = false
+            rotationRequestSerial &+= 1
         }
         if let videoMetaUrl = videoMetaUrl,
            lastRotationRefresh == 0 || Date.timeIntervalSinceReferenceDate - lastRotationRefresh >= 60 {
             guard !rotationRequestActive else { return }
             rotationRequestActive = true
-            session.dataTask(with: videoMetaUrl) { [weak self] data, response, _ in
+            rotationRequestSerial &+= 1
+            let serial = rotationRequestSerial
+            session.dataTask(with: LocalMediaAuth.request(videoMetaUrl, timeout: 4)) {
+                [weak self] data, response, _ in
                 let rotation: Int? = {
                     guard (response as? HTTPURLResponse)?.statusCode == 200,
                           let data = data,
@@ -723,7 +734,7 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
                     return object["rotation"] as? Int
                 }()
                 DispatchQueue.main.async {
-                    guard let self = self else { return }
+                    guard let self = self, self.rotationRequestSerial == serial else { return }
                     self.rotationRequestActive = false
                     guard self.videoMetaUrl == videoMetaUrl,
                           self.pendingUrl == url else { return }
@@ -745,7 +756,7 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
         }
         stillRequestActive = true
         let fittingSize = still.bounds.size
-        session.dataTask(with: url) { [weak self] data, _, _ in
+        session.dataTask(with: LocalMediaAuth.request(url, timeout: 4)) { [weak self] data, _, _ in
             let bytes = data.flatMap { $0.isEmpty ? nil : $0 }
             let image = bytes.flatMap {
                 DoorTileView.thumbnail(from: $0, fitting: fittingSize, rotation: rotation)

@@ -1195,6 +1195,25 @@ enum DoorbellTheme {
         return parts.joined(separator: " · ")
     }
 
+    /// The caption for another device's admin code: its name, its Core version and its battery,
+    /// all read from that peer's own record. This app's version says nothing about the peer.
+    static func peerVersionLine(peer: [String: Any]?, texts: Texts) -> String {
+        var parts: [String] = []
+        let name = ConfigUtil.str(peer, "name") ?? ""
+        if !name.isEmpty { parts.append(name) }
+        parts.append("core v" + shortVersion(ConfigUtil.str(peer, "sw") ?? ""))
+        let power = peer?["power"] as? [String: Any]
+        let percent = ConfigUtil.int(power, "battery_pct", -1)
+        if percent >= 0 {
+            var battery = "\(percent)%"
+            if ConfigUtil.bool(power, "charging", false) {
+                battery += " " + texts.t("power.charging")
+            }
+            parts.append(battery)
+        }
+        return parts.joined(separator: " · ")
+    }
+
     static func shortVersion(_ version: String) -> String {
         guard !version.isEmpty else { return "-" }
         let pieces = version.split(separator: "+", maxSplits: 1, omittingEmptySubsequences: false)

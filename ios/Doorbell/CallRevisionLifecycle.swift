@@ -205,6 +205,15 @@ struct CallChimeRevisionGate {
         self.capacity = max(1, capacity)
     }
 
+    /// Whether `accept` would take this revision, without recording it. The incoming-call router
+    /// asks first and records only once the screen is actually on display, so a chime that could
+    /// not be shown is not spent.
+    func wouldAccept(callId: String, stageRevision: Int) -> Bool {
+        guard !callId.isEmpty else { return true }
+        guard let accepted = revisions[callId] else { return true }
+        return max(0, stageRevision) > accepted
+    }
+
     mutating func accept(callId: String, stageRevision: Int) -> Bool {
         guard !callId.isEmpty else { return true }
         let normalized = max(0, stageRevision)
