@@ -676,10 +676,10 @@
   <data name="offline_reconnect" xml:space="preserve"><value>{0} 秒后重连</value></data>
   <data name="offline_title" xml:space="preserve"><value>系统离线</value></data>
   <data name="pair_add" xml:space="preserve"><value>添加</value></data>
-  <data name="pair_add_all" xml:space="preserve"><value>批量添加（10 分钟）</value></data>
-  <data name="pair_add_all_on" xml:space="preserve"><value>批量添加已开启 — 剩余 {0}:{1}（已添加 {2} 台）</value></data>
+  <data name="pair_add_all" xml:space="preserve"><value>批量接收（10 分钟）</value></data>
+  <data name="pair_add_all_on" xml:space="preserve"><value>正在接收 — 剩余 {0}:{1}（已添加 {2} 台）</value></data>
   <data name="pair_add_all_stop" xml:space="preserve"><value>停止</value></data>
-  <data name="pair_add_all_warning" xml:space="preserve"><value>10 分钟内发现的所有设备都将被自动添加</value></data>
+  <data name="pair_add_all_warning" xml:space="preserve"><value>10 分钟内发现的设备会显示在列表中；请输入各设备显示的确认码逐一添加</value></data>
   <data name="pair_add_failed" xml:space="preserve"><value>添加失败</value></data>
   <data name="pair_add_with_code" xml:space="preserve"><value>使用配对 PIN 添加</value></data>
   <data name="pair_added" xml:space="preserve"><value>已添加</value></data>
@@ -694,6 +694,10 @@
   <data name="pair_code_expires_in" xml:space="preserve"><value>剩余 {0}:{1}</value></data>
   <data name="pair_code_instructions" xml:space="preserve"><value>在新设备上选择“使用配对 PIN 加入”，然后输入上面的连接地址和配对 PIN</value></data>
   <data name="pair_code_label" xml:space="preserve"><value>配对 PIN（6 位）</value></data>
+  <data name="pair_confirm_code_hint" xml:space="preserve"><value>请输入要添加的设备配对画面上显示的 8 位代码。</value></data>
+  <data name="pair_confirm_code_invalid" xml:space="preserve"><value>请输入 8 位数字</value></data>
+  <data name="pair_confirm_code_self" xml:space="preserve"><value>请在添加本设备的那台设备上输入此代码</value></data>
+  <data name="pair_confirm_code_title" xml:space="preserve"><value>{0} 的确认码</value></data>
   <data name="pair_confirm_tap_again" xml:space="preserve"><value>再次按下以确认</value></data>
   <data name="pair_copy" xml:space="preserve"><value>复制</value></data>
   <data name="pair_create_home" xml:space="preserve"><value>新建集群</value></data>
@@ -710,6 +714,8 @@
   <data name="pair_err_bad_pin" xml:space="preserve"><value>配对 PIN 不正确</value></data>
   <data name="pair_err_bad_qr" xml:space="preserve"><value>这不是设备二维码。请原样粘贴新设备上显示的文本</value></data>
   <data name="pair_err_closed" xml:space="preserve"><value>与对方设备的连接已断开</value></data>
+  <data name="pair_err_confirm_code_mismatch" xml:space="preserve"><value>确认码不匹配</value></data>
+  <data name="pair_err_confirm_code_required" xml:space="preserve"><value>需要确认码</value></data>
   <data name="pair_err_connect_failed" xml:space="preserve"><value>无法连接到该地址。请检查连接地址，并确认两台设备处于同一网络</value></data>
   <data name="pair_err_decrypt_failed" xml:space="preserve"><value>安全校验失败。请检查网络中是否存在可疑设备</value></data>
   <data name="pair_err_expired" xml:space="preserve"><value>配对 PIN 已过期。请在对方设备上生成新的配对 PIN</value></data>
@@ -722,6 +728,7 @@
   <data name="pair_err_no_token" xml:space="preserve"><value>对方设备当前没有开启“使用配对 PIN 添加”</value></data>
   <data name="pair_err_pairing_unavailable" xml:space="preserve"><value>无法生成配对码，请重试</value></data>
   <data name="pair_err_persist_failed" xml:space="preserve"><value>无法在此设备上保存设置</value></data>
+  <data name="pair_err_pk_conflict" xml:space="preserve"><value>该设备声明了两个不同的密钥，出于安全无法添加</value></data>
   <data name="pair_err_timeout" xml:space="preserve"><value>没有收到响应。请重试</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>操作未能完成，请重试</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>详情：{0}</value></data>
@@ -783,6 +790,8 @@
   <data name="pair_searching_hint" xml:space="preserve"><value>请在已加入集群的设备或管理页面上点击“添加”</value></data>
   <data name="pair_tab" xml:space="preserve"><value>添加设备</value></data>
   <data name="pair_title_unpaired" xml:space="preserve"><value>将此门铃添加到集群</value></data>
+  <data name="pair_upgrade_rejoin_hint" xml:space="preserve"><value>安全更新后旧连接已失效，历史记录仍保留。请在集群设备上显示 PIN 后重新加入。</value></data>
+  <data name="pair_upgrade_rejoin_title" xml:space="preserve"><value>升级后需要重新配对</value></data>
   <data name="pairing_persist_failed_detail" xml:space="preserve"><value>配对已成功，但安全保存失败，因此此设备尚未就绪。请检查 pairing-error.log、磁盘空间和访问权限。</value></data>
   <data name="pairing_persist_failed_title" xml:space="preserve"><value>配对未能保存</value></data>
   <data name="panel_answering" xml:space="preserve"><value>正在接听…</value></data>
@@ -941,6 +950,13 @@
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>此门口机尚未配置开锁操作</value></data>
   <data name="ring_video_zoom_hint" xml:space="preserve"><value>双指缩放，双击复位</value></data>
   <data name="settings_about" xml:space="preserve"><value>本机信息</value></data>
+  <data name="settings_add_device" xml:space="preserve"><value>添加设备</value></data>
+  <data name="settings_add_device_action" xml:space="preserve"><value>添加</value></data>
+  <data name="settings_add_device_desc" xml:space="preserve"><value>通过 PIN、二维码或附近的设备添加</value></data>
+  <data name="settings_addresses" xml:space="preserve"><value>地址</value></data>
+  <data name="settings_answer_auto" xml:space="preserve"><value>自动接听</value></data>
+  <data name="settings_answer_manual" xml:space="preserve"><value>手动接听</value></data>
+  <data name="settings_app_version" xml:space="preserve"><value>应用版本</value></data>
   <data name="settings_appearance" xml:space="preserve"><value>外观</value></data>
   <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>按时间切换</value></data>
   <data name="settings_appearance_auto_system" xml:space="preserve"><value>跟随设备设置</value></data>
@@ -951,29 +967,183 @@
   <data name="settings_appearance_range" xml:space="preserve"><value>深色 {0} → 浅色 {1}</value></data>
   <data name="settings_appearance_schedule" xml:space="preserve"><value>按时段切换</value></data>
   <data name="settings_appearance_system" xml:space="preserve"><value>跟随系统</value></data>
+  <data name="settings_assets" xml:space="preserve"><value>素材（图片、音频）</value></data>
+  <data name="settings_assets_desc" xml:space="preserve"><value>上传与分发文件</value></data>
+  <data name="settings_back" xml:space="preserve"><value>返回</value></data>
+  <data name="settings_backdrop" xml:space="preserve"><value>背景暗化层</value></data>
+  <data name="settings_backdrop_opacity" xml:space="preserve"><value>暗化强度</value></data>
   <data name="settings_background_color" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_background_image" xml:space="preserve"><value>背景图片</value></data>
   <data name="settings_background_none" xml:space="preserve"><value>不使用图片</value></data>
+  <data name="settings_bg_color" xml:space="preserve"><value>背景色</value></data>
+  <data name="settings_bg_color_desc" xml:space="preserve"><value>#RRGGBB 格式</value></data>
+  <data name="settings_bg_image" xml:space="preserve"><value>背景图片</value></data>
+  <data name="settings_bg_image_desc" xml:space="preserve"><value>请在网页管理中上传图片</value></data>
+  <data name="settings_brightness_default" xml:space="preserve"><value>屏幕亮度</value></data>
+  <data name="settings_brightness_here" xml:space="preserve"><value>屏幕亮度</value></data>
+  <data name="settings_button_sound" xml:space="preserve"><value>按键音</value></data>
+  <data name="settings_call_flow" xml:space="preserve"><value>访客呼叫流程</value></data>
+  <data name="settings_call_sound" xml:space="preserve"><value>门口机呼叫提示音</value></data>
+  <data name="settings_call_sound_loop" xml:space="preserve"><value>重复呼叫提示音</value></data>
+  <data name="settings_call_sound_loop_desc" xml:space="preserve"><value>重复到有回复或 30 秒超时</value></data>
+  <data name="settings_cam_codec" xml:space="preserve"><value>视频编码</value></data>
+  <data name="settings_cam_fps" xml:space="preserve"><value>MJPEG 帧率</value></data>
+  <data name="settings_cam_h264_bitrate" xml:space="preserve"><value>H.264 码率</value></data>
+  <data name="settings_cam_h264_fps" xml:space="preserve"><value>H.264 帧率</value></data>
+  <data name="settings_cam_h264_resolution" xml:space="preserve"><value>H.264 分辨率</value></data>
+  <data name="settings_cam_hint" xml:space="preserve"><value>摄像头名称提示</value></data>
+  <data name="settings_cam_quality" xml:space="preserve"><value>JPEG 画质</value></data>
+  <data name="settings_cam_resolution" xml:space="preserve"><value>MJPEG 分辨率</value></data>
+  <data name="settings_cat_about" xml:space="preserve"><value>关于</value></data>
+  <data name="settings_cat_calls" xml:space="preserve"><value>呼叫</value></data>
+  <data name="settings_cat_camera" xml:space="preserve"><value>摄像头与视频</value></data>
+  <data name="settings_cat_device" xml:space="preserve"><value>本设备</value></data>
+  <data name="settings_cat_display" xml:space="preserve"><value>显示与外观</value></data>
+  <data name="settings_cat_kiosk" xml:space="preserve"><value>展台模式与恢复</value></data>
+  <data name="settings_cat_more" xml:space="preserve"><value>管理页面中的更多设置</value></data>
+  <data name="settings_cat_notices" xml:space="preserve"><value>公告</value></data>
+  <data name="settings_cat_pairing" xml:space="preserve"><value>集群与设备</value></data>
+  <data name="settings_cat_purposes" xml:space="preserve"><value>来访目的</value></data>
+  <data name="settings_cat_replies" xml:space="preserve"><value>快捷回复</value></data>
+  <data name="settings_cat_sip" xml:space="preserve"><value>通话 (SIP)</value></data>
+  <data name="settings_cat_sos" xml:space="preserve"><value>紧急呼叫 (SOS)</value></data>
+  <data name="settings_cat_sound" xml:space="preserve"><value>声音</value></data>
+  <data name="settings_cat_time" xml:space="preserve"><value>日期与时间</value></data>
   <data name="settings_change_password" xml:space="preserve"><value>更改管理密码</value></data>
   <data name="settings_close" xml:space="preserve"><value>关闭</value></data>
   <data name="settings_cluster" xml:space="preserve"><value>集群</value></data>
+  <data name="settings_cluster_key" xml:space="preserve"><value>集群密钥</value></data>
+  <data name="settings_cluster_key_previous" xml:space="preserve"><value>{0}（旧密钥 {1} 在 {2} 前有效）</value></data>
   <data name="settings_cluster_members" xml:space="preserve"><value>家中的设备</value></data>
+  <data name="settings_codec_h264" xml:space="preserve"><value>H.264</value></data>
+  <data name="settings_codec_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
   <data name="settings_configured" xml:space="preserve"><value>已设置</value></data>
   <data name="settings_contrast_warning" xml:space="preserve"><value>可能不易阅读（{0}:1）</value></data>
+  <data name="settings_core_version" xml:space="preserve"><value>核心版本</value></data>
+  <data name="settings_custom_sounds" xml:space="preserve"><value>自定义声音文件</value></data>
+  <data name="settings_custom_sounds_desc" xml:space="preserve"><value>请在网页管理中上传并指定声音文件</value></data>
+  <data name="settings_dark_from" xml:space="preserve"><value>深色开始时间</value></data>
+  <data name="settings_day_1" xml:space="preserve"><value>1 天</value></data>
+  <data name="settings_decrease" xml:space="preserve"><value>减少</value></data>
+  <data name="settings_deg_0" xml:space="preserve"><value>0°</value></data>
+  <data name="settings_deg_180" xml:space="preserve"><value>180°</value></data>
+  <data name="settings_deg_270" xml:space="preserve"><value>270°</value></data>
+  <data name="settings_deg_90" xml:space="preserve"><value>90°</value></data>
   <data name="settings_device_door" xml:space="preserve"><value>负责门口</value></data>
+  <data name="settings_device_door_desc" xml:space="preserve"><value>以字母或数字开头，仅限字母、数字、_ 和 -</value></data>
   <data name="settings_device_name" xml:space="preserve"><value>设备名称</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>角色</value></data>
+  <data name="settings_devices_manage" xml:space="preserve"><value>管理和移除设备</value></data>
+  <data name="settings_devices_manage_desc" xml:space="preserve"><value>其他设备的设置与移除请在网页管理中进行</value></data>
   <data name="settings_door" xml:space="preserve"><value>负责的门口</value></data>
   <data name="settings_doors" xml:space="preserve"><value>门口</value></data>
+  <data name="settings_doors_manage" xml:space="preserve"><value>门与建筑</value></data>
+  <data name="settings_doors_manage_desc" xml:space="preserve"><value>门名称与建筑分配请在网页管理中设置</value></data>
+  <data name="settings_err_admin_required" xml:space="preserve"><value>需要管理密码</value></data>
+  <data name="settings_err_core_unavailable" xml:space="preserve"><value>核心无响应</value></data>
+  <data name="settings_err_door_id" xml:space="preserve"><value>门 ID 格式不正确</value></data>
+  <data name="settings_err_required" xml:space="preserve"><value>此项为必填</value></data>
+  <data name="settings_err_time_format" xml:space="preserve"><value>请使用 HH:MM 格式，例如 22:00</value></data>
   <data name="settings_exit_kiosk" xml:space="preserve"><value>退出信息亭模式</value></data>
+  <data name="settings_fps_15" xml:space="preserve"><value>15 fps</value></data>
+  <data name="settings_fps_24" xml:space="preserve"><value>24 fps</value></data>
+  <data name="settings_fps_30" xml:space="preserve"><value>30 fps</value></data>
+  <data name="settings_glass_blur" xml:space="preserve"><value>毛玻璃模糊</value></data>
+  <data name="settings_grp_about" xml:space="preserve"><value>版本与标识</value></data>
+  <data name="settings_grp_all_devices" xml:space="preserve"><value>所有设备的默认值</value></data>
+  <data name="settings_grp_appearance" xml:space="preserve"><value>外观</value></data>
+  <data name="settings_grp_cluster" xml:space="preserve"><value>集群</value></data>
+  <data name="settings_grp_identity" xml:space="preserve"><value>标识</value></data>
+  <data name="settings_grp_kiosk" xml:space="preserve"><value>展台模式</value></data>
+  <data name="settings_grp_maintenance" xml:space="preserve"><value>维护</value></data>
+  <data name="settings_grp_night" xml:space="preserve"><value>夜间模式</value></data>
+  <data name="settings_grp_security" xml:space="preserve"><value>安全</value></data>
+  <data name="settings_grp_sip_account" xml:space="preserve"><value>本设备账户</value></data>
+  <data name="settings_grp_sip_server" xml:space="preserve"><value>SIP 服务器</value></data>
+  <data name="settings_grp_sos_alarm" xml:space="preserve"><value>警报与通知</value></data>
+  <data name="settings_grp_sos_trigger" xml:space="preserve"><value>触发</value></data>
+  <data name="settings_grp_sounds" xml:space="preserve"><value>提示音</value></data>
+  <data name="settings_grp_theme" xml:space="preserve"><value>主题</value></data>
+  <data name="settings_grp_this_device" xml:space="preserve"><value>本设备</value></data>
+  <data name="settings_grp_time" xml:space="preserve"><value>时间</value></data>
+  <data name="settings_grp_video" xml:space="preserve"><value>视频播放</value></data>
+  <data name="settings_grp_visitor" xml:space="preserve"><value>访客流程</value></data>
+  <data name="settings_grp_web_only" xml:space="preserve"><value>仅可在网页管理中设置</value></data>
   <data name="settings_helper_mode" xml:space="preserve"><value>恢复助手</value></data>
+  <data name="settings_hour_1" xml:space="preserve"><value>1 小时</value></data>
+  <data name="settings_hour_6" xml:space="preserve"><value>6 小时</value></data>
+  <data name="settings_households" xml:space="preserve"><value>通知对象（住户）</value></data>
+  <data name="settings_households_desc" xml:space="preserve"><value>Telegram 与分机的接收者</value></data>
+  <data name="settings_identity_restart_confirm" xml:space="preserve"><value>更改设备标识会重启应用。是否继续？</value></data>
+  <data name="settings_import_export" xml:space="preserve"><value>导出与导入设置</value></data>
+  <data name="settings_import_export_desc" xml:space="preserve"><value>备份与迁移</value></data>
+  <data name="settings_increase" xml:space="preserve"><value>增加</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>使用集群默认值</value></data>
+  <data name="settings_integrations" xml:space="preserve"><value>集成（Telegram、MQTT、Web Push）</value></data>
+  <data name="settings_integrations_desc" xml:space="preserve"><value>外部服务的连接设置</value></data>
+  <data name="settings_kiosk_lock" xml:space="preserve"><value>立即恢复展台模式</value></data>
+  <data name="settings_kiosk_lock_action" xml:space="preserve"><value>恢复</value></data>
+  <data name="settings_kiosk_mode" xml:space="preserve"><value>展台模式</value></data>
+  <data name="settings_kiosk_mode_desc" xml:space="preserve"><value>全屏固定，禁止切换到其他应用</value></data>
+  <data name="settings_kiosk_unlock" xml:space="preserve"><value>暂时退出展台模式</value></data>
+  <data name="settings_kiosk_unlock_action" xml:space="preserve"><value>解除</value></data>
+  <data name="settings_kiosk_unlock_desc" xml:space="preserve"><value>30 分钟后自动恢复</value></data>
+  <data name="settings_kiosk_unlocked" xml:space="preserve"><value>已退出展台模式 30 分钟</value></data>
+  <data name="settings_lang_revert" xml:space="preserve"><value>恢复默认语言的等待时间</value></data>
+  <data name="settings_languages" xml:space="preserve"><value>访客可选语言</value></data>
+  <data name="settings_languages_desc" xml:space="preserve"><value>第一个语言为默认语言</value></data>
+  <data name="settings_launch_sound" xml:space="preserve"><value>启动音</value></data>
+  <data name="settings_light_from" xml:space="preserve"><value>浅色开始时间</value></data>
+  <data name="settings_list_empty" xml:space="preserve"><value>没有条目</value></data>
+  <data name="settings_media_sources" xml:space="preserve"><value>外部摄像头</value></data>
+  <data name="settings_media_sources_desc" xml:space="preserve"><value>登记 IP 摄像头</value></data>
+  <data name="settings_min_1" xml:space="preserve"><value>1 分钟</value></data>
+  <data name="settings_min_10" xml:space="preserve"><value>10 分钟</value></data>
+  <data name="settings_min_15" xml:space="preserve"><value>15 分钟</value></data>
+  <data name="settings_min_2" xml:space="preserve"><value>2 分钟</value></data>
+  <data name="settings_min_30" xml:space="preserve"><value>30 分钟</value></data>
+  <data name="settings_min_5" xml:space="preserve"><value>5 分钟</value></data>
+  <data name="settings_motion_enabled" xml:space="preserve"><value>移动侦测</value></data>
+  <data name="settings_motion_interval" xml:space="preserve"><value>最短间隔</value></data>
+  <data name="settings_motion_sensitivity" xml:space="preserve"><value>灵敏度</value></data>
+  <data name="settings_move_down" xml:space="preserve"><value>下移</value></data>
+  <data name="settings_move_up" xml:space="preserve"><value>上移</value></data>
+  <data name="settings_night_brightness" xml:space="preserve"><value>夜间亮度</value></data>
+  <data name="settings_night_enabled" xml:space="preserve"><value>夜间模式</value></data>
+  <data name="settings_night_enabled_desc" xml:space="preserve"><value>在下列时段调暗屏幕</value></data>
+  <data name="settings_night_from" xml:space="preserve"><value>开始</value></data>
+  <data name="settings_night_red_tint" xml:space="preserve"><value>暖色偏红</value></data>
+  <data name="settings_night_to" xml:space="preserve"><value>结束</value></data>
   <data name="settings_no_password" xml:space="preserve"><value>尚未设置管理密码，请先在网页管理中登录一次</value></data>
+  <data name="settings_node_id" xml:space="preserve"><value>节点 ID</value></data>
   <data name="settings_not_configured" xml:space="preserve"><value>未设置</value></data>
+  <data name="settings_not_set" xml:space="preserve"><value>未设置</value></data>
+  <data name="settings_notice_edit" xml:space="preserve"><value>发布公告</value></data>
+  <data name="settings_notice_edit_action" xml:space="preserve"><value>编辑</value></data>
+  <data name="settings_notice_edit_desc" xml:space="preserve"><value>在门口机和室内机上显示的临时公告</value></data>
+  <data name="settings_notice_presets" xml:space="preserve"><value>预设文本</value></data>
+  <data name="settings_notice_presets_desc" xml:space="preserve"><value>撰写公告时可选的文本</value></data>
+  <data name="settings_ntp_enabled" xml:space="preserve"><value>自动校时 (NTP)</value></data>
+  <data name="settings_ntp_enabled_desc" xml:space="preserve"><value>需要连接互联网</value></data>
+  <data name="settings_ntp_interval" xml:space="preserve"><value>同步间隔</value></data>
+  <data name="settings_ntp_servers" xml:space="preserve"><value>NTP 服务器</value></data>
+  <data name="settings_ntp_servers_desc" xml:space="preserve"><value>最多 4 个，用逗号分隔</value></data>
   <data name="settings_number_prompt" xml:space="preserve"><value>输入数值</value></data>
   <data name="settings_off" xml:space="preserve"><value>关</value></data>
   <data name="settings_offline" xml:space="preserve"><value>暂时无法更改设置，此设备仍在启动中</value></data>
   <data name="settings_on" xml:space="preserve"><value>开</value></data>
+  <data name="settings_open_in_admin" xml:space="preserve"><value>在管理页面打开</value></data>
+  <data name="settings_open_logs" xml:space="preserve"><value>日志文件夹</value></data>
+  <data name="settings_open_logs_action" xml:space="preserve"><value>打开</value></data>
+  <data name="settings_pairing_joining" xml:space="preserve"><value>正在加入</value></data>
+  <data name="settings_pairing_persist_error" xml:space="preserve"><value>密钥保存失败</value></data>
+  <data name="settings_pairing_ready" xml:space="preserve"><value>已加入集群</value></data>
+  <data name="settings_pairing_revoked" xml:space="preserve"><value>已被移除</value></data>
+  <data name="settings_pairing_state" xml:space="preserve"><value>配对</value></data>
+  <data name="settings_pairing_state_cluster" xml:space="preserve"><value>本设备状态</value></data>
+  <data name="settings_pairing_unpaired" xml:space="preserve"><value>未配对</value></data>
+  <data name="settings_panels_manage" xml:space="preserve"><value>网页面板</value></data>
+  <data name="settings_panels_manage_desc" xml:space="preserve"><value>面板的创建、权限与吊销请在网页管理中进行</value></data>
   <data name="settings_password_changed" xml:space="preserve"><value>管理密码已更改</value></data>
   <data name="settings_password_confirm" xml:space="preserve"><value>再次输入</value></data>
   <data name="settings_password_current" xml:space="preserve"><value>当前密码</value></data>
@@ -984,20 +1154,59 @@
   <data name="settings_password_new" xml:space="preserve"><value>新密码</value></data>
   <data name="settings_password_set_failed" xml:space="preserve"><value>无法设置密码</value></data>
   <data name="settings_password_shared" xml:space="preserve"><value>此设备与网页管理使用同一密码</value></data>
+  <data name="settings_peer_alerts" xml:space="preserve"><value>无法连接的设备</value></data>
+  <data name="settings_peer_alerts_desc" xml:space="preserve"><value>旧版本的设备，以及未收到密钥更新的设备</value></data>
+  <data name="settings_peers_legacy" xml:space="preserve"><value>旧版本：{0}</value></data>
+  <data name="settings_peers_ok" xml:space="preserve"><value>无</value></data>
+  <data name="settings_peers_rekey_required" xml:space="preserve"><value>需要重新配对：{0}</value></data>
+  <data name="settings_pixel_shift" xml:space="preserve"><value>防烧屏移动间隔</value></data>
+  <data name="settings_preset_text" xml:space="preserve"><value>文本</value></data>
   <data name="settings_purpose_shown" xml:space="preserve"><value>向访客显示</value></data>
   <data name="settings_purposes" xml:space="preserve"><value>来访目的</value></data>
+  <data name="settings_quick_replies" xml:space="preserve"><value>快捷回复</value></data>
+  <data name="settings_quick_replies_desc" xml:space="preserve"><value>室内机发送给门口机的预设回复</value></data>
   <data name="settings_quiet_hours" xml:space="preserve"><value>静音时段</value></data>
+  <data name="settings_reply_ttl" xml:space="preserve"><value>回复显示时长</value></data>
+  <data name="settings_reply_ttl_desc" xml:space="preserve"><value>快捷回复在门口机上显示的秒数</value></data>
+  <data name="settings_requires_restart" xml:space="preserve"><value>重启后生效</value></data>
+  <data name="settings_res_1280x720" xml:space="preserve"><value>1280×720</value></data>
+  <data name="settings_res_320x240" xml:space="preserve"><value>320×240</value></data>
+  <data name="settings_res_640x360" xml:space="preserve"><value>640×360</value></data>
+  <data name="settings_res_640x480" xml:space="preserve"><value>640×480</value></data>
+  <data name="settings_restart_app" xml:space="preserve"><value>重启应用</value></data>
+  <data name="settings_restart_app_action" xml:space="preserve"><value>重启</value></data>
+  <data name="settings_restart_app_desc" xml:space="preserve"><value>请在没有通话时进行</value></data>
+  <data name="settings_restart_confirm" xml:space="preserve"><value>要重启应用吗？</value></data>
   <data name="settings_restart_required" xml:space="preserve"><value>更改角色后需要重新启动</value></data>
+  <data name="settings_ringtone" xml:space="preserve"><value>室内机铃声</value></data>
   <data name="settings_role" xml:space="preserve"><value>角色</value></data>
   <data name="settings_role_door" xml:space="preserve"><value>门口机</value></data>
   <data name="settings_role_indoor" xml:space="preserve"><value>室内机</value></data>
   <data name="settings_role_restart" xml:space="preserve"><value>更改角色会重启应用</value></data>
   <data name="settings_role_restart_notice" xml:space="preserve"><value>更改角色后，下次打开应用时生效</value></data>
+  <data name="settings_rotate_cluster_key" xml:space="preserve"><value>更换集群密钥</value></data>
+  <data name="settings_rotate_cluster_key_action" xml:space="preserve"><value>更换</value></data>
+  <data name="settings_rotate_cluster_key_confirm" xml:space="preserve"><value>要更换集群密钥吗？离线超过 7 天的设备需要重新配对。</value></data>
+  <data name="settings_rotate_cluster_key_desc" xml:space="preserve"><value>例如丢失设备后执行。旧密钥对成员保留 7 天有效</value></data>
+  <data name="settings_rotate_cluster_key_done" xml:space="preserve"><value>集群密钥已更换</value></data>
+  <data name="settings_rotate_cluster_key_failed" xml:space="preserve"><value>无法更换集群密钥</value></data>
   <data name="settings_rule_enabled" xml:space="preserve"><value>开启</value></data>
   <data name="settings_rules" xml:space="preserve"><value>通知与规则</value></data>
   <data name="settings_rules_count" xml:space="preserve"><value>{0} 条</value></data>
+  <data name="settings_rules_desc" xml:space="preserve"><value>按下、移动侦测或设备离线时的动作</value></data>
+  <data name="settings_safe_mode" xml:space="preserve"><value>安全模式</value></data>
   <data name="settings_save_failed" xml:space="preserve"><value>无法保存</value></data>
+  <data name="settings_save_failed_reason" xml:space="preserve"><value>未能保存：{0}</value></data>
   <data name="settings_saved" xml:space="preserve"><value>已保存</value></data>
+  <data name="settings_saved_with_warning" xml:space="preserve"><value>已保存。注意：{0}</value></data>
+  <data name="settings_scope_all" xml:space="preserve"><value>所有设备</value></data>
+  <data name="settings_scope_device" xml:space="preserve"><value>仅本设备</value></data>
+  <data name="settings_screensaver" xml:space="preserve"><value>屏幕保护</value></data>
+  <data name="settings_search" xml:space="preserve"><value>搜索设置</value></data>
+  <data name="settings_search_none" xml:space="preserve"><value>没有匹配的设置</value></data>
+  <data name="settings_sec_30" xml:space="preserve"><value>30 秒</value></data>
+  <data name="settings_secrets" xml:space="preserve"><value>秘密信息</value></data>
+  <data name="settings_secrets_desc" xml:space="preserve"><value>密码和令牌请在各设备的网页管理中登记</value></data>
   <data name="settings_section_cluster" xml:space="preserve"><value>集群</value></data>
   <data name="settings_section_device" xml:space="preserve"><value>本设备</value></data>
   <data name="settings_section_doors" xml:space="preserve"><value>门口</value></data>
@@ -1010,26 +1219,106 @@
   <data name="settings_section_web" xml:space="preserve"><value>打开网页管理</value></data>
   <data name="settings_set_password" xml:space="preserve"><value>设置管理密码</value></data>
   <data name="settings_set_password_hint" xml:space="preserve"><value>此密码在本机与网页管理中通用</value></data>
+  <data name="settings_sip_answer_mode" xml:space="preserve"><value>接听方式</value></data>
+  <data name="settings_sip_backend" xml:space="preserve"><value>SIP 实现</value></data>
+  <data name="settings_sip_direct_port" xml:space="preserve"><value>设备直连端口</value></data>
+  <data name="settings_sip_direct_port_desc" xml:space="preserve"><value>修改后请同步更新各设备的防火墙规则</value></data>
+  <data name="settings_sip_dtmf" xml:space="preserve"><value>DTMF 动作</value></data>
+  <data name="settings_sip_dtmf_desc" xml:space="preserve"><value>通话中的按键动作（如开锁）请在网页管理中设置</value></data>
+  <data name="settings_sip_password" xml:space="preserve"><value>SIP 密码</value></data>
+  <data name="settings_sip_password_desc" xml:space="preserve"><value>秘密信息请在目标设备的网页管理中登记</value></data>
+  <data name="settings_sip_port" xml:space="preserve"><value>端口</value></data>
+  <data name="settings_sip_server" xml:space="preserve"><value>服务器</value></data>
+  <data name="settings_sip_server_desc" xml:space="preserve"><value>留空则设备之间直接通话</value></data>
+  <data name="settings_sip_transport" xml:space="preserve"><value>传输方式</value></data>
+  <data name="settings_sip_user" xml:space="preserve"><value>用户名</value></data>
+  <data name="settings_software_update" xml:space="preserve"><value>软件更新</value></data>
+  <data name="settings_software_update_action" xml:space="preserve"><value>检查</value></data>
+  <data name="settings_software_update_desc" xml:space="preserve"><value>仅限通过安装程序安装的设备</value></data>
+  <data name="settings_sos_cancel_pin" xml:space="preserve"><value>解除需要管理密码</value></data>
+  <data name="settings_sos_cancel_pin_desc" xml:space="preserve"><value>未设置管理密码时任何人都可解除</value></data>
+  <data name="settings_sos_countdown" xml:space="preserve"><value>报警前倒计时</value></data>
+  <data name="settings_sos_countdown_desc" xml:space="preserve"><value>在此期间可以取消</value></data>
+  <data name="settings_sos_hold" xml:space="preserve"><value>长按</value></data>
+  <data name="settings_sos_mode" xml:space="preserve"><value>触发操作</value></data>
+  <data name="settings_sos_roles" xml:space="preserve"><value>显示 SOS 按钮的设备</value></data>
+  <data name="settings_sos_rules" xml:space="preserve"><value>通知对象与规则</value></data>
+  <data name="settings_sos_rules_desc" xml:space="preserve"><value>通知谁以及如何通知，请在网页管理中设置</value></data>
+  <data name="settings_sos_sip" xml:space="preserve"><value>SOS 时拨打电话</value></data>
+  <data name="settings_sos_sip_target" xml:space="preserve"><value>拨打的分机</value></data>
+  <data name="settings_sos_slide" xml:space="preserve"><value>滑动</value></data>
+  <data name="settings_sos_volume" xml:space="preserve"><value>警报音量</value></data>
+  <data name="settings_sos_web" xml:space="preserve"><value>在打开的网页面板上显示</value></data>
+  <data name="settings_sos_web_desc" xml:space="preserve"><value>在已打开的浏览器面板上显示 SOS 状态</value></data>
+  <data name="settings_sound_classic" xml:space="preserve"><value>经典</value></data>
+  <data name="settings_sound_ding1" xml:space="preserve"><value>叮咚 1</value></data>
+  <data name="settings_sound_ding2" xml:space="preserve"><value>叮咚 2</value></data>
   <data name="settings_telegram" xml:space="preserve"><value>Telegram</value></data>
+  <data name="settings_texts" xml:space="preserve"><value>界面文字</value></data>
+  <data name="settings_texts_desc" xml:space="preserve"><value>覆盖显示文字</value></data>
   <data name="settings_theme_bg" xml:space="preserve"><value>背景颜色</value></data>
   <data name="settings_theme_bg_color" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_theme_bg_image" xml:space="preserve"><value>背景图片</value></data>
   <data name="settings_theme_image" xml:space="preserve"><value>背景图片</value></data>
   <data name="settings_theme_image_none" xml:space="preserve"><value>不使用图片</value></data>
   <data name="settings_this_device" xml:space="preserve"><value>本机</value></data>
+  <data name="settings_time_sync" xml:space="preserve"><value>立即同步</value></data>
+  <data name="settings_time_sync_action" xml:space="preserve"><value>同步</value></data>
+  <data name="settings_time_sync_failed" xml:space="preserve"><value>时间同步失败</value></data>
+  <data name="settings_time_sync_started" xml:space="preserve"><value>已开始同步时间</value></data>
+  <data name="settings_time_zone" xml:space="preserve"><value>时区</value></data>
   <data name="settings_title" xml:space="preserve"><value>设置</value></data>
+  <data name="settings_tls_fingerprint" xml:space="preserve"><value>TLS 证书指纹</value></data>
+  <data name="settings_transport_tcp" xml:space="preserve"><value>TCP</value></data>
+  <data name="settings_transport_tls" xml:space="preserve"><value>TLS</value></data>
+  <data name="settings_transport_udp" xml:space="preserve"><value>UDP</value></data>
+  <data name="settings_tz_berlin" xml:space="preserve"><value>柏林 (Europe/Berlin)</value></data>
+  <data name="settings_tz_london" xml:space="preserve"><value>伦敦 (Europe/London)</value></data>
+  <data name="settings_tz_los_angeles" xml:space="preserve"><value>洛杉矶 (America/Los_Angeles)</value></data>
+  <data name="settings_tz_new_york" xml:space="preserve"><value>纽约 (America/New_York)</value></data>
+  <data name="settings_tz_seoul" xml:space="preserve"><value>首尔 (Asia/Seoul)</value></data>
+  <data name="settings_tz_shanghai" xml:space="preserve"><value>上海 (Asia/Shanghai)</value></data>
+  <data name="settings_tz_singapore" xml:space="preserve"><value>新加坡 (Asia/Singapore)</value></data>
+  <data name="settings_tz_tokyo" xml:space="preserve"><value>东京 (Asia/Tokyo)</value></data>
+  <data name="settings_tz_utc" xml:space="preserve"><value>协调世界时 (UTC)</value></data>
   <data name="settings_ui_lang" xml:space="preserve"><value>显示语言</value></data>
+  <data name="settings_unit_fps" xml:space="preserve"><value>{0} fps</value></data>
+  <data name="settings_unit_kbps" xml:space="preserve"><value>{0} kbps</value></data>
+  <data name="settings_unit_percent" xml:space="preserve"><value>{0}%</value></data>
+  <data name="settings_unit_seconds" xml:space="preserve"><value>{0} 秒</value></data>
   <data name="settings_unlock_button" xml:space="preserve"><value>显示开锁按钮</value></data>
   <data name="settings_unlock_show_button" xml:space="preserve"><value>显示开锁按钮</value></data>
+  <data name="settings_update_sound" xml:space="preserve"><value>更新提示音</value></data>
   <data name="settings_value_unset" xml:space="preserve"><value>未设置</value></data>
   <data name="settings_video_playback" xml:space="preserve"><value>视频播放</value></data>
+  <data name="settings_video_policy" xml:space="preserve"><value>详细播放策略</value></data>
+  <data name="settings_video_policy_desc" xml:space="preserve"><value>各设备组合的优先级请在网页管理中设置</value></data>
   <data name="settings_video_rotation" xml:space="preserve"><value>画面方向</value></data>
+  <data name="settings_video_stats" xml:space="preserve"><value>显示视频统计</value></data>
+  <data name="settings_video_stats_desc" xml:space="preserve"><value>在通话画面显示延迟和帧率</value></data>
+  <data name="settings_visit_purposes" xml:space="preserve"><value>来访目的</value></data>
+  <data name="settings_visit_purposes_desc" xml:space="preserve"><value>访客可选的按钮，按显示顺序排列</value></data>
   <data name="settings_visitor_layout" xml:space="preserve"><value>訪客畫面佈局</value></data>
   <data name="settings_visitor_layout_edges" xml:space="preserve"><value>時鐘在上、控制項在下</value></data>
   <data name="settings_visitor_layout_left" xml:space="preserve"><value>控制項靠左</value></data>
   <data name="settings_visitor_layout_right" xml:space="preserve"><value>控制項靠右</value></data>
   <data name="settings_visitor_layout_standard" xml:space="preserve"><value>標準</value></data>
+  <data name="settings_volume_call" xml:space="preserve"><value>铃声音量</value></data>
+  <data name="settings_volume_call_default" xml:space="preserve"><value>铃声音量</value></data>
+  <data name="settings_volume_idle" xml:space="preserve"><value>常规音量</value></data>
+  <data name="settings_volume_idle_default" xml:space="preserve"><value>常规音量</value></data>
   <data name="settings_volume_inherit" xml:space="preserve"><value>使用集群默认值</value></data>
+  <data name="settings_volume_reset" xml:space="preserve"><value>恢复为所有设备的默认值</value></data>
+  <data name="settings_volume_reset_action" xml:space="preserve"><value>恢复默认</value></data>
+  <data name="settings_volume_reset_desc" xml:space="preserve"><value>清除仅针对本设备的音量</value></data>
+  <data name="settings_volume_sos" xml:space="preserve"><value>SOS 音量</value></data>
+  <data name="settings_volume_sos_default" xml:space="preserve"><value>SOS 音量</value></data>
+  <data name="settings_watchdog_absent" xml:space="preserve"><value>未连接</value></data>
+  <data name="settings_watchdog_connected" xml:space="preserve"><value>已连接</value></data>
+  <data name="settings_watchdog_state" xml:space="preserve"><value>守护服务</value></data>
+  <data name="settings_web_admin_link" xml:space="preserve"><value>网页管理</value></data>
+  <data name="settings_web_admin_link_action" xml:space="preserve"><value>显示</value></data>
+  <data name="settings_web_admin_link_desc" xml:space="preserve"><value>用于从其他设备或手机打开的二维码和地址</value></data>
   <data name="settings_web_only" xml:space="preserve"><value>此项请在网页管理中修改</value></data>
   <data name="settings_web_only_labels" xml:space="preserve"><value>文案覆盖</value></data>
   <data name="settings_web_only_raw_config" xml:space="preserve"><value>请在网页管理中导出与导入配置</value></data>
@@ -1039,6 +1328,7 @@
   <data name="settings_web_only_upload" xml:space="preserve"><value>请在网页管理中添加图片</value></data>
   <data name="settings_web_only_wording" xml:space="preserve"><value>请在网页管理中修改文案</value></data>
   <data name="settings_web_push" xml:space="preserve"><value>Web Push</value></data>
+  <data name="settings_week_1" xml:space="preserve"><value>1 周</value></data>
   <data name="settings_zone_search" xml:space="preserve"><value>搜索时区</value></data>
   <data name="setup_confirm_new_cluster" xml:space="preserve"><value>再次点击以新建集群（如需加入现有集群请取消）</value></data>
   <data name="setup_door" xml:space="preserve"><value>门口 ID</value></data>

@@ -292,6 +292,38 @@ namespace DoorbellApp
 
         private static bool _factoryResetStarted;
 
+        /// <summary>
+        /// Restarts the app after a change that only takes effect at startup (identity, kiosk
+        /// mode). Under the watchdog the restart exit code is not a crash; without one the new
+        /// process waits for this one to release its ports and store.
+        /// </summary>
+        internal static void RestartApp(string reason)
+        {
+            var app = Current as App;
+            if (app == null || _factoryResetStarted) return;
+            _factoryResetStarted = true;
+            app._runtimeProcess?.RecordExit(reason);
+            bool watchdog = Watchdog != null && Watchdog.Available;
+            if (!watchdog)
+            {
+                try
+                {
+                    string exe = System.Reflection.Assembly.GetEntryAssembly() == null ? null :
+                        System.Reflection.Assembly.GetEntryAssembly().Location;
+                    int pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+                    if (!string.IsNullOrEmpty(exe))
+                        System.Diagnostics.Process.Start(exe, "--wait-for-pid " + pid);
+                }
+                catch (Exception ex)
+                {
+                    CoreClient.WriteAppLog("relaunch failed: " + ex.Message);
+                }
+            }
+            if (app.MainWindow is MainWindow main) main.AllowClose();
+            app.Dispatcher.BeginInvoke(new Action(() =>
+                app.Shutdown(watchdog ? ExitRestartRequested : ExitClean)));
+        }
+
         /// <summary>The supervisor asked this instance to go: session change or service stop.</summary>
         private void ExitForSupervisor(string reason)
         {
@@ -303,6 +335,16 @@ namespace DoorbellApp
         private void OnCoreLifecycleEvent(UiEvent ev)
         {
             if (ev == null) return;
+            if (ev.T == "cluster_key_changed")
+            {
+                CoreClient.WriteAppLog("cluster key changed to " + ev.Str("psk_id"));
+                return;
+            }
+            if (ev.T == "peer_rejected")
+            {
+                CoreClient.WriteAppLog("peer rejected: " + ev.Str("id") + " " + ev.Str("reason"));
+                return;
+            }
             if (ev.T == "pairing_persistence_error")
             {
                 ReportPairingPersistenceFailure("Core secure-store callback failed");

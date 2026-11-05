@@ -91,17 +91,20 @@ namespace DoorbellApp
             OpenAddDevicePanel();
         }
 
-        /// <summary>Opens the Add-device panel, behind the admin password on a kiosk.</summary>
-        private void OpenAddDevicePanel()
+        /// <summary>
+        /// Opens the Add-device panel, behind the admin password on a kiosk. From the settings
+        /// window the password was already entered and its admin window stays open.
+        /// </summary>
+        private void OpenAddDevicePanel(bool fromSettings = false)
         {
-            if (App.Boot.Kiosk && !_adminUnlocked)
+            if (App.Boot.Kiosk && !_adminUnlocked && !fromSettings)
             {
                 var prompt = new AdminDialog { Owner = this };
                 if (prompt.ShowDialog() != true) return;
             }
             var panel = new AddDeviceWindow { Owner = this, Topmost = Topmost };
             panel.ShowDialog();
-            if (!_adminUnlocked) App.Core?.AdminLock();
+            if (!_adminUnlocked && !fromSettings) App.Core?.AdminLock();
             if (panel.OnboardingRequested)
             {
                 _pairingSkipped = false;

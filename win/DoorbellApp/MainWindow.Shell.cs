@@ -695,14 +695,14 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// The dashboard 管理 button and the door station's 7-tap corner both land here, always
-        /// behind the admin password.
+        /// The dashboard Admin button lands here, always behind the admin password, and opens the
+        /// native settings; the web admin is one row inside them.
         /// </summary>
         private void OnAdminEntryClick(object sender, RoutedEventArgs e)
         {
             var prompt = new AdminDialog { Owner = this };
             if (prompt.ShowDialog() != true) return;
-            OpenWebAdmin();
+            OpenSettings();
         }
 
         private void OpenWebAdmin()

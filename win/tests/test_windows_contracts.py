@@ -770,6 +770,78 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("ServicePointManager.DefaultConnectionLimit = 16;",
                       read("win/DoorbellApp/App.xaml.cs"))
 
+    def test_native_settings_cover_device_config_and_write_through_the_batch(self):
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        store = read("win/DoorbellApp/Settings/SettingsStore.cs")
+        window = read("win/DoorbellApp/Settings/SettingsWindow.cs")
+        rows = read("win/DoorbellApp/Settings/SettingsWindow.Rows.cs")
+        styles = read("win/DoorbellApp/Settings/SettingsStyles.xaml")
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        strings = read("i18n/strings.yaml")
+        # Every write is one validated, atomic Core config batch, with the admin prompt hooked.
+        self.assertIn("App.Core.ConfigBatchJson(body)", store)
+        self.assertNotIn("SetConfigJson(", store)
+        self.assertIn("CoreClient.AdminPrompt = PromptAdmin;", window)
+        self.assertIn("CoreClient.AdminPrompt = _previousPrompt;", window)
+        # Two panes from 900 effective pixels, drill-down below; 44-pixel touch targets.
+        self.assertIn("public const double WideBreakpoint = 900;", window)
+        self.assertIn("public const double MinTouchTarget = 44;", window)
+        self.assertIn('<Setter Property="MinHeight" Value="44"/>', styles)
+        self.assertIn("SettingsSwitch", styles)
+        self.assertIn("OpenSettings();", shell)
+        # The device-side keys an administrator edits are native controls.
+        for key in ('Self + ".name"', 'Local + ".audio.volume.call"', '"ui.ringtone"',
+                    '"ui.call_flow"', '"ui.languages"', 'Local + ".screen_brightness"',
+                    '"display.night.enabled"', '"quick_replies"', '"visit_purposes"',
+                    '"notice.presets"', '"emergency.trigger.mode"', '"sip.server"',
+                    '"time.zone"', 'Local + ".camera.codec"', '"boot:kiosk"'):
+            with self.subTest(key=key):
+                self.assertIn(key, catalog)
+        # Only genuinely web-only items open the admin.
+        web = set(re.findall(r'Web\("([a-z_]+)"\)', catalog))
+        loop = re.search(r'foreach \(string id in new\[\] \{([^}]*)\}\)\s*Add\(g, Web\(id\)\)',
+                         catalog)
+        self.assertIsNotNone(loop)
+        web |= set(re.findall(r'"([a-z_]+)"', loop.group(1)))
+        self.assertTrue({"rules", "integrations", "assets", "secrets", "panels_manage",
+                         "sip_password", "bg_image"} <= web)
+        # Every category, item, description and action label is translated.
+        keys = set(re.findall(r"^([a-z_.0-9]+):", strings, re.M))
+        for ident in web:
+            self.assertIn("settings." + ident + "_desc", keys)
+        for kind, ident in re.findall(
+                r"\b(Toggle|Slider|Stepper|Choice|Multi|Text|TimeOfDay|Action|Info|Web|ListEditor)"
+                r'\("([a-z_0-9]+)"', catalog):
+            with self.subTest(item=ident):
+                self.assertIn("settings." + ident, keys)
+                if kind == "Action":
+                    self.assertIn("settings." + ident + "_action", keys)
+                if kind == "Web":
+                    self.assertIn("settings." + ident + "_desc", keys)
+        for ident in re.findall(r'Category\("([a-z]+)"', catalog):
+            self.assertIn("settings.cat_" + ident, keys)
+        for label in re.findall(r'O\([^,]+, "([a-z_.0-9]+)"\)', catalog):
+            with self.subTest(option=label):
+                self.assertIn(label, keys)
+        self.assertIn("ActualWidth < 700", rows)
+
+    def test_pairing_requires_the_confirmation_code(self):
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        add = read("win/DoorbellApp/Pairing/AddDeviceWindow.xaml.cs")
+        snapshot = read("win/DoorbellApp/Pairing/PairingSnapshot.cs")
+        onboarding = read("win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs")
+        self.assertIn('"db_core_invite_device_code"', client)
+        self.assertIn('"db_core_rotate_cluster_key"', client)
+        self.assertIn("public delegate void InviteDeviceCodeFn(IntPtr core,", interop)
+        self.assertIn("ConfirmCodeDialog.Ask(this, row.Title)", add)
+        self.assertIn("App.Core.InviteDeviceWithCode(id, code)", add)
+        for field in ('"confirm_code"', '"upgrade_rejoin_required"', '"security"',
+                      '"pk_conflict"', '"rekey_required"', '"legacy_peers"'):
+            self.assertIn(field, snapshot)
+        self.assertIn("pair.upgrade_rejoin_title", onboarding)
+        self.assertIn("ConfirmCodeText", onboarding)
+
     def test_watchdog_restarts_app_not_windows(self):
         watchdog = read("win/watchdog/main.cpp")
         self.assertNotIn("ExitWindowsEx", watchdog)
@@ -824,7 +896,7 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("OpenAddDevicePanel", window)
         gate = window[window.index("private void OpenAddDevicePanel"):
                       window.index("private void OnSecretCorner")]
-        self.assertIn("if (App.Boot.Kiosk && !_adminUnlocked)", gate)
+        self.assertIn("if (App.Boot.Kiosk && !_adminUnlocked && !fromSettings)", gate)
         self.assertIn("new AdminDialog { Owner = this }", gate)
         # persist_error is only cleared by a successful retry, never by another button.
         self.assertIn("bool secondaryAllowed = !persistError && !ready && !joiningState;", view)
@@ -960,16 +1032,18 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("status.BatteryFlag & 128", device)
         self.assertIn('{ "power_state", true }', contracts)
 
-    def test_windows_has_no_native_settings_only_the_web_admin_entry(self):
+    def test_admin_entry_opens_native_settings_with_the_web_admin_inside(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
         window = read("win/DoorbellApp/WebAdminWindow.xaml.cs")
         link = read("win/DoorbellApp/Util/AdminLink.cs")
-        # The admin entry always asks for the admin password and then opens the web admin.
+        actions = read("win/DoorbellApp/Settings/SettingsWindow.Actions.cs")
+        # The admin entry always asks for the admin password and then opens native settings,
+        # where the web admin (QR, URL, updates) is one row.
         entry = shell[shell.index("private void OnAdminEntryClick"):
                       shell.index("private void OpenWebAdmin")]
         self.assertIn("new AdminDialog { Owner = this }", entry)
-        self.assertIn("OpenWebAdmin();", entry)
-        self.assertIn("new WebAdminWindow(App.Boot.HttpPort)", shell)
+        self.assertIn("OpenSettings();", entry)
+        self.assertIn("new WebAdminWindow(App.Boot.HttpPort)", actions)
         # QR, URL and an open button; the URL never points at loopback.
         self.assertIn("QrCodeImage.Render(url, 200)", window)
         self.assertIn('Texts.T("web_admin.open_browser")', window)
@@ -979,8 +1053,6 @@ class WindowsContracts(unittest.TestCase):
         # A door station shows no administration entry at all (spec 0.2).
         self.assertIn("AdminEntryButton.Visibility = door ? Visibility.Collapsed", shell)
         self.assertIn("AdminLinkCard.Visibility = door ? Visibility.Collapsed", shell)
-        # No native settings screen was added.
-        self.assertFalse((WIN / "DoorbellApp" / "SettingsWindow.xaml").exists())
 
     def test_sos_slides_then_counts_down_before_core_is_told(self):
         slider = read("win/DoorbellApp/Ui/SosSlider.cs")
