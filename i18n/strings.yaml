@@ -1585,3 +1585,18 @@ pair.err.rekey_required: { ja: "鍵の更新を受け取っていない端末で
 pair.err.unauthorized_peer: { ja: "クラスタに登録されていない端末です", en: "That device is not a member of this cluster", zh: "该设备不是此集群的成员" }
 pair.err.bad_signature: { ja: "端末の身元を確認できませんでした", en: "That device's identity could not be verified", zh: "无法验证该设备的身份" }
 pair.clock_skew: { ja: "時計が大きくずれていると近くの端末を見つけられません。「インターネットで時刻を合わせる」を有効にしてください", en: "With a clock that is far off, nearby devices cannot be found. Turn on Set the time from the internet", zh: "时钟偏差过大时无法发现附近设备，请开启“通过互联网校时”" }
+# Home Assistant entity names published by Core (MQTT Discovery). Core-only; not emitted to clients.
+core.ha.device.mesh: { ja: "ドアホン網", en: "Doorbell Mesh", zh: "门铃网络" }
+core.ha.entity.doorbell: { ja: "呼び鈴", en: "Doorbell", zh: "门铃" }
+core.ha.entity.motion: { ja: "動体検知", en: "Motion", zh: "移动侦测" }
+core.ha.entity.visitor_lang: { ja: "訪客言語", en: "Visitor language", zh: "访客语言" }
+core.ha.entity.call_state: { ja: "通話状態", en: "Call state", zh: "通话状态" }
+core.ha.entity.last_call: { ja: "最後の呼び出し", en: "Last call", zh: "最近一次呼叫" }
+core.ha.entity.missed_calls: { ja: "不在着信", en: "Missed calls", zh: "未接来访" }
+core.ha.entity.snapshot: { ja: "来客スナップショット", en: "Visitor snapshot", zh: "访客快照" }
+core.ha.entity.quick_reply: { ja: "クイック返信", en: "Quick reply", zh: "快捷回复" }
+core.ha.entity.emergency: { ja: "緊急事態", en: "Emergency", zh: "紧急情况" }
+core.ha.entity.sos_clear: { ja: "緊急事態を解除", en: "Clear emergency", zh: "解除紧急情况" }
+core.ha.entity.sos_trigger: { ja: "緊急事態を発報", en: "Trigger emergency", zh: "触发紧急情况" }
+core.ha.entity.notice: { ja: "お知らせ", en: "Announcement", zh: "公告" }
+core.ha.entity.bridge: { ja: "ドアホン ブリッジ", en: "Doorbell Bridge", zh: "门铃网桥" }

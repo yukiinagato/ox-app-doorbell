@@ -367,6 +367,11 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
     "mqtt": { "host": "10.0.1.5", "port": 1883, "user": "doorbell",
               "pass_ref": "secret:mqtt", "discovery_prefix": "homeassistant",
               "base_topic": "doorbell" },
+    // Home Assistant entities published through MQTT Discovery (deploy/ha/README.en.md).
+    // language: entity names (ja|en|zh; default: first ui.languages entry).
+    // allow_sos_control / allow_notice_control: accept SOS trigger/clear and announcement
+    // commands from MQTT. The broker's authentication is the only check, so both default to false.
+    "ha": { "language": "en", "allow_sos_control": false, "allow_notice_control": false },
     "telegram": { "bot_token_ref": "secret:tg_bot",
                   "poll_updates": true,          // getUpdates long-polling for inline button replies (leader)
                   "text_template": { "ja": "{door} に来客です ({time})" } },
