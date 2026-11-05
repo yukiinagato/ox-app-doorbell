@@ -360,3 +360,19 @@ internal sealed class ConfigOp {
     data class Set(override val key: String, val valueJson: String) : ConfigOp()
     data class Delete(override val key: String) : ConfigOp()
 }
+
+/** Settings search (guidelines "Settings": category list with search). */
+internal object SettingsSearch {
+    fun normalize(query: String): String = query.trim().lowercase(java.util.Locale.ROOT)
+
+    /** Case-insensitive substring match against any of [labels]; an empty query matches. */
+    fun matches(query: String, labels: List<String>): Boolean {
+        val needle = normalize(query)
+        if (needle.isEmpty()) return true
+        return labels.any { it.lowercase(java.util.Locale.ROOT).contains(needle) }
+    }
+
+    fun filter(query: String, labelsOf: (SettingsCategory) -> List<String>): List<SettingsCategory> =
+        if (normalize(query).isEmpty()) SettingsCategory.values().toList()
+        else SettingsCategory.values().filter { matches(query, labelsOf(it)) }
+}

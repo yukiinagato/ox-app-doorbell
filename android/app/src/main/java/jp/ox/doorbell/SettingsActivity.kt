@@ -38,6 +38,11 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     private lateinit var listView: LinearLayout
     private lateinit var categoryList: LinearLayout
     private lateinit var categoryScroll: ScrollView
+
+    /** Search field above the category list, then the list; one pane on phones. */
+    private lateinit var categoryPane: LinearLayout
+    private var query = ""
+    private var roles: UiRoles = UiRoles.from(Palette.DARK)
     private lateinit var detailScroll: ScrollView
     private lateinit var backButton: TextView
     private lateinit var titleView: TextView
@@ -174,6 +179,38 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         categoryList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         listView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         categoryScroll = paneScroll(categoryList)
+        roles = UiRoles.from(palette)
+        categoryPane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val search = EditText(this).apply {
+            setText(query)
+            hint = texts.t("settings.search_hint", R.string.settings_search_hint)
+            setSingleLine(true)
+            textSize = UiTokens.sp(UiTokens.BODY)
+            setTextColor(ShellUi.opaque(palette.ink))
+            setHintTextColor(ShellUi.opaque(palette.muted))
+            background = ShellUi.rounded(this@SettingsActivity, palette.surface,
+                                         UiTokens.RADIUS_PILL, palette.line)
+            val padH = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L)
+            setPadding(padH, 0, padH, 0)
+            minHeight = ShellUi.dp(this@SettingsActivity, UiTokens.TOUCH_MIN_DP)
+            inputType = InputType.TYPE_CLASS_TEXT
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+                override fun afterTextChanged(value: Editable?) {
+                    val next = value?.toString().orEmpty()
+                    if (next == query) return
+                    query = next
+                    applySearch()
+                }
+            })
+        }
+        categoryPane.addView(search, ShellUi.matchWrap().apply {
+            val m = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L)
+            setMargins(m, ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_S), m, 0)
+        })
+        categoryPane.addView(categoryScroll, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         detailScroll = paneScroll(listView)
         val body = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -182,14 +219,14 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         if (twoPane) {
             // Fixed-width category list, a hairline, and the detail pane, as Android Settings
             // lays out a tablet. Plain views, so legacy19 gets the same layout on API 19.
-            body.addView(categoryScroll, LinearLayout.LayoutParams(
+            body.addView(categoryPane, LinearLayout.LayoutParams(
                 ShellUi.dp(this, CATEGORY_PANE_DP), ViewGroup.LayoutParams.MATCH_PARENT))
             body.addView(View(this).apply { setBackgroundColor(ShellUi.opaque(palette.line)) },
                          LinearLayout.LayoutParams(1, ViewGroup.LayoutParams.MATCH_PARENT))
             body.addView(detailScroll, LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         } else {
-            body.addView(categoryScroll, LinearLayout.LayoutParams(
+            body.addView(categoryPane, LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
             body.addView(detailScroll, LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
@@ -247,7 +284,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         )
         if (category != null) renderCategory(category)
         if (!twoPane) {
-            categoryScroll.visibility = if (category == null) View.VISIBLE else View.GONE
+            categoryPane.visibility = if (category == null) View.VISIBLE else View.GONE
             detailScroll.visibility = if (category == null) View.GONE else View.VISIBLE
         }
         backButton.visibility =
@@ -256,29 +293,114 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             else texts.t("settings.title", R.string.settings_title)
     }
 
+    /** Categories the search matches: by their own title or any setting title inside them. */
+    private fun visibleCategories(): List<SettingsCategory> {
+        val role = app.boot.role
+        return SettingsSearch.filter(query) { category ->
+            listOf(label(category.titleKey)) +
+                SettingsModel.specs(category, role).map { label(it.titleKey) }
+        }
+    }
+
+    /** A new query: list the matches, and in two panes open the first if the open one is gone. */
+    private fun applySearch() {
+        val matches = visibleCategories()
+        if (twoPane && matches.isNotEmpty() && selected !in matches) {
+            selected = matches.first()
+            render()
+        } else {
+            renderCategoryList()
+        }
+    }
+
     private fun renderCategoryList() {
         categoryList.removeAllViews()
-        for (category in SettingsCategory.values()) {
-            val row = ShellUi.row(this, palette, label(category.titleKey), "") {
+        val matches = visibleCategories()
+        if (matches.isEmpty()) categoryList.addView(
+            UiKit.text(this, texts.t("settings.search_empty", R.string.settings_search_empty),
+                       UiTokens.BODY, palette.muted).apply {
+                setPadding(0, ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L), 0, 0)
+            },
+            ShellUi.matchWrap(),
+        )
+        for (category in matches) {
+            val active = twoPane && category == selected
+            val row = categoryRow(category, active)
+            categoryList.addView(row, ShellUi.matchWrap().apply {
+                topMargin = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_XS)
+            })
+        }
+        categoryList.addView(
+            UiKit.actionButton(this, texts.t("admin.menu_close", R.string.admin_menu_close),
+                               roles, ActionRole.SECONDARY) { finish() },
+            ShellUi.matchWrap().apply { topMargin = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L) },
+        )
+    }
+
+    /** Icon and title, as Android Settings lists its categories; the open one is highlighted. */
+    private fun categoryRow(category: SettingsCategory, active: Boolean): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = ShellUi.dp(this@SettingsActivity, UiTokens.TOUCH_MIN_DP + UiTokens.SPACE_S)
+            val padH = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_M)
+            setPadding(padH, 0, padH, 0)
+            isClickable = true
+            isFocusable = true
+            isSelected = active
+            background = ShellUi.rounded(this@SettingsActivity,
+                                         if (active) palette.surfaceAlt else palette.ground,
+                                         UiTokens.RADIUS_CARD, if (active) roles.accent else null)
+            contentDescription = label(category.titleKey)
+            setOnClickListener {
                 selected = category
                 render()
                 detailScroll.scrollTo(0, 0)
             }
-            if (twoPane && category == selected) {
-                row.background = ShellUi.rounded(this, palette.surfaceAlt,
-                                                 ShellUi.PILL_RADIUS_DP, palette.accent)
-                row.isSelected = true
-            }
-            categoryList.addView(row, ShellUi.matchWrap().apply {
-                topMargin = ShellUi.dp(this@SettingsActivity, 6)
+            addView(android.widget.ImageView(this@SettingsActivity).apply {
+                setImageResource(categoryIcon(category))
+                setColorFilter(ShellUi.opaque(if (active) roles.accent else palette.muted))
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, LinearLayout.LayoutParams(ShellUi.dp(this@SettingsActivity, 24),
+                                         ShellUi.dp(this@SettingsActivity, 24)).apply {
+                rightMargin = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L)
             })
+            addView(UiKit.text(this@SettingsActivity, label(category.titleKey), UiTokens.BODY,
+                               palette.ink, bold = active).apply { maxLines = 2 },
+                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
-        categoryList.addView(
-            ShellUi.button(this, texts.t("admin.menu_close", R.string.admin_menu_close),
-                           palette) { finish() },
-            ShellUi.matchWrap().apply { topMargin = ShellUi.dp(this@SettingsActivity, 16) },
-        )
+
+    private fun categoryIcon(category: SettingsCategory): Int = when (category) {
+        SettingsCategory.DEVICE -> R.drawable.ic_tabler_device_tablet
+        SettingsCategory.SOUND -> R.drawable.ic_tabler_volume
+        SettingsCategory.DISPLAY -> R.drawable.ic_tabler_palette
+        SettingsCategory.CALLS -> R.drawable.ic_tabler_phone
+        SettingsCategory.DOORS -> R.drawable.ic_tabler_door
+        SettingsCategory.EMERGENCY -> R.drawable.ic_tabler_bell
+        SettingsCategory.NOTIFICATIONS -> R.drawable.ic_tabler_mail
+        SettingsCategory.TIME -> R.drawable.ic_tabler_clock
+        SettingsCategory.SIP -> R.drawable.ic_tabler_link
+        SettingsCategory.NETWORK -> R.drawable.ic_tabler_world
+        SettingsCategory.CLUSTER -> R.drawable.ic_tabler_topology_star_3
+        SettingsCategory.ABOUT -> R.drawable.ic_tabler_info_circle
     }
+
+    /**
+     * A destructive or security action (guidelines "Settings"): a full-width button in the
+     * negative role with its consequence written under it; the caller confirms before acting.
+     */
+    private fun destructiveRow(title: String, note: String, onClick: () -> Unit): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            addView(UiKit.actionButton(this@SettingsActivity, title, roles, ActionRole.NEGATIVE) {
+                if (!readOnly) onClick()
+            }.apply { isEnabled = !readOnly }, ShellUi.matchWrap())
+            if (note.isNotEmpty()) addView(UiKit.text(this@SettingsActivity, note, UiTokens.CAPTION,
+                                                      palette.muted).apply {
+                setPadding(ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_XS),
+                           ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_XS), 0, 0)
+            }, ShellUi.matchWrap())
+        }
 
     private fun renderCategory(category: SettingsCategory) {
         when (category) {
@@ -635,10 +757,13 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         sectionClusterSecurity(card)
         card.row(ShellUi.row(this, palette, label("settings.item_password_change"),
                              enabled = !readOnly) { changePassword() })
-        card.row(ShellUi.row(
-            this, palette, texts.t("pair.clear_title", R.string.pair_clear_title),
-            note = texts.t("pair.clear_confirm", R.string.pair_clear_confirm),
-        ) { confirmUnpair() })
+        // Destructive and security actions sit at the bottom of their section.
+        card.row(destructiveRow(label("settings.item_rotate_key"),
+                                label("settings.item_rotate_key_note")) { confirmRotateKey() })
+        card.row(destructiveRow(texts.t("pair.clear_title", R.string.pair_clear_title),
+                                texts.t("pair.clear_confirm", R.string.pair_clear_confirm)) {
+            confirmUnpair()
+        })
     }
 
     /** Security v3 key state, the re-pair notice after an upgrade, and key rotation. */
@@ -660,29 +785,29 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             card.row(ShellUi.row(this, palette, label("settings.item_cluster_key"),
                                  security.pskId.ifEmpty { "-" }, notes.joinToString(" · ")))
         }
-        card.row(ShellUi.row(this, palette, label("settings.item_rotate_key"),
-                             note = label("settings.item_rotate_key_note"),
-                             enabled = !readOnly) {
-            AlertDialog.Builder(this)
-                .setTitle(label("settings.item_rotate_key"))
-                .setMessage(label("settings.item_rotate_key_confirm"))
-                .setPositiveButton(label("settings.item_rotate_key")) { _, _ ->
-                    Thread({
-                        val result = app.core.rotateClusterKey()
-                        ui.post {
-                            if (isFinishing) return@post
-                            if (result == DoorbellCore.RESULT_ADMIN_REQUIRED) {
-                                reauthenticateThen { app.core.rotateClusterKey() }
-                                return@post
-                            }
-                            toast(if (result == 0) label("settings.item_rotate_key_started")
-                                  else texts.t("admin.save_failed", R.string.admin_save_failed))
+    }
+
+    /** The confirmation names the consequence and repeats the action on its button. */
+    private fun confirmRotateKey() {
+        AlertDialog.Builder(this)
+            .setTitle(label("settings.item_rotate_key"))
+            .setMessage(label("settings.item_rotate_key_confirm"))
+            .setPositiveButton(label("settings.item_rotate_key")) { _, _ ->
+                Thread({
+                    val result = app.core.rotateClusterKey()
+                    ui.post {
+                        if (isFinishing) return@post
+                        if (result == DoorbellCore.RESULT_ADMIN_REQUIRED) {
+                            reauthenticateThen { app.core.rotateClusterKey() }
+                            return@post
                         }
-                    }, "doorbell-rotate-key").apply { isDaemon = true }.start()
-                }
-                .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
-                .show()
-        })
+                        toast(if (result == 0) label("settings.item_rotate_key_started")
+                              else texts.t("admin.save_failed", R.string.admin_save_failed))
+                    }
+                }, "doorbell-rotate-key").apply { isDaemon = true }.start()
+            }
+            .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+            .show()
     }
 
     /** Change the cluster administrator password (db_core_admin_password_set). */
@@ -1480,7 +1605,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         AlertDialog.Builder(this)
             .setTitle(texts.t("pair.clear_title", R.string.pair_clear_title))
             .setMessage(texts.t("pair.clear_confirm", R.string.pair_clear_confirm))
-            .setPositiveButton(texts.t("admin.delete", R.string.admin_delete)) { _, _ ->
+            .setPositiveButton(texts.t("pair.clear_title", R.string.pair_clear_title)) { _, _ ->
                 // Leaving the cluster from the device itself is the same factory reset a
                 // revocation performs: key, seeds, and the local identity all go.
                 app.factoryResetClusterIdentity("admin_leave")
