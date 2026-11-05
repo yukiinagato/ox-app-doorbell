@@ -6882,6 +6882,10 @@ struct Node::Impl {
       json::set(o.get(), "reason", reason);
       uiNotify(json::dump(o.get()));
     };
+    cbs.on_peer_replication = [this](const std::string& peer, const VersionVector& vv,
+                                     const std::map<std::string, uint64_t>& heads) {
+      notePeerReplication(peer, vv, heads);
+    };
     cbs.on_sync_converged = [this](const std::string&) {
       if (emergency_settle_pending) settleEmergencyPresentation();
     };

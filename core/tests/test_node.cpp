@@ -2583,7 +2583,10 @@ TEST_CASE("node: a device joining later never overrides the cluster with its fir
     }
     return false;
   }());
-  host.node->inviteDevice(joiner.node->nodeId());
+  host.node->inviteDevice(
+      joiner.node->nodeId(),
+      json::getString(json::get(json::parse(joiner.node->pairingJson()).get(), "self"),
+                      "confirm_code"));
   REQUIRE([&] {
     for (int i = 0; i < 200; i++) {
       f.run(50);
@@ -2601,6 +2604,42 @@ TEST_CASE("node: a device joining later never overrides the cluster with its fir
   }
   joiner.node->stop();
   host.node->stop();
+}
+
+TEST_CASE("node: anti-entropy reports peer progress, so an online cluster collects tombstones") {
+  const std::string dir = tempDir() + "/doorbell_retention_live_" + genTokenHex(8);
+  REQUIRE(makeDir(dir));
+  struct Cleanup {
+    std::string path;
+    ~Cleanup() {
+      std::error_code ignored;
+      std::filesystem::remove_all(path, ignored);
+    }
+  } cleanup{dir};
+
+  NFleet f;
+  auto& a = f.add("A:1", "panel-a", "indoor_panel", "", false, false, dir);
+  auto& b = f.add("B:1", "panel-b", "indoor_panel", "", false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  f.run(1000);
+  REQUIRE(json::getBool(json::parse(a.node->setConfigJson("doors.d_live", "{\"name\":\"x\"}")).get(), "ok"));
+  f.run(300);
+  REQUIRE(json::getBool(json::parse(a.node->deleteConfigKeyJson("doors.d_live")).get(), "ok"));
+  f.run(1000);
+  f.clock.advance(31LL * 86'400'000);
+  f.run(1000);
+  a.node->runReplicationMaintenance();
+  b.node->stop();
+  a.node->stop();
+
+  Store probe;
+  REQUIRE(probe.open(dir + "/doorbell.db"));
+  bool present = false;
+  for (const auto& entry : probe.configLoadAll())
+    if (entry.key == "doors.d_live") present = true;
+  CHECK_FALSE(present);
+  CHECK_FALSE(probe.eventCoverage().empty());
 }
 
 TEST_CASE("node: retention and tombstone collection wait for every member's progress") {
@@ -2629,6 +2668,10 @@ TEST_CASE("node: retention and tombstone collection wait for every member's prog
   f.run(1000);
   REQUIRE(json::getBool(json::parse(a.node->setConfigJson("doors.d_gone", "{\"name\":\"x\"}")).get(), "ok"));
   f.run(300);
+  // B goes offline before the deletion, so it never observes the tombstone. Its last
+  // advertised progress predates the delete, and collection must keep waiting for it.
+  b.node->stop();
+  f.run(300);
   REQUIRE(json::getBool(json::parse(a.node->deleteConfigKeyJson("doors.d_gone")).get(), "ok"));
   f.run(500);
   f.clock.advance(31LL * 86'400'000);
@@ -2652,7 +2695,6 @@ TEST_CASE("node: retention and tombstone collection wait for every member's prog
     CHECK_FALSE(keys.count("doors.d_gone"));
     CHECK_FALSE(coverage.empty());
   }
-  b.node->stop();
   a.node->stop();
 }
 

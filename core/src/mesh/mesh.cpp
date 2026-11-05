@@ -2032,8 +2032,11 @@ struct Mesh::Impl {
 
   void handleSyncReq(SecureChannel& ch, const cJSON* doc) {
     std::map<std::string, uint64_t> heads;
-    if (mapFromJson(json::get(doc, "heads"), &heads))
-      sync_req_heads[ch.peerId()] = std::move(heads);
+    const bool have_heads = mapFromJson(json::get(doc, "heads"), &heads);
+    VersionVector rvv;
+    if (have_heads && cbs.on_peer_replication && mapFromJson(json::get(doc, "vv"), &rvv))
+      cbs.on_peer_replication(ch.peerId(), rvv, heads);
+    if (have_heads) sync_req_heads[ch.peerId()] = std::move(heads);
     auto resp = buildSyncResp(doc, /*fin=*/false);
     if (!resp) {
       DB_LOGW("mesh", "rejected malformed sync request from " + ch.peerId());

@@ -8,6 +8,7 @@
 #include <array>
 #include <cstdint>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -125,6 +126,12 @@ class Mesh {
     // Fires after each such SYNC_RESP. A consumer that withheld presentation for backfilled
     // history presents the converged state here, once, instead of replaying it event by event.
     std::function<void(const std::string& peer)> on_sync_converged;
+
+    // A peer's SYNC_REQ advertised its configuration version vector and event heads. Node
+    // records them so retention and tombstone collection only discard what every member holds.
+    std::function<void(const std::string& peer, const std::map<std::string, uint64_t>& vv,
+                       const std::map<std::string, uint64_t>& heads)>
+        on_peer_replication;
 
     // The cluster key set changed (rotation, a received PSK_ROTATE, grace expiry, migration).
     // Persist settings().psk/psk_id and prev_psk/prev_psk_id/prev_psk_until_wall_ms before
