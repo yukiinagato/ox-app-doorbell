@@ -6904,6 +6904,7 @@ struct Node::Impl {
     ms.enroll_psk_holders = opts.mesh_enroll_psk_holders;
     loadMeshKeys(ms);
     ms.role = opts.role;
+    ms.display_name = opts.name;
     ms.door = opts.role == "door_station" ? opts.door : "";
     ms.sw_version = opts.sw_version;
     ms.model = opts.model.empty() ? "unknown" : opts.model;

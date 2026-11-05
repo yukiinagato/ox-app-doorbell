@@ -1599,6 +1599,54 @@ TEST_CASE("mesh: a discovered device is invited only with the code shown on that
   REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 4000));
 }
 
+TEST_CASE("mesh: a device that restarts while pending is still invited with its new code") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
+  host.mesh->setPairingMode(10 * 60 * 1000);
+
+  f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
+                     3000));
+  // A process restart generates a fresh pairing key under the same node ID.
+  f.remove(kIdJ);
+  Fleet::Node& restarted =
+      f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  REQUIRE(f.runUntil(
+      [&] {
+        const cJSON* d = pendingDevice(host.mesh->pendingJson(), kIdJ);
+        return d && json::getBool(d, "pk_conflict");
+      },
+      3000));
+
+  // The code on the restarted device's screen selects its own key despite the warning.
+  host.mesh->inviteDevice(kIdJ, confirmCodeOf(restarted));
+  REQUIRE(f.runUntil([&] { return restarted.mesh->isPaired(); }, 4000));
+  REQUIRE(f.runUntil([&] { return f.mutualAlive({kIdA, kIdJ}); }, 4000));
+}
+
+TEST_CASE("mesh: a stale pairing key ages out of the pending conflict warning") {
+  Fleet f;
+  Fleet::Node& host = f.add(kIdA, "A", capsJson(10), {{}, /*beacon=*/true});
+  host.mesh->setPairingMode(10 * 60 * 1000);
+  f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  REQUIRE(f.runUntil([&] { return pendingDevice(host.mesh->pendingJson(), kIdJ) != nullptr; },
+                     3000));
+  f.remove(kIdJ);
+  f.add(kIdJ, "J", capsJson(3), {{}, /*beacon=*/true, 1, /*zero_psk=*/true});
+  REQUIRE(f.runUntil(
+      [&] {
+        const cJSON* d = pendingDevice(host.mesh->pendingJson(), kIdJ);
+        return d && json::getBool(d, "pk_conflict");
+      },
+      3000));
+  REQUIRE(f.runUntil(
+      [&] {
+        const cJSON* d = pendingDevice(host.mesh->pendingJson(), kIdJ);
+        return d && !json::getBool(d, "pk_conflict");
+      },
+      40000));
+}
+
 TEST_CASE("mesh: foundCluster requires a paired founder and creates a real PSK") {
   Fleet f;
 

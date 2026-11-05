@@ -45,6 +45,9 @@ struct MeshSettings {
   // and embedded hosts use this; production shells require a replicated mesh.members record.
   bool enroll_psk_holders = true;
   std::string role = "door_station";  // door_station | indoor_panel
+  // Human-readable device name shown in pending lists and invitations; empty falls back to
+  // "<role> · <id prefix>". Not secret: it travels in unauthenticated pairing beacons.
+  std::string display_name;
   std::string door;                  // Operational door identity; empty for indoor panels.
   std::string sw_version = "0.0.1";
   std::string model = "unknown";     // Device-card hardware model announced while unpaired.

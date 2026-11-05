@@ -821,9 +821,14 @@ struct Mesh::Impl {
     int64_t last_seen = 0;
     // none | sent | acked | joined | failed
     std::string invite_state = "none";
-    // The device announced a different public key while pending: someone else may be
-    // announcing under its ID, so it cannot be invited until the entry expires.
+    // More than one pairing key was announced under this ID within kPendingTtlMs: either the
+    // device restarted (each process generates a fresh pairing key) or something else is
+    // announcing under its ID. Shown as a warning; the confirmation code typed from the
+    // device's own screen selects the right key at invite time.
     bool pk_conflict = false;
+    // Recently announced pairing keys (hex) with their last-seen time, newest last, at most
+    // kPendingMaxKeys. Keys not announced for kPendingTtlMs drop out.
+    std::vector<std::pair<std::string, int64_t>> keys;
     int attempts = 0;
     std::string last_error;
   };
@@ -833,6 +838,7 @@ struct Mesh::Impl {
   int auto_added_count_ = 0;
   bool is_founder_ = false;
   static constexpr int64_t kPendingTtlMs = 30000;
+  static constexpr size_t kPendingMaxKeys = 4;
   static constexpr int64_t kDenyTtlMs = 10 * 60 * 1000;
   static constexpr int64_t kInviteAckMs = 2000;
   static constexpr int kInviteAttempts = 3;
@@ -2654,7 +2660,7 @@ struct Mesh::Impl {
   }
 
   std::string pairName() const {
-
+    if (!st.display_name.empty()) return st.display_name.substr(0, 64);
     return st.role + " · " + (st.node_id.size() > 6 ? st.node_id.substr(0, 6) : st.node_id);
   }
 
@@ -2791,12 +2797,21 @@ struct Mesh::Impl {
     }
     auto it = pending_.find(pb.id);
     const bool isNew = it == pending_.end();
-    const bool conflict = !isNew && !it->second.pk.empty() && it->second.pk != pb.pk;
     Pending& p = pending_[pb.id];
-    if (conflict && !p.pk_conflict) {
-      p.pk_conflict = true;
+    const int64_t t = now();
+    auto& keys = p.keys;
+    keys.erase(std::remove_if(keys.begin(), keys.end(),
+                              [&](const std::pair<std::string, int64_t>& k) {
+                                return k.first == pb.pk || t - k.second > kPendingTtlMs;
+                              }),
+               keys.end());
+    keys.emplace_back(pb.pk, t);
+    if (keys.size() > kPendingMaxKeys) keys.erase(keys.begin());
+    const bool was_conflict = p.pk_conflict;
+    p.pk_conflict = keys.size() > 1;
+    const bool conflict = p.pk_conflict != was_conflict;
+    if (p.pk_conflict && !was_conflict)
       DB_LOGW("mesh", "pending device " + pb.id + " announced a second pairing key");
-    }
     const auto addrs = pb.addrs.empty() ? std::vector<std::string>{pb.addr} : pb.addrs;
     const bool changed = isNew || p.addr != pb.addr || p.addrs != addrs || p.name != pb.name ||
                          p.role != pb.role || p.model != pb.model || p.platform != pb.platform ||
@@ -2806,7 +2821,7 @@ struct Mesh::Impl {
     p.addrs = addrs;
     p.name = pb.name;
     p.role = pb.role;
-    if (!p.pk_conflict) p.pk = pb.pk;
+    p.pk = pb.pk;
     p.model = pb.model;
     p.platform = pb.platform;
     p.sw = pb.sw;
@@ -2878,9 +2893,27 @@ struct Mesh::Impl {
     for (char ch : code)
       if (ch >= '0' && ch <= '9') digits.push_back(ch);
     const char* refusal = nullptr;
-    if (it->second.pk_conflict) refusal = "pk_conflict";
-    else if (digits.empty()) refusal = "confirm_code_required";
-    else if (digits != confirmCode(it->second.pk, id)) refusal = "confirm_code_mismatch";
+    std::string chosen_pk;
+    if (digits.empty()) {
+      refusal = "confirm_code_required";
+    } else {
+      // The code binds exactly one announced key; two matches would mean a forged collision.
+      const int64_t t = now();
+      int matches = 0;
+      for (const auto& k : it->second.keys) {
+        if (t - k.second > kPendingTtlMs) continue;
+        if (digits == confirmCode(k.first, id)) {
+          ++matches;
+          chosen_pk = k.first;
+        }
+      }
+      if (it->second.keys.empty() && digits == confirmCode(it->second.pk, id)) {
+        matches = 1;
+        chosen_pk = it->second.pk;
+      }
+      if (matches == 0) refusal = "confirm_code_mismatch";
+      else if (matches > 1) refusal = "pk_conflict";
+    }
     if (refusal) {
       it->second.invite_state = "failed";
       it->second.last_error = refusal;
@@ -2895,7 +2928,7 @@ struct Mesh::Impl {
       if (!manual) return;
       finishInvite(run->second, false, "superseded");
     }
-    startInvite(id, it->second.addrs, it->second.pk, manual);
+    startInvite(id, it->second.addrs, chosen_pk, manual);
   }
 
 
