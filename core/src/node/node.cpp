@@ -7001,6 +7001,17 @@ struct Node::Impl {
       json::set(o.get(), "reason", reason);
       uiNotify(json::dump(o.get()));
     };
+    cbs.on_join_adopt = [this] {
+      // Joining adopts the cluster's configuration wholesale. Values this node wrote while
+      // unpaired would otherwise win by timestamp, including a locally set administrator
+      // password replacing the cluster's. Identity and door entries are re-asserted once paired.
+      if (!store.configDeleteAll()) return false;
+      config->resetReplica();
+      store.metaDeletePrefix("admin_pw_");
+      snapshot_epoch = hexEncode(randomBytes(16));
+      rebuildCfg();
+      return true;
+    };
     cbs.on_peer_replication = [this](const std::string& peer, const VersionVector& vv,
                                      const std::map<std::string, uint64_t>& heads) {
       notePeerReplication(peer, vv, heads);
@@ -9315,7 +9326,10 @@ struct Node::Impl {
       return;
     }
     // Founding or joining is the other moment this node becomes able to write cluster
-    // configuration, so the door entry is ensured here as well as at startup.
+    // configuration. A join discarded the local replica, so this node's identity record is
+    // written again (seedConfig re-seeds nothing the cluster already has), then its door entry.
+    if (!seedConfig())
+      DB_LOGW(kTag, "could not re-assert this device's identity after pairing");
     if (!reclaimSeededDoorEntries() || !ensureOwnDoorEntry())
       DB_LOGW(kTag, "could not reconcile the door entry for this device");
     emitPairedEvent();

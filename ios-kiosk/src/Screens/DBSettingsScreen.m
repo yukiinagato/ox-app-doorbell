@@ -215,6 +215,26 @@ static NSArray *DBCommonTimeZones(void) {
 }
 @end
 
+// A category in the left pane: icon tile, then the title beside it. Placed explicitly,
+// because indentationLevel does not move textLabel on iOS 5-9 and the tile then
+// covered the start of every title.
+@interface DBCategoryCell : UITableViewCell
+@end
+
+@implementation DBCategoryCell
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  CGFloat width = CGRectGetWidth(self.contentView.bounds);
+  CGFloat height = CGRectGetHeight(self.contentView.bounds);
+  UIView *tile = [self.contentView viewWithTag:11];
+  tile.frame = CGRectMake(12, floor((height - 30) / 2), 30, 30);
+  CGFloat labelX = CGRectGetMaxX(tile.frame) + 12;
+  self.textLabel.frame = CGRectMake(labelX, 0, MAX(0, width - labelX - 8), height);
+  self.backgroundView.frame = CGRectInset(self.bounds, 0, 3);
+  self.selectedBackgroundView.frame = self.backgroundView.frame;
+}
+@end
+
 static const NSInteger kDBRotateKeyAlertTag = 701;
 
 @interface DBSettingsScreen () <UITableViewDataSource, UITableViewDelegate,
@@ -1526,8 +1546,8 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   static NSString *identifier = @"category";
   UITableViewCell *cell = [_categoryTable dequeueReusableCellWithIdentifier:identifier];
   if (cell == nil) {
-    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
-                                  reuseIdentifier:identifier];
+    cell = [[DBCategoryCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                 reuseIdentifier:identifier];
     cell.backgroundView = [[UIView alloc] init];
     cell.selectedBackgroundView = [[UIView alloc] init];
     cell.backgroundView.layer.cornerRadius = 10;
@@ -1536,8 +1556,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
     cell.textLabel.backgroundColor = [UIColor clearColor];
     cell.textLabel.adjustsFontSizeToFitWidth = YES;
     cell.textLabel.minimumFontSize = 13;
-    cell.indentationWidth = 46;  // room for the icon tile
-    cell.indentationLevel = 1;
+    cell.textLabel.lineBreakMode = NSLineBreakByTruncatingTail;
     UIView *tile = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 30, 30)];
     tile.layer.cornerRadius = 7;
     tile.tag = 11;
@@ -1565,12 +1584,8 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 - (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
     forRowAtIndexPath:(NSIndexPath *)indexPath {
   if (tableView != _categoryTable) return;
-  // UITableViewCell lays out textLabel after cellForRow, so the tile and the
-  // label are placed here, inset like a grouped list.
-  CGFloat height = tableView.rowHeight;
-  cell.backgroundView.frame = CGRectInset(cell.bounds, 0, 3);
-  cell.selectedBackgroundView.frame = cell.backgroundView.frame;
-  [cell.contentView viewWithTag:11].frame = CGRectMake(12, (height - 30) / 2, 30, 30);
+  // DBCategoryCell places the tile and the title in its own layoutSubviews.
+  [cell setNeedsLayout];
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {

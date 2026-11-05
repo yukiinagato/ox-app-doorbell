@@ -2573,6 +2573,7 @@ struct Mesh::Impl {
     }
     ConfigWirePayload config_payload;
     if (!configPayloadFromJson(payload, &config_payload)) return fail("bad_payload");
+    if (cbs.on_join_adopt && !cbs.on_join_adopt()) return fail("local_persist_failed");
 
     // Adopt the cluster key before committing config so a crash between the two cannot leave the
     // node holding cluster configuration it has no key for. LwwMap restores its pre-mutation

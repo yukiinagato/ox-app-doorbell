@@ -130,6 +130,12 @@ class Mesh {
     // history presents the converged state here, once, instead of replaying it event by event.
     std::function<void(const std::string& peer)> on_sync_converged;
 
+    // This node is about to adopt a cluster's configuration through a PIN join or an
+    // invitation. The node discards its own replica first, so nothing it wrote while unpaired
+    // (an administrator password above all) competes with the cluster it joins. Returning
+    // false aborts the join.
+    std::function<bool()> on_join_adopt;
+
     // A peer's SYNC_REQ advertised its configuration version vector and event heads. Node
     // records them so retention and tombstone collection only discard what every member holds.
     std::function<void(const std::string& peer, const std::map<std::string, uint64_t>& vv,
