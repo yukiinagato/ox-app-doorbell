@@ -72,11 +72,12 @@ class WindowsContracts(unittest.TestCase):
         fields = re.findall(r"public (?:uint|IntPtr) (\w+);",
                             source[source.index("struct DbPlatformV2"):source.index(
                                 "delegate void LogLineCb")])
-        # Fields are only appended; secure_delete is the newest and must stay last.
+        # Fields are only appended; https_request_v3 (security protocol v3) is the newest and
+        # must stay last.
         self.assertEqual(fields, ["struct_size", "version", "user", "https_request",
                                  "secure_get", "secure_put", "log_line", "tts_speak",
                                  "device_info", "release_buffer", "secure_delete",
-                                 "power_state"])
+                                 "power_state", "https_request_v3"])
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         self.assertIn("Marshal.SizeOf(typeof(CoreInterop.DbPlatformV2))", client)
         self.assertIn("Marshal.FreeHGlobal(buffer)", client)
@@ -89,6 +90,10 @@ class WindowsContracts(unittest.TestCase):
                       read("win/DoorbellApp/Core/DpapiSecretStore.cs"))
         self.assertIn("power_state = Marshal.GetFunctionPointerForDelegate(_powerStateCb)",
                       client)
+        # The binary-safe callback reports the body length; it never relies on a NUL.
+        self.assertIn("https_request_v3 = Marshal.GetFunctionPointerForDelegate(_httpsV3Cb)",
+                      client)
+        self.assertIn("Marshal.WriteIntPtr(lengthOut, new IntPtr(bytes.Length))", client)
         probe = read("win/abi-probe/main.cpp")
         self.assertIn("10 * sizeof(void*)", probe)
         self.assertIn("offsetof(db_platform_v2, power_state)", probe)
@@ -425,7 +430,7 @@ class WindowsContracts(unittest.TestCase):
     def test_runtime_health_is_persisted_measured_and_periodic(self):
         state = read("win/DoorbellApp/RuntimeProcessState.cs")
         app = read("win/DoorbellApp/App.xaml.cs")
-        heartbeat = read("win/DoorbellApp/WatchdogHeartbeat.cs")
+        heartbeat = read("win/DoorbellApp/WatchdogChannel.cs")
         contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         for token in ('"generation"', '"last_exit_reason"', '"session_open"',
@@ -566,7 +571,16 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("Result := not NeedsDeviceSetup();", iss)
         self.assertIn('"setup_complete": true', iss)
         self.assertIn("if Copy(Value, 1, 5) <> 'door-' then Exit;", iss)
-        self.assertIn('{commonappdata}\\Doorbell\\boot.json', iss)
+        self.assertIn("SaveStringToFile(DataDir() + '\\boot.json', Json, False);", iss)
+        # ProgramData is no longer user-modifiable; app data moves into data\ and the
+        # service's own directory stays administrators-only.
+        self.assertNotIn("Permissions: users-modify", iss)
+        for step in ("EnsureOperatorsGroup();", "MigrateLegacyData();", "ApplyDataAcls();"):
+            self.assertIn(step, iss)
+        self.assertIn("*S-1-5-32-545:(OI)(CI)RX", iss)
+        self.assertIn("NetFx48Installed()", iss)
+        self.assertIn("Win7WinHttpLacksTls12()", iss)
+        self.assertIn('ValueName: "UpdatePublisher"', iss)
         # Service = autostart at boot; Run key only as the no-service alternative.
         self.assertIn('Name: "service"; Description: "{cm:TaskService}"', iss)
         self.assertIn("'--install \"' +", iss)
@@ -601,7 +615,14 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('private const string RegistryKey = @"Software\\Doorbell";', updater)
         self.assertIn("releases/latest", updater)
         self.assertIn('key?.GetValue("UpdateFeed")', updater)
-        self.assertIn('@"^DoorbellSetup-.+\\.exe$"', updater)
+        self.assertIn('@"^DoorbellSetup-[A-Za-z0-9._-]+\\.exe$"', updater)
+        # Origin, not just integrity: a private download directory, a handle that denies
+        # writers while the file is checked, Authenticode and the expected publisher.
+        self.assertIn("PrivateUpdateDirectory()", updater)
+        self.assertIn("FileShare.Read))", updater)
+        self.assertIn("WinVerifyTrust(IntPtr.Zero, GenericVerifyV2, data)", updater)
+        self.assertIn("VerifySignature(target, installed.Publisher);", updater)
+        self.assertNotIn("App.DataDir", updater)
         # No download runs without a published checksum, and a mismatch deletes the file.
         self.assertIn("the release publishes no .sha256 for the installer", updater)
         self.assertIn('throw new InvalidOperationException("installer checksum mismatch");', updater)
@@ -611,7 +632,8 @@ class WindowsContracts(unittest.TestCase):
         # Same build id is never "newer"; an older tag is never offered.
         self.assertIn("if (string.Equals(release.BuildId, installed.BuildId, StringComparison.OrdinalIgnoreCase))",
                       updater)
-        self.assertIn("tagVersion < installedVersion", updater)
+        self.assertIn("tagVersion != null && installedVersion != null && tagVersion > installedVersion",
+                      updater)
         # The card lives behind the admin password and is disabled for non-installer copies.
         self.assertIn('x:Name="UpdateCard"', xaml)
         self.assertIn('UpdateStatus.Text = Texts.T("web_admin.update_not_installer");', window)
@@ -700,6 +722,53 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("signtool verify", signing)
         self.assertIn("authenticode-sha256", build)
         self.assertIn("SHA256SUMS", read("win/tools/write-manifest.ps1"))
+
+    def test_supervisor_channel_replaces_files_any_user_could_write(self):
+        watchdog = read("win/watchdog/main.cpp")
+        policy = read("win/watchdog/recovery_policy.h")
+        app = read("win/DoorbellApp/App.xaml.cs")
+        channel = read("win/DoorbellApp/WatchdogChannel.cs")
+        # Only the launched PID may use the channel; the unlock flag file is gone everywhere.
+        self.assertIn("GetNamedPipeClientProcessId(pipe, &client_pid)", watchdog)
+        self.assertIn("client_pid == expected", watchdog)
+        for source in [watchdog] + [p.read_text(encoding="utf-8")
+                                    for p in (WIN / "DoorbellApp").rglob("*.cs")]:
+            self.assertNotIn("admin_unlocked.flag\")", source)
+        # The service keeps its files in an administrators-only directory and refuses links.
+        self.assertIn('L"\\\\service"', watchdog)
+        self.assertIn("FILE_ATTRIBUTE_REPARSE_POINT", watchdog)
+        self.assertIn("PROTECTED_DACL_SECURITY_INFORMATION", watchdog)
+        # Deliberate exits and session changes are not crashes; safe mode lifts itself.
+        self.assertIn("SERVICE_ACCEPT_SESSIONCHANGE", watchdog)
+        self.assertIn("doorbell::classifyExit(", watchdog)
+        self.assertIn("kSafeModeAutoClearMs", policy)
+        self.assertIn("kExitRestartRequested = 3", policy)
+        # The heartbeat comes from the UI dispatcher, so a hung UI thread is detected.
+        self.assertIn("new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Normal",
+                      channel)
+        # One instance per device; --safe-mode from the supervisor is honoured.
+        self.assertIn('@"Global\\DoorbellApp.Instance.v1"', app)
+        self.assertIn('SafeMode = e.Args.Contains("--safe-mode");', app)
+
+    def test_loopback_media_carries_the_local_token(self):
+        media = read("win/DoorbellApp/Core/LocalMedia.cs")
+        self.assertIn('TokenHeader = "X-Doorbell-Local"', media)
+        self.assertIn("request.AllowAutoRedirect = false;", media)
+        for path in (WIN / "DoorbellApp").rglob("*.cs"):
+            if path.name in ("LocalMedia.cs", "UpdateChecker.cs"):
+                continue
+            source = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertNotIn("WebRequest.Create(", source)
+                self.assertNotIn("new System.Net.WebClient()", source)
+        h264 = read("win/DoorbellApp/Core/H264LiveStreamer.cs")
+        mjpeg = read("win/DoorbellApp/Core/MjpegStreamer.cs")
+        self.assertIn('LocalMedia.Sibling(url, "video-meta")', h264)
+        for streamer in (h264, mjpeg):
+            self.assertIn("request.Abort()", streamer)
+            self.assertIn("thread.Join(1000)", streamer)
+        self.assertIn("ServicePointManager.DefaultConnectionLimit = 16;",
+                      read("win/DoorbellApp/App.xaml.cs"))
 
     def test_watchdog_restarts_app_not_windows(self):
         watchdog = read("win/watchdog/main.cpp")
@@ -1956,7 +2025,10 @@ class WindowsContracts(unittest.TestCase):
                     app.index("private static bool _factoryResetStarted;")]
         self.assertIn('Core?.DeleteSecret("mesh.psk")', reset)
         self.assertIn("BootConfig.ResetToFactory(Boot.FilePath)", reset)
-        self.assertIn("app.Shutdown(0)", reset)
+        # Under the watchdog the exit code asks for a restart that is not a crash; without it
+        # the relaunched process waits for this one to release its ports and store.
+        self.assertIn("app.Shutdown(watchdog ? ExitRestartRequested : ExitClean)", reset)
+        self.assertIn('"--wait-for-pid " + pid', reset)
         self.assertIn('if (ev.T == "pairing_revoked")', app)
         self.assertIn('FactoryResetAndRestart("pairing_revoked")', app)
         # Leaving the Cluster from this device resets it the same way; a device that was never
@@ -2026,7 +2098,9 @@ class WindowsContracts(unittest.TestCase):
         # A cluster that already has a password is never opened with a stale device digest.
         self.assertIn("App.Core.AdminPasswordConfigured", submit)
         self.assertLess(submit.index("AdminPasswordConfigured"),
-                        submit.index("Sha256Hex(password) != LocalDigest()"))
+                        submit.index("Sha256Hex(password) != digest"))
+        # Without an operator-set device digest there is no offline way in.
+        self.assertNotIn('Sha256Hex("000000")', dialog)
         # -2 asks the operator to choose the household password and publishes it.
         self.assertIn("if (verdict == AdminPasswordVerdict.NotSet)", submit)
         self.assertIn('App.Core.AdminPasswordSet("", password)', submit)
@@ -2035,7 +2109,7 @@ class WindowsContracts(unittest.TestCase):
         # A core-owned lockout is never worked around with the local digest.
         locked = submit[submit.index("AdminPasswordVerdict.LockedOut"):]
         self.assertLess(locked.index('L10n.T("admin.locked")'),
-                        locked.index("Sha256Hex(password) != LocalDigest()"))
+                        locked.index("Sha256Hex(password) != digest"))
         # The local five-failure, ten-minute lockout stays as a second line of defence.
         self.assertIn("_lockedUntil = DateTime.Now.AddMinutes(10);", dialog)
         self.assertIn("if (++_fails >= 5)", dialog)
@@ -2101,7 +2175,10 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("public bool DeleteConfigKey(string key)", client)
         self.assertIn("public string ConfigBatchJson(string json)", client)
         self.assertIn("public string LastWriteWarnings()", client)
-        self.assertIn("_deleteConfigKey(_core, key) == 0", client)
+        self.assertIn("_deleteConfigKey(_core, key);", client)
+        # A closed native admin window is answered by asking once, then retrying.
+        self.assertIn("if (rc != CoreInterop.DbResultAdminRequired) return rc;", client)
+        self.assertIn("public const int DbResultAdminRequired = -20;", interop)
         self.assertIn("CoreInterop.TakeUtf8(_configBatchJson(_core, json))", client)
         self.assertNotIn("ConfigResult", client)
 

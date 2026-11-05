@@ -272,7 +272,7 @@
   <data name="admin_password" xml:space="preserve"><value>管理パスワード</value></data>
   <data name="admin_password_set_failed" xml:space="preserve"><value>管理パスワードを設定できませんでした</value></data>
   <data name="admin_password_set_prompt" xml:space="preserve"><value>管理パスワードを設定</value></data>
-  <data name="admin_password_too_short" xml:space="preserve"><value>4 文字以上にしてください</value></data>
+  <data name="admin_password_too_short" xml:space="preserve"><value>8 文字以上にしてください</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>管理パスワードを入力してください</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>管理パスワードが違います</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:</value></data>
@@ -425,6 +425,8 @@
   <data name="admin_windows" xml:space="preserve"><value>時間帯</value></data>
   <data name="admin_with_snapshot" xml:space="preserve"><value>写真付き</value></data>
   <data name="admin_write" xml:space="preserve"><value>書込</value></data>
+  <data name="app_already_running" xml:space="preserve"><value>Doorbell はこの端末ですでに実行中です。</value></data>
+  <data name="app_core_start_failed" xml:space="preserve"><value>コアを起動できませんでした。ログを確認してください。</value></data>
   <data name="app_name" xml:space="preserve"><value>ドアホン</value></data>
   <data name="call_return_device_hint" xml:space="preserve"><value>空欄にせず「クラスタの既定に合わせる」で既定に戻せます</value></data>
   <data name="call_return_hint" xml:space="preserve"><value>着信画面のタイトルに残り秒数が出ます。0 になるとホームに戻ります。訪問者が取り消しても映像はそのまま残り、数字をタップすると戻りません</value></data>
@@ -781,6 +783,8 @@
   <data name="pair_searching_hint" xml:space="preserve"><value>クラスタに参加済みの端末か管理画面で「追加」を押してください</value></data>
   <data name="pair_tab" xml:space="preserve"><value>端末を追加</value></data>
   <data name="pair_title_unpaired" xml:space="preserve"><value>このドアホンをクラスタに追加</value></data>
+  <data name="pairing_persist_failed_detail" xml:space="preserve"><value>ペアリングは成功しましたが、安全な保存に失敗したため、この端末はまだ使用可能になっていません。pairing-error.log と空き容量・アクセス権を確認してください。</value></data>
+  <data name="pairing_persist_failed_title" xml:space="preserve"><value>ペアリングの保存に失敗</value></data>
   <data name="panel_answering" xml:space="preserve"><value>応答中…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>パネル認証に失敗しました</value></data>
   <data name="panel_back" xml:space="preserve"><value>戻る</value></data>
@@ -1199,6 +1203,7 @@ PIN: {1}</value></data>
   <data name="unlock_binding_hint" xml:space="preserve"><value>このドアの錠に対応するコマンドを入力または選択してください。空欄で割り当てを解除します。</value></data>
   <data name="unlock_binding_required" xml:space="preserve"><value>共通の HA 操作は開錠に自動使用されません。このドアの錠に対応するコマンドを確認して保存してください。</value></data>
   <data name="unlock_command" xml:space="preserve"><value>送信するコマンド</value></data>
+  <data name="unlock_command_failed" xml:space="preserve"><value>開錠の動作を実行できませんでした</value></data>
   <data name="unlock_command_invalid" xml:space="preserve"><value>コマンドは英数字、_、- の 1～32 文字で入力してください。</value></data>
   <data name="unlock_hide" xml:space="preserve"><value>表示しない</value></data>
   <data name="unlock_not_configured" xml:space="preserve"><value>開錠の動作が設定されていません</value></data>
@@ -1237,5 +1242,6 @@ PIN: {1}</value></data>
   <data name="web_admin_update_latest" xml:space="preserve"><value>最新です（{0}）</value></data>
   <data name="web_admin_update_not_installer" xml:space="preserve"><value>インストーラーで導入されていない環境のため、自動更新は使えません</value></data>
   <data name="web_admin_update_title" xml:space="preserve"><value>アップデート</value></data>
+  <data name="web_admin_update_untrusted" xml:space="preserve"><value>このアップデートは信頼できる発行元の署名がないため適用しませんでした</value></data>
   <data name="web_admin_update_verifying" xml:space="preserve"><value>ダウンロードを検証しています…</value></data>
 </root>

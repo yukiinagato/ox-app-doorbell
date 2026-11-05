@@ -272,7 +272,7 @@ Delete it?</value></data>
   <data name="admin_password" xml:space="preserve"><value>Admin password</value></data>
   <data name="admin_password_set_failed" xml:space="preserve"><value>Couldn't set the admin password</value></data>
   <data name="admin_password_set_prompt" xml:space="preserve"><value>Set the admin password</value></data>
-  <data name="admin_password_too_short" xml:space="preserve"><value>Use at least four characters</value></data>
+  <data name="admin_password_too_short" xml:space="preserve"><value>Use at least eight characters</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>Enter the admin password</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>Wrong admin password</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web skips HLS immediately. A later MJPEG strategy is prewarmed from time zero. Maximum extra wait before MJPEG:</value></data>
@@ -425,6 +425,8 @@ Delete it?</value></data>
   <data name="admin_windows" xml:space="preserve"><value>Time windows</value></data>
   <data name="admin_with_snapshot" xml:space="preserve"><value>With snapshot</value></data>
   <data name="admin_write" xml:space="preserve"><value>Write</value></data>
+  <data name="app_already_running" xml:space="preserve"><value>Doorbell is already running on this device.</value></data>
+  <data name="app_core_start_failed" xml:space="preserve"><value>The core could not start. Check the log.</value></data>
   <data name="app_name" xml:space="preserve"><value>Doorbell</value></data>
   <data name="call_return_device_hint" xml:space="preserve"><value>Tick &quot;use the cluster default&quot; to go back to the default</value></data>
   <data name="call_return_hint" xml:space="preserve"><value>The call screen counts down in its title and returns home at zero. If the visitor cancels, the live view stays until the countdown ends; tapping the number cancels the countdown</value></data>
@@ -781,6 +783,8 @@ Delete it?</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</value></data>
   <data name="pair_tab" xml:space="preserve"><value>Add device</value></data>
   <data name="pair_title_unpaired" xml:space="preserve"><value>Add this doorbell to a Cluster</value></data>
+  <data name="pairing_persist_failed_detail" xml:space="preserve"><value>Pairing succeeded, but secure storage failed, so this device has not been marked ready. Check pairing-error.log, free disk space and permissions.</value></data>
+  <data name="pairing_persist_failed_title" xml:space="preserve"><value>Pairing not saved</value></data>
   <data name="panel_answering" xml:space="preserve"><value>Answering…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>Panel authentication failed</value></data>
   <data name="panel_back" xml:space="preserve"><value>Back</value></data>
@@ -1199,6 +1203,7 @@ Sends in {0}s</value></data>
   <data name="unlock_binding_hint" xml:space="preserve"><value>Enter or choose the command that operates this door's lock. Leave blank to remove the binding.</value></data>
   <data name="unlock_binding_required" xml:space="preserve"><value>Shared HA actions are no longer used automatically for unlocking. Confirm and save the command for this door's lock.</value></data>
   <data name="unlock_command" xml:space="preserve"><value>Configured command</value></data>
+  <data name="unlock_command_failed" xml:space="preserve"><value>The unlock action failed to run</value></data>
   <data name="unlock_command_invalid" xml:space="preserve"><value>Use 1–32 letters, digits, underscores or hyphens for the command.</value></data>
   <data name="unlock_hide" xml:space="preserve"><value>Never show</value></data>
   <data name="unlock_not_configured" xml:space="preserve"><value>No unlock action is configured</value></data>
@@ -1237,5 +1242,6 @@ Sends in {0}s</value></data>
   <data name="web_admin_update_latest" xml:space="preserve"><value>Up to date ({0})</value></data>
   <data name="web_admin_update_not_installer" xml:space="preserve"><value>This copy wasn't set up by the installer, so automatic updates aren't available</value></data>
   <data name="web_admin_update_title" xml:space="preserve"><value>Updates</value></data>
+  <data name="web_admin_update_untrusted" xml:space="preserve"><value>This update was not applied because it is not signed by the trusted publisher</value></data>
   <data name="web_admin_update_verifying" xml:space="preserve"><value>Verifying the download…</value></data>
 </root>

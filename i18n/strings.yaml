@@ -1109,7 +1109,7 @@ settings.password_empty: { ja: "パスワードを入力してください", en:
 settings.password_set_failed: { ja: "パスワードを設定できませんでした", en: "Couldn't set the password", zh: "无法设置密码" }
 settings.password_length: { ja: "パスワードは {min}〜{max} 文字にしてください", en: "The password must be {min}–{max} characters", zh: "密码需为 {min}–{max} 个字符" }
 admin.password_set_prompt: { ja: "管理パスワードを設定", en: "Set the admin password", zh: "设置管理密码" }
-admin.password_too_short: { ja: "4 文字以上にしてください", en: "Use at least four characters", zh: "请至少输入 4 个字符" }
+admin.password_too_short: { ja: "8 文字以上にしてください", en: "Use at least eight characters", zh: "请至少输入 8 个字符" }
 idle.call: { ja: "呼出", en: "Call", zh: "呼叫" }
 door.call_action: { ja: "呼出", en: "Call", zh: "呼叫" }
 pair.join_this_cluster: { ja: "このクラスタに参加", en: "Join this cluster", zh: "加入此集群" }
@@ -1293,3 +1293,11 @@ admin.import_omitted: { en: "Sensitive fields omitted from this export; review a
 
 admin.import_unknown_ack: { en: "I saved the recovery reference and understand that the previous import result is still unknown. I want to review a new import explicitly.", ja: "復旧情報を保存し、前回の結果が不明なままであることを理解しました。別のインポートを新たに確認します。", zh: "我已保存恢复记录，并理解上次导入结果仍未知；我明确选择重新预检另一次导入。" }
 admin.import_new_preview: { en: "Review a new import", ja: "新しいインポートを確認", zh: "预检新的导入" }
+
+# Windows shell (security protocol v3 and supervisor fixes)
+app.already_running: { ja: "Doorbell はこの端末ですでに実行中です。", en: "Doorbell is already running on this device.", zh: "Doorbell 已在此设备上运行。" }
+app.core_start_failed: { ja: "コアを起動できませんでした。ログを確認してください。", en: "The core could not start. Check the log.", zh: "核心无法启动，请查看日志。" }
+pairing.persist_failed_title: { ja: "ペアリングの保存に失敗", en: "Pairing not saved", zh: "配对未能保存" }
+pairing.persist_failed_detail: { ja: "ペアリングは成功しましたが、安全な保存に失敗したため、この端末はまだ使用可能になっていません。pairing-error.log と空き容量・アクセス権を確認してください。", en: "Pairing succeeded, but secure storage failed, so this device has not been marked ready. Check pairing-error.log, free disk space and permissions.", zh: "配对已成功，但安全保存失败，因此此设备尚未就绪。请检查 pairing-error.log、磁盘空间和访问权限。" }
+unlock.command_failed: { ja: "開錠の動作を実行できませんでした", en: "The unlock action failed to run", zh: "开锁动作执行失败" }
+web_admin.update_untrusted: { ja: "このアップデートは信頼できる発行元の署名がないため適用しませんでした", en: "This update was not applied because it is not signed by the trusted publisher", zh: "此更新未由受信任的发布者签名，因此未应用" }
