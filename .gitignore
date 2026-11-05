@@ -65,3 +65,6 @@ __pycache__/
 /tools/llvm-src/
 /ios-kiosk/build/
 /ios-kiosk/lib/
+
+# Parallel review-fix worktrees (local only)
+/.worktrees/
