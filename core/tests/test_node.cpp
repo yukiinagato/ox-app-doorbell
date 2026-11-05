@@ -731,6 +731,33 @@ TEST_CASE("a live configured door authority expires a call after its origin stop
   standby.node->stop();
 }
 
+TEST_CASE("indoor panels end a ringing call whose only door station is gone") {
+  NFleet fleet;
+  auto& origin = fleet.add("A:1", "front", "door_station", "d_front", true);
+  auto& panel_a = fleet.add("B:1", "hall", "indoor_panel", "", false);
+  auto& panel_b = fleet.add("C:1", "kitchen", "indoor_panel", "", false);
+  REQUIRE(origin.node->start());
+  REQUIRE(panel_a.node->start());
+  REQUIRE(panel_b.node->start());
+  fleet.run(1'000);
+  const std::string call_id = origin.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
+  fleet.run(300);
+  REQUIRE(panel_a.node->statusJson().find(call_id) != std::string::npos);
+
+  origin.node->stop();
+  // Before the ring time plus the orphan grace nobody ends it.
+  fleet.run(60'000);
+  CHECK(panel_a.uiCount("event", "call_cancelled") == 0);
+  fleet.run(20'000);
+  CHECK(panel_a.uiCount("event", "call_cancelled") == 1);
+  CHECK(panel_b.uiCount("event", "call_cancelled") == 1);
+  fleet.run(10'000);
+  CHECK(panel_a.uiCount("event", "call_cancelled") == 1);
+  panel_b.node->stop();
+  panel_a.node->stop();
+}
+
 TEST_CASE("a dead dialog owner is cancelled once by the deterministic survivor") {
   const std::string door_dir = nodeTempDir();
   NFleet fleet;

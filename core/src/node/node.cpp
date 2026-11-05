@@ -184,6 +184,8 @@ int64_t floorDiv(int64_t a, int64_t b) {
 constexpr size_t kAssetMaxBytes = 3 * 1024 * 1024;
 // Event retention: the newest records of every origin always survive, whatever the age cutoff is.
 constexpr size_t kEventRetentionPerOrigin = 5000;
+// Extra wait before a node that is not a door station of the door ends an orphaned ringing call.
+constexpr int64_t kOrphanCallGraceMs = 15'000;
 // Call history defaults. A page is bounded so one HTTP call cannot serialize the whole database.
 constexpr size_t kCallLogDefaultLimit = 50;
 constexpr size_t kCallLogMaxLimit = 500;
@@ -7756,44 +7758,52 @@ struct Node::Impl {
     if (!isCallTimeoutAuthority(call) || call.state == "in_call" ||
         call.local_sip_established)
       return;
-    armCallTimeout(call, std::max<int64_t>(0, call.expires_wall_ms - hlc->correctedWallMs()),
+    const int64_t grace = orphanTimeoutRole(call) ? kOrphanCallGraceMs : 0;
+    armCallTimeout(call,
+                   std::max<int64_t>(0, call.expires_wall_ms + grace - hlc->correctedWallMs()),
                    /*reset_retry=*/true);
+  }
+
+  bool peerAlive(const std::string& id) const {
+    if (id == node_id) return true;
+    if (!mesh) return false;
+    for (const auto& peer : mesh->peers()) {
+      if (peer.id == id) return peer.status != "dead";
+    }
+    return false;
+  }
+
+  // Whether a ringing call held here is in no door station's hands: its origin is not this node
+  // and this node is not a door station of the call's door.
+  bool orphanTimeoutRole(const ActiveCall& call) const {
+    return call.origin != node_id && !(opts.role == "door_station" && opts.door == call.door);
   }
 
   bool isCallTimeoutAuthority(const ActiveCall& call) const {
     if (call.origin == node_id) return true;
-    if (opts.role != "door_station" || opts.door != call.door) return false;
-
-    bool origin_alive = false;
+    if (peerAlive(call.origin)) return false;
+    // A dead origin's timeout passes to the lowest-id live door station of the same door.
+    std::string station;
+    if (opts.role == "door_station" && opts.door == call.door) station = node_id;
+    const cJSON* device = nullptr;
+    cJSON_ArrayForEach(device, json::get(cfg.get(), "devices")) {
+      if (!device->string || json::getString(device, "role") != "door_station" ||
+          json::getString(device, "door") != call.door || !peerAlive(device->string))
+        continue;
+      if (station.empty() || std::string(device->string) < station) station = device->string;
+    }
+    if (!station.empty()) return station == node_id;
+    // No door station of the door is alive. The lowest-id live member ends the call (after
+    // kOrphanCallGraceMs), so indoor panels are never left ringing for a station that is gone.
+    std::string fallback = node_id;
     if (mesh) {
       for (const auto& peer : mesh->peers()) {
-        if (peer.id == call.origin && peer.status != "dead") {
-          origin_alive = true;
-          break;
-        }
+        if (peer.status == "dead" || peer.id.empty() || json::get(json::get(cfg.get(), "removed_devices"), peer.id.c_str()))
+          continue;
+        if (peer.id < fallback) fallback = peer.id;
       }
     }
-    if (origin_alive) return false;
-
-    std::string authority = node_id;
-    const cJSON* devices = json::get(cfg.get(), "devices");
-    const cJSON* device = nullptr;
-    cJSON_ArrayForEach(device, devices) {
-      if (!device->string || json::getString(device, "role") != "door_station" ||
-          json::getString(device, "door") != call.door)
-        continue;
-      bool alive = std::string(device->string) == node_id;
-      if (!alive && mesh) {
-        for (const auto& peer : mesh->peers()) {
-          if (peer.id == device->string && peer.status != "dead") {
-            alive = true;
-            break;
-          }
-        }
-      }
-      if (alive && std::string(device->string) < authority) authority = device->string;
-    }
-    return authority == node_id;
+    return fallback == node_id;
   }
 
   void rearmCallTimeouts() {
