@@ -8,6 +8,8 @@
 
 #include "doctest.h"
 #include "mesh/secure_channel.h"
+#include "monocypher-ed25519.h"
+#include "monocypher.h"
 #include "util/clock.h"
 #include "util/runloop.h"
 
@@ -61,20 +63,31 @@ struct Pair {
   std::vector<std::string> got_a, got_b;
   int close_a = 0, close_b = 0, est_a = 0, est_b = 0;
 
+  std::vector<std::string> rejected_a, rejected_b;
+
   Pair(const std::array<uint8_t, 32>& psk_a, const std::array<uint8_t, 32>& psk_b,
+       const std::string& ida = "aaaa000000000000", const std::string& idb = "bbbb000000000000")
+      : Pair(ChannelIdentity{{PskSlot{"k1", psk_a}}, {}, nullptr},
+             ChannelIdentity{{PskSlot{"k1", psk_b}}, {}, nullptr}, ida, idb) {}
+
+  Pair(ChannelIdentity identity_a, ChannelIdentity identity_b,
        const std::string& ida = "aaaa000000000000", const std::string& idb = "bbbb000000000000") {
     ca = std::make_shared<TestConn>(wire, true);
     cb = std::make_shared<TestConn>(wire, false);
     ca->peer = cb.get();
     cb->peer = ca.get();
-    a = std::make_shared<SecureChannel>(loop, ca, /*initiator=*/true, psk_a, ida, 1000);
-    b = std::make_shared<SecureChannel>(loop, cb, /*initiator=*/false, psk_b, idb, 1000);
+    a = std::make_shared<SecureChannel>(loop, ca, /*initiator=*/true, std::move(identity_a), ida,
+                                        1000);
+    b = std::make_shared<SecureChannel>(loop, cb, /*initiator=*/false, std::move(identity_b),
+                                        idb, 1000);
     SecureChannel::Callbacks cba;
+    cba.on_rejected = [this](const std::string& r, const std::string&) { rejected_a.push_back(r); };
     cba.on_established = [this] { est_a++; };
     cba.on_message = [this](const std::string& m) { got_a.push_back(m); };
     cba.on_close = [this] { close_a++; };
     a->setCallbacks(std::move(cba));
     SecureChannel::Callbacks cbb;
+    cbb.on_rejected = [this](const std::string& r, const std::string&) { rejected_b.push_back(r); };
     cbb.on_established = [this] { est_b++; };
     cbb.on_message = [this](const std::string& m) { got_b.push_back(m); };
     cbb.on_close = [this] { close_b++; };
@@ -248,4 +261,120 @@ TEST_CASE("secure_channel: handshake timeout disconnects") {
   p.loop.pumpDue();
   CHECK_FALSE(p.a->established());
   CHECK(p.close_a >= 1);
+}
+
+namespace {
+
+std::array<uint8_t, 32> seedOf(uint8_t fill) {
+  std::array<uint8_t, 32> s{};
+  s.fill(fill);
+  return s;
+}
+
+std::array<uint8_t, 32> publicOf(const std::array<uint8_t, 32>& seed) {
+  std::array<uint8_t, 32> copy = seed, pk{};
+  uint8_t sk[64];
+  crypto_ed25519_key_pair(sk, pk.data(), copy.data());
+  return pk;
+}
+
+}  // namespace
+
+TEST_CASE("secure_channel v3: identities bind node IDs and the newest common key is used") {
+  const auto seed_a = seedOf(0x0a), seed_b = seedOf(0x0b);
+  const auto pk_a = publicOf(seed_a), pk_b = publicOf(seed_b);
+  std::string seen_by_b, key_seen_by_b;
+  ChannelIdentity ia{{PskSlot{"k2.aa", mkPsk(0x22)}, PskSlot{"k1", mkPsk(0x11)}}, seed_a,
+                     [&](const std::string& id, const std::array<uint8_t, 32>& pk,
+                         const std::string&) { return id == "bbbb000000000000" && pk == pk_b; }};
+  ChannelIdentity ib{{PskSlot{"k1", mkPsk(0x11)}}, seed_b,
+                     [&](const std::string& id, const std::array<uint8_t, 32>& pk,
+                         const std::string& key_id) {
+                       seen_by_b = id;
+                       key_seen_by_b = key_id;
+                       return pk == pk_a;
+                     }};
+  Pair p(std::move(ia), std::move(ib));
+  p.pump();
+  REQUIRE(p.a->established());
+  REQUIRE(p.b->established());
+  CHECK(seen_by_b == "aaaa000000000000");
+  CHECK(key_seen_by_b == "k1");
+  CHECK(p.a->pskId() == "k1");
+  CHECK(p.a->peerIdentity() == pk_b);
+  p.a->sendMessage("hello");
+  p.pump();
+  REQUIRE(p.got_b.size() == 1);
+  CHECK(p.got_b[0] == "hello");
+}
+
+TEST_CASE("secure_channel v3: an identity the authorizer does not expect is refused") {
+  const auto expected = publicOf(seedOf(0x0c));
+  ChannelIdentity ia{{PskSlot{"k1", mkPsk(0x11)}}, seedOf(0x0a), nullptr};
+  ChannelIdentity ib{{PskSlot{"k1", mkPsk(0x11)}}, seedOf(0x0b),
+                     [&](const std::string&, const std::array<uint8_t, 32>& pk,
+                         const std::string&) { return pk == expected; }};
+  Pair p(std::move(ia), std::move(ib));
+  p.pump();
+  CHECK_FALSE(p.a->established());
+  CHECK_FALSE(p.b->established());
+  REQUIRE_FALSE(p.rejected_b.empty());
+  CHECK(p.rejected_b[0] == "unauthorized_peer");
+}
+
+TEST_CASE("secure_channel v3: a hello claiming another node's identity key fails the signature") {
+  // B accepts A's announced public key, but the hello is rewritten to carry a key A cannot sign
+  // for: the confirmation signature no longer verifies.
+  const auto victim = publicOf(seedOf(0x0d));
+  ChannelIdentity ia{{PskSlot{"k1", mkPsk(0x11)}}, seedOf(0x0a), nullptr};
+  ChannelIdentity ib{{PskSlot{"k1", mkPsk(0x11)}}, seedOf(0x0b), nullptr};
+  Pair p(std::move(ia), std::move(ib));
+  REQUIRE(!p.wire.a2b.empty());
+  Bytes& hello = p.wire.a2b.front();
+  std::copy(victim.begin(), victim.end(), hello.begin() + 2 + 64);
+  p.pump();
+  CHECK_FALSE(p.b->established());
+}
+
+TEST_CASE("secure_channel v3: no shared cluster key is reported, not silently dropped") {
+  ChannelIdentity ia{{PskSlot{"k3.aa", mkPsk(0x33)}}, seedOf(0x0a), nullptr};
+  ChannelIdentity ib{{PskSlot{"k1", mkPsk(0x11)}}, seedOf(0x0b), nullptr};
+  Pair p(std::move(ia), std::move(ib));
+  p.pump();
+  CHECK_FALSE(p.a->established());
+  REQUIRE_FALSE(p.rejected_b.empty());
+  CHECK(p.rejected_b[0] == "no_common_psk");
+}
+
+TEST_CASE("secure_channel v3: a v2 hello is classified as protocol_upgrade_required") {
+  ChannelIdentity ib{{PskSlot{"k1", mkPsk(0x11)}}, seedOf(0x0b), nullptr};
+  Wire wire;
+  SimClock clock{0, 0};
+  Runloop loop{clock};
+  auto conn = std::make_shared<TestConn>(wire, false);
+  auto ch = std::make_shared<SecureChannel>(loop, conn, false, std::move(ib), "bbbb", 1000);
+  std::string reason, peer;
+  SecureChannel::Callbacks cbs;
+  cbs.on_rejected = [&](const std::string& r, const std::string& id) {
+    reason = r;
+    peer = id;
+  };
+  ch->setCallbacks(std::move(cbs));
+  ch->start();
+  Bytes v2(1 + 32);
+  v2[0] = kFrameHs1;
+  v2[1] = 0x77;
+  const std::string id = "aaaa000000000000";
+  v2.insert(v2.end(), id.begin(), id.end());
+  ch->handleRawFrame(v2);
+  CHECK(reason == "protocol_upgrade_required");
+  CHECK(peer == id);
+  CHECK_FALSE(ch->established());
+}
+
+TEST_CASE("secure_channel v3: comparePskIds orders generations numerically") {
+  CHECK(comparePskIds("k10.00", "k9.ff") > 0);
+  CHECK(comparePskIds("k2.aa", "k2.bb") < 0);
+  CHECK(comparePskIds("k1", "k1") == 0);
+  CHECK(comparePskIds("bogus", "k1") < 0);
 }
