@@ -677,7 +677,7 @@ Delete it?</string>
     <string name="pair_add_all">Add all nearby (10 min)</string>
     <string name="pair_add_all_on">Adding all — %1$s:%2$s left (%3$s added)</string>
     <string name="pair_add_all_stop">Stop</string>
-    <string name="pair_add_all_warning">Every device found in the next 10 minutes will be added automatically</string>
+    <string name="pair_add_all_warning">For 10 minutes, nearby devices are listed here. To add one, enter the confirm code shown on that device</string>
     <string name="pair_add_failed">Couldn\'t add</string>
     <string name="pair_add_with_code">Add with a Pairing PIN</string>
     <string name="pair_added">Added</string>
@@ -692,6 +692,11 @@ Delete it?</string>
     <string name="pair_code_expires_in">%1$s:%2$s left</string>
     <string name="pair_code_instructions">On the new device choose &quot;Join with a Pairing PIN&quot; and enter the address and code shown above</string>
     <string name="pair_code_label">Pairing PIN (6 digits)</string>
+    <string name="pair_confirm_code_hint">8 digits</string>
+    <string name="pair_confirm_code_invalid">Enter all 8 digits</string>
+    <string name="pair_confirm_code_prompt">Enter the 8-digit confirm code shown on the device you are adding</string>
+    <string name="pair_confirm_code_self">Confirm code %1$s</string>
+    <string name="pair_confirm_code_title">Enter the confirm code</string>
     <string name="pair_confirm_tap_again">Press again to confirm</string>
     <string name="pair_copy">Copy</string>
     <string name="pair_create_home">Create a new Cluster</string>
@@ -708,6 +713,8 @@ Delete it?</string>
     <string name="pair_err_bad_pin">Wrong Pairing PIN</string>
     <string name="pair_err_bad_qr">That isn\'t a device QR. Paste the text shown on the new device exactly as it appears</string>
     <string name="pair_err_closed">The other device disconnected</string>
+    <string name="pair_err_confirm_code_mismatch">That confirm code doesn\'t match. Check the new device\'s screen again</string>
+    <string name="pair_err_confirm_code_required">Enter the confirm code shown on the new device</string>
     <string name="pair_err_connect_failed">Can\'t reach that address. Check the address and make sure both devices are on the same network</string>
     <string name="pair_err_decrypt_failed">Security check failed. Make sure there is no untrusted device on the network</string>
     <string name="pair_err_expired">The Pairing PIN expired. Get a new one on the other device</string>
@@ -720,6 +727,8 @@ Delete it?</string>
     <string name="pair_err_no_token">The other device isn\'t offering a Pairing PIN right now</string>
     <string name="pair_err_pairing_unavailable">Couldn\'t create a code. Please try again</string>
     <string name="pair_err_persist_failed">Couldn\'t save settings on this device</string>
+    <string name="pair_err_pk_conflict">Another device is using the same ID. It can\'t be added safely</string>
+    <string name="pair_err_protocol_upgrade_required">Update the other device to the latest version</string>
     <string name="pair_err_timeout">No response. Try again</string>
     <string name="pair_err_unknown">Couldn\'t complete that. Please try again</string>
     <string name="pair_err_detail">Details: %1$s</string>
@@ -781,6 +790,7 @@ Delete it?</string>
     <string name="pair_searching_hint">Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</string>
     <string name="pair_tab">Add device</string>
     <string name="pair_title_unpaired">Add this doorbell to a Cluster</string>
+    <string name="pair_upgrade_rejoin">Re-pairing is required after the update. Add this device to the cluster again</string>
     <string name="panel_answering">Answering…</string>
     <string name="panel_auth_failed">Panel authentication failed</string>
     <string name="panel_back">Back</string>
@@ -984,6 +994,7 @@ On</string>
     <string name="settings_invalid_value">Check the value and try again</string>
     <string name="settings_item_answer_mode">Answering</string>
     <string name="settings_item_brightness">Brightness</string>
+    <string name="settings_item_cluster_key">Cluster key</string>
     <string name="settings_item_cluster_return_s">Close the call screen after (all devices, seconds)</string>
     <string name="settings_item_direct_port">Direct call port</string>
     <string name="settings_item_door_label">Door name</string>
@@ -991,6 +1002,7 @@ On</string>
     <string name="settings_item_http_port">HTTP port</string>
     <string name="settings_item_http_port_note">Used by apps on this device; other devices are redirected to HTTPS</string>
     <string name="settings_item_https_port">HTTPS port</string>
+    <string name="settings_item_legacy_peers">%1$s devices on an old version</string>
     <string name="settings_item_mesh_port">Mesh port</string>
     <string name="settings_item_motion_wake">Wake the screen on motion</string>
     <string name="settings_item_night">Night mode</string>
@@ -1008,13 +1020,19 @@ On</string>
     <string name="settings_item_password_short">Use 8 to 128 characters</string>
     <string name="settings_item_pixel_shift">Burn-in shift interval (seconds)</string>
     <string name="settings_item_ports_note">Ports are set during device setup and cannot be changed here</string>
+    <string name="settings_item_prev_key">Previous key %1$s valid until %2$s</string>
     <string name="settings_item_quiet_clear">Remove quiet hours</string>
     <string name="settings_item_quiet_from">Starts</string>
     <string name="settings_item_quiet_to">Ends</string>
+    <string name="settings_item_rekey_required">Some devices need the new key</string>
     <string name="settings_item_reply_audio">Reply audio files</string>
     <string name="settings_item_reply_ttl">Reply display time (seconds)</string>
     <string name="settings_item_return_s">Close the call screen after (seconds)</string>
     <string name="settings_item_return_s_note">Applies to this device only</string>
+    <string name="settings_item_rotate_key">Rotate the cluster key</string>
+    <string name="settings_item_rotate_key_confirm">A new key is sent to every device; devices that are off receive it later. Continue?</string>
+    <string name="settings_item_rotate_key_note">Do this after a device is lost or removed</string>
+    <string name="settings_item_rotate_key_started">Key rotation started</string>
     <string name="settings_item_saver">Idle screen</string>
     <string name="settings_item_saver_after">Idle screen after (seconds)</string>
     <string name="settings_item_sip_password">SIP password</string>

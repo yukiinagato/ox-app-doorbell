@@ -669,7 +669,7 @@ pair.added: { ja: "追加しました", en: "Added", zh: "已添加" }
 pair.add_failed: { ja: "追加できませんでした", en: "Couldn't add", zh: "添加失败" }
 pair.deny: { ja: "無視", en: "Ignore", zh: "忽略" }
 pair.add_all: { ja: "まとめて追加 (10 分)", en: "Add all nearby (10 min)", zh: "批量添加（10 分钟）" }
-pair.add_all_warning: { ja: "10 分間、見つかった端末をすべて自動で追加します", en: "Every device found in the next 10 minutes will be added automatically", zh: "10 分钟内发现的所有设备都将被自动添加" }
+pair.add_all_warning: { ja: "10 分間、近くの端末を一覧に出します。追加するには、その端末に表示される確認コードを入力してください", en: "For 10 minutes, nearby devices are listed here. To add one, enter the confirm code shown on that device", zh: "10 分钟内会在此列出附近的设备。要添加设备，请输入该设备上显示的确认码" }
 pair.add_all_on: { ja: "まとめて追加 ON — あと {m}:{s} ({n} 台追加)", en: "Adding all — {m}:{s} left ({n} added)", zh: "批量添加已开启 — 剩余 {m}:{s}（已添加 {n} 台）" }
 pair.add_all_stop: { ja: "停止", en: "Stop", zh: "停止" }
 pair.qr_caption: { ja: "別の端末でこの QR を読み取ると追加できます", en: "Scan this QR from another device to add this one", zh: "用另一台设备扫描此二维码即可添加" }
@@ -1377,3 +1377,23 @@ settings.item_password_confirm: { ja: "新しいパスワード（確認）", en
 settings.item_password_short: { ja: "8～128 文字で入力してください", en: "Use 8 to 128 characters", zh: "请输入 8～128 个字符" }
 settings.item_password_mismatch: { ja: "新しいパスワードが一致しません", en: "The new passwords do not match", zh: "两次输入的新密码不一致" }
 settings.item_password_changed: { ja: "管理パスワードを変更しました", en: "Admin password changed", zh: "管理密码已更改" }
+
+# Security v3 pairing on Android (2026-11 review): confirm codes, re-pair after upgrade, key rotation.
+pair.err.confirm_code_required: { ja: "新しい端末に表示されている確認コードを入力してください", en: "Enter the confirm code shown on the new device", zh: "请输入新设备上显示的确认码" }
+pair.err.confirm_code_mismatch: { ja: "確認コードが違います。新しい端末の画面をもう一度確認してください", en: "That confirm code doesn't match. Check the new device's screen again", zh: "确认码不正确。请再次查看新设备的屏幕" }
+pair.err.pk_conflict: { ja: "同じ ID を名乗る別の端末があります。安全のため追加できません", en: "Another device is using the same ID. It can't be added safely", zh: "有另一台设备使用相同的 ID，为安全起见无法添加" }
+pair.err.protocol_upgrade_required: { ja: "相手の端末を最新版に更新してください", en: "Update the other device to the latest version", zh: "请将对方设备更新到最新版本" }
+pair.confirm_code_title: { ja: "確認コードを入力", en: "Enter the confirm code", zh: "输入确认码" }
+pair.confirm_code_prompt: { ja: "追加する端末の画面に表示されている 8 桁の確認コードを入力してください", en: "Enter the 8-digit confirm code shown on the device you are adding", zh: "请输入要添加的设备屏幕上显示的 8 位确认码" }
+pair.confirm_code_hint: { ja: "8 桁の数字", en: "8 digits", zh: "8 位数字" }
+pair.confirm_code_invalid: { ja: "8 桁の数字を入力してください", en: "Enter all 8 digits", zh: "请输入完整的 8 位数字" }
+pair.confirm_code_self: { ja: "確認コード {code}", en: "Confirm code {code}", zh: "确认码 {code}" }
+pair.upgrade_rejoin: { ja: "更新後の再ペアリングが必要です。もう一度クラスタに追加してください", en: "Re-pairing is required after the update. Add this device to the cluster again", zh: "更新后需要重新配对。请再次将本设备加入集群" }
+settings.item_cluster_key: { ja: "クラスタの鍵", en: "Cluster key", zh: "集群密钥" }
+settings.item_rekey_required: { ja: "鍵の更新が必要な端末があります", en: "Some devices need the new key", zh: "有设备需要更新密钥" }
+settings.item_legacy_peers: { ja: "旧バージョンの端末 {n} 台", en: "{n} devices on an old version", zh: "{n} 台设备为旧版本" }
+settings.item_prev_key: { ja: "以前の鍵 {id} は {until} まで有効", en: "Previous key {id} valid until {until}", zh: "旧密钥 {id} 有效至 {until}" }
+settings.item_rotate_key: { ja: "クラスタの鍵を更新", en: "Rotate the cluster key", zh: "更新集群密钥" }
+settings.item_rotate_key_note: { ja: "端末を紛失・削除したときに実行します", en: "Do this after a device is lost or removed", zh: "在设备丢失或被移除后执行" }
+settings.item_rotate_key_confirm: { ja: "すべての端末に新しい鍵を配ります。電源が切れている端末は後で鍵を受け取ります。続けますか？", en: "A new key is sent to every device; devices that are off receive it later. Continue?", zh: "将向所有设备分发新密钥；关机的设备稍后接收。要继续吗？" }
+settings.item_rotate_key_started: { ja: "鍵の更新を開始しました", en: "Key rotation started", zh: "已开始更新密钥" }

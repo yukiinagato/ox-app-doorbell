@@ -341,10 +341,17 @@ class DoorbellCore(context: Context) {
     fun mintJoinToken(seconds: Int): JSONObject? =
         parse(if (handle != 0L) nativeMintJoinTokenJson(handle, seconds) else null)
 
-    /** Approve and invite one pending node. */
-    fun inviteDevice(nodeId: String) {
-        if (handle != 0L) nativeInviteDevice(handle, nodeId)
+    /**
+     * Invite one pending node after the operator typed the 8-digit confirm code its own pairing
+     * screen shows (security v3). The outcome arrives as invite_result; without a code Core
+     * answers confirm_code_required, so the code-less entry point is gone from the shell.
+     */
+    fun inviteDeviceCode(nodeId: String, code: String) {
+        if (handle != 0L) nativeInviteDeviceCode(handle, nodeId, code)
     }
+
+    /** Rotate the cluster key now (admin action); 0 means the rotation started. */
+    fun rotateClusterKey(): Int = if (handle != 0L) nativeRotateClusterKey(handle) else -1
 
     /** Invite an address, ID, and public key directly, as carried by an Add QR. */
     fun inviteDirect(addr: String, nodeId: String, pk: String) {
@@ -559,7 +566,8 @@ class DoorbellCore(context: Context) {
     private external fun nativePairingMode(handle: Long, seconds: Int)
     private external fun nativeStartPairingJson(handle: Long, seconds: Int): String?
     private external fun nativeMintJoinTokenJson(handle: Long, seconds: Int): String?
-    private external fun nativeInviteDevice(handle: Long, nodeId: String)
+    private external fun nativeInviteDeviceCode(handle: Long, nodeId: String, code: String)
+    private external fun nativeRotateClusterKey(handle: Long): Int
     private external fun nativeInviteDirect(handle: Long, addr: String, nodeId: String, pk: String)
     private external fun nativeDenyDevice(handle: Long, nodeId: String)
     private external fun nativeRetryPairingPersistence(handle: Long): Boolean

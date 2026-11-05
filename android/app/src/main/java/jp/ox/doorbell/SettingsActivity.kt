@@ -48,6 +48,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     private var config: JSONObject? = null
     private var status: JSONObject? = null
     private var nodeId = ""
+    private var pairing: JSONObject? = null
     /** Where writes go: core when it exports them, otherwise the loopback session. */
     private var writer: ConfigWriter? = null
 
@@ -108,7 +109,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     override fun onUiEvent(ev: JSONObject) {
         when (ev.optString("t")) {
             "config_changed", "peers_changed", "notice_changed", "time_changed",
-            "power_changed",
+            "power_changed", "cluster_key_changed", "peer_rejected", "pairing_state",
             -> ui.post {
                 if (isFinishing) return@post
                 refreshSnapshots()
@@ -123,6 +124,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     private fun refreshSnapshots() {
         config = if (app.coreOk) app.core.config() else null
         status = if (app.coreOk) app.core.status() else null
+        pairing = if (app.coreOk) app.core.pairingInfo() else null
         nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
     }
 
@@ -630,12 +632,57 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             }
         }
         sectionPanelsLink(card)
+        sectionClusterSecurity(card)
         card.row(ShellUi.row(this, palette, label("settings.item_password_change"),
                              enabled = !readOnly) { changePassword() })
         card.row(ShellUi.row(
             this, palette, texts.t("pair.clear_title", R.string.pair_clear_title),
             note = texts.t("pair.clear_confirm", R.string.pair_clear_confirm),
         ) { confirmUnpair() })
+    }
+
+    /** Security v3 key state, the re-pair notice after an upgrade, and key rotation. */
+    private fun sectionClusterSecurity(card: LinearLayout) {
+        PairingModel.upgradeRejoinReason(pairing)?.let { reason ->
+            card.row(ShellUi.pill(this, texts.t("pair.upgrade_rejoin", R.string.pair_upgrade_rejoin) +
+                " · " + texts.t("pair.err_detail", R.string.pair_err_detail, reason),
+                palette.dangerSoft, palette.dangerInk, 13f))
+        }
+        val security = PairingModel.security(pairing)
+        if (security != null) {
+            val notes = ArrayList<String>(3)
+            if (security.rekeyRequired) notes.add(label("settings.item_rekey_required"))
+            if (security.legacyPeers > 0)
+                notes.add(label("settings.item_legacy_peers", security.legacyPeers.toString()))
+            if (security.prevPskId.isNotEmpty() && security.prevPskUntilMs > 0L)
+                notes.add(label("settings.item_prev_key", security.prevPskId,
+                                clock.format(security.prevPskUntilMs).clockText()))
+            card.row(ShellUi.row(this, palette, label("settings.item_cluster_key"),
+                                 security.pskId.ifEmpty { "-" }, notes.joinToString(" · ")))
+        }
+        card.row(ShellUi.row(this, palette, label("settings.item_rotate_key"),
+                             note = label("settings.item_rotate_key_note"),
+                             enabled = !readOnly) {
+            AlertDialog.Builder(this)
+                .setTitle(label("settings.item_rotate_key"))
+                .setMessage(label("settings.item_rotate_key_confirm"))
+                .setPositiveButton(label("settings.item_rotate_key")) { _, _ ->
+                    Thread({
+                        val result = app.core.rotateClusterKey()
+                        ui.post {
+                            if (isFinishing) return@post
+                            if (result == DoorbellCore.RESULT_ADMIN_REQUIRED) {
+                                reauthenticateThen { app.core.rotateClusterKey() }
+                                return@post
+                            }
+                            toast(if (result == 0) label("settings.item_rotate_key_started")
+                                  else texts.t("admin.save_failed", R.string.admin_save_failed))
+                        }
+                    }, "doorbell-rotate-key").apply { isDaemon = true }.start()
+                }
+                .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+                .show()
+        })
     }
 
     /** Change the cluster administrator password (db_core_admin_password_set). */

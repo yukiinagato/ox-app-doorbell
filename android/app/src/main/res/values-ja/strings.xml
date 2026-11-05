@@ -677,7 +677,7 @@
     <string name="pair_add_all">まとめて追加 (10 分)</string>
     <string name="pair_add_all_on">まとめて追加 ON — あと %1$s:%2$s (%3$s 台追加)</string>
     <string name="pair_add_all_stop">停止</string>
-    <string name="pair_add_all_warning">10 分間、見つかった端末をすべて自動で追加します</string>
+    <string name="pair_add_all_warning">10 分間、近くの端末を一覧に出します。追加するには、その端末に表示される確認コードを入力してください</string>
     <string name="pair_add_failed">追加できませんでした</string>
     <string name="pair_add_with_code">ペアリング PIN で追加</string>
     <string name="pair_added">追加しました</string>
@@ -692,6 +692,11 @@
     <string name="pair_code_expires_in">あと %1$s:%2$s</string>
     <string name="pair_code_instructions">新しい端末で「ペアリング PIN で参加」を選び、上の接続先とペアリング PIN を入力してください</string>
     <string name="pair_code_label">ペアリング PIN (6 桁)</string>
+    <string name="pair_confirm_code_hint">8 桁の数字</string>
+    <string name="pair_confirm_code_invalid">8 桁の数字を入力してください</string>
+    <string name="pair_confirm_code_prompt">追加する端末の画面に表示されている 8 桁の確認コードを入力してください</string>
+    <string name="pair_confirm_code_self">確認コード %1$s</string>
+    <string name="pair_confirm_code_title">確認コードを入力</string>
     <string name="pair_confirm_tap_again">もう一度押すと実行します</string>
     <string name="pair_copy">コピー</string>
     <string name="pair_create_home">新しいクラスタを作る</string>
@@ -708,6 +713,8 @@
     <string name="pair_err_bad_pin">ペアリング PIN が違います</string>
     <string name="pair_err_bad_qr">QR の内容が読み取れませんでした。新しい端末に表示された文字列をそのまま貼り付けてください</string>
     <string name="pair_err_closed">相手の端末との接続が切れました</string>
+    <string name="pair_err_confirm_code_mismatch">確認コードが違います。新しい端末の画面をもう一度確認してください</string>
+    <string name="pair_err_confirm_code_required">新しい端末に表示されている確認コードを入力してください</string>
     <string name="pair_err_connect_failed">接続先に届きません。アドレスと、同じネットワークにつながっているかを確認してください</string>
     <string name="pair_err_decrypt_failed">安全確認に失敗しました。ネットワークに不審な端末がないか確認してください</string>
     <string name="pair_err_expired">ペアリング PIN の期限が切れました。相手の端末で新しいコードを発行してください</string>
@@ -720,6 +727,8 @@
     <string name="pair_err_no_token">相手の端末で「ペアリング PIN で追加」が開始されていません</string>
     <string name="pair_err_pairing_unavailable">コードを発行できませんでした。もう一度お試しください</string>
     <string name="pair_err_persist_failed">この端末に設定を保存できませんでした</string>
+    <string name="pair_err_pk_conflict">同じ ID を名乗る別の端末があります。安全のため追加できません</string>
+    <string name="pair_err_protocol_upgrade_required">相手の端末を最新版に更新してください</string>
     <string name="pair_err_timeout">応答がありませんでした。もう一度お試しください</string>
     <string name="pair_err_unknown">追加できませんでした。もう一度お試しください</string>
     <string name="pair_err_detail">詳細: %1$s</string>
@@ -781,6 +790,7 @@
     <string name="pair_searching_hint">クラスタに参加済みの端末か管理画面で「追加」を押してください</string>
     <string name="pair_tab">端末を追加</string>
     <string name="pair_title_unpaired">このドアホンをクラスタに追加</string>
+    <string name="pair_upgrade_rejoin">更新後の再ペアリングが必要です。もう一度クラスタに追加してください</string>
     <string name="panel_answering">応答中…</string>
     <string name="panel_auth_failed">パネル認証に失敗しました</string>
     <string name="panel_back">戻る</string>
@@ -984,6 +994,7 @@ ON</string>
     <string name="settings_invalid_value">入力内容を確認してください</string>
     <string name="settings_item_answer_mode">応答のしかた</string>
     <string name="settings_item_brightness">明るさ</string>
+    <string name="settings_item_cluster_key">クラスタの鍵</string>
     <string name="settings_item_cluster_return_s">呼び出し画面を閉じるまで（全端末、秒）</string>
     <string name="settings_item_direct_port">直接通話のポート</string>
     <string name="settings_item_door_label">門口の名前</string>
@@ -991,6 +1002,7 @@ ON</string>
     <string name="settings_item_http_port">HTTP ポート</string>
     <string name="settings_item_http_port_note">この端末内のアプリ用です。ほかの端末からは HTTPS に転送されます</string>
     <string name="settings_item_https_port">HTTPS ポート</string>
+    <string name="settings_item_legacy_peers">旧バージョンの端末 %1$s 台</string>
     <string name="settings_item_mesh_port">端末間通信のポート</string>
     <string name="settings_item_motion_wake">動きを検知したら画面を点ける</string>
     <string name="settings_item_night">夜間モード</string>
@@ -1008,13 +1020,19 @@ ON</string>
     <string name="settings_item_password_short">8～128 文字で入力してください</string>
     <string name="settings_item_pixel_shift">焼き付き防止の移動間隔（秒）</string>
     <string name="settings_item_ports_note">ポートは端末の初期設定で決まり、ここでは変更できません</string>
+    <string name="settings_item_prev_key">以前の鍵 %1$s は %2$s まで有効</string>
     <string name="settings_item_quiet_clear">静音時間を解除</string>
     <string name="settings_item_quiet_from">開始</string>
     <string name="settings_item_quiet_to">終了</string>
+    <string name="settings_item_rekey_required">鍵の更新が必要な端末があります</string>
     <string name="settings_item_reply_audio">返信の音声ファイル</string>
     <string name="settings_item_reply_ttl">返信の表示時間（秒）</string>
     <string name="settings_item_return_s">呼び出し画面を閉じるまで（秒）</string>
     <string name="settings_item_return_s_note">この端末だけの設定です</string>
+    <string name="settings_item_rotate_key">クラスタの鍵を更新</string>
+    <string name="settings_item_rotate_key_confirm">すべての端末に新しい鍵を配ります。電源が切れている端末は後で鍵を受け取ります。続けますか？</string>
+    <string name="settings_item_rotate_key_note">端末を紛失・削除したときに実行します</string>
+    <string name="settings_item_rotate_key_started">鍵の更新を開始しました</string>
     <string name="settings_item_saver">待機画面</string>
     <string name="settings_item_saver_after">待機画面までの秒数</string>
     <string name="settings_item_sip_password">SIP パスワード</string>

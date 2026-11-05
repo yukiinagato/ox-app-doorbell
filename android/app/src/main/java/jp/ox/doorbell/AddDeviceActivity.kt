@@ -155,6 +155,13 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
                 }
                 refresh()
             }
+            // Core refused a peer's handshake (for example an identity that is not a member).
+            "peer_rejected" -> {
+                val id = ev.optString("id")
+                if (id.isNotEmpty()) rowStates[id] = RowState(
+                    PHASE_FAILED, errorText(ev.optString("reason")), SystemClock.elapsedRealtime())
+                refresh()
+            }
             "qr_scanned" -> refresh()
             "pending_changed", "pairing_mode_changed", "join_token_changed",
             "pairing_state", "peers_changed" -> refresh()
@@ -277,6 +284,18 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
             ) else "",
         ).filter { it.isNotEmpty() }.joinToString(" · ")
         row.detail.text = detail
+        if (device.pkConflict) {
+            // Two different identity keys claim this node id: one of them is an impostor, so the
+            // row cannot be added from here until the duplicate is gone.
+            row.status.visibility = View.VISIBLE
+            row.status.setTextColor(PairingUi.ERR)
+            row.status.text = errorText("pk_conflict")
+            row.add.isEnabled = false
+            row.deny.isEnabled = true
+            row.add.visibility = View.VISIBLE
+            row.deny.visibility = View.VISIBLE
+            return
+        }
         val state = rowStates[device.id]
         when (state?.phase) {
             PHASE_ADDING -> {
@@ -321,10 +340,50 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
         }
     }
 
+    /**
+     * Security v3: an invitation needs the 8-digit confirm code the new device shows on its own
+     * pairing screen, so a device that merely announced itself on the network cannot be enrolled
+     * by accident, and an impostor answering for it cannot pass.
+     */
     private fun onAdd(id: String) {
-        rowStates[id] = RowState(PHASE_ADDING)
-        app.core.inviteDevice(id)
-        refresh()
+        val field = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            filters = arrayOf(android.text.InputFilter.LengthFilter(
+                PairingModel.CONFIRM_CODE_LENGTH))
+            hint = texts.t("pair.confirm_code_hint", R.string.pair_confirm_code_hint)
+            gravity = Gravity.CENTER
+            textSize = 28f
+            setSingleLine(true)
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(8), dp(20), 0)
+            addView(TextView(this@AddDeviceActivity).apply {
+                text = texts.t("pair.confirm_code_prompt", R.string.pair_confirm_code_prompt)
+            }, PairingUi.matchWrap())
+            addView(field, PairingUi.matchWrap())
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle(texts.t("pair.confirm_code_title", R.string.pair_confirm_code_title))
+            .setView(box)
+            .setPositiveButton(texts.t("pair.add", R.string.pair_add), null)
+            .setNegativeButton(texts.t("calling.cancel", R.string.calling_cancel), null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val code = field.text.toString().filter { it in '0'..'9' }
+                if (!PairingModel.validConfirmCode(code)) {
+                    field.error = texts.t("pair.confirm_code_invalid",
+                                          R.string.pair_confirm_code_invalid)
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                rowStates[id] = RowState(PHASE_ADDING)
+                app.core.inviteDeviceCode(id, code)
+                refresh()
+            }
+        }
+        dialog.show()
     }
 
     private fun onDeny(id: String) {

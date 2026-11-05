@@ -677,7 +677,7 @@
     <string name="pair_add_all">批量添加（10 分钟）</string>
     <string name="pair_add_all_on">批量添加已开启 — 剩余 %1$s:%2$s（已添加 %3$s 台）</string>
     <string name="pair_add_all_stop">停止</string>
-    <string name="pair_add_all_warning">10 分钟内发现的所有设备都将被自动添加</string>
+    <string name="pair_add_all_warning">10 分钟内会在此列出附近的设备。要添加设备，请输入该设备上显示的确认码</string>
     <string name="pair_add_failed">添加失败</string>
     <string name="pair_add_with_code">使用配对 PIN 添加</string>
     <string name="pair_added">已添加</string>
@@ -692,6 +692,11 @@
     <string name="pair_code_expires_in">剩余 %1$s:%2$s</string>
     <string name="pair_code_instructions">在新设备上选择“使用配对 PIN 加入”，然后输入上面的连接地址和配对 PIN</string>
     <string name="pair_code_label">配对 PIN（6 位）</string>
+    <string name="pair_confirm_code_hint">8 位数字</string>
+    <string name="pair_confirm_code_invalid">请输入完整的 8 位数字</string>
+    <string name="pair_confirm_code_prompt">请输入要添加的设备屏幕上显示的 8 位确认码</string>
+    <string name="pair_confirm_code_self">确认码 %1$s</string>
+    <string name="pair_confirm_code_title">输入确认码</string>
     <string name="pair_confirm_tap_again">再次按下以确认</string>
     <string name="pair_copy">复制</string>
     <string name="pair_create_home">新建集群</string>
@@ -708,6 +713,8 @@
     <string name="pair_err_bad_pin">配对 PIN 不正确</string>
     <string name="pair_err_bad_qr">这不是设备二维码。请原样粘贴新设备上显示的文本</string>
     <string name="pair_err_closed">与对方设备的连接已断开</string>
+    <string name="pair_err_confirm_code_mismatch">确认码不正确。请再次查看新设备的屏幕</string>
+    <string name="pair_err_confirm_code_required">请输入新设备上显示的确认码</string>
     <string name="pair_err_connect_failed">无法连接到该地址。请检查连接地址，并确认两台设备处于同一网络</string>
     <string name="pair_err_decrypt_failed">安全校验失败。请检查网络中是否存在可疑设备</string>
     <string name="pair_err_expired">配对 PIN 已过期。请在对方设备上生成新的配对 PIN</string>
@@ -720,6 +727,8 @@
     <string name="pair_err_no_token">对方设备当前没有开启“使用配对 PIN 添加”</string>
     <string name="pair_err_pairing_unavailable">无法生成配对码，请重试</string>
     <string name="pair_err_persist_failed">无法在此设备上保存设置</string>
+    <string name="pair_err_pk_conflict">有另一台设备使用相同的 ID，为安全起见无法添加</string>
+    <string name="pair_err_protocol_upgrade_required">请将对方设备更新到最新版本</string>
     <string name="pair_err_timeout">没有收到响应。请重试</string>
     <string name="pair_err_unknown">操作未能完成，请重试</string>
     <string name="pair_err_detail">详情：%1$s</string>
@@ -781,6 +790,7 @@
     <string name="pair_searching_hint">请在已加入集群的设备或管理页面上点击“添加”</string>
     <string name="pair_tab">添加设备</string>
     <string name="pair_title_unpaired">将此门铃添加到集群</string>
+    <string name="pair_upgrade_rejoin">更新后需要重新配对。请再次将本设备加入集群</string>
     <string name="panel_answering">正在接听…</string>
     <string name="panel_auth_failed">面板认证失败</string>
     <string name="panel_back">返回</string>
@@ -984,6 +994,7 @@
     <string name="settings_invalid_value">请检查输入内容</string>
     <string name="settings_item_answer_mode">接听方式</string>
     <string name="settings_item_brightness">亮度</string>
+    <string name="settings_item_cluster_key">集群密钥</string>
     <string name="settings_item_cluster_return_s">关闭呼叫画面前的秒数（所有设备）</string>
     <string name="settings_item_direct_port">直接通话端口</string>
     <string name="settings_item_door_label">门口名称</string>
@@ -991,6 +1002,7 @@
     <string name="settings_item_http_port">HTTP 端口</string>
     <string name="settings_item_http_port_note">供本设备上的应用使用；其他设备会被转到 HTTPS</string>
     <string name="settings_item_https_port">HTTPS 端口</string>
+    <string name="settings_item_legacy_peers">%1$s 台设备为旧版本</string>
     <string name="settings_item_mesh_port">设备间通信端口</string>
     <string name="settings_item_motion_wake">检测到动作时点亮屏幕</string>
     <string name="settings_item_night">夜间模式</string>
@@ -1008,13 +1020,19 @@
     <string name="settings_item_password_short">请输入 8～128 个字符</string>
     <string name="settings_item_pixel_shift">防烧屏位移间隔（秒）</string>
     <string name="settings_item_ports_note">端口在设备初始设置时确定，此处无法更改</string>
+    <string name="settings_item_prev_key">旧密钥 %1$s 有效至 %2$s</string>
     <string name="settings_item_quiet_clear">取消静音时段</string>
     <string name="settings_item_quiet_from">开始</string>
     <string name="settings_item_quiet_to">结束</string>
+    <string name="settings_item_rekey_required">有设备需要更新密钥</string>
     <string name="settings_item_reply_audio">回复的音频文件</string>
     <string name="settings_item_reply_ttl">回复显示时间（秒）</string>
     <string name="settings_item_return_s">关闭呼叫画面前的秒数</string>
     <string name="settings_item_return_s_note">仅适用于本设备</string>
+    <string name="settings_item_rotate_key">更新集群密钥</string>
+    <string name="settings_item_rotate_key_confirm">将向所有设备分发新密钥；关机的设备稍后接收。要继续吗？</string>
+    <string name="settings_item_rotate_key_note">在设备丢失或被移除后执行</string>
+    <string name="settings_item_rotate_key_started">已开始更新密钥</string>
     <string name="settings_item_saver">待机画面</string>
     <string name="settings_item_saver_after">进入待机画面的秒数</string>
     <string name="settings_item_sip_password">SIP 密码</string>

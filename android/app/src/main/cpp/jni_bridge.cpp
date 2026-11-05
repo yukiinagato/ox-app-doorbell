@@ -894,10 +894,20 @@ Java_jp_ox_doorbell_DoorbellCore_nativePairingMode(JNIEnv*, jobject, jlong h, ji
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_ox_doorbell_DoorbellCore_nativeInviteDevice(JNIEnv* env, jobject, jlong h, jstring id) {
+Java_jp_ox_doorbell_DoorbellCore_nativeInviteDeviceCode(JNIEnv* env, jobject, jlong h, jstring id,
+                                                         jstring code) {
   BridgeLease lease(h);
   Bridge* b = lease.get();
-  if (b && b->core) db_core_invite_device(b->core, toUtf8(env, id).c_str());
+  if (b && b->core)
+    db_core_invite_device_code(b->core, toUtf8(env, id).c_str(), toUtf8(env, code).c_str());
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeRotateClusterKey(JNIEnv*, jobject, jlong h) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return -1;
+  return static_cast<jint>(db_core_rotate_cluster_key(b->core));
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
