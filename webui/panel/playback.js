@@ -2,6 +2,13 @@
 (function (root) {
   "use strict";
 
+  // Cancelling a stream reader returns a promise that rejects once the fetch was aborted; that
+  // rejection is expected and must not surface as an unhandled error.
+  function quiet(promise) {
+    if (promise && typeof promise.catch === "function") promise.catch(function () {});
+    return promise;
+  }
+
   function supportedMse() {
     return !!(root.MediaSource && root.fetch && root.ReadableStream && root.URL &&
               root.URL.createObjectURL);
@@ -135,7 +142,7 @@
       if (stopped) return;
       stopped = true;
       try { if (aborter) aborter.abort(); } catch (e0) {}
-      try { if (reader) reader.cancel(); } catch (e) {}
+      try { if (reader) quiet(reader.cancel()); } catch (e) {}
       failed();
     }
     function frame() { if (!stopped) { activity(); ready(); } }
@@ -218,7 +225,7 @@
     return function () {
       stopped = true;
       try { if (aborter) aborter.abort(); } catch (e0) {}
-      try { if (reader) reader.cancel(); } catch (e) {}
+      try { if (reader) quiet(reader.cancel()); } catch (e) {}
       try {
         video.removeEventListener("loadeddata", frame);
         video.removeEventListener("playing", frame);
@@ -240,7 +247,7 @@
       if (stopped) return;
       stopped = true;
       try { if (aborter) aborter.abort(); } catch (e0) {}
-      try { if (reader) reader.cancel(); } catch (e1) {}
+      try { if (reader) quiet(reader.cancel()); } catch (e1) {}
       failed();
     }
     function append(chunk) {
@@ -280,7 +287,7 @@
     return function () {
       stopped = true;
       try { if (aborter) aborter.abort(); } catch (e0) {}
-      try { if (reader) reader.cancel(); } catch (e1) {}
+      try { if (reader) quiet(reader.cancel()); } catch (e1) {}
     };
   }
 
