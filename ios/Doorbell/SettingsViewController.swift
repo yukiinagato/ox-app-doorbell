@@ -1,16 +1,17 @@
 import UIKit
 
-/// Native settings: the device-level and common cluster settings the owner chose to keep off the
-/// web admin. Every value is written with the same keys and the same atomic batch the web admin
-/// uses, so the two surfaces can never disagree. Anything deliberately left in the web admin says
-/// why, in one line, next to the thing it replaces.
-final class SettingsViewController: SettingsFormViewController {
+/// The settings screen presented from the home screen's admin entry. On iPhone it is a grouped
+/// drill-down in a navigation controller; on iPad and Apple TV it is a master–detail split with the
+/// category list on the left, like the system Settings app. It owns the config writer, and leaving
+/// it closes the native admin window.
+final class SettingsViewController: UIViewController, SettingsHosting, UISplitViewControllerDelegate {
 
-    private let core: CoreBridge
-    private var boot: BootConfig
+    let core: CoreBridge
+    private(set) var boot: BootConfig
+    let texts: Texts
     private let writer: ConfigWriter
-    private var config: [String: Any]?
-    private var nodeId = ""
+    private(set) var palette = DoorbellPalette.dark
+    private(set) var usesSplit = false
 
     /// The screen that hosts settings supplies these so the entries behave exactly as they do
     /// from the home screen.
@@ -18,398 +19,282 @@ final class SettingsViewController: SettingsFormViewController {
     var onExitKiosk: (() -> Void)?
     var onOpenDeviceInfo: (() -> Void)?
 
-    init(core: CoreBridge, boot: BootConfig, texts: Texts) {
-        self.core = core
-        self.boot = boot
-        self.writer = ConfigWriter(core: core, httpPort: boot.httpPort)
-        super.init(texts: texts)
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    override func viewDidLoad() {
-        refreshSnapshot()
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            config: config, nodeId: nodeId, localTime: core.localTime()))
-        screenTitle = texts.t("settings.title")
-        super.viewDidLoad()
-    }
-
-    /// Leaving the settings root closes the native admin window (security protocol v3 §10); a
-    /// child settings page presented over it is not a departure.
-    override func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        if isBeingDismissed || presentingViewController == nil { core.adminLock() }
-    }
-
-    private func refreshSnapshot() {
-        config = core.config()
-        if let node = core.status()?["node"] as? [String: Any] {
-            nodeId = ConfigUtil.evStr(node, "id")
-        }
-    }
-
-    override func fields() -> [SettingsField] {
-        let power = (core.status()?["self"] as? [String: Any])?["power"] as? [String: Any]
-        return [
-            .action(title: texts.t("settings.section_device"), detail: boot.name,
-                    identifier: "settings_device") { [weak self] in self?.openDevice() },
-            .choice(title: texts.t("dashboard.preview_rate_title"),
-                    value: DashboardView.previewRateValue(
-                        DashboardView.savedPreviewFramesPerSecond),
-                    options: DashboardView.previewRates.map { rate in
-                        let value = DashboardView.previewRateValue(rate)
-                        return (value, texts.t("dashboard.preview_rate_format", value))
-                    }, identifier: "settings_preview_rate") { value in
-                guard let rate = Double(value) else { return }
-                UserDefaults.standard.set(rate, forKey: DashboardView.previewRateDefaultsKey)
-            },
-            .action(title: texts.t("settings.section_volume"), detail: volumeSummary(),
-                    identifier: "settings_volume") { [weak self] in self?.openVolume() },
-            .action(title: texts.t("settings.section_time"), detail: timeSummary(),
-                    identifier: "settings_time") { [weak self] in self?.openTime() },
-            .action(title: texts.t("settings.section_doors"), detail: doorSummary(),
-                    identifier: "settings_doors") { [weak self] in self?.openDoors() },
-            .action(title: texts.t("settings.section_purposes"), detail: purposeSummary(),
-                    identifier: "settings_purposes") { [weak self] in self?.openPurposes() },
-            .action(title: texts.t("settings.section_rules"), detail: ruleSummary(),
-                    identifier: "settings_rules") { [weak self] in self?.openRules() },
-            .action(title: texts.t("settings.section_cluster"), detail: clusterSummary(),
-                    identifier: "settings_cluster") { [weak self] in self?.openCluster() },
-            .action(title: texts.t("settings.section_history"), detail: historySummary(),
-                    identifier: "settings_history") { [weak self] in self?.openHistory() },
-            .action(title: texts.t("settings.section_web"), detail: "",
-                    identifier: "settings_web_admin") { [weak self] in self?.openWebAdmin() },
-            .action(title: texts.t("settings.section_info"),
-                    detail: DoorbellTheme.versionLine(name: boot.name,
-                                                      coreVersion: DoorbellTheme.coreVersion(),
-                                                      texts: texts, power: power),
-                    identifier: "settings_info") { [weak self] in self?.openDeviceInfo() },
-        ]
-    }
-
-    // MARK: - Summaries
-
-    private func volumeSummary() -> String {
-        guard let volumes = core.audioVolumes() else { return "" }
-        return "\(texts.t("volume.call")) \(ConfigUtil.int(volumes, "call", 80))"
-            + " · \(texts.t("volume.sos")) \(ConfigUtil.int(volumes, "sos", 100))"
-            + " · \(texts.t("volume.idle")) \(ConfigUtil.int(volumes, "idle", 60))"
-    }
-
-    private func timeSummary() -> String {
-        let time = core.status()?["time"] as? [String: Any]
-        let zone = ConfigUtil.str(time, "zone") ?? ConfigUtil.str(config, "time.zone") ?? ""
-        let source = ConfigUtil.str(time, "source") == "ntp"
-            ? texts.t("time.source_ntp") : texts.t("time.source_system")
-        return [zone, source].filter { !$0.isEmpty }.joined(separator: " · ")
-    }
-
-    private func doorSummary() -> String {
-        let doors = (ConfigUtil.dig(config, "doors") as? [String: Any])?.count ?? 0
-        return doors > 0 ? "\(doors)" : ""
-    }
-
-    private func purposeSummary() -> String {
-        let purposes = ConfigUtil.enabledPurposeIds(config).count
-        return purposes > 0 ? "\(purposes)" : ""
-    }
-
-    private func ruleSummary() -> String {
-        guard let rules = ConfigUtil.dig(config, "rules") as? [String: Any] else { return "" }
-        let enabled = rules.values.filter {
-            ConfigUtil.bool($0 as? [String: Any], "enabled", true)
-        }.count
-        return "\(enabled)/\(rules.count)"
-    }
-
-    private func clusterSummary() -> String {
-        let snapshot = PairingSnapshot.load(core)
-        guard snapshot.hasSnapshot else { return "" }
-        return texts.t("pair.membership", "\(max(snapshot.memberCount, snapshot.paired ? 1 : 0))")
-    }
-
-    private func historySummary() -> String {
-        let unread = CallHistory.unreadMissed(core)
-        return unread > 0 ? texts.t("history.missed_badge", "\(unread)") : ""
-    }
-
-    // MARK: - Navigation
-
-    private func present(_ controller: UIViewController) {
-        guard presentedViewController == nil else { return }
-        present(controller, animated: true, completion: nil)
-    }
-
-    private func openDevice() {
-        let screen = DeviceSettingsViewController(core: core, boot: boot, texts: texts)
-        screen.onExitKiosk = onExitKiosk
-        screen.onBootChanged = { [weak self] updated in
-            self?.boot = updated
-            self?.rebuild()
-        }
-        present(screen)
-    }
-
-    private func openVolume() {
-        present(VolumeSettingsViewController(core: core, boot: boot, texts: texts))
-    }
-
-    private func openTime() {
-        present(TimeSettingsViewController(core: core, boot: boot, texts: texts))
-    }
-
-    private func openDoors() {
-        present(DoorSettingsViewController(core: core, boot: boot, texts: texts))
-    }
-
-    private func openPurposes() {
-        present(PurposeSettingsViewController(core: core, boot: boot, texts: texts))
-    }
-
-    private func openRules() {
-        present(RuleSettingsViewController(core: core, boot: boot, texts: texts))
-    }
-
-    private func openCluster() {
-        guard let handler = onOpenAddDevice else { return }
-        dismiss(animated: true) { handler() }
-    }
-
-    private func openHistory() {
-        present(CallHistoryViewController(core: core, texts: texts, lang: boot.uiLang))
-    }
-
-    private func openWebAdmin() {
-        present(WebAdminViewController(core: core, boot: boot, texts: texts))
-    }
-
-    private func openDeviceInfo() {
-        guard let handler = onOpenDeviceInfo else { return }
-        dismiss(animated: true) { handler() }
-    }
-}
-
-/// Shared plumbing for the settings sub-screens: one config snapshot, one writer, one status line.
-class SettingsChildViewController: SettingsFormViewController {
-    let core: CoreBridge
-    let boot: BootConfig
-    let writer: ConfigWriter
-    var config: [String: Any]?
-    var nodeId = ""
-
-    init(core: CoreBridge, boot: BootConfig, texts: Texts) {
-        self.core = core
-        self.boot = boot
-        self.writer = ConfigWriter(core: core, httpPort: boot.httpPort)
-        super.init(texts: texts)
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    override func viewDidLoad() {
-        reloadConfig()
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            config: config, nodeId: nodeId, localTime: core.localTime()))
-        super.viewDidLoad()
-    }
-
-    /// A value changed on a screen presented from this one is what the household just did; the
-    /// summaries here have to show it when they come back rather than the state they were built
-    /// with.
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        guard isViewLoaded, presentedViewController == nil else { return }
-        reloadConfig()
-        rebuild()
-    }
-
-    func reloadConfig() {
-        config = core.config()
-        if let node = core.status()?["node"] as? [String: Any] {
-            nodeId = ConfigUtil.evStr(node, "id")
-        }
-    }
-
-    /// Writes one or more keys and reports the outcome on the shared status line.
-    func write(_ operations: [ConfigWriter.Operation], rebuildAfter: Bool = false) {
-        writer.apply(operations) { [weak self] result in
-            guard let self = self else { return }
-            self.setStatus(ConfigWriter.message(self.texts, result))
-            self.reloadConfig()
-            if rebuildAfter { self.rebuild() }
-        }
-    }
-
-    func deviceKey(_ suffix: String) -> String? {
-        guard !nodeId.isEmpty else { return nil }
-        return "devices.\(nodeId).\(suffix)"
-    }
-}
-
-/// この端末 — identity, language, video handling, appearance and the idle-screen theme.
-final class DeviceSettingsViewController: SettingsChildViewController {
-
-    var onExitKiosk: (() -> Void)?
-    var onBootChanged: ((BootConfig) -> Void)?
-
+    private let screens = NSHashTable<AnyObject>.weakObjects()
+    private var categoryList: SettingsCategoryListController?
+    private let toast = UILabel()
+    private var toastTimer: Timer?
+    private let preview = SirenPlayer()
     private var pendingName: String
     private var pendingRole: String
     private var pendingDoor: String
     private var currentPassword = ""
     private var newPassword = ""
 
-    override init(core: CoreBridge, boot: BootConfig, texts: Texts) {
+    init(core: CoreBridge, boot: BootConfig, texts: Texts) {
+        self.core = core
+        self.boot = boot
+        self.texts = texts
+        self.writer = ConfigWriter(core: core, httpPort: boot.httpPort)
         pendingName = boot.name
         pendingRole = boot.role
         pendingDoor = boot.door
-        super.init(core: core, boot: boot, texts: texts)
-        screenTitle = texts.t("settings.section_device")
+        super.init(nibName: nil, bundle: nil)
+        modalPresentationStyle = .fullScreen
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    override func fields() -> [SettingsField] {
-        var result: [SettingsField] = [
-            .text(title: texts.t("settings.device_name"), value: pendingName,
-                  placeholder: texts.t("settings.device_name"), identifier: "device_name") {
-                      [weak self] value in self?.pendingName = value; self?.persistIdentity()
-                  },
-            .choice(title: texts.t("settings.device_role"), value: pendingRole,
-                    options: [("door_station", texts.t("admin.role_door")),
-                              ("indoor_panel", texts.t("admin.role_indoor"))],
-                    identifier: "device_role") { [weak self] value in
-                        self?.pendingRole = value
-                        self?.persistIdentity()
-                        self?.setStatus(self?.texts.t("settings.role_restart_notice") ?? "")
-                    },
-        ]
-        if pendingRole == "door_station" {
-            result.append(.text(title: texts.t("settings.device_door"), value: pendingDoor,
-                                placeholder: texts.t("settings.device_door"),
-                                identifier: "device_door") { [weak self] value in
-                                    self?.pendingDoor = value
-                                    self?.persistIdentity()
-                                })
+    // MARK: Layout
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        let config = core.config()
+        palette = DoorbellPalette.of(DoorbellTheme.appearance(
+            config: config, nodeId: nodeId(), localTime: core.localTime()))
+        view.backgroundColor = palette.background
+        #if os(tvOS)
+        usesSplit = true
+        #else
+        usesSplit = UIDevice.current.userInterfaceIdiom == .pad
+        #endif
+
+        let list = SettingsCategoryListController(host: self)
+        list.onClose = { [weak self] in self?.dismiss(animated: true) }
+        categoryList = list
+        let master = UINavigationController(rootViewController: list)
+        SettingsStyle.apply(palette, to: master.navigationBar)
+        let root: UIViewController
+        if usesSplit {
+            let split = UISplitViewController()
+            let firstId = catalog().categories().first?.id ?? "device"
+            let detail = UINavigationController(
+                rootViewController: SettingsPageController(host: self, path: [firstId]))
+            SettingsStyle.apply(palette, to: detail.navigationBar)
+            split.viewControllers = [master, detail]
+            split.delegate = self
+            split.preferredDisplayMode = .allVisible
+            split.preferredPrimaryColumnWidthFraction = 0.34
+            split.maximumPrimaryColumnWidth = 380
+            split.view.backgroundColor = palette.background
+            root = split
+            list.select(firstId)
+        } else {
+            root = master
         }
-
-        // One secret for this device and the web admin; Core keeps the salted hash replicated.
-        if core.supportsAdminPasswordChange {
-            result.append(.header(texts.t("settings.change_password")))
-            result.append(.note(texts.t("settings.password_shared")))
-            result.append(.secret(title: texts.t("settings.password_current"),
-                                  identifier: "password_current") {
-                                      [weak self] value in self?.currentPassword = value
-                                  })
-            result.append(.secret(title: texts.t("settings.password_new"),
-                                  identifier: "password_new") {
-                                      [weak self] value in self?.newPassword = value
-                                  })
-            result.append(.action(title: texts.t("settings.change_password"), detail: "",
-                                  identifier: "password_apply") { [weak self] in
-                                      self?.applyPasswordChange()
-                                  })
+        addChild(root)
+        root.view.frame = view.bounds
+        root.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(root.view)
+        root.didMove(toParent: self)
+        buildToast()
+        // Announcements, remote edits and replication land here too, so an open page never shows a
+        // value another device has since changed.
+        core.addHandler(SettingsViewController.handlerKey) { [weak self] ev in
+            let kind = ConfigUtil.evStr(ev, "t")
+            if ["config_changed", "notice_changed", "peers_changed", "pairing_state",
+                "cluster_key_changed", "peer_rejected"].contains(kind) {
+                self?.refreshAll()
+            }
         }
-
-        result.append(.header(texts.t("admin.language")))
-        let lang = ConfigUtil.str(config, deviceKey("local.ui_lang") ?? "") ?? boot.uiLang
-        result.append(.choice(title: texts.t("settings.ui_lang"), value: lang,
-                              options: languageOptions(), identifier: "device_lang") {
-                                  [weak self] value in
-                                  guard let key = self?.deviceKey("local.ui_lang") else { return }
-                                  self?.write([.set(key, value)])
-                              })
-
-        result.append(.header(texts.t("admin.ui_style")))
-        let playback = ConfigUtil.str(config, deviceKey("local.video.playback") ?? "")
-            ?? "low_latency"
-        result.append(.choice(title: texts.t("settings.video_playback"), value: playback,
-                              options: [("low_latency", "low latency"), ("hls", "HLS"),
-                                        ("mjpeg", "MJPEG")],
-                              identifier: "device_playback") { [weak self] value in
-                                  guard let key = self?.deviceKey("local.video.playback")
-                                  else { return }
-                                  self?.write([.set(key, value)])
-                              })
-        let rotation = ConfigUtil.str(config, deviceKey("local.video.rotation") ?? "") ?? "auto"
-        result.append(.choice(title: texts.t("settings.video_rotation"), value: rotation,
-                              options: [("auto", texts.t("admin.rotation_auto")), ("0", "0°"),
-                                        ("90", "90°"), ("180", "180°"), ("270", "270°")],
-                              identifier: "device_rotation") { [weak self] value in
-                                  guard let key = self?.deviceKey("local.video.rotation")
-                                  else { return }
-                                  self?.write([.set(key, value)])
-                              })
-
-        if boot.role == "door_station", let key = deviceKey("local.visitor_layout") {
-            result.append(.choice(title: texts.t("settings.visitor_layout"),
-                                  value: ConfigUtil.str(config, key) ?? "standard",
-                                  options: ["standard", "left", "right", "edges"].map {
-                                      ($0, texts.t("settings.visitor_layout_" + $0))
-                                  }, identifier: "visitor_layout") { [weak self] value in
-                                      self?.write([.set(key, value)])
-                                  })
-        }
-        result.append(.header(texts.t("settings.appearance")))
-        let appearance = ConfigUtil.str(config, "display.appearance") ?? "auto_system"
-        result.append(.choice(title: texts.t("settings.appearance"), value: appearance,
-                              options: [("auto_system", texts.t("settings.appearance_auto_system")),
-                                        ("auto_schedule",
-                                         texts.t("settings.appearance_auto_schedule")),
-                                        ("light", texts.t("settings.appearance_light")),
-                                        ("dark", texts.t("settings.appearance_dark"))],
-                              identifier: "appearance") { [weak self] value in
-                                  self?.write([.set("display.appearance", value)],
-                                              rebuildAfter: true)
-                              })
-        if appearance == "auto_schedule" {
-            result.append(.text(title: texts.t("settings.appearance_dark_from"),
-                                value: ConfigUtil.str(config,
-                                                      "display.appearance_schedule.dark_from")
-                                    ?? "19:00",
-                                placeholder: "19:00", identifier: "appearance_dark_from") {
-                                    [weak self] value in
-                                    guard DoorbellTheme.minutes(value) != nil else { return }
-                                    self?.write([.set("display.appearance_schedule.dark_from",
-                                                      value)])
-                                })
-            result.append(.text(title: texts.t("settings.appearance_light_from"),
-                                value: ConfigUtil.str(config,
-                                                      "display.appearance_schedule.light_from")
-                                    ?? "06:30",
-                                placeholder: "06:30", identifier: "appearance_light_from") {
-                                    [weak self] value in
-                                    guard DoorbellTheme.minutes(value) != nil else { return }
-                                    self?.write([.set("display.appearance_schedule.light_from",
-                                                      value)])
-                                })
-        }
-
-        result.append(.header(texts.t("settings.theme_bg_color")))
-        let background = ConfigUtil.str(config, "display.theme.bg_color") ?? "#101418"
-        result.append(.text(title: texts.t("settings.theme_bg_color"), value: background,
-                            placeholder: "#101418", identifier: "theme_bg_color") {
-                                [weak self] value in self?.applyBackgroundColor(value)
-                            })
-        result.append(.note(backgroundWarning(background)))
-        result.append(contentsOf: backgroundImageFields())
-        result.append(.note(texts.t("settings.web_only_upload")))
-        result.append(.note(texts.t("settings.web_only_wording")))
-
-        if boot.role == "door_station", onExitKiosk != nil {
-            result.append(.action(title: texts.t("admin.menu_exit_kiosk"), detail: "",
-                                  identifier: "exit_kiosk") { [weak self] in
-                                      self?.dismiss(animated: true) { self?.onExitKiosk?() }
-                                  })
-        }
-        return result
     }
 
-    /// An installation that has never set the password passes an empty current value, which is
-    /// what Core's entry point expects.
+    private static let handlerKey = "settings
+
+    /// An iPad in compact multitasking shows the category list first, never an orphan detail.
+    func splitViewController(_ splitViewController: UISplitViewController,
+                             collapseSecondary secondaryViewController: UIViewController,
+                             onto primaryViewController: UIViewController) -> Bool {
+        return true
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        // Leaving settings closes the native admin window (security protocol v3 §10); a screen
+        // presented over settings is not a departure.
+        if isBeingDismissed || presentingViewController == nil {
+            core.adminLock()
+            core.removeHandler(SettingsViewController.handlerKey)
+        }
+    }
+
+    private func buildToast() {
+        toast.backgroundColor = palette.surfaceStrongSolid
+        toast.textColor = palette.ink
+        toast.textAlignment = .center
+        toast.numberOfLines = 0
+        toast.font = .systemFont(ofSize: 15, weight: .semibold)
+        toast.layer.cornerRadius = 10
+        toast.clipsToBounds = true
+        toast.alpha = 0
+        toast.accessibilityIdentifier = "settings_status"
+        toast.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(toast)
+        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
+        NSLayoutConstraint.activate([
+            toast.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            toast.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -16),
+            toast.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -48),
+            toast.heightAnchor.constraint(greaterThanOrEqualToConstant: 40),
+        ])
+    }
+
+    func setStatus(_ message: String) {
+        guard !message.isEmpty else { return }
+        toast.text = "  " + message + "  "
+        view.bringSubviewToFront(toast)
+        UIView.animate(withDuration: 0.2) { self.toast.alpha = 1 }
+        toastTimer?.invalidate()
+        toastTimer = IOSAvailability.scheduledTimer(withTimeInterval: 2.5, repeats: false) {
+            [weak self] _ in UIView.animate(withDuration: 0.3) { self?.toast.alpha = 0 }
+        }
+    }
+
+    // MARK: SettingsHosting
+
+    private func nodeId() -> String {
+        return ConfigUtil.evStr((core.status()?["node"] as? [String: Any]) ?? [:], "id")
+    }
+
+    func catalog() -> SettingsCatalog {
+        let status = core.status()
+        var ctx = SettingsContext(config: core.config(), status: status, nodeId: nodeId(),
+                                  name: pendingName, role: pendingRole, door: pendingDoor,
+                                  uiLang: boot.uiLang, isTV: SettingsStyle.isTV)
+        ctx.supportsPasswordChange = core.supportsAdminPasswordChange
+        ctx.sipBackend = core.sipBackend
+        ctx.audioVolumes = core.audioVolumes()
+        ctx.previewRate = DashboardView.previewRateValue(DashboardView.savedPreviewFramesPerSecond)
+        ctx.previewRates = DashboardView.previewRates.map(DashboardView.previewRateValue)
+        let snapshot = PairingSnapshot.load(core)
+        ctx.membershipSummary = snapshot.hasSnapshot
+            ? texts.t("pair.membership", "\(max(snapshot.memberCount, snapshot.paired ? 1 : 0))") : ""
+        let unread = CallHistory.unreadMissed(core)
+        ctx.historySummary = unread > 0 ? texts.t("history.missed_badge", "\(unread)") : ""
+        let power = (status?["self"] as? [String: Any])?["power"] as? [String: Any]
+        ctx.versionLine = DoorbellTheme.versionLine(name: boot.name, coreVersion: DoorbellTheme.coreVersion(),
+                                                    texts: texts, power: power)
+        ctx.coreVersion = DoorbellTheme.shortVersion(DoorbellTheme.coreVersion())
+        let lastSync = Int64(ConfigUtil.double(status?["time"] as? [String: Any], "last_sync_ms", 0))
+        ctx.lastSyncText = lastSync > 0 ? DoorbellClock.timeOfDay(core, wallMs: lastSync) : ""
+        ctx.nowMs = DoorbellClock.nowMs(core)
+        ctx.pskId = snapshot.security.pskId
+        ctx.staleMembers = snapshot.security.legacyPeers.count + snapshot.security.rekeyRequired.count
+        ctx.canRotateKey = core.supportsKeyRotation && snapshot.state == .ready
+        return SettingsCatalog(ctx, texts: texts)
+    }
+
+    func register(_ screen: SettingsRefreshable) { screens.add(screen) }
+
+    func refreshAll() {
+        for case let screen as SettingsRefreshable in screens.allObjects { screen.refreshFromHost() }
+    }
+
+    func show(_ controller: UIViewController, from: UIViewController) {
+        if let nav = from.navigationController {
+            nav.pushViewController(controller, animated: true)
+        } else {
+            let nav = UINavigationController(rootViewController: controller)
+            SettingsStyle.apply(palette, to: nav.navigationBar)
+            from.present(nav, animated: true)
+        }
+    }
+
+    func commit(_ item: SettingItem, _ value: SettingValue, from: UIViewController) {
+        guard let commit = item.commit else { return }
+        perform(commit(value), item: item, value: value, from: from, completion: nil)
+    }
+
+    func perform(_ effect: SettingEffect, item: SettingItem?, value: SettingValue?,
+                 from: UIViewController, completion: ((Bool) -> Void)?) {
+        switch effect {
+        case .write(let operations):
+            writer.apply(operations) { [weak self] result in
+                guard let self = self else { return }
+                self.setStatus(ConfigWriter.message(self.texts, result))
+                self.refreshAll()
+                completion?(result.isOk)
+            }
+        case .invalid(let key):
+            setStatus(texts.t(key))
+            refreshAll()
+            completion?(false)
+        case .local(let id):
+            completion?(performLocal(id, value: value, from: from))
+        case .none:
+            completion?(true)
+        }
+    }
+
+    // MARK: Shell actions
+
+    @discardableResult
+    private func performLocal(_ id: String, value: SettingValue?, from: UIViewController) -> Bool {
+        switch id {
+        case "identity.name", "identity.role", "identity.door":
+            guard let text = value?.stringValue else { return false }
+            if id == "identity.name" { pendingName = text }
+            if id == "identity.role" { pendingRole = text }
+            if id == "identity.door" { pendingDoor = text }
+            guard let updated = BootConfig.persistSetup(name: pendingName, role: pendingRole,
+                                                        door: pendingDoor) else {
+                setStatus(texts.t("settings.save_failed"))
+                return false
+            }
+            boot = updated
+            setStatus(texts.t(id == "identity.role" ? "settings.role_restart_notice" : "settings.saved"))
+            refreshAll()
+            return true
+        case "password.current":
+            currentPassword = value?.stringValue ?? ""
+            return true
+        case "password.new":
+            newPassword = value?.stringValue ?? ""
+            return true
+        case "password.apply":
+            applyPasswordChange()
+            return true
+        case "preview_rate":
+            guard let rate = value?.stringValue.flatMap(Double.init) else { return false }
+            UserDefaults.standard.set(rate, forKey: DashboardView.previewRateDefaultsKey)
+            refreshAll()
+            return true
+        case "preview.call", "preview.sos", "preview.idle":
+            play(String(id.dropFirst("preview.".count)))
+            return true
+        case "time.sync":
+            syncTime()
+            return true
+        case "cluster.rotate":
+            confirmKeyRotation(from: from)
+            return true
+        case "exit_kiosk":
+            dismiss(animated: true) { [weak self] in self?.onExitKiosk?() }
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// Rotation drops every device that is offline for longer than the seven-day grace period, so
+    /// it is confirmed first.
+    private func confirmKeyRotation(from: UIViewController) {
+        let alert = UIAlertController(title: texts.t("prefs.rotate_key"),
+                                      message: texts.t("prefs.rotate_key_confirm"),
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: texts.t("prefs.rotate_key"), style: .destructive) {
+            [weak self] _ in
+            guard let self = self else { return }
+            self.setStatus(self.texts.t(self.core.rotateClusterKey() == 0 ? "pair.cluster_key_changed"
+                                                                            : "prefs.rotate_key_failed"))
+            self.refreshAll()
+        })
+        present(alert, animated: true)
+    }
+
     private func applyPasswordChange() {
-        guard !newPassword.isEmpty else {
-            setStatus(texts.t("settings.password_failed"))
+        guard newPassword.count >= 8 else {
+            setStatus(texts.t("prefs.password_too_short"))
             return
         }
         switch core.setAdminPassword(current: currentPassword, new: newPassword) {
@@ -417,159 +302,16 @@ final class DeviceSettingsViewController: SettingsChildViewController {
             setStatus(texts.t("settings.password_changed"))
             currentPassword = ""
             newPassword = ""
-            rebuild()
-        case .wrongCurrent:
-            setStatus(texts.t("admin.pin_wrong"))
-        case .lockedOut:
-            setStatus(texts.t("admin.locked"))
-        case .failed:
-            setStatus(texts.t("settings.password_failed"))
+            refreshAll()
+        case .wrongCurrent: setStatus(texts.t("admin.pin_wrong"))
+        case .lockedOut: setStatus(texts.t("admin.locked"))
+        case .failed: setStatus(texts.t("settings.password_failed"))
         }
-    }
-
-    private func languageOptions() -> [(String, String)] {
-        let languages = (ConfigUtil.dig(config, "ui.languages") as? [Any])?
-            .compactMap { $0 as? String } ?? ["ja", "en", "zh"]
-        return languages.map { ($0, Texts.langDisplayName($0)) }
-    }
-
-    /// Colour entries are never rejected: an unreadable pair is saved and flagged.
-    private func applyBackgroundColor(_ value: String) {
-        guard DoorbellTheme.color(hex: value) != nil else {
-            setStatus(texts.t("settings.save_failed"))
-            return
-        }
-        write([.set("display.theme.bg_color", value)], rebuildAfter: true)
-    }
-
-    private func backgroundWarning(_ value: String) -> String {
-        guard let background = DoorbellTheme.color(hex: value) else { return "" }
-        let ink = DoorbellTheme.luminance(background) >= 0.5
-            ? DoorbellPalette.light.ink : DoorbellPalette.dark.ink
-        return DoorbellTheme.contrastWarning(texts, foreground: ink, background: background) ?? ""
-    }
-
-    /// Only images already in the asset ledger can be picked; uploading stays in the web admin
-    /// because it needs a file picker and a 3 MB downscale.
-    private func backgroundImageFields() -> [SettingsField] {
-        var result: [SettingsField] = []
-        let current = ConfigUtil.str(config, "display.theme.bg_image") ?? ""
-        result.append(.action(title: texts.t("settings.theme_image_none"),
-                              detail: current.isEmpty ? texts.t("admin.enabled") : "",
-                              identifier: "theme_image_none") { [weak self] in
-                                  self?.write([.delete("display.theme.bg_image")],
-                                              rebuildAfter: true)
-                              })
-        guard let assets = ConfigUtil.dig(config, "assets") as? [String: Any] else { return result }
-        for hash in assets.keys.sorted() {
-            let entry = assets[hash] as? [String: Any]
-            guard (ConfigUtil.str(entry, "type") ?? "").hasPrefix("image/") else { continue }
-            let label = ConfigUtil.str(entry, "label") ?? String(hash.prefix(8))
-            result.append(.action(title: label,
-                                  detail: hash == current ? texts.t("admin.enabled") : "",
-                                  identifier: "theme_image_\(hash.prefix(8))") { [weak self] in
-                                      self?.write([.set("display.theme.bg_image", hash)],
-                                                  rebuildAfter: true)
-                                  })
-        }
-        return result
-    }
-
-    /// Identity lives in this device's boot profile, exactly where the initial setup wrote it.
-    private func persistIdentity() {
-        guard let updated = BootConfig.persistSetup(name: pendingName, role: pendingRole,
-                                                    door: pendingDoor) else {
-            setStatus(texts.t("settings.save_failed"))
-            return
-        }
-        setStatus(texts.t("settings.saved"))
-        onBootChanged?(updated)
-    }
-}
-
-/// 音量 — the three levels, with the cluster default and this device's override.
-final class VolumeSettingsViewController: SettingsChildViewController {
-
-    private let preview = SirenPlayer()
-    private var inheriting = true
-
-    override init(core: CoreBridge, boot: BootConfig, texts: Texts) {
-        super.init(core: core, boot: boot, texts: texts)
-        screenTitle = texts.t("volume.title")
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        inheriting = !hasDeviceOverride()
-        rebuild()
-    }
-
-    private func hasDeviceOverride() -> Bool {
-        guard let key = deviceKey("local.audio.volume") else { return false }
-        return ConfigUtil.dig(config, key) != nil
-    }
-
-    private func level(_ name: String, fallback: Int) -> Int {
-        if !inheriting, let key = deviceKey("local.audio.volume.\(name)"),
-           let value = ConfigUtil.dig(config, key) as? NSNumber {
-            return value.intValue
-        }
-        return ConfigUtil.int(core.audioVolumes(), name, fallback)
-    }
-
-    override func fields() -> [SettingsField] {
-        var result: [SettingsField] = [
-            .toggle(title: texts.t("volume.inherit"), detail: "", value: inheriting,
-                    identifier: "volume_inherit") { [weak self] value in
-                        self?.setInheriting(value)
-                    },
-            .header(texts.t("volume.device_title")),
-        ]
-        for (name, titleKey, fallback) in [("call", "volume.call", 80), ("sos", "volume.sos", 100),
-                                           ("idle", "volume.idle", 60)] {
-            let clusterValue = ConfigUtil.int(config, "audio.volume.\(name)", fallback)
-            result.append(.level(title: texts.t(titleKey),
-                                 detail: texts.t("volume.cluster_default", "\(clusterValue)"),
-                                 value: level(name, fallback: fallback), minimum: 0, maximum: 100,
-                                 identifier: "volume_\(name)",
-                                 handler: { [weak self] value in self?.store(name, value) },
-                                 preview: { [weak self] in self?.play(name) }))
-        }
-        result.append(.note(texts.t("volume.hint")))
-        return result
-    }
-
-    private func setInheriting(_ value: Bool) {
-        inheriting = value
-        guard let key = deviceKey("local.audio.volume") else { return }
-        if value {
-            write([.delete(key)], rebuildAfter: true)
-        } else {
-            let object: [String: Any] = [
-                "call": ConfigUtil.int(config, "audio.volume.call", 80),
-                "sos": ConfigUtil.int(config, "audio.volume.sos", 100),
-                "idle": ConfigUtil.int(config, "audio.volume.idle", 60),
-            ]
-            write([.set(key, object)], rebuildAfter: true)
-        }
-    }
-
-    /// Writes the cluster default while the device inherits, and the device override otherwise —
-    /// the same rule the web admin's Devices tab follows.
-    private func store(_ name: String, _ value: Int) {
-        if inheriting {
-            write([.set("audio.volume.\(name)", value)])
-            return
-        }
-        guard let key = deviceKey("local.audio.volume.\(name)") else { return }
-        write([.set(key, value)])
     }
 
     private func play(_ name: String) {
-        let volumes = core.audioVolumes()
-        let value = ConfigUtil.int(volumes, name, 80)
+        let config = core.config()
+        let value = ConfigUtil.int(core.audioVolumes(), name, 80)
         preview.volume = value
         switch name {
         case "sos":
@@ -583,117 +325,13 @@ final class VolumeSettingsViewController: SettingsChildViewController {
             preview.playConfigured(ConfigUtil.str(config, "ui.button_sound") ?? "button_click")
         }
     }
-}
 
-/// 時刻 — cluster zone, the independent time service, and its live state.
-final class TimeSettingsViewController: SettingsChildViewController {
-
-    private var zoneQuery = ""
-
-    override init(core: CoreBridge, boot: BootConfig, texts: Texts) {
-        super.init(core: core, boot: boot, texts: texts)
-        screenTitle = texts.t("time.title")
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    override func fields() -> [SettingsField] {
-        let status = core.status()?["time"] as? [String: Any]
-        var result: [SettingsField] = [
-            .value(title: texts.t("time.zone"),
-                   detail: ConfigUtil.str(config, "time.zone") ?? "Asia/Tokyo"),
-            .note(texts.t("time.zone_hint")),
-            .text(title: texts.t("admin.language"), value: zoneQuery, placeholder: "Asia",
-                  identifier: "time_zone_search") { [weak self] value in
-                      self?.zoneQuery = value
-                      self?.rebuild()
-                  },
-        ]
-        for zone in matchingZones() {
-            result.append(.action(title: zone, detail: "",
-                                  identifier: "time_zone_\(zone)") { [weak self] in
-                                      self?.write([.set("time.zone", zone)], rebuildAfter: true)
-                                  })
-        }
-
-        result.append(.header(texts.t("time.status")))
-        result.append(.toggle(title: texts.t("time.ntp_enabled"), detail: texts.t("time.ntp_hint"),
-                              value: ConfigUtil.bool(config, "time.ntp.enabled", false),
-                              identifier: "time_ntp") { [weak self] value in
-                                  self?.write([.set("time.ntp.enabled", value)],
-                                              rebuildAfter: true)
-                              })
-        let servers = (ConfigUtil.dig(config, "time.ntp.servers") as? [Any])?
-            .compactMap { $0 as? String } ?? []
-        result.append(.text(title: texts.t("time.servers"),
-                            value: servers.joined(separator: ", "),
-                            placeholder: "ntp.nict.jp", identifier: "time_servers") {
-                                [weak self] value in self?.storeServers(value)
-                            })
-        result.append(.note(texts.t("time.servers_hint")))
-        result.append(.text(title: texts.t("time.interval_s"),
-                            value: "\(ConfigUtil.int(config, "time.ntp.interval_s", 86400))",
-                            placeholder: "86400", identifier: "time_interval") {
-                                [weak self] value in self?.storeInterval(value)
-                            })
-        result.append(.value(title: texts.t("time.source"),
-                             detail: ConfigUtil.str(status, "source") == "ntp"
-                                ? texts.t("time.source_ntp") : texts.t("time.source_system")))
-        result.append(.value(title: texts.t("time.offset"),
-                             detail: "\(ConfigUtil.int(status, "offset_ms", 0)) ms"))
-        result.append(.value(title: texts.t("time.last_sync"), detail: lastSyncText(status)))
-        result.append(.value(title: texts.t("time.server"),
-                             detail: ConfigUtil.str(status, "server") ?? ""))
-        result.append(.value(title: texts.t("time.local_now"), detail: nowText()))
-        result.append(.action(title: texts.t("time.sync_now"), detail: "",
-                              identifier: "time_sync_now") { [weak self] in self?.syncNow() })
-        return result
-    }
-
-    private func matchingZones() -> [String] {
-        let all = TimeZone.knownTimeZoneIdentifiers.sorted()
-        guard !zoneQuery.isEmpty else { return Array(all.prefix(12)) }
-        let needle = zoneQuery.lowercased()
-        return Array(all.filter { $0.lowercased().contains(needle) }.prefix(20))
-    }
-
-    private func lastSyncText(_ status: [String: Any]?) -> String {
-        let value = Int64(ConfigUtil.double(status, "last_sync_ms", 0))
-        guard value > 0 else { return texts.t("time.never") }
-        return DoorbellClock.timeOfDay(core, wallMs: value)
-    }
-
-    private func nowText() -> String {
-        guard let reading = DoorbellClock.read(core) else { return "" }
-        return reading.hhmmss + " " + reading.tz
-    }
-
-    private func storeServers(_ value: String) {
-        let servers = value.components(separatedBy: CharacterSet(charactersIn: ",\n"))
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        guard (1...4).contains(servers.count) else {
-            setStatus(texts.t("time.invalid_servers"))
-            return
-        }
-        write([.set("time.ntp.servers", servers)])
-    }
-
-    private func storeInterval(_ value: String) {
-        guard let seconds = Int(value.trimmingCharacters(in: .whitespaces)),
-              (3600...604800).contains(seconds) else {
-            setStatus(texts.t("time.invalid_interval"))
-            return
-        }
-        write([.set("time.ntp.interval_s", seconds)])
-    }
-
-    private func syncNow() {
-        guard ConfigUtil.bool(config, "time.ntp.enabled", false) else {
+    private func syncTime() {
+        guard ConfigUtil.bool(core.config(), "time.ntp.enabled", false) else {
             setStatus(texts.t("time.ntp_off"))
             return
         }
-        let previousSync = ConfigUtil.double(core.status()?["time"] as? [String: Any], "last_sync_ms", 0)
+        let previous = ConfigUtil.double(core.status()?["time"] as? [String: Any], "last_sync_ms", 0)
         guard core.timeSyncNow() else {
             setStatus(texts.t("time.sync_failed"))
             return
@@ -704,229 +342,51 @@ final class TimeSettingsViewController: SettingsChildViewController {
                 Thread.sleep(forTimeInterval: 0.1)
                 guard let status = self?.core.status()?["time"] as? [String: Any],
                       !ConfigUtil.bool(status, "syncing", false) else { continue }
-                let succeeded = ConfigUtil.double(status, "last_sync_ms", 0) > previousSync
+                let succeeded = ConfigUtil.double(status, "last_sync_ms", 0) > previous
                 DispatchQueue.main.async {
                     guard let self = self else { return }
                     self.setStatus(self.texts.t(succeeded ? "time.sync_succeeded" : "time.sync_result_failed"))
+                    self.refreshAll()
                 }
                 return
             }
         }
     }
-}
 
-/// 門口 — labels, the unlock button's visibility, and the announcement per door.
-final class DoorSettingsViewController: SettingsChildViewController {
-
-    override init(core: CoreBridge, boot: BootConfig, texts: Texts) {
-        super.init(core: core, boot: boot, texts: texts)
-        screenTitle = texts.t("settings.section_doors")
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    override func fields() -> [SettingsField] {
-        guard let doors = ConfigUtil.dig(config, "doors") as? [String: Any] else { return [] }
-        var result: [SettingsField] = []
-        let nowMs = DoorbellClock.nowMs(core)
-        for door in ConfigUtil.sortedByOrder(doors) {
-            let entry = doors[door] as? [String: Any]
-            result.append(.header(ConfigUtil.labelOf(entry, boot.uiLang, door)))
-            for (lang, titleKey) in [("ja", "admin.label_ja"), ("en", "admin.label_en"),
-                                     ("zh", "admin.label_zh")] {
-                let value = ((entry?["label"] as? [String: Any])?[lang] as? String) ?? ""
-                result.append(.text(title: texts.t(titleKey), value: value, placeholder: door,
-                                    identifier: "door_label_\(door)_\(lang)") {
-                                        [weak self] newValue in
-                                        self?.write([.set("doors.\(door).label.\(lang)",
-                                                          newValue)])
-                                    })
-            }
-            result.append(.toggle(title: texts.t("settings.unlock_show_button"),
-                                  detail: unlockDetail(door),
-                                  value: DoorUnlock.showsButton(status: core.status(),
-                                                                config: config, door: door),
-                                  identifier: "door_unlock_\(door)") { [weak self] value in
-                                      self?.write([.set("doors.\(door).unlock.show_button",
-                                                        value)])
-                                  })
-            let notice = DoorbellNotice.effective(status: core.status(), config: config,
-                                                  door: door, nowMs: nowMs)
-            result.append(.action(title: texts.t("notice.title"),
-                                  detail: notice?.text ?? texts.t("notice.none"),
-                                  identifier: "door_notice_\(door)") { [weak self] in
-                                      self?.openNotice(door: door)
-                                  })
-        }
-        return result
-    }
-
-    private func unlockDetail(_ door: String) -> String {
-        return DoorUnlock.isConfigured(status: core.status(), config: config, door: door)
-            ? "" : texts.t("door.unlock_not_configured")
-    }
-
-    private func openNotice(door: String) {
-        guard presentedViewController == nil else { return }
-        present(NoticeDialogViewController(core: core, texts: texts, httpPort: boot.httpPort,
-                                           lang: boot.uiLang, door: door), animated: true)
-    }
-}
-
-/// 用件 — which purposes visitors are offered, and in what order.
-final class PurposeSettingsViewController: SettingsChildViewController {
-
-    override init(core: CoreBridge, boot: BootConfig, texts: Texts) {
-        super.init(core: core, boot: boot, texts: texts)
-        screenTitle = texts.t("settings.section_purposes")
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    /// This is the one surface that lists every purpose, switched on or not: a purpose that is
-    /// switched off is exactly the one a household comes here to switch back on. The door
-    /// station's buttons and the ring-then-purpose chooser offer only the enabled ones, and the
-    /// toggle writes that single key — nothing else about the purpose is touched here.
-    override func fields() -> [SettingsField] {
-        guard let purposes = ConfigUtil.dig(config, "visit_purposes") as? [String: Any],
-              !purposes.isEmpty else {
-            return []
-        }
-        let ordered = ConfigUtil.allPurposeIds(config)
-        var result: [SettingsField] = []
-        for (index, id) in ordered.enumerated() {
-            let entry = purposes[id] as? [String: Any]
-            let label = ConfigUtil.labelOf(entry, boot.uiLang, id)
-            let icon = ConfigUtil.str(entry, "icon") ?? ""
-            result.append(.toggle(title: icon.isEmpty ? label : "\(icon) \(label)", detail: "",
-                                  value: ConfigUtil.purposeIsEnabled(entry),
-                                  identifier: "purpose_enabled_\(id)") { [weak self] value in
-                                      self?.write([.set("visit_purposes.\(id).enabled", value)])
-                                  })
-            if index > 0 {
-                let previous = ordered[index - 1]
-                result.append(.action(title: "▲ \(label)", detail: "",
-                                      identifier: "purpose_up_\(id)") { [weak self] in
-                                          self?.swapOrder(id, previous, in: purposes)
-                                      })
-            }
-        }
-        result.append(.note(texts.t("settings.web_only_wording")))
-        return result
-    }
-
-    private func swapOrder(_ first: String, _ second: String, in purposes: [String: Any]) {
-        let firstOrder = ConfigUtil.int(purposes[first] as? [String: Any], "order", 999)
-        let secondOrder = ConfigUtil.int(purposes[second] as? [String: Any], "order", 999)
-        write([.set("visit_purposes.\(first).order", secondOrder),
-               .set("visit_purposes.\(second).order", firstOrder)], rebuildAfter: true)
-    }
-}
-
-/// 通知とルール — a rule's on/off state and a one-line summary; quiet hours; whether the two
-/// external channels are provisioned. Editing what a rule does, and the secrets themselves, stay
-/// in the web admin.
-final class RuleSettingsViewController: SettingsChildViewController {
-
-    override init(core: CoreBridge, boot: BootConfig, texts: Texts) {
-        super.init(core: core, boot: boot, texts: texts)
-        screenTitle = texts.t("settings.section_rules")
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    override func fields() -> [SettingsField] {
-        var result: [SettingsField] = []
-        if let rules = ConfigUtil.dig(config, "rules") as? [String: Any] {
-            for id in rules.keys.sorted() {
-                let rule = rules[id] as? [String: Any]
-                result.append(.toggle(title: ConfigUtil.str(rule, "name") ?? id,
-                                      detail: summary(rule),
-                                      value: ConfigUtil.bool(rule, "enabled", true),
-                                      identifier: "rule_\(id)") { [weak self] value in
-                                          self?.write([.set("rules.\(id).enabled", value)])
-                                      })
-            }
-        }
-        result.append(.note(texts.t("settings.web_only_rule_actions")))
-
-        result.append(.header(texts.t("settings.quiet_hours")))
-        let windows = ConfigUtil.dig(config, "quiet_hours.default.windows") as? [Any] ?? []
-        for (index, window) in windows.enumerated() {
-            let entry = window as? [String: Any]
-            result.append(.text(title: texts.t("settings.quiet_hours") + " \(index + 1)",
-                                value: (ConfigUtil.str(entry, "from") ?? "")
-                                    + "-" + (ConfigUtil.str(entry, "to") ?? ""),
-                                placeholder: "23:00-07:00",
-                                identifier: "quiet_window_\(index)") { [weak self] value in
-                                    self?.storeWindow(index, value, windows: windows)
-                                })
-        }
-
-        result.append(.header(texts.t("admin.notify")))
-        result.append(.value(title: texts.t("settings.telegram"),
-                             detail: configuredText("integrations.telegram.bot_token_ref")))
-        result.append(.value(title: texts.t("settings.web_push"),
-                             detail: configuredText("integrations.web_push.sender_url")))
-        result.append(.note(texts.t("settings.web_only_secrets")))
-        result.append(.note(texts.t("settings.web_only_raw_config")))
-        return result
-    }
-
-    private func summary(_ rule: [String: Any]?) -> String {
-        let trigger = ConfigUtil.str(rule, "when.type") ?? ""
-        let actions = (rule?["actions"] as? [Any])?.count ?? 0
-        return [trigger, actions > 0 ? "\(actions)" : ""].filter { !$0.isEmpty }
-            .joined(separator: " · ")
-    }
-
-    private func configuredText(_ key: String) -> String {
-        return (ConfigUtil.str(config, key) ?? "").isEmpty ? texts.t("admin.not_ready")
-            : texts.t("admin.configured")
-    }
-
-    private func storeWindow(_ index: Int, _ value: String, windows: [Any]) {
-        let parts = value.components(separatedBy: "-")
-        guard parts.count == 2, DoorbellTheme.minutes(parts[0]) != nil,
-              DoorbellTheme.minutes(parts[1]) != nil else {
-            setStatus(texts.t("settings.save_failed"))
+    func openShell(_ id: String, title: String, from: UIViewController) {
+        if id.hasPrefix("notice:") {
+            let door = String(id.dropFirst("notice:".count))
+            let dialog = NoticeDialogViewController(core: core, texts: texts, httpPort: boot.httpPort,
+                                                    lang: boot.uiLang, door: door)
+            dialog.modalPresentationStyle = NoticeDialogViewController.overCallPresentationStyle
+            present(dialog, animated: true)
             return
         }
-        var updated = windows.map { ($0 as? [String: Any]) ?? [:] }
-        guard index < updated.count else { return }
-        updated[index]["from"] = parts[0]
-        updated[index]["to"] = parts[1]
-        write([.set("quiet_hours.default.windows", updated)])
-    }
-}
-
-/// Web 管理を開く — the QR and URL of this node's admin page, plus the leader's when it differs.
-final class WebAdminViewController: SettingsChildViewController {
-
-    override init(core: CoreBridge, boot: BootConfig, texts: Texts) {
-        super.init(core: core, boot: boot, texts: texts)
-        screenTitle = texts.t("web_admin.open")
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    override func viewDidLoad() {
-        super.viewDidLoad()
-        let card = AdminQrView(core: core, boot: boot, texts: texts, compact: false)
-        // Settings is a sheet layered over the home screen, so it stays in the palette: the
-        // theme background is not what is behind this card.
-        card.skin = DoorbellSkin.plain(palette)
-        card.reload()
-        card.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(card)
-        NSLayoutConstraint.activate([
-            card.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            card.centerYAnchor.constraint(equalTo: view.centerYAnchor, constant: 30),
-        ])
+        switch id {
+        case "history":
+            present(CallHistoryViewController(core: core, texts: texts, lang: boot.uiLang), animated: true)
+        case "add_device":
+            guard let handler = onOpenAddDevice else { return }
+            dismiss(animated: true) { handler() }
+        case "device_info":
+            guard let handler = onOpenDeviceInfo else { return }
+            dismiss(animated: true) { handler() }
+        case "web_admin":
+            openWeb(title: title, reason: "", from: from)
+        default:
+            break
+        }
     }
 
-    override func fields() -> [SettingsField] {
-        return [.note(texts.t("web_admin.scan_hint"))]
+    func openWeb(title: String, reason: String, from: UIViewController) {
+        show(SettingsWebAdminController(core: core, boot: boot, texts: texts, palette: palette,
+                                        title: title, reason: reason), from: from)
+    }
+
+    /// Notice dialogs and history refresh the summaries when they close.
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        if isViewLoaded { refreshAll() }
     }
 }
 
