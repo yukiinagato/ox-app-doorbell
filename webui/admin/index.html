@@ -276,6 +276,7 @@
     <button data-tab="dash" class="on"><svg class="ic"><use href="#i-home"/></svg><span data-i18n="admin.dashboard"></span></button>
     <button data-tab="doors"><svg class="ic"><use href="#i-building-community"/></svg><span data-i18n="admin.doors"></span></button>
     <button data-tab="devices"><svg class="ic"><use href="#i-device-tablet"/></svg><span data-i18n="admin.devices"></span></button>
+    <button data-tab="panels"><svg class="ic"><use href="#i-shield-lock"/></svg><span data-i18n="panels.tab"></span></button>
     <button data-tab="rules"><svg class="ic"><use href="#i-adjustments"/></svg><span data-i18n="admin.rules"></span></button>
     <button data-tab="qr"><svg class="ic"><use href="#i-message-reply"/></svg><span data-i18n="admin.quick_replies"></span></button>
     <button data-tab="purposes"><svg class="ic"><use href="#i-list"/></svg><span data-i18n="admin.purposes"></span></button>
@@ -299,13 +300,14 @@
       <div class="card"><div class="dim" id="bridgeInfo" style="margin-bottom:8px"></div>
         <div class="dim mono" id="localAddrs" style="margin-bottom:8px; font-size:12px"></div>
         <table id="peersTbl" class="bounded-table">
-        <colgroup><col style="width:11%"><col style="width:13%"><col style="width:8%"><col style="width:13%"><col style="width:20%"><col style="width:10%"><col style="width:25%"></colgroup>
-        <thead><tr><th data-i18n="info.node"></th><th data-i18n="info.role"></th><th data-i18n="admin.status"></th><th data-i18n="admin.duty"></th><th data-i18n="info.version"></th><th data-i18n="power.title"></th><th data-i18n="admin.addresses"></th></tr></thead>
+        <colgroup><col style="width:10%"><col style="width:11%"><col style="width:7%"><col style="width:11%"><col style="width:14%"><col style="width:9%"><col style="width:17%"><col style="width:9%"><col style="width:12%"></colgroup>
+        <thead><tr><th data-i18n="info.node"></th><th data-i18n="info.role"></th><th data-i18n="admin.status"></th><th data-i18n="admin.duty"></th><th data-i18n="info.version"></th><th data-i18n="power.title"></th><th data-i18n="admin.addresses"></th><th data-i18n="security.membership"></th><th data-i18n="security.fingerprint"></th></tr></thead>
         <tbody></tbody></table></div>
       <div id="liveGrid" style="display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px"></div>
     </section>
     <section id="tab-doors" class="hidden"></section>
     <section id="tab-devices" class="hidden"></section>
+    <section id="tab-panels" class="hidden"></section>
     <section id="tab-rules" class="hidden"></section>
     <section id="tab-qr" class="hidden"></section>
     <section id="tab-purposes" class="hidden"></section>

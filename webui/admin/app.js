@@ -2,6 +2,74 @@
 
 
 var AdminLogic = (function () {
+  // ---- Independent panel identities (/api/panels/*) and protocol v3 device state ----
+  var PANEL_GRANTS = ["view", "call.monitor", "call.answer", "call.initiate", "sos.trigger",
+                      "door.open", "media.publish", "notice.write"];
+  var PANEL_ID_RE = /^[0-9a-f]{32}$/, DOOR_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
+
+  function panelRecords(result) {
+    var out = [];
+    var list = result && result.panels;
+    if (!(list instanceof Array)) return out;
+    for (var i = 0; i < list.length; i++) {
+      var p = list[i] || {};
+      if (!PANEL_ID_RE.test(String(p.panel_id || ""))) continue;
+      out.push({
+        panel_id: p.panel_id,
+        door_scope: (p.door_scope instanceof Array ? p.door_scope : []).filter(function (d) {
+          return typeof d === "string" && DOOR_ID_RE.test(d); }),
+        grants: (p.grants instanceof Array ? p.grants : []).filter(function (g) {
+          return PANEL_GRANTS.indexOf(g) >= 0; }),
+        revoked: p.revoked === true,
+        credential_ref: typeof p.credential_ref === "string" ? p.credential_ref : "",
+        provisioning_status: p.provisioning_status === "configured" ? "configured" :
+          "provisioning_required",
+        last_activity_ms: typeof p.last_activity_ms === "number" && isFinite(p.last_activity_ms) &&
+          p.last_activity_ms > 0 ? p.last_activity_ms : 0
+      });
+    }
+    return out;
+  }
+
+  function panelCreateBody(revision, ref, doorScope, grants) {
+    var scope = [], granted = [], i;
+    for (i = 0; doorScope && i < doorScope.length; i++)
+      if (DOOR_ID_RE.test(doorScope[i]) && scope.indexOf(doorScope[i]) < 0) scope.push(doorScope[i]);
+    for (i = 0; grants && i < grants.length; i++)
+      if (PANEL_GRANTS.indexOf(grants[i]) >= 0 && granted.indexOf(grants[i]) < 0)
+        granted.push(grants[i]);
+    if (!revision || !/^secret:[A-Za-z0-9._-]{1,153}$/.test(ref || "")) return null;
+    return { expected_revision: revision, credential_ref: ref, door_scope: scope, grants: granted };
+  }
+
+  function panelCredentialRef(randomHex) {
+    var suffix = String(randomHex || "").toLowerCase().replace(/[^0-9a-f]/g, "").slice(0, 16);
+    return suffix.length === 16 ? "secret:panel." + suffix : "";
+  }
+
+  var MEMBERSHIP_STATES = ["member", "rekey_required", "protocol_upgrade_required",
+                           "upgrade_rejoin_required"];
+  function membershipState(peer) {
+    var v = peer && (peer.membership || peer.mesh_state || peer.pairing_state);
+    return MEMBERSHIP_STATES.indexOf(v) >= 0 ? v : "unknown";
+  }
+
+  function fingerprintText(hex) {
+    hex = String(hex || "").toLowerCase();
+    if (!/^[0-9a-f]{64}$/.test(hex)) return "";
+    return hex.toUpperCase().match(/.{2}/g).join(":");
+  }
+
+  function newPasswordAcceptable(password) {
+    return typeof password === "string" && password.length >= 8;
+  }
+
+  function peerLabel(peer) {
+    peer = peer || {};
+    var id = String(peer.id || "");
+    return String(peer.name || "") || id.slice(0, 8) || "?";
+  }
+
   "use strict";
 
   function isObj(v) { return v !== null && typeof v === "object" && !(v instanceof Array); }
@@ -2937,7 +3005,15 @@ var AdminLogic = (function () {
     pairRowModel: pairRowModel, pairPanelModel: pairPanelModel,
     pairJoinPayload: pairJoinPayload, pairQrParse: pairQrParse,
     pairQrTextValid: pairQrTextValid,
-    qrModules: qrModules
+    qrModules: qrModules,
+    PANEL_GRANTS: PANEL_GRANTS,
+    panelRecords: panelRecords,
+    panelCreateBody: panelCreateBody,
+    panelCredentialRef: panelCredentialRef,
+    membershipState: membershipState,
+    fingerprintText: fingerprintText,
+    newPasswordAcceptable: newPasswordAcceptable,
+    peerLabel: peerLabel
   };
 })();
 
@@ -2964,6 +3040,14 @@ if (typeof document !== "undefined") (function () {
   }
 
   function icon(n) { return "<svg class='ic'><use href='#i-" + n + "'/></svg>"; }
+
+  function membershipText(state) {
+    return ({ member: t("security.membership_member"),
+      rekey_required: t("security.membership_rekey_required"),
+      protocol_upgrade_required: t("security.membership_protocol_upgrade_required"),
+      upgrade_rejoin_required: t("security.membership_upgrade_rejoin_required") })[state] ||
+      t("security.membership_unknown");
+  }
 
 
   function copyText(text, btn) {
@@ -3359,6 +3443,9 @@ if (typeof document !== "undefined") (function () {
       return ok({ ok: true, hash: hash });
     }
     if (p === "/api/login") return ok({ ok: true });
+    if (p === "/api/panels/list") return ok({ ok: true, revision: "mock-" + mockConfigRevision, panels: [] });
+    if (p.indexOf("/api/panels/") === 0) return ok({ ok: true, panel_id: mockHash(p + JSON.stringify(body)) });
+    if (p === "/api/pairing/rotate" || p === "/api/pairing/rebuild") return ok({ ok: true });
     if (p === "/api/time/sync") {
       if (!((MOCK_CFG.time || {}).ntp || {}).enabled)
         return setTimeout(function () { cb(409, { ok: false, err: "ntp_disabled" }); }, 0);
@@ -4564,7 +4651,7 @@ if (typeof document !== "undefined") (function () {
     var stopped = false;
     function pollRotation() {
       if (stopped) return;
-      fetch(metaUrl, { cache: "no-store", mode: "cors" }).then(function (response) {
+      fetch(metaUrl, { cache: "no-store", credentials: "same-origin" }).then(function (response) {
         return response.ok ? response.json() : null;
       }).then(function (meta) {
         if (meta && meta.rotation !== undefined) applyLiveRotation(entry, meta.rotation);
@@ -4601,19 +4688,24 @@ if (typeof document !== "undefined") (function () {
       var p = peers[i];
       var stCls = p.status === "alive" ? "ok" : (p.status === "suspect" ? "warn" : "err");
       var duties = [];
-      if (j.leaders) for (var d in j.leaders) if (j.leaders[d] === p.id) duties.push(d);
+      if (j.leaders && p.id) for (var d in j.leaders) if (j.leaders[d] === p.id) duties.push(d);
       var power = L.powerModel(p.power);
       var powerCell = !power.known ? "<span class='dim'>" + esc(t("power.unknown")) + "</span>" :
         (!power.hasBattery ? "<span class='dim'>" + esc(t("power.no_battery")) + "</span>" :
           "<span class='" + (power.pct <= 15 && !power.charging ? "err" : "") + "'>" +
           esc(power.text) + "</span>" +
           (power.charging ? " <span class='tag ok'>" + esc(t("power.charging")) + "</span>" : ""));
-      rows += "<tr><td>" + esc(p.name || p.id.slice(0, 8)) +
+      var membership = L.membershipState(p), fingerprint = L.fingerprintText(p.tls_sha256);
+      var memberCls = membership === "member" ? "ok" : (membership === "unknown" ? "dim" : "err");
+      rows += "<tr><td>" + esc(L.peerLabel(p)) +
               (p.self ? " <span class='tag'>self</span>" : "") + "</td><td>" +
               esc(p.role || "") + "</td><td class='" + stCls + "'>" + esc(p.status) +
               "</td><td class='breakable'>" + esc(duties.join(",")) + "</td><td class='breakable'>" + esc(p.sw || "") +
               "</td><td class='breakable'>" + powerCell +
-              "</td><td class='dim'>" + addressLinesHtml(p.addrs) + "</td></tr>";
+              "</td><td class='dim'>" + addressLinesHtml(p.addrs) +
+              "</td><td class='" + memberCls + "'>" + esc(membershipText(membership)) +
+              "</td><td class='mono breakable' style='font-size:11px'>" +
+              (fingerprint ? esc(fingerprint) : "<span class='dim'>—</span>") + "</td></tr>";
     }
     $("#peersTbl tbody").innerHTML = rows;
     var br = j.bridge || {};
@@ -4635,7 +4727,16 @@ if (typeof document !== "undefined") (function () {
     var grid = $("#liveGrid"), want = {};
     for (var li = 0; li < peers.length; li++) {
       var pp = peers[li];
-      if (pp.stream && pp.status === "alive") want[pp.id] = pp;
+      if (!pp || !pp.id || !pp.stream || pp.status !== "alive") continue;
+      // Protocol v3: another node's camera is reached through this node's authenticated proxy,
+      // never through the peer's own (cross-origin, possibly cleartext) URL.
+      var source = { stream_mjpeg: pp.stream, source_node_id: pp.id };
+      var proxied = {};
+      for (var pk in pp) if (Object.prototype.hasOwnProperty.call(pp, pk)) proxied[pk] = pp[pk];
+      proxied.stream = DoorbellPlayback.peerMediaUrl(source, "mjpeg", window.location);
+      proxied.video_meta = DoorbellPlayback.peerMediaUrl(source, "meta", window.location);
+      pp = proxied;
+      if (pp.stream) want[pp.id] = pp;
     }
     var cards = $all("[data-node]", grid);
     for (var ci = 0; ci < cards.length; ci++) {
@@ -6440,6 +6541,224 @@ if (typeof document !== "undefined") (function () {
   }
 
 
+  /* ---- Independent panel identities (/api/panels/*) ----
+   * A panel identity binds one credential to a door scope and a set of grants, so a lost tablet
+   * can be revoked alone instead of rotating the shared legacy panel token for every device. The
+   * credential is generated in this browser, written to this node's secure store, and shown once.
+   * Core never returns it again. */
+  var PANELS = { revision: "", rows: [], error: "", loaded: false, oneTime: null, editing: "" };
+
+  function grantText(grant) {
+    return ({ "view": t("panels.grant_view"), "call.monitor": t("panels.grant_call_monitor"),
+      "call.answer": t("panels.grant_call_answer"), "call.initiate": t("panels.grant_call_initiate"),
+      "sos.trigger": t("panels.grant_sos_trigger"), "door.open": t("panels.grant_door_open"),
+      "media.publish": t("panels.grant_media_publish"),
+      "notice.write": t("panels.grant_notice_write") })[grant] || grant;
+  }
+
+  function randomHex(bytes) {
+    if (!window.crypto || !window.crypto.getRandomValues || typeof Uint8Array === "undefined")
+      return "";
+    var a = new Uint8Array(bytes), s = "";
+    window.crypto.getRandomValues(a);
+    for (var i = 0; i < a.length; i++) s += (a[i] < 16 ? "0" : "") + a[i].toString(16);
+    return s;
+  }
+
+  function loadPanels(done) {
+    api("POST", "/api/panels/list", {}, function (st, j) {
+      PANELS.loaded = true;
+      if (st === 200 && j && j.ok === true) {
+        PANELS.revision = String(j.revision || "");
+        PANELS.rows = L.panelRecords(j);
+        PANELS.error = "";
+      } else PANELS.error = (j && (j.error_code || j.err)) || ("HTTP " + st);
+      if (done) done();
+    }, { timeout_ms: 10000 });
+  }
+
+  function redrawPanels() { if (S.tab === "panels") drawPanels(); }
+
+  function panelFailure(j, st) {
+    msg(fmt(t("panels.failed_reason"), { reason: (j && (j.error_code || j.err)) || ("HTTP " + st) }));
+  }
+
+  // Each mutation re-reads the configuration revision first; Core rejects a stale one with 409.
+  function panelAction(action, body, done) {
+    loadPanels(function () {
+      if (!PANELS.revision) { panelFailure(null, 0); redrawPanels(); return; }
+      body.expected_revision = PANELS.revision;
+      api("POST", "/api/panels/" + action, body, function (st, j) {
+        if (st === 200 && j && j.ok === true) { if (done) done(j); }
+        else panelFailure(j, st);
+        loadPanels(redrawPanels);
+      }, { timeout_ms: 10000 });
+    });
+  }
+
+  function provisionPanelCredential(cb) {
+    var credential = randomHex(32), ref = L.panelCredentialRef(randomHex(8));
+    if (!credential || !ref) { msg(t("panels.crypto_unavailable")); return; }
+    postSecrets([{ secret_ref: ref, value: credential }], function (ok, detail) {
+      if (!ok) { panelFailure({ err: detail && detail.err }, detail && detail.status); return; }
+      cb(ref, credential);
+    });
+  }
+
+  function checkedValues(root, name) {
+    return $all("input[data-" + name + "]", root).filter(function (box) { return box.checked; })
+      .map(function (box) { return box.getAttribute("data-" + name); });
+  }
+
+  function panelScopeEditorHtml(prefix, scope, grants) {
+    var doors = cfgObj("doors"), h = "<div class='frow'><label class='flab'>" +
+      esc(t("panels.door_scope")) + "</label><div>";
+    var any = false;
+    for (var id in doors) {
+      any = true;
+      h += "<label class='frow-check'><input type='checkbox' data-" + prefix + "door='" + esc(id) + "'" +
+           (scope.indexOf(id) >= 0 ? " checked" : "") + "> " + esc(doorLabel(id)) + "</label>";
+    }
+    if (!any) h += "<div class='dim'>" + esc(t("panels.no_doors")) + "</div>";
+    h += "</div></div><div class='frow'><label class='flab'>" + esc(t("panels.grants")) +
+         "</label><div>";
+    L.PANEL_GRANTS.forEach(function (grant) {
+      h += "<label class='frow-check'><input type='checkbox' data-" + prefix + "grant='" +
+           esc(grant) + "'" + (grants.indexOf(grant) >= 0 ? " checked" : "") + "> " +
+           esc(grantText(grant)) + "</label>";
+    });
+    return h + "</div></div>";
+  }
+
+  function panelLinksHtml(credential) {
+    var base = window.location.protocol + "//" + window.location.host, h = "";
+    var labels = { door: t("panels.link_door"), monitor: t("panels.link_monitor"),
+                   call: t("panels.link_call") };
+    ["door", "monitor", "call"].forEach(function (page) {
+      var link = base + "/panel/" + page + "#k=" + credential;
+      h += "<div class='frow'><label class='flab'>" + esc(labels[page]) + "</label>" +
+           "<div class='mono breakable' style='font-size:12px'>" + esc(link) + "</div>" +
+           "<button class='btn2 small' data-act='copylink' data-id='" + esc(link) + "'>" +
+           icon("copy") + " " + esc(t("admin.copy")) + "</button></div>";
+    });
+    return h;
+  }
+
+  function drawPanels() {
+    var el = $("#tab-panels");
+    if (!el) return;
+    var h = "<div class='card'><h2>" + esc(t("panels.title")) + "</h2>" +
+            "<div class='dim fhint'>" + esc(t("panels.intro")) + "</div>" +
+            panelScopeEditorHtml("new", [], ["view"]) +
+            "<button class='btn' data-act='create'>" + icon("plus") + " " +
+            esc(t("panels.create")) + "</button></div>";
+
+    if (PANELS.oneTime) {
+      h += "<div class='card'><h2>" + esc(t("panels.one_time_title")) + "</h2>" +
+           "<div class='warn fhint'>" + esc(t("panels.one_time_warning")) + "</div>" +
+           panelLinksHtml(PANELS.oneTime.credential) +
+           "<button class='btn2' data-act='dismiss'>" + esc(t("panels.one_time_done")) +
+           "</button></div>";
+    }
+
+    h += "<div class='card'><table class='bounded-table'><thead><tr><th>ID</th><th>" +
+         esc(t("panels.door_scope")) + "</th><th>" + esc(t("panels.grants")) + "</th><th>" +
+         esc(t("admin.status")) + "</th><th>" + esc(t("panels.last_activity")) +
+         "</th><th></th></tr></thead><tbody>";
+    if (!PANELS.loaded) h += "<tr><td colspan='6' class='dim'>" + esc(t("panels.loading")) + "</td></tr>";
+    else if (PANELS.error) h += "<tr><td colspan='6' class='err'>" +
+      esc(fmt(t("panels.failed_reason"), { reason: PANELS.error })) + "</td></tr>";
+    else if (!PANELS.rows.length) h += "<tr><td colspan='6' class='dim'>" +
+      esc(t("panels.empty")) + "</td></tr>";
+    PANELS.rows.forEach(function (p) {
+      var status = p.revoked ? "<span class='err'>" + esc(t("panels.revoked")) + "</span>" :
+        (p.provisioning_status === "configured" ? "<span class='ok'>" + esc(t("panels.active")) + "</span>" :
+         "<span class='warn'>" + esc(t("panels.provisioning_required")) + "</span>");
+      h += "<tr><td class='mono'>" + esc(p.panel_id.slice(0, 8)) + "</td><td class='breakable'>" +
+           esc(p.door_scope.map(doorLabel).join(", ") || "—") + "</td><td class='breakable'>" +
+           esc(p.grants.map(grantText).join(", ") || "—") +
+           "</td><td>" + status + "</td><td class='dim'>" +
+           esc(p.last_activity_ms ? fmtTime(p.last_activity_ms) : t("panels.never")) + "</td><td class='ops'>";
+      if (!p.revoked) {
+        h += "<button class='btn2' data-act='edit' data-id='" + esc(p.panel_id) + "'>" +
+             esc(t("admin.edit")) + "</button> <button class='btn2' data-act='rotate' data-id='" +
+             esc(p.panel_id) + "'>" + esc(t("admin.rotate")) + "</button> " +
+             "<button class='btn2 danger' data-act='revoke' data-id='" + esc(p.panel_id) + "'>" +
+             esc(t("panels.revoke")) + "</button>";
+      }
+      h += "</td></tr>";
+      if (PANELS.editing === p.panel_id && !p.revoked) {
+        h += "<tr><td colspan='6' data-panel-editor='" + esc(p.panel_id) + "'>" +
+             panelScopeEditorHtml("edit", p.door_scope, p.grants) +
+             "<button class='btn small' data-act='save' data-id='" + esc(p.panel_id) + "'>" +
+             esc(t("admin.save")) + "</button> <button class='btn2 small' data-act='cancel'>" +
+             esc(t("admin.cancel")) + "</button></td></tr>";
+      }
+    });
+    h += "</tbody></table></div>";
+
+    var panelCfg = cfgObj("panel");
+    var legacyRefs = panelCfg.token_refs instanceof Array ? panelCfg.token_refs.length : 0;
+    if (legacyRefs || S.panelToken) {
+      h += "<div class='card'><h2>" + esc(t("panels.legacy_title")) + "</h2>" +
+           "<div class='warn fhint'>" + esc(t("panels.legacy_detected")) + "</div>" +
+           "<ol class='fhint'><li>" + esc(t("panels.legacy_step_create")) + "</li><li>" +
+           esc(t("panels.legacy_step_move")) + "</li><li>" + esc(t("panels.legacy_step_retire")) +
+           "</li></ol></div>";
+    }
+    el.innerHTML = h;
+
+    bindActs(el, {
+      create: function () {
+        var scope = checkedValues(el, "newdoor"), grants = checkedValues(el, "newgrant");
+        if (!scope.length || !grants.length) { msg(t("panels.scope_required")); return; }
+        provisionPanelCredential(function (ref, credential) {
+          var body = L.panelCreateBody("pending", ref, scope, grants);
+          panelAction("create", body, function () {
+            PANELS.oneTime = { credential: credential };
+            msg(t("panels.created"));
+          });
+        });
+      },
+      edit: function (id) { PANELS.editing = id; drawPanels(); },
+      cancel: function () { PANELS.editing = ""; drawPanels(); },
+      save: function (id) {
+        var row = $("[data-panel-editor='" + id + "']", el) || el;
+        var scope = checkedValues(row, "editdoor"), grants = checkedValues(row, "editgrant");
+        if (!scope.length || !grants.length) { msg(t("panels.scope_required")); return; }
+        panelAction("update", { panel_id: id, door_scope: scope, grants: grants }, function () {
+          PANELS.editing = ""; msg(t("admin.saved"));
+        });
+      },
+      rotate: function (id) {
+        if (!window.confirm(t("panels.rotate_confirm"))) return;
+        var previous = (PANELS.rows.filter(function (p) { return p.panel_id === id; })[0] || {}).credential_ref;
+        provisionPanelCredential(function (ref, credential) {
+          panelAction("rotate", { panel_id: id, credential_ref: ref }, function () {
+            PANELS.oneTime = { credential: credential };
+            if (previous && previous !== ref) deleteSecrets([previous], function () {});
+            msg(t("panels.rotated"));
+          });
+        });
+      },
+      revoke: function (id) {
+        if (!window.confirm(t("panels.revoke_confirm"))) return;
+        panelAction("revoke", { panel_id: id }, function () { msg(t("panels.revoked_done")); });
+      },
+      dismiss: function () { PANELS.oneTime = null; drawPanels(); },
+      copylink: function (link) {
+        var button = $all("[data-act='copylink']", el).filter(function (b) {
+          return b.getAttribute("data-id") === link; })[0];
+        copyText(link, button);
+      }
+    });
+  }
+
+  function renderPanels() {
+    drawPanels();
+    loadPanels(redrawPanels);
+  }
+
   function renderIntegrations() {
     var el = $("#tab-integrations");
     var integ = cfgObj("integrations");
@@ -7207,6 +7526,24 @@ if (typeof document !== "undefined") (function () {
 
     h += "<div class='card' id='sysImportWorkflow'>" + configImportHtml() + "</div>";
 
+    var selfNode = (S.status && S.status.node) || {};
+    var selfFingerprint = L.fingerprintText(selfNode.tls_sha256);
+    var selfMembership = L.membershipState(selfNode);
+    h += "<div class='card' id='clusterSecurity'><h2>" + icon("shield-lock") + " " +
+         esc(t("security.title")) + "</h2>" +
+         "<div class='frow'><label class='flab'>" + esc(t("security.fingerprint")) + "</label>" +
+         "<div class='mono breakable' style='font-size:12px'>" +
+         esc(selfFingerprint || t("security.fingerprint_unavailable")) + "</div>" +
+         "<div class='dim fhint'>" + esc(t("security.fingerprint_hint")) + "</div></div>" +
+         "<div class='frow'><label class='flab'>" + esc(t("security.membership")) + "</label>" +
+         "<div>" + esc(membershipText(selfMembership)) + "</div></div>" +
+         "<div class='frow'><button class='btn2' id='pskRotate'>" + icon("reload") + " " +
+         esc(t("security.rotate_key")) + "</button>" +
+         "<div class='dim fhint'>" + esc(t("security.rotate_key_hint")) + "</div></div>" +
+         "<div class='frow'><button class='btn2 danger' id='clusterRebuild'>" +
+         esc(t("security.rebuild")) + "</button>" +
+         "<div class='dim fhint'>" + esc(t("security.rebuild_hint")) + "</div></div></div>";
+
     h += "<div class='card'><h2>" + esc(t("admin.panel_token")) + "</h2>" +
          "<div class='mono' id='panelTok'>" + esc(tok || "—") + "</div>";
     if (tok)
@@ -7245,6 +7582,20 @@ if (typeof document !== "undefined") (function () {
          "<pre id='logOut' class='mono' " +
          "style='white-space:pre-wrap; font-size:11px; margin-top:8px'></pre></div>";
     el.innerHTML = h;
+
+    function securityAction(path, confirmKey, doneKey) {
+      if (!window.confirm(t(confirmKey))) return;
+      api("POST", path, {}, function (st, j) {
+        if (st === 200 && j && j.ok === true) { msg(t(doneKey)); refreshStatus(function () {}); }
+        else msg(fmt(t("security.failed"), { reason: (j && (j.error_code || j.err)) || ("HTTP " + st) }));
+      }, { timeout_ms: 15000 });
+    }
+    $("#pskRotate").onclick = function () {
+      securityAction("/api/pairing/rotate", "security.rotate_key_confirm", "security.rotate_key_done");
+    };
+    $("#clusterRebuild").onclick = function () {
+      securityAction("/api/pairing/rebuild", "security.rebuild_confirm", "security.rebuild_done");
+    };
 
     bindVolumeRows(el, "sysvol");
     $("#timeSave").onclick = function () {
@@ -8835,7 +9186,8 @@ if (typeof document !== "undefined") (function () {
 
 
   var TABS = {
-    dash: renderDash, doors: renderDoors, devices: renderDevices, rules: renderRules,
+    dash: renderDash, doors: renderDoors, devices: renderDevices, panels: renderPanels,
+    rules: renderRules,
     qr: renderQuickReplies, purposes: renderPurposes, texts: renderTexts, theme: renderTheme,
     assets: renderAssets, households: renderHouseholds, integrations: renderIntegrations,
     events: renderEvents, pair: renderPair, system: renderSystem
@@ -8965,6 +9317,9 @@ if (typeof document !== "undefined") (function () {
       if (st === 200 && result && result.ok === true) {
         show($("#login"), false); show($("#app"), true); boot(pageEpoch);
       } else if (st === 429) error.textContent = t("admin.locked");
+      else if (result && (result.err === "password_too_short" ||
+                          result.error_code === "password_too_short"))
+        error.textContent = t("admin.password_too_short");
       else if (st === 401) error.textContent = t("admin.pin_wrong");
       else if (detail && (detail.reason === "network" || detail.reason === "timeout"))
         error.textContent = t("admin.login_network");
