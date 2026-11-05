@@ -136,6 +136,8 @@ namespace DoorbellApp
             QuickReplyPanel.Visibility = _quickRepliesOpen && !_inCall &&
                 QuickReplyPanel.Children.Count != 0 ?
                 Visibility.Visible : Visibility.Collapsed;
+            UpdateQuickReplySheet();
+            ApplyLiveOverlayMode();
         }
 
         private void OnQuickReplyClick(object sender, RoutedEventArgs e)
@@ -247,7 +249,7 @@ namespace DoorbellApp
             _quickRepliesOpen = false;
             ApplyQuickReplyVisibility();
             QuickReplyToggle.Visibility = Visibility.Collapsed;
-            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("Danger"));
+            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("Negative"));
             IncomingHint.Text = message ?? "";
             IncomingHint.Visibility = string.IsNullOrEmpty(message) ?
                 Visibility.Collapsed : Visibility.Visible;
@@ -277,7 +279,7 @@ namespace DoorbellApp
             AnswerButton.Visibility = Visibility.Visible;
             MonitorButton.Visibility = Visibility.Visible;
             IgnoreButton.Visibility = Visibility.Visible;
-            IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Danger"));
+            IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Negative"));
             OpenDoorButton.IsEnabled = false;
         }
 
@@ -533,7 +535,9 @@ namespace DoorbellApp
             IgnoreButton.Visibility = Visibility.Collapsed;
             IncomingTitle.Text = Texts.T("incall.title");
             IncomingHint.Visibility = Visibility.Collapsed;
-            AnswerButton.Content = Texts.T("incall.end_call");
+            AnswerButton.Content = IconStack("IconPhoneOff", Texts.T("incall.end_call"),
+                (Brush)FindResource("OnNegative"));
+            PaintAnswerSlot(true);
             AnswerButton.Visibility = Visibility.Visible;
             AnswerButton.IsEnabled = true;
             OpenDoorButton.IsEnabled = true;
@@ -548,10 +552,12 @@ namespace DoorbellApp
             QuickReplyToggle.Visibility = Visibility.Collapsed;
             MonitorButton.Visibility = Visibility.Visible;
             IgnoreButton.Visibility = Visibility.Visible;
-            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("Danger"));
+            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("Negative"));
             IncomingTitle.Text = Texts.T("monitor.title", DoorLabel(_incomingDoor));
             IncomingHint.Visibility = Visibility.Collapsed;
-            AnswerButton.Content = Texts.T("ring.answer");
+            AnswerButton.Content = IconStack("IconPhone", Texts.T("ring.answer"),
+                (Brush)FindResource("OnPositive"));
+            PaintAnswerSlot(false);
             AnswerButton.Visibility = Visibility.Collapsed;
             AnswerButton.IsEnabled = App.Core.SipAvailable &&
                 !string.IsNullOrEmpty(_incomingHost);

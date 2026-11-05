@@ -93,7 +93,7 @@ namespace DoorbellApp
             MicButton.Content = IconStack(_micMuted ? "IconMicrophoneOff" : "IconMicrophone", label, micInk);
             InCallMicButton.Content = IconStack(_micMuted ? "IconMicrophoneOff" : "IconMicrophone", label, micInk);
             Brush background = _micMuted ?
-                (Brush)FindResource("Danger") : (Brush)FindResource("Pill");
+                (Brush)FindResource("Negative") : (Brush)FindResource("Pill");
             Brush foreground = _micMuted ?
                 (Brush)FindResource("OnDanger") : (Brush)FindResource("Fg");
             MicButton.Background = background;

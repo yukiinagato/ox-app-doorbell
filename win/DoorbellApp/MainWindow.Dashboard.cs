@@ -74,6 +74,9 @@ namespace DoorbellApp
                         Margin = new Thickness(10),
                         Foreground = (Brush)FindResource("Dim"),
                     });
+                DoorTileGrid.Columns = Ui.LayoutMetrics.TileColumns(_sizeClass,
+                    ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth,
+                    DoorTileGrid.Children.Count);
             }
 
             _tileSnapshotUrls.Clear();
@@ -168,7 +171,7 @@ namespace DoorbellApp
             ClusterOnlineText.Text = Texts.T("pair.membership_connected", onlineTotal) +
                 (offline > 0 ? " · " + offline + " " + Texts.T("dash.tile_offline") : "");
             ClusterOnlineText.SetResourceReference(TextBlock.ForegroundProperty,
-                                                   offline > 0 ? "Warn" : "Ok");
+                                                   offline > 0 ? "Warning" : "Ok");
             DoorCountText.Text = doorsOnline + "/" + doorsTotal;
             PanelCountText.Text = panelsOnline + "/" + panelsTotal;
             AutomationProperties.SetName(ClusterCounter, Texts.T("dash.count_cluster", total));
@@ -541,7 +544,7 @@ namespace DoorbellApp
                 Text = ClockOf(DictLong(row, "ts", 0)),
                 FontSize = detailed ? 16 : 14,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = (Brush)FindResource(missed ? "Danger" : "Dim"),
+                Foreground = (Brush)FindResource(missed ? "Negative" : "Dim"),
             };
             Grid.SetColumn(time, 0);
             grid.Children.Add(time);
@@ -585,7 +588,7 @@ namespace DoorbellApp
                 VerticalAlignment = VerticalAlignment.Center,
                 Child = resultText,
             };
-            result.SetResourceReference(Border.BackgroundProperty, missed ? "Danger" : "Row");
+            result.SetResourceReference(Border.BackgroundProperty, missed ? "Negative" : "Row");
             Grid.SetColumn(result, 2);
             grid.Children.Add(result);
             // Hairline under each row, as on the kiosk list.

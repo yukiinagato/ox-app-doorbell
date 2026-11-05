@@ -104,6 +104,11 @@ namespace DoorbellApp.Settings
         private FrameworkElement BuildAction(SettingItem item, RowParts parts)
         {
             var button = CommandButton(Texts.T(item.LabelKey + "_action"));
+            if (item.Destructive)
+            {
+                button.SetResourceReference(Control.ForegroundProperty, "Negative");
+                button.SetResourceReference(Control.BorderBrushProperty, "Negative");
+            }
             button.Click += (s, e) => RunAction(item, parts);
             return button;
         }
@@ -135,7 +140,7 @@ namespace DoorbellApp.Settings
                     _main.OpenNoticeDialogFromSettings();
                     break;
                 case "rotate_cluster_key":
-                    if (!Confirm(Texts.T("settings.rotate_cluster_key_confirm"))) break;
+                    if (!Confirm(Texts.T("settings.rotate_cluster_key_confirm"), true)) break;
                     int rotated = App.Core == null ? -3 : App.Core.RotateClusterKey();
                     ShowStatus(Texts.T(rotated == 0 ? "settings.rotate_cluster_key_done"
                                      : rotated == -3 ? "settings.err_core_unavailable"
@@ -161,7 +166,7 @@ namespace DoorbellApp.Settings
                     Close();
                     break;
                 case "restart_app":
-                    if (Confirm(Texts.T("settings.restart_confirm"))) App.RestartApp("operator_restart");
+                    if (Confirm(Texts.T("settings.restart_confirm"), true)) App.RestartApp("operator_restart");
                     break;
                 case "open_logs":
                     try
@@ -179,10 +184,11 @@ namespace DoorbellApp.Settings
             }
         }
 
-        private bool Confirm(string message)
+        private bool Confirm(string message, bool destructive = false)
         {
             return MessageBox.Show(this, message, Texts.T("settings.title"), MessageBoxButton.YesNo,
-                                   MessageBoxImage.Question) == MessageBoxResult.Yes;
+                                   destructive ? MessageBoxImage.Warning : MessageBoxImage.Question,
+                                   MessageBoxResult.No) == MessageBoxResult.Yes;
         }
 
         // ---- non-config writes ----------------------------------------------------------------

@@ -99,6 +99,10 @@ namespace DoorbellApp
                 PurposeGrid.Children.Add(MakePurposeButton(id, iconText, label));
                 CallingPurposeGrid.Children.Add(MakePurposeButton(id, iconText, label));
             }
+            PurposeGrid.Columns = Ui.LayoutMetrics.PurposeColumns(_sizeClass,
+                ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth,
+                PurposeGrid.Children.Count);
+            CallingPurposeGrid.Columns = PurposeGrid.Columns;
             PurposeSection.Visibility = ShowsHomePurposes() ? Visibility.Visible : Visibility.Collapsed;
             CallingPurposeSection.Visibility = ShowsCallingPurposes() ? Visibility.Visible : Visibility.Collapsed;
         }

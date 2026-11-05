@@ -210,6 +210,7 @@ namespace DoorbellApp
                 ExitScreensaver();
                 CallingView.Visibility = Visibility.Collapsed;
                 ReplyBanner.Visibility = Visibility.Collapsed;
+                EmergencySource.Text = EmergencySourceLine(ev);
                 EmergencyView.Visibility = Visibility.Visible;
                 SetBrightnessAsync(100);
             }
@@ -310,10 +311,31 @@ namespace DoorbellApp
             EmergencyView.Background = backgroundBrush;
             EmergencyTitle.Foreground = foregroundBrush;
             EmergencyNote.Foreground = foregroundBrush;
+            EmergencySource.Foreground = foregroundBrush;
+            EmergencyClearHint.Foreground = foregroundBrush;
+            EmergencyClearProgress.Background = foregroundBrush;
             EmergencyCancelButton.Background = accentBrush;
             EmergencyCancelButton.Foreground = Frozen(new SolidColorBrush(
                 (Color)ColorConverter.ConvertFromString(accentText)));
             return valid ? "" : "invalid_emergency_presentation_colors";
+        }
+
+        /// <summary>Source and time of the alarm: the raising door or device when Core names one.</summary>
+        private string EmergencySourceLine(UiEvent ev)
+        {
+            string source = ev == null ? "" : (ev.Str("source") ?? "");
+            if (source.Length == 0 && ev != null) source = ev.Str("origin") ?? "";
+            string who = source.Length == 0 ? "" : PeerOrDoorLabel(source);
+            string when = DateTime.Now.ToString("HH:mm");
+            return who.Length == 0 ? Texts.T("emergency.time_only", when)
+                                   : Texts.T("emergency.source_time", who, when);
+        }
+
+        private string PeerOrDoorLabel(string id)
+        {
+            var name = CoreClient.Dig(_cfg, "devices." + id + ".name");
+            if (name != null) return name.ToString();
+            return DoorLabel(id);
         }
 
         private static bool IsExactHexColor(string value)
@@ -357,7 +379,70 @@ namespace DoorbellApp
             return false;
         }
 
+        /// <summary>Hold time for the deliberate SOS clear gesture.</summary>
+        private static readonly TimeSpan EmergencyClearHold = TimeSpan.FromMilliseconds(1500);
+        private DispatcherTimer _emergencyClearTimer;
+        private DateTime _emergencyClearStarted;
+        private bool _emergencyClearArmed;
+
+        private void OnEmergencyClearPress(object sender, MouseButtonEventArgs e)
+        {
+            // Pointer and touch (promoted to mouse) clear only after a long press; the button's
+            // own Click from the pointer is ignored below.
+            e.Handled = true;
+            EmergencyCancelButton.CaptureMouse();
+            _emergencyClearArmed = true;
+            _emergencyClearStarted = DateTime.UtcNow;
+            if (_emergencyClearTimer == null)
+            {
+                _emergencyClearTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+                _emergencyClearTimer.Tick += OnEmergencyClearTick;
+            }
+            _emergencyClearTimer.Start();
+        }
+
+        private void OnEmergencyClearTick(object sender, EventArgs e)
+        {
+            double fraction = (DateTime.UtcNow - _emergencyClearStarted).TotalMilliseconds /
+                              EmergencyClearHold.TotalMilliseconds;
+            double track = Math.Max(0, EmergencyCancelButton.ActualWidth - 8);
+            EmergencyClearProgress.Width = Math.Min(1, fraction) * track;
+            if (fraction < 1) return;
+            ResetEmergencyClearGesture();
+            ClearEmergencyConfirmed();
+        }
+
+        private void OnEmergencyClearRelease(object sender, MouseButtonEventArgs e)
+        {
+            e.Handled = true;
+            ResetEmergencyClearGesture();
+        }
+
+        private void OnEmergencyClearLeave(object sender, EventArgs e)
+        {
+            if (_emergencyClearArmed) ResetEmergencyClearGesture();
+        }
+
+        private void ResetEmergencyClearGesture()
+        {
+            _emergencyClearArmed = false;
+            if (_emergencyClearTimer != null) _emergencyClearTimer.Stop();
+            EmergencyClearProgress.Width = 0;
+            if (EmergencyCancelButton.IsMouseCaptured) EmergencyCancelButton.ReleaseMouseCapture();
+        }
+
+        /// <summary>Keyboard and automation invoke Click; they confirm instead of holding.</summary>
         private void OnEmergencyCancelClick(object sender, RoutedEventArgs e)
+        {
+            if (InputManager.Current.MostRecentInputDevice is MouseDevice ||
+                InputManager.Current.MostRecentInputDevice is StylusDevice) return;
+            if (MessageBox.Show(this, Texts.T("emergency.clear_confirm"), Texts.T("emergency.title"),
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) !=
+                MessageBoxResult.Yes) return;
+            ClearEmergencyConfirmed();
+        }
+
+        private void ClearEmergencyConfirmed()
         {
             // _cancelRequiresPin already carries core's own answer, which folds in "a password
             // is actually set". The second test only covers a core that does not report it.

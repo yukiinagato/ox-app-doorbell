@@ -42,7 +42,7 @@ namespace DoorbellApp.Settings
             panel.Children.Add(head);
             parts.Error = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap,
                                           Visibility = Visibility.Collapsed };
-            parts.Error.SetResourceReference(TextBlock.ForegroundProperty, "Danger");
+            parts.Error.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
 
             List<ListEntry> entries = ReadEntries(item);
             for (int i = 0; i < entries.Count; i++)
@@ -321,7 +321,7 @@ namespace DoorbellApp.Settings
             var error = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap,
                                         Visibility = Visibility.Collapsed,
                                         Margin = new Thickness(0, 8, 0, 0) };
-            error.SetResourceReference(TextBlock.ForegroundProperty, "Danger");
+            error.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
             form.Children.Add(error);
             var actions = new StackPanel
             {

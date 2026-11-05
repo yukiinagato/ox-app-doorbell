@@ -617,11 +617,12 @@ namespace DoorbellApp
             InCallOpenDoorButton.Visibility = OpenDoorButton.Visibility;
             IgnoreButton.Content = IconStack("IconX",
                 monitorOnly ? Texts.T("monitor.close") : Texts.T("ring.ignore"),
-                (Brush)FindResource("Danger"));
+                (Brush)FindResource("Negative"));
 
             StartIncomingVideo();
 
             IncomingView.Visibility = Visibility.Visible;
+            ApplyLiveOverlayMode();
             _returnDoor = _incomingDoor;
             StartReturnCountdown();
             ShowCallOverlay(_incomingDoor);

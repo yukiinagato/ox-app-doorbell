@@ -505,6 +505,8 @@
   <data name="emergency_active_detail" xml:space="preserve"><value>緊急モードが発報されています</value></data>
   <data name="emergency_button" xml:space="preserve"><value>緊急</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>解除</value></data>
+  <data name="emergency_clear_confirm" xml:space="preserve"><value>緊急警報を解除しますか？ すべての端末で警報が止まります。</value></data>
+  <data name="emergency_clear_hold_hint" xml:space="preserve"><value>解除するには長押ししてください</value></data>
   <data name="emergency_clear_instruction" xml:space="preserve"><value>警報を解除するには、管理画面を使用するか、端末で管理パスワードを入力してください。</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>長押しで発報 ({0} 秒)</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>家族に通知しました</value></data>
@@ -526,6 +528,8 @@
   <data name="emergency_sos_sending" xml:space="preserve"><value>SOSを送信しています…</value></data>
   <data name="emergency_sos_unavailable" xml:space="preserve"><value>SOSサービスを利用できません。</value></data>
   <data name="emergency_sos_unknown" xml:space="preserve"><value>SOSの結果は不明です。再送する前に状況を確認してください。</value></data>
+  <data name="emergency_source_time" xml:space="preserve"><value>{0} から発報 · {1}</value></data>
+  <data name="emergency_time_only" xml:space="preserve"><value>発報 {0}</value></data>
   <data name="emergency_title" xml:space="preserve"><value>緊急事態</value></data>
   <data name="event_motion" xml:space="preserve"><value>{0} で動きを検知 ({1})</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} オフライン (最終応答 {1})</value></data>
@@ -537,6 +541,11 @@
   <data name="firewall_rules_missing" xml:space="preserve"><value>Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?</value></data>
   <data name="firewall_title" xml:space="preserve"><value>Windows ファイアウォール</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>{0} が応答</value></data>
+  <data name="history_detail_answered_by" xml:space="preserve"><value>応答した端末</value></data>
+  <data name="history_detail_door" xml:space="preserve"><value>ドア</value></data>
+  <data name="history_detail_empty" xml:space="preserve"><value>呼出を選ぶと詳細が表示されます</value></data>
+  <data name="history_detail_outcome" xml:space="preserve"><value>結果</value></data>
+  <data name="history_detail_purpose" xml:space="preserve"><value>用件</value></data>
   <data name="history_duration" xml:space="preserve"><value>通話 {0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>まだ呼出はありません</value></data>
   <data name="history_filter_all" xml:space="preserve"><value>すべて</value></data>
@@ -554,6 +563,7 @@
   <data name="history_seen_done" xml:space="preserve"><value>既読にしました</value></data>
   <data name="history_title" xml:space="preserve"><value>呼出履歴</value></data>
   <data name="history_today" xml:space="preserve"><value>今日</value></data>
+  <data name="history_unread" xml:space="preserve"><value>未確認</value></data>
   <data name="history_unread_banner" xml:space="preserve"><value>不在着信が {0} 件あります</value></data>
   <data name="history_yesterday" xml:space="preserve"><value>昨日</value></data>
   <data name="idle_call" xml:space="preserve"><value>呼出</value></data>
@@ -1176,7 +1186,7 @@ ON</value></data>
   <data name="settings_restart_app" xml:space="preserve"><value>アプリを再起動</value></data>
   <data name="settings_restart_app_action" xml:space="preserve"><value>再起動</value></data>
   <data name="settings_restart_app_desc" xml:space="preserve"><value>通話中でないときに行ってください</value></data>
-  <data name="settings_restart_confirm" xml:space="preserve"><value>アプリを再起動しますか？</value></data>
+  <data name="settings_restart_confirm" xml:space="preserve"><value>アプリを再起動しますか？ 通話中の呼出は終了し、数秒間操作できなくなります。</value></data>
   <data name="settings_restart_required" xml:space="preserve"><value>役割を変えると再起動が必要です</value></data>
   <data name="settings_ringtone" xml:space="preserve"><value>室内機の呼出音</value></data>
   <data name="settings_role" xml:space="preserve"><value>役割</value></data>
@@ -1489,6 +1499,8 @@ PIN: {1}</value></data>
   <data name="time_title" xml:space="preserve"><value>時刻</value></data>
   <data name="time_zone" xml:space="preserve"><value>タイムゾーン</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>この設定はクラスタ全体の時計・呼出履歴・ルールの時間帯に使われます</value></data>
+  <data name="ui_back" xml:space="preserve"><value>戻る</value></data>
+  <data name="ui_close" xml:space="preserve"><value>閉じる</value></data>
   <data name="unlock_auto" xml:space="preserve"><value>設定されているときだけ表示</value></data>
   <data name="unlock_binding_hint" xml:space="preserve"><value>このドアの錠に対応するコマンドを入力または選択してください。空欄で割り当てを解除します。</value></data>
   <data name="unlock_binding_required" xml:space="preserve"><value>共通の HA 操作は開錠に自動使用されません。このドアの錠に対応するコマンドを確認して保存してください。</value></data>

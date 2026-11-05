@@ -45,6 +45,11 @@ namespace DoorbellApp.Settings
         public string Handler;
         /// <summary>Writes that cannot take effect live: boot.json fields, role changes.</summary>
         public bool RequiresRestart;
+        /// <summary>
+        /// Destructive or security action (ui-guidelines 4, Settings): rendered last in its
+        /// section, in the negative role, behind a confirmation that names the consequence.
+        /// </summary>
+        public bool Destructive;
         /// <summary>Shown only when this returns true for the current device.</summary>
         public Func<SettingsContext, bool> Visible;
         /// <summary>Further keys written to the same value, in the same batch.</summary>

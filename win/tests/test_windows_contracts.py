@@ -2034,17 +2034,133 @@ class WindowsContracts(unittest.TestCase):
     def test_responsive_layout_is_computed_from_the_window_size(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        metrics = read("win/DoorbellApp/Ui/LayoutMetrics.cs")
         self.assertIn("SizeChanged += (s, e) => ApplyResponsiveLayout();", window)
         layout = shell[shell.index("private void ApplyResponsiveLayout"):
-                       shell.index("private static void PlaceVisitor")]
-        self.assertIn("bool portrait = height >= width || width < 900;", layout)
-        # Portrait stacks; landscape splits into two columns.
-        self.assertIn("VisitorRightColumn.Width = new GridLength(0);", layout)
-        self.assertIn("PlaceVisitor(LangBar, 2, 1, 1, 1);", layout)
+                       shell.index("private void LayOutVisitorTopBar")]
+        # Three size classes from the window width (ui-guidelines section 2).
+        self.assertIn("SizeClass size = LayoutMetrics.Classify(width);", layout)
+        self.assertIn("public const double CompactMax = 600;", metrics)
+        self.assertIn("public const double ExpandedMin = 900;", metrics)
+        self.assertIn("if (width < CompactMax) return SizeClass.Compact;", metrics)
+        self.assertIn("if (width < ExpandedMin) return SizeClass.Medium;", metrics)
+        # Dashboard: stacked below Expanded, list beside the tiles from Expanded.
         self.assertIn("PlaceDashboard(RecentCallsPanel, 1, 0, 2);", layout)
         self.assertIn("PlaceDashboard(RecentCallsPanel, 0, 1, 1);", layout)
+        self.assertIn("LayoutMetrics.PurposeColumns(size, width, PurposeGrid.Children.Count)", layout)
+        self.assertIn("LayoutMetrics.TileColumns(size, width, DoorTileGrid.Children.Count)", layout)
+        self.assertIn("ApplyCallLayout(width, height);", layout)
+        self.assertIn("ApplyHistoryLayout(size);", layout)
         # Primary actions share a text-measured dock; secondary content stays responsive.
         self.assertIn("UpdateVisitorActionHeights(width);", layout)
+
+    def test_size_class_grids_follow_the_ui_guidelines(self):
+        metrics = read("win/DoorbellApp/Ui/LayoutMetrics.cs")
+        purposes = metrics[metrics.index("public static int PurposeColumns"):
+                           metrics.index("public static int TileColumns")]
+        tiles = metrics[metrics.index("public static int TileColumns"):
+                        metrics.index("public static double BodySize")]
+        # Visitor purpose grid: 2 compact, 3 medium, 3–4 expanded.
+        self.assertIn("if (size == SizeClass.Compact) columns = 2;", purposes)
+        self.assertIn("else if (size == SizeClass.Medium) columns = 3;", purposes)
+        self.assertIn("else columns = width >= 1280 ? 4 : 3;", purposes)
+        # Dashboard tiles: 1 / 2 / 3–4.
+        self.assertIn("if (size == SizeClass.Compact) columns = 1;", tiles)
+        self.assertIn("else if (size == SizeClass.Medium) columns = 2;", tiles)
+        self.assertIn("else columns = width >= 1400 ? 4 : 3;", tiles)
+        self.assertIn("public const double TouchMin = 44;", metrics)
+        self.assertIn("public const double VisitorTouchMin = 72;", metrics)
+        self.assertIn("TimeSpan.FromSeconds(4)", metrics)
+
+    def test_call_screens_have_fixed_action_zones(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        layout = read("win/DoorbellApp/MainWindow.Layout.cs")
+        root = ET.fromstring(xaml)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        by_name = {e.get(ns): e for e in root.iter() if e.get(ns)}
+        primary = [c.get(ns) for c in by_name["IncomingPrimaryRow"]]
+        secondary = [c.get(ns) for c in by_name["IncomingSecondaryRow"]]
+        # Answer (largest, positive), Reply, Ignore; then Monitor, Unlock, Mic.
+        self.assertEqual(primary, ["AnswerButton", "QuickReplyToggle", "IgnoreButton"])
+        self.assertEqual(secondary, ["MonitorButton", "OpenDoorButton", "MicButton"])
+        self.assertEqual(by_name["AnswerButton"].get("Background"), "{DynamicResource Positive}")
+        self.assertEqual(by_name["IgnoreButton"].get("Foreground"), "{DynamicResource Negative}")
+        # In call, End is first in the zone (where Answer was) and uses the negative role.
+        in_call = [c.get(ns) for c in by_name["InCallActionZone"]]
+        self.assertEqual(in_call[0], "EndCallButton")
+        self.assertEqual(by_name["EndCallButton"].get("Background"), "{DynamicResource Negative}")
+        self.assertIn('AnswerButton.SetResourceReference(Control.BackgroundProperty, end ? "Negative" : "Positive");', layout)
+        # Expanded landscape: right action column; video keeps >= 60 %.
+        self.assertIn("bool side = LayoutMetrics.SideActionZone(width, height);", layout)
+        self.assertIn("Math.Min(420, width * 0.32)", layout)
+        # Quick replies are a sheet over the live call screen: bottom or side.
+        self.assertEqual(by_name["QuickReplySheet"].get("VerticalAlignment"), "Bottom")
+        self.assertIn("QuickReplySheet.HorizontalAlignment = HorizontalAlignment.Right;", layout)
+        self.assertIn("LayoutMetrics.SheetRadius", layout)
+        # Live view: controls float and auto-hide; a revealing tap is consumed.
+        self.assertIn("Interval = LayoutMetrics.OverlayAutoHide", layout)
+        self.assertIn("if (wasHidden) e.Handled = true;", layout)
+        # No literal answer/unlock colours remain on the call screens.
+        for literal in ("#1E8E4B", "#B7791F"):
+            self.assertNotIn(literal, xaml)
+
+    def test_semantic_color_roles_follow_the_core_appearance(self):
+        appearance = read("win/DoorbellApp/Util/Appearance.cs")
+        app = read("win/DoorbellApp/App.xaml")
+        for role, token in (("Surface", "Card"), ("OnSurface", "Fg"), ("Negative", "Danger"),
+                            ("OnNegative", "OnDanger"), ("Warning", "Warn"), ("Muted", "Dim")):
+            with self.subTest(role=role):
+                self.assertIn('{ "%s", "%s" }' % (role, token), appearance)
+                self.assertIn('x:Key="%s"' % role, app)
+        for role in ("Positive", "OnPositive"):
+            self.assertIn('x:Key="%s"' % role, app)
+            self.assertEqual(appearance.count('{ "%s", "#' % role), 2)
+        self.assertIn("resources[RoleAliases[i, 0]] = source;", appearance)
+
+    def test_history_has_list_detail_and_unread_marks(self):
+        layout = read("win/DoorbellApp/MainWindow.Layout.cs")
+        history = read("win/DoorbellApp/MainWindow.History.cs")
+        self.assertIn("HistoryList.Children.Add(HistoryRow(row));", history)
+        self.assertIn("HistoryDetailColumn.Width = new GridLength(1.2, GridUnitType.Star);", layout)
+        self.assertIn("grid.MinHeight = LayoutMetrics.TouchMin;", layout)
+        self.assertIn('Texts.T("history.unread")', layout)
+        self.assertIn('"/asset/" + hash', layout)
+
+    def test_destructive_settings_sit_last_in_negative_with_confirmation(self):
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        actions = read("win/DoorbellApp/Settings/SettingsWindow.Actions.cs")
+        rows = read("win/DoorbellApp/Settings/SettingsWindow.Rows.cs")
+        self.assertIn('Destructive(Describe(Action("rotate_cluster_key", "rotate_cluster_key")))', catalog)
+        self.assertIn('Destructive(Describe(Action("restart_app", "restart_app")))', catalog)
+        self.assertIn("while (at > 0 && group.Items[at - 1].Destructive) at--;", catalog)
+        self.assertIn('button.SetResourceReference(Control.ForegroundProperty, "Negative");', actions)
+        self.assertIn('if (item.Destructive) label.SetResourceReference(TextBlock.ForegroundProperty, "Negative");', rows)
+        self.assertIn('Confirm(Texts.T("settings.rotate_cluster_key_confirm"), true)', actions)
+        self.assertIn("MessageBoxResult.No) == MessageBoxResult.Yes", actions)
+
+    def test_sos_overlay_is_topmost_and_clears_by_deliberate_gesture(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        sos = read("win/DoorbellApp/MainWindow.Emergency.cs")
+        root = ET.fromstring(xaml)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        view = next(e for e in root.iter() if e.get(ns) == "EmergencyView")
+        self.assertEqual(view.get("Panel.ZIndex"), "1000")
+        self.assertEqual(view.get("Background"), "{DynamicResource Negative}")
+        self.assertIn("TimeSpan.FromMilliseconds(1500)", sos)
+        self.assertIn("InputManager.Current.MostRecentInputDevice is MouseDevice", sos)
+        self.assertIn('Texts.T("emergency.clear_confirm")', sos)
+        self.assertIn("EmergencySource.Text = EmergencySourceLine(ev);", sos)
+
+    def test_pairing_code_is_the_largest_element_and_stacks_when_narrow(self):
+        view = read("win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs")
+        self.assertIn("SizeChanged += (sender, args) => ApplySizeClass(args.NewSize.Width);", view)
+        self.assertIn("Grid.SetRow(PairingSidePanel, expanded ? 0 : 1);", view)
+        self.assertIn('SetStatusTone(persistError ? "Negative" : (upgradeRejoin ? "Warning" : null));', view)
+
+    def test_per_monitor_dpi_with_windows7_fallback(self):
+        manifest = read("win/DoorbellApp/app.manifest")
+        self.assertIn(">true/pm</dpiAware>", manifest)
+        self.assertIn(">PerMonitorV2, PerMonitor</dpiAwareness>", manifest)
 
     def test_effective_volumes_reach_the_players(self):
         window = read("win/DoorbellApp/MainWindow.xaml.cs")

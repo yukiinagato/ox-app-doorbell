@@ -535,7 +535,7 @@ namespace DoorbellApp.Settings
         {
             if (_status == null) return;
             _status.Text = text;
-            _status.SetResourceReference(TextBlock.ForegroundProperty, error ? "Danger" : "Ok");
+            _status.SetResourceReference(TextBlock.ForegroundProperty, error ? "Negative" : "Ok");
             _status.Visibility = Visibility.Visible;
             _statusTimer.Stop();
             if (!error) _statusTimer.Start();

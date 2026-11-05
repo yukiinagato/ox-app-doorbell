@@ -525,13 +525,18 @@ namespace DoorbellApp
             EmergencyTitle.Text = Texts.T("emergency.title");
             EmergencyNote.Text = Texts.T("emergency.notified");
             EmergencyCancelButton.Content = Texts.T("emergency.cancel");
+            EmergencyClearHint.Text = Texts.T("emergency.clear_hold_hint");
             bool ending = _inCall && IncomingView.Visibility == Visibility.Visible;
             AnswerButton.Content = IconStack(ending ? "IconPhoneOff" : "IconPhone",
-                Texts.T(ending ? "incall.end_call" : "ring.answer"), Brushes.White);
+                Texts.T(ending ? "incall.end_call" : "ring.answer"),
+                (Brush)FindResource(ending ? "OnNegative" : "OnPositive"));
+            PaintAnswerSlot(ending);
             MonitorButton.Content = IconStack("IconEye", Texts.T("ring.monitor"));
-            OpenDoorButton.Content = IconStack("IconDoor", Texts.T("ring.open_door"), Brushes.White);
-            InCallOpenDoorButton.Content = IconStack("IconDoor", Texts.T("ring.open_door"), Brushes.White);
-            IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Danger"));
+            OpenDoorButton.Content = IconStack("IconDoor", Texts.T("ring.open_door"),
+                (Brush)FindResource("Warning"));
+            InCallOpenDoorButton.Content = IconStack("IconDoor", Texts.T("ring.open_door"),
+                (Brush)FindResource("Warning"));
+            IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Negative"));
             IncomingNoVideo.Text = Texts.T("ring.no_video");
             InCallTitle.Text = Texts.T("incall.title");
             EndCallButton.Content = Texts.T("incall.end_call");
@@ -567,6 +572,7 @@ namespace DoorbellApp
             if (App.Boot.Role == "door_station") TouchHint.Text = Texts.T(
                 ShowsHomePurposes() ? "door.hint_purpose_first" : "door.hint_call");
             PairingOverlay.ApplyStrings();
+            ApplyLayoutStrings();
         }
 
         private string DoorLabel(string door)

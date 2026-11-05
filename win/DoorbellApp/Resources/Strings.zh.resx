@@ -505,6 +505,8 @@
   <data name="emergency_active_detail" xml:space="preserve"><value>紧急模式已触发</value></data>
   <data name="emergency_button" xml:space="preserve"><value>紧急</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>解除警报</value></data>
+  <data name="emergency_clear_confirm" xml:space="preserve"><value>要解除紧急警报吗？所有设备上的警报都会停止。</value></data>
+  <data name="emergency_clear_hold_hint" xml:space="preserve"><value>长按以解除警报</value></data>
   <data name="emergency_clear_instruction" xml:space="preserve"><value>请通过管理页面解除警报，或在设备上输入管理密码。</value></data>
   <data name="emergency_hold_hint" xml:space="preserve"><value>长按 {0} 秒触发</value></data>
   <data name="emergency_notified" xml:space="preserve"><value>已通知家人</value></data>
@@ -526,6 +528,8 @@
   <data name="emergency_sos_sending" xml:space="preserve"><value>正在发送呼救…</value></data>
   <data name="emergency_sos_unavailable" xml:space="preserve"><value>呼救服务暂不可用。</value></data>
   <data name="emergency_sos_unknown" xml:space="preserve"><value>呼救结果未知，请先查询状态再尝试。</value></data>
+  <data name="emergency_source_time" xml:space="preserve"><value>来自 {0} · {1}</value></data>
+  <data name="emergency_time_only" xml:space="preserve"><value>触发于 {0}</value></data>
   <data name="emergency_title" xml:space="preserve"><value>紧急情况</value></data>
   <data name="event_motion" xml:space="preserve"><value>{0} 检测到活动（{1}）</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} 离线（最后在线：{1}）</value></data>
@@ -537,6 +541,11 @@
   <data name="firewall_rules_missing" xml:space="preserve"><value>Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？</value></data>
   <data name="firewall_title" xml:space="preserve"><value>Windows 防火墙</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>由 {0} 接听</value></data>
+  <data name="history_detail_answered_by" xml:space="preserve"><value>接听设备</value></data>
+  <data name="history_detail_door" xml:space="preserve"><value>门</value></data>
+  <data name="history_detail_empty" xml:space="preserve"><value>选择一条呼叫以查看详情</value></data>
+  <data name="history_detail_outcome" xml:space="preserve"><value>结果</value></data>
+  <data name="history_detail_purpose" xml:space="preserve"><value>来意</value></data>
   <data name="history_duration" xml:space="preserve"><value>通话 {0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>暂无呼叫</value></data>
   <data name="history_filter_all" xml:space="preserve"><value>全部</value></data>
@@ -554,6 +563,7 @@
   <data name="history_seen_done" xml:space="preserve"><value>已标为已读</value></data>
   <data name="history_title" xml:space="preserve"><value>呼叫记录</value></data>
   <data name="history_today" xml:space="preserve"><value>今天</value></data>
+  <data name="history_unread" xml:space="preserve"><value>未读</value></data>
   <data name="history_unread_banner" xml:space="preserve"><value>有 {0} 个未接来电</value></data>
   <data name="history_yesterday" xml:space="preserve"><value>昨天</value></data>
   <data name="idle_call" xml:space="preserve"><value>呼叫</value></data>
@@ -1176,7 +1186,7 @@
   <data name="settings_restart_app" xml:space="preserve"><value>重启应用</value></data>
   <data name="settings_restart_app_action" xml:space="preserve"><value>重启</value></data>
   <data name="settings_restart_app_desc" xml:space="preserve"><value>请在没有通话时进行</value></data>
-  <data name="settings_restart_confirm" xml:space="preserve"><value>要重启应用吗？</value></data>
+  <data name="settings_restart_confirm" xml:space="preserve"><value>要重启应用吗？进行中的通话将结束，几秒钟内无法操作。</value></data>
   <data name="settings_restart_required" xml:space="preserve"><value>更改角色后需要重新启动</value></data>
   <data name="settings_ringtone" xml:space="preserve"><value>室内机铃声</value></data>
   <data name="settings_role" xml:space="preserve"><value>角色</value></data>
@@ -1489,6 +1499,8 @@ PIN：{1}</value></data>
   <data name="time_title" xml:space="preserve"><value>时间</value></data>
   <data name="time_zone" xml:space="preserve"><value>时区</value></data>
   <data name="time_zone_hint" xml:space="preserve"><value>此设置用于整个集群的时钟、呼叫记录与规则时段</value></data>
+  <data name="ui_back" xml:space="preserve"><value>返回</value></data>
+  <data name="ui_close" xml:space="preserve"><value>关闭</value></data>
   <data name="unlock_auto" xml:space="preserve"><value>已配置时显示</value></data>
   <data name="unlock_binding_hint" xml:space="preserve"><value>请输入或选择控制此门锁的命令。留空可解除绑定。</value></data>
   <data name="unlock_binding_required" xml:space="preserve"><value>通用 HA 动作不再自动用于开锁。请确认并保存此门锁对应的命令。</value></data>

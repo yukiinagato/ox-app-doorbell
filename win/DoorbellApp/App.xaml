@@ -24,6 +24,15 @@
         <SolidColorBrush x:Key="Notice" Color="#B7791F"/>
         <SolidColorBrush x:Key="OnAccent" Color="#04121F"/>
         <SolidColorBrush x:Key="OnDanger" Color="#FFFFFF"/>
+        <!-- Semantic roles (ui-guidelines section 3); Appearance re-points them on every swap. -->
+        <SolidColorBrush x:Key="Positive" Color="#1E8E4B"/>
+        <SolidColorBrush x:Key="OnPositive" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Surface" Color="#1A2027"/>
+        <SolidColorBrush x:Key="OnSurface" Color="#E8EDF2"/>
+        <SolidColorBrush x:Key="Negative" Color="#C0392B"/>
+        <SolidColorBrush x:Key="OnNegative" Color="#FFFFFF"/>
+        <SolidColorBrush x:Key="Warning" Color="#FFB454"/>
+        <SolidColorBrush x:Key="Muted" Color="#8A97A5"/>
         <!-- Frosted plates: tint over the blurred wallpaper (ui:Frost), hairline, pills. -->
         <SolidColorBrush x:Key="Plate" Color="#A6161C23"/>
         <SolidColorBrush x:Key="PlateLine" Color="#26FFFFFF"/>
@@ -151,6 +160,7 @@
             <Setter Property="Foreground" Value="{DynamicResource Accent}"/>
             <Setter Property="FontSize" Value="15"/>
             <Setter Property="Padding" Value="8,4"/>
+            <Setter Property="MinHeight" Value="44"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -175,7 +185,7 @@
             <Setter Property="BorderBrush" Value="{DynamicResource PlateLine}"/>
             <Setter Property="FontSize" Value="16"/>
             <Setter Property="Padding" Value="16,8"/>
-            <Setter Property="MinHeight" Value="40"/>
+            <Setter Property="MinHeight" Value="44"/>
             <Setter Property="Margin" Value="8,0,0,0"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">

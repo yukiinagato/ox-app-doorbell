@@ -44,12 +44,14 @@ namespace DoorbellApp.Settings
 
             var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center,
                                         Margin = new Thickness(0, 0, 16, 0) };
-            text.Children.Add(new TextBlock
+            var label = new TextBlock
             {
                 Text = Texts.T(item.LabelKey),
                 FontSize = 17,
                 TextWrapping = TextWrapping.Wrap,
-            });
+            };
+            if (item.Destructive) label.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
+            text.Children.Add(label);
             string detail = Detail(item);
             if (detail.Length > 0)
             {
@@ -86,7 +88,7 @@ namespace DoorbellApp.Settings
                 Visibility = Visibility.Collapsed,
                 Margin = new Thickness(0, 6, 0, 0),
             };
-            parts.Error.SetResourceReference(TextBlock.ForegroundProperty, "Danger");
+            parts.Error.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
             Grid.SetRow(parts.Error, 2);
             Grid.SetColumnSpan(parts.Error, 2);
             root.Children.Add(parts.Error);

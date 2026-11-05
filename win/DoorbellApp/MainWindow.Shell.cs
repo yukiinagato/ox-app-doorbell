@@ -13,6 +13,8 @@ using DoorbellApp.Core;
 using DoorbellApp.Pairing;
 using DoorbellApp.Util;
 
+using DoorbellApp.Ui;
+
 namespace DoorbellApp
 {
     /// <summary>
@@ -52,48 +54,35 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// Placement is computed from the window size rather than fixed to one orientation, so the
-        /// same elements serve a portrait phone-sized window and a landscape tablet.
+        /// Placement follows the size class of the current window width (ui-guidelines 2):
+        /// Compact &lt; 600, Medium 600–899, Expanded ≥ 900 effective pixels. It is recomputed on
+        /// every resize, rotation and DPI change, never from the device model.
         /// </summary>
         private void ApplyResponsiveLayout()
         {
             double width = ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth;
             double height = ActualHeight > 0 ? ActualHeight : SystemParameters.PrimaryScreenHeight;
-            bool portrait = height >= width || width < 900;
-            bool large = width >= 1024;
-            bool tablet = width >= 768;
+            SizeClass size = LayoutMetrics.Classify(width);
+            _sizeClass = size;
+            bool expanded = size == SizeClass.Expanded;
+            bool compact = size == SizeClass.Compact;
+            bool portrait = height >= width || !expanded;
+            double scale = LayoutMetrics.TextScale();
 
-            if (portrait)
-            {
-                VisitorRightColumn.Width = new GridLength(0);
-                PlaceVisitor(VisitorClockBlock, 0, 0, 2, 1);
-                PlaceVisitor(VisitorNoticeCard, 1, 0, 2, 1);
-                PlaceVisitor(LangBar, 2, 0, 2, 1);
-                PlaceVisitor(TouchHint, 4, 0, 2, 1);
-                VisitorClockBlock.HorizontalAlignment = HorizontalAlignment.Center;
-            }
-            else
-            {
-                VisitorRightColumn.Width = new GridLength(1.2, GridUnitType.Star);
-                PlaceVisitor(VisitorClockBlock, 0, 0, 1, 1);
-                // The notice fills the left column beside the language row and the call button.
-                PlaceVisitor(VisitorNoticeCard, 1, 0, 1, 3);
-                PlaceVisitor(LangBar, 2, 1, 1, 1);
-                PlaceVisitor(TouchHint, 4, 1, 1, 1);
-                VisitorClockBlock.HorizontalAlignment = HorizontalAlignment.Left;
-            }
-
-            ClockText.FontSize = large ? 84 : (tablet ? 68 : 52);
-            DateText.FontSize = large ? 26 : (tablet ? 22 : 17);
+            LayOutVisitorTopBar(size);
+            ClockText.FontSize = (compact ? 52 : (expanded ? 84 : 68));
+            DateText.FontSize = (compact ? 17 : (expanded ? 26 : 22)) * scale;
+            VisitorDoorName.FontSize = (compact ? 18 : 22) * scale;
             CallButton.MinWidth = 0;
-            PurposeGrid.Columns = Math.Max(1, (int)((width - 40) / 240));
+            PurposeGrid.Columns = LayoutMetrics.PurposeColumns(size, width, PurposeGrid.Children.Count);
             CallingPurposeGrid.Columns = PurposeGrid.Columns;
             InCallHeaderScroll.MaxHeight = Math.Max(56, height / 3);
             UpdateVisitorActionHeights(width);
-            TouchHint.FontSize = tablet ? 21 : 16;
-            VisitorNoticeText.FontSize = tablet ? 22 : 17;
+            TouchHint.FontSize = (compact ? 16 : 20) * scale;
+            VisitorNoticeText.FontSize = (compact ? 17 : 22) * scale;
+            VisitorDoorName.Text = VisitorDoorTitle();
 
-            if (portrait)
+            if (!expanded)
             {
                 DashboardLeftColumn.Width = new GridLength(1, GridUnitType.Star);
                 DashboardRightColumn.Width = new GridLength(0);
@@ -101,8 +90,8 @@ namespace DoorbellApp
                 DashboardBottomRow.Height = new GridLength(1.1, GridUnitType.Star);
                 PlaceDashboard(DoorTilesPanel, 0, 0, 2);
                 PlaceDashboard(RecentCallsPanel, 1, 0, 2);
-                DoorTilesPanel.Margin = new Thickness(0, 0, 0, 8);
-                RecentCallsPanel.Margin = new Thickness(4, 8, 4, 0);
+                DoorTilesPanel.Margin = new Thickness(0, 0, 0, LayoutMetrics.S2);
+                RecentCallsPanel.Margin = new Thickness(LayoutMetrics.S1, LayoutMetrics.S2, LayoutMetrics.S1, 0);
                 DashboardTitleLeftColumn.Width = new GridLength(1, GridUnitType.Star);
                 DashboardTitleRightColumn.Width = new GridLength(0);
             }
@@ -114,18 +103,42 @@ namespace DoorbellApp
                 DashboardBottomRow.Height = new GridLength(0);
                 PlaceDashboard(DoorTilesPanel, 0, 0, 1);
                 PlaceDashboard(RecentCallsPanel, 0, 1, 1);
-                DoorTilesPanel.Margin = new Thickness(0, 0, 12, 0);
-                RecentCallsPanel.Margin = new Thickness(12, 4, 4, 0);
+                DoorTilesPanel.Margin = new Thickness(0, 0, LayoutMetrics.S3, 0);
+                RecentCallsPanel.Margin = new Thickness(LayoutMetrics.S3, LayoutMetrics.S1, LayoutMetrics.S1, 0);
                 DashboardTitleLeftColumn.Width = new GridLength(1.4, GridUnitType.Star);
                 DashboardTitleRightColumn.Width = new GridLength(1, GridUnitType.Star);
             }
-            DoorTileGrid.Columns = portrait ? 2 : (large ? 2 : 1);
+            // Door tiles: 1 column compact, 2 medium, 3–4 expanded.
+            DoorTileGrid.Columns = LayoutMetrics.TileColumns(size, width, DoorTileGrid.Children.Count);
 
+            ApplyCallLayout(width, height);
+            ApplyHistoryLayout(size);
             LayOutSosAndFooters(width, portrait);
             RefreshFrost();
             // Sampling the background under an element needs its arranged bounds, so the ink pass
             // waits for the layout this call just requested.
             QueueInkPass();
+        }
+
+        /// <summary>Compact windows put the clock on its own line under door name and language.</summary>
+        private void LayOutVisitorTopBar(SizeClass size)
+        {
+            bool compact = size == SizeClass.Compact;
+            Grid.SetRow(VisitorClockBlock, compact ? 1 : 0);
+            Grid.SetColumn(VisitorClockBlock, compact ? 0 : 1);
+            Grid.SetColumnSpan(VisitorClockBlock, compact ? 3 : 1);
+            VisitorClockBlock.Margin = new Thickness(0, compact ? LayoutMetrics.S3 : 0, 0, 0);
+            Grid.SetColumnSpan(VisitorDoorName, 1);
+        }
+
+        /// <summary>This door's display name for the visitor top bar; empty when unnamed.</summary>
+        private string VisitorDoorTitle()
+        {
+            if (string.IsNullOrEmpty(_nodeId)) return "";
+            var label = CoreClient.Dig(_cfg, "doors." + _nodeId + ".label." + Texts.Lang)
+                        ?? CoreClient.Dig(_cfg, "doors." + _nodeId + ".label.ja")
+                        ?? CoreClient.Dig(_cfg, "devices." + _nodeId + ".name");
+            return label == null ? "" : label.ToString();
         }
 
         private bool _inkPassQueued;
@@ -275,16 +288,6 @@ namespace DoorbellApp
             DashboardSosColumn.Width = new GridLength(reserveWidth);
             DashboardFooter.Margin = new Thickness(0, 0, 0, reserveHeight);
             VisitorFooter.Margin = new Thickness(0, 12, reserveWidth, reserveHeight);
-        }
-
-        private static void PlaceVisitor(FrameworkElement element, int row, int column,
-                                         int columnSpan, int rowSpan)
-        {
-            if (element == null) return;
-            Grid.SetRow(element, row);
-            Grid.SetColumn(element, column);
-            Grid.SetColumnSpan(element, columnSpan);
-            Grid.SetRowSpan(element, rowSpan);
         }
 
         private static void PlaceDashboard(FrameworkElement element, int row, int column,

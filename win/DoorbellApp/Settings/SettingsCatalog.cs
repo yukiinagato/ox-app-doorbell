@@ -38,7 +38,17 @@ namespace DoorbellApp.Settings
 
         private static SettingItem Add(SettingGroup group, SettingItem item)
         {
-            group.Items.Add(item);
+            // Destructive actions stay at the bottom of their section whatever the call order.
+            int at = group.Items.Count;
+            if (!item.Destructive)
+                while (at > 0 && group.Items[at - 1].Destructive) at--;
+            group.Items.Insert(at, item);
+            return item;
+        }
+
+        private static SettingItem Destructive(SettingItem item)
+        {
+            item.Destructive = true;
             return item;
         }
 
@@ -428,7 +438,7 @@ namespace DoorbellApp.Settings
             var security = Group(c, "settings.grp_security");
             Add(security, Info("cluster_key", "cluster_key"));
             Add(security, Describe(Info("peer_alerts", "peer_alerts")));
-            Add(security, Describe(Action("rotate_cluster_key", "rotate_cluster_key")));
+            Add(security, Destructive(Describe(Action("rotate_cluster_key", "rotate_cluster_key"))));
             Add(g, Web("devices_manage"));
             Add(g, Web("doors_manage"));
             Add(g, Web("panels_manage"));
@@ -446,7 +456,7 @@ namespace DoorbellApp.Settings
             var health = Group(c, "admin.runtime_health");
             Add(health, Info("watchdog_state", "watchdog_state"));
             Add(health, Info("safe_mode", "safe_mode"));
-            Add(health, Describe(Action("restart_app", "restart_app")));
+            Add(health, Destructive(Describe(Action("restart_app", "restart_app"))));
             return c;
         }
 

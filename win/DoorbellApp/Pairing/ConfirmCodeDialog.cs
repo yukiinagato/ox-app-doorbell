@@ -66,7 +66,7 @@ namespace DoorbellApp.Pairing
                 Visibility = Visibility.Collapsed,
                 Margin = new Thickness(0, 8, 0, 0),
             };
-            error.SetResourceReference(TextBlock.ForegroundProperty, "Danger");
+            error.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
             form.Children.Add(error);
             var actions = new StackPanel
             {

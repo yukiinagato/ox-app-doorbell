@@ -1485,7 +1485,7 @@ settings.safe_mode: { ja: "セーフモード", en: "Safe mode", zh: "安全模�
 settings.restart_app: { ja: "アプリを再起動", en: "Restart the app", zh: "重启应用" }
 settings.restart_app_desc: { ja: "通話中でないときに行ってください", en: "Do this when no call is in progress", zh: "请在没有通话时进行" }
 settings.restart_app_action: { ja: "再起動", en: "Restart", zh: "重启" }
-settings.restart_confirm: { ja: "アプリを再起動しますか？", en: "Restart the app?", zh: "要重启应用吗？" }
+settings.restart_confirm: { ja: "アプリを再起動しますか？ 通話中の呼出は終了し、数秒間操作できなくなります。", en: "Restart the app? Any call in progress ends and the screen is unavailable for a few seconds.", zh: "要重启应用吗？进行中的通话将结束，几秒钟内无法操作。" }
 settings.identity_restart_confirm: { ja: "端末の識別を変更するとアプリが再起動します。続けますか？", en: "Changing the device identity restarts the app. Continue?", zh: "更改设备标识会重启应用。是否继续？" }
 settings.app_version: { ja: "アプリのバージョン", en: "App version", zh: "应用版本" }
 settings.core_version: { ja: "コアのバージョン", en: "Core version", zh: "核心版本" }
@@ -1595,3 +1595,17 @@ pair.upgrade_rejoin_hint: { ja: "セキュリティ更新により以前の接�
 pair.err.confirm_code_required: { ja: "確認コードが必要です", en: "A confirmation code is required", zh: "需要确认码" }
 pair.err.confirm_code_mismatch: { ja: "確認コードが一致しません", en: "The confirmation code does not match", zh: "确认码不匹配" }
 pair.err.pk_conflict: { ja: "この端末は異なる鍵を名乗っています。安全のため追加できません", en: "This device announced two different keys and cannot be added safely", zh: "该设备声明了两个不同的密钥，出于安全无法添加" }
+
+# Windows layout (ui-guidelines: size classes, sheets, history detail, SOS clear gesture)
+ui.close: { ja: "閉じる", en: "Close", zh: "关闭" }
+ui.back: { ja: "戻る", en: "Back", zh: "返回" }
+history.unread: { ja: "未確認", en: "Unread", zh: "未读" }
+history.detail_empty: { ja: "呼出を選ぶと詳細が表示されます", en: "Select a call to see its details", zh: "选择一条呼叫以查看详情" }
+history.detail_door: { ja: "ドア", en: "Door", zh: "门" }
+history.detail_purpose: { ja: "用件", en: "Purpose", zh: "来意" }
+history.detail_outcome: { ja: "結果", en: "Outcome", zh: "结果" }
+history.detail_answered_by: { ja: "応答した端末", en: "Answered on", zh: "接听设备" }
+emergency.clear_hold_hint: { ja: "解除するには長押ししてください", en: "Press and hold to clear the alarm", zh: "长按以解除警报" }
+emergency.clear_confirm: { ja: "緊急警報を解除しますか？ すべての端末で警報が止まります。", en: "Clear the emergency alarm? It stops on every device.", zh: "要解除紧急警报吗？所有设备上的警报都会停止。" }
+emergency.source_time: { ja: "{source} から発報 · {time}", en: "From {source} · {time}", zh: "来自 {source} · {time}" }
+emergency.time_only: { ja: "発報 {time}", en: "Raised at {time}", zh: "触发于 {time}" }

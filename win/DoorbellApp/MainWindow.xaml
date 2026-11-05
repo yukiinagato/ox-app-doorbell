@@ -41,20 +41,14 @@
                     HorizontalAlignment="Right" VerticalAlignment="Top"
                     MouseLeftButtonDown="OnSecretCorner"/>
 
-            <!-- B · door-station visitor screen. Row and column placement is recomputed from the
-                 window size, so the same elements serve portrait and landscape. -->
+            <!-- B · door-station visitor screen: top bar, notice, purpose grid, then the fixed
+                 bottom action zone with the full-width Call button (VisitorCallBlock). -->
             <Grid x:Name="VisitorHome" Margin="20,18,20,18" Visibility="Collapsed">
                 <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <ScrollViewer x:Name="VisitorContentScroll" Grid.Row="0" VerticalScrollBarVisibility="Auto"
                               HorizontalScrollBarVisibility="Disabled" Margin="0,0,0,12">
                     <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="VisitorLeftColumn" Width="*"/>
-                    <ColumnDefinition x:Name="VisitorRightColumn" Width="1.2*"/>
-                </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -63,49 +57,60 @@
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
-                <StackPanel x:Name="VisitorClockBlock" Grid.Row="0" Grid.Column="0">
-                    <TextBlock x:Name="ClockText" FontSize="76" FontWeight="Light"
-                               Foreground="{DynamicResource Fg}"/>
-                    <TextBlock x:Name="DateText" FontSize="24"
-                               Foreground="{DynamicResource Dim}" Margin="0,2,0,0"/>
-                </StackPanel>
+                <!-- Top bar (ui-guidelines 4, Visitor): door name left, clock centre, language
+                     switch right. Compact windows move the clock to a second line. -->
+                <Grid x:Name="VisitorTopBar" Grid.Row="0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <TextBlock x:Name="VisitorDoorName" Grid.Column="0" FontSize="22"
+                               FontWeight="SemiBold" TextWrapping="Wrap" VerticalAlignment="Center"
+                               Foreground="{DynamicResource OnSurface}" Margin="0,0,12,0"/>
+                    <StackPanel x:Name="VisitorClockBlock" Grid.Column="1"
+                                HorizontalAlignment="Center">
+                        <TextBlock x:Name="ClockText" FontSize="76" FontWeight="Light"
+                                   HorizontalAlignment="Center" Foreground="{DynamicResource Fg}"/>
+                        <TextBlock x:Name="DateText" FontSize="24" HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource Dim}" Margin="0,2,0,0"/>
+                    </StackPanel>
+                    <WrapPanel x:Name="LangBar" Grid.Column="2" Orientation="Horizontal"
+                               HorizontalAlignment="Right" VerticalAlignment="Center"
+                               Margin="12,0,0,0" Visibility="Collapsed"/>
+                </Grid>
 
-                <Border x:Name="VisitorNoticeCard" Grid.Row="1" Grid.Column="0"
+                <Border x:Name="VisitorNoticeCard" Grid.Row="1"
                         Visibility="Collapsed" Margin="0,16,0,0" CornerRadius="12"
-                        Padding="16,12" Background="{DynamicResource Card}"
+                        Padding="16,12" Background="{DynamicResource Surface}"
                         BorderBrush="{DynamicResource Notice}" BorderThickness="1,1,1,4"
                         VerticalAlignment="Top">
                     <TextBlock x:Name="VisitorNoticeText" FontSize="22" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Fg}"/>
+                               Foreground="{DynamicResource OnSurface}"/>
                 </Border>
 
-                <WrapPanel x:Name="LangBar" Grid.Row="2" Grid.Column="1"
-                            Orientation="Horizontal" HorizontalAlignment="Center"
-                            Margin="0,10,0,10" Visibility="Collapsed"/>
-
-                <TextBlock x:Name="TouchHint" Grid.Row="4" Grid.Column="1" FontSize="20"
+                <TextBlock x:Name="TouchHint" Grid.Row="2" FontSize="20"
                            TextWrapping="Wrap" TextAlignment="Center"
-                           Foreground="{DynamicResource Dim}" Margin="0,14,0,0"/>
+                           Foreground="{DynamicResource Muted}" Margin="0,16,0,0"/>
 
-                <StackPanel x:Name="PurposeSection" Grid.Row="5" Grid.Column="0"
-                            Grid.ColumnSpan="2" Visibility="Collapsed" Margin="0,14,0,6">
-                    <TextBlock x:Name="PurposeHint" FontSize="18"
-                               Foreground="{DynamicResource Dim}"
+                <StackPanel x:Name="PurposeSection" Grid.Row="3" Visibility="Collapsed"
+                            Margin="0,16,0,8">
+                    <TextBlock x:Name="PurposeHint" FontSize="18" TextWrapping="Wrap"
+                               Foreground="{DynamicResource Muted}" TextAlignment="Center"
                                HorizontalAlignment="Center" Margin="0,0,0,8"/>
-                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                  VerticalScrollBarVisibility="Disabled">
-                        <UniformGrid x:Name="PurposeGrid" Columns="3"
-                                     HorizontalAlignment="Stretch"/>
-                    </ScrollViewer>
+                    <UniformGrid x:Name="PurposeGrid" Columns="3" HorizontalAlignment="Stretch"/>
                 </StackPanel>
 
-                <Grid x:Name="VisitorFooter" Grid.Row="6" Grid.Column="0" Grid.ColumnSpan="2"
-                      Margin="0,12,0,0">
+                <Grid x:Name="VisitorFooter" Grid.Row="4" Margin="0,12,0,0">
                     <TextBlock x:Name="VisitorVersionLine" FontSize="14" TextWrapping="Wrap"
-                               Foreground="{DynamicResource Dim}" HorizontalAlignment="Left"
+                               Foreground="{DynamicResource Muted}" HorizontalAlignment="Left"
                                VerticalAlignment="Center"/>
                 </Grid>
-                <Grid x:Name="VisitorSosHost" Grid.Row="7" Grid.ColumnSpan="2" Margin="0,16,0,0"/>
+                <Grid x:Name="VisitorSosHost" Grid.Row="5" Margin="0,16,0,0"/>
                     </Grid>
                 </ScrollViewer>
                 <StackPanel x:Name="VisitorCallBlock" Grid.Row="1">
@@ -412,14 +417,23 @@
         <!-- Incoming / monitor screen, after the iPad 1 layout: title with the return countdown at
              the far right, the video in a rounded black frame that takes the door camera's aspect,
              quick replies, then one control row of icon buttons. Surfaces follow the appearance. -->
-        <Grid x:Name="IncomingView" Visibility="Collapsed" Background="{DynamicResource Bg}">
+        <!-- Incoming / monitor screen (ui-guidelines 4, Incoming call). Portrait and narrow
+             windows: header, video, then the action zone at the bottom. Expanded landscape: the
+             video keeps at least 60% of the width on the left and the action zone is a fixed
+             column on the right (MainWindow.Layout.cs). Primary row: Answer (positive, largest),
+             Reply, Ignore; secondary row: Monitor, Unlock, Mic. -->
+        <Grid x:Name="IncomingView" Visibility="Collapsed" Background="{DynamicResource Bg}"
+              PreviewMouseDown="OnLiveViewInput" PreviewTouchDown="OnLiveViewInput">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <Grid Grid.Row="0" Margin="24,18,24,8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="IncomingStageColumn" Width="*"/>
+                <ColumnDefinition x:Name="IncomingActionColumn" Width="0"/>
+            </Grid.ColumnDefinitions>
+            <Grid Grid.Row="0" Grid.ColumnSpan="2" Margin="24,16,24,8">
                 <StackPanel HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock x:Name="IncomingTitle" FontSize="30" FontWeight="Bold"
@@ -467,8 +481,8 @@
                                Margin="0,4,0,0" Visibility="Collapsed"/>
                 </StackPanel>
             </Grid>
-            <Grid Grid.Row="1" Margin="24,4,24,0">
-                <Border x:Name="IncomingVideoFrame" CornerRadius="16" Background="#000000"
+            <Grid x:Name="IncomingStage" Grid.Row="1" Margin="24,4,24,0">
+                <Border x:Name="IncomingVideoFrame" CornerRadius="12" Background="#000000"
                         ClipToBounds="True" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Grid x:Name="IncomingVideoArea" ClipToBounds="True">
                         <MediaElement x:Name="IncomingH264" Stretch="Uniform" Visibility="Collapsed"
@@ -477,40 +491,80 @@
                         <Image x:Name="IncomingLive" Stretch="Uniform"/>
                         <!-- Core-decoded H.264 (H264LiveStreamer); shown once the first frame lands. -->
                         <Image x:Name="IncomingH264Image" Stretch="Uniform" Visibility="Collapsed"/>
-                        <TextBlock x:Name="IncomingNoVideo" FontSize="22" Foreground="#8A97A5"
+                        <TextBlock x:Name="IncomingNoVideo" FontSize="22"
+                                   Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
+                                   TextAlignment="Center" Margin="16"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
                 </Border>
             </Grid>
-            <WrapPanel x:Name="QuickReplyPanel" Grid.Row="2" Orientation="Horizontal"
-                       HorizontalAlignment="Center" Margin="30,8,30,0" MaxWidth="1200"/>
-            <WrapPanel x:Name="IncomingControlRow" Grid.Row="3" Orientation="Horizontal"
-                       HorizontalAlignment="Center" Margin="20,12,20,18">
-                <Button x:Name="MonitorButton" Style="{StaticResource ActionButton}"
-                        Click="OnMonitorClick"/>
-                <Button x:Name="AnswerButton" Style="{StaticResource ActionButton}"
-                        Background="#1E8E4B" Foreground="#FFFFFF" BorderBrush="#1E8E4B"
-                        Click="OnAnswerClick"/>
-                <Button x:Name="MicButton" Style="{StaticResource ActionButton}"
-                        Visibility="Collapsed" Click="OnMicClick"/>
-                <Button x:Name="OpenDoorButton" Style="{StaticResource ActionButton}"
-                        Background="#B7791F" Foreground="#FFFFFF" BorderBrush="#B7791F"
-                        Click="OnOpenDoorClick"/>
-                <Button x:Name="QuickReplyToggle" Style="{StaticResource ActionButton}"
-                        Click="OnQuickReplyToggleClick"/>
-                <Button x:Name="IgnoreButton" Style="{StaticResource ActionButton}"
-                        Foreground="{DynamicResource Danger}" BorderBrush="{DynamicResource Danger}"
-                        Click="OnIgnoreClick"/>
-            </WrapPanel>
+            <!-- Fixed action zone. In live view (monitor only) it floats over the video on a
+                 plate and hides after 4 s without input; a tap brings it back. -->
+            <Border x:Name="IncomingActionZone" Grid.Row="2" Grid.ColumnSpan="2"
+                    Margin="16,12,16,16" Padding="8" CornerRadius="20"
+                    Background="Transparent">
+                <StackPanel x:Name="IncomingActionStack">
+                    <UniformGrid x:Name="IncomingPrimaryRow" Rows="1" HorizontalAlignment="Stretch">
+                        <Button x:Name="AnswerButton" Style="{StaticResource ActionButton}"
+                                Background="{DynamicResource Positive}"
+                                Foreground="{DynamicResource OnPositive}"
+                                BorderBrush="{DynamicResource Positive}"
+                                MinHeight="88" FontSize="20" Click="OnAnswerClick"/>
+                        <Button x:Name="QuickReplyToggle" Style="{StaticResource ActionButton}"
+                                Click="OnQuickReplyToggleClick"/>
+                        <Button x:Name="IgnoreButton" Style="{StaticResource ActionButton}"
+                                Foreground="{DynamicResource Negative}"
+                                BorderBrush="{DynamicResource Negative}"
+                                Click="OnIgnoreClick"/>
+                    </UniformGrid>
+                    <WrapPanel x:Name="IncomingSecondaryRow" Orientation="Horizontal"
+                               HorizontalAlignment="Center" Margin="0,8,0,0">
+                        <Button x:Name="MonitorButton" Style="{StaticResource ActionButton}"
+                                MinHeight="56" Click="OnMonitorClick"/>
+                        <Button x:Name="OpenDoorButton" Style="{StaticResource ActionButton}"
+                                MinHeight="56" Foreground="{DynamicResource Warning}"
+                                BorderBrush="{DynamicResource Warning}" Click="OnOpenDoorClick"/>
+                        <Button x:Name="MicButton" Style="{StaticResource ActionButton}"
+                                MinHeight="56" Visibility="Collapsed" Click="OnMicClick"/>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+            <!-- Quick-reply sheet: bottom sheet (compact/medium) or side sheet (expanded). The
+                 call screen stays underneath and alive; one tap sends. -->
+            <Border x:Name="QuickReplySheet" Grid.RowSpan="3" Grid.ColumnSpan="2"
+                    Visibility="Collapsed" VerticalAlignment="Bottom"
+                    Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}"
+                    BorderThickness="1" CornerRadius="20,20,0,0" Padding="16,12,16,16">
+                <DockPanel>
+                    <Grid DockPanel.Dock="Top" Margin="8,0,0,8">
+                        <TextBlock x:Name="QuickReplySheetTitle" FontSize="20" FontWeight="SemiBold"
+                                   VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,60,0"
+                                   Foreground="{DynamicResource OnSurface}"/>
+                        <Button x:Name="QuickReplySheetClose" HorizontalAlignment="Right"
+                                Style="{StaticResource SettingsFlatButton}"
+                                MinWidth="48" MinHeight="48" Click="OnQuickReplySheetClose"/>
+                    </Grid>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly">
+                        <WrapPanel x:Name="QuickReplyPanel" Orientation="Horizontal"
+                                   HorizontalAlignment="Left"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
         </Grid>
 
+        <!-- In call: same zones as the incoming screen; End sits where Answer was. -->
         <Grid x:Name="InCallView" Visibility="Collapsed" Background="{DynamicResource Bg}">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
-            <ScrollViewer x:Name="InCallHeaderScroll" Grid.Row="0" Margin="24,18,24,8"
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition x:Name="InCallStageColumn" Width="*"/>
+                <ColumnDefinition x:Name="InCallActionColumn" Width="0"/>
+            </Grid.ColumnDefinitions>
+            <ScrollViewer x:Name="InCallHeaderScroll" Grid.Row="0" Grid.ColumnSpan="2" Margin="24,16,24,8"
                           VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel HorizontalAlignment="Stretch">
                 <TextBlock x:Name="InCallTitle" FontSize="30" FontWeight="Bold"
@@ -525,8 +579,8 @@
                 </Grid>
             </StackPanel>
             </ScrollViewer>
-            <Grid Grid.Row="1" Margin="24,4,24,0">
-                <Border CornerRadius="16" Background="#000000" ClipToBounds="True"
+            <Grid x:Name="InCallStage" Grid.Row="1" Margin="24,4,24,0">
+                <Border CornerRadius="12" Background="#000000" ClipToBounds="True"
                         HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Grid ClipToBounds="True">
                         <MediaElement x:Name="PeerH264" Stretch="Uniform" Visibility="Collapsed"
@@ -537,17 +591,19 @@
                     </Grid>
                 </Border>
             </Grid>
-            <StackPanel Grid.Row="2" Margin="20,12,20,18">
-                <WrapPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
-                <Button x:Name="InCallMicButton" Style="{StaticResource ActionButton}"
-                        Visibility="Collapsed" Click="OnMicClick"/>
-                <Button x:Name="InCallOpenDoorButton" Style="{StaticResource ActionButton}"
-                        Background="#B7791F" Foreground="#FFFFFF" BorderBrush="#B7791F"
-                        Click="OnOpenDoorClick"/>
-                </WrapPanel>
+            <StackPanel x:Name="InCallActionZone" Grid.Row="2" Grid.ColumnSpan="2"
+                        Margin="24,12,24,16">
                 <Button x:Name="EndCallButton" Style="{StaticResource VisitorPrimaryAction}"
-                        Background="{DynamicResource Danger}" Foreground="{DynamicResource OnDanger}"
-                        BorderBrush="{DynamicResource Danger}" Click="OnEndCallClick"/>
+                        Background="{DynamicResource Negative}" Foreground="{DynamicResource OnNegative}"
+                        BorderBrush="{DynamicResource Negative}" Click="OnEndCallClick"/>
+                <WrapPanel x:Name="InCallSecondaryRow" Orientation="Horizontal"
+                           HorizontalAlignment="Center" Margin="0,8,0,0">
+                    <Button x:Name="InCallMicButton" Style="{StaticResource ActionButton}"
+                            MinHeight="56" Visibility="Collapsed" Click="OnMicClick"/>
+                    <Button x:Name="InCallOpenDoorButton" Style="{StaticResource ActionButton}"
+                            MinHeight="56" Foreground="{DynamicResource Warning}"
+                            BorderBrush="{DynamicResource Warning}" Click="OnOpenDoorClick"/>
+                </WrapPanel>
             </StackPanel>
         </Grid>
 
@@ -655,10 +711,33 @@
                         BorderBrush="{DynamicResource Line}" Margin="18,0,0,0"
                         Click="OnHistoryMarkSeenClick"/>
             </WrapPanel>
-            <ScrollViewer Grid.Row="2" Margin="26,0,26,0" VerticalScrollBarVisibility="Auto"
-                          HorizontalScrollBarVisibility="Disabled">
-                <StackPanel x:Name="HistoryList"/>
-            </ScrollViewer>
+            <!-- Expanded: list left, detail right. Compact/medium: the detail replaces the list
+                 (drill-down) with a back action. -->
+            <Grid x:Name="HistoryBody" Grid.Row="2" Margin="24,0,24,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="HistoryListColumn" Width="*"/>
+                    <ColumnDefinition x:Name="HistoryDetailColumn" Width="0"/>
+                </Grid.ColumnDefinitions>
+                <ScrollViewer x:Name="HistoryListScroll" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly">
+                    <StackPanel x:Name="HistoryList"/>
+                </ScrollViewer>
+                <Border x:Name="HistoryDetailPane" Grid.Column="1" Visibility="Collapsed"
+                        Margin="16,8,0,8" CornerRadius="12" Padding="16"
+                        Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}"
+                        BorderThickness="1">
+                    <DockPanel>
+                        <Button x:Name="HistoryDetailBack" DockPanel.Dock="Top"
+                                Style="{StaticResource ChipButton}" MinHeight="44"
+                                BorderBrush="{DynamicResource Line}" HorizontalAlignment="Left"
+                                Margin="0,0,0,12" Click="OnHistoryDetailBackClick"/>
+                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled">
+                            <StackPanel x:Name="HistoryDetail"/>
+                        </ScrollViewer>
+                    </DockPanel>
+                </Border>
+            </Grid>
             <StackPanel Grid.Row="3" Margin="26,10,26,18" HorizontalAlignment="Center">
                 <Button x:Name="HistoryMoreButton" Style="{StaticResource ChipButton}"
                         BorderBrush="{DynamicResource Line}" HorizontalAlignment="Center"
@@ -694,17 +773,41 @@
             </StackPanel>
         </Grid>
 
-        <Grid x:Name="EmergencyView" Visibility="Collapsed" Background="#C62828">
-            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
+        <!-- Active SOS (ui-guidelines 4, SOS): full-screen negative overlay above every other
+             layer (ZIndex), source and time, and one Clear action that needs a deliberate long
+             press; keyboard users get a confirmation instead. Colors come from the Core event. -->
+        <Grid x:Name="EmergencyView" Visibility="Collapsed" Background="{DynamicResource Negative}"
+              Panel.ZIndex="1000">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          Margin="24">
+            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" MaxWidth="1100">
                 <TextBlock x:Name="EmergencyTitle" FontSize="110" FontWeight="Bold"
-                           Foreground="#FFFFFF" HorizontalAlignment="Center"/>
-                <TextBlock x:Name="EmergencyNote" FontSize="30" Foreground="#FFE3DE"
-                           HorizontalAlignment="Center" Margin="0,18,0,0"/>
-                <Button x:Name="EmergencyCancelButton" FontSize="30" Padding="64,18"
-                        Margin="0,64,0,0" Background="#7F1D1D" Foreground="#FFFFFF"
-                        BorderBrush="#FFFFFF" HorizontalAlignment="Center"
-                        Click="OnEmergencyCancelClick"/>
+                           Foreground="{DynamicResource OnNegative}" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center"/>
+                <TextBlock x:Name="EmergencySource" FontSize="30" FontWeight="SemiBold"
+                           Foreground="{DynamicResource OnNegative}" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,0"/>
+                <TextBlock x:Name="EmergencyNote" FontSize="30" Foreground="{DynamicResource OnNegative}"
+                           HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
+                           Margin="0,18,0,0"/>
+                <Grid Margin="0,56,0,0" HorizontalAlignment="Center" MinWidth="420">
+                    <Button x:Name="EmergencyCancelButton" FontSize="30" Padding="64,18"
+                            MinHeight="88" Background="#7F1D1D" Foreground="#FFFFFF"
+                            BorderBrush="#FFFFFF"
+                            PreviewMouseLeftButtonDown="OnEmergencyClearPress"
+                            PreviewMouseLeftButtonUp="OnEmergencyClearRelease"
+                            MouseLeave="OnEmergencyClearLeave"
+                            LostMouseCapture="OnEmergencyClearLeave"
+                            Click="OnEmergencyCancelClick"/>
+                    <Border x:Name="EmergencyClearProgress" HorizontalAlignment="Left"
+                            VerticalAlignment="Bottom" Height="8" Width="0" CornerRadius="4"
+                            Margin="4" IsHitTestVisible="False" Background="#FFFFFF"/>
+                </Grid>
+                <TextBlock x:Name="EmergencyClearHint" FontSize="20"
+                           Foreground="{DynamicResource OnNegative}" HorizontalAlignment="Center"
+                           TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,0"/>
             </StackPanel>
+            </ScrollViewer>
         </Grid>
 
         <Border x:Name="NightTint" Visibility="Collapsed" Background="#33FF2200"
