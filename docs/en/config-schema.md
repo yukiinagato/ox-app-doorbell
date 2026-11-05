@@ -165,7 +165,8 @@ the plaintext subscription. Startup reseals a legacy raw record or removes it fa
     // X-Doorbell-Mode: monitor = one-way listen-in / answer = two-way.
     // Direct calls work even if server or the device's own accounts are unset.
     "direct_port": 47190,
-    // DTMF feature codes (peer's keypress during a call → action; executed via mesh/MQTT)
+    // DTMF feature codes (RFC 4733 keypress on the SIP leg → action). Types: hangup,
+    // ha_command {command, door}, quick_reply {reply_id}, decline. See "SIP DTMF actions" below.
     "dtmf_actions": { "*1": { "type": "ha_command", "command": "unlock", "door": "self" },
                       "*0": { "type": "hangup" } }
   },
@@ -499,6 +500,26 @@ while leaving a light feature code unchanged:
 {"doors":{"d_front":{"unlock":{"command":"front_gate"}}},
  "sip":{"dtmf_actions":{"*1":{"type":"ha_command","command":"light_on","door":"self"}}}}
 ```
+
+### SIP DTMF actions
+
+`sip.dtmf_actions` maps a code of 1–8 characters from `0-9`, `*`, `#` and `A-D` to an action.
+Digits are matched as they arrive; a digit that cannot continue any code restarts matching, and a
+partial code is forgotten after three seconds. Writes are validated: an unknown type, a malformed
+code, an `ha_command` without `command`, or a `quick_reply` whose `reply_id` is not a configured
+`quick_replies` entry is rejected.
+
+| Type | Fields | Effect |
+|---|---|---|
+| `hangup` | — | Ends this node's SIP dialog. |
+| `ha_command` | `command`, `door` (`self` or a door id) | Publishes a `dtmf_action` event that the MQTT bridge turns into `<base>/cmd/<command>`. |
+| `quick_reply` | `reply_id` | Replies to the door's ringing call through the same path as a panel reply (display, speech, call outcome `replied`, `via:"sip_dtmf"`), then releases the SIP leg. Ignored when no call is ringing or the reply no longer exists. |
+| `decline` | — | Records a `dtmf_action` event with the call identity and releases only this SIP leg. Like a resident's Ignore it is local: other devices keep ringing and the call is answered elsewhere or missed by the normal timeout. |
+
+`quick_reply` and `decline` are meant for a phone-side voice menu that keeps the door leg in early
+media (see `deploy/asterisk/doorbell-menu.conf`). Its recommended mapping is `#21`–`#29` for the
+quick replies in display order and `#90` for decline; `tools/gen_asterisk_prompts.sh` prints the
+mapping that matches the prompts it renders. Nothing is seeded by default.
 
 `display.appearance` is `auto_system`, `auto_schedule`, `light`, or `dark`, with
 `display.appearance_schedule = {dark_from, light_from}` evaluated in `time.zone`. Both exist at

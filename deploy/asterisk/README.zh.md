@@ -37,6 +37,29 @@
 - 夜间分支（extensions.conf 的 GotoIfTime）以 **Asterisk 服务器的时钟** 判定。
   与 app 侧的 quiet_hours（抑制门铃声）互相独立 — 管理页面的文档中也有同样说明。
 
+## 电话侧语音菜单（通话、回复、不接听）
+
+门口机呼叫时，最先接起的电话（内线或手机）会听到语音菜单：
+
+- **1**：与访客通话。直到这一步，门口机的呼叫才算被接听。
+- **2**：选择回复。按显示顺序朗读快捷回复（1–9，0 返回）。门口机会在屏幕上显示并语音播放回复，通话记录记为"已回复"。
+- **9**：这部电话不接听。其他室内机继续响铃，无人接听时记为未接来电。
+- 连续 `MENU_TRIES` 次没有按键时执行 `MENU_TIMEOUT_ACTION`。默认是 `decline`，这样手机语音信箱接起时不会接通访客。
+
+原理：门口机的呼叫一直停留在 `Progress()` 早期媒体，不会被接听。选择回复或不接听时，Asterisk 向门口机发送 RFC 4733 DTMF（`#21`–`#29` / `#90`），然后释放这条呼叫。菜单本体在 `doorbell-menu.conf`，由 `extensions.conf` 用 `#include` 引入。
+
+设置：
+
+1. 在 Mac 上生成语音：`tools/gen_asterisk_prompts.sh --config <从管理后台导出的配置>.json`，把 `deploy/asterisk/sounds/<语言>/` 复制到 PBX 的 `/var/lib/asterisk/sounds/<语言>/doorbell/`。
+2. 把脚本输出的 `REPLY_COUNT` 写进 `[globals]`。
+3. 在管理后台给门口机设置脚本输出的 `sip.dtmf_actions`，例如：
+   `{"#21":{"type":"quick_reply","reply_id":"qr_away"},"#22":{"type":"quick_reply","reply_id":"qr_no"},"#90":{"type":"decline"}}`
+4. 快捷回复的顺序或文字改变后，重新做 1–3 步。
+
+经光电话打到的手机，DTMF 多为 inband；保持 `[hgw] dtmf_mode=inband` 时由 Asterisk 检测。发给门口机的 DTMF 走 Asterisk 与门口机之间的 RFC 4733，不受影响。
+
+开发环境验证：在 `deploy/dev/asterisk` 运行 `tools/dev_ivr_test.sh`，由 SIPp 扮演门口机、Asterisk 内的脚本扮演电话，自动验证回复、通话、不接听、语音信箱四种情况。接真实门口机时，把呼叫目标分机设为 620（菜单在软电话 201 上）或 621–624。
+
 ## SIP 视频（Phase 6）
 
 在 Tier A 门口机的 endpoint 追加 `allow=ulaw,h264` + `max_video_streams=1`。

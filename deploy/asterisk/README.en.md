@@ -46,6 +46,29 @@ Ring: door station → 600/601   Reverse call (monitor): extension → 8001..
   server's clock**. It is independent of the app-side quiet_hours (chime suppression) — the admin
   UI documentation notes the same.
 
+## Phone-side voice menu (talk, reply, decline)
+
+The first phone that answers a door-station call (an extension or the mobile) hears a menu:
+
+- **1**: talk to the visitor. Only now is the door-station call answered.
+- **2**: choose a reply. The quick replies are read in display order (1-9, 0 goes back). The door station shows and speaks the reply, and the call history records it as replied.
+- **9**: this phone declines. Other indoor devices keep ringing; if nobody answers the call is missed.
+- After `MENU_TRIES` prompts without a key, `MENU_TIMEOUT_ACTION` runs. It defaults to `decline` so a mobile voicemail that picks up is never connected to the visitor.
+
+How it works: the door leg stays in `Progress()` early media and is not answered. For a reply or a decline Asterisk sends RFC 4733 DTMF (`#21`-`#29` / `#90`) to the door station and releases the leg. The menu lives in `doorbell-menu.conf`, included from `extensions.conf`.
+
+Setup:
+
+1. Render the prompts on a Mac: `tools/gen_asterisk_prompts.sh --config <configuration exported from Admin>.json`. Copy `deploy/asterisk/sounds/<lang>/` to `/var/lib/asterisk/sounds/<lang>/doorbell/` on the PBX.
+2. Put the `REPLY_COUNT` the script prints in `[globals]`.
+3. Set the printed `sip.dtmf_actions` on the door stations in Admin, for example:
+   `{"#21":{"type":"quick_reply","reply_id":"qr_away"},"#22":{"type":"quick_reply","reply_id":"qr_no"},"#90":{"type":"decline"}}`
+4. Repeat steps 1-3 whenever the quick replies change order or wording.
+
+A mobile reached through the Hikari line often sends inband DTMF; with `[hgw] dtmf_mode=inband` Asterisk detects it. The DTMF sent to the door station is RFC 4733 between Asterisk and the door station and is unaffected.
+
+Development check: in `deploy/dev/asterisk`, `tools/dev_ivr_test.sh` uses SIPp as the door station and scripted phones inside Asterisk to verify reply, talk, decline and voicemail automatically. With a real door station, use target extension 620 (menu on softphone 201) or 621-624.
+
 ## SIP Video (Phase 6)
 
 For Tier A door stations, add `allow=ulaw,h264` + `max_video_streams=1` to the endpoint.

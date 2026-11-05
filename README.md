@@ -134,7 +134,10 @@ door, keep up to eight reusable announcement presets, and expose a door-unlock
 control only when an unlock command is configured (or explicitly choose to show
 it). Unlock uses the same configured `ha_command` path as a SIP DTMF feature
 code and returns an explicit `unlock_not_configured` result rather than
-pretending success. A visitor purpose can also be disabled without deleting its
+pretending success. With Asterisk, the first phone to answer a door-station
+call can hear a voice menu (talk, pick a quick reply, or decline); a reply or
+decline reaches the door station as a DTMF action without answering the door
+leg (`deploy/asterisk/README.en.md`). A visitor purpose can also be disabled without deleting its
 wording, icon, order, history, or rules; a stale station that submits that
 purpose still rings, but as a generic call.
 
