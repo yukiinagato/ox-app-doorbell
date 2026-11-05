@@ -1670,6 +1670,67 @@ bool Store::eventCoverageSet(const std::map<std::string, uint64_t>& coverage) {
   return metaSetLocked(kEventCoverageKey, json::dump(o.get()));
 }
 
+std::map<std::string, uint64_t> Store::eventMaxSeqs() {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+  std::map<std::string, uint64_t> out;
+  if (!db_) return out;
+  Stmt st(db_, "SELECT origin,max_seq FROM event_origin_state");
+  if (!st.ok()) return out;
+  while (st.step() == SQLITE_ROW) {
+    const int64_t seq = st.colInt(1);
+    if (seq > 0) out[st.colText(0)] = static_cast<uint64_t>(seq);
+  }
+  return out;
+}
+
+bool Store::discardPreviousClusterEvents(const std::map<std::string, uint64_t>& until,
+                                         const std::string& self_origin) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+  if (!db_ || self_origin.empty() || !exec("BEGIN IMMEDIATE")) return false;
+  auto fail = [this] {
+    exec("ROLLBACK");
+    return false;
+  };
+  {
+    Stmt drop(db_, "DELETE FROM events WHERE origin<>?1");
+    if (!drop.ok()) return fail();
+    drop.bind(1, self_origin);
+    if (drop.step() != SQLITE_DONE) return fail();
+  }
+  {
+    Stmt drop(db_, "DELETE FROM event_origin_state WHERE origin<>?1");
+    if (!drop.ok()) return fail();
+    drop.bind(1, self_origin);
+    if (drop.step() != SQLITE_DONE) return fail();
+  }
+  {
+    Stmt drop(db_, "DELETE FROM event_backfill WHERE origin<>?1");
+    if (!drop.ok()) return fail();
+    drop.bind(1, self_origin);
+    if (drop.step() != SQLITE_DONE) return fail();
+  }
+  auto own = until.find(self_origin);
+  if (own != until.end() && own->second > 0) {
+    Stmt archive(db_,
+                 "UPDATE events SET type='archived',door='',device='',payload_json='{}',"
+                 "notify_json='' WHERE origin=?1 AND seq<=?2");
+    if (!archive.ok()) return fail();
+    archive.bind(1, self_origin);
+    archive.bind(2, static_cast<int64_t>(std::min<uint64_t>(own->second, INT64_MAX)));
+    if (archive.step() != SQLITE_DONE) return fail();
+  }
+  if (!exec("DELETE FROM tg_queue") ||
+      !exec("DELETE FROM meta WHERE key IN ('call_log_seen_hlc','event_coverage')"))
+    return fail();
+  {
+    Stmt presses(db_, "SELECT COUNT(*) FROM events WHERE type='press'");
+    if (!presses.ok() || presses.step() != SQLITE_ROW) return fail();
+    if (!metaSetLocked("stat_press_total", std::to_string(presses.colInt(0)))) return fail();
+  }
+  if (!exec("COMMIT")) return fail();
+  return rebuildCallProjectionLocked(/*clear_fence=*/true);
+}
+
 std::map<std::string, uint64_t> Store::eventCoverage() {
   std::lock_guard<std::recursive_mutex> lk(mu_);
   std::map<std::string, uint64_t> out;

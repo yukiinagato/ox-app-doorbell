@@ -2881,3 +2881,137 @@ TEST_CASE("v3: a node that is not upgrade-pending cannot rebuild") {
   CHECK(n->node->rebuildClusterFromThisDevice() == "not_upgrade_pending");
   n->node->stop();
 }
+
+namespace {
+
+size_t callLogRows(Node& node) {
+  auto doc = json::parse(node.callLogJson(0, 50));
+  return doc ? static_cast<size_t>(cJSON_GetArraySize(json::get(doc.get(), "rows"))) : 0;
+}
+
+bool waitPending(NFleet& f, Node& host, const std::string& id) {
+  for (int i = 0; i < 200; i++) {
+    f.run(50);
+    auto pj = json::parse(host.pairingJson());
+    const cJSON* it = nullptr;
+    cJSON_ArrayForEach(it, json::get(json::get(pj.get(), "pending"), "devices")) {
+      if (json::getString(it, "id") == id) return true;
+    }
+  }
+  return false;
+}
+
+}  // namespace
+
+TEST_CASE("pairing: history from a cluster this device left does not follow it into the next") {
+  const std::string dir_p = v3TempDir();
+  const std::string dir_h = v3TempDir();
+  struct Cleanup {
+    std::vector<std::string> paths;
+    ~Cleanup() {
+      for (const auto& path : paths) {
+        std::error_code ignored;
+        std::filesystem::remove_all(path, ignored);
+      }
+    }
+  } cleanup{{dir_p, dir_h}};
+
+  NFleet f;
+  // Cluster X: a door station and the panel that later moves house.
+  auto& door = f.add("D:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  auto& panel = f.add("P:1", "panel", "indoor_panel", "", /*seed_cfg=*/false, false, dir_p);
+  panel.node->setSecureStore([](const std::string&) { return std::string(); },
+                             [](const std::string&, const std::string&) { return true; });
+  REQUIRE(door.node->start());
+  REQUIRE(panel.node->start());
+  f.run(1000);
+  for (int i = 0; i < 2; i++) {
+    const std::string call = door.node->pressV2("d_front", "");
+    REQUIRE_FALSE(call.empty());
+    REQUIRE(door.node->cancelCallV2("d_front", call, "visitor"));
+    f.run(2000);
+  }
+  REQUIRE([&] {
+    for (int i = 0; i < 400; i++) {
+      f.run(50);
+      if (callLogRows(*panel.node) == 2) return true;
+    }
+    return false;
+  }());
+  const std::string door_id = door.node->nodeId();
+
+  // Leaving keeps the history on the device itself.
+  panel.node->unpair();
+  f.run(500);
+  CHECK(callLogRows(*panel.node) >= 1);
+  door.node->stop();
+
+  // Cluster Y: a new household founded elsewhere invites the panel.
+  auto& host = f.add("H:1", "host", "indoor_panel", "", /*seed_cfg=*/true, /*zero_psk=*/true,
+                     dir_h);
+  host.node->setSecureStore([](const std::string&) { return std::string(); },
+                            [](const std::string&, const std::string&) { return true; });
+  REQUIRE(host.node->start());
+  f.run(200);
+  REQUIRE(host.node->foundCluster());
+  REQUIRE(waitPending(f, *host.node, panel.node->nodeId()));
+  host.node->inviteDevice(
+      panel.node->nodeId(),
+      json::getString(json::get(json::parse(panel.node->pairingJson()).get(), "self"),
+                      "confirm_code"));
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      if (panel.uiCount("paired") >= 1) return true;
+    }
+    return false;
+  }());
+  f.run(3000);
+
+  CHECK(callLogRows(*host.node) == 0);
+  CHECK(callLogRows(*panel.node) == 0);
+  host.node->stop();
+  panel.node->stop();
+
+  for (const auto& dir : {dir_h, dir_p}) {
+    Store probe;
+    REQUIRE(probe.open(dir + "/doorbell.db"));
+    CHECK_FALSE(probe.eventHeads().count(door_id));
+    for (const auto& event : probe.recentEvents(200)) {
+      CHECK(event.origin != door_id);
+      CHECK(event.type != "press");
+    }
+  }
+}
+
+TEST_CASE("pairing: a v2 member rebuilding the cluster keeps its household history") {
+  NFleet f;
+  const std::string dir = v3TempDir();
+  const std::string foreign(32, 'd');
+  {
+    Store seed;
+    REQUIRE(seed.open(dir + "/doorbell.db"));
+    EventRecord press;
+    press.origin = foreign;
+    press.seq = 1;
+    press.type = "press";
+    press.door = "d_front";
+    press.device = foreign;
+    press.hlc = HlcClock::format(1'699'999'000'000LL, 0, "dddddddd");
+    press.wall_ms = 1'699'999'000'000LL;
+    press.payload_json = R"({"call_id":"call-v2-1"})";
+    REQUIRE(seed.eventPut(press));
+  }
+  auto n = makeStrictNode(f, dir, f.psk);
+  n->secrets["mesh.psk"] = hexEncode(f.psk.data(), f.psk.size());
+  REQUIRE(n->node->start());
+  f.run(100);
+  REQUIRE(json::getBool(pairingDoc(*n->node).get(), "upgrade_rejoin_required"));
+  REQUIRE(n->node->rebuildClusterFromThisDevice() == "ok");
+  f.run(200);
+  CHECK(callLogRows(*n->node) >= 1);
+  n->node->stop();
+  Store probe;
+  REQUIRE(probe.open(dir + "/doorbell.db"));
+  CHECK(probe.eventHeads().count(foreign));
+}

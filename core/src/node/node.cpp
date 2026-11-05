@@ -7008,6 +7008,7 @@ struct Node::Impl {
       if (!store.configDeleteAll()) return false;
       config->resetReplica();
       store.metaDeletePrefix("admin_pw_");
+      if (!discardPreviousClusterHistoryOnLoop()) return false;
       snapshot_epoch = hexEncode(randomBytes(16));
       rebuildCfg();
       return true;
@@ -9328,6 +9329,9 @@ struct Node::Impl {
     // Founding or joining is the other moment this node becomes able to write cluster
     // configuration. A join discarded the local replica, so this node's identity record is
     // written again (seedConfig re-seeds nothing the cluster already has), then its door entry.
+    // A founder adopts nothing, so the previous cluster's history is dropped here instead.
+    if (!discardPreviousClusterHistoryOnLoop())
+      DB_LOGW(kTag, "a newly founded cluster may show history from the previous one");
     if (!seedConfig())
       DB_LOGW(kTag, "could not re-assert this device's identity after pairing");
     if (!reclaimSeededDoorEntries() || !ensureOwnDoorEntry())
@@ -9365,6 +9369,15 @@ struct Node::Impl {
   // device does not sit unauthenticated between unpair and first-run setup; and node_id, which
   // is this device's identity rather than the cluster's.
   void forgetClusterStateOnLoop() {
+    // The event log stays as this device's own record, but it belongs to the cluster being left:
+    // remember how far it reaches so the next join or founding does not publish it there.
+    {
+      auto until = json::obj();
+      for (const auto& [origin, seq] : store.eventMaxSeqs())
+        json::set(until.get(), origin.c_str(), static_cast<int64_t>(seq));
+      if (!store.metaSet("events_previous_cluster", json::dump(until.get())))
+        DB_LOGW(kTag, "leaving a cluster: the previous-cluster history marker was not stored");
+    }
     // Hard-delete the rows instead of tombstoning them. A tombstone replicates, so re-pairing to
     // the same cluster would push deletions for every device this replica had forgotten.
     if (!store.configDeleteAll())
@@ -9394,6 +9407,42 @@ struct Node::Impl {
       DB_LOGW(kTag, "first-run configuration could not be re-seeded after leaving the cluster");
     applyEffectiveCaps();
     scheduleSnapshotRefresh();
+  }
+
+  // Before this node joins or founds a cluster: history carried out of a cluster it left is not
+  // the next cluster's history. Other devices' events are dropped and this device's own become
+  // content-free records (see Store::discardPreviousClusterEvents). A v2 member rejoining after
+  // the upgrade never left explicitly, so it has no marker and keeps its household's history.
+  bool discardPreviousClusterHistoryOnLoop() {
+    const auto marker = store.metaGet("events_previous_cluster");
+    if (!marker) return true;
+    const auto upgrade = store.metaGet("mesh.upgrade_rejoin_required");
+    if (upgrade && *upgrade == "1") return true;
+    std::map<std::string, uint64_t> until;
+    if (auto doc = json::parse(*marker)) {
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, doc.get()) {
+        if (it->string && cJSON_IsNumber(it) && it->valuedouble > 0)
+          until[it->string] = static_cast<uint64_t>(it->valuedouble);
+      }
+    }
+    if (!store.discardPreviousClusterEvents(until, node_id)) {
+      DB_LOGE(kTag, "the previous cluster's history could not be discarded");
+      return false;
+    }
+    store.metaDeletePrefix("events_previous_cluster");
+    store.metaDeletePrefix("replication_progress_v1");
+    peer_replication.clear();
+    peer_replication_loaded = false;
+    for (auto& entry : pending_lifecycles)
+      if (entry.second.retry_timer) loop->cancel(entry.second.retry_timer);
+    pending_lifecycles.clear();
+    terminal_calls.clear();
+    events->loadHeads();
+    restoreActiveCalls(/*notify=*/true);
+    notifyCallLogChanged();
+    DB_LOGI(kTag, "discarded the history carried over from the previous cluster");
+    return true;
   }
 
   std::string rebuildClusterOnLoop() {
