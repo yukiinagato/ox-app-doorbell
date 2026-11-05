@@ -7565,6 +7565,20 @@ if (typeof document !== "undefined") (function () {
          "<h3 style='margin-top:14px'>" + esc(t("time.status")) + "</h3>" +
          "<div id='timeStatusBlock' class='fhint'>" + timeStatusHtml() + "</div></div>";
 
+    h += "<div class='card'><h2>" + esc(t("settings.change_password")) + "</h2>" +
+         "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("settings.password_shared")) +
+         "</div>" +
+         "<div class='frow'><label class='flab' for='pwCurrent'>" + esc(t("settings.password_current")) +
+         "</label><input type='password' id='pwCurrent' autocomplete='current-password'></div>" +
+         "<div class='frow'><label class='flab' for='pwNew'>" + esc(t("settings.password_new")) +
+         "</label><input type='password' id='pwNew' autocomplete='new-password' minlength='8'" +
+         " maxlength='128'><div class='dim fhint'>" + esc(t("admin.password_too_short")) +
+         "</div></div>" +
+         "<div class='frow'><label class='flab' for='pwConfirm'>" + esc(t("settings.password_confirm")) +
+         "</label><input type='password' id='pwConfirm' autocomplete='new-password'></div>" +
+         "<div class='fhint' id='pwErr' role='alert' style='color:var(--negative,#e5484d)'></div>" +
+         "<button class='btn small' id='pwSave'>" + esc(t("admin.save")) + "</button></div>";
+
     var clusterVolumes = L.effectiveVolumes(S.cfg, "");
     h += "<div class='card'><h2>" + esc(t("volume.title")) + "</h2>" +
          "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("volume.hint")) + "</div>" +
@@ -7714,6 +7728,27 @@ if (typeof document !== "undefined") (function () {
     };
 
     bindVolumeRows(el, "sysvol");
+    $("#pwSave").onclick = function () {
+      var current = $("#pwCurrent").value, next = $("#pwNew").value;
+      var err = $("#pwErr");
+      err.textContent = "";
+      if (next.length < 8) { err.textContent = t("admin.password_too_short"); return; }
+      if (next !== $("#pwConfirm").value) { err.textContent = t("settings.password_mismatch"); return; }
+      var button = $("#pwSave");
+      button.disabled = true;
+      api("POST", "/api/admin/password", { current: current, "new": next }, function (st, result) {
+        button.disabled = false;
+        if (st === 200 && result && result.ok) {
+          // Every session ends with the old password, this one included: log in again.
+          msg(t("settings.password_changed"));
+          setTimeout(function () { window.location.reload(); }, 1200);
+        } else if (st === 429) err.textContent = t("admin.locked");
+        else if (result && result.err === "wrong_password") err.textContent = t("admin.pin_wrong");
+        else if (result && result.err === "password_too_short")
+          err.textContent = t("admin.password_too_short");
+        else err.textContent = t("settings.password_failed");
+      }, { timeout_ms: 20000 });
+    };
     $("#timeSave").onclick = function () {
       var entries;
       try {

@@ -11071,6 +11071,29 @@ struct Node::Impl {
       return r;
     });
 
+    // Change the cluster administrator password from Admin. Runs on a worker because hashing is
+    // deliberately slow; setAdminPassword re-checks the current password under the shared
+    // lockout and clears every session, so the browser logs in again with the new one.
+    httpd->routeWorker("POST", "/api/admin/password", [this](const HttpReq& req) {
+      bool authorized = false;
+      loop->callSync([&] { authorized = adminMutationAuthorizedOnLoop(req); });
+      if (!authorized) return HttpResp::json("{\"ok\":false,\"error_code\":\"forbidden\"}", 403);
+      auto b = json::parse(req.body);
+      const std::string current = b ? json::getString(b.get(), "current") : "";
+      const std::string next = b ? json::getString(b.get(), "new") : "";
+      const int rc = setAdminPassword(current, next);
+      switch (rc) {
+        case 0: return HttpResp::json("{\"ok\":true}");
+        case -1:
+          return HttpResp::json("{\"ok\":false,\"err\":\"password_too_short\",\"min_length\":8}",
+                                400);
+        case -2: return HttpResp::json("{\"ok\":false,\"err\":\"wrong_password\"}", 403);
+        case -3: return HttpResp::json("{\"ok\":false,\"err\":\"locked\"}", 429);
+        default:
+          return HttpResp::json("{\"ok\":false,\"err\":\"persist_failed\"}", 500);
+      }
+    });
+
     httpd->route("GET", "/api/session", [this](const HttpReq& req) {
       const auto csrf = sessions.csrfToken(req.cookie("dbsess"), clock->monoMs());
       if (csrf.empty()) return HttpResp::json("{\"error_code\":\"auth_required\"}", 401);
