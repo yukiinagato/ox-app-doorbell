@@ -15,7 +15,6 @@ EventLog::EventLog(std::string self_id, HlcClock& hlc, Store& store)
 void EventLog::loadHeads() {
   frontiers_ = store_.eventHeads();
   dispatch_queue_.clear();
-  backfill_pending_.clear();
   dispatching_ = false;
   std::vector<std::string> origins;
   origins.reserve(frontiers_.size());
@@ -23,7 +22,7 @@ void EventLog::loadHeads() {
   for (const auto& origin : origins)
     drainContiguous(origin, nullptr, /*dispatch=*/false);
   const auto latest = store_.recentEvents(1);
-  if (!latest.empty()) hlc_.observe(latest.front().hlc);
+  if (!latest.empty()) hlc_.observePersisted(latest.front().hlc);
 }
 
 void EventLog::replayRecovered() { dispatchPending(); }
@@ -82,9 +81,8 @@ std::vector<bool> EventLog::applyRemoteBatch(const std::vector<EventRecord>& rec
 
 bool EventLog::ingestRemote(const EventRecord& e, bool backfill) {
   // A duplicate of a record that already arrived some other way keeps its original path.
-  if (!store_.eventIngest(e)) return false;
+  if (!store_.eventIngest(e, backfill)) return false;
   hlc_.observe(e.hlc);
-  if (backfill) backfill_pending_.insert({e.origin, e.seq});
   return true;
 }
 
@@ -112,14 +110,13 @@ bool EventLog::dispatchPending() {
       }
       const EventRecord& record = dispatch_queue_.front();
       const std::pair<std::string, uint64_t> key{record.origin, record.seq};
-      on_event_(record, record.origin == self_id_, backfill_pending_.count(key) > 0);
+      on_event_(record, record.origin == self_id_, store_.eventIsBackfill(key.first, key.second));
       if (!store_.eventAckDispatched(record.origin, record.seq)) {
         DB_LOGE("events", "event dispatch acknowledgement failed for " + record.origin + ":" +
                               std::to_string(record.seq));
         ok = false;
         break;
       }
-      backfill_pending_.erase(key);
       dispatch_queue_.pop_front();
     }
   } catch (...) {
@@ -158,8 +155,8 @@ bool EventLog::mergeNotify(const std::string& origin, uint64_t seq,
     cJSON_AddItemToObject(merged.get(), it->string, cJSON_Duplicate(it, 1));
   }
   if (cJSON_Compare(merged.get(), cur.get(), 1)) return false;
-  store_.eventSetNotify(origin, seq, json::dump(merged.get()));
-  return true;
+  // The caller re-broadcasts only what this replica actually persisted.
+  return store_.eventSetNotify(origin, seq, json::dump(merged.get()));
 }
 
 }  // namespace db

@@ -60,6 +60,13 @@ class LwwMap {
   const LwwEntry& remove(const std::string& key);  // tombstone
   // Applies a pre-validated local batch without exposing intermediate states to observers.
   std::vector<LwwEntry> mutate(const std::vector<LwwMutation>& mutations);
+  // Writes first-run defaults at the minimum HLC, so any real write or tombstone from any replica
+  // wins over them. Keys that already have an entry here (live, deleted, or seeded) are skipped.
+  // Deletions are not seeds and are ignored.
+  std::vector<LwwEntry> seed(const std::vector<LwwMutation>& mutations);
+  // The HLC this replica's seeded entries carry: physical time zero, so it orders before every
+  // clock-generated timestamp. The node suffix matches the author like any other HLC.
+  std::string seedHlc() const;
 
 
 
@@ -84,7 +91,21 @@ class LwwMap {
   std::vector<LwwEntry> all() const;
 
 
-  size_t gcTombstones(const VersionVector& fleet_min_vv, const std::string& older_than_hlc);
+  // Erases tombstones older than older_than_hlc that every replica in fleet_min_vv has observed.
+  // A tombstone is kept while it still hides an older live descendant or removes a member from an
+  // older live ancestor object, because erasing it would make that older value visible again.
+  // Returns the erased keys; the caller deletes them from durable storage.
+  // keep, when set, protects keys whose tombstone must outlive GC (for example a key a first-run
+  // seed could recreate on a device that joins after the tombstone was collected).
+  std::vector<std::string> gcTombstones(
+      const VersionVector& fleet_min_vv, const std::string& older_than_hlc,
+      const std::function<bool(const std::string&)>& keep = {});
+
+  // Remote entries whose HLC is malformed or further ahead of local wall time than
+  // kMaxRemoteAheadMs are counted here and never become winners. Their sequence numbers still
+  // advance the version vector, so one bad entry cannot stall replication from its author.
+  static constexpr int64_t kMaxRemoteAheadMs = HlcClock::kMaxObserveAheadMs;
+  uint64_t rejectedRemoteEntries() const { return rejected_remote_entries_; }
 
   // Discard this replica of a cluster's state, for unpair and revoke. Every entry and every
   // remote author's sequence knowledge is dropped locally, so a cluster joined afterwards is
@@ -105,16 +126,21 @@ class LwwMap {
   const std::string& selfId() const { return self_id_; }
 
  private:
+  // Rollback state for one tentative operation. Only the keys the operation touches are saved,
+  // so a write costs O(touched keys + authors) instead of a copy of the whole map.
   struct StateSnapshot {
-    std::map<std::string, LwwEntry> map;
+    std::map<std::string, std::optional<LwwEntry>> touched;
     VersionVector vv;
     std::map<std::string, std::set<uint64_t>> out_of_order_sequences;
     VersionVector durable_remote_frontier;
     uint64_t self_seq = 0;
   };
 
+  class UndoScope;
   StateSnapshot snapshot() const;
   void restore(StateSnapshot&& state);
+  void remember(const std::string& key);
+  bool remoteHlcAcceptable(const std::string& hlc);
   bool commit(const std::vector<LwwEntry>& changed, bool is_local, bool batch);
   bool commit(const std::vector<LwwEntry>& durable_changed,
               const std::vector<LwwEntry>& visible_changed, bool is_local, bool batch);
@@ -132,6 +158,8 @@ class LwwMap {
   VersionVector durable_remote_frontier_;
   uint64_t self_seq_ = 0;
   LwwEntry rejected_entry_;
+  StateSnapshot* undo_ = nullptr;
+  uint64_t rejected_remote_entries_ = 0;
   bool last_mutation_committed_ = true;
   CommitCb on_commit_;
   ChangeCb on_change_;

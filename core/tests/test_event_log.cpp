@@ -337,7 +337,7 @@ TEST_CASE("event_log: applyRemote is idempotent for duplicates and reflected loc
     last_local = is_local;
   });
 
-  EventRecord r = mkRemote("bbbbbbbb1111", 1, 999'999);
+  EventRecord r = mkRemote("bbbbbbbb1111", 1, 200'000);
   CHECK(log.applyRemote(r));
   CHECK_FALSE(log.applyRemote(r));
   CHECK(cb_count == 1);
@@ -645,4 +645,35 @@ TEST_CASE("event_log: a batch is stored completely before its first record is di
   CHECK_FALSE(again[1]);
   CHECK(applied.empty());
   CHECK(other_seen.size() == 2);
+}
+
+TEST_CASE("event_log: a backfilled event stays backfill after a restart before dispatch") {
+  char path_template[] = "/tmp/doorbell_backfill_XXXXXX";
+  const int fd = ::mkstemp(path_template);
+  REQUIRE(fd >= 0);
+  ::close(fd);
+  const std::string path = path_template;
+  SimClock clock(1000);
+  HlcClock hlc(clock, "aaaaaaaa");
+  {
+    Store store;
+    REQUIRE(store.open(path));
+    EventLog log("aaaaaaaa0000", hlc, store);
+    log.loadHeads();
+    // No dispatcher yet: the process "crashes" after ingest, before dispatch.
+    CHECK(log.applyRemote(mkRemote("bbbbbbbb1111", 1, 900), nullptr, /*backfill=*/true));
+    CHECK(log.applyRemote(mkRemote("bbbbbbbb1111", 2, 950), nullptr, /*backfill=*/false));
+  }
+  Store store;
+  REQUIRE(store.open(path));
+  EventLog log("aaaaaaaa0000", hlc, store);
+  log.loadHeads();
+  std::vector<std::pair<uint64_t, bool>> seen;
+  log.onDispatch([&](const EventRecord& e, bool, bool backfill) { seen.push_back({e.seq, backfill}); });
+  log.replayRecovered();
+  REQUIRE(seen.size() == 2);
+  CHECK(seen[0] == std::make_pair(uint64_t{1}, true));
+  CHECK(seen[1] == std::make_pair(uint64_t{2}, false));
+  CHECK_FALSE(store.eventIsBackfill("bbbbbbbb1111", 1));
+  for (const char* suffix : {"", "-wal", "-shm"}) std::remove((path + suffix).c_str());
 }

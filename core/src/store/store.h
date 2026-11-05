@@ -99,10 +99,16 @@ class Store {
   // the returned empty optional must be treated as an emission failure.
   std::optional<EventRecord> eventAppendLocal(EventRecord e,
                                               std::vector<EventRecord>* newly_applied = nullptr);
-  bool eventIngest(const EventRecord& e);
+  // backfill marks a record that arrived through anti-entropy; the mark is committed with the
+  // record and cleared when its dispatch is acknowledged.
+  bool eventIngest(const EventRecord& e, bool backfill = false);
+  bool eventIsBackfill(const std::string& origin, uint64_t seq);
+  // Recomputes call_projection and the door fence from applied history in local application
+  // order, exactly as a schema migration does.
+  bool rebuildCallProjection();
   std::optional<EventRecord> eventApplyNext(const std::string& origin);
   bool eventExists(const std::string& origin, uint64_t seq);
-  void eventSetNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
+  bool eventSetNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
   std::optional<EventRecord> eventGet(const std::string& origin, uint64_t seq);
   // The advertised head is the largest contiguous sequence starting at one. max_seq is a
   // separate durable allocation watermark and is not reduced when old events are pruned.
@@ -229,6 +235,7 @@ class Store {
  private:
   bool exec(const char* sql);
   bool migrate();  // Requires mu_.
+  bool rebuildCallProjectionLocked(bool clear_fence);
   bool migrateOperationsLocked();
   bool operationReadyLocked();
   bool operationExpireLocked(int64_t now_mono_ms, int64_t now_wall_ms);

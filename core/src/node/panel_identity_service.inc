@@ -107,9 +107,9 @@
       if (found == panel_sessions.end()) return false;
       if (interaction) found->second.interactive_mono = clock->monoMs();
     }
-    // The legacy bearer header is an explicit compatibility credential. Browser cookies
-    // always pass the mutation-intent check above because browsers attach them automatically.
-    if (principal.legacy_shared) return true;
+    // Every check has passed. A legacy shared bearer is an explicit compatibility credential and
+    // is not scoped by door or grant; a cookie session additionally proved mutation intent above,
+    // because browsers attach cookies automatically.
     return true;
   }
 

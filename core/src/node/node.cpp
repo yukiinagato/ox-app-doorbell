@@ -184,6 +184,8 @@ int64_t floorDiv(int64_t a, int64_t b) {
 constexpr size_t kAssetMaxBytes = 3 * 1024 * 1024;
 // Event retention: the newest records of every origin always survive, whatever the age cutoff is.
 constexpr size_t kEventRetentionPerOrigin = 5000;
+// Extra wait before a node that is not a door station of the door ends an orphaned ringing call.
+constexpr int64_t kOrphanCallGraceMs = 15'000;
 // Call history defaults. A page is bounded so one HTTP call cannot serialize the whole database.
 constexpr size_t kCallLogDefaultLimit = 50;
 constexpr size_t kCallLogMaxLimit = 500;
@@ -3158,6 +3160,7 @@ struct Node::Impl {
     std::string best_server;
     std::string last_error = "no_response";
     std::vector<int64_t> recovery_offsets;
+    int64_t latest_recovery_offset = 0;
     for (const auto& spec : servers) {
       std::string host;
       int port = sntp::kDefaultPort;
@@ -3191,11 +3194,13 @@ struct Node::Impl {
             last_error = !sntp::sampleRttSane(sample) ? "rtt_unreasonable" : "offset_unreasonable";
             continue;
           }
+          // Continuity is judged against the previous sample, not the largest one so far.
           if (!recovery_offsets.empty()) {
-            const int64_t delta = sample.offset_ms - recovery_offsets.back();
+            const int64_t delta = sample.offset_ms - latest_recovery_offset;
             if (delta < -1500 || delta > 1500) recovery_offsets.clear();
           }
           recovery_offsets.push_back(sample.offset_ms);
+          latest_recovery_offset = sample.offset_ms;
           std::sort(recovery_offsets.begin(), recovery_offsets.end());
           if (recovery_offsets.size() < 3 ||
               recovery_offsets.back() - recovery_offsets.front() > 1500) {
@@ -4676,8 +4681,144 @@ struct Node::Impl {
     return static_cast<int>(std::max<int64_t>(1, std::min<int64_t>(days, 3650)));
   }
 
-  // Retention runs against whatever replicated coverage the store has recorded. Without a
-  // coverage snapshot the store still refuses to delete anything, so this tick is a no-op.
+  // Replication progress each peer last advertised in anti-entropy: its configuration version
+  // vector and event heads. Persisted, and only ever advanced, so a restart keeps what the cluster
+  // is known to hold. Event retention and tombstone collection act only on the minimum over every
+  // configured member, so an offline member simply defers both.
+  struct PeerReplication {
+    VersionVector vv;
+    std::map<std::string, uint64_t> heads;
+  };
+  std::map<std::string, PeerReplication> peer_replication;
+  bool peer_replication_loaded = false;
+
+  static json::Doc counterMapJson(const std::map<std::string, uint64_t>& values) {
+    auto o = json::obj();
+    for (const auto& [key, value] : values)
+      json::set(o.get(), key.c_str(),
+                static_cast<int64_t>(std::min<uint64_t>(value, INT64_MAX)));
+    return o;
+  }
+  static std::map<std::string, uint64_t> counterMapFrom(const cJSON* object) {
+    std::map<std::string, uint64_t> out;
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, object) {
+      if (item->string && cJSON_IsNumber(item) && item->valuedouble > 0)
+        out[item->string] = static_cast<uint64_t>(item->valuedouble);
+    }
+    return out;
+  }
+
+  void loadPeerReplication() {
+    if (peer_replication_loaded) return;
+    peer_replication_loaded = true;
+    auto raw = store.metaGet("replication_progress_v1");
+    auto doc = raw ? json::parse(*raw) : json::Doc();
+    const cJSON* peer = nullptr;
+    cJSON_ArrayForEach(peer, doc.get()) {
+      if (!peer->string) continue;
+      auto& progress = peer_replication[peer->string];
+      progress.vv = counterMapFrom(json::get(peer, "vv"));
+      progress.heads = counterMapFrom(json::get(peer, "heads"));
+    }
+  }
+
+  void notePeerReplication(const std::string& peer, const VersionVector& vv,
+                           const std::map<std::string, uint64_t>& heads) {
+    if (peer.empty() || peer == node_id) return;
+    loadPeerReplication();
+    auto& progress = peer_replication[peer];
+    bool changed = false;
+    auto advance = [&changed](std::map<std::string, uint64_t>& into,
+                              const std::map<std::string, uint64_t>& from) {
+      for (const auto& [key, value] : from) {
+        uint64_t& current = into[key];
+        if (value > current) {
+          current = value;
+          changed = true;
+        }
+      }
+    };
+    advance(progress.vv, vv);
+    advance(progress.heads, heads);
+    if (!changed) return;
+    auto doc = json::obj();
+    for (const auto& [id, entry] : peer_replication) {
+      cJSON* item = json::addObj(doc.get(), id.c_str());
+      json::setItem(item, "vv", counterMapJson(entry.vv));
+      json::setItem(item, "heads", counterMapJson(entry.heads));
+    }
+    store.metaSet("replication_progress_v1", json::dump(doc.get()));
+  }
+
+  // The minimum every configured member is known to hold. False while any member has never
+  // reported, because nothing may be discarded that such a member could still need.
+  bool fleetReplicationMinimum(VersionVector* vv, std::map<std::string, uint64_t>* heads) {
+    loadPeerReplication();
+    *vv = config->versionVector();
+    *heads = events->heads();
+    std::set<std::string> members;
+    const cJSON* device = nullptr;
+    cJSON_ArrayForEach(device, json::get(cfg.get(), "devices")) {
+      if (device->string) members.insert(device->string);
+    }
+    if (mesh) {
+      for (const auto& peer : mesh->peers()) members.insert(peer.id);
+    }
+    for (const auto& id : members) {
+      if (id.empty() || id == node_id || cfgAt("removed_devices." + id)) continue;
+      auto found = peer_replication.find(id);
+      if (found == peer_replication.end()) return false;
+      for (auto& [key, value] : *vv) {
+        auto other = found->second.vv.find(key);
+        value = std::min(value, other == found->second.vv.end() ? 0 : other->second);
+      }
+      for (auto& [key, value] : *heads) {
+        auto other = found->second.heads.find(key);
+        value = std::min(value, other == found->second.heads.end() ? 0 : other->second);
+      }
+    }
+    return true;
+  }
+
+  // Keys a first-run seed can write. Their tombstones are kept forever: collecting one would let
+  // a device that joins later re-seed a default the administrator deliberately deleted.
+  static bool seedableKey(const std::string& key) {
+    for (const char* prefix : {"schema_version", "reply", "integrations", "time", "audio",
+                               "emergency", "quick_replies", "ui", "visit_purposes",
+                               "notice.presets", "trigger_rules.r_sos_default_on",
+                               "trigger_rules.r_sos_default_off",
+                               "trigger_rules.r_missed_call_default"}) {
+      const size_t n = std::strlen(prefix);
+      if (key.compare(0, n, prefix) == 0 && (key.size() == n || key[n] == '.')) return true;
+    }
+    return false;
+  }
+
+  static constexpr int64_t kTombstoneRetentionMs = 30LL * 86'400'000;
+
+  void replicationMaintenanceTick() {
+    VersionVector vv;
+    std::map<std::string, uint64_t> heads;
+    if (fleetReplicationMinimum(&vv, &heads)) {
+      std::map<std::string, uint64_t> coverage;
+      for (const auto& [origin, seq] : heads)
+        if (seq > 0) coverage[origin] = seq;
+      store.eventCoverageSet(coverage);
+      const int64_t cutoff_ms = hlc->correctedWallMs() - kTombstoneRetentionMs;
+      if (cutoff_ms > 0) {
+        const auto erased = config->gcTombstones(vv, HlcClock::format(cutoff_ms, 0, ""),
+                                                 seedableKey);
+        for (const auto& key : erased) store.configDelete(key);
+        if (!erased.empty())
+          DB_LOGI(kTag, "collected " + std::to_string(erased.size()) + " configuration tombstones");
+      }
+    }
+    pruneEventsTick();
+  }
+
+  // Retention runs against the replicated coverage the store has recorded. Without a coverage
+  // snapshot the store still refuses to delete anything, so this tick is then a no-op.
   void pruneEventsTick() {
     const int64_t cutoff =
         hlc->correctedWallMs() - static_cast<int64_t>(eventRetentionDays()) * 86'400'000LL;
@@ -4998,7 +5139,7 @@ struct Node::Impl {
   void restoreEmergency() {
     auto ev = store.latestEventOfTypes("emergency", "emergency_cancel");
     if (!ev) return;
-    hlc->observe(ev->hlc);
+    hlc->observePersisted(ev->hlc);
     emergency_hlc = ev->hlc;
     emergency_active = (ev->type == "emergency");
   }
@@ -6276,7 +6417,13 @@ struct Node::Impl {
 
   bool onConfigChanges(const std::vector<LwwEntry>& entries, bool is_local, bool batch) {
     if (entries.empty() || suppress_config_callbacks) return true;
-    if (!configEditRecordsValid(config->all(), &config_edit_error)) {
+    // The edit journal can only change through its own reserved keys, so a batch without them
+    // leaves a previously valid journal valid. Full validation is linear in the journal size.
+    const bool touches_journal =
+        std::any_of(entries.begin(), entries.end(),
+                    [](const LwwEntry& entry) { return configEditReserved(entry.key); });
+    if ((touches_journal || !config_edit_error.empty()) &&
+        !configEditRecordsValid(config->all(), &config_edit_error)) {
       config_persistence_failed = true; ++config_persistence_failures;
       if (started) scheduleSnapshotRefresh();
       return false;
@@ -6557,8 +6704,8 @@ struct Node::Impl {
       pairing_is_founder = founder && *founder == "1";
       const bool has_psk = std::any_of(opts.psk.begin(), opts.psk.end(),
                                        [](uint8_t byte) { return byte != 0; });
-      // "none" は「鍵がない」という意味なので、鍵を持っているのにそう名乗ることはできない。
-      // 出所を申告しないホスト（doorbell_host や組み込み利用）は平文鍵として扱う。
+      // "none" means there is no key, so a node holding one cannot claim it. A host that does not
+      // declare the key's provenance (doorbell_host, embedded use) is treated as plaintext.
       const bool declared = opts.psk_source == "secure_store" || opts.psk_source == "boot_plaintext";
       pairing_psk_source = !has_psk ? "none" : (declared ? opts.psk_source : "boot_plaintext");
       pairing_psk_ref = pairing_psk_source == "secure_store" ? opts.psk_ref : "";
@@ -6867,7 +7014,8 @@ struct Node::Impl {
     minute_timer = loop->postEvery(60'000, [this] { minuteTick(); });
     // Retention is a slow background sweep; six hours is frequent enough for a daily policy and
     // cheap enough for the oldest hardware in the fleet.
-    event_retention_timer = loop->postEvery(6 * 3600'000, [this] { pruneEventsTick(); });
+    event_retention_timer =
+        loop->postEvery(6 * 3600'000, [this] { replicationMaintenanceTick(); });
 
     started = true;
     startMediaOnLoop();
@@ -6898,6 +7046,21 @@ struct Node::Impl {
   }
 
 
+  static void setSeedLabels(cJSON* label, const std::string& key) {
+    for (const char* lang : {"ja", "en", "zh"}) {
+      const char* text = builtinText(key, lang);
+      json::set(label, lang, text ? text : "");
+    }
+  }
+
+  // Single-language seed text (announcement presets) follows the first configured UI language.
+  std::string seedLanguage() const {
+    const cJSON* languages = json::get(json::get(cfg.get(), "ui"), "languages");
+    const cJSON* first = cJSON_IsArray(languages) ? cJSON_GetArrayItem(languages, 0) : nullptr;
+    const std::string lang = cJSON_IsString(first) ? first->valuestring : "";
+    return lang == "en" || lang == "zh" ? lang : "ja";
+  }
+
   bool seedConfig() {
     if (opts.seed_default_config && !config->get("schema_version")) {
       std::vector<LwwMutation> defaults = {
@@ -6915,21 +7078,19 @@ struct Node::Impl {
           {"audio.volume.idle", "60", false},
           {"emergency.trigger.mode", "\"slide\"", false},
           {"emergency.trigger.countdown_s", "3", false}};
-      auto qr = [&](const char* id, const char* ja, const char* en, const char* zh, int order) {
+      auto qr = [&](const char* id, int order) {
         auto o = json::obj();
-        cJSON* label = json::addObj(o.get(), "label");
-        json::set(label, "ja", ja);
-        json::set(label, "en", en);
-        json::set(label, "zh", zh);
+        setSeedLabels(json::addObj(o.get(), "label"),
+                      std::string("core.seed.quick_reply.") + id);
         json::setBool(o.get(), "speak", true);
         json::set(o.get(), "order", static_cast<int64_t>(order));
         defaults.push_back(
             {std::string("quick_replies.") + id, json::dump(o.get()), false});
       };
-      qr("qr_away", "ただいま留守にしています", "We are away right now", "现在不在家", 1);
-      qr("qr_no", "結構です", "Not interested", "不需要，谢谢", 2);
-      qr("qr_wrong", "お間違いのようです", "Wrong address", "您可能找错地方了", 3);
-      qr("qr_wait", "少々お待ちください", "One moment please", "请稍等", 4);
+      qr("qr_away", 1);
+      qr("qr_no", 2);
+      qr("qr_wrong", 3);
+      qr("qr_wait", 4);
 
       defaults.insert(defaults.end(), {
           {"ui.languages", "[\"ja\",\"en\",\"zh\"]", false},
@@ -6943,25 +7104,22 @@ struct Node::Impl {
           {"ui.call_flow", "\"purpose_first\"", false},
           {"ui.call_ttl_s", "60", false}});
 
-      auto vp = [&](const char* id, const char* ja, const char* en, const char* zh,
-                    const char* icon, int order) {
+      auto vp = [&](const char* id, const char* icon, int order) {
         auto o = json::obj();
-        cJSON* label = json::addObj(o.get(), "label");
-        json::set(label, "ja", ja);
-        json::set(label, "en", en);
-        json::set(label, "zh", zh);
+        setSeedLabels(json::addObj(o.get(), "label"), std::string("core.seed.purpose.") + id);
         json::set(o.get(), "icon", icon);
         json::set(o.get(), "order", static_cast<int64_t>(order));
         defaults.push_back(
             {std::string("visit_purposes.") + id, json::dump(o.get()), false});
       };
-      vp("p_visit", "訪問", "Visit", "访客", "🏠", 1);
-      vp("p_delivery", "宅配便", "Delivery", "快递", "📦", 2);
-      vp("p_mail", "郵便", "Mail", "邮件", "✉️", 3);
-      vp("p_sales", "営業・集金", "Sales", "推销/收费", "💼", 4);
-      vp("p_work", "検針・工事", "Utility", "检修/施工", "🔧", 5);
-      vp("p_other", "その他", "Other", "其他", "❓", 6);
-      config->mutate(defaults);
+      vp("p_visit", "🏠", 1);
+      vp("p_delivery", "📦", 2);
+      vp("p_mail", "✉️", 3);
+      vp("p_sales", "💼", 4);
+      vp("p_work", "🔧", 5);
+      vp("p_other", "❓", 6);
+      // Seeded at the minimum HLC: a joining device never overrides what the cluster decided.
+      config->seed(defaults);
       if (!config->lastMutationCommitted()) return false;
     }
     // One-release migration: move legacy bearer values out of the replicated/exported CRDT.
@@ -6996,8 +7154,8 @@ struct Node::Impl {
             "\"never_suppress\":true,\"presentation\":{\"visual\":true,"
             "\"sticky\":false,\"ttl_s\":10}},{\"type\":\"telegram\","
             "\"never_suppress\":true,\"households\":\"all\"}]}";
-        config->mutate({{"trigger_rules.r_sos_default_on", on, false},
-                        {"trigger_rules.r_sos_default_off", off, false}});
+        config->seed({{"trigger_rules.r_sos_default_on", on, false},
+                      {"trigger_rules.r_sos_default_off", off, false}});
         if (!config->lastMutationCommitted()) return false;
       }
       if (!store.metaSet("seed_sos_rules_v1", "1")) return false;
@@ -7007,15 +7165,17 @@ struct Node::Impl {
     if (!store.metaGet("seed_notice_presets_v1")) {
       if (!json::get(json::get(cfg.get(), "notice"), "presets")) {
         auto presets = json::arr();
-        auto add = [&presets](const char* id, const char* text) {
+        const std::string lang = seedLanguage();
+        auto add = [&presets, &lang](const char* id) {
           cJSON* entry = json::pushObj(presets.get());
           json::set(entry, "id", id);
-          json::set(entry, "text", text);
+          const char* text = builtinText(std::string("core.seed.notice.") + id, lang);
+          json::set(entry, "text", text ? text : "");
         };
-        add("np_absent", "不在です。荷物は玄関前へお願いします");
-        add("np_back_door", "裏口へお回りください");
-        add("np_construction", "工事中です。足元にご注意ください");
-        config->mutate({{"notice.presets", json::dump(presets.get()), false}});
+        add("np_absent");
+        add("np_back_door");
+        add("np_construction");
+        config->seed({{"notice.presets", json::dump(presets.get()), false}});
         if (!config->lastMutationCommitted()) return false;
       }
       if (!store.metaSet("seed_notice_presets_v1", "1")) return false;
@@ -7039,7 +7199,7 @@ struct Node::Impl {
             "[\"indoor_panel\"],\"web_profiles\":\"all\"},"
             "\"channels\":[\"in_app\",\"system_notification\",\"web_push\"],"
             "\"presentation\":{\"visual\":true,\"sticky\":false,\"ttl_s\":30}}]}";
-        config->mutate({{"trigger_rules.r_missed_call_default", missed, false}});
+        config->seed({{"trigger_rules.r_missed_call_default", missed, false}});
         if (!config->lastMutationCommitted()) return false;
       }
       if (!store.metaSet("seed_missed_call_rule_v1", "1")) return false;
@@ -7601,44 +7761,52 @@ struct Node::Impl {
     if (!isCallTimeoutAuthority(call) || call.state == "in_call" ||
         call.local_sip_established)
       return;
-    armCallTimeout(call, std::max<int64_t>(0, call.expires_wall_ms - hlc->correctedWallMs()),
+    const int64_t grace = orphanTimeoutRole(call) ? kOrphanCallGraceMs : 0;
+    armCallTimeout(call,
+                   std::max<int64_t>(0, call.expires_wall_ms + grace - hlc->correctedWallMs()),
                    /*reset_retry=*/true);
+  }
+
+  bool peerAlive(const std::string& id) const {
+    if (id == node_id) return true;
+    if (!mesh) return false;
+    for (const auto& peer : mesh->peers()) {
+      if (peer.id == id) return peer.status != "dead";
+    }
+    return false;
+  }
+
+  // Whether a ringing call held here is in no door station's hands: its origin is not this node
+  // and this node is not a door station of the call's door.
+  bool orphanTimeoutRole(const ActiveCall& call) const {
+    return call.origin != node_id && !(opts.role == "door_station" && opts.door == call.door);
   }
 
   bool isCallTimeoutAuthority(const ActiveCall& call) const {
     if (call.origin == node_id) return true;
-    if (opts.role != "door_station" || opts.door != call.door) return false;
-
-    bool origin_alive = false;
+    if (peerAlive(call.origin)) return false;
+    // A dead origin's timeout passes to the lowest-id live door station of the same door.
+    std::string station;
+    if (opts.role == "door_station" && opts.door == call.door) station = node_id;
+    const cJSON* device = nullptr;
+    cJSON_ArrayForEach(device, json::get(cfg.get(), "devices")) {
+      if (!device->string || json::getString(device, "role") != "door_station" ||
+          json::getString(device, "door") != call.door || !peerAlive(device->string))
+        continue;
+      if (station.empty() || std::string(device->string) < station) station = device->string;
+    }
+    if (!station.empty()) return station == node_id;
+    // No door station of the door is alive. The lowest-id live member ends the call (after
+    // kOrphanCallGraceMs), so indoor panels are never left ringing for a station that is gone.
+    std::string fallback = node_id;
     if (mesh) {
       for (const auto& peer : mesh->peers()) {
-        if (peer.id == call.origin && peer.status != "dead") {
-          origin_alive = true;
-          break;
-        }
+        if (peer.status == "dead" || peer.id.empty() || json::get(json::get(cfg.get(), "removed_devices"), peer.id.c_str()))
+          continue;
+        if (peer.id < fallback) fallback = peer.id;
       }
     }
-    if (origin_alive) return false;
-
-    std::string authority = node_id;
-    const cJSON* devices = json::get(cfg.get(), "devices");
-    const cJSON* device = nullptr;
-    cJSON_ArrayForEach(device, devices) {
-      if (!device->string || json::getString(device, "role") != "door_station" ||
-          json::getString(device, "door") != call.door)
-        continue;
-      bool alive = std::string(device->string) == node_id;
-      if (!alive && mesh) {
-        for (const auto& peer : mesh->peers()) {
-          if (peer.id == device->string && peer.status != "dead") {
-            alive = true;
-            break;
-          }
-        }
-      }
-      if (alive && std::string(device->string) < authority) authority = device->string;
-    }
-    return authority == node_id;
+    return fallback == node_id;
   }
 
   void rearmCallTimeouts() {
@@ -7766,7 +7934,25 @@ struct Node::Impl {
   }
 
   void restoreActiveCalls(bool notify = true) {
-    for (const auto& projection : store.activeCallProjections()) {
+    const auto projections = store.activeCallProjections();
+    // A resync replaces in-memory calls with the durable projection. A call the projection no
+    // longer holds is cleared through the normal path, and a replaced entry's timers are
+    // cancelled rather than left to fire against the new state.
+    std::map<std::string, std::string> projected;
+    for (const auto& projection : projections) projected[projection.door] = projection.call_id;
+    std::vector<std::string> stale;
+    for (const auto& entry : active_calls) {
+      auto found = projected.find(entry.first);
+      if (found == projected.end() || found->second != entry.second.call_id)
+        stale.push_back(entry.first);
+    }
+    for (const auto& door : stale) clearActiveCall(door);
+    for (const auto& projection : projections) {
+      auto existing = active_calls.find(projection.door);
+      if (existing != active_calls.end()) {
+        if (existing->second.timeout_timer) loop->cancel(existing->second.timeout_timer);
+        if (existing->second.recovery_timer) loop->cancel(existing->second.recovery_timer);
+      }
       ActiveCall call;
       call.call_id = projection.call_id;
       call.door = projection.door;
@@ -8000,7 +8186,11 @@ struct Node::Impl {
     // The history projection is already committed at this point, so the badge count delivered
     // here is the one a client would read back from /api/call-log.
     if (callLifecycleType(ev.type)) notifyCallLogChanged();
-    auto actions = rules.evaluate(ev, hlc->correctedWallMs(), tzOffsetMin());
+    // Schedules and quiet hours apply to when the event happened, not to when a delayed copy
+    // reached this node. A timestamp from the future (a wrong origin clock) falls back to now.
+    const int64_t now_ms = hlc->correctedWallMs();
+    const int64_t rule_time_ms = ev.wall_ms > 0 && ev.wall_ms <= now_ms ? ev.wall_ms : now_ms;
+    auto actions = rules.evaluate(ev, rule_time_ms, tzOffsetMin());
     bool chime_notified = false;
     bool chime_action_seen = false;
     for (const auto& a : actions) {
@@ -8735,8 +8925,8 @@ struct Node::Impl {
     pairing_is_founder = mesh->isFounder();
     store.metaSet("pairing.is_founder", pairing_is_founder ? "1" : "0");
     const bool stored = storePairingSecret();
-    // C5: 鍵の保存に失敗した参加を ok:true と報告してはいけない。join_result は
-    // 保存の成否が確定してから、paired / pairing_state より前に必ず出す。
+    // C5: a join whose key could not be stored must never report ok:true. join_result is emitted
+    // once the store outcome is known, and always before paired / pairing_state.
     if (pairing_join_awaiting_persist) {
       pairing_join_awaiting_persist = false;
       emitJoinResult(stored, stored ? "" : "persist_failed");
@@ -12454,6 +12644,19 @@ std::string Node::callLogJson(int64_t since_ms, int64_t before_ms, int limit) {
       out.empty())
     out = R"({"rows":[],"unread_missed":0,"seen_hlc":"","server_ts":0})";
   return out;
+}
+
+void Node::notePeerReplication(const std::string& peer, const VersionVector& vv,
+                               const std::map<std::string, uint64_t>& heads) {
+  impl_->loop->callSync([&] {
+    if (impl_->started) impl_->notePeerReplication(peer, vv, heads);
+  });
+}
+
+void Node::runReplicationMaintenance() {
+  impl_->loop->callSync([&] {
+    if (impl_->started) impl_->replicationMaintenanceTick();
+  });
 }
 
 bool Node::markCallLogSeen(const std::string& up_to_hlc) {

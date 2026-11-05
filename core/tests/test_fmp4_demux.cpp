@@ -281,6 +281,17 @@ TEST_CASE("fmp4_demux: rejects corrupt or oversized input instead of buffering i
     CHECK_FALSE(d.feed(moov, sizeof(moov)));
     CHECK(d.error() == "moov has no avcC");
   }
+  SUBCASE("a 64-bit child size that would wrap the bound check") {
+    fmp4::Demuxer d;
+    // moov(32) holding a child with size==1 and a largesize near UINT64_MAX. An additive bound
+    // check wraps past the buffer end; the parser must reject it without reading further.
+    const uint8_t moov[40] = {0, 0, 0, 40, 'm', 'o', 'o', 'v', 0, 0, 0, 8, 'f', 'r', 'e', 'e',
+                              0, 0, 0, 1, 't', 'r', 'a', 'k',
+                              0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xf8,
+                              0, 0, 0, 0, 0, 0, 0, 0};
+    CHECK_FALSE(d.feed(moov, sizeof(moov)));
+    CHECK(d.error() == "moov has no avcC");
+  }
   SUBCASE("sample size larger than mdat") {
     fmp4::Demuxer d;
     REQUIRE(d.feed(init.data(), init.size()));

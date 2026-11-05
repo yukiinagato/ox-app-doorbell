@@ -307,3 +307,41 @@ TEST_CASE("rules: malformed config JSON is treated as empty config") {
   re.setConfig(R"({"trigger_rules": []})");
   CHECK(re.evaluate(bt, noon, 0).empty());
 }
+
+TEST_CASE("rules: a purpose selection does not repeat what the press already did") {
+  RuleEngine re;
+  re.setConfig(R"({
+    "trigger_rules": {
+      "r1_delivery": { "enabled": true,
+        "when": { "type": "press", "purposes": ["p_delivery"] },
+        "actions": [ { "type": "auto_reply", "reply_id": "qr_okihai" } ] },
+      "r2_any": { "enabled": true,
+        "when": { "type": "press" },
+        "actions": [ { "type": "sip_call" }, { "type": "telegram" }, { "type": "chime" } ] }
+    }
+  })");
+  const int64_t noon = wallAtLocal(kThu, 12, 0, 0);
+  EventRecord press = makeEv("press", "d_front", "");
+  press.payload_json = "{}";
+  CHECK(typesOf(re.evaluate(press, noon, 0)) == "sip_call,telegram,chime");
+  EventRecord selected = makeEv("purpose_selected", "d_front", "");
+  selected.payload_json = R"({"purpose":"p_delivery"})";
+  CHECK(typesOf(re.evaluate(selected, noon, 0)) == "auto_reply,chime");
+}
+
+TEST_CASE("rules: a window may end at 24:00 but not later") {
+  RuleEngine re;
+  re.setConfig(R"({
+    "trigger_rules": {
+      "late": { "enabled": true, "when": { "type": "press" },
+        "schedule": { "windows": [ { "from": "22:00", "to": "24:00" } ] },
+        "actions": [ { "type": "chime" } ] },
+      "bad": { "enabled": true, "when": { "type": "press" },
+        "schedule": { "windows": [ { "from": "22:00", "to": "24:59" } ] },
+        "actions": [ { "type": "telegram" } ] }
+    }
+  })");
+  EventRecord press = makeEv("press", "d_front", "");
+  CHECK(typesOf(re.evaluate(press, wallAtLocal(kThu, 23, 59, 0), 0)) == "chime");
+  CHECK(typesOf(re.evaluate(press, wallAtLocal(kThu, 21, 59, 0), 0)) == "");
+}

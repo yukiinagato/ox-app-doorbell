@@ -213,6 +213,10 @@ bool Store::migrate() {
       "CREATE TABLE IF NOT EXISTS event_origin_state("
       "  origin TEXT PRIMARY KEY, frontier INT NOT NULL, max_seq INT NOT NULL,"
       "  dispatch_frontier INT NOT NULL DEFAULT 0);"
+      // Remote events that arrived through anti-entropy and are not yet dispatched. Durable, so a
+      // restart still dispatches them as history rather than re-enacting their side effects.
+      "CREATE TABLE IF NOT EXISTS event_backfill("
+      "  origin TEXT NOT NULL, seq INT NOT NULL, PRIMARY KEY(origin, seq));"
       "CREATE TABLE IF NOT EXISTS tg_queue("
       "  id INTEGER PRIMARY KEY AUTOINCREMENT, kind TEXT, chat_id TEXT, payload TEXT,"
       "  snapshot BLOB, attempts INT, next_retry_ms INT, created_ms INT);"
@@ -253,6 +257,14 @@ bool Store::migrate() {
       if (columns.colText(1) == name) return true;
     return false;
   };
+  // The local application order of every event. A projection rebuilt from history replays in
+  // this order, so it equals the projection this replica computed live. Rows applied before the
+  // column existed have no order and replay after ordered rows, by HLC.
+  if (!has_column("events", "applied_order") &&
+      !exec("ALTER TABLE events ADD COLUMN applied_order INT"))
+    return false;
+  if (!exec("CREATE INDEX IF NOT EXISTS idx_events_applied_order ON events(applied_order)"))
+    return false;
   if (previous_schema < 3) {
     if (!has_column("call_projection", "dialog_owner") &&
         !exec("ALTER TABLE call_projection ADD COLUMN dialog_owner TEXT NOT NULL DEFAULT ''"))
@@ -286,28 +298,7 @@ bool Store::migrate() {
     }
   }
   if (previous_schema < 4) {
-    std::vector<EventRecord> lifecycle;
-    Stmt events(db_,
-                "SELECT e.origin,e.seq,e.type,e.door,e.device,e.hlc,e.wall_ms,"
-                " e.payload_json,e.notify_json FROM events e"
-                " JOIN event_origin_state s ON s.origin=e.origin"
-                " WHERE e.seq<=s.frontier ORDER BY e.hlc ASC");
-    if (!events.ok()) return false;
-    while (events.step() == SQLITE_ROW) lifecycle.push_back(rowToEvent(events));
-    if (!exec("BEGIN IMMEDIATE") || !exec("DELETE FROM call_projection")) {
-      exec("ROLLBACK");
-      return false;
-    }
-    for (const auto& event : lifecycle) {
-      if (!applyCallProjectionLocked(event)) {
-        exec("ROLLBACK");
-        return false;
-      }
-    }
-    if (!exec("COMMIT")) {
-      exec("ROLLBACK");
-      return false;
-    }
+    if (!rebuildCallProjectionLocked(/*clear_fence=*/false)) return false;
   }
   if (previous_schema < 5) {
     if (!has_column("event_origin_state", "dispatch_frontier") &&
@@ -354,29 +345,7 @@ bool Store::migrate() {
                               " TEXT NOT NULL DEFAULT ''";
       if (!exec(sql.c_str())) return false;
     }
-    std::vector<EventRecord> lifecycle;
-    Stmt events(db_,
-                "SELECT e.origin,e.seq,e.type,e.door,e.device,e.hlc,e.wall_ms,"
-                " e.payload_json,e.notify_json FROM events e"
-                " JOIN event_origin_state s ON s.origin=e.origin"
-                " WHERE e.seq<=s.frontier ORDER BY e.hlc ASC");
-    if (!events.ok()) return false;
-    while (events.step() == SQLITE_ROW) lifecycle.push_back(rowToEvent(events));
-    if (!exec("BEGIN IMMEDIATE") || !exec("DELETE FROM call_projection") ||
-        !exec("DELETE FROM call_door_fence")) {
-      exec("ROLLBACK");
-      return false;
-    }
-    for (const auto& event : lifecycle) {
-      if (!applyCallProjectionLocked(event)) {
-        exec("ROLLBACK");
-        return false;
-      }
-    }
-    if (!exec("COMMIT")) {
-      exec("ROLLBACK");
-      return false;
-    }
+    if (!rebuildCallProjectionLocked(/*clear_fence=*/true)) return false;
   }
   if ((!schema || *schema != std::to_string(kSchemaVersion)) &&
       !metaSetLocked("schema_version", std::to_string(kSchemaVersion)))
@@ -677,18 +646,38 @@ std::optional<EventRecord> Store::eventAppendLocal(
   return e;
 }
 
-bool Store::eventIngest(const EventRecord& e) {
+bool Store::eventIngest(const EventRecord& e, bool backfill) {
   std::lock_guard<std::recursive_mutex> lk(mu_);
   if (!db_ || e.origin.empty() || e.seq == 0 ||
       e.seq > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
     return false;
   if (!exec("BEGIN IMMEDIATE")) return false;
   bool inserted = false;
-  if (!persistEventLocked(e, /*allow_existing=*/true, &inserted) || !exec("COMMIT")) {
+  bool ok = persistEventLocked(e, /*allow_existing=*/true, &inserted);
+  if (ok && inserted && backfill) {
+    Stmt mark(db_, "INSERT OR IGNORE INTO event_backfill(origin,seq) VALUES(?1,?2)");
+    ok = mark.ok();
+    if (ok) {
+      mark.bind(1, e.origin);
+      mark.bind(2, static_cast<int64_t>(e.seq));
+      ok = mark.step() == SQLITE_DONE;
+    }
+  }
+  if (!ok || !exec("COMMIT")) {
     exec("ROLLBACK");
     return false;
   }
   return inserted;
+}
+
+bool Store::eventIsBackfill(const std::string& origin, uint64_t seq) {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+  if (!db_) return false;
+  Stmt st(db_, "SELECT 1 FROM event_backfill WHERE origin=?1 AND seq=?2");
+  if (!st.ok()) return false;
+  st.bind(1, origin);
+  st.bind(2, static_cast<int64_t>(std::min<uint64_t>(seq, INT64_MAX)));
+  return st.step() == SQLITE_ROW;
 }
 
 Store::EventApplyResult Store::eventApplyNextLocked(const std::string& origin,
@@ -718,6 +707,25 @@ Store::EventApplyResult Store::eventApplyNextLocked(const std::string& origin,
     next = rowToEvent(event);
   }
   if (!applyCallProjectionLocked(next)) return EventApplyResult::Error;
+  {
+    int64_t order = 0;
+    if (auto current = metaGetLocked("event_applied_order")) {
+      try {
+        order = std::stoll(*current);
+      } catch (...) {
+        order = 0;
+      }
+    }
+    ++order;
+    Stmt mark(db_, "UPDATE events SET applied_order=?3 WHERE origin=?1 AND seq=?2");
+    if (!mark.ok()) return EventApplyResult::Error;
+    mark.bind(1, origin);
+    mark.bind(2, static_cast<int64_t>(next.seq));
+    mark.bind(3, order);
+    if (mark.step() != SQLITE_DONE ||
+        !metaSetLocked("event_applied_order", std::to_string(order)))
+      return EventApplyResult::Error;
+  }
   if (next.type == "press") {
     long long n = 0;
     auto current = metaGetLocked("stat_press_total");
@@ -843,6 +851,40 @@ bool Store::advanceCallDoorFenceLocked(const std::string& door,
   promote.bind(2, door);
   promote.bind(3, *effective);
   return promote.step() == SQLITE_DONE;
+}
+
+bool Store::rebuildCallProjectionLocked(bool clear_fence) {
+  std::vector<EventRecord> lifecycle;
+  Stmt events(db_,
+              "SELECT e.origin,e.seq,e.type,e.door,e.device,e.hlc,e.wall_ms,"
+              " e.payload_json,e.notify_json FROM events e"
+              " JOIN event_origin_state s ON s.origin=e.origin"
+              " WHERE e.seq<=s.frontier"
+              " ORDER BY (e.applied_order IS NULL) ASC, e.applied_order ASC, e.hlc ASC,"
+              " e.origin ASC, e.seq ASC");
+  if (!events.ok()) return false;
+  while (events.step() == SQLITE_ROW) lifecycle.push_back(rowToEvent(events));
+  if (!exec("BEGIN IMMEDIATE") || !exec("DELETE FROM call_projection") ||
+      (clear_fence && !exec("DELETE FROM call_door_fence"))) {
+    exec("ROLLBACK");
+    return false;
+  }
+  for (const auto& event : lifecycle) {
+    if (!applyCallProjectionLocked(event)) {
+      exec("ROLLBACK");
+      return false;
+    }
+  }
+  if (!exec("COMMIT")) {
+    exec("ROLLBACK");
+    return false;
+  }
+  return true;
+}
+
+bool Store::rebuildCallProjection() {
+  std::lock_guard<std::recursive_mutex> lk(mu_);
+  return db_ && rebuildCallProjectionLocked(/*clear_fence=*/true);
 }
 
 bool Store::applyCallProjectionLocked(const EventRecord& e) {
@@ -1256,15 +1298,16 @@ bool Store::eventExists(const std::string& origin, uint64_t seq) {
   return st.step() == SQLITE_ROW;
 }
 
-void Store::eventSetNotify(const std::string& origin, uint64_t seq,
+bool Store::eventSetNotify(const std::string& origin, uint64_t seq,
                            const std::string& notify_json) {
   std::lock_guard<std::recursive_mutex> lk(mu_);
+  if (!db_) return false;
   Stmt st(db_, "UPDATE events SET notify_json=?3 WHERE origin=?1 AND seq=?2");
-  if (!st.ok()) return;
+  if (!st.ok()) return false;
   st.bind(1, origin);
   st.bind(2, static_cast<int64_t>(seq));
   st.bind(3, notify_json);
-  st.step();
+  return st.step() == SQLITE_DONE && sqlite3_changes(db_) == 1;
 }
 
 std::optional<EventRecord> Store::eventGet(const std::string& origin, uint64_t seq) {
@@ -1327,14 +1370,31 @@ bool Store::eventAckDispatched(const std::string& origin, uint64_t seq) {
   if (!db_ || origin.empty() || seq == 0 ||
       seq > static_cast<uint64_t>(std::numeric_limits<int64_t>::max()))
     return false;
+  if (!exec("BEGIN IMMEDIATE")) return false;
   Stmt st(db_,
           "UPDATE event_origin_state SET dispatch_frontier=?2"
           " WHERE origin=?1 AND dispatch_frontier=?3 AND frontier>=?2");
-  if (!st.ok()) return false;
-  st.bind(1, origin);
-  st.bind(2, static_cast<int64_t>(seq));
-  st.bind(3, static_cast<int64_t>(seq - 1));
-  return st.step() == SQLITE_DONE && sqlite3_changes(db_) == 1;
+  bool ok = st.ok();
+  if (ok) {
+    st.bind(1, origin);
+    st.bind(2, static_cast<int64_t>(seq));
+    st.bind(3, static_cast<int64_t>(seq - 1));
+    ok = st.step() == SQLITE_DONE && sqlite3_changes(db_) == 1;
+  }
+  if (ok) {
+    Stmt clear(db_, "DELETE FROM event_backfill WHERE origin=?1 AND seq<=?2");
+    ok = clear.ok();
+    if (ok) {
+      clear.bind(1, origin);
+      clear.bind(2, static_cast<int64_t>(seq));
+      ok = clear.step() == SQLITE_DONE;
+    }
+  }
+  if (!ok || !exec("COMMIT")) {
+    exec("ROLLBACK");
+    return false;
+  }
+  return true;
 }
 
 uint64_t Store::eventDispatchFrontier(const std::string& origin) {
@@ -1667,12 +1727,13 @@ size_t Store::pruneEvents(size_t max_events, int64_t cutoff_wall_ms) {
   // every cluster member, so anti-entropy can never be asked for an event this node destroyed.
   Stmt del(db_,
            "DELETE FROM events WHERE rowid IN ("
-           " SELECT e.rowid FROM events e"
-           " JOIN event_origin_state s ON s.origin=e.origin"
-           " JOIN event_prune_coverage c ON c.origin=e.origin"
-           " WHERE e.wall_ms<?1 AND e.seq<=MIN(s.frontier,s.dispatch_frontier)"
-           " AND e.seq<=c.covered"
-           " AND (SELECT COUNT(*) FROM events n WHERE n.origin=e.origin AND n.seq>e.seq)>=?2)");
+           " SELECT r.rid FROM (SELECT rowid AS rid,origin,seq,wall_ms,"
+           "  ROW_NUMBER() OVER (PARTITION BY origin ORDER BY seq DESC) AS newer_rank"
+           "  FROM events) r"
+           " JOIN event_origin_state s ON s.origin=r.origin"
+           " JOIN event_prune_coverage c ON c.origin=r.origin"
+           " WHERE r.wall_ms<?1 AND r.seq<=MIN(s.frontier,s.dispatch_frontier)"
+           " AND r.seq<=c.covered AND r.newer_rank>?2)");
   if (!del.ok()) return 0;
   del.bind(1, cutoff_wall_ms);
   del.bind(2, static_cast<int64_t>(std::min(

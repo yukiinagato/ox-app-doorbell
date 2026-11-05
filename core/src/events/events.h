@@ -67,6 +67,7 @@ class EventLog {
                                       size_t limit) const;
 
 
+  // Returns true only when the merged notification state changed and was persisted.
   bool mergeNotify(const std::string& origin, uint64_t seq, const std::string& notify_json);
 
   void onEvent(EventCb cb);
@@ -80,8 +81,6 @@ class EventLog {
   std::map<std::string, uint64_t> frontiers_;
   std::deque<EventRecord> dispatch_queue_;
   DispatchCb on_event_;
-  // Identities ingested through anti-entropy and not yet dispatched.
-  std::set<std::pair<std::string, uint64_t>> backfill_pending_;
   bool dispatching_ = false;
 
   void drainContiguous(const std::string& origin,

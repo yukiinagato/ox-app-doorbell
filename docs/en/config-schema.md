@@ -697,6 +697,12 @@ The HLC preserves causal ordering separately from physical time. Observing a fut
 timestamp or retaining an older, fast local timestamp cannot advance the displayed clock,
 local event `wall_ms`, or schedule and expiry checks. A backward NTP correction applies
 immediately; HLC identifiers remain monotonic so replicated writes retain their ordering.
+A remote timestamp more than five minutes ahead of local wall time does not advance the HLC,
+and a configuration entry carrying such (or a malformed) timestamp never becomes a winner; its
+author's sequence still advances so replication is not blocked. A node's own persisted history
+always advances its clock, so a device whose wall clock went backwards keeps ordering new writes
+after old ones. First-run defaults are written at the minimum HLC, so every real write or
+deletion anywhere in the cluster wins over them, including on a device that joins later.
 
 Power state comes from the optional `db_platform_v2.power_state` callback, polled once a minute.
 It is published as `status.self.power` (and the identical `status.node.power`), gossiped into
@@ -879,7 +885,19 @@ one bulk-add window may auto-add.
 - **Retention.** `events.retention_days` (1..3650, default 90) is the age floor of the local
   retention sweep, which also always keeps the newest 5,000 records per origin. Deletion further
   requires that the record is applied, dispatched, and covered by a durable replication coverage
-  vector; no such vector is produced yet, so pruning is still a logged no-op in practice.
+  vector. Each node records the event heads and configuration version vector every peer
+  advertises in anti-entropy, and a six-hourly pass writes the coverage vector as the minimum
+  over every configured or currently known member. While any member has never reported, nothing
+  is deleted. The same pass collects configuration tombstones older than 30 days that every
+  member has observed, except tombstones of keys a first-run seed can write.
+- **Backfill.** Events that arrive through anti-entropy are marked durably with the record, so a
+  restart before dispatch still delivers them as history and never re-runs their side effects.
+- **Rules.** Schedules and quiet hours are evaluated at the event's own `wall_ms` (or now, when
+  that lies in the future). A `purpose_selected` event re-runs only the `chime` actions of rules
+  without a `purposes` filter, since those rules already acted on the press; purpose-specific
+  rules act on it normally. A window may end at `24:00`; later hours are invalid. The
+  `ha_event` action is accepted but has no separate effect: the Home Assistant bridge already
+  publishes every event it receives.
 
 ## MQTT (Phase 2 — implemented)
 

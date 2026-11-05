@@ -7,6 +7,7 @@
 #include <unistd.h>
 
 #include <cstdio>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <random>
@@ -23,6 +24,8 @@
 #include "sipctl/sipctl.h"
 #include "store/store.h"
 #include "util/clock.h"
+#include "util/common.h"
+#include "util/ids.h"
 #include "util/json.h"
 #include "util/runloop.h"
 
@@ -726,6 +729,33 @@ TEST_CASE("a live configured door authority expires a call after its origin stop
   fleet.run(10'000);
   CHECK(standby.uiCount("event", "call_cancelled") == 1);
   standby.node->stop();
+}
+
+TEST_CASE("indoor panels end a ringing call whose only door station is gone") {
+  NFleet fleet;
+  auto& origin = fleet.add("A:1", "front", "door_station", "d_front", true);
+  auto& panel_a = fleet.add("B:1", "hall", "indoor_panel", "", false);
+  auto& panel_b = fleet.add("C:1", "kitchen", "indoor_panel", "", false);
+  REQUIRE(origin.node->start());
+  REQUIRE(panel_a.node->start());
+  REQUIRE(panel_b.node->start());
+  fleet.run(1'000);
+  const std::string call_id = origin.node->pressV2("d_front", "");
+  REQUIRE(!call_id.empty());
+  fleet.run(300);
+  REQUIRE(panel_a.node->statusJson().find(call_id) != std::string::npos);
+
+  origin.node->stop();
+  // Before the ring time plus the orphan grace nobody ends it.
+  fleet.run(60'000);
+  CHECK(panel_a.uiCount("event", "call_cancelled") == 0);
+  fleet.run(20'000);
+  CHECK(panel_a.uiCount("event", "call_cancelled") == 1);
+  CHECK(panel_b.uiCount("event", "call_cancelled") == 1);
+  fleet.run(10'000);
+  CHECK(panel_a.uiCount("event", "call_cancelled") == 1);
+  panel_b.node->stop();
+  panel_a.node->stop();
 }
 
 TEST_CASE("a dead dialog owner is cancelled once by the deterministic survivor") {
@@ -2508,4 +2538,111 @@ TEST_CASE("node: an offline removed member leaves after reconnecting") {
   CHECK(old.uiCount("pairing_revoked") > 0);
   admin.node->stop();
   old.node->stop();
+}
+
+TEST_CASE("node: a device joining later never overrides the cluster with its first-run defaults") {
+  NFleet f;
+  auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  REQUIRE(host.node->start());
+  f.run(300);
+  REQUIRE(json::getBool(
+      json::parse(host.node->setConfigJson("ui.call_flow", "\"ring_then_purpose\"")).get(), "ok"));
+  REQUIRE(json::getBool(
+      json::parse(host.node->deleteConfigKeyJson("trigger_rules.r_missed_call_default")).get(),
+      "ok"));
+  f.run(300);
+
+  // The new tablet's first boot, and so its seeded defaults, happens days after the edits.
+  f.clock.advance(3LL * 86'400'000);
+  auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/true,
+                       /*zero_psk=*/true);
+  joiner.node->setSecureStore([](const std::string&) { return std::string(); },
+                              [](const std::string&, const std::string&) { return true; });
+  REQUIRE(joiner.node->start());
+  REQUIRE(joiner.node->configJson().find("purpose_first") != std::string::npos);
+  REQUIRE(joiner.node->configJson().find("r_missed_call_default") != std::string::npos);
+
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto pj = json::parse(host.node->pairingJson());
+      cJSON* devs = json::get(json::get(pj.get(), "pending"), "devices");
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, devs) {
+        if (json::getString(it, "id") == joiner.node->nodeId()) return true;
+      }
+    }
+    return false;
+  }());
+  host.node->inviteDevice(joiner.node->nodeId());
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      if (joiner.uiCount("paired") >= 1) return true;
+    }
+    return false;
+  }());
+  f.run(2000);
+
+  for (auto* n : {&host, &joiner}) {
+    auto cfg = json::parse(n->node->configJson());
+    CHECK(json::getString(json::get(cfg.get(), "ui"), "call_flow") == "ring_then_purpose");
+    CHECK(json::get(json::get(cfg.get(), "trigger_rules"), "r_missed_call_default") == nullptr);
+    CHECK(json::get(json::get(cfg.get(), "trigger_rules"), "r_sos_default_on") != nullptr);
+  }
+  joiner.node->stop();
+  host.node->stop();
+}
+
+TEST_CASE("node: retention and tombstone collection wait for every member's progress") {
+  const std::string dir = tempDir() + "/doorbell_retention_" + genTokenHex(8);
+  REQUIRE(makeDir(dir));
+  struct Cleanup {
+    std::string path;
+    ~Cleanup() {
+      std::error_code ignored;
+      std::filesystem::remove_all(path, ignored);
+    }
+  } cleanup{dir};
+  auto storedKeys = [&dir] {
+    Store probe;
+    REQUIRE(probe.open(dir + "/doorbell.db"));
+    std::map<std::string, bool> keys;
+    for (const auto& entry : probe.configLoadAll()) keys[entry.key] = entry.deleted;
+    return std::make_pair(keys, probe.eventCoverage());
+  };
+
+  NFleet f;
+  auto& a = f.add("A:1", "panel-a", "indoor_panel", "", false, false, dir);
+  auto& b = f.add("B:1", "panel-b", "indoor_panel", "", false);
+  REQUIRE(a.node->start());
+  REQUIRE(b.node->start());
+  f.run(1000);
+  REQUIRE(json::getBool(json::parse(a.node->setConfigJson("doors.d_gone", "{\"name\":\"x\"}")).get(), "ok"));
+  f.run(300);
+  REQUIRE(json::getBool(json::parse(a.node->deleteConfigKeyJson("doors.d_gone")).get(), "ok"));
+  f.run(500);
+  f.clock.advance(31LL * 86'400'000);
+  f.run(200);
+
+  a.node->runReplicationMaintenance();
+  {
+    auto [keys, coverage] = storedKeys();
+    REQUIRE(keys.count("doors.d_gone"));
+    CHECK(keys["doors.d_gone"]);
+    CHECK(coverage.empty());
+  }
+
+  const uint64_t all = 1'000'000;
+  const std::map<std::string, uint64_t> everything{{a.node->nodeId(), all},
+                                                   {b.node->nodeId(), all}};
+  a.node->notePeerReplication(b.node->nodeId(), everything, everything);
+  a.node->runReplicationMaintenance();
+  {
+    auto [keys, coverage] = storedKeys();
+    CHECK_FALSE(keys.count("doors.d_gone"));
+    CHECK_FALSE(coverage.empty());
+  }
+  b.node->stop();
+  a.node->stop();
 }

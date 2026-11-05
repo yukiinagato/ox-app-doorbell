@@ -205,18 +205,39 @@ TEST_CASE("config conflicts: sensitive candidates are redacted and reserved hist
   }
 }
 
-TEST_CASE("config conflicts: per entity capacity blocks publication instead of dropping intent") {
+TEST_CASE("config conflicts: compaction keeps a long-edited entity writable") {
   ConfigConflictFleet f;
   f.net.partition({{"config-race-a"}, {"config-race-b"}});
-  for (int i = 0; i < 64; ++i) {
+  for (int i = 0; i < 200; ++i) {
     auto result = json::parse(f.edit(*f.a, std::to_string(i)));
     CAPTURE(i); REQUIRE(json::getBool(result.get(), "ok"));
   }
-  auto before = json::parse(f.a->configSnapshotJson());
-  auto result = json::parse(f.edit(*f.a, "must not publish"));
-  CHECK(json::getString(result.get(), "error_code") == "config_history_capacity_exceeded");
-  auto after = json::parse(f.a->configSnapshotJson());
-  CHECK(json::getString(before.get(), "revision") == json::getString(after.get(), "revision"));
-  CHECK(f.a->configJson().find("must not publish") == std::string::npos);
-  CHECK(json::getInt(json::get(after.get(), "edit_journal"), "records") == 64);
+  auto snapshot = json::parse(f.a->configSnapshotJson());
+  CHECK(json::dump(snapshot.get()).find("\"partition_test\":\"199\"") != std::string::npos);
+  const cJSON* journal = json::get(snapshot.get(), "edit_journal");
+  CHECK(json::getInt(journal, "records") <= 64);
+  CHECK(json::getBool(journal, "capacity_available"));
+}
+
+TEST_CASE("config conflicts: merged partitions over the writer limit keep replicating") {
+  ConfigConflictFleet f;
+  REQUIRE(json::getBool(json::parse(f.edit(*f.a, "base")).get(), "ok"));
+  f.run(500);
+  f.net.partition({{"config-race-a"}, {"config-race-b"}});
+  for (int i = 0; i < 60; ++i) {
+    CAPTURE(i);
+    REQUIRE(json::getBool(json::parse(f.edit(*f.a, "a" + std::to_string(i))).get(), "ok"));
+    REQUIRE(json::getBool(json::parse(f.edit(*f.b, "b" + std::to_string(i))).get(), "ok"));
+  }
+  f.net.heal();
+  f.run(3000);
+  for (Node* node : {f.a.get(), f.b.get()}) {
+    auto status = json::parse(node->statusJson());
+    CHECK(json::get(json::get(status.get(), "runtime"), "config_store") == nullptr);
+  }
+  CHECK(f.a->configJson() == f.b->configJson());
+  // A later unrelated write still replicates.
+  REQUIRE(json::getBool(json::parse(f.a->setConfigJson("reply.display_ttl_s", "41")).get(), "ok"));
+  f.run(1000);
+  CHECK(f.b->configJson().find("\"display_ttl_s\":41") != std::string::npos);
 }

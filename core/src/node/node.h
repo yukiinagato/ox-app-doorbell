@@ -5,6 +5,7 @@
 
 #include <array>
 #include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -272,6 +273,12 @@ class Node {
   // Move the device-local seen watermark. An empty HLC marks every known call as seen. The
   // watermark never moves backwards and a call_log_changed event follows a successful write.
   bool markCallLogSeen(const std::string& up_to_hlc);
+  // Records the configuration version vector and event heads a peer advertised in anti-entropy.
+  // Event retention and tombstone collection only discard what every configured member holds.
+  void notePeerReplication(const std::string& peer, const VersionVector& vv,
+                           const std::map<std::string, uint64_t>& heads);
+  // Runs one retention/tombstone-collection pass now (it otherwise runs every six hours).
+  void runReplicationMaintenance();
 
 
   std::string pairingJson();

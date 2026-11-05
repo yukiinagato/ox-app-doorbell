@@ -2,6 +2,7 @@
 
 
 
+#include <filesystem>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -241,7 +242,15 @@ TEST_CASE("emergency: state replication is independent from configurable alert r
 }
 
 TEST_CASE("emergency: event replay restores state after restart") {
-  const std::string dir = "tmp_test_emergency_" + std::to_string(::getpid());
+  const std::string dir = tempDir() + "/doorbell_emergency_replay_" + genTokenHex(8);
+  REQUIRE(makeDir(dir));
+  struct Cleanup {
+    std::string path;
+    ~Cleanup() {
+      std::error_code ignored;
+      std::filesystem::remove_all(path, ignored);
+    }
+  } cleanup{dir};
 
   {
     EmFleet f;
@@ -282,9 +291,6 @@ TEST_CASE("emergency: event replay restores state after restart") {
   }
 
 
-  for (const char* n : {"doorbell.db", "doorbell.db-wal", "doorbell.db-shm"})
-    std::remove((dir + "/" + n).c_str());
-  ::rmdir(dir.c_str());
 }
 
 TEST_CASE("emergency: startup does not present an older recovered activation over a newer clear") {
