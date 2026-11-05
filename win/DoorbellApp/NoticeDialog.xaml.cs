@@ -35,6 +35,11 @@ namespace DoorbellApp
                             string existingText, List<string> presets)
         {
             InitializeComponent();
+            // Compact windows: the dialog never exceeds the work area; content scrolls instead
+            // of clipping at large text sizes.
+            var area = SystemParameters.WorkArea;
+            Width = Math.Max(320, Math.Min(620, area.Width - 32));
+            MaxHeight = Math.Max(320, area.Height - 32);
             _doors = doors ?? new List<KeyValuePair<string, string>>();
             _target = preselectedDoor ?? "";
             NoticeBody = "";

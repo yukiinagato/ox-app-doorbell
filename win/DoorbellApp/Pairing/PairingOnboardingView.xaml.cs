@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using System.Windows.Threading;
 using DoorbellApp.Core;
 using DoorbellApp.Util;
@@ -42,6 +43,7 @@ namespace DoorbellApp.Pairing
         {
             InitializeComponent();
             ApplyStrings();
+            SizeChanged += (sender, args) => ApplySizeClass(args.NewSize.Width);
 
             _poll.Interval = TimeSpan.FromSeconds(1);
             _poll.Tick += (sender, args) => Refresh();
@@ -91,6 +93,7 @@ namespace DoorbellApp.Pairing
             PersistErrorBody.Text = Texts.T("pair.persist_error_body");
             RetryButton.Content = Texts.T("pair.retry");
             QrCaption.Text = Texts.T("pair.qr_caption");
+            ConfirmCodeLabel.Text = Texts.T("pair.confirm_code_self");
             QrPlaceholder.Text = Texts.T("pair.searching");
             CreatedCodeCard.ApplyStrings();
         }
@@ -187,6 +190,11 @@ namespace DoorbellApp.Pairing
             var snapshot = _snapshot;
             IdentityText.Text = IdentityLine(snapshot);
             RenderQr(snapshot.PairQr);
+            bool showCode = !string.IsNullOrEmpty(snapshot.SelfConfirmCode) &&
+                            snapshot.State != PairingSnapshot.StateReady;
+            ConfirmCodeText.Text = PairingSnapshot.GroupedCode(snapshot.SelfConfirmCode);
+            ConfirmCodeLabel.Visibility = showCode ? Visibility.Visible : Visibility.Collapsed;
+            ConfirmCodeText.Visibility = ConfirmCodeLabel.Visibility;
 
             bool persistError = snapshot.State == PairingSnapshot.StatePersistError;
             bool joiningState = snapshot.State == PairingSnapshot.StateJoining || _joining;
@@ -204,11 +212,22 @@ namespace DoorbellApp.Pairing
                 _mode = Mode.Created;
             }
 
+            bool upgradeRejoin = !persistError && snapshot.UpgradeRejoinRequired && !ready &&
+                                 !joiningState;
+            SetStatusTone(persistError ? "Negative" : (upgradeRejoin ? "Warning" : null));
+
             if (persistError)
             {
                 StatusSpinner.Visibility = Visibility.Collapsed;
                 StatusText.Text = Texts.T("pair.persist_error_title");
                 StatusHint.Text = "";
+            }
+            else if (snapshot.UpgradeRejoinRequired && !ready && !joiningState)
+            {
+                // A v2 member after the upgrade: its old key no longer opens the cluster.
+                StatusSpinner.Visibility = Visibility.Collapsed;
+                StatusText.Text = Texts.T("pair.upgrade_rejoin_title");
+                StatusHint.Text = Texts.T("pair.upgrade_rejoin_hint");
             }
             else if (revoked)
             {
@@ -485,6 +504,52 @@ namespace DoorbellApp.Pairing
         {
             var handler = DismissRequested;
             if (handler != null) handler();
+        }
+
+        /// <summary>
+        /// ui-guidelines 4, Pairing: the confirm code is the largest element. Expanded windows
+        /// keep it in the right column; compact and medium stack it centred under the status.
+        /// </summary>
+        private void ApplySizeClass(double width)
+        {
+            var size = Ui.LayoutMetrics.Classify(width);
+            bool expanded = size == Ui.SizeClass.Expanded;
+            Grid.SetColumn(PairingSidePanel, expanded ? 1 : 0);
+            Grid.SetRow(PairingSidePanel, expanded ? 0 : 1);
+            PairingSidePanel.Margin = expanded ? new Thickness(40, 0, 0, 0) : new Thickness(0, 24, 0, 0);
+            PairingSidePanel.Width = expanded ? 300 : double.NaN;
+            PairingSidePanel.MaxWidth = expanded ? double.PositiveInfinity : 420;
+            PairingSidePanel.HorizontalAlignment = expanded ? HorizontalAlignment.Stretch
+                                                            : HorizontalAlignment.Center;
+            ConfirmCodeText.FontSize = size == Ui.SizeClass.Compact ? 44 : 56;
+            ActionsPanel.Orientation = size == Ui.SizeClass.Compact ? Orientation.Vertical
+                                                                   : Orientation.Horizontal;
+            foreach (UIElement child in ActionsPanel.Children)
+            {
+                var button = child as FrameworkElement;
+                if (button == null) continue;
+                button.MinHeight = Ui.LayoutMetrics.TouchMin;
+                button.Margin = size == Ui.SizeClass.Compact
+                    ? new Thickness(0, ActionsPanel.Children.IndexOf(child) == 0 ? 0 : 12, 0, 0)
+                    : new Thickness(ActionsPanel.Children.IndexOf(child) == 0 ? 0 : 14, 0, 0, 0);
+            }
+        }
+
+        private void SetStatusTone(string role)
+        {
+            if (role == null)
+            {
+                StatusCard.BorderThickness = new Thickness(0);
+                StatusCard.Padding = new Thickness(0);
+                StatusCard.Background = Brushes.Transparent;
+                StatusText.SetResourceReference(TextBlock.ForegroundProperty, "Fg");
+                return;
+            }
+            StatusCard.BorderThickness = new Thickness(1, 1, 1, 4);
+            StatusCard.Padding = new Thickness(16, 12, 16, 12);
+            StatusCard.SetResourceReference(Border.BorderBrushProperty, role);
+            StatusCard.SetResourceReference(Border.BackgroundProperty, "Surface");
+            StatusText.SetResourceReference(TextBlock.ForegroundProperty, role);
         }
     }
 }

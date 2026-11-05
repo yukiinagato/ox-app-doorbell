@@ -108,7 +108,7 @@
       "id": "native-windows-vm",
       "status": "BLOCKED_ENV",
       "evidence": "verification/device-inventory.json",
-      "reason": "No native VM runtime or legal XP/7 images; Docker used only for Linux."
+      "reason": "No native VM runtime or legal Windows 7 SP1 image; Docker used only for Linux. Windows XP is not a supported target."
     },
     {
       "id": "independent-review-T16-T17-T18-T30-T31-T32",

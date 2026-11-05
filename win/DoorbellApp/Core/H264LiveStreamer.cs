@@ -32,6 +32,7 @@ namespace DoorbellApp.Core
         private readonly object _gate = new object();
         private volatile bool _running;
         private Thread _thread;
+        private volatile HttpWebRequest _request;
         private IntPtr _player;
         private CoreInterop.H264FrameCb _frameCb;
         private CoreInterop.H264StateCb _stateCb;
@@ -86,11 +87,22 @@ namespace DoorbellApp.Core
             _thread.Start();
         }
 
+        /// <summary>
+        /// Aborts the open request so the connection is released immediately, waits briefly for
+        /// the feed thread, then destroys the Core player.
+        /// </summary>
         public void Stop()
         {
             _running = false;
-            try { _thread?.Interrupt(); } catch { }
+            var request = _request;
+            if (request != null) try { request.Abort(); } catch { }
+            var thread = _thread;
             _thread = null;
+            if (thread != null)
+            {
+                try { thread.Interrupt(); } catch { }
+                if (thread != Thread.CurrentThread) thread.Join(1000);
+            }
             DestroyPlayer();
         }
 
@@ -129,15 +141,9 @@ namespace DoorbellApp.Core
             }
         }
 
-        private static string MetaUrl(string url)
-        {
-            try
-            {
-                var u = new Uri(url);
-                return new UriBuilder(u) { Path = "/video-meta", Query = "" }.Uri.ToString();
-            }
-            catch { return null; }
-        }
+        // The stream's own source answers /video-meta next to it; for a peer that is
+        // /media/peer/<id>/video-meta on this device, not this device's /video-meta.
+        private static string MetaUrl(string url) => LocalMedia.Sibling(url, "video-meta");
 
         private bool CreatePlayer()
         {
@@ -183,9 +189,13 @@ namespace DoorbellApp.Core
                 bool parseError = false;
                 try
                 {
-                    var req = (HttpWebRequest)WebRequest.Create(_url);
-                    req.Timeout = 4000;
-                    req.ReadWriteTimeout = 10000;
+                    var req = LocalMedia.Create(_url, 4000, 10000);
+                    _request = req;
+                    if (!_running)
+                    {
+                        DestroyPlayer();
+                        return;
+                    }
                     using (var resp = req.GetResponse())
                     using (var stream = resp.GetResponseStream())
                     {
@@ -222,6 +232,7 @@ namespace DoorbellApp.Core
                 {
                     lastError = ex.GetType().Name + " " + ex.Message;
                 }
+                _request = null;
                 DestroyPlayer();
                 if (!_running) return;
                 if (_lastState.StartsWith("error", StringComparison.Ordinal))
@@ -250,8 +261,7 @@ namespace DoorbellApp.Core
             if (string.IsNullOrEmpty(_metaUrl)) return;
             try
             {
-                var req = (HttpWebRequest)WebRequest.Create(_metaUrl);
-                req.Timeout = 1500;
+                var req = LocalMedia.Create(_metaUrl, 1500, 1500);
                 using (var resp = req.GetResponse())
                 using (var reader = new StreamReader(resp.GetResponseStream()))
                 {

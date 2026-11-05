@@ -135,6 +135,25 @@ namespace DoorbellApp
             catch { return null; }
         }
 
+        /// <summary>
+        /// Sets one top-level boot.json field (ui_lang, kiosk) atomically, keeping every other
+        /// field. Returns the reloaded profile, or null when the write failed.
+        /// </summary>
+        public static BootConfig PersistField(string path, string field, object value)
+        {
+            if (string.IsNullOrEmpty(field)) return null;
+            string current = ReadValidJson(path) ?? ReadValidJson(path + ".bak") ?? DefaultJson;
+            try
+            {
+                var json = new JavaScriptSerializer();
+                var data = json.Deserialize<Dictionary<string, object>>(current) ??
+                           new Dictionary<string, object>();
+                data[field] = value;
+                return WriteAtomic(path, json.Serialize(data)) ? Load(path) : null;
+            }
+            catch { return null; }
+        }
+
         /// <summary>Pairing PSK/seeds are crash-safely persisted for the next process start.</summary>
         public static string PersistPairingReference(string path, IEnumerable<string> seeds)
         {

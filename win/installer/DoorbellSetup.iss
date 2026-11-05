@@ -20,6 +20,16 @@
 ;   BuildId    – the bundle's build id (artifact directory name)
 ;   AppVersion – dotted numeric version for the Windows version resource
 ;   ProvisionDir – deploy\provision\windows (kiosk / provisioning scripts)
+;   UpdatePublisher – CN of the Authenticode certificate release installers are signed with;
+;                  the in-app updater refuses any installer not signed by it (empty: refuse all)
+;
+; Data layout (security protocol v3):
+;   %ProgramData%\Doorbell          SYSTEM/Administrators full, Users read
+;   %ProgramData%\Doorbell\service  the watchdog service's state and log, administrators only
+;   %ProgramData%\Doorbell\data     the app's data (boot.json, store, logs), Users modify
+;   %ProgramData%\Doorbell\data\secure  DPAPI secrets: SYSTEM, Administrators and the
+;                                   "Doorbell Operators" group, which holds the accounts that
+;                                   run the app (the installing user, and /KIOSKUSER=name)
 
 #ifndef SourceDir
   #error SourceDir must point at a finished win\dist\<build-id> bundle
@@ -33,6 +43,9 @@
 #ifndef ProvisionDir
   #define ProvisionDir "..\..\deploy\provision\windows"
 #endif
+#ifndef UpdatePublisher
+  #define UpdatePublisher ""
+#endif
 
 #define MyAppName "Doorbell"
 #define MyAppPublisher "ox"
@@ -40,6 +53,7 @@
 #define WatchdogExe "doorbell-watchdog.exe"
 #define ServiceName "DoorbellWatchdog"
 #define RegKey "Software\Doorbell"
+#define OperatorsGroup "Doorbell Operators"
 
 [Setup]
 AppId={{7D2E3B60-5B1E-4C7A-9C8B-6C1D3F0A5E21}
@@ -93,6 +107,8 @@ ja.GroupSetup=セットアップ
 ja.GroupSystem=システム
 ja.KeepDataPrompt=設定とペアリング情報（%ProgramData%\Doorbell）を残しますか？%n「いいえ」を選ぶとクラスタ鍵を含めてすべて削除されます。
 ja.UpgradeNote=既存の Doorbell が見つかりました。設定を保持したまま更新します。
+ja.NetFx48Missing=.NET Framework 4.8 が見つかりません。Microsoft から .NET Framework 4.8 をインストールしてから、もう一度セットアップを実行してください。
+ja.Kb3140245Missing=この Windows 7 には更新プログラム KB3140245 がありません。インストールされるまで、Telegram・Web Push・アプリ内アップデートなどの HTTPS 連携は動作しません（呼び出し・通話・SOS は動作します）。続行しますか？
 en.RolePageCaption=Device role
 en.RolePageDescription=How will this device be used? The role can be changed later in the admin console.
 en.RoleDoor=Door station (at the entrance, shows visitors through its camera)
@@ -111,6 +127,8 @@ en.GroupSetup=Setup
 en.GroupSystem=System
 en.KeepDataPrompt=Keep the settings and pairing data (%ProgramData%\Doorbell)?%nChoose No to delete everything, including the cluster key.
 en.UpgradeNote=An existing Doorbell installation was found. It will be updated in place with its settings kept.
+en.NetFx48Missing=.NET Framework 4.8 was not found. Install .NET Framework 4.8 from Microsoft, then run setup again.
+en.Kb3140245Missing=This Windows 7 system is missing update KB3140245. Until it is installed, HTTPS integrations (Telegram, Web Push, in-app updates) will not work; calls, intercom and SOS still do. Continue?
 
 [Tasks]
 Name: "service"; Description: "{cm:TaskService}"; GroupDescription: "{cm:GroupSetup}"
@@ -129,7 +147,10 @@ Source: "{#ProvisionDir}\kiosk-enable.cmd"; DestDir: "{app}\provision"; Flags: i
 Source: "{#ProvisionDir}\kiosk-disable.cmd"; DestDir: "{app}\provision"; Flags: ignoreversion
 
 [Dirs]
-Name: "{commonappdata}\Doorbell"; Permissions: users-modify
+; Access control is applied explicitly in ApplyDataAcls; Inno's Permissions only adds entries.
+Name: "{commonappdata}\Doorbell"; Flags: uninsneveruninstall
+Name: "{commonappdata}\Doorbell\data"; Flags: uninsneveruninstall
+Name: "{commonappdata}\Doorbell\service"; Flags: uninsneveruninstall
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"
@@ -140,6 +161,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\app\{#MyAppExeName}"; Tasks
 Root: HKLM; Subkey: "{#RegKey}"; ValueType: string; ValueName: "InstallDir"; ValueData: "{app}"; Flags: uninsdeletekey
 Root: HKLM; Subkey: "{#RegKey}"; ValueType: string; ValueName: "BuildId"; ValueData: "{#BuildId}"
 Root: HKLM; Subkey: "{#RegKey}"; ValueType: string; ValueName: "Version"; ValueData: "{#AppVersion}"
+Root: HKLM; Subkey: "{#RegKey}"; ValueType: string; ValueName: "UpdatePublisher"; ValueData: "{#UpdatePublisher}"
 Root: HKLM; Subkey: "{#RegKey}"; ValueType: dword; ValueName: "ServiceInstalled"; ValueData: "1"; Tasks: service
 Root: HKLM; Subkey: "{#RegKey}"; ValueType: dword; ValueName: "ServiceInstalled"; ValueData: "0"; Tasks: not service; Check: not ServiceWasInstalled
 ; Sign-in autostart when the service is not used.
@@ -173,9 +195,22 @@ var
   UpgradeDetected: Boolean;
   ServiceExistedBefore: Boolean;
 
+function DataRoot(): String;
+begin
+  Result := ExpandConstant('{commonappdata}\Doorbell');
+end;
+
+function DataDir(): String;
+begin
+  Result := DataRoot() + '\data';
+end;
+
+{ Where boot.json lives now; before the first v3 install it is still at the top level. }
 function BootJsonPath(): String;
 begin
-  Result := ExpandConstant('{commonappdata}\Doorbell\boot.json');
+  Result := DataDir() + '\boot.json';
+  if not FileExists(Result) and FileExists(DataRoot() + '\boot.json') then
+    Result := DataRoot() + '\boot.json';
 end;
 
 { setup_complete:true in boot.json means the device was already set up (by a previous
@@ -255,13 +290,48 @@ begin
   end;
 end;
 
+function NetFx48Installed(): Boolean;
+var
+  Release: Cardinal;
+begin
+  Result := RegQueryDWordValue(HKLM, 'SOFTWARE\Microsoft\NET Framework Setup\NDP\v4\Full',
+                               'Release', Release) and (Release >= 528040);
+end;
+
+{ KB3140245 updates winhttp.dll to 6.1.7601.23375; before it WinHTTP on Windows 7 cannot be
+  restricted to TLS 1.2, and the app refuses to fall back to anything older. }
+function Win7WinHttpLacksTls12(): Boolean;
+var
+  Version: TWindowsVersion;
+  Packed: Int64;
+begin
+  Result := False;
+  GetWindowsVersionEx(Version);
+  if (Version.Major <> 6) or (Version.Minor <> 1) then Exit;
+  if not GetPackedVersion(ExpandConstant('{sys}\winhttp.dll'), Packed) then Exit;
+  Result := ComparePackedVersion(Packed, PackVersionComponents(6, 1, 7601, 23375)) < 0;
+end;
+
 function InitializeSetup(): Boolean;
 var
   Previous: String;
 begin
+  Result := True;
+  if not NetFx48Installed() then
+  begin
+    SuppressibleMsgBox(CustomMessage('NetFx48Missing'), mbCriticalError, MB_OK, IDOK);
+    Result := False;
+    Exit;
+  end;
+  if Win7WinHttpLacksTls12() then
+    if SuppressibleMsgBox(CustomMessage('Kb3140245Missing'), mbConfirmation, MB_YESNO,
+                          IDYES) = IDNO then
+    begin
+      Result := False;
+      Exit;
+    end;
   UpgradeDetected := RegQueryStringValue(HKLM, '{#RegKey}', 'InstallDir', Previous);
   ServiceExistedBefore := ServiceExists();
-  Result := True;
 end;
 
 procedure InitializeWizard();
@@ -361,10 +431,88 @@ begin
   Json := '{ "name": "' + JsonEscape(Name) + '", "role": "' + Role + '", "door": "' +
           JsonEscape(Door) + '", "listen_port": 47172, "http_port": 47180, "ui_lang": "' +
           Lang + '", "kiosk": false, "setup_complete": true }';
-  ForceDirectories(ExpandConstant('{commonappdata}\Doorbell'));
-  if FileExists(BootJsonPath()) then
-    FileCopy(BootJsonPath(), BootJsonPath() + '.bak', False);
-  SaveStringToFile(BootJsonPath(), Json, False);
+  ForceDirectories(DataDir());
+  if FileExists(DataDir() + '\boot.json') then
+    FileCopy(DataDir() + '\boot.json', DataDir() + '\boot.json.bak', False);
+  SaveStringToFile(DataDir() + '\boot.json', Json, False);
+end;
+
+procedure RunHidden(const FileName, Params: String);
+var
+  ResultCode: Integer;
+begin
+  if not Exec(FileName, Params, '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    Log('could not run ' + FileName + ' ' + Params)
+  else if ResultCode <> 0 then
+    Log(FileName + ' ' + Params + ' exited ' + IntToStr(ResultCode));
+end;
+
+{ The accounts that run the app need the DPAPI secret directory; nobody else does. }
+procedure EnsureOperatorsGroup();
+var
+  Kiosk: String;
+begin
+  RunHidden('net.exe', 'localgroup "{#OperatorsGroup}" /add /comment:"Accounts that run the Doorbell app"');
+  RunHidden('net.exe', 'localgroup "{#OperatorsGroup}" "' + GetUserNameString() + '" /add');
+  Kiosk := Trim(ExpandConstant('{param:KIOSKUSER|}'));
+  if Kiosk <> '' then
+    RunHidden('net.exe', 'localgroup "{#OperatorsGroup}" "' + Kiosk + '" /add');
+end;
+
+{ Versions before security protocol v3 kept everything at the top level, which ordinary users
+  could modify and where the SYSTEM service also wrote. App data moves into data\; the service's
+  old files and the retired kiosk unlock flag are dropped. }
+procedure MigrateLegacyData();
+var
+  Find: TFindRec;
+  Name: String;
+begin
+  if FindFirst(DataRoot() + '\*', Find) then
+  try
+    repeat
+      Name := Find.Name;
+      if (Name = '.') or (Name = '..') or (CompareText(Name, 'data') = 0) or
+         (CompareText(Name, 'service') = 0) then
+        Continue;
+      if (CompareText(Name, 'watchdog-state.txt') = 0) or
+         (CompareText(Name, 'watchdog-state.txt.tmp') = 0) or
+         (CompareText(Name, 'watchdog.log') = 0) or
+         (CompareText(Name, 'admin_unlocked.flag') = 0) then
+      begin
+        DeleteFile(DataRoot() + '\' + Name);
+        Continue;
+      end;
+      if CompareText(Name, 'updates') = 0 then
+      begin
+        DelTree(DataRoot() + '\updates', True, True, True);
+        Continue;
+      end;
+      if not RenameFile(DataRoot() + '\' + Name, DataDir() + '\' + Name) then
+        Log('could not move ' + Name + ' into data');
+    until not FindNext(Find);
+  finally
+    FindClose(Find);
+  end;
+end;
+
+procedure ApplyDataAcls();
+var
+  Secure: String;
+begin
+  RunHidden('icacls.exe', '"' + DataRoot() + '" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F ' +
+            '*S-1-5-32-544:(OI)(CI)F *S-1-5-32-545:(OI)(CI)RX');
+  RunHidden('icacls.exe', '"' + DataRoot() + '\service" /inheritance:r /grant:r ' +
+            '*S-1-5-18:(OI)(CI)F *S-1-5-32-544:(OI)(CI)F *S-1-5-11:(OI)(CI)RX');
+  RunHidden('icacls.exe', '"' + DataDir() + '" /grant *S-1-5-32-545:(OI)(CI)M');
+  Secure := DataDir() + '\secure';
+  if not DirExists(Secure) then
+  begin
+    ForceDirectories(Secure);
+    RunHidden('icacls.exe', '"' + Secure + '" /inheritance:r /grant:r *S-1-5-18:(OI)(CI)F ' +
+              '*S-1-5-32-544:(OI)(CI)F "{#OperatorsGroup}":(OI)(CI)F');
+  end
+  else
+    RunHidden('icacls.exe', '"' + Secure + '" /grant "{#OperatorsGroup}":(OI)(CI)F');
 end;
 
 procedure InstallOrRestartService();
@@ -387,6 +535,10 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
+    EnsureOperatorsGroup();
+    ForceDirectories(DataDir());
+    MigrateLegacyData();
+    ApplyDataAcls();
     if NeedsDeviceSetup() then WriteBootJson();
     if WillRunService() then InstallOrRestartService();
   end;

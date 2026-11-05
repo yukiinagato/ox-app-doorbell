@@ -74,6 +74,9 @@ namespace DoorbellApp
                         Margin = new Thickness(10),
                         Foreground = (Brush)FindResource("Dim"),
                     });
+                DoorTileGrid.Columns = Ui.LayoutMetrics.TileColumns(_sizeClass,
+                    ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth,
+                    DoorTileGrid.Children.Count);
             }
 
             _tileSnapshotUrls.Clear();
@@ -168,7 +171,7 @@ namespace DoorbellApp
             ClusterOnlineText.Text = Texts.T("pair.membership_connected", onlineTotal) +
                 (offline > 0 ? " · " + offline + " " + Texts.T("dash.tile_offline") : "");
             ClusterOnlineText.SetResourceReference(TextBlock.ForegroundProperty,
-                                                   offline > 0 ? "Warn" : "Ok");
+                                                   offline > 0 ? "Warning" : "Ok");
             DoorCountText.Text = doorsOnline + "/" + doorsTotal;
             PanelCountText.Text = panelsOnline + "/" + panelsTotal;
             AutomationProperties.SetName(ClusterCounter, Texts.T("dash.count_cluster", total));
@@ -400,20 +403,18 @@ namespace DoorbellApp
                     int rotation = -1;
                     try
                     {
-                        using (var client = new System.Net.WebClient())
-                        {
-                            jpeg = client.DownloadData(url);
-                            // The still is the raw sensor frame; the station says how it is held.
-                            string meta = client.DownloadString(
-                                url.Substring(0, url.Length - "/snapshot.jpg".Length) + "/video-meta");
-                            var m = System.Text.RegularExpressions.Regex.Match(meta, "\"rotation\"\\s*:\\s*(-?\\d+)");
-                            if (m.Success) rotation = ((int.Parse(m.Groups[1].Value) % 360) + 360) % 360;
-                        }
+                        jpeg = LocalMedia.Download(url, 5000, 4 * 1024 * 1024);
+                        // The still is the raw sensor frame; the station says how it is held.
+                        byte[] metaBytes = jpeg == null ? null :
+                            LocalMedia.Download(LocalMedia.Sibling(url, "video-meta"), 3000, 64 * 1024);
+                        string meta = metaBytes == null ? "" :
+                            System.Text.Encoding.UTF8.GetString(metaBytes);
+                        var m = System.Text.RegularExpressions.Regex.Match(meta, "\"rotation\"\\s*:\\s*(-?\\d+)");
+                        if (m.Success) rotation = ((int.Parse(m.Groups[1].Value) % 360) + 360) % 360;
                     }
                     catch (Exception ex)
                     {
-                        System.Diagnostics.Debug.WriteLine("door still unavailable: " +
-                                                           ex.Message);
+                        CoreClient.WriteAppLog("door still unavailable: " + ex.Message);
                     }
                     BitmapImage bitmap = jpeg == null ? null :
                         MjpegStreamer.Decode(jpeg, App.SafeMode ? 320 : 640);
@@ -543,7 +544,7 @@ namespace DoorbellApp
                 Text = ClockOf(DictLong(row, "ts", 0)),
                 FontSize = detailed ? 16 : 14,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = (Brush)FindResource(missed ? "Danger" : "Dim"),
+                Foreground = (Brush)FindResource(missed ? "Negative" : "Dim"),
             };
             Grid.SetColumn(time, 0);
             grid.Children.Add(time);
@@ -587,7 +588,7 @@ namespace DoorbellApp
                 VerticalAlignment = VerticalAlignment.Center,
                 Child = resultText,
             };
-            result.SetResourceReference(Border.BackgroundProperty, missed ? "Danger" : "Row");
+            result.SetResourceReference(Border.BackgroundProperty, missed ? "Negative" : "Row");
             Grid.SetColumn(result, 2);
             grid.Children.Add(result);
             // Hairline under each row, as on the kiosk list.

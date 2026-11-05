@@ -191,6 +191,11 @@ namespace DoorbellApp
                                                     : "web_admin.update_installing");
                         })));
                 }
+                catch (UpdateTrustException ex)
+                {
+                    CoreClient.WriteAppLog("update refused: " + ex.Message);
+                    error = Texts.T("web_admin.update_untrusted");
+                }
                 catch (Exception ex) { error = ex.Message; }
                 Dispatcher.BeginInvoke(new Action(() =>
                 {

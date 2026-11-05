@@ -12,7 +12,21 @@ ROOT = Path(__file__).resolve().parents[2]
 WIN = ROOT / "win"
 
 
+# MainWindow.xaml.cs is split into partial classes by concern; the parts below were cut from it
+# in this order, so their concatenation reads like the original single file.
+MAIN_WINDOW_PARTS = (
+    "MainWindow.xaml.cs", "MainWindow.Clock.cs", "MainWindow.PeerPolling.cs",
+    "MainWindow.Theme.cs", "MainWindow.Purposes.cs", "MainWindow.Audio.cs",
+    "MainWindow.Display.cs", "MainWindow.Emergency.cs", "MainWindow.CallFlow.cs",
+    "MainWindow.IncomingVideo.cs", "MainWindow.CallControls.cs", "MainWindow.InCallVideo.cs",
+    "MainWindow.Calling.cs", "MainWindow.Pairing.cs",
+)
+
+
 def read(relative: str) -> str:
+    if relative == "win/DoorbellApp/MainWindow.xaml.cs":
+        return "\n".join((WIN / "DoorbellApp" / part).read_text(encoding="utf-8")
+                         for part in MAIN_WINDOW_PARTS)
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
@@ -58,11 +72,12 @@ class WindowsContracts(unittest.TestCase):
         fields = re.findall(r"public (?:uint|IntPtr) (\w+);",
                             source[source.index("struct DbPlatformV2"):source.index(
                                 "delegate void LogLineCb")])
-        # Fields are only appended; secure_delete is the newest and must stay last.
+        # Fields are only appended; https_request_v3 (security protocol v3) is the newest and
+        # must stay last.
         self.assertEqual(fields, ["struct_size", "version", "user", "https_request",
                                  "secure_get", "secure_put", "log_line", "tts_speak",
                                  "device_info", "release_buffer", "secure_delete",
-                                 "power_state"])
+                                 "power_state", "https_request_v3"])
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         self.assertIn("Marshal.SizeOf(typeof(CoreInterop.DbPlatformV2))", client)
         self.assertIn("Marshal.FreeHGlobal(buffer)", client)
@@ -75,6 +90,10 @@ class WindowsContracts(unittest.TestCase):
                       read("win/DoorbellApp/Core/DpapiSecretStore.cs"))
         self.assertIn("power_state = Marshal.GetFunctionPointerForDelegate(_powerStateCb)",
                       client)
+        # The binary-safe callback reports the body length; it never relies on a NUL.
+        self.assertIn("https_request_v3 = Marshal.GetFunctionPointerForDelegate(_httpsV3Cb)",
+                      client)
+        self.assertIn("Marshal.WriteIntPtr(lengthOut, new IntPtr(bytes.Length))", client)
         probe = read("win/abi-probe/main.cpp")
         self.assertIn("10 * sizeof(void*)", probe)
         self.assertIn("offsetof(db_platform_v2, power_state)", probe)
@@ -411,7 +430,7 @@ class WindowsContracts(unittest.TestCase):
     def test_runtime_health_is_persisted_measured_and_periodic(self):
         state = read("win/DoorbellApp/RuntimeProcessState.cs")
         app = read("win/DoorbellApp/App.xaml.cs")
-        heartbeat = read("win/DoorbellApp/WatchdogHeartbeat.cs")
+        heartbeat = read("win/DoorbellApp/WatchdogChannel.cs")
         contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
         client = read("win/DoorbellApp/Core/CoreClient.cs")
         for token in ('"generation"', '"last_exit_reason"', '"session_open"',
@@ -552,7 +571,16 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("Result := not NeedsDeviceSetup();", iss)
         self.assertIn('"setup_complete": true', iss)
         self.assertIn("if Copy(Value, 1, 5) <> 'door-' then Exit;", iss)
-        self.assertIn('{commonappdata}\\Doorbell\\boot.json', iss)
+        self.assertIn("SaveStringToFile(DataDir() + '\\boot.json', Json, False);", iss)
+        # ProgramData is no longer user-modifiable; app data moves into data\ and the
+        # service's own directory stays administrators-only.
+        self.assertNotIn("Permissions: users-modify", iss)
+        for step in ("EnsureOperatorsGroup();", "MigrateLegacyData();", "ApplyDataAcls();"):
+            self.assertIn(step, iss)
+        self.assertIn("*S-1-5-32-545:(OI)(CI)RX", iss)
+        self.assertIn("NetFx48Installed()", iss)
+        self.assertIn("Win7WinHttpLacksTls12()", iss)
+        self.assertIn('ValueName: "UpdatePublisher"', iss)
         # Service = autostart at boot; Run key only as the no-service alternative.
         self.assertIn('Name: "service"; Description: "{cm:TaskService}"', iss)
         self.assertIn("'--install \"' +", iss)
@@ -587,7 +615,14 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('private const string RegistryKey = @"Software\\Doorbell";', updater)
         self.assertIn("releases/latest", updater)
         self.assertIn('key?.GetValue("UpdateFeed")', updater)
-        self.assertIn('@"^DoorbellSetup-.+\\.exe$"', updater)
+        self.assertIn('@"^DoorbellSetup-[A-Za-z0-9._-]+\\.exe$"', updater)
+        # Origin, not just integrity: a private download directory, a handle that denies
+        # writers while the file is checked, Authenticode and the expected publisher.
+        self.assertIn("PrivateUpdateDirectory()", updater)
+        self.assertIn("FileShare.Read))", updater)
+        self.assertIn("WinVerifyTrust(IntPtr.Zero, GenericVerifyV2, data)", updater)
+        self.assertIn("VerifySignature(target, installed.Publisher);", updater)
+        self.assertNotIn("App.DataDir", updater)
         # No download runs without a published checksum, and a mismatch deletes the file.
         self.assertIn("the release publishes no .sha256 for the installer", updater)
         self.assertIn('throw new InvalidOperationException("installer checksum mismatch");', updater)
@@ -597,7 +632,8 @@ class WindowsContracts(unittest.TestCase):
         # Same build id is never "newer"; an older tag is never offered.
         self.assertIn("if (string.Equals(release.BuildId, installed.BuildId, StringComparison.OrdinalIgnoreCase))",
                       updater)
-        self.assertIn("tagVersion < installedVersion", updater)
+        self.assertIn("tagVersion != null && installedVersion != null && tagVersion > installedVersion",
+                      updater)
         # The card lives behind the admin password and is disabled for non-installer copies.
         self.assertIn('x:Name="UpdateCard"', xaml)
         self.assertIn('UpdateStatus.Text = Texts.T("web_admin.update_not_installer");', window)
@@ -687,6 +723,125 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("authenticode-sha256", build)
         self.assertIn("SHA256SUMS", read("win/tools/write-manifest.ps1"))
 
+    def test_supervisor_channel_replaces_files_any_user_could_write(self):
+        watchdog = read("win/watchdog/main.cpp")
+        policy = read("win/watchdog/recovery_policy.h")
+        app = read("win/DoorbellApp/App.xaml.cs")
+        channel = read("win/DoorbellApp/WatchdogChannel.cs")
+        # Only the launched PID may use the channel; the unlock flag file is gone everywhere.
+        self.assertIn("GetNamedPipeClientProcessId(pipe, &client_pid)", watchdog)
+        self.assertIn("client_pid == expected", watchdog)
+        for source in [watchdog] + [p.read_text(encoding="utf-8")
+                                    for p in (WIN / "DoorbellApp").rglob("*.cs")]:
+            self.assertNotIn("admin_unlocked.flag\")", source)
+        # The service keeps its files in an administrators-only directory and refuses links.
+        self.assertIn('L"\\\\service"', watchdog)
+        self.assertIn("FILE_ATTRIBUTE_REPARSE_POINT", watchdog)
+        self.assertIn("PROTECTED_DACL_SECURITY_INFORMATION", watchdog)
+        # Deliberate exits and session changes are not crashes; safe mode lifts itself.
+        self.assertIn("SERVICE_ACCEPT_SESSIONCHANGE", watchdog)
+        self.assertIn("doorbell::classifyExit(", watchdog)
+        self.assertIn("kSafeModeAutoClearMs", policy)
+        self.assertIn("kExitRestartRequested = 3", policy)
+        # The heartbeat comes from the UI dispatcher, so a hung UI thread is detected.
+        self.assertIn("new DispatcherTimer(TimeSpan.FromSeconds(2), DispatcherPriority.Normal",
+                      channel)
+        # One instance per device; --safe-mode from the supervisor is honoured.
+        self.assertIn('@"Global\\DoorbellApp.Instance.v1"', app)
+        self.assertIn('SafeMode = e.Args.Contains("--safe-mode");', app)
+
+    def test_loopback_media_carries_the_local_token(self):
+        media = read("win/DoorbellApp/Core/LocalMedia.cs")
+        self.assertIn('TokenHeader = "X-Doorbell-Local"', media)
+        self.assertIn("request.AllowAutoRedirect = false;", media)
+        for path in (WIN / "DoorbellApp").rglob("*.cs"):
+            if path.name in ("LocalMedia.cs", "UpdateChecker.cs"):
+                continue
+            source = path.read_text(encoding="utf-8")
+            with self.subTest(path=path.name):
+                self.assertNotIn("WebRequest.Create(", source)
+                self.assertNotIn("new System.Net.WebClient()", source)
+        h264 = read("win/DoorbellApp/Core/H264LiveStreamer.cs")
+        mjpeg = read("win/DoorbellApp/Core/MjpegStreamer.cs")
+        self.assertIn('LocalMedia.Sibling(url, "video-meta")', h264)
+        for streamer in (h264, mjpeg):
+            self.assertIn("request.Abort()", streamer)
+            self.assertIn("thread.Join(1000)", streamer)
+        self.assertIn("ServicePointManager.DefaultConnectionLimit = 16;",
+                      read("win/DoorbellApp/App.xaml.cs"))
+
+    def test_native_settings_cover_device_config_and_write_through_the_batch(self):
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        store = read("win/DoorbellApp/Settings/SettingsStore.cs")
+        window = read("win/DoorbellApp/Settings/SettingsWindow.cs")
+        rows = read("win/DoorbellApp/Settings/SettingsWindow.Rows.cs")
+        styles = read("win/DoorbellApp/Settings/SettingsStyles.xaml")
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        strings = read("i18n/strings.yaml")
+        # Every write is one validated, atomic Core config batch, with the admin prompt hooked.
+        self.assertIn("App.Core.ConfigBatchJson(body)", store)
+        self.assertNotIn("SetConfigJson(", store)
+        self.assertIn("CoreClient.AdminPrompt = PromptAdmin;", window)
+        self.assertIn("CoreClient.AdminPrompt = _previousPrompt;", window)
+        # Two panes from 900 effective pixels, drill-down below; 44-pixel touch targets.
+        self.assertIn("public const double WideBreakpoint = 900;", window)
+        self.assertIn("public const double MinTouchTarget = 44;", window)
+        self.assertIn('<Setter Property="MinHeight" Value="44"/>', styles)
+        self.assertIn("SettingsSwitch", styles)
+        self.assertIn("OpenSettings();", shell)
+        # The device-side keys an administrator edits are native controls.
+        for key in ('Self + ".name"', 'Local + ".audio.volume.call"', '"ui.ringtone"',
+                    '"ui.call_flow"', '"ui.languages"', 'Local + ".screen_brightness"',
+                    '"display.night.enabled"', '"quick_replies"', '"visit_purposes"',
+                    '"notice.presets"', '"emergency.trigger.mode"', '"sip.server"',
+                    '"time.zone"', 'Local + ".camera.codec"', '"boot:kiosk"'):
+            with self.subTest(key=key):
+                self.assertIn(key, catalog)
+        # Only genuinely web-only items open the admin.
+        web = set(re.findall(r'Web\("([a-z_]+)"\)', catalog))
+        loop = re.search(r'foreach \(string id in new\[\] \{([^}]*)\}\)\s*Add\(g, Web\(id\)\)',
+                         catalog)
+        self.assertIsNotNone(loop)
+        web |= set(re.findall(r'"([a-z_]+)"', loop.group(1)))
+        self.assertTrue({"rules", "integrations", "assets", "secrets", "panels_manage",
+                         "sip_password", "bg_image"} <= web)
+        # Every category, item, description and action label is translated.
+        keys = set(re.findall(r"^([a-z_.0-9]+):", strings, re.M))
+        for ident in web:
+            self.assertIn("settings." + ident + "_desc", keys)
+        for kind, ident in re.findall(
+                r"\b(Toggle|Slider|Stepper|Choice|Multi|Text|TimeOfDay|Action|Info|Web|ListEditor)"
+                r'\("([a-z_0-9]+)"', catalog):
+            with self.subTest(item=ident):
+                self.assertIn("settings." + ident, keys)
+                if kind == "Action":
+                    self.assertIn("settings." + ident + "_action", keys)
+                if kind == "Web":
+                    self.assertIn("settings." + ident + "_desc", keys)
+        for ident in re.findall(r'Category\("([a-z]+)"', catalog):
+            self.assertIn("settings.cat_" + ident, keys)
+        for label in re.findall(r'O\([^,]+, "([a-z_.0-9]+)"\)', catalog):
+            with self.subTest(option=label):
+                self.assertIn(label, keys)
+        self.assertIn("ActualWidth < 700", rows)
+
+    def test_pairing_requires_the_confirmation_code(self):
+        interop = read("win/DoorbellApp/Core/CoreInterop.cs")
+        client = read("win/DoorbellApp/Core/CoreClient.cs")
+        add = read("win/DoorbellApp/Pairing/AddDeviceWindow.xaml.cs")
+        snapshot = read("win/DoorbellApp/Pairing/PairingSnapshot.cs")
+        onboarding = read("win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs")
+        self.assertIn('"db_core_invite_device_code"', client)
+        self.assertIn('"db_core_rotate_cluster_key"', client)
+        self.assertIn("public delegate void InviteDeviceCodeFn(IntPtr core,", interop)
+        self.assertIn("ConfirmCodeDialog.Ask(this, row.Title)", add)
+        self.assertIn("App.Core.InviteDeviceWithCode(id, code)", add)
+        for field in ('"confirm_code"', '"upgrade_rejoin_required"', '"security"',
+                      '"pk_conflict"', '"rekey_required"', '"legacy_peers"'):
+            self.assertIn(field, snapshot)
+        self.assertIn("pair.upgrade_rejoin_title", onboarding)
+        self.assertIn("ConfirmCodeText", onboarding)
+
     def test_watchdog_restarts_app_not_windows(self):
         watchdog = read("win/watchdog/main.cpp")
         self.assertNotIn("ExitWindowsEx", watchdog)
@@ -741,7 +896,7 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("OpenAddDevicePanel", window)
         gate = window[window.index("private void OpenAddDevicePanel"):
                       window.index("private void OnSecretCorner")]
-        self.assertIn("if (App.Boot.Kiosk && !_adminUnlocked)", gate)
+        self.assertIn("if (App.Boot.Kiosk && !_adminUnlocked && !fromSettings)", gate)
         self.assertIn("new AdminDialog { Owner = this }", gate)
         # persist_error is only cleared by a successful retry, never by another button.
         self.assertIn("bool secondaryAllowed = !persistError && !ready && !joiningState;", view)
@@ -877,16 +1032,18 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("status.BatteryFlag & 128", device)
         self.assertIn('{ "power_state", true }', contracts)
 
-    def test_windows_has_no_native_settings_only_the_web_admin_entry(self):
+    def test_admin_entry_opens_native_settings_with_the_web_admin_inside(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
         window = read("win/DoorbellApp/WebAdminWindow.xaml.cs")
         link = read("win/DoorbellApp/Util/AdminLink.cs")
-        # The admin entry always asks for the admin password and then opens the web admin.
+        actions = read("win/DoorbellApp/Settings/SettingsWindow.Actions.cs")
+        # The admin entry always asks for the admin password and then opens native settings,
+        # where the web admin (QR, URL, updates) is one row.
         entry = shell[shell.index("private void OnAdminEntryClick"):
                       shell.index("private void OpenWebAdmin")]
         self.assertIn("new AdminDialog { Owner = this }", entry)
-        self.assertIn("OpenWebAdmin();", entry)
-        self.assertIn("new WebAdminWindow(App.Boot.HttpPort)", shell)
+        self.assertIn("OpenSettings();", entry)
+        self.assertIn("new WebAdminWindow(App.Boot.HttpPort)", actions)
         # QR, URL and an open button; the URL never points at loopback.
         self.assertIn("QrCodeImage.Render(url, 200)", window)
         self.assertIn('Texts.T("web_admin.open_browser")', window)
@@ -896,8 +1053,6 @@ class WindowsContracts(unittest.TestCase):
         # A door station shows no administration entry at all (spec 0.2).
         self.assertIn("AdminEntryButton.Visibility = door ? Visibility.Collapsed", shell)
         self.assertIn("AdminLinkCard.Visibility = door ? Visibility.Collapsed", shell)
-        # No native settings screen was added.
-        self.assertFalse((WIN / "DoorbellApp" / "SettingsWindow.xaml").exists())
 
     def test_sos_slides_then_counts_down_before_core_is_told(self):
         slider = read("win/DoorbellApp/Ui/SosSlider.cs")
@@ -1879,17 +2034,133 @@ class WindowsContracts(unittest.TestCase):
     def test_responsive_layout_is_computed_from_the_window_size(self):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        metrics = read("win/DoorbellApp/Ui/LayoutMetrics.cs")
         self.assertIn("SizeChanged += (s, e) => ApplyResponsiveLayout();", window)
         layout = shell[shell.index("private void ApplyResponsiveLayout"):
-                       shell.index("private static void PlaceVisitor")]
-        self.assertIn("bool portrait = height >= width || width < 900;", layout)
-        # Portrait stacks; landscape splits into two columns.
-        self.assertIn("VisitorRightColumn.Width = new GridLength(0);", layout)
-        self.assertIn("PlaceVisitor(LangBar, 2, 1, 1, 1);", layout)
+                       shell.index("private void LayOutVisitorTopBar")]
+        # Three size classes from the window width (ui-guidelines section 2).
+        self.assertIn("SizeClass size = LayoutMetrics.Classify(width);", layout)
+        self.assertIn("public const double CompactMax = 600;", metrics)
+        self.assertIn("public const double ExpandedMin = 900;", metrics)
+        self.assertIn("if (width < CompactMax) return SizeClass.Compact;", metrics)
+        self.assertIn("if (width < ExpandedMin) return SizeClass.Medium;", metrics)
+        # Dashboard: stacked below Expanded, list beside the tiles from Expanded.
         self.assertIn("PlaceDashboard(RecentCallsPanel, 1, 0, 2);", layout)
         self.assertIn("PlaceDashboard(RecentCallsPanel, 0, 1, 1);", layout)
+        self.assertIn("LayoutMetrics.PurposeColumns(size, width, PurposeGrid.Children.Count)", layout)
+        self.assertIn("LayoutMetrics.TileColumns(size, width, DoorTileGrid.Children.Count)", layout)
+        self.assertIn("ApplyCallLayout(width, height);", layout)
+        self.assertIn("ApplyHistoryLayout(size);", layout)
         # Primary actions share a text-measured dock; secondary content stays responsive.
         self.assertIn("UpdateVisitorActionHeights(width);", layout)
+
+    def test_size_class_grids_follow_the_ui_guidelines(self):
+        metrics = read("win/DoorbellApp/Ui/LayoutMetrics.cs")
+        purposes = metrics[metrics.index("public static int PurposeColumns"):
+                           metrics.index("public static int TileColumns")]
+        tiles = metrics[metrics.index("public static int TileColumns"):
+                        metrics.index("public static double BodySize")]
+        # Visitor purpose grid: 2 compact, 3 medium, 3–4 expanded.
+        self.assertIn("if (size == SizeClass.Compact) columns = 2;", purposes)
+        self.assertIn("else if (size == SizeClass.Medium) columns = 3;", purposes)
+        self.assertIn("else columns = width >= 1280 ? 4 : 3;", purposes)
+        # Dashboard tiles: 1 / 2 / 3–4.
+        self.assertIn("if (size == SizeClass.Compact) columns = 1;", tiles)
+        self.assertIn("else if (size == SizeClass.Medium) columns = 2;", tiles)
+        self.assertIn("else columns = width >= 1400 ? 4 : 3;", tiles)
+        self.assertIn("public const double TouchMin = 44;", metrics)
+        self.assertIn("public const double VisitorTouchMin = 72;", metrics)
+        self.assertIn("TimeSpan.FromSeconds(4)", metrics)
+
+    def test_call_screens_have_fixed_action_zones(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        layout = read("win/DoorbellApp/MainWindow.Layout.cs")
+        root = ET.fromstring(xaml)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        by_name = {e.get(ns): e for e in root.iter() if e.get(ns)}
+        primary = [c.get(ns) for c in by_name["IncomingPrimaryRow"]]
+        secondary = [c.get(ns) for c in by_name["IncomingSecondaryRow"]]
+        # Answer (largest, positive), Reply, Ignore; then Monitor, Unlock, Mic.
+        self.assertEqual(primary, ["AnswerButton", "QuickReplyToggle", "IgnoreButton"])
+        self.assertEqual(secondary, ["MonitorButton", "OpenDoorButton", "MicButton"])
+        self.assertEqual(by_name["AnswerButton"].get("Background"), "{DynamicResource Positive}")
+        self.assertEqual(by_name["IgnoreButton"].get("Foreground"), "{DynamicResource Negative}")
+        # In call, End is first in the zone (where Answer was) and uses the negative role.
+        in_call = [c.get(ns) for c in by_name["InCallActionZone"]]
+        self.assertEqual(in_call[0], "EndCallButton")
+        self.assertEqual(by_name["EndCallButton"].get("Background"), "{DynamicResource Negative}")
+        self.assertIn('AnswerButton.SetResourceReference(Control.BackgroundProperty, end ? "Negative" : "Positive");', layout)
+        # Expanded landscape: right action column; video keeps >= 60 %.
+        self.assertIn("bool side = LayoutMetrics.SideActionZone(width, height);", layout)
+        self.assertIn("Math.Min(420, width * 0.32)", layout)
+        # Quick replies are a sheet over the live call screen: bottom or side.
+        self.assertEqual(by_name["QuickReplySheet"].get("VerticalAlignment"), "Bottom")
+        self.assertIn("QuickReplySheet.HorizontalAlignment = HorizontalAlignment.Right;", layout)
+        self.assertIn("LayoutMetrics.SheetRadius", layout)
+        # Live view: controls float and auto-hide; a revealing tap is consumed.
+        self.assertIn("Interval = LayoutMetrics.OverlayAutoHide", layout)
+        self.assertIn("if (wasHidden) e.Handled = true;", layout)
+        # No literal answer/unlock colours remain on the call screens.
+        for literal in ("#1E8E4B", "#B7791F"):
+            self.assertNotIn(literal, xaml)
+
+    def test_semantic_color_roles_follow_the_core_appearance(self):
+        appearance = read("win/DoorbellApp/Util/Appearance.cs")
+        app = read("win/DoorbellApp/App.xaml")
+        for role, token in (("Surface", "Card"), ("OnSurface", "Fg"), ("Negative", "Danger"),
+                            ("OnNegative", "OnDanger"), ("Warning", "Warn"), ("Muted", "Dim")):
+            with self.subTest(role=role):
+                self.assertIn('{ "%s", "%s" }' % (role, token), appearance)
+                self.assertIn('x:Key="%s"' % role, app)
+        for role in ("Positive", "OnPositive"):
+            self.assertIn('x:Key="%s"' % role, app)
+            self.assertEqual(appearance.count('{ "%s", "#' % role), 2)
+        self.assertIn("resources[RoleAliases[i, 0]] = source;", appearance)
+
+    def test_history_has_list_detail_and_unread_marks(self):
+        layout = read("win/DoorbellApp/MainWindow.Layout.cs")
+        history = read("win/DoorbellApp/MainWindow.History.cs")
+        self.assertIn("HistoryList.Children.Add(HistoryRow(row));", history)
+        self.assertIn("HistoryDetailColumn.Width = new GridLength(1.2, GridUnitType.Star);", layout)
+        self.assertIn("grid.MinHeight = LayoutMetrics.TouchMin;", layout)
+        self.assertIn('Texts.T("history.unread")', layout)
+        self.assertIn('"/asset/" + hash', layout)
+
+    def test_destructive_settings_sit_last_in_negative_with_confirmation(self):
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        actions = read("win/DoorbellApp/Settings/SettingsWindow.Actions.cs")
+        rows = read("win/DoorbellApp/Settings/SettingsWindow.Rows.cs")
+        self.assertIn('Destructive(Describe(Action("rotate_cluster_key", "rotate_cluster_key")))', catalog)
+        self.assertIn('Destructive(Describe(Action("restart_app", "restart_app")))', catalog)
+        self.assertIn("while (at > 0 && group.Items[at - 1].Destructive) at--;", catalog)
+        self.assertIn('button.SetResourceReference(Control.ForegroundProperty, "Negative");', actions)
+        self.assertIn('if (item.Destructive) label.SetResourceReference(TextBlock.ForegroundProperty, "Negative");', rows)
+        self.assertIn('Confirm(Texts.T("settings.rotate_cluster_key_confirm"), true)', actions)
+        self.assertIn("MessageBoxResult.No) == MessageBoxResult.Yes", actions)
+
+    def test_sos_overlay_is_topmost_and_clears_by_deliberate_gesture(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        sos = read("win/DoorbellApp/MainWindow.Emergency.cs")
+        root = ET.fromstring(xaml)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        view = next(e for e in root.iter() if e.get(ns) == "EmergencyView")
+        self.assertEqual(view.get("Panel.ZIndex"), "1000")
+        self.assertEqual(view.get("Background"), "{DynamicResource Negative}")
+        self.assertIn("TimeSpan.FromMilliseconds(1500)", sos)
+        self.assertIn("InputManager.Current.MostRecentInputDevice is MouseDevice", sos)
+        self.assertIn('Texts.T("emergency.clear_confirm")', sos)
+        self.assertIn("EmergencySource.Text = EmergencySourceLine(ev);", sos)
+
+    def test_pairing_code_is_the_largest_element_and_stacks_when_narrow(self):
+        view = read("win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs")
+        self.assertIn("SizeChanged += (sender, args) => ApplySizeClass(args.NewSize.Width);", view)
+        self.assertIn("Grid.SetRow(PairingSidePanel, expanded ? 0 : 1);", view)
+        self.assertIn('SetStatusTone(persistError ? "Negative" : (upgradeRejoin ? "Warning" : null));', view)
+
+    def test_per_monitor_dpi_with_windows7_fallback(self):
+        manifest = read("win/DoorbellApp/app.manifest")
+        self.assertIn(">true/pm</dpiAware>", manifest)
+        self.assertIn(">PerMonitorV2, PerMonitor</dpiAwareness>", manifest)
 
     def test_effective_volumes_reach_the_players(self):
         window = read("win/DoorbellApp/MainWindow.xaml.cs")
@@ -1942,7 +2213,10 @@ class WindowsContracts(unittest.TestCase):
                     app.index("private static bool _factoryResetStarted;")]
         self.assertIn('Core?.DeleteSecret("mesh.psk")', reset)
         self.assertIn("BootConfig.ResetToFactory(Boot.FilePath)", reset)
-        self.assertIn("app.Shutdown(0)", reset)
+        # Under the watchdog the exit code asks for a restart that is not a crash; without it
+        # the relaunched process waits for this one to release its ports and store.
+        self.assertIn("app.Shutdown(watchdog ? ExitRestartRequested : ExitClean)", reset)
+        self.assertIn('"--wait-for-pid " + pid', reset)
         self.assertIn('if (ev.T == "pairing_revoked")', app)
         self.assertIn('FactoryResetAndRestart("pairing_revoked")', app)
         # Leaving the Cluster from this device resets it the same way; a device that was never
@@ -2012,7 +2286,9 @@ class WindowsContracts(unittest.TestCase):
         # A cluster that already has a password is never opened with a stale device digest.
         self.assertIn("App.Core.AdminPasswordConfigured", submit)
         self.assertLess(submit.index("AdminPasswordConfigured"),
-                        submit.index("Sha256Hex(password) != LocalDigest()"))
+                        submit.index("Sha256Hex(password) != digest"))
+        # Without an operator-set device digest there is no offline way in.
+        self.assertNotIn('Sha256Hex("000000")', dialog)
         # -2 asks the operator to choose the household password and publishes it.
         self.assertIn("if (verdict == AdminPasswordVerdict.NotSet)", submit)
         self.assertIn('App.Core.AdminPasswordSet("", password)', submit)
@@ -2021,7 +2297,7 @@ class WindowsContracts(unittest.TestCase):
         # A core-owned lockout is never worked around with the local digest.
         locked = submit[submit.index("AdminPasswordVerdict.LockedOut"):]
         self.assertLess(locked.index('L10n.T("admin.locked")'),
-                        locked.index("Sha256Hex(password) != LocalDigest()"))
+                        locked.index("Sha256Hex(password) != digest"))
         # The local five-failure, ten-minute lockout stays as a second line of defence.
         self.assertIn("_lockedUntil = DateTime.Now.AddMinutes(10);", dialog)
         self.assertIn("if (++_fails >= 5)", dialog)
@@ -2087,7 +2363,10 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("public bool DeleteConfigKey(string key)", client)
         self.assertIn("public string ConfigBatchJson(string json)", client)
         self.assertIn("public string LastWriteWarnings()", client)
-        self.assertIn("_deleteConfigKey(_core, key) == 0", client)
+        self.assertIn("_deleteConfigKey(_core, key);", client)
+        # A closed native admin window is answered by asking once, then retrying.
+        self.assertIn("if (rc != CoreInterop.DbResultAdminRequired) return rc;", client)
+        self.assertIn("public const int DbResultAdminRequired = -20;", interop)
         self.assertIn("CoreInterop.TakeUtf8(_configBatchJson(_core, json))", client)
         self.assertNotIn("ConfigResult", client)
 

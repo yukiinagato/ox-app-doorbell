@@ -62,6 +62,11 @@ if "%DB_ALLOW_SIP_STUB%"=="1" (
     echo ERROR: release build requires DB_SIGN_CERT_SHA1 for Authenticode signing.
     exit /b 1
   )
+  rem The in-app updater runs only installers signed by this certificate subject (CN).
+  if "%DB_UPDATE_PUBLISHER%"=="" (
+    echo ERROR: release build requires DB_UPDATE_PUBLISHER, the CN of the signing certificate.
+    exit /b 1
+  )
   if "%DB_PJSIP_ROOT_X64%"=="" (
     echo ERROR: release build requires DB_PJSIP_ROOT_X64.
     exit /b 1
@@ -151,7 +156,7 @@ if "!DB_ISCC!"=="" (
 ) else (
   set "DB_APP_VERSION=0.2.0"
   for /f "tokens=3 delims=<>" %%V in ('findstr /c:"<Version>" win\DoorbellApp\DoorbellApp.csproj') do set "DB_APP_VERSION=%%V"
-  "!DB_ISCC!" /Q "/DSourceDir=%CD%\!DB_DIST!" "/DBuildId=!DB_BUILD_ID!" "/DAppVersion=!DB_APP_VERSION!" "/DProvisionDir=%CD%\deploy\provision\windows" win\installer\DoorbellSetup.iss || exit /b 1
+  "!DB_ISCC!" /Q "/DSourceDir=%CD%\!DB_DIST!" "/DBuildId=!DB_BUILD_ID!" "/DAppVersion=!DB_APP_VERSION!" "/DProvisionDir=%CD%\deploy\provision\windows" "/DUpdatePublisher=%DB_UPDATE_PUBLISHER%" win\installer\DoorbellSetup.iss || exit /b 1
   if not "%DB_ALLOW_SIP_STUB%"=="1" (
     powershell -NoProfile -ExecutionPolicy Bypass -File win\tools\sign-bundle.ps1 -ArtifactRoot "!DB_DIST!\installer" -CertificateThumbprint "%DB_SIGN_CERT_SHA1%" || exit /b 1
   )

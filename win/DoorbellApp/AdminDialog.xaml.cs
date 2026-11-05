@@ -119,7 +119,9 @@ namespace DoorbellApp
             }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
-            return Sha256Hex("000000");
+            // No operator-set device digest: there is no offline way in. A default code would be
+            // a published password for every device whose Core is unavailable.
+            return null;
         }
 
         /// <summary>
@@ -191,7 +193,8 @@ namespace DoorbellApp
                 CountFailure();
                 return;
             }
-            if (Sha256Hex(password) != LocalDigest())
+            string digest = LocalDigest();
+            if (digest == null || Sha256Hex(password) != digest)
             {
                 CountFailure();
                 return;
@@ -208,8 +211,16 @@ namespace DoorbellApp
         /// <summary>
         /// Publishes the first cluster password, off the dispatcher for the same reason verify is.
         /// </summary>
+        /// <summary>Security protocol v3: a new cluster password has at least this many characters.</summary>
+        public const int MinimumPasswordLength = 8;
+
         private void PublishFirstPassword(string password)
         {
+            if (password.Length < MinimumPasswordLength)
+            {
+                Reject(L10n.T("admin.password_too_short"));
+                return;
+            }
             _verifying = true;
             IsEnabled = false;
             Task.Run(() =>

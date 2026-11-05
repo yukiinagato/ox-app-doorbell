@@ -22,6 +22,17 @@ namespace DoorbellApp.Util
         {
             "Bg", "Card", "Fg", "Dim", "Accent", "Warn", "Line", "Danger", "Ok", "Notice",
             "OnAccent", "OnDanger", "Track", "Plate", "PlateLine", "Pill", "Row",
+            "Positive", "OnPositive",
+        };
+
+        /// <summary>
+        /// Semantic color roles (ui-guidelines section 3) as aliases of the palette tokens that
+        /// Core's effective appearance selects. Screens bind the role, never a literal color.
+        /// </summary>
+        internal static readonly string[,] RoleAliases =
+        {
+            { "Surface", "Card" }, { "OnSurface", "Fg" }, { "Negative", "Danger" },
+            { "OnNegative", "OnDanger" }, { "Warning", "Warn" }, { "Muted", "Dim" },
         };
 
         private static readonly Dictionary<string, string> DarkPalette =
@@ -34,7 +45,7 @@ namespace DoorbellApp.Util
                 { "Track", "#802A21" },
                 // Frosted plates (spec 5.7): dark appearance = dark translucent plate, light ink.
                 { "Plate", "#A6161C23" }, { "PlateLine", "#26FFFFFF" }, { "Pill", "#B31F262E" },
-                { "Row", "#14FFFFFF" },
+                { "Row", "#14FFFFFF" }, { "Positive", "#1E8E4B" }, { "OnPositive", "#FFFFFF" },
             };
 
         private static readonly Dictionary<string, string> LightPalette =
@@ -46,7 +57,7 @@ namespace DoorbellApp.Util
                 { "Notice", "#8A5A00" }, { "OnAccent", "#FFFFFF" }, { "OnDanger", "#FFFFFF" },
                 { "Track", "#E4C9C6" },
                 { "Plate", "#A6F7F8FA" }, { "PlateLine", "#1F000000" }, { "Pill", "#CCFFFFFF" },
-                { "Row", "#14000000" },
+                { "Row", "#14000000" }, { "Positive", "#1E7F55" }, { "OnPositive", "#FFFFFF" },
             };
 
         private static DateTime _systemProbedAt = DateTime.MinValue;
@@ -95,6 +106,11 @@ namespace DoorbellApp.Util
                 var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
                 brush.Freeze();
                 resources[key] = brush;
+            }
+            for (int i = 0; i < RoleAliases.GetLength(0); i++)
+            {
+                object source = resources[RoleAliases[i, 1]];
+                if (source != null) resources[RoleAliases[i, 0]] = source;
             }
             return true;
         }

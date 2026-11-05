@@ -34,8 +34,10 @@ namespace DoorbellApp
         {
             _historyFilter = "all";
             _historyDoorFilter = "";
+            _historySelected = null;
             BuildHistoryDoorFilters();
             HistoryView.Visibility = Visibility.Visible;
+            ApplyHistoryLayout(_sizeClass);
             LoadHistoryPage(true, true);
             RenderHistory();
         }
@@ -199,7 +201,7 @@ namespace DoorbellApp
                         Foreground = (Brush)FindResource("Dim"),
                     });
                 }
-                HistoryList.Children.Add(BuildCallRow(row, true));
+                HistoryList.Children.Add(HistoryRow(row));
                 shown++;
             }
             if (shown == 0)

@@ -57,7 +57,7 @@ namespace DoorbellApp.Core
             }
             catch (Exception ex)
             {
-                Debug.WriteLine("camera probe failed: " + ex.Message);
+                CoreClient.WriteAppLog("camera probe failed: " + ex.Message);
             }
             finally
             {
@@ -69,11 +69,8 @@ namespace DoorbellApp.Core
         {
             try
             {
-                var request = (HttpWebRequest)WebRequest.Create(_url);
+                var request = LocalMedia.Create(_url, RequestTimeoutMs, RequestTimeoutMs);
                 request.Method = "GET";
-                request.Timeout = RequestTimeoutMs;
-                request.ReadWriteTimeout = RequestTimeoutMs;
-                request.AllowAutoRedirect = false;
                 using (var response = (HttpWebResponse)request.GetResponse())
                     return response.StatusCode == HttpStatusCode.OK &&
                            response.ContentLength != 0;

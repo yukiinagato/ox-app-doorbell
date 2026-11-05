@@ -119,6 +119,8 @@ namespace DoorbellApp.Pairing
                         Refresh();
                         break;
                     }
+                case "peer_rejected":
+                case "cluster_key_changed":
                 case "pending_changed":
                 case "pairing_mode_changed":
                 case "join_token_changed":
@@ -268,9 +270,16 @@ namespace DoorbellApp.Pairing
             var element = sender as FrameworkElement;
             var row = element == null ? null : element.DataContext as PendingDeviceRow;
             if (row == null || !row.CanAct) return;
+            // Protocol v3: the key in a beacon is unauthenticated, so the administrator confirms
+            // it with the code the new device shows on its own screen.
+            string code = ConfirmCodeDialog.Ask(this, row.Title);
+            if (code == null) return;
             row.MarkAdding();
             string id = row.Id;
-            Task.Factory.StartNew(() => App.Core.InviteDevice(id));
+            Task.Factory.StartNew(() =>
+            {
+                if (!App.Core.InviteDeviceWithCode(id, code)) App.Core.InviteDevice(id);
+            });
         }
 
         private void OnDenyClick(object sender, RoutedEventArgs e)

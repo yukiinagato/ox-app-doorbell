@@ -31,8 +31,11 @@ namespace DoorbellApp.Core
             // secret when pairing is cleared, so struct_size must always be sizeof(this struct).
             public IntPtr secure_delete;
             // Appended after secure_delete. NULL is legal and means core reports no power state.
-            // Fields are only ever appended, so power_state must stay last.
             public IntPtr power_state;
+            // Appended after power_state (security protocol v3, section 13). Binary-safe HTTPS:
+            // core prefers it over https_request when struct_size covers it. Fields are only
+            // ever appended, so https_request_v3 must stay last.
+            public IntPtr https_request_v3;
         }
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -45,6 +48,13 @@ namespace DoorbellApp.Core
         public delegate int HttpsRequestCb(IntPtr user, IntPtr methodUtf8, IntPtr urlUtf8,
             IntPtr headersJsonUtf8, IntPtr body, UIntPtr bodyLength, IntPtr responseBodyOut,
             IntPtr httpStatusOut);
+
+        // resp_body_out receives a release_buffer-owned buffer of *resp_len_out bytes, which
+        // may contain NUL bytes; resp_len_out is a size_t, so it is pointer-sized.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int HttpsRequestV3Cb(IntPtr user, IntPtr methodUtf8, IntPtr urlUtf8,
+            IntPtr headersJsonUtf8, IntPtr body, UIntPtr bodyLength, IntPtr responseBodyOut,
+            IntPtr responseLengthOut, IntPtr httpStatusOut);
 
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int SecureGetCb(IntPtr user, IntPtr keyUtf8, IntPtr valueOut);
@@ -123,6 +133,30 @@ namespace DoorbellApp.Core
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate int DeleteConfigKeyFn(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string key);
+
+        // Security protocol v3 (docs/en/security-v3.md, section 13). The loopback media token is
+        // owned by core and valid until db_core_destroy; it is never freed by the shell.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr LocalTokenFn(IntPtr core);
+
+        // Approves a pending device with the eight-digit code shown on that device
+        // (pairing self.confirm_code there). The outcome arrives as invite_result.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void InviteDeviceCodeFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string id,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string code);
+
+        // Replaces the cluster key: 0 ok, -1 bad arguments, -2 unpaired or not stored.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int RotateClusterKeyFn(IntPtr core);
+
+        // Closes the native admin window that a successful password check opened.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate void AdminLockFn(IntPtr core);
+
+        // Int-valued configuration writes return this while the native admin window is closed;
+        // the batch document reports it as "error":"admin_required".
+        public const int DbResultAdminRequired = -20;
 
         // Call history with an exclusive upper bound, so the history page really pages.
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
@@ -364,7 +398,8 @@ namespace DoorbellApp.Core
         public static extern int db_core_clear_door_notice(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string door);
 
-        // 0 queued, -1 null core or empty door, -2 unknown door, -3 no unlock action configured.
+        // 0 queued, -1 null core or empty door, -2 unknown door, -3 no unlock action configured,
+        // -4 the configured unlock command failed to execute.
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern int db_core_open_door(IntPtr core,
             [MarshalAs(UnmanagedType.LPUTF8Str)] string door);
