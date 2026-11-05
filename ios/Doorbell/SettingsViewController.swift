@@ -35,6 +35,13 @@ final class SettingsViewController: SettingsFormViewController {
         super.viewDidLoad()
     }
 
+    /// Leaving the settings root closes the native admin window (security protocol v3 §10); a
+    /// child settings page presented over it is not a departure.
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        if isBeingDismissed || presentingViewController == nil { core.adminLock() }
+    }
+
     private func refreshSnapshot() {
         config = core.config()
         if let node = core.status()?["node"] as? [String: Any] {

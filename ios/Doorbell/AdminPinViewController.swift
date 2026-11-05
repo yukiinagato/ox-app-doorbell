@@ -13,6 +13,8 @@ final class AdminPinViewController: UIViewController {
     private static var lockedUntil = Date.distantPast
 
     var onUnlocked: (() -> Void)?
+    /// Runs after the user dismissed the prompt without unlocking.
+    var onCancelled: (() -> Void)?
     private let core: CoreBridge?
     private let texts: Texts
     private var pin = ""
@@ -112,7 +114,10 @@ final class AdminPinViewController: UIViewController {
         ])
     }
 
-    @objc private func onCancel() { dismiss(animated: true) }
+    @objc private func onCancel() {
+        let callback = onCancelled
+        dismiss(animated: true) { callback?() }
+    }
 
     @objc private func onKey(_ sender: UIButton) {
         errorLabel.text = " "

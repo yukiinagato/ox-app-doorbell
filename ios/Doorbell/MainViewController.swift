@@ -1858,7 +1858,7 @@ final class MainViewController: UIViewController {
             URLQueryItem(name: "call_id", value: identity.call),
             URLQueryItem(name: "stage_revision", value: String(identity.revision))]
         guard let url = components.url else { peerPollBusy = false; return }
-        var request = URLRequest(url: url)
+        var request = LocalMediaAuth.request(url, timeout: 3)
         request.timeoutInterval = 3
         let complete: (Data?, URLResponse?) -> Void = { [weak self] data, resp in
             DispatchQueue.main.async {

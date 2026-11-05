@@ -92,6 +92,7 @@ final class AddDeviceViewController: UIViewController {
         super.viewDidDisappear(animated)
         pollTimer?.invalidate()
         pollTimer = nil
+        if isBeingDismissed || presentingViewController == nil { core.adminLock() }
     }
 
 
