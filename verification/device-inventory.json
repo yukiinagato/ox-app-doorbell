@@ -68,9 +68,8 @@
   "windows": [
     {
       "device": "Windows XP SP3",
-      "status": "BLOCKED_ENV_MISSING_WINDOWS_IMAGE",
-      "attempt": "Checked for UTM, VMware Fusion, VirtualBox, Parallels, and QEMU. Docker is available but only used for Linux; no native VM runtime was found.",
-      "missing": "A legal XP SP3 image and a native VM runtime."
+      "status": "NOT_SUPPORTED",
+      "reason": "The Windows shell targets .NET Framework 4.8 and the installer requires MinVersion 6.1sp1 (Windows 7 SP1). The watchdog uses GetTickCount64, delayed auto-start and named-pipe client PID checks (Vista+), and HTTPS integrations require WinHTTP TLS 1.2. None of these exist on XP, so XP is not a target and is not a pending qualification."
     },
     {
       "device": "Windows 7 SP1",

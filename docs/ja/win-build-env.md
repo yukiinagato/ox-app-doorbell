@@ -56,6 +56,39 @@ cmake -S core -B build-win64 -DCMAKE_TOOLCHAIN_FILE=core/cmake/mingw-w64.cmake &
 
 ## 6. Toughpad 実機検証 (最終)
 
-- Win7 機: .NET Framework 4.8 オフラインインストーラ + TLS1.2 有効化パッチが前提
-  (provision スクリプトが設定)。v143 成果物が動かない場合のみ v141 ビルドに切替。
+- 対応下限は Windows 7 SP1。Windows XP は対象外（.NET Framework 4.8、インストーラの
+  MinVersion 6.1sp1、watchdog の Vista 以降 API のため）。
+- Win7 機: .NET Framework 4.8 オフラインインストーラと KB3140245（WinHTTP の TLS 1.2）が前提。
+  セットアップは .NET 4.8 がなければ中止し、KB3140245 がなければ警告する。未導入の間は HTTPS
+  連携が失敗し、理由は `logs\doorbell.log` に出る。v143 成果物が動かない場合のみ v141 ビルドに切替。
 - AEC キャリブレーション・カメラ列挙・kiosk (シェル置換) は実機でのみ最終確認できる。
+
+## 7. 2026-11 レビュー修正の確認
+
+修正時点では Windows 上で一度も実行していない。Windows レーンを検証済みとする前に VM で実行すること。
+
+```bat
+:: Contract tests and the watchdog policy
+python win\tests\test_windows_contracts.py
+cmake -S win\watchdog -B build-watchdog -A x64 -DBUILD_TESTING=ON
+cmake --build build-watchdog --config Release -j
+ctest --test-dir build-watchdog -C Release --output-on-failure
+
+:: Full bundle; a release additionally needs DB_SIGN_CERT_SHA1 and DB_UPDATE_PUBLISHER (the CN)
+set DB_ALLOW_SIP_STUB=1
+win\build.cmd
+```
+
+インストール済み端末で（1〜3 は管理者プロンプト）:
+
+1. `icacls "%ProgramData%\Doorbell"` で Users が `(RX)` のみ、`...\service` に Users の書込みがなく、
+   `...\data` は Users `(M)`、`...\data\secure` に `Doorbell Operators` があること。
+2. 標準ユーザーで `%ProgramData%\Doorbell\service` にファイルを作れないこと。
+3. `sc qc DoorbellWatchdog` でアプリが起動し、`watchdog.log` が `...\service` にあること。
+4. `DoorbellApp.exe` を 5 分以内に 3 回強制終了するとセーフモードになり、クラスタ離脱（初期化）を 3 回してもならないこと。
+5. 別アカウントへのユーザー切替で、アプリが新しいコンソールセッションへ移ること。
+6. UI スレッドを止める（ディスパッチャーでデバッガ停止）と約 20 秒で watchdog が再起動すること。
+7. 2 つ目の `DoorbellApp.exe` は終了コード 5 で終わり、1 つ目が動き続けること。
+8. 門口機カメラを抜き差ししても、アプリ再起動なしで映像が戻ること。
+9. 着信画面の開閉を繰り返しても `netstat -ano` にループバックのメディア接続が残らないこと。
+10. 未署名または別署名のインストーラによるアプリ内更新が `web_admin.update_untrusted` で拒否されること。

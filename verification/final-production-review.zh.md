@@ -68,16 +68,16 @@
 
 | 系统 | 方式/状态 | 结果 |
 |---|---|---|
-| Windows XP SP3 | `BLOCKED_ENV_MISSING_WINDOWS_IMAGE` | 未找到本机原生 VM runtime 和合法 XP 镜像；没有进行原生运行。 |
+| Windows XP SP3 | `NOT_SUPPORTED` | 不是支持目标：Windows 外壳面向 .NET Framework 4.8，安装程序要求 Windows 7 SP1（MinVersion 6.1sp1），watchdog 使用 Vista 以上 API，HTTPS 集成需要 WinHTTP TLS 1.2。不再作为待验收项。 |
 | Windows 7 SP1 | `BLOCKED_ENV_MISSING_WINDOWS_IMAGE` | 未找到本机原生 VM runtime 和合法 Windows 7 镜像；没有进行原生运行。 |
 | Modern Windows | `BLOCKED_ENV` | 无 Windows host/VM。 |
 
-Docker 仅用于 Linux；没有用 Docker、Wine 或交叉编译声称 XP/7 通过。没有 guest/Core IP、桥接、TCP 或 SIP 连通证据。
+Docker 仅用于 Linux；没有用 Docker、Wine 或交叉编译声称 Windows 7 通过。没有 guest/Core IP、桥接、TCP 或 SIP 连通证据。
 
 ## F. 未完成项
 
 - `FAIL`：Core 全量套件尚未获得通过结果；Linux 重跑未完成前保留失败/超时，不以单测通过抵销。
-- `BLOCKED_ENV`：HTTPS 双节点真实浏览器 E2E；独立进程 relay 与 slow peer/revoke/epoch 测试；iPad Air 1 屏幕/UI 自动化与完整通话测试；iPad mini 3 实测；Windows XP/7/现代系统原生 VM。
+- `BLOCKED_ENV`：HTTPS 双节点真实浏览器 E2E；独立进程 relay 与 slow peer/revoke/epoch 测试；iPad Air 1 屏幕/UI 自动化与完整通话测试；iPad mini 3 实测；Windows 7/现代系统原生 VM。
 - `NOT_RUN`：设备真实 SIP/RTP/audio/video；T18 全流程；T31 完整 identity/grant 撤销和迁移；T32 panel 管理生命周期；reference frame 拒绝后的依赖差分帧实测；T16/T17/T18/T30/T31/T32 独立复核。
 - `feature-parity.json` 将 Chromium 播放 fixture 证据限定记录在 Web Panel 的 F19 单元格；它没有把设备安装或单元测试外推到其他平台。其他没有证据的功能单元继续 `NOT_RUN`。
 - 唯一当前任务状态账本为 `verification/progress.json`；报告与其状态必须保持一致。

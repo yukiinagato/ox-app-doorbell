@@ -104,7 +104,7 @@
       "evidence": [
         "verification/device-inventory.json"
       ],
-      "blocking_reason": "No native Windows VM runtime or legal XP/7 images. Docker provides Linux only."
+      "blocking_reason": "No native Windows VM runtime or legal Windows 7 SP1 image. Docker provides Linux only. Windows XP is not a supported target (.NET 4.8, Windows 7 SP1 installer floor)."
     }
   ],
   "latest_tested_commit": "f63e53041412ba9a4f942d27db6a1c3fb1e6040e"

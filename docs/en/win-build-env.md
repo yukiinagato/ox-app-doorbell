@@ -58,8 +58,47 @@ This catches most Winsock/API porting mistakes before you even go to the VM
 
 ## 6. Toughpad hardware verification (final)
 
-- Win7 machines: the .NET Framework 4.8 offline installer + the TLS 1.2 enablement patch are
-  prerequisites (the provisioning script configures them). Switch to the v141 build only if the
-  v143 artifact does not run.
+- Supported floor: Windows 7 SP1. Windows XP is not a target (.NET Framework 4.8, the
+  installer's MinVersion 6.1sp1, and Vista+ APIs in the watchdog).
+- Win7 machines: the .NET Framework 4.8 offline installer and KB3140245 (WinHTTP TLS 1.2) are
+  prerequisites. Setup stops without .NET 4.8 and warns without KB3140245; until it is
+  installed, HTTPS integrations fail and `logs\doorbell.log` says why. Switch to the v141
+  build only if the v143 artifact does not run.
 - AEC calibration, camera enumeration, and kiosk (shell replacement) can only receive final
   verification on real hardware.
+
+## 7. Checks for the 2026-11 review fixes
+
+None of these were run on Windows when the fixes were written; run them in the VM before
+marking the Windows lane verified.
+
+```bat
+:: Contract tests and the watchdog policy (also run on any host with Python 3 and a C++17 compiler)
+python win\tests\test_windows_contracts.py
+cmake -S win\watchdog -B build-watchdog -A x64 -DBUILD_TESTING=ON
+cmake --build build-watchdog --config Release -j
+ctest --test-dir build-watchdog -C Release --output-on-failure
+
+:: Full bundle; a release additionally needs DB_SIGN_CERT_SHA1 and DB_UPDATE_PUBLISHER (the CN)
+set DB_ALLOW_SIP_STUB=1
+win\build.cmd
+```
+
+Then, on the installed device (elevated prompt for the first three):
+
+1. `icacls "%ProgramData%\Doorbell"` shows Users `(RX)` only, `...\service` has no Users write,
+   `...\data` has Users `(M)`, and `...\data\secure` lists `Doorbell Operators`.
+2. As a standard user, creating a file in `%ProgramData%\Doorbell\service` fails.
+3. `sc qc DoorbellWatchdog` still starts the app; `watchdog.log` lives in `...\service`.
+4. Kill `DoorbellApp.exe` three times within five minutes: safe mode starts. Use Leave Cluster
+   (factory reset) three times: safe mode does not start.
+5. Fast user switch to another account: the app moves to the new console session.
+6. Freeze the UI thread (debugger break on the dispatcher): the watchdog restarts the app after
+   about 20 seconds.
+7. Start a second `DoorbellApp.exe`: it exits with code 5 and the first keeps running.
+8. Unplug and re-plug the door-station camera: video returns without restarting the app.
+9. Close an incoming-call screen repeatedly: `netstat -ano` shows no lingering loopback media
+   connections.
+10. In-app update with an unsigned or differently signed installer is refused with
+    `web_admin.update_untrusted`.
+

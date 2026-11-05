@@ -20,7 +20,7 @@
 | Android API 21+ | 已實作，有建置 lane | modern tier/NDK r27；不代表所有硬體已認證。 |
 | Android modern critical-memory recovery | bounded 實機 smoke 通過；不是 hardware certification | moto g64y 5G/API 34 收到真實 `RUNNING_CRITICAL` trim 後維持同一 process/foreground Activity，記錄 encoder release，30 秒 protection window 後重建 `c2.mtk.avc.encoder` 並提供有效 640×360 fMP4。[2026-08-31 evidence](../evidence/android-modern-memory-pressure-smoke-2026-08-31.md)。OOM kill、in-call audio、power、thermal、soak 仍未驗證。 |
 | Android API 19 armv7/NEON | 已實作且有 lane；supported SKU 為 0 | qualification list 為空。exact fingerprint/evidence artifact 通過 codec/recovery/thermal/SIP/8 小時 soak 前都未 commission。CI 的 debug-key `debug-contract` APK 不是 release。 |
-| Windows x86/x64 WPF | 已實作，有 hosted contract/stub compile 與 opt-in self-hosted release gate | hosted stub 不 upload；只有 commissioned runner 可 upload real-PJSIP x86/x64 bundle。仍無 VM/Toughpad 硬體認證記錄。 |
+| Windows x86/x64 WPF | 已實作，有 hosted contract/stub compile 與 opt-in self-hosted release gate | hosted stub 不 upload；只有 commissioned runner 可 upload real-PJSIP x86/x64 bundle。仍無 VM/Toughpad 硬體認證記錄。下限為 Windows 7 SP1 與 .NET Framework 4.8，不支援 Windows XP。 |
 | iOS 12+ | 已實作，有 hosted simulator 與 unsigned device-link gate，須簽署實機驗證 | CI 建置 keyed real-PJSIP simulator/iPhoneOS archive、iOS 12 simulator contract 與 unsigned arm64 device binary；camera/audio/SAM/recovery/signing/install/soak 仍是實機 gate。 |
 | iOS 9 arm64 | 有 unsigned device-link proof；未 install/實機驗證 | 驗證 unsigned `iphoneos` arm64/9.0 Release binary 的 ABI v2、min OS、real-PJSIP symbols、Swift runtime；不 sign/install/launch 或測硬體。 |
 | iOS 9 armv7 | formal profile/gate 已實作；未 commission | historical Xcode 7/SDK、real-PJSIP、stock IPA/jailbreak package gate 已有，但沒有 commissioned runner artifact 或實機結果。 |
