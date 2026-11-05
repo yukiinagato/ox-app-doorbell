@@ -60,8 +60,6 @@ indirect enum SettingControl {
     case list(() -> SettingsListModel)
     /// Opens a screen the shell owns (call history, add device, an announcement editor).
     case shell(String)
-    /// Genuinely web-only: shown as an "Open in Admin" row with the reason as its footer.
-    case web(String)
 }
 
 struct SettingItem {
@@ -139,6 +137,8 @@ struct SettingsListModel {
     /// A new row needs a value typed first (an NTP server, a preset text).
     var addPrompt: String = ""
     var addWithText: ((String) -> SettingEffect)?
+    /// Long lists (the wording overrides) get a search field.
+    var searchable = false
 }
 
 // MARK: - Validation shared by every target

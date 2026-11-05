@@ -201,10 +201,6 @@ struct SettingsCatalog {
         return ConfigUtil.bool(cfg, key, fallback)
     }
 
-    private func webRow(_ id: String, _ title: String, reason: String) -> SettingItem {
-        return SettingItem(id, title, detail: t("prefs.open_in_admin"), .web(reason))
-    }
-
     private func labelPage(id: String, title: String, prefix: String,
                            entry: [String: Any]?, limit: Int) -> [SettingItem] {
         return [("ja", "admin.label_ja"), ("en", "admin.label_en"), ("zh", "admin.label_zh")].map {
@@ -466,7 +462,7 @@ struct SettingsCatalog {
             SettingItem("call_sound_loop", t("prefs.call_sound_loop"),
                         .toggle(bool("ui.call_sound_loop", false)), commit: set("ui.call_sound_loop")),
         ]
-        tones.append(webRow("sound_upload", t("prefs.sound_upload"), reason: t("settings.web_only_upload")))
+        tones.append(contentsOf: soundsLibraryItems())
         return SettingsPage(id: "sounds", title: t("prefs.sounds"), sections: [
             SettingSection(t("volume.device_title"), footer: t("volume.hint"), levels),
             SettingSection(t("prefs.tones"), tones),
@@ -539,7 +535,6 @@ struct SettingsCatalog {
                               commit: setInt("display.theme.glass.blur_radius", 0, 40))
                 : SettingItem("glass_blur", t("prefs.blur_radius"),
                               .info(t("prefs.blur_system_managed"))),
-            webRow("theme_upload", t("prefs.image_upload"), reason: t("settings.web_only_upload")),
         ]
         let saverKey = "display.screensaver"
         let night: [SettingItem] = [
@@ -592,11 +587,11 @@ struct SettingsCatalog {
                                  commit: setInt("display.pixel_shift_s", 0, 3600)))
         return SettingsPage(id: "display", title: t("prefs.display"), sections: [
             SettingSection(t("settings.appearance"), look),
-            SettingSection(t("prefs.theme"), footer: backgroundFooter(background), theme),
+            SettingSection(t("prefs.theme"), footer: backgroundFooter(background),
+                           theme + themeImageItems(prefix: "display.theme")),
             SettingSection(t("prefs.brightness"), night),
             SettingSection(t("prefs.screensaver"), saver),
-            SettingSection([webRow("wording", t("settings.web_only_labels"),
-                                   reason: t("settings.web_only_wording"))]),
+            SettingSection([SettingItem("wording", t("editor.wording"), .list(wordingList))]),
         ])
     }
 
@@ -654,7 +649,8 @@ struct SettingsCatalog {
                 SettingItem("visit_purposes", t("settings.section_purposes"),
                             detail: "\(ConfigUtil.enabledPurposeIds(cfg).count)/\(ConfigUtil.allPurposeIds(cfg).count)",
                             .list(purposeList)),
-                webRow("reply_audio", t("prefs.reply_audio"), reason: t("settings.web_only_upload")),
+                SettingItem("reply_audio", t("prefs.reply_audio"), detail: "\(assetEntries("audio/").count)",
+                            .list({ self.assetList("audio/", title: self.t("editor.sounds")) })),
             ]),
         ])
     }
@@ -694,6 +690,16 @@ struct SettingsCatalog {
                 SettingItem("\(id)_speak", t("prefs.speak"),
                             .toggle(ConfigUtil.bool(entry, "speak", true)), commit: set("\(prefix).speak")),
             ]),
+            // Recorded or uploaded audio per visitor language; it takes priority over speech.
+            SettingSection(t("prefs.reply_audio"), SettingsCatalog.editorLanguages.map { lang -> SettingItem in
+                let options = [SettingOption(value: "", title: t("prefs.sound_none"))]
+                    + assetEntries("audio/").map {
+                        SettingOption(value: $0.hash, title: ConfigUtil.str($0.entry, "label") ?? String($0.hash.prefix(8))) }
+                return SettingItem("\(id)_audio_\(lang)", Texts.langDisplayName(lang),
+                                   .choice(value: str("\(prefix).audio.\(lang)", ""), options: options,
+                                           searchable: false),
+                                   commit: setOptional("\(prefix).audio.\(lang)"))
+            }),
         ])
     }
 
@@ -770,7 +776,7 @@ struct SettingsCatalog {
                             detail: "\((ConfigUtil.dig(cfg, "notice.presets") as? [Any])?.count ?? 0)",
                             .list(noticePresetList)),
             ]),
-            SettingSection([webRow("buildings", t("prefs.buildings"), reason: t("prefs.web_only_structure"))]),
+            SettingSection(placesItems()),
         ])
     }
 
@@ -867,8 +873,7 @@ struct SettingsCatalog {
                     return .write([.set("emergency.sip_call.target_extension", text)])
                 },
             ]),
-            SettingSection([webRow("sos_rules", t("prefs.sos_presentation"),
-                                   reason: t("settings.web_only_rule_actions"))]),
+            SettingSection([SettingItem("sos_rules", t("prefs.sos_presentation"), .list(ruleList))]),
         ])
     }
 
@@ -965,9 +970,8 @@ struct SettingsCatalog {
             return (ConfigUtil.str(cfg, key) ?? "").isEmpty ? t("admin.not_ready") : t("admin.configured")
         }
         return SettingsPage(id: "notifications", title: t("settings.section_rules"), sections: [
-            SettingSection(t("prefs.rules"), footer: t("settings.web_only_rule_actions"),
-                           ruleItems + [webRow("rule_edit", t("prefs.rule_edit"),
-                                               reason: t("settings.web_only_rule_actions"))]),
+            SettingSection(t("prefs.rules"),
+                           ruleItems + [SettingItem("rule_edit", t("prefs.rule_edit"), .list(ruleList))]),
             SettingSection(t("settings.quiet_hours"), footer: t("prefs.quiet_footer"), [
                 SettingItem("quiet_hours", t("settings.quiet_hours"),
                             detail: "\((ConfigUtil.dig(cfg, "quiet_hours.default.windows") as? [Any])?.count ?? 0)",
@@ -981,13 +985,14 @@ struct SettingsCatalog {
                 SettingItem("history", t("settings.section_history"), detail: ctx.historySummary,
                             .shell("history")),
             ]),
-            SettingSection(t("admin.notify"), footer: t("settings.web_only_secrets"), [
+            SettingSection(t("admin.notify"), footer: t("editor.secret_hint"), [
                 SettingItem("telegram", t("settings.telegram"),
-                            .info(configured("integrations.telegram.bot_token_ref"))),
+                            detail: configured("integrations.telegram.bot_token_ref"), .page(telegramPage)),
                 SettingItem("web_push", t("settings.web_push"),
                             .info(configured("integrations.web_push.sender_url"))),
-                SettingItem("mqtt", "MQTT", .info(configured("integrations.mqtt.host"))),
-                webRow("integrations", t("prefs.integrations"), reason: t("settings.web_only_secrets")),
+                SettingItem("mqtt", t("editor.mqtt"), detail: configured("integrations.mqtt.host"),
+                            .page(mqttPage)),
+                SettingItem("integrations", t("editor.secrets"), .page(secretsPage)),
             ]),
         ])
     }
@@ -1097,9 +1102,16 @@ struct SettingsCatalog {
                                        options: [SettingOption(value: "ring", title: t("prefs.answer_ring")),
                                                  SettingOption(value: "auto", title: t("prefs.answer_auto"))]),
                             commit: set(account.map { "\($0).answer_mode" })),
-                webRow("sip_password", t("prefs.sip_password"), reason: t("settings.web_only_secrets")),
+                secretItem("sip_password", t("prefs.sip_password"), key: account.map { "\($0).pass_ref" },
+                           base: "sip.\(ctx.nodeId)"),
             ]),
-            SettingSection([webRow("dtmf", t("prefs.dtmf"), reason: t("prefs.web_only_dtmf"))]),
+            SettingSection(footer: t("editor.srtp_hint"), [
+                choiceItem("sip_srtp", "SRTP", key: "sip.srtp", fallback: "optional", options: [
+                    SettingOption(value: "optional", title: t("editor.srtp_optional")),
+                    SettingOption(value: "mandatory", title: t("editor.srtp_mandatory"))]),
+            ]),
+            SettingSection([SettingItem("dtmf", t("prefs.dtmf"), detail: countSummary("sip.dtmf_actions"),
+                                        .list(dtmfList))]),
         ])
     }
 
@@ -1118,11 +1130,14 @@ struct SettingsCatalog {
                 + (ctx.canRotateKey ? [SettingItem("cluster_rotate", t("prefs.rotate_key"),
                                                    .action(destructive: true)) { _ in
                                            .local("cluster.rotate") }] : [])),
-            SettingSection(footer: t("prefs.web_only_panels"), [
-                webRow("panels", t("prefs.panels"), reason: t("prefs.web_only_panels")),
-                webRow("media_sources", t("prefs.media_sources"), reason: t("prefs.web_only_structure")),
-                webRow("households", t("prefs.households"), reason: t("prefs.web_only_structure")),
-                webRow("import_export", t("prefs.import_export"), reason: t("prefs.web_only_structure")),
+            SettingSection(footer: t("editor.panels_hint"), [
+                SettingItem("devices", t("admin.devices"), detail: countSummary("devices"), .list(deviceList)),
+                SettingItem("panels", t("prefs.panels"), .shell("panels")),
+                SettingItem("media_sources", t("prefs.media_sources"), detail: countSummary("media_sources"),
+                            .list(mediaSourceList)),
+                SettingItem("households", t("prefs.households"), detail: countSummary("households"),
+                            .list(householdList)),
+                SettingItem("import_export", t("prefs.import_export"), .page(transferPage)),
             ]),
         ])
     }
@@ -1143,5 +1158,844 @@ struct SettingsCatalog {
                 SettingItem("web_admin", t("settings.section_web"), .shell("web_admin")),
             ]),
         ])
+    }
+}
+
+// MARK: - Native editors for what used to open the web admin
+
+extension SettingsCatalog {
+    static let editorLanguages = ["ja", "en", "zh"]
+
+    /// A write-only secret. The value is stored in this device's Keychain by the controller
+    /// (`secret|<name base>|<config key>`); configuration only ever receives `secret:<name>`.
+    func secretItem(_ id: String, _ title: String, key: String?, base: String) -> SettingItem {
+        let stored = key.map { (ConfigUtil.str(cfg, $0) ?? "").hasPrefix("secret:") } ?? false
+        return SettingItem(id, title, detail: t(stored ? "editor.secret_set" : "editor.secret_unset"),
+                           .secret) { value in
+            guard let key = key else { return .invalid("prefs.no_node") }
+            if (value.stringValue ?? "").isEmpty { return .write([.delete(key)]) }
+            return .local("secret|\(base)|\(key)")
+        }
+    }
+
+    func textItem(_ id: String, _ title: String, key: String, placeholder: String = "",
+                  numeric: Bool = false, limit: Int = 255) -> SettingItem {
+        let value = str(key, "")
+        return SettingItem(id, title, detail: value,
+                           .text(value: value, placeholder: placeholder, numeric: numeric)) { value in
+            let text = (value.stringValue ?? "").trimmingCharacters(in: .whitespaces)
+            if text.isEmpty { return .write([.delete(key)]) }
+            guard text.count <= limit,
+                  !text.unicodeScalars.contains(where: { CharacterSet.controlCharacters.contains($0) })
+            else { return .invalid("prefs.label_invalid") }
+            return .write([.set(key, text)])
+        }
+    }
+
+    func portItem(_ id: String, _ title: String, key: String, fallback: Int) -> SettingItem {
+        let value = "\(int(key, fallback))"
+        return SettingItem(id, title, detail: value,
+                           .text(value: value, placeholder: "\(fallback)", numeric: true)) { value in
+            guard let port = value.stringValue.flatMap(SettingValidation.port) else {
+                return .invalid("prefs.invalid_port")
+            }
+            return .write([.set(key, port)])
+        }
+    }
+
+    func choiceItem(_ id: String, _ title: String, key: String, fallback: String,
+                    options: [SettingOption]) -> SettingItem {
+        return SettingItem(id, title, .choice(value: str(key, fallback), options: options,
+                                              searchable: options.count > 12),
+                           commit: setOptional(key))
+    }
+
+    func multiItem(_ id: String, _ title: String, values: [String], options: [SettingOption],
+                   commit: @escaping ([String]) -> SettingEffect) -> SettingItem {
+        let detail = values.isEmpty ? t("editor.all")
+            : values.map { value in options.first { $0.value == value }?.title ?? value }
+                .joined(separator: ", ")
+        return SettingItem(id, title, detail: detail,
+                           .multiChoice(values: values, options: options, ordered: false,
+                                        minimumCount: 0)) { value in
+            commit(value.stringsValue ?? [])
+        }
+    }
+
+    func strings(_ key: String) -> [String] {
+        return (ConfigUtil.dig(cfg, key) as? [Any])?.compactMap { $0 as? String } ?? []
+    }
+
+    func map(_ key: String) -> [String: Any] {
+        return ConfigUtil.dig(cfg, key) as? [String: Any] ?? [:]
+    }
+
+    func labelled(_ key: String) -> [SettingOption] {
+        let entries = map(key)
+        return ConfigUtil.sortedByOrder(entries).map {
+            SettingOption(value: $0, title: ConfigUtil.labelOf(entries[$0] as? [String: Any], ctx.uiLang, $0))
+        }
+    }
+
+    func doorOptions() -> [SettingOption] { return labelled("doors") }
+
+    // MARK: Assets
+
+    func assetEntries(_ prefix: String) -> [(hash: String, entry: [String: Any])] {
+        let assets = map("assets")
+        return assets.keys.sorted().compactMap { hash -> (hash: String, entry: [String: Any])? in
+            let entry = assets[hash] as? [String: Any] ?? [:]
+            return (ConfigUtil.str(entry, "type") ?? "").hasPrefix(prefix) ? (hash, entry) : nil
+        }
+    }
+
+    func assetList(_ prefix: String, title: String) -> SettingsListModel {
+        let rows = assetEntries(prefix).map { asset -> SettingsListRow in
+            let size = ConfigUtil.int(asset.entry, "size", 0)
+            return SettingsListRow(id: asset.hash,
+                                   title: ConfigUtil.str(asset.entry, "label") ?? String(asset.hash.prefix(8)),
+                                   detail: "\(ConfigUtil.str(asset.entry, "type") ?? "") · \(size / 1024) KB")
+        }
+        var model = SettingsListModel(id: "assets_\(prefix.dropLast())", title: title,
+                                      footer: t("editor.assets_hint"), rows: rows)
+        model.delete = { hash in .local("asset.remove|\(hash)") }
+        if !ctx.isTV && prefix == "audio/" {
+            model.addTitle = t("editor.record_sound")
+            model.add = { .local("asset.record") }
+        }
+        return model
+    }
+
+    func soundsLibraryItems() -> [SettingItem] {
+        var items = [SettingItem("sound_library", t("editor.sounds"),
+                                 detail: "\(assetEntries("audio/").count)",
+                                 .list({ self.assetList("audio/", title: self.t("editor.sounds")) }))]
+        if !ctx.isTV {
+            items.append(SettingItem("sound_import", t("prefs.sound_upload"),
+                                     .action(destructive: false)) { _ in .local("asset.file") })
+        }
+        return items
+    }
+
+    func themeImageItems(prefix: String) -> [SettingItem] {
+        var items: [SettingItem] = []
+        if !ctx.isTV {
+            items.append(SettingItem("theme_upload", t("editor.choose_photo"),
+                                     .action(destructive: false)) { _ in
+                .local("asset.image|\(prefix).bg_image") })
+        }
+        items.append(SettingItem("theme_images", t("editor.images"),
+                                 detail: "\(assetEntries("image/").count)",
+                                 .list({ self.assetList("image/", title: self.t("editor.images")) })))
+        items.append(SettingItem("theme_ink", t("editor.ink_overrides"), .page({
+            self.inkPage(prefix: prefix) })))
+        return items
+    }
+
+    func inkPage(prefix: String) -> SettingsPage {
+        let items = ["clock", "date", "status_line", "hint", "tile_label"].map { region -> SettingItem in
+            let key = "\(prefix).ink_override.\(region)"
+            let value = str(key, "")
+            return SettingItem("ink_\(region)", t("editor.region_\(region)"),
+                               detail: value.isEmpty ? t("editor.automatic") : value,
+                               .text(value: value, placeholder: "#FFFFFF", numeric: false)) { value in
+                let text = (value.stringValue ?? "").trimmingCharacters(in: .whitespaces)
+                if text.isEmpty { return .write([.delete(key)]) }
+                guard let color = SettingValidation.hexColor(text) else { return .invalid("prefs.invalid_color") }
+                return .write([.set(key, color)])
+            }
+        }
+        return SettingsPage(id: "theme_ink", title: t("editor.ink_overrides"),
+                            sections: [SettingSection(footer: t("editor.ink_hint"), items)])
+    }
+
+    // MARK: Wording overrides
+
+    func wordingList() -> SettingsListModel {
+        let builtin = Texts.builtinStrings(ctx.uiLang)
+        let overrides = map("i18n_overrides")
+        var changed = Set<String>()
+        for lang in SettingsCatalog.editorLanguages {
+            changed.formUnion((overrides[lang] as? [String: Any] ?? [:]).keys)
+        }
+        let mine = overrides[ctx.uiLang] as? [String: Any] ?? [:]
+        let keys = builtin.keys.sorted { a, b in
+            let ca = changed.contains(a), cb = changed.contains(b)
+            return ca != cb ? ca : a < b
+        }
+        let rows = keys.map { key -> SettingsListRow in
+            let text = (mine[key] as? String) ?? builtin[key] ?? ""
+            return SettingsListRow(id: key, title: (changed.contains(key) ? "✎ " : "") + key,
+                                   detail: text, edit: { self.wordPage(key) })
+        }
+        var model = SettingsListModel(id: "wording", title: t("editor.wording"),
+                                      footer: t("editor.wording_hint"), rows: rows)
+        model.searchable = true
+        return model
+    }
+
+    /// How many values a wording takes: `{name}` in an override, `%@` / `%1$@` in the shipped
+    /// platform strings. An override must keep the same number.
+    static func placeholderCount(_ text: String) -> Int {
+        guard let pattern = try? NSRegularExpression(pattern: "\\{[A-Za-z0-9_]+\\}|%(\\d+\\$)?@")
+        else { return 0 }
+        return pattern.numberOfMatches(in: text, range: NSRange(text.startIndex..., in: text))
+    }
+
+
+
+    func wordPage(_ key: String) -> SettingsPage {
+        let overrides = map("i18n_overrides")
+        var items = SettingsCatalog.editorLanguages.map { lang -> SettingItem in
+            let builtin = Texts.builtinStrings(lang)[key] ?? ""
+            let langMap = overrides[lang] as? [String: Any] ?? [:]
+            let current = (langMap[key] as? String) ?? builtin
+            return SettingItem("word_\(lang)", Texts.langDisplayName(lang) + (langMap[key] != nil ? " ✎" : ""),
+                               detail: current,
+                               .text(value: current, placeholder: builtin, numeric: false)) { value in
+                var text = value.stringValue ?? ""
+                if text == builtin { text = "" }
+                if !text.isEmpty && !builtin.isEmpty &&
+                    SettingsCatalog.placeholderCount(text) != SettingsCatalog.placeholderCount(builtin) {
+                    return .invalid("editor.placeholder_hint")
+                }
+                var next = langMap
+                if text.isEmpty { next.removeValue(forKey: key) } else { next[key] = text }
+                let mapKey = "i18n_overrides.\(lang)"
+                return .write([next.isEmpty ? .delete(mapKey) : .set(mapKey, next)])
+            }
+        }
+        let any = SettingsCatalog.editorLanguages.contains {
+            (overrides[$0] as? [String: Any])?[key] != nil }
+        if any {
+            items.append(SettingItem("word_reset", t("editor.reset"), .action(destructive: true)) { _ in
+                var operations: [ConfigWriter.Operation] = []
+                for lang in SettingsCatalog.editorLanguages {
+                    guard var next = overrides[lang] as? [String: Any], next[key] != nil else { continue }
+                    next.removeValue(forKey: key)
+                    let mapKey = "i18n_overrides.\(lang)"
+                    operations.append(next.isEmpty ? .delete(mapKey) : .set(mapKey, next))
+                }
+                return .write(operations)
+            })
+        }
+        return SettingsPage(id: key, title: key,
+                            sections: [SettingSection(footer: t("editor.placeholder_hint"), items)])
+    }
+
+    // MARK: Buildings, doors and households
+
+    func labelledList(_ root: String, title: String, prefix: String, addTitle: String,
+                      extra: ((String, [String: Any]?) -> [SettingItem])? = nil) -> SettingsListModel {
+        let entries = map(root)
+        let ids = ConfigUtil.sortedByOrder(entries)
+        let rows = ids.map { id -> SettingsListRow in
+            let entry = entries[id] as? [String: Any]
+            let label = ConfigUtil.labelOf(entry, ctx.uiLang, id)
+            return SettingsListRow(id: id, title: label, detail: id, edit: {
+                var sections = [SettingSection(t("editor.label"),
+                    self.labelPage(id: "\(root)_\(id)", title: label, prefix: "\(root).\(id)",
+                                   entry: entry, limit: 40))]
+                if let more = extra?(id, entry), !more.isEmpty { sections.append(SettingSection(more)) }
+                return SettingsPage(id: id, title: label, sections: sections)
+            })
+        }
+        var model = SettingsListModel(id: root, title: title, rows: rows)
+        model.delete = { id in .write([.delete("\(root).\(id)")]) }
+        model.addTitle = addTitle
+        model.addPrompt = t("admin.label_ja")
+        model.addWithText = { text in
+            guard let label = SettingValidation.label(text, limit: 40) else {
+                return .invalid("prefs.label_invalid")
+            }
+            return .write([.set("\(root).\(SettingValidation.newId(prefix))",
+                                ["label": ["ja": label], "order": ids.count + 1])])
+        }
+        return model
+    }
+
+    func placesItems() -> [SettingItem] {
+        let buildings = labelled("buildings")
+        return [
+            SettingItem("buildings", t("editor.buildings"), detail: countSummary("buildings"),
+                        .list({ self.labelledList("buildings", title: self.t("editor.buildings"),
+                                                  prefix: "b", addTitle: self.t("editor.new_building")) })),
+            SettingItem("doors_edit", t("editor.doors"), detail: countSummary("doors"),
+                        .list({ self.labelledList("doors", title: self.t("editor.doors"), prefix: "d",
+                                                  addTitle: self.t("editor.new_door")) { id, entry in
+                            [SettingItem("door_\(id)_building", self.t("editor.building"),
+                                         .choice(value: ConfigUtil.str(entry, "building") ?? "",
+                                                 options: [SettingOption(value: "", title: "—")] + buildings,
+                                                 searchable: false),
+                                         commit: self.setOptional("doors.\(id).building"))]
+                        } })),
+            SettingItem("households", t("editor.households"), detail: countSummary("households"),
+                        .list(householdList)),
+        ]
+    }
+
+    func householdList() -> SettingsListModel {
+        return labelledList("households", title: t("editor.households"), prefix: "h",
+                            addTitle: t("editor.new_household")) { id, entry in
+            let chats = ((entry?["telegram_chat_ids"] as? [Any]) ?? []).map { "\($0)" }
+                .joined(separator: ", ")
+            let extensions = ((entry?["sip_extensions"] as? [Any]) ?? []).map { "\($0)" }
+                .joined(separator: ", ")
+            return [
+                SettingItem("household_\(id)_chats", self.t("editor.chat_ids"), detail: chats,
+                            .text(value: chats, placeholder: "123456789", numeric: true)) { value in
+                    var ids: [Int64] = []
+                    for part in (value.stringValue ?? "").split(separator: ",") {
+                        let text = part.trimmingCharacters(in: .whitespaces)
+                        guard let number = Int64(text), number != 0 else { return .invalid("prefs.out_of_range") }
+                        ids.append(number)
+                    }
+                    let key = "households.\(id).telegram_chat_ids"
+                    return .write([ids.isEmpty ? .delete(key) : .set(key, ids)])
+                },
+                SettingItem("household_\(id)_extensions", self.t("editor.sip_extensions"),
+                            detail: extensions,
+                            .text(value: extensions, placeholder: "201", numeric: true)) { value in
+                    let list = (value.stringValue ?? "").split(separator: ",")
+                        .map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+                    let key = "households.\(id).sip_extensions"
+                    return .write([list.isEmpty ? .delete(key) : .set(key, list)])
+                },
+            ]
+        }
+    }
+
+    // MARK: Devices
+
+    func deviceList() -> SettingsListModel {
+        let devices = map("devices")
+        let rows = devices.keys.sorted().map { id -> SettingsListRow in
+            let entry = devices[id] as? [String: Any]
+            let role = ConfigUtil.str(entry, "role") ?? ""
+            let name = ConfigUtil.str(entry, "name") ?? id
+            return SettingsListRow(id: id, title: name,
+                                   detail: t(role == "door_station" ? "admin.role_door" : "admin.role_indoor")
+                                       + (id == ctx.nodeId ? " · " + t("editor.this_device") : ""),
+                                   edit: {
+                var items = [
+                    SettingItem("device_\(id)_name", self.t("settings.device_name"), detail: name,
+                                .text(value: name, placeholder: id, numeric: false)) { value in
+                        guard let text = value.stringValue.flatMap({ SettingValidation.label($0, limit: 64) })
+                        else { return .invalid("prefs.label_invalid") }
+                        return .write([.set("devices.\(id).name", text)])
+                    },
+                    SettingItem("device_\(id)_role", self.t("settings.device_role"),
+                                .info(self.t(role == "door_station" ? "admin.role_door" : "admin.role_indoor"))),
+                ]
+                if role == "door_station" {
+                    items.append(SettingItem("device_\(id)_door", self.t("settings.device_door"),
+                                             .choice(value: ConfigUtil.str(entry, "door") ?? "",
+                                                     options: self.doorOptions(), searchable: false),
+                                             commit: self.set("devices.\(id).door")))
+                }
+                var sections = [SettingSection(footer: self.t("editor.role_on_device"), items)]
+                if id != self.ctx.nodeId {
+                    sections.append(SettingSection([SettingItem("device_\(id)_remove",
+                        self.t("editor.remove_device"), .action(destructive: true)) { _ in
+                            .local("device.remove|\(id)") }]))
+                }
+                return SettingsPage(id: id, title: name, sections: sections)
+            })
+        }
+        return SettingsListModel(id: "devices", title: t("prefs.members"), rows: rows)
+    }
+
+    // MARK: Trigger rules
+
+    func whenOptions() -> [SettingOption] {
+        return ["button", "motion", "call_missed", "device_offline", "emergency_on", "emergency_off"]
+            .map { SettingOption(value: $0, title: t("editor.when_\($0)")) }
+    }
+
+    func actionTypeOptions() -> [SettingOption] {
+        return ["chime", "device_alert", "sip_call", "telegram", "ha_event", "ha_command", "auto_reply"]
+            .map { SettingOption(value: $0, title: t("editor.action_\($0)")) }
+    }
+
+    func ruleList() -> SettingsListModel {
+        let rules = map("trigger_rules")
+        let rows = rules.keys.sorted().map { id -> SettingsListRow in
+            let rule = rules[id] as? [String: Any]
+            let when = ConfigUtil.str(rule, "when.type") ?? ""
+            return SettingsListRow(id: id, title: ConfigUtil.str(rule, "name") ?? ruleTitle(id, rule),
+                                   detail: t("editor.when_\(when)"),
+                                   enabled: ConfigUtil.bool(rule, "enabled", true),
+                                   toggle: { on in .write([.set("trigger_rules.\(id).enabled", on)]) },
+                                   edit: { self.rulePage(id) })
+        }
+        var model = SettingsListModel(id: "rules", title: t("prefs.rule_edit"), rows: rows)
+        model.delete = { id in .write([.delete("trigger_rules.\(id)")]) }
+        model.addTitle = t("editor.new_rule")
+        model.addPrompt = t("editor.name")
+        model.addWithText = { text in
+            guard let name = SettingValidation.label(text, limit: 64) else { return .invalid("prefs.label_invalid") }
+            return .write([.set("trigger_rules.\(SettingValidation.newId("r"))",
+                                ["enabled": true, "name": name, "when": ["type": "button"],
+                                 "schedule": ["always": true], "actions": [["type": "chime"]]])])
+        }
+        return model
+    }
+
+    func rulePage(_ id: String) -> SettingsPage {
+        let base = "trigger_rules.\(id)"
+        let rule = ConfigUtil.dig(cfg, base) as? [String: Any]
+        let when = ConfigUtil.str(rule, "when.type") ?? "button"
+        var whenItems = [SettingItem("rule_when", t("editor.when"),
+                                     .choice(value: when, options: whenOptions(), searchable: false),
+                                     commit: set("\(base).when.type"))]
+        if ["button", "motion", "call_missed"].contains(when) {
+            whenItems.append(multiItem("rule_doors", t("editor.doors"), values: strings("\(base).when.doors"),
+                                       options: doorOptions()) { list in
+                .write([list.isEmpty ? .delete("\(base).when.doors") : .set("\(base).when.doors", list)]) })
+        }
+        if when == "button" {
+            whenItems.append(multiItem("rule_purposes", t("editor.purposes"),
+                                       values: strings("\(base).when.purposes"),
+                                       options: labelled("visit_purposes")) { list in
+                .write([list.isEmpty ? .delete("\(base).when.purposes") : .set("\(base).when.purposes", list)]) })
+        }
+        let windows = (ConfigUtil.dig(cfg, "\(base).schedule.windows") as? [Any]) ?? []
+        let always = windows.isEmpty || bool("\(base).schedule.always", false)
+        var scheduleItems = [SettingItem("rule_always", t("editor.always"), .toggle(always)) { value in
+            if value.boolValue == true { return .write([.set("\(base).schedule", ["always": true])]) }
+            return .write([.set("\(base).schedule", ["windows": [["from": "08:00", "to": "20:00"]]])])
+        }]
+        if !always {
+            scheduleItems.append(SettingItem("rule_windows", t("editor.windows"), detail: "\(windows.count)",
+                                             .list({ self.windowList("\(base).schedule.windows",
+                                                                     title: self.t("editor.windows")) })))
+        }
+        let actions = (ConfigUtil.dig(cfg, "\(base).actions") as? [Any]) ?? []
+        return SettingsPage(id: id, title: ConfigUtil.str(rule, "name") ?? ruleTitle(id, rule), sections: [
+            SettingSection([
+                textItem("rule_name", t("editor.name"), key: "\(base).name", limit: 64),
+                SettingItem("rule_enabled", t("editor.enabled"),
+                            .toggle(bool("\(base).enabled", true)), commit: set("\(base).enabled")),
+            ]),
+            SettingSection(t("editor.when"), whenItems),
+            SettingSection(t("editor.schedule"), scheduleItems),
+            SettingSection(t("editor.actions"), footer: t("editor.never_suppress_hint"), [
+                SettingItem("rule_actions", t("editor.actions"), detail: "\(actions.count)",
+                            .list({ self.actionList("\(base).actions") })),
+            ]),
+        ])
+    }
+
+    /// Time windows `[{from, to, days?}]` stored as one array.
+    func windowList(_ key: String, title: String) -> SettingsListModel {
+        let windows = (ConfigUtil.dig(cfg, key) as? [Any])?.map { ($0 as? [String: Any]) ?? [:] } ?? []
+        func write(_ list: [[String: Any]]) -> SettingEffect { return .write([.set(key, list)]) }
+        let days = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+            .map { SettingOption(value: $0, title: t("editor.day_\($0)")) }
+        let rows = windows.enumerated().map { index, window -> SettingsListRow in
+            let from = ConfigUtil.str(window, "from") ?? "22:00"
+            let to = ConfigUtil.str(window, "to") ?? "07:00"
+            let picked = (window["days"] as? [Any])?.compactMap { $0 as? String } ?? []
+            return SettingsListRow(id: "w\(index)", title: "\(from) – \(to)",
+                                   detail: picked.map { t("editor.day_\($0)") }.joined(separator: " "),
+                                   edit: {
+                SettingsPage(id: "w\(index)", title: "\(from) – \(to)", sections: [SettingSection(
+                    footer: self.t("editor.weekdays_hint"), [
+                    SettingItem("w\(index)_from", self.t("editor.from"), .time(from)) { value in
+                        guard let clock = value.stringValue.flatMap(SettingValidation.clock) else {
+                            return .invalid("prefs.invalid_time") }
+                        var updated = windows
+                        updated[index]["from"] = clock
+                        return write(updated)
+                    },
+                    SettingItem("w\(index)_to", self.t("editor.to"), .time(to)) { value in
+                        guard let clock = value.stringValue.flatMap(SettingValidation.clock) else {
+                            return .invalid("prefs.invalid_time") }
+                        var updated = windows
+                        updated[index]["to"] = clock
+                        return write(updated)
+                    },
+                    self.multiItem("w\(index)_days", self.t("editor.weekdays"), values: picked,
+                                   options: days) { list in
+                        var updated = windows
+                        if list.isEmpty { updated[index].removeValue(forKey: "days") }
+                        else { updated[index]["days"] = list }
+                        return write(updated)
+                    },
+                ])])
+            })
+        }
+        var model = SettingsListModel(id: "windows", title: title, rows: rows)
+        model.delete = { id in
+            guard let index = Int(id.dropFirst()), index < windows.count else { return .none }
+            var updated = windows
+            updated.remove(at: index)
+            return write(updated)
+        }
+        model.addTitle = t("editor.add_window")
+        model.add = { write(windows + [["from": "22:00", "to": "07:00"]]) }
+        return model
+    }
+
+    func actionList(_ key: String) -> SettingsListModel {
+        let actions = (ConfigUtil.dig(cfg, key) as? [Any])?.map { ($0 as? [String: Any]) ?? [:] } ?? []
+        func write(_ list: [[String: Any]]) -> SettingEffect { return .write([.set(key, list)]) }
+        let rows = actions.enumerated().map { index, action -> SettingsListRow in
+            let type = ConfigUtil.str(action, "type") ?? ""
+            let never = ConfigUtil.bool(action, "never_suppress", false)
+            return SettingsListRow(id: "a\(index)", title: t("editor.action_\(type)"),
+                                   detail: never ? t("editor.never_suppress_short") : "",
+                                   edit: { self.actionPage(key, index: index, actions: actions) })
+        }
+        var model = SettingsListModel(id: "actions", title: t("editor.actions"), rows: rows)
+        model.reorder = { order in
+            let indexes = order.compactMap { Int($0.dropFirst()) }.filter { $0 < actions.count }
+            return write(indexes.map { actions[$0] })
+        }
+        model.delete = { id in
+            guard let index = Int(id.dropFirst()), index < actions.count else { return .none }
+            var updated = actions
+            updated.remove(at: index)
+            return write(updated)
+        }
+        model.addTitle = t("editor.add_action")
+        model.add = { write(actions + [["type": "chime", "sound": "ding1"]]) }
+        return model
+    }
+
+    func actionPage(_ key: String, index: Int, actions: [[String: Any]]) -> SettingsPage {
+        let action = actions[index]
+        let type = ConfigUtil.str(action, "type") ?? ""
+        func update(_ change: (inout [String: Any]) -> Void) -> SettingEffect {
+            var updated = actions
+            change(&updated[index])
+            return .write([.set(key, updated)])
+        }
+        func text(_ id: String, _ title: String, _ field: String, numeric: Bool = false) -> SettingItem {
+            let value = ConfigUtil.str(action, field) ?? ""
+            return SettingItem(id, title, detail: value,
+                               .text(value: value, placeholder: "", numeric: numeric)) { value in
+                let trimmed = (value.stringValue ?? "").trimmingCharacters(in: .whitespaces)
+                return update { entry in
+                    if trimmed.isEmpty { entry.removeValue(forKey: field) } else { entry[field] = trimmed }
+                }
+            }
+        }
+        func flag(_ id: String, _ title: String, _ path: [String], _ fallback: Bool) -> SettingItem {
+            let current: Bool
+            if path.count == 2 {
+                current = ConfigUtil.bool(action[path[0]] as? [String: Any], path[1], fallback)
+            } else {
+                current = ConfigUtil.bool(action, path[0], fallback)
+            }
+            return SettingItem(id, title, .toggle(current)) { value in
+                let on = value.boolValue ?? false
+                return update { entry in
+                    if path.count == 2 {
+                        var inner = entry[path[0]] as? [String: Any] ?? [:]
+                        inner[path[1]] = on
+                        entry[path[0]] = inner
+                    } else {
+                        entry[path[0]] = on
+                    }
+                }
+            }
+        }
+        /// "all" or a list, as Core stores targets.
+        func targets(_ id: String, _ title: String, _ path: [String],
+                     _ options: [SettingOption]) -> SettingItem {
+            let raw: Any? = path.count == 2 ? (action[path[0]] as? [String: Any])?[path[1]] : action[path[0]]
+            let all = (raw as? String) == "all"
+            let values = all ? ["all"] : ((raw as? [Any])?.compactMap { $0 as? String } ?? [])
+            return multiItem(id, title, values: values,
+                             options: [SettingOption(value: "all", title: t("editor.all"))] + options) { list in
+                var stored: Any = list.filter { $0 != "all" }
+                if list.last == "all" { stored = "all" }
+                return update { entry in
+                    if path.count == 2 {
+                        var inner = entry[path[0]] as? [String: Any] ?? [:]
+                        inner[path[1]] = stored
+                        entry[path[0]] = inner
+                    } else {
+                        entry[path[0]] = stored
+                    }
+                }
+            }
+        }
+        var items = [SettingItem("action_type", t("editor.type"),
+                                 .choice(value: type, options: actionTypeOptions(), searchable: false)) { value in
+            guard let next = value.stringValue else { return .none }
+            var updated = actions
+            updated[index] = ["type": next]
+            return .write([.set(key, updated)])
+        }]
+        switch type {
+        case "sip_call":
+            items.append(text("action_extension", t("editor.extension"), "target_extension", numeric: true))
+        case "telegram":
+            items.append(targets("action_households", t("editor.households"), ["households"],
+                                 labelled("households")))
+            items.append(flag("action_snapshot", t("editor.with_snapshot"), ["with_snapshot"], false))
+        case "ha_command":
+            items.append(text("action_command", t("editor.command"), "command"))
+            items.append(SettingItem("action_door", t("editor.door"),
+                                     .choice(value: ConfigUtil.str(action, "door") ?? "self",
+                                             options: [SettingOption(value: "self", title: t("editor.this_door"))]
+                                                 + doorOptions(), searchable: false)) { value in
+                update { $0["door"] = value.stringValue ?? "self" } })
+        case "chime":
+            items.append(SettingItem("action_sound", t("prefs.ringtone"),
+                                     .choice(value: ConfigUtil.str(action, "sound") ?? "ding1",
+                                             options: soundOptions(builtIn: ["school_chime", "ding1", "ding2", "classic"],
+                                                                   allowNone: false),
+                                             searchable: false)) { value in
+                update { $0["sound"] = value.stringValue ?? "ding1" } })
+        case "auto_reply":
+            items.append(SettingItem("action_reply", t("prefs.quick_replies"),
+                                     .choice(value: ConfigUtil.str(action, "reply_id") ?? "",
+                                             options: labelled("quick_replies"), searchable: false)) { value in
+                update { $0["reply_id"] = value.stringValue ?? "" } })
+        case "device_alert":
+            items.append(targets("action_roles", t("editor.target_roles"), ["targets", "roles"], [
+                SettingOption(value: "indoor_panel", title: t("admin.role_indoor")),
+                SettingOption(value: "door_station", title: t("admin.role_door"))]))
+            let channels = (action["channels"] as? [Any])?.compactMap { $0 as? String } ?? []
+            items.append(multiItem("action_channels", t("editor.channels"), values: channels,
+                                   options: ["in_app", "system_notification", "web_push"].map {
+                                       SettingOption(value: $0, title: t("editor.channel_\($0)")) }) { list in
+                update { $0["channels"] = list } })
+            items.append(flag("action_visual", t("editor.visual"), ["presentation", "visual"], true))
+            items.append(flag("action_sticky", t("editor.sticky"), ["presentation", "sticky"], false))
+            let ttl = ConfigUtil.int(action["presentation"] as? [String: Any], "ttl_s", 30)
+            items.append(SettingItem("action_ttl", t("editor.ttl"), detail: "\(ttl)",
+                                     .text(value: "\(ttl)", placeholder: "30", numeric: true)) { value in
+                guard let seconds = value.stringValue.flatMap({ Int($0) }), (0...86400).contains(seconds)
+                else { return .invalid("prefs.out_of_range") }
+                return update { entry in
+                    var inner = entry["presentation"] as? [String: Any] ?? [:]
+                    inner["ttl_s"] = seconds
+                    entry["presentation"] = inner
+                }
+            })
+        default:
+            break
+        }
+        return SettingsPage(id: "a\(index)", title: t("editor.action_\(type)"), sections: [
+            SettingSection(items),
+            SettingSection(footer: t("editor.never_suppress_hint"), [
+                flag("action_never_suppress", t("editor.never_suppress"), ["never_suppress"], false)]),
+        ])
+    }
+
+    // MARK: Integrations
+
+    func telegramPage() -> SettingsPage {
+        let key = "integrations.telegram.bot_token_ref"
+        var items = [
+            secretItem("telegram_token", t("editor.bot_token"), key: key, base: "tg_bot"),
+            SettingItem("telegram_poll", t("editor.poll_updates"),
+                        .toggle(bool("integrations.telegram.poll_updates", true)),
+                        commit: set("integrations.telegram.poll_updates")),
+            SettingItem("telegram_households", t("editor.households"), detail: countSummary("households"),
+                        .list(householdList)),
+        ]
+        if !str(key, "").isEmpty {
+            items.append(SettingItem("telegram_test", t("editor.test_message"),
+                                     .action(destructive: false)) { _ in .local("telegram.test") })
+            items.append(SettingItem("telegram_off", t("editor.disable"), .action(destructive: true)) { _ in
+                .write([.delete(key)]) })
+        }
+        return SettingsPage(id: "telegram", title: t("settings.telegram"),
+                            sections: [SettingSection(footer: t("editor.secret_hint"), items)])
+    }
+
+    func mqttPage() -> SettingsPage {
+        let m = "integrations.mqtt."
+        let h = "integrations.ha."
+        return SettingsPage(id: "mqtt", title: t("editor.mqtt"), sections: [
+            SettingSection(t("editor.broker"), footer: t("editor.tls_hint"), [
+                textItem("mqtt_host", t("editor.server"), key: m + "host", placeholder: "10.0.1.5"),
+                portItem("mqtt_port", t("editor.port"), key: m + "port", fallback: 1883),
+                SettingItem("mqtt_tls", "TLS", .toggle(bool(m + "tls", false)), commit: set(m + "tls")),
+                textItem("mqtt_pin", t("editor.tls_pin"), key: m + "tls_sha256", placeholder: "sha256"),
+                textItem("mqtt_user", t("editor.user"), key: m + "user"),
+                secretItem("mqtt_password", t("editor.mqtt_password"), key: m + "pass_ref", base: "mqtt"),
+                textItem("mqtt_topic", t("editor.base_topic"), key: m + "base_topic", placeholder: "doorbell"),
+                textItem("mqtt_discovery", t("editor.discovery_prefix"), key: m + "discovery_prefix",
+                         placeholder: "homeassistant"),
+            ]),
+            SettingSection("Home Assistant", footer: t("editor.ha_control_hint"), [
+                choiceItem("ha_language", t("editor.entity_language"), key: h + "language", fallback: "ja",
+                           options: SettingsCatalog.editorLanguages.map {
+                               SettingOption(value: $0, title: Texts.langDisplayName($0)) }),
+                SettingItem("ha_sos", t("editor.allow_sos_control"), .toggle(bool(h + "allow_sos_control", false)),
+                            commit: set(h + "allow_sos_control")),
+                SettingItem("ha_notice", t("editor.allow_notice_control"),
+                            .toggle(bool(h + "allow_notice_control", false)),
+                            commit: set(h + "allow_notice_control")),
+            ]),
+        ])
+    }
+
+    func secretsPage() -> SettingsPage {
+        var items: [SettingItem] = []
+        if !ctx.nodeId.isEmpty {
+            items.append(secretItem("secret_sip", t("editor.sip_password"),
+                                    key: "sip.accounts.\(ctx.nodeId).pass_ref", base: "sip.\(ctx.nodeId)"))
+        }
+        items.append(secretItem("secret_mqtt", t("editor.mqtt_password"), key: "integrations.mqtt.pass_ref",
+                                base: "mqtt"))
+        items.append(secretItem("secret_telegram", t("editor.bot_token"),
+                                key: "integrations.telegram.bot_token_ref", base: "tg_bot"))
+        for source in map("media_sources").keys.sorted() where SettingValidation.doorId(source) {
+            let stored = (ConfigUtil.str(cfg, "media_sources.\(source).secret_ref") ?? "").hasPrefix("secret:")
+            items.append(SettingItem("secret_media_\(source)", "\(t("editor.camera_credential")) · \(source)",
+                                     detail: t(stored ? "editor.secret_set" : "editor.secret_unset"), .secret) { value in
+                (value.stringValue ?? "").isEmpty ? .none : .local("mediasecret|\(source)")
+            })
+        }
+        return SettingsPage(id: "secrets", title: t("editor.secrets"),
+                            sections: [SettingSection(footer: t("editor.secret_hint"), items)])
+    }
+
+    // MARK: SIP keypad actions
+
+    func dtmfList() -> SettingsListModel {
+        let actions = map("sip.dtmf_actions")
+        func write(_ next: [String: Any]) -> SettingEffect { return .write([.set("sip.dtmf_actions", next)]) }
+        let types = ["hangup", "ha_command", "quick_reply", "decline"].map {
+            SettingOption(value: $0, title: t("editor.dtmf_\($0)")) }
+        let rows = actions.keys.sorted().map { code -> SettingsListRow in
+            let action = actions[code] as? [String: Any] ?? [:]
+            let type = ConfigUtil.str(action, "type") ?? "hangup"
+            return SettingsListRow(id: code, title: code, detail: t("editor.dtmf_\(type)"), edit: {
+                func change(_ body: (inout [String: Any]) -> Void) -> SettingEffect {
+                    var entry = action
+                    body(&entry)
+                    var next = actions
+                    next[code] = entry
+                    return write(next)
+                }
+                var items = [SettingItem("dtmf_type", self.t("editor.type"),
+                                         .choice(value: type, options: types, searchable: false)) { value in
+                    guard let next = value.stringValue else { return .none }
+                    var entry: [String: Any] = ["type": next]
+                    if next == "ha_command" { entry["command"] = "unlock"; entry["door"] = "self" }
+                    if next == "quick_reply" {
+                        guard let first = self.labelled("quick_replies").first else { return .invalid("prefs.out_of_range") }
+                        entry["reply_id"] = first.value
+                    }
+                    var all = actions
+                    all[code] = entry
+                    return write(all)
+                }]
+                if type == "ha_command" {
+                    let command = ConfigUtil.str(action, "command") ?? ""
+                    items.append(SettingItem("dtmf_command", self.t("editor.command"), detail: command,
+                                             .text(value: command, placeholder: "unlock", numeric: false)) { value in
+                        change { $0["command"] = (value.stringValue ?? "").trimmingCharacters(in: .whitespaces) } })
+                    items.append(SettingItem("dtmf_door", self.t("editor.door"),
+                                             .choice(value: ConfigUtil.str(action, "door") ?? "self",
+                                                     options: [SettingOption(value: "self", title: self.t("editor.this_door"))]
+                                                         + self.doorOptions(), searchable: false)) { value in
+                        change { $0["door"] = value.stringValue ?? "self" } })
+                } else if type == "quick_reply" {
+                    items.append(SettingItem("dtmf_reply", self.t("prefs.quick_replies"),
+                                             .choice(value: ConfigUtil.str(action, "reply_id") ?? "",
+                                                     options: self.labelled("quick_replies"), searchable: false)) { value in
+                        change { $0["reply_id"] = value.stringValue ?? "" } })
+                }
+                return SettingsPage(id: code, title: code, sections: [SettingSection(items)])
+            })
+        }
+        var model = SettingsListModel(id: "dtmf", title: t("editor.dtmf_actions"),
+                                      footer: t("editor.dtmf_hint"), rows: rows)
+        model.delete = { code in
+            var next = actions
+            next.removeValue(forKey: code)
+            return write(next)
+        }
+        model.addTitle = t("editor.add_dtmf")
+        model.addPrompt = t("editor.dtmf_code")
+        model.addWithText = { text in
+            let code = text.trimmingCharacters(in: .whitespaces).uppercased()
+            guard (1...8).contains(code.count), code.allSatisfy({ "0123456789*#ABCD".contains($0) }) else {
+                return .invalid("editor.dtmf_code_hint")
+            }
+            var next = actions
+            next[code] = ["type": "hangup"]
+            return write(next)
+        }
+        return model
+    }
+
+    // MARK: External cameras
+
+    func mediaSourceList() -> SettingsListModel {
+        let sources = map("media_sources")
+        let rows = sources.keys.sorted().map { id -> SettingsListRow in
+            let entry = sources[id] as? [String: Any] ?? [:]
+            let streams = entry["streams"] as? [String: Any] ?? [:]
+            return SettingsListRow(id: id, title: id, detail: streams.keys.sorted().joined(separator: ", "),
+                                   edit: { self.mediaSourcePage(id, entry: entry) })
+        }
+        var model = SettingsListModel(id: "media_sources", title: t("prefs.media_sources"),
+                                      footer: t("editor.media_hint"), rows: rows)
+        model.delete = { id in .write([.delete("media_sources.\(id)")]) }
+        model.addTitle = t("prefs.media_sources")
+        model.addPrompt = "http://192.0.2.20/live.mjpeg"
+        model.addWithText = { text in
+            let url = text.trimmingCharacters(in: .whitespaces)
+            guard url.hasPrefix("http://") || url.hasPrefix("https://") else { return .invalid("editor.media_url_hint") }
+            return .write([.set("media_sources.\(SettingValidation.newId("cam"))",
+                                ["schema_version": 1, "kind": "ip_camera",
+                                 "streams": ["mjpeg": ["url": url]]])])
+        }
+        return model
+    }
+
+    func mediaSourcePage(_ id: String, entry: [String: Any]) -> SettingsPage {
+        let streams = entry["streams"] as? [String: Any] ?? [:]
+        let items = [("mjpeg", "MJPEG (http/https)"), ("snapshot", "Snapshot JPEG (http/https)"),
+                     ("h264", "H.264 (rtsp, TCP, Baseline)")].map { name, title -> SettingItem in
+            let url = ConfigUtil.str(streams[name] as? [String: Any], "url") ?? ""
+            return SettingItem("media_\(name)", title, detail: url,
+                               .text(value: url, placeholder: name == "h264" ? "rtsp://" : "http://",
+                                     numeric: false)) { value in
+                let text = (value.stringValue ?? "").trimmingCharacters(in: .whitespaces)
+                var next = streams
+                if text.isEmpty {
+                    next.removeValue(forKey: name)
+                } else if name == "h264" {
+                    next[name] = ["url": text, "transport": "tcp", "profile": "baseline"]
+                } else {
+                    next[name] = ["url": text]
+                }
+                guard !next.isEmpty else { return .invalid("editor.media_url_hint") }
+                var updated = entry
+                updated["schema_version"] = 1
+                updated["kind"] = "ip_camera"
+                updated["streams"] = next
+                return .write([.set("media_sources.\(id)", updated)])
+            }
+        }
+        let stored = (ConfigUtil.str(entry, "secret_ref") ?? "").hasPrefix("secret:")
+        return SettingsPage(id: id, title: id, sections: [
+            SettingSection(t("editor.streams"), footer: t("editor.media_url_hint"), items),
+            SettingSection(footer: t("editor.media_hint"), [
+                SettingItem("media_credential", t("editor.camera_credential"),
+                            detail: t(stored ? "editor.secret_set" : "editor.secret_unset"), .secret) { value in
+                    (value.stringValue ?? "").isEmpty ? .none : .local("mediasecret|\(id)")
+                }]),
+        ])
+    }
+
+    func transferPage() -> SettingsPage {
+        var items = [SettingItem("config_export", t("editor.export_clipboard"), .action(destructive: false)) { _ in
+            .local("config.export") }]
+        items.append(SettingItem("config_import", t("editor.import_clipboard"), .action(destructive: true)) { _ in
+            .local("config.import") })
+        return SettingsPage(id: "import_export", title: t("editor.config_transfer"),
+                            sections: [SettingSection(footer: t("editor.config_transfer_hint"), items)])
     }
 }
