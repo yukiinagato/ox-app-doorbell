@@ -163,9 +163,23 @@
     NSString *origin = [self originOfURL:[self stringFrom:peer keys:@[ key ]]];
     if ([origin length] > 0) return origin;
   }
-  NSString *host = [self peerHost:peer];
-  if ([host length] == 0) return @"";
-  return [NSString stringWithFormat:@"http://%@:47180", [self urlHost:host]];
+  // Security protocol v3 §8: a shell never fetches another node directly. Core publishes peer
+  // media as loopback proxy URLs, so a peer without published streams has no media origin.
+  return @"";
+}
+
+// The sibling resource of a published media URL: .../stream.mjpeg -> .../snapshot.jpg. Core
+// serves peer media under /media/peer/<id>/, so replacing the whole path with /snapshot.jpg would
+// address this device's own camera instead of the peer's.
++ (NSString *)siblingOf:(NSString *)raw name:(NSString *)name {
+  NSURL *url = [raw length] ? [NSURL URLWithString:raw] : nil;
+  if ([[url scheme] length] == 0 || [[url host] length] == 0) return @"";
+  NSString *path = [url path] ?: @"";
+  NSRange slash = [path rangeOfString:@"/" options:NSBackwardsSearch];
+  NSString *dir = slash.location == NSNotFound ? @"" : [path substringToIndex:slash.location];
+  NSString *port = [url port] ? [NSString stringWithFormat:@":%@", [url port]] : @"";
+  return [NSString stringWithFormat:@"%@://%@%@%@/%@", [url scheme],
+      [self urlHost:[url host]], port, dir, name];
 }
 
 + (NSString *)safeURL:(NSString *)raw origin:(NSString *)origin
@@ -348,21 +362,15 @@
   if ([snapshot length] == 0)
     snapshot = [self stringFrom:peer keys:@[@"snapshot_url", @"snapshot"]];
   if ([meta length] == 0)
-    meta = [self stringFrom:peer keys:@[@"video_meta_url"]];
+    meta = [self stringFrom:peer keys:@[@"video_meta", @"video_meta_url"]];
 
-  // Backward compatibility applies only to a peer whose role is known. A seed
-  // address by itself is connectivity information, never proof of a camera or
-  // a door-station role.
-  BOOL knownDoorPeer = [[self stringFrom:peer keys:@[@"role"]] isEqualToString:@"door_station"];
-  if ([mjpeg length] == 0 && knownDoorPeer && [origin length] > 0)
-    mjpeg = @"/stream.mjpeg";
-  if ([mp4 length] == 0 && knownDoorPeer && [origin length] > 0)
-    mp4 = @"/stream.mp4";
-  if ([snapshot length] == 0 && knownDoorPeer && [origin length] > 0)
-    snapshot = @"/snapshot.jpg";
-  if ([meta length] == 0 && knownDoorPeer && !localOverride &&
-      [origin length] > 0)
-    meta = @"/video-meta";
+  // Stills and rotation metadata sit beside the published stream. A peer with no published
+  // stream has no media at all; its seed or mesh address is never a media origin.
+  NSString *published = [mjpeg length] ? mjpeg : mp4;
+  if ([snapshot length] == 0 && [published length] > 0)
+    snapshot = [self siblingOf:published name:@"snapshot.jpg"];
+  if ([meta length] == 0 && !localOverride && [published length] > 0)
+    meta = [self siblingOf:published name:@"video-meta"];
 
   out.mjpegURL = [self safeURL:mjpeg origin:origin schemes:@[@"http", @"https"]];
   out.mp4URL = [self safeURL:mp4 origin:origin schemes:@[@"http", @"https"]];

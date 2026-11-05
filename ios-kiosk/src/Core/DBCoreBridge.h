@@ -6,6 +6,21 @@
 // the registered release_buffer callback.
 
 typedef void (^DBUiEventHandler)(NSDictionary *ev);
+
+// Security protocol v3 (docs/en/security-v3.md). A configuration write refused because the
+// native admin window is closed returns DBAdminRequiredResult, and the bridge posts
+// DBAdminRequiredNotification on the main thread so the router can ask for the password.
+#define DBAdminRequiredResult (-20)
+extern NSString *const DBAdminRequiredNotification;
+// Loopback media credential (§8). Every request to this device's own Core media routes adds
+// "X-Doorbell-Local: <token>"; requests to any other host never do.
+extern NSString *const DBLocalMediaHeader;
+NSString *DBLocalMediaToken(void);
+BOOL DBURLIsLoopback(NSURL *url);
+void DBAuthorizeLocalMediaRequest(NSMutableURLRequest *request);
+// The raw header line ("X-Doorbell-Local: ...\r\n") for hand-built HTTP requests, or an
+// empty string when url is not loopback or no token is available.
+NSString *DBLocalMediaHeaderLine(NSURL *url);
 @class DBCallTimingSnapshot;
 
 @interface DBCoreBridge : NSObject
@@ -76,8 +91,9 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (BOOL)setNotice:(NSString *)text forDoor:(NSString *)door expiresMs:(long long)expiresMs;
 - (BOOL)clearNoticeForDoor:(NSString *)door;
 // Trigger the door's configured unlock action. Returns Core's status: 0 queued,
-// -3 when nothing is configured, other negatives for bad arguments. The shell
-// must say so on -3 instead of reporting a silent success.
+// -3 when nothing is configured, -4 when a configured command failed to run,
+// other negatives for bad arguments. The shell must say which instead of
+// reporting a silent success.
 - (int)openDoor:(NSString *)door;
 // Call history. sinceMs of zero reads the whole retained history.
 - (NSDictionary *)callLogSince:(long long)sinceMs limit:(NSInteger)limit;
@@ -147,6 +163,9 @@ typedef void (^DBUiEventHandler)(NSDictionary *ev);
 - (int)verifyAdminPassword:(NSString *)password;
 // current may be empty when no password has been set yet. Returns 0 on success.
 - (int)setAdminPasswordFrom:(NSString *)current to:(NSString *)replacement;
+// Closes the native admin window a successful verification opened (§10). Called when an
+// administrator screen closes and when the app leaves the foreground.
+- (void)adminLock;
 
 // ---- Native configuration writes (spec §5.5) ----
 // Same validation and advisory colour warnings as the web admin. value must be

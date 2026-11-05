@@ -154,11 +154,25 @@ static BOOL DBCoreSipBackendCompiled(void) {
       _effectiveSipBackend = @"core";
     }
 #endif
+    // Core refused a configuration write because the native admin window closed (security
+    // protocol v3 §10). Ask for the password over the current screen; the user then repeats
+    // the action, which Core accepts inside the reopened window.
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(onAdminRequired:)
+                                                 name:DBAdminRequiredNotification
+                                               object:nil];
   }
   return self;
 }
 
+- (void)onAdminRequired:(NSNotification *)note {
+  (void)note;
+  if (_pin && _pin.superview) return;
+  [self requestPinThen:nil];
+}
+
 - (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
   [_recoveryTimer invalidate];
   [_emergencyPresentationTimer invalidate];
   if (_emergencyNotification)
@@ -544,6 +558,9 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)showHomeAnimated:(BOOL)animated {
+  // Returning to the primary screen ends any administrator flow, so the native admin window
+  // closes here rather than lingering behind the kiosk (security protocol v3 §10).
+  [_core adminLock];
   DBScreen *primary = [_boot.role isEqualToString:@"door_station"] ? self.door : self.home;
   [self transitionTo:primary animated:animated];
   [self checkPairingDeferred];

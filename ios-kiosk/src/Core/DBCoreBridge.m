@@ -14,7 +14,10 @@
 #import <mach/mach_time.h>
 #import "DBCallHistoryModel.h"
 #import "DBNoticeModel.h"
+#import "DBHTTPMediaSupport.h"
 #import "doorbell/doorbell.h"
+
+static void *DBCoreSymbol(const char *name);
 
 
 @interface DBCoreBridge ()
@@ -205,53 +208,116 @@ static BOOL DBKeychainPut(NSString *key, NSString *value) {
   return st == errSecSuccess;
 }
 
+NSString *const DBAdminRequiredNotification = @"DBAdminRequiredNotification";
+NSString *const DBLocalMediaHeader = @"X-Doorbell-Local";
+static NSString *gDBLocalMediaToken = nil;
+
+NSString *DBLocalMediaToken(void) {
+  @synchronized([DBCoreBridge class]) { return gDBLocalMediaToken; }
+}
+
+static void DBSetLocalMediaToken(NSString *token) {
+  // The token is ASCII from Core; anything that could break a header line is refused.
+  if ([token rangeOfCharacterFromSet:[NSCharacterSet characterSetWithCharactersInString:@"\r\n:"]]
+          .location != NSNotFound) token = nil;
+  @synchronized([DBCoreBridge class]) { gDBLocalMediaToken = [token length] ? [token copy] : nil; }
+}
+
+BOOL DBURLIsLoopback(NSURL *url) {
+  NSString *host = [[url host] lowercaseString];
+  return [host isEqualToString:@"127.0.0.1"] || [host isEqualToString:@"localhost"] ||
+      [host isEqualToString:@"::1"];
+}
+
+void DBAuthorizeLocalMediaRequest(NSMutableURLRequest *request) {
+  NSString *token = DBLocalMediaToken();
+  if (request == nil || !DBURLIsLoopback([request URL]) || [token length] == 0) return;
+  [request setValue:token forHTTPHeaderField:DBLocalMediaHeader];
+}
+
+NSString *DBLocalMediaHeaderLine(NSURL *url) {
+  NSString *token = DBLocalMediaToken();
+  if (!DBURLIsLoopback(url) || [token length] == 0) return @"";
+  return [NSString stringWithFormat:@"%@: %@\r\n", DBLocalMediaHeader, token];
+}
+
+static void DBPostAdminRequired(void) {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[NSNotificationCenter defaultCenter] postNotificationName:DBAdminRequiredNotification
+                                                        object:nil];
+  });
+}
+
+// Core's HTTPS callback contract is synchronous; the caller is a Core worker thread. The wait is
+// bounded by this timeout, and a call on the main thread is refused rather than freezing the UI.
+static const NSTimeInterval kDBHttpsTimeout = 15;
+
+static NSData *DBHttpsFetch(const char *method, const char *url, const char *headers_json,
+                            const uint8_t *body, size_t body_len, int *status_out) {
+  if (method == NULL || url == NULL || [NSThread isMainThread]) return nil;
+  NSURL *u = [NSURL URLWithString:[NSString stringWithUTF8String:url]];
+  if (u == nil) return nil;
+  NSMutableURLRequest *req =
+      [NSMutableURLRequest requestWithURL:u
+                              cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
+                          timeoutInterval:kDBHttpsTimeout];
+  req.HTTPMethod = [NSString stringWithUTF8String:method];
+  if (headers_json != NULL) {
+    NSData *hd =
+        [[NSString stringWithUTF8String:headers_json] dataUsingEncoding:NSUTF8StringEncoding];
+    id h = hd ? [NSJSONSerialization JSONObjectWithData:hd options:0 error:NULL] : nil;
+    if ([h isKindOfClass:[NSDictionary class]]) {
+      for (NSString *k in (NSDictionary *)h) {
+        [req setValue:[NSString stringWithFormat:@"%@", [(NSDictionary *)h objectForKey:k]]
+          forHTTPHeaderField:k];
+      }
+    }
+  }
+  if (body != NULL && body_len > 0) req.HTTPBody = [NSData dataWithBytes:body length:body_len];
+  NSURLResponse *resp = nil;
+  NSError *err = nil;
+  NSData *respData = [NSURLConnection sendSynchronousRequest:req
+                                           returningResponse:&resp
+                                                       error:&err];
+  if (![resp isKindOfClass:[NSHTTPURLResponse class]]) return nil;
+  if (status_out) *status_out = (int)[(NSHTTPURLResponse *)resp statusCode];
+  return respData ?: [NSData data];
+}
+
 static int DBHttpsRequest(void *user, const char *method, const char *url,
                           const char *headers_json, const uint8_t *body, size_t body_len,
                           char **resp_out, int *status_out) {
   (void)user;
-  if (method == NULL || url == NULL) return -1;
   @autoreleasepool {
-    int rc = -1;
-    NSURL *u = [NSURL URLWithString:[NSString stringWithUTF8String:url]];
-    if (u == nil) return -1;
-    NSMutableURLRequest *req =
-        [NSMutableURLRequest requestWithURL:u
-                                cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                            timeoutInterval:40];
-    req.HTTPMethod = [NSString stringWithUTF8String:method];
-    if (headers_json != NULL) {
-      NSData *hd =
-          [[NSString stringWithUTF8String:headers_json] dataUsingEncoding:NSUTF8StringEncoding];
-      id h = hd ? [NSJSONSerialization JSONObjectWithData:hd options:0 error:NULL] : nil;
-      if ([h isKindOfClass:[NSDictionary class]]) {
-        for (NSString *k in (NSDictionary *)h) {
-          [req setValue:[NSString stringWithFormat:@"%@", [(NSDictionary *)h objectForKey:k]]
-            forHTTPHeaderField:k];
-        }
-      }
-    }
-    if (body != NULL && body_len > 0) req.HTTPBody = [NSData dataWithBytes:body length:body_len];
-    NSURLResponse *resp = nil;
-    NSError *err = nil;
-    NSData *respData = [NSURLConnection sendSynchronousRequest:req
-                                             returningResponse:&resp
-                                                         error:&err];
-    if ([resp isKindOfClass:[NSHTTPURLResponse class]]) {
-      if (status_out) *status_out = (int)[(NSHTTPURLResponse *)resp statusCode];
-      if (resp_out) {
-        NSUInteger n = [respData length];
-        char *buf = (char *)malloc(n + 1);
-        if (buf) {
-          if (n > 0) memcpy(buf, [respData bytes], n);
-          buf[n] = 0;
-          *resp_out = buf;
-          rc = 0;
-        }
-      } else {
-        rc = 0;
-      }
-    }
-    return rc;
+    NSData *respData = DBHttpsFetch(method, url, headers_json, body, body_len, status_out);
+    if (respData == nil) return -1;
+    if (resp_out == NULL) return 0;
+    NSUInteger n = [respData length];
+    char *buf = (char *)malloc(n + 1);
+    if (buf == NULL) return -1;
+    if (n > 0) memcpy(buf, [respData bytes], n);
+    buf[n] = 0;
+    *resp_out = buf;
+    return 0;
+  }
+}
+
+// Binary-safe variant (§13): a body containing NUL bytes is returned whole with its length.
+static int DBHttpsRequestV3(void *user, const char *method, const char *url,
+                            const char *headers_json, const uint8_t *body, size_t body_len,
+                            uint8_t **resp_out, size_t *resp_len_out, int *status_out) {
+  (void)user;
+  @autoreleasepool {
+    NSData *respData = DBHttpsFetch(method, url, headers_json, body, body_len, status_out);
+    if (respData == nil) return -1;
+    if (resp_out == NULL) return 0;
+    NSUInteger n = [respData length];
+    uint8_t *buf = (uint8_t *)malloc(n > 0 ? n : 1);
+    if (buf == NULL) return -1;
+    if (n > 0) memcpy(buf, [respData bytes], n);
+    *resp_out = buf;
+    if (resp_len_out) *resp_len_out = n;
+    return 0;
   }
 }
 
@@ -408,6 +474,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   plat.log_line = DBLogLine;
   plat.tts_speak = DBTtsSpeak;
   plat.https_request = DBHttpsRequest;
+  plat.https_request_v3 = DBHttpsRequestV3;
   plat.secure_get = DBSecureGet;
   plat.secure_put = DBSecurePut;
   plat.device_info = DBDeviceInfo;
@@ -423,6 +490,13 @@ static void DBUiEventCb(void *user, const char *event_json) {
     _core = NULL;
     return NO;
   }
+  typedef const char *(*DBLocalTokenFn)(db_core *);
+  DBLocalTokenFn tokenFn = (DBLocalTokenFn)DBCoreSymbol("db_core_local_token");
+  const char *token = tokenFn ? tokenFn(_core) : NULL;
+  DBSetLocalMediaToken(token ? [NSString stringWithUTF8String:token] : nil);
+  [DBHTTPMediaSupport setRequestDecorator:^(NSMutableURLRequest *request) {
+    DBAuthorizeLocalMediaRequest(request);
+  }];
   // Refresh the callback cache periodically on the main run loop.
   _diTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
                                               target:self
@@ -438,6 +512,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
     [_diTimer invalidate];
     _diTimer = nil;
   }
+  DBSetLocalMediaToken(nil);
   if (_core == NULL) return;
   dispatch_sync(_coreQueue, ^{
     db_core *core = self->_core;
@@ -1324,6 +1399,17 @@ static DBAdminSetFn DBAdminSet(void) {
   return status;
 }
 
+- (void)adminLock {
+  typedef void (*DBAdminLockFn)(db_core *);
+  static DBAdminLockFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBAdminLockFn)DBCoreSymbol("db_core_admin_lock"); });
+  if (fn == NULL) return;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) fn(self->_core);
+  });
+}
+
 #pragma mark - native configuration writes (spec §5.5)
 
 static DBSetConfigFn DBSetConfig(void) {
@@ -1361,6 +1447,7 @@ static DBDeleteConfigFn DBDeleteConfig(void) {
   dispatch_sync(_coreQueue, ^{
     if (self->_core) status = set(self->_core, [k UTF8String], [v UTF8String]);
   });
+  if (status == DBAdminRequiredResult) DBPostAdminRequired();
   return status;
 }
 
@@ -1394,6 +1481,7 @@ static DBDeleteConfigFn DBDeleteConfig(void) {
   dispatch_sync(_coreQueue, ^{
     if (self->_core) status = remove(self->_core, [k UTF8String]);
   });
+  if (status == DBAdminRequiredResult) DBPostAdminRequired();
   return status;
 }
 
@@ -1421,6 +1509,8 @@ static DBWriteWarningsFn DBWriteWarnings(void) {
   dispatch_sync(_coreQueue, ^{
     if (self->_core) out = [self takeJson:batch(self->_core, [json UTF8String])];
   });
+  if ([[out objectForKey:@"error"] isEqual:@"admin_required"] ||
+      [[out objectForKey:@"err"] isEqual:@"admin_required"]) DBPostAdminRequired();
   return out;
 }
 

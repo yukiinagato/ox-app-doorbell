@@ -649,7 +649,11 @@ static const CGFloat kPurposeIconSide = 28;
 }
 
 - (void)onScreenWillDisappear {
-  // Keep observing Core while the admin/info overlay is visible.
+  // Keep observing Core while the admin/info overlay is visible. The keyframe poll keeps running:
+  // remote viewers still receive this station's camera and need their keyframes. The clock is
+  // only drawn here, so it stops until the screen appears again.
+  [_clockTimer invalidate];
+  _clockTimer = nil;
 }
 
 - (void)refreshFromCore {

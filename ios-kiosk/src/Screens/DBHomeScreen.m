@@ -572,6 +572,10 @@ static const NSInteger kRecentCallLimit = 20;
 }
 
 - (void)onScreenWillDisappear {
+  // A hidden home screen draws nothing; its clock restarts on the next appearance, which also
+  // repaints the time immediately. An A4 iPad 1 has no CPU to spare for invisible ticks.
+  [_clockTimer invalidate];
+  _clockTimer = nil;
   [_peersTimer invalidate];
   _peersTimer = nil;
   // Stills are pure decoration: never keep polling five-second JPEGs behind a
@@ -1142,8 +1146,9 @@ static const CGFloat kFooterGlassAlpha = 0.65;
       NSInteger rotation = previousRotation;
       NSURL *metadataURL = [metaURL length] > 0 ? [NSURL URLWithString:metaURL] : nil;
       if (metadataURL != nil) {
-        NSURLRequest *metadataRequest = [NSURLRequest requestWithURL:metadataURL
+        NSMutableURLRequest *metadataRequest = [NSMutableURLRequest requestWithURL:metadataURL
             cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:1.0];
+        DBAuthorizeLocalMediaRequest(metadataRequest);
         NSURLResponse *metadataResponse = nil;
         NSData *metadataData = [NSURLConnection sendSynchronousRequest:metadataRequest
             returningResponse:&metadataResponse error:NULL];
@@ -1153,9 +1158,9 @@ static const CGFloat kFooterGlassAlpha = 0.65;
           rotation = [DBDoorTileModel videoRotationFromMetadata:metadata fallback:rotation];
         }
       }
-      NSURLRequest *request = [NSURLRequest requestWithURL:url
-                                              cachePolicy:NSURLRequestReloadIgnoringLocalCacheData
-                                          timeoutInterval:3.0];
+      NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url
+          cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:3.0];
+      DBAuthorizeLocalMediaRequest(request);
       NSURLResponse *response = nil;
       NSError *error = nil;
       NSData *data = [NSURLConnection sendSynchronousRequest:request returningResponse:&response

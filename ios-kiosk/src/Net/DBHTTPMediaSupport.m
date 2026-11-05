@@ -83,7 +83,13 @@ static BOOL DBHTTPURLQueryContainsCredential(NSURL *url) {
   return NO;
 }
 
+static DBHTTPRequestDecorator gDBHTTPRequestDecorator = nil;
+
 @implementation DBHTTPMediaSupport
+
++ (void)setRequestDecorator:(DBHTTPRequestDecorator)decorator {
+  @synchronized(self) { gDBHTTPRequestDecorator = [decorator copy]; }
+}
 
 + (NSString *)safeURLString:(NSString *)raw {
   if (![raw isKindOfClass:[NSString class]] || [raw length] == 0 ||
@@ -166,6 +172,9 @@ static BOOL DBHTTPURLQueryContainsCredential(NSURL *url) {
   NSDictionary *headers = [self authorizationHeadersForSecret:secret];
   for (NSString *name in headers)
     [request setValue:[headers objectForKey:name] forHTTPHeaderField:name];
+  DBHTTPRequestDecorator decorator = nil;
+  @synchronized(self) { decorator = gDBHTTPRequestDecorator; }
+  if (decorator) decorator(request);
   return request;
 }
 

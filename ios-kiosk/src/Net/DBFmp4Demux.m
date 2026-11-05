@@ -1,3 +1,4 @@
+#import "DBCoreBridge.h"
 #import "DBFmp4Demux.h"
 #import "../Media/DBLiveEdgeGate.h"
 void DBH264Dbg(NSString *fmt, ...);
@@ -184,7 +185,8 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   }
   NSMutableString *req = [NSMutableString stringWithFormat:
       @"GET %@ HTTP/1.1\r\nHost: %@:%ld\r\nUser-Agent: doorbell-kiosk\r\n"
-       "Accept: video/mp4\r\nConnection: close\r\n\r\n", path, host, (long)port];
+       "Accept: video/mp4\r\n%@Connection: close\r\n\r\n", path, host, (long)port,
+      DBLocalMediaHeaderLine(u)];
   NSData *rd = [req dataUsingEncoding:NSUTF8StringEncoding];
   int64_t requestSentMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000.0);
   if (!sendAll(s, [rd bytes], [rd length])) {
