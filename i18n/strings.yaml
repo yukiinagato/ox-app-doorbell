@@ -1908,3 +1908,12 @@ emergency.clear_hold_hint: { ja: "解除するには長押ししてください"
 emergency.clear_confirm: { ja: "緊急警報を解除しますか？ すべての端末で警報が止まります。", en: "Clear the emergency alarm? It stops on every device.", zh: "要解除紧急警报吗？所有设备上的警报都会停止。" }
 emergency.source_time: { ja: "{source} から発報 · {time}", en: "From {source} · {time}", zh: "来自 {source} · {time}" }
 emergency.time_only: { ja: "発報 {time}", en: "Raised at {time}", zh: "触发于 {time}" }
+
+# Asterisk voice menu prompts (tools/gen_asterisk_prompts.sh renders them to audio; Core only).
+core.ivr.menu: { ja: "来客です。お話しする場合は 1、メッセージで返事をする場合は 2、応答しない場合は 9 を押してください。", en: "There is a visitor at the door. Press 1 to talk, 2 to send a reply, or 9 to decline.", zh: "门口有访客。通话请按 1，用消息回复请按 2，不接听请按 9。" }
+core.ivr.reply_menu: { ja: "返事を選んでください。", en: "Choose a reply.", zh: "请选择回复。" }
+core.ivr.reply_option: { ja: "「{label}」は {digit} 番。", en: "For \"{label}\", press {digit}.", zh: "“{label}”请按 {digit}。" }
+core.ivr.reply_back: { ja: "前のメニューに戻るには 0 を押してください。", en: "Press 0 to go back.", zh: "返回上一级请按 0。" }
+core.ivr.invalid: { ja: "入力が正しくありません。", en: "That is not a valid choice.", zh: "输入无效。" }
+core.ivr.reply_sent: { ja: "返事を来客に伝えました。", en: "Your reply has been sent to the visitor.", zh: "已将回复告知访客。" }
+core.ivr.declined: { ja: "この電話では応答しません。ほかの端末では呼び出しが続きます。", en: "This phone will not answer. Other devices keep ringing.", zh: "此电话不接听，其他设备继续响铃。" }

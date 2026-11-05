@@ -190,6 +190,8 @@ class Node {
   std::string operationRequestJson(const std::string& verb, const std::string& request_json);
 #if defined(DB_HTTPD_TEST_HOOKS)
   size_t operationPendingForTesting() const;
+  // Delivers RFC2833 digits as if the active SIP dialog had received them.
+  void injectSipDtmfForTesting(const std::string& digits);
 #endif
 
 
