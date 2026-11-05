@@ -61,7 +61,7 @@ bool findAvcC(const uint8_t* p, size_t n, const uint8_t** out, size_t* out_n, in
     } else if (size == 0) {
       box_size = n - i;
     }
-    if (box_size < header || i + box_size > n) return false;
+    if (box_size < header || box_size > n - i) return false;
     const uint8_t* body = p + i + header;
     size_t body_n = static_cast<size_t>(box_size - header);
     if (type == kAvcC) {
@@ -99,7 +99,7 @@ bool Demuxer::parseAvcC(const uint8_t* p, size_t n, Bytes* sps, Bytes* pps, int*
     if (i + 2 > n) return false;
     size_t len = be16(p + i);
     i += 2;
-    if (i + len > n || len == 0) return false;
+    if (len > n - i || len == 0) return false;
     if (first_sps.empty()) first_sps.assign(p + i, p + i + len);
     i += len;
   }
@@ -109,7 +109,7 @@ bool Demuxer::parseAvcC(const uint8_t* p, size_t n, Bytes* sps, Bytes* pps, int*
     if (i + 2 > n) return false;
     size_t len = be16(p + i);
     i += 2;
-    if (i + len > n || len == 0) return false;
+    if (len > n - i || len == 0) return false;
     if (first_pps.empty()) first_pps.assign(p + i, p + i + len);
     i += len;
   }
@@ -217,14 +217,14 @@ bool Demuxer::handleMoof(const uint8_t* body, size_t n) {
   while (i + 8 <= n) {
     uint32_t size = be32(body + i);
     uint32_t type = be32(body + i + 4);
-    if (size < 8 || i + size > n) return fail("corrupt moof child");
+    if (size < 8 || size > n - i) return fail("corrupt moof child");
     if (type == kTraf) {
       size_t j = i + 8;
       size_t end = i + size;
       while (j + 8 <= end) {
         uint32_t csize = be32(body + j);
         uint32_t ctype = be32(body + j + 4);
-        if (csize < 8 || j + csize > end) return fail("corrupt traf child");
+        if (csize < 8 || csize > end - j) return fail("corrupt traf child");
         const uint8_t* c = body + j + 8;
         size_t cn = csize - 8;
         if (ctype == kTfdt) {
@@ -296,7 +296,7 @@ bool Demuxer::handleMdat(const uint8_t* body, size_t n) {
   size_t off = 0;
   for (size_t s = 0; s < pending_.size(); s++) {
     const TrunSample& ts = pending_[s];
-    if (ts.size < static_cast<uint32_t>(nal_len_size_) || off + ts.size > n)
+    if (ts.size < static_cast<uint32_t>(nal_len_size_) || ts.size > n - off)
       return fail("trun sample size exceeds mdat");
     const uint8_t* sample = body + off;
     size_t remaining = ts.size;
@@ -310,7 +310,7 @@ bool Demuxer::handleMdat(const uint8_t* body, size_t n) {
       uint32_t len = 0;
       for (int b = 0; b < nal_len_size_; b++) len = (len << 8) | sample[i + b];
       i += static_cast<size_t>(nal_len_size_);
-      if (len == 0 || i + len > remaining) return fail("AVCC NAL length exceeds sample");
+      if (len == 0 || len > remaining - i) return fail("AVCC NAL length exceeds sample");
       if ((sample[i] & 0x1f) == 5) has_idr = true;
       appendNal(&nals, sample + i, len);
       i += len;
