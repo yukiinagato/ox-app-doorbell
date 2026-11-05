@@ -4,7 +4,11 @@
 package jp.ox.doorbell
 
 import android.app.Activity
-import android.app.AlertDialog
+import android.app.Dialog
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
+import android.view.Window
+import android.view.WindowManager
 import android.os.Handler
 import android.os.Looper
 import android.text.Editable
@@ -46,7 +50,9 @@ internal object NoticeDialog {
         var expiry = ExpiryChoice.UNTIL_CLEARED
         val existing = NoticeModel.resolve(coreStatus, config, preselectDoor, nowMs)
 
-        val pad = ShellUi.dp(activity, 16)
+        val roles = UiRoles.from(palette)
+        val window = UiKit.window(activity)
+        val pad = ShellUi.dp(activity, UiTokens.SPACE_L)
         val root = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(pad, ShellUi.dp(activity, 8), pad, 0)
@@ -61,6 +67,12 @@ internal object NoticeDialog {
             filters = arrayOf<InputFilter>(InputFilter.LengthFilter(NoticeModel.MAX_TEXT))
             isFocusable = true
             isFocusableInTouchMode = true
+            textSize = UiTokens.sp(UiTokens.BODY)
+            setTextColor(ShellUi.opaque(palette.ink))
+            background = ShellUi.rounded(activity, palette.surfaceAlt, UiTokens.RADIUS_CARD, palette.line)
+            val inset = ShellUi.dp(activity, UiTokens.SPACE_M)
+            setPadding(inset, inset, inset, inset)
+            minHeight = ShellUi.dp(activity, UiTokens.TOUCH_MIN_DP * 2)
         }
         root.addView(field, ShellUi.matchWrap())
 
@@ -119,20 +131,10 @@ internal object NoticeDialog {
             palette,
         ) { }
         fun paintTargets() {
-            globalButton.background = ShellUi.rounded(
-                activity, if (target == NoticeTarget.GLOBAL) palette.accent else palette.surfaceAlt,
-                10,
-            )
-            globalButton.setTextColor(ShellUi.opaque(
-                if (target == NoticeTarget.GLOBAL) palette.accentInk else palette.ink,
-            ))
-            doorButton.background = ShellUi.rounded(
-                activity, if (target == NoticeTarget.DOOR) palette.accent else palette.surfaceAlt,
-                10,
-            )
-            doorButton.setTextColor(ShellUi.opaque(
-                if (target == NoticeTarget.DOOR) palette.accentInk else palette.ink,
-            ))
+            UiKit.styleAction(globalButton, roles,
+                if (target == NoticeTarget.GLOBAL) ActionRole.PRIMARY else ActionRole.SECONDARY)
+            UiKit.styleAction(doorButton, roles,
+                if (target == NoticeTarget.DOOR) ActionRole.PRIMARY else ActionRole.SECONDARY)
         }
         globalButton.setOnClickListener { target = NoticeTarget.GLOBAL; paintTargets() }
         doorButton.setOnClickListener { target = NoticeTarget.DOOR; paintTargets() }
@@ -162,16 +164,14 @@ internal object NoticeDialog {
         )
         val expiryRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         fun paintExpiry() {
-            for ((choice, button) in expiryButtons) {
-                val on = choice == expiry
-                button.background = ShellUi.rounded(
-                    activity, if (on) palette.accent else palette.surfaceAlt, 10,
-                )
-                button.setTextColor(
-                    ShellUi.opaque(if (on) palette.accentInk else palette.ink),
-                )
-            }
+            for ((choice, button) in expiryButtons) UiKit.styleAction(
+                button, roles, if (choice == expiry) ActionRole.PRIMARY else ActionRole.SECONDARY,
+            )
         }
+        // Three presets share a row, except at large text on a compact window where each takes
+        // its own full-width row so no label is cut.
+        val stackExpiry = window.sizeClass == SizeClass.COMPACT && window.largeText
+        if (stackExpiry) expiryRow.orientation = LinearLayout.VERTICAL
         for ((choice, label) in expiryLabels) {
             val button = ShellUi.button(activity, label, palette) {
                 expiry = choice
@@ -180,8 +180,10 @@ internal object NoticeDialog {
             expiryButtons[choice] = button
             expiryRow.addView(
                 button,
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    leftMargin = if (expiryButtons.size == 1) 0 else ShellUi.dp(activity, 4)
+                if (stackExpiry) ShellUi.matchWrap().apply {
+                    topMargin = if (expiryButtons.size == 1) 0 else ShellUi.dp(activity, UiTokens.SPACE_S)
+                } else LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                    leftMargin = if (expiryButtons.size == 1) 0 else ShellUi.dp(activity, UiTokens.SPACE_S)
                 },
             )
         }
@@ -194,14 +196,47 @@ internal object NoticeDialog {
         }
         root.addView(status, ShellUi.matchWrap())
 
+        // A sheet (guidelines: radius 20, fixed action zone): bottom sheet on compact windows,
+        // a centred panel otherwise. Built from plain views so API 19 looks the same.
         val scroll = ScrollView(activity).apply { addView(root) }
-        val dialog = AlertDialog.Builder(activity)
-            .setTitle(texts.t("notice.title", R.string.notice_title))
-            .setView(scroll)
-            .setPositiveButton(texts.t("notice.publish", R.string.notice_publish), null)
-            .setNeutralButton(texts.t("notice.clear", R.string.notice_clear), null)
-            .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
-            .create()
+        val sheet = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            background = ShellUi.rounded(activity, palette.surface, UiTokens.RADIUS_SHEET)
+            setPadding(0, pad, 0, pad)
+        }
+        sheet.addView(UiKit.text(activity, texts.t("notice.title", R.string.notice_title),
+                                 UiTokens.TITLE, palette.ink, bold = true).apply {
+            setPadding(pad, 0, pad, ShellUi.dp(activity, UiTokens.SPACE_S))
+        }, ShellUi.matchWrap())
+        sheet.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f,
+        ))
+        val publishButton = UiKit.actionButton(
+            activity, texts.t("notice.publish", R.string.notice_publish), roles, ActionRole.PRIMARY,
+        ) { }
+        val clearButton = UiKit.actionButton(
+            activity, texts.t("notice.clear", R.string.notice_clear), roles, ActionRole.NEGATIVE,
+        ) { }
+        val dialog = Dialog(activity)
+        val cancelButton = UiKit.actionButton(
+            activity, texts.t("admin.cancel", R.string.admin_cancel), roles, ActionRole.SECONDARY,
+        ) { dialog.dismiss() }
+        // Destructive on the start edge, the primary action last where the thumb ends.
+        val actions = UiKit.row(activity, listOf(clearButton to 1f, cancelButton to 1f, publishButton to 1.4f))
+        actions.setPadding(pad, ShellUi.dp(activity, UiTokens.SPACE_M), pad, 0)
+        sheet.addView(actions, ShellUi.matchWrap())
+        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
+        dialog.setContentView(sheet)
+        dialog.window?.let { w ->
+            w.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+            val compact = window.sizeClass == SizeClass.COMPACT
+            w.setGravity(if (compact) Gravity.BOTTOM else Gravity.CENTER)
+            w.setLayout(
+                if (compact) WindowManager.LayoutParams.MATCH_PARENT
+                else ShellUi.dp(activity, 560),
+                WindowManager.LayoutParams.WRAP_CONTENT,
+            )
+        }
 
         val ui = Handler(Looper.getMainLooper())
         fun report(view: TextView, message: String, isError: Boolean) {
@@ -249,10 +284,8 @@ internal object NoticeDialog {
             }, "doorbell-notice").apply { isDaemon = true }.start()
         }
 
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { apply(false) }
-            dialog.getButton(AlertDialog.BUTTON_NEUTRAL).setOnClickListener { apply(true) }
-        }
+        publishButton.setOnClickListener { apply(false) }
+        clearButton.setOnClickListener { apply(true) }
         dialog.show()
     }
 
