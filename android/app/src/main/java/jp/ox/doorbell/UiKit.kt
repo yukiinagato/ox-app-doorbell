@@ -13,6 +13,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 
@@ -136,10 +137,11 @@ internal object UiKit {
                 if (active) background = ShellUi.rounded(context, roles.accent, UiTokens.RADIUS_CARD)
                 setOnClickListener { onSelect(item) }
                 val ink = if (active) roles.onAccent else roles.onSurface
-                addView(text(context, item.glyph, UiTokens.TITLE, ink).apply {
-                    gravity = Gravity.CENTER
+                addView(ImageView(context).apply {
+                    setImageResource(item.icon)
+                    setColorFilter(ShellUi.opaque(ink))
                     importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                })
+                }, LinearLayout.LayoutParams(ShellUi.dp(context, 24), ShellUi.dp(context, 24)))
                 addView(text(context, item.label, UiTokens.CAPTION, ink, bold = active).apply {
                     gravity = Gravity.CENTER
                     maxLines = 2
@@ -154,6 +156,21 @@ internal object UiKit {
                 addView(cell, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             }
         }
+    }
+
+    /** The icon for a recorded call's outcome, shared by the dashboard and the history. */
+    fun outcomeIcon(outcome: CallOutcome): Int = when (outcome) {
+        CallOutcome.ANSWERED -> R.drawable.ic_tabler_phone
+        CallOutcome.MISSED -> R.drawable.ic_tabler_phone_off
+        CallOutcome.REPLIED -> R.drawable.ic_tabler_message_reply
+        CallOutcome.CANCELLED -> R.drawable.ic_tabler_x
+    }
+
+    fun outcomeLabel(texts: Texts, outcome: CallOutcome): String = when (outcome) {
+        CallOutcome.MISSED -> texts.t("history.outcome_missed", R.string.history_outcome_missed)
+        CallOutcome.ANSWERED -> texts.t("history.outcome_answered", R.string.history_outcome_answered)
+        CallOutcome.REPLIED -> texts.t("history.outcome_replied", R.string.history_outcome_replied)
+        CallOutcome.CANCELLED -> texts.t("history.outcome_cancelled", R.string.history_outcome_cancelled)
     }
 
     /**
@@ -203,5 +220,5 @@ internal object UiKit {
     }
 }
 
-/** One navigation destination; [glyph] is a short text icon so API 19 needs no vector assets. */
-internal data class NavItem(val id: String, val label: String, val glyph: String)
+/** One navigation destination; [icon] is a drawable the build rasterises for API 19. */
+internal data class NavItem(val id: String, val label: String, val icon: Int)

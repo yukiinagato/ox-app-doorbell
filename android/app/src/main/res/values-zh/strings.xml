@@ -440,6 +440,8 @@
     <string name="cluster_indoor_panels_a11y">室内机 %1$s/%2$s 台在线</string>
     <string name="dash_address_count">%1$s 个地址</string>
     <string name="dash_admin">管理</string>
+    <string name="dash_chip_offline">%1$s 台离线</string>
+    <string name="dash_chip_sos">SOS 报警中</string>
     <string name="dash_count_cluster">集群设备 %1$s 台</string>
     <string name="dash_count_devices">设备 %1$s 台</string>
     <string name="dash_count_door_stations">门口机 %1$s / %2$s 台在线</string>
@@ -452,6 +454,9 @@
     <string name="dash_notice_global">公告（全部门口）</string>
     <string name="dash_recent_calls">呼叫记录</string>
     <string name="dash_see_all">查看全部</string>
+    <string name="dash_state_idle">空闲</string>
+    <string name="dash_state_in_call">通话中</string>
+    <string name="dash_state_ringing">呼叫中</string>
     <string name="dash_tile_no_station">无门口机</string>
     <string name="dash_tile_no_still">暂无静止画</string>
     <string name="dash_tile_offline">离线</string>
@@ -541,6 +546,7 @@
     <string name="history_load_more">加载更多</string>
     <string name="history_mark_seen">全部标为已读</string>
     <string name="history_missed_badge">%1$s 个未接来电</string>
+    <string name="history_no_snapshot">没有图像</string>
     <string name="history_outcome_answered">已接听</string>
     <string name="history_outcome_cancelled">已取消</string>
     <string name="history_outcome_missed">未接</string>
@@ -548,8 +554,10 @@
     <string name="history_page_limit">更早的记录请在网页管理中查看</string>
     <string name="history_see_all">查看全部</string>
     <string name="history_seen_done">已标为已读</string>
+    <string name="history_select_call">选择一条呼叫即可查看详情</string>
     <string name="history_title">呼叫记录</string>
     <string name="history_today">今天</string>
+    <string name="history_unread">未读</string>
     <string name="history_unread_banner">有 %1$s 个未接来电</string>
     <string name="history_yesterday">昨天</string>
     <string name="idle_call">呼叫</string>
@@ -624,6 +632,10 @@
     <string name="monitor_live">实时画面</string>
     <string name="monitor_open">查看门口机</string>
     <string name="monitor_title">%1$s 实时画面</string>
+    <string name="nav_history">记录</string>
+    <string name="nav_home">首页</string>
+    <string name="nav_monitor">监视</string>
+    <string name="nav_settings">设置</string>
     <string name="notice_active">显示中</string>
     <string name="notice_char_count">%1$s/200</string>
     <string name="notice_chip">公告</string>
@@ -791,6 +803,7 @@
     <string name="pair_tab">添加设备</string>
     <string name="pair_title_unpaired">将此门铃添加到集群</string>
     <string name="pair_upgrade_rejoin">更新后需要重新配对。请再次将本设备加入集群</string>
+    <string name="pair_upgrade_rejoin_action">重新配对</string>
     <string name="panel_answering">正在接听…</string>
     <string name="panel_auth_failed">面板认证失败</string>
     <string name="panel_back">返回</string>
@@ -1074,6 +1087,8 @@
     <string name="settings_rules_count">%1$s 条</string>
     <string name="settings_save_failed">无法保存</string>
     <string name="settings_saved">已保存</string>
+    <string name="settings_search_empty">没有匹配的设置</string>
+    <string name="settings_search_hint">搜索设置</string>
     <string name="settings_section_cluster">集群</string>
     <string name="settings_section_device">本设备</string>
     <string name="settings_section_doors">门口</string>
@@ -1171,8 +1186,10 @@ PIN：%2$s</string>
     <string name="sos_countdown_cancel">取消</string>
     <string name="sos_countdown_s">可取消的倒计时（秒）</string>
     <string name="sos_hint">触发后会通知所有家人的设备；不会自动联系警察或消防</string>
+    <string name="sos_hold_to_clear">长按以解除</string>
     <string name="sos_mode_hold">长按触发（旧方式）</string>
     <string name="sos_mode_slide">滑动触发</string>
+    <string name="sos_since">自 %1$s 起</string>
     <string name="sos_slide_hint">向右滑动求助</string>
     <string name="sos_slide_label">滑动求助</string>
     <string name="sos_slide_sub">%1$s 秒后发出警报</string>

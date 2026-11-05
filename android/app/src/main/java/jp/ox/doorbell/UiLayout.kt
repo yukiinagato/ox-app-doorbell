@@ -206,3 +206,6 @@ internal fun UiRoles.ink(role: ActionRole): Int = when (role) {
     ActionRole.WARNING -> onWarning
     ActionRole.SECONDARY -> onSurface
 }
+
+/** Ink for an icon or glyph in [role] drawn straight on a surface: the fill, or muted for secondary. */
+internal fun UiRoles.tint(role: ActionRole): Int = if (role == ActionRole.SECONDARY) muted else fill(role)

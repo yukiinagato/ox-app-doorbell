@@ -58,7 +58,7 @@ val doorbellNdk = if (doorbellTier == "legacy19") "25.2.9519653" else "27.1.1229
 // One build number per release; each flavour gets its own versionCode derived from it, so a
 // legacy19 and a modern APK of the same release never share a code (and both stay above the
 // single shared code 27 used through 0.3.26).
-val doorbellBuildNumber = 31
+val doorbellBuildNumber = 32
 fun flavorVersionCode(flavorDigit: Int): Int = doorbellBuildNumber * 10 + flavorDigit
 
 // Release signing comes from Gradle properties or the environment, never from the repository:
@@ -93,7 +93,7 @@ android {
     targetSdk = 35
     testInstrumentationRunner = "jp.ox.doorbell.VisitorUiInstrumentation"
     versionCode = flavorVersionCode(0)
-    versionName = "0.3.30+${doorbellGitRevision.take(7)}"
+    versionName = "0.3.31+${doorbellGitRevision.take(7)}"
     buildConfigField("String", "DOORBELL_SOURCE_ID", "\"$doorbellSourceIdentity\"")
 
     externalNativeBuild {

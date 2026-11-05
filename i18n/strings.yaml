@@ -1397,3 +1397,23 @@ settings.item_rotate_key: { ja: "クラスタの鍵を更新", en: "Rotate the c
 settings.item_rotate_key_note: { ja: "端末を紛失・削除したときに実行します", en: "Do this after a device is lost or removed", zh: "在设备丢失或被移除后执行" }
 settings.item_rotate_key_confirm: { ja: "すべての端末に新しい鍵を配ります。電源が切れている端末は後で鍵を受け取ります。続けますか？", en: "A new key is sent to every device; devices that are off receive it later. Continue?", zh: "将向所有设备分发新密钥；关机的设备稍后接收。要继续吗？" }
 settings.item_rotate_key_started: { ja: "鍵の更新を開始しました", en: "Key rotation started", zh: "已开始更新密钥" }
+
+# Android UI redesign (2026-11, docs/en/ui-guidelines.md): navigation, tile states, header chips,
+# history detail, settings search, and the SOS hold-to-clear gesture.
+nav.home: { ja: "ホーム", en: "Home", zh: "首页" }
+nav.history: { ja: "履歴", en: "History", zh: "记录" }
+nav.monitor: { ja: "モニター", en: "Monitor", zh: "监视" }
+nav.settings: { ja: "設定", en: "Settings", zh: "设置" }
+dash.state_idle: { ja: "待機中", en: "Idle", zh: "空闲" }
+dash.state_ringing: { ja: "呼出中", en: "Ringing", zh: "呼叫中" }
+dash.state_in_call: { ja: "通話中", en: "In call", zh: "通话中" }
+dash.chip_sos: { ja: "SOS 発報中", en: "SOS active", zh: "SOS 报警中" }
+dash.chip_offline: { ja: "{n} 台オフライン", en: "{n} offline", zh: "{n} 台离线" }
+history.select_call: { ja: "呼出を選ぶと詳細が表示されます", en: "Select a call to see its details", zh: "选择一条呼叫即可查看详情" }
+history.unread: { ja: "未確認", en: "Unread", zh: "未读" }
+history.no_snapshot: { ja: "画像はありません", en: "No picture", zh: "没有图像" }
+settings.search_hint: { ja: "設定を検索", en: "Search settings", zh: "搜索设置" }
+settings.search_empty: { ja: "一致する設定はありません", en: "No matching settings", zh: "没有匹配的设置" }
+sos.hold_to_clear: { ja: "長押しで解除", en: "Press and hold to clear", zh: "长按以解除" }
+sos.since: { ja: "{time} から", en: "Since {time}", zh: "自 {time} 起" }
+pair.upgrade_rejoin_action: { ja: "もう一度ペアリングする", en: "Pair again", zh: "重新配对" }

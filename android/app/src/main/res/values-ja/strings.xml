@@ -440,6 +440,8 @@
     <string name="cluster_indoor_panels_a11y">室内機 %1$s/%2$s 台オンライン</string>
     <string name="dash_address_count">%1$s アドレス</string>
     <string name="dash_admin">管理</string>
+    <string name="dash_chip_offline">%1$s 台オフライン</string>
+    <string name="dash_chip_sos">SOS 発報中</string>
     <string name="dash_count_cluster">クラスタの機器 %1$s 台</string>
     <string name="dash_count_devices">機器 %1$s 台</string>
     <string name="dash_count_door_stations">門口機 %1$s / %2$s 台オンライン</string>
@@ -452,6 +454,9 @@
     <string name="dash_notice_global">お知らせ（全体）</string>
     <string name="dash_recent_calls">呼出履歴</string>
     <string name="dash_see_all">すべて見る</string>
+    <string name="dash_state_idle">待機中</string>
+    <string name="dash_state_in_call">通話中</string>
+    <string name="dash_state_ringing">呼出中</string>
     <string name="dash_tile_no_station">門口機なし</string>
     <string name="dash_tile_no_still">静止画なし</string>
     <string name="dash_tile_offline">オフライン</string>
@@ -541,6 +546,7 @@
     <string name="history_load_more">さらに読み込む</string>
     <string name="history_mark_seen">すべて既読にする</string>
     <string name="history_missed_badge">不在着信 %1$s 件</string>
+    <string name="history_no_snapshot">画像はありません</string>
     <string name="history_outcome_answered">応答</string>
     <string name="history_outcome_cancelled">取消</string>
     <string name="history_outcome_missed">不在着信</string>
@@ -548,8 +554,10 @@
     <string name="history_page_limit">これより前は Web 管理でご覧ください</string>
     <string name="history_see_all">すべて見る</string>
     <string name="history_seen_done">既読にしました</string>
+    <string name="history_select_call">呼出を選ぶと詳細が表示されます</string>
     <string name="history_title">呼出履歴</string>
     <string name="history_today">今日</string>
+    <string name="history_unread">未確認</string>
     <string name="history_unread_banner">不在着信が %1$s 件あります</string>
     <string name="history_yesterday">昨日</string>
     <string name="idle_call">呼出</string>
@@ -624,6 +632,10 @@
     <string name="monitor_live">リアルタイム映像</string>
     <string name="monitor_open">門口を見る</string>
     <string name="monitor_title">%1$s ライブ</string>
+    <string name="nav_history">履歴</string>
+    <string name="nav_home">ホーム</string>
+    <string name="nav_monitor">モニター</string>
+    <string name="nav_settings">設定</string>
     <string name="notice_active">表示中</string>
     <string name="notice_char_count">%1$s/200</string>
     <string name="notice_chip">お知らせ</string>
@@ -791,6 +803,7 @@
     <string name="pair_tab">端末を追加</string>
     <string name="pair_title_unpaired">このドアホンをクラスタに追加</string>
     <string name="pair_upgrade_rejoin">更新後の再ペアリングが必要です。もう一度クラスタに追加してください</string>
+    <string name="pair_upgrade_rejoin_action">もう一度ペアリングする</string>
     <string name="panel_answering">応答中…</string>
     <string name="panel_auth_failed">パネル認証に失敗しました</string>
     <string name="panel_back">戻る</string>
@@ -1074,6 +1087,8 @@ ON</string>
     <string name="settings_rules_count">%1$s 件</string>
     <string name="settings_save_failed">保存できませんでした</string>
     <string name="settings_saved">保存しました</string>
+    <string name="settings_search_empty">一致する設定はありません</string>
+    <string name="settings_search_hint">設定を検索</string>
     <string name="settings_section_cluster">クラスタ</string>
     <string name="settings_section_device">この端末</string>
     <string name="settings_section_doors">門口</string>
@@ -1171,8 +1186,10 @@ PIN: %2$s</string>
     <string name="sos_countdown_cancel">取り消す</string>
     <string name="sos_countdown_s">取り消せる秒数</string>
     <string name="sos_hint">発報すると家族全員の端末に通知します。警察や消防には自動で連絡しません</string>
+    <string name="sos_hold_to_clear">長押しで解除</string>
     <string name="sos_mode_hold">長押しで発報 (旧方式)</string>
     <string name="sos_mode_slide">スライドして発報</string>
+    <string name="sos_since">%1$s から</string>
     <string name="sos_slide_hint">右にスライドして助けを呼ぶ</string>
     <string name="sos_slide_label">スライドで SOS</string>
     <string name="sos_slide_sub">%1$s 秒後に発報</string>
