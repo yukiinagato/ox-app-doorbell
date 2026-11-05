@@ -799,7 +799,7 @@
   function installEmergencyOverlay(options) {
     options = options || {};
     var doc = root.document, overlay = null, title = null, detail = null;
-    var trigger = null, triggerLabel = null, triggerHint = null;
+    var trigger = null, triggerLabel = null, triggerHint = null, sosWhen = null;
     var current = { known: false, active: false, source: "none" };
     var expiryTimer = null, expiryKey = "", expired = {}, alarm = null;
     var operationBox = null, operationText = null, operationReason = null, operationHelp = null;
@@ -813,6 +813,7 @@
         ".dbEmergencyOverlay .dbEmergencyInner{position:absolute;left:5%;right:5%;top:18%;}" +
         ".dbEmergencyOverlay h2{font-size:64px;line-height:1.2;margin:0 0 24px;}" +
         ".dbEmergencyOverlay p{font-size:26px;line-height:1.5;margin:8px;}" +
+        ".dbEmergencyOverlay .dbSosWhen{font-size:22px;opacity:.9;margin:16px 0 0;}" +
         ".dbSosTrigger{position:fixed;right:18px;bottom:18px;z-index:2147483645;" +
         "min-width:88px;min-height:88px;padding:10px;border:2px solid #fff;border-radius:44px;" +
         "background:#8f1010;color:#fff;font-weight:bold;line-height:1.1;touch-action:none;}" +
@@ -841,6 +842,10 @@
       title.appendChild(doc.createTextNode(options.title || "SOS"));
       detail.appendChild(doc.createTextNode(options.detail || ""));
       clearInstruction.appendChild(doc.createTextNode(options.clearInstruction || ""));
+      // Source and time of the active SOS (UI guidelines: SOS overlay).
+      sosWhen = doc.createElement("div");
+      sosWhen.className = "dbSosWhen";
+      (overlay.firstChild || overlay).appendChild(sosWhen);
       doc.body.appendChild(overlay);
 
       trigger = doc.createElement("button");
@@ -933,6 +938,16 @@
       if (overlay) {
         overlay.style.display = current.presented ? "block" : "none";
         paintPalette(presentation, rawFallback);
+        if (sosWhen) {
+          var parts = [];
+          if (current.device) parts.push(String(current.device));
+          if (current.wall_ms > 0) {
+            var at = new Date(current.wall_ms);
+            parts.push((at.getHours() < 10 ? "0" : "") + at.getHours() + ":" +
+                       (at.getMinutes() < 10 ? "0" : "") + at.getMinutes());
+          }
+          sosWhen.textContent = current.active ? parts.join(" \u00B7 ") : "";
+        }
       }
       if (trigger) trigger.disabled = current.active || !!(operation && operation.state().busy);
       if (current.active && triggerHold) cancelTriggerHold();

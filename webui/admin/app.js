@@ -7598,7 +7598,7 @@ if (typeof document !== "undefined") (function () {
          (emergencyCfg.cancel_requires_pin !== false ? " checked" : "") + "> " +
          esc(t("sos.cancel_requires_pin")) + "</label>" +
          "<div class='frow'><label class='flab'>" + esc(t("sos.alarm_sound")) + "</label>" +
-         "<div style='display:flex;gap:8px;align-items:center'><select id='sosSound'>";
+         "<div style='display:flex;flex-wrap:wrap;gap:8px;align-items:center'><select id='sosSound'>";
     ringtoneOptions().forEach(function (option) {
       h += "<option value='" + esc(option.v) + "'" +
         ((emergencyCfg.alarm_sound || "siren1") === option.v ? " selected" : "") + ">" +
@@ -7641,7 +7641,7 @@ if (typeof document !== "undefined") (function () {
          "<div class='dim fhint'>" + esc(t("security.fingerprint_hint")) + "</div></div>" +
          "<div class='frow'><label class='flab'>" + esc(t("security.membership")) + "</label>" +
          "<div>" + esc(membershipText(selfMembership)) + "</div></div>" +
-         "<div class='frow'><button class='btn2' id='pskRotate'>" + icon("reload") + " " +
+         "<div class='frow'><button class='btn2 danger' id='pskRotate'>" + icon("reload") + " " +
          esc(t("security.rotate_key")) + "</button>" +
          "<div class='dim fhint'>" + esc(t("security.rotate_key_hint")) + "</div></div>" +
          "<div class='frow'><button class='btn2 danger' id='clusterRebuild'>" +

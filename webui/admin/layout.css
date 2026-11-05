@@ -209,3 +209,7 @@ textarea { max-width:100%; }
   *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important;
                            transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }
+
+/* Renderer rows built with inline flex must wrap at 200% text instead of overflowing. */
+.card [style*="display:flex"], .mbody [style*="display:flex"] { flex-wrap:wrap; }
+.card [style*="display:flex"] input[type=range] { flex:1 1 160px; min-width:0; }

@@ -58,30 +58,49 @@
 <body>
 <div id="soundBand"></div>
 <div id="offlineBand" data-semantic-id="status.offline"></div>
-<div id="pushBar"><button id="pushBtn" type="button"></button>
-  <span id="pushStatus"></span></div>
-<h1 id="title" data-semantic-id="ring.title"><span id="titleText"></span><span
-  id="missedBadge"></span></h1>
-<div id="snapGrid"></div>
-<div id="evCard">
-  <div id="evHead"><h2 id="historyTitle"></h2>
-    <button id="markSeen" type="button"></button></div>
-  <table>
-    <thead><tr><th id="eventTime"></th><th id="eventOutcome"></th><th id="eventDoor"></th>
-      <th id="eventDetail"></th></tr></thead>
-    <tbody id="evBody"></tbody>
-  </table>
-  <div class="evEmpty" id="evEmpty"></div>
+<header id="dashHeader">
+  <h1 id="title" data-semantic-id="ring.title"><span id="titleText"></span></h1>
+  <div id="statusChips" role="status">
+    <span id="clock" class="chip clock"></span>
+    <span id="missedBadge" class="chip negative"></span>
+    <span id="offlineChip" class="chip warning"></span>
+  </div>
+  <div id="pushBar"><button id="pushBtn" type="button"></button>
+    <span id="pushStatus"></span></div>
+</header>
+<nav id="dashTabs" role="tablist">
+  <button type="button" role="tab" id="tabDoors" data-pane="doors" aria-selected="true"></button>
+  <button type="button" role="tab" id="tabHistory" data-pane="history" aria-selected="false"></button>
+</nav>
+<div id="dashBody" data-pane="doors">
+  <section id="doorsPane" aria-labelledby="tabDoors"><div id="snapGrid"></div></section>
+  <section id="historyPane" aria-labelledby="tabHistory">
+    <div id="evCard">
+      <div id="evHead"><h2 id="historyTitle"></h2>
+        <button id="markSeen" type="button"></button></div>
+      <div id="evBody"></div>
+      <div class="evEmpty" id="evEmpty"></div>
+    </div>
+  </section>
 </div>
-<div id="callView">
-  <div class="msg" id="callMsg" data-semantic-id="ring.title"></div>
-  <img id="callImg" alt="">
-
-  <video id="callVideo" style="display:none" muted playsinline autoplay></video>
-  <div id="callActions">
-    <button id="answerBtn" data-semantic-id="ring.action" type="button"></button>
-    <span id="replyActions"></span>
-    <button id="monitorClose" data-semantic-id="monitor.close" type="button"></button>
+<div id="callView" role="dialog" aria-modal="true" aria-labelledby="callMsg">
+  <div class="callMedia">
+    <img id="callImg" alt="">
+    <video id="callVideo" style="display:none" muted playsinline autoplay></video>
+  </div>
+  <div class="callSide">
+    <div class="msg" id="callMsg" data-semantic-id="ring.title"></div>
+    <div id="callBadges"></div>
+    <div id="callActions">
+      <button id="answerBtn" class="positive" data-semantic-id="ring.action" type="button"></button>
+      <button id="replyBtn" type="button" aria-expanded="false" aria-controls="replySheet"></button>
+      <button id="monitorClose" data-semantic-id="monitor.close" type="button"></button>
+    </div>
+  </div>
+  <div id="replySheet" role="dialog" aria-labelledby="replyTitle" hidden>
+    <div class="sheetHead"><h2 id="replyTitle"></h2>
+      <button id="replySheetClose" type="button"></button></div>
+    <div id="replyActions"></div>
   </div>
 </div>
 
@@ -153,12 +172,14 @@
     $("soundBand").innerHTML = esc(t("panel.tap_sound"));
     $("offlineBand").innerHTML = esc(t("panel.offline"));
     $("answerBtn").innerHTML = esc(t("ring.answer"));
-    $("monitorClose").innerHTML = esc(t("monitor.close"));
     $("historyTitle").innerHTML = esc(t("history.title"));
     $("markSeen").innerHTML = esc(t("history.mark_seen"));
-    $("eventTime").innerHTML = esc(t("panel.event_time"));
-    $("eventOutcome").innerHTML = esc(t("panel.event_type"));
-    $("eventDoor").innerHTML = esc(t("panel.event_door"));
+    C.setText($("tabDoors"), t("dash.doors"));
+    C.setText($("tabHistory"), t("history.title"));
+    C.setText($("replyBtn"), t("ring.quick_replies"));
+    C.setText($("replyTitle"), t("reply.choose"));
+    C.setText($("replySheetClose"), t("monitor.close"));
+    C.setText($("monitorClose"), t("ring.ignore"));
     renderCallLog();
     $("pushBtn").innerHTML = esc(pushSubscribed ? t("panel.push_disable") :
       t("panel.push_enable"));
@@ -231,19 +252,39 @@
     grid.innerHTML = "";
     for (var k = 0; k < doors.length; k++) {
       var d = doors[k];
+      // A door tile: preview, name, state chip and last activity. Tapping it opens live view.
       var card = document.createElement("div");
       card.className = "snapCard";
-      var labelEl = document.createElement("div");
-      labelEl.className = "lbl";
-      C.setText(labelEl, d.label);
-      card.appendChild(labelEl);
+      card.setAttribute("data-door", d.id);
+      card.setAttribute("role", "button");
+      card.setAttribute("tabindex", "0");
+      card.onclick = (function (doorId) {
+        return function () { openLive(doorId); };
+      })(d.id);
+      card.onkeydown = (function (doorId) {
+        return function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLive(doorId); } };
+      })(d.id);
+      var media = document.createElement("div");
+      media.className = "tileMedia";
       var v = makeVideo();
       var img = document.createElement("img");
       img.alt = "";
       var live = DoorbellPlayback.peerMediaUrl(d, "mjpeg", window.location);
       if (!LIVE && !live) img.setAttribute("data-snapshot-door", d.id);
-      card.appendChild(img);
-      card.appendChild(v);
+      media.appendChild(img);
+      media.appendChild(v);
+      card.appendChild(media);
+      var foot = document.createElement("div");
+      foot.className = "tileFoot";
+      var labelEl = document.createElement("div");
+      labelEl.className = "lbl";
+      C.setText(labelEl, d.label);
+      var chip = document.createElement("span");
+      chip.className = "chip state";
+      var last = document.createElement("div");
+      last.className = "tileLast";
+      foot.appendChild(labelEl); foot.appendChild(chip); foot.appendChild(last);
+      card.appendChild(foot);
       var fallback = live || snapshotUrl(d.id, +new Date());
       gridStreams[d.id] = DoorbellPlayback.start({ profile: d.playback_profile,
         mp4: DoorbellPlayback.proxyMp4Url(d.id, TOKEN, d.stream_mp4, window.location),
@@ -251,6 +292,57 @@
       grid.appendChild(card);
     }
   }
+  function openLive(doorId) {
+    var url = DoorbellPanelRuntime.panelUrl("call", TOKEN, false, doorId);
+    var hashAt = url.indexOf("#"), hash = hashAt >= 0 ? url.substring(hashAt) : "";
+    var base = hashAt >= 0 ? url.substring(0, hashAt) : url;
+    window.location.href = base + (base.indexOf("?") >= 0 ? "&" : "?") +
+      "lang=" + encodeURIComponent(LANG) + hash;
+  }
+  var TILE_STATE_KEYS = { idle: "dash.state_idle", ringing: "dash.state_ringing",
+                          in_call: "dash.state_in_call", offline: "dash.tile_offline" };
+  // State chips and "last activity" change every poll; they never restart the previews.
+  function updateTiles(doors) {
+    var lastByDoor = {}, rows = callLog.rows || [], offline = 0, i;
+    for (i = 0; i < rows.length; i++) {
+      var r = rows[i] || {};
+      if (r.door && !(Number(lastByDoor[r.door]) >= Number(r.ts))) lastByDoor[r.door] = r.ts;
+    }
+    for (i = 0; i < doors.length; i++) {
+      var d = doors[i], state = C.doorTileState(d);
+      if (state === "offline") offline++;
+      var cards = $("snapGrid").children;
+      for (var c = 0; c < cards.length; c++) {
+        if (cards[c].getAttribute("data-door") !== d.id) continue;
+        cards[c].className = "snapCard is-" + state;
+        var chip = cards[c].getElementsByClassName("state")[0];
+        if (chip) { C.setText(chip, t(TILE_STATE_KEYS[state])); chip.className = "chip state " + state; }
+        var last = cards[c].getElementsByClassName("tileLast")[0];
+        if (last) C.setText(last, lastByDoor[d.id] ? t("dash.last_activity", { time: fmtTime(lastByDoor[d.id]) }) : "");
+        cards[c].setAttribute("aria-label", d.label + ", " + t(TILE_STATE_KEYS[state]));
+      }
+    }
+    var chipEl = $("offlineChip");
+    C.setText(chipEl, offline ? t("dash.offline_count", { n: offline }) : "");
+    chipEl.style.display = offline ? "" : "none";
+  }
+  // Cluster clock: the server's time, ticking locally between polls.
+  var clockSkewMs = 0;
+  function renderClock() {
+    var now = new Date(new Date().getTime() + clockSkewMs);
+    function p(n) { return n < 10 ? "0" + n : n; }
+    C.setText($("clock"), p(now.getHours()) + ":" + p(now.getMinutes()));
+  }
+  setInterval(renderClock, 15000);
+  function selectPane(pane) {
+    $("dashBody").setAttribute("data-pane", pane);
+    var tabs = $("dashTabs").getElementsByTagName("button");
+    for (var i = 0; i < tabs.length; i++)
+      tabs[i].setAttribute("aria-selected", tabs[i].getAttribute("data-pane") === pane ? "true" : "false");
+  }
+  $("tabDoors").onclick = function () { selectPane("doors"); };
+  $("tabHistory").onclick = function () { selectPane("history"); };
+
   setInterval(function () {
     if (LIVE || $("callView").style.display === "block") return;
     var imgs = $("snapGrid").getElementsByTagName("img");
@@ -281,21 +373,45 @@
     var mm = Math.floor(total / 60), ss = total % 60;
     return t("history.duration", { mm_ss: mm + ":" + (ss < 10 ? "0" + ss : ss) });
   }
+  var OUTCOME_ICONS = { answered: "\u2713", replied: "\u21A9", missed: "!", cancelled: "\u00D7" };
+  function hhmm(ms) {
+    var d = new Date(ms);
+    function p(n) { return n < 10 ? "0" + n : n; }
+    return p(d.getHours()) + ":" + p(d.getMinutes());
+  }
+  function dayLabel(group) {
+    if (group.kind === "today") return t("history.today");
+    if (group.kind === "yesterday") return t("history.yesterday");
+    var d = new Date(group.ms);
+    return (d.getMonth() + 1) + "/" + d.getDate();
+  }
+  // Grouped by day; each row is time, door, purpose, outcome (icon + word) and a thumbnail when
+  // the call recorded one. Unread missed calls are marked.
   function renderCallLog() {
-    var rows = callLog.rows || [];
-    var html = "";
-    for (var i = 0; i < rows.length && i < 10; i++) {
-      var r = rows[i] || {};
-      var cls = r.outcome === "missed" ? " class='outMissed'" : "";
-      var detail = "";
-      if (r.answered_by) detail = t("history.answered_by", { device: r.answered_by });
-      var dur = durationLabel(r.duration_ms);
-      if (dur) detail = detail ? detail + " · " + dur : dur;
-      html += "<tr><td class='dim' data-label='" + esc(t("panel.event_time")) + "'>" + fmtTime(r.ts) +
-              "</td><td" + cls + " data-label='" + esc(t("panel.event_type")) + "'>" +
-              esc(outcomeLabel(r.outcome)) + "</td><td data-label='" + esc(t("panel.event_door")) + "'>" +
-              esc(doorLabels[r.door] || r.door || "") + "</td><td class='dim'>" +
-              esc(detail) + "</td></tr>";
+    var rows = displayedRows();
+    var html = "", groups = C.groupByDay(rows, new Date().getTime() + clockSkewMs);
+    for (var g = 0; g < groups.length; g++) {
+      html += "<h3 class='hday'>" + esc(dayLabel(groups[g])) + "</h3><ul class='hlist'>";
+      for (var i = 0; i < groups[g].rows.length; i++) {
+        var r = groups[g].rows[i] || {};
+        var detail = "";
+        if (r.answered_by) detail = t("history.answered_by", { device: r.answered_by });
+        var dur = durationLabel(r.duration_ms);
+        if (dur) detail = detail ? detail + " · " + dur : dur;
+        var purpose = r.purpose ? purposeLabel(r.purpose) : "";
+        var outcome = /^(answered|replied|missed|cancelled)$/.test(r.outcome) ? r.outcome : "other";
+        var unread = outcome === "missed" && r.seen === false;
+        var thumb = /^[0-9a-f]{64}$/.test(String(r.snapshot || "")) ?
+          "<img class='hthumb' alt='' loading='lazy' src='/asset/" + r.snapshot + "'>" : "";
+        html += "<li class='hrow out-" + outcome + (unread ? " unread" : "") + "'>" +
+          "<span class='hicon' aria-hidden='true'>" + esc(OUTCOME_ICONS[outcome] || "\u2022") + "</span>" +
+          "<span class='htime'>" + esc(hhmm(r.ts)) + "</span>" +
+          "<span class='hmain'><span class='hdoor'>" + esc(doorLabels[r.door] || r.door || "") + "</span>" +
+          (purpose ? " <span class='hpurpose'>" + esc(purpose) + "</span>" : "") +
+          "<span class='hout'>" + esc(outcomeLabel(r.outcome)) + (detail ? " · " + esc(detail) : "") +
+          "</span></span>" + thumb + "</li>";
+      }
+      html += "</ul>";
     }
     $("evBody").innerHTML = html;
     $("evEmpty").innerHTML = rows.length ? "" : esc(t("history.empty"));
@@ -303,7 +419,7 @@
     var unread = Number(callLog.unread_missed || 0);
     var badge = $("missedBadge");
     badge.innerHTML = unread > 0 ? esc(t("history.missed_badge", { n: unread })) : "";
-    badge.style.display = unread > 0 ? "inline-block" : "none";
+    badge.style.display = unread > 0 ? "" : "none";
     $("markSeen").style.display = unread > 0 ? "inline-block" : "none";
   }
   function fetchCallLog(force) {
@@ -321,6 +437,40 @@
   // actually displayed. Opening a monitor never clears missed calls for other surfaces, and a
   // call that arrives after the list was drawn stays unread.
   function displayedRows() { return (callLog.rows || []).slice(0, 10); }
+  var purposes = [];
+  function purposeLabel(id) {
+    for (var i = 0; i < purposes.length; i++) {
+      var p = purposes[i] || {};
+      if (p.id !== id) continue;
+      var l = p.label;
+      if (l && typeof l === "object") l = l[LANG] || l.ja || l.en || l.zh;
+      return (p.icon ? p.icon + " " : "") + (l || id);
+    }
+    return id;
+  }
+  var LANGUAGE_NAME_KEYS = { ja: "language.name_ja", en: "language.name_en", zh: "language.name_zh" };
+  function renderCallBadges(calling) {
+    var box = $("callBadges");
+    while (box.firstChild) box.removeChild(box.firstChild);
+    function badge(text) {
+      var el = document.createElement("span");
+      el.className = "chip";
+      C.setText(el, text);
+      box.appendChild(el);
+    }
+    if (calling.purpose) badge(t("ring.purpose_badge", { purpose: purposeLabel(calling.purpose) }));
+    var vl = normalizeLang(calling.visitor_lang);
+    if (vl) badge(t("ring.lang_badge", { lang: t(LANGUAGE_NAME_KEYS[vl]) }));
+  }
+  // Quick replies open as a sheet over the ringing call; the call view stays underneath.
+  function setReplySheet(open) {
+    var sheet = $("replySheet");
+    if (open) sheet.removeAttribute("hidden"); else sheet.setAttribute("hidden", "");
+    $("replyBtn").setAttribute("aria-expanded", open ? "true" : "false");
+    if (open) { var first = $("replyActions").getElementsByTagName("button")[0]; if (first) first.focus(); }
+  }
+  $("replyBtn").onclick = function () { setReplySheet($("replySheet").hasAttribute("hidden")); };
+  $("replySheetClose").onclick = function () { setReplySheet(false); $("replyBtn").focus(); };
   function markSeen() {
     var upTo = C.newestHlc(displayedRows());
     if (!upTo) return;
@@ -378,6 +528,7 @@
           R.panelRequest("POST", "/api/panel/reply", body, function (status) {
             if (status >= 200 && status < 300) {
               $("callMsg").innerHTML = esc(t("reply.sent", { text: chosen.label }));
+              setReplySheet(false);
             } else {
               el.disabled = false;
               $("callMsg").innerHTML = esc(t("reply.failed"));
@@ -400,7 +551,7 @@
         callingDoorId = null;
         callingDoorKey = "";
         stopCallStream();
-        $("callView").style.display = "none";
+        $("callView").style.display = "none"; setReplySheet(false);
         return;
       }
       activeCalling = calling;
@@ -428,12 +579,14 @@
           "lang=" + encodeURIComponent(LANG) + hash;
       };
       renderQuickReplies(calling, quickReplies);
+      renderCallBadges(calling);
+      $("replyBtn").style.display = $("replyActions").getElementsByTagName("button").length ? "" : "none";
       $("monitorClose").onclick = function () {
         dismissedCallKey = callKey;
         callingDoorId = null;
         callingDoorKey = "";
         stopCallStream();
-        $("callView").style.display = "none";
+        $("callView").style.display = "none"; setReplySheet(false);
       };
       $("callView").style.display = "block";
     } else {
@@ -466,8 +619,10 @@
         $("callMsg").innerHTML = esc(t("ring.cancelled") +
           (cancelledDoor ? " (" + cancelledDoor + ")" : ""));
         $("answerBtn").style.display = "none";
+        $("replyBtn").style.display = "none";
+        $("callBadges").innerHTML = "";
         $("callView").style.display = "block";
-      } else $("callView").style.display = "none";
+      } else $("callView").style.display = "none"; setReplySheet(false);
     }
   }
 
@@ -480,10 +635,16 @@
       return;
     }
     emergencyOverlay.update(state);
+    if (state.display && state.display.theme) C.applyColorRoles(state.display.theme);
+    var serverMs = Number(state.server_ts);
+    if (serverMs > 1e12) clockSkewMs = serverMs - new Date().getTime();
+    renderClock();
     var doors = state.doors || [];
+    purposes = state.purposes || [];
     doorLabels = {};
     for (var di = 0; di < doors.length; di++) doorLabels[doors[di].id] = doors[di].label;
     renderSnapGrid(doors);
+    updateTiles(doors);
     fetchCallLog(noteEventStream(state.events || []));
     renderCall(doors, state.events || [], state.quick_replies || []);
     DoorbellPanelRuntime.applySemanticUi(state, { page: "monitor" });

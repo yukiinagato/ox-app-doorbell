@@ -234,6 +234,12 @@
       b.onclick = onPress;
       list.appendChild(b);
     }
+    // One door: its Call button is the primary action in the fixed bottom zone. Several doors:
+    // they are listed in the content area and the zone keeps only Cancel and SOS.
+    var zone = $("visitorActions"), main = $("main");
+    if (doors.length === 1) {
+      if (list.parentNode !== zone) zone.insertBefore(list, zone.firstChild);
+    } else if (list.parentNode !== main) main.insertBefore(list, $("callingView"));
   }
 
   // purpose_first selects before ringing; ring_then_purpose selects after call_id creation.
@@ -267,9 +273,9 @@
     var box = $("purposeStep"), items = [], i;
     for (i = 0; i < lastPurposes.length; i++) {
       var p = lastPurposes[i] || {}, label = labelIn(p.label) || p.id;
-      items.push({ id: String(p.id || ""), text: (p.icon ? p.icon + " " : "") + label });
+      items.push({ id: String(p.id || ""), icon: String(p.icon || ""), text: label });
     }
-    items.push({ id: "", text: t("purpose.skip") });
+    items.push({ id: "", icon: "", text: t("purpose.skip"), skip: true });
     box.style.display = "block";
     var signature = String(afterRing) + ":" + JSON.stringify(items);
     if (purposeMarkup === signature) return;
@@ -278,10 +284,20 @@
     for (i = 0; i < items.length; i++) {
       var b = document.createElement("button");
       b.type = "button";
-      b.className = "purposeBtn";
+      b.className = "purposeBtn" + (items[i].skip ? " skip" : "");
       b.setAttribute("data-semantic-id", "purpose.button");
       b.setAttribute("data-purpose", items[i].id);
-      C.setText(b, items[i].text);
+      if (items[i].icon) {
+        var icon = document.createElement("span");
+        icon.className = "pIcon";
+        icon.setAttribute("aria-hidden", "true");
+        C.setText(icon, items[i].icon);
+        b.appendChild(icon);
+      }
+      var text = document.createElement("span");
+      text.className = "pLabel";
+      C.setText(text, items[i].text);
+      b.appendChild(text);
       b.onclick = (function (purpose) {
         return function () { choosePurpose(purpose, afterRing); };
       })(items[i].id);
@@ -601,6 +617,9 @@
         scheduleReset(currentCall, 800);
       }
     }
+    if (state.display && state.display.theme) C.applyColorRoles(state.display.theme);
+    var pending = currentCall && !currentCall.preflight && !currentCall.inCall && !currentCall.terminal;
+    $("callingView").className = pending ? "pending" : "";
     DoorbellPanelRuntime.applySemanticUi(state, { page: "door" });
   }
   function poll() {

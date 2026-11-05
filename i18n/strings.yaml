@@ -1383,3 +1383,8 @@ pair.security_previous_until: { ja: "{id} は {time} まで受け付けます", 
 pair.security_legacy_peers: { ja: "更新が必要な端末", en: "Devices that need an update", zh: "需要升级的设备" }
 pair.security_rekey_required: { ja: "再配対が必要な端末", en: "Devices that must pair again", zh: "需要重新配对的设备" }
 security.rotate_key_done_id: { ja: "クラスター鍵を {id} に更新しました", en: "Cluster key rotated to {id}", zh: "集群密钥已轮换为 {id}" }
+dash.state_idle: { ja: "待機中", en: "Idle", zh: "待机" }
+dash.state_ringing: { ja: "呼び出し中", en: "Ringing", zh: "正在呼叫" }
+dash.state_in_call: { ja: "通話中", en: "In call", zh: "通话中" }
+dash.last_activity: { ja: "最後の呼び出し {time}", en: "Last call {time}", zh: "最近呼叫 {time}" }
+dash.offline_count: { ja: "{n} 台オフライン", en: "{n} offline", zh: "{n} 台离线" }
