@@ -147,6 +147,18 @@ class Store {
   bool eventCoverageSet(const std::map<std::string, uint64_t>& coverage);
   std::map<std::string, uint64_t> eventCoverage();
 
+  // Highest stored sequence of every origin (event_origin_state.max_seq).
+  std::map<std::string, uint64_t> eventMaxSeqs();
+  // Drops the history a device carried out of a cluster it left, before it joins or founds
+  // another one. Every other origin's events, buffered gaps, backfill marks and origin state are
+  // deleted. This device's own events up to until[self_origin] keep their sequence numbers, so
+  // peers of the next cluster still see one contiguous origin, but become content-free
+  // "archived" records that no projection reads. The call projection and door fence are rebuilt,
+  // and the call-log watermark, the press counter, replication coverage and queued Telegram
+  // sends of the old cluster are cleared. All in one transaction.
+  bool discardPreviousClusterEvents(const std::map<std::string, uint64_t>& until,
+                                    const std::string& self_origin);
+
   struct CallProjection {
     std::string call_id;
     std::string door;
