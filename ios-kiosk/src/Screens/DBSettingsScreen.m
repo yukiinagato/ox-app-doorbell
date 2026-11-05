@@ -2,6 +2,7 @@
 
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
+#import "../Core/DBIconAsset.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBNoticeModel.h"
 #import "../Core/DBPurposeModel.h"
@@ -23,9 +24,12 @@
 @property(nonatomic, copy) NSString *argument;
 @property(nonatomic, assign) BOOL webOnly;
 @property(nonatomic, assign) BOOL destructive;
+// [[value, label], ...] for "segment" and "choose" rows; `value` holds the label.
+@property(nonatomic, copy) NSArray *choices;
 @end
 
 @implementation DBSettingsRow
+@synthesize choices = _choices;
 @synthesize title = _title, value = _value, action = _action, argument = _argument,
             webOnly = _webOnly, destructive = _destructive;
 @end
@@ -79,7 +83,11 @@ static NSArray *DBCommonTimeZones(void) {
 - (void)layoutSubviews {
   [super layoutSubviews];
   BOOL hasValue = [self.detailTextLabel.text length] > 0;
-  CGFloat available = MAX(120, CGRectGetWidth(self.bounds) - 64);
+  // A switch, stepper or segmented control sits at the trailing edge; the
+  // labels share what is left.
+  CGFloat control = self.accessoryView && CGRectGetWidth(self.accessoryView.bounds) > 20
+      ? CGRectGetWidth(self.accessoryView.bounds) + 12 : 0;
+  CGFloat available = MAX(120, CGRectGetWidth(self.bounds) - 64 - control);
   CGFloat titleWidth = hasValue ? available * 0.43 : available;
   CGFloat valueWidth = available * 0.57 - 16;
   CGFloat titleHeight = ceil([self.textLabel sizeThatFits:CGSizeMake(titleWidth, CGFLOAT_MAX)].height);
@@ -102,8 +110,12 @@ static NSArray *DBCommonTimeZones(void) {
     background.layer.mask = mask;
   }
   if (self.accessoryView) {
-    CGRect arrowFrame = CGRectMake(CGRectGetWidth(self.bounds) - 28, (height - 20) / 2, 12, 20);
-    self.accessoryView.frame = [self convertRect:arrowFrame toView:self.accessoryView.superview];
+    CGSize own = self.accessoryView.bounds.size;
+    CGRect frame = control > 0
+        ? CGRectMake(CGRectGetWidth(self.bounds) - 16 - own.width, floor((height - own.height) / 2),
+                     own.width, own.height)
+        : CGRectMake(CGRectGetWidth(self.bounds) - 28, (height - 20) / 2, 12, 20);
+    self.accessoryView.frame = [self convertRect:frame toView:self.accessoryView.superview];
   }
   _rowSeparator.hidden = _lastRow;
   _rowSeparator.frame = CGRectMake(16, height - 0.5, CGRectGetWidth(self.bounds) - 16, 0.5);
@@ -203,8 +215,11 @@ static NSArray *DBCommonTimeZones(void) {
 }
 @end
 
+static const NSInteger kDBRotateKeyAlertTag = 701;
+
 @interface DBSettingsScreen () <UITableViewDataSource, UITableViewDelegate,
-                                UITextFieldDelegate, UIAlertViewDelegate>
+                                UITextFieldDelegate, UIAlertViewDelegate,
+                                UIActionSheetDelegate>
 @end
 
 @implementation DBSettingsScreen {
@@ -232,6 +247,13 @@ static NSArray *DBCommonTimeZones(void) {
   UILabel *_title;
   UIButton *_close;
   UITableView *_table;
+  // Two panes, as in Settings on a larger iPad: categories left, the chosen
+  // category's rows right. Only one category is ever built into cells, which
+  // keeps the A4 from laying out ~60 rows at once.
+  UITableView *_categoryTable;
+  NSString *_selectedId;
+  NSInteger _selectedSection;
+  NSDictionary *_pairing;
   CGFloat _footerWidth;
   UIView *_footerContainer;
   UIView *_adminFooter;
@@ -255,6 +277,7 @@ static NSArray *DBCommonTimeZones(void) {
   NSArray *_pickerAll;
   NSArray *_pickerFiltered;
   NSString *_pickerKey;
+  DBSettingsRow *_pendingChoiceRow;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -288,6 +311,16 @@ static NSArray *DBCommonTimeZones(void) {
   _close.clipsToBounds = YES;
   [_close addTarget:self action:@selector(onClose) forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_close];
+
+  _categoryTable = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
+  _categoryTable.dataSource = self;
+  _categoryTable.delegate = self;
+  _categoryTable.rowHeight = 56;
+  _categoryTable.separatorStyle = UITableViewCellSeparatorStyleNone;
+  _categoryTable.backgroundView = [[UIView alloc] init];
+  _categoryTable.backgroundView.backgroundColor = [UIColor clearColor];
+  _categoryTable.accessibilityIdentifier = @"settings_categories";
+  [self addSubview:_categoryTable];
 
   _table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
   _table.dataSource = self;
@@ -420,17 +453,15 @@ static NSArray *DBCommonTimeZones(void) {
       screen->_localTime = localTime;
       NSString *iso = [DBConfigUtil str:localTime path:@"iso"];
       if ([iso length] == 0) return;
-      for (NSUInteger section = 0; section < [screen->_sections count]; section++) {
-        NSArray *rows = [[screen->_sections objectAtIndex:section] objectForKey:@"rows"];
-        for (NSUInteger index = 0; index < [rows count]; index++) {
-          DBSettingsRow *row = [rows objectAtIndex:index];
-          if (![row.argument isEqualToString:@"local_clock"]) continue;
-          row.value = iso;
-          NSIndexPath *path = [NSIndexPath indexPathForRow:index inSection:section];
-          UITableViewCell *cell = [screen->_table cellForRowAtIndexPath:path];
-          cell.detailTextLabel.text = iso;
-          [cell setNeedsLayout];
-        }
+      NSArray *rows = [screen selectedRows];
+      for (NSUInteger index = 0; index < [rows count]; index++) {
+        DBSettingsRow *row = [rows objectAtIndex:index];
+        if (![row.argument isEqualToString:@"local_clock"]) continue;
+        row.value = iso;
+        NSIndexPath *path = [NSIndexPath indexPathForRow:index inSection:0];
+        UITableViewCell *cell = [screen->_table cellForRowAtIndexPath:path];
+        cell.detailTextLabel.text = iso;
+        [cell setNeedsLayout];
       }
     });
   });
@@ -463,9 +494,11 @@ static NSArray *DBCommonTimeZones(void) {
     NSString *nodeId = [DBConfigUtil str:status path:@"node.id"] ?: @"";
     NSDictionary *audio = [core audioJsonForDevice:nodeId];
     NSDictionary *localTime = [core localTimeJson:0];
+    NSDictionary *pairing = [core pairingInfo];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBSettingsScreen *screen = weakSelf;
       if (!screen || screen->_loadGeneration != generation) return;
+      screen->_pairing = pairing;
       screen->_cfg = cfg;
       screen->_status = status;
       screen->_nodeId = nodeId;
@@ -497,6 +530,7 @@ static NSArray *DBCommonTimeZones(void) {
   _close.layer.borderColor = _palette.separator.CGColor;
   [_close setTitleColor:_palette.ink forState:UIControlStateNormal];
   _table.backgroundColor = _palette.surface;
+  _categoryTable.backgroundColor = _palette.surface;
   _table.separatorColor = _palette.separator;
   _adminFooter.backgroundColor = [_palette plate];
   _adminFooter.layer.cornerRadius = 12;
@@ -515,15 +549,61 @@ static NSArray *DBCommonTimeZones(void) {
     }
   }
   if ([host length] == 0) host = @"127.0.0.1";
-  return [NSString stringWithFormat:@"http://%@:%ld/admin/", [DBConfigUtil urlHost:host],
-                                    (long)_boot.httpPort];
+  // Security protocol v3: the admin is served over HTTPS on 47443 only.
+  return [NSString stringWithFormat:@"https://%@:47443/admin/", [DBConfigUtil urlHost:host]];
 }
 
 #pragma mark - sections
 
 - (NSDictionary *)section:(NSString *)titleKey rows:(NSArray *)rows {
+  return [self section:titleKey rows:rows icon:@"settings" tint:@"#8E8E93"];
+}
+
+// `tint` is the icon tile colour, as on iOS Settings; the glyph is always white.
+- (NSDictionary *)section:(NSString *)titleKey rows:(NSArray *)rows icon:(NSString *)icon
+                     tint:(NSString *)tint {
   return [NSDictionary dictionaryWithObjectsAndKeys:
-      [_texts ts:titleKey], @"title", rows, @"rows", nil];
+      [_texts ts:titleKey], @"title", rows, @"rows", titleKey, @"id", icon, @"icon",
+      tint, @"tint", nil];
+}
+
+- (DBSettingsRow *)toggleRow:(NSString *)title key:(NSString *)key def:(BOOL)def {
+  BOOL on = [DBConfigUtil boolVal:_cfg path:key def:def];
+  return DBRow(title, @"", @"toggle", [NSString stringWithFormat:@"%@|%d", key, on ? 1 : 0]);
+}
+
+- (DBSettingsRow *)stepperRow:(NSString *)title key:(NSString *)key def:(NSInteger)def
+                          min:(NSInteger)min max:(NSInteger)max step:(NSInteger)step
+                         unit:(NSString *)unit {
+  NSInteger value = [DBConfigUtil intVal:_cfg path:key def:def];
+  value = MAX(min, MIN(max, value));
+  NSString *shown = [unit length] > 0 ? [NSString stringWithFormat:@"%ld %@", (long)value, unit]
+                                      : [NSString stringWithFormat:@"%ld", (long)value];
+  return DBRow(title, shown, @"stepper",
+               [NSString stringWithFormat:@"%@|%ld|%ld|%ld|%ld", key, (long)min, (long)max,
+                                          (long)step, (long)value]);
+}
+
+// choices: [[value, label], ...]. Up to three fit a segmented control; more
+// open an action sheet.
+- (DBSettingsRow *)choiceRow:(NSString *)title key:(NSString *)key def:(NSString *)def
+                     choices:(NSArray *)choices {
+  NSString *current = [DBConfigUtil str:_cfg path:key] ?: def;
+  NSString *label = current;
+  for (NSArray *choice in choices)
+    if ([[choice objectAtIndex:0] isEqualToString:current]) label = [choice objectAtIndex:1];
+  DBSettingsRow *row = DBRow(title, label, ([choices count] <= 3 ? @"segment" : @"choose"),
+                             [NSString stringWithFormat:@"%@|%@", key, current]);
+  row.choices = choices;
+  return row;
+}
+
+- (NSArray *)soundChoices:(NSArray *)ids none:(BOOL)none {
+  NSMutableArray *out = [NSMutableArray array];
+  if (none) [out addObject:@[ @"", [_texts ts:@"prefs.sound_none"] ]];
+  for (NSString *sound in ids)
+    [out addObject:@[ sound, [_texts ts:[@"prefs.sound_" stringByAppendingString:sound]] ]];
+  return out;
 }
 
 - (DBSettingsRow *)webOnlyRow:(NSString *)title value:(NSString *)value {
@@ -558,12 +638,18 @@ static NSArray *DBCommonTimeZones(void) {
                         [self appearanceLabel:configured effective:effective],
                         @"cycle",
                         @"display.appearance|auto_schedule,light,dark")];
-  NSString *playback = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
-      @"devices.%@.local.video.playback", _nodeId]] ?: @"low_latency";
-  [rows addObject:[self webOnlyRow:[_texts ts:@"settings.video_playback"] value:playback]];
-  NSString *rotation = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
-      @"devices.%@.local.video.rotation", _nodeId]] ?: @"auto";
-  [rows addObject:[self webOnlyRow:[_texts ts:@"settings.video_rotation"] value:rotation]];
+  if ([_nodeId length] > 0) {
+    NSString *local = [NSString stringWithFormat:@"devices.%@.local.video", _nodeId];
+    [rows addObject:[self choiceRow:[_texts ts:@"settings.video_playback"]
+                                key:[local stringByAppendingString:@".playback"] def:@"low_latency"
+                            choices:@[ @[ @"low_latency", [_texts ts:@"prefs.playback_low_latency"] ],
+                                       @[ @"hls", @"HLS" ], @[ @"mjpeg", @"MJPEG" ] ]]];
+    [rows addObject:[self choiceRow:[_texts ts:@"settings.video_rotation"]
+                                key:[local stringByAppendingString:@".rotation"] def:@"auto"
+                            choices:@[ @[ @"auto", [_texts ts:@"admin.rotation_auto"] ],
+                                       @[ @"0", @"0°" ], @[ @"90", @"90°" ],
+                                       @[ @"180", @"180°" ], @[ @"270", @"270°" ] ]]];
+  }
   [rows addObject:[self webOnlyRow:[_texts ts:@"settings.theme_bg"]
                              value:([self themeBackgroundHex] ?: @"")]];
   [rows addObject:[self webOnlyRow:[_texts ts:@"settings.web_only_upload"] value:@""]];
@@ -638,11 +724,7 @@ static NSArray *DBCommonTimeZones(void) {
                         [_texts ts:([source isEqualToString:@"ntp"] ? @"time.source_ntp"
                                                                     : @"time.source_system")],
                         @"", nil)];
-  BOOL ntpOn = [DBConfigUtil boolVal:_cfg path:@"time.ntp.enabled" def:NO];
-  [rows addObject:DBRow([_texts ts:@"time.ntp_enabled"],
-                        [_texts ts:(ntpOn ? @"settings.on" : @"settings.off")],
-                        @"toggle",
-                        [NSString stringWithFormat:@"time.ntp.enabled|%d", ntpOn ? 1 : 0])];
+  [rows addObject:[self toggleRow:[_texts ts:@"time.ntp_enabled"] key:@"time.ntp.enabled" def:NO]];
   NSInteger interval = [DBConfigUtil intVal:_cfg path:@"time.ntp.interval_s" def:86400];
   [rows addObject:DBRow([_texts ts:@"time.interval_s"],
                         [NSString stringWithFormat:@"%ld", (long)interval], @"number",
@@ -683,9 +765,7 @@ static NSArray *DBCommonTimeZones(void) {
       BOOL configuredUnlock = [DBConfigUtil boolVal:unlock path:@"configured" def:NO];
       BOOL showUnlock = [DBConfigUtil boolVal:unlock path:@"show_button"
                                           def:configuredUnlock];
-      [rows addObject:DBRow([_texts ts:@"unlock.title"],
-                            [_texts ts:(showUnlock ? @"settings.on" : @"settings.off")],
-                            @"toggle",
+      [rows addObject:DBRow([_texts ts:@"unlock.title"], @"", @"toggle",
                             [NSString stringWithFormat:@"doors.%@.unlock.show_button|%d",
                                                        door, showUnlock ? 1 : 0])];
     }
@@ -713,11 +793,28 @@ static NSArray *DBCommonTimeZones(void) {
 
 - (NSArray *)ruleRows {
   NSMutableArray *rows = [NSMutableArray array];
-  NSDictionary *rules = [DBConfigUtil dig:_cfg path:@"rules"];
-  NSInteger count = [rules isKindOfClass:[NSDictionary class]] ? (NSInteger)[rules count] : 0;
-  [rows addObject:[self webOnlyRow:[_texts ts:@"admin.rules"]
-                             value:[_texts t:@"settings.rules_count",
-                                        [NSString stringWithFormat:@"%ld", (long)count], nil]]];
+  // Each rule switches on and off here; what a rule does stays in the web admin.
+  for (NSString *root in @[ @"trigger_rules", @"rules" ]) {
+    NSDictionary *rules = [DBConfigUtil dig:_cfg path:root];
+    if (![rules isKindOfClass:[NSDictionary class]]) continue;
+    for (NSString *ruleId in [[rules allKeys] sortedArrayUsingSelector:@selector(compare:)]) {
+      NSDictionary *rule = [rules objectForKey:ruleId];
+      if (![rule isKindOfClass:[NSDictionary class]]) continue;
+      NSString *name = [DBConfigUtil str:rule path:@"name"];
+      if ([name length] == 0) {
+        NSString *key = [NSString stringWithFormat:@"prefs.rule_%@", ruleId];
+        NSString *known = [_texts ts:key];
+        name = [known isEqualToString:key] ? ruleId : known;
+      }
+      [rows addObject:[self toggleRow:name
+                                  key:[NSString stringWithFormat:@"%@.%@.enabled", root, ruleId]
+                                  def:YES]];
+    }
+  }
+  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.rule_edit"] value:@""]];
+  [rows addObject:[self stepperRow:[_texts ts:@"prefs.retention"] key:@"events.retention_days"
+                               def:90 min:1 max:3650 step:30
+                              unit:[_texts ts:@"prefs.unit_days"]]];
   id quiet = [DBConfigUtil dig:_cfg path:@"quiet_hours"];
   [rows addObject:[self webOnlyRow:[_texts ts:@"settings.quiet_hours"]
                              value:[_texts ts:(quiet ? @"settings.configured"
@@ -740,6 +837,120 @@ static NSArray *DBCommonTimeZones(void) {
                         [_texts t:@"settings.rules_count",
                              [NSString stringWithFormat:@"%ld", (long)(count + 1)], nil],
                         @"", nil)];
+  // Security protocol v3 state, from the pairing snapshot.
+  NSDictionary *security = [_pairing isKindOfClass:[NSDictionary class]]
+      ? [_pairing objectForKey:@"security"] : nil;
+  if ([security isKindOfClass:[NSDictionary class]]) {
+    NSString *psk = [DBConfigUtil str:security path:@"psk_id"] ?: @"";
+    if ([psk length] > 0)
+      [rows addObject:DBRow([_texts ts:@"prefs.cluster_key"], psk, @"", nil)];
+    NSInteger stale = 0;
+    for (NSString *key in @[ @"legacy_peers", @"rekey_required" ]) {
+      id list = [security objectForKey:key];
+      if ([list isKindOfClass:[NSArray class]]) stale += (NSInteger)[(NSArray *)list count];
+    }
+    if (stale > 0)
+      [rows addObject:DBRow([_texts ts:@"prefs.members_need_rejoin"],
+                            [_texts t:@"pair.members_need_rejoin",
+                                 [NSString stringWithFormat:@"%ld", (long)stale], nil],
+                            @"", nil)];
+  }
+  BOOL paired = [[DBConfigUtil str:_pairing path:@"state"] isEqualToString:@"ready"];
+  if ([DBCoreBridge supportsKeyRotation] && paired) {
+    DBSettingsRow *rotate = DBRow([_texts ts:@"prefs.rotate_key"], @"", @"rotate_key", nil);
+    rotate.destructive = YES;
+    [rows addObject:rotate];
+  }
+  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.panels"] value:@""]];
+  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.media_sources"] value:@""]];
+  return rows;
+}
+
+- (NSArray *)soundRows {
+  NSMutableArray *rows = [NSMutableArray array];
+  [rows addObject:[self choiceRow:[_texts ts:@"prefs.ringtone"] key:@"ui.ringtone"
+                              def:@"school_chime"
+                          choices:[self soundChoices:@[ @"school_chime", @"ding1", @"ding2",
+                                                        @"classic" ] none:NO]]];
+  [rows addObject:[self toggleRow:[_texts ts:@"prefs.call_sound_loop"] key:@"ui.call_sound_loop"
+                              def:NO]];
+  [rows addObject:[self choiceRow:[_texts ts:@"prefs.button_sound"] key:@"ui.button_sound"
+                              def:@"button_click"
+                          choices:[self soundChoices:@[ @"button_click" ] none:YES]]];
+  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.sound_upload"] value:@""]];
+  return rows;
+}
+
+- (NSArray *)displayRows {
+  NSMutableArray *rows = [NSMutableArray array];
+  [rows addObject:[self stepperRow:[_texts ts:@"prefs.brightness"] key:@"display.brightness"
+                               def:70 min:0 max:100 step:5 unit:@"%"]];
+  [rows addObject:[self toggleRow:[_texts ts:@"prefs.night_mode"] key:@"display.night.enabled"
+                              def:NO]];
+  if ([DBConfigUtil boolVal:_cfg path:@"display.night.enabled" def:NO])
+    [rows addObject:[self stepperRow:[_texts ts:@"prefs.night_brightness"]
+                                 key:@"display.night.brightness" def:15 min:1 max:100 step:5
+                                unit:@"%"]];
+  NSString *saver = @"display.screensaver";
+  NSInteger legacyAfter = [DBConfigUtil intVal:_cfg path:@"display.screensaver_after_s" def:120];
+  [rows addObject:[self toggleRow:[_texts ts:@"prefs.screensaver"]
+                              key:[saver stringByAppendingString:@".enabled"] def:legacyAfter > 0]];
+  [rows addObject:[self stepperRow:[_texts ts:@"prefs.screensaver_after"]
+                               key:[saver stringByAppendingString:@".after_s"]
+                               def:legacyAfter min:10 max:3600 step:10
+                              unit:[_texts ts:@"prefs.unit_seconds"]]];
+  [rows addObject:[self choiceRow:[_texts ts:@"prefs.screensaver_mode"]
+                              key:[saver stringByAppendingString:@".mode"] def:@"dim"
+                          choices:@[ @[ @"dim", [_texts ts:@"prefs.saver_dim"] ],
+                                     @[ @"minimal", [_texts ts:@"prefs.saver_minimal"] ],
+                                     @[ @"clock", [_texts ts:@"prefs.saver_clock"] ] ]]];
+  [rows addObject:[self stepperRow:[_texts ts:@"prefs.screensaver_brightness"]
+                               key:[saver stringByAppendingString:@".brightness"] def:10 min:1
+                               max:100 step:5 unit:@"%"]];
+  return rows;
+}
+
+- (NSArray *)callRows {
+  NSMutableArray *rows = [NSMutableArray array];
+  [rows addObject:[self choiceRow:[_texts ts:@"prefs.call_flow"] key:@"ui.call_flow"
+                              def:@"purpose_first"
+                          choices:@[ @[ @"purpose_first", [_texts ts:@"prefs.flow_purpose_first"] ],
+                                     @[ @"ring_then_purpose",
+                                        [_texts ts:@"prefs.flow_ring_then_purpose"] ] ]]];
+  NSString *seconds = [_texts ts:@"prefs.unit_seconds"];
+  [rows addObject:[self stepperRow:[_texts ts:@"prefs.call_ttl"] key:@"ui.call_ttl_s" def:60
+                               min:10 max:300 step:10 unit:seconds]];
+  [rows addObject:[self stepperRow:[_texts ts:@"prefs.reply_ttl"] key:@"reply.display_ttl_s"
+                               def:8 min:3 max:60 step:1 unit:seconds]];
+  [rows addObject:[self stepperRow:[_texts ts:@"prefs.visitor_lang_revert"]
+                               key:@"ui.visitor_lang_revert_s" def:60 min:5 max:600 step:5
+                              unit:seconds]];
+  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.quick_replies"] value:@""]];
+  return rows;
+}
+
+- (NSArray *)sosRows {
+  NSMutableArray *rows = [NSMutableArray array];
+  [rows addObject:[self stepperRow:[_texts ts:@"prefs.sos_countdown"]
+                               key:@"emergency.trigger.countdown_s" def:3 min:0 max:10 step:1
+                              unit:[_texts ts:@"prefs.unit_seconds"]]];
+  [rows addObject:[self toggleRow:[_texts ts:@"prefs.sos_cancel_pin"]
+                              key:@"emergency.cancel_requires_pin" def:YES]];
+  [rows addObject:[self toggleRow:[_texts ts:@"prefs.sos_web_alerts"]
+                              key:@"emergency.web_active_page_alerts" def:YES]];
+  id roles = [DBConfigUtil dig:_cfg path:@"emergency.button_on_roles"];
+  NSArray *list = [roles isKindOfClass:[NSArray class]] ? roles : @[ @"indoor_panel" ];
+  for (NSArray *role in @[ @[ @"indoor_panel", @"admin.role_indoor" ],
+                           @[ @"door_station", @"admin.role_door" ] ]) {
+    BOOL on = [list containsObject:[role objectAtIndex:0]];
+    [rows addObject:DBRow([NSString stringWithFormat:@"%@ · %@", [_texts ts:@"prefs.sos_roles"],
+                                                     [_texts ts:[role objectAtIndex:1]]],
+                          @"", @"role_toggle",
+                          [NSString stringWithFormat:@"%@|%d", [role objectAtIndex:0], on ? 1 : 0])];
+  }
+  [rows addObject:[self choiceRow:[_texts ts:@"prefs.sos_sound"] key:@"emergency.alarm_sound"
+                              def:@"siren1"
+                          choices:[self soundChoices:@[ @"siren1" ] none:NO]]];
   return rows;
 }
 
@@ -787,21 +998,43 @@ static NSArray *DBCommonTimeZones(void) {
         ((DBVolumeSettingsCell *)cell).editingVolume) return;
   }
   NSMutableArray *sections = [NSMutableArray array];
-  [sections addObject:[self section:@"settings.section_device" rows:[self deviceRows]]];
-  [sections addObject:[self section:@"settings.section_volume" rows:[self volumeRows]]];
-  [sections addObject:[self section:@"settings.section_time" rows:[self timeRows]]];
-  [sections addObject:[self section:@"settings.section_doors" rows:[self doorRows]]];
+  [sections addObject:[self section:@"settings.section_device" rows:[self deviceRows]
+                               icon:@"device-tablet" tint:@"#8E8E93"]];
+  NSMutableArray *sound = [NSMutableArray arrayWithArray:[self volumeRows]];
+  [sound addObjectsFromArray:[self soundRows]];
+  [sections addObject:[self section:@"prefs.sounds" rows:sound icon:@"volume" tint:@"#FF2D55"]];
+  [sections addObject:[self section:@"prefs.display" rows:[self displayRows]
+                               icon:@"palette" tint:@"#007AFF"]];
+  [sections addObject:[self section:@"prefs.calls" rows:[self callRows]
+                               icon:@"phone" tint:@"#34C759"]];
+  [sections addObject:[self section:@"settings.section_doors" rows:[self doorRows]
+                               icon:@"door" tint:@"#FF9500"]];
   NSArray *purposes = [self purposeRows];
   if ([purposes count] > 0)
-    [sections addObject:[self section:@"settings.section_purposes" rows:purposes]];
-  [sections addObject:[self section:@"settings.section_rules" rows:[self ruleRows]]];
-  [sections addObject:[self section:@"settings.section_cluster" rows:[self clusterRows]]];
+    [sections addObject:[self section:@"settings.section_purposes" rows:purposes
+                                 icon:@"message-reply" tint:@"#5AC8FA"]];
+  [sections addObject:[self section:@"prefs.sos" rows:[self sosRows]
+                               icon:@"shield-lock" tint:@"#FF3B30"]];
+  [sections addObject:[self section:@"settings.section_time" rows:[self timeRows]
+                               icon:@"clock" tint:@"#5856D6"]];
+  [sections addObject:[self section:@"settings.section_rules" rows:[self ruleRows]
+                               icon:@"bell" tint:@"#FF3B30"]];
+  [sections addObject:[self section:@"settings.section_cluster" rows:[self clusterRows]
+                               icon:@"topology-star-3" tint:@"#30B0C7"]];
   [sections addObject:[self section:@"settings.section_history"
                                rows:[NSArray arrayWithObject:
                                         DBRow([_texts ts:@"history.title"], @"",
-                                              @"history", nil)]]];
-  [sections addObject:[self section:@"settings.section_info" rows:[self infoRows]]];
+                                              @"history", nil)]
+                               icon:@"list" tint:@"#8E8E93"]];
+  [sections addObject:[self section:@"settings.section_info" rows:[self infoRows]
+                               icon:@"info-circle" tint:@"#8E8E93"]];
   _sections = sections;
+  _selectedSection = 0;
+  for (NSUInteger i = 0; i < [sections count]; i++)
+    if ([[[sections objectAtIndex:i] objectForKey:@"id"] isEqualToString:_selectedId])
+      _selectedSection = (NSInteger)i;
+  _selectedId = [[sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"id"];
+  [_categoryTable reloadData];
 
   _title.text = [_texts ts:@"settings.title"];
   [_close setTitle:[_texts ts:@"settings.close"] forState:UIControlStateNormal];
@@ -813,9 +1046,13 @@ static NSArray *DBCommonTimeZones(void) {
 
 #pragma mark - actions
 
+- (NSArray *)selectedRows {
+  if (_selectedSection < 0 || _selectedSection >= (NSInteger)[_sections count]) return nil;
+  return [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"rows"];
+}
+
 - (DBSettingsRow *)rowAt:(NSIndexPath *)indexPath {
-  if (indexPath.section < 0 || indexPath.section >= (NSInteger)[_sections count]) return nil;
-  NSArray *rows = [[_sections objectAtIndex:(NSUInteger)indexPath.section] objectForKey:@"rows"];
+  NSArray *rows = [self selectedRows];
   if (indexPath.row < 0 || indexPath.row >= (NSInteger)[rows count]) return nil;
   return [rows objectAtIndex:(NSUInteger)indexPath.row];
 }
@@ -1026,6 +1263,7 @@ static NSArray *DBCommonTimeZones(void) {
 }
 
 - (BOOL)alertViewShouldEnableFirstOtherButton:(UIAlertView *)alertView {
+  if (alertView.alertViewStyle != UIAlertViewStylePlainTextInput) return YES;
   NSString *name = [[alertView textFieldAtIndex:0].text stringByTrimmingCharactersInSet:
       [NSCharacterSet whitespaceAndNewlineCharacterSet]];
   return [name length] > 0 && [name length] <= 64;
@@ -1033,6 +1271,10 @@ static NSArray *DBCommonTimeZones(void) {
 
 - (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
   if (buttonIndex == alertView.cancelButtonIndex) return;
+  if (alertView.tag == kDBRotateKeyAlertTag) {
+    [self rotateClusterKey];
+    return;
+  }
   NSString *name = [[alertView textFieldAtIndex:0].text stringByTrimmingCharactersInSet:
       [NSCharacterSet whitespaceAndNewlineCharacterSet]];
   if ([name length] == 0 || [name length] > 64 || [_nodeId length] == 0) {
@@ -1102,6 +1344,28 @@ static NSArray *DBCommonTimeZones(void) {
     });
   } else if ([action isEqualToString:@"notice"]) {
     [self openNoticeDialogForDoor:row.argument];
+  } else if ([action isEqualToString:@"stepper"]) {
+    // A tap on a wide-range stepper row opens the keypad for a typed value.
+    NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+    if ([parts count] == 5) {
+      DBSettingsRow *number = DBRow(row.title, row.value, @"number",
+          [NSString stringWithFormat:@"%@|%@|%@", [parts objectAtIndex:0],
+                                     [parts objectAtIndex:1], [parts objectAtIndex:2]]);
+      [self promptNumberForRow:number];
+    }
+  } else if ([action isEqualToString:@"segment"]) {
+    // The segmented control handles taps itself.
+  } else if ([action isEqualToString:@"choose"]) {
+    [self presentChoicesForRow:row];
+  } else if ([action isEqualToString:@"role_toggle"]) {
+    [self toggleRoleForRow:row];
+  } else if ([action isEqualToString:@"rotate_key"]) {
+    UIAlertView *confirm = [[UIAlertView alloc] initWithTitle:[_texts ts:@"prefs.rotate_key"]
+        message:[_texts ts:@"prefs.rotate_key_confirm"] delegate:self
+        cancelButtonTitle:[_texts ts:@"admin.cancel"]
+        otherButtonTitles:[_texts ts:@"prefs.rotate_key"], nil];
+    confirm.tag = kDBRotateKeyAlertTag;
+    [confirm show];
   } else if ([action isEqualToString:@"add_device"]) {
     [_router showAddDevice];
   } else if ([action isEqualToString:@"history"]) {
@@ -1115,50 +1379,215 @@ static NSArray *DBCommonTimeZones(void) {
   [_router closeSettingsAnimated:YES];
 }
 
+#pragma mark - native controls
+
+- (void)onSwitch:(UISwitch *)sender {
+  NSArray *rows = [self selectedRows];
+  if (sender.tag < 0 || sender.tag >= (NSInteger)[rows count]) return;
+  DBSettingsRow *row = [rows objectAtIndex:(NSUInteger)sender.tag];
+  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+  if ([parts count] != 2) return;
+  if ([row.action isEqualToString:@"role_toggle"]) {
+    [self setRole:[parts objectAtIndex:0] enabled:sender.on];
+    return;
+  }
+  if (![self reportWriteStatus:[_core setConfigKey:[parts objectAtIndex:0] boolValue:sender.on]])
+    [sender setOn:!sender.on animated:YES];
+}
+
+- (void)onStepper:(UIStepper *)sender {
+  NSArray *rows = [self selectedRows];
+  if (sender.tag < 0 || sender.tag >= (NSInteger)[rows count]) return;
+  DBSettingsRow *row = [rows objectAtIndex:(NSUInteger)sender.tag];
+  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+  if ([parts count] != 5) return;
+  // Writes on release only: each change is a replicated config write.
+  [self reportWriteStatus:[_core setConfigKey:[parts objectAtIndex:0]
+                                  numberValue:(NSInteger)sender.value]];
+}
+
+- (void)onStepperChanged:(UIStepper *)sender {
+  UIView *view = sender.superview;
+  while (view && ![view isKindOfClass:[UITableViewCell class]]) view = view.superview;
+  NSArray *rows = [self selectedRows];
+  if (!view || sender.tag < 0 || sender.tag >= (NSInteger)[rows count]) return;
+  DBSettingsRow *row = [rows objectAtIndex:(NSUInteger)sender.tag];
+  NSRange space = [row.value rangeOfString:@" "];
+  NSString *unit = space.location == NSNotFound ? @"" : [row.value substringFromIndex:space.location];
+  if ([row.value hasSuffix:@"%"]) unit = @"%";
+  ((UITableViewCell *)view).detailTextLabel.text =
+      [NSString stringWithFormat:@"%ld%@", (long)sender.value, unit];
+  // UIStepper reports no release on iOS 5; writing after a short pause keeps
+  // a run of taps to one replicated config write.
+  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(onStepper:)
+                                             object:sender];
+  [self performSelector:@selector(onStepper:) withObject:sender afterDelay:0.7];
+}
+
+- (void)onSegment:(UISegmentedControl *)sender {
+  NSArray *rows = [self selectedRows];
+  if (sender.tag < 0 || sender.tag >= (NSInteger)[rows count]) return;
+  DBSettingsRow *row = [rows objectAtIndex:(NSUInteger)sender.tag];
+  NSInteger index = sender.selectedSegmentIndex;
+  if (index < 0 || index >= (NSInteger)[row.choices count]) return;
+  NSString *key = [[row.argument componentsSeparatedByString:@"|"] objectAtIndex:0];
+  [self reportWriteStatus:[_core setConfigKey:key
+      stringValue:[[row.choices objectAtIndex:(NSUInteger)index] objectAtIndex:0]]];
+}
+
+- (void)presentChoicesForRow:(DBSettingsRow *)row {
+  UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:row.title delegate:self
+      cancelButtonTitle:nil destructiveButtonTitle:nil otherButtonTitles:nil];
+  for (NSArray *choice in row.choices) [sheet addButtonWithTitle:[choice objectAtIndex:1]];
+  sheet.cancelButtonIndex = [sheet addButtonWithTitle:[_texts ts:@"admin.cancel"]];
+  _pendingChoiceRow = row;
+  NSUInteger index = [[self selectedRows] indexOfObject:row];
+  CGRect rect = index == NSNotFound ? CGRectMake(CGRectGetMidX(_table.bounds), 0, 1, 1)
+      : [_table rectForRowAtIndexPath:[NSIndexPath indexPathForRow:(NSInteger)index inSection:0]];
+  [sheet showFromRect:rect inView:_table animated:YES];
+}
+
+- (void)actionSheet:(UIActionSheet *)sheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+  DBSettingsRow *row = _pendingChoiceRow;
+  _pendingChoiceRow = nil;
+  if (row == nil || buttonIndex == sheet.cancelButtonIndex || buttonIndex < 0 ||
+      buttonIndex >= (NSInteger)[row.choices count]) return;
+  NSString *key = [[row.argument componentsSeparatedByString:@"|"] objectAtIndex:0];
+  [self reportWriteStatus:[_core setConfigKey:key
+      stringValue:[[row.choices objectAtIndex:(NSUInteger)buttonIndex] objectAtIndex:0]]];
+}
+
+- (void)toggleRoleForRow:(DBSettingsRow *)row {
+  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+  if ([parts count] != 2) return;
+  [self setRole:[parts objectAtIndex:0] enabled:[[parts objectAtIndex:1] integerValue] == 0];
+}
+
+- (void)setRole:(NSString *)role enabled:(BOOL)enabled {
+  id current = [DBConfigUtil dig:_cfg path:@"emergency.button_on_roles"];
+  NSMutableArray *roles = [NSMutableArray arrayWithArray:
+      [current isKindOfClass:[NSArray class]] ? current : @[ @"indoor_panel" ]];
+  [roles removeObject:role];
+  if (enabled) [roles addObject:role];
+  NSData *data = [NSJSONSerialization dataWithJSONObject:roles options:0 error:NULL];
+  NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+  if ([json length] == 0) return;
+  [self reportWriteStatus:[_core setConfigKey:@"emergency.button_on_roles" valueJson:json]];
+}
+
+- (void)rotateClusterKey {
+  __weak DBSettingsScreen *weakSelf = self;
+  [_core rotateClusterKey:^(int result) {
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return;
+    [screen showToast:[screen->_texts ts:(result == 0 ? @"pair.cluster_key_changed"
+                                                      : @"prefs.rotate_key_failed")]];
+    [screen reload];
+  }];
+}
+
 #pragma mark - table
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-  if (tableView == _pickerTable) return 1;
-  return (NSInteger)[_sections count];
+  return 1;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
   if (tableView == _pickerTable) return (NSInteger)[_pickerFiltered count];
-  if (section < 0 || section >= (NSInteger)[_sections count]) return 0;
-  return (NSInteger)[[[_sections objectAtIndex:(NSUInteger)section]
-      objectForKey:@"rows"] count];
+  if (tableView == _categoryTable) return (NSInteger)[_sections count];
+  return (NSInteger)[[self selectedRows] count];
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-  if (tableView == _pickerTable) return nil;
-  if (section < 0 || section >= (NSInteger)[_sections count]) return nil;
-  return [[_sections objectAtIndex:(NSUInteger)section] objectForKey:@"title"];
+  if (tableView != _table) return nil;
+  if (_selectedSection < 0 || _selectedSection >= (NSInteger)[_sections count]) return nil;
+  return [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"title"];
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-  return tableView == _pickerTable ? 0 : 44;
+  return tableView == _table ? 56 : 0;
 }
 
 - (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-  if (tableView == _pickerTable) return nil;
-  UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width, 44)];
+  if (tableView != _table) return nil;
+  // The detail pane's large title names the chosen category.
+  UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width, 56)];
   header.backgroundColor = _palette.surface;
-  UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(16, 14, tableView.bounds.size.width - 32, 24)];
+  UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(8, 14, tableView.bounds.size.width - 16, 30)];
   label.backgroundColor = [UIColor clearColor];
-  label.font = [UIFont systemFontOfSize:13];
-  label.textColor = _palette.mutedInk;
+  label.font = [UIFont boldSystemFontOfSize:24];
+  label.textColor = _palette.ink;
   label.text = [self tableView:tableView titleForHeaderInSection:section];
   [header addSubview:label];
   return header;
 }
 
+- (UITableViewCell *)categoryCellForRow:(NSInteger)index {
+  static NSString *identifier = @"category";
+  UITableViewCell *cell = [_categoryTable dequeueReusableCellWithIdentifier:identifier];
+  if (cell == nil) {
+    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                  reuseIdentifier:identifier];
+    cell.backgroundView = [[UIView alloc] init];
+    cell.selectedBackgroundView = [[UIView alloc] init];
+    cell.backgroundView.layer.cornerRadius = 10;
+    cell.selectedBackgroundView.layer.cornerRadius = 10;
+    cell.textLabel.font = [UIFont systemFontOfSize:17];
+    cell.textLabel.backgroundColor = [UIColor clearColor];
+    cell.textLabel.adjustsFontSizeToFitWidth = YES;
+    cell.textLabel.minimumFontSize = 13;
+    cell.indentationWidth = 46;  // room for the icon tile
+    cell.indentationLevel = 1;
+    UIView *tile = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 30, 30)];
+    tile.layer.cornerRadius = 7;
+    tile.tag = 11;
+    UIImageView *glyph = [[UIImageView alloc] initWithFrame:CGRectMake(5, 5, 20, 20)];
+    glyph.tag = 12;
+    [tile addSubview:glyph];
+    [cell.contentView addSubview:tile];
+  }
+  NSDictionary *section = [_sections objectAtIndex:(NSUInteger)index];
+  BOOL selected = index == _selectedSection;
+  cell.textLabel.text = [section objectForKey:@"title"];
+  cell.textLabel.textColor = _palette.ink;
+  cell.backgroundColor = [UIColor clearColor];
+  cell.backgroundView.backgroundColor = selected ? [_palette plate] : [UIColor clearColor];
+  cell.selectedBackgroundView.backgroundColor = _palette.elevated;
+  cell.accessibilityTraits = selected ? UIAccessibilityTraitSelected : UIAccessibilityTraitNone;
+  UIView *tile = [cell.contentView viewWithTag:11];
+  tile.backgroundColor = [DBConfigUtil parseHexColor:[section objectForKey:@"tint"]];
+  ((UIImageView *)[tile viewWithTag:12]).image =
+      [DBIconAsset tintedImageNamed:[section objectForKey:@"icon"] color:[UIColor whiteColor]
+                               size:CGSizeMake(20, 20)];
+  return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+  if (tableView != _categoryTable) return;
+  // UITableViewCell lays out textLabel after cellForRow, so the tile and the
+  // label are placed here, inset like a grouped list.
+  CGFloat height = tableView.rowHeight;
+  cell.backgroundView.frame = CGRectInset(cell.bounds, 0, 3);
+  cell.selectedBackgroundView.frame = cell.backgroundView.frame;
+  [cell.contentView viewWithTag:11].frame = CGRectMake(12, (height - 30) / 2, 30, 30);
+}
+
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
   if (tableView == _pickerTable) return 58;
+  if (tableView == _categoryTable) return 56;
   DBSettingsRow *row = [self rowAt:indexPath];
-  NSString *value = row.webOnly && [row.value length] == 0
-      ? [_texts ts:@"settings.web_only"] : row.value;
+  NSString *value = row.webOnly ? [NSString stringWithFormat:@"%@ · %@", row.value,
+                                     [_texts ts:@"prefs.open_in_admin"]] : row.value;
   if ([row.action isEqualToString:@"volume_slider"]) return 64;
-  return [DBSettingsCell heightForTitle:row.title value:value width:tableView.bounds.size.width];
+  // Rows with a control lose its width (≈ 110 pt switch/stepper, more for a segment).
+  CGFloat controlWidth = [row.action isEqualToString:@"segment"]
+      ? MIN(360, 120 * [row.choices count]) + 12
+      : ([row.action isEqualToString:@"toggle"] || [row.action isEqualToString:@"stepper"] ||
+         [row.action isEqualToString:@"role_toggle"]) ? 110 : 0;
+  if ([row.action isEqualToString:@"segment"]) value = @"";
+  return MAX(56, [DBSettingsCell heightForTitle:row.title value:value
+                                          width:tableView.bounds.size.width - controlWidth]);
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView
@@ -1177,6 +1606,7 @@ static NSArray *DBCommonTimeZones(void) {
     cell.backgroundColor = _palette.elevated;
     return cell;
   }
+  if (tableView == _categoryTable) return [self categoryCellForRow:indexPath.row];
   DBSettingsRow *row = [self rowAt:indexPath];
   BOOL volumeSlider = [row.action isEqualToString:@"volume_slider"];
   NSString *identifier = volumeSlider ? @"volume_setting" : @"setting";
@@ -1197,8 +1627,7 @@ static NSArray *DBCommonTimeZones(void) {
   cell.detailTextLabel.font = [UIFont systemFontOfSize:15];
   cell.detailTextLabel.textAlignment = NSTextAlignmentRight;
   cell.detailTextLabel.numberOfLines = 0;
-  cell.detailTextLabel.text = row.webOnly && [row.value length] == 0
-      ? [_texts ts:@"settings.web_only"] : row.value;
+  cell.detailTextLabel.text = [row.action isEqualToString:@"segment"] ? @"" : row.value;
   cell.textLabel.textColor = _palette.ink;
   cell.detailTextLabel.textColor = _palette.mutedInk;
   cell.backgroundColor = [UIColor clearColor];
@@ -1211,7 +1640,10 @@ static NSArray *DBCommonTimeZones(void) {
   cell.textLabel.backgroundColor = [UIColor clearColor];
   cell.detailTextLabel.backgroundColor = [UIColor clearColor];
   cell.accessoryType = UITableViewCellAccessoryNone;
-  if ([row.action length] > 0 && !row.webOnly && !volumeSlider) {
+  UIView *control = [self controlForRow:row index:indexPath.row];
+  if (control != nil) {
+    cell.accessoryView = control;
+  } else if ([row.action length] > 0 && !row.webOnly && !volumeSlider) {
     UIImageView *arrow = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 12, 20)];
     arrow.userInteractionEnabled = NO;
     arrow.contentMode = UIViewContentModeCenter;
@@ -1221,8 +1653,14 @@ static NSArray *DBCommonTimeZones(void) {
   } else {
     cell.accessoryView = nil;
   }
-  cell.selectionStyle = [row.action length] > 0 && !volumeSlider ? UITableViewCellSelectionStyleGray
-                                                : UITableViewCellSelectionStyleNone;
+  BOOL tappable = [row.action length] > 0 && !volumeSlider &&
+      ![row.action isEqualToString:@"segment"];
+  cell.selectionStyle = tappable ? UITableViewCellSelectionStyleGray
+                                 : UITableViewCellSelectionStyleNone;
+  if (row.destructive) cell.textLabel.textColor = [UIColor colorWithRed:1 green:0.23f blue:0.19f alpha:1];
+  if (row.webOnly) cell.detailTextLabel.text = [row.value length] > 0
+      ? [NSString stringWithFormat:@"%@ · %@", row.value, [_texts ts:@"prefs.open_in_admin"]]
+      : [_texts ts:@"prefs.open_in_admin"];
   if (volumeSlider) {
     DBVolumeSettingsCell *volumeCell = (DBVolumeSettingsCell *)cell;
     NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
@@ -1262,8 +1700,63 @@ static NSArray *DBCommonTimeZones(void) {
   return cell;
 }
 
+// Native controls are built per bind; a table shows one category, so this is a
+// handful of controls at a time.
+- (UIView *)controlForRow:(DBSettingsRow *)row index:(NSInteger)index {
+  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+  if (([row.action isEqualToString:@"toggle"] || [row.action isEqualToString:@"role_toggle"]) &&
+      [parts count] == 2) {
+    UISwitch *toggle = [[UISwitch alloc] init];
+    toggle.on = [[parts objectAtIndex:1] integerValue] != 0;
+    toggle.tag = index;
+    toggle.accessibilityLabel = row.title;
+    [toggle addTarget:self action:@selector(onSwitch:) forControlEvents:UIControlEventValueChanged];
+    return toggle;
+  }
+  if ([row.action isEqualToString:@"stepper"] && [parts count] == 5) {
+    UIStepper *stepper = [[UIStepper alloc] init];
+    stepper.minimumValue = [[parts objectAtIndex:1] doubleValue];
+    stepper.maximumValue = [[parts objectAtIndex:2] doubleValue];
+    stepper.stepValue = MAX(1, [[parts objectAtIndex:3] doubleValue]);
+    stepper.value = [[parts objectAtIndex:4] doubleValue];
+    stepper.continuous = YES;
+    stepper.tag = index;
+    stepper.accessibilityLabel = row.title;
+    [stepper addTarget:self action:@selector(onStepperChanged:)
+        forControlEvents:UIControlEventValueChanged];
+    return stepper;
+  }
+  if ([row.action isEqualToString:@"segment"] && [row.choices count] > 0) {
+    NSMutableArray *labels = [NSMutableArray array];
+    NSInteger selected = UISegmentedControlNoSegment;
+    NSString *current = [parts count] == 2 ? [parts objectAtIndex:1] : @"";
+    for (NSUInteger i = 0; i < [row.choices count]; i++) {
+      NSArray *choice = [row.choices objectAtIndex:i];
+      [labels addObject:[choice objectAtIndex:1]];
+      if ([[choice objectAtIndex:0] isEqualToString:current]) selected = (NSInteger)i;
+    }
+    UISegmentedControl *segment = [[UISegmentedControl alloc] initWithItems:labels];
+    segment.segmentedControlStyle = UISegmentedControlStyleBar;
+    segment.frame = CGRectMake(0, 0, MIN(360, 120 * [labels count]), 36);
+    segment.selectedSegmentIndex = selected;
+    segment.tag = index;
+    [segment addTarget:self action:@selector(onSegment:) forControlEvents:UIControlEventValueChanged];
+    return segment;
+  }
+  return nil;
+}
+
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
+  if (tableView == _categoryTable) {
+    if (indexPath.row >= (NSInteger)[_sections count] || indexPath.row == _selectedSection) return;
+    _selectedSection = indexPath.row;
+    _selectedId = [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"id"];
+    [_categoryTable reloadData];
+    [_table reloadData];
+    [_table setContentOffset:CGPointZero animated:NO];
+    return;
+  }
   if (tableView == _pickerTable) {
     if (indexPath.row >= (NSInteger)[_pickerFiltered count]) return;
     NSString *zone = [_pickerFiltered objectAtIndex:(NSUInteger)indexPath.row];
@@ -1292,8 +1785,13 @@ static NSArray *DBCommonTimeZones(void) {
   CGFloat pad = 20;
   _title.frame = CGRectMake(100, 16, width - 200, 28);
   _close.frame = CGRectMake(size.width - pad - 80, 6, 80, 44);
-  CGFloat contentWidth = width - 32;
-  _table.frame = CGRectMake(16, 56, contentWidth, MAX(0, size.height - 56));
+  // iPad 1 is 768 or 1024 points wide: the category pane takes a fixed share
+  // and the detail gets the rest.
+  CGFloat paneWidth = width >= 900 ? 280 : 236;
+  _categoryTable.frame = CGRectMake(12, 56, paneWidth, MAX(0, size.height - 56));
+  CGFloat detailX = 12 + paneWidth + 16;
+  CGFloat contentWidth = width - detailX - 16;
+  _table.frame = CGRectMake(detailX, 56, contentWidth, MAX(0, size.height - 56));
   _adminFooter.frame = CGRectMake(0, 20, contentWidth, 116);
   _qr.frame = CGRectMake(20, 22, contentWidth - 40, 72);
   if (_footerWidth != contentWidth) {
