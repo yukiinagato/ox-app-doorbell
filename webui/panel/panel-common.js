@@ -187,12 +187,22 @@
     return { cols: best.cols, rows: best.rows };
   }
 
-  // Placeholder text key for a video area that has no picture yet.
-  function videoPlaceholder(doorState, playbackState) {
+  // Placeholder text key for a video area, or "" when a picture is showing. hasFrame reports a
+  // frame actually on screen: playback keeps the MJPEG picture visible while it retries H.264
+  // ("fallback"), and that picture must not be covered by "Connecting".
+  function videoPlaceholder(doorState, playbackState, hasFrame) {
     if (doorState === "offline") return "dash.tile_offline";
-    if (playbackState === "playing") return "";
+    if (hasFrame || playbackState === "playing") return "";
     if (playbackState === "failed") return "ring.no_video";
     return "video.connecting";
+  }
+
+  // True when an <img> or <video> in a video area is showing a decoded picture.
+  function mediaHasFrame(img, video) {
+    var imgOk = !!img && img.naturalWidth > 0 && !!(img.getAttribute && img.getAttribute("src")) &&
+      img.style.display !== "none" && img.style.visibility !== "hidden";
+    var videoOk = !!video && video.style.display !== "none" && (video.readyState || 0) >= 2;
+    return imgOk || videoOk;
   }
 
   function dayKey(ms) {
@@ -223,5 +233,5 @@
            applyEmergencyText: applyEmergencyText, newestHlc: newestHlc,
            sizeClass: sizeClass, colorRoles: colorRoles, applyColorRoles: applyColorRoles,
            doorTileState: doorTileState, groupByDay: groupByDay, tileGrid: tileGrid,
-           videoPlaceholder: videoPlaceholder };
+           videoPlaceholder: videoPlaceholder, mediaHasFrame: mediaHasFrame };
 });

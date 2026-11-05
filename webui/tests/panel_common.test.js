@@ -116,4 +116,21 @@ for (const page of ["door.html", "monitor.html"]) {
   assert(!/MOCK|mockSessionActive/.test(call), "call page ships no mock path");
 }
 
+{
+  // A visible frame clears the "Connecting" placeholder even while playback retries H.264.
+  const ctx = { window: {}, console };
+  vm.createContext(ctx);
+  vm.runInContext(read("panel-common.js"), ctx);
+  const C = ctx.window.DoorbellPanelCommon || ctx.DoorbellPanelCommon;
+  assert.strictEqual(C.videoPlaceholder("idle", "fallback", false), "video.connecting");
+  assert.strictEqual(C.videoPlaceholder("idle", "fallback", true), "");
+  assert.strictEqual(C.videoPlaceholder("idle", "failed", false), "ring.no_video");
+  assert.strictEqual(C.videoPlaceholder("offline", "playing", true), "dash.tile_offline");
+  const shown = { naturalWidth: 640, style: {}, getAttribute: () => "/x.jpg" };
+  assert.strictEqual(C.mediaHasFrame(shown, null), true);
+  assert.strictEqual(C.mediaHasFrame({ naturalWidth: 640, style: { display: "none" }, getAttribute: () => "/x" }, null), false);
+  assert.strictEqual(C.mediaHasFrame(null, { style: {}, readyState: 3 }), true);
+  assert.strictEqual(C.mediaHasFrame(null, { style: {}, readyState: 0 }), false);
+}
+
 console.log("panel common, CSRF lane and page contracts: PASS");

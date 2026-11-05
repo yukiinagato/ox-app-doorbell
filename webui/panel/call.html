@@ -505,7 +505,8 @@ function selectedRinging() {
 // A video area never shows an empty black box: it names the door and says what is happening.
 function renderPlaceholder() {
   const doorState = selected ? DoorbellPanelCommon.doorTileState(selected) : "idle";
-  const key = selected ? DoorbellPanelCommon.videoPlaceholder(doorState, playbackState) : "";
+  const key = selected ? DoorbellPanelCommon.videoPlaceholder(doorState, playbackState,
+    DoorbellPanelCommon.mediaHasFrame(els.live, els.liveVideo)) : "";
   els.noVideo.style.display = key ? "" : "none";
   els.noVideo.className = "videoPh" + (key === "video.connecting" ? " connecting" : "");
   els.phDoor.textContent = selected ? selected.label || selected.id : "";
@@ -592,6 +593,11 @@ function renderSecondaryActions() {
   renderPlaceholder();
 }
 
+if (els.live && els.live.addEventListener) els.live.addEventListener("load", renderPlaceholder);
+if (els.liveVideo && els.liveVideo.addEventListener) {
+  els.liveVideo.addEventListener("playing", renderPlaceholder);
+  els.liveVideo.addEventListener("loadeddata", renderPlaceholder);
+}
 els.reply.onclick = () => setReplySheet(!!els.replySheet.hidden);
 document.getElementById("replySheetClose").onclick = () => { setReplySheet(false); els.reply.focus(); };
 els.ignore.onclick = () => {

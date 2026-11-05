@@ -288,6 +288,9 @@
       media.appendChild(img);
       media.appendChild(v);
       media.appendChild(makePlaceholder(d.label));
+      var repaint = function () { if (lastDoors) updateTiles(lastDoors); };
+      if (img.addEventListener) img.addEventListener("load", repaint);
+      if (v.addEventListener) { v.addEventListener("playing", repaint); v.addEventListener("loadeddata", repaint); }
       card.appendChild(media);
       var foot = document.createElement("div");
       foot.className = "tileFoot";
@@ -328,7 +331,10 @@
   }
   function paintPlaceholder(ph, doorState, playbackState) {
     if (!ph) return;
-    var key = C.videoPlaceholder(doorState, playbackState);
+    var media = ph.parentNode;
+    var img = media && media.getElementsByTagName ? media.getElementsByTagName("img")[0] : null;
+    var vid = media && media.getElementsByTagName ? media.getElementsByTagName("video")[0] : null;
+    var key = C.videoPlaceholder(doorState, playbackState, C.mediaHasFrame(img, vid));
     ph.style.display = key ? "" : "none";
     ph.className = "videoPh" + (key === "video.connecting" ? " connecting" : "") +
       (doorState === "offline" ? " offline" : "");
@@ -354,6 +360,14 @@
     if (body.style.setProperty) body.style.setProperty("--dash-avail", avail + "px");
   }
   window.addEventListener("resize", function () { dockSos(); layoutTiles(); });
+  (function () {
+    var repaintCall = function () {
+      if (activeCalling) paintPlaceholder($("callPh"), C.doorTileState(activeCalling), callPlayback);
+    };
+    $("callImg").addEventListener("load", repaintCall);
+    $("callVideo").addEventListener("playing", repaintCall);
+    $("callVideo").addEventListener("loadeddata", repaintCall);
+  })();
   function openLive(doorId) {
     var url = DoorbellPanelRuntime.panelUrl("call", TOKEN, false, doorId);
     var hashAt = url.indexOf("#"), hash = hashAt >= 0 ? url.substring(hashAt) : "";
@@ -559,7 +573,7 @@
 
   var callingDoorId = null;
   var callingDoorKey = "";
-  var activeCalling = null, dismissedCallKey = "";
+  var activeCalling = null, dismissedCallKey = "", callPlayback = "loading";
   var cancelledKey = "", cancelledUntil = 0, cancelledDoor = "";
   function callIdentity(calling) {
     return String(calling.call_id || (calling.id + "|" +
@@ -627,13 +641,14 @@
       if (callingDoorKey !== streamKey || !callStream) {
         stopCallStream();
         C.setText($("callPhDoor"), calling.label || calling.id);
+        callPlayback = "loading";
         paintPlaceholder($("callPh"), C.doorTileState(calling), "loading");
         callStream = DoorbellPlayback.start({ profile: calling.playback_profile,
           mp4: DoorbellPlayback.proxyMp4Url(calling.id, TOKEN, calling.stream_mp4, window.location),
           mjpeg: liveMjpegUrl(calling),
           mjpegMode: "image", video: vid, img: img,
           onState: (function (door) {
-            return function (state) { paintPlaceholder($("callPh"), C.doorTileState(door), state); };
+            return function (state) { callPlayback = state; paintPlaceholder($("callPh"), C.doorTileState(door), state); };
           })(calling) });
         callingDoorKey = streamKey;
       }
