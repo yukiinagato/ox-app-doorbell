@@ -989,6 +989,54 @@ static void DBUiEventCb(void *user, const char *event_json) {
   });
 }
 
+typedef int (*DBInviteCodeFn)(db_core *, const char *, const char *);
+typedef int (*DBRotateKeyFn)(db_core *);
+
+static DBInviteCodeFn DBInviteCode(void) {
+  static DBInviteCodeFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBInviteCodeFn)DBCoreSymbol("db_core_invite_device_code"); });
+  return fn;
+}
+
+static DBRotateKeyFn DBRotateKey(void) {
+  static DBRotateKeyFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBRotateKeyFn)DBCoreSymbol("db_core_rotate_cluster_key"); });
+  return fn;
+}
+
++ (BOOL)supportsCodeInvite {
+  return DBInviteCode() != NULL;
+}
+
+- (void)inviteDevice:(NSString *)nodeId code:(NSString *)code {
+  if ([nodeId length] == 0) return;
+  DBInviteCodeFn fn = DBInviteCode();
+  // Old Core: fall back to the code-less invite, which that Core still accepts.
+  if (fn == NULL) { [self inviteDevice:nodeId]; return; }
+  NSString *idStr = [nodeId copy];
+  NSString *codeStr = [code copy] ?: @"";
+  dispatch_async(_coreQueue, ^{
+    // Failures (confirm_code_mismatch, pk_conflict) come back as pairing events.
+    if (self->_core) fn(self->_core, [idStr UTF8String], [codeStr UTF8String]);
+  });
+}
+
++ (BOOL)supportsKeyRotation {
+  return DBRotateKey() != NULL;
+}
+
+- (void)rotateClusterKey:(void (^)(int result))completion {
+  DBRotateKeyFn fn = DBRotateKey();
+  void (^done)(int) = [completion copy];
+  dispatch_async(_coreQueue, ^{
+    int rc = -1;
+    if (fn != NULL && self->_core) rc = fn(self->_core);
+    if (done) dispatch_async(dispatch_get_main_queue(), ^{ done(rc); });
+  });
+}
+
 - (void)denyDevice:(NSString *)nodeId {
   if ([nodeId length] == 0) return;
   NSString *idStr = [nodeId copy];

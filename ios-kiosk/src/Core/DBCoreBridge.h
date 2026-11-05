@@ -201,6 +201,15 @@ NSString *DBLocalMediaHeaderLine(NSURL *url);
 - (int)setMicMuted:(BOOL)muted;
 - (void)removeDevice:(NSString *)nodeId;
 - (void)inviteDevice:(NSString *)nodeId;
+// Security protocol v3: invites with the eight-digit code shown on the new device.
+// YES when this Core build exports db_core_invite_device_code.
++ (BOOL)supportsCodeInvite;
+- (void)inviteDevice:(NSString *)nodeId code:(NSString *)code;
+// Admin action. YES when the Core build can rotate the cluster key.
++ (BOOL)supportsKeyRotation;
+// Completion runs on the main queue with 0, or -2 when unpaired or the key could
+// not be stored (-1 when the Core build lacks the symbol).
+- (void)rotateClusterKey:(void (^)(int result))completion;
 // Short-lived blocklist for one pending device (the "無視" action).
 - (void)denyDevice:(NSString *)nodeId;
 // Re-runs the failed secure_put. Core emits pairing_state either way.

@@ -17,5 +17,8 @@
 - (void)handlePairingModeChanged:(NSDictionary *)ev;
 - (void)handleJoinTokenChanged:(NSDictionary *)ev;
 - (void)handlePairingState:(NSDictionary *)ev;
+// Security protocol v3 events: a peer refused for a reason, and a rotated key.
+- (void)handlePeerRejected:(NSDictionary *)ev;
+- (void)handleClusterKeyChanged:(NSDictionary *)ev;
 
 @end

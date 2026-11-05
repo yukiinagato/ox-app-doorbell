@@ -28,6 +28,12 @@ static UIColor *DBPairOk(void) {
   UIScrollView *_scroll;
   UILabel *_title;
   UILabel *_identity;
+  // Security protocol v3: the eight-digit code an administrator types to add this device,
+  // and the clock hint for beacons that only count within ±120 s.
+  UILabel *_confirmCaption;
+  UILabel *_confirmCode;
+  BOOL _upgradeRejoin;
+  BOOL _ntpOff;
   UIActivityIndicatorView *_spinner;
   UILabel *_status;
   UILabel *_hint;
@@ -153,6 +159,18 @@ static UIColor *DBPairOk(void) {
 
   _identity = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBPairDim() center:YES];
   [_scroll addSubview:_identity];
+
+  _confirmCaption = [self labelWithFont:[UIFont systemFontOfSize:15] color:DBPairDim() center:YES];
+  _confirmCaption.text = [texts ts:@"pair.confirm_code_caption"];
+  _confirmCaption.hidden = YES;
+  [_scroll addSubview:_confirmCaption];
+  // Monospaced digits, sized to be read across a room; drawn once, no animation (A4 budget).
+  _confirmCode = [self labelWithFont:[UIFont fontWithName:@"Courier-Bold" size:56] ?:
+                                         [UIFont boldSystemFontOfSize:56]
+                               color:[UIColor whiteColor] center:YES];
+  _confirmCode.accessibilityIdentifier = @"pair_confirm_code";
+  _confirmCode.hidden = YES;
+  [_scroll addSubview:_confirmCode];
 
   _spinner = [[UIActivityIndicatorView alloc]
       initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
@@ -360,6 +378,9 @@ static UIColor *DBPairOk(void) {
   __weak DBPairingScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSDictionary *info = [core pairingInfo];
+    // Beacons only count within ±120 s; Core does not report skew, so the
+    // useful hint is "network time is off" while this device is still searching.
+    BOOL ntpOff = ![DBConfigUtil boolVal:[core lastConfig] path:@"time.ntp.enabled" def:YES];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBPairingScreen *screen = weakSelf;
       if (!screen) return;
@@ -367,6 +388,7 @@ static UIColor *DBPairOk(void) {
       // The very first snapshot can land before the router has attached the
       // view; the poll timer, not the view tree, is what says we are live.
       if (!screen.superview && !screen->_poll) return;
+      screen->_ntpOff = ntpOff;
       [screen applyPairingInfo:info];
     });
   });
@@ -393,7 +415,12 @@ static UIColor *DBPairOk(void) {
         _identity.text = addr;
       else
         _identity.text = head;
+      NSString *code = [DBConfigUtil evStr:selfInfo key:@"confirm_code"];
+      _confirmCode.text = [code length] == 8
+          ? [NSString stringWithFormat:@"%@ %@", [code substringToIndex:4], [code substringFromIndex:4]]
+          : code;
     }
+    _upgradeRejoin = [DBConfigUtil evBool:info key:@"upgrade_rejoin_required"];
     id token = [info objectForKey:@"token"];
     if ([token isKindOfClass:[NSDictionary class]] &&
         [DBConfigUtil evBool:(NSDictionary *)token key:@"active"]) {
@@ -513,11 +540,23 @@ static UIColor *DBPairOk(void) {
     _status.text = [texts ts:@"pair.joining"];
     _status.textColor = DBPairDim();
     [_spinner startAnimating];
+  } else if (_upgradeRejoin) {
+    // Paired under protocol v2: one clear warning state, then the ordinary join path.
+    _title.text = [texts ts:@"pair.upgrade_title"];
+    _status.text = [texts ts:@"pair.upgrade_body"];
+    _status.textColor = DBPairError();
+    [_spinner stopAnimating];
   } else {
     _status.text = [texts ts:@"pair.searching"];
     _status.textColor = DBPairDim();
     [_spinner startAnimating];
   }
+  BOOL unpaired = [_state isEqualToString:@"unpaired"];
+  _confirmCode.hidden = !unpaired || persistError || showCard || [_confirmCode.text length] == 0;
+  _confirmCaption.hidden = _confirmCode.hidden;
+  if (!_upgradeRejoin || ready || joining) _title.text = [texts ts:@"pair.title_unpaired"];
+  _hint.text = [texts ts:((unpaired && !joining && _ntpOff) ? @"pair.clock_skew"
+                                                            : @"pair.searching_hint")];
   [self setNeedsLayout];
 }
 
@@ -808,6 +847,13 @@ static UIColor *DBPairOk(void) {
   CGFloat identityHeight = [_identity sizeThatFits:CGSizeMake(width, 9999)].height;
   _identity.frame = CGRectMake(pad, y, width, identityHeight);
   y += identityHeight + 12;
+  if (!_confirmCode.hidden) {
+    CGFloat captionHeight = [_confirmCaption sizeThatFits:CGSizeMake(width, 9999)].height;
+    _confirmCaption.frame = CGRectMake(pad, y, width, captionHeight);
+    y += captionHeight + 4;
+    _confirmCode.frame = CGRectMake(pad, y, width, 64);
+    y += 64 + 12;
+  }
 
   CGFloat statusHeight = MAX(24, [_status sizeThatFits:CGSizeMake(width - 40, 9999)].height);
   _status.frame = CGRectMake(pad + 34, y, width - 68, statusHeight);

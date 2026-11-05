@@ -1334,6 +1334,12 @@ static BOOL DBCoreSipBackendCompiled(void) {
     if (_current == _addDevice) [_addDevice handlePendingChanged:ev];
   } else if ([t isEqualToString:@"invite_result"]) {
     if (_current == _addDevice) [_addDevice handleInviteResult:ev];
+  } else if ([t isEqualToString:@"peer_rejected"]) {
+    if (_current == _addDevice) [_addDevice handlePeerRejected:ev];
+    if (_current == _settings) [_settings reload];
+  } else if ([t isEqualToString:@"cluster_key_changed"]) {
+    if (_current == _addDevice) [_addDevice handleClusterKeyChanged:ev];
+    if (_current == _settings) [_settings reload];
   } else if ([t isEqualToString:@"device_joined"]) {
     if (_current == _addDevice) [_addDevice handleDeviceJoined:ev];
     // A door station that just joined must reach the monitor list without
