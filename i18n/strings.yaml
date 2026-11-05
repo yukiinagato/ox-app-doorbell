@@ -667,7 +667,7 @@ pair.added: { ja: "追加しました", en: "Added", zh: "已添加" }
 pair.add_failed: { ja: "追加できませんでした", en: "Couldn't add", zh: "添加失败" }
 pair.deny: { ja: "無視", en: "Ignore", zh: "忽略" }
 pair.add_all: { ja: "まとめて追加 (10 分)", en: "Add all nearby (10 min)", zh: "批量添加（10 分钟）" }
-pair.add_all_warning: { ja: "10 分間、見つかった端末をすべて自動で追加します", en: "Every device found in the next 10 minutes will be added automatically", zh: "10 分钟内发现的所有设备都将被自动添加" }
+pair.add_all_warning: { ja: "10 分間、近くの端末を探して一覧に表示します。追加するには各端末に表示されたコードを入力してください", en: "For 10 minutes, nearby devices are listed here. To add one, type the code shown on that device", zh: "10 分钟内会列出附近的设备。要添加设备，请输入该设备上显示的代码" }
 pair.add_all_on: { ja: "まとめて追加 ON — あと {m}:{s} ({n} 台追加)", en: "Adding all — {m}:{s} left ({n} added)", zh: "批量添加已开启 — 剩余 {m}:{s}（已添加 {n} 台）" }
 pair.add_all_stop: { ja: "停止", en: "Stop", zh: "停止" }
 pair.qr_caption: { ja: "別の端末でこの QR を読み取ると追加できます", en: "Scan this QR from another device to add this one", zh: "用另一台设备扫描此二维码即可添加" }
@@ -1354,3 +1354,32 @@ security.rebuild_hint: { ja: "元の創設端末がないまま更新した場�
 security.rebuild_confirm: { ja: "この端末を基準にクラスターを作り直しますか？ほかの端末はすべて再配対が必要になります。", en: "Rebuild the cluster from this device? Every other device will need to pair again.", zh: "要以本设备重建集群吗？其他所有设备都需要重新配对。" }
 security.rebuild_done: { ja: "クラスターを作り直しました。ほかの端末を配対してください。", en: "Cluster rebuilt. Pair the other devices.", zh: "已重建集群，请为其他设备配对。" }
 security.failed: { ja: "操作できませんでした: {reason}", en: "Couldn't complete the action: {reason}", zh: "操作未完成：{reason}" }
+
+# ---- Web: settings navigation and pairing confirmation codes (2026-11 review) ----
+settings.categories: { ja: "設定の項目", en: "Settings categories", zh: "设置类别" }
+settings.search: { ja: "設定を検索", en: "Search settings", zh: "搜索设置" }
+settings.no_match: { ja: "一致する項目はありません", en: "No matching settings", zh: "没有匹配的设置" }
+settings.back: { ja: "設定", en: "Settings", zh: "设置" }
+settings.group_overview: { ja: "概要", en: "Overview", zh: "概览" }
+settings.group_site: { ja: "ドアと端末", en: "Doors and devices", zh: "门与设备" }
+settings.group_calls: { ja: "呼び出し", en: "Calls", zh: "呼叫" }
+settings.group_appearance: { ja: "表示", en: "Appearance", zh: "外观" }
+settings.group_system: { ja: "システム", en: "System", zh: "系统" }
+pair.confirm_code_title: { ja: "この端末の確認コード", en: "This device's confirmation code", zh: "本设备的确认码" }
+pair.confirm_code_show: { ja: "この端末を追加する人に、このコードを伝えてください", en: "Give this code to the person adding this device", zh: "请把此代码告诉添加本设备的人" }
+pair.confirm_code_input: { ja: "端末に表示された 8 桁のコード", en: "8-digit code shown on the device", zh: "设备上显示的 8 位代码" }
+pair.confirm_code_hint: { ja: "追加する端末の画面に表示された 8 桁のコードを入力してください", en: "Type the 8-digit code shown on the device you are adding", zh: "请输入要添加的设备屏幕上显示的 8 位代码" }
+pair.err.confirm_code_mismatch: { ja: "コードが違います。追加する端末に表示されたコードを確認してください", en: "Wrong code. Check the code shown on the device you are adding", zh: "代码不正确。请核对要添加的设备上显示的代码" }
+pair.err.confirm_code_required: { ja: "追加する端末に表示された 8 桁のコードを入力してください", en: "Enter the 8-digit code shown on the device you are adding", zh: "请输入要添加的设备上显示的 8 位代码" }
+pair.err.pk_conflict: { ja: "同じ名前で別の鍵を名乗る端末があります。なりすましの可能性があるため、端末を確認してから追加してください", en: "Another device answered with a different key for this one. It may be an impostor; check the device before adding it", zh: "有另一台设备以不同的密钥冒用此设备。可能是仿冒设备，请先核实再添加" }
+pair.err.not_upgrade_pending: { ja: "この端末は再構築の対象ではありません", en: "This device is not waiting to rebuild a cluster", zh: "此设备不需要重建集群" }
+pair.pk_conflict_warning: { ja: "注意: この端末の鍵が一致しません。なりすましの可能性があります。表示された確認コードを本体で必ず確かめてください", en: "Warning: this device's key does not match. It may be an impostor. Check the confirmation code on the device itself", zh: "警告：此设备的密钥不一致，可能是仿冒设备。请务必在设备本机上核对确认码" }
+pair.upgrade_title: { ja: "再配対が必要です", en: "Pair this device again", zh: "需要重新配对" }
+pair.upgrade_body: { ja: "アプリの更新でクラスターへの参加方法が変わりました。元の創設端末から、この端末をもう一度追加してください。", en: "The app update changed how devices join a cluster. Add this device again from the original founding device.", zh: "应用升级改变了设备加入集群的方式。请从原始创建设备重新添加本设备。" }
+pair.security_title: { ja: "クラスター鍵", en: "Cluster key", zh: "集群密钥" }
+pair.security_key: { ja: "現在の鍵", en: "Current key", zh: "当前密钥" }
+pair.security_previous_key: { ja: "旧い鍵", en: "Previous key", zh: "旧密钥" }
+pair.security_previous_until: { ja: "{id} は {time} まで受け付けます", en: "{id} is accepted until {time}", zh: "{id} 在 {time} 之前仍被接受" }
+pair.security_legacy_peers: { ja: "更新が必要な端末", en: "Devices that need an update", zh: "需要升级的设备" }
+pair.security_rekey_required: { ja: "再配対が必要な端末", en: "Devices that must pair again", zh: "需要重新配对的设备" }
+security.rotate_key_done_id: { ja: "クラスター鍵を {id} に更新しました", en: "Cluster key rotated to {id}", zh: "集群密钥已轮换为 {id}" }

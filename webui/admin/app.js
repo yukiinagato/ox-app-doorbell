@@ -2,6 +2,60 @@
 
 
 var AdminLogic = (function () {
+  // ---- Settings navigation: grouped categories, deep links and master-detail view ----
+  // Categories are grouped like a system Settings app. Every existing tab stays reachable.
+  var SETTINGS_GROUPS = [
+    { id: "overview", label: "settings.group_overview", tabs: ["dash", "events"] },
+    { id: "site", label: "settings.group_site", tabs: ["doors", "devices", "panels", "pair"] },
+    { id: "calls", label: "settings.group_calls", tabs: ["rules", "qr", "purposes", "households"] },
+    { id: "appearance", label: "settings.group_appearance", tabs: ["texts", "theme", "assets"] },
+    { id: "system", label: "settings.group_system", tabs: ["integrations", "system"] }
+  ];
+  var SETTINGS_SPLIT_MIN_PX = 900;
+
+  function settingsTabs() {
+    var out = [];
+    for (var i = 0; i < SETTINGS_GROUPS.length; i++) out = out.concat(SETTINGS_GROUPS[i].tabs);
+    return out;
+  }
+
+  // "#/system" opens a category, "#/" or "" is the category list. Anything else is ignored.
+  function settingsRoute(hash) {
+    var m = /^#\/([a-z]*)$/.exec(String(hash || ""));
+    if (!m) return { valid: String(hash || "") === "", tab: "" };
+    if (!m[1]) return { valid: true, tab: "" };
+    return settingsTabs().indexOf(m[1]) >= 0 ? { valid: true, tab: m[1] } : { valid: false, tab: "" };
+  }
+
+  function settingsHash(tab) {
+    return settingsTabs().indexOf(tab) >= 0 ? "#/" + tab : "#/";
+  }
+
+  // Wide screens always show both panes; narrow screens show the list until a category is open.
+  function settingsView(widthPx, routedTab) {
+    if (Number(widthPx) >= SETTINGS_SPLIT_MIN_PX) return "split";
+    return routedTab ? "detail" : "list";
+  }
+
+  function foldText(value) {
+    var s = String(value || "").toLowerCase();
+    try { s = s.normalize("NFKC"); } catch (e) {}
+    return s.replace(/\s+/g, " ").trim();
+  }
+
+  // items: [{ tab, label, group }]. Returns the tabs whose label or group matches every term.
+  function filterSettings(items, query) {
+    var terms = foldText(query).split(" ").filter(function (x) { return x; });
+    var out = [];
+    for (var i = 0; i < (items || []).length; i++) {
+      var hay = foldText(items[i].label + " " + (items[i].group || "") + " " + items[i].tab);
+      var all = true;
+      for (var j = 0; j < terms.length; j++) if (hay.indexOf(terms[j]) < 0) { all = false; break; }
+      if (all) out.push(items[i].tab);
+    }
+    return out;
+  }
+
   // ---- Independent panel identities (/api/panels/*) and protocol v3 device state ----
   var PANEL_GRANTS = ["view", "call.monitor", "call.answer", "call.initiate", "sos.trigger",
                       "door.open", "media.publish", "notice.write"];
@@ -2492,7 +2546,8 @@ var AdminLogic = (function () {
   var PAIR_ERR_CODES = ["bad_pin", "expired", "no_token", "host_unpaired", "connect_failed",
     "timeout", "closed", "join_in_progress", "already_paired", "decrypt_failed", "bad_payload",
     "bad_challenge", "local_persist_failed", "persist_failed", "host_zero_psk", "no_ack",
-    "bad_qr", "no_mesh", "pairing_unavailable"];
+    "bad_qr", "no_mesh", "pairing_unavailable", "confirm_code_mismatch", "confirm_code_required",
+    "pk_conflict", "not_upgrade_pending"];
 
   var PAIR_STATES = ["unpaired", "joining", "persist_error", "ready", "revoked"];
 
@@ -2570,6 +2625,8 @@ var AdminLogic = (function () {
     if (device.invite_state === "failed") { state = "failed"; errKey = pairErrKey(device.last_error); }
     if (local.state === "added") { state = "added"; errKey = ""; }
     return {
+      // Another device answered with a different pairing key for this id: possibly an impostor.
+      pkConflict: device.pk_conflict === true,
       id: String(device.id || local.id || ""),
       label: device.id ? pairDeviceLabel(device) : String(local.label || ""),
       detail: pairDeviceDetail(device),
@@ -2607,9 +2664,27 @@ var AdminLogic = (function () {
         }));
     }
     var tokenActive = token.active === true;
+    var security = isObj(snapshot.security) ? snapshot.security : {};
+    function ids(list) {
+      return (list instanceof Array ? list : []).filter(function (x) {
+        return typeof x === "string" && x; }).map(String);
+    }
     return {
       state: state,
       onboarding: state !== "ready",
+      // The unpaired device shows this code; whoever invites it must type it (protocol v3).
+      confirmCode: pairConfirmCodeText(self.confirm_code),
+      upgradeRejoin: snapshot.upgrade_rejoin_required === true,
+      upgradeReason: String(snapshot.upgrade_rejoin_reason || snapshot.reason || ""),
+      security: {
+        pskId: String(security.psk_id || ""),
+        prevPskId: String(security.prev_psk_id || ""),
+        prevPskUntilMs: Math.max(0, num(security.prev_psk_until_ms, 0)),
+        legacyPeers: ids(security.legacy_peers),
+        rekeyRequired: ids(security.rekey_required),
+        identityPk: /^[0-9a-f]{64}$/i.test(String(security.identity_pk || "")) ?
+          String(security.identity_pk).toLowerCase() : ""
+      },
       isFounder: snapshot.is_founder === true,
       self: {
         name: String(self.name || ""), model: String(self.model || ""),
@@ -2635,6 +2710,20 @@ var AdminLogic = (function () {
       },
       rows: list
     };
+  }
+
+  // An unpaired device's 8-digit confirmation code, grouped for reading aloud: "1234 5678".
+  function pairConfirmCodeText(code) {
+    var digits = String(code == null ? "" : code).replace(/[^0-9]/g, "");
+    return digits.length === 8 ? digits.slice(0, 4) + " " + digits.slice(4) : "";
+  }
+
+  // Inviting a discovered device requires the code shown on that device.
+  function pairInvitePayload(id, code) {
+    var digits = String(code == null ? "" : code).replace(/[^0-9]/g, "");
+    if (!id) return { ok: false, field: "id" };
+    if (digits.length !== 8) return { ok: false, field: "code", err: "confirm_code_required" };
+    return { ok: true, body: { id: String(id), code: digits } };
   }
 
   // The join form on an unpaired host: address plus a six-digit Pairing PIN.
@@ -3006,6 +3095,8 @@ var AdminLogic = (function () {
     pairJoinPayload: pairJoinPayload, pairQrParse: pairQrParse,
     pairQrTextValid: pairQrTextValid,
     qrModules: qrModules,
+    pairConfirmCodeText: pairConfirmCodeText,
+    pairInvitePayload: pairInvitePayload,
     PANEL_GRANTS: PANEL_GRANTS,
     panelRecords: panelRecords,
     panelCreateBody: panelCreateBody,
@@ -3013,7 +3104,14 @@ var AdminLogic = (function () {
     membershipState: membershipState,
     fingerprintText: fingerprintText,
     newPasswordAcceptable: newPasswordAcceptable,
-    peerLabel: peerLabel
+    peerLabel: peerLabel,
+    SETTINGS_GROUPS: SETTINGS_GROUPS,
+    SETTINGS_SPLIT_MIN_PX: SETTINGS_SPLIT_MIN_PX,
+    settingsTabs: settingsTabs,
+    settingsRoute: settingsRoute,
+    settingsHash: settingsHash,
+    settingsView: settingsView,
+    filterSettings: filterSettings
   };
 })();
 
@@ -3148,8 +3246,7 @@ if (typeof document !== "undefined") (function () {
       keep.push(d);
     }
     MOCK_PAIR.devices = keep;
-    if (now < MOCK_PAIR.modeUntil)
-      for (i = 0; i < MOCK_PAIR.devices.length; i++) mockPairInvite(MOCK_PAIR.devices[i].id, false);
+    // Protocol v3: bulk add only lists devices; each still needs its confirmation code.
   }
 
   function mockPairSnapshot() {
@@ -3161,7 +3258,7 @@ if (typeof document !== "undefined") (function () {
       devices.push({ id: d.id, addr: d.addr, name: d.name, role: d.role, model: d.model,
                      platform: d.platform, sw: d.sw,
                      age_s: Math.round((now - d.seen) / 1000), invite_state: d.invite_state,
-                     attempts: d.attempts, last_error: d.last_error });
+                     attempts: d.attempts, last_error: d.last_error, pk_conflict: d.fate === "fail" });
     }
     var paired = MOCK_PAIR.state === "ready" || MOCK_PAIR.state === "persist_error";
     return {
@@ -3173,7 +3270,10 @@ if (typeof document !== "undefined") (function () {
       psk_ref: paired ? "secret:mesh.psk" : null,
       role: "door_station",
       self: { id: MOCK_ID1, addr: "10.10.38.9:47172", name: "front-panel", role: "door_station",
-              pk: "de".repeat(32), model: "Pixel 4a", platform: "android", sw: "0.1.0" },
+              pk: "de".repeat(32), model: "Pixel 4a", platform: "android", sw: "0.1.0",
+              confirm_code: paired ? undefined : "48151623" },
+      security: paired ? { psk_id: "k2", prev_psk_id: "k1", prev_psk_until_ms: now + 6 * 86400000,
+                           legacy_peers: [], rekey_required: [], identity_pk: "ab".repeat(32) } : undefined,
       pair_qr: "doorbell-pair:10.10.38.9:47172|" + MOCK_ID1 + "|" + "de".repeat(32),
       home: { member_count: MOCK_STATUS.peers.length,
               connected_count: MOCK_STATUS.peers.length - 1 },
@@ -3648,6 +3748,10 @@ if (typeof document !== "undefined") (function () {
     }
     if (p === "/api/pairing/invite") {
       if (!body || !body.id) return setTimeout(function () { cb(400, { ok: false, err: "no_id" }); }, 0);
+      if (!/^[0-9]{8}$/.test(String(body.code || "")))
+        return setTimeout(function () { cb(400, { ok: false, err: "confirm_code_required" }); }, 0);
+      if (body.code === "00000000")
+        return setTimeout(function () { cb(409, { ok: false, err: "confirm_code_mismatch" }); }, 0);
       if (!mockPairInvite(body.id, true))
         return setTimeout(function () { cb(400, { ok: false, err: "unknown_device" }); }, 0);
       return ok({ ok: true });
@@ -7051,7 +7155,7 @@ if (typeof document !== "undefined") (function () {
   function renderEvents() {
     var el = $("#tab-events");
     var types = ["", "press", "motion", "reply", "answered", "missed", "offline", "online",
-                 "config_changed", "dtmf_action"];
+                 "config_changed", "dtmf_action", "cluster_key_changed", "peer_rejected"];
     var h = "<div class='card'><div class='chead'><h2></h2><select id='evFilter'>";
     types.forEach(function (ty) {
       h += "<option value='" + ty + "'" + (evFilter === ty ? " selected" : "") + ">" +
@@ -7587,11 +7691,23 @@ if (typeof document !== "undefined") (function () {
       if (!window.confirm(t(confirmKey))) return;
       api("POST", path, {}, function (st, j) {
         if (st === 200 && j && j.ok === true) { msg(t(doneKey)); refreshStatus(function () {}); }
-        else msg(fmt(t("security.failed"), { reason: (j && (j.error_code || j.err)) || ("HTTP " + st) }));
+        else {
+          var code = (j && (j.error_code || j.err)) || "";
+          var key = L.pairErrKey(code);
+          msg(key !== "pair.err.unknown" ? t(key) :
+            fmt(t("security.failed"), { reason: code || ("HTTP " + st) }));
+        }
       }, { timeout_ms: 15000 });
     }
     $("#pskRotate").onclick = function () {
-      securityAction("/api/pairing/rotate", "security.rotate_key_confirm", "security.rotate_key_done");
+      if (!window.confirm(t("security.rotate_key_confirm"))) return;
+      api("POST", "/api/pairing/rotate", {}, function (st, j) {
+        if (st === 200 && j && j.ok === true) {
+          msg(j.psk_id ? fmt(t("security.rotate_key_done_id"), { id: String(j.psk_id) }) :
+            t("security.rotate_key_done"));
+          refreshStatus(function () {});
+        } else msg(fmt(t("security.failed"), { reason: (j && (j.error_code || j.err)) || ("HTTP " + st) }));
+      }, { timeout_ms: 15000 });
     };
     $("#clusterRebuild").onclick = function () {
       securityAction("/api/pairing/rebuild", "security.rebuild_confirm", "security.rebuild_done");
@@ -7717,7 +7833,7 @@ if (typeof document !== "undefined") (function () {
    * until the admin API gains an event stream.
    */
 
-  var PAIR = { snap: null, rows: {}, form: {}, poll: 0, tick: 0, scan: null, err: "",
+  var PAIR = { snap: null, rows: {}, form: {}, codes: {}, poll: 0, tick: 0, scan: null, err: "",
                joinErr: "", hadToken: false, created: false, runtime: null, visit: 0 };
 
   function pairRuntimeCurrent(runtime, visit) {
@@ -7807,8 +7923,28 @@ if (typeof document !== "undefined") (function () {
            "<div class='dim fhint'>" + esc(t("pair.qr_caption")) + "</div></div>";
   }
 
+  function pairConfirmCodeHtml(m) {
+    if (!m.confirmCode) return "";
+    return "<div class='card confirmcode'><h2>" + esc(t("pair.confirm_code_title")) + "</h2>" +
+           "<div class='pin' id='pairConfirmCode'>" + esc(m.confirmCode) + "</div>" +
+           "<div class='dim fhint' style='text-align:center'>" + esc(t("pair.confirm_code_show")) +
+           "</div></div>";
+  }
+
+  function pairUpgradeHtml(m) {
+    if (!m.upgradeRejoin) return "";
+    return "<div class='card' role='alert'><h2>" + esc(t("pair.upgrade_title")) + "</h2>" +
+           "<div class='warn'>" + esc(t("pair.upgrade_body")) + "</div>" +
+           (m.upgradeReason ? "<div class='dim fhint'>" +
+             esc(fmt(t("pair.err_detail"), { code: m.upgradeReason })) + "</div>" : "") +
+           "<div class='dim fhint' style='margin:10px 0'>" + esc(t("security.rebuild_hint")) + "</div>" +
+           "<button class='btn2 danger' data-pair='rebuild'>" + esc(t("security.rebuild")) +
+           "</button></div>";
+  }
+
   function pairOnboardingHtml(m) {
-    var h = "<div class='card'><h2>" + esc(t("pair.title_unpaired")) + "</h2>" +
+    var h = pairUpgradeHtml(m) + pairConfirmCodeHtml(m) +
+            "<div class='card'><h2>" + esc(t("pair.title_unpaired")) + "</h2>" +
             "<div class='dim fhint mono'>" + esc(pairSelfLine(m)) + "</div>";
     if (m.state === "persist_error") {
       h += "<div class='err' style='margin-top:10px'>" +
@@ -7850,6 +7986,15 @@ if (typeof document !== "undefined") (function () {
     return h + pairErrHtml();
   }
 
+  // Inviting needs the 8-digit code shown on the new device, so a device that merely answers on
+  // the network cannot be added by mistake (protocol v3).
+  function pairCodeInputHtml(r) {
+    return "<input type='text' class='paircode' inputmode='numeric' autocomplete='off' " +
+           "spellcheck='false' maxlength='9' pattern='[0-9 ]{8,9}' id='pc-" +
+           esc(String(r.id).replace(/[^A-Za-z0-9_-]/g, "_")) + "' data-code-for='" + esc(r.id) +
+           "' placeholder='0000 0000' aria-label='" + esc(t("pair.confirm_code_input")) + "'>";
+  }
+
   function pairRowHtml(r) {
     var right, note = "", meta = [];
     if (r.state === "adding") {
@@ -7857,19 +8002,22 @@ if (typeof document !== "undefined") (function () {
     } else if (r.state === "added") {
       right = "<span class='ok'>" + esc(t("pair.added")) + " ✓</span>";
     } else if (r.state === "failed") {
-      right = "<button class='btn small' data-pair='add' data-id='" + esc(r.id) + "'>" +
+      right = pairCodeInputHtml(r) + "<button class='btn small' data-pair='add' data-id='" + esc(r.id) + "'>" +
               esc(t("pair.add")) + "</button>";
       note = "<div class='err fhint'>" + esc(t("pair.add_failed")) + " — " + esc(t(r.errKey)) +
              (r.errCode ? " <span class='dim'>" +
                esc(fmt(t("pair.err_detail"), { code: r.errCode })) + "</span>" : "") + "</div>";
     } else {
-      right = "<button class='btn small' data-pair='add' data-id='" + esc(r.id) + "'>" +
+      right = pairCodeInputHtml(r) + "<button class='btn small' data-pair='add' data-id='" + esc(r.id) + "'>" +
               esc(t("pair.add")) + "</button> " +
               "<button class='btn2 small' data-pair='deny' data-id='" + esc(r.id) + "'>" +
               esc(t("pair.deny")) + "</button>";
     }
     if (r.detail) meta.push(esc(r.detail));
     if (!r.gone) meta.push(esc(fmt(t("pair.nearby_waiting_since"), { s: r.age_s })));
+    if (r.pkConflict) note = "<div class='warn fhint' role='alert'>" + esc(t("pair.pk_conflict_warning")) +
+      "</div>" + note;
+    else if (r.state === "idle") note = "<div class='dim fhint'>" + esc(t("pair.confirm_code_hint")) + "</div>";
     return "<div class='pairrow'><div class='pairwho'><div>" + esc(r.label) + "</div>" +
            "<div class='dim fhint'>" + meta.join(" · ") + "</div>" + note + "</div>" +
            "<div class='ops'>" + right + "</div></div>";
@@ -7941,6 +8089,27 @@ if (typeof document !== "undefined") (function () {
     return h + "</div>";
   }
 
+  function pairSecurityHtml(m) {
+    var s = m.security;
+    if (!s.pskId && !s.legacyPeers.length && !s.rekeyRequired.length) return "";
+    var h = "<div class='card'><h2>" + esc(t("pair.security_title")) + "</h2>";
+    if (s.pskId)
+      h += "<div class='frow'><label class='flab'>" + esc(t("pair.security_key")) + "</label>" +
+           "<div class='mono'>" + esc(s.pskId) + "</div></div>";
+    if (s.prevPskId && s.prevPskUntilMs)
+      h += "<div class='frow'><label class='flab'>" + esc(t("pair.security_previous_key")) + "</label>" +
+           "<div>" + esc(fmt(t("pair.security_previous_until"), { id: s.prevPskId,
+             time: fmtTime(s.prevPskUntilMs) })) + "</div></div>";
+    function list(ids, labelKey, cls) {
+      if (!ids.length) return "";
+      return "<div class='frow'><label class='flab'>" + esc(t(labelKey)) + "</label><div class='" + cls +
+             "'>" + esc(ids.map(deviceName).join(", ")) + "</div></div>";
+    }
+    h += list(s.legacyPeers, "pair.security_legacy_peers", "warn");
+    h += list(s.rekeyRequired, "pair.security_rekey_required", "err");
+    return h + "</div>";
+  }
+
   function pairPanelHtml(m) {
     var h = "<div class='card'><h2>" + esc(t("pair.tab")) + "</h2><div>" +
             esc(fmt(t("pair.membership"), { n: m.memberCount })) + " · <span class='dim'>" +
@@ -7959,7 +8128,7 @@ if (typeof document !== "undefined") (function () {
     for (var i = 0; i < m.rows.length; i++) h += pairRowHtml(m.rows[i]);
     h += "</div>";
 
-    h += pairCodeCardHtml(m) + pairAddAllCardHtml(m) + pairScanCardHtml();
+    h += pairCodeCardHtml(m) + pairAddAllCardHtml(m) + pairScanCardHtml() + pairSecurityHtml(m);
     h += "<div class='card'><h2>" + esc(t("pair.clear_title")) + "</h2>" +
          "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("pair.clear_confirm")) +
          "</div><button class='btn2 small danger' data-pair='unpair'>" +
@@ -7970,6 +8139,14 @@ if (typeof document !== "undefined") (function () {
   function pairBind(root) {
     $all("[data-pair]", root).forEach(function (b) {
       b.onclick = function () { pairAct(b.getAttribute("data-pair"), b.getAttribute("data-id"), b); };
+    });
+    $all("input[data-code-for]", root).forEach(function (input) {
+      var id = input.getAttribute("data-code-for");
+      input.value = PAIR.codes[id] || "";
+      input.oninput = function () { PAIR.codes[id] = input.value; };
+      input.onkeydown = function (e) {
+        if (e.key === "Enter") pairAct("add", id, input);
+      };
     });
     var host = $("#pairJoinHost"), pin = $("#pairJoinPin"), paste = $("#pairPaste");
     if (host) {
@@ -8014,11 +8191,21 @@ if (typeof document !== "undefined") (function () {
     if (!pairRuntimeCurrent(PAIR.runtime, PAIR.visit)) return;
     var m = L.pairPanelModel(PAIR.snap || {}, PAIR.rows);
     if (act === "add") {
+      var invite = L.pairInvitePayload(id, PAIR.codes[id]);
+      if (!invite.ok) {
+        PAIR.rows[id] = { state: "failed", err: invite.err || "confirm_code_required",
+                          at: new Date().getTime(), label: L.pairDeviceLabel(pairPendingOf(id)) };
+        renderPair();
+        var field = $all("input[data-code-for]").filter(function (x) {
+          return x.getAttribute("data-code-for") === id; })[0];
+        if (field) field.focus();
+        return;
+      }
       PAIR.rows[id] = { state: "adding", at: new Date().getTime(),
                         label: L.pairDeviceLabel(pairPendingOf(id)) };
       renderPair();
-      pairPost("/api/pairing/invite", { id: id }, function (ok, j) {
-        if (ok) return;
+      pairPost("/api/pairing/invite", invite.body, function (ok, j) {
+        if (ok) { delete PAIR.codes[id]; return; }
         PAIR.rows[id] = { state: "failed", err: (j && j.err) || "", at: new Date().getTime(),
                           label: (PAIR.rows[id] || {}).label || "" };
         PAIR.err = "";
@@ -8042,6 +8229,14 @@ if (typeof document !== "undefined") (function () {
       return;
     }
     if (act === "stopall") { pairPost("/api/pairing/stop", {}); return; }
+    if (act === "rebuild") {
+      if (!window.confirm(t("security.rebuild_confirm"))) return;
+      pairPost("/api/pairing/rebuild", {}, function (ok, j) {
+        if (ok) { PAIR.created = true; msg(t("security.rebuild_done")); }
+        else PAIR.err = L.pairErrKey(j && (j.err || j.error_code));
+      });
+      return;
+    }
     if (act === "retry") { pairPost("/api/pairing/retry-persist", {}); return; }
     if (act === "unpair") {
       if (!window.confirm(t("pair.clear_confirm"))) return;
@@ -9208,8 +9403,11 @@ if (typeof document !== "undefined") (function () {
     var was = S.tab;
     S.tab = name;
     $all("nav button").forEach(function (b) {
-      b.classList[b.getAttribute("data-tab") === name ? "add" : "remove"]("on");
+      var selected = b.getAttribute("data-tab") === name;
+      b.classList[selected ? "add" : "remove"]("on");
+      if (selected) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current");
     });
+    settingsNav.titleFor(name);
     for (var k in TABS) show($("#tab-" + k), k === name);
     // A second activation of Pair (including a click on its already-selected nav item) is a
     // new visit. Retire the previous visit's poll/scan state before issuing its replacement.
@@ -9220,9 +9418,104 @@ if (typeof document !== "undefined") (function () {
     else refreshConfig(function () { refreshStatus(rendered); });
   }
 
-  $all("nav button").forEach(function (b) {
-    b.onclick = function () { switchTab(b.getAttribute("data-tab")); };
-  });
+  /* ---- Settings navigation ----
+   * >= L.SETTINGS_SPLIT_MIN_PX: two panes (category list + detail). Narrower: a drill-down list
+   * with a back button. The URL fragment (#/<category>) is the state, so categories can be
+   * deep-linked, and browser Back/Forward move between list and detail. */
+  var settingsNav = (function () {
+    var app = $("#app"), depth = 0;
+    var split = window.matchMedia ?
+      window.matchMedia("(min-width: " + L.SETTINGS_SPLIT_MIN_PX + "px)") : null;
+    function width() { return split ? (split.matches ? L.SETTINGS_SPLIT_MIN_PX : 0) : window.innerWidth; }
+    function routed() { return L.settingsRoute(window.location.hash).tab; }
+    function applyView() {
+      if (!app) return;
+      var view = L.settingsView(width(), routed());
+      app.setAttribute("data-view", view);
+    }
+    function labelOf(tab) {
+      var b = $("nav button[data-tab='" + tab + "'] span[data-i18n]");
+      return b ? b.textContent : "";
+    }
+    function titleFor(tab) {
+      var title = $("#detailTitle");
+      if (title) title.textContent = labelOf(tab);
+    }
+    function setHash(hash, replace) {
+      if (window.location.hash === hash) return;
+      if (window.history && window.history.pushState) {
+        var url = window.location.pathname + window.location.search + hash;
+        if (replace) window.history.replaceState(null, "", url);
+        else { window.history.pushState(null, "", url); depth++; }
+      } else window.location.hash = hash;
+    }
+    function open(tab, options) {
+      options = options || {};
+      setHash(L.settingsHash(tab), options.replace);
+      if (S.tab !== tab || options.force) switchTab(tab);
+      applyView();
+      if (app && app.getAttribute("data-view") === "detail") {
+        var title = $("#detailTitle");
+        if (title && title.focus) title.focus();
+        window.scrollTo(0, 0);
+      }
+    }
+    function showList() {
+      if (depth > 0 && window.history && window.history.back) { depth--; window.history.back(); return; }
+      setHash("#/", true);
+      applyView();
+      var current = $("nav button[data-tab='" + S.tab + "']");
+      if (current && current.focus) current.focus();
+    }
+    function onRoute() {
+      var route = L.settingsRoute(window.location.hash);
+      if (!route.valid) { setHash(L.settingsHash(S.tab), true); applyView(); return; }
+      if (route.tab && route.tab !== S.tab && AUTH.authenticated) switchTab(route.tab);
+      applyView();
+    }
+    function filter() {
+      var query = ($("#navSearch") || {}).value || "";
+      var items = [];
+      L.SETTINGS_GROUPS.forEach(function (group) {
+        var head = $(".navgroup[data-group='" + group.id + "'] .navgrouphead");
+        group.tabs.forEach(function (tab) {
+          items.push({ tab: tab, label: labelOf(tab), group: head ? head.textContent : "" });
+        });
+      });
+      var visible = L.filterSettings(items, query), any = false;
+      $all("nav button[data-tab]").forEach(function (b) {
+        var on = visible.indexOf(b.getAttribute("data-tab")) >= 0;
+        show(b, on); any = any || on;
+      });
+      $all(".navgroup").forEach(function (g) {
+        show(g, $all("button[data-tab]", g).some(function (b) { return !b.classList.contains("hidden"); }));
+      });
+      var empty = $("#navEmpty");
+      if (empty) show(empty, !any);
+    }
+    $all("nav button[data-tab]").forEach(function (b) {
+      b.onclick = function () { open(b.getAttribute("data-tab")); };
+    });
+    var back = $("#navBack");
+    if (back) back.onclick = showList;
+    var search = $("#navSearch");
+    if (search) {
+      search.addEventListener("input", filter);
+      search.addEventListener("keydown", function (e) {
+        if (e.key !== "Enter") return;
+        var first = $all("nav button[data-tab]").filter(function (b) {
+          return !b.classList.contains("hidden"); })[0];
+        if (first) first.click();
+      });
+    }
+    window.addEventListener("popstate", function () { depth = Math.max(0, depth - 1); onRoute(); });
+    window.addEventListener("hashchange", onRoute);
+    if (split && split.addEventListener) split.addEventListener("change", applyView);
+    else if (split && split.addListener) split.addListener(applyView);
+    applyView();
+    return { open: open, initialTab: function () { return routed(); }, titleFor: titleFor,
+             applyView: applyView, filter: filter };
+  })();
 
 
   function poll(generation) {
@@ -9270,6 +9563,11 @@ if (typeof document !== "undefined") (function () {
       $all("[data-i18n-title]").forEach(function (el) {
         el.title = t(el.getAttribute("data-i18n-title"));
       });
+      $all("[data-i18n-aria]").forEach(function (el) {
+        el.setAttribute("aria-label", t(el.getAttribute("data-i18n-aria")));
+      });
+      settingsNav.titleFor(S.tab);
+      settingsNav.filter();
     }
   });
 
@@ -9350,7 +9648,7 @@ if (typeof document !== "undefined") (function () {
         info.textContent = (n.name || n.id || "") + " · v" + (n.version || "?");
         AUTH.booting = false;
         AUTH.authenticated = true;
-        switchTab(inlineDraft ? inlineDraft.editor.tab : "dash", function () {
+        switchTab(inlineDraft ? inlineDraft.editor.tab : (settingsNav.initialTab() || "dash"), function () {
           restoreModalDraft(); restoreInlineDraft();
         });
         schedulePoll(generation);
@@ -9408,6 +9706,96 @@ if (typeof document !== "undefined") (function () {
   window.addEventListener("keydown", recordInteraction);
   window.addEventListener("pagehide", stopAdminRuntime);
   window.addEventListener("pageshow", recoverAdminRuntime);
+
+  /* ---- Presentation enhancement ----
+   * Renderers build markup as strings; this pass runs after every DOM change in the app and the
+   * modal and only adds accessibility and layout hints. It never changes values or behavior:
+   * - a settings checkbox (label.frow-check) is announced and drawn as a switch (role=switch);
+   * - a .flab label is bound to the control that follows it, and help text is described-by;
+   * - table cells get data-label from their column header, so narrow screens show cards;
+   * - native constraint validation shows its message inline next to the control. */
+  var enhanceSerial = 0;
+  function enhanceControls(root) {
+    $all("label.frow-check > input[type=checkbox]", root).forEach(function (box) {
+      if (box.getAttribute("role") !== "switch") box.setAttribute("role", "switch");
+    });
+    $all(".frow > label.flab", root).forEach(function (label) {
+      if (label.htmlFor) return;
+      var control = label.nextElementSibling;
+      while (control && !/^(INPUT|SELECT|TEXTAREA)$/.test(control.tagName)) {
+        var inner = control.querySelector && control.querySelector("input,select,textarea");
+        if (inner) { control = inner; break; }
+        control = control.nextElementSibling;
+      }
+      if (!control || control.type === "hidden") return;
+      if (!control.id) control.id = "f" + (++enhanceSerial);
+      label.htmlFor = control.id;
+      var hint = label.parentNode.querySelector(".fhint");
+      if (hint && !control.hasAttribute("aria-describedby")) {
+        if (!hint.id) hint.id = "h" + (++enhanceSerial);
+        control.setAttribute("aria-describedby", hint.id);
+      }
+    });
+    $all("table", root).forEach(function (table) {
+      var heads = $all("thead th", table).map(function (th) { return th.textContent.trim(); });
+      if (!heads.length) return;
+      table.classList.add("stack");
+      $all("tbody tr", table).forEach(function (tr) {
+        var col = 0;
+        Array.prototype.forEach.call(tr.children, function (td) {
+          var label = heads[col] || "";
+          if (td.getAttribute("data-label") !== label) td.setAttribute("data-label", label);
+          col += Number(td.getAttribute("colspan") || 1);
+        });
+      });
+    });
+  }
+  function showValidity(field) {
+    if (!field || !field.willValidate || field.type === "checkbox" || field.type === "radio") return;
+    var holder = field.parentNode, note = holder && holder.querySelector(":scope > .vmsg");
+    var valid = field.checkValidity();
+    if (valid) {
+      field.removeAttribute("aria-invalid");
+      if (note) note.textContent = "";
+      return;
+    }
+    if (!note) {
+      note = document.createElement("div");
+      note.className = "vmsg err";
+      note.setAttribute("role", "alert");
+      note.id = "v" + (++enhanceSerial);
+      field.insertAdjacentElement("afterend", note);
+      var described = field.getAttribute("aria-describedby");
+      field.setAttribute("aria-describedby", (described ? described + " " : "") + note.id);
+    }
+    field.setAttribute("aria-invalid", "true");
+    note.textContent = field.validationMessage;
+  }
+  (function () {
+    var pending = false;
+    function schedule() {
+      if (pending) return;
+      pending = true;
+      (window.requestAnimationFrame || setTimeout)(function () {
+        pending = false;
+        enhanceControls(document);
+      });
+    }
+    if (window.MutationObserver) {
+      var observer = new MutationObserver(schedule);
+      [$("#app"), $("#modal")].forEach(function (node) {
+        if (node) observer.observe(node, { childList: true, subtree: true });
+      });
+    }
+    if (typeof document.addEventListener !== "function") return;
+    document.addEventListener("input", function (e) {
+      if (e.target && e.target.getAttribute && e.target.getAttribute("aria-invalid") === "true")
+        showValidity(e.target);
+    }, true);
+    document.addEventListener("change", function (e) { showValidity(e.target); }, true);
+    document.addEventListener("invalid", function (e) { showValidity(e.target); }, true);
+    schedule();
+  })();
 
   recoverAdminRuntime();
 

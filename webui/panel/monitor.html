@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title></title>
 
 <style>
@@ -53,6 +53,7 @@
   #callActions { padding: 14px; }
   #replyActions { display: inline-flex; flex-wrap: wrap; justify-content: center; }
 </style>
+<link rel="stylesheet" href="/panel/panel.css">
 </head>
 <body>
 <div id="soundBand"></div>
@@ -290,8 +291,9 @@
       if (r.answered_by) detail = t("history.answered_by", { device: r.answered_by });
       var dur = durationLabel(r.duration_ms);
       if (dur) detail = detail ? detail + " · " + dur : dur;
-      html += "<tr><td class='dim'>" + fmtTime(r.ts) + "</td><td" + cls + ">" +
-              esc(outcomeLabel(r.outcome)) + "</td><td>" +
+      html += "<tr><td class='dim' data-label='" + esc(t("panel.event_time")) + "'>" + fmtTime(r.ts) +
+              "</td><td" + cls + " data-label='" + esc(t("panel.event_type")) + "'>" +
+              esc(outcomeLabel(r.outcome)) + "</td><td data-label='" + esc(t("panel.event_door")) + "'>" +
               esc(doorLabels[r.door] || r.door || "") + "</td><td class='dim'>" +
               esc(detail) + "</td></tr>";
     }

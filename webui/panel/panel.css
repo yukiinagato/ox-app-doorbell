@@ -1,0 +1,77 @@
+/* Responsive layer shared by door.html, monitor.html and call.html. Loaded after each page's own
+ * styles. Every modern value has a plain fallback first: the door page still runs on iOS 5 Safari,
+ * which ignores clamp(), env(), grid and @supports and keeps the page's original layout. */
+html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
+body { padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+img, video { max-width:100%; }
+button, select, input { min-height:44px; }
+button:focus-visible, select:focus-visible, input:focus-visible { outline:3px solid #ffd166; outline-offset:2px; }
+
+/* ---- Monitor ---- */
+#pushBar { display:flex; flex-wrap:wrap; align-items:center; gap:8px;
+           padding-top:max(8px, env(safe-area-inset-top)); }
+#pushBar #pushBtn { margin:0; }
+h1#title { font-size:24px; font-size:clamp(18px, 1rem + 1.2vw, 28px); }
+@supports (display:grid) {
+  #snapGrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(min(100%, 300px), 1fr));
+              gap:12px; padding:8px clamp(10px, 2vw, 20px); }
+  #snapGrid .snapCard { width:auto; margin:0; display:block; }
+}
+.snapCard .lbl { font-size:20px; font-size:clamp(16px, .9rem + .8vw, 24px); overflow-wrap:anywhere; }
+#evCard { margin-left:clamp(10px, 2vw, 20px); margin-right:clamp(10px, 2vw, 20px);
+          margin-bottom:calc(24px + env(safe-area-inset-bottom)); }
+#evHead { flex-wrap:wrap; gap:8px; }
+#evCard table { font-size:18px; font-size:clamp(15px, .8rem + .6vw, 20px); }
+#callView { position:fixed; overflow:auto; -webkit-overflow-scrolling:touch;
+            padding-bottom:env(safe-area-inset-bottom); }
+#callView .msg { font-size:44px; font-size:clamp(28px, 1rem + 4vw, 58px); overflow-wrap:anywhere; }
+#callView img, #callView video { max-height:60vh; object-fit:contain; }
+#callActions { position:-webkit-sticky; position:sticky; bottom:0; background:#101418;
+               padding-bottom:calc(14px + env(safe-area-inset-bottom)); }
+#callActions button, #replyActions button { min-height:48px; }
+@media (max-width: 599.98px) {
+  #evCard table, #evCard tbody, #evCard tr, #evCard td { display:block; width:100%; }
+  #evCard thead { display:none; }
+  #evCard tr { border-bottom:1px solid #242d36; padding:8px 0; }
+  #evCard td { border:0; padding:2px 8px; }
+  #evCard td[data-label]::before { content:attr(data-label) " "; color:#8a97a5; font-size:14px; }
+  #callView .msg { padding:16px 10px; }
+  #pushBtn, #answerBtn, #monitorClose, #replyActions button { font-size:16px; padding:9px 14px; }
+}
+@media (min-width: 1600px) {
+  #snapGrid { grid-template-columns:repeat(auto-fill, minmax(420px, 1fr)); }
+}
+
+/* ---- Web call ---- */
+#doorTabs { padding-top:max(8px, env(safe-area-inset-top)); }
+#doorTabs button { font-size:18px; font-size:clamp(15px, .8rem + .6vw, 20px); }
+#callBtn { font-size:24px; font-size:clamp(18px, 1rem + 1vw, 26px); min-height:56px;
+           padding:12px 40px; padding:12px clamp(24px, 6vw, 56px); }
+#controls { padding-bottom:calc(4px + env(safe-area-inset-bottom)); }
+#videoToggle { min-height:44px; }
+#videoToggle input { width:24px; height:24px; min-height:0; }
+@media (max-width: 599.98px) {
+  header h1 { font-size:20px; }
+  #selfPreview { width:28%; }
+  #callBtn { flex:1 1 100%; }
+}
+@media (max-height: 500px) and (orientation: landscape) {
+  #videoBox { min-height:160px; }
+  #controls { padding-top:6px; }
+}
+
+/* The floating SOS trigger sits bottom-right on monitor and call pages; the last content keeps
+   clear of it instead of being covered. (The door page docks it in its action bar.) */
+#status { padding-bottom:calc(104px + env(safe-area-inset-bottom)); }
+#evCard { margin-bottom:calc(104px + env(safe-area-inset-bottom)); }
+
+/* ---- Door station ---- */
+.doorBtn { font-size:28px; font-size:clamp(1.4rem, 1rem + 2vw, 2.2rem); }
+.purposeBtn { font-size:20px; font-size:clamp(1.05rem, .9rem + .6vw, 1.4rem); }
+#callingView .big { font-size:28px; font-size:clamp(1.5rem, 1rem + 2.4vw, 2.6rem); }
+@media (min-width: 1600px) { .doorBtn, .purposeBtn { max-width:960px; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration:.01ms !important; animation-iteration-count:1 !important;
+                           transition-duration:.01ms !important; }
+}
