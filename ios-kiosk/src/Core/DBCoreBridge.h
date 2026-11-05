@@ -181,6 +181,25 @@ NSString *DBLocalMediaHeaderLine(NSURL *url);
 // ops are {op:"set"|"delete", key, value} entries, applied as one atomic
 // commit. Returns Core's result document, or nil when the export is absent.
 - (NSDictionary *)writeConfigBatch:(NSArray *)ops;
+// ---- Native assets, configuration snapshot/import, panel identities ----
+// Asset upload into the shared ledger (image/jpeg, image/png, audio/mpeg,
+// audio/wav, at most 3 MiB). Returns Core's {"ok":true,"hash":...} document, or
+// nil when this Core lacks the export. Both need the native admin window.
++ (BOOL)supportsAssets;
+- (NSDictionary *)addAsset:(NSData *)data type:(NSString *)type label:(NSString *)label;
+- (NSDictionary *)removeAsset:(NSString *)sha256;
+// {schema_version:2, revision, config}; nil on an older Core.
+- (NSDictionary *)configSnapshot;
+// These two need an administrator HTTP session and its CSRF value
+// (DBAdminHttpSession). nil when the export is absent.
+- (NSDictionary *)configImport:(NSString *)action request:(NSDictionary *)request
+                       session:(NSString *)session csrf:(NSString *)csrf;
+- (NSDictionary *)panelIdentity:(NSString *)action request:(NSDictionary *)request
+                        session:(NSString *)session csrf:(NSString *)csrf;
+// db_core_remove_device_v2: 0 on success, DBAdminRequiredResult when the
+// window is closed, -100 when absent (the caller then uses removeDevice:).
+- (int)removeDeviceV2:(NSString *)nodeId;
+
 // Readability warnings produced by the last single-key write. Each entry is
 // {key, property, contrast, message_key}; an empty array means nothing to
 // report. A warning never means the write failed.

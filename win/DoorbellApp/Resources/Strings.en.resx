@@ -510,6 +510,204 @@ Delete it?</value></data>
   <data name="door_notice_for_this" xml:space="preserve"><value>Announce at this door</value></data>
   <data name="door_unlock_not_configured" xml:space="preserve"><value>No unlock action is configured</value></data>
   <data name="door_view" xml:space="preserve"><value>View</value></data>
+  <data name="editor_action" xml:space="preserve"><value>Action</value></data>
+  <data name="editor_action_auto_reply" xml:space="preserve"><value>Automatic reply</value></data>
+  <data name="editor_action_chime" xml:space="preserve"><value>Chime</value></data>
+  <data name="editor_action_device_alert" xml:space="preserve"><value>Device alert</value></data>
+  <data name="editor_action_ha_command" xml:space="preserve"><value>Home Assistant command</value></data>
+  <data name="editor_action_ha_event" xml:space="preserve"><value>Home Assistant event</value></data>
+  <data name="editor_action_sip_call" xml:space="preserve"><value>Phone call</value></data>
+  <data name="editor_action_telegram" xml:space="preserve"><value>Telegram</value></data>
+  <data name="editor_actions" xml:space="preserve"><value>Actions</value></data>
+  <data name="editor_add_action" xml:space="preserve"><value>Add an action</value></data>
+  <data name="editor_add_dtmf" xml:space="preserve"><value>Add a keypad action</value></data>
+  <data name="editor_add_window" xml:space="preserve"><value>Add a time window</value></data>
+  <data name="editor_admin_password" xml:space="preserve"><value>Admin password</value></data>
+  <data name="editor_all" xml:space="preserve"><value>All</value></data>
+  <data name="editor_all_devices" xml:space="preserve"><value>All devices</value></data>
+  <data name="editor_all_wording" xml:space="preserve"><value>All wording</value></data>
+  <data name="editor_allow_notice_control" xml:space="preserve"><value>Allow announcements from Home Assistant</value></data>
+  <data name="editor_allow_sos_control" xml:space="preserve"><value>Allow SOS control from Home Assistant</value></data>
+  <data name="editor_always" xml:space="preserve"><value>Always</value></data>
+  <data name="editor_answer_auto" xml:space="preserve"><value>Answer at once</value></data>
+  <data name="editor_answer_mode" xml:space="preserve"><value>On an incoming call</value></data>
+  <data name="editor_answer_ring" xml:space="preserve"><value>Ring and wait</value></data>
+  <data name="editor_assets_hint" xml:space="preserve"><value>Tap Edit to delete. Files in use are removed too</value></data>
+  <data name="editor_automatic" xml:space="preserve"><value>Automatic</value></data>
+  <data name="editor_back" xml:space="preserve"><value>Back</value></data>
+  <data name="editor_background_image" xml:space="preserve"><value>Background image</value></data>
+  <data name="editor_base_topic" xml:space="preserve"><value>Base topic</value></data>
+  <data name="editor_bot_token" xml:space="preserve"><value>Bot token</value></data>
+  <data name="editor_broker" xml:space="preserve"><value>Broker</value></data>
+  <data name="editor_building" xml:space="preserve"><value>Building</value></data>
+  <data name="editor_buildings" xml:space="preserve"><value>Buildings</value></data>
+  <data name="editor_camera_credential" xml:space="preserve"><value>Camera login</value></data>
+  <data name="editor_camera_name" xml:space="preserve"><value>Camera ID (letters, digits, _ and -)</value></data>
+  <data name="editor_change_password" xml:space="preserve"><value>Change the password</value></data>
+  <data name="editor_channel_in_app" xml:space="preserve"><value>On screen</value></data>
+  <data name="editor_channel_system_notification" xml:space="preserve"><value>System notification</value></data>
+  <data name="editor_channel_web_push" xml:space="preserve"><value>Web Push</value></data>
+  <data name="editor_channels" xml:space="preserve"><value>Channels</value></data>
+  <data name="editor_chat_id" xml:space="preserve"><value>Chat ID to send to</value></data>
+  <data name="editor_chat_ids" xml:space="preserve"><value>Telegram chat IDs (comma-separated)</value></data>
+  <data name="editor_choose_photo" xml:space="preserve"><value>Choose a photo</value></data>
+  <data name="editor_clipboard_not_config" xml:space="preserve"><value>The clipboard holds no settings</value></data>
+  <data name="editor_command" xml:space="preserve"><value>Command</value></data>
+  <data name="editor_config_transfer" xml:space="preserve"><value>Export and import settings</value></data>
+  <data name="editor_config_transfer_hint" xml:space="preserve"><value>Passwords, keys and image or sound files are not included</value></data>
+  <data name="editor_confirm" xml:space="preserve"><value>Continue</value></data>
+  <data name="editor_core_too_old" xml:space="preserve"><value>This device's Core does not support this</value></data>
+  <data name="editor_current_image" xml:space="preserve"><value>Current image</value></data>
+  <data name="editor_current_password" xml:space="preserve"><value>Current password</value></data>
+  <data name="editor_custom_color" xml:space="preserve"><value>Enter a colour code</value></data>
+  <data name="editor_day_fri" xml:space="preserve"><value>Fri</value></data>
+  <data name="editor_day_mon" xml:space="preserve"><value>Mon</value></data>
+  <data name="editor_day_sat" xml:space="preserve"><value>Sat</value></data>
+  <data name="editor_day_sun" xml:space="preserve"><value>Sun</value></data>
+  <data name="editor_day_thu" xml:space="preserve"><value>Thu</value></data>
+  <data name="editor_day_tue" xml:space="preserve"><value>Tue</value></data>
+  <data name="editor_day_wed" xml:space="preserve"><value>Wed</value></data>
+  <data name="editor_delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="editor_direct_port" xml:space="preserve"><value>Direct call port</value></data>
+  <data name="editor_disable" xml:space="preserve"><value>Turn off</value></data>
+  <data name="editor_discovery_prefix" xml:space="preserve"><value>Discovery prefix</value></data>
+  <data name="editor_done" xml:space="preserve"><value>Done</value></data>
+  <data name="editor_door" xml:space="preserve"><value>Door</value></data>
+  <data name="editor_doors" xml:space="preserve"><value>Doors</value></data>
+  <data name="editor_dtmf_actions" xml:space="preserve"><value>Phone keypad actions</value></data>
+  <data name="editor_dtmf_code" xml:space="preserve"><value>Keys to press (for example *1)</value></data>
+  <data name="editor_dtmf_code_hint" xml:space="preserve"><value>One to eight of 0-9, *, # and A-D</value></data>
+  <data name="editor_dtmf_decline" xml:space="preserve"><value>Decline</value></data>
+  <data name="editor_dtmf_ha_command" xml:space="preserve"><value>Home Assistant command</value></data>
+  <data name="editor_dtmf_hangup" xml:space="preserve"><value>Hang up</value></data>
+  <data name="editor_dtmf_hint" xml:space="preserve"><value>Runs when the keys are pressed on the phone during a call</value></data>
+  <data name="editor_dtmf_quick_reply" xml:space="preserve"><value>Quick reply</value></data>
+  <data name="editor_edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="editor_edited" xml:space="preserve"><value>Changed</value></data>
+  <data name="editor_enabled" xml:space="preserve"><value>Enabled</value></data>
+  <data name="editor_entity_language" xml:space="preserve"><value>Entity name language</value></data>
+  <data name="editor_export_clipboard" xml:space="preserve"><value>Copy settings to the clipboard</value></data>
+  <data name="editor_exported" xml:space="preserve"><value>Copied {0} KB of settings</value></data>
+  <data name="editor_extension" xml:space="preserve"><value>Extension</value></data>
+  <data name="editor_from" xml:space="preserve"><value>From</value></data>
+  <data name="editor_ha_control_hint" xml:space="preserve"><value>Only the broker's login is checked, so turn these on only when needed</value></data>
+  <data name="editor_households" xml:space="preserve"><value>Households</value></data>
+  <data name="editor_icon" xml:space="preserve"><value>Icon (emoji)</value></data>
+  <data name="editor_id_hint" xml:space="preserve"><value>Letters, digits, _ and - only, up to 64</value></data>
+  <data name="editor_images" xml:space="preserve"><value>Images</value></data>
+  <data name="editor_import_blocked" xml:space="preserve"><value>Cannot import. Check for missing passwords or files</value></data>
+  <data name="editor_import_clipboard" xml:space="preserve"><value>Import settings from the clipboard</value></data>
+  <data name="editor_import_confirm" xml:space="preserve"><value>{0} values will change. Import?</value></data>
+  <data name="editor_inherited" xml:space="preserve"><value>Same as all devices</value></data>
+  <data name="editor_ink" xml:space="preserve"><value>Text colour</value></data>
+  <data name="editor_ink_hint" xml:space="preserve"><value>Automatic picks the more readable colour for the background</value></data>
+  <data name="editor_ink_overrides" xml:space="preserve"><value>Text colours</value></data>
+  <data name="editor_label" xml:space="preserve"><value>Label</value></data>
+  <data name="editor_list_edit_hint" xml:space="preserve"><value>Tap Edit to reorder or delete</value></data>
+  <data name="editor_loading" xml:space="preserve"><value>Loading…</value></data>
+  <data name="editor_media_hint" xml:space="preserve"><value>Never put the camera's login in the URL; store it as the camera login</value></data>
+  <data name="editor_media_url_hint" xml:space="preserve"><value>H.264 must be RTSP over TCP, Baseline profile</value></data>
+  <data name="editor_mqtt" xml:space="preserve"><value>MQTT and Home Assistant</value></data>
+  <data name="editor_mqtt_password" xml:space="preserve"><value>MQTT password</value></data>
+  <data name="editor_name" xml:space="preserve"><value>Name</value></data>
+  <data name="editor_never_suppress" xml:space="preserve"><value>Notify during quiet hours</value></data>
+  <data name="editor_never_suppress_hint" xml:space="preserve"><value>When on, this action also runs during quiet hours</value></data>
+  <data name="editor_never_suppress_short" xml:space="preserve"><value>always</value></data>
+  <data name="editor_new_building" xml:space="preserve"><value>New building</value></data>
+  <data name="editor_new_door" xml:space="preserve"><value>New door</value></data>
+  <data name="editor_new_household" xml:space="preserve"><value>New household</value></data>
+  <data name="editor_new_password" xml:space="preserve"><value>New password (at least 8 characters)</value></data>
+  <data name="editor_new_purpose" xml:space="preserve"><value>New purpose</value></data>
+  <data name="editor_new_reply" xml:space="preserve"><value>New reply</value></data>
+  <data name="editor_new_rule" xml:space="preserve"><value>New rule</value></data>
+  <data name="editor_no_microphone" xml:space="preserve"><value>The microphone is not available</value></data>
+  <data name="editor_no_photos" xml:space="preserve"><value>Photos are not available</value></data>
+  <data name="editor_ntp_servers_hint" xml:space="preserve"><value>Up to four. Use host:port for a non-standard port</value></data>
+  <data name="editor_off" xml:space="preserve"><value>Off</value></data>
+  <data name="editor_offline" xml:space="preserve"><value>Offline</value></data>
+  <data name="editor_ok" xml:space="preserve"><value>OK</value></data>
+  <data name="editor_on" xml:space="preserve"><value>On</value></data>
+  <data name="editor_online" xml:space="preserve"><value>Online</value></data>
+  <data name="editor_panel_link_once" xml:space="preserve"><value>This link is shown only now. Scan the QR code on the device that will use it</value></data>
+  <data name="editor_panels_hint" xml:space="preserve"><value>Each Web panel gets its own doors and actions. Its link is shown once, when it is issued</value></data>
+  <data name="editor_password_changed" xml:space="preserve"><value>Password changed</value></data>
+  <data name="editor_password_for_session" xml:space="preserve"><value>Admin password</value></data>
+  <data name="editor_password_hint" xml:space="preserve"><value>The same password is used by the web admin and every device</value></data>
+  <data name="editor_password_mismatch" xml:space="preserve"><value>The two entries differ</value></data>
+  <data name="editor_password_too_short" xml:space="preserve"><value>Use at least 8 characters</value></data>
+  <data name="editor_password_wrong" xml:space="preserve"><value>Wrong password</value></data>
+  <data name="editor_placeholder_hint" xml:space="preserve"><value>Keep every part written in { } as it is</value></data>
+  <data name="editor_places" xml:space="preserve"><value>Buildings, doors and households</value></data>
+  <data name="editor_poll_updates" xml:space="preserve"><value>Accept replies from Telegram</value></data>
+  <data name="editor_port" xml:space="preserve"><value>Port</value></data>
+  <data name="editor_presets_hint" xml:space="preserve"><value>Up to eight presets of at most 200 characters</value></data>
+  <data name="editor_purposes" xml:space="preserve"><value>Visit purposes</value></data>
+  <data name="editor_purposes_edit" xml:space="preserve"><value>Edit visit purposes</value></data>
+  <data name="editor_quiet_hint" xml:space="preserve"><value>Times use the cluster time zone</value></data>
+  <data name="editor_record_hint" xml:space="preserve"><value>A recording can be chosen as the ringtone or the SOS sound</value></data>
+  <data name="editor_record_sound" xml:space="preserve"><value>Record with the microphone</value></data>
+  <data name="editor_recording" xml:space="preserve"><value>Recording (up to 60 seconds)</value></data>
+  <data name="editor_region_clock" xml:space="preserve"><value>Clock</value></data>
+  <data name="editor_region_date" xml:space="preserve"><value>Date</value></data>
+  <data name="editor_region_hint" xml:space="preserve"><value>Hints</value></data>
+  <data name="editor_region_status_line" xml:space="preserve"><value>Status line</value></data>
+  <data name="editor_region_tile_label" xml:space="preserve"><value>Tile labels</value></data>
+  <data name="editor_remove_device" xml:space="preserve"><value>Remove from the cluster</value></data>
+  <data name="editor_remove_image" xml:space="preserve"><value>Remove the image</value></data>
+  <data name="editor_repeat_password" xml:space="preserve"><value>New password again</value></data>
+  <data name="editor_reset" xml:space="preserve"><value>Reset to default</value></data>
+  <data name="editor_role_on_device" xml:space="preserve"><value>A device's role is changed on that device</value></data>
+  <data name="editor_schedule" xml:space="preserve"><value>Schedule</value></data>
+  <data name="editor_search" xml:space="preserve"><value>Search</value></data>
+  <data name="editor_secret_hint" xml:space="preserve"><value>Passwords and keys go to this device's secure store; the configuration only holds a reference</value></data>
+  <data name="editor_secret_set" xml:space="preserve"><value>Stored</value></data>
+  <data name="editor_secret_store_failed" xml:space="preserve"><value>Could not write to the secure store</value></data>
+  <data name="editor_secret_unset" xml:space="preserve"><value>Not set</value></data>
+  <data name="editor_secrets" xml:space="preserve"><value>Passwords and keys</value></data>
+  <data name="editor_server" xml:space="preserve"><value>Server</value></data>
+  <data name="editor_sip_extensions" xml:space="preserve"><value>Extensions (comma-separated)</value></data>
+  <data name="editor_sip_password" xml:space="preserve"><value>SIP password</value></data>
+  <data name="editor_sip_user" xml:space="preserve"><value>User (extension)</value></data>
+  <data name="editor_sound_name" xml:space="preserve"><value>Sound name</value></data>
+  <data name="editor_sounds" xml:space="preserve"><value>Sounds</value></data>
+  <data name="editor_speak" xml:space="preserve"><value>Speak aloud</value></data>
+  <data name="editor_speak_on" xml:space="preserve"><value>Spoken</value></data>
+  <data name="editor_srtp_hint" xml:space="preserve"><value>With Always encrypt, iOS 5 devices cannot take direct calls</value></data>
+  <data name="editor_srtp_mandatory" xml:space="preserve"><value>Always encrypt</value></data>
+  <data name="editor_srtp_optional" xml:space="preserve"><value>Encrypt when possible</value></data>
+  <data name="editor_sticky" xml:space="preserve"><value>Keep until dismissed</value></data>
+  <data name="editor_stop_recording" xml:space="preserve"><value>Stop recording</value></data>
+  <data name="editor_streams" xml:space="preserve"><value>Stream URLs</value></data>
+  <data name="editor_suppress" xml:space="preserve"><value>Silence</value></data>
+  <data name="editor_target_roles" xml:space="preserve"><value>Notify devices</value></data>
+  <data name="editor_test_message" xml:space="preserve"><value>Send a test message</value></data>
+  <data name="editor_this_device" xml:space="preserve"><value>This device</value></data>
+  <data name="editor_this_door" xml:space="preserve"><value>The calling door</value></data>
+  <data name="editor_tls_hint" xml:space="preserve"><value>TLS needs the certificate's SHA-256</value></data>
+  <data name="editor_tls_pin" xml:space="preserve"><value>Certificate SHA-256</value></data>
+  <data name="editor_to" xml:space="preserve"><value>To</value></data>
+  <data name="editor_transport" xml:space="preserve"><value>Transport</value></data>
+  <data name="editor_ttl" xml:space="preserve"><value>Seconds shown (0 for no limit)</value></data>
+  <data name="editor_type" xml:space="preserve"><value>Type</value></data>
+  <data name="editor_unreachable" xml:space="preserve"><value>Could not reach this device's administration service</value></data>
+  <data name="editor_uploading" xml:space="preserve"><value>Adding…</value></data>
+  <data name="editor_use_cluster_theme" xml:space="preserve"><value>Use the setting for all devices</value></data>
+  <data name="editor_user" xml:space="preserve"><value>User name</value></data>
+  <data name="editor_visual" xml:space="preserve"><value>Show on screen</value></data>
+  <data name="editor_weekdays" xml:space="preserve"><value>Days</value></data>
+  <data name="editor_weekdays_hint" xml:space="preserve"><value>No days selected means every day. A window may run past midnight</value></data>
+  <data name="editor_when" xml:space="preserve"><value>When</value></data>
+  <data name="editor_when_button" xml:space="preserve"><value>Call button</value></data>
+  <data name="editor_when_call_missed" xml:space="preserve"><value>Missed call</value></data>
+  <data name="editor_when_device_offline" xml:space="preserve"><value>Device offline</value></data>
+  <data name="editor_when_emergency_off" xml:space="preserve"><value>SOS cleared</value></data>
+  <data name="editor_when_emergency_on" xml:space="preserve"><value>SOS raised</value></data>
+  <data name="editor_when_motion" xml:space="preserve"><value>Motion</value></data>
+  <data name="editor_window" xml:space="preserve"><value>Time window</value></data>
+  <data name="editor_windows" xml:space="preserve"><value>Time windows</value></data>
+  <data name="editor_with_snapshot" xml:space="preserve"><value>Attach a photo</value></data>
+  <data name="editor_wording" xml:space="preserve"><value>Wording overrides</value></data>
+  <data name="editor_wording_hint" xml:space="preserve"><value>Search by key or by wording</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>Emergency mode is active</value></data>
   <data name="emergency_button" xml:space="preserve"><value>SOS</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>Cancel alarm</value></data>

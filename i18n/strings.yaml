@@ -2312,3 +2312,203 @@ nset.export_note: { ja: "パスワードや音声・画像は含まれません"
 nset.import_note: { ja: "読み込む前に変更点を確認できます", en: "Changes are shown before anything is applied", zh: "应用前会显示变更内容" }
 nset.import_summary: { ja: "変更 {changes} 件 · 未登録の秘密情報 {secrets} 件 · 未取得の資産 {assets} 件 · 問題 {problems} 件", en: "{changes} changes · {secrets} missing secrets · {assets} missing assets · {problems} problems", zh: "变更 {changes} 项 · 缺少秘密信息 {secrets} 项 · 缺少资源 {assets} 项 · 问题 {problems} 项" }
 nset.export_done: { ja: "書き出しました", en: "Exported", zh: "已导出" }
+
+# Native settings editors (iOS 5 kiosk and iOS): every item formerly sent to the web admin
+editor.back: { ja: "戻る", en: "Back", zh: "返回" }
+editor.done: { ja: "完了", en: "Done", zh: "完成" }
+editor.edit: { ja: "編集", en: "Edit", zh: "编辑" }
+editor.ok: { ja: "OK", en: "OK", zh: "确定" }
+editor.confirm: { ja: "実行", en: "Continue", zh: "继续" }
+editor.search: { ja: "検索", en: "Search", zh: "搜索" }
+editor.loading: { ja: "読み込み中…", en: "Loading…", zh: "正在加载…" }
+editor.delete: { ja: "削除", en: "Delete", zh: "删除" }
+editor.reset: { ja: "元に戻す", en: "Reset to default", zh: "恢复默认" }
+editor.disable: { ja: "無効にする", en: "Turn off", zh: "停用" }
+editor.enabled: { ja: "有効", en: "Enabled", zh: "启用" }
+editor.on: { ja: "オン", en: "On", zh: "开" }
+editor.off: { ja: "オフ", en: "Off", zh: "关" }
+editor.all: { ja: "すべて", en: "All", zh: "全部" }
+editor.name: { ja: "名前", en: "Name", zh: "名称" }
+editor.label: { ja: "表示名", en: "Label", zh: "显示名称" }
+editor.icon: { ja: "アイコン（絵文字）", en: "Icon (emoji)", zh: "图标（表情符号）" }
+editor.type: { ja: "種類", en: "Type", zh: "类型" }
+editor.automatic: { ja: "自動", en: "Automatic", zh: "自动" }
+editor.inherited: { ja: "全体の設定", en: "Same as all devices", zh: "与全部设备相同" }
+editor.this_device: { ja: "この端末", en: "This device", zh: "本设备" }
+editor.all_devices: { ja: "すべての端末", en: "All devices", zh: "所有设备" }
+editor.online: { ja: "オンライン", en: "Online", zh: "在线" }
+editor.offline: { ja: "オフライン", en: "Offline", zh: "离线" }
+editor.list_edit_hint: { ja: "「編集」で並べ替えと削除ができます", en: "Tap Edit to reorder or delete", zh: "点按“编辑”可排序或删除" }
+editor.secret_set: { ja: "登録済み", en: "Stored", zh: "已保存" }
+editor.secret_unset: { ja: "未登録", en: "Not set", zh: "未设置" }
+editor.secret_hint: { ja: "パスワードと鍵はこの端末の安全な保管場所に入り、設定には参照だけが書かれます", en: "Passwords and keys go to this device's secure store; the configuration only holds a reference", zh: "密码和密钥保存在本设备的安全存储中，配置里只写入引用" }
+editor.secret_store_failed: { ja: "安全な保管場所に書き込めませんでした", en: "Could not write to the secure store", zh: "无法写入安全存储" }
+editor.core_too_old: { ja: "この端末の Core はこの操作に対応していません", en: "This device's Core does not support this", zh: "本设备的 Core 不支持此操作" }
+editor.unreachable: { ja: "この端末の管理機能に接続できません", en: "Could not reach this device's administration service", zh: "无法连接本设备的管理服务" }
+editor.password_for_session: { ja: "管理パスワード", en: "Admin password", zh: "管理密码" }
+editor.password_wrong: { ja: "パスワードが違います", en: "Wrong password", zh: "密码错误" }
+editor.custom_color: { ja: "色コードを入力", en: "Enter a colour code", zh: "输入颜色代码" }
+editor.speak: { ja: "読み上げる", en: "Speak aloud", zh: "朗读" }
+editor.speak_on: { ja: "読み上げ", en: "Spoken", zh: "朗读" }
+editor.new_reply: { ja: "新しい返答", en: "New reply", zh: "新回复" }
+editor.purposes: { ja: "用件", en: "Visit purposes", zh: "来访目的" }
+editor.purposes_edit: { ja: "用件を編集", en: "Edit visit purposes", zh: "编辑来访目的" }
+editor.new_purpose: { ja: "新しい用件", en: "New purpose", zh: "新来访目的" }
+editor.presets_hint: { ja: "お知らせの定型文は最大 8 件、各 200 文字まで", en: "Up to eight presets of at most 200 characters", zh: "最多 8 条，每条不超过 200 个字符" }
+editor.windows: { ja: "時間帯", en: "Time windows", zh: "时间段" }
+editor.window: { ja: "時間帯", en: "Time window", zh: "时间段" }
+editor.add_window: { ja: "時間帯を追加", en: "Add a time window", zh: "添加时间段" }
+editor.from: { ja: "開始", en: "From", zh: "开始" }
+editor.to: { ja: "終了", en: "To", zh: "结束" }
+editor.weekdays: { ja: "曜日", en: "Days", zh: "星期" }
+editor.weekdays_hint: { ja: "曜日を選ばないと毎日になります。日をまたぐ時間帯も指定できます", en: "No days selected means every day. A window may run past midnight", zh: "不选星期表示每天。时间段可以跨越午夜" }
+editor.quiet_hint: { ja: "時刻はクラスターのタイムゾーンで判定します", en: "Times use the cluster time zone", zh: "时间按集群时区判断" }
+editor.suppress: { ja: "止める通知", en: "Silence", zh: "静音的通知" }
+editor.never_suppress: { ja: "静かな時間帯でも通知する", en: "Notify during quiet hours", zh: "静音时段也通知" }
+editor.never_suppress_short: { ja: "常時", en: "always", zh: "始终" }
+editor.never_suppress_hint: { ja: "オンにすると静かにする時間帯でもこの動作を行います", en: "When on, this action also runs during quiet hours", zh: "开启后，静音时段也会执行此动作" }
+editor.day_mon: { ja: "月", en: "Mon", zh: "一" }
+editor.day_tue: { ja: "火", en: "Tue", zh: "二" }
+editor.day_wed: { ja: "水", en: "Wed", zh: "三" }
+editor.day_thu: { ja: "木", en: "Thu", zh: "四" }
+editor.day_fri: { ja: "金", en: "Fri", zh: "五" }
+editor.day_sat: { ja: "土", en: "Sat", zh: "六" }
+editor.day_sun: { ja: "日", en: "Sun", zh: "日" }
+editor.ntp_servers_hint: { ja: "最大 4 つ。ポートを変える場合は host:port", en: "Up to four. Use host:port for a non-standard port", zh: "最多四个。非标准端口请使用 host:port" }
+editor.new_rule: { ja: "新しいルール", en: "New rule", zh: "新规则" }
+editor.when: { ja: "きっかけ", en: "When", zh: "触发条件" }
+editor.when_button: { ja: "呼出ボタン", en: "Call button", zh: "呼叫按钮" }
+editor.when_motion: { ja: "動きを検知", en: "Motion", zh: "检测到移动" }
+editor.when_call_missed: { ja: "不在着信", en: "Missed call", zh: "未接来电" }
+editor.when_device_offline: { ja: "端末がオフライン", en: "Device offline", zh: "设备离线" }
+editor.when_emergency_on: { ja: "SOS 発生", en: "SOS raised", zh: "SOS 触发" }
+editor.when_emergency_off: { ja: "SOS 解除", en: "SOS cleared", zh: "SOS 解除" }
+editor.doors: { ja: "ドア", en: "Doors", zh: "门" }
+editor.door: { ja: "ドア", en: "Door", zh: "门" }
+editor.this_door: { ja: "呼び出したドア", en: "The calling door", zh: "呼叫的门" }
+editor.schedule: { ja: "時間", en: "Schedule", zh: "时间安排" }
+editor.always: { ja: "いつでも", en: "Always", zh: "随时" }
+editor.actions: { ja: "動作", en: "Actions", zh: "动作" }
+editor.action: { ja: "動作", en: "Action", zh: "动作" }
+editor.add_action: { ja: "動作を追加", en: "Add an action", zh: "添加动作" }
+editor.action_chime: { ja: "チャイム", en: "Chime", zh: "门铃声" }
+editor.action_device_alert: { ja: "端末に通知", en: "Device alert", zh: "设备提醒" }
+editor.action_sip_call: { ja: "電話をかける", en: "Phone call", zh: "拨打电话" }
+editor.action_telegram: { ja: "Telegram", en: "Telegram", zh: "Telegram" }
+editor.action_ha_event: { ja: "Home Assistant イベント", en: "Home Assistant event", zh: "Home Assistant 事件" }
+editor.action_ha_command: { ja: "Home Assistant コマンド", en: "Home Assistant command", zh: "Home Assistant 命令" }
+editor.action_auto_reply: { ja: "自動返答", en: "Automatic reply", zh: "自动回复" }
+editor.extension: { ja: "内線番号", en: "Extension", zh: "分机号" }
+editor.households: { ja: "世帯", en: "Households", zh: "住户" }
+editor.new_household: { ja: "新しい世帯", en: "New household", zh: "新住户" }
+editor.with_snapshot: { ja: "写真を付ける", en: "Attach a photo", zh: "附带照片" }
+editor.command: { ja: "コマンド", en: "Command", zh: "命令" }
+editor.target_roles: { ja: "通知する端末", en: "Notify devices", zh: "通知的设备" }
+editor.channels: { ja: "通知の方法", en: "Channels", zh: "通知方式" }
+editor.channel_in_app: { ja: "画面に表示", en: "On screen", zh: "屏幕显示" }
+editor.channel_system_notification: { ja: "システム通知", en: "System notification", zh: "系统通知" }
+editor.channel_web_push: { ja: "Web プッシュ", en: "Web Push", zh: "网页推送" }
+editor.visual: { ja: "画面で知らせる", en: "Show on screen", zh: "屏幕提示" }
+editor.sticky: { ja: "閉じるまで表示", en: "Keep until dismissed", zh: "保持到关闭" }
+editor.ttl: { ja: "表示秒数（0 は無制限）", en: "Seconds shown (0 for no limit)", zh: "显示秒数（0 表示不限）" }
+editor.bot_token: { ja: "ボットのトークン", en: "Bot token", zh: "机器人令牌" }
+editor.poll_updates: { ja: "Telegram から返答を受け付ける", en: "Accept replies from Telegram", zh: "接受来自 Telegram 的回复" }
+editor.test_message: { ja: "テストメッセージを送る", en: "Send a test message", zh: "发送测试消息" }
+editor.chat_id: { ja: "送り先のチャット ID", en: "Chat ID to send to", zh: "发送目标聊天 ID" }
+editor.chat_ids: { ja: "Telegram のチャット ID（カンマ区切り）", en: "Telegram chat IDs (comma-separated)", zh: "Telegram 聊天 ID（逗号分隔）" }
+editor.sip_extensions: { ja: "内線番号（カンマ区切り）", en: "Extensions (comma-separated)", zh: "分机号（逗号分隔）" }
+editor.secrets: { ja: "パスワードと鍵", en: "Passwords and keys", zh: "密码与密钥" }
+editor.sip_password: { ja: "SIP パスワード", en: "SIP password", zh: "SIP 密码" }
+editor.mqtt_password: { ja: "MQTT パスワード", en: "MQTT password", zh: "MQTT 密码" }
+editor.camera_credential: { ja: "カメラのログイン", en: "Camera login", zh: "摄像头登录信息" }
+editor.server: { ja: "サーバー", en: "Server", zh: "服务器" }
+editor.port: { ja: "ポート", en: "Port", zh: "端口" }
+editor.transport: { ja: "通信方式", en: "Transport", zh: "传输方式" }
+editor.direct_port: { ja: "直接通話のポート", en: "Direct call port", zh: "直接通话端口" }
+editor.srtp_optional: { ja: "可能なら暗号化", en: "Encrypt when possible", zh: "尽可能加密" }
+editor.srtp_mandatory: { ja: "必ず暗号化", en: "Always encrypt", zh: "始终加密" }
+editor.srtp_hint: { ja: "「必ず暗号化」にすると iOS 5 の端末とは直接通話できません", en: "With Always encrypt, iOS 5 devices cannot take direct calls", zh: "选择“始终加密”后，iOS 5 设备无法直接通话" }
+editor.sip_user: { ja: "ユーザー（内線）", en: "User (extension)", zh: "用户（分机）" }
+editor.answer_mode: { ja: "着信時", en: "On an incoming call", zh: "来电时" }
+editor.answer_auto: { ja: "すぐに応答", en: "Answer at once", zh: "立即接听" }
+editor.answer_ring: { ja: "呼び出して待つ", en: "Ring and wait", zh: "响铃等待" }
+editor.dtmf_actions: { ja: "電話のボタン操作", en: "Phone keypad actions", zh: "电话按键操作" }
+editor.add_dtmf: { ja: "ボタン操作を追加", en: "Add a keypad action", zh: "添加按键操作" }
+editor.dtmf_code: { ja: "押すボタン（例 *1）", en: "Keys to press (for example *1)", zh: "按键（例如 *1）" }
+editor.dtmf_code_hint: { ja: "0-9、*、#、A-D を 1〜8 文字", en: "One to eight of 0-9, *, # and A-D", zh: "由 0-9、*、#、A-D 组成的 1 至 8 个字符" }
+editor.dtmf_hint: { ja: "通話中に電話機でボタンを押すと実行します", en: "Runs when the keys are pressed on the phone during a call", zh: "通话中在电话上按键时执行" }
+editor.dtmf_hangup: { ja: "電話を切る", en: "Hang up", zh: "挂断" }
+editor.dtmf_ha_command: { ja: "Home Assistant コマンド", en: "Home Assistant command", zh: "Home Assistant 命令" }
+editor.dtmf_quick_reply: { ja: "クイック返答", en: "Quick reply", zh: "快捷回复" }
+editor.dtmf_decline: { ja: "応答しない", en: "Decline", zh: "拒绝" }
+editor.mqtt: { ja: "MQTT と Home Assistant", en: "MQTT and Home Assistant", zh: "MQTT 与 Home Assistant" }
+editor.broker: { ja: "ブローカー", en: "Broker", zh: "代理服务器" }
+editor.tls_pin: { ja: "証明書の SHA-256", en: "Certificate SHA-256", zh: "证书 SHA-256" }
+editor.tls_hint: { ja: "TLS を使うときは証明書の SHA-256 が必要です", en: "TLS needs the certificate's SHA-256", zh: "使用 TLS 时需要证书的 SHA-256" }
+editor.user: { ja: "ユーザー名", en: "User name", zh: "用户名" }
+editor.base_topic: { ja: "トピックの接頭辞", en: "Base topic", zh: "主题前缀" }
+editor.discovery_prefix: { ja: "Discovery の接頭辞", en: "Discovery prefix", zh: "Discovery 前缀" }
+editor.entity_language: { ja: "エンティティ名の言語", en: "Entity name language", zh: "实体名称语言" }
+editor.allow_sos_control: { ja: "Home Assistant から SOS を操作", en: "Allow SOS control from Home Assistant", zh: "允许从 Home Assistant 控制 SOS" }
+editor.allow_notice_control: { ja: "Home Assistant からお知らせを操作", en: "Allow announcements from Home Assistant", zh: "允许从 Home Assistant 发布公告" }
+editor.ha_control_hint: { ja: "ブローカーの認証だけが確認されるため、必要なときだけオンにしてください", en: "Only the broker's login is checked, so turn these on only when needed", zh: "只检查代理服务器的登录，请仅在需要时开启" }
+editor.panels_hint: { ja: "Web パネルごとに使えるドアと操作を決めます。リンクは発行したときに一度だけ表示します", en: "Each Web panel gets its own doors and actions. Its link is shown once, when it is issued", zh: "为每个网页面板设定可用的门和操作。链接只在签发时显示一次" }
+editor.panel_link_once: { ja: "このリンクは今だけ表示されます。使う端末で QR コードを読み取ってください", en: "This link is shown only now. Scan the QR code on the device that will use it", zh: "此链接仅显示这一次。请在要使用的设备上扫描二维码" }
+editor.media_hint: { ja: "カメラのログインは URL に書かず、「カメラのログイン」に登録します", en: "Never put the camera's login in the URL; store it as the camera login", zh: "不要把摄像头登录信息写在 URL 中，请保存为“摄像头登录信息”" }
+editor.media_url_hint: { ja: "H.264 は RTSP（TCP、Baseline）だけに対応します", en: "H.264 must be RTSP over TCP, Baseline profile", zh: "H.264 仅支持 RTSP（TCP、Baseline）" }
+editor.camera_name: { ja: "カメラの ID（英数字、_、-）", en: "Camera ID (letters, digits, _ and -)", zh: "摄像头 ID（字母、数字、_ 和 -）" }
+editor.id_hint: { ja: "英数字と _ - だけで 64 文字まで", en: "Letters, digits, _ and - only, up to 64", zh: "仅限字母、数字、_ 和 -，最多 64 个" }
+editor.streams: { ja: "映像の URL", en: "Stream URLs", zh: "视频流 URL" }
+editor.places: { ja: "建物・ドア・世帯", en: "Buildings, doors and households", zh: "建筑、门与住户" }
+editor.buildings: { ja: "建物", en: "Buildings", zh: "建筑" }
+editor.building: { ja: "建物", en: "Building", zh: "建筑" }
+editor.new_building: { ja: "新しい建物", en: "New building", zh: "新建筑" }
+editor.new_door: { ja: "新しいドア", en: "New door", zh: "新门" }
+editor.role_on_device: { ja: "役割はその端末の設定で変更します", en: "A device's role is changed on that device", zh: "设备角色需在该设备上更改" }
+editor.remove_device: { ja: "クラスターから外す", en: "Remove from the cluster", zh: "从集群中移除" }
+editor.wording: { ja: "文言の書き換え", en: "Wording overrides", zh: "文案覆盖" }
+editor.edited: { ja: "書き換え済み", en: "Changed", zh: "已修改" }
+editor.all_wording: { ja: "すべての文言", en: "All wording", zh: "全部文案" }
+editor.wording_hint: { ja: "検索欄でキーや文言を探せます", en: "Search by key or by wording", zh: "可按键名或文案搜索" }
+editor.placeholder_hint: { ja: "{ } で囲んだ部分はそのまま残してください", en: "Keep every part written in { } as it is", zh: "请保留所有用 { } 括起的部分" }
+editor.background_image: { ja: "背景画像", en: "Background image", zh: "背景图片" }
+editor.choose_photo: { ja: "写真から選ぶ", en: "Choose a photo", zh: "从照片中选择" }
+editor.current_image: { ja: "使用中の画像", en: "Current image", zh: "当前图片" }
+editor.remove_image: { ja: "画像を使わない", en: "Remove the image", zh: "不使用图片" }
+editor.images: { ja: "画像", en: "Images", zh: "图片" }
+editor.ink_overrides: { ja: "文字色", en: "Text colours", zh: "文字颜色" }
+editor.ink: { ja: "文字色", en: "Text colour", zh: "文字颜色" }
+editor.ink_hint: { ja: "「自動」は背景に合わせて読みやすい色を選びます", en: "Automatic picks the more readable colour for the background", zh: "“自动”会根据背景选择更易读的颜色" }
+editor.region_clock: { ja: "時計", en: "Clock", zh: "时钟" }
+editor.region_date: { ja: "日付", en: "Date", zh: "日期" }
+editor.region_status_line: { ja: "状態の行", en: "Status line", zh: "状态行" }
+editor.region_hint: { ja: "案内文", en: "Hints", zh: "提示文字" }
+editor.region_tile_label: { ja: "タイルの名前", en: "Tile labels", zh: "磁贴名称" }
+editor.use_cluster_theme: { ja: "この端末の設定をやめる", en: "Use the setting for all devices", zh: "改用所有设备的设置" }
+editor.no_photos: { ja: "写真を読み込めません", en: "Photos are not available", zh: "无法读取照片" }
+editor.uploading: { ja: "取り込み中…", en: "Adding…", zh: "正在添加…" }
+editor.assets_hint: { ja: "「編集」で削除できます。使用中のものも削除されます", en: "Tap Edit to delete. Files in use are removed too", zh: "点按“编辑”可删除，正在使用的文件也会被删除" }
+editor.sounds: { ja: "音", en: "Sounds", zh: "声音" }
+editor.record_sound: { ja: "マイクで録音", en: "Record with the microphone", zh: "用麦克风录音" }
+editor.stop_recording: { ja: "録音を止める", en: "Stop recording", zh: "停止录音" }
+editor.recording: { ja: "録音中（最長 60 秒）", en: "Recording (up to 60 seconds)", zh: "录音中（最长 60 秒）" }
+editor.record_hint: { ja: "録音した音は着信音や SOS の音に選べます", en: "A recording can be chosen as the ringtone or the SOS sound", zh: "录制的声音可设为铃声或 SOS 声音" }
+editor.no_microphone: { ja: "マイクが使えません", en: "The microphone is not available", zh: "麦克风不可用" }
+editor.sound_name: { ja: "音の名前", en: "Sound name", zh: "声音名称" }
+editor.config_transfer: { ja: "設定の書き出しと読み込み", en: "Export and import settings", zh: "导出与导入设置" }
+editor.export_clipboard: { ja: "クリップボードに書き出す", en: "Copy settings to the clipboard", zh: "将设置复制到剪贴板" }
+editor.import_clipboard: { ja: "クリップボードから読み込む", en: "Import settings from the clipboard", zh: "从剪贴板导入设置" }
+editor.exported: { ja: "{kb} KB の設定をコピーしました", en: "Copied {kb} KB of settings", zh: "已复制 {kb} KB 的设置" }
+editor.import_confirm: { ja: "{count} 項目が変わります。読み込みますか？", en: "{count} values will change. Import?", zh: "将更改 {count} 项。要导入吗？" }
+editor.import_blocked: { ja: "読み込めません。足りないパスワードや画像がないか確認してください", en: "Cannot import. Check for missing passwords or files", zh: "无法导入。请检查是否缺少密码或文件" }
+editor.clipboard_not_config: { ja: "クリップボードに設定がありません", en: "The clipboard holds no settings", zh: "剪贴板中没有设置" }
+editor.config_transfer_hint: { ja: "パスワードと鍵、画像や音のファイルは含まれません", en: "Passwords, keys and image or sound files are not included", zh: "不包含密码、密钥以及图片或声音文件" }
+editor.admin_password: { ja: "管理パスワード", en: "Admin password", zh: "管理密码" }
+editor.change_password: { ja: "パスワードを変更", en: "Change the password", zh: "更改密码" }
+editor.current_password: { ja: "今のパスワード", en: "Current password", zh: "当前密码" }
+editor.new_password: { ja: "新しいパスワード（8 文字以上）", en: "New password (at least 8 characters)", zh: "新密码（至少 8 个字符）" }
+editor.repeat_password: { ja: "新しいパスワードをもう一度", en: "New password again", zh: "再次输入新密码" }
+editor.password_too_short: { ja: "8 文字以上にしてください", en: "Use at least 8 characters", zh: "请至少使用 8 个字符" }
+editor.password_mismatch: { ja: "2 回の入力が違います", en: "The two entries differ", zh: "两次输入不一致" }
+editor.password_changed: { ja: "パスワードを変更しました", en: "Password changed", zh: "密码已更改" }
+editor.password_hint: { ja: "Web 管理とすべての端末で同じパスワードを使います", en: "The same password is used by the web admin and every device", zh: "网页管理和所有设备使用同一密码" }

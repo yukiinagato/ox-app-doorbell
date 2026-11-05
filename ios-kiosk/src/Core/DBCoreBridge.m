@@ -119,6 +119,43 @@ static NSString *DBDefaultGatewayIPv4(void) {
 
 
 
+// Hardware identifier such as "iPad2,7". UIDevice.model only says "iPad".
+static NSString *DBHardwareMachine(void) {
+  size_t size = 0;
+  if (sysctlbyname("hw.machine", NULL, &size, NULL, 0) != 0 || size == 0) return nil;
+  char *buf = (char *)malloc(size);
+  if (buf == NULL) return nil;
+  NSString *machine = nil;
+  if (sysctlbyname("hw.machine", buf, &size, NULL, 0) == 0)
+    machine = [NSString stringWithUTF8String:buf];
+  free(buf);
+  return [machine length] > 0 ? machine : nil;
+}
+
+// Core takes the node's model and platform from boot.json and otherwise reports
+// "unknown"; the kiosk boot document never carried them. Fill both in from the
+// hardware without overriding what an installer wrote.
+static NSString *DBBootJsonWithIdentity(NSString *bootJson) {
+  NSData *data = [bootJson dataUsingEncoding:NSUTF8StringEncoding];
+  id root = data ? [NSJSONSerialization JSONObjectWithData:data
+                                                   options:NSJSONReadingMutableContainers
+                                                     error:NULL] : nil;
+  if (![root isKindOfClass:[NSMutableDictionary class]]) return bootJson;
+  NSMutableDictionary *boot = (NSMutableDictionary *)root;
+  NSString *model = DBHardwareMachine() ?: [[UIDevice currentDevice] model];
+  id current = [boot objectForKey:@"model"];
+  if (![current isKindOfClass:[NSString class]] || [current length] == 0 ||
+      [current isEqualToString:@"unknown"]) {
+    if ([model length] > 0) [boot setObject:model forKey:@"model"];
+  }
+  current = [boot objectForKey:@"platform"];
+  if (![current isKindOfClass:[NSString class]] || [current length] == 0 ||
+      [current isEqualToString:@"unknown"]) [boot setObject:@"ios" forKey:@"platform"];
+  NSData *out = [NSJSONSerialization dataWithJSONObject:boot options:0 error:NULL];
+  NSString *json = out ? [[NSString alloc] initWithData:out encoding:NSUTF8StringEncoding] : nil;
+  return [json length] > 0 ? json : bootJson;
+}
+
 static int DBDeviceInfo(void *user, char **out_json) {
   if (out_json == NULL || user == NULL) return -1;
   @autoreleasepool {
@@ -482,6 +519,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   plat.power_state = DBPowerState;
   plat.user = (__bridge void *)self;
 
+  bootJson = DBBootJsonWithIdentity(bootJson ?: @"{}");
   _core = db_core_create_v2(&plat, [dataDir UTF8String], [bootJson UTF8String]);
   if (_core == NULL) return NO;
   db_core_set_ui_callback(_core, DBUiEventCb, (__bridge void *)self);
@@ -1097,6 +1135,13 @@ static DBRotateKeyFn DBRotateKey(void) {
     case UIDeviceBatteryStateUnplugged: state = @"unplugged"; break;
     default: break;
   }
+  NSString *machine = DBHardwareMachine();
+  [root setObject:machine ?: ([dev model] ?: @"") forKey:@"model"];
+  [root setObject:@"ios" forKey:@"platform"];
+  [root setObject:[dev systemVersion] ?: @"" forKey:@"os_version"];
+  NSString *appVersion =
+      [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleShortVersionString"];
+  if ([appVersion length] > 0) [root setObject:appVersion forKey:@"app_version"];
   NSMutableDictionary *bat = [NSMutableDictionary dictionary];
   if (lvl >= 0) [bat setObject:[NSNumber numberWithFloat:lvl] forKey:@"level"];
   [bat setObject:state forKey:@"state"];
@@ -1634,6 +1679,129 @@ static DBMicMuteFn DBMicMute(void) {
   dispatch_sync(_coreQueue, ^{
     if (self->_core) status = mute(self->_core, muted ? 1 : 0);
   });
+  return status;
+}
+
+
+// ---- Native assets, snapshot/import and panel identities ----
+typedef char *(*DBAssetAddFn)(db_core *, const uint8_t *, size_t, const char *, const char *);
+typedef char *(*DBAssetRemoveFn)(db_core *, const char *);
+typedef char *(*DBSnapshotFn)(db_core *);
+typedef char *(*DBSessionCallFn)(db_core *, const char *, const char *, const char *, const char *);
+typedef int (*DBRemoveDeviceV2Fn)(db_core *, const char *);
+
+static DBAssetAddFn DBAssetAdd(void) {
+  static DBAssetAddFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBAssetAddFn)DBCoreSymbol("db_core_asset_add_json"); });
+  return fn;
+}
+
+static DBAssetRemoveFn DBAssetRemove(void) {
+  static DBAssetRemoveFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBAssetRemoveFn)DBCoreSymbol("db_core_asset_remove_json"); });
+  return fn;
+}
+
+static NSString *DBJsonString(NSDictionary *object) {
+  NSData *data = object ? [NSJSONSerialization dataWithJSONObject:object options:0 error:NULL] : nil;
+  return data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+}
+
++ (BOOL)supportsAssets {
+  return DBAssetAdd() != NULL && DBAssetRemove() != NULL;
+}
+
+- (NSDictionary *)resultAdminChecked:(NSDictionary *)result {
+  if ([[result objectForKey:@"err"] isEqual:@"admin_required"] ||
+      [[result objectForKey:@"error_code"] isEqual:@"admin_required"])
+    DBPostAdminRequired();
+  return result;
+}
+
+- (NSDictionary *)addAsset:(NSData *)data type:(NSString *)type label:(NSString *)label {
+  DBAssetAddFn add = DBAssetAdd();
+  if (add == NULL || [data length] == 0 || [type length] == 0) return nil;
+  NSData *bytes = [data copy];
+  NSString *mime = [type copy];
+  NSString *name = [label copy] ?: @"";
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:add(self->_core, (const uint8_t *)[bytes bytes], [bytes length],
+                               [mime UTF8String], [name UTF8String])];
+  });
+  return [self resultAdminChecked:out];
+}
+
+- (NSDictionary *)removeAsset:(NSString *)sha256 {
+  DBAssetRemoveFn remove = DBAssetRemove();
+  if (remove == NULL || [sha256 length] == 0) return nil;
+  NSString *hash = [sha256 copy];
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:remove(self->_core, [hash UTF8String])];
+  });
+  return [self resultAdminChecked:out];
+}
+
+- (NSDictionary *)configSnapshot {
+  static DBSnapshotFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBSnapshotFn)DBCoreSymbol("db_core_config_snapshot_json_v2"); });
+  if (fn == NULL) return nil;
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:fn(self->_core)];
+  });
+  return out;
+}
+
+- (NSDictionary *)sessionCall:(DBSessionCallFn)fn action:(NSString *)action
+                      request:(NSDictionary *)request session:(NSString *)session
+                         csrf:(NSString *)csrf {
+  NSString *body = DBJsonString(request ?: @{});
+  if (fn == NULL || [action length] == 0 || body == nil || [session length] == 0 ||
+      [csrf length] == 0) return nil;
+  NSString *a = [action copy], *s = [session copy], *t = [csrf copy];
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      out = [self takeJson:fn(self->_core, [a UTF8String], [body UTF8String], [s UTF8String],
+                              [t UTF8String])];
+  });
+  return out;
+}
+
+- (NSDictionary *)configImport:(NSString *)action request:(NSDictionary *)request
+                       session:(NSString *)session csrf:(NSString *)csrf {
+  static DBSessionCallFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBSessionCallFn)DBCoreSymbol("db_core_config_import_json_v2"); });
+  return [self sessionCall:fn action:action request:request session:session csrf:csrf];
+}
+
+- (NSDictionary *)panelIdentity:(NSString *)action request:(NSDictionary *)request
+                        session:(NSString *)session csrf:(NSString *)csrf {
+  static DBSessionCallFn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBSessionCallFn)DBCoreSymbol("db_core_panel_identity_json_v2"); });
+  return [self sessionCall:fn action:action request:request session:session csrf:csrf];
+}
+
+- (int)removeDeviceV2:(NSString *)nodeId {
+  static DBRemoveDeviceV2Fn fn = NULL;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ fn = (DBRemoveDeviceV2Fn)DBCoreSymbol("db_core_remove_device_v2"); });
+  if (fn == NULL) return -100;
+  if ([nodeId length] == 0) return -1;
+  NSString *target = [nodeId copy];
+  __block int status = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) status = fn(self->_core, [target UTF8String]);
+  });
+  if (status == DBAdminRequiredResult) DBPostAdminRequired();
   return status;
 }
 

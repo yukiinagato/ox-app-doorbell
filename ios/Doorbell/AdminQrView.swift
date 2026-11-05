@@ -152,9 +152,9 @@ final class AdminQrView: UIView {
         }
         let ipv4 = addresses.filter { !$0.contains(":") }.sorted()
         if let first = ipv4.first {
-            return "http://\(first):\(boot.httpPort)/admin/"
+            return "https://\(first):\(ConfigUtil.peerAdminHttpsPort)/admin/"
         }
         guard let first = addresses.sorted().first else { return "" }
-        return "http://[\(first)]:\(boot.httpPort)/admin/"
+        return "https://[\(first)]:\(ConfigUtil.peerAdminHttpsPort)/admin/"
     }
 }

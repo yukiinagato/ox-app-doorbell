@@ -8,24 +8,55 @@
 #import "../Media/DBQrCode.h"
 #import "DBRouter.h"
 #import <arpa/inet.h>
+#import <errno.h>
 #import <fcntl.h>
+#import <sys/select.h>
 #import <netinet/in.h>
 #import <sys/socket.h>
 #import <unistd.h>
 #import <AVFoundation/AVFoundation.h>
 
 
-static BOOL DBPortListening(int port) {
+// Non-blocking connect with a short timeout. Core may bind its listeners to the
+// LAN address rather than loopback, so a refusal on 127.0.0.1 is retried on
+// every IPv4 address Core reports. Runs on a background queue only.
+static BOOL DBPortOpenOn(const char *host, int port) {
   int fd = socket(AF_INET, SOCK_STREAM, 0);
   if (fd < 0) return NO;
+  int flags = fcntl(fd, F_GETFL, 0);
+  fcntl(fd, F_SETFL, flags | O_NONBLOCK);
   struct sockaddr_in a;
   memset(&a, 0, sizeof(a));
   a.sin_family = AF_INET;
   a.sin_port = htons((uint16_t)port);
-  inet_pton(AF_INET, "127.0.0.1", &a.sin_addr);
-  BOOL listening = (connect(fd, (struct sockaddr *)&a, sizeof(a)) == 0);
+  if (inet_pton(AF_INET, host, &a.sin_addr) != 1) { close(fd); return NO; }
+  BOOL open = NO;
+  int rc = connect(fd, (struct sockaddr *)&a, sizeof(a));
+  if (rc == 0) {
+    open = YES;
+  } else if (errno == EINPROGRESS) {
+    fd_set w;
+    FD_ZERO(&w);
+    FD_SET(fd, &w);
+    struct timeval tv = {0, 600000};
+    if (select(fd + 1, NULL, &w, NULL, &tv) == 1) {
+      int err = 0;
+      socklen_t len = sizeof(err);
+      if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) == 0 && err == 0) open = YES;
+    }
+  }
   close(fd);
-  return listening;
+  return open;
+}
+
+static BOOL DBPortListening(int port, NSArray *hosts) {
+  if (DBPortOpenOn("127.0.0.1", port)) return YES;
+  for (NSString *host in hosts) {
+    if (![host isKindOfClass:[NSString class]] || [host rangeOfString:@":"].location != NSNotFound)
+      continue;
+    if (DBPortOpenOn([host UTF8String], port)) return YES;
+  }
+  return NO;
 }
 
 @implementation DBInfoScreen {
@@ -46,6 +77,8 @@ static BOOL DBPortListening(int port) {
   NSMutableArray *_v4;
   NSMutableArray *_v6;
   NSInteger _choiceIdx;
+  NSDictionary *_ports;
+  NSInteger _portRetries;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -146,14 +179,33 @@ static BOOL DBPortListening(int port) {
 
 - (void)reload {
   DBCoreBridge *core = _core;
+  NSInteger httpPort = _boot.httpPort > 0 ? _boot.httpPort : 47180;
   __weak DBInfoScreen *wself = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     NSDictionary *st = [core status];
     NSDictionary *dbg = [core debugInfo];
+    id hosts = [DBConfigUtil dig:st path:@"node.local_addrs"];
+    if (![hosts isKindOfClass:[NSArray class]]) hosts = @[];
+    NSMutableDictionary *ports = [NSMutableDictionary dictionary];
+    for (NSNumber *port in @[@(httpPort), @47443, @47172]) {
+      [ports setObject:@(DBPortListening([port intValue], hosts)) forKey:port];
+    }
     dispatch_async(dispatch_get_main_queue(), ^{
       DBInfoScreen *s = wself;
       if (!s || !s.superview) return;
+      s->_ports = ports;
       [s applyCollectedStatus:st debug:dbg];
+      // Core may still be binding right after launch: re-probe a few times
+      // while anything reads closed.
+      if (![[ports allValues] containsObject:@NO]) s->_portRetries = 0;
+      if ([[ports allValues] containsObject:@NO] && s->_portRetries < 5) {
+        s->_portRetries++;
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+          DBInfoScreen *again = wself;
+          if (again && again.superview) [again reload];
+        });
+      }
     });
   });
 }
@@ -244,11 +296,14 @@ static BOOL DBPortListening(int port) {
 
 
   [info appendFormat:@"\n\n── %@ ──\n", [texts ts:@"info.ports"]];
-  [info appendFormat:@"http  %ld : %@\n", (long)_boot.httpPort,
-                      DBPortListening((int)_boot.httpPort) ? @"LISTEN ✓" :
-                      [texts ts:@"info.port_closed"]];
-  [info appendFormat:@"mesh  47172 : %@\n", DBPortListening(47172) ? @"LISTEN ✓" :
-                      [texts ts:@"info.port_closed"]];
+  NSInteger httpPort = _boot.httpPort > 0 ? _boot.httpPort : 47180;
+  NSArray *probed = @[ @[ @"http ", @(httpPort) ], @[ @"https", @47443 ], @[ @"mesh ", @47172 ] ];
+  for (NSArray *entry in probed) {
+    NSNumber *open = [_ports objectForKey:[entry objectAtIndex:1]];
+    NSString *state = open == nil ? @"…"
+        : ([open boolValue] ? @"LISTEN ✓" : [texts ts:@"info.port_closed"]);
+    [info appendFormat:@"%@ %@ : %@\n", [entry objectAtIndex:0], [entry objectAtIndex:1], state];
+  }
   [info appendFormat:@"sip   %ld : %@", (long)_boot.directPort,
                       [texts ts:@"info.sip_direct"]];
 
@@ -335,9 +390,9 @@ static BOOL DBPortListening(int port) {
   NSString *url = nil;
   if (addr) {
     if (_ipSeg.selectedSegmentIndex == 1)
-      url = [NSString stringWithFormat:@"http://[%@]:%ld/admin/", addr, (long)_boot.httpPort];
+      url = [NSString stringWithFormat:@"https://[%@]:47443/admin/", addr];
     else
-      url = [NSString stringWithFormat:@"http://%@:%ld/admin/", addr, (long)_boot.httpPort];
+      url = [NSString stringWithFormat:@"https://%@:47443/admin/", addr];
   }
   if ([list count] > 1) {
     _cycleBtn.hidden = NO;

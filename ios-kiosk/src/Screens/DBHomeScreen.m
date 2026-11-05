@@ -941,8 +941,8 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     }
   }
   if ([host length] == 0) host = @"127.0.0.1";
-  return [NSString stringWithFormat:@"http://%@:%ld/admin/", [DBConfigUtil urlHost:host],
-                                    (long)_boot.httpPort];
+  // Security protocol v3: the admin is served over HTTPS on 47443 only.
+  return [NSString stringWithFormat:@"https://%@:47443/admin/", [DBConfigUtil urlHost:host]];
 }
 
 // Status arrives every five seconds and on every event. Tearing the tiles down

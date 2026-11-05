@@ -1,4 +1,5 @@
 #import "DBAppDelegate.h"
+#import <dlfcn.h>
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBCompatibilityProfile.h"
 #import "../Core/DBConfigUtil.h"
@@ -625,6 +626,29 @@ static BOOL DBNativeKioskHealthy(void) {
 - (void)restartForIdentityChange;
 @end
 
+// ---- Staying reachable while backgrounded ----
+// SpringBoard relaunches a VoIP app in the background after it is killed or the
+// device reboots. A suspended kiosk stops serving Core's HTTPS and mesh ports.
+// On the jailbroken kiosk the app asks SpringBoard to bring it to the front
+// (SpringBoardServices, entitlement com.apple.springboard.launchapplications);
+// where that is refused it keeps Core alive as long as iOS allows with a
+// background task renewed from the VoIP keep-alive handler (iOS 4+, minimum
+// interval 600 s). See ios-kiosk/README.md, "Background relaunch".
+typedef int (*DBSBSLaunchFn)(CFStringRef identifier, Boolean suspended);
+
+static BOOL DBBringAppToForeground(void) {
+  void *handle = dlopen("/System/Library/PrivateFrameworks/SpringBoardServices.framework/"
+                        "SpringBoardServices", RTLD_LAZY);
+  if (handle == NULL) return NO;
+  DBSBSLaunchFn launch =
+      (DBSBSLaunchFn)dlsym(handle, "SBSLaunchApplicationWithIdentifier");
+  NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier];
+  if (launch == NULL || [bundleId length] == 0) return NO;
+  int rc = launch((__bridge CFStringRef)bundleId, false);
+  NSLog(@"[doorbell] SBSLaunchApplicationWithIdentifier(%@) -> %d", bundleId, rc);
+  return rc == 0;
+}
+
 @implementation DBAppDelegate {
   DBCameraFeeder *_camera;
   DBCoreBridge *_core;
@@ -654,6 +678,7 @@ static BOOL DBNativeKioskHealthy(void) {
   NSString *_lastMemoryPressureSource;
   long long _lastMemoryPressureAtMs;
   BOOL _identityRestartPending;
+  UIBackgroundTaskIdentifier _backgroundTask;
 }
 @synthesize window = _window;
 
@@ -812,6 +837,17 @@ static BOOL DBNativeKioskHealthy(void) {
     return recovery.helperSupervising;
   }];
   [_watchdog start];
+  _backgroundTask = UIBackgroundTaskInvalid;
+  if (application.applicationState == UIApplicationStateBackground) {
+    // Relaunched by SpringBoard in the background: hold Core up, then ask to
+    // be brought to the front once the run loop is running.
+    NSLog(@"[doorbell] launched in background; requesting foreground");
+    [self beginBackgroundKeepAlive:application];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+      if ([application applicationState] != UIApplicationStateActive) DBBringAppToForeground();
+    });
+  }
   __weak DBAppDelegate *cameraDelegate = self;
   DBCoreBridge *cameraCore = _core;
   _camera = [[DBCameraFeeder alloc] initWithFrameHandler:^(NSData *data, int format, int width, int height, int stride) {
@@ -1266,8 +1302,36 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   if (degrees >= 0) [_core setVideoSensorRotation:degrees];
 }
 
+- (void)beginBackgroundKeepAlive:(UIApplication *)application {
+  if (_backgroundTask != UIBackgroundTaskInvalid && _backgroundTask != 0) return;
+  __weak DBAppDelegate *weakSelf = self;
+  _backgroundTask = [application beginBackgroundTaskWithExpirationHandler:^{
+    DBAppDelegate *delegate = weakSelf;
+    if (!delegate) return;
+    [[UIApplication sharedApplication] endBackgroundTask:delegate->_backgroundTask];
+    delegate->_backgroundTask = UIBackgroundTaskInvalid;
+  }];
+  [application setKeepAliveTimeout:600 handler:^{
+    DBAppDelegate *delegate = weakSelf;
+    if (!delegate) return;
+    // Each VoIP wake renews the window in which Core keeps serving.
+    if (delegate->_backgroundTask != UIBackgroundTaskInvalid && delegate->_backgroundTask != 0)
+      [[UIApplication sharedApplication] endBackgroundTask:delegate->_backgroundTask];
+    delegate->_backgroundTask = UIBackgroundTaskInvalid;
+    [delegate beginBackgroundKeepAlive:[UIApplication sharedApplication]];
+    if ([[delegate->_boot role] length] > 0) DBBringAppToForeground();
+  }];
+}
+
+- (void)endBackgroundKeepAlive:(UIApplication *)application {
+  [application clearKeepAliveTimeout];
+  if (_backgroundTask != UIBackgroundTaskInvalid && _backgroundTask != 0)
+    [application endBackgroundTask:_backgroundTask];
+  _backgroundTask = UIBackgroundTaskInvalid;
+}
+
 - (void)applicationDidBecomeActive:(UIApplication *)application {
-  (void)application;
+  [self endBackgroundKeepAlive:application];
   [_core invalidateCachedLocalTime];
   [self refreshNativeKioskMeasurement];
   [_router resumeMediaAfterBackground];
@@ -1292,8 +1356,9 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
 }
 
 - (void)applicationDidEnterBackground:(UIApplication *)application {
-  (void)application;
   [_core adminLock];
+  // Keep Core serving the ports for as long as iOS grants background time.
+  [self beginBackgroundKeepAlive:application];
   [_router suspendMediaForBackground];
   [_camera stop];
 }

@@ -55,6 +55,25 @@ containing secrets. A successful host build is not iOS 5 hardware qualification;
 cold-boot, audio, call lifecycle, recovery, long-run, and rollback checks in the maintainer runbook
 before marking a release hardware-certified.
 
+## Background relaunch
+
+SpringBoard relaunches a VoIP app in the background after it is killed or the
+device restarts. A suspended app stops answering on 47443 (admin), 47180 and
+47172 (mesh), so the kiosk does two things:
+
+- When it finds itself launched in the background it asks SpringBoard to bring
+  it to the front with `SBSLaunchApplicationWithIdentifier`
+  (SpringBoardServices). This needs the
+  `com.apple.springboard.launchapplications` entitlement in
+  `src/Entitlements.plist`, which `ldid` applies on the jailbroken kiosk; a
+  stock install refuses the call and logs the result.
+- While it is in the background it holds a background task and renews it from
+  the VoIP keep-alive handler (600 s, the minimum iOS allows), retrying the
+  foreground request on each wake. iOS still ends background time after a few
+  minutes, so on a non-jailbroken device Core serves only until then; the root
+  keep-alive helper (`../ios-compat/helper/`) remains the way to relaunch a
+  stalled app.
+
 ## Attaching a debugger (iPad 1)
 
 A shipped build is not debuggable: the entitlements carry no `get-task-allow`,

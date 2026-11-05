@@ -968,14 +968,15 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 #pragma mark - Door-station Admin QR
 
 - (NSInteger)adminHttpPort {
-  // An external camera URL is not the door station's admin endpoint.
-  return 47180;
+  // An external camera URL is not the door station's admin endpoint. Security
+  // protocol v3 serves the admin over HTTPS on 47443 only.
+  return 47443;
 }
 
 - (NSString *)adminUrlForHost:(NSString *)host {
   NSString *urlHost = [DBConfigUtil urlHost:host];
   if ([urlHost length] == 0) return nil;
-  return [NSString stringWithFormat:@"http://%@:%ld/admin/", urlHost,
+  return [NSString stringWithFormat:@"https://%@:%ld/admin/", urlHost,
                                     (long)[self adminHttpPort]];
 }
 

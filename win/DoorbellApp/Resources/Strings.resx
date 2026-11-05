@@ -510,6 +510,204 @@
   <data name="door_notice_for_this" xml:space="preserve"><value>この門口機にお知らせ</value></data>
   <data name="door_unlock_not_configured" xml:space="preserve"><value>開錠の動作が設定されていません</value></data>
   <data name="door_view" xml:space="preserve"><value>見る</value></data>
+  <data name="editor_action" xml:space="preserve"><value>動作</value></data>
+  <data name="editor_action_auto_reply" xml:space="preserve"><value>自動返答</value></data>
+  <data name="editor_action_chime" xml:space="preserve"><value>チャイム</value></data>
+  <data name="editor_action_device_alert" xml:space="preserve"><value>端末に通知</value></data>
+  <data name="editor_action_ha_command" xml:space="preserve"><value>Home Assistant コマンド</value></data>
+  <data name="editor_action_ha_event" xml:space="preserve"><value>Home Assistant イベント</value></data>
+  <data name="editor_action_sip_call" xml:space="preserve"><value>電話をかける</value></data>
+  <data name="editor_action_telegram" xml:space="preserve"><value>Telegram</value></data>
+  <data name="editor_actions" xml:space="preserve"><value>動作</value></data>
+  <data name="editor_add_action" xml:space="preserve"><value>動作を追加</value></data>
+  <data name="editor_add_dtmf" xml:space="preserve"><value>ボタン操作を追加</value></data>
+  <data name="editor_add_window" xml:space="preserve"><value>時間帯を追加</value></data>
+  <data name="editor_admin_password" xml:space="preserve"><value>管理パスワード</value></data>
+  <data name="editor_all" xml:space="preserve"><value>すべて</value></data>
+  <data name="editor_all_devices" xml:space="preserve"><value>すべての端末</value></data>
+  <data name="editor_all_wording" xml:space="preserve"><value>すべての文言</value></data>
+  <data name="editor_allow_notice_control" xml:space="preserve"><value>Home Assistant からお知らせを操作</value></data>
+  <data name="editor_allow_sos_control" xml:space="preserve"><value>Home Assistant から SOS を操作</value></data>
+  <data name="editor_always" xml:space="preserve"><value>いつでも</value></data>
+  <data name="editor_answer_auto" xml:space="preserve"><value>すぐに応答</value></data>
+  <data name="editor_answer_mode" xml:space="preserve"><value>着信時</value></data>
+  <data name="editor_answer_ring" xml:space="preserve"><value>呼び出して待つ</value></data>
+  <data name="editor_assets_hint" xml:space="preserve"><value>「編集」で削除できます。使用中のものも削除されます</value></data>
+  <data name="editor_automatic" xml:space="preserve"><value>自動</value></data>
+  <data name="editor_back" xml:space="preserve"><value>戻る</value></data>
+  <data name="editor_background_image" xml:space="preserve"><value>背景画像</value></data>
+  <data name="editor_base_topic" xml:space="preserve"><value>トピックの接頭辞</value></data>
+  <data name="editor_bot_token" xml:space="preserve"><value>ボットのトークン</value></data>
+  <data name="editor_broker" xml:space="preserve"><value>ブローカー</value></data>
+  <data name="editor_building" xml:space="preserve"><value>建物</value></data>
+  <data name="editor_buildings" xml:space="preserve"><value>建物</value></data>
+  <data name="editor_camera_credential" xml:space="preserve"><value>カメラのログイン</value></data>
+  <data name="editor_camera_name" xml:space="preserve"><value>カメラの ID（英数字、_、-）</value></data>
+  <data name="editor_change_password" xml:space="preserve"><value>パスワードを変更</value></data>
+  <data name="editor_channel_in_app" xml:space="preserve"><value>画面に表示</value></data>
+  <data name="editor_channel_system_notification" xml:space="preserve"><value>システム通知</value></data>
+  <data name="editor_channel_web_push" xml:space="preserve"><value>Web プッシュ</value></data>
+  <data name="editor_channels" xml:space="preserve"><value>通知の方法</value></data>
+  <data name="editor_chat_id" xml:space="preserve"><value>送り先のチャット ID</value></data>
+  <data name="editor_chat_ids" xml:space="preserve"><value>Telegram のチャット ID（カンマ区切り）</value></data>
+  <data name="editor_choose_photo" xml:space="preserve"><value>写真から選ぶ</value></data>
+  <data name="editor_clipboard_not_config" xml:space="preserve"><value>クリップボードに設定がありません</value></data>
+  <data name="editor_command" xml:space="preserve"><value>コマンド</value></data>
+  <data name="editor_config_transfer" xml:space="preserve"><value>設定の書き出しと読み込み</value></data>
+  <data name="editor_config_transfer_hint" xml:space="preserve"><value>パスワードと鍵、画像や音のファイルは含まれません</value></data>
+  <data name="editor_confirm" xml:space="preserve"><value>実行</value></data>
+  <data name="editor_core_too_old" xml:space="preserve"><value>この端末の Core はこの操作に対応していません</value></data>
+  <data name="editor_current_image" xml:space="preserve"><value>使用中の画像</value></data>
+  <data name="editor_current_password" xml:space="preserve"><value>今のパスワード</value></data>
+  <data name="editor_custom_color" xml:space="preserve"><value>色コードを入力</value></data>
+  <data name="editor_day_fri" xml:space="preserve"><value>金</value></data>
+  <data name="editor_day_mon" xml:space="preserve"><value>月</value></data>
+  <data name="editor_day_sat" xml:space="preserve"><value>土</value></data>
+  <data name="editor_day_sun" xml:space="preserve"><value>日</value></data>
+  <data name="editor_day_thu" xml:space="preserve"><value>木</value></data>
+  <data name="editor_day_tue" xml:space="preserve"><value>火</value></data>
+  <data name="editor_day_wed" xml:space="preserve"><value>水</value></data>
+  <data name="editor_delete" xml:space="preserve"><value>削除</value></data>
+  <data name="editor_direct_port" xml:space="preserve"><value>直接通話のポート</value></data>
+  <data name="editor_disable" xml:space="preserve"><value>無効にする</value></data>
+  <data name="editor_discovery_prefix" xml:space="preserve"><value>Discovery の接頭辞</value></data>
+  <data name="editor_done" xml:space="preserve"><value>完了</value></data>
+  <data name="editor_door" xml:space="preserve"><value>ドア</value></data>
+  <data name="editor_doors" xml:space="preserve"><value>ドア</value></data>
+  <data name="editor_dtmf_actions" xml:space="preserve"><value>電話のボタン操作</value></data>
+  <data name="editor_dtmf_code" xml:space="preserve"><value>押すボタン（例 *1）</value></data>
+  <data name="editor_dtmf_code_hint" xml:space="preserve"><value>0-9、*、#、A-D を 1〜8 文字</value></data>
+  <data name="editor_dtmf_decline" xml:space="preserve"><value>応答しない</value></data>
+  <data name="editor_dtmf_ha_command" xml:space="preserve"><value>Home Assistant コマンド</value></data>
+  <data name="editor_dtmf_hangup" xml:space="preserve"><value>電話を切る</value></data>
+  <data name="editor_dtmf_hint" xml:space="preserve"><value>通話中に電話機でボタンを押すと実行します</value></data>
+  <data name="editor_dtmf_quick_reply" xml:space="preserve"><value>クイック返答</value></data>
+  <data name="editor_edit" xml:space="preserve"><value>編集</value></data>
+  <data name="editor_edited" xml:space="preserve"><value>書き換え済み</value></data>
+  <data name="editor_enabled" xml:space="preserve"><value>有効</value></data>
+  <data name="editor_entity_language" xml:space="preserve"><value>エンティティ名の言語</value></data>
+  <data name="editor_export_clipboard" xml:space="preserve"><value>クリップボードに書き出す</value></data>
+  <data name="editor_exported" xml:space="preserve"><value>{0} KB の設定をコピーしました</value></data>
+  <data name="editor_extension" xml:space="preserve"><value>内線番号</value></data>
+  <data name="editor_from" xml:space="preserve"><value>開始</value></data>
+  <data name="editor_ha_control_hint" xml:space="preserve"><value>ブローカーの認証だけが確認されるため、必要なときだけオンにしてください</value></data>
+  <data name="editor_households" xml:space="preserve"><value>世帯</value></data>
+  <data name="editor_icon" xml:space="preserve"><value>アイコン（絵文字）</value></data>
+  <data name="editor_id_hint" xml:space="preserve"><value>英数字と _ - だけで 64 文字まで</value></data>
+  <data name="editor_images" xml:space="preserve"><value>画像</value></data>
+  <data name="editor_import_blocked" xml:space="preserve"><value>読み込めません。足りないパスワードや画像がないか確認してください</value></data>
+  <data name="editor_import_clipboard" xml:space="preserve"><value>クリップボードから読み込む</value></data>
+  <data name="editor_import_confirm" xml:space="preserve"><value>{0} 項目が変わります。読み込みますか？</value></data>
+  <data name="editor_inherited" xml:space="preserve"><value>全体の設定</value></data>
+  <data name="editor_ink" xml:space="preserve"><value>文字色</value></data>
+  <data name="editor_ink_hint" xml:space="preserve"><value>「自動」は背景に合わせて読みやすい色を選びます</value></data>
+  <data name="editor_ink_overrides" xml:space="preserve"><value>文字色</value></data>
+  <data name="editor_label" xml:space="preserve"><value>表示名</value></data>
+  <data name="editor_list_edit_hint" xml:space="preserve"><value>「編集」で並べ替えと削除ができます</value></data>
+  <data name="editor_loading" xml:space="preserve"><value>読み込み中…</value></data>
+  <data name="editor_media_hint" xml:space="preserve"><value>カメラのログインは URL に書かず、「カメラのログイン」に登録します</value></data>
+  <data name="editor_media_url_hint" xml:space="preserve"><value>H.264 は RTSP（TCP、Baseline）だけに対応します</value></data>
+  <data name="editor_mqtt" xml:space="preserve"><value>MQTT と Home Assistant</value></data>
+  <data name="editor_mqtt_password" xml:space="preserve"><value>MQTT パスワード</value></data>
+  <data name="editor_name" xml:space="preserve"><value>名前</value></data>
+  <data name="editor_never_suppress" xml:space="preserve"><value>静かな時間帯でも通知する</value></data>
+  <data name="editor_never_suppress_hint" xml:space="preserve"><value>オンにすると静かにする時間帯でもこの動作を行います</value></data>
+  <data name="editor_never_suppress_short" xml:space="preserve"><value>常時</value></data>
+  <data name="editor_new_building" xml:space="preserve"><value>新しい建物</value></data>
+  <data name="editor_new_door" xml:space="preserve"><value>新しいドア</value></data>
+  <data name="editor_new_household" xml:space="preserve"><value>新しい世帯</value></data>
+  <data name="editor_new_password" xml:space="preserve"><value>新しいパスワード（8 文字以上）</value></data>
+  <data name="editor_new_purpose" xml:space="preserve"><value>新しい用件</value></data>
+  <data name="editor_new_reply" xml:space="preserve"><value>新しい返答</value></data>
+  <data name="editor_new_rule" xml:space="preserve"><value>新しいルール</value></data>
+  <data name="editor_no_microphone" xml:space="preserve"><value>マイクが使えません</value></data>
+  <data name="editor_no_photos" xml:space="preserve"><value>写真を読み込めません</value></data>
+  <data name="editor_ntp_servers_hint" xml:space="preserve"><value>最大 4 つ。ポートを変える場合は host:port</value></data>
+  <data name="editor_off" xml:space="preserve"><value>オフ</value></data>
+  <data name="editor_offline" xml:space="preserve"><value>オフライン</value></data>
+  <data name="editor_ok" xml:space="preserve"><value>OK</value></data>
+  <data name="editor_on" xml:space="preserve"><value>オン</value></data>
+  <data name="editor_online" xml:space="preserve"><value>オンライン</value></data>
+  <data name="editor_panel_link_once" xml:space="preserve"><value>このリンクは今だけ表示されます。使う端末で QR コードを読み取ってください</value></data>
+  <data name="editor_panels_hint" xml:space="preserve"><value>Web パネルごとに使えるドアと操作を決めます。リンクは発行したときに一度だけ表示します</value></data>
+  <data name="editor_password_changed" xml:space="preserve"><value>パスワードを変更しました</value></data>
+  <data name="editor_password_for_session" xml:space="preserve"><value>管理パスワード</value></data>
+  <data name="editor_password_hint" xml:space="preserve"><value>Web 管理とすべての端末で同じパスワードを使います</value></data>
+  <data name="editor_password_mismatch" xml:space="preserve"><value>2 回の入力が違います</value></data>
+  <data name="editor_password_too_short" xml:space="preserve"><value>8 文字以上にしてください</value></data>
+  <data name="editor_password_wrong" xml:space="preserve"><value>パスワードが違います</value></data>
+  <data name="editor_placeholder_hint" xml:space="preserve"><value>{ } で囲んだ部分はそのまま残してください</value></data>
+  <data name="editor_places" xml:space="preserve"><value>建物・ドア・世帯</value></data>
+  <data name="editor_poll_updates" xml:space="preserve"><value>Telegram から返答を受け付ける</value></data>
+  <data name="editor_port" xml:space="preserve"><value>ポート</value></data>
+  <data name="editor_presets_hint" xml:space="preserve"><value>お知らせの定型文は最大 8 件、各 200 文字まで</value></data>
+  <data name="editor_purposes" xml:space="preserve"><value>用件</value></data>
+  <data name="editor_purposes_edit" xml:space="preserve"><value>用件を編集</value></data>
+  <data name="editor_quiet_hint" xml:space="preserve"><value>時刻はクラスターのタイムゾーンで判定します</value></data>
+  <data name="editor_record_hint" xml:space="preserve"><value>録音した音は着信音や SOS の音に選べます</value></data>
+  <data name="editor_record_sound" xml:space="preserve"><value>マイクで録音</value></data>
+  <data name="editor_recording" xml:space="preserve"><value>録音中（最長 60 秒）</value></data>
+  <data name="editor_region_clock" xml:space="preserve"><value>時計</value></data>
+  <data name="editor_region_date" xml:space="preserve"><value>日付</value></data>
+  <data name="editor_region_hint" xml:space="preserve"><value>案内文</value></data>
+  <data name="editor_region_status_line" xml:space="preserve"><value>状態の行</value></data>
+  <data name="editor_region_tile_label" xml:space="preserve"><value>タイルの名前</value></data>
+  <data name="editor_remove_device" xml:space="preserve"><value>クラスターから外す</value></data>
+  <data name="editor_remove_image" xml:space="preserve"><value>画像を使わない</value></data>
+  <data name="editor_repeat_password" xml:space="preserve"><value>新しいパスワードをもう一度</value></data>
+  <data name="editor_reset" xml:space="preserve"><value>元に戻す</value></data>
+  <data name="editor_role_on_device" xml:space="preserve"><value>役割はその端末の設定で変更します</value></data>
+  <data name="editor_schedule" xml:space="preserve"><value>時間</value></data>
+  <data name="editor_search" xml:space="preserve"><value>検索</value></data>
+  <data name="editor_secret_hint" xml:space="preserve"><value>パスワードと鍵はこの端末の安全な保管場所に入り、設定には参照だけが書かれます</value></data>
+  <data name="editor_secret_set" xml:space="preserve"><value>登録済み</value></data>
+  <data name="editor_secret_store_failed" xml:space="preserve"><value>安全な保管場所に書き込めませんでした</value></data>
+  <data name="editor_secret_unset" xml:space="preserve"><value>未登録</value></data>
+  <data name="editor_secrets" xml:space="preserve"><value>パスワードと鍵</value></data>
+  <data name="editor_server" xml:space="preserve"><value>サーバー</value></data>
+  <data name="editor_sip_extensions" xml:space="preserve"><value>内線番号（カンマ区切り）</value></data>
+  <data name="editor_sip_password" xml:space="preserve"><value>SIP パスワード</value></data>
+  <data name="editor_sip_user" xml:space="preserve"><value>ユーザー（内線）</value></data>
+  <data name="editor_sound_name" xml:space="preserve"><value>音の名前</value></data>
+  <data name="editor_sounds" xml:space="preserve"><value>音</value></data>
+  <data name="editor_speak" xml:space="preserve"><value>読み上げる</value></data>
+  <data name="editor_speak_on" xml:space="preserve"><value>読み上げ</value></data>
+  <data name="editor_srtp_hint" xml:space="preserve"><value>「必ず暗号化」にすると iOS 5 の端末とは直接通話できません</value></data>
+  <data name="editor_srtp_mandatory" xml:space="preserve"><value>必ず暗号化</value></data>
+  <data name="editor_srtp_optional" xml:space="preserve"><value>可能なら暗号化</value></data>
+  <data name="editor_sticky" xml:space="preserve"><value>閉じるまで表示</value></data>
+  <data name="editor_stop_recording" xml:space="preserve"><value>録音を止める</value></data>
+  <data name="editor_streams" xml:space="preserve"><value>映像の URL</value></data>
+  <data name="editor_suppress" xml:space="preserve"><value>止める通知</value></data>
+  <data name="editor_target_roles" xml:space="preserve"><value>通知する端末</value></data>
+  <data name="editor_test_message" xml:space="preserve"><value>テストメッセージを送る</value></data>
+  <data name="editor_this_device" xml:space="preserve"><value>この端末</value></data>
+  <data name="editor_this_door" xml:space="preserve"><value>呼び出したドア</value></data>
+  <data name="editor_tls_hint" xml:space="preserve"><value>TLS を使うときは証明書の SHA-256 が必要です</value></data>
+  <data name="editor_tls_pin" xml:space="preserve"><value>証明書の SHA-256</value></data>
+  <data name="editor_to" xml:space="preserve"><value>終了</value></data>
+  <data name="editor_transport" xml:space="preserve"><value>通信方式</value></data>
+  <data name="editor_ttl" xml:space="preserve"><value>表示秒数（0 は無制限）</value></data>
+  <data name="editor_type" xml:space="preserve"><value>種類</value></data>
+  <data name="editor_unreachable" xml:space="preserve"><value>この端末の管理機能に接続できません</value></data>
+  <data name="editor_uploading" xml:space="preserve"><value>取り込み中…</value></data>
+  <data name="editor_use_cluster_theme" xml:space="preserve"><value>この端末の設定をやめる</value></data>
+  <data name="editor_user" xml:space="preserve"><value>ユーザー名</value></data>
+  <data name="editor_visual" xml:space="preserve"><value>画面で知らせる</value></data>
+  <data name="editor_weekdays" xml:space="preserve"><value>曜日</value></data>
+  <data name="editor_weekdays_hint" xml:space="preserve"><value>曜日を選ばないと毎日になります。日をまたぐ時間帯も指定できます</value></data>
+  <data name="editor_when" xml:space="preserve"><value>きっかけ</value></data>
+  <data name="editor_when_button" xml:space="preserve"><value>呼出ボタン</value></data>
+  <data name="editor_when_call_missed" xml:space="preserve"><value>不在着信</value></data>
+  <data name="editor_when_device_offline" xml:space="preserve"><value>端末がオフライン</value></data>
+  <data name="editor_when_emergency_off" xml:space="preserve"><value>SOS 解除</value></data>
+  <data name="editor_when_emergency_on" xml:space="preserve"><value>SOS 発生</value></data>
+  <data name="editor_when_motion" xml:space="preserve"><value>動きを検知</value></data>
+  <data name="editor_window" xml:space="preserve"><value>時間帯</value></data>
+  <data name="editor_windows" xml:space="preserve"><value>時間帯</value></data>
+  <data name="editor_with_snapshot" xml:space="preserve"><value>写真を付ける</value></data>
+  <data name="editor_wording" xml:space="preserve"><value>文言の書き換え</value></data>
+  <data name="editor_wording_hint" xml:space="preserve"><value>検索欄でキーや文言を探せます</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>緊急モードが発報されています</value></data>
   <data name="emergency_button" xml:space="preserve"><value>緊急</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>解除</value></data>
