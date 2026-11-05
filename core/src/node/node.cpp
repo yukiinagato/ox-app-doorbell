@@ -4708,6 +4708,44 @@ struct Node::Impl {
     json::set(o.get(), "t", "call_log_changed");
     json::set(o.get(), "unread_missed", static_cast<int64_t>(store.unreadMissedCount()));
     uiNotify(json::dump(o.get()));
+    if (bridge && mesh && mesh->isLeader("mqtt_bridge")) bridge->onCallLogChanged();
+  }
+
+  // Home Assistant entity language: integrations.ha.language, else the first UI language.
+  std::string haLanguage() {
+    std::string lang = json::getString(cfgAt("integrations.ha"), "language");
+    if (lang.empty()) {
+      cJSON* langs = json::get(json::get(cfg.get(), "ui"), "languages");
+      if (cJSON_IsArray(langs) && cJSON_GetArraySize(langs) > 0 &&
+          cJSON_IsString(cJSON_GetArrayItem(langs, 0)))
+        lang = cJSON_GetArrayItem(langs, 0)->valuestring;
+    }
+    return lang == "en" || lang == "zh" ? lang : std::string("ja");
+  }
+
+  // SOS state for integrations: the newest activation and clear, with the source device.
+  std::string emergencyInfoJson() {
+    auto o = json::obj();
+    json::setBool(o.get(), "active", emergency_active);
+    const auto on = store.latestEventOfTypes("emergency", "emergency");
+    const auto off = store.latestEventOfTypes("emergency_cancel", "emergency_cancel");
+    if (on) {
+      auto p = json::parse(on->payload_json.empty() ? "{}" : on->payload_json);
+      std::string source = p ? json::getString(p.get(), "source") : "";
+      if (source.empty()) source = on->device;
+      const cJSON* dev = cfgAt("devices." + source);
+      json::set(o.get(), "source", source);
+      json::set(o.get(), "source_name", json::getString(dev, "name"));
+      json::set(o.get(), "door", json::getString(dev, "door"));
+      json::set(o.get(), "via", p ? json::getString(p.get(), "via") : "");
+      json::set(o.get(), "triggered_at", on->wall_ms);
+    }
+    if (off) {
+      auto p = json::parse(off->payload_json.empty() ? "{}" : off->payload_json);
+      json::set(o.get(), "cleared_at", off->wall_ms);
+      json::set(o.get(), "cleared_via", p ? json::getString(p.get(), "via") : "");
+    }
+    return json::dump(o.get());
   }
 
   bool markCallLogSeen(const std::string& up_to_hlc) {
@@ -6929,6 +6967,61 @@ struct Node::Impl {
       hooks.visitor_langs = [this] {
         return std::vector<std::pair<std::string, std::string>>(visitor_lang_by_door.begin(),
                                                                 visitor_lang_by_door.end());
+      };
+      hooks.language = [this] { return haLanguage(); };
+      hooks.text = [this](const std::string& key) { return textOnLoop(key, haLanguage(), {}); };
+      hooks.call_state = [this](const std::string& door) -> std::string {
+        auto it = active_calls.find(door);
+        if (it == active_calls.end()) return "idle";
+        if (it->second.state == "in_call") return "in_call";
+        if (it->second.state != "ringing") return "idle";
+        const int64_t expires = it->second.expires_wall_ms;
+        return expires > 0 && expires < hlc->correctedWallMs() ? "idle" : "ringing";
+      };
+      hooks.active_call = [this](const std::string& door) -> std::string {
+        auto it = active_calls.find(door);
+        if (it == active_calls.end() || it->second.call_id.empty()) return "";
+        if (it->second.state != "ringing" && it->second.state != "in_call") return "";
+        auto o = json::obj();
+        json::set(o.get(), "call_id", it->second.call_id);
+        json::set(o.get(), "stage_revision", static_cast<int64_t>(it->second.stage_revision));
+        return json::dump(o.get());
+      };
+      hooks.last_call = [this](const std::string& door) -> std::string {
+        Store::CallLogQuery query;
+        query.door = door;
+        query.limit = 1;
+        const auto rows = store.callLog(query);
+        if (rows.empty()) return "";
+        return json::dump(callLogRowJson(rows.front()).get());
+      };
+      hooks.unseen_missed = [this](const std::string& door) -> int64_t {
+        Store::CallLogQuery query;
+        query.door = door;
+        query.outcome = "missed";
+        query.limit = 500;
+        int64_t unseen = 0;
+        for (const auto& row : store.callLog(query))
+          if (!row.seen) unseen++;
+        return unseen;
+      };
+      hooks.fetch_snapshot = [this](const std::string& door, std::function<void(Bytes)> done) {
+        std::string target;
+        if (configuredStationForDoor(door, &target) != 1 || target.empty()) {
+          loop->post([done] { done(Bytes()); });
+          return;
+        }
+        if (mesh) {
+          mesh->fetchSnapshot(target, std::move(done));
+          return;
+        }
+        Bytes jpeg = target == node_id ? frame_bus.latestJpeg() : Bytes();
+        loop->post([done, jpeg] { done(jpeg); });
+      };
+      hooks.emergency_info = [this] { return emergencyInfoJson(); };
+      hooks.set_emergency = [this](bool active) { return doEmergency(active, "mqtt"); };
+      hooks.set_notice = [this](const std::string& text) {
+        return text.empty() ? clearDoorNoticeOnLoop("*") : setDoorNoticeOnLoop("*", text, 0);
       };
       bridge.reset(new HaBridge(*loop, std::move(hooks)));
     }

@@ -1308,3 +1308,18 @@ core.seed.purpose.p_other: { ja: "その他", en: "Other", zh: "其他" }
 core.seed.notice.np_absent: { ja: "不在です。荷物は玄関前へお願いします", en: "Nobody is home. Please leave parcels at the front door", zh: "家中无人，包裹请放在门口" }
 core.seed.notice.np_back_door: { ja: "裏口へお回りください", en: "Please come round to the back door", zh: "请绕到后门" }
 core.seed.notice.np_construction: { ja: "工事中です。足元にご注意ください", en: "Building work in progress. Please watch your step", zh: "正在施工，请注意脚下" }
+# Home Assistant entity names published by Core (MQTT Discovery). Core-only; not emitted to clients.
+core.ha.device.mesh: { ja: "ドアホン網", en: "Doorbell Mesh", zh: "门铃网络" }
+core.ha.entity.doorbell: { ja: "呼び鈴", en: "Doorbell", zh: "门铃" }
+core.ha.entity.motion: { ja: "動体検知", en: "Motion", zh: "移动侦测" }
+core.ha.entity.visitor_lang: { ja: "訪客言語", en: "Visitor language", zh: "访客语言" }
+core.ha.entity.call_state: { ja: "通話状態", en: "Call state", zh: "通话状态" }
+core.ha.entity.last_call: { ja: "最後の呼び出し", en: "Last call", zh: "最近一次呼叫" }
+core.ha.entity.missed_calls: { ja: "不在着信", en: "Missed calls", zh: "未接来访" }
+core.ha.entity.snapshot: { ja: "来客スナップショット", en: "Visitor snapshot", zh: "访客快照" }
+core.ha.entity.quick_reply: { ja: "クイック返信", en: "Quick reply", zh: "快捷回复" }
+core.ha.entity.emergency: { ja: "緊急事態", en: "Emergency", zh: "紧急情况" }
+core.ha.entity.sos_clear: { ja: "緊急事態を解除", en: "Clear emergency", zh: "解除紧急情况" }
+core.ha.entity.sos_trigger: { ja: "緊急事態を発報", en: "Trigger emergency", zh: "触发紧急情况" }
+core.ha.entity.notice: { ja: "お知らせ", en: "Announcement", zh: "公告" }
+core.ha.entity.bridge: { ja: "ドアホン ブリッジ", en: "Doorbell Bridge", zh: "门铃网桥" }

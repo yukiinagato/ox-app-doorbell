@@ -1,26 +1,40 @@
 # Home Assistant configuration fragments for configuration.yaml and automations.
-# The leader node registers doorbell entities (event/binary_sensor) through MQTT Discovery.
-# entity_id is derived from the ASCII object_id and is therefore predictable. Examples:
-#   event.doorbell_d_front                    (doorbell, device_class: doorbell)
+# The leader node registers doorbell entities through MQTT Discovery (see README.*.md for the
+# full list). entity_id is derived from the ASCII object_id and is therefore predictable:
+#   event.doorbell_d_front                    (doorbell; event_type press/answered/missed/replied/cancelled)
+#   sensor.doorbell_d_front_call_state        (idle / ringing / in_call)
+#   sensor.doorbell_d_front_last_call         (latest finished call; attributes hold the details)
+#   sensor.doorbell_d_front_missed_calls      (unseen missed calls)
+#   image.doorbell_d_front_snapshot           (JPEG taken at the bell press, sent over MQTT)
+#   select.doorbell_d_front_quick_reply       (send a quick reply to the call in progress)
 #   binary_sensor.doorbell_d_front_motion     (motion, off_delay 30s)
+#   binary_sensor.doorbell_emergency          (SOS; attributes: source, door, triggered_at, ...)
 #   binary_sensor.doorbell_node_<first 8 chars of node_id>  (device online, connectivity)
 #   binary_sensor.doorbell_bridge_online      (bridge liveness, derived from LWT)
-# Localized Japanese labels appear only in entity/device names (doors.<id>.label.ja).
+# Entity names follow integrations.ha.language (ja/en/zh; default: first UI language).
 #
-# Camera streams and snapshots do not travel over MQTT:
-#   - go2rtc converts the door station's live MJPEG stream to H.264 for HA (see go2rtc.yaml).
-#   - HA's generic camera fetches /snapshot.jpg directly from the door station (see camera below).
+# Live video does not travel over MQTT: go2rtc pulls it from the door station over HTTPS with a
+# security v3 integration credential (see go2rtc.yaml).
 
-# ---------- Snapshot: generic camera fetching /snapshot.jpg directly ----------
-# Use this for notification images and camera_proxy. Use go2rtc entities for live video.
+# ---------- Optional: generic camera fetching /snapshot.jpg on demand ----------
+# The MQTT image entity already carries the picture taken at each press. Use a generic camera
+# only when you also want stills on demand. Requires the security v3 integration credential;
+# the station certificate is self-signed, so verify_ssl must be false.
 camera:
   - platform: generic
     name: genkan_front_still
-    still_image_url: "http://10.0.1.11:47180/snapshot.jpg"
-    # If door-station authentication is enabled, append ?k=<panel_token> to still_image_url.
+    still_image_url: "https://10.0.1.11:47443/snapshot.jpg"
+    username: ha-media
+    password: !secret doorbell_media_password
+    authentication: basic
+    verify_ssl: false
   - platform: generic
     name: genkan_annex_still
-    still_image_url: "http://10.0.1.12:47180/snapshot.jpg"
+    still_image_url: "https://10.0.1.12:47443/snapshot.jpg"
+    username: ha-media
+    password: !secret doorbell_media_password
+    authentication: basic
+    verify_ssl: false
 
 # ---------- HomeKit Bridge: entrance cameras and doorbells in Apple Home ----------
 # First expose the go2rtc.yaml streams to HA as camera.genkan_front and similar entities
@@ -62,14 +76,23 @@ automation:
     trigger:
       - platform: state
         entity_id: event.doorbell_d_front
+    # The event entity also reports answered/missed/replied/cancelled; notify on press only.
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.attributes.event_type == 'press' }}"
     action:
+      # The press snapshot arrives over MQTT a moment after the event; wait briefly for it.
+      - wait_for_trigger:
+          - platform: state
+            entity_id: image.doorbell_d_front_snapshot
+        timeout: "00:00:03"
+        continue_on_timeout: true
       - service: notify.mobile_app_iphone
         data:
           title: "来客"
           message: "正面玄関に来客です"
           data:
-            # The snapshot comes through the generic camera above, not MQTT.
-            image: "/api/camera_proxy/camera.genkan_front_still"
+            image: "/api/image_proxy/image.doorbell_d_front_snapshot"
             push: { sound: { name: default, critical: 1, volume: 1.0 } }
             actions:
               - { action: "DOORBELL_REPLY_AWAY",  title: "留守にしています" }
@@ -118,3 +141,36 @@ automation:
     action:
       - service: lock.unlock
         target: { entity_id: lock.genkan }
+
+  # ---------- Missed call reminder with the visitor's purpose ----------
+  - alias: "doorbell: 不在着信"
+    trigger:
+      - platform: state
+        entity_id: event.doorbell_d_front
+    condition:
+      - condition: template
+        value_template: "{{ trigger.to_state.attributes.event_type == 'missed' }}"
+    action:
+      - service: notify.mobile_app_iphone
+        data:
+          title: "ドアホン"
+          message: >-
+            正面玄関で不在着信 ({{ state_attr('sensor.doorbell_d_front_last_call', 'purpose') }})。
+            未確認 {{ states('sensor.doorbell_d_front_missed_calls') }} 件
+          data:
+            image: "/api/image_proxy/image.doorbell_d_front_snapshot"
+
+  # ---------- SOS details in the alert ----------
+  - alias: "doorbell: SOS"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.doorbell_emergency
+        to: "on"
+    action:
+      - service: notify.mobile_app_iphone
+        data:
+          title: "緊急事態"
+          message: >-
+            {{ state_attr('binary_sensor.doorbell_emergency', 'source_name') }} から発報
+            ({{ state_attr('binary_sensor.doorbell_emergency', 'triggered_at_iso') }})
+          data: { push: { sound: { name: default, critical: 1, volume: 1.0 } } }
