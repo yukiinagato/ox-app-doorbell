@@ -55,6 +55,31 @@ require(doorbellTier == "modern" || doorbellTier == "legacy19") {
 }
 val doorbellNdk = if (doorbellTier == "legacy19") "25.2.9519653" else "27.1.12297006"
 
+// One build number per release; each flavour gets its own versionCode derived from it, so a
+// legacy19 and a modern APK of the same release never share a code (and both stay above the
+// single shared code 27 used through 0.3.26).
+val doorbellBuildNumber = 37
+fun flavorVersionCode(flavorDigit: Int): Int = doorbellBuildNumber * 10 + flavorDigit
+
+// Release signing comes from Gradle properties or the environment, never from the repository:
+//   doorbell.release.storeFile / DOORBELL_RELEASE_STORE_FILE
+//   doorbell.release.storePassword / DOORBELL_RELEASE_STORE_PASSWORD
+//   doorbell.release.keyAlias / DOORBELL_RELEASE_KEY_ALIAS
+//   doorbell.release.keyPassword / DOORBELL_RELEASE_KEY_PASSWORD
+fun releaseSetting(property: String, env: String): String? =
+  providers.gradleProperty(property).orNull?.takeIf { it.isNotBlank() }
+    ?: System.getenv(env)?.takeIf { it.isNotBlank() }
+
+val releaseStoreFile = releaseSetting("doorbell.release.storeFile", "DOORBELL_RELEASE_STORE_FILE")
+val releaseStorePassword =
+  releaseSetting("doorbell.release.storePassword", "DOORBELL_RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = releaseSetting("doorbell.release.keyAlias", "DOORBELL_RELEASE_KEY_ALIAS")
+val releaseKeyPassword =
+  releaseSetting("doorbell.release.keyPassword", "DOORBELL_RELEASE_KEY_PASSWORD")
+val releaseSigningConfigured = listOf(
+  releaseStoreFile, releaseStorePassword, releaseKeyAlias, releaseKeyPassword,
+).all { it != null }
+
 android {
   namespace = "jp.ox.doorbell"
   compileSdk = 35
@@ -67,8 +92,8 @@ android {
     minSdk = 19
     targetSdk = 35
     testInstrumentationRunner = "jp.ox.doorbell.VisitorUiInstrumentation"
-    versionCode = 27
-    versionName = "0.3.26+${doorbellGitRevision.take(7)}"
+    versionCode = flavorVersionCode(0)
+    versionName = "0.3.36+${doorbellGitRevision.take(7)}"
     buildConfigField("String", "DOORBELL_SOURCE_ID", "\"$doorbellSourceIdentity\"")
 
     externalNativeBuild {
@@ -94,6 +119,7 @@ android {
     create("legacy19") {
       dimension = "platform"
       minSdk = 19
+      versionCode = flavorVersionCode(1)
       versionNameSuffix = "-legacy19"
       ndk { abiFilters += listOf("armeabi-v7a") }
       externalNativeBuild {
@@ -104,6 +130,7 @@ android {
     create("modern") {
       dimension = "platform"
       minSdk = 21
+      versionCode = flavorVersionCode(2)
       ndk { abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86_64") }
       externalNativeBuild {
         cmake { arguments += "-DDB_ANDROID_PJSIP_TIER=api21" }
@@ -119,10 +146,24 @@ android {
     }
   }
 
+  signingConfigs {
+    if (releaseSigningConfigured) {
+      create("release") {
+        storeFile = file(releaseStoreFile!!)
+        storePassword = releaseStorePassword
+        keyAlias = releaseKeyAlias
+        keyPassword = releaseKeyPassword
+      }
+    }
+  }
+
   buildTypes {
     release {
       isMinifyEnabled = false
-      signingConfig = signingConfigs.getByName("debug")
+      // A release signed with a machine's debug key cannot upgrade an installed release and is
+      // not release provenance, so a missing release key leaves the APK unsigned and the
+      // packaging check below fails the build.
+      if (releaseSigningConfigured) signingConfig = signingConfigs.getByName("release")
     }
   }
 
@@ -156,5 +197,19 @@ androidComponents {
   beforeVariants(selector().all()) { variant ->
     val tier = variant.productFlavors.firstOrNull { it.first == "platform" }?.second
     if (tier != null && tier != doorbellTier) variant.enable = false
+  }
+}
+
+// Fail release packaging without a release key instead of silently shipping a debug signature.
+gradle.taskGraph.whenReady {
+  val packagesRelease = allTasks.any {
+    it.project == project && it.name.startsWith("package") && it.name.endsWith("Release")
+  }
+  if (packagesRelease && !releaseSigningConfigured) {
+    throw GradleException(
+      "Release signing is not configured. Set doorbell.release.storeFile, " +
+        "doorbell.release.storePassword, doorbell.release.keyAlias and " +
+        "doorbell.release.keyPassword (Gradle properties) or the matching " +
+        "DOORBELL_RELEASE_* environment variables.")
   }
 }

@@ -6904,6 +6904,7 @@ struct Node::Impl {
     ms.enroll_psk_holders = opts.mesh_enroll_psk_holders;
     loadMeshKeys(ms);
     ms.role = opts.role;
+    ms.display_name = opts.name;
     ms.door = opts.role == "door_station" ? opts.door : "";
     ms.sw_version = opts.sw_version;
     ms.model = opts.model.empty() ? "unknown" : opts.model;
@@ -6999,6 +7000,17 @@ struct Node::Impl {
       json::set(o.get(), "id", id);
       json::set(o.get(), "reason", reason);
       uiNotify(json::dump(o.get()));
+    };
+    cbs.on_join_adopt = [this] {
+      // Joining adopts the cluster's configuration wholesale. Values this node wrote while
+      // unpaired would otherwise win by timestamp, including a locally set administrator
+      // password replacing the cluster's. Identity and door entries are re-asserted once paired.
+      if (!store.configDeleteAll()) return false;
+      config->resetReplica();
+      store.metaDeletePrefix("admin_pw_");
+      snapshot_epoch = hexEncode(randomBytes(16));
+      rebuildCfg();
+      return true;
     };
     cbs.on_peer_replication = [this](const std::string& peer, const VersionVector& vv,
                                      const std::map<std::string, uint64_t>& heads) {
@@ -9314,7 +9326,10 @@ struct Node::Impl {
       return;
     }
     // Founding or joining is the other moment this node becomes able to write cluster
-    // configuration, so the door entry is ensured here as well as at startup.
+    // configuration. A join discarded the local replica, so this node's identity record is
+    // written again (seedConfig re-seeds nothing the cluster already has), then its door entry.
+    if (!seedConfig())
+      DB_LOGW(kTag, "could not re-assert this device's identity after pairing");
     if (!reclaimSeededDoorEntries() || !ensureOwnDoorEntry())
       DB_LOGW(kTag, "could not reconcile the door entry for this device");
     emitPairedEvent();
@@ -11068,6 +11083,29 @@ struct Node::Impl {
       r.headers["Cache-Control"] = "no-store";
       r.headers["Set-Cookie"] = sessionCookie("dbsess", tok, req);
       return r;
+    });
+
+    // Change the cluster administrator password from Admin. Runs on a worker because hashing is
+    // deliberately slow; setAdminPassword re-checks the current password under the shared
+    // lockout and clears every session, so the browser logs in again with the new one.
+    httpd->routeWorker("POST", "/api/admin/password", [this](const HttpReq& req) {
+      bool authorized = false;
+      loop->callSync([&] { authorized = adminMutationAuthorizedOnLoop(req); });
+      if (!authorized) return HttpResp::json("{\"ok\":false,\"error_code\":\"forbidden\"}", 403);
+      auto b = json::parse(req.body);
+      const std::string current = b ? json::getString(b.get(), "current") : "";
+      const std::string next = b ? json::getString(b.get(), "new") : "";
+      const int rc = setAdminPassword(current, next);
+      switch (rc) {
+        case 0: return HttpResp::json("{\"ok\":true}");
+        case -1:
+          return HttpResp::json("{\"ok\":false,\"err\":\"password_too_short\",\"min_length\":8}",
+                                400);
+        case -2: return HttpResp::json("{\"ok\":false,\"err\":\"wrong_password\"}", 403);
+        case -3: return HttpResp::json("{\"ok\":false,\"err\":\"locked\"}", 429);
+        default:
+          return HttpResp::json("{\"ok\":false,\"err\":\"persist_failed\"}", 500);
+      }
     });
 
     httpd->route("GET", "/api/session", [this](const HttpReq& req) {
@@ -13551,6 +13589,36 @@ std::string Node::setConfigJson(const std::string& key, const std::string& value
   std::string out;
   if (!impl_->loop->callSync(
           [&] { out = impl_->setConfigJsonOnLoop(key, value_json, nullptr); }))
+    return R"({"ok":false,"err":"not_started"})";
+  return out;
+}
+
+std::string Node::addAssetJson(const std::vector<uint8_t>& data, const std::string& type,
+                               const std::string& label) {
+  if (!assetTypeAllowed(type)) return R"({"ok":false,"err":"bad_type"})";
+  if (data.empty()) return R"({"ok":false,"err":"empty"})";
+  if (data.size() > kAssetMaxBytes) return R"({"ok":false,"err":"too_large"})";
+  std::string hash;
+  const Bytes bytes(data.begin(), data.end());
+  if (!impl_->loop->callSync([&] { hash = impl_->addAssetOnLoop(bytes, type, label); }))
+    return R"({"ok":false,"err":"not_started"})";
+  if (hash.empty()) return R"({"ok":false,"err":"store_failed"})";
+  return std::string(R"({"ok":true,"hash":")") + hash + "\"}";
+}
+
+std::string Node::removeAssetJson(const std::string& hash) {
+  if (!isSha256HexStr(hash)) return R"({"ok":false,"err":"bad_hash"})";
+  std::string out;
+  if (!impl_->loop->callSync([&] {
+        impl_->config->remove("assets." + hash);
+        if (!impl_->config->lastMutationCommitted()) {
+          out = R"({"ok":false,"err":"config_persistence_failed"})";
+          return;
+        }
+        removeFile(impl_->assetFilePath(hash));
+        impl_->asset_unref_since.erase(hash);
+        out = R"({"ok":true})";
+      }))
     return R"({"ok":false,"err":"not_started"})";
   return out;
 }

@@ -1920,3 +1920,98 @@ core.ivr.declined: { ja: "この電話では応答しません。ほかの端末
 video.connecting: { ja: "映像に接続しています…", en: "Connecting to video…", zh: "正在连接视频…" }
 ring.ignored: { ja: "この画面では無視しました。ほかの端末では鳴り続けます", en: "Ignored on this screen. Other devices keep ringing", zh: "已在本画面忽略，其他设备仍在响铃" }
 ring.answer_unavailable: { ja: "この画面では応答できません", en: "Answering isn't available on this screen", zh: "此画面无法接听" }
+# Android background call alert (2026-11 review): the call notification that opens the incoming
+# screen full screen when the platform blocks a background activity start.
+incoming.channel_name: { ja: "来客の呼び出し", en: "Visitor calls", zh: "访客呼叫" }
+incoming.notification_tap: { ja: "タップして応答画面を開く", en: "Tap to open the call screen", zh: "点按打开接听画面" }
+
+# Android native settings (2026-11 review): Android Settings-style categories and the native
+# controls that replace former "open in Admin" rows.
+settings.cat_doors: { ja: "門口とお知らせ", en: "Doors and announcements", zh: "门口与公告" }
+settings.cat_emergency: { ja: "SOS", en: "SOS", zh: "SOS" }
+settings.cat_notifications: { ja: "通知とルール", en: "Notifications and rules", zh: "通知与规则" }
+settings.cat_network: { ja: "ネットワーク", en: "Network", zh: "网络" }
+settings.cat_cluster: { ja: "端末の追加と管理", en: "Devices and pairing", zh: "设备与配对" }
+settings.item_return_s: { ja: "呼び出し画面を閉じるまで（秒）", en: "Close the call screen after (seconds)", zh: "关闭呼叫画面前的秒数" }
+settings.item_return_s_note: { ja: "この端末だけの設定です", en: "Applies to this device only", zh: "仅适用于本设备" }
+settings.item_motion_wake: { ja: "動きを検知したら画面を点ける", en: "Wake the screen on motion", zh: "检测到动作时点亮屏幕" }
+settings.item_brightness: { ja: "明るさ", en: "Brightness", zh: "亮度" }
+settings.item_night: { ja: "夜間モード", en: "Night mode", zh: "夜间模式" }
+settings.item_night_from: { ja: "夜間モード開始", en: "Night mode starts", zh: "夜间模式开始" }
+settings.item_night_to: { ja: "夜間モード終了", en: "Night mode ends", zh: "夜间模式结束" }
+settings.item_night_brightness: { ja: "夜間の明るさ", en: "Night brightness", zh: "夜间亮度" }
+settings.item_saver: { ja: "待機画面", en: "Idle screen", zh: "待机画面" }
+settings.item_saver_after: { ja: "待機画面までの秒数", en: "Idle screen after (seconds)", zh: "进入待机画面的秒数" }
+settings.item_pixel_shift: { ja: "焼き付き防止の移動間隔（秒）", en: "Burn-in shift interval (seconds)", zh: "防烧屏位移间隔（秒）" }
+settings.item_cluster_return_s: { ja: "呼び出し画面を閉じるまで（全端末、秒）", en: "Close the call screen after (all devices, seconds)", zh: "关闭呼叫画面前的秒数（所有设备）" }
+settings.item_reply_ttl: { ja: "返信の表示時間（秒）", en: "Reply display time (seconds)", zh: "回复显示时间（秒）" }
+settings.item_sip_server: { ja: "SIP サーバー", en: "SIP server", zh: "SIP 服务器" }
+settings.item_sip_server_note: { ja: "空欄にするとサーバーを使わず直接通話だけになります", en: "Leave blank to use direct calls only", zh: "留空则只使用直接通话" }
+settings.item_sip_user: { ja: "この端末の内線番号", en: "This device's extension", zh: "本设备的分机号" }
+settings.item_answer_mode: { ja: "応答のしかた", en: "Answering", zh: "接听方式" }
+settings.item_direct_port: { ja: "直接通話のポート", en: "Direct call port", zh: "直接通话端口" }
+settings.item_sip_password: { ja: "SIP パスワード", en: "SIP password", zh: "SIP 密码" }
+settings.item_reply_audio: { ja: "返信の音声ファイル", en: "Reply audio files", zh: "回复的音频文件" }
+settings.item_door_label: { ja: "門口の名前", en: "Door name", zh: "门口名称" }
+settings.item_doors_add: { ja: "門口・建物の追加と削除", en: "Add or remove doors and buildings", zh: "添加或删除门口与建筑" }
+settings.item_quiet_from: { ja: "開始", en: "Starts", zh: "开始" }
+settings.item_quiet_to: { ja: "終了", en: "Ends", zh: "结束" }
+settings.item_quiet_clear: { ja: "静音時間を解除", en: "Remove quiet hours", zh: "取消静音时段" }
+settings.item_panels: { ja: "Web パネル", en: "Web panels", zh: "Web 面板" }
+settings.item_panels_note: { ja: "パネルの作成・権限・取り消しは管理画面で行います", en: "Create, scope, and revoke panels in Admin", zh: "在管理页面中创建、授权和撤销面板" }
+settings.item_http_port: { ja: "HTTP ポート", en: "HTTP port", zh: "HTTP 端口" }
+settings.item_http_port_note: { ja: "この端末内のアプリ用です。ほかの端末からは HTTPS に転送されます", en: "Used by apps on this device; other devices are redirected to HTTPS", zh: "供本设备上的应用使用；其他设备会被转到 HTTPS" }
+settings.item_https_port: { ja: "HTTPS ポート", en: "HTTPS port", zh: "HTTPS 端口" }
+settings.item_mesh_port: { ja: "端末間通信のポート", en: "Mesh port", zh: "设备间通信端口" }
+settings.item_ports_note: { ja: "ポートは端末の初期設定で決まり、ここでは変更できません", en: "Ports are set during device setup and cannot be changed here", zh: "端口在设备初始设置时确定，此处无法更改" }
+settings.sound_none: { ja: "鳴らさない", en: "None", zh: "不播放" }
+settings.sound_custom: { ja: "アップロードした音声", en: "Uploaded sound", zh: "已上传的声音" }
+settings.sound_school_chime: { ja: "学校のチャイム", en: "School chime", zh: "学校铃声" }
+settings.sound_outdoor_call_alert: { ja: "呼び出し音", en: "Call alert", zh: "呼叫提示音" }
+settings.sound_button_click: { ja: "クリック音", en: "Click", zh: "点击声" }
+settings.sound_indoor_update: { ja: "更新音", en: "Update tone", zh: "更新提示音" }
+settings.sound_title_display: { ja: "起動音", en: "Startup tone", zh: "启动提示音" }
+settings.playback_auto: { ja: "自動", en: "Automatic", zh: "自动" }
+settings.playback_h264: { ja: "H.264", en: "H.264", zh: "H.264" }
+settings.playback_mjpeg: { ja: "MJPEG", en: "MJPEG", zh: "MJPEG" }
+settings.call_flow_purpose_first: { ja: "用件を選んで呼び出す", en: "Choose purpose, then ring", zh: "先选目的，再呼叫" }
+settings.call_flow_ring_then_purpose: { ja: "呼び出してから用件を選ぶ", en: "Ring, then choose purpose", zh: "先呼叫，再选目的" }
+settings.role_indoor_panel: { ja: "室内機", en: "Indoor panel", zh: "室内机" }
+settings.role_door_station: { ja: "門口機", en: "Door station", zh: "门口机" }
+settings.answer_mode_auto: { ja: "すぐに応答する", en: "Answer immediately", zh: "立即接听" }
+settings.answer_mode_ring: { ja: "鳴らして手動で応答", en: "Ring and answer by hand", zh: "响铃后手动接听" }
+settings.select_at_least_one: { ja: "少なくとも 1 つ選んでください", en: "Choose at least one", zh: "请至少选择一项" }
+settings.invalid_value: { ja: "入力内容を確認してください", en: "Check the value and try again", zh: "请检查输入内容" }
+settings.item_password_change: { ja: "管理パスワードを変更", en: "Change the admin password", zh: "更改管理密码" }
+settings.item_password_current: { ja: "現在のパスワード", en: "Current password", zh: "当前密码" }
+settings.item_password_new: { ja: "新しいパスワード（8 文字以上）", en: "New password (at least 8 characters)", zh: "新密码（至少 8 个字符）" }
+settings.item_password_confirm: { ja: "新しいパスワード（確認）", en: "Confirm the new password", zh: "确认新密码" }
+settings.item_password_short: { ja: "8～128 文字で入力してください", en: "Use 8 to 128 characters", zh: "请输入 8～128 个字符" }
+settings.item_password_mismatch: { ja: "新しいパスワードが一致しません", en: "The new passwords do not match", zh: "两次输入的新密码不一致" }
+settings.item_password_changed: { ja: "管理パスワードを変更しました", en: "Admin password changed", zh: "管理密码已更改" }
+
+# Security v3 pairing on Android (2026-11 review): confirm codes, re-pair after upgrade, key rotation.
+pair.upgrade_rejoin: { ja: "更新後の再ペアリングが必要です。もう一度クラスタに追加してください", en: "Re-pairing is required after the update. Add this device to the cluster again", zh: "更新后需要重新配对。请再次将本设备加入集群" }
+settings.item_cluster_key: { ja: "クラスタの鍵", en: "Cluster key", zh: "集群密钥" }
+settings.item_rekey_required: { ja: "鍵の更新が必要な端末があります", en: "Some devices need the new key", zh: "有设备需要更新密钥" }
+settings.item_legacy_peers: { ja: "旧バージョンの端末 {n} 台", en: "{n} devices on an old version", zh: "{n} 台设备为旧版本" }
+settings.item_prev_key: { ja: "以前の鍵 {id} は {until} まで有効", en: "Previous key {id} valid until {until}", zh: "旧密钥 {id} 有效至 {until}" }
+settings.item_rotate_key: { ja: "クラスタの鍵を更新", en: "Rotate the cluster key", zh: "更新集群密钥" }
+settings.item_rotate_key_note: { ja: "端末を紛失・削除したときに実行します", en: "Do this after a device is lost or removed", zh: "在设备丢失或被移除后执行" }
+settings.item_rotate_key_confirm: { ja: "すべての端末に新しい鍵を配ります。電源が切れている端末は後で鍵を受け取ります。続けますか？", en: "A new key is sent to every device; devices that are off receive it later. Continue?", zh: "将向所有设备分发新密钥；关机的设备稍后接收。要继续吗？" }
+settings.item_rotate_key_started: { ja: "鍵の更新を開始しました", en: "Key rotation started", zh: "已开始更新密钥" }
+
+# Android UI redesign (2026-11, docs/en/ui-guidelines.md): navigation, tile states, header chips,
+# history detail, settings search, and the SOS hold-to-clear gesture.
+nav.home: { ja: "ホーム", en: "Home", zh: "首页" }
+nav.history: { ja: "履歴", en: "History", zh: "记录" }
+nav.monitor: { ja: "モニター", en: "Monitor", zh: "监视" }
+nav.settings: { ja: "設定", en: "Settings", zh: "设置" }
+dash.chip_sos: { ja: "SOS 発報中", en: "SOS active", zh: "SOS 报警中" }
+dash.chip_offline: { ja: "{n} 台オフライン", en: "{n} offline", zh: "{n} 台离线" }
+history.select_call: { ja: "呼出を選ぶと詳細が表示されます", en: "Select a call to see its details", zh: "选择一条呼叫即可查看详情" }
+settings.search_hint: { ja: "設定を検索", en: "Search settings", zh: "搜索设置" }
+settings.search_empty: { ja: "一致する設定はありません", en: "No matching settings", zh: "没有匹配的设置" }
+sos.hold_to_clear: { ja: "長押しで解除", en: "Press and hold to clear", zh: "长按以解除" }
+sos.since: { ja: "{time} から", en: "Since {time}", zh: "自 {time} 起" }
+pair.upgrade_rejoin_action: { ja: "もう一度ペアリングする", en: "Pair again", zh: "重新配对" }

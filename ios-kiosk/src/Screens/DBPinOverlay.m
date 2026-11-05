@@ -6,7 +6,9 @@
 #import "DBRouter.h"
 #import <CommonCrypto/CommonDigest.h>
 
-static const NSInteger kMaxLen = 6;
+// Matches Core's admin password bounds (admin_password.h).
+static const NSInteger kMinLen = 8;
+static const NSInteger kMaxLen = 128;
 static NSInteger sFails = 0;
 static NSTimeInterval sLockedUntil = 0;
 
@@ -18,6 +20,7 @@ static NSTimeInterval sLockedUntil = 0;
   DBCoreBridge *_core;
   NSMutableString *_pin;
   UITextField *_display;
+  BOOL _needsNewPassword;
   CGFloat _keyboardHeight;
   UIButton *_submitButton;
   UILabel *_errorLabel;
@@ -55,7 +58,12 @@ static NSTimeInterval sLockedUntil = 0;
 
   _display = [[UITextField alloc] init];
   _display.secureTextEntry = YES;
-  _display.keyboardType = UIKeyboardTypeNumberPad;
+  // The cluster password is free text of at least eight characters, so the full keyboard is
+  // needed; a digits-only pad would make most passwords impossible to type on the device.
+  _display.keyboardType = UIKeyboardTypeASCIICapable;
+  _display.autocorrectionType = UITextAutocorrectionTypeNo;
+  _display.autocapitalizationType = UITextAutocapitalizationTypeNone;
+  _display.returnKeyType = UIReturnKeyDone;
   _display.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
   _display.delegate = self;
   [_display addTarget:self action:@selector(pinChanged) forControlEvents:UIControlEventEditingChanged];
@@ -140,8 +148,13 @@ static NSTimeInterval sLockedUntil = 0;
 
 - (BOOL)textField:(UITextField *)field shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string {
   NSString *next = [field.text ?: @"" stringByReplacingCharactersInRange:range withString:string];
-  NSCharacterSet *invalid = [[NSCharacterSet characterSetWithCharactersInString:@"0123456789"] invertedSet];
-  return [next length] <= kMaxLen && [next rangeOfCharacterFromSet:invalid].location == NSNotFound;
+  return [next length] <= kMaxLen;
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)field {
+  (void)field;
+  [self submit];
+  return NO;
 }
 
 - (void)pinChanged {
@@ -206,7 +219,8 @@ static NSTimeInterval sLockedUntil = 0;
                                                encoding:NSUTF8StringEncoding error:NULL];
   NSString *trimmed = [stored stringByTrimmingCharactersInSet:
       [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-  return [trimmed length] > 0 ? trimmed : [self sha256Hex:@"000000"];
+  // No digest file means no device credential at all; there is no built-in default.
+  return [trimmed length] > 0 ? trimmed : nil;
 }
 
 + (void)retireLocalDigest {
@@ -218,8 +232,9 @@ static NSTimeInterval sLockedUntil = 0;
 }
 
 - (BOOL)acceptsEnteredPassword:(NSString *)entered {
+  NSString *digest = [[self class] localDigest];
   BOOL localMatches =
-      [[[self class] sha256Hex:entered] isEqualToString:[[self class] localDigest]];
+      digest != nil && [[[self class] sha256Hex:entered] isEqualToString:digest];
   if (![DBCoreBridge supportsAdminPassword]) {
     // Core predates the shared password: keep the local digest as the gate.
     return localMatches;
@@ -238,12 +253,18 @@ static NSTimeInterval sLockedUntil = 0;
     return NO;
   }
   if (status != -2) return NO;
-  // No cluster password yet: the device's own digest is still authoritative,
-  // and the first successful entry republishes it as the cluster password.
-  if (!localMatches) return NO;
+  // No cluster password yet. A legacy device digest, if present, must match before this entry
+  // may become the cluster password; without one this is the same trust-on-first-use as the
+  // first web login. Either way the new password has to meet Core's minimum length, so an old
+  // six-digit PIN cannot be carried over and the user is asked for a longer one instead.
+  if (digest != nil && !localMatches) return NO;
+  if ((NSInteger)[entered length] < kMinLen) {
+    _needsNewPassword = YES;
+    return NO;
+  }
   if ([_core setAdminPasswordFrom:@"" to:entered] != 0) return NO;
   [[self class] retireLocalDigest];
-  NSLog(@"[doorbell][admin] migrated the local admin digest to the cluster password");
+  NSLog(@"[doorbell][admin] set the first cluster password from this device");
   return YES;
 }
 
@@ -254,6 +275,7 @@ static NSTimeInterval sLockedUntil = 0;
     _display.text = @"";
     return;
   }
+  _needsNewPassword = NO;
   if ([self acceptsEnteredPassword:_pin]) {
     sFails = 0;
     void (^cb)(void) = _onUnlocked;
@@ -261,6 +283,14 @@ static NSTimeInterval sLockedUntil = 0;
     [self dismiss];
 
     if (cb) cb();
+    return;
+  }
+  if (_needsNewPassword) {
+    // Not a wrong password: the cluster has none yet and this entry is too short to become it.
+    _title.text = [_texts ts:@"admin.password_set_prompt"];
+    _errorLabel.text = [_texts ts:@"admin.password_too_short"];
+    [_pin setString:@""];
+    _display.text = @"";
     return;
   }
   sFails++;

@@ -15,6 +15,6 @@ class BootReceiver : BroadcastReceiver() {
         if (!app.boot.bootLaunch) return
         val i = Intent(context, MainActivity::class.java)
             .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        try { context.startActivity(i) } catch (_: Exception) { }
+        try { context.startActivity(i) } catch (e: Exception) { ShellLog.ignored("BootReceiver", e) }
     }
 }

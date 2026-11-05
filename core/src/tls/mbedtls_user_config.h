@@ -26,3 +26,9 @@
 // GCC-only x86 inline assembly; unused and fragile on old MinGW.
 #undef MBEDTLS_PADLOCK_C
 #undef MBEDTLS_TIMING_C
+
+// The iOS 5.1 SDK has no clock_gettime(); every Apple target uses mach_absolute_time() instead
+// (core/src/tls/mbedtls_ms_time_apple.c).
+#if defined(__APPLE__)
+#define MBEDTLS_PLATFORM_MS_TIME_ALT
+#endif

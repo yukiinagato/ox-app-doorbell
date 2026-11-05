@@ -320,6 +320,15 @@ DB_API const char* db_core_local_token(db_core* c);
 DB_API int db_core_set_config_json(db_core* c, const char* key, const char* value_json);
 DB_API char* db_core_last_write_warnings_json(db_core* c);
 DB_API char* db_core_config_batch_json(db_core* c, const char* ops_json);
+/* Native asset upload, the same ledger as Admin's image and sound uploads. type is image/jpeg,
+ * image/png, audio/mpeg or audio/wav; at most 3 MiB; label is optional. Needs the native admin
+ * window. Returns {"ok":true,"hash":"<sha256>"} for use in config (theme backgrounds, ringtones
+ * as "asset:<sha256>") or {"ok":false,"err":"admin_required|bad_type|empty|too_large|..."}.
+ * Free the result with db_free. */
+DB_API char* db_core_asset_add_json(db_core* c, const uint8_t* data, size_t len,
+                                    const char* type, const char* label);
+/* Remove one asset from the ledger; same result shape. Needs the native admin window. */
+DB_API char* db_core_asset_remove_json(db_core* c, const char* sha256_hex);
 
 /* Version 2 configuration reads return {schema_version:2,revision,config}; the snapshot omits
  * administrator password digests. Commit requires {schema_version:2,expected_revision,ops}.

@@ -285,6 +285,13 @@ class Node {
   // The advisory warnings from the most recent single-key write, as a JSON array.
   std::string lastWriteWarningsJson();
   std::string configBatchJson(const std::string& ops_json);
+  // Store an image or sound for the cluster asset ledger, as the Admin upload does. type is one of
+  // image/jpeg, image/png, audio/mpeg, audio/wav; at most 3 MiB. Returns
+  // {"ok":true,"hash":"<sha256>"} or {"ok":false,"err":"bad_type|empty|too_large|store_failed"}.
+  std::string addAssetJson(const std::vector<uint8_t>& data, const std::string& type,
+                           const std::string& label);
+  // Drop one asset from the ledger. {"ok":true} or {"ok":false,"err":"bad_hash|..."}.
+  std::string removeAssetJson(const std::string& hash);
   std::string deleteConfigKeyJson(const std::string& key);
 
   // Call history for the local device. since_ms is an inclusive lower bound on the row timestamp

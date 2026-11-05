@@ -285,6 +285,53 @@ TEST_CASE("admin API: initial password is issued only after an atomic durable wr
   removeAdminTempDir(dir);
 }
 
+TEST_CASE("admin API: the administrator password can be changed from Admin") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x9a55u);
+  const int mesh_port = adminFreePort(rng);
+  const int http_port = adminFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+  const std::string dir = adminTempDir();
+
+  NodeOptions options;
+  options.data_dir = dir;
+  options.name = "password-change";
+  options.role = "indoor_panel";
+  options.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  options.psk.fill(0x27);
+  options.enable_beacon = false;
+  options.http_port = http_port;
+  options.mesh_timing_template = adminTiming();
+  options.use_mesh_timing_template = true;
+
+  Node node(options);
+  REQUIRE(node.start());
+  const std::string sess = adminLogin(http_port);
+
+  const std::string no_csrf = adminReq(http_port, "POST", "/api/admin/password",
+                                       R"({"current":"testpw-12","new":"73914028"})", sess, "",
+                                       /*send_csrf=*/false);
+  CHECK(no_csrf.find("HTTP/1.1 403") == 0);
+  const std::string wrong = adminReq(http_port, "POST", "/api/admin/password",
+                                     R"({"current":"not-the-password","new":"73914028"})", sess);
+  CHECK(wrong.find("HTTP/1.1 403") == 0);
+  CHECK(wrong.find("wrong_password") != std::string::npos);
+  const std::string short_pw = adminReq(http_port, "POST", "/api/admin/password",
+                                        R"({"current":"testpw-12","new":"1234"})", sess);
+  CHECK(short_pw.find("HTTP/1.1 400") == 0);
+  CHECK(short_pw.find("password_too_short") != std::string::npos);
+
+  const std::string changed = adminReq(http_port, "POST", "/api/admin/password",
+                                       R"({"current":"testpw-12","new":"73914028"})", sess);
+  CHECK(changed.find("HTTP/1.1 200") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/login", R"({"password":"testpw-12"})")
+            .find("HTTP/1.1 401") == 0);
+  CHECK(adminReq(http_port, "POST", "/api/login", R"({"password":"73914028"})")
+            .find("HTTP/1.1 200") == 0);
+  node.stop();
+  removeAdminTempDir(dir);
+}
+
 TEST_CASE("admin API: config persistence failure keeps last-known-good state") {
   std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0xd17abu);
   const int mesh_port = adminFreePort(rng);

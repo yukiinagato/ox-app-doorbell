@@ -48,6 +48,8 @@ internal object PairingModel {
         val inviteState: String,
         val attempts: Int,
         val lastError: String,
+        /** Core saw a second, different identity key for this node id; inviting it is unsafe. */
+        val pkConflict: Boolean = false,
     ) {
         /** Human name, then model, then a short identifier — never a blank row. */
         fun displayName(): String {
@@ -81,6 +83,7 @@ internal object PairingModel {
                     inviteState = d.optString("invite_state", "none"),
                     attempts = d.optInt("attempts", 0),
                     lastError = d.optString("last_error"),
+                    pkConflict = d.optBoolean("pk_conflict", false),
                 ),
             )
         }
@@ -154,6 +157,10 @@ internal object PairingModel {
         "persist_failed" -> R.string.pair_err_persist_failed
         "host_zero_psk" -> R.string.pair_err_host_zero_psk
         "no_ack" -> R.string.pair_err_no_ack
+        "confirm_code_required" -> R.string.pair_err_confirm_code_required
+        "confirm_code_mismatch" -> R.string.pair_err_confirm_code_mismatch
+        "pk_conflict" -> R.string.pair_err_pk_conflict
+        "protocol_upgrade_required" -> R.string.pair_err_protocol_upgrade_required
         else -> R.string.pair_err_unknown
     }
 
@@ -161,9 +168,73 @@ internal object PairingModel {
     fun errorKey(code: String): String = when (code) {
         "bad_pin", "expired", "no_token", "host_unpaired", "connect_failed", "timeout", "closed",
         "join_in_progress", "already_paired", "decrypt_failed", "bad_payload", "bad_challenge",
-        "local_persist_failed", "persist_failed", "host_zero_psk", "no_ack" -> "pair.err.$code"
+        "local_persist_failed", "persist_failed", "host_zero_psk", "no_ack",
+        "confirm_code_required", "confirm_code_mismatch", "pk_conflict",
+        "protocol_upgrade_required" -> "pair.err.$code"
         else -> "pair.err.unknown"
     }
+
+    // ---------- security v3 (pairing JSON additions) ----------
+
+    /** This device's 8-digit invitation confirm code, shown on its own pairing screen. */
+    fun selfConfirmCode(pairing: JSONObject?): String {
+        val code = pairing?.optJSONObject("self")?.optString("confirm_code").orEmpty()
+        return if (validConfirmCode(code)) code else ""
+    }
+
+    /** Exactly eight ASCII digits, as the inviting device must type them. */
+    fun validConfirmCode(code: String): Boolean =
+        code.length == CONFIRM_CODE_LENGTH && code.all { it in '0'..'9' }
+
+    /** "1234 5678": grouped for reading aloud and copying by eye. */
+    fun groupedConfirmCode(code: String): String =
+        if (code.length == CONFIRM_CODE_LENGTH) code.substring(0, 4) + " " + code.substring(4)
+        else code
+
+    data class Security(
+        val legacyPeers: Int,
+        val rekeyRequired: Boolean,
+        val pskId: String,
+        val prevPskId: String,
+        val prevPskUntilMs: Long,
+        val identityPk: String,
+    )
+
+    fun security(pairing: JSONObject?): Security? {
+        val s = pairing?.optJSONObject("security") ?: return null
+        val legacy = s.opt("legacy_peers")
+        return Security(
+            legacyPeers = when (legacy) {
+                is org.json.JSONArray -> legacy.length()
+                is Number -> legacy.toInt()
+                else -> 0
+            },
+            rekeyRequired = s.optBoolean("rekey_required", false),
+            pskId = s.optString("psk_id"),
+            prevPskId = if (s.isNull("prev_psk_id")) "" else s.optString("prev_psk_id"),
+            prevPskUntilMs = s.optLong("prev_psk_until_ms", 0L),
+            identityPk = s.optString("identity_pk"),
+        )
+    }
+
+    /**
+     * Why this device must be paired again after the v3 upgrade, or null when it need not.
+     * Core reports `upgrade_rejoin_required` as true plus `upgrade_rejoin_reason`, or as an
+     * object carrying `reason`; both forms are accepted.
+     */
+    fun upgradeRejoinReason(pairing: JSONObject?): String? {
+        if (pairing == null) return null
+        val value = pairing.opt("upgrade_rejoin_required")
+        return when (value) {
+            is JSONObject -> if (value.optBoolean("required", true))
+                value.optString("reason").ifEmpty { "upgrade_rejoin_required" } else null
+            true -> pairing.optString("upgrade_rejoin_reason").ifEmpty { "upgrade_rejoin_required" }
+            is String -> value.takeIf { it.isNotEmpty() && it != "false" }
+            else -> null
+        }
+    }
+
+    const val CONFIRM_CODE_LENGTH = 8
 
     /** True when the QR payload is one this cluster can act on. */
     fun isPairQr(text: String): Boolean {

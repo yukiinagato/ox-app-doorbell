@@ -444,6 +444,8 @@ Delete it?</value></data>
   <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>{0} of {1} indoor panels online</value></data>
   <data name="dash_address_count" xml:space="preserve"><value>{0} addresses</value></data>
   <data name="dash_admin" xml:space="preserve"><value>Admin</value></data>
+  <data name="dash_chip_offline" xml:space="preserve"><value>{0} offline</value></data>
+  <data name="dash_chip_sos" xml:space="preserve"><value>SOS active</value></data>
   <data name="dash_count_cluster" xml:space="preserve"><value>{0} devices in the cluster</value></data>
   <data name="dash_count_devices" xml:space="preserve"><value>{0} devices</value></data>
   <data name="dash_count_door_stations" xml:space="preserve"><value>Door stations {0} of {1} online</value></data>
@@ -567,6 +569,7 @@ Delete it?</value></data>
   <data name="history_page_limit" xml:space="preserve"><value>Older calls are in the web admin</value></data>
   <data name="history_see_all" xml:space="preserve"><value>See all</value></data>
   <data name="history_seen_done" xml:space="preserve"><value>Marked as seen</value></data>
+  <data name="history_select_call" xml:space="preserve"><value>Select a call to see its details</value></data>
   <data name="history_title" xml:space="preserve"><value>Call history</value></data>
   <data name="history_today" xml:space="preserve"><value>Today</value></data>
   <data name="history_unread" xml:space="preserve"><value>Unread</value></data>
@@ -581,6 +584,8 @@ Delete it?</value></data>
   <data name="incall_end" xml:space="preserve"><value>End</value></data>
   <data name="incall_end_call" xml:space="preserve"><value>End call</value></data>
   <data name="incall_title" xml:space="preserve"><value>In call</value></data>
+  <data name="incoming_channel_name" xml:space="preserve"><value>Visitor calls</value></data>
+  <data name="incoming_notification_tap" xml:space="preserve"><value>Tap to open the call screen</value></data>
   <data name="info_absent" xml:space="preserve"><value>Absent</value></data>
   <data name="info_active_calls" xml:space="preserve"><value>Active calls</value></data>
   <data name="info_address_cycle" xml:space="preserve"><value>Change address ({0}/{1}) ▸</value></data>
@@ -642,6 +647,10 @@ Delete it?</value></data>
   <data name="monitor_live" xml:space="preserve"><value>Live video</value></data>
   <data name="monitor_open" xml:space="preserve"><value>View door stations</value></data>
   <data name="monitor_title" xml:space="preserve"><value>{0} live</value></data>
+  <data name="nav_history" xml:space="preserve"><value>History</value></data>
+  <data name="nav_home" xml:space="preserve"><value>Home</value></data>
+  <data name="nav_monitor" xml:space="preserve"><value>Monitor</value></data>
+  <data name="nav_settings" xml:space="preserve"><value>Settings</value></data>
   <data name="notice_active" xml:space="preserve"><value>Showing</value></data>
   <data name="notice_char_count" xml:space="preserve"><value>{0}/200</value></data>
   <data name="notice_chip" xml:space="preserve"><value>Announcement</value></data>
@@ -827,6 +836,8 @@ Delete it?</value></data>
   <data name="pair_tab" xml:space="preserve"><value>Add device</value></data>
   <data name="pair_title_unpaired" xml:space="preserve"><value>Add this doorbell to a Cluster</value></data>
   <data name="pair_upgrade_body" xml:space="preserve"><value>The new security protocol needs this device to join the cluster again. Its history is kept. Add it from a device that is already in the cluster.</value></data>
+  <data name="pair_upgrade_rejoin" xml:space="preserve"><value>Re-pairing is required after the update. Add this device to the cluster again</value></data>
+  <data name="pair_upgrade_rejoin_action" xml:space="preserve"><value>Pair again</value></data>
   <data name="pair_upgrade_rejoin_hint" xml:space="preserve"><value>The security update retired the old connection; history is kept. Show a PIN on a cluster device and join again.</value></data>
   <data name="pair_upgrade_rejoin_title" xml:space="preserve"><value>Pair again after the upgrade</value></data>
   <data name="pair_upgrade_title" xml:space="preserve"><value>Pair this device again</value></data>
@@ -1221,6 +1232,8 @@ On</value></data>
   <data name="settings_addresses" xml:space="preserve"><value>Addresses</value></data>
   <data name="settings_answer_auto" xml:space="preserve"><value>Answer automatically</value></data>
   <data name="settings_answer_manual" xml:space="preserve"><value>Answer manually</value></data>
+  <data name="settings_answer_mode_auto" xml:space="preserve"><value>Answer immediately</value></data>
+  <data name="settings_answer_mode_ring" xml:space="preserve"><value>Ring and answer by hand</value></data>
   <data name="settings_app_version" xml:space="preserve"><value>App version</value></data>
   <data name="settings_appearance" xml:space="preserve"><value>Appearance</value></data>
   <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>Switch by time of day</value></data>
@@ -1248,6 +1261,8 @@ On</value></data>
   <data name="settings_brightness_here" xml:space="preserve"><value>Screen brightness</value></data>
   <data name="settings_button_sound" xml:space="preserve"><value>Button sound</value></data>
   <data name="settings_call_flow" xml:space="preserve"><value>Visitor call flow</value></data>
+  <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>Choose purpose, then ring</value></data>
+  <data name="settings_call_flow_ring_then_purpose" xml:space="preserve"><value>Ring, then choose purpose</value></data>
   <data name="settings_call_sound" xml:space="preserve"><value>Door-station call sound</value></data>
   <data name="settings_call_sound_loop" xml:space="preserve"><value>Repeat the call sound</value></data>
   <data name="settings_call_sound_loop_desc" xml:space="preserve"><value>Repeats until a reply or the 30-second timeout</value></data>
@@ -1262,11 +1277,16 @@ On</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>About</value></data>
   <data name="settings_cat_calls" xml:space="preserve"><value>Calls</value></data>
   <data name="settings_cat_camera" xml:space="preserve"><value>Camera &amp; video</value></data>
+  <data name="settings_cat_cluster" xml:space="preserve"><value>Devices and pairing</value></data>
   <data name="settings_cat_device" xml:space="preserve"><value>This device</value></data>
   <data name="settings_cat_display" xml:space="preserve"><value>Display &amp; appearance</value></data>
+  <data name="settings_cat_doors" xml:space="preserve"><value>Doors and announcements</value></data>
+  <data name="settings_cat_emergency" xml:space="preserve"><value>SOS</value></data>
   <data name="settings_cat_kiosk" xml:space="preserve"><value>Kiosk &amp; recovery</value></data>
   <data name="settings_cat_more" xml:space="preserve"><value>More in Admin</value></data>
+  <data name="settings_cat_network" xml:space="preserve"><value>Network</value></data>
   <data name="settings_cat_notices" xml:space="preserve"><value>Announcements</value></data>
+  <data name="settings_cat_notifications" xml:space="preserve"><value>Notifications and rules</value></data>
   <data name="settings_cat_pairing" xml:space="preserve"><value>Cluster &amp; devices</value></data>
   <data name="settings_cat_purposes" xml:space="preserve"><value>Visit purposes</value></data>
   <data name="settings_cat_replies" xml:space="preserve"><value>Quick replies</value></data>
@@ -1352,6 +1372,54 @@ On</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
   <data name="settings_integrations" xml:space="preserve"><value>Integrations (Telegram, MQTT, Web Push)</value></data>
   <data name="settings_integrations_desc" xml:space="preserve"><value>Connections to external services</value></data>
+  <data name="settings_invalid_value" xml:space="preserve"><value>Check the value and try again</value></data>
+  <data name="settings_item_answer_mode" xml:space="preserve"><value>Answering</value></data>
+  <data name="settings_item_brightness" xml:space="preserve"><value>Brightness</value></data>
+  <data name="settings_item_cluster_key" xml:space="preserve"><value>Cluster key</value></data>
+  <data name="settings_item_cluster_return_s" xml:space="preserve"><value>Close the call screen after (all devices, seconds)</value></data>
+  <data name="settings_item_direct_port" xml:space="preserve"><value>Direct call port</value></data>
+  <data name="settings_item_door_label" xml:space="preserve"><value>Door name</value></data>
+  <data name="settings_item_doors_add" xml:space="preserve"><value>Add or remove doors and buildings</value></data>
+  <data name="settings_item_http_port" xml:space="preserve"><value>HTTP port</value></data>
+  <data name="settings_item_http_port_note" xml:space="preserve"><value>Used by apps on this device; other devices are redirected to HTTPS</value></data>
+  <data name="settings_item_https_port" xml:space="preserve"><value>HTTPS port</value></data>
+  <data name="settings_item_legacy_peers" xml:space="preserve"><value>{0} devices on an old version</value></data>
+  <data name="settings_item_mesh_port" xml:space="preserve"><value>Mesh port</value></data>
+  <data name="settings_item_motion_wake" xml:space="preserve"><value>Wake the screen on motion</value></data>
+  <data name="settings_item_night" xml:space="preserve"><value>Night mode</value></data>
+  <data name="settings_item_night_brightness" xml:space="preserve"><value>Night brightness</value></data>
+  <data name="settings_item_night_from" xml:space="preserve"><value>Night mode starts</value></data>
+  <data name="settings_item_night_to" xml:space="preserve"><value>Night mode ends</value></data>
+  <data name="settings_item_panels" xml:space="preserve"><value>Web panels</value></data>
+  <data name="settings_item_panels_note" xml:space="preserve"><value>Create, scope, and revoke panels in Admin</value></data>
+  <data name="settings_item_password_change" xml:space="preserve"><value>Change the admin password</value></data>
+  <data name="settings_item_password_changed" xml:space="preserve"><value>Admin password changed</value></data>
+  <data name="settings_item_password_confirm" xml:space="preserve"><value>Confirm the new password</value></data>
+  <data name="settings_item_password_current" xml:space="preserve"><value>Current password</value></data>
+  <data name="settings_item_password_mismatch" xml:space="preserve"><value>The new passwords do not match</value></data>
+  <data name="settings_item_password_new" xml:space="preserve"><value>New password (at least 8 characters)</value></data>
+  <data name="settings_item_password_short" xml:space="preserve"><value>Use 8 to 128 characters</value></data>
+  <data name="settings_item_pixel_shift" xml:space="preserve"><value>Burn-in shift interval (seconds)</value></data>
+  <data name="settings_item_ports_note" xml:space="preserve"><value>Ports are set during device setup and cannot be changed here</value></data>
+  <data name="settings_item_prev_key" xml:space="preserve"><value>Previous key {0} valid until {1}</value></data>
+  <data name="settings_item_quiet_clear" xml:space="preserve"><value>Remove quiet hours</value></data>
+  <data name="settings_item_quiet_from" xml:space="preserve"><value>Starts</value></data>
+  <data name="settings_item_quiet_to" xml:space="preserve"><value>Ends</value></data>
+  <data name="settings_item_rekey_required" xml:space="preserve"><value>Some devices need the new key</value></data>
+  <data name="settings_item_reply_audio" xml:space="preserve"><value>Reply audio files</value></data>
+  <data name="settings_item_reply_ttl" xml:space="preserve"><value>Reply display time (seconds)</value></data>
+  <data name="settings_item_return_s" xml:space="preserve"><value>Close the call screen after (seconds)</value></data>
+  <data name="settings_item_return_s_note" xml:space="preserve"><value>Applies to this device only</value></data>
+  <data name="settings_item_rotate_key" xml:space="preserve"><value>Rotate the cluster key</value></data>
+  <data name="settings_item_rotate_key_confirm" xml:space="preserve"><value>A new key is sent to every device; devices that are off receive it later. Continue?</value></data>
+  <data name="settings_item_rotate_key_note" xml:space="preserve"><value>Do this after a device is lost or removed</value></data>
+  <data name="settings_item_rotate_key_started" xml:space="preserve"><value>Key rotation started</value></data>
+  <data name="settings_item_saver" xml:space="preserve"><value>Idle screen</value></data>
+  <data name="settings_item_saver_after" xml:space="preserve"><value>Idle screen after (seconds)</value></data>
+  <data name="settings_item_sip_password" xml:space="preserve"><value>SIP password</value></data>
+  <data name="settings_item_sip_server" xml:space="preserve"><value>SIP server</value></data>
+  <data name="settings_item_sip_server_note" xml:space="preserve"><value>Leave blank to use direct calls only</value></data>
+  <data name="settings_item_sip_user" xml:space="preserve"><value>This device's extension</value></data>
   <data name="settings_kiosk_lock" xml:space="preserve"><value>Return to kiosk now</value></data>
   <data name="settings_kiosk_lock_action" xml:space="preserve"><value>Lock</value></data>
   <data name="settings_kiosk_mode" xml:space="preserve"><value>Kiosk mode</value></data>
@@ -1432,6 +1500,9 @@ On</value></data>
   <data name="settings_peers_ok" xml:space="preserve"><value>None</value></data>
   <data name="settings_peers_rekey_required" xml:space="preserve"><value>Need pairing again: {0}</value></data>
   <data name="settings_pixel_shift" xml:space="preserve"><value>Burn-in protection shift</value></data>
+  <data name="settings_playback_auto" xml:space="preserve"><value>Automatic</value></data>
+  <data name="settings_playback_h264" xml:space="preserve"><value>H.264</value></data>
+  <data name="settings_playback_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
   <data name="settings_preset_text" xml:space="preserve"><value>Text</value></data>
   <data name="settings_purpose_shown" xml:space="preserve"><value>Offer it to visitors</value></data>
   <data name="settings_purposes" xml:space="preserve"><value>Visit purposes</value></data>
@@ -1453,7 +1524,9 @@ On</value></data>
   <data name="settings_ringtone" xml:space="preserve"><value>Indoor ringtone</value></data>
   <data name="settings_role" xml:space="preserve"><value>Role</value></data>
   <data name="settings_role_door" xml:space="preserve"><value>Door station</value></data>
+  <data name="settings_role_door_station" xml:space="preserve"><value>Door station</value></data>
   <data name="settings_role_indoor" xml:space="preserve"><value>Indoor panel</value></data>
+  <data name="settings_role_indoor_panel" xml:space="preserve"><value>Indoor panel</value></data>
   <data name="settings_role_restart" xml:space="preserve"><value>Changing the role restarts the app</value></data>
   <data name="settings_role_restart_notice" xml:space="preserve"><value>A new role takes effect the next time the app is opened</value></data>
   <data name="settings_rotate_cluster_key" xml:space="preserve"><value>Change the cluster key</value></data>
@@ -1475,6 +1548,8 @@ On</value></data>
   <data name="settings_scope_device" xml:space="preserve"><value>This device only</value></data>
   <data name="settings_screensaver" xml:space="preserve"><value>Screensaver</value></data>
   <data name="settings_search" xml:space="preserve"><value>Search settings</value></data>
+  <data name="settings_search_empty" xml:space="preserve"><value>No matching settings</value></data>
+  <data name="settings_search_hint" xml:space="preserve"><value>Search settings</value></data>
   <data name="settings_search_none" xml:space="preserve"><value>No matching settings</value></data>
   <data name="settings_sec_30" xml:space="preserve"><value>30 seconds</value></data>
   <data name="settings_secrets" xml:space="preserve"><value>Secrets</value></data>
@@ -1489,6 +1564,7 @@ On</value></data>
   <data name="settings_section_time" xml:space="preserve"><value>Time</value></data>
   <data name="settings_section_volume" xml:space="preserve"><value>Volume</value></data>
   <data name="settings_section_web" xml:space="preserve"><value>Open the web admin</value></data>
+  <data name="settings_select_at_least_one" xml:space="preserve"><value>Choose at least one</value></data>
   <data name="settings_set_password" xml:space="preserve"><value>Set the admin password</value></data>
   <data name="settings_set_password_hint" xml:space="preserve"><value>One password for this device and the web admin</value></data>
   <data name="settings_sip_answer_mode" xml:space="preserve"><value>Answer mode</value></data>
@@ -1522,9 +1598,16 @@ On</value></data>
   <data name="settings_sos_volume" xml:space="preserve"><value>Alarm volume</value></data>
   <data name="settings_sos_web" xml:space="preserve"><value>Show on open Web panels</value></data>
   <data name="settings_sos_web_desc" xml:space="preserve"><value>Shows the SOS state on browser panels that are open</value></data>
+  <data name="settings_sound_button_click" xml:space="preserve"><value>Click</value></data>
   <data name="settings_sound_classic" xml:space="preserve"><value>Classic</value></data>
+  <data name="settings_sound_custom" xml:space="preserve"><value>Uploaded sound</value></data>
   <data name="settings_sound_ding1" xml:space="preserve"><value>Ding-dong 1</value></data>
   <data name="settings_sound_ding2" xml:space="preserve"><value>Ding-dong 2</value></data>
+  <data name="settings_sound_indoor_update" xml:space="preserve"><value>Update tone</value></data>
+  <data name="settings_sound_none" xml:space="preserve"><value>None</value></data>
+  <data name="settings_sound_outdoor_call_alert" xml:space="preserve"><value>Call alert</value></data>
+  <data name="settings_sound_school_chime" xml:space="preserve"><value>School chime</value></data>
+  <data name="settings_sound_title_display" xml:space="preserve"><value>Startup tone</value></data>
   <data name="settings_telegram" xml:space="preserve"><value>Telegram</value></data>
   <data name="settings_texts" xml:space="preserve"><value>Screen texts</value></data>
   <data name="settings_texts_desc" xml:space="preserve"><value>Overrides for displayed texts</value></data>
@@ -1643,8 +1726,10 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="sos_countdown_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="sos_countdown_s" xml:space="preserve"><value>Cancellable countdown (seconds)</value></data>
   <data name="sos_hint" xml:space="preserve"><value>Triggering an alert notifies every family device. It does not automatically contact the police or fire service.</value></data>
+  <data name="sos_hold_to_clear" xml:space="preserve"><value>Press and hold to clear</value></data>
   <data name="sos_mode_hold" xml:space="preserve"><value>Press and hold (legacy)</value></data>
   <data name="sos_mode_slide" xml:space="preserve"><value>Slide to trigger</value></data>
+  <data name="sos_since" xml:space="preserve"><value>Since {0}</value></data>
   <data name="sos_slide_hint" xml:space="preserve"><value>Slide right to call for help</value></data>
   <data name="sos_slide_label" xml:space="preserve"><value>Slide for SOS</value></data>
   <data name="sos_slide_sub" xml:space="preserve"><value>Alarm after {0}s</value></data>

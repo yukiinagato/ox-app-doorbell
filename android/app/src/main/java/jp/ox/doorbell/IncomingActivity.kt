@@ -41,6 +41,9 @@ class IncomingActivity : Activity() {
     private lateinit var clusterClock: ClusterClock
     private lateinit var sosSlider: SosSlideView
     private var palette: Palette = Palette.DARK
+    private var roles: UiRoles = UiRoles.from(Palette.DARK)
+    private lateinit var screen: IncomingScreen
+    private var replySheet: UiKit.Sheet? = null
     private var cachedConfig: JSONObject? = null
     private var cachedStatus: JSONObject? = null
 
@@ -104,6 +107,7 @@ class IncomingActivity : Activity() {
         stageRevision = intent?.getIntExtra(EXTRA_STAGE_REVISION, 0) ?: 0
         revisionLifecycle = CallRevisionLifecycle(stageRevision)
         expiresAtMs = intent?.getLongExtra(EXTRA_EXPIRES_AT_MS, 0L) ?: 0L
+        app.incomingAlerts.onIncomingShown(callId)
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         // Alert on the lock screen when Device Owner policy has not disabled keyguard.
         if (Build.VERSION.SDK_INT >= 27) {
@@ -165,6 +169,14 @@ class IncomingActivity : Activity() {
             if (SosSlideState.visibleForRole(cfg, app.boot.role)) android.view.View.VISIBLE
             else android.view.View.GONE
         applyAppearance()
+        roles = UiRoles.from(palette, CoreDisplays.callButton(
+            CoreDisplays.parse(st?.optJSONObject("display")).theme, palette.ground))
+        screen = IncomingScreen(this)
+        updateDoorSwitcher()
+        screen.arrange(roles, liveView = callId.isEmpty())
+        val videoBox = findViewById<android.view.View>(R.id.video_box)
+        VideoZoom(findViewById(R.id.video_zoom_layer), videoBox)
+        videoBox.contentDescription = texts.t("ring.video_zoom_hint", R.string.ring_video_zoom_hint)
         buildControlRow(cfg)
         buildNoticeChip()
         buildAdminQr(st)
@@ -300,8 +312,46 @@ class IncomingActivity : Activity() {
             text = texts.t("ring.answer", R.string.ring_answer)
             isEnabled = peerHost != null
         }
+        replySheet?.dismiss()
+        updateDoorSwitcher()
+        screen.arrange(roles, liveView = callId.isEmpty())
         applySemanticUi(cfg, st)
         scheduleAutoClose()
+    }
+
+    /** Live view: chips for every door with a station, so the resident can switch cameras. */
+    private fun updateDoorSwitcher() {
+        screen.setDoorSwitcher(doorIds().map { it to doorLabel(it) }, door) { picked ->
+            try {
+                startActivity(IncomingActivity.intent(this, VisitorCallSnapshot(door = picked))
+                    .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP))
+            } catch (e: Exception) {
+                ShellLog.ignored("IncomingActivity", e)
+            }
+        }
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        // Rotation or a window resize re-chooses portrait/side-by-side live.
+        val sheetOpen = replySheet?.showing == true
+        replySheet?.dismiss()
+        screen.arrange(roles, liveView = callId.isEmpty())
+        applySemanticUi(cachedConfig, cachedStatus)
+        if (sheetOpen) openReplySheet()
+    }
+
+    override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (::screen.isInitialized) screen.onUserTouch(ev)
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun openReplySheet() {
+        val list = findViewById<LinearLayout>(R.id.reply_list)
+        if (list.childCount == 0) return
+        replySheet?.dismiss()
+        replySheet = screen.replySheet(list).also { it.show() }
+        list.getChildAt(0).requestFocus()
     }
 
     override fun onDestroy() {
@@ -309,6 +359,7 @@ class IncomingActivity : Activity() {
         ui.removeCallbacks(debugTick)
         ui.removeCallbacks(returnTick)
         if (::sosSlider.isInitialized) sosSlider.cancelCountdown()
+        if (::screen.isInitialized) screen.release()
         ui.removeCallbacksAndMessages(null)
         answerRequested = false
         answerDelayPending = false
@@ -317,7 +368,7 @@ class IncomingActivity : Activity() {
         if (sipCalling) app.core.sipHangup()
         if (micMuted) {
             app.core.sipSetMicMuted(false)
-            try { audioManager.isMicrophoneMute = false } catch (_: Exception) { }
+            try { audioManager.isMicrophoneMute = false } catch (e: Exception) { ShellLog.ignored("IncomingActivity", e) }
         }
         app.abandonPendingManualSipAnswer(callId)
         @Suppress("DEPRECATION")
@@ -605,7 +656,7 @@ class IncomingActivity : Activity() {
         val sip = app.core.status()?.optJSONObject("sip")
         monitorTxAtStart = sip?.optLong("rtp_tx", 0L) ?: 0L
         monitorRxAtStart = sip?.optLong("rtp_rx", 0L) ?: 0L
-        app.core.sipCall("sip:$host:$directPort", "monitor")
+        app.core.sipCall(sipUri(host), "monitor")
         sipCalling = true
         findViewById<TextView>(R.id.audio_hint).visibility = View.VISIBLE
     }
@@ -615,7 +666,9 @@ class IncomingActivity : Activity() {
      * "maybe", so the backoff — not this — is what protects an older door station.
      */
     private fun doorHasAudio(): Boolean {
-        val caps = findDoorPeer(app.core.status())?.optJSONObject("caps") ?: return true
+        // Capabilities change rarely; the screen's status snapshot avoids a main-thread core read.
+        val caps = findDoorPeer(cachedStatus ?: app.core.status())?.optJSONObject("caps")
+            ?: return true
         if (!caps.has("audio")) return true
         val audio = caps.opt("audio")
         return when (audio) {
@@ -680,19 +733,19 @@ class IncomingActivity : Activity() {
             finish()
             return
         }
-        app.core.sipCall("sip:$host:$directPort", "answer")
+        app.core.sipCall(sipUri(host), "answer")
         sipCalling = true
     }
 
-    /** Extract the host from the peer's first mesh address for direct SIP. */
-    private fun resolvePeerHost(peer: JSONObject?): String? {
-        val addrs = peer?.optJSONArray("addrs") ?: return null
-        if (addrs.length() == 0) return null
-        val a = addrs.optString(0)
-        val i = a.lastIndexOf(':')
-        val host = if (i > 0) a.substring(0, i) else a
-        return host.ifEmpty { null }
-    }
+    /**
+     * The peer host for direct SIP, chosen from all of its mesh addresses in preference order
+     * (IPv4 before IPv6, link-local last), so one unreachable interface does not hide the door.
+     */
+    private fun resolvePeerHost(peer: JSONObject?): String? =
+        PeerAddresses.first(peer?.optJSONArray("addrs"))
+
+    /** A SIP URI for the peer; IPv6 literals are bracketed. */
+    private fun sipUri(host: String): String = "sip:" + PeerAddresses.authority(host, directPort)
 
     // Quick replies.
 
@@ -720,31 +773,27 @@ class IncomingActivity : Activity() {
             val label = labelOf(q, lang, id)
             val b = Button(this)
             b.text = label
-            b.textSize = 17f
-            b.maxLines = 2
-            b.isAllCaps = false
-            @Suppress("DEPRECATION")
-            b.setTextColor(resources.getColor(R.color.fg))
-            @Suppress("DEPRECATION")
-            b.background = resources.getDrawable(R.drawable.bg_tv_button)
+            b.textSize = UiTokens.sp(UiTokens.BODY)
+            b.maxLines = 3
             b.isFocusable = true
-            b.minHeight = dp(52)
+            IncomingScreen.styleReply(b, roles, UiKit.window(this))
             val lp = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT,
             )
-            lp.topMargin = dp(4)
+            lp.topMargin = dp(UiTokens.SPACE_S)
             b.layoutParams = lp
             b.setOnClickListener { sendReply(id, label) }
             list.addView(b)
         }
-        if (list.visibility == View.VISIBLE && list.childCount > 0)
-            list.getChildAt(0).requestFocus()
+        if (replySheet?.showing == true && list.childCount > 0) list.getChildAt(0).requestFocus()
     }
 
     private fun applySemanticUi(cfg: JSONObject?, status: JSONObject?) {
         val nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
         val styleConfig = if (app.safeMode) null else cfg
+        // Role colours first; Core's semantic overrides are then applied on top of them.
+        if (::screen.isInitialized) screen.styleActions(inCall || answerRequested)
         SemanticUi.apply(findViewById(R.id.door_label), "ring.title", styleConfig, nodeId)
         SemanticUi.apply(findViewById(R.id.status_text), "ring.title", styleConfig, nodeId)
         SemanticUi.apply(
@@ -762,6 +811,7 @@ class IncomingActivity : Activity() {
 
     private fun sendReply(replyId: String, label: String) {
         if (inCall || answerRequested) return
+        replySheet?.dismiss()
         val accepted = app.core.quickReplyV2(replyId, door, callId, stageRevision)
         val sent = findViewById<TextView>(R.id.sent_text)
         sent.text = if (accepted)
@@ -777,7 +827,7 @@ class IncomingActivity : Activity() {
     // ---------- batch 2: one control row, notice chip, debug line, admin QR ----------
 
     private fun applyAppearance() {
-        findViewById<View>(R.id.incoming_root).setBackgroundColor(ShellUi.opaque(palette.ground))
+        findViewById<View>(R.id.incoming_frame).setBackgroundColor(ShellUi.opaque(palette.ground))
         findViewById<TextView>(R.id.door_label).setTextColor(ShellUi.opaque(palette.ink))
         findViewById<TextView>(R.id.status_text).setTextColor(ShellUi.opaque(palette.accent))
         findViewById<TextView>(R.id.audio_hint).setTextColor(ShellUi.opaque(palette.muted))
@@ -798,12 +848,7 @@ class IncomingActivity : Activity() {
         val mic = findViewById<Button>(R.id.mic_button)
         mic.setOnClickListener { toggleMic() }
         val reply = findViewById<Button>(R.id.reply_button)
-        reply.setOnClickListener {
-            val list = findViewById<LinearLayout>(R.id.reply_list)
-            list.visibility = if (list.visibility == View.VISIBLE) View.GONE else View.VISIBLE
-            if (list.visibility == View.VISIBLE && list.childCount > 0)
-                list.getChildAt(0).requestFocus()
-        }
+        reply.setOnClickListener { openReplySheet() }
         reply.text = texts.t("ring.quick_reply", R.string.ring_quick_reply)
         val unlock = findViewById<Button>(R.id.unlock_button)
         unlock.text = texts.t("ring.unlock", R.string.ring_unlock)
@@ -857,7 +902,7 @@ class IncomingActivity : Activity() {
         if (!inCall) return
         micMuted = !micMuted
         if (!app.core.sipSetMicMuted(micMuted)) {
-            try { audioManager.isMicrophoneMute = micMuted } catch (_: Exception) { }
+            try { audioManager.isMicrophoneMute = micMuted } catch (e: Exception) { ShellLog.ignored("IncomingActivity", e) }
         }
         updateControlLabels()
     }
@@ -877,7 +922,7 @@ class IncomingActivity : Activity() {
         try {
             @Suppress("DEPRECATION")
             audioManager.setStreamMute(AudioManager.STREAM_VOICE_CALL, muted)
-        } catch (_: Exception) { }
+        } catch (e: Exception) { ShellLog.ignored("IncomingActivity", e) }
     }
 
     /**
@@ -897,6 +942,8 @@ class IncomingActivity : Activity() {
                         DoorUnlocks.unconfigured(result) -> texts.t(
                             "unlock.not_configured", R.string.unlock_not_configured,
                         )
+                        DoorUnlocks.executionFailed(result) ->
+                            texts.t("ring.open_failed", R.string.ring_open_failed)
                         else -> texts.t("admin.save_failed", R.string.admin_save_failed)
                     },
                 )
@@ -1028,29 +1075,32 @@ class IncomingActivity : Activity() {
         private const val ANSWER_REPLACE_TIMEOUT_MS = 2_000L
         private const val DIRECT_PORT = 47190
 
-        /** Launch from an application-level Core callback using a new task. */
-        fun launch(
-            ctx: Context,
-            door: String,
-            purpose: String = "",
-            visitorLang: String = "",
-            callId: String = "",
-            stageRevision: Int = 0,
-            expiresAtMs: Long = 0L,
-        ) {
+        /** The intent that opens this screen for one call, also used by the call notification. */
+        internal fun intent(ctx: Context, call: VisitorCallSnapshot): Intent =
+            Intent(ctx, IncomingActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                .putExtra(EXTRA_DOOR, call.door)
+                .putExtra(EXTRA_PURPOSE, call.purpose)
+                .putExtra(EXTRA_LANG, call.visitorLang)
+                .putExtra(EXTRA_CALL_ID, call.callId)
+                .putExtra(EXTRA_STAGE_REVISION, call.stageRevision)
+                .putExtra(EXTRA_EXPIRES_AT_MS, call.expiresAtMs)
+
+        /**
+         * Launch from an application-level Core callback using a new task. Returns false when the
+         * platform refused the start, so the caller can fall back to the call notification.
+         */
+        internal fun launch(ctx: Context, call: VisitorCallSnapshot): Boolean =
             try {
-                ctx.startActivity(
-                    Intent(ctx, IncomingActivity::class.java)
-                        .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        .putExtra(EXTRA_DOOR, door)
-                        .putExtra(EXTRA_PURPOSE, purpose)
-                        .putExtra(EXTRA_LANG, visitorLang)
-                        .putExtra(EXTRA_CALL_ID, callId)
-                        .putExtra(EXTRA_STAGE_REVISION, stageRevision)
-                        .putExtra(EXTRA_EXPIRES_AT_MS, expiresAtMs))
-            } catch (_: Exception) {
-                // Background launch may be denied when overlay authorization is unavailable.
+                ctx.startActivity(intent(ctx, call))
+                true
+            } catch (e: Exception) {
+                android.util.Log.w("doorbell-incoming", "incoming screen launch refused: $e")
+                false
             }
-        }
+
+        /** Open the monitor for a door without a call, as a dashboard tile does. */
+        internal fun launch(ctx: Context, door: String): Boolean =
+            launch(ctx, VisitorCallSnapshot(door = door))
     }
 }

@@ -210,11 +210,13 @@ internal class AdaptiveVideoPlayer(
         Thread({
             var connection: HttpURLConnection? = null
             try {
+                // video-meta sits beside the stream, both for a node's own camera and for the
+                // loopback proxy path /media/peer/<id>/stream.mp4 that Core publishes.
                 val source = URL(streamUrl)
-                val port = if (source.port >= 0) ":${source.port}" else ""
-                val query = source.query?.let { "?$it" }.orEmpty()
-                val meta = URL("${source.protocol}://${source.host}$port/video-meta$query")
-                connection = meta.openConnection() as HttpURLConnection
+                val directory = source.path.substringBeforeLast('/', "")
+                val meta = URL(source, "$directory/video-meta" +
+                    (source.query?.let { "?$it" }.orEmpty()))
+                connection = LocalMedia.open(meta)
                 connection.connectTimeout = 1_500
                 connection.readTimeout = 1_500
                 if (connection.responseCode != HttpURLConnection.HTTP_OK) return@Thread
@@ -227,8 +229,9 @@ internal class AdaptiveVideoPlayer(
                         applyTextureTransform()
                     }
                 }
-            } catch (_: Exception) { }
-            finally { try { connection?.disconnect() } catch (_: Exception) { } }
+            } catch (e: Exception) {
+                android.util.Log.d("doorbell-video", "video-meta unavailable: $e")
+            } finally { try { connection?.disconnect() } catch (e: Exception) { ShellLog.ignored("AdaptiveVideoPlayer", e) } }
         }, "doorbell-video-meta").apply { isDaemon = true }.start()
     }
 

@@ -191,6 +191,13 @@ internal object DoorStations {
      * from the dashboard. The capability still suppresses the tile for a station that is present
      * but not serving, which is the case it was written for: a doorbell with no lens.
      */
+    /**
+     * Configured doors whose station is not serving them, offline or never bound, in door order.
+     * A door with no peer record at all is included: it is just as unreachable.
+     */
+    fun offlineDoors(status: JSONObject?, config: JSONObject?): List<String> =
+        allDoorIds(status, config).filter { serviceOf(status, config, it) != DoorService.SERVED }
+
     fun tileVisible(status: JSONObject?, config: JSONObject?, door: String): Boolean {
         // Core naming a station in served_by is a positive statement, not the older inference
         // "some alive station matches this door", so the capability still decides everywhere core

@@ -136,3 +136,17 @@ internal object CallHistoryModel {
         )
     }
 }
+
+/** History screen decisions that are not about paging (docs/en/ui-guidelines.md, "History"). */
+internal object HistoryModel {
+    /** Marked until the user has displayed it; Core's seen flag is per row. */
+    fun unread(row: CallRow): Boolean = row.missed && !row.seen
+
+    /**
+     * The row whose detail is shown: the chosen one while it is still listed; otherwise the
+     * newest row when the detail has its own pane, and nothing when it would cover the list.
+     */
+    fun selection(visible: List<CallRow>, selectedId: String, twoPane: Boolean): CallRow? =
+        visible.firstOrNull { it.id == selectedId && selectedId.isNotEmpty() }
+            ?: if (twoPane) visible.firstOrNull() else null
+}

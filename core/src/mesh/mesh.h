@@ -45,6 +45,9 @@ struct MeshSettings {
   // and embedded hosts use this; production shells require a replicated mesh.members record.
   bool enroll_psk_holders = true;
   std::string role = "door_station";  // door_station | indoor_panel
+  // Human-readable device name shown in pending lists and invitations; empty falls back to
+  // "<role> · <id prefix>". Not secret: it travels in unauthenticated pairing beacons.
+  std::string display_name;
   std::string door;                  // Operational door identity; empty for indoor panels.
   std::string sw_version = "0.0.1";
   std::string model = "unknown";     // Device-card hardware model announced while unpaired.
@@ -126,6 +129,12 @@ class Mesh {
     // Fires after each such SYNC_RESP. A consumer that withheld presentation for backfilled
     // history presents the converged state here, once, instead of replaying it event by event.
     std::function<void(const std::string& peer)> on_sync_converged;
+
+    // This node is about to adopt a cluster's configuration through a PIN join or an
+    // invitation. The node discards its own replica first, so nothing it wrote while unpaired
+    // (an administrator password above all) competes with the cluster it joins. Returning
+    // false aborts the join.
+    std::function<bool()> on_join_adopt;
 
     // A peer's SYNC_REQ advertised its configuration version vector and event heads. Node
     // records them so retention and tombstone collection only discard what every member holds.

@@ -679,6 +679,8 @@ class BatchTwoModelTest {
         assertTrue(DoorUnlocks.queued(0))
         assertFalse(DoorUnlocks.queued(-3))
         assertTrue(DoorUnlocks.unconfigured(-3))
+        assertTrue(DoorUnlocks.executionFailed(-4))
+        assertFalse(DoorUnlocks.executionFailed(-3))
         assertFalse(DoorUnlocks.unconfigured(-2))
         assertFalse(DoorUnlocks.unconfigured(0))
     }
@@ -695,8 +697,9 @@ class BatchTwoModelTest {
             """.trimIndent(),
         )
         val link = AdminLinks.resolve(status, 47180)
-        assertEquals("http://10.10.38.147:47180/admin/", link.url)
-        assertEquals("http://10.10.38.151:47180/admin/", link.leaderUrl)
+        // Browsers use the HTTPS listener (security v3 section 7).
+        assertEquals("https://10.10.38.147:47443/admin/", link.url)
+        assertEquals("https://10.10.38.151:47443/admin/", link.leaderUrl)
         assertTrue(link.hasLeader)
     }
 

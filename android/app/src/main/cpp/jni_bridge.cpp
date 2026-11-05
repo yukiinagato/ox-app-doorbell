@@ -219,16 +219,16 @@ void platTtsSpeak(void* user, const char* text, const char* lang) {
   if (jl) env->DeleteLocalRef(jl);
 }
 
-int platHttpsRequest(void* user, const char* method, const char* url,
-                     const char* headers_json, const uint8_t* body, size_t body_len,
-                     char** resp_body_out, int* http_status_out) {
-  auto* b = static_cast<Bridge*>(user);
-  BridgeLease lease(b);
-  b = lease.get();
-  if (!b || !resp_body_out || !http_status_out ||
+// Runs the Java HTTPS client. The Java side returns [status:4 BE][body...]; the body is copied
+// into a malloc'd buffer (NUL-terminated for the legacy entry point) with its exact length.
+int callJavaHttps(Bridge* b, const char* method, const char* url, const char* headers_json,
+                  const uint8_t* body, size_t body_len, char** payload_out, size_t* len_out,
+                  int* http_status_out) {
+  if (!b || !payload_out || !len_out || !http_status_out ||
       (body_len > 0 && !body) ||
       body_len > static_cast<size_t>(std::numeric_limits<jsize>::max())) return -1;
-  *resp_body_out = nullptr;
+  *payload_out = nullptr;
+  *len_out = 0;
   *http_status_out = 0;
   JNIEnv* env = envForThisThread();
   if (!env || !b->obj) return -1;
@@ -268,9 +268,39 @@ int platHttpsRequest(void* user, const char* method, const char* url,
     env->GetByteArrayRegion(result, 4, size - 4, reinterpret_cast<jbyte*>(payload));
   payload[payload_size] = '\0';
   env->DeleteLocalRef(result);
-  *resp_body_out = payload;
+  *payload_out = payload;
+  *len_out = payload_size;
   *http_status_out = status;
   return 0;
+}
+
+// Legacy entry point: the body is a C string, so it is cut at the first NUL. Core prefers
+// platHttpsRequestV3 whenever the table carries it.
+int platHttpsRequest(void* user, const char* method, const char* url,
+                     const char* headers_json, const uint8_t* body, size_t body_len,
+                     char** resp_body_out, int* http_status_out) {
+  auto* b = static_cast<Bridge*>(user);
+  BridgeLease lease(b);
+  b = lease.get();
+  if (!resp_body_out || !http_status_out) return -1;
+  size_t len = 0;
+  return callJavaHttps(b, method, url, headers_json, body, body_len, resp_body_out, &len,
+                       http_status_out);
+}
+
+// Binary-safe entry point (security v3 section 13).
+int platHttpsRequestV3(void* user, const char* method, const char* url,
+                       const char* headers_json, const uint8_t* body, size_t body_len,
+                       uint8_t** resp_body_out, size_t* resp_len_out, int* http_status_out) {
+  auto* b = static_cast<Bridge*>(user);
+  BridgeLease lease(b);
+  b = lease.get();
+  if (!resp_body_out || !resp_len_out || !http_status_out) return -1;
+  char* payload = nullptr;
+  const int rc = callJavaHttps(b, method, url, headers_json, body, body_len, &payload,
+                               resp_len_out, http_status_out);
+  *resp_body_out = reinterpret_cast<uint8_t*>(payload);
+  return rc;
 }
 
 int platSecureGet(void* user, const char* key, char** value_out) {
@@ -454,6 +484,7 @@ Java_jp_ox_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jstring
   b->plat.release_buffer = platReleaseBuffer;
   b->plat.secure_delete = platSecureDelete;
   b->plat.power_state = platPowerState;
+  b->plat.https_request_v3 = platHttpsRequestV3;
 
   const std::string dir = toUtf8(env, data_dir);
   const std::string boot = toUtf8(env, boot_json);
@@ -503,39 +534,6 @@ Java_jp_ox_doorbell_DoorbellCore_nativeSetUiCallback(JNIEnv*, jobject, jlong h,
   Bridge* b = lease.get();
   if (b && b->core)
     db_core_set_ui_callback(b->core, enabled ? uiEventCb : nullptr, b);
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_jp_ox_doorbell_DoorbellCore_nativePress(JNIEnv* env, jobject, jlong h, jstring door_id) {
-  BridgeLease lease(h);
-  Bridge* b = lease.get();
-  if (b && b->core) db_core_press(b->core, toUtf8(env, door_id).c_str());
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_jp_ox_doorbell_DoorbellCore_nativePressPurpose(JNIEnv* env, jobject, jlong h,
-                                                        jstring door_id, jstring purpose) {
-  BridgeLease lease(h);
-  Bridge* b = lease.get();
-  if (b && b->core)
-    db_core_press_purpose(b->core, toUtf8(env, door_id).c_str(), toUtf8(env, purpose).c_str());
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_jp_ox_doorbell_DoorbellCore_nativeSelectPurpose(JNIEnv* env, jobject, jlong h,
-                                                         jstring door_id, jstring purpose) {
-  BridgeLease lease(h);
-  Bridge* b = lease.get();
-  if (b && b->core)
-    db_core_select_purpose(b->core, toUtf8(env, door_id).c_str(), toUtf8(env, purpose).c_str());
-}
-
-extern "C" JNIEXPORT void JNICALL
-Java_jp_ox_doorbell_DoorbellCore_nativeCancelCall(JNIEnv* env, jobject, jlong h,
-                                                      jstring door_id) {
-  BridgeLease lease(h);
-  Bridge* b = lease.get();
-  if (b && b->core) db_core_cancel_call(b->core, toUtf8(env, door_id).c_str());
 }
 
 extern "C" JNIEXPORT jstring JNICALL
@@ -714,6 +712,28 @@ Java_jp_ox_doorbell_DoorbellCore_nativeCapabilitiesJson(JNIEnv* env, jobject, jl
   return out;
 }
 
+// Bytes a frame of this geometry occupies, or -1 for an impossible geometry. NV21/NV12 carry a
+// full-resolution Y plane and a half-height interleaved chroma plane with the same stride; YUY2
+// and BGRA strides are in bytes.
+static int64_t cameraFrameBytes(jint format, jint width, jint height, jint stride) {
+  if (width <= 0 || height <= 0 || width > 8192 || height > 8192 || stride <= 0) return -1;
+  const int64_t s = stride, h = height, w = width;
+  switch (format) {
+    case 0:
+    case 1:
+      if (s < w) return -1;
+      return s * h + s * ((h + 1) / 2);
+    case 2:
+      if (s < w * 2) return -1;
+      return s * h;
+    case 3:
+      if (s < w * 4) return -1;
+      return s * h;
+    default:
+      return -1;
+  }
+}
+
 extern "C" JNIEXPORT void JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeOnCameraFrame(JNIEnv* env, jobject, jlong h,
                                                          jbyteArray data, jint format, jint width,
@@ -721,6 +741,18 @@ Java_jp_ox_doorbell_DoorbellCore_nativeOnCameraFrame(JNIEnv* env, jobject, jlong
   BridgeLease lease(h);
   Bridge* b = lease.get();
   if (!b || !b->core || !data) return;
+  // db_core_on_camera_frame takes no length, so the array must cover the whole frame the
+  // geometry describes; a stale buffer from before a resolution change is dropped here.
+  const int64_t required = cameraFrameBytes(format, width, height, stride);
+  if (required <= 0 || required > static_cast<int64_t>(env->GetArrayLength(data))) {
+    __android_log_print(ANDROID_LOG_WARN, "doorbell-jni",
+                        "dropping camera frame: format=%d %dx%d stride=%d needs %lld bytes, has %d",
+                        static_cast<int>(format), static_cast<int>(width),
+                        static_cast<int>(height), static_cast<int>(stride),
+                        static_cast<long long>(required),
+                        static_cast<int>(env->GetArrayLength(data)));
+    return;
+  }
   jbyte* p = env->GetByteArrayElements(data, nullptr);
   if (!p) return;
   db_core_on_camera_frame(b->core, reinterpret_cast<const uint8_t*>(p), format, width, height,
@@ -862,10 +894,20 @@ Java_jp_ox_doorbell_DoorbellCore_nativePairingMode(JNIEnv*, jobject, jlong h, ji
 }
 
 extern "C" JNIEXPORT void JNICALL
-Java_jp_ox_doorbell_DoorbellCore_nativeInviteDevice(JNIEnv* env, jobject, jlong h, jstring id) {
+Java_jp_ox_doorbell_DoorbellCore_nativeInviteDeviceCode(JNIEnv* env, jobject, jlong h, jstring id,
+                                                         jstring code) {
   BridgeLease lease(h);
   Bridge* b = lease.get();
-  if (b && b->core) db_core_invite_device(b->core, toUtf8(env, id).c_str());
+  if (b && b->core)
+    db_core_invite_device_code(b->core, toUtf8(env, id).c_str(), toUtf8(env, code).c_str());
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeRotateClusterKey(JNIEnv*, jobject, jlong h) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return -1;
+  return static_cast<jint>(db_core_rotate_cluster_key(b->core));
 }
 
 extern "C" JNIEXPORT jboolean JNICALL
@@ -1176,4 +1218,22 @@ Java_jp_ox_doorbell_DoorbellCore_nativeParsePairUriJson(JNIEnv* env, jobject, jl
   jstring out = toJString(env, b, s);
   db_free(s);
   return out;
+}
+
+// ---- Security v3 (docs/en/security-v3.md sections 8, 10, 13).
+
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeLocalToken(JNIEnv* env, jobject, jlong h) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  const char* token = db_core_local_token(b->core);  // Owned by core until db_core_destroy.
+  return token ? env->NewStringUTF(token) : nullptr;
+}
+
+extern "C" JNIEXPORT void JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeAdminLock(JNIEnv*, jobject, jlong h) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (b && b->core) db_core_admin_lock(b->core);
 }

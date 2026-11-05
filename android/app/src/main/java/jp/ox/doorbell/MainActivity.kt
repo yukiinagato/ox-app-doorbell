@@ -9,7 +9,6 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.Color
 import android.media.AudioManager
-import android.media.MediaPlayer
 import android.media.ToneGenerator
 import android.os.Build
 import android.os.Bundle
@@ -18,7 +17,6 @@ import android.os.HandlerThread
 import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
-import android.speech.tts.TextToSpeech
 import android.util.Log
 import android.view.View
 import android.view.KeyEvent
@@ -33,9 +31,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import java.io.File
 import java.net.HttpURLConnection
-import java.net.URL
 import java.util.Calendar
-import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -114,8 +110,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private var homeThread: HandlerThread? = null
     private var homeHandler: Handler? = null
 
-    private var tts: TextToSpeech? = null
-    private var ttsReady = false
+    private lateinit var speech: ShellSpeech
+    private lateinit var purposePanel: VisitorPurposePanel
+    private lateinit var languageBar: VisitorLanguageBar
 
     private var secretTaps = 0
     private var secretFirstMs = 0L
@@ -126,13 +123,18 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private var nodeId = ""
     private var visitorLang = "ja"
     private var choosingPurpose = false
-    private var themeColor: String? = null
-    private var themeHash: String? = null
-    private var audio: MediaPlayer? = null
-    private var effectAudio: MediaPlayer? = null
-    private var callFeedbackAudio: MediaPlayer? = null
-    private var launchAudio: MediaPlayer? = null
-    private var chimeTone: ToneGenerator? = null
+    private val backdrop by lazy(LazyThreadSafetyMode.NONE) {
+        VisitorBackdrop(this, app, rootView, themeBg, nightTint, ui,
+            config = { cfg }, nodeId = { nodeId }, palette = { palette },
+            coreDisplay = { coreDisplay },
+            inkRegions = {
+                listOf(
+                    InkRegion(clockText, "clock", false), InkRegion(dateText, "date", true),
+                    InkRegion(touchHint, "hint", true), InkRegion(nodeInfo, "footer", true),
+                )
+            })
+    }
+    private val audio by lazy(LazyThreadSafetyMode.NONE) { ShellAudio(this) }
     private var callTitleOverride: String? = null
     private var callFlowMode = CallFlowMode.PURPOSE_FIRST
     private var callUiPhase = CallUiPhase.IDLE
@@ -156,6 +158,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             }
         }
     }
+    /** When the visitor's purpose choice times out, on the elapsed-realtime clock. */
+    private var purposeDeadlineElapsedMs = 0L
     private val purposeTimeout = Runnable {
         if (!choosingPurpose) return@Runnable
         if (uiCallId.isNotEmpty()) continueWithoutPurpose(false)
@@ -180,6 +184,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         setContentView(R.layout.activity_main)
         bindViews()
+        purposePanel = VisitorPurposePanel(this, purposeGrid) { id, label -> onPurposeClick(id, label) }
+        languageBar = VisitorLanguageBar(this, langBar) { lang -> onLangClick(lang) }
         installRoleHome()
 
         val worker = HandlerThread("doorbell-home", Process.THREAD_PRIORITY_BACKGROUND)
@@ -205,7 +211,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             PairingActivity.launch(this)
         }
 
-        tts = TextToSpeech(this) { status -> ttsReady = status == TextToSpeech.SUCCESS }
+        speech = ShellSpeech(this)
 
         requestPermissionsIfNeeded()
 
@@ -236,12 +242,18 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         // Re-register on every resume: a pairing or maintenance screen closing above this one
         // must hand the event stream back, or chimes and display events are lost until restart.
         app.bindForeground(this)
-        // Keep unenrolled devices in the pairing flow.
-        if (maybeShowPairing()) return
-        refreshMembership()
+        // Keep unenrolled devices in the pairing flow. The pairing document is read off the main
+        // thread: core may be holding its run loop (SQLite, sync) and the visitor screen must not
+        // freeze while it answers.
+        checkPairingAsync()
         enterImmersive()
         ui.post(clockTick)
-        if (choosingPurpose) ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
+        if (choosingPurpose) {
+            // Resume the remaining choice time; a pause must not restart the full window.
+            val remaining = purposeDeadlineElapsedMs - SystemClock.elapsedRealtime()
+            if (remaining <= 0L) ui.post(purposeTimeout)
+            else ui.postDelayed(purposeTimeout, remaining)
+        }
         enterKioskIfConfigured()
         maybeStartCamera()
         dashboard?.onResume()
@@ -254,13 +266,26 @@ class MainActivity : Activity(), DoorbellCore.Listener {
      * reference. Once the operator chose "set up later" the main UI stays visible and only the
      * banner remains, so there is no relaunch loop.
      */
-    private fun maybeShowPairing(): Boolean {
-        if (!app.coreOk) return false
-        val pairing = app.core.pairingInfo() ?: return false
-        if (app.pairingReadyFrom(pairing)) return false
-        if (app.pairingDeferred) return false
-        PairingActivity.launch(this)
-        return true
+    private fun checkPairingAsync(onReady: () -> Unit = {}) {
+        val worker = homeHandler
+        if (!app.coreOk || worker == null) {
+            onReady()
+            return
+        }
+        val generation = app.runtime.coreGeneration
+        worker.post {
+            val pairing = app.core.pairingInfo()
+            val ready = app.pairingReadyFrom(pairing)
+            ui.post {
+                if (isFinishing || !app.runtime.isCurrentGeneration(generation)) return@post
+                if (pairing != null && !ready && !app.pairingDeferred) {
+                    PairingActivity.launch(this)
+                    return@post
+                }
+                renderMembership(pairing, ready)
+                onReady()
+            }
+        }
     }
 
     /**
@@ -271,8 +296,16 @@ class MainActivity : Activity(), DoorbellCore.Listener {
      * renders through [renderMembership].
      */
     private fun refreshMembership() {
-        val pairing = if (app.coreOk) app.core.pairingInfo() else null
-        renderMembership(pairing, app.pairingReadyFrom(pairing))
+        val worker = homeHandler
+        if (!app.coreOk || worker == null) {
+            renderMembership(null, false)
+            return
+        }
+        worker.post {
+            val pairing = app.core.pairingInfo()
+            val ready = app.pairingReadyFrom(pairing)
+            ui.post { if (!isFinishing) renderMembership(pairing, ready) }
+        }
     }
 
     /** Render the membership pill and the pairing banner from an already-read pairing document. */
@@ -389,13 +422,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         homeThread = null
         homeHandler = null
         app.unbindForeground(this)
-        tts?.shutdown()
-        try { audio?.release() } catch (_: Exception) { }
-        audio = null
-        releasePlayer(effectAudio); effectAudio = null
-        releasePlayer(callFeedbackAudio); callFeedbackAudio = null
-        releasePlayer(launchAudio); launchAudio = null
+        if (::speech.isInitialized) speech.shutdown()
         stopRinging()
+        audio.releaseAll()
         super.onDestroy()
     }
 
@@ -543,9 +572,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         noticeCard.setTextColor(ShellUi.opaque(palette.noticeInk))
         clockText.textSize = VisitorLayout.clockTextSizeSp(widthDp, heightDp)
         touchHint.textSize = VisitorLayout.hintTextSizeSp(widthDp)
-        callButton.minHeight = dp(VisitorLayout.callButtonHeightDp(widthDp))
-        cancelButton.minHeight = callButton.minHeight
-        purposeCancelButton.minHeight = callButton.minHeight
+        styleVisitorActions()
         VisitorLayout.apply(
             visitorSplit, visitorColumnA, visitorColumnB,
             idleHeader, noticeCard, langBar,
@@ -554,6 +581,31 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         applyFooterLayout(widthDp, heightDp)
         scheduleGroupSpacing()
         scheduleRegionInk()
+    }
+
+    /**
+     * The fixed action zone (guidelines "Visitor"): one full-width primary Call button in Core's
+     * region accent, Cancel/End in the negative role, "call without choosing" secondary. All are
+     * at least the 72 dp visitor target and grow with large text so a 200 % label never clips.
+     */
+    private fun styleVisitorActions() {
+        val window = UiKit.window(this)
+        val height = ScreenLayouts.visitorActionHeightDp(window)
+        val roles = visitorRoles()
+        callButton.minHeight = dp(height)
+        callButton.minimumHeight = dp(height)
+        callButton.textSize = UiTokens.sp(UiTokens.HEADLINE)
+        UiKit.styleAction(cancelButton, roles, ActionRole.NEGATIVE, height, emphasis = true)
+        UiKit.styleAction(purposeCancelButton, roles, ActionRole.NEGATIVE, height, emphasis = true)
+        UiKit.styleAction(purposeSkipButton, roles, ActionRole.SECONDARY,
+                          ScreenLayouts.touchTargetDp(window, 56))
+        for (button in listOf(cancelButton, purposeCancelButton))
+            button.textSize = UiTokens.sp(UiTokens.TITLE)
+        pairingBanner.background = ShellUi.rounded(this, roles.warning, UiTokens.RADIUS_CARD)
+        pairingBanner.setTextColor(ShellUi.opaque(roles.onWarning))
+        applyCallButtonAccent()
+        // Core's semantic overrides go on top of the freshly styled roles.
+        applySemanticUi()
     }
 
     /**
@@ -638,86 +690,30 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         // A configured background colour or image wins; the palette ground is the fallback.
         if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
             rootView.setBackgroundColor(ShellUi.opaque(palette.ground))
-        regionInkApplied.clear()
+        backdrop.clearInk()
         applyRegionInk()
         sosSlider.applyPalette(palette)
         applyCallButtonAccent()
     }
 
-    /**
-     * Automatic ink per text region (§5). Core averages the whole background image because it has
-     * no layout geometry, so each region is sampled locally and the result refines core's answer;
-     * an administrator override still wins, and a flat background colour leaves core's value
-     * standing. A region that misses 4.5:1 gets the 40 % opposite-ink shadow behind it.
-     */
-    private fun applyRegionInk() {
-        paintRegion(clockText, "clock", muted = false)
-        paintRegion(dateText, "date", muted = true)
-        paintRegion(touchHint, "hint", muted = true)
-        paintRegion(nodeInfo, "footer", muted = true)
-    }
+    private fun applyRegionInk() = backdrop.applyRegionInk()
 
-    /** The last ink applied per region, so a layout pass that changes nothing does no work. */
-    private val regionInkApplied = HashMap<String, Int>()
-
-    private fun paintRegion(view: TextView, region: String, muted: Boolean) {
-        // The flat colour a visitor would see with no picture on screen; never core's average of
-        // the picture, which is only meaningful while the picture is actually painted.
-        val ground = flatBackgroundRgb()
-        val drawn = themeBg.visibility == View.VISIBLE && themeBg.drawable != null
-        val sample = if (drawn) RegionInk.sample(themeBg, view, ground) else null
-        val result = CoreDisplays.inkFor(
-            coreDisplay.theme, region, ground, sample?.averageRgb, drawn, sample = sample,
-        )
-        val ink = if (muted) ShellUi.mute(result.inkRgb, palette.dark) else result.inkRgb
-        val signature = (if (result.needsShadow) 1 shl 25 else 0) or (ink and 0xffffff)
-        if (regionInkApplied[region] == signature) return
-        regionInkApplied[region] = signature
-        view.setTextColor(ShellUi.opaque(ink))
-        if (result.needsShadow) {
-            val shadow = ShellUi.opaque(result.shadowRgb) and 0x00ffffff or
-                (RegionInkPolicy.SHADOW_ALPHA shl 24)
-            view.setShadowLayer(1f * resources.displayMetrics.density, 0f, 0f, shadow)
-        } else {
-            view.setShadowLayer(0f, 0f, 0f, 0)
-        }
-    }
-
-    /**
-     * The regions move under the picture on every layout, and the picture itself arrives long
-     * after the first one. Both have to re-run the decision, or the screen keeps the ink it chose
-     * against a background nobody is looking at any more -- which is how a light illustration ended
-     * up carrying light text.
-     */
     private fun scheduleRegionInk() {
         if (dashboard != null) return
-        rootView.post { if (!isFinishing) applyRegionInk() }
-    }
-
-    private val regionInkOnLayout = android.view.ViewTreeObserver.OnGlobalLayoutListener {
-        if (!isFinishing) applyRegionInk()
+        backdrop.scheduleRegionInk()
     }
 
     private fun startRegionInkWatch() {
         if (dashboard != null) return
-        rootView.viewTreeObserver.addOnGlobalLayoutListener(regionInkOnLayout)
+        backdrop.startWatch()
     }
 
     private fun stopRegionInkWatch() {
         if (dashboard != null) return
-        @Suppress("DEPRECATION")
-        rootView.viewTreeObserver.removeGlobalOnLayoutListener(regionInkOnLayout)
+        backdrop.stopWatch()
     }
 
-    /** The flat colour behind the visitor screen, with no background image taken into account. */
-    private fun flatBackgroundRgb(): Int =
-        UiContrast.parseRgb(themeValue("bg_color")) ?: palette.ground
-
-    /** The colour actually behind the visitor screen, averaged by core when it is an image. */
-    private fun effectiveBackgroundRgb(): Int =
-        coreDisplay.theme?.backgroundRgb
-            ?: UiContrast.parseRgb(themeValue("bg_color"))
-            ?: palette.ground
+    private fun effectiveBackgroundRgb(): Int = backdrop.effectiveBackgroundRgb()
 
     /**
      * The call button's background comes from core, which has already folded in the administrator
@@ -728,8 +724,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         val (background, ink) = CoreDisplays.callButton(
             coreDisplay.theme, effectiveBackgroundRgb(),
         )
-        callButton.background = ShellUi.rounded(this, background, 14)
+        callButton.background = ShellUi.rounded(this, background, UiTokens.RADIUS_CARD)
         callButton.setTextColor(ShellUi.opaque(ink))
+        SemanticUi.invalidate(callButton)
     }
 
     /**
@@ -947,85 +944,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     }
 
     /** Resolve device-local theme values before fleet defaults. */
-    private fun themeValue(leaf: String): String? {
-        val v = (if (nodeId.isNotEmpty()) app.core.dig(cfg, "devices.$nodeId.local.theme.$leaf")
-                 else null)
-            ?: app.core.dig(cfg, "display.theme.$leaf")
-        val s = v?.toString().orEmpty()
-        return if (s.isEmpty() || s == "null") null else s
-    }
+    private fun themeValue(leaf: String): String? = backdrop.themeValue(leaf)
 
-    private fun applyTheme() {
-        if (app.safeMode) {
-            themeHash = null
-            themeColor = null
-            themeBg.setImageDrawable(null)
-            themeBg.visibility = View.GONE
-            @Suppress("DEPRECATION")
-            rootView.setBackgroundColor(resources.getColor(R.color.bg))
-            return
-        }
-        val color = themeValue("bg_color")
-        if (color != themeColor) {
-            themeColor = color
-            try {
-                @Suppress("DEPRECATION")
-                rootView.setBackgroundColor(
-                    if (color != null) Color.parseColor(color) else resources.getColor(R.color.bg))
-            } catch (e: Exception) {
-                Log.w(TAG, "Ignoring invalid theme background color: $color ($e)")
-            }
-        }
-        val hash = themeValue("bg_image")
-        if (hash.isNullOrEmpty()) {
-            themeHash = null
-            themeBg.setImageDrawable(null)
-            themeBg.visibility = View.GONE
-            return
-        }
-        if (hash == themeHash && themeBg.drawable != null) return
-        themeHash = hash
-        loadThemeImage(hash)
-    }
+    private fun applyTheme() = backdrop.applyTheme()
 
-    /** Load a bounded background image from the LAN-public local asset endpoint. */
-    private fun loadThemeImage(hash: String) {
-        if (app.safeMode) return
-        val url = "http://127.0.0.1:${app.boot.httpPort}/asset/$hash"
-        Thread({
-            var bmp: Bitmap? = null
-            var conn: HttpURLConnection? = null
-            try {
-                conn = URL(url).openConnection() as HttpURLConnection
-                conn.connectTimeout = 4000
-                conn.readTimeout = 8000
-                val bytes = BoundedBitmapDecoder.readLimited(conn.inputStream, 4 * 1024 * 1024)
-                val width = themeBg.width.takeIf { it > 0 } ?: resources.displayMetrics.widthPixels
-                val height = themeBg.height.takeIf { it > 0 } ?: resources.displayMetrics.heightPixels
-                bmp = bytes?.let { BoundedBitmapDecoder.decodeAspectFill(it, width, height) }
-            } catch (e: Exception) {
-                // asset_ready triggers another attempt after mesh prefetch completes.
-                Log.w(TAG, "Theme background is not available yet: $e")
-            } finally {
-                try { conn?.disconnect() } catch (_: Exception) { }
-            }
-            val b = bmp ?: return@Thread
-            ui.post {
-                if (themeHash != hash || app.safeMode) return@post
-                themeBg.setImageBitmap(b)
-                themeBg.visibility = View.VISIBLE
-                // The background under every region just changed, so nothing decided against the
-                // previous one may be kept.
-                regionInkApplied.clear()
-                scheduleRegionInk()
-            }
-        }, "theme-bg").apply { isDaemon = true }.start()
-    }
+    private fun loadThemeImage(hash: String) = backdrop.loadThemeImage(hash)
 
-    /** Apply a night tint above potentially bright theme imagery. */
-    private fun applyNightTint(night: Boolean, redTint: Boolean) {
-        nightTint.visibility = if (night && redTint) View.VISIBLE else View.GONE
-    }
+    private fun applyNightTint(night: Boolean, redTint: Boolean) =
+        backdrop.applyNightTint(night, redTint)
 
     /**
      * Build visit-purpose controls for the door-station idle screen. A purpose an administrator
@@ -1033,58 +959,18 @@ class MainActivity : Activity(), DoorbellCore.Listener {
      * with none configured, so the visitor goes straight on with the call.
      */
     private fun buildPurposeButtons() {
-        purposeGrid.removeAllViews()
         if (app.boot.role != "door_station") {
+            purposeGrid.removeAllViews()
             purposeSection.visibility = View.GONE
             return
         }
-        val ids = VisitPurposes.enabled(cfg)
-        if (ids.isEmpty()) {
-            purposeGrid.columnCount = 1
-            updatePurposeVisibility()
-            return
-        }
-        val widthDp = resources.displayMetrics.widthPixels / resources.displayMetrics.density
-        val columns = when {
-            ids.size <= 1 || resources.configuration.fontScale > 1.3f -> 1
-            widthDp < 520f -> 2
-            else -> minOf(3, ids.size)
-        }
-        purposeGrid.columnCount = columns
-        val rows = (ids.size + columns - 1) / columns
-        val buttonHeight = when {
-            rows >= 3 -> 48
-            rows == 2 -> 50
-            else -> 64
-        }
-        val textSize = if (rows >= 2 || columns == 2) 14f else 16f
-        for ((index, id) in ids.withIndex()) {
-            val label = VisitPurposes.label(cfg, id, texts.lang)
-            val b = Button(this)
-            b.text = VisitPurposes.decoratedLabel(cfg, id, texts.lang)
-            b.textSize = textSize
-            b.isAllCaps = false
-            b.setSingleLine(false)
-            b.maxLines = 4
-            b.minHeight = dp(buttonHeight)
-            b.gravity = android.view.Gravity.CENTER
-            b.setPadding(dp(8), 0, dp(8), 0)
-            @Suppress("DEPRECATION")
-            b.setTextColor(resources.getColor(R.color.fg))
-            @Suppress("DEPRECATION")
-            b.background = resources.getDrawable(R.drawable.bg_tv_button)
-            b.isFocusable = true
-            b.setOnClickListener { onPurposeClick(id, label) }
-            val lp = GridLayout.LayoutParams()
-            lp.rowSpec = GridLayout.spec(index / columns)
-            lp.columnSpec = GridLayout.spec(index % columns)
-            lp.width = (resources.displayMetrics.widthPixels - dp(48)) / columns - dp(8)
-            lp.height = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            lp.setMargins(dp(4), dp(3), dp(4), dp(3))
-            purposeGrid.addView(b, lp)
-        }
+        purposePanel.build(cfg, texts.lang, visitorRoles())
         updatePurposeVisibility()
     }
+
+    /** Colour roles for the visitor screen; the call button keeps Core's region accent. */
+    private fun visitorRoles(): UiRoles =
+        UiRoles.from(palette, CoreDisplays.callButton(coreDisplay.theme, effectiveBackgroundRgb()))
 
     private fun showsHomePurposes(): Boolean = app.boot.role == "door_station" &&
         callFlowMode == CallFlowMode.PURPOSE_FIRST && VisitPurposes.enabled(cfg).isNotEmpty()
@@ -1121,53 +1007,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     /** Build the configured visitor-language controls. */
     private fun buildLangBar() {
-        langBar.removeAllViews()
-        val arr = app.core.dig(cfg, "ui.languages") as? JSONArray
-        val list = ArrayList<String>()
-        if (arr != null) {
-            for (i in 0 until arr.length()) {
-                val s = arr.optString(i)
-                if (s.isNotEmpty()) list.add(s)
-            }
-        }
-        if (app.boot.role != "door_station" || list.size < 2) {
-            langBar.visibility = View.GONE
-            return
-        }
-        for (l in list) {
-            val b = Button(this)
-            b.text = Texts.langDisplayName(l)
-            b.textSize = 15f
-            b.isAllCaps = false
-            b.isFocusable = true
-            b.gravity = android.view.Gravity.CENTER
-            b.includeFontPadding = false
-            b.minWidth = 0
-            b.minHeight = 0
-            b.minimumWidth = 0
-            b.minimumHeight = 0
-            b.setPadding(0, 0, 0, 0)
-            b.tag = l
-            @Suppress("DEPRECATION")
-            b.background = resources.getDrawable(R.drawable.bg_tv_button)
-            b.setOnClickListener { onLangClick(l) }
-            val lp = LinearLayout.LayoutParams(dp(104), dp(42))
-            lp.leftMargin = dp(4)
-            lp.rightMargin = dp(4)
-            langBar.addView(b, lp)
-        }
+        val shown = languageBar.build(cfg, visitorRoles(), app.boot.role == "door_station")
         // The visitor keeps the language row on the idle screen, not only while choosing.
-        langBar.visibility = View.VISIBLE
-        updateLangBarSelection()
+        langBar.visibility = if (shown) View.VISIBLE else View.GONE
+        if (shown) updateLangBarSelection()
     }
 
     private fun updateLangBarSelection() {
-        for (i in 0 until langBar.childCount) {
-            val b = langBar.getChildAt(i) as? Button ?: continue
-            @Suppress("DEPRECATION")
-            b.setTextColor(resources.getColor(
-                if (b.tag == visitorLang) R.color.accent else R.color.dim))
-        }
+        languageBar.select(visitorLang)
     }
 
     private fun onLangClick(lang: String) {
@@ -1261,6 +1108,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         purposeCancelButton.isEnabled = app.coreOk
         langBar.visibility = if (langBar.childCount > 0) View.VISIBLE else View.GONE
         ui.removeCallbacks(purposeTimeout)
+        purposeDeadlineElapsedMs = SystemClock.elapsedRealtime() + PURPOSE_TIMEOUT_MS
         ui.postDelayed(purposeTimeout, PURPOSE_TIMEOUT_MS)
         scheduleCallTimeout()
     }
@@ -1412,15 +1260,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun speakNow(text: String, lang: String) {
-        if (!ttsReady || text.isEmpty()) return
-        try {
-            tts?.language = Locale(if (lang.isEmpty()) "ja" else lang)
-            @Suppress("DEPRECATION")
-            if (Build.VERSION.SDK_INT >= 21)
-                tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, "reply")
-            else
-                tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null)
-        } catch (_: Exception) { }
+        if (::speech.isInitialized) speech.speak(text, lang)
     }
 
     private fun handleUiEvent(ev: JSONObject) {
@@ -1429,19 +1269,18 @@ class MainActivity : Activity(), DoorbellCore.Listener {
                 if (ev.optString("state") == "ready") {
                     // Core only publishes pairing state once its runtime is up, so the
                     // membership check is repeated here rather than only in onResume.
-                    if (maybeShowPairing()) return
-                    refreshNodeInfo()
-                    restoreCurrentCallUi()
-                    restoreRequestedCall(intent)
-                    maybeStartCamera()
+                    checkPairingAsync {
+                        refreshNodeInfo()
+                        restoreCurrentCallUi()
+                        restoreRequestedCall(intent)
+                        maybeStartCamera()
+                    }
                 } else showOffline()
             }
             "memory_pressure" -> {
                 if (ev.optInt("level") >= android.content.ComponentCallbacks2.TRIM_MEMORY_RUNNING_LOW) {
                     themeBg.setImageDrawable(null)
-                    releasePlayer(effectAudio); effectAudio = null
-                    releasePlayer(callFeedbackAudio); callFeedbackAudio = null
-                    releasePlayer(launchAudio); launchAudio = null
+                    audio.releaseOptional()
                 }
             }
             // peers_changed lands in the coalesced refresh below, which renders membership too.
@@ -1477,18 +1316,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
                     }
                 }
             }
-            // Prefer the configured asset and fall back to a built-in tone.
-            "chime" -> playAudio(ev.optString("audio_path")) {
-                val sound = ev.optString("sound", "ding1")
-                if (!playConfiguredInto(sound, false) { audio = it }) playChimeTone(sound)
-            }
+            // The chime sound is played by App.incomingAlerts, which rings whatever is in front.
             "reply" -> {
                 // Core already spoke replies without custom audio, so avoid duplicate TTS.
                 val path = ev.optString("audio_path")
                 if (path.isNotEmpty()) {
                     val spoken = ev.optString("text")
                     val spokenLang = ev.optString("lang")
-                    playAudio(path) { speakNow(spoken, spokenLang) }
+                    audio.playFile(path) { speakNow(spoken, spokenLang) }
                 }
                 replyText.text = ev.optString("text")
                 replyBanner.visibility = View.VISIBLE
@@ -1511,7 +1346,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             }
             // Retry a pending background after asset prefetch completes.
             "asset_ready" -> {
-                val h = themeHash
+                val h = backdrop.themeHash
                 if (!app.safeMode && h != null && ev.optString("hash") == h &&
                     themeBg.drawable == null)
                     loadThemeImage(h)
@@ -1597,71 +1432,14 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     // Audio.
 
-    /** Play a local asset, falling back to TTS or a built-in sound. */
-    private fun playAudio(path: String, fallback: () -> Unit) {
-        if (path.isEmpty() || !File(path).exists()) {
-            fallback()
-            return
-        }
-        try {
-            try { audio?.release() } catch (_: Exception) { }
-            audio = null
-            val mp = MediaPlayer()
-            audio = mp
-            mp.setOnErrorListener { _, what, extra ->
-                Log.w(TAG, "Custom audio playback failed ($what/$extra); using fallback")
-                try { mp.release() } catch (_: Exception) { }
-                if (audio === mp) audio = null
-                ui.post { fallback() }
-                true
-            }
-            mp.setOnCompletionListener {
-                try { it.release() } catch (_: Exception) { }
-                if (audio === mp) audio = null
-            }
-            mp.setDataSource(path)
-            mp.prepare()
-            mp.start()
-        } catch (e: Exception) {
-            Log.w(TAG, "Cannot open custom audio; using fallback: $e")
-            fallback()
-        }
-    }
-
-    private fun playChimeTone(sound: String) {
-        try {
-            try { chimeTone?.release() } catch (_: Exception) { }
-            val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 90)
-            chimeTone = tone
-            val kind = when (sound) {
-                "ding2" -> ToneGenerator.TONE_PROP_BEEP
-                "classic" -> ToneGenerator.TONE_SUP_RINGTONE
-                else -> ToneGenerator.TONE_PROP_BEEP2
-            }
-            val duration = if (sound == "classic") 1400 else if (sound == "ding2") 700 else 450
-            tone.startTone(kind, duration)
-            ui.postDelayed({
-                if (chimeTone === tone) {
-                    try { tone.release() } catch (_: Exception) { }
-                    chimeTone = null
-                }
-            }, (duration + 100).toLong())
-        } catch (_: Exception) { }
-    }
-
     /** Play immediate feedback after accepting the visitor's call action. */
     private fun playCallFeedback() {
         stopCallFeedback()
         val value = configuredSound("call_sound", "outdoor_call_alert")
         if (value.isEmpty()) return
         val loop = (app.core.dig(cfg, "ui.call_sound_loop") as? Boolean) ?: false
-        if (!playConfiguredInto(value, loop) { callFeedbackAudio = it }) {
-            try {
-                val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 75)
-                tone.startTone(ToneGenerator.TONE_PROP_ACK, 140)
-                ui.postDelayed({ try { tone.release() } catch (_: Exception) { } }, 220)
-            } catch (_: Exception) { }
-        }
+        if (!audio.playConfigured(ShellAudio.Channel.CALL_FEEDBACK, value, loop))
+            audio.playTone(AudioManager.STREAM_MUSIC, 75, ToneGenerator.TONE_PROP_ACK, 140)
     }
 
     private fun configuredSound(key: String, fallback: String): String {
@@ -1669,94 +1447,30 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         return if (value is String) value else fallback
     }
 
-    private fun bundledSoundFile(value: String): String? = when (value) {
-        "outdoor_call_alert" -> "outdoor_call_alert.mp3"
-        "button_click" -> "button_click.mp3"
-        "school_chime" -> "学校のチャイム.mp3"
-        "indoor_update" -> "indoor_update.mp3"
-        "title_display" -> "title_display.mp3"
-        else -> null
-    }
-
-    private fun makeConfiguredPlayer(value: String, loop: Boolean): MediaPlayer? {
-        if (value.isEmpty()) return null
-        return try {
-            val mp = MediaPlayer()
-            if (value.startsWith("asset:") && value.length == 70) {
-                val file = File(File(filesDir, "assets"), value.substring(6))
-                if (!file.exists()) { mp.release(); return null }
-                mp.setDataSource(file.absolutePath)
-            } else {
-                val name = bundledSoundFile(value) ?: run { mp.release(); return null }
-                assets.openFd("audio/$name").use { fd ->
-                    mp.setDataSource(fd.fileDescriptor, fd.startOffset, fd.length)
-                }
-            }
-            mp.isLooping = loop
-            mp.prepare()
-            mp
-        } catch (e: Exception) {
-            Log.w(TAG, "Cannot open bundled or configured audio: $value ($e)")
-            null
-        }
-    }
-
-    private fun playConfiguredInto(value: String, loop: Boolean,
-                                   assign: (MediaPlayer?) -> Unit): Boolean {
-        val mp = makeConfiguredPlayer(value, loop) ?: return false
-        assign(mp)
-        mp.setOnCompletionListener {
-            if (!it.isLooping) {
-                try { it.release() } catch (_: Exception) { }
-                assign(null)
-            }
-        }
-        mp.start()
-        return true
-    }
-
-    private fun releasePlayer(player: MediaPlayer?) {
-        try { player?.stop() } catch (_: Exception) { }
-        try { player?.release() } catch (_: Exception) { }
-    }
-
     private fun playButtonSound() {
-        releasePlayer(effectAudio)
-        effectAudio = null
-        playConfiguredInto(configuredSound("button_sound", "button_click"), false) {
-            effectAudio = it
-        }
+        audio.playConfigured(ShellAudio.Channel.EFFECT,
+                             configuredSound("button_sound", "button_click"), false)
     }
 
     private fun playUpdateSound() {
-        releasePlayer(effectAudio)
-        effectAudio = null
-        playConfiguredInto(configuredSound("update_sound", "indoor_update"), false) {
-            effectAudio = it
-        }
+        audio.playConfigured(ShellAudio.Channel.EFFECT,
+                             configuredSound("update_sound", "indoor_update"), false)
     }
 
     private fun playLaunchSound() {
-        releasePlayer(launchAudio)
-        launchAudio = null
-        playConfiguredInto(configuredSound("launch_sound", "title_display"), false) {
-            launchAudio = it
-        }
+        audio.playConfigured(ShellAudio.Channel.LAUNCH,
+                             configuredSound("launch_sound", "title_display"), false)
     }
 
     private fun stopCallFeedback() {
-        releasePlayer(callFeedbackAudio)
-        callFeedbackAudio = null
+        audio.stop(ShellAudio.Channel.CALL_FEEDBACK)
     }
 
     private fun stopRinging() {
         stopCallFeedback()
-        try { audio?.stop() } catch (_: Exception) { }
-        try { audio?.release() } catch (_: Exception) { }
-        audio = null
-        try { chimeTone?.stopTone() } catch (_: Exception) { }
-        try { chimeTone?.release() } catch (_: Exception) { }
-        chimeTone = null
+        audio.stop(ShellAudio.Channel.CUSTOM)
+        audio.stopTone()
+        app.incomingAlerts.stopChime()
     }
 
     // Visitor actions.
@@ -1873,6 +1587,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>,
                                             grantResults: IntArray) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        // Newly granted camera/microphone permissions become foreground-service types.
+        app.refreshResidentForegroundTypes()
         maybeStartCamera()
     }
 

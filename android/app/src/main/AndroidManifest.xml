@@ -12,7 +12,15 @@
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- The foreground service keeps the Core process resident. -->
+    <!-- The foreground service keeps the Core process resident. FOREGROUND_SERVICE is required
+         from API 28; older platforms ignore an unknown permission, so legacy19 installs that land
+         on a newer OS still start the service instead of crash-looping. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <!-- A visitor call opens full screen over the lock screen or another app (API 29+ blocks
+         background activity starts otherwise). -->
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <!-- Process recovery on API 31+: an exact alarm is the exempt way to restart the service. -->
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
     <!-- TV installations use an approved overlay to show a visitor above the foreground app. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
 
@@ -164,6 +172,9 @@
                 <action android:name="android.app.action.DEVICE_ADMIN_ENABLED"/>
             </intent-filter>
         </receiver>
+
+        <!-- Exact recovery alarm target; starts the resident service inside the alarm exemption. -->
+        <receiver android:name=".RecoveryReceiver" android:exported="false"/>
 
         <receiver android:name=".BootReceiver" android:exported="true">
             <intent-filter>

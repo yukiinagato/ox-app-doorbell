@@ -2606,6 +2606,59 @@ TEST_CASE("node: a device joining later never overrides the cluster with its fir
   host.node->stop();
 }
 
+TEST_CASE("node: a joining device never brings its own administrator password into the cluster") {
+  NFleet f;
+  auto& host = f.add("A:1", "front", "door_station", "d_front", /*seed_cfg=*/true);
+  REQUIRE(host.node->start());
+  f.run(300);
+  REQUIRE(host.node->setAdminPassword("", "cluster-password") == 0);
+  f.run(300);
+
+  // A device with its own password, set and then used while it was unpaired.
+  f.clock.advance(60'000);
+  auto& joiner = f.add("J:1", "newpad", "indoor_panel", "", /*seed_cfg=*/true, /*zero_psk=*/true);
+  joiner.node->setSecureStore([](const std::string&) { return std::string(); },
+                              [](const std::string&, const std::string&) { return true; });
+  REQUIRE(joiner.node->start());
+  REQUIRE(joiner.node->setAdminPassword("", "joiner-password") == 0);
+  REQUIRE(joiner.node->verifyAdminPassword("joiner-password") > 0);
+
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      auto pj = json::parse(host.node->pairingJson());
+      cJSON* it = nullptr;
+      cJSON_ArrayForEach(it, json::get(json::get(pj.get(), "pending"), "devices")) {
+        if (json::getString(it, "id") == joiner.node->nodeId()) return true;
+      }
+    }
+    return false;
+  }());
+  host.node->inviteDevice(
+      joiner.node->nodeId(),
+      json::getString(json::get(json::parse(joiner.node->pairingJson()).get(), "self"),
+                      "confirm_code"));
+  REQUIRE([&] {
+    for (int i = 0; i < 200; i++) {
+      f.run(50);
+      if (joiner.uiCount("paired") >= 1) return true;
+    }
+    return false;
+  }());
+  f.run(2000);
+
+  for (auto* n : {&host, &joiner}) {
+    CHECK(n->node->verifyAdminPassword("cluster-password") > 0);
+    CHECK(n->node->verifyAdminPassword("joiner-password") == 0);
+  }
+  // The joiner's identity was written again after its replica was replaced.
+  auto cfg = json::parse(host.node->configJson());
+  CHECK(json::getString(json::get(json::get(cfg.get(), "devices"), joiner.node->nodeId().c_str()),
+                        "name") == "newpad");
+  joiner.node->stop();
+  host.node->stop();
+}
+
 TEST_CASE("node: anti-entropy reports peer progress, so an online cluster collects tombstones") {
   const std::string dir = tempDir() + "/doorbell_retention_live_" + genTokenHex(8);
   REQUIRE(makeDir(dir));

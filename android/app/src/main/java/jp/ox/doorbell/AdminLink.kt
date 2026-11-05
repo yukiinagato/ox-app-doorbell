@@ -56,7 +56,11 @@ internal object AdminLinks {
         val node = status?.optJSONObject("node")
         val self = firstHost(node?.optJSONArray("local_addrs"))
             ?: firstHost(node?.optJSONArray("addrs"))
-        val local = "http://${self ?: "127.0.0.1"}:$httpPort/admin/"
+        // Browsers reach Admin over HTTPS (security v3 section 7); plain HTTP from the LAN only
+        // redirects there. Loopback keeps the plain port, which only this device can open.
+        val httpsPort = node?.optInt("https_port", DEFAULT_HTTPS_PORT) ?: DEFAULT_HTTPS_PORT
+        val local = if (self == null) "http://127.0.0.1:$httpPort/admin/"
+            else "https://${PeerAddresses.authority(self, httpsPort)}/admin/"
         val peers = status?.optJSONArray("peers")
         var leader = ""
         if (peers != null) {
@@ -64,7 +68,8 @@ internal object AdminLinks {
                 val peer = peers.optJSONObject(index) ?: continue
                 if (!peer.optBoolean("leader")) continue
                 val host = firstHost(peer.optJSONArray("addrs")) ?: continue
-                leader = "http://$host:$httpPort/admin/"
+                val peerHttps = peer.optInt("https_port", httpsPort)
+                leader = "https://${PeerAddresses.authority(host, peerHttps)}/admin/"
                 break
             }
         }
@@ -72,17 +77,10 @@ internal object AdminLinks {
     }
 
     /** Mesh addresses are host:port; the admin page lives on the HTTP port, not that one. */
-    internal fun firstHost(addresses: org.json.JSONArray?): String? {
-        if (addresses == null) return null
-        for (index in 0 until addresses.length()) {
-            val value = addresses.optString(index)
-            if (value.isEmpty()) continue
-            val separator = value.lastIndexOf(':')
-            val host = if (separator > 0) value.substring(0, separator) else value
-            if (host.isNotEmpty()) return host
-        }
-        return null
-    }
+    internal fun firstHost(addresses: org.json.JSONArray?): String? =
+        PeerAddresses.first(addresses)
+
+    private const val DEFAULT_HTTPS_PORT = 47443
 
     /**
      * The footer block: a small QR next to the address. [sizeDp] keeps it unobtrusive in the

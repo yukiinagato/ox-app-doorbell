@@ -22,9 +22,13 @@ PJSIP_TIER=api19 ANDROID_NDK_ROOT="$ANDROID_HOME/ndk/25.2.9519653" \
 ```
 
 These commands and hosted CI produce debug-key **debug-contract** APKs. They are not release
-artifacts. The current Gradle `release` build type also points at the debug signing configuration;
-do not publish it until a controlled release lane injects an approved signing identity and records
-the artifact/toolchain/dependency manifest. Keep modern and legacy outputs separate.
+artifacts. A `release` build is signed only with the identity supplied through the Gradle
+properties `doorbell.release.storeFile`, `doorbell.release.storePassword`,
+`doorbell.release.keyAlias` and `doorbell.release.keyPassword` (or the matching
+`DOORBELL_RELEASE_*` environment variables); packaging a release fails when they are absent, so a
+debug-signed release can no longer be produced by accident. The controlled release lane must still
+record the artifact/toolchain/dependency manifest. Keep modern and legacy outputs separate: each
+flavour has its own `versionCode` (`build × 10 + 1` for legacy19, `+ 2` for modern).
 
 The PJSIP build emits `doorbell-build.properties`. CMake rejects an artifact whose ABI,
 `APP_PLATFORM`, or NDK generation does not match the selected APK tier. API 19 is intentionally
@@ -104,10 +108,23 @@ losing SIP leg, so the resulting `idle` callback cannot report `call_ended` for 
 
 ## Lifetime and recovery
 
-`DoorbellService` owns the core, Camera1 session, and encoder. Activity pause/resume does not stop
-upstream video. Core startup uses bounded exponential retry. The process uses a foreground
-`START_STICKY` service, `BOOT_COMPLETED`, `MY_PACKAGE_REPLACED`, a small crash marker, and an alarm
-restart. Bitmap decode dimensions and fMP4/JPEG input sizes are bounded; critical trim-memory
+`DoorbellService` owns the core, camera session, and encoder. Headless door-station capture uses
+Camera2 on API 21+ devices whose camera hardware level is not LEGACY, and Camera1 on legacy19,
+LEGACY-level devices, the QR preview, and any device where Camera2 once failed to deliver a first
+frame within three seconds (remembered per OS build). The service declares the `camera` and
+`microphone` foreground types it has permission for (API 30+), falling back to `specialUse` alone
+when Android refuses a while-in-use type from the background and upgrading on the next foreground
+transition. Activity pause/resume does not stop upstream video. Core startup uses bounded
+exponential retry. The process uses a foreground `START_STICKY` service, `BOOT_COMPLETED`,
+`MY_PACKAGE_REPLACED`, a small crash marker, and an alarm restart. On API 31+ the restart alarm is
+an exact allow-while-idle alarm delivered to `RecoveryReceiver`, which is the exempt way to start
+a foreground service from the background; it needs `SCHEDULE_EXACT_ALARM` granted (or device-owner
+provisioning). Without either, the log says that no exempt restart path exists.
+
+A targeted chime rings from the application whatever screen is in front. When Android 10+ blocks a
+background activity start (no overlay permission, not device owner, nothing in front), the incoming
+screen opens through a high-priority call notification with a full-screen intent; Android 14 users
+can revoke `USE_FULL_SCREEN_INTENT`, in which case it shows as a heads-up notification. Bitmap decode dimensions and fMP4/JPEG input sizes are bounded; critical trim-memory
 events release the AVC encoder and nonessential image/audio caches.
 
 These in-process mechanisms cannot recover from force-stop and cannot reliably detect a native
