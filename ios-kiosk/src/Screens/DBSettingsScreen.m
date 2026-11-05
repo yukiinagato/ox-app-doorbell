@@ -9,20 +9,20 @@
 #import "../Core/DBTexts.h"
 #import "../Core/DBUiTheme.h"
 #import "../Support/DBSafeModeRecovery.h"
+#import "DBEditor.h"
 #import "DBNoticeDialog.h"
 #import "DBNumericKeypad.h"
 #import "DBRouter.h"
+#import "DBSettingsPages.h"
 #import "DBWidgets.h"
 
-// One settings row. `action` names what a tap does; `webOnly` marks the items
-// the owner deliberately kept in the web admin (spec §3), which show their
-// current value plus the reason instead of pretending to be editable.
+// One settings row. `action` names what a tap does; "page" opens one of the
+// native editors in DBSettingsPages, named by `argument`.
 @interface DBSettingsRow : NSObject
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, copy) NSString *value;
 @property(nonatomic, copy) NSString *action;
 @property(nonatomic, copy) NSString *argument;
-@property(nonatomic, assign) BOOL webOnly;
 @property(nonatomic, assign) BOOL destructive;
 // [[value, label], ...] for "segment" and "choose" rows; `value` holds the label.
 @property(nonatomic, copy) NSArray *choices;
@@ -31,7 +31,7 @@
 @implementation DBSettingsRow
 @synthesize choices = _choices;
 @synthesize title = _title, value = _value, action = _action, argument = _argument,
-            webOnly = _webOnly, destructive = _destructive;
+            destructive = _destructive;
 @end
 
 static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
@@ -298,6 +298,10 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   NSArray *_pickerFiltered;
   NSString *_pickerKey;
   DBSettingsRow *_pendingChoiceRow;
+
+  // Native editors for list and form settings (DBSettingsPages).
+  DBEditorView *_editor;
+  DBSettingsPages *_pages;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -436,6 +440,9 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 
 - (void)onScreenWillDisappear {
   _screenVisible = NO;
+  if (_editor && !_editor.hidden) {
+    while (!_editor.hidden) [_editor popPage];
+  }
   [self stopClockUpdates];
   [_noticeDialog dismiss];
 }
@@ -555,6 +562,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   _adminFooter.backgroundColor = [_palette plate];
   _adminFooter.layer.cornerRadius = 12;
   [_qr applyPalette:_palette];
+  if (_editor) [_editor applyPalette:_palette];
 }
 
 - (NSString *)adminUrl {
@@ -626,10 +634,43 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   return out;
 }
 
-- (DBSettingsRow *)webOnlyRow:(NSString *)title value:(NSString *)value {
-  DBSettingsRow *row = DBRow(title, value, @"web", nil);
-  row.webOnly = YES;
-  return row;
+- (DBSettingsRow *)pageRow:(NSString *)title value:(NSString *)value page:(NSString *)page {
+  return DBRow(title, value ?: @"", @"page", page);
+}
+
+- (void)openPage:(NSString *)name {
+  if (_editor == nil) {
+    _editor = [[DBEditorView alloc] initWithFrame:self.bounds];
+    _editor.hidden = YES;
+    __weak DBSettingsScreen *weakSelf = self;
+    _editor.onClose = ^{
+      DBSettingsScreen *screen = weakSelf;
+      if (!screen) return;
+      [screen->_pages close];
+      [screen reload];
+    };
+    [self addSubview:_editor];
+  }
+  if (_pages == nil) _pages = [[DBSettingsPages alloc] initWithRouter:_router editor:_editor
+                                                               nodeId:_nodeId];
+  _pages.nodeId = _nodeId;
+  _editor.backTitle = [_texts ts:@"editor.back"];
+  _editor.doneTitle = [_texts ts:@"editor.done"];
+  _editor.editTitle = [_texts ts:@"editor.edit"];
+  _editor.cancelTitle = [_texts ts:@"admin.cancel"];
+  _editor.okTitle = [_texts ts:@"editor.ok"];
+  _editor.confirmTitle = [_texts ts:@"editor.confirm"];
+  _editor.setText = [_texts ts:@"editor.secret_set"];
+  _editor.unsetText = [_texts ts:@"editor.secret_unset"];
+  _editor.customColorTitle = [_texts ts:@"editor.custom_color"];
+  _editor.searchPlaceholder = [_texts ts:@"editor.search"];
+  [_editor applyPalette:_palette];
+  DBEditPage *page = [_pages pageNamed:name];
+  if (page == nil) return;
+  _editor.frame = self.bounds;
+  _editor.hidden = NO;
+  [self bringSubviewToFront:_editor];
+  [_editor pushPage:page];
 }
 
 - (NSString *)roleLabel {
@@ -670,10 +711,13 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
                                        @[ @"0", @"0°" ], @[ @"90", @"90°" ],
                                        @[ @"180", @"180°" ], @[ @"270", @"270°" ] ]]];
   }
-  [rows addObject:[self webOnlyRow:[_texts ts:@"settings.theme_bg"]
-                             value:([self themeBackgroundHex] ?: @"")]];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"settings.web_only_upload"] value:@""]];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"settings.web_only_labels"] value:@""]];
+  [rows addObject:[self pageRow:[_texts ts:@"settings.theme_bg"]
+                          value:([self themeBackgroundHex] ?: @"") page:@"theme"]];
+  [rows addObject:[self pageRow:[_texts ts:@"editor.wording"] value:nil page:@"wording"]];
+  [rows addObject:[self pageRow:[_texts ts:@"editor.admin_password"] value:nil
+                           page:@"admin_password"]];
+  [rows addObject:[self pageRow:[_texts ts:@"editor.config_transfer"] value:nil
+                           page:@"config_transfer"]];
   // No キオスクを終了 row here: on this jailbroken iPad the app *is* the kiosk,
   // so there is no mode to leave -- terminating it only makes the watchdog or
   // the root helper relaunch it. A row that cannot do what it says is worse
@@ -749,12 +793,11 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   [rows addObject:DBRow([_texts ts:@"time.interval_s"],
                         [NSString stringWithFormat:@"%ld", (long)interval], @"number",
                         @"time.ntp.interval_s|3600|604800")];
-  // Host names cannot be typed on a drawn numeric keypad, so the server list
-  // stays a web-admin field.
   id servers = [DBConfigUtil dig:_cfg path:@"time.ntp.servers"];
-  if ([servers isKindOfClass:[NSArray class]])
-    [rows addObject:[self webOnlyRow:[_texts ts:@"time.servers"]
-                               value:[(NSArray *)servers componentsJoinedByString:@", "]]];
+  [rows addObject:[self pageRow:[_texts ts:@"time.servers"]
+                          value:([servers isKindOfClass:[NSArray class]]
+                                     ? [(NSArray *)servers componentsJoinedByString:@", "] : @"")
+                           page:@"ntp_servers"]];
   long long lastSync = [DBConfigUtil longLongVal:_status path:@"time.last_sync_ms" def:0];
   [rows addObject:DBRow([_texts ts:@"time.last_sync"],
                         lastSync > 0 ? [NSString stringWithFormat:@"%lld ms",
@@ -791,6 +834,8 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
     }
   }
   [rows addObject:DBRow([_texts ts:@"dash.notice_global"], @"", @"notice", @"")];
+  [rows addObject:[self pageRow:[_texts ts:@"notice.presets"] value:nil page:@"notice_presets"]];
+  [rows addObject:[self pageRow:[_texts ts:@"editor.places"] value:nil page:@"places"]];
   return rows;
 }
 
@@ -808,12 +853,13 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
                           [NSString stringWithFormat:@"%@|%d",
                               [DBPurposeModel enabledKeyForPurpose:purpose], enabled ? 1 : 0])];
   }
+  [rows addObject:[self pageRow:[_texts ts:@"editor.purposes_edit"] value:nil page:@"purposes"]];
   return rows;
 }
 
 - (NSArray *)ruleRows {
   NSMutableArray *rows = [NSMutableArray array];
-  // Each rule switches on and off here; what a rule does stays in the web admin.
+  // Each rule switches on and off here; the rule editor changes what it does.
   for (NSString *root in @[ @"trigger_rules", @"rules" ]) {
     NSDictionary *rules = [DBConfigUtil dig:_cfg path:root];
     if (![rules isKindOfClass:[NSDictionary class]]) continue;
@@ -831,19 +877,25 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
                                   def:YES]];
     }
   }
-  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.rule_edit"] value:@""]];
+  [rows addObject:[self pageRow:[_texts ts:@"prefs.rule_edit"] value:nil page:@"rules"]];
   [rows addObject:[self stepperRow:[_texts ts:@"prefs.retention"] key:@"events.retention_days"
                                def:90 min:1 max:3650 step:30
                               unit:[_texts ts:@"prefs.unit_days"]]];
   id quiet = [DBConfigUtil dig:_cfg path:@"quiet_hours"];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"settings.quiet_hours"]
-                             value:[_texts ts:(quiet ? @"settings.configured"
-                                                     : @"settings.not_configured")]]];
-  BOOL telegram = [[DBConfigUtil str:_cfg path:@"integrations.telegram.token_ref"] length] > 0;
-  [rows addObject:[self webOnlyRow:@"Telegram"
-                             value:[_texts ts:(telegram ? @"settings.configured"
-                                                        : @"settings.not_configured")]]];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"settings.web_only_secrets"] value:@""]];
+  [rows addObject:[self pageRow:[_texts ts:@"settings.quiet_hours"]
+                          value:[_texts ts:(quiet ? @"settings.configured"
+                                                  : @"settings.not_configured")]
+                           page:@"quiet_hours"]];
+  BOOL telegram = [[DBConfigUtil str:_cfg path:@"integrations.telegram.bot_token_ref"] length] > 0;
+  [rows addObject:[self pageRow:@"Telegram"
+                          value:[_texts ts:(telegram ? @"settings.configured"
+                                                     : @"settings.not_configured")]
+                           page:@"telegram"]];
+  [rows addObject:[self pageRow:@"SIP" value:[DBConfigUtil str:_cfg path:@"sip.server"] page:@"sip"]];
+  [rows addObject:[self pageRow:[_texts ts:@"editor.mqtt"]
+                          value:[DBConfigUtil str:_cfg path:@"integrations.mqtt.host"]
+                           page:@"mqtt"]];
+  [rows addObject:[self pageRow:[_texts ts:@"editor.secrets"] value:nil page:@"secrets"]];
   return rows;
 }
 
@@ -856,7 +908,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   [rows addObject:DBRow([_texts ts:@"admin.devices"],
                         [_texts t:@"settings.rules_count",
                              [NSString stringWithFormat:@"%ld", (long)(count + 1)], nil],
-                        @"", nil)];
+                        @"page", @"devices")];
   // Security protocol v3 state, from the pairing snapshot.
   NSDictionary *security = [_pairing isKindOfClass:[NSDictionary class]]
       ? [_pairing objectForKey:@"security"] : nil;
@@ -881,8 +933,13 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
     rotate.destructive = YES;
     [rows addObject:rotate];
   }
-  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.panels"] value:@""]];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.media_sources"] value:@""]];
+  [rows addObject:[self pageRow:[_texts ts:@"prefs.panels"] value:nil page:@"panels"]];
+  NSDictionary *sources = [DBConfigUtil dig:_cfg path:@"media_sources"];
+  [rows addObject:[self pageRow:[_texts ts:@"prefs.media_sources"]
+                          value:([sources isKindOfClass:[NSDictionary class]] && [sources count]
+                                     ? [NSString stringWithFormat:@"%lu", (unsigned long)[sources count]]
+                                     : nil)
+                           page:@"media_sources"]];
   return rows;
 }
 
@@ -897,7 +954,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   [rows addObject:[self choiceRow:[_texts ts:@"prefs.button_sound"] key:@"ui.button_sound"
                               def:@"button_click"
                           choices:[self soundChoices:@[ @"button_click" ] none:YES]]];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.sound_upload"] value:@""]];
+  [rows addObject:[self pageRow:[_texts ts:@"editor.sounds"] value:nil page:@"sounds"]];
   return rows;
 }
 
@@ -945,7 +1002,12 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   [rows addObject:[self stepperRow:[_texts ts:@"prefs.visitor_lang_revert"]
                                key:@"ui.visitor_lang_revert_s" def:60 min:5 max:600 step:5
                               unit:seconds]];
-  [rows addObject:[self webOnlyRow:[_texts ts:@"prefs.quick_replies"] value:@""]];
+  NSDictionary *replies = [DBConfigUtil dig:_cfg path:@"quick_replies"];
+  [rows addObject:[self pageRow:[_texts ts:@"prefs.quick_replies"]
+                          value:([replies isKindOfClass:[NSDictionary class]]
+                                     ? [NSString stringWithFormat:@"%lu", (unsigned long)[replies count]]
+                                     : nil)
+                           page:@"quick_replies"]];
   return rows;
 }
 
@@ -1139,7 +1201,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 // pretending the value was saved.
 - (BOOL)reportWriteStatus:(int)status {
   if (status != 0) {
-    [self showToast:[_texts ts:(status == -100 ? @"settings.web_only"
+    [self showToast:[_texts ts:(status == -100 ? @"editor.core_too_old"
                                                : @"settings.save_failed")]];
     return NO;
   }
@@ -1313,8 +1375,8 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   if ([action length] == 0) return;
   if ([action isEqualToString:@"device_name"]) {
     [self promptDeviceName];
-  } else if ([action isEqualToString:@"web"]) {
-    [self showToast:[_texts ts:@"settings.web_only"]];
+  } else if ([action isEqualToString:@"page"]) {
+    [self openPage:row.argument];
   } else if ([action isEqualToString:@"number"]) {
     [self promptNumberForRow:row];
   } else if ([action isEqualToString:@"toggle"]) {
@@ -1598,8 +1660,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   if (tableView == _pickerTable) return 58;
   if (tableView == _categoryTable) return 56;
   DBSettingsRow *row = [self rowAt:indexPath];
-  NSString *value = row.webOnly ? [NSString stringWithFormat:@"%@ · %@", row.value,
-                                     [_texts ts:@"prefs.open_in_admin"]] : row.value;
+  NSString *value = row.value;
   if ([row.action isEqualToString:@"volume_slider"]) return 64;
   // Rows with a control lose its width (≈ 110 pt switch/stepper, more for a segment).
   CGFloat controlWidth = [row.action isEqualToString:@"segment"]
@@ -1664,7 +1725,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   UIView *control = [self controlForRow:row index:indexPath.row];
   if (control != nil) {
     cell.accessoryView = control;
-  } else if ([row.action length] > 0 && !row.webOnly && !volumeSlider) {
+  } else if ([row.action length] > 0 && !volumeSlider) {
     UIImageView *arrow = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 12, 20)];
     arrow.userInteractionEnabled = NO;
     arrow.contentMode = UIViewContentModeCenter;
@@ -1679,9 +1740,6 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   cell.selectionStyle = tappable ? UITableViewCellSelectionStyleGray
                                  : UITableViewCellSelectionStyleNone;
   if (row.destructive) cell.textLabel.textColor = [UIColor colorWithRed:1 green:0.23f blue:0.19f alpha:1];
-  if (row.webOnly) cell.detailTextLabel.text = [row.value length] > 0
-      ? [NSString stringWithFormat:@"%@ · %@", row.value, [_texts ts:@"prefs.open_in_admin"]]
-      : [_texts ts:@"prefs.open_in_admin"];
   if (volumeSlider) {
     DBVolumeSettingsCell *volumeCell = (DBVolumeSettingsCell *)cell;
     NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
@@ -1827,6 +1885,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   }
   _toast.frame = CGRectMake(100, 0, width - 200, 16);
   _noticeDialog.frame = self.bounds;
+  if (_editor) _editor.frame = self.bounds;
 
   _keypadOverlay.frame = self.bounds;
   CGFloat keypadWidth = MIN(320, size.width - 80);
