@@ -166,6 +166,9 @@ namespace DoorbellApp
             if (verdict == AdminPasswordVerdict.Accepted)
             {
                 DropLocalDigest();
+                // Session-bound services (import, panels, secrets, rebuild) need a loopback
+                // admin session too; start it now so the operator is not asked twice.
+                DoorbellApp.Core.AdminHttpSession.BeginLogin(password);
                 Accept();
                 return;
             }

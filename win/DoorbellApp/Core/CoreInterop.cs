@@ -154,6 +154,37 @@ namespace DoorbellApp.Core
         [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
         public delegate void AdminLockFn(IntPtr core);
 
+        // Native asset ledger (doorbell.h): upload an image or sound, remove one by hash.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr AssetAddJsonFn(IntPtr core, byte[] data, UIntPtr len,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string type,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string label);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr AssetRemoveJsonFn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string sha256Hex);
+
+        // Version 2 configuration: snapshot (no password digests) and conditional commit.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr ConfigSnapshotJsonV2Fn(IntPtr core);
+
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr ConfigCommitJsonV2Fn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string request);
+
+        // Import and panel identities take the administrator session and its CSRF value.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate IntPtr SessionActionJsonV2Fn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string action,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string request,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string adminSession,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string csrf);
+
+        // 0 removed, -1 invalid id (or this device), -2 role cannot remove, -3 not persisted, -20.
+        [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+        public delegate int RemoveDeviceV2Fn(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string nodeId);
+
         // Int-valued configuration writes return this while the native admin window is closed;
         // the batch document reports it as "error":"admin_required".
         public const int DbResultAdminRequired = -20;
