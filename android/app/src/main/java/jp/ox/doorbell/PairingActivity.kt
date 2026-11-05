@@ -35,6 +35,13 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private val ui = Handler(Looper.getMainLooper())
 
     private lateinit var titleView: TextView
+    /** This device's invitation confirm code, large enough to read across a room. */
+    private lateinit var confirmCodeView: TextView
+    private lateinit var upgradeView: TextView
+
+    /** Full-width warning state for "re-pair required after upgrade", with one action. */
+    private lateinit var upgradeBanner: LinearLayout
+    private lateinit var upgradeAction: Button
     private lateinit var identityView: TextView
     private lateinit var spinner: ProgressBar
     private lateinit var statusView: TextView
@@ -182,6 +189,18 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         val addr = self?.optString("addr").orEmpty()
         identityView.text = listOf(name, model, addr).filter { it.isNotEmpty() }
             .joinToString("\n")
+        // Security v3: the inviting device types this code, so it is the most prominent thing
+        // on the screen of a device that is waiting to be added.
+        val confirmCode = PairingModel.selfConfirmCode(p)
+        confirmCodeView.visibility = if (confirmCode.isEmpty()) View.GONE else View.VISIBLE
+        confirmCodeView.text = texts.t("pair.confirm_code_self", R.string.pair_confirm_code_self,
+                                       PairingModel.groupedConfirmCode(confirmCode))
+        val rejoin = PairingModel.upgradeRejoinReason(p)
+        upgradeBanner.visibility = if (rejoin == null) View.GONE else View.VISIBLE
+        upgradeAction.text = texts.t("pair.upgrade_rejoin_action", R.string.pair_upgrade_rejoin_action)
+        if (rejoin != null) upgradeView.text = texts.t(
+            "pair.upgrade_rejoin", R.string.pair_upgrade_rejoin) + " · " +
+            texts.t("pair.err_detail", R.string.pair_err_detail, rejoin)
 
         // Core's doorbell:// link when it publishes one, else the legacy payload.
         val qr = PairUri.qrPayload(p)
@@ -577,9 +596,12 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private fun buildUi(): View {
         val frame = FrameLayout(this)
         val scroll = ScrollView(this).apply { setBackgroundColor(PairingUi.BG) }
+        // Content stays a readable column in the centre of medium and expanded windows.
+        val window = UiKit.window(this)
+        val side = maxOf(20, (window.widthDp - UiTokens.MAX_CONTENT_DP) / 2)
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(24), dp(20), dp(120))
+            setPadding(dp(side), dp(24), dp(side), dp(120))
         }
         scroll.addView(
             root,
@@ -593,6 +615,30 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         root.addView(titleView, PairingUi.matchWrap())
         identityView = PairingUi.small(this).apply { setPadding(0, dp(6), 0, dp(14)) }
         root.addView(identityView, PairingUi.matchWrap())
+        val warning = UiRoles.from(Palette.DARK)
+        upgradeBanner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            background = ShellUi.rounded(this@PairingActivity, warning.warning, UiTokens.RADIUS_CARD)
+            setPadding(dp(UiTokens.SPACE_L), dp(UiTokens.SPACE_L), dp(UiTokens.SPACE_L), dp(UiTokens.SPACE_L))
+        }
+        upgradeView = PairingUi.body(this).apply {
+            setTextColor(ShellUi.opaque(warning.onWarning))
+            textSize = UiTokens.sp(UiTokens.BODY)
+        }
+        upgradeBanner.addView(upgradeView, PairingUi.matchWrap())
+        upgradeAction = UiKit.actionButton(this, "", warning, ActionRole.SECONDARY) {
+            if (joinCard.visibility != View.VISIBLE) toggleJoinCard()
+        }
+        upgradeBanner.addView(upgradeAction, PairingUi.matchWrap().apply { topMargin = dp(UiTokens.SPACE_M) })
+        root.addView(upgradeBanner, PairingUi.matchWrap().apply { bottomMargin = dp(UiTokens.SPACE_M) })
+        confirmCodeView = PairingUi.title(this, "").apply {
+            gravity = Gravity.CENTER
+            textSize = UiTokens.sp(UiTokens.DISPLAY)
+            visibility = View.GONE
+            setPadding(0, dp(4), 0, dp(14))
+        }
+        root.addView(confirmCodeView, PairingUi.matchWrap())
 
         // Live status block.
         val statusRow = LinearLayout(this).apply {

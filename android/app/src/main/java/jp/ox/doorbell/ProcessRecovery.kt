@@ -57,17 +57,48 @@ internal class ProcessRecovery(private val app: App) {
         state = store.endSession(reason)
     }
 
+    /**
+     * Ask the system to bring the resident service back after this process dies.
+     *
+     * Android 12 refuses a foreground-service start from the background unless an exemption
+     * applies, so a plain alarm aimed at getForegroundService is silently dropped there. The
+     * restart therefore uses, in order:
+     *  1. an exact allow-while-idle alarm delivered to [RecoveryReceiver]; receiving an exact
+     *     alarm is an exemption, and the receiver starts the service inside it. Needs
+     *     SCHEDULE_EXACT_ALARM, which the user or the device owner can grant;
+     *  2. the direct foreground-service alarm when this app is the device owner, which is itself
+     *     exempt;
+     *  3. otherwise nothing reliable exists, and that is logged rather than pretended.
+     * Native aborts, LMK kills and force-stops never reach this handler; the optional root helper
+     * covers them.
+     */
     private fun scheduleServiceRestart(delayMs: Long) {
         try {
+            val alarm = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val at = SystemClock.elapsedRealtime() + delayMs
+            if (Build.VERSION.SDK_INT >= 31) {
+                if (RecoveryAlarmApi31.canScheduleExact(alarm)) {
+                    RecoveryAlarmApi31.scheduleExact(alarm, at, RecoveryReceiver.pendingIntent(app))
+                    return
+                }
+                if (!DeviceOwnerPolicies.isDeviceOwner(app)) {
+                    android.util.Log.w(TAG, "no exempt restart path: grant exact alarms " +
+                        "(SCHEDULE_EXACT_ALARM) or provision as device owner")
+                }
+            }
             val intent = Intent(app, DoorbellService::class.java)
             val pending = if (Build.VERSION.SDK_INT >= 26)
                 RecoveryPendingIntentApi26.create(app, intent)
             else PendingIntent.getService(app, REQUEST_CODE, intent,
                 if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0)
-            val alarm = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            alarm.set(AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                      SystemClock.elapsedRealtime() + delayMs, pending)
-        } catch (_: Exception) { }
+            if (Build.VERSION.SDK_INT >= 23) {
+                RecoveryAlarmApi23.scheduleWhileIdle(alarm, at, pending)
+            } else {
+                alarm.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pending)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "could not schedule the service restart", e)
+        }
     }
 
     private fun writeMarker(bytes: ByteArray) {
@@ -80,7 +111,7 @@ internal class ProcessRecovery(private val app: App) {
                 out.fd.sync()
             }
             if (!tmp.renameTo(target)) tmp.delete()
-        } catch (_: Exception) { }
+        } catch (e: Exception) { ShellLog.ignored("ProcessRecovery", e) }
     }
 
     private fun artifactBuild(): String = try {
@@ -94,5 +125,6 @@ internal class ProcessRecovery(private val app: App) {
 
     companion object {
         private const val REQUEST_CODE = 7019
+        private const val TAG = "doorbell-recovery"
     }
 }

@@ -77,25 +77,26 @@ class App : Application(), DoorbellCore.Listener {
     @Volatile
     internal var emergencyActivity: EmergencyActivity? = null
 
-    // Metadata for the most recent visitor call shown by the incoming UI.
+    // The most recent visitor call shown by the incoming UI. Core threads replace the whole
+    // snapshot under visitorCallLock, so a reader never pairs one call's door with another's ID.
+    private val visitorCallLock = Any()
     @Volatile
-    var lastPressDoor = ""
+    internal var visitorCall: VisitorCallSnapshot = VisitorCallSnapshot.EMPTY
         private set
+
+    private fun updateVisitorCall(
+        transform: (VisitorCallSnapshot) -> VisitorCallSnapshot,
+    ): VisitorCallSnapshot = synchronized(visitorCallLock) {
+        transform(visitorCall).also { visitorCall = it }
+    }
+
+    internal lateinit var incomingAlerts: IncomingCallAlerts
+        private set
+
+    // Started-Activity count; zero means the app is in the background.
     @Volatile
-    var lastPurpose = ""
-        private set
-    @Volatile
-    var lastVisitorLang = ""
-        private set
-    @Volatile
-    var lastCallId = ""
-        private set
-    @Volatile
-    var lastStageRevision = 0
-        private set
-    @Volatile
-    var lastCallExpiresAtMs = 0L
-        private set
+    private var startedActivities = 0
+    internal val hasStartedActivity: Boolean get() = startedActivities > 0
     private val chimeGate = ChimeGate()
     private val manualSipLifecycle = ManualSipCallLifecycle()
     private val recoveryLock = Any()
@@ -130,6 +131,9 @@ class App : Application(), DoorbellCore.Listener {
         )
         migrateLegacyPairingSecret()
         core.listener = this
+        LocalMedia.tokenProvider = { if (coreOk) core.localToken() else "" }
+        incomingAlerts = IncomingCallAlerts(this)
+        registerActivityLifecycleCallbacks(foregroundTracker)
         emergencyAlerts = EmergencyAlertController(this)
         processRecovery = ProcessRecovery(this).also { it.install() }
         safeMode = processRecovery.snapshot().safeMode
@@ -148,7 +152,21 @@ class App : Application(), DoorbellCore.Listener {
         try {
             val i = Intent(this, DoorbellService::class.java)
             if (Build.VERSION.SDK_INT >= 26) ServiceStartApi26.start(this, i) else startService(i)
-        } catch (_: Exception) { /* The next foreground transition retries a restricted start. */ }
+        } catch (e: Exception) {
+            // The next foreground transition retries a restricted start.
+            Log.w(TAG, "resident service start deferred: $e")
+        }
+    }
+
+    /** Re-declare the resident service's foreground types after a permission or focus change. */
+    fun refreshResidentForegroundTypes() {
+        if (bootSetupRequired || Build.VERSION.SDK_INT < 30) return
+        try {
+            startService(Intent(this, DoorbellService::class.java)
+                .setAction(DoorbellService.ACTION_REFRESH_TYPES))
+        } catch (e: Exception) {
+            Log.w(TAG, "foreground type refresh deferred: $e")
+        }
     }
 
     /** Completes the local identity gate before this device is allowed to join or originate calls. */
@@ -215,11 +233,8 @@ class App : Application(), DoorbellCore.Listener {
         )
         activityListener?.onUiEvent(taggedEvent)
         // Door stations retain their visitor UI; only indoor profiles open the incoming monitor.
-        if (eventType == "chime" && boot.role != "door_station") {
-            IncomingActivity.launch(this, lastPressDoor,
-                                    lastPurpose, lastVisitorLang, lastCallId,
-                                    lastStageRevision, lastCallExpiresAtMs)
-        }
+        if (eventType == "chime")
+            incomingAlerts.onChime(ev, visitorCall, openIncomingUi = boot.role != "door_station")
     }
 
     /** Apply a remotely edited self identity to the local bootstrap profile and running shell. */
@@ -267,25 +282,26 @@ class App : Application(), DoorbellCore.Listener {
         val expiresAtMs = ev.optLong("expires_at_ms", 0L)
         when (type) {
             "press" -> {
-                lastPressDoor = door
-                lastPurpose = ev.optString("purpose")
-                lastVisitorLang = ev.optString("visitor_lang")
-                lastCallId = callId
-                lastStageRevision = stage
-                lastCallExpiresAtMs = expiresAtMs
-                callFlow.observePress(door, callId, stage, expiresAtMs, lastPurpose)
+                val call = updateVisitorCall {
+                    VisitorCallSnapshot(door, ev.optString("purpose"), ev.optString("visitor_lang"),
+                                        callId, stage, expiresAtMs)
+                }
+                callFlow.observePress(door, callId, stage, expiresAtMs, call.purpose)
             }
             "purpose_selected" -> {
                 val supersededAnswer =
                     manualSipLifecycle.observeWinningPurpose(callId, stage)
-                if (lastPressDoor.isEmpty() || door == lastPressDoor) {
-                    lastPressDoor = door
-                    lastPurpose = ev.optString("purpose")
-                    ev.optString("visitor_lang").takeIf { it.isNotEmpty() }
-                        ?.let { lastVisitorLang = it }
-                    callId.takeIf { it.isNotEmpty() }?.let { lastCallId = it }
-                    lastStageRevision = stage
-                    lastCallExpiresAtMs = expiresAtMs
+                updateVisitorCall { current ->
+                    if (current.door.isNotEmpty() && door != current.door) current
+                    else current.copy(
+                        door = door,
+                        purpose = ev.optString("purpose"),
+                        visitorLang = ev.optString("visitor_lang")
+                            .ifEmpty { current.visitorLang },
+                        callId = callId.ifEmpty { current.callId },
+                        stageRevision = stage,
+                        expiresAtMs = expiresAtMs,
+                    )
                 }
                 callFlow.observePurpose(door, callId, stage, expiresAtMs, ev.optString("purpose"))
                 incomingActivity?.onPurposeSelected(
@@ -301,6 +317,7 @@ class App : Application(), DoorbellCore.Listener {
                 }
             }
             "call_cancelled" -> {
+                incomingAlerts.onCallFinished(callId)
                 manualSipLifecycle.clear(callId)
                 callFlow.observeCancellation(callId, stage)
                 clearPendingRecovery(callId)
@@ -316,10 +333,12 @@ class App : Application(), DoorbellCore.Listener {
                     ManualSipClaimResult.NONE,
                     ManualSipClaimResult.OWNED -> Unit
                 }
+                incomingAlerts.onCallFinished(callId)
                 callFlow.observeAnswered(callId, stage, expiresAtMs)
                 incomingActivity?.onCallAnswered(door, callId, stage)
             }
             "call_ended" -> {
+                incomingAlerts.onCallFinished(callId)
                 manualSipLifecycle.clear(callId)
                 callFlow.observeEnded(callId, stage)
                 clearPendingRecovery(callId)
@@ -334,10 +353,11 @@ class App : Application(), DoorbellCore.Listener {
     }
 
     private fun clearLastCall(callId: String) {
-        if (callId.isEmpty() || callId != lastCallId) return
-        lastCallId = ""
-        lastStageRevision = 0
-        lastCallExpiresAtMs = 0L
+        if (callId.isEmpty()) return
+        updateVisitorCall { current ->
+            if (callId != current.callId) current
+            else current.copy(callId = "", stageRevision = 0, expiresAtMs = 0L)
+        }
     }
 
     /** Bind only the bidirectional leg started by the resident's Answer action. */
@@ -359,11 +379,9 @@ class App : Application(), DoorbellCore.Listener {
     }
 
     private fun currentVisitorCall(): ManualSipCallIdentity? {
-        val door = lastPressDoor
-        val callId = lastCallId
-        val revision = lastStageRevision
-        return if (door.isNotBlank() && callId.isNotBlank() && revision >= 0)
-            ManualSipCallIdentity(door, callId, revision) else null
+        val call = visitorCall
+        return if (call.door.isNotBlank() && call.callId.isNotBlank() && call.stageRevision >= 0)
+            ManualSipCallIdentity(call.door, call.callId, call.stageRevision) else null
     }
 
     private fun handleManualSipLifecycle(state: String) {
@@ -500,17 +518,21 @@ class App : Application(), DoorbellCore.Listener {
                               System.currentTimeMillis())) return false
         val supersededAnswer = manualSipLifecycle.observeWinningPurpose(callId, stage)
         val door = ev.optString("door")
-        val same = door.isEmpty() || lastPressDoor.isEmpty() || door == lastPressDoor
-        lastPressDoor = door
-        lastCallId = callId
-        lastStageRevision = stage
-        lastCallExpiresAtMs = expires
-        lastPurpose = ev.optString("purpose", if (same) lastPurpose else "")
-        lastVisitorLang = ev.optString("visitor_lang", if (same) lastVisitorLang else "")
+        val call = updateVisitorCall { current ->
+            val same = door.isEmpty() || current.door.isEmpty() || door == current.door
+            VisitorCallSnapshot(
+                door = door,
+                purpose = ev.optString("purpose", if (same) current.purpose else ""),
+                visitorLang = ev.optString("visitor_lang", if (same) current.visitorLang else ""),
+                callId = callId,
+                stageRevision = stage,
+                expiresAtMs = expires,
+            )
+        }
         if (supersededAnswer != ManualSipPurposeResult.NONE) {
             // Queue the activity demotion before the losing SIP leg can publish Idle.
             incomingActivity?.onPurposeSelected(
-                door, callId, stage, expires, lastPurpose, lastVisitorLang,
+                door, callId, stage, expires, call.purpose, call.visitorLang,
             )
             mainHandler.post { core.sipHangup() }
         }
@@ -568,9 +590,9 @@ class App : Application(), DoorbellCore.Listener {
      */
     internal fun factoryResetClusterIdentity(reason: String) {
         pairingPersistence.recordFailure()
-        try { core.unpair() } catch (_: Exception) { }
+        try { core.unpair() } catch (e: Exception) { ShellLog.ignored("App", e) }
         // The pre-shared key must not survive; an orphaned entry would be readable material.
-        try { core.deletePlatformSecret("mesh.psk") } catch (_: Exception) { }
+        try { core.deletePlatformSecret("mesh.psk") } catch (e: Exception) { ShellLog.ignored("App", e) }
         val bootFile = File(filesDir, "boot.json")
         if (BootConfig.factoryReset(bootFile) == null) {
             Log.e(TAG, "factory reset ($reason): boot.json could not be rewritten")
@@ -718,6 +740,32 @@ class App : Application(), DoorbellCore.Listener {
         private const val MIN_RECOVERY_DEADLINE_MS = 1_000L
         private const val RECOVERY_DEADLINE_MS = 10_000L
         private const val RECOVERY_REPORT_MARGIN_MS = 750L
+    }
+
+    /**
+     * Counts started Activities. When the count drops to zero the app is in the background:
+     * the native admin window closes (security v3 section 10) and background launch rules apply.
+     */
+    private val foregroundTracker = object : Application.ActivityLifecycleCallbacks {
+        override fun onActivityStarted(activity: android.app.Activity) {
+            startedActivities++
+            // A service started at boot may only have its resident type; the first foreground
+            // moment is when Android allows the camera and microphone types to be added.
+            if (startedActivities == 1) refreshResidentForegroundTypes()
+        }
+
+        override fun onActivityStopped(activity: android.app.Activity) {
+            startedActivities = (startedActivities - 1).coerceAtLeast(0)
+            if (startedActivities == 0 && coreOk) core.adminLock()
+        }
+
+        override fun onActivityCreated(activity: android.app.Activity,
+                                       savedInstanceState: android.os.Bundle?) = Unit
+        override fun onActivityResumed(activity: android.app.Activity) = Unit
+        override fun onActivityPaused(activity: android.app.Activity) = Unit
+        override fun onActivitySaveInstanceState(activity: android.app.Activity,
+                                                 outState: android.os.Bundle) = Unit
+        override fun onActivityDestroyed(activity: android.app.Activity) = Unit
     }
 
     private data class PendingRecovery(

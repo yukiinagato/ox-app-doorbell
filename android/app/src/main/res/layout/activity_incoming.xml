@@ -1,292 +1,299 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Incoming / monitor screen (spec §5.1 A2). The video keeps the door camera's own aspect, the
-     controls are one row below it, the announcement is a compact chip, and the debug line and the
-     admin QR sit in the corners without covering the picture. Touch and D-pad. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/incoming_root"
+<!-- Incoming call / live view (docs/en/ui-guidelines.md section 4). The pieces below are placed
+     at runtime by IncomingScreenLayout: video on top with details and the fixed action zone below
+     in portrait; video left (at least 60 %) with details and actions in a right column on
+     landscape medium/expanded windows. The quick-reply sheet is added over incoming_frame. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/incoming_frame"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:background="@color/bg"
-    android:baselineAligned="false"
-    android:orientation="vertical">
+    android:layout_height="match_parent">
 
-    <!-- Header: door name, elapsed state, the fixed-height purpose slot, and the notice chip. -->
     <LinearLayout
+        android:id="@+id/incoming_root"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="match_parent"
+        android:background="@color/bg"
         android:baselineAligned="false"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingLeft="16dp"
-        android:paddingTop="10dp"
-        android:paddingRight="16dp"
-        android:paddingBottom="6dp">
-        <LinearLayout
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <!-- Video area: the stream is letterboxed inside this box, never cropped or stretched. -->
+        <FrameLayout
+            android:id="@+id/video_box"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
             android:layout_weight="1"
-            android:orientation="vertical">
+            android:background="#000000"
+            android:clipChildren="true">
+            <!-- Pinch-zoom and pan apply to this layer only, so the overlays keep their size. -->
+            <FrameLayout
+                android:id="@+id/video_zoom_layer"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+                <TextureView
+                    android:id="@+id/live_texture"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:alpha="0"
+                    android:visibility="visible"/>
+                <ImageView
+                    android:id="@+id/live_view"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:importantForAccessibility="no"
+                    android:scaleType="fitCenter"/>
+            </FrameLayout>
             <TextView
-                android:id="@+id/door_label"
+                android:id="@+id/no_video_text"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:maxLines="1"
-                android:textColor="@color/fg"
-                android:textSize="26sp"
-                android:textStyle="bold"/>
-            <TextView
-                android:id="@+id/status_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:maxLines="1"
-                android:textColor="@color/accent"
-                android:textSize="16sp"/>
-            <!-- Fixed-height purpose slot: the layout never jumps when the purpose arrives late. -->
+                android:layout_gravity="center"
+                android:text="@string/ring_no_video"
+                android:textColor="@color/dim"
+                android:textSize="20sp"/>
+            <!-- The admin QR stays visible in a corner; opening the page still needs the password. -->
             <LinearLayout
-                android:id="@+id/purpose_slot"
+                android:id="@+id/admin_qr_slot"
                 android:layout_width="wrap_content"
-                android:layout_height="34dp"
-                android:layout_marginTop="4dp"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|start"
+                android:layout_margin="8dp"
+                android:orientation="horizontal"/>
+            <!-- Unobtrusive diagnostics; tap to hide, remembered on this device. -->
+            <TextView
+                android:id="@+id/debug_line"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="8dp"
+                android:clickable="true"
+                android:focusable="true"
+                android:maxLines="1"
+                android:minHeight="48dp"
                 android:gravity="center_vertical"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:textColor="@color/dim"
+                android:textSize="11sp"/>
+            <TextView
+                android:id="@+id/sent_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:layout_margin="24dp"
+                android:background="@drawable/bg_reply_card"
+                android:padding="24dp"
+                android:textColor="@color/fg"
+                android:textSize="24sp"
+                android:visibility="gone"/>
+        </FrameLayout>
+
+        <!-- Door name, state, purpose and visitor language, and the announcement chip. -->
+        <LinearLayout
+            android:id="@+id/details_box"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingLeft="16dp"
+            android:paddingTop="12dp"
+            android:paddingRight="16dp"
+            android:paddingBottom="8dp">
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <TextView
+                    android:id="@+id/door_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="2"
+                    android:textColor="@color/fg"
+                    android:textSize="26sp"
+                    android:textStyle="bold"/>
+                <TextView
+                    android:id="@+id/status_text"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:maxLines="2"
+                    android:textColor="@color/accent"
+                    android:textSize="16sp"/>
+                <!-- Wraps instead of clipping, so 200 % text and long zh/en labels stay whole. -->
+                <LinearLayout
+                    android:id="@+id/purpose_slot"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="4dp"
+                    android:minHeight="32dp"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+                    <TextView
+                        android:id="@+id/purpose_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:background="@drawable/bg_badge"
+                        android:maxLines="2"
+                        android:paddingLeft="12dp"
+                        android:paddingTop="6dp"
+                        android:paddingRight="12dp"
+                        android:paddingBottom="6dp"
+                        android:textColor="@color/fg"
+                        android:textSize="15sp"
+                        android:visibility="invisible"/>
+                    <TextView
+                        android:id="@+id/lang_badge"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginLeft="8dp"
+                        android:layout_marginStart="8dp"
+                        android:background="@drawable/bg_badge"
+                        android:maxLines="1"
+                        android:paddingLeft="12dp"
+                        android:paddingTop="6dp"
+                        android:paddingRight="12dp"
+                        android:paddingBottom="6dp"
+                        android:textColor="@color/fg"
+                        android:textSize="15sp"
+                        android:visibility="gone"/>
+                </LinearLayout>
+            </LinearLayout>
+            <TextView
+                android:id="@+id/notice_chip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:clickable="true"
+                android:focusable="true"
+                android:gravity="center"
+                android:maxLines="2"
+                android:minHeight="48dp"
+                android:minWidth="48dp"
+                android:paddingLeft="12dp"
+                android:paddingRight="12dp"
+                android:textColor="@color/fg"
+                android:textSize="14sp"/>
+        </LinearLayout>
+
+        <!-- Fixed action zone. Primary row: Answer (or End) / Reply / Ignore. Secondary row:
+             Monitor / Unlock / Mic. IncomingScreenLayout fixes order, weights and roles. -->
+        <LinearLayout
+            android:id="@+id/action_zone"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingLeft="16dp"
+            android:paddingTop="8dp"
+            android:paddingRight="16dp"
+            android:paddingBottom="8dp">
+            <LinearLayout
+                android:id="@+id/control_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:baselineAligned="false"
                 android:orientation="horizontal">
-                <TextView
-                    android:id="@+id/purpose_badge"
-                    android:layout_width="wrap_content"
+                <Button
+                    android:id="@+id/answer_button"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:background="@drawable/bg_badge"
-                    android:maxLines="1"
-                    android:paddingLeft="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingRight="12dp"
-                    android:paddingBottom="6dp"
-                    android:textColor="@color/fg"
-                    android:textSize="15sp"
-                    android:visibility="invisible"/>
-                <TextView
-                    android:id="@+id/lang_badge"
-                    android:layout_width="wrap_content"
+                    android:layout_weight="2"
+                    android:focusable="true"
+                    android:maxLines="2"
+                    android:text="@string/ring_answer"
+                    android:textSize="18sp"/>
+                <Button
+                    android:id="@+id/reply_button"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
                     android:layout_marginLeft="8dp"
-                    android:background="@drawable/bg_badge"
-                    android:maxLines="1"
-                    android:paddingLeft="12dp"
-                    android:paddingTop="6dp"
-                    android:paddingRight="12dp"
-                    android:paddingBottom="6dp"
-                    android:textColor="@color/fg"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:focusable="true"
+                    android:maxLines="2"
+                    android:textSize="16sp"/>
+                <Button
+                    android:id="@+id/close_button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:focusable="true"
+                    android:maxLines="2"
+                    android:text="@string/ring_ignore"
+                    android:textSize="16sp"/>
+            </LinearLayout>
+            <LinearLayout
+                android:id="@+id/secondary_row"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+                <Button
+                    android:id="@+id/monitor_button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:focusable="true"
+                    android:maxLines="2"
+                    android:textSize="15sp"/>
+                <Button
+                    android:id="@+id/unlock_button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:focusable="true"
+                    android:maxLines="2"
+                    android:text="@string/ring_unlock"
                     android:textSize="15sp"
                     android:visibility="gone"/>
+                <Button
+                    android:id="@+id/mic_button"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginLeft="8dp"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
+                    android:focusable="true"
+                    android:maxLines="2"
+                    android:textSize="15sp"/>
             </LinearLayout>
         </LinearLayout>
 
-        <!-- Compact announcement chip; a dot marks an active announcement. -->
-        <TextView
-            android:id="@+id/notice_chip"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:clickable="true"
-            android:focusable="true"
-            android:maxLines="1"
-            android:minHeight="48dp"
-            android:gravity="center"
-            android:paddingLeft="12dp"
-            android:paddingTop="6dp"
-            android:paddingRight="12dp"
-            android:paddingBottom="6dp"
-            android:textColor="@color/fg"
-            android:textSize="14sp"/>
-    </LinearLayout>
-
-    <!-- Video area: the stream is letterboxed inside this box, never cropped or stretched. -->
-    <FrameLayout
-        android:id="@+id/video_box"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1">
-        <TextureView
-            android:id="@+id/live_texture"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:alpha="0"
-            android:visibility="visible"/>
-        <ImageView
-            android:id="@+id/live_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:importantForAccessibility="no"
-            android:scaleType="fitCenter"/>
-        <TextView
-            android:id="@+id/no_video_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:text="@string/ring_no_video"
-            android:textColor="@color/dim"
-            android:textSize="22sp"/>
-        <!-- The admin QR stays visible in a corner; opening the page still needs the password. -->
+        <!-- Footer: audio hint and the SOS slider. -->
         <LinearLayout
-            android:id="@+id/admin_qr_slot"
+            android:id="@+id/footer_box"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:baselineAligned="false"
+            android:gravity="center_vertical"
             android:orientation="horizontal"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|start"
-            android:layout_margin="10dp"/>
-        <!-- Unobtrusive diagnostics; tap to hide, remembered on this device. -->
-        <TextView
-            android:id="@+id/debug_line"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="bottom|end"
-            android:layout_margin="10dp"
-            android:clickable="true"
-            android:focusable="true"
-            android:maxLines="1"
-            android:paddingLeft="12dp"
-            android:paddingTop="6dp"
-            android:paddingRight="12dp"
-            android:paddingBottom="6dp"
-            android:textColor="@color/dim"
-            android:textSize="11sp"/>
-        <TextView
-            android:id="@+id/sent_text"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_gravity="center"
-            android:background="@drawable/bg_reply_card"
-            android:padding="28dp"
-            android:textColor="@color/fg"
-            android:textSize="26sp"
-            android:visibility="gone"/>
-    </FrameLayout>
-
-    <!-- One control row: モニター · 応答/通話終了 · マイク · 開錠 · クイック返信. -->
-    <LinearLayout
-        android:id="@+id/control_row"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:baselineAligned="false"
-        android:orientation="horizontal"
-        android:paddingLeft="12dp"
-        android:paddingTop="8dp"
-        android:paddingRight="12dp"
-        android:paddingBottom="8dp">
-        <Button
-            android:id="@+id/monitor_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tv_button"
-            android:focusable="true"
-            android:maxLines="2"
-            android:minHeight="56dp"
-            android:textColor="@color/fg"
-            android:textSize="15sp"/>
-        <Button
-            android:id="@+id/answer_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginLeft="6dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tv_button"
-            android:focusable="true"
-            android:maxLines="2"
-            android:minHeight="56dp"
-            android:text="@string/ring_answer"
-            android:textColor="@color/accent"
-            android:textSize="16sp"
-            android:textStyle="bold"/>
-        <Button
-            android:id="@+id/mic_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginLeft="6dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tv_button"
-            android:focusable="true"
-            android:maxLines="2"
-            android:minHeight="56dp"
-            android:textColor="@color/fg"
-            android:textSize="15sp"/>
-        <Button
-            android:id="@+id/unlock_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginLeft="6dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tv_button"
-            android:focusable="true"
-            android:maxLines="2"
-            android:minHeight="56dp"
-            android:text="@string/ring_unlock"
-            android:textColor="@color/fg"
-            android:textSize="15sp"
-            android:visibility="gone"/>
-        <Button
-            android:id="@+id/reply_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginLeft="6dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tv_button"
-            android:focusable="true"
-            android:maxLines="2"
-            android:minHeight="56dp"
-            android:textColor="@color/fg"
-            android:textSize="15sp"/>
-        <Button
-            android:id="@+id/close_button"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginStart="6dp"
-            android:layout_marginLeft="6dp"
-            android:layout_weight="1"
-            android:background="@drawable/bg_tv_button"
-            android:focusable="true"
-            android:maxLines="2"
-            android:minHeight="56dp"
-            android:text="@string/ring_ignore"
-            android:textColor="@color/dim"
-            android:textSize="15sp"/>
+            android:paddingLeft="16dp"
+            android:paddingRight="16dp"
+            android:paddingBottom="8dp">
+            <TextView
+                android:id="@+id/audio_hint"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:maxLines="2"
+                android:textColor="@color/dim"
+                android:textSize="13sp"/>
+            <FrameLayout
+                android:id="@+id/sos_slot"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minWidth="200dp"/>
+        </LinearLayout>
     </LinearLayout>
 
-    <!-- Quick replies expand below the row; hidden until 「クイック返信」 is pressed. -->
+    <!-- Quick replies; QuickReplySheet moves this list into a bottom or side sheet. -->
     <LinearLayout
         android:id="@+id/reply_list"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:paddingLeft="12dp"
-        android:paddingRight="12dp"
-        android:paddingBottom="8dp"
         android:visibility="gone"/>
-
-    <!-- Footer: audio hint, version and battery, and the SOS slider. -->
-    <LinearLayout
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:baselineAligned="false"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingLeft="12dp"
-        android:paddingRight="12dp"
-        android:paddingBottom="10dp">
-        <TextView
-            android:id="@+id/audio_hint"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:maxLines="1"
-            android:textColor="@color/dim"
-            android:textSize="12sp"/>
-        <FrameLayout
-            android:id="@+id/sos_slot"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:minWidth="200dp"/>
-    </LinearLayout>
-</LinearLayout>
+</FrameLayout>

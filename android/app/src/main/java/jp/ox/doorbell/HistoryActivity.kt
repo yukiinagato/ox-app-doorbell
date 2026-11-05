@@ -2,6 +2,8 @@
 //
 // Fifty rows per page with 「さらに読み込む」, grouped by cluster-local day, filtered by
 // all / missed / one door, and marked seen on open so the dashboard's 不在着信 badge clears.
+// Each row carries its outcome icon and an unread mark; from 600 dp the detail sits beside the
+// list, below that it opens in a bottom sheet (docs/en/ui-guidelines.md, "History").
 package jp.ox.doorbell
 
 import android.app.Activity
@@ -14,6 +16,8 @@ import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
 import android.widget.Button
+import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import java.util.Locale
@@ -36,6 +40,14 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
     private var pages = 1
     private var rows: List<CallRow> = emptyList()
     private var hasMore = false
+    private var twoPane = false
+    private var roles: UiRoles = UiRoles.from(Palette.DARK)
+    private lateinit var frame: FrameLayout
+    private var detailPane: LinearLayout? = null
+    private var sheet: UiKit.Sheet? = null
+
+    /** The call shown in the detail pane or sheet; kept across reloads while it is listed. */
+    private var selectedId = ""
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -78,6 +90,12 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
 
     override fun onTts(text: String, lang: String) {}
 
+    @Suppress("DEPRECATION")
+    override fun onBackPressed() {
+        val open = sheet
+        if (open != null && open.showing) open.dismiss() else super.onBackPressed()
+    }
+
     private fun resolvePalette(): Palette = Appearance.resolve(
         config,
         app.core.status()?.optJSONObject("node")?.optString("id").orEmpty(),
@@ -86,25 +104,43 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
     )
 
     private fun buildUi(): View {
+        val window = UiKit.window(this)
+        twoPane = ScreenLayouts.historyTwoPane(window)
+        roles = UiRoles.from(palette)
+        frame = FrameLayout(this).apply { setBackgroundColor(ShellUi.opaque(palette.ground)) }
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(ShellUi.opaque(palette.ground))
-            val pad = ShellUi.dp(this@HistoryActivity, 16)
+            val pad = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_L)
             setPadding(pad, pad, pad, pad)
         }
-        root.addView(
-            ShellUi.text(this, texts.t("history.title", R.string.history_title), 22f,
-                         palette.ink, bold = true),
-            ShellUi.matchWrap(),
+        frame.addView(root, FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
+        ))
+        // Title bar: the back action sits where the eye starts, then the title.
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        bar.addView(UiKit.actionButton(
+            this, texts.t("admin.menu_close", R.string.admin_menu_close), roles, ActionRole.SECONDARY,
+        ) { finish() })
+        bar.addView(
+            UiKit.text(this, texts.t("history.title", R.string.history_title), UiTokens.HEADLINE,
+                       palette.ink, bold = true).apply { maxLines = 2 },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                leftMargin = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_M)
+            },
         )
+        root.addView(bar, ShellUi.matchWrap())
 
         filterRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, ShellUi.dp(this@HistoryActivity, 10), 0,
-                       ShellUi.dp(this@HistoryActivity, 6))
+            setPadding(0, ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_M), 0,
+                       ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_S))
         }
         root.addView(filterRow, ShellUi.matchWrap())
 
+        val listColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         listView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val scroll = ScrollView(this).apply {
             isFillViewport = true
@@ -112,24 +148,45 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             ))
         }
-        root.addView(scroll, LinearLayout.LayoutParams(
+        listColumn.addView(scroll, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f,
         ))
-
-        moreButton = ShellUi.button(
-            this, texts.t("history.load_more", R.string.history_load_more), palette,
+        moreButton = UiKit.actionButton(
+            this, texts.t("history.load_more", R.string.history_load_more), roles,
+            ActionRole.SECONDARY,
         ) { loadMore() }
-        root.addView(moreButton, ShellUi.matchWrap().apply {
-            topMargin = ShellUi.dp(this@HistoryActivity, 8)
+        listColumn.addView(moreButton, ShellUi.matchWrap().apply {
+            topMargin = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_S)
         })
 
-        root.addView(
-            ShellUi.button(this, texts.t("admin.menu_close", R.string.admin_menu_close),
-                           palette) { finish() },
-            ShellUi.matchWrap().apply { topMargin = ShellUi.dp(this@HistoryActivity, 6) },
-        )
+        if (twoPane) {
+            // Expanded: list left, detail right (guidelines "History").
+            val split = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                isBaselineAligned = false
+            }
+            split.addView(listColumn, LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.MATCH_PARENT, 0.45f,
+            ))
+            detailPane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+            split.addView(ScrollView(this).apply {
+                addView(detailPane, LinearLayout.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                ))
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 0.55f).apply {
+                leftMargin = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_L)
+            })
+            root.addView(split, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f,
+            ))
+        } else {
+            detailPane = null
+            root.addView(listColumn, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f,
+            ))
+        }
         buildFilters()
-        return root
+        return frame
     }
 
     private fun buildFilters() {
@@ -145,7 +202,9 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
             ))
         for ((value, label) in entries) {
             val on = value == filter
-            val button = ShellUi.button(this, label, palette, primary = on) {
+            val button = UiKit.actionButton(
+                this, label, roles, if (on) ActionRole.PRIMARY else ActionRole.SECONDARY,
+            ) {
                 filter = value
                 pages = 1
                 buildFilters()
@@ -215,82 +274,167 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
         listView.removeAllViews()
         val visible = CallHistoryModel.filter(rows, filter, doorFilter)
         moreButton.visibility = if (hasMore) View.VISIBLE else View.GONE
+        val shown = HistoryModel.selection(visible, selectedId, twoPane)
+        selectedId = shown?.id.orEmpty()
         if (visible.isEmpty()) {
             listView.addView(
-                ShellUi.text(this, texts.t("history.empty", R.string.history_empty), 15f,
-                             palette.muted),
+                UiKit.text(this, texts.t("history.empty", R.string.history_empty), UiTokens.BODY,
+                           palette.muted),
                 ShellUi.matchWrap(),
             )
+            renderDetail(null)
             return
         }
         val today = clock.now().date
         for (group in CallHistoryModel.group(visible) { clock.dayKey(it) }) {
-            listView.addView(
-                ShellUi.sectionHeading(this, palette, dayHeading(group.dayKey, today)),
-                ShellUi.matchWrap(),
-            )
-            val card = ShellUi.card(this, palette)
-            for (row in group.rows) card.addView(rowView(row), ShellUi.matchWrap())
+            listView.addView(UiKit.groupHeader(this, roles, dayHeading(group.dayKey, today)),
+                             ShellUi.matchWrap())
+            val card = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                background = ShellUi.rounded(this@HistoryActivity, palette.surface,
+                                             UiTokens.RADIUS_CARD, palette.line)
+                val pad = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_S)
+                setPadding(pad, pad / 2, pad, pad / 2)
+            }
+            for (row in group.rows) card.addView(rowView(row, row.id == selectedId && twoPane),
+                                                 ShellUi.matchWrap())
             listView.addView(card, ShellUi.matchWrap())
         }
+        renderDetail(shown)
     }
 
-    private fun rowView(row: CallRow): View {
+    private fun rowView(row: CallRow, selected: Boolean): View {
+        val outcome = CallOutcome.of(row.outcome)
         val line = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = ShellUi.dp(this@HistoryActivity, ShellUi.TOUCH_FLOOR_DP)
-            setPadding(0, ShellUi.dp(this@HistoryActivity, 6), 0,
-                       ShellUi.dp(this@HistoryActivity, 6))
+            isBaselineAligned = false
+            minimumHeight = ShellUi.dp(this@HistoryActivity, UiTokens.TOUCH_MIN_DP + UiTokens.SPACE_S)
+            val pad = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_S)
+            setPadding(pad, pad, pad, pad)
+            isClickable = true
+            isFocusable = true
+            if (selected) background = ShellUi.rounded(this@HistoryActivity, palette.surfaceAlt,
+                                                       UiTokens.RADIUS_CARD, roles.accent)
+            setOnClickListener { select(row) }
         }
+        line.addView(ImageView(this).apply {
+            setImageResource(UiKit.outcomeIcon(outcome))
+            setColorFilter(ShellUi.opaque(roles.tint(outcome.role)))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(ShellUi.dp(this, 24), ShellUi.dp(this, 24)).apply {
+            rightMargin = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_M)
+        })
         val time = clock.format(row.tsMs)
+        val clockText = String.format(Locale.US, "%02d:%02d", time.hour, time.minute)
         line.addView(
-            ShellUi.text(this, String.format(Locale.US, "%02d:%02d", time.hour, time.minute),
-                         13f, palette.muted),
-            LinearLayout.LayoutParams(
-                ShellUi.dp(this, 48), ViewGroup.LayoutParams.WRAP_CONTENT,
-            ),
+            UiKit.text(this, clockText, UiTokens.CAPTION, palette.muted),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                                      ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                rightMargin = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_M)
+            },
         )
         val middle = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val title = StringBuilder(doorLabel(row.door))
-        if (row.purpose.isNotEmpty()) title.append(" · ").append(purposeLabel(row.purpose))
-        middle.addView(ShellUi.text(this, title.toString(), 14.5f, palette.ink))
-        val detail = ArrayList<String>(2)
-        if (row.answeredBy.isNotEmpty())
-            detail.add(texts.t("history.answered_by", R.string.history_answered_by,
-                               deviceName(row.answeredBy)))
-        val duration = CallHistoryModel.durationText(row.durationMs)
-        if (duration.isNotEmpty())
-            detail.add(texts.t("history.duration", R.string.history_duration, duration))
-        if (detail.isNotEmpty())
-            middle.addView(ShellUi.text(this, detail.joinToString(" · "), 12.5f, palette.muted))
+        val title = titleOf(row)
+        val unread = HistoryModel.unread(row)
+        middle.addView(UiKit.text(this, title, UiTokens.BODY,
+                                  if (row.missed) palette.dangerInk else palette.ink,
+                                  bold = unread).apply { maxLines = 2 })
+        val outcomeLabel = UiKit.outcomeLabel(texts, outcome)
+        middle.addView(UiKit.text(this, outcomeLabel, UiTokens.CAPTION, palette.muted))
         line.addView(middle, LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
         ))
-        line.addView(outcomePill(row))
+        if (unread) line.addView(ShellUi.pill(
+            this, texts.t("history.unread", R.string.history_unread), roles.negative,
+            roles.onNegative, UiTokens.sp(UiTokens.CAPTION),
+        ))
+        line.contentDescription = listOf(clockText, title, outcomeLabel,
+            if (unread) texts.t("history.unread", R.string.history_unread) else "")
+            .filter { it.isNotEmpty() }.joinToString(", ")
         return line
     }
 
-    private fun outcomePill(row: CallRow): View {
-        val (label, background, ink) = when (row.outcome) {
-            "missed" -> Triple(
-                texts.t("history.outcome_missed", R.string.history_outcome_missed),
-                palette.dangerSoft, palette.dangerInk,
-            )
-            "answered" -> Triple(
-                texts.t("history.outcome_answered", R.string.history_outcome_answered),
-                palette.okSoft, palette.okInk,
-            )
-            "replied" -> Triple(
-                texts.t("history.outcome_replied", R.string.history_outcome_replied),
-                palette.surfaceAlt, palette.muted,
-            )
-            else -> Triple(
-                texts.t("history.outcome_cancelled", R.string.history_outcome_cancelled),
-                palette.surfaceAlt, palette.muted,
-            )
+    private fun titleOf(row: CallRow): String {
+        val title = StringBuilder(doorLabel(row.door))
+        if (row.purpose.isNotEmpty()) title.append(" · ").append(purposeLabel(row.purpose))
+        return title.toString()
+    }
+
+    /** Two panes: show it on the right. One pane: show it in a sheet over the list. */
+    private fun select(row: CallRow) {
+        selectedId = row.id
+        if (twoPane) {
+            render()
+            return
         }
-        return ShellUi.pill(this, label, background, ink)
+        sheet?.dismiss()
+        val next = UiKit.Sheet(frame, roles, atSide = false) { sheet = null }
+        fillDetail(next.panel, row)
+        sheet = next
+        next.show()
+    }
+
+    private fun renderDetail(row: CallRow?) {
+        val pane = detailPane ?: return
+        pane.removeAllViews()
+        if (row == null) {
+            pane.addView(UiKit.text(this, texts.t("history.select_call", R.string.history_select_call),
+                                    UiTokens.BODY, palette.muted).apply {
+                gravity = Gravity.CENTER
+                setPadding(0, ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_XXXL), 0, 0)
+            }, ShellUi.matchWrap())
+            return
+        }
+        val card = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = ShellUi.rounded(this@HistoryActivity, palette.surface,
+                                         UiTokens.RADIUS_CARD, palette.line)
+            val pad = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_L)
+            setPadding(pad, pad, pad, pad)
+        }
+        fillDetail(card, row)
+        pane.addView(card, ShellUi.matchWrap())
+    }
+
+    /** One call's detail: what happened, when, who answered, and a way to look at the door now. */
+    private fun fillDetail(target: LinearLayout, row: CallRow) {
+        val outcome = CallOutcome.of(row.outcome)
+        val time = clock.format(row.tsMs)
+        val head = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        head.addView(ImageView(this).apply {
+            setImageResource(UiKit.outcomeIcon(outcome))
+            setColorFilter(ShellUi.opaque(roles.tint(outcome.role)))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(ShellUi.dp(this, 32), ShellUi.dp(this, 32)).apply {
+            rightMargin = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_M)
+        })
+        head.addView(UiKit.text(this, titleOf(row), UiTokens.TITLE, palette.ink, bold = true)
+                         .apply { maxLines = 3 },
+                     LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        target.addView(head, ShellUi.matchWrap())
+        val facts = ArrayList<String>(4)
+        facts.add(String.format(Locale.US, "%s %02d:%02d", time.date, time.hour, time.minute))
+        facts.add(UiKit.outcomeLabel(texts, outcome))
+        if (row.answeredBy.isNotEmpty())
+            facts.add(texts.t("history.answered_by", R.string.history_answered_by,
+                              deviceName(row.answeredBy)))
+        val duration = CallHistoryModel.durationText(row.durationMs)
+        if (duration.isNotEmpty())
+            facts.add(texts.t("history.duration", R.string.history_duration, duration))
+        for (fact in facts) target.addView(
+            UiKit.text(this, fact, UiTokens.BODY, palette.muted).apply {
+                setPadding(0, ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_S), 0, 0)
+            }, ShellUi.matchWrap(),
+        )
+        if (row.door.isNotEmpty()) target.addView(
+            UiKit.actionButton(this, texts.t("nav.monitor", R.string.nav_monitor), roles,
+                               ActionRole.PRIMARY) { IncomingActivity.launch(this, row.door) },
+            ShellUi.matchWrap().apply { topMargin = ShellUi.dp(this@HistoryActivity, UiTokens.SPACE_L) },
+        )
     }
 
     private fun dayHeading(dayKey: String, today: String): String {
@@ -328,7 +472,7 @@ class HistoryActivity : Activity(), DoorbellCore.Listener {
                 context.startActivity(
                     Intent(context, HistoryActivity::class.java).putExtra(EXTRA_DOOR, door),
                 )
-            } catch (_: Exception) { }
+            } catch (e: Exception) { ShellLog.ignored("HistoryActivity", e) }
         }
 
         /**

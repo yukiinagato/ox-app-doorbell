@@ -103,6 +103,7 @@ internal class EmergencyAlertController(private val app: App) {
         var inAppPresented = inApp
         var inAppVisualApplied = false
         var inAppSoundApplied = false
+        var notificationSoundApplied = false
         if (inApp) {
             inAppSoundApplied = alarm.start(value)
             if (value.visual) {
@@ -118,10 +119,18 @@ internal class EmergencyAlertController(private val app: App) {
                 app.emergencyActivity?.finishForStateClear()
             }
         } else {
-            alarm.stop()
             app.emergencyActivity?.finishForStateClear()
+            // Without the in-app channel the notification owns the sound. The app still plays it
+            // on the alarm stream with the configured file and volume: a notification channel's
+            // sound is fixed at creation, ignores per-alert volume, and is muted by Do Not Disturb.
+            if (systemNotification && soundRequested) {
+                notificationSoundApplied = alarm.start(value)
+            } else {
+                alarm.stop()
+            }
         }
-        val notification = if (systemNotification) postNotification(value, inApp) else {
+        val notification = if (systemNotification)
+            postNotification(value, inApp, notificationSoundApplied) else {
             cancelNotification()
             NotificationPostResult.notRequested(notificationPermissionStatus())
         }
@@ -168,6 +177,7 @@ internal class EmergencyAlertController(private val app: App) {
     private fun postNotification(
         value: EmergencyPresentation,
         inAppRequested: Boolean,
+        soundApplied: Boolean,
     ): NotificationPostResult {
         val permission = notificationPermissionStatus()
         if (notificationPermissionNeeded()) return NotificationPostResult(
@@ -176,15 +186,15 @@ internal class EmergencyAlertController(private val app: App) {
             failure = "notification_permission_required",
         )
         val manager = app.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        val audible = !inAppRequested && value.alarmVolume > 0 &&
-            (value.alarmSound.isNotEmpty() || value.audioPath.isNotEmpty())
-        val channelId = if (audible) NOTIFICATION_CHANNEL_ALARM else NOTIFICATION_CHANNEL_SILENT
+        // The sound is never the channel's: see applyPresentation. The channel only vibrates.
+        val audible = !inAppRequested && soundApplied
+        val channelId = NOTIFICATION_CHANNEL
         if (Build.VERSION.SDK_INT >= 26) {
             EmergencyNotificationApi26.ensureChannel(
                 manager,
                 channelId,
                 app.getString(R.string.emergency_title),
-                audible,
+                LEGACY_NOTIFICATION_CHANNELS,
             )
         }
         val open = PendingIntent.getActivity(
@@ -194,10 +204,26 @@ internal class EmergencyAlertController(private val app: App) {
             PendingIntent.FLAG_UPDATE_CURRENT or
                 if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0,
         )
+        // Over the lock screen the alert opens full screen, as the in-app channel would.
+        val fullScreen = if (value.visual) PendingIntent.getActivity(
+            app,
+            FULL_SCREEN_REQUEST,
+            Intent(app, EmergencyActivity::class.java).addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP,
+            ),
+            PendingIntent.FLAG_UPDATE_CURRENT or
+                if (Build.VERSION.SDK_INT >= 23) PendingIntent.FLAG_IMMUTABLE else 0,
+        ) else null
         @Suppress("DEPRECATION")
         val builder = if (Build.VERSION.SDK_INT >= 26)
             EmergencyNotificationApi26.builder(app, channelId)
         else Notification.Builder(app)
+        if (fullScreen != null) builder.setFullScreenIntent(fullScreen, true)
+        if (Build.VERSION.SDK_INT >= 21) {
+            builder.setCategory(Notification.CATEGORY_ALARM)
+            builder.setVisibility(Notification.VISIBILITY_PUBLIC)
+        }
         val title = value.title.ifEmpty { app.getString(R.string.emergency_title) }
         val body = if (value.source.isEmpty()) app.getString(R.string.emergency_notified)
             else value.source
@@ -209,8 +235,8 @@ internal class EmergencyAlertController(private val app: App) {
             .setPriority(Notification.PRIORITY_MAX)
             .setOngoing(value.sticky)
             .setAutoCancel(!value.sticky)
-            .setDefaults(if (Build.VERSION.SDK_INT < 26 && audible)
-                Notification.DEFAULT_ALL else 0)
+            .setDefaults(if (Build.VERSION.SDK_INT < 26)
+                Notification.DEFAULT_VIBRATE or Notification.DEFAULT_LIGHTS else 0)
             .build()
         return try {
             manager.notify(NOTIFICATION_ID, notification)
@@ -219,13 +245,15 @@ internal class EmergencyAlertController(private val app: App) {
                 permission = permission,
                 audible = audible,
             )
-        } catch (_: SecurityException) {
+        } catch (e: SecurityException) {
+            android.util.Log.w(TAG, "SOS notification refused: $e")
             NotificationPostResult(
                 posted = false,
                 permission = AndroidDeviceAlertChannels.PERMISSION_DENIED,
                 failure = "notification_permission_denied",
             )
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w(TAG, "SOS notification failed: $e")
             NotificationPostResult(
                 posted = false,
                 permission = permission,
@@ -287,9 +315,11 @@ internal class EmergencyAlertController(private val app: App) {
                 notification.permission,
             ))
         } else {
-            val limitations = ArrayList<String>(3)
+            val limitations = ArrayList<String>(4)
             if (soundRequested && value.uses(CHANNEL_IN_APP))
                 limitations.add("sound_owned_by_in_app_channel")
+            if (soundRequested && !value.uses(CHANNEL_IN_APP) && !notification.audible)
+                limitations.add("alarm_sound_failed")
             if (!value.visual && notification.posted)
                 limitations.add("system_notification_visual_is_mandatory")
             if (notification.failure.isNotEmpty()) limitations.add(notification.failure)
@@ -382,10 +412,15 @@ internal class EmergencyAlertController(private val app: App) {
         private const val CHANNEL_IN_APP = AndroidDeviceAlertChannels.IN_APP
         private const val CHANNEL_SYSTEM_NOTIFICATION =
             AndroidDeviceAlertChannels.SYSTEM_NOTIFICATION
-        private const val NOTIFICATION_CHANNEL_ALARM = "doorbell_emergency_alarm"
-        private const val NOTIFICATION_CHANNEL_SILENT = "doorbell_emergency_silent"
+        private const val TAG = "doorbell-sos"
+        // Versioned: the old channels carried the channel's own sound, which the user could not
+        // retune from the cluster. They are deleted when the current channel is created.
+        private const val NOTIFICATION_CHANNEL = "doorbell_emergency_v2"
+        private val LEGACY_NOTIFICATION_CHANNELS =
+            listOf("doorbell_emergency_alarm", "doorbell_emergency_silent")
         private const val NOTIFICATION_ID = 911
         private const val NOTIFICATION_REQUEST = 912
+        private const val FULL_SCREEN_REQUEST = 913
     }
 }
 
@@ -417,6 +452,7 @@ private class EmergencyAlarmPlayer(
         }
     }
 
+    @Suppress("DEPRECATION") // setAudioStreamType is the API 19-20 path only.
     fun start(value: EmergencyPresentation): Boolean {
         stop()
         if (value.alarmVolume <= 0 ||
@@ -426,7 +462,8 @@ private class EmergencyAlarmPlayer(
             try {
                 val volume = value.alarmVolume / 100f
                 media = MediaPlayer().apply {
-                    setAudioStreamType(AudioManager.STREAM_ALARM)
+                    if (Build.VERSION.SDK_INT >= 21) AlarmAudioApi21.apply(this)
+                    else setAudioStreamType(AudioManager.STREAM_ALARM)
                     setDataSource(custom.absolutePath)
                     isLooping = value.sticky
                     setVolume(volume, volume)
@@ -434,28 +471,30 @@ private class EmergencyAlarmPlayer(
                     start()
                 }
                 return true
-            } catch (_: Exception) {
-                try { media?.release() } catch (_: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.w("doorbell-sos", "SOS audio file failed; using the alarm tone: $e")
+                try { media?.release() } catch (e: Exception) { ShellLog.ignored("EmergencyAlertController", e) }
                 media = null
             }
         }
         try {
-            tone = ToneGenerator(AudioManager.STREAM_ALARM, value.alarmVolume)
+            tone = ToneGenerator(AudioManager.STREAM_ALARM, value.alarmVolume.coerceIn(0, 100))
             repeat = value.sticky
             handler.post(repeatTone)
             return true
-        } catch (_: Exception) {
+        } catch (e: Exception) {
+            android.util.Log.w("doorbell-sos", "SOS alarm tone unavailable: $e")
             return false
         }
     }
 
     fun stop() {
         handler.removeCallbacks(repeatTone)
-        try { media?.stop() } catch (_: Exception) { }
-        try { media?.release() } catch (_: Exception) { }
+        try { media?.stop() } catch (e: Exception) { ShellLog.ignored("EmergencyAlertController", e) }
+        try { media?.release() } catch (e: Exception) { ShellLog.ignored("EmergencyAlertController", e) }
         media = null
-        try { tone?.stopTone() } catch (_: Exception) { }
-        try { tone?.release() } catch (_: Exception) { }
+        try { tone?.stopTone() } catch (e: Exception) { ShellLog.ignored("EmergencyAlertController", e) }
+        try { tone?.release() } catch (e: Exception) { ShellLog.ignored("EmergencyAlertController", e) }
         tone = null
         repeat = false
     }

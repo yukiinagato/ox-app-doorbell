@@ -32,7 +32,7 @@ class RuntimeStatusStore(
             persist()
             JSONObject(root.toString())
         }
-        try { onChanged(copy) } catch (_: Exception) { }
+        try { onChanged(copy) } catch (e: Exception) { ShellLog.ignored("RuntimeStatusStore", e) }
     }
 
     private fun updateValue(section: String, value: Any) {
@@ -41,7 +41,7 @@ class RuntimeStatusStore(
             persist()
             JSONObject(root.toString())
         }
-        try { onChanged(copy) } catch (_: Exception) { }
+        try { onChanged(copy) } catch (e: Exception) { ShellLog.ignored("RuntimeStatusStore", e) }
     }
 
     @Synchronized

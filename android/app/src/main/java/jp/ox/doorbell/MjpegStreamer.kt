@@ -8,7 +8,6 @@ import android.util.Log
 import java.io.BufferedInputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
-import java.net.URL
 
 class MjpegStreamer(private val url: String, private val onFrame: (Bitmap, Int) -> Unit) {
 
@@ -17,6 +16,10 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap, Int) 
     @Volatile
     private var running = false
     private var thread: Thread? = null
+    // The live request, so stop() can close its socket; interrupting the reader thread does not
+    // unblock a socket read, which left the door station serving a dead stream until timeout.
+    @Volatile
+    private var connection: HttpURLConnection? = null
     private var startupMs = 0L
     private var tracedHeaders = false
     private var tracedPart = false
@@ -40,13 +43,21 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap, Int) 
         running = false
         thread?.interrupt()
         thread = null
+        val live = connection ?: return
+        connection = null
+        // disconnect() may touch the socket, so it never runs on the caller's (main) thread.
+        Thread({
+            try { live.disconnect() } catch (e: Exception) { Log.d(TAG, "disconnect: $e") }
+        }, "mjpeg-close").apply { isDaemon = true }.start()
     }
 
     private fun loop() {
         while (running) {
             var conn: HttpURLConnection? = null
             try {
-                conn = URL(url).openConnection() as HttpURLConnection
+                conn = LocalMedia.open(url)
+                connection = conn
+                if (!running) break
                 conn.connectTimeout = 4000
                 conn.readTimeout = 10000
                 val ins = BufferedInputStream(conn.inputStream, 64 * 1024)
@@ -70,7 +81,8 @@ class MjpegStreamer(private val url: String, private val onFrame: (Bitmap, Int) 
             } catch (e: Exception) {
                 if (running) Log.w(TAG, "stream error: $e")
             } finally {
-                try { conn?.disconnect() } catch (_: Exception) { }
+                try { conn?.disconnect() } catch (e: Exception) { ShellLog.ignored("MjpegStreamer", e) }
+                if (connection === conn) connection = null
             }
             if (!running) break
             try { Thread.sleep(2000) } catch (_: InterruptedException) { }

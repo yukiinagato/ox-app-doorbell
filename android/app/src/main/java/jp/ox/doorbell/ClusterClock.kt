@@ -135,7 +135,7 @@ internal class ClusterClock(
         if (!ClusterClockMath.stale(anchor, elapsedRealtimeMs(), maxAgeMs)) return
         if (!refreshing.compareAndSet(false, true)) return
         Thread({
-            try { now() } catch (_: Exception) { } finally { refreshing.set(false) }
+            try { now() } catch (e: Exception) { ShellLog.ignored("ClusterClock", e) } finally { refreshing.set(false) }
             onRefreshed?.invoke()
         }, "doorbell-clock").apply { isDaemon = true }.start()
     }

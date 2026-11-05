@@ -15,6 +15,9 @@ internal interface ConfigWriter {
     fun setBatch(values: List<Pair<String, String>>): ConfigWriteResult
     fun deleteKey(key: String): ConfigWriteResult
 
+    /** One atomic batch mixing sets and deletes; the same document /api/config/batch takes. */
+    fun applyOps(ops: List<ConfigOp>): ConfigWriteResult
+
     fun setString(key: String, value: String): ConfigWriteResult =
         setKey(key, JSONObject.quote(value))
 
@@ -37,12 +40,17 @@ internal class NativeConfigWriter(private val core: DoorbellCore) : ConfigWriter
     override fun deleteKey(key: String): ConfigWriteResult =
         resultOf(core.deleteConfigKey(key))
 
-    override fun setBatch(values: List<Pair<String, String>>): ConfigWriteResult {
-        if (values.isEmpty()) return ConfigWriteResult(true)
-        val document = core.configBatchJson(ConfigOps.build(values)) ?: return UNSUPPORTED
+    override fun setBatch(values: List<Pair<String, String>>): ConfigWriteResult =
+        applyOps(values.map { ConfigOp.Set(it.first, it.second) })
+
+    override fun applyOps(ops: List<ConfigOp>): ConfigWriteResult {
+        if (ops.isEmpty()) return ConfigWriteResult(true)
+        val document = core.configBatchJson(ConfigOps.buildOps(ops)) ?: return UNSUPPORTED
         val ok = document.optBoolean("ok", false)
+        val error = document.optString("err").ifEmpty { document.optString("error") }
+        if (!ok && error == ConfigWriters.ERR_ADMIN_REQUIRED) return ADMIN_REQUIRED
         return ConfigWriteResult(
-            ok, document.optString("err"), if (ok) 200 else 400,
+            ok, error, if (ok) 200 else 400,
             warnings = document.optJSONArray("warnings"),
         )
     }
@@ -50,6 +58,7 @@ internal class NativeConfigWriter(private val core: DoorbellCore) : ConfigWriter
     private fun resultOf(result: Int?): ConfigWriteResult = when (result) {
         null -> UNSUPPORTED
         0 -> ConfigWriteResult(true, status = 200)
+        DoorbellCore.RESULT_ADMIN_REQUIRED -> ADMIN_REQUIRED
         // -1 is a malformed call from this shell; -2 is core refusing or failing to persist.
         -1 -> ConfigWriteResult(false, "bad_request", status = 400)
         else -> ConfigWriteResult(false, "config_rejected", status = 400)
@@ -58,11 +67,13 @@ internal class NativeConfigWriter(private val core: DoorbellCore) : ConfigWriter
     private companion object {
         /** Distinguishes "this core has no such export" from "core refused the write". */
         val UNSUPPORTED = ConfigWriteResult(false, ConfigWriters.ERR_UNSUPPORTED, 0)
+        val ADMIN_REQUIRED = ConfigWriteResult(false, ConfigWriters.ERR_ADMIN_REQUIRED, 401)
     }
 }
 
 internal object ConfigWriters {
     const val ERR_UNSUPPORTED = "unsupported"
+    const val ERR_ADMIN_REQUIRED = "admin_required"
 
     /**
      * Prefer core; fall back to the loopback session. [loopback] is null when the operator only
@@ -78,11 +89,17 @@ internal object ConfigWriters {
 
 internal object ConfigOps {
     /** The ops document shared by db_core_config_batch_json and POST /api/config/batch. */
-    fun build(values: List<Pair<String, String>>): String {
-        val ops = JSONArray()
-        for ((key, valueJson) in values)
-            ops.put(JSONObject().put("op", "set").put("key", key).put("value", parse(valueJson)))
-        return JSONObject().put("ops", ops).toString()
+    fun build(values: List<Pair<String, String>>): String =
+        buildOps(values.map { ConfigOp.Set(it.first, it.second) })
+
+    fun buildOps(ops: List<ConfigOp>): String {
+        val array = JSONArray()
+        for (op in ops) when (op) {
+            is ConfigOp.Set -> array.put(
+                JSONObject().put("op", "set").put("key", op.key).put("value", parse(op.valueJson)))
+            is ConfigOp.Delete -> array.put(JSONObject().put("op", "delete").put("key", op.key))
+        }
+        return JSONObject().put("ops", array).toString()
     }
 
     /** A key's value is a JSON document, not a display string; fall back to a bare string. */

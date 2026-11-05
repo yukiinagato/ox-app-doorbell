@@ -61,7 +61,7 @@ internal object AndroidHttpsClient {
         } catch (_: Exception) {
             null
         } finally {
-            try { connection?.disconnect() } catch (_: Exception) { }
+            try { connection?.disconnect() } catch (e: Exception) { ShellLog.ignored("AndroidHttpsClient", e) }
         }
     }
 

@@ -58,7 +58,7 @@ class RootKeepaliveClient {
         } catch (e: Exception) {
             Status(true, error = e.javaClass.simpleName)
         } finally {
-            try { socket.close() } catch (_: Exception) { }
+            try { socket.close() } catch (e: Exception) { ShellLog.ignored("RootKeepaliveClient", e) }
         }
     }
 

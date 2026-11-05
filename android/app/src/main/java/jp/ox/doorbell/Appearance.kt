@@ -29,6 +29,13 @@ internal data class Palette(
     val dangerInk: Int,
     val okSoft: Int,
     val okInk: Int,
+    /** Answer / connected fill and its ink (guidelines `positive`). */
+    val positive: Int = if (dark) 0x4CC277 else 0x1F7A3A,
+    val onPositive: Int = if (dark) 0x0B1A10 else 0xFFFFFF,
+    /** Hang up / SOS / error ink on a [danger] fill (guidelines `negative`). */
+    val onNegative: Int = if (dark) 0x1F0B0A else 0xFFFFFF,
+    val warning: Int = if (dark) 0xF0B44C else 0x9A5B00,
+    val onWarning: Int = if (dark) 0x231600 else 0xFFFFFF,
 ) {
     /** The ink token for a region whose own background is [backgroundRgb]. */
     fun inkOver(backgroundRgb: Int): Int =
