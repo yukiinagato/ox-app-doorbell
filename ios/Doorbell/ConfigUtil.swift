@@ -102,16 +102,15 @@ enum ConfigUtil {
         return eventChannels(ev).contains(channel)
     }
 
+    /// The door station to bind a call to: an alive station first, then a suspect one. A dead
+    /// station is never chosen. Within a rank the projection order is kept.
     static func findDoorPeer(_ st: [String: Any]?, door: String) -> [String: Any]? {
         guard let peers = st?["peers"] as? [[String: Any]] else { return nil }
-        for p in peers {
-            if (p["self"] as? Bool) == true { continue }
-            if evStr(p, "role") != "door_station" { continue }
-            if !door.isEmpty && evStr(p, "door") != door { continue }
-            if evStr(p, "status") == "dead" { continue }
-            return p
+        let candidates = peers.filter { p in
+            (p["self"] as? Bool) != true && evStr(p, "role") == "door_station" &&
+                (door.isEmpty || evStr(p, "door") == door) && evStr(p, "status") != "dead"
         }
-        return nil
+        return candidates.first { evStr($0, "status") == "alive" } ?? candidates.first
     }
 
     static func onlineDoorPeer(_ status: [String: Any]?, door: String) -> [String: Any]? {
@@ -122,19 +121,29 @@ enum ConfigUtil {
         }
     }
 
+    /// Configured doors that no reachable station serves. A door whose station has a peer record
+    /// is listed through that record; a configured door with no station record at all is listed
+    /// as a synthetic entry (`id` empty, `status` "missing"), so it is visible somewhere instead
+    /// of vanishing from both the dashboard and this list.
     static func offlineDoorPeers(config: [String: Any]?, status: [String: Any]?) -> [[String: Any]] {
-        guard let peers = status?["peers"] as? [[String: Any]] else { return [] }
-        let configuredDoors = Set((dig(config, "doors") as? [String: Any]).map {
-            Array($0.keys)
-        } ?? [])
+        let peers = status?["peers"] as? [[String: Any]] ?? []
+        let doorMap = dig(config, "doors") as? [String: Any] ?? [:]
+        let configuredDoors = Set(doorMap.keys)
         let onlineDoors = Set(peers.filter {
             evStr($0, "role") == "door_station" && evStr($0, "status") == "alive"
         }.map { evStr($0, "door") })
-        return peers.filter {
+        var listed = peers.filter {
             ($0["self"] as? Bool) != true && evStr($0, "role") == "door_station" &&
                 evStr($0, "status") != "alive" && configuredDoors.contains(evStr($0, "door")) &&
                 !onlineDoors.contains(evStr($0, "door"))
-        }.sorted {
+        }
+        let recordedDoors = Set(peers.filter { evStr($0, "role") == "door_station" }
+            .map { evStr($0, "door") })
+        for door in configuredDoors.subtracting(recordedDoors).subtracting(onlineDoors) {
+            listed.append(["id": "", "role": "door_station", "door": door,
+                           "status": "missing", "name": ""])
+        }
+        return listed.sorted {
             let left = evStr($0, "name")
             let right = evStr($1, "name")
             return left == right ? evStr($0, "id") < evStr($1, "id") : left < right
@@ -159,29 +168,40 @@ enum ConfigUtil {
         }
     }
 
+    /// The host of a peer's first usable address. Addresses are `host:port`, `[v6]:port`, or a
+    /// bare host; a bare IPv6 address contains colons and is returned whole.
     static func peerHost(_ peer: [String: Any]?) -> String? {
         guard let addrs = peer?["addrs"] as? [Any] else { return nil }
         for a in addrs {
             guard let s = a as? String, !s.isEmpty else { continue }
-            if let i = s.range(of: ":", options: .backwards) {
-                let host = String(s[s.startIndex..<i.lowerBound])
-                return host.isEmpty ? nil : host
+            if s.hasPrefix("["), let close = s.firstIndex(of: "]") {
+                let host = String(s[s.index(after: s.startIndex)..<close])
+                if !host.isEmpty { return host }
+                continue
+            }
+            let colons = s.filter { $0 == ":" }.count
+            if colons > 1 { return s }
+            if colons == 1, let i = s.firstIndex(of: ":") {
+                let host = String(s[s.startIndex..<i])
+                if !host.isEmpty { return host }
+                continue
             }
             return s
         }
         return nil
     }
 
+    /// Browsers reach a peer's Admin over its TLS listener (security protocol v3 §7). The stream
+    /// URL is a loopback proxy on this device, so the address comes from the peer record.
+    static let peerAdminHttpsPort = 47443
+
     static func peerAdminURL(_ peer: [String: Any]?) -> String? {
-        guard let stream = str(peer, "stream"),
-              var components = URLComponents(string: stream),
-              let scheme = components.scheme?.lowercased(),
-              scheme == "http" || scheme == "https",
-              components.host != nil,
-              components.user == nil, components.password == nil else { return nil }
+        guard let host = peerHost(peer) else { return nil }
+        var components = URLComponents()
+        components.scheme = "https"
+        components.host = host.contains(":") ? "[\(host)]" : host
+        components.port = peerAdminHttpsPort
         components.path = "/admin/"
-        components.query = nil
-        components.fragment = nil
         return components.url?.absoluteString
     }
 

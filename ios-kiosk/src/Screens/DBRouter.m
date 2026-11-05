@@ -154,11 +154,25 @@ static BOOL DBCoreSipBackendCompiled(void) {
       _effectiveSipBackend = @"core";
     }
 #endif
+    // Core refused a configuration write because the native admin window closed (security
+    // protocol v3 §10). Ask for the password over the current screen; the user then repeats
+    // the action, which Core accepts inside the reopened window.
+    [[NSNotificationCenter defaultCenter] addObserver:self
+                                             selector:@selector(onAdminRequired:)
+                                                 name:DBAdminRequiredNotification
+                                               object:nil];
   }
   return self;
 }
 
+- (void)onAdminRequired:(NSNotification *)note {
+  (void)note;
+  if (_pin && _pin.superview) return;
+  [self requestPinThen:nil];
+}
+
 - (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
   [_recoveryTimer invalidate];
   [_emergencyPresentationTimer invalidate];
   if (_emergencyNotification)
@@ -544,6 +558,9 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)showHomeAnimated:(BOOL)animated {
+  // Returning to the primary screen ends any administrator flow, so the native admin window
+  // closes here rather than lingering behind the kiosk (security protocol v3 §10).
+  [_core adminLock];
   DBScreen *primary = [_boot.role isEqualToString:@"door_station"] ? self.door : self.home;
   [self transitionTo:primary animated:animated];
   [self checkPairingDeferred];
@@ -1317,6 +1334,12 @@ static BOOL DBCoreSipBackendCompiled(void) {
     if (_current == _addDevice) [_addDevice handlePendingChanged:ev];
   } else if ([t isEqualToString:@"invite_result"]) {
     if (_current == _addDevice) [_addDevice handleInviteResult:ev];
+  } else if ([t isEqualToString:@"peer_rejected"]) {
+    if (_current == _addDevice) [_addDevice handlePeerRejected:ev];
+    if (_current == _settings) [_settings reload];
+  } else if ([t isEqualToString:@"cluster_key_changed"]) {
+    if (_current == _addDevice) [_addDevice handleClusterKeyChanged:ev];
+    if (_current == _settings) [_settings reload];
   } else if ([t isEqualToString:@"device_joined"]) {
     if (_current == _addDevice) [_addDevice handleDeviceJoined:ev];
     // A door station that just joined must reach the monitor list without

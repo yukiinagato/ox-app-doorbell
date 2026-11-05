@@ -45,6 +45,9 @@ final class PairingViewController: UIViewController {
     private let hintLabel = UILabel()
     private let errorLabel = UILabel()
     private let detailLabel = UILabel()
+    /// This device's eight-digit confirmation code, read out to whoever adds it.
+    private let confirmCaption = UILabel()
+    private let confirmLabel = UILabel()
     private lazy var qrCard = PairingQrCardView(core: core, texts: texts)
     private lazy var codeCard = PairingCodeCardView(texts: texts, core: core)
 
@@ -171,6 +174,18 @@ final class PairingViewController: UIViewController {
         detailLabel.numberOfLines = 0
         detailLabel.isHidden = true
 
+        confirmCaption.text = texts.t("pair.confirm_code_caption")
+        confirmCaption.font = .systemFont(ofSize: PairingTheme.smallSize)
+        confirmCaption.textColor = PairingTheme.dim
+        confirmCaption.textAlignment = .center
+        confirmCaption.numberOfLines = 0
+        confirmLabel.font = .monospacedDigitSystemFont(ofSize: PairingTheme.titleSize * 1.4,
+                                                       weight: .bold)
+        confirmLabel.textColor = PairingTheme.foreground
+        confirmLabel.textAlignment = .center
+        confirmLabel.accessibilityIdentifier = "pair_confirm_code"
+        confirmLabel.adjustsFontSizeToFitWidth = true
+
         buildCodeEntryCard()
 
         joinButton.addTarget(self, action: #selector(showCodeEntry),
@@ -195,7 +210,8 @@ final class PairingViewController: UIViewController {
         statusRow.spacing = 12
         statusRow.alignment = .center
 
-        for element in [titleLabel, identityLabel, statusRow, hintLabel, errorLabel, detailLabel,
+        for element in [titleLabel, identityLabel, confirmCaption, confirmLabel, statusRow,
+                        hintLabel, errorLabel, detailLabel,
                         qrCard, codeCard, codeEntryCard, actionStack] as [UIView] {
             contentStack.addArrangedSubview(element)
             element.translatesAutoresizingMaskIntoConstraints = false
@@ -204,7 +220,8 @@ final class PairingViewController: UIViewController {
         // children, so anything left out of this list is laid out at its intrinsic width instead:
         // a multi-line label inside a horizontal row has no useful intrinsic width and collapses
         // to a couple of characters per line, which is what the status row did on an iPad mini.
-        for wide in [titleLabel, identityLabel, statusRow, hintLabel, errorLabel, detailLabel,
+        for wide in [titleLabel, identityLabel, confirmCaption, confirmLabel, statusRow,
+                     hintLabel, errorLabel, detailLabel,
                      qrCard, codeCard, codeEntryCard, actionStack] as [UIView] {
             wide.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
         }
@@ -294,6 +311,11 @@ final class PairingViewController: UIViewController {
         statusLabel.textColor = PairingTheme.foreground
         qrCard.update(payload: snapshot.pairQr)
         codeCard.update(snapshot)
+        let showsConfirmCode = screen == .status && snapshot.state == .unpaired &&
+            !snapshot.confirmCode.isEmpty
+        confirmLabel.text = PairingCopy.groupedCode(snapshot.confirmCode)
+        confirmLabel.isHidden = !showsConfirmCode
+        confirmCaption.isHidden = !showsConfirmCode
 
         if snapshot.state == .persistError { screen = .persistError }
         if screen == .persistError && snapshot.state != .persistError { screen = .status }
@@ -357,7 +379,14 @@ final class PairingViewController: UIViewController {
                 spinner.stopAnimating()
                 setActions([])
             default:
-                statusLabel.text = texts.t("pair.searching")
+                if snapshot.upgradeRejoinRequired {
+                    // Paired under protocol v2: the old key no longer opens the cluster, but the
+                    // local history is kept. Joining again is the only way back.
+                    titleLabel.text = texts.t("pair.upgrade_title")
+                    statusLabel.text = texts.t("pair.upgrade_body")
+                } else {
+                    statusLabel.text = texts.t("pair.searching")
+                }
                 hintLabel.text = texts.t("pair.searching_hint")
                 spinner.startAnimating()
                 setActions([joinButton, createButton, laterButton])

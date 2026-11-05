@@ -1478,8 +1478,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   NSURL *url = [NSURL URLWithString:_videoMetaUrl];
   if (!url) return;
   _videoOrientationBusy = YES;
-  NSURLRequest *req = [NSURLRequest requestWithURL:url
+  NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url
       cachePolicy:NSURLRequestReloadIgnoringLocalCacheData timeoutInterval:1.0];
+  DBAuthorizeLocalMediaRequest(req);
   __weak DBIncomingScreen *wself = self;
   [NSURLConnection sendAsynchronousRequest:req queue:[NSOperationQueue mainQueue]
       completionHandler:^(NSURLResponse *resp, NSData *data, NSError *error) {
@@ -1841,11 +1842,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)onOpenDoor {
   // db_core_open_door publishes the configured unlock action; -3 means nothing
-  // is configured anywhere. Shown but unconfigured must explain itself, because
-  // a silent no-op reads as a broken lock (spec §5.2).
+  // is configured anywhere and -4 that a configured command failed. Each must
+  // explain itself, because a silent no-op reads as a broken lock (spec §5.2).
   int status = [_core openDoor:_door];
-  _hintLabel.text = (status == 0) ? [_texts ts:@"ring.unlock_sent"]
-                                  : [_texts ts:@"unlock.not_configured"];
+  if (status == 0) _hintLabel.text = [_texts ts:@"ring.unlock_sent"];
+  else if (status == -3) _hintLabel.text = [_texts ts:@"unlock.not_configured"];
+  else _hintLabel.text = [_texts ts:@"ring.unlock_failed"];
   _hintLabel.hidden = NO;
 }
 

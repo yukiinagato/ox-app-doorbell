@@ -201,11 +201,9 @@ final class AdaptiveH264MjpegPlayer: NSObject {
     }
 
     private func fetchRotation() {
-        guard let url = h264URL,
-              var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return }
-        components.path = "/video-meta"
-        guard let metaURL = components.url else { return }
-        URLSession.shared.dataTask(with: metaURL) { [weak self] data, response, _ in
+        guard let url = h264URL, let metaURL = LocalMediaAuth.sibling(url, "video-meta")
+        else { return }
+        URLSession.shared.dataTask(with: LocalMediaAuth.request(metaURL, timeout: 5)) { [weak self] data, response, _ in
             guard let self = self, self.running,
                   (response as? HTTPURLResponse)?.statusCode == 200,
                   let data = data,

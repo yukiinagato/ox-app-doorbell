@@ -185,6 +185,28 @@ final class CoreBridge {
                 body: body != nil && bodyLen > 0 ? Data(bytes: body!, count: bodyLen) : Data(),
                 respOut: respOut, statusOut: statusOut)
         }
+        // Binary-safe variant (security protocol v3 §13). Core prefers it when present, so a
+        // response body containing NUL bytes is no longer truncated at the first one.
+        plat.https_request_v3 = { user, method, url, headersJson, body, bodyLen, respOut, lenOut,
+                                  statusOut in
+            guard let method = method, let url = url else { return -1 }
+            guard let result = CoreBridge.httpsFetch(
+                method: String(cString: method), url: String(cString: url),
+                headersJson: headersJson != nil ? String(cString: headersJson!) : "{}",
+                body: body != nil && bodyLen > 0 ? Data(bytes: body!, count: bodyLen) : Data())
+            else { return -1 }
+            statusOut?.pointee = result.status
+            if let out = respOut {
+                let d = result.body
+                guard let raw = malloc(max(d.count, 1)) else { return -1 }
+                if !d.isEmpty {
+                    _ = d.withUnsafeBytes { p in memcpy(raw, p.baseAddress!, d.count) }
+                }
+                out.pointee = raw.assumingMemoryBound(to: UInt8.self)
+                lenOut?.pointee = d.count
+            }
+            return 0
+        }
         plat.secure_get = { _, key, valueOut in
             guard let key = key, let valueOut = valueOut else { return -1 }
             guard let v = Keychain.get(String(cString: key)) else { return -1 }
@@ -259,6 +281,13 @@ final class CoreBridge {
         lifecycle.broadcast()
         lifecycle.unlock()
         if needsStop { stop() }
+        if accepted {
+            // Read under a lease, never under the lifecycle lock that must not surround C code.
+            withCore { c in
+                LocalMediaAuth.setToken(CoreBridge.localTokenFn.flatMap { fn in
+                    fn(c).map { String(cString: $0) } })
+            }
+        }
         return accepted
     }
 
@@ -286,6 +315,7 @@ final class CoreBridge {
         let registration = uiCallbackRegistration
         core = nil
         lifecycle.unlock()
+        LocalMediaAuth.setToken(nil)
         if let handle = handle {
             db_core_set_ui_callback(handle, nil, nil)
             db_core_stop(handle)
@@ -559,6 +589,30 @@ final class CoreBridge {
         if !id.isEmpty { withCore { c in db_core_invite_device(c, id) } }
     }
 
+    private typealias InviteCodeFn = @convention(c) (OpaquePointer?, UnsafePointer<CChar>?,
+                                                     UnsafePointer<CChar>?) -> Void
+    private static let inviteCodeFn: InviteCodeFn? = symbol("db_core_invite_device_code")
+        .map { unsafeBitCast($0, to: InviteCodeFn.self) }
+    private typealias RotateKeyFn = @convention(c) (OpaquePointer?) -> Int32
+    private static let rotateKeyFn: RotateKeyFn? = symbol("db_core_rotate_cluster_key")
+        .map { unsafeBitCast($0, to: RotateKeyFn.self) }
+
+    /// Approve a discovered device with the eight-digit code shown on it (security protocol v3).
+    /// The result arrives as invite_result: confirm_code_mismatch or pk_conflict on failure.
+    func inviteDevice(_ id: String, confirmCode: String) {
+        guard !id.isEmpty, let invite = CoreBridge.inviteCodeFn else { return }
+        withCore { c in invite(c, id, confirmCode) }
+    }
+
+    var supportsKeyRotation: Bool { return CoreBridge.rotateKeyFn != nil }
+
+    /// Replaces the cluster key; 0 on success, -2 while unpaired or when the key could not be
+    /// stored. Emits cluster_key_changed.
+    func rotateClusterKey() -> Int32 {
+        guard let rotate = CoreBridge.rotateKeyFn else { return -1 }
+        return withCore { c in rotate(c) } ?? -1
+    }
+
     /// Invite an address/id/public-key triple straight from a scanned Add QR, bypassing discovery.
     func inviteDirect(addr: String, id: String, pk: String) {
         withCore { c -> Void in
@@ -700,7 +754,8 @@ final class CoreBridge {
     }
 
     /// Trigger the configured unlock action. 0 queued the action, -3 means nothing is configured
-    /// anywhere, and the shell must say so rather than reporting a silent success.
+    /// anywhere, -4 means a configured command failed to run, and the shell must say which
+    /// rather than reporting a silent success.
     func openDoor(_ door: String) -> Int32 {
         return withCore { c -> Int32 in
             guard !door.isEmpty else { return -1 }
@@ -784,6 +839,10 @@ final class CoreBridge {
         return dlsym(UnsafeMutableRawPointer(bitPattern: -2), name)
     }
 
+    private typealias LocalTokenFn = @convention(c) (OpaquePointer?) -> UnsafePointer<CChar>?
+    private static let localTokenFn: LocalTokenFn? = symbol("db_core_local_token")
+        .map { unsafeBitCast($0, to: LocalTokenFn.self) }
+
     private static let setConfigKeyFn: SetConfigKeyFn? = symbol("db_core_set_config_json")
         .map { unsafeBitCast($0, to: SetConfigKeyFn.self) }
     private static let deleteConfigKeyFn: DeleteConfigKeyFn? = symbol("db_core_delete_config_key")
@@ -822,7 +881,8 @@ final class CoreBridge {
                 let data = Data(bytes: UnsafeRawPointer(raw), count: strlen(raw))
                 let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
                 return WriteOutcome(ok: ConfigUtil.bool(object, "ok", false),
-                                    error: ConfigUtil.str(object, "err") ?? "",
+                                    error: ConfigUtil.str(object, "error")
+                                        ?? ConfigUtil.str(object, "err") ?? "",
                                     warnings: (object?["warnings"] as? [[String: Any]]) ?? [])
             }
             guard let set = CoreBridge.setConfigKeyFn,
@@ -836,7 +896,9 @@ final class CoreBridge {
                 let code = operation.value.map { set(c, operation.key, $0) }
                     ?? remove(c, operation.key)
                 guard code == 0 else {
-                    return WriteOutcome(ok: false, error: "config_persistence_failed",
+                    return WriteOutcome(ok: false,
+                                        error: code == CoreBridge.resultAdminRequired
+                                            ? "admin_required" : "config_persistence_failed",
                                         warnings: lastWriteWarnings(c))
                 }
             }
@@ -866,6 +928,20 @@ final class CoreBridge {
         .map { unsafeBitCast($0, to: AdminSetFn.self) }
 
     var supportsAdminPassword: Bool { return CoreBridge.adminVerifyFn != nil }
+
+    /// Returned by Core's int-valued configuration writes while the native admin window is
+    /// closed (security protocol v3 §10). The batch form reports `"error":"admin_required"`.
+    static let resultAdminRequired: Int32 = -20
+
+    private typealias AdminLockFn = @convention(c) (OpaquePointer?) -> Void
+    private static let adminLockFn: AdminLockFn? = symbol("db_core_admin_lock")
+        .map { unsafeBitCast($0, to: AdminLockFn.self) }
+
+    /// Closes the native admin window that a successful password check opened. Called whenever
+    /// an administrator screen closes and when the app leaves the foreground.
+    func adminLock() {
+        withCore { c in CoreBridge.adminLockFn?(c) }
+    }
 
     /// Core's answer, not a boolean: a wrong password and a cluster that has no password yet are
     /// different situations, and treating either as "accepted" would open the settings screen.
@@ -1079,9 +1155,41 @@ final class CoreBridge {
         method: String, url: String, headersJson: String, body: Data,
         respOut: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?,
         statusOut: UnsafeMutablePointer<Int32>?) -> Int32 {
-        guard let u = URL(string: url) else { return -1 }
+        guard let result = httpsFetch(method: method, url: url, headersJson: headersJson,
+                                      body: body) else { return -1 }
+        statusOut?.pointee = result.status
+        if let out = respOut {
+            let d = result.body
+            guard let raw = malloc(d.count + 1) else { return -1 }
+            let buf = raw.assumingMemoryBound(to: CChar.self)
+            if !d.isEmpty {
+                _ = d.withUnsafeBytes { p in memcpy(buf, p.baseAddress!, d.count) }
+            }
+            buf[d.count] = 0
+            out.pointee = buf
+        }
+        return 0
+    }
+
+    /// Request timeout for platform HTTPS. Core's callback contract is synchronous, so the caller
+    /// thread waits; the wait is bounded by this value plus a short grace, never unbounded.
+    static let httpsTimeout: TimeInterval = 15
+
+    private static let httpsSession: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = httpsTimeout
+        configuration.timeoutIntervalForResource = httpsTimeout
+        configuration.requestCachePolicy = .reloadIgnoringLocalCacheData
+        return URLSession(configuration: configuration)
+    }()
+
+    /// Performs one platform HTTPS request for Core. Core runs these on its own worker threads;
+    /// a call that arrives on the main thread is refused instead of freezing the UI.
+    static func httpsFetch(method: String, url: String, headersJson: String,
+                           body: Data) -> (status: Int32, body: Data)? {
+        guard !Thread.isMainThread, let u = URL(string: url) else { return nil }
         var req = URLRequest(url: u, cachePolicy: .reloadIgnoringLocalCacheData,
-                             timeoutInterval: 40)
+                             timeoutInterval: httpsTimeout)
         req.httpMethod = method
         if let hd = headersJson.data(using: .utf8),
            let headers = (try? JSONSerialization.jsonObject(with: hd)) as? [String: Any] {
@@ -1093,28 +1201,21 @@ final class CoreBridge {
         var httpStatus: Int32 = 0
         var transportOk = false
         let sem = DispatchSemaphore(value: 0)
-        URLSession.shared.dataTask(with: req) { data, resp, _ in
+        let task = httpsSession.dataTask(with: req) { data, resp, _ in
             if let http = resp as? HTTPURLResponse {
                 transportOk = true
                 httpStatus = Int32(http.statusCode)
                 respData = data
             }
             sem.signal()
-        }.resume()
-        sem.wait()
-        guard transportOk else { return -1 }
-        statusOut?.pointee = httpStatus
-        if let out = respOut {
-            let d = respData ?? Data()
-            guard let raw = malloc(d.count + 1) else { return -1 }
-            let buf = raw.assumingMemoryBound(to: CChar.self)
-            if !d.isEmpty {
-                _ = d.withUnsafeBytes { p in memcpy(buf, p.baseAddress!, d.count) }
-            }
-            buf[d.count] = 0
-            out.pointee = buf
         }
-        return 0
+        task.resume()
+        if sem.wait(timeout: .now() + httpsTimeout + 2) == .timedOut {
+            task.cancel()
+            return nil
+        }
+        guard transportOk else { return nil }
+        return (httpStatus, respData ?? Data())
     }
 }
 
@@ -1172,5 +1273,63 @@ enum Keychain {
         ]
         let status = SecItemDelete(query as CFDictionary)
         return status == errSecSuccess || status == errSecItemNotFound
+    }
+}
+
+
+/// The loopback media credential (security protocol v3 §8). Every request this shell makes to its
+/// own Core's media routes carries `X-Doorbell-Local`; requests anywhere else never do.
+enum LocalMediaAuth {
+    static let header = "X-Doorbell-Local"
+    private static let lock = NSLock()
+    private static var token: String?
+
+    static func setToken(_ value: String?) {
+        lock.lock()
+        token = (value?.isEmpty ?? true) ? nil : value
+        lock.unlock()
+    }
+
+    static var currentToken: String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return token
+    }
+
+    static func isLoopback(_ url: URL?) -> Bool {
+        guard let host = url?.host?.lowercased() else { return false }
+        return host == "127.0.0.1" || host == "localhost" || host == "::1" || host == "[::1]"
+    }
+
+    /// Adds the credential when `request` targets this device's Core.
+    static func authorize(_ request: inout URLRequest) {
+        guard isLoopback(request.url), let token = currentToken else { return }
+        request.setValue(token, forHTTPHeaderField: header)
+    }
+
+    /// The sibling resource of a media URL: `.../stream.mp4` → `.../video-meta`. Core publishes
+    /// peer media under `/media/peer/<id>/`, so replacing the whole path would lose the peer.
+    static func sibling(_ url: URL, _ name: String) -> URL? {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+        var path = components.path
+        if let slash = path.range(of: "/", options: .backwards) {
+            path = String(path[path.startIndex..<slash.lowerBound])
+        } else {
+            path = ""
+        }
+        components.path = path + "/" + name
+        components.query = nil
+        components.fragment = nil
+        return components.url
+    }
+
+    static func request(_ url: URL, timeout: TimeInterval = 10,
+                        cachePolicy: URLRequest.CachePolicy = .reloadIgnoringLocalCacheData)
+        -> URLRequest {
+        var request = URLRequest(url: url, cachePolicy: cachePolicy, timeoutInterval: timeout)
+        authorize(&request)
+        return request
     }
 }

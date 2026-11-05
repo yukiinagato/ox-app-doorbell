@@ -61,7 +61,7 @@ final class MjpegClient: NSObject, URLSessionDataDelegate {
         cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
         let s = URLSession(configuration: cfg, delegate: self, delegateQueue: nil)
         session = s
-        let t = s.dataTask(with: url)
+        let t = s.dataTask(with: LocalMediaAuth.request(url, timeout: 10))
         task = t
         t.resume()
     }

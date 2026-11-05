@@ -174,8 +174,22 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         applySemanticStyles()
     }
 
+    /// UIKit also calls this when a full-screen child (the announcement dialog on a compact
+    /// device or on tvOS) covers the call. That is not the resident leaving: the call, its media
+    /// and its event handler stay up, and only an actual dismissal tears them down.
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
+        guard presentedViewController == nil || isBeingDismissed ||
+              presentingViewController == nil else { return }
+        tearDownCall()
+    }
+
+    private var tornDown = false
+
+    /// The single owner of hang-up and media release when this screen goes away.
+    private func tearDownCall() {
+        guard !tornDown else { return }
+        tornDown = true
         core.removeHandler(IncomingViewController.handlerKey)
         debugTimer?.invalidate()
         debugTimer = nil
@@ -396,35 +410,14 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         monitorButton.accessibilityIdentifier = "incoming_monitor"
         unlockButton.accessibilityIdentifier = "incoming_unlock"
         quickReplyButton.accessibilityIdentifier = "incoming_quick_reply"
-        if core.sipBackend != "pjsip" {
-            answerButton.isHidden = true
-            monitorButton.isHidden = true
-            micButton.isHidden = true
-        }
-        #if os(tvOS)
-        answerButton.isHidden = true
-        micButton.isHidden = true
-        unlockButton.isHidden = true
-        #endif
-        // Two compact rows keep the controls touch-sized while preserving the video area.
-        let primaryActions = UIStackView(arrangedSubviews: [monitorButton, answerButton, micButton])
-        primaryActions.axis = .horizontal
-        primaryActions.spacing = 8
-        primaryActions.distribution = .fillEqually
-        let secondaryActions = UIStackView(arrangedSubviews: [unlockButton, quickReplyButton,
-                                                               ignoreButton])
-        secondaryActions.axis = .horizontal
-        secondaryActions.spacing = 8
-        secondaryActions.distribution = .fillEqually
-        let actionRows = UIStackView(arrangedSubviews: [primaryActions, secondaryActions])
-        actionRows.axis = .vertical
-        actionRows.spacing = 8
-        for button in [monitorButton, answerButton, micButton, unlockButton,
-                       quickReplyButton, ignoreButton] {
-            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 56).isActive = true
-        }
-        quickReplyButton.titleLabel?.font = .systemFont(ofSize: 17, weight: .semibold)
-        quickReplyButton.contentEdgeInsets = UIEdgeInsets(top: 12, left: 4, bottom: 12, right: 4)
+        applyButtonVisibility()
+        // The fixed action zone (ui-guidelines §4): Answer — the largest, positive control —
+        // then Reply and Ignore; Monitor, Unlock and the in-call microphone below. In a call,
+        // End takes Answer's place, so the hand never has to look for it.
+        let actionRows = ActionZoneView()
+        actionRows.setActions(primary: [answerButton, quickReplyButton, ignoreButton],
+                              secondary: [monitorButton, unlockButton, micButton])
+        actionRows.accessibilityIdentifier = "incoming_actions"
 
         replyStack.isHidden = true
 
@@ -515,15 +508,13 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     }
 
     private func styleActionButton(_ b: UIButton, prominent: Bool) {
-        b.titleLabel?.font = .systemFont(ofSize: 22, weight: .semibold)
+        b.titleLabel?.font = TypeRole.title.font(weight: .semibold, base: prominent ? 20 : 17)
         b.titleLabel?.adjustsFontSizeToFitWidth = true
         b.titleLabel?.minimumScaleFactor = 0.6
         #if os(iOS)
         b.setTitleColor(prominent ? .black : .white, for: .normal)
-        b.backgroundColor = prominent
-            ? UIColor(red: 0.35, green: 0.78, blue: 0.42, alpha: 1)
-            : UIColor(white: 1, alpha: 0.14)
-        b.layer.cornerRadius = 12
+        b.backgroundColor = prominent ? ColorRole.positive : UIColor(white: 1, alpha: 0.14)
+        b.layer.cornerRadius = Radius.card
         b.contentEdgeInsets = UIEdgeInsets(top: 14, left: 10, bottom: 14, right: 10)
         #endif
     }
@@ -565,8 +556,23 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
                                        focusColor: palette.onAccent)
         }
         micButton.isEnabled = inCall
-        monitorButton.isHidden = inCall
-        micButton.isHidden = !inCall
+        applyButtonVisibility()
+    }
+
+    /// The one place that decides which call controls exist. A build without PJSIP cannot answer,
+    /// monitor or mute; tvOS has no microphone and no unlock; the in-call state swaps the
+    /// pre-answer controls for the microphone. Unlock visibility is the administrator's choice
+    /// and lives in `updateUnlockVisibility`.
+    private func applyButtonVisibility() {
+        let sipCapable = core.sipBackend == "pjsip"
+        #if os(tvOS)
+        let hasMicrophone = false
+        #else
+        let hasMicrophone = true
+        #endif
+        answerButton.isHidden = !sipCapable || !hasMicrophone
+        monitorButton.isHidden = !sipCapable || inCall
+        micButton.isHidden = !sipCapable || !hasMicrophone || !inCall
         quickReplyButton.isHidden = inCall
         ignoreButton.isHidden = inCall
     }
@@ -599,9 +605,8 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     private func updateDoorStationAdminEntry(status: [String: Any]?) {
         let peer = ConfigUtil.findDoorPeer(status, door: door)
         adminQr.setTargetURL(ConfigUtil.peerAdminURL(peer))
-        let power = (status?["self"] as? [String: Any])?["power"] as? [String: Any]
-        adminQr.setDetailText(DoorbellTheme.versionLine(name: boot.name,
-            coreVersion: DoorbellTheme.coreVersion(), texts: texts, power: power))
+        // The caption describes the device the code opens: the door station, not this panel.
+        adminQr.setDetailText(DoorbellTheme.peerVersionLine(peer: peer, texts: texts))
     }
 
     /// The bare text on this screen — the door name, the prompt, the counters line — takes Core's
@@ -632,8 +637,12 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
 
     private func openNoticeDialog() {
         guard presentedViewController == nil else { return }
-        present(NoticeDialogViewController(core: core, texts: texts, httpPort: boot.httpPort,
-                                           lang: boot.uiLang, door: door), animated: true)
+        let dialog = NoticeDialogViewController(core: core, texts: texts, httpPort: boot.httpPort,
+                                                lang: boot.uiLang, door: door)
+        // Over the call, never instead of it: the call screen stays in the hierarchy, so its
+        // media and SIP dialog are not torn down while the announcement is edited.
+        dialog.modalPresentationStyle = NoticeDialogViewController.overCallPresentationStyle
+        present(dialog, animated: true)
     }
 
     private func updateBadges() {
@@ -830,8 +839,16 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         }
     }
 
+    /// Dismisses this screen together with anything presented over it. `dismiss` on self would
+    /// only close the topmost child (for example an open announcement dialog) and leave the
+    /// ended call on screen. Dismissing through the presenter keeps a screen the call was
+    /// stacked over (Settings, History) where the resident left it.
     private func close() {
-        dismiss(animated: true)
+        if let presenter = presentingViewController {
+            presenter.dismiss(animated: true)
+        } else {
+            dismiss(animated: true)
+        }
     }
 
     private func demoteSupersededAnswer() {
@@ -941,9 +958,22 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         updateToggleTitles()
     }
 
+    /// Quick replies open as a bottom sheet (compact) or a popover (wider windows). The call
+    /// screen stays underneath and alive, and one tap sends.
     @objc private func onToggleReplies() {
-        replyExpanded.toggle()
-        replyStack.isHidden = !replyExpanded || replyStack.arrangedSubviews.isEmpty
+        guard !inCall, presentedViewController == nil,
+              let replies = ConfigUtil.dig(cfg, "quick_replies") as? [String: Any],
+              !replies.isEmpty else { return }
+        let lang = visitorLang.isEmpty ? "ja" : visitorLang
+        let choices = ConfigUtil.sortedByOrder(replies).map { id in
+            ActionSheetController.Choice(id: id, title: ConfigUtil.labelOf(
+                replies[id] as? [String: Any], lang, id))
+        }
+        let sheet = ActionSheetController(title: texts.t("ring.quick_reply"), choices: choices,
+                                          palette: palette, source: quickReplyButton) {
+            [weak self] choice in self?.sendQuickReply(id: choice.id, title: choice.title)
+        }
+        present(sheet, animated: !Motion.reduced)
     }
 
     /// The debug line is opt-in and the choice is remembered on this device.
@@ -962,23 +992,27 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             + " · \(stats.fps) fps · drop \(stats.dropped)"
     }
 
-    /// The existing open-door action. Core answers -3 when nothing is configured anywhere, which
-    /// is the case the owner asked to be explained rather than silently ignored.
+    /// The existing open-door action. Core answers -3 when nothing is configured anywhere and -4
+    /// when a configured command failed to run; each is explained rather than silently ignored.
     @objc private func onUnlock() {
-        let result = core.openDoor(door)
-        hintLabel.text = result == 0 ? texts.t("ring.unlock_sent")
-            : texts.t("door.unlock_not_configured")
+        switch core.openDoor(door) {
+        case 0: hintLabel.text = texts.t("ring.unlock_sent")
+        case -3: hintLabel.text = texts.t("door.unlock_not_configured")
+        default: hintLabel.text = texts.t("ring.unlock_failed")
+        }
         hintLabel.isHidden = false
     }
 
     @objc private func onReply(_ sender: UIButton) {
-        guard !inCall else { return }
         guard let id = sender.accessibilityIdentifier?.dropFirst("qr_button_".count) else { return }
-        let accepted = core.quickReplyV2(replyId: String(id), door: door, callId: callId,
+        sendQuickReply(id: String(id), title: sender.currentTitle ?? "")
+    }
+
+    private func sendQuickReply(id: String, title: String) {
+        guard !inCall else { return }
+        let accepted = core.quickReplyV2(replyId: id, door: door, callId: callId,
                                          stageRevision: stageRevision)
-        hintLabel.text = accepted
-            ? texts.t("reply.sent", sender.currentTitle ?? "")
-            : texts.t("reply.failed")
+        hintLabel.text = accepted ? texts.t("reply.sent", title) : texts.t("reply.failed")
         hintLabel.isHidden = false
         if accepted && !inCall { restartReturnCountdown() }
     }
@@ -1128,5 +1162,119 @@ final class PaddedLabel: UILabel {
         let s = super.intrinsicContentSize
         return CGSize(width: s.width + insets.left + insets.right,
                       height: s.height + insets.top + insets.bottom)
+    }
+}
+
+/// One ring as the router sees it.
+struct IncomingCallRequest {
+    let door: String
+    let purpose: String
+    let visitorLang: String
+    let callId: String
+    let stageRevision: Int
+}
+
+/// The single owner of the decision to show an incoming call, shared by the iOS and tvOS app
+/// delegates. A ring always wins over the screen in front of it:
+/// - an Incoming screen anywhere in the stack takes the new call itself;
+/// - a Monitor session is closed first, because it holds its own SIP dialog to a door;
+/// - any other screen (Settings, History, announcements, the offline list, a PIN prompt, an
+///   alert) stays where it is and the call is stacked over it, so nothing is lost;
+/// - during a presentation or dismissal, or while the pairing gate is up, the ring is queued
+///   and retried, never dropped.
+/// The chime gate records a revision only once the screen is actually on display, so a ring
+/// that could not be shown is not spent.
+final class IncomingCallRouter {
+    typealias RootProvider = () -> UIViewController?
+
+    private let root: RootProvider
+    private let blocked: () -> Bool
+    private let makeScreen: (IncomingCallRequest) -> IncomingViewController?
+    private var gate = CallChimeRevisionGate()
+    private var pending: IncomingCallRequest?
+    private var retryScheduled = false
+    private var attempts = 0
+
+    static let retryInterval: TimeInterval = 0.25
+    static let retryLimit = 40
+
+    init(root: @escaping RootProvider, blocked: @escaping () -> Bool,
+         makeScreen: @escaping (IncomingCallRequest) -> IncomingViewController?) {
+        self.root = root
+        self.blocked = blocked
+        self.makeScreen = makeScreen
+    }
+
+    /// Feeds one Core UI event. Only a targeted `chime` opens the screen; a cancellation or end
+    /// of the waiting call drops a queued ring.
+    func handle(_ ev: [String: Any]) {
+        let kind = ConfigUtil.evStr(ev, "t")
+        if kind == "chime" {
+            let request = IncomingCallRequest(
+                door: ConfigUtil.evStr(ev, "door"), purpose: ConfigUtil.evStr(ev, "purpose"),
+                visitorLang: ConfigUtil.evStr(ev, "visitor_lang"),
+                callId: ConfigUtil.evStr(ev, "call_id"),
+                stageRevision: ConfigUtil.int(ev, "stage_revision", 0))
+            guard !request.callId.isEmpty,
+                  gate.wouldAccept(callId: request.callId,
+                                   stageRevision: request.stageRevision) else { return }
+            if pending?.callId != request.callId { attempts = 0 }
+            pending = request
+            route()
+            return
+        }
+        let type = ConfigUtil.evStr(ev, "type")
+        if kind == "event", type == "call_cancelled" || type == "call_ended",
+           ConfigUtil.evStr(ev, "call_id") == pending?.callId {
+            pending = nil
+        }
+    }
+
+    private func route() {
+        guard let request = pending, let base = root() else { return }
+        var chain: [UIViewController] = [base]
+        while let next = chain.last?.presentedViewController { chain.append(next) }
+
+        if let incoming = chain.compactMap({ $0 as? IncomingViewController }).last {
+            incoming.receive(door: request.door, purpose: request.purpose,
+                             visitorLang: request.visitorLang, callId: request.callId,
+                             stageRevision: request.stageRevision)
+            shown(request)
+            return
+        }
+        if blocked() || chain.contains(where: { $0.isBeingPresented || $0.isBeingDismissed }) {
+            retryLater()
+            return
+        }
+        if let index = chain.firstIndex(where: { $0 is MonitorViewController }), index > 0 {
+            chain[index - 1].dismiss(animated: false) { [weak self] in self?.route() }
+            return
+        }
+        guard let top = chain.last, let screen = makeScreen(request) else { return }
+        top.present(screen, animated: true)
+        shown(request)
+    }
+
+    private func shown(_ request: IncomingCallRequest) {
+        _ = gate.accept(callId: request.callId, stageRevision: request.stageRevision)
+        if pending?.callId == request.callId { pending = nil }
+        attempts = 0
+    }
+
+    private func retryLater() {
+        guard !retryScheduled else { return }
+        attempts += 1
+        guard attempts <= IncomingCallRouter.retryLimit else {
+            ShellLog.note("incoming route gave up call_id=\(pending?.callId ?? "")")
+            pending = nil
+            attempts = 0
+            return
+        }
+        retryScheduled = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + IncomingCallRouter.retryInterval) {
+            [weak self] in
+            self?.retryScheduled = false
+            self?.route()
+        }
     }
 }

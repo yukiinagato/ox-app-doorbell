@@ -19,6 +19,17 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
     private var openPairingObserver: NSObjectProtocol?
     private var resetObserver: NSObjectProtocol?
     private var pairingResetPending = false
+    private lazy var incomingRouter = IncomingCallRouter(
+        root: { [weak self] in self?.window?.rootViewController },
+        blocked: { [weak self] in self?.pairingGate != nil },
+        makeScreen: { [weak self] request in
+            guard let self = self else { return nil }
+            return IncomingViewController(core: self.core, boot: self.boot, door: request.door,
+                                          purpose: request.purpose,
+                                          visitorLang: request.visitorLang,
+                                          callId: request.callId,
+                                          stageRevision: request.stageRevision)
+        })
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions:
@@ -160,6 +171,10 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         ScreenAwake.apply()
     }
 
+    func applicationDidEnterBackground(_ application: UIApplication) {
+        core.adminLock()
+    }
+
     func applicationWillTerminate(_ application: UIApplication) {
         runtime?.stop(clean: true)
         core.stop()
@@ -191,12 +206,7 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
             if pairingGate == nil { presentPairingPersistenceError() }
         }
         if t == "pairing_state" || t == "paired" { evaluatePairingGate() }
-        if t == "chime" {
-            presentIncoming(door: ConfigUtil.evStr(ev, "door"),
-                            purpose: ConfigUtil.evStr(ev, "purpose"),
-                            visitorLang: ConfigUtil.evStr(ev, "visitor_lang"),
-                            callId: ConfigUtil.evStr(ev, "call_id"))
-        }
+        incomingRouter.handle(ev)
     }
 
     private func soundValue(_ key: String, _ fallback: String) -> String {
@@ -214,20 +224,6 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         root.present(alert, animated: true)
     }
 
-    private func presentIncoming(door: String, purpose: String, visitorLang: String,
-                                 callId: String) {
-        guard !callId.isEmpty else { return }
-        guard let root = window?.rootViewController else { return }
-        if let vc = root.presentedViewController as? IncomingViewController {
-            vc.receive(door: door, purpose: purpose, visitorLang: visitorLang, callId: callId)
-            return
-        }
-        guard root.presentedViewController == nil else { return }
-        let vc = IncomingViewController(core: core, boot: boot, door: door,
-                                        purpose: purpose, visitorLang: visitorLang,
-                                        callId: callId)
-        root.present(vc, animated: true)
-    }
 }
 
 private final class TVActivityWindow: UIWindow {

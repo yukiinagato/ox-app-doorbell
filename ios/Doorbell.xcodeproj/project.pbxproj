@@ -21,6 +21,7 @@
 		AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */; };
 		AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000017 /* SosVisibilityTests.swift */; };
 		AC000000000000000000001A /* ClusterAndClockTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000019 /* ClusterAndClockTests.swift */; };
+		E39CD4A21B90E5412DE8E9D1 /* SettingsCatalogTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDAD294A1E4281CAE8E43DAE /* SettingsCatalogTests.swift */; };
 		AC000000000000000000001C /* CoreBridgeLifecycleTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC000000000000000000001B /* CoreBridgeLifecycleTests.swift */; };
 		FB0000000000000000000021 /* CoreBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000002 /* CoreBridge.swift */; };
 		FB00000000000000000000C0 /* CoreEventDispatchGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA00000000000000000000C0 /* CoreEventDispatchGate.swift */; };
@@ -141,8 +142,20 @@
 		FB0000000000000000000091 /* DoorbellClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000031 /* DoorbellClock.swift */; };
 		F90000000000000000000071 /* DoorbellClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000031 /* DoorbellClock.swift */; };
 		FB0000000000000000000072 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
+		DEB9A3612E2F3F95486207AD /* DoorbellLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */; };
+		E802D0E23A11C6650FB13367 /* SettingsUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E836B9F8D7829313832B7060 /* SettingsUI.swift */; };
+		E8101E66FAE61287262E6AE3 /* SettingsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */; };
+		E064C8AD47D8C3986393B292 /* SettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E84E39C4B00251F5A31125 /* SettingsModel.swift */; };
 		FB0000000000000000000092 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
+		D4748C3C60EF7B9432F4BA35 /* DoorbellLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */; };
+		E520E971266FD58DCC1A2F64 /* SettingsUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E836B9F8D7829313832B7060 /* SettingsUI.swift */; };
+		E14419BC401646000109D42E /* SettingsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */; };
+		E1EAB6AE8BDBA9407E73535C /* SettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E84E39C4B00251F5A31125 /* SettingsModel.swift */; };
 		F90000000000000000000072 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
+		DEE168A331E0F68CF19FACFE /* DoorbellLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */; };
+		ED023E838B1F0E5E0AD016D1 /* SettingsUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E836B9F8D7829313832B7060 /* SettingsUI.swift */; };
+		E6B15835F88E48E248161291 /* SettingsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */; };
+		E0A28CEB5B39E2FE6DBA4C41 /* SettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E84E39C4B00251F5A31125 /* SettingsModel.swift */; };
 		FB0000000000000000000073 /* SosSlideControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000033 /* SosSlideControl.swift */; };
 		FB0000000000000000000093 /* SosSlideControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000033 /* SosSlideControl.swift */; };
 		F90000000000000000000073 /* SosSlideControl.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000033 /* SosSlideControl.swift */; };
@@ -189,6 +202,7 @@
 		AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorRetryPolicyTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000017 /* SosVisibilityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SosVisibilityTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000019 /* ClusterAndClockTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClusterAndClockTests.swift; sourceTree = "<group>"; };
+		EDAD294A1E4281CAE8E43DAE /* SettingsCatalogTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCatalogTests.swift; sourceTree = "<group>"; };
 		AC000000000000000000001B /* CoreBridgeLifecycleTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridgeLifecycleTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000001 /* BridgingHeader.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = BridgingHeader.h; sourceTree = "<group>"; };
 		FA0000000000000000000002 /* CoreBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoreBridge.swift; sourceTree = "<group>"; };
@@ -243,6 +257,10 @@
 		FA0000000000000000000030 /* DoorbellTheme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorbellTheme.swift; sourceTree = "<group>"; };
 		FA0000000000000000000031 /* DoorbellClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorbellClock.swift; sourceTree = "<group>"; };
 		FA0000000000000000000032 /* ConfigWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigWriter.swift; sourceTree = "<group>"; };
+		DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorbellLayout.swift; sourceTree = "<group>"; };
+		E836B9F8D7829313832B7060 /* SettingsUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsUI.swift; sourceTree = "<group>"; };
+		E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCatalog.swift; sourceTree = "<group>"; };
+		E5E84E39C4B00251F5A31125 /* SettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModel.swift; sourceTree = "<group>"; };
 		FA0000000000000000000033 /* SosSlideControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SosSlideControl.swift; sourceTree = "<group>"; };
 		FA0000000000000000000034 /* NoticeSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeSupport.swift; sourceTree = "<group>"; };
 		FA0000000000000000000035 /* CallHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallHistory.swift; sourceTree = "<group>"; };
@@ -305,6 +323,10 @@
 				FA0000000000000000000030 /* DoorbellTheme.swift */,
 				FA0000000000000000000031 /* DoorbellClock.swift */,
 				FA0000000000000000000032 /* ConfigWriter.swift */,
+				DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */,
+				E836B9F8D7829313832B7060 /* SettingsUI.swift */,
+				E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */,
+				E5E84E39C4B00251F5A31125 /* SettingsModel.swift */,
 				FA0000000000000000000033 /* SosSlideControl.swift */,
 				FA0000000000000000000034 /* NoticeSupport.swift */,
 				FA0000000000000000000035 /* CallHistory.swift */,
@@ -372,6 +394,7 @@
 				AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */,
 				AC0000000000000000000017 /* SosVisibilityTests.swift */,
 				AC0000000000000000000019 /* ClusterAndClockTests.swift */,
+				EDAD294A1E4281CAE8E43DAE /* SettingsCatalogTests.swift */,
 				AC000000000000000000001B /* CoreBridgeLifecycleTests.swift */,
 			);
 			path = DoorbellTests;
@@ -662,6 +685,7 @@
 				AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */,
 				AC0000000000000000000018 /* SosVisibilityTests.swift in Sources */,
 				AC000000000000000000001A /* ClusterAndClockTests.swift in Sources */,
+				E39CD4A21B90E5412DE8E9D1 /* SettingsCatalogTests.swift in Sources */,
 				AC000000000000000000001C /* CoreBridgeLifecycleTests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -673,6 +697,10 @@
 				FB0000000000000000000070 /* DoorbellTheme.swift in Sources */,
 				FB0000000000000000000071 /* DoorbellClock.swift in Sources */,
 				FB0000000000000000000072 /* ConfigWriter.swift in Sources */,
+				DEB9A3612E2F3F95486207AD /* DoorbellLayout.swift in Sources */,
+				E802D0E23A11C6650FB13367 /* SettingsUI.swift in Sources */,
+				E8101E66FAE61287262E6AE3 /* SettingsCatalog.swift in Sources */,
+				E064C8AD47D8C3986393B292 /* SettingsModel.swift in Sources */,
 				FB0000000000000000000073 /* SosSlideControl.swift in Sources */,
 				FB0000000000000000000074 /* NoticeSupport.swift in Sources */,
 				FB0000000000000000000075 /* CallHistory.swift in Sources */,
@@ -723,6 +751,10 @@
 				FB0000000000000000000090 /* DoorbellTheme.swift in Sources */,
 				FB0000000000000000000091 /* DoorbellClock.swift in Sources */,
 				FB0000000000000000000092 /* ConfigWriter.swift in Sources */,
+				D4748C3C60EF7B9432F4BA35 /* DoorbellLayout.swift in Sources */,
+				E520E971266FD58DCC1A2F64 /* SettingsUI.swift in Sources */,
+				E14419BC401646000109D42E /* SettingsCatalog.swift in Sources */,
+				E1EAB6AE8BDBA9407E73535C /* SettingsModel.swift in Sources */,
 				FB0000000000000000000093 /* SosSlideControl.swift in Sources */,
 				FB0000000000000000000094 /* NoticeSupport.swift in Sources */,
 				FB0000000000000000000095 /* CallHistory.swift in Sources */,
@@ -767,6 +799,10 @@
 				F90000000000000000000070 /* DoorbellTheme.swift in Sources */,
 				F90000000000000000000071 /* DoorbellClock.swift in Sources */,
 				F90000000000000000000072 /* ConfigWriter.swift in Sources */,
+				DEE168A331E0F68CF19FACFE /* DoorbellLayout.swift in Sources */,
+				ED023E838B1F0E5E0AD016D1 /* SettingsUI.swift in Sources */,
+				E6B15835F88E48E248161291 /* SettingsCatalog.swift in Sources */,
+				E0A28CEB5B39E2FE6DBA4C41 /* SettingsModel.swift in Sources */,
 				F90000000000000000000073 /* SosSlideControl.swift in Sources */,
 				F90000000000000000000074 /* NoticeSupport.swift in Sources */,
 				F90000000000000000000075 /* CallHistory.swift in Sources */,

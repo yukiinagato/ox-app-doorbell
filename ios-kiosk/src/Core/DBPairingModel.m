@@ -12,6 +12,9 @@ static NSArray *DBPairingKnownErrorCodes(void) {
       @"timeout", @"closed", @"join_in_progress", @"already_paired",
       @"decrypt_failed", @"bad_payload", @"bad_challenge",
       @"local_persist_failed", @"persist_failed", @"host_zero_psk", @"no_ack",
+      @"confirm_code_required", @"confirm_code_mismatch", @"pk_conflict",
+      @"protocol_upgrade_required", @"rekey_required", @"unauthorized_peer",
+      @"bad_signature",
     ];
   }
   return codes;

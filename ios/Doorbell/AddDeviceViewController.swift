@@ -55,6 +55,10 @@ final class AddDeviceViewController: UIViewController {
     private lazy var unpairButton = PairingTheme.button(texts.t("pair.clear_title"))
     private lazy var closeButton = PairingTheme.button(texts.t("monitor.close"))
     private let unpairedNotice = UILabel()
+    /// Handshake rejections and key rotations, reported by Core events.
+    private let peerNotice = UILabel()
+    /// Members that must be upgraded or re-keyed, from the snapshot's `security` section.
+    private let securityNotice = UILabel()
     private lazy var createButton = PairingTheme.button(texts.t("pair.create_home"), filled: true)
 
     init(core: CoreBridge, boot: BootConfig, texts: Texts) {
@@ -92,6 +96,7 @@ final class AddDeviceViewController: UIViewController {
         super.viewDidDisappear(animated)
         pollTimer?.invalidate()
         pollTimer = nil
+        if isBeingDismissed || presentingViewController == nil { core.adminLock() }
     }
 
 
@@ -196,6 +201,14 @@ final class AddDeviceViewController: UIViewController {
         unpairedNotice.textColor = PairingTheme.danger
         unpairedNotice.numberOfLines = 0
         unpairedNotice.isHidden = true
+        for notice in [peerNotice, securityNotice] {
+            notice.font = .systemFont(ofSize: PairingTheme.smallSize)
+            notice.textColor = PairingTheme.danger
+            notice.numberOfLines = 0
+            notice.isHidden = true
+        }
+        peerNotice.accessibilityIdentifier = "add_device_peer_notice"
+        securityNotice.accessibilityIdentifier = "add_device_security_notice"
         createButton.addTarget(self, action: #selector(createCluster),
                                for: .primaryActionTriggered)
         createButton.isHidden = true
@@ -206,7 +219,8 @@ final class AddDeviceViewController: UIViewController {
         members.spacing = 4
         members.alignment = .leading
 
-        for element in [title, members, unpairedNotice, createButton, nearbyTitle, nearbyStack,
+        for element in [title, members, unpairedNotice, peerNotice, securityNotice, createButton,
+                        nearbyTitle, nearbyStack,
                         emptyRow, codeButton, codeUnavailable, codeCard, addAllButton,
                         addAllWarning,
                         addAllStatus, addAllStop, scanButton, scanUnavailable, qrCard,
@@ -261,6 +275,9 @@ final class AddDeviceViewController: UIViewController {
         unpairButton.isHidden = !snapshot.paired
 
         codeCard.update(snapshot)
+        let stale = snapshot.security.legacyPeers.count + snapshot.security.rekeyRequired.count
+        securityNotice.text = texts.t("pair.members_need_rejoin", "\(stale)")
+        securityNotice.isHidden = !usable || stale == 0
         addAllStatus.text = PairingCopy.addAllOn(texts, leftS: snapshot.pairingModeLeftS,
                                                  added: snapshot.autoAddedCount)
         refreshRows(usable: usable)
@@ -319,7 +336,8 @@ final class AddDeviceViewController: UIViewController {
             let state = states[device.id] ?? RowState(status: .idle, error: "", since: now)
             row.update(device: device, status: statusText(device: device, state: state),
                        busy: state.status == .adding,
-                       canAct: state.status == .idle || state.status == .failed)
+                       canAct: !device.pkConflict &&
+                           (state.status == .idle || state.status == .failed))
         }
         nearbyEmpty.isHidden = !ordered.isEmpty || !usable
         nearbySpinner.isHidden = nearbyEmpty.isHidden
@@ -337,6 +355,9 @@ final class AddDeviceViewController: UIViewController {
                                                                                  state.error)
             return (message, PairingTheme.danger)
         case .idle:
+            if device.pkConflict {
+                return (PairingCopy.error(texts, "pk_conflict"), PairingTheme.danger)
+            }
             if device.inviteState == "sent" || device.inviteState == "acked" {
                 return (texts.t("pair.adding"), PairingTheme.accent)
             }
@@ -373,6 +394,16 @@ final class AddDeviceViewController: UIViewController {
             refresh()
         case "qr_scanned":
             refresh()
+        case "peer_rejected":
+            // A member that cannot complete the v3 handshake: shown, not silently dropped.
+            let reason = ConfigUtil.evStr(ev, "reason")
+            peerNotice.text = texts.t("pair.peer_rejected", PairingCopy.error(texts, reason))
+            peerNotice.isHidden = false
+            refresh()
+        case "cluster_key_changed":
+            peerNotice.text = texts.t("pair.cluster_key_changed")
+            peerNotice.isHidden = false
+            refresh()
         case "pending_changed", "pairing_state", "pairing_mode_changed", "join_token_changed",
              "paired", "peers_changed":
             refresh()
@@ -382,11 +413,35 @@ final class AddDeviceViewController: UIViewController {
     }
 
 
+    /// A discovered device's key arrived in an unauthenticated beacon, so Core invites it only
+    /// with the eight-digit code that device shows on its own screen.
     private func add(_ id: String) {
         guard !id.isEmpty else { return }
-        states[id] = RowState(status: .adding, error: "", since: Date())
-        core.inviteDevice(id)
-        refresh()
+        let alert = UIAlertController(title: texts.t("pair.confirm_code_title"),
+                                      message: texts.t("pair.confirm_code_prompt"),
+                                      preferredStyle: .alert)
+        alert.addTextField { field in
+            field.placeholder = "1234 5678"
+            #if os(iOS)
+            field.keyboardType = .numberPad
+            #endif
+            field.accessibilityIdentifier = "pair_confirm_code"
+        }
+        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+        alert.addAction(UIAlertAction(title: texts.t("pair.add"), style: .default) {
+            [weak self, weak alert] _ in
+            guard let self = self else { return }
+            guard let code = PairingCopy.normalizedCode(alert?.textFields?.first?.text ?? "") else {
+                self.states[id] = RowState(status: .failed, error: "confirm_code_mismatch",
+                                           since: Date())
+                self.refresh()
+                return
+            }
+            self.states[id] = RowState(status: .adding, error: "", since: Date())
+            self.core.inviteDevice(id, confirmCode: code)
+            self.refresh()
+        })
+        present(alert, animated: true)
     }
 
     private func confirmDeny(_ id: String) {

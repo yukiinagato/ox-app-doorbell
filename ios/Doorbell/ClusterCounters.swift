@@ -135,18 +135,18 @@ final class ClusterCounterView: UIStackView {
         isAccessibilityElement = true
         accessibilityTraits = .staticText
         isLayoutMarginsRelativeArrangement = true
-        directionalLayoutMargins = NSDirectionalEdgeInsets(top: 5, leading: 6,
-                                                           bottom: 5, trailing: 6)
+        IOSAvailability.setLayoutMargins(self, top: 5, leading: 6, bottom: 5, trailing: 6)
     }
 
     required init(coder: NSCoder) { fatalError("not supported") }
 
+    /// `ink` is Core's per-region automatic ink for the surface the pill is painted with, so the
+    /// counters stay readable on any theme instead of assuming a light pill.
     func update(text: String, ink: UIColor, accessibility: String) {
         if value.text != text { value.text = text }
-        let labelInk = UIColor(white: 0.08, alpha: 1)
-        if title.textColor != labelInk { title.textColor = labelInk }
-        if value.textColor != labelInk { value.textColor = labelInk }
-        icon.apply(ink: labelInk)
+        if title.textColor != ink { title.textColor = ink }
+        if value.textColor != ink { value.textColor = ink }
+        icon.apply(ink: ink)
         accessibilityLabel = accessibility
     }
 }
@@ -179,8 +179,7 @@ final class ClusterCountersView: UIView {
         row.alignment = .fill
         row.distribution = .fillEqually
         row.isLayoutMarginsRelativeArrangement = true
-        row.directionalLayoutMargins = NSDirectionalEdgeInsets(top: 0, leading: 5,
-                                                               bottom: 0, trailing: 5)
+        IOSAvailability.setLayoutMargins(row, top: 0, leading: 5, bottom: 0, trailing: 5)
         for counter in [devices, doors, panels] { row.addArrangedSubview(counter) }
         addSubview(row)
         row.translatesAutoresizingMaskIntoConstraints = false
@@ -206,7 +205,10 @@ final class ClusterCountersView: UIView {
 
     required init(coder: NSCoder) { fatalError("not supported") }
 
-    func update(_ counts: ClusterCounts, ink: UIColor) {
+    func update(_ counts: ClusterCounts, ink: UIColor, surface: UIColor) {
+        if backgroundColor != surface { backgroundColor = surface }
+        let divider = ink.withAlphaComponent(0.35)
+        for line in dividers where line.backgroundColor != divider { line.backgroundColor = divider }
         devices.update(text: "\(counts.devices)", ink: ink,
                        accessibility: texts.t("cluster.devices_a11y", "\(counts.devices)"))
         doors.update(text: "\(counts.doorStationsOnline)/\(counts.doorStations)", ink: ink,

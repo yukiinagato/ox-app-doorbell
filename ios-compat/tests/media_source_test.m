@@ -175,8 +175,20 @@ int main(void) {
     };
     source = [DBMediaSource sourceForPeer:legacyPeer config:@{} boot:indoor
                                     door:@"front" deviceID:nil];
-    require([source.mjpegURL isEqualToString:@"http://192.0.2.40:47180/stream.mjpeg"],
-            @"known legacy door peer fallback");
+    require(![source hasPreview],
+            @"a peer without published streams is never fetched directly");
+
+    NSDictionary *proxiedPeer = @{
+      @"id" : @"door-a", @"role" : @"door_station",
+      @"stream" : @"http://127.0.0.1:47180/media/peer/door-a/stream.mjpeg",
+    };
+    source = [DBMediaSource sourceForPeer:proxiedPeer config:@{} boot:indoor
+                                    door:@"front" deviceID:nil];
+    require([source.snapshotURL
+                 isEqualToString:@"http://127.0.0.1:47180/media/peer/door-a/snapshot.jpg"] &&
+            [source.videoMetaURL
+                 isEqualToString:@"http://127.0.0.1:47180/media/peer/door-a/video-meta"],
+            @"stills and metadata keep the peer proxy prefix");
     puts("PASS: DBMediaSource schema and migration fallbacks");
   }
   return 0;

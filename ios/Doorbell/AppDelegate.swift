@@ -15,7 +15,21 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private let emergencyNotifications = EmergencySystemNotifier()
     private var soundConfig: [String: Any]?
     private var runtime: RuntimeSupervisor?
-    private var chimeGate = CallChimeRevisionGate()
+    private let callAudioMonitor = CallAudioSessionMonitor()
+    private lazy var incomingRouter = IncomingCallRouter(
+        root: { [weak self] in self?.window?.rootViewController },
+        blocked: { [weak self] in
+            self?.pairingGate != nil ||
+                (self?.window?.rootViewController as? MainViewController)?.isEmergencyVisible == true
+        },
+        makeScreen: { [weak self] request in
+            guard let self = self else { return nil }
+            return IncomingViewController(core: self.core, boot: self.boot, door: request.door,
+                                          purpose: request.purpose,
+                                          visitorLang: request.visitorLang,
+                                          callId: request.callId,
+                                          stageRevision: request.stageRevision)
+        })
     private var appStarted = false
     private var resetObserver: NSObjectProtocol?
     private var openPairingObserver: NSObjectProtocol?
@@ -149,6 +163,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         // Configure speakerphone calling. PJSIP selects VoiceProcessingIO for AEC at runtime.
         let session = AVAudioSession.sharedInstance()
         let audioSessionReady = IOSAvailability.configureCallAudioSession(session)
+        callAudioMonitor.start()
 
         // A key left in boot.json by an older build moves into the Keychain before Core reads
         // the profile, so provenance is reported as secure_store from the first launch.
@@ -285,6 +300,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
+        // The native admin window never outlives the foreground (security protocol v3 §10).
+        core.adminLock()
         // Reaching here on a panel means the device locked or something took the foreground; the
         // suspension that follows is what takes the node off the mesh.
         ShellLog.note("lifecycle didEnterBackground idle_timer_disabled="
@@ -301,10 +318,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         runtime?.handleMemoryPressure()
         if let root = window?.rootViewController as? MainViewController {
             root.enterSafeModeForMemoryPressure()
-            if let incoming = root.presentedViewController as? IncomingViewController {
-                incoming.enterSafeModeForMemoryPressure()
-            } else if let monitor = root.presentedViewController as? MonitorViewController {
-                monitor.enterSafeModeForMemoryPressure()
+            var chain: [UIViewController] = []
+            var next = root.presentedViewController
+            while let current = next { chain.append(current); next = current.presentedViewController }
+            for vc in chain {
+                (vc as? IncomingViewController)?.enterSafeModeForMemoryPressure()
+                (vc as? MonitorViewController)?.enterSafeModeForMemoryPressure()
             }
         }
         // Safe-mode transitions release active players back into the reserve, so purge last.
@@ -438,15 +457,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         }
         // Only a targeted chime opens the incoming screen. Raw mesh press events update state
         // but never ring twice when more than one rule action observes the same call.
-        if eventKind == "chime" && boot.role != "door_station" &&
-            chimeGate.accept(callId: ConfigUtil.evStr(ev, "call_id"),
-                             stageRevision: ConfigUtil.int(ev, "stage_revision", 0)) {
-            presentIncoming(door: ConfigUtil.evStr(ev, "door"),
-                            purpose: ConfigUtil.evStr(ev, "purpose"),
-                            visitorLang: ConfigUtil.evStr(ev, "visitor_lang"),
-                            callId: ConfigUtil.evStr(ev, "call_id"),
-                            stageRevision: ConfigUtil.int(ev, "stage_revision", 0))
-        }
+        if boot.role != "door_station" { incomingRouter.handle(ev) }
     }
 
     private func persistPairing(_ ev: [String: Any]) {
@@ -555,21 +566,6 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         return "debug status role=\(boot.role) core=\(core.isRunning) codec=\(codec) active=\(active) subscribers=\(subscribers) rotation=\(rotation)"
     }
 
-    private func presentIncoming(door: String, purpose: String, visitorLang: String,
-                                 callId: String, stageRevision: Int) {
-        guard !callId.isEmpty else { return }
-        guard let root = window?.rootViewController else { return }
-        if let vc = root.presentedViewController as? IncomingViewController {
-            vc.receive(door: door, purpose: purpose, visitorLang: visitorLang, callId: callId,
-                       stageRevision: stageRevision)
-            return
-        }
-        guard root.presentedViewController == nil else { return }
-        let vc = IncomingViewController(core: core, boot: boot, door: door,
-                                        purpose: purpose, visitorLang: visitorLang,
-                                        callId: callId, stageRevision: stageRevision)
-        root.present(vc, animated: true)
-    }
 }
 
 private final class BootstrapSetupViewController: UIViewController, UITextFieldDelegate,

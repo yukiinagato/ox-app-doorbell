@@ -1277,8 +1277,23 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   [self publishRuntimeHealth:nil];
 }
 
+// Diagnostic URL helpers address media only through this device's Core (security protocol v3
+// §8): an empty argument is the local camera, otherwise it names a peer node id, which Core
+// proxies over its authenticated TLS connection. A raw peer address is never fetched.
+- (NSString *)debugMediaURL:(NSString *)peer file:(NSString *)file {
+  NSInteger port = _boot.httpPort > 0 ? _boot.httpPort : 47180;
+  NSCharacterSet *allowed = [NSCharacterSet characterSetWithCharactersInString:
+      @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_"];
+  if ([peer length] == 0 ||
+      [[peer stringByTrimmingCharactersInSet:allowed] length] > 0)
+    return [NSString stringWithFormat:@"http://127.0.0.1:%ld/%@", (long)port, file];
+  return [NSString stringWithFormat:@"http://127.0.0.1:%ld/media/peer/%@/%@", (long)port,
+      peer, file];
+}
+
 - (void)applicationDidEnterBackground:(UIApplication *)application {
   (void)application;
+  [_core adminLock];
   [_router suspendMediaForBackground];
   [_camera stop];
 }
@@ -1406,10 +1421,8 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   if ([host hasPrefix:@"h264test"]) {
 
 
-    NSString *ip = nil;
-    if ([host length] > 8) ip = [host substringFromIndex:8];
-    if ([ip length] == 0) ip = @"127.0.0.1";
-    NSString *url = [NSString stringWithFormat:@"http://%@:47180/stream.mp4", ip];
+    NSString *peer = [host length] > 8 ? [host substringFromIndex:8] : nil;
+    NSString *url = [self debugMediaURL:peer file:@"stream.mp4"];
     NSLog(@"[doorbell] h264test: %@", url);
     [_h264Test stop];
     _h264Test = nil;
@@ -1427,9 +1440,8 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
     return YES;
   }
   if ([host hasPrefix:@"vttest"]) {
-    NSString *ip = [host length] > 6 ? [host substringFromIndex:6] : nil;
-    if (![ip length]) ip = @"127.0.0.1";
-    NSString *stream = [NSString stringWithFormat:@"http://%@:47180/stream.mp4", ip];
+    NSString *peer = [host length] > 6 ? [host substringFromIndex:6] : nil;
+    NSString *stream = [self debugMediaURL:peer file:@"stream.mp4"];
     [self h264TestStop];
     UIView *container = _router.containerView;
     __weak DBAppDelegate *wself = self;
@@ -1445,8 +1457,7 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
     return YES;
   }
   if ([host hasPrefix:@"mjpegtest"]) {
-    NSString *ip = [host length] > 9 ? [host substringFromIndex:9] : nil;
-    if (![ip length]) ip = @"127.0.0.1";
+    NSString *peer = [host length] > 9 ? [host substringFromIndex:9] : nil;
     [self h264TestStop];
     UIView *container = _router.containerView;
     _mjpegTestView = [[UIImageView alloc] initWithFrame:container.bounds];
@@ -1455,7 +1466,7 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
     _mjpegTestView.backgroundColor = [UIColor blackColor];
     [container addSubview:_mjpegTestView];
     __weak DBAppDelegate *wself = self;
-    NSString *url = [NSString stringWithFormat:@"http://%@:47180/stream.mjpeg", ip];
+    NSString *url = [self debugMediaURL:peer file:@"stream.mjpeg"];
     _mjpegTest = [[DBMjpegClient alloc] initWithURLString:url onFrame:^(UIImage *image) {
       DBAppDelegate *delegate = wself;
       if (delegate) delegate->_mjpegTestView.image = image;

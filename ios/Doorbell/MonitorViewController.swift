@@ -90,6 +90,8 @@ final class MonitorViewController: UIViewController {
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         core.removeHandler("active-monitor")
+        hideTimer?.invalidate()
+        hideTimer = nil
         videoPlayer?.stop()
         videoPlayer = nil
         monitorWanted = false
@@ -125,32 +127,54 @@ final class MonitorViewController: UIViewController {
         view.addSubview(h264View)
 
         titleLabel.text = texts.t("monitor.choose")
-        titleLabel.font = .systemFont(ofSize: 28, weight: .semibold)
+        titleLabel.font = TypeRole.headline.font(weight: .semibold)
         titleLabel.numberOfLines = 2
 
         emptyLabel.text = texts.t("ring.no_video")
         emptyLabel.textAlignment = .center
 
         deviceStack.axis = .vertical
-        deviceStack.spacing = 12
+        deviceStack.spacing = Space.s
 
         closeButton.setTitle(texts.t("monitor.close"), for: .normal)
         closeButton.accessibilityIdentifier = "monitor_close"
         closeButton.titleLabel?.font = .systemFont(ofSize: 22, weight: .semibold)
         closeButton.setTitleColor(.white, for: .normal)
-        closeButton.backgroundColor = UIColor(red: 0.72, green: 0.15, blue: 0.12, alpha: 1)
-        closeButton.layer.cornerRadius = 12
+        closeButton.layer.cornerRadius = Radius.card
         #if !os(tvOS)
         closeButton.contentEdgeInsets = UIEdgeInsets(top: 14, left: 30, bottom: 14, right: 30)
         #endif
         closeButton.addTarget(self, action: #selector(close), for: .primaryActionTriggered)
 
-        let sidebar = UIStackView(arrangedSubviews: [titleLabel, deviceStack, emptyLabel,
-                                                      UIView(), closeButton])
+        // Door switcher: a horizontal strip on compact windows, a side list on wider ones.
+        deviceScroll.translatesAutoresizingMaskIntoConstraints = false
+        deviceStack.translatesAutoresizingMaskIntoConstraints = false
+        deviceScroll.addSubview(deviceStack)
+        NSLayoutConstraint.activate([
+            deviceStack.topAnchor.constraint(equalTo: deviceScroll.topAnchor),
+            deviceStack.bottomAnchor.constraint(equalTo: deviceScroll.bottomAnchor),
+            deviceStack.leadingAnchor.constraint(equalTo: deviceScroll.leadingAnchor),
+            deviceStack.trailingAnchor.constraint(equalTo: deviceScroll.trailingAnchor),
+        ])
+        stripHeight = deviceScroll.heightAnchor.constraint(equalTo: deviceStack.heightAnchor)
+        listWidth = deviceStack.widthAnchor.constraint(equalTo: deviceScroll.widthAnchor)
+
+        sidebar.addArrangedSubview(titleLabel)
+        sidebar.addArrangedSubview(deviceScroll)
+        sidebar.addArrangedSubview(emptyLabel)
+        sidebar.addArrangedSubview(UIView())
+        sidebar.addArrangedSubview(closeButton)
         sidebar.axis = .vertical
-        sidebar.spacing = 18
+        sidebar.spacing = Space.m
         sidebar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(sidebar)
+
+        // Tapping the picture brings hidden controls back (ui-guidelines §4, live view).
+        let tap = UITapGestureRecognizer(target: self, action: #selector(showControls))
+        videoBackdrop.isUserInteractionEnabled = true
+        videoBackdrop.addGestureRecognizer(tap)
+        h264View.isUserInteractionEnabled = false
+        video.isUserInteractionEnabled = false
 
         let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
@@ -158,24 +182,96 @@ final class MonitorViewController: UIViewController {
             themeBg.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             themeBg.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             themeBg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            videoBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
-            videoBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            videoBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            videoBackdrop.topAnchor.constraint(equalTo: video.topAnchor),
+            videoBackdrop.bottomAnchor.constraint(equalTo: video.bottomAnchor),
+            videoBackdrop.leadingAnchor.constraint(equalTo: video.leadingAnchor),
             videoBackdrop.trailingAnchor.constraint(equalTo: video.trailingAnchor),
             video.topAnchor.constraint(equalTo: guide.topAnchor),
-            video.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
             video.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-            video.widthAnchor.constraint(equalTo: guide.widthAnchor, multiplier: 0.68),
             h264View.topAnchor.constraint(equalTo: video.topAnchor),
             h264View.bottomAnchor.constraint(equalTo: video.bottomAnchor),
             h264View.leadingAnchor.constraint(equalTo: video.leadingAnchor),
             h264View.trailingAnchor.constraint(equalTo: video.trailingAnchor),
-            sidebar.topAnchor.constraint(equalTo: guide.topAnchor, constant: 24),
-            sidebar.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -24),
-            sidebar.leadingAnchor.constraint(equalTo: video.trailingAnchor, constant: 24),
-            sidebar.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -24),
-            closeButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            closeButton.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum + 8),
         ])
+        sideConstraints = [
+            video.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+            video.widthAnchor.constraint(equalTo: guide.widthAnchor, multiplier: 0.68),
+            sidebar.topAnchor.constraint(equalTo: guide.topAnchor, constant: Space.l),
+            sidebar.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -Space.l),
+            sidebar.leadingAnchor.constraint(equalTo: video.trailingAnchor, constant: Space.l),
+            sidebar.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -Space.l),
+        ]
+        stackedConstraints = [
+            video.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+            video.heightAnchor.constraint(equalTo: video.widthAnchor, multiplier: 9.0 / 16.0),
+            sidebar.topAnchor.constraint(equalTo: video.bottomAnchor, constant: Space.m),
+            sidebar.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -Space.m),
+            sidebar.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: Space.m),
+            sidebar.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -Space.m),
+        ]
+        immersiveConstraints = [
+            video.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+            video.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+        ]
+        applyArrangement(for: view.bounds.size)
+    }
+
+    private let deviceScroll = UIScrollView()
+    private let sidebar = UIStackView()
+    private var stripHeight: NSLayoutConstraint?
+    private var listWidth: NSLayoutConstraint?
+    private var sideConstraints: [NSLayoutConstraint] = []
+    private var stackedConstraints: [NSLayoutConstraint] = []
+    private var immersiveConstraints: [NSLayoutConstraint] = []
+    private var controlsHidden = false
+    private var hideTimer: Timer?
+
+    /// Video beside the list on wide windows, above a door strip on compact ones, or alone once
+    /// the controls have hidden themselves.
+    private func applyArrangement(for size: CGSize) {
+        NSLayoutConstraint.deactivate(sideConstraints + stackedConstraints + immersiveConstraints)
+        let side = LayoutClass.sideBySide(size)
+        if controlsHidden {
+            NSLayoutConstraint.activate(immersiveConstraints)
+        } else {
+            NSLayoutConstraint.activate(side ? sideConstraints : stackedConstraints)
+        }
+        deviceStack.axis = side ? .vertical : .horizontal
+        stripHeight?.isActive = !side
+        listWidth?.isActive = side
+        sidebar.alpha = controlsHidden ? 0 : 1
+        sidebar.isUserInteractionEnabled = !controlsHidden
+    }
+
+    override func viewWillTransition(to size: CGSize,
+                                     with coordinator: UIViewControllerTransitionCoordinator) {
+        super.viewWillTransition(to: size, with: coordinator)
+        coordinator.animate(alongsideTransition: { _ in self.applyArrangement(for: size) })
+    }
+
+    /// Controls hide 4 s after a door starts playing and come back on a tap. tvOS keeps them:
+    /// the focus engine needs something to land on.
+    private func scheduleControlsHide() {
+        hideTimer?.invalidate()
+        #if os(iOS)
+        hideTimer = IOSAvailability.scheduledTimer(withTimeInterval: 4, repeats: false) {
+            [weak self] _ in
+            guard let self = self, self.videoPlayer != nil else { return }
+            self.controlsHidden = true
+            Motion.animate { self.applyArrangement(for: self.view.bounds.size); self.view.layoutIfNeeded() }
+        }
+        #endif
+    }
+
+    @objc private func showControls() {
+        guard controlsHidden else {
+            scheduleControlsHide()
+            return
+        }
+        controlsHidden = false
+        Motion.animate { self.applyArrangement(for: self.view.bounds.size); self.view.layoutIfNeeded() }
+        scheduleControlsHide()
     }
 
     /// The monitor page wears the same theme background as the home screens; only the picture
@@ -190,6 +286,7 @@ final class MonitorViewController: UIViewController {
         skin = themeBg.apply(display: display, config: config, nodeId: nodeId, palette: palette,
                              httpPort: boot.httpPort, host: view)
         skin.apply("status_line", to: titleLabel)
+        closeButton.backgroundColor = ColorRole.negative(palette)
         // The empty-video notice lives in the sidebar, not over the picture, so it follows the
         // sidebar's background rather than the video's black frame.
         skin.apply("hint", to: emptyLabel, quiet: true)
@@ -218,7 +315,9 @@ final class MonitorViewController: UIViewController {
             let name = ConfigUtil.evStr(peer, "name")
             button.setTitle(name.isEmpty ? ConfigUtil.evStr(peer, "id") : name, for: .normal)
             button.setTitleColor(skin.cardInk("tile_label"), for: .normal)
-            button.titleLabel?.font = .systemFont(ofSize: 20, weight: .medium)
+            button.titleLabel?.font = TypeRole.body.font(weight: .medium, base: 19)
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum + 4)
+                .isActive = true
             button.backgroundColor = skin.surfaceStrong
             button.layer.cornerRadius = 10
             #if !os(tvOS)
@@ -271,6 +370,7 @@ final class MonitorViewController: UIViewController {
         if monitoringAudio { core.sipHangup() }
         monitoringAudio = false
         openMonitorDialog(peer: peer)
+        scheduleControlsHide()
     }
 
     /// Opens one listen dialog, if the policy still allows one. A door that has said it has no

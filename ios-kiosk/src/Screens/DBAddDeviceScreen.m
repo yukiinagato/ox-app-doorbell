@@ -30,6 +30,9 @@ static UIColor *DBAddError(void) {
   return [UIColor colorWithRed:0.88 green:0.36 blue:0.30 alpha:1];
 }
 
+@interface DBAddDeviceScreen () <UIAlertViewDelegate>
+@end
+
 @implementation DBAddDeviceScreen {
   UIScrollView *_scroll;
   UILabel *_title;
@@ -63,6 +66,8 @@ static UIColor *DBAddError(void) {
   UIButton *_unpairButton;
   UILabel *_unpairConfirm;
   UILabel *_errorLabel;
+  UILabel *_securityNotice;   // peer_rejected / cluster_key_changed, one line
+  NSString *_codePromptId;    // device the open code prompt belongs to
 
   UILabel *_unpairedNotice;
   UIButton *_openOnboarding;
@@ -259,6 +264,10 @@ static UIColor *DBAddError(void) {
   _errorLabel = [self labelWithFont:[UIFont boldSystemFontOfSize:15] color:DBAddError() center:YES];
   _errorLabel.text = @"";
   [_scroll addSubview:_errorLabel];
+
+  _securityNotice = [self labelWithFont:[UIFont systemFontOfSize:15] color:DBAddDim() center:YES];
+  _securityNotice.hidden = YES;
+  [_scroll addSubview:_securityNotice];
 
   _unpairButton = [self flatButtonWithTitle:[_texts ts:@"pair.clear_title"] background:nil];
   [_unpairButton setTitleColor:DBAddError() forState:UIControlStateNormal];
@@ -544,6 +553,13 @@ static UIColor *DBAddError(void) {
       UIButton *add = [self flatButtonWithTitle:[_texts ts:@"pair.add"]
                                      background:DBAddAccent()];
       add.tag = 4;
+      // Same id, different identity key: never invitable from here (spec v3).
+      if ([DBConfigUtil evBool:entry key:@"pk_conflict"]) {
+        add.enabled = NO;
+        add.alpha = 0.4f;
+        [_deviceErrors setObject:@"pk_conflict" forKey:identifier];
+        state = @"failed";
+      }
       add.accessibilityIdentifier = identifier;
       [add addTarget:self action:@selector(onAddDevice:)
             forControlEvents:UIControlEventTouchUpInside];
@@ -683,15 +699,85 @@ static UIColor *DBAddError(void) {
   [self reload];
 }
 
+- (void)handlePeerRejected:(NSDictionary *)ev {
+  NSString *reason = [DBConfigUtil evStr:ev key:@"reason"] ?: @"";
+  NSString *identifier = [DBConfigUtil evStr:ev key:@"id"];
+  NSString *why = [_texts ts:[DBPairingModel errorTextKeyForCode:reason]];
+  _securityNotice.text = [_texts t:@"pair.peer_rejected", why, nil];
+  _securityNotice.textColor = DBAddError();
+  _securityNotice.hidden = NO;
+  if ([identifier length] > 0 && [_deviceStates objectForKey:identifier] != nil) {
+    [_deviceStates setObject:@"failed" forKey:identifier];
+    [_deviceErrors setObject:reason forKey:identifier];
+  }
+  [self applyContent];
+}
+
+- (void)handleClusterKeyChanged:(NSDictionary *)ev {
+  (void)ev;
+  _securityNotice.text = [_texts ts:@"pair.cluster_key_changed"];
+  _securityNotice.textColor = DBAddDim();
+  _securityNotice.hidden = NO;
+  [self setNeedsLayout];
+  [self reload];
+}
+
 #pragma mark - actions
 
 - (void)onAddDevice:(UIButton *)sender {
   NSString *identifier = sender.accessibilityIdentifier;
   if ([identifier length] == 0) return;
+  if (![DBCoreBridge supportsCodeInvite]) {
+    [self inviteIdentifier:identifier code:nil];
+    return;
+  }
+  // The eight-digit code is shown on the new device's own pairing screen.
+  _codePromptId = [identifier copy];
+  UIAlertView *prompt = [[UIAlertView alloc] initWithTitle:[_texts ts:@"pair.confirm_code_title"]
+                                                   message:[_texts ts:@"pair.confirm_code_prompt"]
+                                                  delegate:self
+                                         cancelButtonTitle:[_texts ts:@"admin.cancel"]
+                                         otherButtonTitles:[_texts ts:@"pair.add"], nil];
+  prompt.alertViewStyle = UIAlertViewStylePlainTextInput;
+  UITextField *field = [prompt textFieldAtIndex:0];
+  field.keyboardType = UIKeyboardTypeNumberPad;
+  field.placeholder = @"0000 0000";
+  [prompt show];
+}
+
+- (void)inviteIdentifier:(NSString *)identifier code:(NSString *)code {
   [_deviceStates setObject:@"adding" forKey:identifier];
   [_deviceErrors removeObjectForKey:identifier];
   [self applyContent];
-  [_core inviteDevice:identifier];
+  if (code != nil) [_core inviteDevice:identifier code:code];
+  else [_core inviteDevice:identifier];
+}
+
+- (BOOL)alertViewShouldEnableFirstOtherButton:(UIAlertView *)alertView {
+  return [[self digitsOf:[[alertView textFieldAtIndex:0] text]] length] == 8;
+}
+
+- (NSString *)digitsOf:(NSString *)text {
+  NSMutableString *out = [NSMutableString string];
+  for (NSUInteger i = 0; i < [text length]; i++) {
+    unichar c = [text characterAtIndex:i];
+    if (c >= '0' && c <= '9') [out appendFormat:@"%C", c];
+  }
+  return out;
+}
+
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+  NSString *identifier = _codePromptId;
+  _codePromptId = nil;
+  if (buttonIndex == alertView.cancelButtonIndex || [identifier length] == 0) return;
+  NSString *code = [self digitsOf:[[alertView textFieldAtIndex:0] text]];
+  if ([code length] != 8) {
+    [_deviceStates setObject:@"failed" forKey:identifier];
+    [_deviceErrors setObject:@"confirm_code_required" forKey:identifier];
+    [self applyContent];
+    return;
+  }
+  [self inviteIdentifier:identifier code:code];
 }
 
 - (void)onDenyDevice:(UIButton *)sender {
@@ -907,6 +993,11 @@ static UIColor *DBAddError(void) {
       ? [_errorLabel sizeThatFits:CGSizeMake(width, 9999)].height : 0;
   _errorLabel.frame = CGRectMake(pad, y, width, errorHeight);
   y += errorHeight > 0 ? errorHeight + 10 : 0;
+  if (!_securityNotice.hidden) {
+    CGFloat noticeHeight = [_securityNotice sizeThatFits:CGSizeMake(width, 9999)].height;
+    _securityNotice.frame = CGRectMake(pad, y, width, noticeHeight);
+    y += noticeHeight + 10;
+  }
 
   if (!_unpairButton.hidden) {
     _unpairButton.frame = CGRectMake(pad, y, width, 40);

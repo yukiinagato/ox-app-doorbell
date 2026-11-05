@@ -195,6 +195,11 @@ final class NoticeDialogViewController: UIViewController {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
+    /// The style to use when the dialog opens over a live call. A form sheet becomes a full-screen
+    /// presentation on a compact iPhone and on tvOS, which would remove the call screen from the
+    /// hierarchy; over-full-screen keeps the presenter in place on every size class.
+    static var overCallPresentationStyle: UIModalPresentationStyle { return .overFullScreen }
+
     override func viewDidLoad() {
         super.viewDidLoad()
         config = core.config()

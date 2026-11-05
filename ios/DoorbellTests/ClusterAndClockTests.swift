@@ -109,9 +109,37 @@ final class ClusterAndClockTests: XCTestCase {
              "status": "dead", "caps": ["camera": true]],
         ]]
         XCTAssertEqual(ConfigUtil.doorsWithCamera(config: config, status: status), ["front"])
-        XCTAssertEqual(ConfigUtil.offlineDoorPeers(config: config, status: status).map {
-            ConfigUtil.evStr($0, "door")
-        }, ["back"])
+        let offline = ConfigUtil.offlineDoorPeers(config: config, status: status)
+        XCTAssertEqual(Set(offline.map { ConfigUtil.evStr($0, "door") }), ["back", "removed"],
+                       "a configured door with no station record is listed, not hidden")
+        XCTAssertEqual(offline.first { ConfigUtil.evStr($0, "door") == "removed" }
+            .map { ConfigUtil.evStr($0, "status") }, "missing")
+    }
+
+    func testFindDoorPeerPrefersAnAliveStationOverASuspectOne() {
+        let status: [String: Any] = ["peers": [
+            ["id": "a", "role": "door_station", "door": "front", "status": "suspect"],
+            ["id": "b", "role": "door_station", "door": "front", "status": "alive"],
+            ["id": "c", "role": "door_station", "door": "front", "status": "dead"],
+        ]]
+        XCTAssertEqual(ConfigUtil.findDoorPeer(status, door: "front")
+            .map { ConfigUtil.evStr($0, "id") }, "b")
+    }
+
+    func testPeerHostHandlesIPv4IPv6AndBracketedAddresses() {
+        XCTAssertEqual(ConfigUtil.peerHost(["addrs": ["10.0.0.5:47172"]]), "10.0.0.5")
+        XCTAssertEqual(ConfigUtil.peerHost(["addrs": ["[fe80::1]:47172"]]), "fe80::1")
+        XCTAssertEqual(ConfigUtil.peerHost(["addrs": ["fe80::1"]]), "fe80::1")
+        XCTAssertEqual(ConfigUtil.peerAdminURL(["addrs": ["10.0.0.5:47172"]]),
+                       "https://10.0.0.5:47443/admin/")
+    }
+
+    func testMediaSiblingKeepsThePeerProxyPrefix() {
+        let url = URL(string: "http://127.0.0.1:47180/media/peer/abc/stream.mjpeg")!
+        XCTAssertEqual(LocalMediaAuth.sibling(url, "snapshot.jpg")?.absoluteString,
+                       "http://127.0.0.1:47180/media/peer/abc/snapshot.jpg")
+        XCTAssertTrue(LocalMediaAuth.isLoopback(url))
+        XCTAssertFalse(LocalMediaAuth.isLoopback(URL(string: "https://10.0.0.5:47443/")))
     }
 
     func testDoorPreviewGridAdaptsFromOneThroughFiveAndKeepsEveryDoor() {

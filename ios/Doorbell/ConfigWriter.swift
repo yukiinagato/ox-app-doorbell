@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Native settings write exactly the keys the web admin writes, and Core validates them with the
 /// same rules either way. There are two transports and the shell never invents a third: Core's
@@ -46,8 +47,24 @@ final class ConfigWriter {
     }
 
     /// Applies every operation or none. `completion` runs on the main queue with a message key
-    /// the caller renders; an empty message means success.
+    /// the caller renders; an empty message means success. When Core reports that the native
+    /// admin window has closed (security protocol v3 §10), the administrator password is asked
+    /// for once and the same batch is retried; a cancelled prompt reports `admin_required`.
     func apply(_ operations: [Operation], completion: @escaping (Result) -> Void) {
+        applyOnce(operations) { [weak self] result in
+            guard case .failed(let error) = result, error == "admin_required",
+                  let self = self, let core = self.core else {
+                completion(result)
+                return
+            }
+            AdminReauthentication.request(core: core) { unlocked in
+                guard unlocked else { completion(result); return }
+                self.applyOnce(operations, completion: completion)
+            }
+        }
+    }
+
+    private func applyOnce(_ operations: [Operation], completion: @escaping (Result) -> Void) {
         guard !operations.isEmpty else {
             DispatchQueue.main.async { completion(.ok) }
             return
@@ -159,5 +176,40 @@ final class ConfigWriter {
             if code == "batch_unavailable" { return texts.t("admin.atomic_batch_unavailable") }
             return texts.t("settings.save_failed")
         }
+    }
+}
+
+
+/// Asks for the administrator password over whatever is on screen, for a write Core refused with
+/// `admin_required`. Concurrent requests share one prompt.
+enum AdminReauthentication {
+    private static var waiting: [(Bool) -> Void] = []
+
+    static func request(core: CoreBridge, completion: @escaping (Bool) -> Void) {
+        // Main thread only; ConfigWriter delivers its completions on the main queue.
+        guard Thread.isMainThread else {
+            DispatchQueue.main.async { request(core: core, completion: completion) }
+            return
+        }
+        waiting.append(completion)
+        guard waiting.count == 1 else { return }
+        guard var top = UIApplication.shared.keyWindow?.rootViewController else {
+            finish(false)
+            return
+        }
+        while let next = top.presentedViewController { top = next }
+        let texts = Texts()
+        texts.setConfig(core.config())
+        texts.setLang(BootConfig.load().uiLang)
+        let prompt = AdminPinViewController(texts: texts, core: core)
+        prompt.onUnlocked = { finish(true) }
+        prompt.onCancelled = { finish(false) }
+        top.present(prompt, animated: true)
+    }
+
+    private static func finish(_ unlocked: Bool) {
+        let callbacks = waiting
+        waiting.removeAll()
+        for callback in callbacks { callback(unlocked) }
     }
 }

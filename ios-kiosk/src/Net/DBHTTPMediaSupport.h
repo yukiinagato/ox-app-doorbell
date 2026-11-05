@@ -5,7 +5,13 @@ typedef void (^DBMJPEGDataHandler)(NSData *jpeg);
 
 // Shared policy for camera HTTP requests. URL credentials are rejected and
 // secure-store values are converted to an ephemeral Authorization header.
+typedef void (^DBHTTPRequestDecorator)(NSMutableURLRequest *request);
+
 @interface DBHTTPMediaSupport : NSObject
+
+// Applied to every request this class builds. The app installs the loopback media credential
+// here (security protocol v3 §8); this file stays free of Core dependencies for host tests.
++ (void)setRequestDecorator:(DBHTTPRequestDecorator)decorator;
 
 + (NSString *)safeURLString:(NSString *)raw;
 + (NSDictionary *)authorizationHeadersForSecret:(NSString *)secret;
