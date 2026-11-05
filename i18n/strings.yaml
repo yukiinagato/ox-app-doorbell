@@ -1389,7 +1389,7 @@ pair.err.pk_conflict: { ja: "同じ名前で別の鍵を名乗る端末があり
 pair.err.not_upgrade_pending: { ja: "この端末は再構築の対象ではありません", en: "This device is not waiting to rebuild a cluster", zh: "此设备不需要重建集群" }
 pair.pk_conflict_warning: { ja: "注意: この端末の鍵が一致しません。なりすましの可能性があります。表示された確認コードを本体で必ず確かめてください", en: "Warning: this device's key does not match. It may be an impostor. Check the confirmation code on the device itself", zh: "警告：此设备的密钥不一致，可能是仿冒设备。请务必在设备本机上核对确认码" }
 pair.upgrade_title: { ja: "再配対が必要です", en: "Pair this device again", zh: "需要重新配对" }
-pair.upgrade_body: { ja: "アプリの更新でクラスターへの参加方法が変わりました。元の創設端末から、この端末をもう一度追加してください。", en: "The app update changed how devices join a cluster. Add this device again from the original founding device.", zh: "应用升级改变了设备加入集群的方式。请从原始创建设备重新添加本设备。" }
+pair.upgrade_body: { ja: "新しい安全方式のため、この端末をもう一度クラスターに追加してください。履歴は残っています。すでにクラスターにいる端末から追加します。", en: "The new security protocol needs this device to join the cluster again. Its history is kept. Add it from a device that is already in the cluster.", zh: "新的安全协议要求此设备重新加入集群，历史记录会保留。请从已在集群中的设备添加它。" }
 pair.security_title: { ja: "クラスター鍵", en: "Cluster key", zh: "集群密钥" }
 pair.security_key: { ja: "現在の鍵", en: "Current key", zh: "当前密钥" }
 pair.security_previous_key: { ja: "旧い鍵", en: "Previous key", zh: "旧密钥" }

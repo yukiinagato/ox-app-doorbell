@@ -451,21 +451,27 @@ Delete it?</value></data>
   <data name="dash_count_indoor_panels" xml:space="preserve"><value>{0} of {1} indoor panels online</value></data>
   <data name="dash_count_panels" xml:space="preserve"><value>{0} of {1} indoor panels online</value></data>
   <data name="dash_doors" xml:space="preserve"><value>Door stations</value></data>
+  <data name="dash_last_activity" xml:space="preserve"><value>Last call {0}</value></data>
   <data name="dash_last_answer" xml:space="preserve"><value>Last answered {0}</value></data>
   <data name="dash_no_doors" xml:space="preserve"><value>No door station has been added yet</value></data>
   <data name="dash_notice_global" xml:space="preserve"><value>Announcement (all doors)</value></data>
+  <data name="dash_offline_count" xml:space="preserve"><value>{0} offline</value></data>
   <data name="dash_recent_calls" xml:space="preserve"><value>Recent calls</value></data>
   <data name="dash_see_all" xml:space="preserve"><value>See all</value></data>
+  <data name="dash_state_idle" xml:space="preserve"><value>Idle</value></data>
+  <data name="dash_state_in_call" xml:space="preserve"><value>In call</value></data>
+  <data name="dash_state_ringing" xml:space="preserve"><value>Ringing</value></data>
   <data name="dash_tile_no_station" xml:space="preserve"><value>No door station</value></data>
   <data name="dash_tile_no_still" xml:space="preserve"><value>No still yet</value></data>
   <data name="dash_tile_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="dash_tile_open" xml:space="preserve"><value>View</value></data>
   <data name="dash_tile_watch" xml:space="preserve"><value>View</value></data>
+  <data name="dashboard_device_status_missing" xml:space="preserve"><value>No door station registered</value></data>
   <data name="dashboard_device_status_offline" xml:space="preserve"><value>Offline</value></data>
   <data name="dashboard_offline_doors" xml:space="preserve"><value>Offline door stations</value></data>
   <data name="dashboard_offline_doors_empty" xml:space="preserve"><value>No offline door stations</value></data>
   <data name="dashboard_offline_doors_title" xml:space="preserve"><value>Offline door stations</value></data>
-  <data name="dashboard_preview_rate_format" xml:space="preserve"><value>%@ fps</value></data>
+  <data name="dashboard_preview_rate_format" xml:space="preserve"><value>{0} fps</value></data>
   <data name="dashboard_preview_rate_title" xml:space="preserve"><value>Preview refresh rate</value></data>
   <data name="date_full" xml:space="preserve"><value>{0}-{1}-{2} ({3})</value></data>
   <data name="day_fri" xml:space="preserve"><value>Fri</value></data>
@@ -686,10 +692,10 @@ Delete it?</value></data>
   <data name="offline_reconnect" xml:space="preserve"><value>Reconnecting in {0}s</value></data>
   <data name="offline_title" xml:space="preserve"><value>System offline</value></data>
   <data name="pair_add" xml:space="preserve"><value>Add</value></data>
-  <data name="pair_add_all" xml:space="preserve"><value>Accept nearby devices (10 min)</value></data>
-  <data name="pair_add_all_on" xml:space="preserve"><value>Accepting — {0}:{1} left ({2} added)</value></data>
+  <data name="pair_add_all" xml:space="preserve"><value>Add all nearby (10 min)</value></data>
+  <data name="pair_add_all_on" xml:space="preserve"><value>Adding all — {0}:{1} left ({2} added)</value></data>
   <data name="pair_add_all_stop" xml:space="preserve"><value>Stop</value></data>
-  <data name="pair_add_all_warning" xml:space="preserve"><value>Devices found in the next 10 minutes are listed; add each one with the confirmation code it shows</value></data>
+  <data name="pair_add_all_warning" xml:space="preserve"><value>For 10 minutes, nearby devices are listed here. To add one, type the code shown on that device</value></data>
   <data name="pair_add_failed" xml:space="preserve"><value>Couldn't add</value></data>
   <data name="pair_add_with_code" xml:space="preserve"><value>Add with a Pairing PIN</value></data>
   <data name="pair_added" xml:space="preserve"><value>Added</value></data>
@@ -699,15 +705,21 @@ Delete it?</value></data>
   <data name="pair_clear_confirm" xml:space="preserve"><value>This device will leave the Cluster and all of its settings will be erased. This cannot be undone.</value></data>
   <data name="pair_clear_resets_device" xml:space="preserve"><value>This resets the device and removes it</value></data>
   <data name="pair_clear_title" xml:space="preserve"><value>Clear pairing on this device</value></data>
+  <data name="pair_clock_skew" xml:space="preserve"><value>With a clock that is far off, nearby devices cannot be found. Turn on Set the time from the internet</value></data>
+  <data name="pair_cluster_key_changed" xml:space="preserve"><value>The cluster key was rotated</value></data>
   <data name="pair_code_attempts_left" xml:space="preserve"><value>{0} attempts left</value></data>
   <data name="pair_code_expired" xml:space="preserve"><value>Expired — get a new code</value></data>
   <data name="pair_code_expires_in" xml:space="preserve"><value>{0}:{1} left</value></data>
   <data name="pair_code_instructions" xml:space="preserve"><value>On the new device choose &quot;Join with a Pairing PIN&quot; and enter the address and code shown above</value></data>
   <data name="pair_code_label" xml:space="preserve"><value>Pairing PIN (6 digits)</value></data>
-  <data name="pair_confirm_code_hint" xml:space="preserve"><value>Enter the eight-digit code shown on the pairing screen of the device you are adding.</value></data>
+  <data name="pair_confirm_code_caption" xml:space="preserve"><value>Confirmation code — read it to the person adding this device</value></data>
+  <data name="pair_confirm_code_hint" xml:space="preserve"><value>Type the 8-digit code shown on the device you are adding</value></data>
+  <data name="pair_confirm_code_input" xml:space="preserve"><value>8-digit code shown on the device</value></data>
   <data name="pair_confirm_code_invalid" xml:space="preserve"><value>Enter eight digits</value></data>
+  <data name="pair_confirm_code_prompt" xml:space="preserve"><value>Enter the eight digits shown on the device you are adding.</value></data>
   <data name="pair_confirm_code_self" xml:space="preserve"><value>Enter this code on the device that adds this one</value></data>
-  <data name="pair_confirm_code_title" xml:space="preserve"><value>Confirmation code for {0}</value></data>
+  <data name="pair_confirm_code_show" xml:space="preserve"><value>Give this code to the person adding this device</value></data>
+  <data name="pair_confirm_code_title" xml:space="preserve"><value>This device's confirmation code</value></data>
   <data name="pair_confirm_tap_again" xml:space="preserve"><value>Press again to confirm</value></data>
   <data name="pair_copy" xml:space="preserve"><value>Copy</value></data>
   <data name="pair_create_home" xml:space="preserve"><value>Create a new Cluster</value></data>
@@ -723,9 +735,10 @@ Delete it?</value></data>
   <data name="pair_err_bad_payload" xml:space="preserve"><value>The other device's version isn't compatible</value></data>
   <data name="pair_err_bad_pin" xml:space="preserve"><value>Wrong Pairing PIN</value></data>
   <data name="pair_err_bad_qr" xml:space="preserve"><value>That isn't a device QR. Paste the text shown on the new device exactly as it appears</value></data>
+  <data name="pair_err_bad_signature" xml:space="preserve"><value>That device's identity could not be verified</value></data>
   <data name="pair_err_closed" xml:space="preserve"><value>The other device disconnected</value></data>
-  <data name="pair_err_confirm_code_mismatch" xml:space="preserve"><value>The confirmation code does not match</value></data>
-  <data name="pair_err_confirm_code_required" xml:space="preserve"><value>A confirmation code is required</value></data>
+  <data name="pair_err_confirm_code_mismatch" xml:space="preserve"><value>Wrong code. Check the code shown on the device you are adding</value></data>
+  <data name="pair_err_confirm_code_required" xml:space="preserve"><value>Enter the 8-digit code shown on the device you are adding</value></data>
   <data name="pair_err_connect_failed" xml:space="preserve"><value>Can't reach that address. Check the address and make sure both devices are on the same network</value></data>
   <data name="pair_err_decrypt_failed" xml:space="preserve"><value>Security check failed. Make sure there is no untrusted device on the network</value></data>
   <data name="pair_err_expired" xml:space="preserve"><value>The Pairing PIN expired. Get a new one on the other device</value></data>
@@ -736,10 +749,14 @@ Delete it?</value></data>
   <data name="pair_err_no_ack" xml:space="preserve"><value>The device didn't respond. Check that it is powered on and on the same network</value></data>
   <data name="pair_err_no_mesh" xml:space="preserve"><value>The device is still starting up. Try again in a moment</value></data>
   <data name="pair_err_no_token" xml:space="preserve"><value>The other device isn't offering a Pairing PIN right now</value></data>
+  <data name="pair_err_not_upgrade_pending" xml:space="preserve"><value>This device is not waiting to rebuild a cluster</value></data>
   <data name="pair_err_pairing_unavailable" xml:space="preserve"><value>Couldn't create a code. Please try again</value></data>
   <data name="pair_err_persist_failed" xml:space="preserve"><value>Couldn't save settings on this device</value></data>
-  <data name="pair_err_pk_conflict" xml:space="preserve"><value>This device announced two different keys and cannot be added safely</value></data>
+  <data name="pair_err_pk_conflict" xml:space="preserve"><value>Another device answered with a different key for this one. It may be an impostor; check the device before adding it</value></data>
+  <data name="pair_err_protocol_upgrade_required" xml:space="preserve"><value>That device runs an older version. Update it, then pair it again</value></data>
+  <data name="pair_err_rekey_required" xml:space="preserve"><value>That device missed a key rotation. Pair it again</value></data>
   <data name="pair_err_timeout" xml:space="preserve"><value>No response. Try again</value></data>
+  <data name="pair_err_unauthorized_peer" xml:space="preserve"><value>That device is not a member of this cluster</value></data>
   <data name="pair_err_unknown" xml:space="preserve"><value>Couldn't complete that. Please try again</value></data>
   <data name="pair_err_detail" xml:space="preserve"><value>Details: {0}</value></data>
   <data name="pair_invitation_confirm" xml:space="preserve"><value>Join {0}?</value></data>
@@ -765,6 +782,7 @@ Delete it?</value></data>
   <data name="pair_later" xml:space="preserve"><value>Set up later</value></data>
   <data name="pair_link_from" xml:space="preserve"><value>Invitation to {0}</value></data>
   <data name="pair_link_leave_current" xml:space="preserve"><value>This device is already in another cluster. Joining erases all of its current settings.</value></data>
+  <data name="pair_members_need_rejoin" xml:space="preserve"><value>{0} devices must be upgraded and join again</value></data>
   <data name="pair_membership" xml:space="preserve"><value>Cluster · {0} devices</value></data>
   <data name="pair_membership_connected" xml:space="preserve"><value>{0} connected</value></data>
   <data name="pair_mint_unsupported" xml:space="preserve"><value>This device's core can't issue a Pairing PIN yet. Update it</value></data>
@@ -776,9 +794,11 @@ Delete it?</value></data>
   <data name="pair_open_onboarding" xml:space="preserve"><value>Open the pairing screen</value></data>
   <data name="pair_open_panel" xml:space="preserve"><value>Open &quot;Add device&quot;</value></data>
   <data name="pair_panel_title" xml:space="preserve"><value>Add a device</value></data>
+  <data name="pair_peer_rejected" xml:space="preserve"><value>A device was refused: {0}</value></data>
   <data name="pair_persist_error_body" xml:space="preserve"><value>This device couldn't write to its secure storage. Check free space and permissions, then try again.</value></data>
   <data name="pair_persist_error_title" xml:space="preserve"><value>Couldn't save settings</value></data>
   <data name="pair_pin_unavailable" xml:space="preserve"><value>This core build cannot issue a Pairing PIN</value></data>
+  <data name="pair_pk_conflict_warning" xml:space="preserve"><value>Warning: this device's key does not match. It may be an impostor. Check the confirmation code on the device itself</value></data>
   <data name="pair_qr_caption" xml:space="preserve"><value>Scan this QR from another device to add this one</value></data>
   <data name="pair_qr_pending" xml:space="preserve"><value>Preparing the Add QR…</value></data>
   <data name="pair_retry" xml:space="preserve"><value>Retry</value></data>
@@ -798,10 +818,18 @@ Delete it?</value></data>
   <data name="pair_scanning" xml:space="preserve"><value>Scanning…</value></data>
   <data name="pair_searching" xml:space="preserve"><value>Looking for nearby devices…</value></data>
   <data name="pair_searching_hint" xml:space="preserve"><value>Press &quot;Add&quot; on a device already in the Cluster, or on the admin page</value></data>
+  <data name="pair_security_key" xml:space="preserve"><value>Current key</value></data>
+  <data name="pair_security_legacy_peers" xml:space="preserve"><value>Devices that need an update</value></data>
+  <data name="pair_security_previous_key" xml:space="preserve"><value>Previous key</value></data>
+  <data name="pair_security_previous_until" xml:space="preserve"><value>{0} is accepted until {1}</value></data>
+  <data name="pair_security_rekey_required" xml:space="preserve"><value>Devices that must pair again</value></data>
+  <data name="pair_security_title" xml:space="preserve"><value>Cluster key</value></data>
   <data name="pair_tab" xml:space="preserve"><value>Add device</value></data>
   <data name="pair_title_unpaired" xml:space="preserve"><value>Add this doorbell to a Cluster</value></data>
+  <data name="pair_upgrade_body" xml:space="preserve"><value>The new security protocol needs this device to join the cluster again. Its history is kept. Add it from a device that is already in the cluster.</value></data>
   <data name="pair_upgrade_rejoin_hint" xml:space="preserve"><value>The security update retired the old connection; history is kept. Show a PIN on a cluster device and join again.</value></data>
   <data name="pair_upgrade_rejoin_title" xml:space="preserve"><value>Pair again after the upgrade</value></data>
+  <data name="pair_upgrade_title" xml:space="preserve"><value>Pair this device again</value></data>
   <data name="pairing_persist_failed_detail" xml:space="preserve"><value>Pairing succeeded, but secure storage failed, so this device has not been marked ready. Check pairing-error.log, free disk space and permissions.</value></data>
   <data name="pairing_persist_failed_title" xml:space="preserve"><value>Pairing not saved</value></data>
   <data name="panel_answering" xml:space="preserve"><value>Answering…</value></data>
@@ -866,8 +894,6 @@ Delete it?</value></data>
   <data name="panel_lifecycle_identity_missing" xml:space="preserve"><value>This call cannot be answered safely because its lifecycle identity is unavailable</value></data>
   <data name="panel_lifecycle_lease_expired" xml:space="preserve"><value>Call control authorization expired.</value></data>
   <data name="panel_lifecycle_lease_unavailable" xml:space="preserve"><value>This node cannot confirm the call control lease.</value></data>
-  <data name="panel_mock_incall" xml:space="preserve"><value>In call (mock)</value></data>
-  <data name="panel_mock_registered" xml:space="preserve"><value>Extension {0} registered (mock)</value></data>
   <data name="panel_monitor_title" xml:space="preserve"><value>Ring monitor</value></data>
   <data name="panel_new_call_detected" xml:space="preserve"><value>A new call was detected — refreshing state</value></data>
   <data name="panel_no_audio_note" xml:space="preserve"><value>No voice at this door (notify only)</value></data>
@@ -906,12 +932,220 @@ Delete it?</value></data>
   <data name="panel_video_unavailable" xml:space="preserve"><value>Video sharing is unavailable for this call.</value></data>
   <data name="panel_visitor_calling" xml:space="preserve"><value>Visitor calling</value></data>
   <data name="panel_webrtc_required" xml:space="preserve"><value>Calling requires Asterisk WebRTC configuration (integrations.webrtc.ws_url) — see deploy/asterisk/webrtc.md</value></data>
+  <data name="panels_active" xml:space="preserve"><value>Active</value></data>
+  <data name="panels_create" xml:space="preserve"><value>Issue credential</value></data>
+  <data name="panels_created" xml:space="preserve"><value>Panel credential issued</value></data>
+  <data name="panels_crypto_unavailable" xml:space="preserve"><value>This browser cannot create a secure credential</value></data>
+  <data name="panels_door_scope" xml:space="preserve"><value>Doors</value></data>
+  <data name="panels_empty" xml:space="preserve"><value>No panel credentials issued yet</value></data>
+  <data name="panels_failed_reason" xml:space="preserve"><value>Couldn't complete the action: {0}</value></data>
+  <data name="panels_grant_call_answer" xml:space="preserve"><value>Answer calls</value></data>
+  <data name="panels_grant_call_initiate" xml:space="preserve"><value>Start calls</value></data>
+  <data name="panels_grant_call_monitor" xml:space="preserve"><value>Watch video</value></data>
+  <data name="panels_grant_door_open" xml:space="preserve"><value>Unlock the door</value></data>
+  <data name="panels_grant_media_publish" xml:space="preserve"><value>Send video</value></data>
+  <data name="panels_grant_notice_write" xml:space="preserve"><value>Edit announcements</value></data>
+  <data name="panels_grant_sos_trigger" xml:space="preserve"><value>Trigger SOS</value></data>
+  <data name="panels_grant_view" xml:space="preserve"><value>View status</value></data>
+  <data name="panels_grants" xml:space="preserve"><value>Allowed actions</value></data>
+  <data name="panels_intro" xml:space="preserve"><value>Issue one credential per Web panel and choose which doors and actions it may use. A lost device can be revoked on its own without affecting other panels.</value></data>
+  <data name="panels_last_activity" xml:space="preserve"><value>Last activity</value></data>
+  <data name="panels_legacy_detected" xml:space="preserve"><value>The older shared token is in use. If one device leaks it, every panel has to be changed.</value></data>
+  <data name="panels_legacy_step_create" xml:space="preserve"><value>Issue a credential above for each panel</value></data>
+  <data name="panels_legacy_step_move" xml:space="preserve"><value>Reopen each panel device with its new link</value></data>
+  <data name="panels_legacy_step_retire" xml:space="preserve"><value>When every panel has moved, rotate the shared token under System to retire the old links</value></data>
+  <data name="panels_legacy_title" xml:space="preserve"><value>Shared panel token</value></data>
+  <data name="panels_link_call" xml:space="preserve"><value>Call screen</value></data>
+  <data name="panels_link_door" xml:space="preserve"><value>Door screen</value></data>
+  <data name="panels_link_monitor" xml:space="preserve"><value>Monitor screen</value></data>
+  <data name="panels_loading" xml:space="preserve"><value>Loading…</value></data>
+  <data name="panels_never" xml:space="preserve"><value>Not recorded</value></data>
+  <data name="panels_no_doors" xml:space="preserve"><value>No doors yet</value></data>
+  <data name="panels_one_time_done" xml:space="preserve"><value>Done</value></data>
+  <data name="panels_one_time_title" xml:space="preserve"><value>Panel links</value></data>
+  <data name="panels_one_time_warning" xml:space="preserve"><value>These links are shown only once. Open one on the panel device, then close this box. The credential is stored on this node only.</value></data>
+  <data name="panels_provisioning_required" xml:space="preserve"><value>Call setup needed</value></data>
+  <data name="panels_revoke" xml:space="preserve"><value>Revoke</value></data>
+  <data name="panels_revoke_confirm" xml:space="preserve"><value>Revoke this panel? Its credential will stop working immediately.</value></data>
+  <data name="panels_revoked" xml:space="preserve"><value>Revoked</value></data>
+  <data name="panels_revoked_done" xml:space="preserve"><value>Panel revoked</value></data>
+  <data name="panels_rotate_confirm" xml:space="preserve"><value>Replace this credential? The old link stops working.</value></data>
+  <data name="panels_rotated" xml:space="preserve"><value>Credential replaced</value></data>
+  <data name="panels_scope_required" xml:space="preserve"><value>Choose at least one door and one action</value></data>
+  <data name="panels_tab" xml:space="preserve"><value>Panels</value></data>
+  <data name="panels_title" xml:space="preserve"><value>Panel credentials</value></data>
   <data name="power_charging" xml:space="preserve"><value>Charging</value></data>
   <data name="power_mains" xml:space="preserve"><value>On mains power</value></data>
   <data name="power_no_battery" xml:space="preserve"><value>No battery</value></data>
   <data name="power_percent" xml:space="preserve"><value>{0}%</value></data>
   <data name="power_title" xml:space="preserve"><value>Battery</value></data>
   <data name="power_unknown" xml:space="preserve"><value>Not reported</value></data>
+  <data name="prefs_about" xml:space="preserve"><value>About</value></data>
+  <data name="prefs_add_device" xml:space="preserve"><value>Add a device</value></data>
+  <data name="prefs_add_preset" xml:space="preserve"><value>Add preset</value></data>
+  <data name="prefs_add_purpose" xml:space="preserve"><value>Add purpose</value></data>
+  <data name="prefs_add_reply" xml:space="preserve"><value>Add reply</value></data>
+  <data name="prefs_add_server" xml:space="preserve"><value>Add server</value></data>
+  <data name="prefs_add_window" xml:space="preserve"><value>Add time window</value></data>
+  <data name="prefs_answer_auto" xml:space="preserve"><value>Automatic</value></data>
+  <data name="prefs_answer_mode" xml:space="preserve"><value>Answer</value></data>
+  <data name="prefs_answer_ring" xml:space="preserve"><value>Manual</value></data>
+  <data name="prefs_available" xml:space="preserve"><value>Available</value></data>
+  <data name="prefs_backdrop" xml:space="preserve"><value>Text backdrop</value></data>
+  <data name="prefs_backdrop_color" xml:space="preserve"><value>Backdrop colour</value></data>
+  <data name="prefs_backdrop_opacity" xml:space="preserve"><value>Backdrop opacity</value></data>
+  <data name="prefs_bitrate" xml:space="preserve"><value>Bit rate</value></data>
+  <data name="prefs_blur_radius" xml:space="preserve"><value>Frosted-glass blur</value></data>
+  <data name="prefs_blur_system_managed" xml:space="preserve"><value>Managed by the system</value></data>
+  <data name="prefs_brightness" xml:space="preserve"><value>Brightness</value></data>
+  <data name="prefs_buildings" xml:space="preserve"><value>Buildings and doors</value></data>
+  <data name="prefs_button_sound" xml:space="preserve"><value>Button sound</value></data>
+  <data name="prefs_call_flow" xml:space="preserve"><value>Call flow</value></data>
+  <data name="prefs_call_flow_footer" xml:space="preserve"><value>Choose whether visitors pick a purpose first or ring first and pick it afterwards.</value></data>
+  <data name="prefs_call_sound" xml:space="preserve"><value>Door station call sound</value></data>
+  <data name="prefs_call_sound_loop" xml:space="preserve"><value>Repeat until answered</value></data>
+  <data name="prefs_call_ttl" xml:space="preserve"><value>Ring duration</value></data>
+  <data name="prefs_calls" xml:space="preserve"><value>Calls and replies</value></data>
+  <data name="prefs_camera" xml:space="preserve"><value>Camera</value></data>
+  <data name="prefs_camera_codec" xml:space="preserve"><value>Video format</value></data>
+  <data name="prefs_camera_codec_footer" xml:space="preserve"><value>Automatic uses H.264 where this device supports it and MJPEG otherwise.</value></data>
+  <data name="prefs_cluster_key" xml:space="preserve"><value>Cluster key</value></data>
+  <data name="prefs_direct_port" xml:space="preserve"><value>Direct call port</value></data>
+  <data name="prefs_display" xml:space="preserve"><value>Display and brightness</value></data>
+  <data name="prefs_doors_footer" xml:space="preserve"><value>A door is created when its door station is added.</value></data>
+  <data name="prefs_dtmf" xml:space="preserve"><value>Keypad actions (DTMF)</value></data>
+  <data name="prefs_flow_purpose_first" xml:space="preserve"><value>Purpose first</value></data>
+  <data name="prefs_flow_ring_then_purpose" xml:space="preserve"><value>Ring first</value></data>
+  <data name="prefs_frame_rate" xml:space="preserve"><value>Frame rate</value></data>
+  <data name="prefs_from" xml:space="preserve"><value>From</value></data>
+  <data name="prefs_history" xml:space="preserve"><value>History</value></data>
+  <data name="prefs_households" xml:space="preserve"><value>Households</value></data>
+  <data name="prefs_icon" xml:space="preserve"><value>Icon</value></data>
+  <data name="prefs_identity" xml:space="preserve"><value>Name and role</value></data>
+  <data name="prefs_image_upload" xml:space="preserve"><value>Add images</value></data>
+  <data name="prefs_import_export" xml:space="preserve"><value>Import and export</value></data>
+  <data name="prefs_integrations" xml:space="preserve"><value>Integration settings</value></data>
+  <data name="prefs_invalid_color" xml:space="preserve"><value>Enter a colour as #RRGGBB</value></data>
+  <data name="prefs_invalid_door_id" xml:space="preserve"><value>A door ID starts with a letter or digit and uses up to 64 letters, digits, _ or -</value></data>
+  <data name="prefs_invalid_extension" xml:space="preserve"><value>That extension is not valid</value></data>
+  <data name="prefs_invalid_host" xml:space="preserve"><value>That server name is not valid</value></data>
+  <data name="prefs_invalid_port" xml:space="preserve"><value>Enter a port from 1 to 65535</value></data>
+  <data name="prefs_invalid_time" xml:space="preserve"><value>Enter a time from 00:00 to 23:59</value></data>
+  <data name="prefs_label" xml:space="preserve"><value>Label</value></data>
+  <data name="prefs_label_invalid" xml:space="preserve"><value>The label is too long or contains characters that cannot be used</value></data>
+  <data name="prefs_label_required" xml:space="preserve"><value>The Japanese label cannot be empty</value></data>
+  <data name="prefs_launch_sound" xml:space="preserve"><value>Startup sound</value></data>
+  <data name="prefs_list_footer" xml:space="preserve"><value>Tap Edit to reorder or delete.</value></data>
+  <data name="prefs_media_sources" xml:space="preserve"><value>External cameras</value></data>
+  <data name="prefs_members" xml:space="preserve"><value>Members</value></data>
+  <data name="prefs_members_need_rejoin" xml:space="preserve"><value>Devices that must re-join</value></data>
+  <data name="prefs_motion" xml:space="preserve"><value>Motion detection</value></data>
+  <data name="prefs_motion_enabled" xml:space="preserve"><value>Detect motion</value></data>
+  <data name="prefs_motion_interval" xml:space="preserve"><value>Minimum interval</value></data>
+  <data name="prefs_motion_sensitivity" xml:space="preserve"><value>Sensitivity</value></data>
+  <data name="prefs_need_one_language" xml:space="preserve"><value>Choose at least one language</value></data>
+  <data name="prefs_night_brightness" xml:space="preserve"><value>Night brightness</value></data>
+  <data name="prefs_night_mode" xml:space="preserve"><value>Night mode</value></data>
+  <data name="prefs_no_doors" xml:space="preserve"><value>No doors yet</value></data>
+  <data name="prefs_no_node" xml:space="preserve"><value>This device's ID is not known yet</value></data>
+  <data name="prefs_notice_global" xml:space="preserve"><value>Home-wide announcement</value></data>
+  <data name="prefs_notice_presets" xml:space="preserve"><value>Announcement presets</value></data>
+  <data name="prefs_ntp" xml:space="preserve"><value>Internet time</value></data>
+  <data name="prefs_open_in_admin" xml:space="preserve"><value>Open in Admin</value></data>
+  <data name="prefs_order_footer" xml:space="preserve"><value>Drag the handles to reorder.</value></data>
+  <data name="prefs_out_of_range" xml:space="preserve"><value>That value is out of range</value></data>
+  <data name="prefs_panels" xml:space="preserve"><value>Web panel access</value></data>
+  <data name="prefs_password_too_short" xml:space="preserve"><value>The admin password needs at least eight characters</value></data>
+  <data name="prefs_pixel_shift" xml:space="preserve"><value>Burn-in shift interval</value></data>
+  <data name="prefs_playback_low_latency" xml:space="preserve"><value>Low latency</value></data>
+  <data name="prefs_port" xml:space="preserve"><value>Port</value></data>
+  <data name="prefs_presets_footer" xml:space="preserve"><value>Up to eight presets.</value></data>
+  <data name="prefs_presets_full" xml:space="preserve"><value>There are already eight presets</value></data>
+  <data name="prefs_purpose_footer" xml:space="preserve"><value>A switched-off purpose is hidden from visitors; its wording and order are kept.</value></data>
+  <data name="prefs_quality" xml:space="preserve"><value>Quality</value></data>
+  <data name="prefs_quick_replies" xml:space="preserve"><value>Quick replies</value></data>
+  <data name="prefs_quiet_footer" xml:space="preserve"><value>Indoor chimes stay silent during these windows.</value></data>
+  <data name="prefs_red_tint" xml:space="preserve"><value>Red tint</value></data>
+  <data name="prefs_reply_audio" xml:space="preserve"><value>Recorded reply audio</value></data>
+  <data name="prefs_reply_ttl" xml:space="preserve"><value>Reply display time</value></data>
+  <data name="prefs_resolution" xml:space="preserve"><value>Resolution</value></data>
+  <data name="prefs_retention" xml:space="preserve"><value>Keep history for</value></data>
+  <data name="prefs_ringtone" xml:space="preserve"><value>Ringtone</value></data>
+  <data name="prefs_rotate_key" xml:space="preserve"><value>Rotate the cluster key</value></data>
+  <data name="prefs_rotate_key_confirm" xml:space="preserve"><value>Every connected device receives the new key. A device that does not connect within seven days must join again.</value></data>
+  <data name="prefs_rotate_key_failed" xml:space="preserve"><value>The cluster key could not be rotated</value></data>
+  <data name="prefs_rotate_key_footer" xml:space="preserve"><value>Do this after removing a device. Devices offline for more than seven days must join again.</value></data>
+  <data name="prefs_rule_edit" xml:space="preserve"><value>Edit what rules do</value></data>
+  <data name="prefs_rule_missed" xml:space="preserve"><value>Missed call</value></data>
+  <data name="prefs_rule_sos_off" xml:space="preserve"><value>SOS cleared</value></data>
+  <data name="prefs_rule_sos_on" xml:space="preserve"><value>SOS raised</value></data>
+  <data name="prefs_rules" xml:space="preserve"><value>Rules</value></data>
+  <data name="prefs_save" xml:space="preserve"><value>Save</value></data>
+  <data name="prefs_saver_always" xml:space="preserve"><value>Always</value></data>
+  <data name="prefs_saver_clock" xml:space="preserve"><value>Clock</value></data>
+  <data name="prefs_saver_daily" xml:space="preserve"><value>Daily window</value></data>
+  <data name="prefs_saver_dim" xml:space="preserve"><value>Dim</value></data>
+  <data name="prefs_saver_minimal" xml:space="preserve"><value>Minimal</value></data>
+  <data name="prefs_screensaver" xml:space="preserve"><value>Screen saver</value></data>
+  <data name="prefs_screensaver_after" xml:space="preserve"><value>Start after</value></data>
+  <data name="prefs_screensaver_brightness" xml:space="preserve"><value>Brightness while saving</value></data>
+  <data name="prefs_screensaver_mode" xml:space="preserve"><value>Style</value></data>
+  <data name="prefs_screensaver_schedule" xml:space="preserve"><value>When</value></data>
+  <data name="prefs_search" xml:space="preserve"><value>Search settings</value></data>
+  <data name="prefs_selected" xml:space="preserve"><value>Selected</value></data>
+  <data name="prefs_sip" xml:space="preserve"><value>Calling (SIP)</value></data>
+  <data name="prefs_sip_account" xml:space="preserve"><value>This device's extension</value></data>
+  <data name="prefs_sip_account_footer" xml:space="preserve"><value>The password lives in secure storage and is set in the web admin.</value></data>
+  <data name="prefs_sip_host" xml:space="preserve"><value>Server</value></data>
+  <data name="prefs_sip_password" xml:space="preserve"><value>SIP password</value></data>
+  <data name="prefs_sip_server" xml:space="preserve"><value>SIP server</value></data>
+  <data name="prefs_sip_server_footer" xml:space="preserve"><value>Leave empty to use direct calls between devices only.</value></data>
+  <data name="prefs_sip_user" xml:space="preserve"><value>Extension</value></data>
+  <data name="prefs_sos" xml:space="preserve"><value>Emergency (SOS)</value></data>
+  <data name="prefs_sos_alarm" xml:space="preserve"><value>Alarm</value></data>
+  <data name="prefs_sos_cancel_pin" xml:space="preserve"><value>Clearing needs the admin password</value></data>
+  <data name="prefs_sos_countdown" xml:space="preserve"><value>Cancellable countdown</value></data>
+  <data name="prefs_sos_presentation" xml:space="preserve"><value>Alert appearance and recipients</value></data>
+  <data name="prefs_sos_roles" xml:space="preserve"><value>Shown on</value></data>
+  <data name="prefs_sos_sip" xml:space="preserve"><value>SOS phone call</value></data>
+  <data name="prefs_sos_sip_enabled" xml:space="preserve"><value>Place a call</value></data>
+  <data name="prefs_sos_sip_footer" xml:space="preserve"><value>Calls the given extension through the SIP server.</value></data>
+  <data name="prefs_sos_sip_target" xml:space="preserve"><value>Extension</value></data>
+  <data name="prefs_sos_sound" xml:space="preserve"><value>Alarm sound</value></data>
+  <data name="prefs_sos_trigger" xml:space="preserve"><value>SOS control</value></data>
+  <data name="prefs_sos_trigger_footer" xml:space="preserve"><value>SOS never calls the police or fire services by itself.</value></data>
+  <data name="prefs_sos_web_alerts" xml:space="preserve"><value>Show on open web panels</value></data>
+  <data name="prefs_sound_button_click" xml:space="preserve"><value>Click</value></data>
+  <data name="prefs_sound_classic" xml:space="preserve"><value>Classic</value></data>
+  <data name="prefs_sound_ding1" xml:space="preserve"><value>Ding 1</value></data>
+  <data name="prefs_sound_ding2" xml:space="preserve"><value>Ding 2</value></data>
+  <data name="prefs_sound_indoor_update" xml:space="preserve"><value>Notification</value></data>
+  <data name="prefs_sound_none" xml:space="preserve"><value>None</value></data>
+  <data name="prefs_sound_outdoor_call_alert" xml:space="preserve"><value>Call alert</value></data>
+  <data name="prefs_sound_school_chime" xml:space="preserve"><value>School chime</value></data>
+  <data name="prefs_sound_siren1" xml:space="preserve"><value>Siren</value></data>
+  <data name="prefs_sound_title_display" xml:space="preserve"><value>Title</value></data>
+  <data name="prefs_sound_upload" xml:space="preserve"><value>Add audio files</value></data>
+  <data name="prefs_sounds" xml:space="preserve"><value>Sounds and volume</value></data>
+  <data name="prefs_speak" xml:space="preserve"><value>Speak aloud</value></data>
+  <data name="prefs_speak_footer" xml:space="preserve"><value>The door station reads the reply aloud.</value></data>
+  <data name="prefs_sync_interval" xml:space="preserve"><value>Sync interval</value></data>
+  <data name="prefs_theme" xml:space="preserve"><value>Background</value></data>
+  <data name="prefs_to" xml:space="preserve"><value>To</value></data>
+  <data name="prefs_tones" xml:space="preserve"><value>Sound effects</value></data>
+  <data name="prefs_transport" xml:space="preserve"><value>Transport</value></data>
+  <data name="prefs_unit_days" xml:space="preserve"><value>days</value></data>
+  <data name="prefs_unit_hours" xml:space="preserve"><value>h</value></data>
+  <data name="prefs_unit_seconds" xml:space="preserve"><value>s</value></data>
+  <data name="prefs_update_sound" xml:space="preserve"><value>Update sound</value></data>
+  <data name="prefs_version" xml:space="preserve"><value>Version</value></data>
+  <data name="prefs_video" xml:space="preserve"><value>Video</value></data>
+  <data name="prefs_visitor_lang_revert" xml:space="preserve"><value>Return to the default language after</value></data>
+  <data name="prefs_visitor_languages" xml:space="preserve"><value>Visitor languages</value></data>
+  <data name="prefs_visitor_languages_footer" xml:space="preserve"><value>The order shown on the door station's language switch. The first language is the default.</value></data>
+  <data name="prefs_web_only_dtmf" xml:space="preserve"><value>Keypad actions send commands to other systems, so they are edited in the web admin.</value></data>
+  <data name="prefs_web_only_panels" xml:space="preserve"><value>Panel credentials are shown only once, so they are issued in the web admin.</value></data>
+  <data name="prefs_web_only_structure" xml:space="preserve"><value>These are validated together across many keys, so they are edited in the web admin.</value></data>
   <data name="purpose_cancel_call" xml:space="preserve"><value>Cancel call</value></data>
   <data name="purpose_choose_hint" xml:space="preserve"><value>Tap an option to ring the doorbell.</value></data>
   <data name="purpose_disabled" xml:space="preserve"><value>Hidden</value></data>
@@ -956,9 +1190,30 @@ On</value></data>
   <data name="ring_quick_reply" xml:space="preserve"><value>Quick reply</value></data>
   <data name="ring_return_countdown_a11y" xml:space="preserve"><value>Seconds until this panel returns home (tap to stop)</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>Unlock</value></data>
+  <data name="ring_unlock_failed" xml:space="preserve"><value>The unlock action could not be run</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>No unlock action is configured for this door</value></data>
   <data name="ring_video_zoom_hint" xml:space="preserve"><value>Pinch to zoom; double-tap to reset</value></data>
+  <data name="security_failed" xml:space="preserve"><value>Couldn't complete the action: {0}</value></data>
+  <data name="security_fingerprint" xml:space="preserve"><value>Certificate fingerprint</value></data>
+  <data name="security_fingerprint_hint" xml:space="preserve"><value>Trust this connection only if the fingerprint your browser shows matches this one.</value></data>
+  <data name="security_fingerprint_unavailable" xml:space="preserve"><value>Not available</value></data>
+  <data name="security_membership" xml:space="preserve"><value>Membership</value></data>
+  <data name="security_membership_member" xml:space="preserve"><value>Member</value></data>
+  <data name="security_membership_protocol_upgrade_required" xml:space="preserve"><value>App update needed</value></data>
+  <data name="security_membership_rekey_required" xml:space="preserve"><value>Pair again (missed a key change)</value></data>
+  <data name="security_membership_unknown" xml:space="preserve"><value>Unknown</value></data>
+  <data name="security_membership_upgrade_rejoin_required" xml:space="preserve"><value>Pair again after the update</value></data>
+  <data name="security_rebuild" xml:space="preserve"><value>Rebuild the cluster from this device</value></data>
+  <data name="security_rebuild_confirm" xml:space="preserve"><value>Rebuild the cluster from this device? Every other device will need to pair again.</value></data>
+  <data name="security_rebuild_done" xml:space="preserve"><value>Cluster rebuilt. Pair the other devices.</value></data>
+  <data name="security_rebuild_hint" xml:space="preserve"><value>Use this when the original founding device is gone after an upgrade. This device keeps its settings and history; every other device pairs again.</value></data>
+  <data name="security_rotate_key" xml:space="preserve"><value>Rotate the cluster key</value></data>
+  <data name="security_rotate_key_confirm" xml:space="preserve"><value>Rotate the cluster key now?</value></data>
+  <data name="security_rotate_key_done" xml:space="preserve"><value>Cluster key rotation started</value></data>
+  <data name="security_rotate_key_done_id" xml:space="preserve"><value>Cluster key rotated to {0}</value></data>
+  <data name="security_rotate_key_hint" xml:space="preserve"><value>Use this after removing a device or if a leak is suspected. Devices that stay offline for more than 7 days must be paired again.</value></data>
+  <data name="security_title" xml:space="preserve"><value>Cluster security</value></data>
   <data name="settings_about" xml:space="preserve"><value>About this device</value></data>
   <data name="settings_add_device" xml:space="preserve"><value>Add a device</value></data>
   <data name="settings_add_device_action" xml:space="preserve"><value>Add</value></data>
@@ -979,7 +1234,7 @@ On</value></data>
   <data name="settings_appearance_system" xml:space="preserve"><value>Follow the system</value></data>
   <data name="settings_assets" xml:space="preserve"><value>Assets (images, audio)</value></data>
   <data name="settings_assets_desc" xml:space="preserve"><value>Uploading and distributing files</value></data>
-  <data name="settings_back" xml:space="preserve"><value>Back</value></data>
+  <data name="settings_back" xml:space="preserve"><value>Settings</value></data>
   <data name="settings_backdrop" xml:space="preserve"><value>Dimming layer</value></data>
   <data name="settings_backdrop_opacity" xml:space="preserve"><value>Dimming strength</value></data>
   <data name="settings_background_color" xml:space="preserve"><value>Background colour</value></data>
@@ -1019,6 +1274,7 @@ On</value></data>
   <data name="settings_cat_sos" xml:space="preserve"><value>Emergency (SOS)</value></data>
   <data name="settings_cat_sound" xml:space="preserve"><value>Sound</value></data>
   <data name="settings_cat_time" xml:space="preserve"><value>Date &amp; time</value></data>
+  <data name="settings_categories" xml:space="preserve"><value>Settings categories</value></data>
   <data name="settings_change_password" xml:space="preserve"><value>Change the admin password</value></data>
   <data name="settings_close" xml:space="preserve"><value>Close</value></data>
   <data name="settings_cluster" xml:space="preserve"><value>Cluster</value></data>
@@ -1059,6 +1315,11 @@ On</value></data>
   <data name="settings_fps_24" xml:space="preserve"><value>24 fps</value></data>
   <data name="settings_fps_30" xml:space="preserve"><value>30 fps</value></data>
   <data name="settings_glass_blur" xml:space="preserve"><value>Frosted-glass blur</value></data>
+  <data name="settings_group_appearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="settings_group_calls" xml:space="preserve"><value>Calls</value></data>
+  <data name="settings_group_overview" xml:space="preserve"><value>Overview</value></data>
+  <data name="settings_group_site" xml:space="preserve"><value>Doors and devices</value></data>
+  <data name="settings_group_system" xml:space="preserve"><value>System</value></data>
   <data name="settings_grp_about" xml:space="preserve"><value>Version and identity</value></data>
   <data name="settings_grp_all_devices" xml:space="preserve"><value>Default for all devices</value></data>
   <data name="settings_grp_appearance" xml:space="preserve"><value>Appearance</value></data>
@@ -1124,6 +1385,7 @@ On</value></data>
   <data name="settings_night_from" xml:space="preserve"><value>From</value></data>
   <data name="settings_night_red_tint" xml:space="preserve"><value>Warm red tint</value></data>
   <data name="settings_night_to" xml:space="preserve"><value>Until</value></data>
+  <data name="settings_no_match" xml:space="preserve"><value>No matching settings</value></data>
   <data name="settings_no_password" xml:space="preserve"><value>No admin password is set yet. Sign in once on the web admin</value></data>
   <data name="settings_node_id" xml:space="preserve"><value>Node ID</value></data>
   <data name="settings_not_configured" xml:space="preserve"><value>Not set</value></data>
