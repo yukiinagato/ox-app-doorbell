@@ -1141,6 +1141,7 @@
   <data name="pair_scan_denied" xml:space="preserve"><value>无法打开摄像头。请检查浏览器的摄像头权限</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>请对准新设备上显示的添加二维码</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。</value></data>
+  <data name="pair_scan_not_device_qr" xml:space="preserve"><value>这不是设备的添加二维码。请扫描新设备屏幕上显示的添加用二维码</value></data>
   <data name="pair_scan_opening" xml:space="preserve"><value>正在启动摄像头…</value></data>
   <data name="pair_scan_paste" xml:space="preserve"><value>粘贴二维码文本</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>扫描二维码</value></data>

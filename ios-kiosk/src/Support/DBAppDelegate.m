@@ -1345,6 +1345,10 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   _backgroundTask = UIBackgroundTaskInvalid;
 }
 
+- (DBCameraFeeder *)sharedCamera {
+  return _camera;
+}
+
 - (void)listenerProbeTimerFired:(NSTimer *)timer {
   (void)timer;
   [self restartIfCoreListenersDead:@"periodic"];

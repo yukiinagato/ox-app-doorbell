@@ -1134,6 +1134,7 @@
 "pair.scan_denied" = "カメラを開けませんでした。ブラウザのカメラ権限を確認してください";
 "pair.scan_hint" = "新しい端末に表示された追加用QRコードにカメラを向けてください";
 "pair.scan_no_camera" = "この端末にはカメラがありません。別の端末で読み取るか、ペアリング PIN を使ってください。";
+"pair.scan_not_device_qr" = "これは端末追加用のQRではありません。新しい端末の画面に表示されている追加用QRを読み取ってください";
 "pair.scan_opening" = "カメラを起動しています…";
 "pair.scan_paste" = "QR の文字列を貼り付ける";
 "pair.scan_qr" = "QR を読み取る";

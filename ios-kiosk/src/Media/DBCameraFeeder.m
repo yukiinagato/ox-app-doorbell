@@ -112,6 +112,17 @@
   dispatch_async(_queue, ^{ [session startRunning]; });
 }
 
+- (BOOL)running {
+  return _session != nil;
+}
+
+- (CALayer *)newPreviewLayer {
+  if (!_session) return nil;
+  AVCaptureVideoPreviewLayer *layer = [AVCaptureVideoPreviewLayer layerWithSession:_session];
+  layer.videoGravity = AVLayerVideoGravityResizeAspectFill;
+  return layer;
+}
+
 - (void)stop {
   @synchronized(self) { _accepting = NO; _reportedActive = NO; }
   AVCaptureSession *session = _session;

@@ -1139,6 +1139,7 @@ Delete it?</string>
     <string name="pair_scan_denied">Couldn\'t open the camera. Check the browser\'s camera permission</string>
     <string name="pair_scan_hint">Point at the Add QR shown on the new device</string>
     <string name="pair_scan_no_camera">This device has no camera. Scan from another device, or use a Pairing PIN.</string>
+    <string name="pair_scan_not_device_qr">That isn\'t a device\'s Add QR. Scan the Add QR shown on the new device\'s screen</string>
     <string name="pair_scan_opening">Starting the camera…</string>
     <string name="pair_scan_paste">Paste the QR text</string>
     <string name="pair_scan_qr">Scan QR</string>

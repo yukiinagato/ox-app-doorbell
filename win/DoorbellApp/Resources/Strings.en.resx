@@ -1141,6 +1141,7 @@ Delete it?</value></data>
   <data name="pair_scan_denied" xml:space="preserve"><value>Couldn't open the camera. Check the browser's camera permission</value></data>
   <data name="pair_scan_hint" xml:space="preserve"><value>Point at the Add QR shown on the new device</value></data>
   <data name="pair_scan_no_camera" xml:space="preserve"><value>This device has no camera. Scan from another device, or use a Pairing PIN.</value></data>
+  <data name="pair_scan_not_device_qr" xml:space="preserve"><value>That isn't a device's Add QR. Scan the Add QR shown on the new device's screen</value></data>
   <data name="pair_scan_opening" xml:space="preserve"><value>Starting the camera…</value></data>
   <data name="pair_scan_paste" xml:space="preserve"><value>Paste the QR text</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>

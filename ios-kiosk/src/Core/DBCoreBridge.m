@@ -1144,6 +1144,18 @@ static DBRotateKeyFn DBRotateKey(void) {
   });
 }
 
+- (void)qrScanStart {
+  dispatch_async(_coreQueue, ^{
+    if (self->_core) db_core_qr_scan_start(self->_core);
+  });
+}
+
+- (void)qrScanStop {
+  dispatch_async(_coreQueue, ^{
+    if (self->_core) db_core_qr_scan_stop(self->_core);
+  });
+}
+
 - (BOOL)retryPairingPersistence {
   __block BOOL ok = NO;
   dispatch_sync(_coreQueue, ^{

@@ -1134,6 +1134,7 @@
 "pair.scan_denied" = "无法打开摄像头。请检查浏览器的摄像头权限";
 "pair.scan_hint" = "请对准新设备上显示的添加二维码";
 "pair.scan_no_camera" = "此设备没有摄像头。请用其他设备扫描，或改用配对 PIN。";
+"pair.scan_not_device_qr" = "这不是设备的添加二维码。请扫描新设备屏幕上显示的添加用二维码";
 "pair.scan_opening" = "正在启动摄像头…";
 "pair.scan_paste" = "粘贴二维码文本";
 "pair.scan_qr" = "扫描二维码";

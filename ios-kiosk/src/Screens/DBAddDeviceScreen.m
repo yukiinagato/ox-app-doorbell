@@ -6,6 +6,7 @@
 #import "../Core/DBPairingModel.h"
 #import "../Core/DBTexts.h"
 #import "../Media/DBQrCode.h"
+#import "DBQrScanOverlay.h"
 #import "DBRouter.h"
 
 // A joined device leaves pending.devices[] immediately. Keep its row on screen
@@ -56,6 +57,9 @@ static UIColor *DBAddError(void) {
   UIButton *_newCodeButton;
 
   UIButton *_addAllButton;
+  UIButton *_scanButton;
+  UILabel *_scanUnavailable;
+  DBQrScanOverlay *_scanner;
   UILabel *_addAllWarning;
   UIButton *_addAllStop;
 
@@ -230,6 +234,16 @@ static UIColor *DBAddError(void) {
   _newCodeButton.hidden = YES;
   [_codeCard addSubview:_newCodeButton];
 
+  _scanButton = [self flatButtonWithTitle:[_texts ts:@"pair.scan_qr"]
+                               background:DBAddAccent()];
+  [_scanButton addTarget:self action:@selector(onScanQr)
+        forControlEvents:UIControlEventTouchUpInside];
+  _scanButton.accessibilityIdentifier = @"add_device_scan";
+  [_scroll addSubview:_scanButton];
+  _scanUnavailable = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBAddDim() center:YES];
+  _scanUnavailable.text = [_texts ts:@"pair.scan_no_camera"];
+  [_scroll addSubview:_scanUnavailable];
+
   _addAllButton = [self flatButtonWithTitle:[_texts ts:@"pair.add_all"] background:nil];
   [_addAllButton setTitleColor:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1]
                       forState:UIControlStateNormal];
@@ -302,6 +316,10 @@ static UIColor *DBAddError(void) {
 
 - (void)onScreenWillDisappear {
   [self stopPolling];
+  DBQrScanOverlay *scanner = _scanner;
+  _scanner = nil;
+  scanner.onFinished = nil;
+  [scanner dismiss];
 }
 
 - (void)startPolling {
@@ -463,6 +481,9 @@ static UIColor *DBAddError(void) {
   _nearbyTitle.hidden = !ready;
   _nearbyPanel.hidden = !ready;
   _codeButton.hidden = !ready;
+  BOOL hasCamera = [DBQrScanOverlay cameraAvailable];
+  _scanButton.hidden = !ready || !hasCamera;
+  _scanUnavailable.hidden = !ready || hasCamera;
   _codeCard.hidden = !ready || (_token == nil);
   _addAllButton.hidden = !ready;
   _addAllWarning.hidden = !ready;
@@ -790,6 +811,41 @@ static UIColor *DBAddError(void) {
   [self reload];
 }
 
+- (void)onScanQr {
+  if (_scanner) return;
+  DBQrScanOverlay *scanner = [[DBQrScanOverlay alloc] initWithCore:_core texts:_texts];
+  __weak DBAddDeviceScreen *weakSelf = self;
+  scanner.onFinished = ^(NSString *invitedId, NSString *invitedAddr) {
+    DBAddDeviceScreen *screen = weakSelf;
+    if (!screen) return;
+    screen->_scanner = nil;
+    if ([invitedId length] == 0) return;
+    // Core already sent the invite. Show the device as "adding" until device_joined arrives,
+    // the same row a code-confirmed invite gets; its address names it until then.
+    [screen->_deviceStates setObject:@"adding" forKey:invitedId];
+    [screen->_deviceErrors removeObjectForKey:invitedId];
+    if ([invitedAddr length] > 0 && ![screen->_deviceNames objectForKey:invitedId])
+      [screen->_deviceNames setObject:invitedAddr forKey:invitedId];
+    [screen->_addedAt setObject:[NSNumber numberWithDouble:CFAbsoluteTimeGetCurrent()]
+                         forKey:invitedId];
+    [screen applyContent];
+  };
+  _scanner = scanner;
+  [scanner presentInView:self];
+}
+
+- (void)openScannerForDebug {
+  [self onScanQr];
+}
+
+- (void)handleQrScanned:(NSDictionary *)ev {
+  [_scanner handleQrScanned:ev];
+}
+
+- (void)handleQrScanState:(NSDictionary *)ev {
+  [_scanner handleQrScanState:ev];
+}
+
 - (void)onStartCode {
   _errorLabel.text = @"";
   _codeButton.enabled = NO;
@@ -968,6 +1024,17 @@ static UIColor *DBAddError(void) {
       }
       _codeCard.frame = CGRectMake(pad, y, width, cy + 4);
       y += cy + 20;
+    }
+
+    if (!_scanButton.hidden) {
+      _scanButton.frame = CGRectMake(pad, y, width, 48);
+      y += 58;
+    }
+    if (!_scanUnavailable.hidden) {
+      CGFloat unavailableHeight =
+          [_scanUnavailable sizeThatFits:CGSizeMake(width, 9999)].height;
+      _scanUnavailable.frame = CGRectMake(pad, y, width, unavailableHeight);
+      y += unavailableHeight + 14;
     }
 
     _addAllButton.frame = CGRectMake(pad, y, width, 44);

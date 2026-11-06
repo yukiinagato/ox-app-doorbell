@@ -673,6 +673,7 @@ pair.add_all_stop: { ja: "停止", en: "Stop", zh: "停止" }
 pair.qr_caption: { ja: "別の端末でこの QR を読み取ると追加できます", en: "Scan this QR from another device to add this one", zh: "用另一台设备扫描此二维码即可添加" }
 pair.scan_qr: { ja: "QR を読み取る", en: "Scan QR", zh: "扫描二维码" }
 pair.scan_hint: { ja: "新しい端末に表示された追加用QRコードにカメラを向けてください", en: "Point at the Add QR shown on the new device", zh: "请对准新设备上显示的添加二维码" }
+pair.scan_not_device_qr: { ja: "これは端末追加用のQRではありません。新しい端末の画面に表示されている追加用QRを読み取ってください", en: "That isn't a device's Add QR. Scan the Add QR shown on the new device's screen", zh: "这不是设备的添加二维码。请扫描新设备屏幕上显示的添加用二维码" }
 pair.scan_opening: { ja: "カメラを起動しています…", en: "Starting the camera…", zh: "正在启动摄像头…" }
 # The indoor dashboard's three cluster counters. Drawn as a small mark and a number, so the
 # meaning lives entirely in these labels for anyone using VoiceOver.

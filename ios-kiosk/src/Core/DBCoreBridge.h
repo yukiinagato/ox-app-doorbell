@@ -234,6 +234,11 @@ NSString *DBLocalMediaHeaderLine(NSURL *url);
 - (void)rotateClusterKey:(void (^)(int result))completion;
 // Short-lived blocklist for one pending device (the "無視" action).
 - (void)denyDevice:(NSString *)nodeId;
+// Core's own QR decoder reads the camera frames this bridge already pushes. A decoded
+// doorbell-pair: payload is invited by Core itself; results arrive as qr_scanned
+// {text, invited} and qr_scan_state {active}. Scanning stops on its own after two minutes.
+- (void)qrScanStart;
+- (void)qrScanStop;
 // Re-runs the failed secure_put. Core emits pairing_state either way.
 - (BOOL)retryPairingPersistence;
 // Leaves the Cluster: zeroes the PSK, deletes mesh.psk, emits pairing_state.

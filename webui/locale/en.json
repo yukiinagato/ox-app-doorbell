@@ -1134,6 +1134,7 @@
  "pair.scan_denied": "Couldn't open the camera. Check the browser's camera permission",
  "pair.scan_hint": "Point at the Add QR shown on the new device",
  "pair.scan_no_camera": "This device has no camera. Scan from another device, or use a Pairing PIN.",
+ "pair.scan_not_device_qr": "That isn't a device's Add QR. Scan the Add QR shown on the new device's screen",
  "pair.scan_opening": "Starting the camera…",
  "pair.scan_paste": "Paste the QR text",
  "pair.scan_qr": "Scan QR",

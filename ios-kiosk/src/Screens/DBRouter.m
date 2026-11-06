@@ -664,6 +664,14 @@ static BOOL DBCoreSipBackendCompiled(void) {
     [self showPairing];
   } else if ([screen isEqualToString:@"info"]) {
     [self showInfo];
+  } else if ([screen isEqualToString:@"add_device"]) {
+    [self showAddDevice];
+  } else if ([screen isEqualToString:@"qr_scan"]) {
+    // The add-device panel with its scanner open, as the Scan QR button leaves it.
+    [self showAddDevice];
+    DBAddDeviceScreen *panel = _addDevice;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ [panel openScannerForDebug]; });
   } else if ([screen isEqualToString:@"visitor"]) {
     [self transitionTo:self.door animated:NO];
   } else if ([screen isEqualToString:@"incoming"]) {
@@ -1334,6 +1342,10 @@ static BOOL DBCoreSipBackendCompiled(void) {
     if (_current == _addDevice) [_addDevice handlePendingChanged:ev];
   } else if ([t isEqualToString:@"invite_result"]) {
     if (_current == _addDevice) [_addDevice handleInviteResult:ev];
+  } else if ([t isEqualToString:@"qr_scanned"]) {
+    if (_current == _addDevice) [_addDevice handleQrScanned:ev];
+  } else if ([t isEqualToString:@"qr_scan_state"]) {
+    if (_current == _addDevice) [_addDevice handleQrScanState:ev];
   } else if ([t isEqualToString:@"peer_rejected"]) {
     if (_current == _addDevice) [_addDevice handlePeerRejected:ev];
     if (_current == _settings) [_settings reload];
