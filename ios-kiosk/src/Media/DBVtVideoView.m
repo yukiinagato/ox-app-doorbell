@@ -2,9 +2,6 @@
 
 #import "DBLiveEdgeGate.h"
 #import <CoreMedia/CoreMedia.h>
-#import <CoreVideo/CVOpenGLESTextureCache.h>
-#import <OpenGLES/ES1/gl.h>
-#import <OpenGLES/ES1/glext.h>
 #ifdef DB_IOS_COMPAT_PUBLIC_VIDEOTOOLBOX
 #import <VideoToolbox/VideoToolbox.h>
 #else
@@ -231,24 +228,27 @@ static BOOL DbSpsSize(NSData *spsData, int *widthOut, int *heightOut) {
 static void DbVtOutput(void *, void *, OSStatus, DbVTDecodeInfoFlags,
                        CVImageBufferRef, CMTime, CMTime);
 
-@interface DBVtVideoView () <GLKViewDelegate>
+@interface DBVtVideoView ()
 - (void)acceptDecoded:(CVPixelBufferRef)pixel captureMs:(int64_t)captureMs;
 - (int64_t)takeCaptureMsForDts:(int64_t)dtsMs;
+- (void)presentLatestFrame;
+- (void)resetFrameState;
 @end
 
 static DBVtVideoView *DBWarmVideoView;
+static NSUInteger DBActiveVideoViews;
 
 @implementation DBVtVideoView {
   DbVTSessionRef _session;
+  NSData *_configuredSps;
+  NSData *_configuredPps;
   CMFormatDescriptionRef _format;
-  CVOpenGLESTextureCacheRef _textureCache;
   CVPixelBufferRef _latest;
   int64_t _latestCaptureMs;
   BOOL _latestDisplayed;
+  BOOL _displayPending;
+  NSUInteger _displayGeneration;
   DBLiveEdgeGate _liveEdge;
-  GLuint _uploadTexture;
-  size_t _uploadWidth;
-  size_t _uploadHeight;
   NSLock *_frameLock;
   NSMutableDictionary *_captureMsByDts;
   NSUInteger _decodedFrames;
@@ -264,11 +264,18 @@ static DBVtVideoView *DBWarmVideoView;
   }
   if (DBWarmVideoView) return;
   DBWarmVideoView = [[DBVtVideoView alloc] initWithFrame:CGRectMake(-1, -1, 1, 1)];
-  [DBWarmVideoView bindDrawable];
+}
+
++ (void)prewarmWithSps:(NSData *)sps pps:(NSData *)pps {
+  NSAssert([NSThread isMainThread], @"Decoder prewarm is main-thread only");
+  if (DBActiveVideoViews || ![sps length] || ![pps length]) return;
+  [self prewarm];
+  [DBWarmVideoView startWithSps:sps pps:pps];
 }
 
 + (DBVtVideoView *)takeWarmView {
   NSAssert([NSThread isMainThread], @"DBVtVideoView pool is main-thread only");
+  DBActiveVideoViews++;
   DBVtVideoView *view = DBWarmVideoView;
   DBWarmVideoView = nil;
   return view ?: [[DBVtVideoView alloc] initWithFrame:CGRectMake(-1, -1, 1, 1)];
@@ -277,8 +284,9 @@ static DBVtVideoView *DBWarmVideoView;
 + (void)recycleWarmView:(DBVtVideoView *)view {
   if (!view) return;
   NSAssert([NSThread isMainThread], @"DBVtVideoView pool is main-thread only");
-  [view shutdownDecoder];
   view.onDisplayedFrame = nil;
+  [view resetFrameState];
+  if (DBActiveVideoViews) DBActiveVideoViews--;
   [view removeFromSuperview];
   view.frame = CGRectMake(-1, -1, 1, 1);
   if (!DBWarmVideoView) DBWarmVideoView = view;
@@ -290,8 +298,7 @@ static DBVtVideoView *DBWarmVideoView;
 }
 
 - (id)initWithFrame:(CGRect)frame {
-  EAGLContext *context = [[EAGLContext alloc] initWithAPI:kEAGLRenderingAPIOpenGLES1];
-  self = [super initWithFrame:frame context:context];
+  self = [super initWithFrame:frame];
   if (self) {
     _frameLock = [[NSLock alloc] init];
     _captureMsByDts = [[NSMutableDictionary alloc] init];
@@ -299,20 +306,12 @@ static DBVtVideoView *DBWarmVideoView;
     DBLiveEdgeGateInit(&_liveEdge, DB_LIVE_EDGE_DEFAULT_START_MS,
                        DB_LIVE_EDGE_DEFAULT_FLOOR_MS,
                        DB_LIVE_EDGE_DEFAULT_CEILING_MS, false);
-    self.delegate = self;
-    self.enableSetNeedsDisplay = YES;
-    // The decoder compositor is a UIKit sibling. Keep this GLKView transparent
-    // until a decoded H.264 frame is available so an availability MJPEG stream
-    // remains visible during an H.264 probe or a transient decoder failure.
+    // UIKit composites the decoded BGRA image; an EAGL drawable is not
+    // needed and can stall presentation on the original iPad's SGX535.
     self.opaque = NO;
     self.backgroundColor = [UIColor clearColor];
-    self.drawableColorFormat = GLKViewDrawableColorFormatRGBA8888;
-    // The original iPad's SGX535 can successfully decode and upload a BGRA
-    // frame while still presenting an all-black/white EAGL drawable.  Keep the
-    // hardware VideoToolbox decoder and direct fMP4 path, but composite the
-    // decoded BGRA snapshot through a normal UIKit layer above GLKView.  This
-    // costs one bounded 640x360 memory copy per displayed frame; it does not
-    // introduce a software H.264 decoder or another network fallback.
+    // SGX535 can present a blank EAGL drawable despite valid decoded pixels.
+    // UIKit owns final presentation; copy the buffer before returning it to VT.
     _compatImageView = [[UIImageView alloc] initWithFrame:self.bounds];
     _compatImageView.autoresizingMask =
         UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -321,11 +320,6 @@ static DBVtVideoView *DBWarmVideoView;
     _compatImageView.opaque = YES;
     _compatImageView.userInteractionEnabled = NO;
     [self addSubview:_compatImageView];
-    [EAGLContext setCurrentContext:context];
-    CVReturn result = CVOpenGLESTextureCacheCreate(kCFAllocatorDefault, NULL,
-        (CVEAGLContext)context, NULL, &_textureCache);
-    [EAGLContext setCurrentContext:nil];
-    DBH264Dbg(@"[vt] GL texture cache=%d", (int)result);
   }
   return self;
 }
@@ -384,7 +378,8 @@ static int64_t DbNowMs(void) {
 }
 
 - (BOOL)startWithSps:(NSData *)sps pps:(NSData *)pps {
-  if (_session) return YES;
+  if (_session && [_configuredSps isEqual:sps] && [_configuredPps isEqual:pps]) return YES;
+  if (_session) [self shutdownDecoder];
   if (!DbLoadVt() || [sps length] < 4 || [pps length] == 0) return NO;
   int width = 0, height = 0;
   if (!DbSpsSize(sps, &width, &height)) return NO;
@@ -426,6 +421,7 @@ static int64_t DbNowMs(void) {
     DbVTSetProperty(_session, CFSTR("RealTime"), kCFBooleanTrue);
   DBH264Dbg(@"[vt] session %dx%d status=%d ptr=%p", width, height,
             (int)status, _session);
+  if (status == 0 && _session) { _configuredSps = [sps copy]; _configuredPps = [pps copy]; }
   return status == 0 && _session;
 }
 
@@ -493,6 +489,7 @@ static int64_t DbNowMs(void) {
               (unsigned long)CVPixelBufferGetPlaneCount(pixel),
               (unsigned long)CVPixelBufferGetBytesPerRow(pixel));
   }
+  if ([self decodedFrames] == 0) DBH264Dbg(@"[startup-ui] decoded unix_ms=%lld", (long long)DbNowMs());
   int64_t nowMs = DbNowMs();
   BOOL stale = NO;
   BOOL superseded = NO;
@@ -530,7 +527,18 @@ static int64_t DbNowMs(void) {
                 (long long)[self liveEdgeMs]);
   }
   if (stale) return;
-  dispatch_async(dispatch_get_main_queue(), ^{ [self setNeedsDisplay]; });
+  [_frameLock lock];
+  BOOL schedule = !_displayPending;
+  _displayPending = YES;
+  NSUInteger generation = _displayGeneration;
+  [_frameLock unlock];
+  if (schedule) dispatch_async(dispatch_get_main_queue(), ^{
+    [self->_frameLock lock];
+    BOOL current = generation == self->_displayGeneration;
+    if (current) self->_displayPending = NO;
+    [self->_frameLock unlock];
+    if (current) [self presentLatestFrame];
+  });
 }
 
 static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
@@ -548,8 +556,8 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
     DBH264Dbg(@"[vt] output status=%d", (int)status);
 }
 
-- (void)glkView:(GLKView *)view drawInRect:(CGRect)rect {
-  (void)view;
+- (void)presentLatestFrame {
+  if (!_loggedCompatFrame) DBH264Dbg(@"[startup-ui] present_begin unix_ms=%lld", (long long)DbNowMs());
   [_frameLock lock];
   CVPixelBufferRef pixel = _latest ? CVBufferRetain(_latest) : NULL;
   int64_t captureMs = _latestCaptureMs;
@@ -563,59 +571,17 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
   // acceptDecoded:, which is the only place a newer frame can already exist.
   if (alreadyDisplayed) {
     // Nothing new since the last draw (a layout-driven redraw). Skip the
-    // expensive SGX535 upload and keep the frame that is already on screen.
+    // BGRA copy and keep the frame that is already on screen.
     CVBufferRelease(pixel);
     return;
   }
-  glClearColor(0, 0, 0, 0); glClear(GL_COLOR_BUFFER_BIT);
   size_t width = CVPixelBufferGetWidth(pixel), height = CVPixelBufferGetHeight(pixel);
-  // iOS 5's CVOpenGLESTextureCache reports success for VideoToolbox BGRA
-  // buffers but produces an all-white texture on the iPad 1 (SGX535). Upload
-  // the already-decoded BGRA surface into one reusable GL texture instead.
-  // This is one memcpy-equivalent GPU upload per frame, still no software H.264
-  // decode, and is deterministic on the real target hardware.
   CVReturn lock = CVPixelBufferLockBaseAddress(pixel, kCVPixelBufferLock_ReadOnly);
   void *base = lock == kCVReturnSuccess ? CVPixelBufferGetBaseAddress(pixel) : NULL;
   size_t stride = CVPixelBufferGetBytesPerRow(pixel);
-  if (base && stride == width * 4) {
-    if (!_uploadTexture) glGenTextures(1, &_uploadTexture);
-    glBindTexture(GL_TEXTURE_2D, _uploadTexture);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glPixelStorei(GL_UNPACK_ALIGNMENT, 4);
-    if (_uploadWidth != width || _uploadHeight != height) {
-      glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, (GLsizei)width, (GLsizei)height,
-                   0, GL_BGRA, GL_UNSIGNED_BYTE, base);
-      _uploadWidth = width;
-      _uploadHeight = height;
-    } else {
-      glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, (GLsizei)width, (GLsizei)height,
-                      GL_BGRA, GL_UNSIGNED_BYTE, base);
-    }
-    glViewport(0, 0, (GLsizei)rect.size.width, (GLsizei)rect.size.height);
-    glMatrixMode(GL_PROJECTION); glLoadIdentity();
-    glMatrixMode(GL_MODELVIEW); glLoadIdentity();
-    glColor4f(1, 1, 1, 1);
-    glTexEnvi(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_REPLACE);
-    CGRect bounds = self.bounds;
-    CGFloat scale = MIN(bounds.size.width / width, bounds.size.height / height);
-    GLfloat halfW = (GLfloat)(width * scale / bounds.size.width);
-    GLfloat halfH = (GLfloat)(height * scale / bounds.size.height);
-    GLfloat vertices[] = {-halfW,-halfH, halfW,-halfH,
-                          -halfW, halfH, halfW, halfH};
-    static const GLfloat coords[] = {0,1, 1,1, 0,0, 1,0};
-    glEnable(GL_TEXTURE_2D);
-    glEnableClientState(GL_VERTEX_ARRAY);
-    glEnableClientState(GL_TEXTURE_COORD_ARRAY);
-    glVertexPointer(2, GL_FLOAT, 0, vertices);
-    glTexCoordPointer(2, GL_FLOAT, 0, coords);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glDisableClientState(GL_VERTEX_ARRAY);
-    glDisableClientState(GL_TEXTURE_COORD_ARRAY);
-    glDisable(GL_TEXTURE_2D);
-
+  // UIKit owns presentation on SGX535. Uploading the same surface to an
+  // unused GL texture doubles memory traffic and blocks the UI thread.
+  if (base && stride >= width * 4) {
     // CGBitmapContextCreateImage is allowed to retain the context storage.
     // Copy the decoder surface first so the UIImage remains valid after the
     // CVPixelBuffer is unlocked and returned to VideoToolbox.
@@ -630,6 +596,7 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
     CGImageRef image = (provider && colorSpace) ? CGImageCreate(
         width, height, 8, 32, stride, colorSpace, bitmapInfo, provider,
         NULL, NO, kCGRenderingIntentDefault) : NULL;
+    BOOL presented = image != NULL;
     if (image) {
       _compatImageView.image = [UIImage imageWithCGImage:image];
       if (!_loggedCompatFrame) {
@@ -648,40 +615,43 @@ static void DbVtOutput(void *refCon, void *frameRefCon, OSStatus status,
     int64_t displayedAge = captureMs > 0
         ? DbNowMs() - captureMs - _serverToClientOffsetMs : 0;
     [_frameLock lock];
-    _latestDisplayed = YES;
-    DBLiveEdgeGateNoteDisplayed(&_liveEdge, displayedAge, captureMs > 0);
+    if (presented && _latest == pixel) _latestDisplayed = YES;
+    if (presented) DBLiveEdgeGateNoteDisplayed(&_liveEdge, displayedAge, captureMs > 0);
     [_frameLock unlock];
-    if (_onDisplayedFrame) _onDisplayedFrame(captureMs);
+    if (presented && _onDisplayedFrame) _onDisplayedFrame(captureMs);
   }
   if (lock == kCVReturnSuccess)
     CVPixelBufferUnlockBaseAddress(pixel, kCVPixelBufferLock_ReadOnly);
   CVBufferRelease(pixel);
 }
 
-- (void)shutdownDecoder {
-  if (_session) {
-    if (DbVTWait) DbVTWait(_session);
-    DbVTInvalidate(_session);
-    _session = NULL;
-  }
-  if (_format) { CFRelease(_format); _format = NULL; }
+- (void)resetFrameState {
+  if (_session && DbVTWait) DbVTWait(_session);
   [_frameLock lock];
   if (_latest) { CVBufferRelease(_latest); _latest = NULL; }
   _latestDisplayed = NO;
+  _displayPending = NO;
+  _displayGeneration++;
+  _decodedFrames = 0; _droppedFrames = 0;
   [_captureMsByDts removeAllObjects];
   [_frameLock unlock];
   _compatImageView.image = nil;
   _loggedCompatFrame = NO;
 }
 
+- (void)shutdownDecoder {
+  [self resetFrameState];
+  if (_session) {
+    DbVTInvalidate(_session);
+    CFRelease(_session);
+    _session = NULL;
+  }
+  if (_format) { CFRelease(_format); _format = NULL; }
+  _configuredSps = nil; _configuredPps = nil;
+}
+
 - (void)dealloc {
   [self shutdownDecoder];
-  if (_uploadTexture) {
-    [EAGLContext setCurrentContext:self.context];
-    glDeleteTextures(1, &_uploadTexture);
-    [EAGLContext setCurrentContext:nil];
-  }
-  if (_textureCache) CFRelease(_textureCache);
 }
 
 @end

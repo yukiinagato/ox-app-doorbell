@@ -243,13 +243,17 @@ int VideoTrack::subscriberCount() const {
   return st_->subscribers;
 }
 
+Bytes VideoTrack::initialization() const {
+  std::lock_guard<std::mutex> lk(st_->mu); return st_->init;
+}
+
 std::string VideoTrack::codecString() const {
   std::lock_guard<std::mutex> lk(st_->mu);
   return st_->codec_str;
 }
 
-std::shared_ptr<VideoTrack::Reader> VideoTrack::subscribe() {
-  auto reader = std::make_shared<Reader>(st_);
+std::shared_ptr<VideoTrack::Reader> VideoTrack::subscribe(bool fresh_only) {
+  auto reader = std::make_shared<Reader>(st_, fresh_only);
   {
     std::lock_guard<std::mutex> lk(st_->mu);
     if (st_->enabled && !st_->stopped) {
@@ -262,7 +266,7 @@ std::shared_ptr<VideoTrack::Reader> VideoTrack::subscribe() {
 
 // ---------- Reader ----------
 
-VideoTrack::Reader::Reader(std::shared_ptr<State> st) : st_(std::move(st)) {
+VideoTrack::Reader::Reader(std::shared_ptr<State> st, bool fresh_only) : st_(std::move(st)), fresh_only_(fresh_only) {
   std::lock_guard<std::mutex> lk(st_->mu);
   generation_ = st_->generation;
   subscribed_key_seq_ = st_->key_frag_seq;
@@ -293,7 +297,7 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
     if (s.stopped || s.generation != generation_ || !s.enabled) return true;
     if (!init_sent_) return !s.init.empty();
     if (s.source_waiting_for_key) return false;
-    if (key_pending_) return !s.key_frag.empty();
+    if (key_pending_) return !s.key_frag.empty() && (!fresh_only_ || s.key_frag_seq > subscribed_key_seq_);
     if (waiting_for_fresh_key_) return s.key_frag_seq > resume_after_seq_;
     return s.frag_seq > last_frag_;
   };
@@ -309,7 +313,7 @@ Bytes VideoTrack::Reader::pull(int timeout_ms, bool* ended) {
   }
   if (s.source_waiting_for_key) return {};
   if (key_pending_) {
-    if (s.key_frag.empty()) return {};
+    if (s.key_frag.empty() || (fresh_only_ && s.key_frag_seq <= subscribed_key_seq_)) return {};
     key_pending_ = false;
     markDeliveredLocked(s.key_frag_seq);
     // If this random-access point predates the subscription, keep it on screen as the immediate

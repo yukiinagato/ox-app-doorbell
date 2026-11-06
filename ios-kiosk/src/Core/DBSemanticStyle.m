@@ -14,9 +14,11 @@ static NSMutableDictionary *DBSemanticOutcomes(void) {
 }
 
 static NSTimeInterval DBSemanticUpdatedAtMs = 0;
+static NSMutableDictionary *DBSemanticConfirmedData;
+static NSMutableDictionary *DBSemanticAppliedInputs;
 
 static void DBSemanticRecord(NSString *semanticID, NSString *source, BOOL applied,
-                             BOOL rejected, BOOL persisted, NSString *error) {
+                             BOOL rejected, BOOL persisted, NSString *error, NSDictionary *input) {
   if ([semanticID length] == 0) return;
   NSDictionary *outcome = @{
     @"source" : source ?: @"default",
@@ -26,6 +28,12 @@ static void DBSemanticRecord(NSString *semanticID, NSString *source, BOOL applie
     @"error" : error ?: @"",
   };
   @synchronized([DBSemanticStyle class]) {
+    if (!DBSemanticAppliedInputs) DBSemanticAppliedInputs = [[NSMutableDictionary alloc] init];
+    NSDictionary *oldInput = [DBSemanticAppliedInputs objectForKey:semanticID];
+    BOOL sameInput = (input == oldInput) || [input isEqual:oldInput];
+    if (sameInput && [[DBSemanticOutcomes() objectForKey:semanticID] isEqual:outcome]) return;
+    if (input) [DBSemanticAppliedInputs setObject:[input copy] forKey:semanticID];
+    else [DBSemanticAppliedInputs removeObjectForKey:semanticID];
     [DBSemanticOutcomes() setObject:outcome forKey:semanticID];
     DBSemanticUpdatedAtMs = [[NSDate date] timeIntervalSince1970] * 1000.0;
   }
@@ -141,7 +149,7 @@ static BOOL DBSemanticStyleValid(NSDictionary *style, BOOL safetyCritical,
                    baselineBorder:(UIColor *)border {
   NSDictionary *proposed = DBSemanticRawOverride(config, deviceID, semanticID);
   if (!proposed) {
-    DBSemanticRecord(semanticID, @"default", NO, NO, NO, @"");
+    DBSemanticRecord(semanticID, @"default", NO, NO, NO, @"", nil);
     return nil;
   }
   NSString *key = [NSString stringWithFormat:@"ui.lkg.%@.%@", deviceID, semanticID];
@@ -150,11 +158,22 @@ static BOOL DBSemanticStyleValid(NSDictionary *style, BOOL safetyCritical,
     NSData *data = [NSJSONSerialization dataWithJSONObject:proposed options:0 error:NULL];
     BOOL persisted = NO;
     if (data) {
-      [defaults setObject:data forKey:key];
-      persisted = [defaults synchronize];
+      @synchronized([DBSemanticStyle class]) {
+        NSDictionary *confirmed = [DBSemanticConfirmedData objectForKey:key];
+        persisted = [[confirmed objectForKey:@"style"] isEqual:proposed] &&
+            [[defaults dataForKey:key] isEqual:[confirmed objectForKey:@"data"]];
+      }
+      if (!persisted) {
+        [defaults setObject:data forKey:key];
+        persisted = [defaults synchronize];
+        if (persisted) @synchronized([DBSemanticStyle class]) {
+          if (!DBSemanticConfirmedData) DBSemanticConfirmedData = [[NSMutableDictionary alloc] init];
+          [DBSemanticConfirmedData setObject:@{ @"style": [proposed copy], @"data": data } forKey:key];
+        }
+      }
     }
     DBSemanticRecord(semanticID, @"override", YES, NO, persisted,
-                     persisted ? @"" : @"last_known_good_persist_failed");
+                     persisted ? @"" : @"last_known_good_persist_failed", proposed);
     return proposed;
   }
   NSData *data = [defaults dataForKey:key];
@@ -162,7 +181,7 @@ static BOOL DBSemanticStyleValid(NSDictionary *style, BOOL safetyCritical,
   BOOL usesSaved = DBSemanticStyleValid(saved, safetyCritical, foreground, background,
                                         accent, border);
   DBSemanticRecord(semanticID, usesSaved ? @"last_known_good" : @"default",
-                   usesSaved, YES, usesSaved, @"invalid_override");
+                   usesSaved, YES, usesSaved, @"invalid_override", usesSaved ? saved : nil);
   return usesSaved ? saved : nil;
 }
 

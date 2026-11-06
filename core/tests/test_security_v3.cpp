@@ -147,6 +147,8 @@ TEST_CASE("security v3: media requires a local token, a session, or a peer MAC")
     CHECK(fetch(self, path, {{"X-Doorbell-Peer", "v1.0123456789abcdef0123456789abcdef.1.00"}})
               .status == 401);
   }
+  CHECK(fetch(self, "/media-standby.mp4").status == 403);
+  CHECK(fetch(self, "/media-standby.mp4", {{"X-Doorbell-Local", options.local_token}}).status == 403);
   const Reply meta = fetch(self, "/video-meta", {{"X-Doorbell-Local", options.local_token}});
   CHECK(meta.status == 200);
   // Home Assistant / go2rtc: Basic credentials carrying a panel credential with the view grant.

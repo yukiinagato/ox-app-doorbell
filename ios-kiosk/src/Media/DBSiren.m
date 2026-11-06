@@ -2,15 +2,32 @@
 #import "../Core/DBBootConfig.h"
 #import <math.h>
 
+void DBH264Dbg(NSString *fmt, ...);
+
 @implementation DBSiren {
   AVAudioPlayer *_player;
+  AVAudioPlayer *_chimePlayer;
+  dispatch_queue_t _chimeQueue;
+  NSUInteger _generation;
+}
+
+- (id)init {
+  self = [super init];
+  if (self) _chimeQueue = dispatch_queue_create("doorbell.chime.prepare", DISPATCH_QUEUE_SERIAL);
+  return self;
 }
 
 - (void)dealloc {
-  [_player stop];
+  AVAudioPlayer *effect = _player;
+  AVAudioPlayer *chime = _chimePlayer;
+  if ([NSThread isMainThread]) [effect stop];
+  else dispatch_async(dispatch_get_main_queue(), ^{ [effect stop]; });
+  dispatch_async(_chimeQueue, ^{ [chime stop]; });
 }
 
 - (void)swapPlayer:(AVAudioPlayer *)p {
+  @synchronized(self) { _generation++; }
+  dispatch_async(_chimeQueue, ^{ [self->_chimePlayer stop]; self->_chimePlayer = nil; });
   [_player stop];
   _player = p;
 }
@@ -56,14 +73,56 @@
 }
 
 - (void)playChimeSound:(NSString *)sound assetPath:(NSString *)path {
-  if ([self playAssetPath:path]) return;
-  if ([self playConfiguredSound:sound loop:NO]) return;
-  AVAudioPlayer *p = [[AVAudioPlayer alloc] initWithData:[[self class] chimeWav:sound] error:NULL];
-  if (p == nil) return;
-  [self swapPlayer:p];
-  p.numberOfLoops = 0;
-  p.volume = 1.0f;
-  [p play];
+  NSUInteger generation;
+  @synchronized(self) { generation = ++_generation; }
+  [_player stop]; _player = nil;
+  NSString *asset = [path copy];
+  NSString *preset = [sound copy];
+  __weak DBSiren *weakSelf = self;
+  // mediaserverd can block both preparation and play. This queue exclusively
+  // owns chime players; short generation checks order UI cancellation/replacement.
+  dispatch_async(_chimeQueue, ^{
+    DBSiren *owner = weakSelf;
+    if (!owner) return;
+    @synchronized(owner) { if (owner->_generation != generation) return; }
+    [owner->_chimePlayer stop]; owner->_chimePlayer = nil;
+    owner = nil;
+    CFAbsoluteTime started = CFAbsoluteTimeGetCurrent();
+    AVAudioPlayer *player = nil;
+    if ([asset length] && [[NSFileManager defaultManager] fileExistsAtPath:asset])
+      player = [[AVAudioPlayer alloc] initWithContentsOfURL:[NSURL fileURLWithPath:asset] error:NULL];
+    if (!player) {
+      NSString *resource = nil;
+      if ([preset hasPrefix:@"asset:"] && [preset length] == 70)
+        resource = [[[DBBootConfig dataDir] stringByAppendingPathComponent:@"assets"]
+            stringByAppendingPathComponent:[preset substringFromIndex:6]];
+      else {
+        NSString *name = [DBSiren fileNameForPreset:preset];
+        if (name) resource = [[NSBundle mainBundle] pathForResource:[name stringByDeletingPathExtension]
+                                                            ofType:[name pathExtension]];
+      }
+      if ([resource length]) player = [[AVAudioPlayer alloc] initWithContentsOfURL:
+          [NSURL fileURLWithPath:resource] error:NULL];
+    }
+    if (!player || ![player prepareToPlay]) {
+      player = [[AVAudioPlayer alloc] initWithData:[DBSiren chimeWav:preset] error:NULL];
+      [player prepareToPlay];
+    }
+    player.numberOfLoops = 0;
+    player.volume = 1.0f;
+    DBH264Dbg(@"[call-startup] chime_prepared_ms=%lld",
+        (long long)((CFAbsoluteTimeGetCurrent() - started) * 1000.0));
+    owner = weakSelf;
+    if (!owner || !player) return;
+    @synchronized(owner) { if (owner->_generation != generation) return; }
+    owner->_chimePlayer = player;
+    CFAbsoluteTime playAt = CFAbsoluteTimeGetCurrent();
+    [player play];
+    DBH264Dbg(@"[call-startup] chime_play_ms=%lld", (long long)((CFAbsoluteTimeGetCurrent() - playAt) * 1000.0));
+    BOOL cancelled;
+    @synchronized(owner) { cancelled = owner->_generation != generation; }
+    if (cancelled) { [player stop]; owner->_chimePlayer = nil; }
+  });
 }
 
 - (void)startSiren:(NSString *)customPath volume:(NSInteger)volume {
@@ -88,6 +147,8 @@
 }
 
 - (void)stop {
+  @synchronized(self) { _generation++; }
+  dispatch_async(_chimeQueue, ^{ [self->_chimePlayer stop]; self->_chimePlayer = nil; });
   [_player stop];
   _player = nil;
 }

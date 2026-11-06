@@ -750,6 +750,8 @@ struct Mesh::Impl {
   MeshSettings& st;
   Callbacks cbs;
   bool running = false;
+  bool runtime_dirty = false;
+  int64_t runtime_gossip_at = -1000;
 
 
   struct Peer {
@@ -978,6 +980,9 @@ struct Mesh::Impl {
 
     timers.push_back(loop.postEvery(st.heartbeat_ms, [this] { heartbeatTick(); }));
     timers.push_back(loop.postEvery(st.gossip_ms, [this] { gossipAll(); }));
+    timers.push_back(loop.postEvery(1000, [this] {
+      if (runtime_dirty) { runtime_dirty = false; runtime_gossip_at = now(); gossipAll(); }
+    }));
     timers.push_back(loop.postEvery(st.sync_ms, [this] { syncTick(); }));
     timers.push_back(loop.postEvery(std::max<int64_t>(1, st.claim_ttl_ms / 3),
                                     [this] { leaderTick(); }));
@@ -3401,11 +3406,15 @@ void Mesh::setUiManifest(const std::string& manifest_json) {
 
 void Mesh::setRuntime(const std::string& runtime_json) {
   std::string projected;
-  if (!projectMeshRuntimeJson(runtime_json, &projected)) return;
+  if (!projectMeshRuntimeJson(runtime_json, &projected) || projected == settings_.runtime_json) return;
   settings_.runtime_json = projected;
   auto it = impl_->peers.find(settings_.node_id);
   if (it != impl_->peers.end()) it->second.info.runtime_json = std::move(projected);
-  if (impl_->running) impl_->gossipAll();
+  if (impl_->running) {
+    if (impl_->now() - impl_->runtime_gossip_at >= 1000) {
+      impl_->runtime_gossip_at = impl_->now(); impl_->runtime_dirty = false; impl_->gossipAll();
+    } else impl_->runtime_dirty = true;
+  }
 }
 
 void Mesh::broadcastEvent(const EventRecord& ev) { impl_->broadcastEvent(ev); }

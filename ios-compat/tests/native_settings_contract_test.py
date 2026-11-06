@@ -26,7 +26,7 @@ writer = source("ios/Doorbell/ConfigWriter.swift")
 sos = source("ios/Doorbell/SosSlideControl.swift")
 notice = source("ios/Doorbell/NoticeSupport.swift")
 history = source("ios/Doorbell/CallHistory.swift")
-settings = source("ios/Doorbell/SettingsViewController.swift")
+settings = source("ios/Doorbell/SettingsViewController.swift") + source("ios/Doorbell/SettingsCatalog.swift")
 dashboard = source("ios/Doorbell/DashboardView.swift")
 visitor = source("ios/Doorbell/VisitorScreenView.swift")
 incoming = source("ios/Doorbell/IncomingViewController.swift")
@@ -105,7 +105,8 @@ assert "db_core_last_write_warnings_json" in bridge
 assert "core?.verifyAdminPassword(pin) ?? .unavailable" in admin
 assert "retireLegacyDigest()" in admin and "exit_pin.txt" in admin
 assert "FileManager.default.removeItem(atPath: path)" in admin
-assert "settings.change_password" in settings and "core.setAdminPassword(current:" in settings
+assert "settings.change_password" in source("ios/Doorbell/SettingsCatalog.swift") and \
+    "core.setAdminPassword(current:" in settings
 assert "case secret(title: String" in source("ios/Doorbell/SettingsForm.swift"), \
     "a password field is never pre-filled or echoed"
 
@@ -142,12 +143,11 @@ assert 'deviceKey("local.ui_lang")' in settings
 assert 'deviceKey("local.video.playback")' in settings
 assert 'deviceKey("local.video.rotation")' in settings
 
-# Items that deliberately stay in the web admin must say why, next to what they replace.
+# Native editors replace the former web-only placeholders.
 for reason in ("settings.web_only_upload", "settings.web_only_wording",
                "settings.web_only_rule_actions", "settings.web_only_secrets",
                "settings.web_only_raw_config"):
-    assert reason in settings, reason
-    assert reason.replace("_", "_") in strings
+    assert reason not in settings, reason
 
 # --- announcements ---------------------------------------------------------
 assert 'ConfigUtil.dig(status, "doors.\\(door).notice")' in notice, \
@@ -180,7 +180,7 @@ assert main.count("dialog.onUnlocked = { [weak self] in self?.showSettings() }")
 assert "NoticeChipView" in incoming, "the announcement is a compact chip"
 assert "purposeSlot.heightAnchor.constraint(equalToConstant:" in incoming, \
     "the purpose slot keeps its height so the layout never jumps"
-assert "applyVideoAspect" in incoming and "liveView.heightAnchor.constraint(equalTo:" in incoming
+assert "applyVideoAspect" in incoming and "videoBackdrop.heightAnchor.constraint(equalTo:" in incoming
 # Both toggles show their state, and the state is the authored second line rather than a suffix
 # the button would have to shrink to fit.
 assert "ring.monitor_two_line_on" in incoming and "ring.mic_two_line_on" in incoming
@@ -203,7 +203,7 @@ assert "struct DoorbellSkin" in theme and "func cardInk(" in theme, \
 assert "surfaceSolid" in theme and "func solid(" in theme, \
     "a card over a theme picture has to be opaque or its palette ink stops being readable"
 for region in ("clock", "date", "status_line", "hint", "tile_label", "footer", "notice"):
-    assert f'"{region}"' in theme + dashboard + visitor + incoming, region
+    assert f'"{region}"' in theme + dashboard + visitor + incoming + main, region
 for shell, name in ((main, "MainViewController"), (tv, "TVMainViewController"),
                     (incoming, "IncomingViewController"),
                     (source("ios/Doorbell/MonitorViewController.swift"), "Monitor")):
@@ -227,18 +227,19 @@ assert 'bool(entry, "enabled", true)' in config_util, "an absent switch means of
 assert "ConfigUtil.enabledPurposeIds(cfg)" in main and \
     main.count("ConfigUtil.enabledPurposeIds(cfg)") >= 2, \
     "the door buttons and the ring-then-purpose chooser share one answer"
-assert "ConfigUtil.allPurposeIds(config)" in settings, "the settings list shows every purpose"
+assert "ConfigUtil.allPurposeIds(cfg)" in settings, "the settings list shows every purpose"
 assert "ConfigUtil.purposeIsEnabled(entry)" in settings
-assert 'write([.set("visit_purposes.\\(id).enabled", value)])' in settings, \
+assert 'write([.set("visit_purposes.\\(id).enabled", on)])' in settings, \
     "the toggle writes that one key and nothing else"
 
 # --- dashboard -------------------------------------------------------------
-assert "/snapshot.jpg" in dashboard and "withTimeInterval: 5" in dashboard
+assert 'LocalMediaAuth.sibling(url, "snapshot.jpg")' in dashboard and \
+    "withTimeInterval: Self.previewInterval(for: rate)" in dashboard
 assert "history.missed_badge" in dashboard and "history.see_all" in dashboard
-assert "AdminQrView(core: core, boot: boot, texts: texts, compact: false)" in dashboard, \
+assert "self.adminQr = AdminQrView(core: core, boot: boot, texts: texts," in dashboard, \
     "the admin QR is always visible on an indoor panel"
-assert "footerEffect.heightAnchor.constraint(equalToConstant: 88)" in dashboard
-assert "let side: CGFloat = compact ? 64 : 72" in source("ios/Doorbell/AdminQrView.swift")
+assert "footerEffect.heightAnchor.constraint(equalToConstant: 44)" in dashboard
+assert "let side = qrSide ?? 72" in source("ios/Doorbell/AdminQrView.swift")
 assert "adminQr.setDetailText(DoorbellTheme.versionLine" in dashboard
 assert "func applyLayout(for size: CGSize)" in dashboard and \
     "func applyLayout(for size: CGSize)" in visitor, "both home screens are size-driven"

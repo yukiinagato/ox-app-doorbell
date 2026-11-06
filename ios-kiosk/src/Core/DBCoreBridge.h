@@ -106,6 +106,7 @@ NSString *DBLocalMediaHeaderLine(NSURL *url);
 - (NSString *)coreVersion;
 
 - (NSDictionary *)status;
+- (NSDictionary *)lastStatus;
 // Owns the copied cached JSON and binds it to the serial Core handle lifetime.
 - (DBCallTimingSnapshot *)callTimingSnapshot;
 - (NSDictionary *)debugInfo;

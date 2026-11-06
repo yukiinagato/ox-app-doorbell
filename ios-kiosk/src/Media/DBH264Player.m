@@ -7,21 +7,31 @@
 
 void DBH264Dbg(NSString *fmt, ...) NS_FORMAT_FUNCTION(1, 2);
 void DBH264Dbg(NSString *fmt, ...) {
-  static NSLock *lock = nil;
+  static NSLock *lock;
+  static dispatch_queue_t queue;
+  static NSUInteger pending;
   static dispatch_once_t once;
-  dispatch_once(&once, ^{ lock = [[NSLock alloc] init]; });
+  dispatch_once(&once, ^{
+    lock = [[NSLock alloc] init];
+    queue = dispatch_queue_create("doorbell.media.trace", DISPATCH_QUEUE_SERIAL);
+    dispatch_set_target_queue(queue, dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0));
+  });
   [lock lock];
+  if (pending >= 256) { [lock unlock]; return; }
+  pending++;
+  [lock unlock];
   va_list ap;
   va_start(ap, fmt);
   NSString *line = [[NSString alloc] initWithFormat:fmt arguments:ap];
   va_end(ap);
-  FILE *f = fopen("/var/mobile/Documents/h264-dbg.log", "a");
-  if (f) {
-    fprintf(f, "%s\n", [line UTF8String]);
-    fclose(f);
-  }
-  NSLog(@"%@", line);
-  [lock unlock];
+  // Callers capture their timestamps before enqueueing. Slow flash or ASL must
+  // not block rendering, decoding callbacks, or camera capture.
+  dispatch_async(queue, ^{
+    FILE *f = fopen("/var/mobile/Documents/h264-dbg.log", "a");
+    if (f) { fprintf(f, "%s\n", [line UTF8String]); fclose(f); }
+    NSLog(@"%@", line);
+    [lock lock]; pending--; [lock unlock];
+  });
 }
 
 @interface DBH264Player () <DBFmp4DemuxDelegate>

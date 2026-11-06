@@ -314,7 +314,7 @@ class RecoverySafeModeContracts(unittest.TestCase):
                            incoming.index("func refresh(")]
         main_handler = main[main.index("func enterSafeModeForMemoryPressure"):
                             main.index("private func buildUi")]
-        self.assertIn("incoming.enterSafeModeForMemoryPressure()", app)
+        self.assertIn("(vc as? IncomingViewController)?.enterSafeModeForMemoryPressure()", app)
         self.assertIn("videoPlayer?.stop()", handler)
         self.assertNotIn("sipHangup", handler)
         self.assertNotIn("close()", handler)

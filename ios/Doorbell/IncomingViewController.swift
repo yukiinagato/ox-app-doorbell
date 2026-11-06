@@ -311,9 +311,11 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         noVideoLabel.translatesAutoresizingMaskIntoConstraints = false
         videoBackdrop.addSubview(noVideoLabel)
 
+        #if os(iOS)
         let pinch = UIPinchGestureRecognizer(target: self, action: #selector(onVideoPinch(_:)))
         pinch.delegate = self
         videoBackdrop.addGestureRecognizer(pinch)
+        #endif
         let pan = UIPanGestureRecognizer(target: self, action: #selector(onVideoPan(_:)))
         pan.delegate = self
         videoBackdrop.addGestureRecognizer(pan)
@@ -737,6 +739,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         view.setNeedsLayout()
     }
 
+    #if os(iOS)
     @objc private func onVideoPinch(_ gesture: UIPinchGestureRecognizer) {
         switch gesture.state {
         case .began:
@@ -749,6 +752,8 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             break
         }
     }
+
+    #endif
 
     @objc private func onVideoPan(_ gesture: UIPanGestureRecognizer) {
         guard zoomScale > 1 else { return }

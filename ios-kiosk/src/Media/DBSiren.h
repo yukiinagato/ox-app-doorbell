@@ -11,6 +11,7 @@
 - (BOOL)playConfiguredSound:(NSString *)value loop:(BOOL)loop;
 
 
+// Main-thread entry; a serial audio queue owns chime preparation/playback and cancellation.
 - (void)playChimeSound:(NSString *)sound assetPath:(NSString *)path;
 
 

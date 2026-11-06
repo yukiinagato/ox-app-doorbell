@@ -37,7 +37,9 @@ enum SettingsStyle {
     static func apply(_ palette: DoorbellPalette, to table: UITableView) {
         table.backgroundColor = palette.background
         table.backgroundView = nil
+        #if os(iOS)
         table.separatorColor = palette.separator
+        #endif
         table.tintColor = palette.accent
         table.estimatedRowHeight = 52
         table.rowHeight = UITableView.automaticDimension
@@ -449,6 +451,7 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
         return item(at: indexPath)
     }
 
+    #if os(iOS)
     @objc private func toggled(_ sender: UISwitch) {
         guard let item = itemForControl(sender) else { return }
         host?.commit(item, .bool(sender.isOn), from: self)
@@ -470,6 +473,8 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
         pendingStepper = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
     }
+
+    #endif
 
     // MARK: Selection
 
@@ -1196,11 +1201,13 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
         return cell
     }
 
+    #if os(iOS)
     @objc private func rowToggled(_ sender: UISwitch) {
         let shown = rows
         guard sender.tag < shown.count, let toggle = shown[sender.tag].toggle else { return }
         host?.perform(toggle(sender.isOn), item: nil, value: nil, from: self, completion: nil)
     }
+    #endif
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         tableView.deselectRow(at: indexPath, animated: true)

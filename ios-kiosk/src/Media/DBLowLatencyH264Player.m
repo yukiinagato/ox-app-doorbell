@@ -73,7 +73,8 @@ void DBH264Dbg(NSString *fmt, ...);
 - (void)traceStartup:(NSString *)stage {
   long long elapsedMs = _startupAt > 0
       ? (long long)((CFAbsoluteTimeGetCurrent() - _startupAt) * 1000.0) : 0;
-  DBH264Dbg(@"[startup] %@ +%lldms", stage, MAX(0LL, elapsedMs));
+  DBH264Dbg(@"[startup] %@ +%lldms unix_ms=%lld", stage, MAX(0LL, elapsedMs),
+      (long long)([[NSDate date] timeIntervalSince1970] * 1000.0));
 }
 
 - (void)setState:(DBLowLatencyPlayerState)state {
@@ -112,18 +113,11 @@ void DBH264Dbg(NSString *fmt, ...);
   _displayedFrames = 0;
   _waitingForKeyframe = YES;
   NSUInteger generation = _generation;
-  // Keep GLKView attached so its draw callback can make the compatibility
-  // UIImage, but do not let its legacy EAGL surface cover the availability
-  // layer while H.264 is still probing. On iOS 5, an ostensibly transparent
-  // GLK renderbuffer can still composite as black over a sibling MJPEG view.
   _videoView = [DBVtVideoView takeWarmView];
   _videoView.autoresizingMask = UIViewAutoresizingNone;
   _videoView.hidden = NO;
   [_container addSubview:_videoView];
-  // GLKView presents its renderbuffer directly on iOS 5. A UIKit image view
-  // nested inside it can have valid decoded content yet still be overwritten
-  // during presentation on the original iPad. Keep the compatibility BGRA
-  // compositor as a sibling above GLKView so Core Animation owns final display.
+  // Keep the compositor above the MJPEG availability layer until teardown.
   _compatOverlay = [[UIImageView alloc] initWithFrame:_container.bounds];
   _compatOverlay.autoresizingMask =
       UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -146,6 +140,7 @@ void DBH264Dbg(NSString *fmt, ...);
       player->_firstDisplayedAt = displayedAt;
       DBH264Dbg(@"[vt] first frame displayed");
       [player traceStartup:@"first_frame_displayed"];
+      DBH264Dbg(@"[startup] first_capture_ms=%lld", (long long)captureMs);
     }
     if (captureMs > 0 && captureMs != player->_lastCaptureMs) {
       player->_lastCaptureMs = captureMs;
@@ -169,23 +164,20 @@ void DBH264Dbg(NSString *fmt, ...);
         player->_latencyCount++;
         player->_latencySum += latency;
         if (latency > player->_latencyMax) player->_latencyMax = latency;
-        DBH264Dbg(@"[latency] frame=%lu e2e=%lldms avg=%lldms max=%lldms",
+        if (player->_latencyCount == 1 || player->_latencyCount % 60 == 0)
+          DBH264Dbg(@"[latency] frame=%lu e2e=%lldms avg=%lldms max=%lldms",
                   (unsigned long)player->_latencyCount, (long long)latency,
                   (long long)(player->_latencySum / player->_latencyCount),
                   (long long)player->_latencyMax);
       }
     }
-    // The compatibility overlay is opaque: bringing it to front hides the
-    // MJPEG availability layer underneath. Do that only once H.264 has proved
-    // it can sustain a real frame rate, so a decoder that manages one frame
-    // and then stalls can never leave a frozen still where MJPEG was live.
-    if (player->_state == DBLowLatencyPlayerLoading &&
-        DBLiveEdgeSustained((uint32_t)player->_displayedFrames,
-                            (double)(displayedAt - player->_firstDisplayedAt))) {
+    // Show the first decoded image immediately; the display watchdog still
+    // uncovers MJPEG if subsequent H.264 output stalls.
+    if (player->_state == DBLowLatencyPlayerLoading) {
       player->_videoView.hidden = NO;
       player->_compatOverlay.hidden = NO;
       [player->_container bringSubviewToFront:player->_compatOverlay];
-      DBH264Dbg(@"[vt] sustained %lu displayed frames; H.264 takes over from MJPEG",
+      DBH264Dbg(@"[vt] %lu displayed frames; H.264 takes over from MJPEG",
                 (unsigned long)player->_displayedFrames);
       [player traceStartup:@"h264_takeover"];
       [player setState:DBLowLatencyPlayerPlaying];

@@ -272,13 +272,6 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
     const uint8_t *body = b + hdr;
     uint64_t bodyLen = size - hdr;
 
-    static int boxLog = 0;
-    if (boxLog < 14 && (type == 'moof' || type == 'mdat' || type == 'moov' || type == 'free')) {
-      boxLog++;
-      DBH264Dbg(@"[fmp4] box %c%c%c%c size=%llu trun=%d", (char)((type >> 24) & 0xFF),
-                (char)((type >> 16) & 0xFF), (char)((type >> 8) & 0xFF),
-                (char)(type & 0xFF), (unsigned long long)size, _trunCount);
-    }
     if (type == 'dbts') {
       if (bodyLen < 4) { [self failLocked]; return; }
       uint32_t count = rd32(body);
@@ -446,13 +439,6 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
   _trunCount = count;
   _firstFlagsSet = (flags & 0x000004) != 0;
   _firstFlags = firstFlags;
-  static int tlog = 0;
-  if (!tlog) {
-    tlog = 1;
-    DBH264Dbg(@"[fmp4] trun flags=0x%06x count=%d first=%d dur0=%u size0=%u",
-              flags, count, (int)_firstFlagsSet,
-              count ? _trun[0].dur : 0, count ? _trun[0].size : 0);
-  }
   (void)dataOffset;
   return YES;
 }
@@ -460,14 +446,6 @@ static BOOL sendAll(int fd, const void *bytes, size_t length) {
 
 
 - (BOOL)emitSamplesLocked:(const uint8_t *)p len:(uint64_t)len {
-  static int elog = 0;
-  if (!elog) {
-    elog = 1;
-    DBH264Dbg(@"[fmp4] emit: mdatLen=%llu count=%u s0=%u s1=%u dts=%llu",
-              (unsigned long long)len, _trunCount, _trun[0].size,
-              _trunCount > 1 ? _trun[1].size : 0,
-              (unsigned long long)_outDtsMs);
-  }
   uint64_t off = 0;
   uint64_t dts = _outDtsMs;
   id<DBFmp4DemuxDelegate> d = _delegate;

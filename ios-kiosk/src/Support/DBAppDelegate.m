@@ -1156,7 +1156,32 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   [_core setRuntimeStatusSection:@"ui_style" value:[DBSemanticStyle runtimeReport]];
 }
 
+- (void)prewarmStandbyDecoder:(NSDictionary *)status {
+  if ([UIApplication sharedApplication].applicationState != UIApplicationStateActive) return;
+  for (NSDictionary *peer in [status objectForKey:@"peers"]) {
+    NSString *spsText = [peer objectForKey:@"h264_sps"];
+    NSString *ppsText = [peer objectForKey:@"h264_pps"];
+    if (![spsText isKindOfClass:[NSString class]] || ![ppsText isKindOfClass:[NSString class]]) continue;
+    NSData *sps = [[NSData alloc] initWithBase64Encoding:spsText];
+    NSData *pps = [[NSData alloc] initWithBase64Encoding:ppsText];
+    [DBVtVideoView prewarmWithSps:sps pps:pps];
+    break;
+  }
+}
+
 - (void)publishRuntimeHealth:(NSTimer *)timer {
+  if ([_boot.role isEqualToString:@"indoor_panel"]) {
+    NSDictionary *status = [_core lastStatus];
+    if (status) [self prewarmStandbyDecoder:status];
+    else {
+      DBCoreBridge *core = _core;
+      __weak DBAppDelegate *weakSelf = self;
+      dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+        NSDictionary *fresh = [core status];
+        dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf prewarmStandbyDecoder:fresh]; });
+      });
+    }
+  }
   (void)timer;
   NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
   NSTimeInterval wallSeconds = [[NSDate date] timeIntervalSince1970];

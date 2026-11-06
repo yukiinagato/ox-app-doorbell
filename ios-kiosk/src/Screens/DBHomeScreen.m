@@ -267,6 +267,8 @@ static const NSInteger kRecentCallLimit = 20;
 
   dispatch_queue_t _refreshQueue;
   DBRefreshCoalescer *_refreshGate;
+  BOOL _screenVisible;
+  BOOL _callRefreshPending;
 
   // UI
   UIImageView *_themeBg;
@@ -549,6 +551,7 @@ static const NSInteger kRecentCallLimit = 20;
 #pragma mark - lifecycle
 
 - (void)onScreenWillAppear {
+  _screenVisible = YES;
   if (!_clockTimer) {
     _clockTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self
                                                  selector:@selector(updateClock)
@@ -572,6 +575,7 @@ static const NSInteger kRecentCallLimit = 20;
 }
 
 - (void)onScreenWillDisappear {
+  _screenVisible = NO;
   // A hidden home screen draws nothing; its clock restarts on the next appearance, which also
   // repaints the time immediately. An A4 iPad 1 has no CPU to spare for invisible ticks.
   [_clockTimer invalidate];
@@ -626,6 +630,7 @@ static const NSInteger kRecentCallLimit = 20;
 #pragma mark - core snapshot
 
 - (void)refreshFromCore {
+  if (!_screenVisible) return;
   if (![_refreshGate beginRefresh]) return;
   DBCoreBridge *core = _core;
   __weak DBHomeScreen *weakSelf = self;
@@ -639,6 +644,7 @@ static const NSInteger kRecentCallLimit = 20;
       DBHomeScreen *screen = weakSelf;
       if (!screen) return;
       BOOL again = [screen->_refreshGate endRefresh];
+      if (!screen->_screenVisible) return;
       screen->_tzOffsetMinutes = [DBConfigUtil intVal:localTime path:@"offset_min"
                                                   def:screen->_tzOffsetMinutes];
       [screen applyCoreSnapshotWithConfig:cfg status:status log:log];
@@ -1336,13 +1342,35 @@ static const CGFloat kFooterGlassAlpha = 0.65;
 
 #pragma mark - events from the router
 
+- (void)refreshAfterCallEvent {
+  if (_callRefreshPending || !_screenVisible) return;
+  _callRefreshPending = YES;
+  __weak DBHomeScreen *weakSelf = self;
+  // Durable history is refreshed on return; its query/layout must not precede
+  // admission and first-frame presentation for a newly ringing call.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+    DBHomeScreen *screen = weakSelf;
+    if (!screen) return;
+    screen->_callRefreshPending = NO;
+    [screen refreshFromCore];
+  });
+}
+
 - (void)appendEvent:(NSDictionary *)ev {
   NSString *type = [DBConfigUtil evStr:ev key:@"type"];
-  if ([type isEqualToString:@"motion"] || [type isEqualToString:@"press"])
+  if ([type isEqualToString:@"motion"])
     [self prioritizeDoorPreview:[DBConfigUtil evStr:ev key:@"door"]];
+  else if ([type isEqualToString:@"press"]) {
+    NSString *door = [DBConfigUtil evStr:ev key:@"door"];
+    __weak DBHomeScreen *weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+      DBHomeScreen *screen = weakSelf;
+      if (screen && screen->_screenVisible) [screen prioritizeDoorPreview:door];
+    });
+  }
   // The volatile ticker is gone: the dashboard renders the durable call log
   // instead, so a refresh is the correct response to any call-lifecycle event.
-  [self refreshFromCore];
+  [self refreshAfterCallEvent];
 }
 
 - (void)playChime:(NSDictionary *)ev {

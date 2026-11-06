@@ -9,6 +9,7 @@
 
 
 - (void)refreshFromCore;
+- (void)refreshAfterCallEvent;
 - (void)appendEvent:(NSDictionary *)ev;
 - (void)playChime:(NSDictionary *)ev;
 - (void)stopChime;

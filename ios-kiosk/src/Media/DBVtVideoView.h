@@ -1,10 +1,11 @@
-#import <GLKit/GLKit.h>
+#import <UIKit/UIKit.h>
 
 // Low-latency H.264 renderer shared by compatibility profiles. iOS 5 loads the
 // device-only decoder dynamically; iOS 9 links the public VideoToolbox API.
-@interface DBVtVideoView : GLKView
+@interface DBVtVideoView : UIView
 
 + (void)prewarm;
++ (void)prewarmWithSps:(NSData *)sps pps:(NSData *)pps;
 + (DBVtVideoView *)takeWarmView;
 + (void)recycleWarmView:(DBVtVideoView *)view;
 + (void)purgeWarmView;

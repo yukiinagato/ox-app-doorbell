@@ -28,6 +28,9 @@ internal class WavRecorder {
         val record = try {
             AudioRecord(MediaRecorder.AudioSource.MIC, RATE, AudioFormat.CHANNEL_IN_MONO,
                         AudioFormat.ENCODING_PCM_16BIT, maxOf(min, RATE))
+        } catch (e: SecurityException) {
+            ShellLog.ignored("WavRecorder", e)
+            return false
         } catch (e: Exception) {
             ShellLog.ignored("WavRecorder", e)
             return false

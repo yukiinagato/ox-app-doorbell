@@ -23,7 +23,9 @@
 #include "media/fmp4.h"
 #include "media/fmp4_demux.h"
 #include "media/video_track.h"
+#include "media/standby_channel.h"
 #include "node/node.h"
+#include "httpd/httpd.h"
 #include "util/json.h"
 
 using namespace db;
@@ -958,7 +960,7 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
   node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"正面玄関\"}}");
 
 
-  CHECK(node.videoEncoderWanted());
+  CHECK_FALSE(node.videoEncoderWanted());
 
   Bytes sps = makeSps(80, 45, 0), pps = makePps();
   Bytes key_au = annexb({sps, pps, makeSlice(true, 40)});
@@ -970,6 +972,7 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
                     node.localToken() + "\r\nConnection: close\r\n\r\n";
   REQUIRE(::send(fd, req.data(), req.size(), 0) == static_cast<ssize_t>(req.size()));
 
+  REQUIRE(waitFor([&] { return node.videoEncoderWanted(); }, 2000));
   std::string got;
   bool wanted_seen = false;
   char buf[8192];
@@ -998,8 +1001,6 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
   CHECK(hasMarker(got, "mdat"));
 
 
-  CHECK(node.videoEncoderWanted());
-
 
   {
     std::string st = node.statusJson();
@@ -1025,6 +1026,7 @@ TEST_CASE("fmp4: Node serves encoded frames through GET /stream.mp4") {
   }
 
 
+  CHECK(waitFor([&] { return !node.videoEncoderWanted(); }, 4000));
   node.setConfigKey("devices." + node.nodeId() + ".local.camera", "{\"codec\":\"mjpeg\"}");
   CHECK(!node.videoEncoderWanted());
   CHECK(httpGet(http_port, "/stream.mp4").rfind("HTTP/1.1 401", 0) == 0);
@@ -1199,7 +1201,7 @@ TEST_CASE("fmp4: authenticated same-origin proxy streams from an alive mesh peer
 }
 
 TEST_CASE("fmp4: validates parsing with ffprobe when available") {
-  if (std::system("which ffprobe >/dev/null 2>&1") != 0) {
+  if (std::system("ffprobe -version >/dev/null 2>&1") != 0) {
     MESSAGE("ffprobe is unavailable; skipping external validation");
     return;
   }
@@ -1232,4 +1234,164 @@ TEST_CASE("fmp4: validates parsing with ffprobe when available") {
   CHECK(out.find("codec_name=h264") != std::string::npos);
   CHECK(out.find("width=1280") != std::string::npos);
   CHECK(out.find("height=720") != std::string::npos);
+}
+
+TEST_CASE("standby: a fresh subscription never returns the cached IDR") {
+  VideoTrack track;
+  track.setEnabled(true);
+  Bytes key = annexb({makeSps(80, 45, 0), makePps(), makeSlice(true, 30)});
+  track.push(key.data(), key.size(), true, 1000);
+  auto reader = track.subscribe(true);
+  CHECK(track.takeKeyframeRequest());
+  bool ended = false;
+  CHECK(!reader->pull(0, &ended).empty());
+  CHECK(reader->pull(0, &ended).empty());
+  Bytes delta = annexb({makeSlice(false, 8)});
+  track.push(delta.data(), delta.size(), false, 1100);
+  CHECK(reader->pull(0, &ended).empty());
+  track.push(key.data(), key.size(), true, 1200);
+  Bytes fresh = reader->pull(0, &ended);
+  REQUIRE(fresh.size() >= 20);
+  CHECK(be64(fresh, 12) == 1200);
+  CHECK(!ended);
+}
+
+TEST_CASE("standby: idle channels have no video subscription and activation is owner bound") {
+  VideoTrack track;
+  track.setEnabled(true);
+  StandbyServer server;
+  auto slot = server.open("owner", "channel", track);
+  REQUIRE(slot);
+  bool ended = false;
+  CHECK(StandbyServer::pull(slot, &ended).size() == 12);
+  CHECK(track.subscriberCount() == 0);
+  server.command("other", "channel", 1);
+  server.command("owner", "obsolete-channel", 1);
+  CHECK(track.subscriberCount() == 0);
+  server.command("owner", "channel", 1);
+  CHECK(track.subscriberCount() == 1);
+  Bytes begin = StandbyServer::pull(slot, &ended);
+  REQUIRE(begin.size() == 24);
+  CHECK(be64(begin, 8) == 1);
+  server.command("owner", "channel", 0);
+  CHECK(track.subscriberCount() == 0);
+  server.command("owner", "channel", 2);
+  CHECK(track.subscriberCount() == 1);
+  server.retain({});
+  CHECK(track.subscriberCount() == 0);
+  CHECK(StandbyServer::pull(slot, &ended).empty());
+  CHECK(ended);
+}
+
+TEST_CASE("standby: a live channel reuses TLS transport and only delivers the activated generation") {
+  RealClock clock;
+  Runloop loop(clock);
+  loop.start();
+  VideoTrack track;
+  track.setEnabled(true);
+  StandbyServer server;
+  Bytes cached = annexb({makeSps(80, 45, 0), makePps(), makeSlice(true, 30)});
+  track.push(cached.data(), cached.size(), true, 1000);
+  server.setRotation(90);
+  Httpd httpd(loop);
+  tls::Identity identity;
+  std::string error;
+  REQUIRE(tls::generateIdentity("standby-test", &identity, &error));
+  const int tls_port = testing::freeListenPort();
+  httpd.setTls({tls_port, tls::listenerPem(identity)});
+  std::atomic<int> opens{0};
+  httpd.routeStream("/media-standby.mp4", [&](const HttpReq&) {
+    ++opens;
+    Httpd::StreamResponse response;
+    auto slot = server.open("owner", "channel", track);
+    response.status = 200; response.content_type = "application/x-doorbell-standby-v1";
+    response.pull = [slot](bool* ended) { return StandbyServer::pull(slot, ended); };
+    return response;
+  });
+  const int port = testing::freeListenPort();
+  REQUIRE(httpd.start(port, Httpd::Ipv6Mode::Off));
+  StandbyClient client({"127.0.0.1", tls_port, true, identity.sha256_hex}, {}, "channel");
+  client.start();
+  REQUIRE(waitFor([&] { return client.ready(); }, 3000));
+  CHECK(client.rotation() == 90);
+  REQUIRE(waitFor([&] { return !client.decoderConfig().sps.empty(); }, 2000));
+  CHECK(track.subscriberCount() == 0);
+  CHECK(track.subscriberCount() == 0);
+  auto lease = client.subscribe();
+  REQUIRE(lease);
+  CHECK(!client.subscribe());
+  server.command("owner", "channel", lease->token());
+  CHECK(lease->awaitBegin(1000));
+  Bytes key = annexb({makeSps(80, 45, 0), makePps(), makeSlice(true, 30)});
+  track.push(key.data(), key.size(), true, 2000);
+  bool ended = false;
+  std::string payload;
+  for (int i = 0; i < 10 && payload.find("mdat") == std::string::npos; ++i) {
+    Bytes box = lease->pull(100, &ended);
+    payload.append(box.begin(), box.end());
+  }
+  CHECK(payload.find("ftyp") != std::string::npos);
+  CHECK(payload.find("mdat") != std::string::npos);
+  CHECK(!ended);
+  lease.reset();
+  CHECK(client.activeToken() == 0);
+  server.command("owner", "channel", 0);
+  CHECK(waitFor([&] { return track.subscriberCount() == 0; }, 1500));
+  server.setRotation(180);
+  CHECK(waitFor([&] { return client.rotation() == 180; }, 2000));
+  auto next = client.subscribe();
+  REQUIRE(next);
+  CHECK(next->token() == 2);
+  server.command("owner", "channel", next->token());
+  CHECK(next->awaitBegin(1000));
+  next->pull(0, &ended);
+  CHECK_FALSE(ended);
+  CHECK(opens.load() == 1);
+  server.clear();
+  CHECK(waitFor([&] { return client.finished(); }, 2000));
+  CHECK(next->pull(0, &ended).empty());
+  CHECK(ended);
+  client.stop(); client.join(); httpd.stop(); loop.stop();
+}
+
+TEST_CASE("standby: a press activates fresh video before the UI requests its stream") {
+  NodeOptions d;
+  d.data_dir = ":memory:"; d.role = "door_station"; d.door = "d_standby";
+  d.listen_addr = "127.0.0.1:" + std::to_string(testing::freeListenPort());
+  d.advertise_addr = d.listen_addr; d.http_port = testing::freeListenPort();
+  d.enable_beacon = false; d.psk.fill(0x67);
+  NodeOptions p;
+  p.data_dir = ":memory:"; p.role = "indoor_panel";
+  p.listen_addr = "127.0.0.1:" + std::to_string(testing::freeListenPort());
+  p.advertise_addr = p.listen_addr; p.http_port = testing::freeListenPort();
+  p.seed_peers = {d.listen_addr}; p.enable_beacon = false; p.psk = d.psk;
+  Node door(d), panel(p);
+  REQUIRE(door.start()); REQUIRE(panel.start());
+  REQUIRE(waitFor([&] {
+    auto status = json::parse(panel.statusJson());
+    cJSON* channels = status ? json::get(json::get(status.get(), "video"), "standby") : nullptr;
+    return cJSON_GetArraySize(channels) == 1 && json::getBool(cJSON_GetArrayItem(channels, 0), "ready");
+  }, 15000));
+  REQUIRE(waitFor([&] { return !door.videoEncoderWanted(); }, 4000));
+  const std::string call = door.pressV2("d_standby", "");
+  REQUIRE_FALSE(call.empty());
+  REQUIRE(waitFor([&] { return door.videoEncoderWanted(); }, 2000));
+  Bytes key = annexb({makeSps(80, 45, 0), makePps(), makeSlice(true, 30)});
+  door.pushEncodedFrame(key.data(), key.size(), true, 2000);
+  const int fd = connectTo(p.http_port, 2000);
+  REQUIRE(fd >= 0);
+  const std::string req = "GET /media/peer/" + door.nodeId() +
+      "/stream.mp4 HTTP/1.1\r\nHost: 127.0.0.1\r\nX-Doorbell-Local: " +
+      panel.localToken() + "\r\nConnection: close\r\n\r\n";
+  REQUIRE(::send(fd, req.data(), req.size(), 0) == static_cast<ssize_t>(req.size()));
+  std::string response; char buffer[8192];
+  for (int i = 0; i < 10 && response.find("mdat") == std::string::npos; ++i) {
+    const ssize_t n = ::recv(fd, buffer, sizeof(buffer), 0);
+    if (n <= 0) break;
+    response.append(buffer, static_cast<size_t>(n));
+  }
+  ::close(fd);
+  CHECK(response.find("X-Doorbell-Media-Mode: standby-v1") != std::string::npos);
+  CHECK(response.find("mdat") != std::string::npos);
+  panel.stop(); door.stop();
 }

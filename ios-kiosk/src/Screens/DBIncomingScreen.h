@@ -4,6 +4,7 @@
 // Incoming-call view with video, answer/listen/unlock/ignore, and quick replies.
 // DBRouter exclusively owns the SIP session; this view renders state and actions.
 @interface DBIncomingScreen : DBScreen
+- (void)prewarmAppearanceWithStatus:(NSDictionary *)status;
 
 - (id)initWithRouter:(DBRouter *)router;
 

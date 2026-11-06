@@ -82,9 +82,8 @@ int main(void) {
     require([[DBMediaSource originForPeer:aliveStation(@"alive")]
                 isEqualToString:@"http://10.10.38.79:47180"],
             @"the peer origin comes from its advertised stream URL");
-    require([[DBMediaSource originForPeer:@{@"addrs" : @[ @"10.10.38.80:47172" ]}]
-                isEqualToString:@"http://10.10.38.80:47180"],
-            @"a peer with no stream URL falls back to its mesh address host");
+    require([[DBMediaSource originForPeer:@{@"addrs" : @[ @"10.10.38.80:47172" ]}] length] == 0,
+            @"a peer without published media must not synthesize a URL from its mesh address");
     require([[DBMediaSource originForPeer:
                  @{@"stream" : @"http://user:pw@10.10.38.79:47180/stream.mjpeg"}] length] == 0,
             @"a credentialed stream URL never becomes an origin");

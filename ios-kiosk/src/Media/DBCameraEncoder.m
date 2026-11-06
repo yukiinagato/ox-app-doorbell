@@ -3,6 +3,8 @@
 #import <CoreMedia/CoreMedia.h>
 #import <dlfcn.h>
 
+void DBH264Dbg(NSString *fmt, ...);
+
 typedef struct OpaqueVTCompressionSession *DBCompressionRef;
 typedef void (*DBCompressionCallback)(void *, void *, OSStatus, uint32_t, CMSampleBufferRef);
 static OSStatus (*DBCompressionCreate)(CFAllocatorRef, int32_t, int32_t, CMVideoCodecType,
@@ -40,6 +42,7 @@ static void DBCompressionOutput(void *refcon, void *frameRefcon, OSStatus status
   CMTime _firstTimestamp;
   int64_t _wallStartMs;
   int64_t _lastTimestampMs;
+  CFAbsoluteTime _keyRequestedAt;
 }
 
 - (id)initWithCore:(DBCoreBridge *)core {
@@ -67,10 +70,17 @@ static void DBCompressionOutput(void *refcon, void *frameRefcon, OSStatus status
 }
 
 - (void)feed:(CVPixelBufferRef)pixels timestamp:(CMTime)timestamp {
-  if (_failed || ![_core videoEncoderWanted]) return;
+  if (_failed || ![_core videoEncoderWanted] || !CMTIME_IS_NUMERIC(timestamp)) return;
+  // Anchor capture time before potentially slow encoder initialization. Anchoring
+  // afterward would shift every subsequent frame into the future by that setup cost.
+  if (!_wallStartMs) {
+    _firstTimestamp = timestamp;
+    _wallStartMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000);
+  }
   if (!_session) {
     if (!DBCompressionCreate || !DBCompressionEncode || !DBCompressionInvalidate ||
         !DBCompressionSet || !DBCompressionPrepare || !DBH264Parameters) { _failed = YES; return; }
+    CFAbsoluteTime prepareAt = CFAbsoluteTimeGetCurrent();
     OSStatus status = DBCompressionCreate(NULL, (int32_t)CVPixelBufferGetWidth(pixels),
         (int32_t)CVPixelBufferGetHeight(pixels), kCMVideoCodecType_H264, NULL, NULL,
         NULL, DBCompressionOutput, (__bridge void *)self, &_session);
@@ -83,25 +93,30 @@ static void DBCompressionOutput(void *refcon, void *frameRefcon, OSStatus status
     [self setProperty:"kVTCompressionPropertyKey_ProfileLevel"
         value:DBCompressionString("kVTProfileLevel_H264_Baseline_AutoLevel")];
     [self setProperty:"kVTCompressionPropertyKey_AverageBitRate" value:(__bridge CFTypeRef)@1000000];
-    [self setProperty:"kVTCompressionPropertyKey_ExpectedFrameRate" value:(__bridge CFTypeRef)@30];
-    [self setProperty:"kVTCompressionPropertyKey_MaxKeyFrameInterval" value:(__bridge CFTypeRef)@60];
+    [self setProperty:"kVTCompressionPropertyKey_ExpectedFrameRate" value:(__bridge CFTypeRef)@15];
+    // Keep a random-access point within half a second even if a remote
+    // keyframe request is delayed, and prevent encoder lookahead buffering.
+    [self setProperty:"kVTCompressionPropertyKey_MaxKeyFrameInterval" value:(__bridge CFTypeRef)@7];
+    [self setProperty:"kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration" value:(__bridge CFTypeRef)@0.5];
+    [self setProperty:"kVTCompressionPropertyKey_MaxFrameDelayCount" value:(__bridge CFTypeRef)@1];
     status = DBCompressionPrepare(_session);
     if (status != 0) { [self stop]; _failed = YES; return; }
     @synchronized(self) { _accepting = YES; }
-  }
-  NSDictionary *options = nil;
-  CFStringRef forceKey = DBCompressionString("kVTEncodeFrameOptionKey_ForceKeyFrame");
-  if (forceKey && [_core takeVideoKeyframeRequest]) options = @{(__bridge NSString *)forceKey: @YES};
-  if (!CMTIME_IS_NUMERIC(timestamp)) return;
-  if (!_wallStartMs) {
-    _firstTimestamp = timestamp;
-    _wallStartMs = (int64_t)([[NSDate date] timeIntervalSince1970] * 1000);
+    DBH264Dbg(@"[encoder-startup] prepared_ms=%lld", (long long)((CFAbsoluteTimeGetCurrent() - prepareAt) * 1000.0));
   }
   int64_t now = _wallStartMs + (int64_t)(CMTimeGetSeconds(CMTimeSubtract(timestamp, _firstTimestamp)) * 1000);
-  if (now <= _lastTimestampMs) return;
+  // Keep hardware encoding and BGRA presentation within the legacy devices'
+  // sustained budget. Drop raw capture frames before encoding, never H.264 dependencies.
+  if (_lastTimestampMs > 0 && now - _lastTimestampMs < 60) return;
   _lastTimestampMs = now;
+  NSDictionary *options = nil;
+  CFStringRef forceKey = DBCompressionString("kVTEncodeFrameOptionKey_ForceKeyFrame");
+  if (forceKey && [_core takeVideoKeyframeRequest]) {
+    options = @{(__bridge NSString *)forceKey: @YES};
+    @synchronized(self) { _keyRequestedAt = CFAbsoluteTimeGetCurrent(); }
+  }
   OSStatus status = DBCompressionEncode(_session, pixels, CMTimeMake(now, 1000),
-      CMTimeMake(1, 30), (__bridge CFDictionaryRef)options, NULL, NULL);
+      CMTimeMake(1, 15), (__bridge CFDictionaryRef)options, NULL, NULL);
   if (status != 0) { NSLog(@"[doorbell] H.264 encode failed (%ld)", (long)status); [self stop]; _failed = YES; }
 }
 
@@ -111,6 +126,15 @@ static void DBCompressionOutput(void *refcon, void *frameRefcon, OSStatus status
   CFArrayRef attachments = CMSampleBufferGetSampleAttachmentsArray(sample, false);
   BOOL keyframe = !attachments || !CFArrayGetCount(attachments) ||
       !CFDictionaryContainsKey(CFArrayGetValueAtIndex(attachments, 0), kCMSampleAttachmentKey_NotSync);
+  if (keyframe) {
+    @synchronized(self) {
+      if (_keyRequestedAt > 0) {
+        DBH264Dbg(@"[encoder-startup] requested_key_to_output_ms=%lld",
+            (long long)((CFAbsoluteTimeGetCurrent() - _keyRequestedAt) * 1000.0));
+        _keyRequestedAt = 0;
+      }
+    }
+  }
   NSMutableData *annex = [NSMutableData data];
   const uint8_t start[] = {0, 0, 0, 1};
   int headerLength = 4;

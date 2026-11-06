@@ -29,6 +29,7 @@
 #include "media/qr_scanner.h"
 #include "media/motion_detector.h"
 #include "media/video_track.h"
+#include "media/standby_channel.h"
 #include "mesh/socket_compat.h"
 #include "mesh/tcp_transport.h"
 #include "mesh/udp_beacon.h"
@@ -2377,6 +2378,7 @@ struct Node::Impl {
   bool mqtt_probe_reachable = false;
 
   // ---------- helpers ----------
+#include "node/standby_media_service.inc"
 #include "node/operation_service.inc"
 #include "node/panel_identity_service.inc"
 #include "node/media_relay_service.inc"
@@ -3986,14 +3988,21 @@ struct Node::Impl {
 
 
 
-  void notifyChime(const std::string& sound, const std::string& door) {
+  void notifyChime(const std::string& sound, const std::string& door, int64_t press_wall_ms = 0, int64_t capture_cutoff_ms = 0) {
     auto o = json::obj();
     json::set(o.get(), "schema_version", static_cast<int64_t>(2));
     json::set(o.get(), "t", "chime");
+    const int64_t timing_now = hlc->correctedWallMs();
+    if (press_wall_ms > 0 && press_wall_ms <= timing_now) {
+      json::set(o.get(), "press_age_ms", timing_now - press_wall_ms);
+      json::set(o.get(), "press_local_wall_ms", clock->systemWallMs() - (timing_now - press_wall_ms));
+    }
+    if (capture_cutoff_ms > 0) json::set(o.get(), "capture_cutoff_ms", capture_cutoff_ms);
     json::set(o.get(), "sound", sound);
     if (!door.empty()) json::set(o.get(), "door", door);
     auto call = active_calls.find(door);
     if (call != active_calls.end()) {
+      if (capture_cutoff_ms > 0) reserveStandby(door, call->second.call_id);
       json::set(o.get(), "call_id", call->second.call_id);
       json::set(o.get(), "stage_revision", static_cast<int64_t>(call->second.stage_revision));
       json::set(o.get(), "expires_at_ms", call->second.expires_wall_ms);
@@ -7161,6 +7170,7 @@ struct Node::Impl {
       return false;
     }
     mesh->start();
+    standby_timer = loop->postEvery(1000, [this] { maintainStandby(); });
     if (mesh_upgrade_founder) migrateFounderOnLoop();
     reevalBridge();
     reevalTelegram();
@@ -8287,6 +8297,12 @@ struct Node::Impl {
   }
 
 
+  static int64_t pressCaptureCutoff(const EventRecord& event) {
+    if (event.type != "press") return 0;
+    auto payload = json::parse(event.payload_json);
+    return payload ? json::getInt(payload.get(), "capture_cutoff_ms", 0) : 0;
+  }
+
   void onEvent(const EventRecord& ev, bool is_local, bool backfill) {
     bool emergency_transition = true;
     bool emergency_winner = true;
@@ -8467,7 +8483,7 @@ struct Node::Impl {
           }
         }
         if (mine) {
-          notifyChime(json::getString(p.get(), "sound", "ding1"), ev.door);
+          notifyChime(json::getString(p.get(), "sound", "ding1"), ev.door, ev.type == "press" ? ev.wall_ms : 0, pressCaptureCutoff(ev));
           chime_notified = true;
         }
       } else if (a.type == "auto_reply") {
@@ -8524,7 +8540,7 @@ struct Node::Impl {
     if ((ev.type == "press" || ev.type == "purpose_selected") &&
         opts.role == "indoor_panel" && !chime_action_seen &&
         !chime_notified) {
-      notifyChime(json::getString(json::get(cfg.get(), "ui"), "ringtone", "ding1"), ev.door);
+      notifyChime(json::getString(json::get(cfg.get(), "ui"), "ringtone", "ding1"), ev.door, ev.type == "press" ? ev.wall_ms : 0, pressCaptureCutoff(ev));
     }
 
     if (bridge && mesh && mesh->isLeader("mqtt_bridge")) bridge->onEvent(ev);
@@ -8585,6 +8601,9 @@ struct Node::Impl {
     if (!c) return;
     std::string cmd = json::getString(c.get(), "cmd");
     if (cmd.rfind("media_", 0) == 0) return;
+    if (cmd == "standby_video_v1") {
+      onStandbyCommand(from, c.get()); return;
+    }
     if (cmd == "operation_request_v1" || cmd == "operation_response_v1") {
       if (cmd_json.size() <= 16384) onOperationCommand(from, c.get());
       return;
@@ -9674,6 +9693,15 @@ struct Node::Impl {
       // frames are measured by each receiver's own player and are reported through its runtime
       // status; core only knows what this node produced and handed out.
       const VideoTrack::Stats stats = video_track.stats();
+      cJSON* standby = json::addArr(v, "standby");
+      for (const auto& entry : standby_clients) {
+        auto item = json::obj();
+        json::set(item.get(), "peer", entry.first);
+        json::setBool(item.get(), "ready", entry.second->ready());
+        json::set(item.get(), "connected_age_ms", entry.second->idleAgeMs());
+        json::setBool(item.get(), "subscribed", entry.second->activeToken() != 0);
+        json::push(standby, std::move(item));
+      }
       cJSON* publish = json::addObj(v, "publish");
       json::set(publish, "frames", static_cast<int64_t>(stats.frames));
       json::set(publish, "keyframes", static_cast<int64_t>(stats.keyframes));
@@ -9885,6 +9913,15 @@ struct Node::Impl {
         if (peer_role == "door_station" && !peer_origin.empty()) {
           // Absolute URLs are loopback proxies for native shells (send X-Doorbell-Local);
           // *_path fields are the same routes for a browser on this node.
+          auto standby = standby_clients.find(p.id);
+          json::setBool(e, "media_standby_ready", standby != standby_clients.end() && standby->second->ready());
+          if (standby != standby_clients.end() && standby->second->ready()) {
+            const auto format = standby->second->decoderConfig();
+            if (!format.sps.empty() && !format.pps.empty()) {
+              json::set(e, "h264_sps", base64Encode(format.sps));
+              json::set(e, "h264_pps", base64Encode(format.pps));
+            }
+          }
           json::set(e, "stream", peerMediaLoopbackUrl(p.id, "stream.mjpeg"));
           json::set(e, "video_meta", peerMediaLoopbackUrl(p.id, "video-meta"));
           json::set(e, "snapshot", peerMediaLoopbackUrl(p.id, "snapshot.jpg"));
@@ -10892,9 +10929,20 @@ struct Node::Impl {
     if (!peerIdShape(peer) || !kLeaves.count(leaf)) return fail(404, "not_found");
     tls::Endpoint upstream;
     std::string peer_auth;
+    std::shared_ptr<StandbyLease> standby_lease;
+    int standby_rotation = -1;
     int refused = 503;
     const char* refusal = "peer_unreachable";
-    loop->callSync([&] {
+    // Only the private loopback token may claim a lease already authorized and
+    // activated by this Core. Browser/peer requests still enter normal admission.
+    if (leaf == "stream.mp4" && localTokenOk(req)) {
+      std::lock_guard<std::mutex> reservations(standby_reservation_mu);
+      auto found = standby_reserved.find(peer);
+      if (found != standby_reserved.end() && found->second.deadline >= clock->monoMs()) {
+        standby_lease = found->second.lease; standby_reserved.erase(found); refused = 0;
+      }
+    }
+    if (!standby_lease) loop->callSync([&] {
       std::string door;
       if (peer == node_id) {
         door = opts.door;
@@ -10918,8 +10966,41 @@ struct Node::Impl {
       if (!peerEndpointOnLoop(peer, &upstream)) return;
       peer_auth = peerAuthHeaderOnLoop("GET", "/" + leaf);
       if (!peer_auth.empty()) refused = 0;
+      if (!refused && leaf == "video-meta") {
+        auto found = standby_clients.find(peer);
+        if (found != standby_clients.end() && found->second->ready()) standby_rotation = found->second->rotation();
+      }
+      if (!refused && leaf == "stream.mp4") {
+        auto found = standby_clients.find(peer);
+        if (found != standby_clients.end()) {
+          std::lock_guard<std::mutex> reservations(standby_reservation_mu);
+          auto reservation = standby_reserved.find(peer);
+          if (reservation != standby_reserved.end() && reservation->second.deadline >= clock->monoMs()) {
+            standby_lease = reservation->second.lease; standby_reserved.erase(reservation);
+          } else {
+            standby_lease = found->second->subscribe();
+            if (standby_lease) sendStandbyCommand(peer, *found->second);
+          }
+        }
+      }
     });
     if (refused) return fail(refused, refusal);
+    if (standby_rotation >= 0) {
+      out.status = 200; out.content_type = "application/json";
+      out.body = "{\"rotation\":" + std::to_string(standby_rotation) + "}";
+      out.headers["Cache-Control"] = "no-store"; return out;
+    }
+    if (standby_lease) {
+      const auto at = std::chrono::steady_clock::now();
+      if (!standby_lease->awaitBegin(1500)) return fail(502, "standby_activation_timeout");
+      out.status = 200; out.content_type = "video/mp4";
+      out.headers["X-Doorbell-Server-Time-Ms"] = std::to_string(standby_lease->serverWallMs());
+      out.headers["X-Doorbell-Media-Mode"] = "standby-v1";
+      out.pull = [standby_lease](bool* ended) { return standby_lease->pull(500, ended); };
+      DB_LOGI("media-startup", "standby_activate_ms=" + std::to_string(
+          std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - at).count()));
+      return out;
+    }
     std::map<std::string, std::string> headers;
     if (peer == node_id)
       headers["X-Doorbell-Local"] = opts.local_token;
@@ -10979,7 +11060,7 @@ struct Node::Impl {
                    // mediaAccessOnLoop (local token, session, panel grant, or peer MAC).
                    {"/api/login", "/locale/", "/panel/", "/admin/", "/stream.mjpeg",
                     "/stream.mp4", "/stream-proxy.mp4", "/video-meta", "/snapshot.jpg",
-                    "/media/peer/",
+                    "/media/peer/", "/media-standby.mp4",
                     "/api/panel/", "/snapshot-proxy", "/call-frame", "/peer-frame.jpg",
                     // The call history is readable by a panel credential and by an admin
                     // session; both handlers below re-check the caller explicitly.
@@ -11049,6 +11130,9 @@ struct Node::Impl {
 
     // Native shells and browsers read other nodes' cameras through this node. Core fetches the
     // peer over pinned HTTPS with X-Doorbell-Peer, so no device ever needs peer credentials.
+    httpd->routeStream("/media-standby.mp4", [this](const HttpReq& req) {
+      return standbyResponse(req);
+    });
     httpd->routeStream("/media/peer/", [this](const HttpReq& req) {
       return peerMediaResponse(req);
     });
@@ -12784,8 +12868,10 @@ struct Node::Impl {
     if (existing != active_calls.end() &&
         !doCancelCall(door, existing->second.call_id, "timeout"))
       return "";
+    const int64_t capture_cutoff_ms = clock->systemWallMs();
     const std::string call_id = genTokenHex(16);
     auto p = json::obj();
+    json::set(p.get(), "capture_cutoff_ms", capture_cutoff_ms);
     json::set(p.get(), "schema_version", static_cast<int64_t>(2));
     json::set(p.get(), "call_id", call_id);
     json::set(p.get(), "stage_revision", static_cast<int64_t>(0));
@@ -13100,6 +13186,9 @@ bool Node::start() {
 
 void Node::stop() {
   if (!impl_ || !impl_->started) return;
+  std::vector<std::shared_ptr<StandbyClient>> standby;
+  impl_->loop->callSync([&] { standby = impl_->stopStandby(); });
+  for (auto& client : standby) client->join();
   impl_->media_dispatcher->stop();
   impl_->operation_dispatcher->stop();
   impl_->started = false;
@@ -13443,7 +13532,7 @@ void Node::pushEncodedFrame(const uint8_t* annexb, size_t len, bool key, int64_t
 }
 
 bool Node::videoEncoderWanted() {
-  return impl_->video_track.enabled();
+  return impl_->video_track.enabled() && impl_->video_track.subscriberCount() > 0;
 }
 
 bool Node::takeVideoKeyframeRequest() {

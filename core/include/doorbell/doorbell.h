@@ -718,8 +718,9 @@ DB_API int db_core_emergency_v2(db_core* c, int active);
 DB_API void db_core_on_encoded_frame(db_core* c, const uint8_t* annexb, size_t len,
                                      int is_keyframe, int64_t ts_ms);
 
-/* Return one when the shell should run its low-cost encoder: camera.codec is h264/auto. Keeping
- * the encoder warm makes init data and a recent random-access point available before a call. */
+/* Return one when camera.codec is h264/auto and an active video subscriber needs frames.
+ * Keep the compression session reusable while idle, but do not encode or transmit video for
+ * a standby connection until it is activated. Poll this while capture is running. */
 DB_API int db_core_video_encoder_wanted(db_core* c);
 
 /* Return one once for each burst of new H.264 subscribers and clear the pending edge. A running

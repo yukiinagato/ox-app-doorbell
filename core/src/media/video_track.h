@@ -50,6 +50,7 @@ class VideoTrack {
   bool active() const;
   int subscriberCount() const;
   std::string codecString() const;
+  Bytes initialization() const;
 
   // Publish-side counters for the debug line. These describe what this node produced and handed
   // out, not what a receiver managed to display: latency, jitter and displayed frames belong to
@@ -72,7 +73,7 @@ class VideoTrack {
 
   class Reader {
    public:
-    explicit Reader(std::shared_ptr<State> st);
+    explicit Reader(std::shared_ptr<State> st, bool fresh_only = false);
     ~Reader();
     Reader(const Reader&) = delete;
     Reader& operator=(const Reader&) = delete;
@@ -85,6 +86,7 @@ class VideoTrack {
     uint64_t subscribed_key_seq_ = 0;
     bool init_sent_ = false;
     bool key_pending_ = true;
+    bool fresh_only_ = false;
     bool waiting_for_fresh_key_ = false;
     uint64_t resume_after_seq_ = 0;
     uint64_t last_frag_ = 0;
@@ -93,7 +95,7 @@ class VideoTrack {
     void accountDiscardedLocked(uint64_t through);
     void markDeliveredLocked(uint64_t sequence);
   };
-  std::shared_ptr<Reader> subscribe();
+  std::shared_ptr<Reader> subscribe(bool fresh_only = false);
 
  private:
   std::shared_ptr<State> st_;

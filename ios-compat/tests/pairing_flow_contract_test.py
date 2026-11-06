@@ -114,7 +114,7 @@ class AdminPasswordAndWriteContracts(unittest.TestCase):
         # The old per-node digest is consulted only while the cluster has no
         # password (-2) and the first successful entry republishes it.
         self.assertIn('setAdminPasswordFrom:@"" to:entered', accept)
-        self.assertIn("if (!localMatches) return NO;", accept)
+        self.assertIn("if (digest != nil && !localMatches) return NO;", accept)
         # ...and then the file is gone, so it is never a second credential.
         retire = overlay[overlay.index("+ (void)retireLocalDigest"):
                          overlay.index("- (BOOL)acceptsEnteredPassword:")]

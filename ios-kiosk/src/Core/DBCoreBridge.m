@@ -429,6 +429,8 @@ static void DBUiEventCb(void *user, const char *event_json) {
 
   NSLock *_cfgLock;
   NSDictionary *_lastConfig;
+  NSDictionary *_lastStatus;
+  CFAbsoluteTime _lastStatusAt;
   NSMutableDictionary *_runtimeStatus;
   NSMutableDictionary *_runtimeCapabilities;
   NSLock *_encodedFrameLock;
@@ -612,6 +614,7 @@ static BOOL DBLoopbackPortAccepts(int port) {
     _diTimer = nil;
   }
   DBSetLocalMediaToken(nil);
+  [_cfgLock lock]; _lastStatus = nil; _lastStatusAt = 0; [_cfgLock unlock];
   if (_core == NULL) return;
   dispatch_sync(_coreQueue, ^{
     db_core *core = self->_core;
@@ -845,11 +848,21 @@ static BOOL DBLoopbackPortAccepts(int port) {
 }
 
 
+- (NSDictionary *)lastStatus {
+  [_cfgLock lock];
+  NSDictionary *status = CFAbsoluteTimeGetCurrent() - _lastStatusAt <= 5.0 ? _lastStatus : nil;
+  [_cfgLock unlock];
+  return status;
+}
+
 - (NSDictionary *)status {
   __block NSDictionary *out = nil;
   dispatch_sync(_coreQueue, ^{
     if (self->_core) out = [self takeJson:db_core_status_json(self->_core)];
   });
+  if (out) {
+    [_cfgLock lock]; _lastStatus = out; _lastStatusAt = CFAbsoluteTimeGetCurrent(); [_cfgLock unlock];
+  }
   return out;
 }
 
@@ -862,6 +875,7 @@ static BOOL DBLoopbackPortAccepts(int port) {
       document = [self takeJson:db_core_status_json(self->_core)];
   });
   if (!document || self.lifecycleGeneration != generation) return nil;
+  [_cfgLock lock]; _lastStatus = document; _lastStatusAt = CFAbsoluteTimeGetCurrent(); [_cfgLock unlock];
   return [[DBCallTimingSnapshot alloc] initWithDocument:document
       coreGeneration:generation requestedAt:requestedAt];
 }
@@ -1000,7 +1014,7 @@ static BOOL DBLoopbackPortAccepts(int port) {
 - (BOOL)videoEncoderWanted {
   CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
   [_encodedFrameLock lock];
-  BOOL refresh = !_videoControlRefreshPending && now - _videoControlRefreshedAt >= 0.2;
+  BOOL refresh = !_videoControlRefreshPending && now - _videoControlRefreshedAt >= 0.05;
   if (refresh) _videoControlRefreshPending = YES;
   BOOL wanted = _videoWanted;
   [_encodedFrameLock unlock];

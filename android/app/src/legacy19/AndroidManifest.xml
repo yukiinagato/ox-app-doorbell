@@ -6,8 +6,12 @@
          declaration below is ignored by API 19's package parser and lets the same APK start its
          foreground service on API 28+ and 34+ instead of failing in startForeground. -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA"/>
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE"/>
+
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
 
     <application>
         <service

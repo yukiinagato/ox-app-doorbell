@@ -21,6 +21,8 @@
 #import "DBRouter.h"
 #import "DBWidgets.h"
 
+void DBH264Dbg(NSString *fmt, ...);
+
 // The debug line is remembered per device (spec §5.2).
 static NSString *const kDebugLineHiddenKey = @"DBIncomingDebugLineHidden";
 
@@ -80,7 +82,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   NSString *_currentVideoStrategy;
   DBBackoffPolicy *_h264Backoff;  // Spaces out restarts against a dead HTTP endpoint.
   BOOL _videoStrategyPlaying;
-  BOOL _mjpegAvailabilityDisabled;  // Profile turned the MJPEG layer off.
+  BOOL _mjpegAvailabilityDisabled;
+  BOOL _mediaStandbyReady;  // Profile turned the MJPEG layer off.
   UIImage *_pendingMjpegFrame;
   NSString *_incomingStreamUrl;
   NSString *_incomingStreamMp4Url;
@@ -106,6 +109,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   NSTimer *_videoOrientationTimer;
   BOOL _videoOrientationBusy;
   NSInteger _videoRotation;
+  NSDictionary *_appearanceConfig;
+  NSDictionary *_appearanceDisplay;
+  NSString *_appearanceNodeId;
+  CFAbsoluteTime _fastStartupUntil;
+  BOOL _snapshotDeferred;
   NSInteger _snapshotGen;  // Discards stale background snapshots.
   NSString *_activeVideoTransport;
   NSArray *_adminHosts;
@@ -387,10 +395,28 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 
+- (void)prewarmAppearanceWithStatus:(NSDictionary *)status {
+  if (self.superview) return;
+  NSDictionary *config = [_core lastConfig];
+  NSString *node = [DBConfigUtil str:status path:@"node.id"];
+  NSDictionary *display = [status objectForKey:@"display"];
+  if (!config || ![node length]) return;
+  if ([_appearanceConfig isEqual:config] && [_appearanceDisplay isEqual:display] &&
+      [_appearanceNodeId isEqual:node]) return;
+  _appearanceConfig = config; _appearanceDisplay = display; _appearanceNodeId = [node copy];
+  _cfg = config; _display = display; _nodeId = [node copy];
+  BOOL monitor = _monitorOnly, inCall = _inCall;
+  _monitorOnly = NO; _inCall = NO;
+  [self applyContent];
+  [self layoutIfNeeded];
+  _monitorOnly = monitor; _inCall = inCall;
+}
+
 - (void)prepareWithDoor:(NSString *)door purpose:(NSString *)purpose lang:(NSString *)lang
                  callID:(NSString *)callID stageRevision:(NSInteger)stageRevision
             expiresAtMs:(long long)expiresAtMs {
   (void)expiresAtMs;
+  ++_snapshotGen; _snapshotDeferred = NO; _fastStartupUntil = 0;
   ++_sipActionGen;
   [_router sipHangup];
   _sipMode = @"";
@@ -427,6 +453,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _incomingStreamMp4Url = @"";
   _videoMetaUrl = @"";
   _mediaSource = nil;
+  _mediaStandbyReady = NO;
   _answerButton.enabled = NO;
   _monitorButton.enabled = NO;
   _monitorAudioOn = NO;
@@ -452,18 +479,33 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     [_texts setConfig:_cfg];
     [_texts setLang:_boot.uiLang];
   }
-  _mediaSource = [DBMediaSource sourceForPeer:nil config:_cfg boot:_boot door:_door
+  NSDictionary *cachedStatus = [_core lastStatus];
+  NSDictionary *cachedPeer = [DBConfigUtil findDoorPeer:cachedStatus door:_door];
+  _nodeId = [DBConfigUtil str:cachedStatus path:@"node.id"] ?: @"";
+  if ([[cachedStatus objectForKey:@"display"] isKindOfClass:[NSDictionary class]])
+    _display = [cachedStatus objectForKey:@"display"];
+  _doorUnlock = [DBConfigUtil dig:cachedStatus path:[NSString stringWithFormat:@"doors.%@.unlock", _door ?: @""]];
+  _mediaStandbyReady = [DBConfigUtil evBool:cachedPeer key:@"media_standby_ready"];
+  if (_mediaStandbyReady) _fastStartupUntil = CFAbsoluteTimeGetCurrent() + 1.0;
+  _peerHost = [DBConfigUtil peerHost:cachedPeer];
+  _mediaSource = [DBMediaSource sourceForPeer:cachedPeer config:_cfg boot:_boot door:_door
                                      deviceID:nil];
+  _videoStrategies = [self videoStrategiesFromProfile:[cachedPeer objectForKey:@"playback_profile"]
+                                               legacy:_videoPlayback];
+  _videoStrategiesSource = _videoStrategies;
   _incomingStreamUrl = _mediaSource.mjpegURL;
   _incomingStreamMp4Url = _mediaSource.mp4URL;
   _videoMetaUrl = _mediaSource.videoMetaURL;
   [self startVideo:_incomingStreamUrl];
 
+  DBH264Dbg(@"[startup-ui] content_begin unix_ms=%lld", (long long)(CFAbsoluteTimeGetCurrent() * 1000.0 + kCFAbsoluteTimeIntervalSince1970 * 1000.0));
   [self applyContent];
+  DBH264Dbg(@"[startup-ui] content_end unix_ms=%lld", (long long)(CFAbsoluteTimeGetCurrent() * 1000.0 + kCFAbsoluteTimeIntervalSince1970 * 1000.0));
   [self fetchAndApplyCoreSnapshot];
 }
 
 - (void)prepareMonitorWithPeer:(NSDictionary *)peer {
+  _fastStartupUntil = 0; _snapshotDeferred = NO;
   ++_sipActionGen;
   [_router sipHangup];
   _sipMode = @"";
@@ -579,6 +621,24 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 
 - (void)fetchAndApplyCoreSnapshot {
+  // Admission already supplied a fresh authoritative status sample. Avoid
+  // competing JSON work on the A4 CPU while the first image is being decoded.
+  CFAbsoluteTime delay = _fastStartupUntil - CFAbsoluteTimeGetCurrent();
+  if (delay > 0 && !_videoStrategyPlaying) {
+    if (_snapshotDeferred) return;
+    _snapshotDeferred = YES;
+    NSInteger generation = _snapshotGen;
+    __weak DBIncomingScreen *weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(delay * NSEC_PER_SEC)),
+        dispatch_get_main_queue(), ^{
+      DBIncomingScreen *screen = weakSelf;
+      if (!screen || screen->_snapshotGen != generation || !screen.superview) return;
+      screen->_snapshotDeferred = NO;
+      [screen fetchAndApplyCoreSnapshot];
+    });
+    return;
+  }
+  _snapshotDeferred = NO;
   NSInteger gen = ++_snapshotGen;
   DBCoreBridge *core = _core;
   __weak DBIncomingScreen *wself = self;
@@ -608,6 +668,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       if (!peer && s->_monitorOnly && [s->_peerHost length] > 0)
         peer = [DBConfigUtil findDoorPeer:st host:s->_peerHost];
       if (peer) {
+        s->_mediaStandbyReady = [DBConfigUtil evBool:peer key:@"media_standby_ready"];
         s->_peerHost = (!s->_monitorOnly && [s->_boot.doorHost length] > 0)
                            ? s->_boot.doorHost
                            : [DBConfigUtil peerHost:peer];
@@ -1191,8 +1252,18 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   // MJPEG URL exists — regardless of where mjpeg sits in the strategy order,
   // and even when the profile omits the mjpeg strategy entirely — unless the
   // profile explicitly disabled it.
-  if ([_incomingStreamUrl length] > 0 && !_mjpegAvailabilityDisabled)
-    [self startMjpegPrewarm];
+  if ([_incomingStreamUrl length] > 0 && !_mjpegAvailabilityDisabled) {
+    if (!_mediaStandbyReady) [self startMjpegPrewarm];
+    else {
+      NSInteger session = _videoSessionGen;
+      __weak DBIncomingScreen *weakSelf = self;
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1000 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+        DBIncomingScreen *screen = weakSelf;
+        if (screen && screen->_videoSessionGen == session && !screen->_videoStrategyPlaying && !screen->_cancelled)
+          [screen startMjpegPrewarm];
+      });
+    }
+  }
   [self advanceVideoStrategy:@"session_start"];
 }
 

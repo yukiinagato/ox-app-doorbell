@@ -196,6 +196,8 @@ swiftc \
   -framework Foundation -o "$OUT/pairing_ux_test"
 
 "$OUT/minisip_uas_loopback"
+bash "$SCRIPT_DIR/test_chime_host.sh"
+bash "$SCRIPT_DIR/test_semantic_style_host.sh"
 "$OUT/media_source_test"
 "$OUT/door_tile_model_test"
 "$OUT/fleet_counts_test"

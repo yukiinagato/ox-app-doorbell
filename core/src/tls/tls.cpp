@@ -14,6 +14,7 @@
 #include "mbedtls/ssl.h"
 #include "mbedtls/x509_crt.h"
 #include "mesh/socket_compat.h"
+#include "util/log.h"
 
 extern "C" int db_tls_random(void*, unsigned char* out, size_t len) {
   if (len == 0) return 0;
@@ -246,6 +247,9 @@ std::string HttpStream::header(const std::string& lowercase_name) const {
 bool HttpStream::open(int timeout_ms) {
   if (opened_) return status_ != 0;
   opened_ = true;
+  started_at_ = std::chrono::steady_clock::now();
+  auto elapsed = [&] { return std::chrono::duration_cast<std::chrono::milliseconds>(
+      std::chrono::steady_clock::now() - started_at_).count(); };
   const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(timeout_ms);
   auto remaining = [&] {
     return static_cast<int>(std::max<int64_t>(0, std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -273,6 +277,7 @@ bool HttpStream::open(int timeout_ms) {
     error_ = "resolve_failed";
     return false;
   }
+  timings_.resolve_ms = elapsed();
   for (addrinfo* p = addresses; p && !net::valid(impl_->fd); p = p->ai_next) {
     net::socket_t candidate = ::socket(p->ai_family, p->ai_socktype, p->ai_protocol);
     if (!net::valid(candidate)) continue;
@@ -296,6 +301,7 @@ bool HttpStream::open(int timeout_ms) {
     error_ = "connect_failed";
     return false;
   }
+  timings_.connect_ms = elapsed() - timings_.resolve_ms;
   int yes = 1;
   net::setSockOpt(impl_->fd, IPPROTO_TCP, TCP_NODELAY, &yes, sizeof(yes));
 
@@ -340,6 +346,7 @@ bool HttpStream::open(int timeout_ms) {
     }
   }
 
+  timings_.tls_ms = elapsed() - timings_.resolve_ms - timings_.connect_ms;
   std::string authority = endpoint_.host;
   if (authority.find(':') != std::string::npos && authority.front() != '[')
     authority = "[" + authority + "]";
@@ -363,6 +370,8 @@ bool HttpStream::open(int timeout_ms) {
     return false;
   }
 
+  timings_.request_ms = elapsed() - timings_.resolve_ms - timings_.connect_ms - timings_.tls_ms;
+  const int64_t head_start = elapsed();
   std::string response;
   while (response.find("\r\n\r\n") == std::string::npos && response.size() < 64 * 1024) {
     if (!impl_->pendingInTls()) {
@@ -410,11 +419,25 @@ bool HttpStream::open(int timeout_ms) {
     if (next == std::string::npos || next >= end) break;
     line = next;
   }
+  timings_.headers_ms = elapsed() - head_start;
+  if (path_ == "/stream.mp4" || path_ == "/media-standby.mp4")
+    DB_LOGI("media-startup", "resolve_ms=" + std::to_string(timings_.resolve_ms) +
+        " tcp_ms=" + std::to_string(timings_.connect_ms) + " tls_ms=" + std::to_string(timings_.tls_ms) +
+        " request_ms=" + std::to_string(timings_.request_ms) + " headers_ms=" + std::to_string(timings_.headers_ms) +
+        " total_ms=" + std::to_string(elapsed()) + " status=" + std::to_string(status_));
   pending_.assign(response.begin() + static_cast<std::ptrdiff_t>(end + 4), response.end());
   return status_ != 0;
 }
 
 Bytes HttpStream::pull(bool* ended) {
+  auto note_body = [&] {
+    if (timed_body_) return;
+    timed_body_ = true;
+    timings_.first_body_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - started_at_).count();
+    if (path_ == "/stream.mp4" || path_ == "/media-standby.mp4")
+      DB_LOGI("media-startup", "first_body_ms=" + std::to_string(timings_.first_body_ms));
+  };
   if (ended) *ended = false;
   if (closed_ || !impl_ || status_ == 0) {
     if (ended) *ended = true;
@@ -425,6 +448,7 @@ Bytes HttpStream::pull(bool* ended) {
     const size_t n = std::min<size_t>(pending_.size(), 64 * 1024);
     out.insert(out.end(), pending_.begin(), pending_.begin() + static_cast<std::ptrdiff_t>(n));
     pending_.erase(pending_.begin(), pending_.begin() + static_cast<std::ptrdiff_t>(n));
+    note_body();
     return out;
   }
   if (!impl_->pendingInTls()) {
@@ -443,6 +467,7 @@ Bytes HttpStream::pull(bool* ended) {
   const int n = impl_->readSome(buf.data(), buf.size());
   if (n > 0) {
     buf.resize(static_cast<size_t>(n));
+    note_body();
     return buf;
   }
   if (n == -1) return {};

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstdint>
+#include <chrono>
 #include <map>
 #include <memory>
 #include <string>
@@ -47,6 +48,11 @@ class HttpStream {
   HttpStream(const HttpStream&) = delete;
   HttpStream& operator=(const HttpStream&) = delete;
 
+  struct Timings {
+    int64_t resolve_ms = 0, connect_ms = 0, tls_ms = 0, request_ms = 0, headers_ms = 0;
+    int64_t first_body_ms = -1;
+  };
+  const Timings& timings() const { return timings_; }
   bool open(int timeout_ms = 5000);
   int status() const { return status_; }
   // Lowercased response header value, or empty.
@@ -62,6 +68,9 @@ class HttpStream {
  private:
   void close();
 
+  Timings timings_;
+  std::chrono::steady_clock::time_point started_at_;
+  bool timed_body_ = false;
   Endpoint endpoint_;
   std::string path_;
   std::map<std::string, std::string> headers_;

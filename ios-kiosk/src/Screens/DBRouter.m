@@ -1,5 +1,7 @@
 #import "DBRouter.h"
 
+void DBH264Dbg(NSString *fmt, ...);
+
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBCallEventTracker.h"
 #import "../Core/DBConfigUtil.h"
@@ -239,6 +241,13 @@ static BOOL DBCoreSipBackendCompiled(void) {
 
 - (void)start {
   [self showHomeAnimated:NO];
+  if ([_boot.role isEqualToString:@"indoor_panel"]) {
+    __weak DBRouter *weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 3 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+      DBRouter *router = weakSelf;
+      if (router && !router->_safeMode) (void)[router incoming];
+    });
+  }
   [self refreshSoundConfig];
   [self refreshSelfDeviceIdentity];
   if ([_boot.role isEqualToString:@"door_station"]) {
@@ -996,11 +1005,18 @@ static BOOL DBCoreSipBackendCompiled(void) {
 
 - (void)presentAdmittedChime:(NSDictionary *)entry {
   NSDictionary *chime = [entry objectForKey:@"event"];
+  DBH264Dbg(@"[call-startup] admitted call=%@ press_age_ms=%lld unix_ms=%lld press_local_wall_ms=%lld capture_cutoff_ms=%lld",
+      [DBConfigUtil evStr:chime key:@"call_id"],
+      [[chime objectForKey:@"press_age_ms"] respondsToSelector:@selector(longLongValue)]
+          ? [[chime objectForKey:@"press_age_ms"] longLongValue] : -1LL,
+      (long long)([[NSDate date] timeIntervalSince1970] * 1000.0),
+      [[chime objectForKey:@"press_local_wall_ms"] longLongValue],
+      [[chime objectForKey:@"capture_cutoff_ms"] longLongValue]);
   NSString *callID = [DBConfigUtil evStr:chime key:@"call_id"];
   [self persistTargetedIndoorCall:chime];
-  [_home playChime:chime];
   if ([[entry objectForKey:@"previous_call_id"] isEqual:callID] &&
       _current == _incoming && ![_incoming isActiveMonitor]) {
+    [_home playChime:chime];
     [_incoming refreshPurpose:[DBConfigUtil evStr:chime key:@"purpose"]
                          lang:[DBConfigUtil evStr:chime key:@"visitor_lang"]
                 stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]];
@@ -1011,6 +1027,8 @@ static BOOL DBCoreSipBackendCompiled(void) {
                 lang:[DBConfigUtil evStr:chime key:@"visitor_lang"] callID:callID
        stageRevision:[DBConfigUtil intVal:chime path:@"stage_revision" def:0]
           expiresAtMs:[DBConfigUtil longLongVal:chime path:@"expires_at_ms" def:0]];
+  [_home playChime:chime];
+  DBH264Dbg(@"[startup-ui] transition_end unix_ms=%lld", (long long)([[NSDate date] timeIntervalSince1970] * 1000.0));
 }
 
 - (void)resolvePendingChimes {
@@ -1337,7 +1355,7 @@ static BOOL DBCoreSipBackendCompiled(void) {
     if (_home) [_home refreshFromCore];
     if (_door) [_door refreshFromCore];
   } else if ([t isEqualToString:@"call_log_changed"]) {
-    if (_home) [_home refreshFromCore];
+    if (_home) [_home refreshAfterCallEvent];
   } else if ([t isEqualToString:@"pending_changed"]) {
     if (_current == _addDevice) [_addDevice handlePendingChanged:ev];
   } else if ([t isEqualToString:@"invite_result"]) {
