@@ -54,6 +54,9 @@ static BOOL DBPrepareLocalRecoveryState(void) {
   NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
   NSFileManager *files = [NSFileManager defaultManager];
   BOOL maintenanceRestart = [files fileExistsAtPath:DBRecoveryMaintenanceMarkerPath];
+  NSString *maintenanceReason = maintenanceRestart
+      ? [NSString stringWithContentsOfFile:DBRecoveryMaintenanceMarkerPath
+                                  encoding:NSUTF8StringEncoding error:NULL] : nil;
   if (maintenanceRestart) [files removeItemAtPath:DBRecoveryMaintenanceMarkerPath error:NULL];
   NSNumber *previousClean = [defaults objectForKey:DBRecoveryCleanExitKey] == nil
       ? nil : @([defaults boolForKey:DBRecoveryCleanExitKey]);
@@ -68,7 +71,9 @@ static BOOL DBPrepareLocalRecoveryState(void) {
   NSInteger generation = previousGeneration >= 0 && previousGeneration < NSIntegerMax
       ? previousGeneration + 1 : 1;
   NSString *lastExitReason = [defaults stringForKey:DBRecoveryLastExitReasonKey];
-  if (maintenanceRestart)
+  if (maintenanceRestart && [maintenanceReason hasPrefix:@"dead_listener"])
+    lastExitReason = @"dead_listener_restart";
+  else if (maintenanceRestart)
     lastExitReason = @"maintenance_restart";
   else if (previousClean == nil && [lastExitReason length] == 0)
     lastExitReason = @"first_launch";
@@ -666,6 +671,8 @@ static BOOL DBBringAppToForeground(void) {
   NSString *_recoveryConfigSource;
   NSTimer *_nativeKioskProbeTimer;
   NSTimer *_runtimeHeartbeatTimer;
+  NSTimer *_listenerProbeTimer;
+  NSTimeInterval _listenerProbeArmedAt;
   NSTimer *_screenshotTimer;
   BOOL _localSafeMode;
   BOOL _helperSafeModeActive;
@@ -875,6 +882,9 @@ static BOOL DBBringAppToForeground(void) {
   [self updateCameraOrientation:nil];
   _runtimeHeartbeatTimer = [NSTimer scheduledTimerWithTimeInterval:10.0
       target:self selector:@selector(publishRuntimeHealth:) userInfo:nil repeats:YES];
+  _listenerProbeArmedAt = [[NSDate date] timeIntervalSince1970];
+  _listenerProbeTimer = [NSTimer scheduledTimerWithTimeInterval:15.0
+      target:self selector:@selector(listenerProbeTimerFired:) userInfo:nil repeats:YES];
   [self startScreenshotHookIfEnabled];
   if (_boot.debugScreenshots && [_boot.debugStartScreen length] > 0) {
     // After the first layout, so the screen it opens is fully drawn.
@@ -1118,6 +1128,8 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
 }
 
 - (void)restartIntoBootstrapSetup {
+  [_listenerProbeTimer invalidate];
+  _listenerProbeTimer = nil;
   [_nativeKioskProbeTimer invalidate];
   _nativeKioskProbeTimer = nil;
   [_runtimeHeartbeatTimer invalidate];
@@ -1271,6 +1283,8 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
 - (void)applicationWillTerminate:(UIApplication *)application {
   (void)application;
   DBMarkCleanExit();
+  [_listenerProbeTimer invalidate];
+  _listenerProbeTimer = nil;
   [_runtimeHeartbeatTimer invalidate];
   _runtimeHeartbeatTimer = nil;
   [_nativeKioskProbeTimer invalidate];
@@ -1319,6 +1333,7 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
       [[UIApplication sharedApplication] endBackgroundTask:delegate->_backgroundTask];
     delegate->_backgroundTask = UIBackgroundTaskInvalid;
     [delegate beginBackgroundKeepAlive:[UIApplication sharedApplication]];
+    [delegate restartIfCoreListenersDead:@"keepalive"];
     if ([[delegate->_boot role] length] > 0) DBBringAppToForeground();
   }];
 }
@@ -1330,8 +1345,50 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
   _backgroundTask = UIBackgroundTaskInvalid;
 }
 
+- (void)listenerProbeTimerFired:(NSTimer *)timer {
+  (void)timer;
+  [self restartIfCoreListenersDead:@"periodic"];
+}
+
+// A panel that iOS suspended comes back with its UI and Core running but every listening socket
+// defunct, so no door station can deliver a call (measured on iPad 1 / iOS 5.1.1: ports 47180,
+// 47443, 47172 and 47190 all refused while the UI kept polling). Only a fresh process rebinds
+// them, so take the same clean maintenance restart an identity change uses.
+- (void)restartIfCoreListenersDead:(NSString *)reason {
+  if (_identityRestartPending || !_core.isRunning) return;
+  NSTimeInterval now = [[NSDate date] timeIntervalSince1970];
+  if (now - _listenerProbeArmedAt < 20) return;  // let a fresh Core finish binding
+  NSString *screen = [_router currentScreenName] ?: @"";
+  if ([screen rangeOfString:@"incoming"].location != NSNotFound ||
+      [screen rangeOfString:@"call"].location != NSNotFound) return;
+  NSString *dead = [_core deadLoopbackListener];
+  if (dead == nil) return;
+  NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
+  double last = [defaults doubleForKey:@"recovery.dead_listener_restart_at"];
+  if (last > 0 && now - last < 120) {
+    NSLog(@"[doorbell][recovery] listener %@ dead (%@) but restarted %.0fs ago; waiting",
+          dead, reason, now - last);
+    return;
+  }
+  [defaults setDouble:now forKey:@"recovery.dead_listener_restart_at"];
+  [defaults setObject:@"dead_listener" forKey:DBRecoveryLastExitReasonKey];
+  [defaults synchronize];
+  NSLog(@"[doorbell][recovery] listener %@ refuses loopback connects (%@); restarting", dead,
+        reason);
+  _identityRestartPending = YES;
+  [@"dead_listener\n" writeToFile:DBRecoveryMaintenanceMarkerPath atomically:YES
+                         encoding:NSUTF8StringEncoding error:NULL];
+  BOOL supervised = _recovery.helperSupervising;
+  DBMarkCleanExit();
+  [_core stop];
+  [DBWatchdog restartForMaintenanceWithExternalSupervisor:supervised];
+}
+
 - (void)applicationDidBecomeActive:(UIApplication *)application {
   [self endBackgroundKeepAlive:application];
+  _listenerProbeArmedAt = MIN(_listenerProbeArmedAt, [[NSDate date] timeIntervalSince1970] - 20);
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{ [self restartIfCoreListenersDead:@"resume"]; });
   [_core invalidateCachedLocalTime];
   [self refreshNativeKioskMeasurement];
   [_router resumeMediaAfterBackground];

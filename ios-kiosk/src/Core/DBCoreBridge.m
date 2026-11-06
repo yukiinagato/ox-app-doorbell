@@ -11,6 +11,10 @@
 #import <sys/socket.h>
 #import <sys/sysctl.h>
 #import <dlfcn.h>
+#import <fcntl.h>
+#import <poll.h>
+#import <errno.h>
+#import <unistd.h>
 #import <mach/mach_time.h>
 #import "DBCallHistoryModel.h"
 #import "DBNoticeModel.h"
@@ -438,6 +442,8 @@ static void DBUiEventCb(void *user, const char *event_json) {
   BOOL _videoControlRefreshPending;
   BOOL _videoWanted;
   BOOL _videoKeyframeRequested;
+  int _probeHttpPort;
+  int _probeMeshPort;
   CFAbsoluteTime _videoControlRefreshedAt;
 }
 @synthesize cameraActive = _cameraActive;
@@ -520,6 +526,16 @@ static void DBUiEventCb(void *user, const char *event_json) {
   plat.user = (__bridge void *)self;
 
   bootJson = DBBootJsonWithIdentity(bootJson ?: @"{}");
+  _probeHttpPort = 47180;
+  _probeMeshPort = 47172;
+  NSData *bootData = [bootJson dataUsingEncoding:NSUTF8StringEncoding];
+  id bootDoc = bootData ? [NSJSONSerialization JSONObjectWithData:bootData options:0 error:NULL] : nil;
+  if ([bootDoc isKindOfClass:[NSDictionary class]]) {
+    id http = [(NSDictionary *)bootDoc objectForKey:@"http_port"];
+    id mesh = [(NSDictionary *)bootDoc objectForKey:@"listen_port"];
+    if ([http respondsToSelector:@selector(intValue)] && [http intValue] > 0) _probeHttpPort = [http intValue];
+    if ([mesh respondsToSelector:@selector(intValue)] && [mesh intValue] > 0) _probeMeshPort = [mesh intValue];
+  }
   _core = db_core_create_v2(&plat, [dataDir UTF8String], [bootJson UTF8String]);
   if (_core == NULL) return NO;
   db_core_set_ui_callback(_core, DBUiEventCb, (__bridge void *)self);
@@ -542,6 +558,51 @@ static void DBUiEventCb(void *user, const char *event_json) {
                                             userInfo:nil
                                              repeats:YES];
   return YES;
+}
+
+// iOS marks every socket of a suspended app defunct. After the app resumes its UI and Core's
+// outbound connections recover, but the listening sockets stay dead: loopback connects are
+// refused and no peer can reach this panel, so incoming calls are silently lost. A loopback
+// connect to each TCP listener tells the two states apart.
+static BOOL DBLoopbackPortAccepts(int port) {
+  if (port <= 0 || port > 65535) return YES;
+  int fd = socket(AF_INET, SOCK_STREAM, 0);
+  if (fd < 0) return YES;  // cannot judge; do not trigger a restart
+  int flags = fcntl(fd, F_GETFL, 0);
+  if (flags >= 0) fcntl(fd, F_SETFL, flags | O_NONBLOCK);
+  struct sockaddr_in addr;
+  memset(&addr, 0, sizeof(addr));
+  addr.sin_len = sizeof(addr);
+  addr.sin_family = AF_INET;
+  addr.sin_port = htons((uint16_t)port);
+  addr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+  BOOL ok = NO;
+  if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) == 0) {
+    ok = YES;
+  } else if (errno == EINPROGRESS) {
+    struct pollfd p;
+    p.fd = fd;
+    p.events = POLLOUT;
+    p.revents = 0;
+    if (poll(&p, 1, 300) > 0) {
+      int err = 0;
+      socklen_t len = sizeof(err);
+      ok = getsockopt(fd, SOL_SOCKET, SO_ERROR, &err, &len) == 0 && err == 0;
+    } else {
+      ok = YES;  // a slow loopback answer is not a dead listener
+    }
+  }
+  close(fd);
+  return ok;
+}
+
+- (NSString *)deadLoopbackListener {
+  if (_core == NULL) return nil;
+  if (!DBLoopbackPortAccepts(_probeHttpPort))
+    return [NSString stringWithFormat:@"http:%d", _probeHttpPort];
+  if (!DBLoopbackPortAccepts(_probeMeshPort))
+    return [NSString stringWithFormat:@"mesh:%d", _probeMeshPort];
+  return nil;
 }
 
 - (void)stop {

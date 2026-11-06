@@ -34,6 +34,9 @@ NSString *DBLocalMediaHeaderLine(NSURL *url);
 
 - (BOOL)startWithDataDir:(NSString *)dataDir bootJson:(NSString *)bootJson;
 - (void)stop;
+/// The first of Core's TCP listeners ("http:<port>" / "mesh:<port>") that refuses a loopback
+/// connect, or nil when all accept. A suspended app's listeners are left defunct by iOS.
+- (NSString *)deadLoopbackListener;
 
 // UI event subscription. Handlers run on the main thread; duplicate keys replace the old handler.
 - (void)addHandler:(NSString *)key handler:(DBUiEventHandler)handler;
