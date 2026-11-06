@@ -8313,6 +8313,13 @@ if (typeof document !== "undefined") (function () {
     if (act === "copypin") { copyText(m.token.pin, btn); return; }
     if (act === "scan") { pairScanOpen(); return; }
     if (act === "scanstop") { pairScanClose(); return; }
+    if (act === "scanflip") {
+      // Reopen on the other lens; a tablet on a stand cannot be turned around.
+      PAIR.scanFacing = PAIR.scanFacing === "user" ? "environment" : "user";
+      pairScanClose();
+      pairScanOpen();
+      return;
+    }
   }
 
   function pairPendingOf(id) {
@@ -8377,7 +8384,9 @@ if (typeof document !== "undefined") (function () {
     box.innerHTML = "<video id='pairScanVideo' autoplay playsinline muted></video>" +
       "<div class='pairscanframe'></div>" +
       "<div class='pairscanbar'><span id='pairScanMsg'>" + esc(t("pair.scan_hint")) +
-      "</span><button class='btn small' data-pair='scanstop'>" + esc(t("pair.scan_cancel")) +
+      "</span><button class='btn small' data-pair='scanflip' id='pairScanFlip' hidden>" +
+      esc(t("pair.scan_switch_camera")) + "</button>" +
+      "<button class='btn small' data-pair='scanstop'>" + esc(t("pair.scan_cancel")) +
       "</button></div>";
     document.body.appendChild(box);
     var s = { box: box, video: null, message: null, stream: null, timer: 0, detector: null,
@@ -8387,7 +8396,17 @@ if (typeof document !== "undefined") (function () {
     s.message = box.querySelector("#pairScanMsg");
     PAIR.scan = s;
     pairBind(box);
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } }).then(
+    // The flip button only appears where there is more than one camera to flip to.
+    if (navigator.mediaDevices.enumerateDevices) {
+      navigator.mediaDevices.enumerateDevices().then(function (devices) {
+        var cameras = 0;
+        for (var i = 0; i < devices.length; i++) if (devices[i].kind === "videoinput") cameras++;
+        var flip = box.querySelector("#pairScanFlip");
+        if (flip && cameras > 1) flip.hidden = false;
+      }, function () {});
+    }
+    navigator.mediaDevices.getUserMedia({
+      video: { facingMode: PAIR.scanFacing === "user" ? "user" : "environment" } }).then(
       function (stream) {
         if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime, s.visit)) {
           var ts = stream.getTracks ? stream.getTracks() : [];

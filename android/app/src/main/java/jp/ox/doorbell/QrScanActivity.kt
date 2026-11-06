@@ -43,6 +43,8 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
 
     private var scanning = false
     private var surfaceReady = false
+    // Opens on the back lens; a wall-mounted panel can flip to the front one.
+    private var useBackCamera = true
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -120,7 +122,7 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
         if (!hasCameraPermission()) return
         scanning = true
         app.core.qrScanStart()
-        app.runtime.acquireScannerPreview(preview.holder) { started ->
+        app.runtime.acquireScannerPreview(preview.holder, useBackCamera) { started ->
             ui.post {
                 if (!started) {
                     scanning = false
@@ -131,6 +133,13 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
                 }
             }
         }
+    }
+
+    private fun switchCamera() {
+        useBackCamera = !useBackCamera
+        if (!scanning) return
+        stopScanning()
+        if (surfaceReady) startScanning()
     }
 
     private fun stopScanning() {
@@ -251,6 +260,13 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
             this,
             texts.t("calling.cancel", R.string.calling_cancel),
         ) { finish() }
+        if (CameraFeeder.hasFrontAndBack()) {
+            val flip: Button = PairingUi.button(
+                this,
+                texts.t("pair.scan_switch_camera", R.string.pair_scan_switch_camera),
+            ) { switchCamera() }
+            overlay.addView(flip, PairingUi.matchWrap().apply { topMargin = dp(16) })
+        }
         overlay.addView(cancel, PairingUi.matchWrap().apply { topMargin = dp(16) })
         frame.addView(
             overlay,

@@ -20,6 +20,8 @@ final class PairingScannerViewController: UIViewController,
     private let hintLabel = UILabel()
     private let messageLabel = UILabel()
     private lazy var cancelButton = PairingTheme.button(texts.t("admin.cancel"))
+    private lazy var switchButton = PairingTheme.button(texts.t("pair.scan_switch_camera"))
+    private var currentInput: AVCaptureDeviceInput?
 
     init(texts: Texts, onPayload: @escaping ((addr: String, id: String, pk: String)) -> Void) {
         self.texts = texts
@@ -78,6 +80,13 @@ final class PairingScannerViewController: UIViewController,
         cancelButton.accessibilityIdentifier = "pair_scan_cancel"
         view.addSubview(cancelButton)
 
+        // Opens on the back camera; a panel on a wall or a stand can flip to the front one.
+        switchButton.addTarget(self, action: #selector(switchCamera), for: .primaryActionTriggered)
+        switchButton.translatesAutoresizingMaskIntoConstraints = false
+        switchButton.accessibilityIdentifier = "pair_scan_switch_camera"
+        switchButton.isHidden = true
+        view.addSubview(switchButton)
+
         let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
             viewfinder.centerXAnchor.constraint(equalTo: view.centerXAnchor),
@@ -92,6 +101,8 @@ final class PairingScannerViewController: UIViewController,
             messageLabel.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -32),
             cancelButton.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -28),
             cancelButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            switchButton.bottomAnchor.constraint(equalTo: cancelButton.topAnchor, constant: -12),
+            switchButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
         ])
     }
 
@@ -119,6 +130,8 @@ final class PairingScannerViewController: UIViewController,
             return
         }
         session.addInput(input)
+        currentInput = input
+        switchButton.isHidden = !(Self.device(at: .front) != nil && Self.device(at: .back) != nil)
         let output = AVCaptureMetadataOutput()
         guard session.canAddOutput(output) else {
             showUnavailable(denied: false)
@@ -136,7 +149,33 @@ final class PairingScannerViewController: UIViewController,
         session.startRunning()
     }
 
+    private static func device(at position: AVCaptureDevice.Position) -> AVCaptureDevice? {
+#if IOS9_COMPAT
+        return AVCaptureDevice.devices(for: .video).first(where: { $0.position == position })
+#else
+        return AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
+#endif
+    }
+
+    @objc private func switchCamera() {
+        guard let current = currentInput else { return }
+        let next: AVCaptureDevice.Position = current.device.position == .front ? .back : .front
+        guard let device = Self.device(at: next),
+              let input = try? AVCaptureDeviceInput(device: device) else { return }
+        session.beginConfiguration()
+        session.removeInput(current)
+        if session.canAddInput(input) {
+            session.addInput(input)
+            currentInput = input
+        } else {
+            session.addInput(current)
+        }
+        session.commitConfiguration()
+        messageLabel.isHidden = true
+    }
+
     private func showUnavailable(denied: Bool) {
+        switchButton.isHidden = true
         viewfinder.isHidden = true
         hintLabel.isHidden = true
         messageLabel.text = texts.t(denied ? "pair.scan_denied" : "pair.scan_no_camera")

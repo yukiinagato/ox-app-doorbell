@@ -170,7 +170,8 @@ class RuntimeSupervisor(private val app: App) {
      * frames keep reaching Core. A door station's headless capture is restarted on release.
      * The result is reported on the caller's handler.
      */
-    fun acquireScannerPreview(holder: android.view.SurfaceHolder, done: (Boolean) -> Unit) {
+    fun acquireScannerPreview(holder: android.view.SurfaceHolder, preferBack: Boolean = true,
+                              done: (Boolean) -> Unit) {
         handler.post {
             if (!hasCameraPermission()) {
                 scannerActive = false
@@ -180,7 +181,7 @@ class RuntimeSupervisor(private val app: App) {
             restartCamera()
             orientation.stop()
             scannerActive = true
-            val started = camera.start(holder, SCANNER_WIDTH, SCANNER_HEIGHT, 0, preferBack = true)
+            val started = camera.start(holder, SCANNER_WIDTH, SCANNER_HEIGHT, 0, preferBack = preferBack)
             if (!started) {
                 scannerActive = false
                 cameraRetryAtMs = 0L

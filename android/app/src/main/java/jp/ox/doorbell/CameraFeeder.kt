@@ -252,5 +252,20 @@ internal class CameraFeeder(
         } catch (_: Exception) {
             false
         }
+
+        /** Both a front and a back lens, so the QR scanner can offer to flip between them. */
+        fun hasFrontAndBack(): Boolean = try {
+            val info = Camera.CameraInfo()
+            var front = false
+            var back = false
+            for (i in 0 until Camera.getNumberOfCameras()) {
+                Camera.getCameraInfo(i, info)
+                if (info.facing == Camera.CameraInfo.CAMERA_FACING_FRONT) front = true
+                if (info.facing == Camera.CameraInfo.CAMERA_FACING_BACK) back = true
+            }
+            front && back
+        } catch (_: Exception) {
+            false
+        }
     }
 }
