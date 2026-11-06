@@ -90,6 +90,11 @@ struct SettingSection {
         self.footer = footer
         self.items = items
     }
+
+    /// Header-less section: `SettingSection([items])`.
+    init(_ items: [SettingItem]) {
+        self.init("", footer: "", items)
+    }
 }
 
 struct SettingsPage {

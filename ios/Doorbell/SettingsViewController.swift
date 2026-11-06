@@ -102,7 +102,7 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         }
     }
 
-    private static let handlerKey = "settings
+    private static let handlerKey = "settings"
 
     /// An iPad in compact multitasking shows the category list first, never an orphan detail.
     func splitViewController(_ splitViewController: UISplitViewController,
