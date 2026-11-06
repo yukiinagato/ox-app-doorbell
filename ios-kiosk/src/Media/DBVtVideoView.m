@@ -98,8 +98,20 @@ static BOOL DbLoadVt(void) {
   static dispatch_once_t once;
   static BOOL ok;
   dispatch_once(&once, ^{
-    void *vt = dlopen("/System/Library/PrivateFrameworks/VideoToolbox.framework/VideoToolbox",
-                      RTLD_NOW);
+    // iOS 5-7 ship VideoToolbox as a private framework; iOS 8 made it public and moved it.
+    // The same kiosk binary runs on both (iPad 1 on 5.1.1, iPad mini on 9.3.x), and on iOS 9
+    // the private path no longer exists, so every decoder start failed and H.264 never played.
+    // The entry points keep the same names and signatures in both locations.
+    const char *paths[] = {
+      "/System/Library/Frameworks/VideoToolbox.framework/VideoToolbox",
+      "/System/Library/PrivateFrameworks/VideoToolbox.framework/VideoToolbox",
+    };
+    void *vt = NULL;
+    const char *loaded = "none";
+    for (size_t i = 0; i < sizeof(paths) / sizeof(paths[0]) && vt == NULL; ++i) {
+      vt = dlopen(paths[i], RTLD_NOW);
+      if (vt) loaded = i == 0 ? "public" : "private";
+    }
     DbVTCreate = dlsym(vt, "VTDecompressionSessionCreate");
     DbVTDecode = dlsym(vt, "VTDecompressionSessionDecodeFrame");
     DbVTInvalidate = dlsym(vt, "VTDecompressionSessionInvalidate");
@@ -108,7 +120,7 @@ static BOOL DbLoadVt(void) {
     DbVTHardwareKey = dlsym(
         vt, "kVTVideoDecoderSpecification_EnableHardwareAcceleratedVideoDecoder");
     ok = vt && DbVTCreate && DbVTDecode && DbVTInvalidate;
-    DBH264Dbg(@"[vt] symbols create=%p decode=%p wait=%p ok=%d",
+    DBH264Dbg(@"[vt] symbols (%s) create=%p decode=%p wait=%p ok=%d", loaded,
               DbVTCreate, DbVTDecode, DbVTWait, (int)ok);
   });
   return ok;
