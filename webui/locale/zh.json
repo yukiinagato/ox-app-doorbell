@@ -1138,6 +1138,7 @@
  "pair.scan_opening": "正在启动摄像头…",
  "pair.scan_paste": "粘贴二维码文本",
  "pair.scan_qr": "扫描二维码",
+ "pair.scan_switch_camera": "切换摄像头",
  "pair.scan_unavailable_http": "摄像头仅在 https 或 localhost 下可用。请改为粘贴新设备上显示的二维码文本",
  "pair.scanning": "扫描中…",
  "pair.searching": "正在查找附近设备…",

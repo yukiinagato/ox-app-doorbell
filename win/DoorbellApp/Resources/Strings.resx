@@ -1145,6 +1145,7 @@
   <data name="pair_scan_opening" xml:space="preserve"><value>カメラを起動しています…</value></data>
   <data name="pair_scan_paste" xml:space="preserve"><value>QR の文字列を貼り付ける</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>QR を読み取る</value></data>
+  <data name="pair_scan_switch_camera" xml:space="preserve"><value>カメラを切り替え</value></data>
   <data name="pair_scan_unavailable_http" xml:space="preserve"><value>カメラは https か localhost でのみ使えます。新しい端末に表示された QR の文字列を貼り付けてください</value></data>
   <data name="pair_scanning" xml:space="preserve"><value>読み取り中…</value></data>
   <data name="pair_searching" xml:space="preserve"><value>近くの端末を探しています…</value></data>

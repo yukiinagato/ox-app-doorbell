@@ -1144,6 +1144,14 @@ static DBRotateKeyFn DBRotateKey(void) {
   });
 }
 
+- (void)inviteDirectAddr:(NSString *)addr nodeId:(NSString *)nodeId publicKey:(NSString *)pk {
+  if ([addr length] == 0 || [pk length] == 0) return;
+  NSString *a = [addr copy], *n = [nodeId copy] ?: @"", *k = [pk copy];
+  dispatch_async(_coreQueue, ^{
+    if (self->_core) db_core_invite_direct(self->_core, [a UTF8String], [n UTF8String], [k UTF8String]);
+  });
+}
+
 - (void)qrScanStart {
   dispatch_async(_coreQueue, ^{
     if (self->_core) db_core_qr_scan_start(self->_core);

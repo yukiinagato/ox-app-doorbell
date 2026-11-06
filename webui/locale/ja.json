@@ -1138,6 +1138,7 @@
  "pair.scan_opening": "カメラを起動しています…",
  "pair.scan_paste": "QR の文字列を貼り付ける",
  "pair.scan_qr": "QR を読み取る",
+ "pair.scan_switch_camera": "カメラを切り替え",
  "pair.scan_unavailable_http": "カメラは https か localhost でのみ使えます。新しい端末に表示された QR の文字列を貼り付けてください",
  "pair.scanning": "読み取り中…",
  "pair.searching": "近くの端末を探しています…",

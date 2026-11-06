@@ -1143,6 +1143,7 @@ Delete it?</string>
     <string name="pair_scan_opening">Starting the camera…</string>
     <string name="pair_scan_paste">Paste the QR text</string>
     <string name="pair_scan_qr">Scan QR</string>
+    <string name="pair_scan_switch_camera">Switch camera</string>
     <string name="pair_scan_unavailable_http">The camera works only over https or localhost. Paste the QR text shown on the new device instead</string>
     <string name="pair_scanning">Scanning…</string>
     <string name="pair_searching">Looking for nearby devices…</string>

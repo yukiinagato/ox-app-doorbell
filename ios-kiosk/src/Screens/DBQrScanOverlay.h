@@ -5,11 +5,12 @@
 
 // Full-screen "scan the new device's Add QR" overlay for the kiosk (spec §5.1 item 4).
 //
-// iOS 5 has no AVFoundation QR detection, so nothing is decoded here: the app's one camera
-// session keeps pushing frames to Core and Core's own decoder reads them, exactly as on Android.
-// A decoded doorbell-pair: payload is invited by Core itself. The overlay only owns the preview,
-// the viewfinder and the messages, and it gives the camera back in the state it found it: a door
-// station keeps capturing, an indoor panel's camera is stopped again.
+// The overlay borrows the app's one camera session (a second session would take the device
+// away from a door station). On iOS 7+ it adds AVFoundation's own QR detector to that session
+// and invites the doorbell-pair: payload it reads. iOS 5/6 have no such detector, so there
+// Core's decoder reads the frames the session already pushes and invites by itself. The camera
+// is handed back as it was found: a door station keeps its visitor lens, an indoor panel's
+// camera is stopped again.
 @interface DBQrScanOverlay : UIView
 
 - (id)initWithCore:(DBCoreBridge *)core texts:(DBTexts *)texts;
@@ -28,7 +29,7 @@
 // YES when this device has any camera at all (the iPad 1 has none).
 + (BOOL)cameraAvailable;
 
-// "doorbell-pair:<addr>|<id>|<pk>" -> @{addr,id}, or nil for any other text.
+// "doorbell-pair:<addr>|<id>|<pk>" -> @{addr,id,pk}, or nil for any other text.
 + (NSDictionary *)parsePairPayload:(NSString *)text;
 
 @end

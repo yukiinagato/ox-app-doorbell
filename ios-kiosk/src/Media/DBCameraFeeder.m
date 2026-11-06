@@ -4,11 +4,14 @@
 #import <CoreMedia/CoreMedia.h>
 #import <UIKit/UIKit.h>
 
-@interface DBCameraFeeder () <AVCaptureVideoDataOutputSampleBufferDelegate>
+@interface DBCameraFeeder () <AVCaptureVideoDataOutputSampleBufferDelegate,
+                              AVCaptureMetadataOutputObjectsDelegate>
 @end
 
 @implementation DBCameraFeeder {
   AVCaptureSession *_session;
+  id _metadataOutput;  // AVCaptureMetadataOutput while onQrCode is set (iOS 7+)
+  AVCaptureDevicePosition _activePosition;
   dispatch_queue_t _queue;
   void (^_frameHandler)(NSData *, int, int, int, int);
   void (^_stateHandler)(BOOL, NSString *);
@@ -24,6 +27,8 @@
     _frameHandler = [frameHandler copy];
     _stateHandler = [stateHandler copy];
     _queue = dispatch_queue_create("doorbell.camera", DISPATCH_QUEUE_SERIAL);
+    _preferredPosition = AVCaptureDevicePositionFront;
+    _activePosition = AVCaptureDevicePositionUnspecified;
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(runtimeError:)
         name:AVCaptureSessionRuntimeErrorNotification object:nil];
   }
@@ -63,8 +68,8 @@
   }
   AVCaptureDevice *device = nil;
   for (AVCaptureDevice *candidate in [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo]) {
-    if (!device || candidate.position == AVCaptureDevicePositionFront) device = candidate;
-    if (candidate.position == AVCaptureDevicePositionFront) break;
+    if (!device || candidate.position == _preferredPosition) device = candidate;
+    if (candidate.position == _preferredPosition) break;
   }
   if (!device) { [self report:NO reason:@"no_device"]; return; }
   AVCaptureDeviceInput *input = [AVCaptureDeviceInput deviceInputWithDevice:device error:NULL];
@@ -87,6 +92,24 @@
     [session commitConfiguration]; [self report:NO reason:@"output_failed"]; return;
   }
   [session addOutput:output];
+  _metadataOutput = nil;
+  Class metadataClass = NSClassFromString(@"AVCaptureMetadataOutput");
+  if (_onQrCode && metadataClass) {
+    // Part of the session's own configuration, like the iOS app's scanner: an output added to
+    // a session that is already starting on another queue never delivered a single code.
+    AVCaptureMetadataOutput *metadata = [[metadataClass alloc] init];
+    if ([session canAddOutput:metadata]) {
+      [session addOutput:metadata];
+      // AVMetadataObjectTypeQRCode, spelled out: a weak iOS 7 constant in a 5.1 binary.
+      if ([[metadata availableMetadataObjectTypes] containsObject:@"org.iso.QRCode"]) {
+        [metadata setMetadataObjectsDelegate:self queue:dispatch_get_main_queue()];
+        metadata.metadataObjectTypes = @[ @"org.iso.QRCode" ];
+        _metadataOutput = metadata;
+      } else {
+        [session removeOutput:metadata];
+      }
+    }
+  }
   AVCaptureConnection *connection = [output connectionWithMediaType:AVMediaTypeVideo];
   if (connection.isVideoOrientationSupported) connection.videoOrientation = AVCaptureVideoOrientationPortrait;
   if (connection.isVideoMirroringSupported) {
@@ -107,9 +130,41 @@
     [device unlockForConfiguration];
   }
   _session = session;
+  _activePosition = device.position;
   @synchronized(self) { _accepting = YES; _reportedActive = NO; _lastFrame = 0; }
   [self report:NO reason:@"starting"];
   dispatch_async(_queue, ^{ [session startRunning]; });
+}
+
++ (BOOL)canSwitchPosition {
+  BOOL front = NO, back = NO;
+  for (AVCaptureDevice *device in [AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo]) {
+    if (device.position == AVCaptureDevicePositionFront) front = YES;
+    if (device.position == AVCaptureDevicePositionBack) back = YES;
+  }
+  return front && back;
+}
+
+- (AVCaptureDevicePosition)activePosition {
+  return _session ? _activePosition : AVCaptureDevicePositionUnspecified;
+}
+
+- (BOOL)qrDetectorActive {
+  return _session != nil && _metadataOutput != nil;
+}
+
+- (void)captureOutput:(AVCaptureOutput *)output
+    didOutputMetadataObjects:(NSArray *)metadataObjects
+              fromConnection:(AVCaptureConnection *)connection {
+  (void)connection;
+  if (output != _metadataOutput) return;
+  void (^handler)(NSString *) = _onQrCode;
+  if (!handler) return;
+  for (id object in metadataObjects) {
+    if (![object respondsToSelector:@selector(stringValue)]) continue;
+    NSString *text = [object stringValue];
+    if ([text length] > 0) handler(text);
+  }
 }
 
 - (BOOL)running {
@@ -127,6 +182,10 @@
   @synchronized(self) { _accepting = NO; _reportedActive = NO; }
   AVCaptureSession *session = _session;
   _session = nil;
+  if (_metadataOutput) {
+    [_metadataOutput setMetadataObjectsDelegate:nil queue:NULL];
+    _metadataOutput = nil;
+  }
   if (session) dispatch_async(_queue, ^{
     [session stopRunning];
     if (self->_onCaptureStopped) self->_onCaptureStopped();

@@ -12,6 +12,9 @@ static const NSTimeInterval kRearmS = 60;
 // A camera that has not come up by then is reported instead of leaving a black square.
 static const NSTimeInterval kCameraStartBudgetS = 5;
 
+
+void DBH264Dbg(NSString *fmt, ...);
+
 @implementation DBQrScanOverlay {
   DBCoreBridge *_core;
   DBTexts *_texts;
@@ -21,6 +24,8 @@ static const NSTimeInterval kCameraStartBudgetS = 5;
   UILabel *_hint;
   UILabel *_status;
   UIButton *_cancel;
+  UIButton *_switchCamera;
+  AVCaptureDevicePosition _originalPosition;
   NSTimer *_tick;
   NSDate *_openedAt;
   NSDate *_armedAt;
@@ -33,6 +38,12 @@ static const NSTimeInterval kCameraStartBudgetS = 5;
   return [[AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo] count] > 0;
 }
 
+// iOS 7+ reads QR codes with AVFoundation's own detector, the one the iOS app uses. Only
+// iOS 5/6 fall back to Core's decoder fed with camera frames.
++ (BOOL)nativeDetectorAvailable {
+  return NSClassFromString(@"AVCaptureMetadataOutput") != nil;
+}
+
 + (NSDictionary *)parsePairPayload:(NSString *)text {
   static NSString *const kPrefix = @"doorbell-pair:";
   if (![text isKindOfClass:[NSString class]] || ![text hasPrefix:kPrefix]) return nil;
@@ -40,8 +51,9 @@ static const NSTimeInterval kCameraStartBudgetS = 5;
   if ([parts count] < 3) return nil;
   NSString *addr = [parts objectAtIndex:0];
   NSString *identifier = [parts objectAtIndex:1];
-  if ([addr length] == 0 || [identifier length] == 0) return nil;
-  return @{ @"addr" : addr, @"id" : identifier };
+  NSString *pk = [parts objectAtIndex:[parts count] - 1];
+  if ([addr length] == 0 || [identifier length] == 0 || [pk length] != 64) return nil;
+  return @{ @"addr" : addr, @"id" : identifier, @"pk" : pk };
 }
 
 - (id)initWithCore:(DBCoreBridge *)core texts:(DBTexts *)texts {
@@ -84,6 +96,20 @@ static const NSTimeInterval kCameraStartBudgetS = 5;
       forControlEvents:UIControlEventTouchUpInside];
     _cancel.accessibilityIdentifier = @"qr_scan_cancel";
     [self addSubview:_cancel];
+
+    // A wall-mounted panel cannot be turned around, and a phone held up to the front lens is
+    // awkward, so the scanner opens on the back camera and can flip to the front one.
+    _switchCamera = [UIButton buttonWithType:UIButtonTypeCustom];
+    _switchCamera.backgroundColor = [UIColor colorWithWhite:0.22 alpha:1];
+    _switchCamera.layer.cornerRadius = 10;
+    _switchCamera.titleLabel.font = [UIFont boldSystemFontOfSize:18];
+    [_switchCamera setTitle:[_texts ts:@"pair.scan_switch_camera"] forState:UIControlStateNormal];
+    [_switchCamera setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    [_switchCamera addTarget:self action:@selector(onSwitchCamera)
+            forControlEvents:UIControlEventTouchUpInside];
+    _switchCamera.accessibilityIdentifier = @"qr_scan_switch_camera";
+    _switchCamera.hidden = ![DBCameraFeeder canSwitchPosition];
+    [self addSubview:_switchCamera];
   }
   return self;
 }
@@ -129,16 +155,87 @@ static const NSTimeInterval kCameraStartBudgetS = 5;
     return;
   }
   _ownsCamera = !camera.running;
-  if (_ownsCamera) [camera start];
+  _originalPosition = camera.preferredPosition;
+  [self useCameraPosition:[DBCameraFeeder canSwitchPosition] ? AVCaptureDevicePositionBack
+                                                             : _originalPosition];
   [self arm];
   _tick = [NSTimer scheduledTimerWithTimeInterval:kTickS target:self selector:@selector(onTick:)
                                          userInfo:nil repeats:YES];
   [self onTick:nil];
 }
 
+// Points the shared camera at one lens. A door station's running capture is restarted on the
+// requested lens; dismiss puts its original lens back.
+- (void)useCameraPosition:(AVCaptureDevicePosition)position {
+  DBCameraFeeder *camera = [self camera];
+  camera.preferredPosition = position;
+  [self installDetector];
+  BOOL detectorReady = ![DBQrScanOverlay nativeDetectorAvailable] || camera.qrDetectorActive;
+  if (camera.running && camera.activePosition == position && detectorReady) return;
+  [_preview removeFromSuperlayer];
+  _preview = nil;
+  _openedAt = [NSDate date];
+  _status.text = [_texts ts:@"pair.scan_opening"];
+  if (camera.running) [camera stop];
+  [camera start];
+}
+
+- (void)onSwitchCamera {
+  if (_finished || _failed) return;
+  DBCameraFeeder *camera = [self camera];
+  AVCaptureDevicePosition next = camera.activePosition == AVCaptureDevicePositionFront
+      ? AVCaptureDevicePositionBack : AVCaptureDevicePositionFront;
+  [self useCameraPosition:next];
+}
+
 - (void)arm {
   _armedAt = [NSDate date];
-  [_core qrScanStart];
+  if (![DBQrScanOverlay nativeDetectorAvailable]) [_core qrScanStart];
+}
+
+- (void)installDetector {
+  if (![DBQrScanOverlay nativeDetectorAvailable]) return;
+  __weak DBQrScanOverlay *weakSelf = self;
+  [self camera].onQrCode = ^(NSString *text) { [weakSelf handleDecodedText:text]; };
+}
+
+- (void)removeDetector {
+  [self camera].onQrCode = nil;
+}
+
+- (void)handleDecodedText:(NSString *)text {
+  if (_finished || _failed) return;
+  NSDictionary *payload = [DBQrScanOverlay parsePairPayload:text];
+  if (!payload) {
+    _status.text = [_texts ts:@"pair.scan_not_device_qr"];
+    return;
+  }
+  DBH264Dbg(@"[qr] scanned Add QR for %@ at %@; inviting", [payload objectForKey:@"id"],
+            [payload objectForKey:@"addr"]);
+  [_core inviteDirectAddr:[payload objectForKey:@"addr"]
+                   nodeId:[payload objectForKey:@"id"]
+                publicKey:[payload objectForKey:@"pk"]];
+  [self finishWithId:[payload objectForKey:@"id"] addr:[payload objectForKey:@"addr"]];
+}
+
+// The preview follows the screen, not the sensor; a landscape panel otherwise shows it rotated.
+- (void)applyPreviewOrientation {
+  if (!_preview) return;
+  AVCaptureVideoOrientation orientation =
+      (AVCaptureVideoOrientation)[[UIApplication sharedApplication] statusBarOrientation];
+  if (orientation < AVCaptureVideoOrientationPortrait ||
+      orientation > AVCaptureVideoOrientationLandscapeLeft) return;
+  AVCaptureVideoPreviewLayer *layer = (AVCaptureVideoPreviewLayer *)_preview;
+  if ([layer respondsToSelector:@selector(connection)]) {
+    AVCaptureConnection *connection = layer.connection;
+    if (connection.isVideoOrientationSupported) connection.videoOrientation = orientation;
+  } else if ([layer respondsToSelector:@selector(setOrientation:)]) {
+    // iOS 5: the pre-iOS 6 property on the layer itself.
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wdeprecated-declarations"
+    layer.orientation = orientation;
+#pragma clang diagnostic pop
+  }
 }
 
 - (void)onTick:(NSTimer *)timer {
@@ -149,7 +246,9 @@ static const NSTimeInterval kCameraStartBudgetS = 5;
     _preview = [camera newPreviewLayer];
     if (_preview) {
       _preview.frame = _previewHost.bounds;
+      [self applyPreviewOrientation];
       [_previewHost.layer addSublayer:_preview];
+      DBH264Dbg(@"[qr] preview up; AVFoundation detector=%d", (int)camera.qrDetectorActive);
       _status.text = [_texts ts:@"pair.scanning"];
     }
   } else if (!camera.running && _preview != nil) {
@@ -212,8 +311,22 @@ static const NSTimeInterval kCameraStartBudgetS = 5;
 }
 
 - (void)releaseCamera {
-  if (_ownsCamera) [[self camera] stop];
+  DBCameraFeeder *camera = [self camera];
+  AVCaptureDevicePosition original = _originalPosition;
+  BOOL hadDetector = camera.qrDetectorActive;
+  [self removeDetector];
+  if (_ownsCamera) {
+    [camera stop];
+  } else if (camera.running && original != AVCaptureDevicePositionUnspecified &&
+             (camera.activePosition != original || hadDetector)) {
+    // Hand a door station back its visitor lens.
+    camera.preferredPosition = original;
+    [camera stop];
+    [camera start];
+  }
+  if (original != AVCaptureDevicePositionUnspecified) camera.preferredPosition = original;
   _ownsCamera = NO;
+  _originalPosition = AVCaptureDevicePositionUnspecified;
 }
 
 - (void)dismiss {
@@ -233,6 +346,7 @@ static const NSTimeInterval kCameraStartBudgetS = 5;
   CGFloat width = size.width - pad * 2;
   _previewHost.frame = self.bounds;
   _preview.frame = _previewHost.bounds;
+  [self applyPreviewOrientation];
   CGFloat side = MIN(MIN(size.width, size.height) * 0.6, 420);
   _finder.frame = CGRectMake((size.width - side) / 2, (size.height - side) / 2 - 20, side, side);
   CGFloat hintHeight = [_hint sizeThatFits:CGSizeMake(width, 9999)].height;
@@ -240,7 +354,15 @@ static const NSTimeInterval kCameraStartBudgetS = 5;
   _hint.frame = CGRectMake(pad, top, width, hintHeight);
   CGFloat statusHeight = [_status sizeThatFits:CGSizeMake(width, 9999)].height;
   _status.frame = CGRectMake(pad, CGRectGetMaxY(_finder.frame) + 16, width, statusHeight);
-  _cancel.frame = CGRectMake((size.width - 220) / 2, size.height - 84, 220, 56);
+  if (_switchCamera.hidden || _failed) {
+    _switchCamera.hidden = YES;
+    _cancel.frame = CGRectMake((size.width - 220) / 2, size.height - 84, 220, 56);
+  } else {
+    CGFloat buttonWidth = 220, gap = 16;
+    CGFloat left = (size.width - buttonWidth * 2 - gap) / 2;
+    _switchCamera.frame = CGRectMake(left, size.height - 84, buttonWidth, 56);
+    _cancel.frame = CGRectMake(left + buttonWidth + gap, size.height - 84, buttonWidth, 56);
+  }
 }
 
 @end

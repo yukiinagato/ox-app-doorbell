@@ -1145,6 +1145,7 @@ Delete it?</value></data>
   <data name="pair_scan_opening" xml:space="preserve"><value>Starting the camera…</value></data>
   <data name="pair_scan_paste" xml:space="preserve"><value>Paste the QR text</value></data>
   <data name="pair_scan_qr" xml:space="preserve"><value>Scan QR</value></data>
+  <data name="pair_scan_switch_camera" xml:space="preserve"><value>Switch camera</value></data>
   <data name="pair_scan_unavailable_http" xml:space="preserve"><value>The camera works only over https or localhost. Paste the QR text shown on the new device instead</value></data>
   <data name="pair_scanning" xml:space="preserve"><value>Scanning…</value></data>
   <data name="pair_searching" xml:space="preserve"><value>Looking for nearby devices…</value></data>

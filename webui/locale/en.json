@@ -1138,6 +1138,7 @@
  "pair.scan_opening": "Starting the camera…",
  "pair.scan_paste": "Paste the QR text",
  "pair.scan_qr": "Scan QR",
+ "pair.scan_switch_camera": "Switch camera",
  "pair.scan_unavailable_http": "The camera works only over https or localhost. Paste the QR text shown on the new device instead",
  "pair.scanning": "Scanning…",
  "pair.searching": "Looking for nearby devices…",
