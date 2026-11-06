@@ -8411,8 +8411,9 @@ if (typeof document !== "undefined") (function () {
             s.busy = false;
             if (PAIR.scan !== s || s.closed || !pairRuntimeCurrent(s.runtime, s.visit) || s.submitted) return;
             s.failures = 0;
+            var foreign = false;
             for (var i = 0; i < codes.length; i++) {
-              if (!L.pairQrTextValid(codes[i].rawValue)) continue;
+              if (!L.pairQrTextValid(codes[i].rawValue)) { foreign = true; continue; }
               var text = codes[i].rawValue;
               s.submitted = true;
               disposeScanSession(s);
@@ -8420,6 +8421,8 @@ if (typeof document !== "undefined") (function () {
               pairScanSubmit(text, s.runtime, s.visit);
               return;
             }
+            // A foreign QR is a mis-aim: say so and keep scanning.
+            if (foreign && s.message) s.message.textContent = t("pair.scan_not_device_qr");
           }, function () { scanDetectFailed(s); });
         }, 300);
       },

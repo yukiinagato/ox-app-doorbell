@@ -163,7 +163,7 @@ final class PairingScannerViewController: UIViewController,
             guard let payload = PairingQR.parse(value) else {
                 // Keep scanning: a foreign QR is a mis-aim, not a failure of the flow.
                 messageLabel.textColor = PairingTheme.danger
-                messageLabel.text = texts.t("pair.add_failed")
+                messageLabel.text = texts.t("pair.scan_not_device_qr")
                 messageLabel.isHidden = false
                 continue
             }

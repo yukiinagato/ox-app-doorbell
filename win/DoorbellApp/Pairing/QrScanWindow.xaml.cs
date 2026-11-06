@@ -176,9 +176,9 @@ namespace DoorbellApp.Pairing
             string addr, id, publicKey;
             if (!PairingText.TryParsePairPayload(text, out addr, out id, out publicKey))
             {
-                // Not one of our Add QRs: keep scanning instead of failing the whole flow.
+                // Not one of our Add QRs: say so and keep scanning instead of failing the flow.
                 _handledText = "";
-                ShowStatus("", "");
+                ShowStatus(Texts.T("pair.scan_not_device_qr"), "");
                 return;
             }
             ShowStatus(Texts.T("pair.adding"), "");

@@ -158,7 +158,14 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
                     finish()
                     return
                 }
-                if (!PairingModel.isPairQr(text)) return
+                if (!PairingModel.isPairQr(text)) {
+                    // A foreign QR is a mis-aim, not a failure: say so and keep scanning.
+                    resultView.visibility = View.VISIBLE
+                    resultView.setTextColor(PairingUi.ERR)
+                    resultView.text =
+                        texts.t("pair.scan_not_device_qr", R.string.pair_scan_not_device_qr)
+                    return
+                }
                 resultView.visibility = View.VISIBLE
                 resultView.setTextColor(PairingUi.DIM)
                 resultView.text = texts.t("pair.adding", R.string.pair_adding)
