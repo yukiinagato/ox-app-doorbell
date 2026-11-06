@@ -89,6 +89,7 @@ final class MainViewController: UIViewController {
     private var chimeGate = CallChimeRevisionGate()
     private var h264EncoderFailed = false
     private var lastEncoderDemand: Bool?
+    private var lastCameraRestartAt: CFTimeInterval = 0
 
     private lazy var camera = CameraFeeder(core: core) { [weak self] active, state in
         self?.runtime?.recordCameraRuntime(active: active, state: state)
@@ -2204,8 +2205,27 @@ final class MainViewController: UIViewController {
         camera.start(targetW: tw, targetH: th)
     }
 
+    /// A door station whose camera stopped delivering frames while the app is in front gets a
+    /// fresh capture session. iOS only lends the camera to the foreground app, and a second
+    /// session in the same app (the pairing QR scanner) takes the device away; neither case
+    /// reliably hands it back to the original session.
+    private func cameraWatchdog() {
+        guard boot.role == "door_station", !safeMode,
+              UIApplication.shared.applicationState == .active,
+              AvPermissions.state(.video) == "authorized",
+              presentedViewController == nil else { return }
+        let now = CACurrentMediaTime()
+        guard now - lastCameraRestartAt >= 5 else { return }
+        let stalled = camera.secondsWithoutFrames(now: now)
+        guard stalled == nil || stalled! >= 4 else { return }
+        lastCameraRestartAt = now
+        IOSAvailability.logDebug("camera watchdog restart stalled=\(stalled.map { String(format: "%.1f", $0) } ?? "none")")
+        maybeStartCamera()
+    }
+
     private func encoderPoll() {
         guard boot.role == "door_station" else { return }
+        cameraWatchdog()
         if safeMode || h264EncoderFailed || videoEncoder.hasTerminalFailure {
             if videoEncoder.isRunning {
                 camera.encoder = nil

@@ -385,7 +385,10 @@ final class RuntimeSupervisor {
                            "no_device", "input_failed", "configuration_failed",
                            "runtime_failed", "stopped", "testing", "session_failed",
                            "encode_failed", "invalid_output", "failed",
-                           "unsupported_no_decoder_path"])
+                           "unsupported_no_decoder_path", "interrupted",
+                           "interrupted_background", "interrupted_device_in_use",
+                           "interrupted_multitasking", "interrupted_audio_in_use",
+                           "interrupted_pressure"])
         return allowed.contains(value) ? value : fallback
     }
 

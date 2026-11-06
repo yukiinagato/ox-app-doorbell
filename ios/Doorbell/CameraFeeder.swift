@@ -18,6 +18,13 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
     private var captureCoreGeneration: UInt64?
     private var sessionGeneration: UInt64 = 0
     private weak var currentOutput: AVCaptureOutput?
+    private var interruptionObservers: [NSObjectProtocol] = []
+    // Monotonic seconds of the last start() and of the last delivered frame; read by the
+    // stall watchdog so a session that was started but never (or no longer) delivers frames —
+    // started while backgrounded, or robbed of the device by the pairing QR scanner — is
+    // restarted instead of leaving every indoor panel without a picture.
+    private var lastStartAt: CFTimeInterval = 0
+    private var lastFrameAt: CFTimeInterval = 0
 
     private var currentEncoder: VideoEncoderVT?
     var encoder: VideoEncoderVT? {
@@ -98,8 +105,12 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         currentOutput = out
         acceptingFrames = true
         runtimeLock.unlock()
+        runtimeLock.lock()
+        lastStartAt = CACurrentMediaTime()
+        runtimeLock.unlock()
         reportRuntime(active: false, state: "starting")
         installRuntimeErrorObserver(session: s, generation: generation)
+        installInterruptionObservers(session: s, generation: generation)
         queue.async { s.startRunning() }
         return true
     }
@@ -113,6 +124,8 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
             NotificationCenter.default.removeObserver(observer)
             runtimeErrorObserver = nil
         }
+        interruptionObservers.forEach { NotificationCenter.default.removeObserver($0) }
+        interruptionObservers.removeAll()
         let s = session
         session = nil
         previewLayer = nil
@@ -125,6 +138,9 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         guard isAcceptingFrames() else { return }
         guard let token = frameGeneration(output: output) else { return }
         guard let pb = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
+        runtimeLock.lock()
+        lastFrameAt = CACurrentMediaTime()
+        runtimeLock.unlock()
         reportRuntime(active: true, state: "active", generation: token.session)
         let tsMs = Int64(Date().timeIntervalSince1970 * 1000)
 
@@ -225,6 +241,46 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         return { [weak self] in
             self?.reportRuntime(active: false, state: "runtime_failed", generation: generation)
         }
+    }
+
+    /// Seconds since the capture last made progress (a start or a frame); nil when no session
+    /// is meant to be running.
+    func secondsWithoutFrames(now: CFTimeInterval = CACurrentMediaTime()) -> CFTimeInterval? {
+        runtimeLock.lock()
+        defer { runtimeLock.unlock() }
+        guard acceptingFrames, session != nil else { return nil }
+        return now - max(lastStartAt, lastFrameAt)
+    }
+
+    private func installInterruptionObservers(session: AVCaptureSession, generation: UInt64) {
+        let center = NotificationCenter.default
+        interruptionObservers.append(center.addObserver(
+            forName: .AVCaptureSessionWasInterrupted, object: session, queue: nil
+        ) { [weak self] note in
+            var reason = "interrupted"
+            if let raw = note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? Int,
+               let r = AVCaptureSession.InterruptionReason(rawValue: raw) {
+                switch r {
+                case .videoDeviceNotAvailableInBackground: reason = "interrupted_background"
+                case .videoDeviceInUseByAnotherClient: reason = "interrupted_device_in_use"
+                case .videoDeviceNotAvailableWithMultipleForegroundApps:
+                    reason = "interrupted_multitasking"
+                case .audioDeviceInUseByAnotherClient: reason = "interrupted_audio_in_use"
+                case .videoDeviceNotAvailableDueToSystemPressure: reason = "interrupted_pressure"
+                @unknown default: reason = "interrupted"
+                }
+            }
+            self?.reportRuntime(active: false, state: reason, generation: generation)
+        })
+        interruptionObservers.append(center.addObserver(
+            forName: .AVCaptureSessionInterruptionEnded, object: session, queue: nil
+        ) { [weak self] _ in
+            guard let self = self else { return }
+            self.runtimeLock.lock()
+            self.lastStartAt = CACurrentMediaTime()
+            self.runtimeLock.unlock()
+            self.reportRuntime(active: false, state: "starting", generation: generation)
+        })
     }
 
     private func installRuntimeErrorObserver(session: AVCaptureSession, generation: UInt64) {
