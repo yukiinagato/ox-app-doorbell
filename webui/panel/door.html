@@ -4,94 +4,34 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 
+<meta name="color-scheme" content="light dark">
 <meta http-equiv="refresh" content="300">
 <title></title>
-
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; width: 100%; }
-  body { background: #101418; color: #e8edf2; overflow: hidden;
-         font-family: "Hiragino Sans", "Yu Gothic UI", sans-serif; }
-  button, select { font-family: inherit; }
-  button { cursor: pointer; overflow-wrap: break-word; word-wrap: break-word; }
-  button:focus, select:focus { outline: 3px solid #ffd166; outline-offset: 2px; }
-  #layout { display: -webkit-box; display: -webkit-flex; display: flex;
-            -webkit-box-orient: vertical; -webkit-flex-direction: column; flex-direction: column;
-            width: 100%; height: 100%; }
-  #offlineBand { display: none; background: #26313c; color: #fff; text-align: center;
-                 font-size: 1.125rem; line-height: 1.4; padding: 10px 16px; max-height: 30%; overflow: auto; }
-  #replyBanner { display: none; background: #5dd39e; color: #06281a; text-align: center;
-                 padding: 14px 16px; max-height: 35%; overflow: auto; }
-  #replyBanner .cap { font-size: 1rem; }
-  #replyBanner .txt { font-size: 1.75rem; font-weight: bold; line-height: 1.3; overflow-wrap: break-word; }
-  #main { -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-height: 0; width: 100%;
-          text-align: center; padding: 16px; overflow: auto; -webkit-overflow-scrolling: touch; }
-  .visitorHeading { display: -webkit-box; display: -webkit-flex; display: flex;
-                    -webkit-box-align: center; align-items: center; -webkit-box-pack: justify;
-                    justify-content: space-between; margin-bottom: 12px; }
-  h1 { font-size: 1.125rem; color: #b9c5d1; font-weight: normal; text-align: left; padding-right: 10px; }
-  .languageChoice { text-align: right; font-size: .75rem; color: #b9c5d1; }
-  .languageChoice span { display: block; }
-  #visitorLanguage { min-height: 44px; max-width: 130px; padding: 6px 8px; font-size: 1rem;
-                     background: #1a2027; color: #e8edf2; border: 1px solid #63758a; border-radius: 8px; }
-  #hint { font-size: 1rem; color: #b9c5d1; line-height: 1.35; padding-bottom: 8px; }
-  .doorBtn { display: block; background: #1a2027; border: 3px solid #4da3ff; border-radius: 18px;
-             color: #e8edf2; font-size: 2rem; font-weight: bold; line-height: 1.15;
-             width: 100%; max-width: 720px; min-height: 88px; margin: 8px auto 14px; padding: 16px 14px; }
-  .doorName { display: block; font-size: .5em; font-weight: normal; line-height: 1.4; margin-top: 8px; }
-  .doorBtn:active { background: #4da3ff; color: #04121f; }
-  .doorBtn:disabled { opacity: .55; }
-  #callingView { display: none; }
-  #callingView .big { font-size: 2rem; font-weight: bold; color: #4da3ff; line-height: 1.25;
-                      padding: 16px 6px; overflow-wrap: break-word; }
-  #callingView .door { font-size: 1.125rem; color: #b9c5d1; line-height: 1.4; }
-  #callStatus { min-height: 34px; color: #ffb454; font-size: 1.125rem; line-height: 1.4; padding: 8px 4px 16px; }
-  #purposeStep { display: none; padding: 0 0 16px; }
-  .purposeBtn { display: block; background: #1a2027; border: 2px solid #ffb454; border-radius: 12px;
-                color: #fff; font-size: 1.25rem; line-height: 1.35; width: 100%; min-height: 52px;
-                max-width: 720px; margin: 8px auto; padding: 14px 12px; }
-  #note { color: #aebbc9; text-align: center; font-size: .875rem; line-height: 1.4; padding: 14px 0; }
-  #visitorActions { display: -webkit-box; display: -webkit-flex; display: flex;
-                    -webkit-box-align: stretch; align-items: stretch; -webkit-flex-shrink: 0; flex-shrink: 0;
-                    padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom));
-                    background: #101418; border-top: 1px solid #334253; }
-  #visitorActions.idle { -webkit-box-pack: end; justify-content: flex-end; }
-  #cancelCall { display: none; -webkit-box-flex: 1; -webkit-flex: 1; flex: 1; min-width: 0; min-height: 88px;
-                background: #8d2932; border: 2px solid #fff; border-radius: 14px; color: #fff;
-                font-size: 1.5rem; font-weight: bold; line-height: 1.2; padding: 14px 10px; }
-  #cancelCall:disabled { opacity: .45; }
-  #visitorActions .dbSosTrigger { position: static; -webkit-flex: 0 0 88px; flex: 0 0 88px;
-                                width: 88px; min-width: 88px; margin-left: 12px; border-radius: 22px; }
-  .dbEmergencyOverlay { overflow: auto; }
-  body .dbEmergencyOverlay .dbEmergencyInner { position: relative; top: auto; left: auto; right: auto; margin: 8% 5%; }
-  body .dbEmergencyOverlay h2 { font-size: 2rem; overflow-wrap: break-word; }
-  body .dbEmergencyOverlay p { font-size: 1.125rem; }
-  @media (min-width: 700px) { #main { padding: 24px 32px; } #visitorActions { padding-left: 32px; padding-right: 32px; } }
-  @media (max-height: 500px) { #main { padding: 12px 16px; } .visitorHeading { margin-bottom: 8px; } .languageChoice span { display: none; } }
-</style>
 <link rel="stylesheet" href="/panel/panel.css">
 </head>
-<body>
+<body class="doorPage">
 <div id="layout">
-  <div id="offlineBand" data-semantic-id="status.offline" role="status" style="display:none"></div>
+  <div id="offlineBand" class="band" data-semantic-id="status.offline" role="status" style="display:none"></div>
   <div id="replyBanner" role="status" style="display:none">
     <div class="cap" id="replyCaption"></div>
     <div class="txt" id="replyText"></div>
   </div>
-  <main id="main">
-    <div class="visitorHeading">
-      <h1 id="title"></h1>
-      <label class="languageChoice"><span id="languageLabel"></span>
-        <select id="visitorLanguage"><option value="ja"></option><option value="en"></option><option value="zh"></option></select>
-      </label>
+  <header class="visitorHeading">
+    <h1 id="title"></h1>
+    <div id="visitorLanguage" class="langSwitch" role="group">
+      <button type="button" data-lang="ja" lang="ja" aria-pressed="false"></button>
+      <button type="button" data-lang="en" lang="en" aria-pressed="false"></button>
+      <button type="button" data-lang="zh" lang="zh" aria-pressed="false"></button>
     </div>
+  </header>
+  <main id="main">
     <div id="hint"></div>
     <div id="doorList"></div>
-    <div id="callingView">
+    <div id="callingView" style="display:none">
       <div class="door" id="callingDoor"></div>
       <div class="big" id="callingMsg" data-semantic-id="ring.title" role="status"></div>
       <div id="callStatus" role="status"></div>
-      <div id="purposeStep"></div>
+      <div id="purposeStep" style="display:none"><div id="purposeGrid"></div></div>
     </div>
     <div id="note"></div>
   </main>
@@ -149,20 +89,22 @@
       triggerLabel: t("emergency.button"),
       triggerHint: t("emergency.hold_hint", { sec: "2" })
     });
+    // SOS sits at the leading edge of the fixed action zone and never floats over content.
     var actions = document.getElementById && document.getElementById("visitorActions");
-    if (actions && emergencyOverlay.trigger()) actions.appendChild(emergencyOverlay.trigger());
+    if (actions && emergencyOverlay.trigger()) actions.insertBefore(emergencyOverlay.trigger(), actions.firstChild);
     applyEmergencyI18n();
   }
   function applyI18n() {
     document.title = t("panel.title");
     $("title").innerHTML = esc(t("panel.title"));
     $("hint").innerHTML = esc(t("panel.press_hint"));
-    $("languageLabel").innerHTML = esc(t("idle.language"));
     var languageNames = { ja: t("language.name_ja"), en: t("language.name_en"), zh: t("language.name_zh") };
-    var languageOptions = $("visitorLanguage").getElementsByTagName("option");
-    for (var i = 0; i < languageOptions.length; i++)
-      languageOptions[i].innerHTML = esc(languageNames[languageOptions[i].value]);
-    $("visitorLanguage").value = LANG;
+    var languageButtons = $("visitorLanguage").getElementsByTagName("button");
+    for (var i = 0; i < languageButtons.length; i++) {
+      var code = languageButtons[i].getAttribute("data-lang");
+      C.setText(languageButtons[i], languageNames[code]);
+      languageButtons[i].setAttribute("aria-pressed", code === LANG ? "true" : "false");
+    }
     $("visitorLanguage").setAttribute("aria-label", t("idle.language"));
     $("note").innerHTML = esc(t("panel.no_audio_note"));
     $("offlineBand").innerHTML = esc(t("panel.offline"));
@@ -219,6 +161,7 @@
     var list = $("doorList");
     while (list.firstChild) list.removeChild(list.firstChild);
     var half = doors.length > 4;
+    list.className = half ? "many" : "";
     for (var k = 0; k < doors.length; k++) {
       var b = document.createElement("button");
       b.className = "doorBtn" + (half ? " half" : "");
@@ -238,7 +181,7 @@
     // they are listed in the content area and the zone keeps only Cancel and SOS.
     var zone = $("visitorActions"), main = $("main");
     if (doors.length === 1) {
-      if (list.parentNode !== zone) zone.insertBefore(list, zone.firstChild);
+      if (list.parentNode !== zone) zone.insertBefore(list, $("cancelCall"));
     } else if (list.parentNode !== main) main.insertBefore(list, $("callingView"));
   }
 
@@ -270,13 +213,13 @@
   // Purpose ids and labels are configuration data: they are only ever assigned as text or
   // attribute values through DOM APIs, never concatenated into markup.
   function purposeButtons(afterRing) {
-    var box = $("purposeStep"), items = [], i;
+    var step = $("purposeStep"), box = $("purposeGrid"), items = [], i;
     for (i = 0; i < lastPurposes.length; i++) {
       var p = lastPurposes[i] || {}, label = labelIn(p.label) || p.id;
       items.push({ id: String(p.id || ""), icon: String(p.icon || ""), text: label });
     }
     items.push({ id: "", icon: "", text: t("purpose.skip"), skip: true });
-    box.style.display = "block";
+    step.style.display = "block";
     var signature = String(afterRing) + ":" + JSON.stringify(items);
     if (purposeMarkup === signature) return;
     purposeMarkup = signature;
@@ -316,6 +259,7 @@
     $("cancelCall").disabled = !preflight;
     $("cancelCall").setAttribute("data-semantic-id", "cancel.call");
     $("cancelCall").innerHTML = esc(preflight ? t("panel.back") : t("calling.cancel"));
+    $("cancelCall").className = preflight ? "back" : "";
     $("doorList").style.display = "none"; $("hint").style.display = "none";
     $("callingView").style.display = "block"; $("cancelCall").style.display = "block";
     $("visitorActions").className = ""; $("main").scrollTop = 0; setDoorButtonsDisabled(true);
@@ -328,7 +272,7 @@
     $("callingView").style.display = "none"; $("purposeStep").style.display = "none";
     $("cancelCall").style.display = "none"; $("visitorActions").className = "idle";
     $("cancelCall").setAttribute("data-semantic-id", "cancel.call");
-    $("doorList").style.display = "block"; $("hint").style.display = "block";
+    $("doorList").style.display = ""; $("hint").style.display = "";
     setDoorButtonsDisabled(false);
   }
   function scheduleReset(c, delayMs) {
@@ -356,6 +300,7 @@
     $("callingMsg").innerHTML = esc(t("panel.calling"));
     $("callStatus").innerHTML = esc(t("panel.sending")); $("cancelCall").disabled = true;
     $("cancelCall").innerHTML = esc(t("calling.cancel"));
+    $("cancelCall").className = "";
     sendPress(c.door, purpose, function (st, j) {
       if (!currentCall || currentCall !== c) return;
       if (st !== 200 || !j || j.ok !== true) {
@@ -617,6 +562,7 @@
         scheduleReset(currentCall, 800);
       }
     }
+    if (state.display) C.applyAppearance(state.display);
     if (state.display && state.display.theme) C.applyColorRoles(state.display.theme);
     var pending = currentCall && !currentCall.preflight && !currentCall.inCall && !currentCall.terminal;
     $("callingView").className = pending ? "pending" : "";
@@ -640,12 +586,16 @@
       setTimeout(poll, POLL_MS);
     });
   }
-  $("visitorLanguage").onchange = function () {
-    QUERY_LANG = normalizeLang(this.value) || LANG;
+  function chooseLanguage() {
+    QUERY_LANG = normalizeLang(this.getAttribute("data-lang")) || LANG;
     visitorChoseLang = true;
     reportVisitorLang(visitorLangDoor());
     loadLanguage(QUERY_LANG, function () { applyI18n(); if (lastState) render(lastState); });
-  };
+  }
+  (function () {
+    var buttons = $("visitorLanguage").getElementsByTagName("button");
+    for (var i = 0; i < buttons.length; i++) buttons[i].onclick = chooseLanguage;
+  })();
   loadLanguage(QUERY_LANG || "ja", function () {
     applyI18n();
     installEmergency();

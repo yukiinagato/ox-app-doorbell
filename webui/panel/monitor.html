@@ -3,103 +3,60 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title></title>
-
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; }
-  body { background: #101418; color: #e8edf2;
-         font-family: "Hiragino Sans", "Yu Gothic UI", sans-serif; }
-  #soundBand { display: none; background: #ffb454; color: #3a2200; text-align: center;
-               font-size: 26px; font-weight: bold; padding: 14px; cursor: pointer; }
-  #offlineBand { display: none; background: #ff6b6b; color: #2a0505; text-align: center;
-                 font-size: 26px; font-weight: bold; padding: 12px; }
-  #pushBar { padding: 8px 16px; color: #8a97a5; }
-  #pushBtn, #answerBtn, #monitorClose, #replyActions button {
-                        background: #274261; border: 1px solid #4da3ff; border-radius: 9px;
-                        color: #fff; font-size: 18px; padding: 9px 18px; margin: 5px; }
-  #pushBtn:disabled { opacity: .45; }
-  h1 { font-size: 24px; color: #8a97a5; font-weight: normal; padding: 12px 16px 4px; }
-
-  #snapGrid { padding: 8px 12px; }
-  .snapCard { display: inline-block; vertical-align: top; background: #1a2027;
-              border: 1px solid #2a333d; border-radius: 10px; padding: 10px;
-              margin: 6px; width: 46%; }
-  .snapCard .lbl { font-size: 22px; padding-bottom: 6px; }
-  .snapCard img, .snapCard video { width: 100%; background: #000; border-radius: 6px;
-                                   min-height: 120px; }
-  #evCard { background: #1a2027; border: 1px solid #2a333d; border-radius: 10px;
-            margin: 8px 18px 24px; padding: 12px; }
-  #evHead { display: flex; align-items: center; justify-content: space-between;
-            padding: 0 8px 8px; }
-  #evHead h2 { font-size: 20px; color: #8a97a5; font-weight: normal; }
-  #markSeen { background: #274261; border: 1px solid #4da3ff; border-radius: 9px;
-              color: #fff; font-size: 16px; padding: 6px 14px; display: none; }
-  #missedBadge { display: none; background: #ff6b6b; color: #2a0505; border-radius: 999px;
-                 font-size: 17px; font-weight: bold; margin-left: 10px; padding: 3px 12px; }
-  .outMissed { color: #ff8e8e; font-weight: bold; }
-  .evEmpty { color: #8a97a5; padding: 10px 8px; }
-  table { width: 100%; border-collapse: collapse; font-size: 20px; }
-  th, td { text-align: left; padding: 8px; border-bottom: 1px solid #242d36; }
-  th { color: #8a97a5; font-weight: normal; font-size: 16px; }
-  .dim { color: #8a97a5; }
-
-  #callView { display: none; position: absolute; left: 0; top: 0; width: 100%;
-              height: 100%; background: #101418; text-align: center; z-index: 10; }
-  #callView .msg { font-size: 58px; font-weight: bold; color: #ffb454;
-                   padding: 26px 10px; line-height: 1.3; }
-  #callView img, #callView video { width: 92%; max-width: 900px; background: #000;
-                                   border-radius: 10px; }
-  #callActions { padding: 14px; }
-  #replyActions { display: inline-flex; flex-wrap: wrap; justify-content: center; }
-</style>
 <link rel="stylesheet" href="/panel/panel.css">
 </head>
-<body>
-<div id="soundBand"></div>
-<div id="offlineBand" data-semantic-id="status.offline"></div>
+<body class="monitorPage">
+<div id="soundBand" class="band warning"></div>
+<div id="offlineBand" class="band" data-semantic-id="status.offline" role="status"></div>
 <header id="dashHeader">
-  <h1 id="title" data-semantic-id="ring.title"><span id="titleText"></span></h1>
+  <div class="dashClock"><span id="clock"></span>
+    <h1 id="title" data-semantic-id="ring.title"><span id="titleText"></span></h1></div>
   <div id="statusChips" role="status">
-    <span id="clock" class="chip clock"></span>
-    <span id="missedBadge" class="chip negative"></span>
     <span id="offlineChip" class="chip warning"></span>
   </div>
   <div id="pushBar"><button id="pushBtn" type="button"></button>
     <span id="pushStatus"></span></div>
 </header>
 <nav id="dashTabs" role="tablist">
-  <button type="button" role="tab" id="tabDoors" data-pane="doors" aria-selected="true"></button>
-  <button type="button" role="tab" id="tabHistory" data-pane="history" aria-selected="false"></button>
+  <button type="button" role="tab" id="tabDoors" data-pane="doors" aria-controls="doorsPane" aria-selected="true"></button>
+  <button type="button" role="tab" id="tabHistory" data-pane="history" aria-controls="historyPane" aria-selected="false" tabindex="-1"></button>
 </nav>
 <div id="dashBody" data-pane="doors">
-  <section id="doorsPane" aria-labelledby="tabDoors"><div id="snapGrid"></div></section>
-  <section id="historyPane" aria-labelledby="tabHistory">
+  <section id="doorsPane" role="tabpanel" aria-labelledby="tabDoors">
+    <button id="missedNotice" class="notice" type="button" hidden></button>
+    <div id="snapGrid"></div>
+    <p class="paneEmpty" id="doorsEmpty"></p></section>
+  <section id="historyPane" role="tabpanel" aria-labelledby="tabHistory">
     <div id="evCard">
       <div id="evHead"><h2 id="historyTitle"></h2>
         <button id="markSeen" type="button"></button></div>
       <div id="evBody"></div>
-      <div class="evEmpty" id="evEmpty"></div>
+      <p class="paneEmpty" id="evEmpty"></p>
     </div>
   </section>
 </div>
 <div id="callView" role="dialog" aria-modal="true" aria-labelledby="callMsg">
-  <div class="callMedia">
-    <img id="callImg" alt="">
-    <video id="callVideo" style="display:none" muted playsinline autoplay></video>
-    <div id="callPh" class="videoPh connecting" role="status"><span class="phSpin" aria-hidden="true"></span>
-      <span class="phDoor" id="callPhDoor"></span><span class="phText"></span></div>
-  </div>
-  <div class="callSide">
-    <div class="msg" id="callMsg" data-semantic-id="ring.title"></div>
-    <div id="callBadges"></div>
-    <div id="callActions">
-      <button id="answerBtn" class="positive" data-semantic-id="ring.action" type="button"></button>
-      <button id="replyBtn" type="button" aria-expanded="false" aria-controls="replySheet"></button>
-      <button id="monitorClose" data-semantic-id="monitor.close" type="button"></button>
+  <div class="callFrame">
+    <div class="callMedia"><div class="ratio" id="callPicture">
+      <img id="callImg" alt="">
+      <video id="callVideo" style="display:none" muted playsinline autoplay></video>
+      <div id="callPh" class="videoPh connecting" role="status"><span class="phSpin" aria-hidden="true"></span>
+        <span class="phDoor" id="callPhDoor"></span><span class="phText"></span></div>
+    </div></div>
+    <div class="callSide">
+      <div class="msg" id="callMsg" data-semantic-id="ring.title"></div>
+      <div id="callBadges"></div>
+      <div id="callActions">
+        <button id="answerBtn" class="positive" data-semantic-id="ring.action" type="button"></button>
+        <button id="replyBtn" type="button" aria-expanded="false" aria-controls="replySheet"></button>
+        <button id="monitorClose" class="quiet" data-semantic-id="monitor.close" type="button"></button>
+      </div>
     </div>
   </div>
-  <div id="replySheet" role="dialog" aria-labelledby="replyTitle" hidden>
+  <div id="sheetScrim" hidden></div>
+  <div id="replySheet" role="dialog" aria-modal="true" aria-labelledby="replyTitle" hidden>
     <div class="sheetHead"><h2 id="replyTitle"></h2>
       <button id="replySheetClose" type="button"></button></div>
     <div id="replyActions"></div>
@@ -170,13 +127,13 @@
     applyEmergencyI18n();
   }
   // SOS sits at the leading edge of the current fixed action zone: the incoming-call actions,
-  // the bottom tab bar on phones, or the header on wider screens. It never floats over content.
+  // the bottom tab bar (compact and medium), or the header (expanded). It never floats over content.
   function dockSos() {
     var trigger = emergencyOverlay && emergencyOverlay.trigger && emergencyOverlay.trigger();
     if (!trigger || !document.getElementById) return;
     var callOpen = $("callView") && $("callView").style.display === "block";
     var zone = callOpen ? $("callActions") :
-      $(C.sizeClass(window.innerWidth) === "compact" ? "dashTabs" : "dashHeader");
+      $(C.sizeClass(window.innerWidth) === "expanded" ? "dashHeader" : "dashTabs");
     if (zone && (trigger.parentNode !== zone || zone.firstChild !== trigger))
       zone.insertBefore(trigger, zone.firstChild);
   }
@@ -185,18 +142,18 @@
     $("titleText").innerHTML = esc(t("panel.monitor_title"));
     $("soundBand").innerHTML = esc(t("panel.tap_sound"));
     $("offlineBand").innerHTML = esc(t("panel.offline"));
-    $("answerBtn").innerHTML = esc(t("ring.answer"));
+    C.setLabel($("answerBtn"), t("ring.answer"), "phone");
     $("historyTitle").innerHTML = esc(t("history.title"));
     $("markSeen").innerHTML = esc(t("history.mark_seen"));
-    C.setText($("tabDoors"), t("dash.doors"));
-    C.setText($("tabHistory"), t("history.title"));
-    C.setText($("replyBtn"), t("ring.quick_replies"));
+    C.setLabel($("tabDoors"), t("dash.doors"), "door");
+    C.setLabel($("tabHistory"), t("history.title"), "list");
+    C.setLabel($("replyBtn"), t("ring.quick_replies"), "message-reply");
     C.setText($("replyTitle"), t("reply.choose"));
     C.setText($("replySheetClose"), t("monitor.close"));
-    C.setText($("monitorClose"), t("ring.ignore"));
+    C.setLabel($("monitorClose"), t("ring.ignore"), "x");
+    C.setText($("doorsEmpty"), t("dash.no_doors"));
     renderCallLog();
-    $("pushBtn").innerHTML = esc(pushSubscribed ? t("panel.push_disable") :
-      t("panel.push_enable"));
+    C.setLabel($("pushBtn"), pushSubscribed ? t("panel.push_disable") : t("panel.push_enable"), "bell");
     if (pushPaintState) paintPush(pushPaintState);
     lastDoorsKey = "";
     applyEmergencyI18n();
@@ -279,7 +236,7 @@
         return function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openLive(doorId); } };
       })(d.id);
       var media = document.createElement("div");
-      media.className = "tileMedia";
+      media.className = "tileMedia ratio";
       var v = makeVideo();
       var img = document.createElement("img");
       img.alt = "";
@@ -341,23 +298,23 @@
     var text = ph.getElementsByClassName("phText")[0];
     if (text) C.setText(text, key ? t(key) : "");
   }
-  // Expanded screens: tiles fill the available height with the largest 16:9 video the door count
-  // allows, and history keeps its own scroll. Smaller screens use the CSS flow layout.
+  // Expanded screens: the column count that gives the largest 16:9 tiles that still fit the
+  // height. Smaller screens use the stylesheet's flow layout.
   function layoutTiles() {
     var grid = $("snapGrid"), body = $("dashBody");
     var expanded = C.sizeClass(window.innerWidth) === "expanded";
     var count = grid.children.length;
-    if (!expanded || !count || !grid.getBoundingClientRect) {
-      grid.style.gridTemplateColumns = grid.style.gridTemplateRows = grid.style.height = "";
-      body.style.removeProperty && body.style.removeProperty("--dash-avail");
-      return;
-    }
-    var top = grid.getBoundingClientRect().top, avail = Math.max(320, window.innerHeight - top - 24);
-    var shape = C.tileGrid(count, grid.clientWidth, avail, 16, 56);
-    grid.style.gridTemplateColumns = "repeat(" + shape.cols + ", minmax(0, 1fr))";
-    grid.style.gridTemplateRows = "repeat(" + shape.rows + ", minmax(0, 1fr))";
-    grid.style.height = avail + "px";
-    if (body.style.setProperty) body.style.setProperty("--dash-avail", avail + "px");
+    grid.style.gridTemplateColumns = grid.style.maxWidth = "";
+    if (!expanded || !count || !grid.getBoundingClientRect || body.getAttribute("data-pane") !== "doors") return;
+    var gap = 16, foot = 76;
+    var top = grid.getBoundingClientRect().top, avail = Math.max(240, window.innerHeight - top - 24);
+    var width = grid.clientWidth, shape = C.tileGrid(count, width, avail, gap, foot);
+    var cols = Math.min(4, shape.cols), rows = Math.ceil(count / cols);
+    var cellW = (width - gap * (cols - 1)) / cols;
+    var videoW = Math.min(cellW, ((avail - gap * (rows - 1)) / rows - foot) * 16 / 9);
+    if (!(videoW >= 220)) return;
+    grid.style.gridTemplateColumns = "repeat(" + cols + ", minmax(0, 1fr))";
+    grid.style.maxWidth = Math.floor(videoW * cols + gap * (cols - 1)) + "px";
   }
   window.addEventListener("resize", function () { dockSos(); layoutTiles(); });
   (function () {
@@ -400,6 +357,7 @@
         paintPlaceholder(cards[c].getElementsByClassName("videoPh")[0], state, tilePlayback[d.id]);
       }
     }
+    $("doorsEmpty").style.display = doors.length ? "none" : "";
     var chipEl = $("offlineChip");
     C.setText(chipEl, offline ? t("dash.offline_count", { n: offline }) : "");
     chipEl.style.display = offline ? "" : "none";
@@ -415,11 +373,44 @@
   function selectPane(pane) {
     $("dashBody").setAttribute("data-pane", pane);
     var tabs = $("dashTabs").getElementsByTagName("button");
-    for (var i = 0; i < tabs.length; i++)
-      tabs[i].setAttribute("aria-selected", tabs[i].getAttribute("data-pane") === pane ? "true" : "false");
+    for (var i = 0; i < tabs.length; i++) {
+      var chosen = tabs[i].getAttribute("data-pane") === pane;
+      tabs[i].setAttribute("aria-selected", chosen ? "true" : "false");
+      tabs[i].setAttribute("tabindex", chosen ? "0" : "-1");
+    }
+    layoutTiles();
   }
+  // Unread missed calls: a badge on the History tab and, on the Doors view, one notice that
+  // opens History. The home view itself shows no call history.
+  function paintMissed(unread) {
+    var tab = $("tabHistory"), badge = $("tabHistoryBadge"), notice = $("missedNotice");
+    if (!badge) {
+      badge = document.createElement("span");
+      badge.id = "tabHistoryBadge";
+      badge.className = "tabBadge";
+    }
+    if (badge.parentNode !== tab) tab.appendChild(badge);
+    C.setText(badge, unread > 0 ? String(unread) : "");
+    tab.setAttribute("aria-label", t("history.title") +
+      (unread > 0 ? ", " + t("history.missed_badge", { n: unread }) : ""));
+    if (unread > 0) {
+      C.setLabel(notice, t("history.unread_banner", { n: unread }), "phone-off");
+      notice.removeAttribute("hidden");
+    } else notice.setAttribute("hidden", "");
+    layoutTiles();
+  }
+  $("missedNotice").onclick = function () { selectPane("history"); $("tabHistory").focus(); };
   $("tabDoors").onclick = function () { selectPane("doors"); };
   $("tabHistory").onclick = function () { selectPane("history"); };
+  $("dashTabs").onkeydown = function (e) {
+    var key = e.key || e.keyCode;
+    var next = key === "ArrowRight" || key === "ArrowLeft" || key === 37 || key === 39;
+    if (!next) return;
+    var target = $("dashBody").getAttribute("data-pane") === "doors" ? "tabHistory" : "tabDoors";
+    selectPane($(target).getAttribute("data-pane"));
+    $(target).focus();
+    if (e.preventDefault) e.preventDefault();
+  };
 
   setInterval(function () {
     if (LIVE || $("callView").style.display === "block") return;
@@ -451,7 +442,7 @@
     var mm = Math.floor(total / 60), ss = total % 60;
     return t("history.duration", { mm_ss: mm + ":" + (ss < 10 ? "0" + ss : ss) });
   }
-  var OUTCOME_ICONS = { answered: "\u2713", replied: "\u21A9", missed: "!", cancelled: "\u00D7" };
+  var OUTCOME_ICONS = { answered: "check", replied: "message-reply", missed: "phone-off", cancelled: "x" };
   function hhmm(ms) {
     var d = new Date(ms);
     function p(n) { return n < 10 ? "0" + n : n; }
@@ -482,7 +473,7 @@
         var thumb = /^[0-9a-f]{64}$/.test(String(r.snapshot || "")) ?
           "<img class='hthumb' alt='' loading='lazy' src='/asset/" + r.snapshot + "'>" : "";
         html += "<li class='hrow out-" + outcome + (unread ? " unread" : "") + "'>" +
-          "<span class='hicon' aria-hidden='true'>" + esc(OUTCOME_ICONS[outcome] || "\u2022") + "</span>" +
+          "<span class='hicon' aria-hidden='true'>" + C.iconMarkup(OUTCOME_ICONS[outcome] || "bell") + "</span>" +
           "<span class='htime'>" + esc(hhmm(r.ts)) + "</span>" +
           "<span class='hmain'><span class='hdoor'>" + esc(doorLabels[r.door] || r.door || "") + "</span>" +
           (purpose ? " <span class='hpurpose'>" + esc(purpose) + "</span>" : "") +
@@ -493,11 +484,9 @@
     }
     $("evBody").innerHTML = html;
     $("evEmpty").innerHTML = rows.length ? "" : esc(t("history.empty"));
-    $("evEmpty").style.display = rows.length ? "none" : "block";
+    $("evEmpty").style.display = rows.length ? "none" : "";
     var unread = Number(callLog.unread_missed || 0);
-    var badge = $("missedBadge");
-    badge.innerHTML = unread > 0 ? esc(t("history.missed_badge", { n: unread })) : "";
-    badge.style.display = unread > 0 ? "" : "none";
+    paintMissed(unread);
     $("markSeen").style.display = unread > 0 ? "inline-block" : "none";
   }
   function fetchCallLog(force) {
@@ -542,13 +531,28 @@
   }
   // Quick replies open as a sheet over the ringing call; the call view stays underneath.
   function setReplySheet(open) {
-    var sheet = $("replySheet");
-    if (open) sheet.removeAttribute("hidden"); else sheet.setAttribute("hidden", "");
+    var sheet = $("replySheet"), scrim = $("sheetScrim");
+    if (open) { sheet.removeAttribute("hidden"); scrim.removeAttribute("hidden"); }
+    else { sheet.setAttribute("hidden", ""); scrim.setAttribute("hidden", ""); }
     $("replyBtn").setAttribute("aria-expanded", open ? "true" : "false");
     if (open) { var first = $("replyActions").getElementsByTagName("button")[0]; if (first) first.focus(); }
   }
   $("replyBtn").onclick = function () { setReplySheet($("replySheet").hasAttribute("hidden")); };
   $("replySheetClose").onclick = function () { setReplySheet(false); $("replyBtn").focus(); };
+  $("sheetScrim").onclick = function () { setReplySheet(false); };
+  document.addEventListener("keydown", function (e) {
+    if ((e.key === "Escape" || e.keyCode === 27) && !$("replySheet").hasAttribute("hidden")) {
+      setReplySheet(false); $("replyBtn").focus();
+    }
+  }, false);
+  // The incoming-call picture can be pinched, dragged and double-tapped; a new call starts at 1x.
+  var callZoom = C.attachZoom($("callPicture"), [$("callImg"), $("callVideo")]);
+  function showCallView(open) {
+    var view = $("callView"), was = view.style.display === "block";
+    view.style.display = open ? "block" : "none";
+    if (!open) { setReplySheet(false); callZoom.reset(); }
+    else if (!was && $("answerBtn").style.display !== "none") $("answerBtn").focus();
+  }
   function markSeen() {
     var upTo = C.newestHlc(displayedRows());
     if (!upTo) return;
@@ -629,7 +633,7 @@
         callingDoorId = null;
         callingDoorKey = "";
         stopCallStream();
-        $("callView").style.display = "none"; setReplySheet(false);
+        showCallView(false);
         return;
       }
       activeCalling = calling;
@@ -640,6 +644,7 @@
                       JSON.stringify(calling.playback_profile || {});
       if (callingDoorKey !== streamKey || !callStream) {
         stopCallStream();
+        callZoom.reset();
         C.setText($("callPhDoor"), calling.label || calling.id);
         callPlayback = "loading";
         paintPlaceholder($("callPh"), C.doorTileState(calling), "loading");
@@ -670,9 +675,9 @@
         callingDoorId = null;
         callingDoorKey = "";
         stopCallStream();
-        $("callView").style.display = "none"; setReplySheet(false);
+        showCallView(false);
       };
-      $("callView").style.display = "block";
+      showCallView(true);
     } else {
       activeCalling = null;
       $("replyActions").innerHTML = "";
@@ -705,8 +710,9 @@
         $("answerBtn").style.display = "none";
         $("replyBtn").style.display = "none";
         $("callBadges").innerHTML = "";
-        $("callView").style.display = "block";
-      } else $("callView").style.display = "none"; setReplySheet(false);
+        setReplySheet(false);
+        showCallView(true);
+      } else showCallView(false);
     }
   }
 
@@ -719,6 +725,7 @@
       return;
     }
     emergencyOverlay.update(state);
+    if (state.display) C.applyAppearance(state.display);
     if (state.display && state.display.theme) C.applyColorRoles(state.display.theme);
     var serverMs = Number(state.server_ts);
     if (serverMs > 1e12) clockSkewMs = serverMs - new Date().getTime();
@@ -761,8 +768,7 @@
     else if (state.ok === false) message = t("panel.push_failed");
     else message = t(pushSubscribed ? "panel.push_enabled" : "panel.push_disabled");
     $("pushStatus").innerHTML = esc(message);
-    $("pushBtn").innerHTML = esc(pushSubscribed ? t("panel.push_disable") :
-      t("panel.push_enable"));
+    C.setLabel($("pushBtn"), pushSubscribed ? t("panel.push_disable") : t("panel.push_enable"), "bell");
     $("pushBtn").disabled = !!state.pending || !!state.unavailable;
     if (!state.pending) pushAction = "";
   }

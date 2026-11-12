@@ -59,7 +59,9 @@ function runDoorTabTests() {
     assert(selectionRevision === prior + 1, "One click must dispatch one selection action");
     assert(selected === latest, "Retained handler selected an obsolete door object");
     assert(buttons().length === 2, "Removed door nodes leaked");
-    assert(retained.getAttribute("aria-pressed") === "true", "Selected state is not accessible");
+    assert(retained.getAttribute("role") === "tab" && retained.getAttribute("aria-selected") === "true",
+      "Selected state is not accessible");
+    assert(buttons()[1].getAttribute("aria-selected") === "false", "Unselected tab claims selection");
   });
   return results;
 }

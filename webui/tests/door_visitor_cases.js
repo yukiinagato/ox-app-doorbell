@@ -149,8 +149,10 @@ async function runDoorVisitorChecks(phase) {
   for(const profile of [[320,480],[844,390],[768,1024],[1024,768]])for(const lang of ['en','zh'])for(const large of ['0','1']){
     await test(`Layout ${profile.join('x')} ${lang} semantic font ${large==='1'?'150%':'100%'}`,async()=>{
       const p=await open(profile,{lang,large,long:'1'}),primary=p.doc.querySelector('[data-door]');
-      const main=p.$('main').getBoundingClientRect(),primaryRect=primary.getBoundingClientRect();
-      assert(inside(primaryRect,...profile)&&primaryRect.bottom<=main.bottom+1,'Primary call is clipped or below minimum touch size');
+      const zone=p.$('visitorActions').getBoundingClientRect(),primaryRect=primary.getBoundingClientRect(),idleSos=p.doc.querySelector('.dbSosTrigger').getBoundingClientRect();
+      assert(inside(primaryRect,...profile)&&primaryRect.height>=72,'Primary call is clipped or below the visitor touch size');
+      assert(primaryRect.top>=zone.top-1&&primaryRect.bottom<=zone.bottom+1&&!overlap(primaryRect,idleSos),'Primary call left the fixed action zone or overlaps SOS');
+      for(const choice of p.doc.querySelectorAll('#visitorLanguage button'))assert(inside(choice.getBoundingClientRect(),...profile)&&choice.getBoundingClientRect().height>=72,'Language choice is clipped or below the visitor touch size');
       primary.click();const before=p.$('cancelCall').getBoundingClientRect(),sos=p.doc.querySelector('.dbSosTrigger').getBoundingClientRect();
       assert(inside(before,...profile),'Back/cancel is clipped during purpose choice');assert(!overlap(before,sos),'Call action overlaps SOS');
       p.doc.querySelector('[data-purpose="delivery"]').click();await wait(()=>!p.$('cancelCall').disabled,'Call response missing');
@@ -165,7 +167,7 @@ async function runDoorVisitorChecks(phase) {
   await test('Ordinary offline status is neutral while the existing SOS overlay stays separate',async()=>{
     const p=await open([320,480]);p.f.down=true;
     await wait(()=>p.win.getComputedStyle(p.$('offlineBand')).display!=='none','Offline state not visible',12000);
-    assert(p.win.getComputedStyle(p.$('offlineBand')).backgroundColor==='rgb(38, 49, 60)','Ordinary outage still uses a red alarm background');
+    assert(p.win.getComputedStyle(p.$('offlineBand')).backgroundColor!==p.win.getComputedStyle(p.doc.querySelector('.dbEmergencyOverlay')).backgroundColor&&p.win.getComputedStyle(p.$('offlineBand')).backgroundColor!==p.win.getComputedStyle(p.$('cancelCall')).backgroundColor,'Ordinary outage still uses a red alarm background');
     assert(p.win.getComputedStyle(p.doc.querySelector('.dbEmergencyOverlay')).display==='none','Ordinary outage opened the SOS overlay');
     p.f.down=false;p.f.state.emergency={active:true};
     await wait(()=>p.win.getComputedStyle(p.doc.querySelector('.dbEmergencyOverlay')).display!=='none','Replicated SOS not visible');
@@ -182,9 +184,10 @@ async function runDoorVisitorChecks(phase) {
     assert(p.requests('/api/emergency').length===0,'SOS used the legacy mutation endpoint');
   });
   await test('Language remains secondary and updates the visible purpose choices',async()=>{
-    const p=await open([320,480]);const language=p.$('visitorLanguage');assert(language,'Language choice missing');
-    language.value='zh';language.dispatchEvent(new p.win.Event('change',{bubbles:true}));
+    const p=await open([320,480]);const language=p.doc.querySelector('#visitorLanguage [data-lang="zh"]');assert(language&&language.textContent==='中文','Language choice missing');
+    language.click();
     await wait(()=>p.doc.documentElement.lang==='zh','Language not applied');
+    assert(language.getAttribute('aria-pressed')==='true'&&p.doc.querySelector('#visitorLanguage [data-lang="en"]').getAttribute('aria-pressed')==='false','Chosen language is not marked');
     p.doc.querySelector('[data-door]').click();assert(p.doc.querySelector('[data-purpose="delivery"]').textContent.includes('配送'),'Purpose not localized');
     const focused=p.doc.querySelector('[data-purpose="delivery"]');focused.focus();
     const count=p.requests('/api/panel/state').length;await wait(()=>p.requests('/api/panel/state').length>count,'Background snapshot missing');

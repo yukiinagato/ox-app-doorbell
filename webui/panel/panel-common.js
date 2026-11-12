@@ -1,5 +1,5 @@
-/* Helpers shared by the door and monitor panel pages. ES5 parse-safe: the door page still runs
- * on iOS 5 Safari. Pages load runtime.js first and pass DoorbellPanelRuntime.panelRequest in. */
+/* Helpers shared by the door, monitor and call panel pages. ES5 parse-safe: the door page still
+ * runs on iOS 5 Safari. Pages load runtime.js first and pass DoorbellPanelRuntime.panelRequest in. */
 (function (root, factory) {
   var api = factory(root);
   if (typeof module !== "undefined" && module.exports) module.exports = api;
@@ -156,7 +156,298 @@
       el.style.setProperty("--" + name.replace(/_/g, "-"), roles[name]);
       applied.push(name);
     }
+    // Secondary surfaces are then derived from Core's surface and ink (panel.css).
+    if (el.setAttribute && roles.surface && roles.on_surface) el.setAttribute("data-core-roles", "1");
     return applied;
+  }
+
+  // "light" or "dark" when Core fixes the appearance (display.appearance with follow_system
+  // false), otherwise "" so the page follows the system setting.
+  function appearanceTheme(display) {
+    var a = display && typeof display === "object" ? display.appearance : null;
+    if (!a || typeof a !== "object" || a.follow_system !== false) return "";
+    return a.effective === "light" || a.effective === "dark" ? a.effective : "";
+  }
+
+  function applyAppearance(display, doc) {
+    doc = doc || root.document;
+    var el = doc && doc.documentElement, theme = appearanceTheme(display);
+    if (!el || !el.setAttribute) return theme;
+    if (theme) el.setAttribute("data-theme", theme);
+    else if (el.removeAttribute) el.removeAttribute("data-theme");
+    return theme;
+  }
+
+  // A Tabler icon from the generated sprite served beside the panel pages. Decorative: panel.css
+  // shows it only where external <use> references work, and every control keeps its text label.
+  var ICON_SPRITE = "/panel/icons/tabler-sprite.svg";
+  var SVG_NS = "http://www.w3.org/2000/svg";
+  function iconName(name) { return /^[a-z0-9-]+$/.test(String(name || "")) ? String(name) : ""; }
+  function icon(name, doc) {
+    doc = doc || root.document;
+    name = iconName(name);
+    if (!name || !doc || !doc.createElementNS) return null;
+    var svg = doc.createElementNS(SVG_NS, "svg"), use = doc.createElementNS(SVG_NS, "use");
+    svg.setAttribute("class", "ic");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    use.setAttribute("href", ICON_SPRITE + "#i-" + name);
+    svg.appendChild(use);
+    return svg;
+  }
+  function iconMarkup(name) {
+    name = iconName(name);
+    return name ? "<svg class='ic' aria-hidden='true' focusable='false'><use href='" + ICON_SPRITE +
+      "#i-" + name + "'></use></svg>" : "";
+  }
+  // Replaces a control's content with an optional icon and a text label.
+  function setLabel(element, text, iconId) {
+    if (!element) return;
+    while (element.firstChild) element.removeChild(element.firstChild);
+    var doc = element.ownerDocument || root.document;
+    var glyph = iconId ? icon(iconId, doc) : null;
+    if (glyph) element.appendChild(glyph);
+    if (doc && doc.createElement && doc.createTextNode) {
+      var span = doc.createElement("span");
+      span.className = "lbl";
+      span.appendChild(doc.createTextNode(String(text === null || text === undefined ? "" : text)));
+      element.appendChild(span);
+    } else setText(element, text);
+  }
+
+  // ---- Live picture zoom and pan (docs/en/ui-guidelines.md, "Live view / monitor") ----
+
+  var ZOOM_MAX = 4, ZOOM_DOUBLE_TAP = 2;
+
+  // Scale limited to 1..ZOOM_MAX and the offset limited so the scaled picture always covers its
+  // box: at scale s a box of width w may move by at most w * (s - 1) / 2 either way.
+  function clampZoom(view, width, height) {
+    view = view || {};
+    var scale = Number(view.scale);
+    if (!isFinite(scale) || scale < 1) scale = 1;
+    if (scale > ZOOM_MAX) scale = ZOOM_MAX;
+    var maxX = Math.max(0, (Number(width) || 0) * (scale - 1) / 2);
+    var maxY = Math.max(0, (Number(height) || 0) * (scale - 1) / 2);
+    var x = Number(view.x), y = Number(view.y);
+    if (!isFinite(x)) x = 0;
+    if (!isFinite(y)) y = 0;
+    return { scale: scale, x: Math.max(-maxX, Math.min(maxX, x)) || 0,
+             y: Math.max(-maxY, Math.min(maxY, y)) || 0 };
+  }
+
+  // Zooms by factor while the picture point under (px, py) stays put. px and py are measured
+  // from the centre of the box.
+  function zoomAt(view, factor, px, py, width, height) {
+    var from = clampZoom(view, width, height);
+    var to = clampZoom({ scale: from.scale * (Number(factor) || 1) }, width, height).scale;
+    var ratio = to / from.scale;
+    px = Number(px) || 0; py = Number(py) || 0;
+    return clampZoom({ scale: to, x: px - (px - from.x) * ratio, y: py - (py - from.y) * ratio },
+                     width, height);
+  }
+
+  function panBy(view, dx, dy, width, height) {
+    var from = clampZoom(view, width, height);
+    return clampZoom({ scale: from.scale, x: from.x + (Number(dx) || 0), y: from.y + (Number(dy) || 0) },
+                     width, height);
+  }
+
+  // Double tap: fit <-> 2x around the tapped point.
+  function toggleZoom(view, px, py, width, height) {
+    var from = clampZoom(view, width, height);
+    if (from.scale > 1.01) return { scale: 1, x: 0, y: 0 };
+    return zoomAt(from, ZOOM_DOUBLE_TAP, px, py, width, height);
+  }
+
+  // Pinch, drag, double tap, wheel and mouse drag on a live picture. box clips (overflow hidden);
+  // layers are the <img>/<video> elements that receive the transform. Gestures are handled on
+  // the picture only, so the page keeps scrolling at 1x and the action buttons are untouched.
+  function attachZoom(box, layers) {
+    var view = { scale: 1, x: 0, y: 0 }, noop = function () {};
+    if (!box || !box.addEventListener) return { reset: noop, view: function () { return view; } };
+    var touches = null, drag = null, lastTap = null, pointers = {}, pointerCount = 0, pinch = null;
+    function size() {
+      var r = box.getBoundingClientRect ? box.getBoundingClientRect() : null;
+      return { w: r ? r.width : box.clientWidth || 0, h: r ? r.height : box.clientHeight || 0,
+               left: r ? r.left : 0, top: r ? r.top : 0 };
+    }
+    function local(clientX, clientY, s) {
+      return { x: clientX - s.left - s.w / 2, y: clientY - s.top - s.h / 2 };
+    }
+    function paint() {
+      var zoomed = view.scale > 1.001;
+      var value = zoomed ? "translate(" + view.x + "px," + view.y + "px) scale(" + view.scale + ")" : "";
+      for (var i = 0; i < layers.length; i++) if (layers[i] && layers[i].style) {
+        layers[i].style.webkitTransform = value;
+        layers[i].style.transform = value;
+      }
+      // Only a zoomed picture takes one-finger drags away from page scrolling.
+      box.style.touchAction = zoomed ? "none" : "";
+      box.className = box.className.replace(/(^|\s)is-zoomed(?!\S)/g, "") + (zoomed ? " is-zoomed" : "");
+    }
+    function set(next) { view = next; paint(); }
+    function reset() { touches = drag = pinch = lastTap = null; set({ scale: 1, x: 0, y: 0 }); }
+    function stop(event) { if (event.cancelable !== false && event.preventDefault) event.preventDefault(); }
+    function tap(clientX, clientY) {
+      var now = new Date().getTime(), s = size();
+      if (lastTap && now - lastTap.at < 320 && Math.abs(clientX - lastTap.x) < 30 &&
+          Math.abs(clientY - lastTap.y) < 30) {
+        var p = local(clientX, clientY, s);
+        lastTap = null;
+        set(toggleZoom(view, p.x, p.y, s.w, s.h));
+        return true;
+      }
+      lastTap = { at: now, x: clientX, y: clientY };
+      return false;
+    }
+    function pinchStart(a, b) {
+      return { distance: Math.max(1, Math.sqrt((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y))),
+               cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+    }
+    function pinchMove(a, b) {
+      var next = pinchStart(a, b), s = size(), p = local(next.cx, next.cy, s);
+      var moved = panBy(view, next.cx - pinch.cx, next.cy - pinch.cy, s.w, s.h);
+      set(zoomAt(moved, next.distance / pinch.distance, p.x, p.y, s.w, s.h));
+      pinch = next;
+    }
+
+    // Touch events: decided per gesture, so a one-finger swipe at 1x still scrolls the page.
+    function touchPoint(t) { return { x: t.clientX, y: t.clientY }; }
+    function onTouchStart(event) {
+      var list = event.touches || [];
+      if (list.length === 2) {
+        stop(event);
+        pinch = pinchStart(touchPoint(list[0]), touchPoint(list[1]));
+        drag = null; touches = { moved: true };
+      } else if (list.length === 1) {
+        touches = { moved: false, x: list[0].clientX, y: list[0].clientY };
+        drag = view.scale > 1.001 ? { x: list[0].clientX, y: list[0].clientY } : null;
+        if (drag) stop(event);
+      }
+    }
+    function onTouchMove(event) {
+      var list = event.touches || [], s;
+      if (list.length === 2 && pinch) {
+        stop(event);
+        pinchMove(touchPoint(list[0]), touchPoint(list[1]));
+      } else if (list.length === 1 && drag) {
+        stop(event);
+        s = size();
+        set(panBy(view, list[0].clientX - drag.x, list[0].clientY - drag.y, s.w, s.h));
+        drag = { x: list[0].clientX, y: list[0].clientY };
+        if (touches) touches.moved = true;
+      } else if (list.length === 1 && touches &&
+                 (Math.abs(list[0].clientX - touches.x) > 10 || Math.abs(list[0].clientY - touches.y) > 10)) {
+        touches.moved = true;
+      }
+    }
+    function onTouchEnd(event) {
+      var list = event.touches || [], ended = event.changedTouches && event.changedTouches[0];
+      if (list.length < 2) pinch = null;
+      if (list.length === 1) drag = view.scale > 1.001 ? touchPoint(list[0]) : null;
+      if (list.length === 0) {
+        drag = null;
+        if (touches && !touches.moved && ended && tap(ended.clientX, ended.clientY)) stop(event);
+        touches = null;
+      }
+    }
+
+    // Pointer Events for mouse and pen, and for touch where touch events do not exist.
+    var touchEvents = "ontouchstart" in box || ("ontouchstart" in root);
+    function usesPointer(event) { return !(touchEvents && event.pointerType === "touch"); }
+    function onPointerDown(event) {
+      if (!usesPointer(event) || (event.button !== undefined && event.button > 0)) return;
+      if (!pointers[event.pointerId]) pointerCount++;
+      pointers[event.pointerId] = { x: event.clientX, y: event.clientY };
+      if (pointerCount === 2) { pinch = pointerPinch(); drag = null; stop(event); }
+      else if (view.scale > 1.001) {
+        drag = { x: event.clientX, y: event.clientY, id: event.pointerId };
+        if (box.setPointerCapture) { try { box.setPointerCapture(event.pointerId); } catch (e) {} }
+        stop(event);
+      }
+    }
+    function pointerPinch() {
+      var pts = [];
+      for (var id in pointers) if (Object.prototype.hasOwnProperty.call(pointers, id)) pts.push(pointers[id]);
+      return pts.length >= 2 ? pinchStart(pts[0], pts[1]) : null;
+    }
+    function onPointerMove(event) {
+      if (!usesPointer(event) || !pointers[event.pointerId]) return;
+      pointers[event.pointerId] = { x: event.clientX, y: event.clientY };
+      var s;
+      if (pointerCount >= 2 && pinch) {
+        var pts = [];
+        for (var id in pointers) if (Object.prototype.hasOwnProperty.call(pointers, id)) pts.push(pointers[id]);
+        stop(event);
+        pinchMove(pts[0], pts[1]);
+      } else if (drag && drag.id === event.pointerId) {
+        stop(event);
+        s = size();
+        set(panBy(view, event.clientX - drag.x, event.clientY - drag.y, s.w, s.h));
+        drag.x = event.clientX; drag.y = event.clientY;
+      }
+    }
+    function onPointerUp(event) {
+      if (!pointers[event.pointerId]) return;
+      delete pointers[event.pointerId];
+      pointerCount = Math.max(0, pointerCount - 1);
+      if (pointerCount < 2) pinch = null;
+      if (drag && drag.id === event.pointerId) drag = null;
+    }
+    // Plain mouse events where Pointer Events do not exist.
+    function onMouseDown(event) {
+      if (event.button > 0 || view.scale <= 1.001) return;
+      drag = { x: event.clientX, y: event.clientY, mouse: true };
+      stop(event);
+    }
+    function onMouseMove(event) {
+      if (!drag || !drag.mouse) return;
+      var s = size();
+      set(panBy(view, event.clientX - drag.x, event.clientY - drag.y, s.w, s.h));
+      drag.x = event.clientX; drag.y = event.clientY;
+    }
+    function onMouseUp() { if (drag && drag.mouse) drag = null; }
+    function onWheel(event) {
+      var s = size(), p = local(event.clientX, event.clientY, s);
+      var delta = event.deltaY !== undefined ? event.deltaY : -(event.wheelDelta || 0);
+      if (!delta) return;
+      var next = zoomAt(view, delta < 0 ? 1.2 : 1 / 1.2, p.x, p.y, s.w, s.h);
+      // At the limit the wheel is left to the page so scrolling is never trapped.
+      if (next.scale === view.scale) return;
+      stop(event);
+      set(next);
+    }
+    function onDoubleClick(event) {
+      var s = size(), p = local(event.clientX, event.clientY, s);
+      stop(event);
+      set(toggleZoom(view, p.x, p.y, s.w, s.h));
+    }
+
+    var active = { passive: false };
+    try { box.addEventListener("touchstart", onTouchStart, active); }
+    catch (e) { active = false; box.addEventListener("touchstart", onTouchStart, false); }
+    box.addEventListener("touchmove", onTouchMove, active);
+    box.addEventListener("touchend", onTouchEnd, active);
+    box.addEventListener("touchcancel", function () { touches = drag = pinch = null; }, false);
+    if (root.PointerEvent) {
+      box.addEventListener("pointerdown", onPointerDown, false);
+      box.addEventListener("pointermove", onPointerMove, false);
+      box.addEventListener("pointerup", onPointerUp, false);
+      box.addEventListener("pointercancel", onPointerUp, false);
+    } else {
+      box.addEventListener("mousedown", onMouseDown, false);
+      if (root.addEventListener) {
+        root.addEventListener("mousemove", onMouseMove, false);
+        root.addEventListener("mouseup", onMouseUp, false);
+      }
+    }
+    box.addEventListener("wheel", onWheel, active);
+    box.addEventListener("dblclick", onDoubleClick, false);
+    if (root.addEventListener) root.addEventListener("resize", function () {
+      var s = size();
+      set(clampZoom(view, s.w, s.h));
+    }, false);
+    return { reset: reset, view: function () { return view; } };
   }
 
   // Door tile state chip: ringing, in_call, offline or idle.
@@ -233,5 +524,9 @@
            applyEmergencyText: applyEmergencyText, newestHlc: newestHlc,
            sizeClass: sizeClass, colorRoles: colorRoles, applyColorRoles: applyColorRoles,
            doorTileState: doorTileState, groupByDay: groupByDay, tileGrid: tileGrid,
-           videoPlaceholder: videoPlaceholder, mediaHasFrame: mediaHasFrame };
+           videoPlaceholder: videoPlaceholder, mediaHasFrame: mediaHasFrame,
+           appearanceTheme: appearanceTheme, applyAppearance: applyAppearance,
+           icon: icon, iconMarkup: iconMarkup, setLabel: setLabel,
+           ZOOM_MAX: ZOOM_MAX, clampZoom: clampZoom, zoomAt: zoomAt, panBy: panBy,
+           toggleZoom: toggleZoom, attachZoom: attachZoom };
 });

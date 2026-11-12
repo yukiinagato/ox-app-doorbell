@@ -60,16 +60,186 @@ assert(order.every(i => i > 0) && order[0] < order[1] && order[1] < order[2],
 assert(/id="answerBtn" class="positive"/.test(monitor), "Answer uses the positive role");
 assert(monitor.includes('id="replySheet" role="dialog"') && monitor.includes("hidden>"),
   "quick replies live in a sheet that starts closed");
-assert(monitor.includes('C.setText($("monitorClose"), t("ring.ignore"))'), "Ignore is labelled Ignore");
+assert(monitor.includes('C.setLabel($("monitorClose"), t("ring.ignore"), "x")'), "Ignore is labelled Ignore");
 assert(monitor.includes('id="dashTabs" role="tablist"') && monitor.includes("C.groupByDay("));
+assert((monitor.match(/role="tab" /g) || []).length === 2 && (monitor.match(/role="tabpanel"/g) || []).length === 2 &&
+  monitor.includes('aria-controls="doorsPane"') && monitor.includes('aria-controls="historyPane"'),
+  "Doors and History are a real tab list with labelled panels");
+assert(monitor.includes('id="sheetScrim" hidden'), "the reply sheet has a scrim that starts closed");
+// The home (Doors) view shows no call history: History is its own tab at every width, carries the
+// unread badge, and the Doors view has one notice that opens it.
+{
+  const doorsPane = monitor.slice(monitor.indexOf('<section id="doorsPane"'), monitor.indexOf('<section id="historyPane"'));
+  assert(doorsPane.includes('id="missedNotice" class="notice" type="button" hidden') && !/evCard|evBody|hlist/.test(doorsPane),
+    "the Doors view holds the tiles and the missed-call notice, never the history list");
+  assert(monitor.includes('$("missedNotice").onclick = function () { selectPane("history");'), "the notice opens History");
+  assert(monitor.includes('badge.id = "tabHistoryBadge"') && monitor.includes("paintMissed(unread)"),
+    "the History tab carries the unread missed-call badge");
+  const sheet = read("panel.css");
+  assert(sheet.includes('#dashBody[data-pane="doors"] #historyPane, #dashBody[data-pane="history"] #doorsPane { display:none; }'));
+  assert(!/#dashTabs\s*\{[^}]*display:none/.test(sheet) && !/#historyPane\s*\{[^}]*(float|sticky)/.test(sheet) &&
+    !/#dashBody\[data-pane\] #historyPane/.test(sheet),
+    "no width shows History beside the tiles or hides the tab list");
+}
+assert(monitor.includes('C.sizeClass(window.innerWidth) === "expanded" ? "dashHeader" : "dashTabs"'),
+  "SOS is docked in a fixed zone, never floating");
 assert(monitor.includes("C.doorTileState(") && monitor.includes("openLive("), "tiles show state and open live view");
 const door = read("door.html");
-assert(door.includes('zone.insertBefore(list, zone.firstChild)'), "a single door's Call is in the action zone");
+assert(door.includes('zone.insertBefore(list, $("cancelCall"))'), "a single door's Call is in the action zone");
+assert(door.includes("actions.insertBefore(emergencyOverlay.trigger(), actions.firstChild)"),
+  "SOS is docked at the leading edge of the visitor action zone");
+for (const lang of ["ja", "en", "zh"])
+  assert(door.includes('data-lang="' + lang + '" lang="' + lang + '"'), "visitor language " + lang + " is a text button");
+assert(!/<select/.test(door) && !/<a\b|settings|\/admin/i.test(door),
+  "the visitor screen has no route to settings");
 assert(door.includes('"purposeBtn" + (items[i].skip ? " skip" : "")'));
 const css = read("panel.css");
 for (const role of ["--surface", "--on-surface", "--accent", "--positive", "--negative", "--warning", "--muted"])
   assert(css.includes(role + ":"), "color role " + role + " has a default");
 assert(css.includes("--tap-visitor:72px") && css.includes("min-width: 900px") && css.includes("max-width: 599.98px"));
 assert(css.includes("prefers-reduced-motion"));
-assert(read("call.html").includes('<body class="callPage">'));
+const call = read("call.html");
+assert(call.includes('<body class="callPage">'));
+assert(call.includes('id="doorTabs" role="tablist"') && call.includes('button.setAttribute("role", "tab")'),
+  "the door switcher is a tab list");
+{
+  const zone = call.slice(call.indexOf('<div id="controls">'), call.indexOf('id="sheetScrim"'));
+  const ids = ["callBtn", "replyBtn", "ignoreBtn", "micBtn", "unlockBtn", "sendVideo", 'id="status"', "adminNote"]
+    .map(id => zone.indexOf(id));
+  assert(ids.every((at, i) => at > 0 && (i === 0 || at > ids[i - 1])),
+    "call actions: Answer/End, Reply, Ignore, then Mic, Unlock, video, status and the administrator note");
+  assert(call.includes('t(selectedRinging() ? "ring.answer_unavailable" : "panel.calling_unavailable")') &&
+    call.includes('t("panel.admin_note", { detail: t(setupKey) })'),
+    "residents get a plain status; setup detail is a separate administrator note");
+}
+for (const page of [door, monitor, call]) {
+  assert(!/<style/.test(page), "pages take every rule from panel.css");
+  assert(page.includes('<meta name="color-scheme" content="light dark">'));
+}
+assert(css.includes("prefers-color-scheme: dark") && css.includes(':root[data-theme="dark"]') &&
+  css.includes("accent-color:var(--accent)") && css.includes("safe-area-inset-bottom") && css.includes("100dvh"));
+// Everything outside "@supports (display:grid)" must parse on iOS 5 Safari: a plain value always
+// precedes a var() for the same property.
+{
+  const plain = css.replace(/\/\*[\s\S]*?\*\//g, "");
+  let depth = 0, modern = 0, i = 0, legacy = "";
+  while (i < plain.length) {
+    if (!modern && plain.startsWith("@supports", i)) { modern = depth + 1; }
+    const ch = plain[i];
+    if (ch === "{") depth++;
+    if (ch === "}") { depth--; if (modern && depth < modern) { modern = 0; i++; continue; } }
+    if (!modern) legacy += ch;
+    i++;
+  }
+  for (const block of legacy.match(/\{[^{}]*\}/g) || []) {
+    const seen = {};
+    for (const decl of block.slice(1, -1).split(";")) {
+      const at = decl.indexOf(":");
+      if (at < 0) continue;
+      const prop = decl.slice(0, at).trim(), value = decl.slice(at + 1).trim();
+      if (prop.startsWith("--")) continue;
+      if (/var\(|calc\(|clamp\(|env\(|\d(vh|vw|dvh)\b/.test(value))
+        assert(seen[prop] || /callPage|#call(Shell|Header)|#controls|#doorTabs|#primaryRow|#secondaryRow|#videoBox|#status|#adminNote|#videoToggle|#backLink|#notices|#conversation/.test(legacyRuleFor(block)),
+          "iOS 5 needs a plain fallback before: " + prop + ":" + value);
+      else seen[prop] = true;
+    }
+  }
+  function legacyRuleFor(block) {
+    const at = legacy.indexOf(block);
+    return legacy.slice(legacy.lastIndexOf("}", at) + 1, at);
+  }
+}
+
+// Appearance: Core's fixed appearance wins; follow_system leaves it to the system setting.
+assert.strictEqual(C.appearanceTheme({ appearance: { effective: "dark", follow_system: false } }), "dark");
+assert.strictEqual(C.appearanceTheme({ appearance: { effective: "light", follow_system: false } }), "light");
+assert.strictEqual(C.appearanceTheme({ appearance: { effective: "dark", follow_system: true } }), "");
+assert.strictEqual(C.appearanceTheme({ appearance: { effective: "sepia", follow_system: false } }), "");
+assert.strictEqual(C.appearanceTheme(null), "");
+{
+  const attrs = {};
+  const page = { documentElement: { setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: k => { delete attrs[k]; } } };
+  C.applyAppearance({ appearance: { effective: "dark", follow_system: false } }, page);
+  assert.strictEqual(attrs["data-theme"], "dark");
+  C.applyAppearance({ appearance: { effective: "dark", follow_system: true } }, page);
+  assert.strictEqual("data-theme" in attrs, false, "following the system clears the fixed theme");
+}
+
+// Icons come from the Tabler sprite that tools/gen_icons.py writes beside the pages.
+const sprite = read("icons/tabler-sprite.svg");
+for (const name of ["door", "list", "phone", "message-reply", "x", "bell", "check", "phone-off", "chevron-right"])
+  assert(sprite.includes('id="i-' + name + '"'), "icon " + name + " exists in the sprite");
+assert.strictEqual(C.iconMarkup("x\"><script>"), "", "icon names are validated, never interpolated raw");
+assert(C.iconMarkup("phone").includes("/panel/icons/tabler-sprite.svg#i-phone"));
+
+// Helper results come from another realm, so they are compared by value.
+const same = (actual, expected, message) =>
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(actual)), expected, message);
+// Live picture zoom: 1x..4x, never past the picture's edges, double tap toggles fit and 2x.
+assert.strictEqual(C.ZOOM_MAX >= 4, true);
+same(C.clampZoom({ scale: 0.3, x: 50, y: -50 }, 400, 225), { scale: 1, x: 0, y: 0 });
+same(C.clampZoom({ scale: 9, x: 9999, y: -9999 }, 400, 200), { scale: 4, x: 600, y: -300 });
+same(C.clampZoom({ scale: NaN, x: NaN }, 400, 200), { scale: 1, x: 0, y: 0 });
+same(C.clampZoom({ scale: 2, x: 150, y: 0 }, 400, 200), { scale: 2, x: 150, y: 0 });
+same(C.clampZoom({ scale: 2, x: 250, y: 120 }, 400, 200), { scale: 2, x: 200, y: 100 },
+  "at 2x a 400x200 box may move 200 and 100 at most");
+{
+  // Zooming keeps the point under the fingers in place: picture point = (p - offset) / scale.
+  const before = { scale: 1.5, x: 20, y: -10 }, px = 60, py = 30;
+  const after = C.zoomAt(before, 2, px, py, 400, 200);
+  assert.strictEqual(after.scale, 3);
+  assert(Math.abs((px - before.x) / before.scale - (px - after.x) / after.scale) < 1e-9);
+  assert(Math.abs((py - before.y) / before.scale - (py - after.y) / after.scale) < 1e-9);
+  assert.strictEqual(C.zoomAt({ scale: 3 }, 10, 0, 0, 400, 200).scale, 4, "pinch stops at the maximum");
+  same(C.zoomAt({ scale: 1.2, x: 30, y: 10 }, 0.1, 100, 50, 400, 200), { scale: 1, x: 0, y: 0 },
+    "pinching out returns to the fitted picture");
+  const corner = JSON.parse(JSON.stringify(C.zoomAt({ scale: 1 }, 4, 200, 100, 400, 200)));
+  same(corner, { scale: 4, x: -600, y: -300 }, "zooming into a corner stops at the edge");
+  same(C.panBy(corner, -500, -500, 400, 200), corner, "panning never passes the edge");
+  same(C.panBy({ scale: 1 }, 40, 40, 400, 200), { scale: 1, x: 0, y: 0 }, "a fitted picture does not pan");
+  same(C.panBy({ scale: 2, x: 0, y: 0 }, 30, -20, 400, 200), { scale: 2, x: 30, y: -20 });
+  same(C.toggleZoom({ scale: 1 }, 0, 0, 400, 200), { scale: 2, x: 0, y: 0 });
+  same(C.toggleZoom({ scale: 1 }, 100, 50, 400, 200), { scale: 2, x: -100, y: -50 });
+  same(C.toggleZoom({ scale: 2.5, x: 40, y: 0 }, 10, 10, 400, 200), { scale: 1, x: 0, y: 0 });
+}
+{
+  // The gesture helper: wheel and double click zoom, drag pans, reset returns to 1x, and
+  // touch-action is taken from the page only while the picture is zoomed.
+  const handlers = {}, layer = { style: {} };
+  const box = { style: {}, className: "ratio", addEventListener: (name, fn) => { handlers[name] = fn; },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 200 }) };
+  const zoom = C.attachZoom(box, [layer]);
+  let prevented = 0;
+  const event = extra => Object.assign({ preventDefault() { prevented++; } }, extra);
+  handlers.wheel(event({ clientX: 200, clientY: 100, deltaY: 100 }));
+  assert.strictEqual(prevented, 0, "a wheel that cannot zoom further is left to page scrolling");
+  assert.strictEqual(box.style.touchAction || "", "", "a fitted picture leaves touches to the page");
+  handlers.wheel(event({ clientX: 200, clientY: 100, deltaY: -100 }));
+  assert.strictEqual(prevented, 1);
+  assert(zoom.view().scale > 1 && box.style.touchAction === "none" && /is-zoomed/.test(box.className));
+  assert(/scale\(1\.2\)/.test(layer.style.transform) && layer.style.webkitTransform === layer.style.transform);
+  handlers.dblclick(event({ clientX: 200, clientY: 100 }));
+  assert.strictEqual(zoom.view().scale, 1, "double click on a zoomed picture fits it again");
+  handlers.dblclick(event({ clientX: 300, clientY: 150 }));
+  same(zoom.view(), { scale: 2, x: -100, y: -50 });
+  handlers.touchstart(event({ touches: [{ clientX: 100, clientY: 100 }] }));
+  handlers.touchmove(event({ touches: [{ clientX: 1000, clientY: 1000 }] }));
+  same(zoom.view(), { scale: 2, x: 200, y: 100 }, "a drag stops at the picture's edge");
+  handlers.touchend(event({ touches: [], changedTouches: [{ clientX: 1000, clientY: 1000 }] }));
+  handlers.touchstart(event({ touches: [{ clientX: 150, clientY: 100 }, { clientX: 250, clientY: 100 }] }));
+  handlers.touchmove(event({ touches: [{ clientX: 0, clientY: 100 }, { clientX: 400, clientY: 100 }] }));
+  assert.strictEqual(zoom.view().scale, 4, "a pinch stops at 4x");
+  zoom.reset();
+  same(zoom.view(), { scale: 1, x: 0, y: 0 });
+  assert.strictEqual(layer.style.transform, "");
+  assert.strictEqual(box.style.touchAction, "");
+  assert.strictEqual(box.className, "ratio");
+  const before = prevented;
+  handlers.touchstart(event({ touches: [{ clientX: 100, clientY: 100 }] }));
+  handlers.touchmove(event({ touches: [{ clientX: 100, clientY: 40 }] }));
+  assert.strictEqual(prevented, before, "one finger on a fitted picture still scrolls the page");
+  assert.strictEqual(C.attachZoom(null, []).view().scale, 1, "a missing picture box is tolerated");
+}
+for (const [name, source] of [["monitor.html", monitor], ["call.html", call]])
+  assert(source.includes("attachZoom(") && /[zZ]oom\.reset\(\)/.test(source), name + " zooms its live picture and resets it");
 console.log("panel layout helpers and screen contracts: PASS");

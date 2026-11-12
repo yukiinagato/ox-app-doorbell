@@ -156,7 +156,7 @@
           !(desc.properties instanceof Array) || !isObj(desc.defaults) ||
           typeof desc.safety_critical !== "boolean")
         return { ok: false, error: "invalid ui_manifest element " + id, elements: {} };
-      var allowed = {}, style = {}, p;
+      var allowed = {}, style = {}, overridden = {}, p;
       for (var pi = 0; pi < desc.properties.length; pi++) {
         p = desc.properties[pi];
         if (UI_PROPERTIES.indexOf(p) < 0 || allowed[p] || !own(desc.defaults, p))
@@ -173,6 +173,7 @@
         if (!allowed[p])
           return { ok: false, error: id + " uses unsupported property " + p, elements: {} };
         style[p] = proposed[p];
+        overridden[p] = true;
       }
       for (p in style) if (own(style, p)) {
         var value = style[p];
@@ -194,7 +195,7 @@
         return { ok: false, error: id + " accent contrast is below 3:1", elements: {} };
       if (style.border && style.background && contrast(style.border, style.background) < 3)
         return { ok: false, error: id + " border contrast is below 3:1", elements: {} };
-      result[id] = { style: style, safety_critical: desc.safety_critical };
+      result[id] = { style: style, overridden: overridden, safety_critical: desc.safety_critical };
     }
     return { ok: true, error: "", elements: result, minimum_touch: minimumTouch,
              device_id: String((webUi && webUi.device_id) || "") };
@@ -247,7 +248,7 @@
   }
 
   function storageKey(deviceId, page) {
-    return "doorbell.semantic-ui.v1." + String(deviceId || "unknown") + "." + page;
+    return "doorbell.semantic-ui.v2." + String(deviceId || "unknown") + "." + page;
   }
   function applySemanticUi(state, options) {
     options = options || {};
@@ -289,27 +290,40 @@
         if (!el.hasAttribute("data-db-base-transform"))
           el.setAttribute("data-db-base-transform", (computed && computed.transform !== "none") ?
                           computed.transform : "");
-        if (style.font_scale !== undefined) el.style.fontSize = (baseFont * style.font_scale) + "px";
-        if (style.foreground) el.style.color = style.foreground;
-        if (style.background) el.style.backgroundColor = style.background;
-        if (style.accent) {
-          el.style.outlineColor = style.accent;
-          if (el.style.setProperty) el.style.setProperty("--db-semantic-accent", style.accent);
+        // Manifest defaults describe the element; the page stylesheet already draws them in the
+        // current light or dark appearance. Only what an administrator overrode is painted. A
+        // color override paints the whole validated color set, because its contrast was checked
+        // against the manifest colors and not against the page's.
+        var set = entry.overridden || {};
+        var colors = !!(set.foreground || set.background || set.accent || set.border);
+        el.style.fontSize = set.font_scale ? (baseFont * style.font_scale) + "px" : "";
+        el.style.color = colors && style.foreground ? style.foreground : "";
+        el.style.backgroundColor = colors && style.background ? style.background : "";
+        el.style.outlineColor = colors && style.accent ? style.accent : "";
+        if (el.style.setProperty) {
+          if (colors && style.accent) el.style.setProperty("--db-semantic-accent", style.accent);
+          else if (el.style.removeProperty) el.style.removeProperty("--db-semantic-accent");
         }
-        if (style.border) {
+        if (colors && style.border) {
           el.style.borderColor = style.border;
           if (!computed || parseFloat(computed.borderWidth) === 0) el.style.borderWidth = "2px";
           el.style.borderStyle = "solid";
+        } else {
+          el.style.borderColor = ""; el.style.borderWidth = ""; el.style.borderStyle = "";
         }
-        if (style.radius !== undefined) el.style.borderRadius = style.radius + "px";
+        el.style.borderRadius = set.radius ? style.radius + "px" : "";
         var scale = style.scale === undefined ? 1 : style.scale;
         var baseTransform = el.getAttribute("data-db-base-transform") || "";
         el.style.transform = baseTransform + (scale === 1 ? "" : " scale(" + scale + ")");
         el.style.transformOrigin = "center";
         var tag = String(el.tagName || "").toUpperCase();
         if (entry.safety_critical || /^(BUTTON|A|INPUT)$/.test(tag)) {
-          el.style.minWidth = (model.minimum_touch / scale) + "px";
-          el.style.minHeight = (model.minimum_touch / scale) + "px";
+          // The floor never lowers a larger minimum the stylesheet asks for (visitor targets).
+          var floor = model.minimum_touch / scale;
+          el.style.minWidth = ""; el.style.minHeight = "";
+          var sized = root.getComputedStyle ? root.getComputedStyle(el) : null;
+          if (!sized || !(parseFloat(sized.minWidth) >= floor)) el.style.minWidth = floor + "px";
+          if (!sized || !(parseFloat(sized.minHeight) >= floor)) el.style.minHeight = floor + "px";
         }
         if (appliedIds.indexOf(id) < 0) appliedIds.push(id);
       }
@@ -365,7 +379,11 @@
 
     if (model.ok && !rejected && storage) {
       var effective = {};
-      for (var id in model.elements) if (own(model.elements, id)) effective[id] = model.elements[id].style;
+      for (var id in model.elements) if (own(model.elements, id)) {
+        var kept = {}, source = model.elements[id];
+        for (var prop in source.overridden) if (own(source.overridden, prop)) kept[prop] = source.style[prop];
+        effective[id] = kept;
+      }
       try {
         storage.setItem(key, JSON.stringify({ schema_version: 1, elements: effective }));
         lkgPersisted = true;

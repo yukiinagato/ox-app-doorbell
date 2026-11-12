@@ -3,84 +3,50 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
 <title></title>
-
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body { height: 100%; }
-  body { background: #101418; color: #e8edf2; display: flex; flex-direction: column;
-         font-family: "Hiragino Sans", "Yu Gothic UI", sans-serif; }
-  header { display: flex; align-items: baseline; gap: 16px; padding: 12px 16px 4px; }
-  h1 { font-size: 24px; color: #8a97a5; font-weight: normal; }
-  #regState { font-size: 14px; color: #5d6b79; }
-  #offlineBand { display: none; background: #ff6b6b; color: #2a0505; text-align: center;
-                 font-size: 22px; font-weight: bold; padding: 10px; }
-  #configBand { display: none; padding: 8px 16px; color: #ffd59a; background: #3a2d19; }
-  #connectionBand { display: none; padding: 8px 16px; color: #ffd59a; background: #3a2d19; }
-  #doorTabs { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px 16px; }
-  #doorTabs button { font-size: 20px; padding: 10px 22px; border-radius: 10px;
-                     border: 1px solid #2a333d; background: #1a2027; color: #e8edf2;
-                     cursor: pointer; }
-  #doorTabs button.sel { background: #274261; border-color: #4da3ff; }
-  #doorTabs button:focus { outline: 2px solid #8bc5ff; outline-offset: 3px; }
-  #doorTabs button:disabled { cursor: default; opacity: 0.65; }
-  #doorTabs button .st { font-size: 13px; color: #8a97a5; display: block; }
-  main { flex: 1; display: flex; flex-direction: column; align-items: center;
-         padding: 8px 16px 16px; min-height: 0; }
-  #videoBox { position: relative; width: 100%; max-width: 960px; flex: 1; min-height: 240px;
-              background: #000; border-radius: 12px; overflow: hidden;
-              display: flex; align-items: center; justify-content: center; }
-  #liveImg, #liveVideo { width: 100%; height: 100%; object-fit: contain; }
-  #liveVideo { display: none; }
-  #noVideo { position: absolute; color: #5d6b79; font-size: 20px; }
-  #selfPreview { position: absolute; right: 10px; bottom: 10px; width: 160px;
-                 border-radius: 8px; border: 1px solid #2a333d; display: none; }
-  #controls { display: flex; align-items: center; gap: 18px; padding: 14px 0 4px;
-              flex-wrap: wrap; justify-content: center; }
-  #callBtn { font-size: 26px; font-weight: bold; padding: 14px 56px; border-radius: 14px;
-             border: 0; background: #1e8e4e; color: #fff; cursor: pointer; }
-  #callBtn.hang { background: #c0392b; }
-  #callBtn:disabled { background: #2a333d; color: #5d6b79; cursor: default; }
-  #videoToggle { font-size: 18px; color: #aab6c2; display: flex; align-items: center;
-                 gap: 8px; cursor: pointer; }
-  #status { font-size: 18px; color: #8a97a5; min-height: 24px; padding-bottom: 10px;
-            text-align: center; }
-  #status.err { color: #ff8f85; }
-  #status a { color: #4da3ff; }
-</style>
 <link rel="stylesheet" href="/panel/panel.css">
 </head>
 <body class="callPage">
-<div id="offlineBand" data-semantic-id="status.offline"></div>
-<div id="configBand" role="status"></div>
-<div id="connectionBand" role="status"></div>
-<header><h1 id="title" tabindex="-1" data-semantic-id="ring.title"></h1><span id="regState"></span></header>
-<div id="doorTabs" role="group" aria-labelledby="title"></div>
-<div id="conversationSummary" role="status" style="white-space:pre-line;padding:8px 16px"></div>
-<div id="conversationActions" style="display:flex;flex-wrap:wrap;gap:8px;padding:0 16px"></div>
-<main>
-  <div id="videoBox">
-    <img id="liveImg" alt="">
-    <video id="liveVideo" muted autoplay playsinline></video>
-    <div id="noVideo" class="videoPh" role="status"><span class="phSpin" aria-hidden="true"></span>
-      <span class="phDoor" id="phDoor"></span><span class="phText" id="phText"></span></div>
-    <video id="selfPreview" muted autoplay playsinline></video>
+<div id="callShell">
+  <header id="callHeader">
+    <a id="backLink" href="/panel/monitor"><svg class="ic" aria-hidden="true" focusable="false"><use href="/panel/icons/tabler-sprite.svg#i-chevron-right"></use></svg><span id="backText"></span></a>
+    <h1 id="title" tabindex="-1" data-semantic-id="ring.title"></h1>
+  </header>
+  <div id="notices">
+    <div id="offlineBand" class="band" data-semantic-id="status.offline" role="status"></div>
+    <div id="configBand" class="band" role="status"></div>
+    <div id="connectionBand" class="band" role="status"></div>
   </div>
+  <div id="doorTabs" role="tablist" aria-labelledby="title"></div>
+  <main>
+    <div id="videoBox" class="ratio" role="tabpanel" aria-labelledby="title">
+      <img id="liveImg" alt="">
+      <video id="liveVideo" style="display:none" muted autoplay playsinline></video>
+      <div id="noVideo" class="videoPh" role="status"><span class="phSpin" aria-hidden="true"></span>
+        <span class="phDoor" id="phDoor"></span><span class="phText" id="phText"></span></div>
+      <video id="selfPreview" muted autoplay playsinline></video>
+    </div>
+    <div id="conversationSummary" role="status"></div>
+    <div id="conversationActions"></div>
+  </main>
   <div id="controls">
     <div id="primaryRow">
       <button id="callBtn" data-semantic-id="ring.action" disabled></button>
       <button id="replyBtn" type="button" aria-controls="replySheet" aria-expanded="false" hidden></button>
-      <button id="ignoreBtn" type="button" hidden></button>
+      <button id="ignoreBtn" class="quiet" type="button" hidden></button>
     </div>
     <div id="secondaryRow">
       <button id="micBtn" type="button" aria-pressed="false" hidden></button>
       <button id="unlockBtn" type="button" hidden></button>
       <label id="videoToggle"><input type="checkbox" id="sendVideo"> <span id="videoToggleText"></span></label>
     </div>
-    <div id="status"></div>
+    <div id="status" role="status"></div>
+    <div id="adminNote"><span id="setupNote"></span><span id="regState"></span><span id="extensionNote"></span></div>
   </div>
-</main>
-<div id="replySheet" role="dialog" aria-labelledby="replyTitle" hidden>
+</div>
+<div id="sheetScrim" hidden></div>
+<div id="replySheet" role="dialog" aria-modal="true" aria-labelledby="replyTitle" hidden>
   <div class="sheetHead"><h2 id="replyTitle"></h2><button id="replySheetClose" type="button"></button></div>
   <div id="replyActions"></div>
 </div>
@@ -213,7 +179,15 @@ const els = {
   config: document.getElementById("configBand"),
   connection: document.getElementById("connectionBand"),
   audio: document.getElementById("remoteAudio"),
+  scrim: document.getElementById("sheetScrim"),
+  setupNote: document.getElementById("setupNote"),
+  extensionNote: document.getElementById("extensionNote"),
+  back: document.getElementById("backLink"),
+  backText: document.getElementById("backText"),
 };
+// The live picture can be pinched, dragged and double-tapped; it returns to 1x when the door or
+// the call changes.
+const liveZoom = DoorbellPanelCommon.attachZoom(document.getElementById("videoBox"), [els.live, els.liveVideo]);
 let doors = [];        // [{id,label,extension,station,online}]
 const doorTabNodes = new Map();
 let selected = null;
@@ -384,6 +358,9 @@ function renderConnection() {
 function applyI18n() {
   document.title = t("panel.call_title");
   els.title.textContent = t("panel.call_title");
+  els.backText.textContent = t("panel.monitor_title");
+  if (DoorbellPanelRuntime.panelUrl && LANG)
+    els.back.setAttribute("href", DoorbellPanelRuntime.panelUrl("monitor", "", false) + "?lang=" + encodeURIComponent(LANG));
   els.reply.textContent = t("ring.quick_replies");
   els.ignore.textContent = t("ring.ignore");
   els.unlock.textContent = t("ring.unlock");
@@ -428,6 +405,7 @@ function renderTabs() {
     if (!entry) {
       const button = document.createElement("button");
       button.type = "button";
+      button.setAttribute("role", "tab");
       const label = document.createElement("span"), status = document.createElement("span");
       status.className = "st";
       button.appendChild(label); button.appendChild(status);
@@ -436,16 +414,19 @@ function renderTabs() {
       doorTabNodes.set(d.id, entry);
     }
     entry.door = d;
-    const status = (d.calling || d.call_state === "ringing" || d.call_state === "purpose_pending") ?
-      t("panel.visitor_calling") : (d.extension ?
-        t("panel.extension", { extension: d.extension }) : t("panel.no_extension"));
+    // The tab says what a resident needs: who is at which door. Extensions are setup detail and
+    // live in the administrator note of the action zone.
+    const tileState = DoorbellPanelCommon.doorTileState(d);
+    const status = tileState === "ringing" ? t("panel.visitor_calling") :
+      tileState === "in_call" ? t("dash.state_in_call") :
+      tileState === "offline" ? t("dash.tile_offline") : "";
     if (entry.label.textContent !== d.label) entry.label.textContent = d.label;
     if (entry.status.textContent !== status) entry.status.textContent = status;
     const chosen = !!selected && selected.id === d.id;
-    const className = chosen ? "sel" : "";
+    const className = (chosen ? "sel " : "") + "is-" + tileState;
     if (entry.button.className !== className) entry.button.className = className;
     const pressed = chosen ? "true" : "false";
-    if (entry.button.getAttribute("aria-pressed") !== pressed) entry.button.setAttribute("aria-pressed", pressed);
+    if (entry.button.getAttribute("aria-selected") !== pressed) entry.button.setAttribute("aria-selected", pressed);
     const disabled = !!session && !chosen;
     if (entry.button.disabled !== disabled) entry.button.disabled = disabled;
     const index = present.size - 1;
@@ -469,6 +450,18 @@ function renderTabs() {
   els.tabs.scrollLeft = scrollLeft; els.tabs.scrollTop = scrollTop;
 }
 
+// Arrow keys move between door tabs, as in any tab list.
+els.tabs.onkeydown = event => {
+  const step = event.key === "ArrowRight" || event.key === "ArrowDown" ? 1 :
+    event.key === "ArrowLeft" || event.key === "ArrowUp" ? -1 : 0;
+  if (!step) return;
+  const tabs = Array.from(els.tabs.children).filter(button => !button.disabled);
+  const at = tabs.indexOf(document.activeElement);
+  if (at < 0 || tabs.length < 2) return;
+  event.preventDefault();
+  tabs[(at + step + tabs.length) % tabs.length].focus();
+};
+
 function playbackKey(d) {
   return [d && d.id, d && d.stream_mjpeg, d && d.stream_mp4,
           JSON.stringify((d && d.playback_profile) || {})].join("|");
@@ -478,6 +471,7 @@ function selectDoor(d, forcePlaybackRefresh) {
   if (conference && !forcePlaybackRefresh) conference.select(d);
   if (session && !forcePlaybackRefresh) return;  // Do not switch doors during an active call.
   selectionRevision++;
+  if (!selected || selected.id !== d.id) liveZoom.reset();
   selected = d;
   renderTabs();
   if (playback) { playback.stop(); playback = null; }
@@ -531,6 +525,7 @@ function renderReplySheet() {
     if (!reply.id || !label) continue;
     const button = document.createElement("button");
     button.type = "button";
+    button.setAttribute("data-semantic-id", "reply.button");
     button.textContent = label;
     button.onclick = () => sendQuickReply(reply.id, label, button);
     host.appendChild(button);
@@ -540,6 +535,7 @@ function renderReplySheet() {
 function setReplySheet(open) {
   if (open) renderReplySheet();
   els.replySheet.hidden = !open;
+  els.scrim.hidden = !open;
   els.reply.setAttribute("aria-expanded", open ? "true" : "false");
   if (open && els.replyActions.querySelector) {
     const first = els.replyActions.querySelector("button");
@@ -604,6 +600,10 @@ if (els.liveVideo && els.liveVideo.addEventListener) {
 }
 els.reply.onclick = () => setReplySheet(!!els.replySheet.hidden);
 document.getElementById("replySheetClose").onclick = () => { setReplySheet(false); els.reply.focus(); };
+els.scrim.onclick = () => setReplySheet(false);
+document.addEventListener("keydown", event => {
+  if (event.key === "Escape" && !els.replySheet.hidden) { setReplySheet(false); els.reply.focus(); }
+});
 els.ignore.onclick = () => {
   ignoredRing = ringKey(selected);
   setReplySheet(false);
@@ -617,8 +617,25 @@ function updateCallButton() {
   updateLegacyCallButton();
   if (conference) renderConference();
 }
+// Setup detail is for the administrator: a quiet note under the resident's status line.
+function renderAdminNote(setupKey) {
+  const setup = setupKey ? t("panel.admin_note", { detail: t(setupKey) }) : "";
+  if (els.setupNote.textContent !== setup) els.setupNote.textContent = setup;
+  const extension = !selected ? "" : selected.extension ?
+    t("panel.extension", { extension: selected.extension }) : t("panel.no_extension");
+  if (els.extensionNote.textContent !== extension) els.extensionNote.textContent = extension;
+}
+// "Calling is not available" explains a disabled control; it is withdrawn as soon as the control
+// works again, and never replaces a newer message.
+let availabilityStatus = "";
+function setAvailability(message) {
+  if (message) { availabilityStatus = message; setStatus(message); }
+  else if (availabilityStatus && els.status.textContent === availabilityStatus) { availabilityStatus = ""; setStatus(""); }
+}
 function updateLegacyCallButton() {
   renderSecondaryActions();
+  renderAdminNote(!webrtc || !webrtc.ws_url ? "panel.webrtc_required" :
+    selected && !selected.extension ? "panel.extension_unconfigured" : "");
   if (session) {
     els.call.setAttribute("data-semantic-id", "call.end");
     els.call.textContent = t("incall.end");
@@ -631,15 +648,15 @@ function updateLegacyCallButton() {
   if (!webrtc || !webrtc.ws_url) {
     els.call.disabled = true;
     // The reason sits in the action zone next to the disabled control.
-    setStatus(selectedRinging() ? t("ring.answer_unavailable") + " — " + t("panel.webrtc_required") :
-      t("panel.webrtc_required"));
+    setAvailability(t(selectedRinging() ? "ring.answer_unavailable" : "panel.calling_unavailable"));
     return;
   }
   if (!selected || !selected.extension) {
     els.call.disabled = true;
-    if (selected) setStatus(t("panel.extension_unconfigured"));
+    if (selected) setAvailability(t("panel.door_call_unavailable"));
     return;
   }
+  setAvailability("");
   const answering = selected.calling || selected.call_state === "ringing" ||
     selected.call_state === "purpose_pending";
   if (answering && !selected.call_id) {
@@ -822,6 +839,7 @@ function startCall() {
   }
   activeLifecycle = binding;
   callRevision++;
+  liveZoom.reset();
   setStatus(answering ? t("panel.answering") : t("calling.title"));
   els.call.textContent = t("incall.end");
   els.call.classList.add("hang");
@@ -1025,6 +1043,7 @@ function endCall(reason, expectedBinding, expectedSession) {
   if (endedSession) { try { if (!endedSession.isEnded()) endedSession.terminate(); } catch (e) { } }
   reportLifecycleEnd(binding, reason || "local_hangup");
   stopSendingVideo();
+  liveZoom.reset();
   els.call.classList.remove("hang");
   initUa();
   renderConnection();
@@ -1270,6 +1289,7 @@ function applyState(st, request) {
   if (!contextCurrent(request)) return false;
   if (!st || typeof st !== "object" || !Array.isArray(st.doors)) throw new Error("invalid state");
   emergencyOverlay.update(st);
+  if (st.display) DoorbellPanelCommon.applyAppearance(st.display);
   latestPanelState = st;
   const refreshed = refreshDoors(st);
   if (conference) conference.update(Object.assign({}, st, { doors: doors }));
@@ -1434,7 +1454,8 @@ function renderConference() {
   for (const door of latestPanelState && latestPanelState.doors || []) {
     for (const member of door.conversation && door.conversation.participants || []) {
       const key = member.state === "waiting" ? "queued" : member.state;
-      lines.push(door.label + " · " + t("conversation." + key, { device: member.name || member.device }));
+      const messageKey = "conversation." + key;
+      lines.push(door.label + " · " + t(messageKey, { device: member.name || member.device }));
     }
   }
   summary.textContent = lines.join("\n");
@@ -1453,7 +1474,8 @@ function renderConference() {
   conferenceActionSignature = signature; actions.textContent = "";
   for (const verb of verbs) {
     const button = document.createElement("button");
-    button.type = "button"; button.style.minHeight = "48px"; button.textContent = t("conversation." + verb);
+    const verbKey = "conversation." + verb;
+    button.type = "button"; button.textContent = t(verbKey);
     let frozen = null, target = null;
     button.onpointerdown = () => { target = selected; frozen = conference.request(selected, verb); };
     button.onclick = () => {

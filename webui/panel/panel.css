@@ -1,337 +1,549 @@
-/* Shared layout for door.html (visitor), monitor.html (dashboard, history, incoming call) and
- * call.html (live view / in call), following docs/en/ui-guidelines.md.
+/* Styles for door.html (visitor), monitor.html (dashboard, history, incoming call) and call.html
+ * (live view / in call), following docs/en/ui-guidelines.md: system font, native controls, light
+ * and dark, Core's accent, three size classes (compact < 600 <= medium < 900 <= expanded) and
+ * fixed action zones.
  *
- * Color roles are CSS custom properties. Core's theme regions set them at runtime
- * (DoorbellPanelCommon.applyColorRoles); per-element semantic UI overrides still win because they
- * are inline styles. Every declaration that uses a modern feature is preceded by a plain fallback:
- * iOS 5 Safari (iPad 1 door station) ignores var(), clamp(), env(), grid and @supports, and keeps
- * the page's original layout. Size classes: compact < 600 <= medium < 900 <= expanded. */
+ * iOS 5 Safari (iPad 1) is the floor for door.html and monitor.html. It ignores var(), calc(),
+ * clamp(), env(), vh, grid, modern flexbox, prefers-color-scheme and whole @supports blocks. So
+ * every rule outside "@supports (display:grid)" is written for it: a plain value first (the dark
+ * palette, the one verified on that hardware), 2009 flexbox (-webkit-box) or inline-block for
+ * layout, and -webkit- prefixes. Modern layout lives inside the @supports blocks.
+ *
+ * Color roles are custom properties. Core's theme overrides them at runtime
+ * (DoorbellPanelCommon.applyColorRoles); an administrator's per-element semantic override is an
+ * inline style and still wins. html[data-theme] is set when Core fixes the appearance; otherwise
+ * the system setting decides. */
 
 :root {
-  --surface:#101418; --surface-2:#1a2027; --surface-3:#232c35; --line:#2a333d;
-  --on-surface:#e8edf2; --muted:#8a97a5; --accent:#4da3ff; --on-accent:#04121f;
-  --positive:#1e8e4e; --on-positive:#ffffff; --negative:#b3261e; --on-negative:#ffffff;
+  color-scheme:light dark;
+  --surface:#f3f4f6; --surface-2:#ffffff; --surface-3:#e6e9ee; --line:#d3d8df;
+  --on-surface:#14181d; --muted:#586370; --accent:#0b62d6; --on-accent:#ffffff;
+  --positive:#1a7f43; --on-positive:#ffffff; --negative:#b3261e; --on-negative:#ffffff;
   --warning:#ffb454; --on-warning:#2a1a00;
+  --positive-text:#17703b; --negative-text:#b3261e; --focus:#0b57d0; --scrim:rgba(15,20,25,.45);
+  --media:#0b0d10; --shadow:0 1px 2px rgba(15,20,25,.08), 0 4px 16px rgba(15,20,25,.06);
   --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
   --tap:44px; --tap-visitor:72px; --radius:12px; --radius-sheet:20px;
   --ease:cubic-bezier(.2,.8,.2,1); --dur:200ms;
+  accent-color:#0b62d6; accent-color:var(--accent);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --surface:#101418; --surface-2:#1a2027; --surface-3:#27313b; --line:#343f4b;
+    --on-surface:#e8edf2; --muted:#9aa7b5; --accent:#4da3ff; --on-accent:#04121f;
+    --positive-text:#6fd59a; --negative-text:#ff8e8e; --focus:#ffd166; --scrim:rgba(0,0,0,.6);
+    --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.3);
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme:dark;
+  --surface:#101418; --surface-2:#1a2027; --surface-3:#27313b; --line:#343f4b;
+  --on-surface:#e8edf2; --muted:#9aa7b5; --accent:#4da3ff; --on-accent:#04121f;
+  --positive-text:#6fd59a; --negative-text:#ff8e8e; --focus:#ffd166; --scrim:rgba(0,0,0,.6);
+  --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.3);
+}
+:root[data-theme="light"] { color-scheme:light; }
+/* Core supplied its own surface and ink: derive the secondary surfaces from them. */
+@supports (color:color-mix(in srgb, red, blue)) {
+  :root[data-core-roles] {
+    --surface-2:color-mix(in srgb, var(--surface) 93%, var(--on-surface));
+    --surface-3:color-mix(in srgb, var(--surface) 86%, var(--on-surface));
+    --line:color-mix(in srgb, var(--surface) 78%, var(--on-surface));
+  }
 }
 
-html { -webkit-text-size-adjust:100%; text-size-adjust:100%; }
-body { background:#101418; background:var(--surface); color:#e8edf2; color:var(--on-surface);
-       padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+/* ================================================================ Base */
+* { -webkit-box-sizing:border-box; box-sizing:border-box; margin:0; padding:0; }
+html { -webkit-text-size-adjust:100%; text-size-adjust:100%; height:100%; }
+body { min-height:100%; background:#101418; background:var(--surface); color:#e8edf2; color:var(--on-surface);
+       font-family:-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+                   "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", "Noto Sans CJK JP",
+                   "PingFang SC", "Microsoft YaHei", sans-serif;
+       font-size:16px; font-size:1rem; line-height:1.4; -webkit-tap-highlight-color:transparent; }
+[hidden] { display:none !important; }
 img, video { max-width:100%; }
-button, select, input { min-height:44px; min-height:var(--tap); }
-button:focus-visible, select:focus-visible, input:focus-visible, [role=button]:focus-visible {
-  outline:3px solid #ffd166; outline-offset:2px; }
-.chip { display:inline-block; padding:4px 12px; border-radius:999px; font-size:14px; line-height:1.4;
-        background:#232c35; background:var(--surface-3); color:var(--on-surface); white-space:nowrap; }
+h1, h2, h3 { font-weight:600; line-height:1.25; }
+button, select, input { font-family:inherit; font-size:inherit; color:inherit; }
+button { -webkit-appearance:none; appearance:none; min-height:44px; min-height:var(--tap); padding:10px 16px;
+         border:1px solid #343f4b; border:1px solid var(--line); border-radius:10px;
+         background:#27313b; background:var(--surface-3); color:#e8edf2; color:var(--on-surface);
+         font-size:16px; font-size:1rem; line-height:1.25; cursor:pointer; touch-action:manipulation;
+         overflow-wrap:break-word; word-wrap:break-word; }
+button:disabled { opacity:.5; cursor:default; }
+button:active { opacity:.8; }
+select { min-height:44px; min-height:var(--tap); }
+button:focus, select:focus, input:focus, a:focus, [role=button]:focus, [tabindex]:focus {
+  outline:3px solid #ffd166; outline:3px solid var(--focus); outline-offset:2px; }
+@supports selector(:focus-visible) {
+  button:focus:not(:focus-visible), select:focus:not(:focus-visible), input:focus:not(:focus-visible),
+  a:focus:not(:focus-visible), [role=button]:focus:not(:focus-visible), [tabindex]:focus:not(:focus-visible) { outline:none; }
+}
+button.positive { background:#1a7f43; background:var(--positive); color:#fff; color:var(--on-positive);
+                  border-color:transparent; font-weight:bold; }
+button.negative { background:#b3261e; background:var(--negative); color:#fff; color:var(--on-negative);
+                  border-color:transparent; font-weight:bold; }
+button.quiet { background:transparent; color:#9aa7b5; color:var(--muted); }
+
+/* Icons are decorative and only shown where external sprite references work. */
+.ic { display:none; }
+@supports (display:grid) {
+  .ic { display:inline-block; width:1.25em; height:1.25em; -webkit-flex:none; flex:none;
+        vertical-align:-0.25em; margin-right:.4em; }
+  .ic:last-child { margin-right:0; }
+}
+
+.chip { display:inline-block; padding:4px 12px; border-radius:999px; font-size:14px; font-size:.875rem;
+        line-height:1.4; background:#27313b; background:var(--surface-3); color:#e8edf2; color:var(--on-surface);
+        white-space:nowrap; vertical-align:middle; }
 .chip:empty { display:none; }
 .chip.negative { background:#b3261e; background:var(--negative); color:#fff; color:var(--on-negative); font-weight:bold; }
 .chip.warning { background:#ffb454; background:var(--warning); color:#2a1a00; color:var(--on-warning); }
-.chip.ringing { background:var(--accent); color:var(--on-accent); font-weight:bold; }
-.chip.in_call { background:var(--positive); color:var(--on-positive); }
-.chip.offline { background:transparent; border:1px solid var(--line); color:var(--muted); }
-.chip.clock { font-variant-numeric:tabular-nums; font-size:18px; background:transparent; padding-left:0; }
+.chip.ringing { background:#4da3ff; background:var(--accent); color:#04121f; color:var(--on-accent); font-weight:bold; }
+.chip.in_call { background:#1a7f43; background:var(--positive); color:#fff; color:var(--on-positive); }
+.chip.idle { background:transparent; border:1px solid #343f4b; border:1px solid var(--line); color:#9aa7b5; color:var(--muted); }
+.chip.offline { background:transparent; border:1px solid #343f4b; border:1px solid var(--line); color:#9aa7b5; color:var(--muted); }
 
-/* ================================================================ Dashboard (monitor.html) */
-#dashHeader { display:-webkit-box; display:-webkit-flex; display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap;
-              -webkit-box-align:center; align-items:center; gap:8px 16px;
-              padding:12px 16px; padding-top:max(12px, env(safe-area-inset-top));
-              background:var(--surface); border-bottom:1px solid var(--line);
-              position:-webkit-sticky; position:sticky; top:0; z-index:5; }
-#dashHeader h1#title { padding:0; margin:0; font-size:22px; font-size:clamp(18px, 1rem + .8vw, 26px);
-                       color:var(--on-surface); font-weight:600; }
-#statusChips { display:-webkit-flex; display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap;
-               -webkit-align-items:center; align-items:center; gap:8px; -webkit-flex:1; flex:1; }
-#pushBar { display:-webkit-flex; display:flex; -webkit-align-items:center; align-items:center;
-           gap:8px; padding:0; color:var(--muted); font-size:14px; }
-#pushBar #pushBtn { margin:0; font-size:15px; padding:8px 14px; background:var(--surface-2);
-                    border:1px solid var(--line); color:var(--on-surface); }
-#dashTabs { display:none; }
-#dashBody { padding:16px; padding:var(--s4) clamp(12px, 2.5vw, 32px);
-            padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
-#snapGrid { padding:0; }
-.snapCard { position:relative; display:inline-block; vertical-align:top; width:46%; margin:6px;
-            padding:0; overflow:hidden; cursor:pointer; background:var(--surface-2);
-            border:1px solid var(--line); border-radius:12px; border-radius:var(--radius);
-            -webkit-tap-highlight-color:transparent; }
-.snapCard .tileMedia { position:relative; background:#000; aspect-ratio:16 / 9; overflow:hidden; }
-.snapCard .tileMedia img, .snapCard .tileMedia video { display:block; width:100%; height:100%;
-            min-height:0; object-fit:cover; border-radius:0; }
-.snapCard .tileMedia video { position:absolute; left:0; top:0; }
-.tileFoot { display:-webkit-flex; display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap;
-            -webkit-align-items:center; align-items:center; gap:4px 8px; padding:10px 12px 12px; }
-.tileFoot .lbl { -webkit-flex:1; flex:1; min-width:0; font-size:18px; font-size:clamp(16px, .9rem + .4vw, 20px);
-                 padding:0; font-weight:600; overflow-wrap:anywhere; }
-.tileLast { -webkit-flex-basis:100%; flex-basis:100%; font-size:14px; color:var(--muted); }
-.tileLast:empty { display:none; }
-.snapCard.is-ringing { border-color:var(--accent); box-shadow:0 0 0 3px var(--accent); }
-.snapCard.is-offline .tileMedia { opacity:.45; }
+/* Status bands at the top of a page. Ordinary connection trouble is neutral, never alarm red. */
+.band { display:none; padding:10px 16px; text-align:center; font-size:16px; font-size:1rem; line-height:1.4;
+        background:#27313b; background:var(--surface-3); color:#e8edf2; color:var(--on-surface);
+        border-bottom:1px solid #343f4b; border-bottom:1px solid var(--line); }
+.band.warning { background:#ffb454; background:var(--warning); color:#2a1a00; color:var(--on-warning);
+                border-bottom-color:transparent; font-weight:600; cursor:pointer; }
+
+/* A 16:9 picture box that works without aspect-ratio. Children fill it. */
+.ratio { position:relative; width:100%; overflow:hidden; background:#0b0d10; background:var(--media); }
+.ratio:before { content:""; display:block; padding-top:56.25%; }
+.ratio > img, .ratio > video { position:absolute; left:0; top:0; width:100%; height:100%; max-width:none;
+                               object-fit:contain; -webkit-transform-origin:50% 50%; transform-origin:50% 50%; }
+.ratio.is-zoomed { cursor:grab; }
+.ratio img { -webkit-user-drag:none; -webkit-user-select:none; user-select:none; }
+
+.videoPh { position:absolute; left:0; top:0; right:0; bottom:0; z-index:1; padding:12px; text-align:center;
+           background:#1a2027; background:var(--surface-2); color:#e8edf2; color:var(--on-surface);
+           font-size:16px; font-size:1rem; display:-webkit-box; -webkit-box-orient:vertical;
+           -webkit-box-pack:center; -webkit-box-align:center; }
+.videoPh .phDoor { display:block; font-weight:600; font-size:1.15em; overflow-wrap:anywhere; }
+.videoPh .phText { display:block; color:#9aa7b5; color:var(--muted); font-size:.9em; }
+.videoPh .phSpin { display:none; width:28px; height:28px; margin:0 auto 8px; border-radius:50%;
+                   border:3px solid #343f4b; border:3px solid var(--line); border-top-color:#4da3ff; border-top-color:var(--accent);
+                   -webkit-animation:dbSpin 1s linear infinite; animation:dbSpin 1s linear infinite; }
+.videoPh.connecting .phSpin { display:block; }
+@-webkit-keyframes dbSpin { to { -webkit-transform:rotate(360deg); } }
+@keyframes dbSpin { to { transform:rotate(360deg); } }
 @supports (display:grid) {
-  #snapGrid { display:grid; grid-template-columns:minmax(0, 1fr); gap:var(--s4); }
-  #snapGrid .snapCard { width:auto; margin:0; display:block; }
+  .videoPh { display:flex; flex-direction:column; align-items:center; justify-content:center; }
 }
 
-#evCard { margin:0; padding:16px; background:var(--surface-2); border:1px solid var(--line);
-          border-radius:var(--radius); }
-#evHead { display:-webkit-flex; display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap; gap:8px;
-          -webkit-align-items:center; align-items:center; -webkit-justify-content:space-between;
-          justify-content:space-between; padding:0 0 8px; }
-#evHead h2 { font-size:20px; color:var(--on-surface); font-weight:600; }
-#markSeen { background:var(--surface-3); border:1px solid var(--line); color:var(--on-surface); font-size:15px; }
-.hday { font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted);
-        font-weight:600; margin:16px 0 4px; }
-.hday:first-child { margin-top:4px; }
-.hlist { list-style:none; margin:0; padding:0; }
-.hrow { display:-webkit-flex; display:flex; -webkit-align-items:center; align-items:center; gap:12px;
-        min-height:56px; padding:8px 0; border-bottom:1px solid var(--line); }
-.hrow:last-child { border-bottom:0; }
-.hicon { width:32px; height:32px; border-radius:16px; -webkit-flex:none; flex:none; text-align:center;
-         line-height:32px; font-weight:bold; background:var(--surface-3); color:var(--muted); }
-.out-answered .hicon { background:var(--positive); color:var(--on-positive); }
-.out-missed .hicon { background:var(--negative); color:var(--on-negative); }
-.out-replied .hicon { background:var(--accent); color:var(--on-accent); }
-.htime { font-variant-numeric:tabular-nums; color:var(--muted); min-width:3em; }
-.hmain { -webkit-flex:1; flex:1; min-width:0; display:-webkit-flex; display:flex;
-         -webkit-flex-wrap:wrap; flex-wrap:wrap; gap:0 8px; -webkit-align-items:baseline; align-items:baseline; }
-.hdoor { font-weight:600; overflow-wrap:anywhere; }
-.hpurpose { color:var(--muted); }
-.hout { -webkit-flex-basis:100%; flex-basis:100%; color:var(--muted); font-size:14px; }
-.hrow.unread .hdoor::after { content:""; display:inline-block; width:8px; height:8px; margin-left:8px;
-                              border-radius:4px; background:var(--negative); vertical-align:middle; }
-.out-missed .hout { color:#ff8e8e; }
-.hthumb { width:72px; height:40px; object-fit:cover; border-radius:6px; -webkit-flex:none; flex:none; }
-
-/* Compact: one pane at a time, switched by a bottom tab bar. */
-@media (max-width: 599.98px) {
-  #dashTabs { display:-webkit-flex; display:flex; position:fixed; left:0; right:0; bottom:0; z-index:6;
-              background:var(--surface-2); border-top:1px solid var(--line);
-              padding:6px 8px calc(6px + env(safe-area-inset-bottom)); gap:6px; -webkit-align-items:center; align-items:center; }
-  #dashTabs button { -webkit-flex:1; flex:1; min-height:56px; background:none; border:0;
-                     color:var(--muted); font-size:15px; border-radius:10px; }
-  #dashTabs button[aria-selected="true"] { color:var(--on-surface); background:var(--surface-3); font-weight:600; }
-  #dashBody[data-pane="doors"] #historyPane, #dashBody[data-pane="history"] #doorsPane { display:none; }
-  #pushBar { -webkit-flex-basis:100%; flex-basis:100%; }
-}
-/* Medium: two tile columns, history below. Expanded: tiles beside history. */
-@media (min-width: 600px) {
-  @supports (display:grid) { #snapGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); } }
-  #dashBody { padding-bottom:calc(24px + env(safe-area-inset-bottom)); }
-  #historyPane { margin-top:var(--s5); }
-}
-@media (min-width: 900px) {
-  @supports (display:grid) {
-    #dashBody { display:grid; grid-template-columns:minmax(0, 2fr) minmax(320px, 1fr); gap:var(--s5);
-                align-items:start; }
-    #historyPane { margin-top:0; position:-webkit-sticky; position:sticky; top:84px; }
-    #snapGrid { grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); }
-  }
-}
-@media (min-width: 1600px) {
-  @supports (display:grid) { #snapGrid { grid-template-columns:repeat(auto-fill, minmax(380px, 1fr)); } }
-}
-
-/* ================================================================ Incoming call (monitor.html) */
-#callView { position:fixed; left:0; top:0; right:0; bottom:0; width:auto; height:auto; z-index:10;
-            overflow:auto; -webkit-overflow-scrolling:touch; text-align:center;
-            background:#101418; background:var(--surface);
-            padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
-#callView .callMedia { background:#000; }
-#callView .callMedia img, #callView .callMedia video { display:block; width:100%; max-width:none;
-            height:auto; max-height:56vh; aspect-ratio:16 / 9; object-fit:contain; border-radius:0; margin:0 auto; }
-#callView .callSide { padding:16px; padding:var(--s4) var(--s4) 0; }
-#callView .msg { font-size:40px; font-size:clamp(26px, 1rem + 3vw, 48px); padding:8px 0;
-                 color:var(--on-surface); overflow-wrap:anywhere; line-height:1.25; }
-#callBadges { display:-webkit-flex; display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap;
-              -webkit-justify-content:center; justify-content:center; gap:8px; margin:4px 0 16px; }
-/* Fixed action zone: Answer (positive, largest), Reply, Ignore. */
-#callActions { position:-webkit-sticky; position:sticky; bottom:0; z-index:2; display:-webkit-flex; display:flex;
-               -webkit-flex-wrap:wrap; flex-wrap:wrap; gap:12px; padding:16px 0;
-               padding-bottom:calc(16px + env(safe-area-inset-bottom));
-               background:var(--surface); }
-#callActions button { margin:0; border-radius:14px; font-size:18px; min-height:56px; padding:10px 18px;
-                      background:var(--surface-3); border:1px solid var(--line); color:var(--on-surface); }
-#callActions #answerBtn { -webkit-flex:1 1 100%; flex:1 1 100%; min-height:72px; font-size:24px;
-                          font-weight:bold; background:#1e8e4e; background:var(--positive);
-                          border-color:transparent; color:var(--on-positive); }
-#callActions #replyBtn, #callActions #monitorClose { -webkit-flex:1 1 40%; flex:1 1 40%; }
-#callActions #monitorClose { background:transparent; color:var(--muted); }
-#replySheet { position:fixed; left:0; right:0; bottom:0; z-index:12; max-height:70vh; overflow:auto;
-              background:var(--surface-2); border-top:1px solid var(--line);
-              border-radius:20px 20px 0 0; border-radius:var(--radius-sheet) var(--radius-sheet) 0 0;
-              padding:8px 16px calc(16px + env(safe-area-inset-bottom)); text-align:left;
-              box-shadow:0 -8px 32px rgba(0,0,0,.45); }
-#replySheet[hidden] { display:none; }
-.sheetHead { display:-webkit-flex; display:flex; -webkit-align-items:center; align-items:center;
-             -webkit-justify-content:space-between; justify-content:space-between; gap:8px; padding:8px 0; }
-.sheetHead h2 { font-size:18px; font-weight:600; }
-.sheetHead button { background:none; border:0; color:var(--accent); font-size:16px; }
-#replyActions { display:block; }
-#replyActions button { display:block; width:100%; margin:8px 0; min-height:56px; text-align:left;
-                       font-size:18px; padding:12px 16px; border-radius:12px; background:var(--surface-3);
-                       border:1px solid var(--line); color:var(--on-surface); }
-/* Landscape and expanded: video left (>= 60%), details and actions in the right column. */
-@media (min-width: 900px), (orientation: landscape) and (min-width: 600px) {
-  @supports (display:grid) {
-    #callView { grid-template-columns:minmax(0, 62fr) minmax(300px, 38fr); text-align:left; }
-    #callView[style*="block"] { display:grid !important; }
-    #callView .callMedia { display:-webkit-flex; display:flex; -webkit-align-items:center; align-items:center; min-height:100vh; min-height:100dvh; }
-    #callView .callMedia img, #callView .callMedia video { max-height:100vh; max-height:100dvh; }
-    #callView .callSide { display:-webkit-flex; display:flex; -webkit-flex-direction:column; flex-direction:column;
-                          min-height:100vh; min-height:100dvh; padding:var(--s6) var(--s5) 0; }
-    #callBadges { -webkit-justify-content:flex-start; justify-content:flex-start; }
-    #callActions { margin-top:auto; }
-    #replySheet { left:auto; top:0; width:400px; max-width:90vw; max-height:none; border-radius:0;
-                  border-top:0; border-left:1px solid var(--line); }
-  }
-}
-
-/* ================================================================ Live view / in call (call.html) */
-#doorTabs { padding-top:max(8px, env(safe-area-inset-top)); overflow-x:auto; -webkit-flex-wrap:nowrap;
-            flex-wrap:nowrap; scrollbar-width:none; }
-#doorTabs button { -webkit-flex:none; flex:none; font-size:18px; font-size:clamp(15px, .8rem + .6vw, 20px);
-                   background:var(--surface-2); border-color:var(--line); color:var(--on-surface); }
-#doorTabs button.sel { background:var(--surface-3); border-color:var(--accent); }
-#callBtn { font-size:24px; font-size:clamp(20px, 1rem + 1vw, 28px); min-height:72px;
-           padding:12px 40px; padding:12px clamp(24px, 6vw, 56px); background:var(--positive); color:var(--on-positive); }
-#callBtn.hang { background:var(--negative); color:var(--on-negative); }
-#controls { gap:12px 18px; padding-bottom:calc(4px + env(safe-area-inset-bottom)); }
-#videoToggle { min-height:44px; }
-#videoToggle input { width:24px; height:24px; min-height:0; }
-#status { color:var(--muted); }
-@media (max-width: 599.98px) {
-  header h1 { font-size:20px; }
-  #selfPreview { width:28%; }
-  #callBtn { -webkit-flex:1 1 100%; flex:1 1 100%; }
-}
-@media (min-width: 900px), (orientation: landscape) and (min-width: 600px) {
-  @supports (display:grid) {
-    body.callPage main { display:grid; grid-template-columns:minmax(0, 62fr) minmax(280px, 38fr);
-                         grid-template-rows:minmax(0, 1fr) auto; gap:0 var(--s5); align-items:stretch; }
-    body.callPage #videoBox { grid-row:1 / span 2; max-width:none; }
-    body.callPage #controls { -webkit-flex-direction:column; flex-direction:column; -webkit-align-items:stretch;
-                              align-items:stretch; -webkit-justify-content:flex-end; justify-content:flex-end; padding-top:0; }
-    body.callPage #status { text-align:left; }
+/* ================================================================ Quick-reply sheet (monitor, call) */
+#sheetScrim { position:fixed; left:0; top:0; right:0; bottom:0; z-index:11; background:rgba(0,0,0,.6);
+              background:var(--scrim); }
+#replySheet { position:fixed; left:0; right:0; bottom:0; z-index:12; max-height:70%; overflow:auto;
+              -webkit-overflow-scrolling:touch; text-align:left;
+              background:#1a2027; background:var(--surface-2); border-top:1px solid #343f4b; border-top:1px solid var(--line);
+              border-radius:20px 20px 0 0; padding:8px 16px 16px;
+              box-shadow:0 -8px 32px rgba(0,0,0,.3); }
+.sheetHead { display:-webkit-box; -webkit-box-align:center; padding:8px 0; }
+.sheetHead h2 { -webkit-box-flex:1; font-size:18px; font-size:1.125rem; }
+.sheetHead button { background:transparent; border-color:transparent; color:#4da3ff; color:var(--accent); font-weight:600; }
+#replyActions button { display:block; width:100%; margin:8px 0 0; min-height:56px; text-align:left;
+                       font-size:18px; font-size:1.125rem; padding:12px 16px; border-radius:12px; }
+@supports (display:grid) {
+  #replySheet { max-height:70vh; padding-bottom:calc(16px + env(safe-area-inset-bottom));
+                padding-left:calc(16px + env(safe-area-inset-left)); padding-right:calc(16px + env(safe-area-inset-right));
+                animation:dbSheetUp var(--dur) var(--ease); }
+  .sheetHead { display:flex; align-items:center; justify-content:space-between; }
+  .sheetHead h2 { flex:1; min-width:0; }
+  @keyframes dbSheetUp { from { transform:translateY(24px); opacity:0; } }
+  #sheetScrim { animation:dbFade var(--dur) linear; }
+  @keyframes dbFade { from { opacity:0; } }
+  /* Expanded: a centred dialog instead of a bottom sheet. */
+  @media (min-width: 900px) {
+    #replySheet { left:50%; right:auto; top:50%; bottom:auto; width:480px; max-width:90vw; max-height:80vh;
+                  transform:translate(-50%, -50%); border:1px solid var(--line); border-radius:var(--radius-sheet);
+                  padding:12px 20px 20px; box-shadow:var(--shadow); animation:dbFade var(--dur) linear; }
   }
 }
 
 /* ================================================================ Visitor (door.html) */
-.doorBtn { font-size:28px; font-size:clamp(1.5rem, 1rem + 2vw, 2.2rem); min-height:88px;
-           background:var(--accent); border-color:transparent; color:var(--on-accent); }
-.doorBtn:active { background:var(--on-accent); color:var(--accent); }
-#visitorActions .doorBtn { margin:0; max-width:none; }
-#visitorActions #doorList { -webkit-flex:1; flex:1; min-width:0; }
-#visitorActions #doorList .doorBtn + .doorBtn { margin-top:12px; }
-#purposeStep { padding:0 0 16px; }
-.purposeBtn { min-height:72px; min-height:var(--tap-visitor); font-size:20px;
-              font-size:clamp(1.1rem, .95rem + .6vw, 1.5rem); background:var(--surface-2); color:var(--on-surface); }
-.purposeBtn .pIcon { display:block; font-size:1.8em; line-height:1.2; }
-.purposeBtn .pLabel { display:block; overflow-wrap:anywhere; }
-@supports (display:grid) {
-  #purposeStep { grid-template-columns:repeat(2, minmax(0, 1fr)); gap:var(--s3); max-width:1100px; margin:0 auto; }
-  #purposeStep[style*="block"] { display:grid !important; }
-  #purposeStep .purposeBtn { margin:0; max-width:none; min-height:120px; }
-  #purposeStep .purposeBtn.skip { grid-column:1 / -1; min-height:var(--tap-visitor); background:transparent; }
-}
-@media (min-width: 900px) { @supports (display:grid) { #purposeStep { grid-template-columns:repeat(3, minmax(0, 1fr)); } } }
-@media (min-width: 1400px) { @supports (display:grid) { #purposeStep { grid-template-columns:repeat(4, minmax(0, 1fr)); } } }
-#callingView .big { font-size:28px; font-size:clamp(1.6rem, 1rem + 2.4vw, 2.8rem); color:var(--accent); }
+body.doorPage { height:100%; overflow:hidden; }
+#layout { display:-webkit-box; -webkit-box-orient:vertical; width:100%; height:100%; }
+body.doorPage .band { max-height:30%; overflow:auto; font-size:18px; font-size:1.125rem; }
+#replyBanner { display:none; padding:14px 16px; text-align:center; max-height:35%; overflow:auto;
+               background:#1a7f43; background:var(--positive); color:#fff; color:var(--on-positive); }
+#replyBanner .cap { font-size:16px; font-size:1rem; opacity:.9; }
+#replyBanner .txt { font-size:32px; font-size:2rem; font-weight:bold; line-height:1.25; overflow-wrap:break-word; word-wrap:break-word; }
+.visitorHeading { display:-webkit-box; -webkit-box-align:center; padding:12px 16px 4px; }
+.visitorHeading h1 { -webkit-box-flex:1; font-size:20px; font-size:1.25rem; text-align:left; padding-right:12px;
+                     color:#9aa7b5; color:var(--muted); font-weight:normal; overflow-wrap:anywhere; }
+.langSwitch { white-space:nowrap; }
+.langSwitch button { min-height:72px; min-height:var(--tap-visitor); min-width:72px; min-width:var(--tap-visitor);
+                     padding:8px 14px; margin-left:8px; font-size:18px; font-size:1.125rem;
+                     background:transparent; }
+.langSwitch button[aria-pressed="true"] { background:#27313b; background:var(--surface-3); border-color:#4da3ff;
+                     border-color:var(--accent); font-weight:bold; }
+#main { -webkit-box-flex:1; min-height:0; width:100%; text-align:center; padding:12px 16px 16px;
+        overflow:auto; -webkit-overflow-scrolling:touch; }
+#hint { font-size:22px; font-size:1.375rem; line-height:1.35; padding:8px 0 12px; }
+#note { color:#9aa7b5; color:var(--muted); font-size:16px; font-size:1rem; padding:12px 0; }
+.doorBtn { display:block; width:100%; max-width:720px; min-height:96px; margin:12px auto; padding:16px;
+           border:0; border-radius:18px; background:#4da3ff; background:var(--accent); color:#04121f; color:var(--on-accent);
+           font-size:32px; font-size:2rem; font-weight:bold; line-height:1.15; }
+.doorBtn .doorName { display:block; font-size:.5em; font-weight:normal; line-height:1.35; margin-top:6px; overflow-wrap:anywhere; }
+.doorBtn.half { display:inline-block; width:47%; margin:8px 1%; vertical-align:top; }
+#callingView { display:none; }
+#callingView .door { font-size:20px; font-size:1.25rem; color:#9aa7b5; color:var(--muted); overflow-wrap:anywhere; }
+#callingView .big { font-size:36px; font-size:2.25rem; font-weight:bold; line-height:1.2; padding:12px 4px;
+                    overflow-wrap:break-word; word-wrap:break-word; }
 #callingView.pending .big { -webkit-animation:dbPulse 1.6s ease-in-out infinite; animation:dbPulse 1.6s ease-in-out infinite; }
 @-webkit-keyframes dbPulse { 50% { opacity:.55; } }
 @keyframes dbPulse { 50% { opacity:.55; } }
-#replyBanner .txt { font-size:2rem; font-size:clamp(1.6rem, 1rem + 2.5vw, 3rem); }
-#cancelCall { background:var(--negative); color:var(--on-negative); min-height:88px; }
-
-/* ================================================================ SOS (runtime.js overlay) */
-.dbEmergencyOverlay { background:#8f1010; background:var(--negative); color:#fff; color:var(--on-negative);
-                      overflow:auto; padding:env(safe-area-inset-top) env(safe-area-inset-right)
-                      env(safe-area-inset-bottom) env(safe-area-inset-left); }
-.dbEmergencyOverlay h2 { font-size:clamp(2rem, 1rem + 5vw, 4rem) !important; overflow-wrap:anywhere; }
-.dbEmergencyOverlay p { font-size:clamp(1.1rem, .9rem + 1vw, 1.6rem) !important; }
-.dbSosTrigger { bottom:calc(18px + env(safe-area-inset-bottom)); right:calc(18px + env(safe-area-inset-right));
-                background:var(--negative); }
-/* Docked SOS: part of a fixed action zone (leading edge), never floating over content. */
-#controls .dbSosTrigger, #callActions .dbSosTrigger, #dashTabs .dbSosTrigger, #dashHeader .dbSosTrigger {
-  position:static; -webkit-flex:none; flex:none; min-width:72px; min-height:56px; margin:0;
-  border-radius:16px; padding:6px 10px; background:#8f1010; background:var(--negative);
-  color:#fff; color:var(--on-negative); border:2px solid #fff; font-weight:bold; }
-#dashHeader .dbSosTrigger { min-height:48px; min-width:64px; padding:4px 12px; border-radius:24px; }
-#dashHeader .dbSosTrigger .dbSosLabel, #dashTabs .dbSosTrigger .dbSosLabel { font-size:18px; }
-#dashHeader .dbSosTrigger .dbSosHint, #dashTabs .dbSosTrigger .dbSosHint { font-size:10px; margin-top:2px; }
-
-@media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { -webkit-animation:none !important; animation:none !important;
-                           transition-duration:.01ms !important; scroll-behavior:auto !important; }
-}
-
-/* ================================================================ Video placeholders */
-.videoPh { position:absolute; left:0; top:0; right:0; bottom:0; z-index:1; display:-webkit-flex; display:flex;
-           -webkit-flex-direction:column; flex-direction:column; -webkit-align-items:center; align-items:center;
-           -webkit-justify-content:center; justify-content:center; gap:8px; padding:12px; text-align:center;
-           background:#1a2027; background:linear-gradient(160deg, var(--surface-2), var(--surface-3));
-           color:var(--on-surface); font-size:18px; }
-.videoPh .phDoor { font-weight:600; font-size:1.15em; overflow-wrap:anywhere; }
-.videoPh .phText { color:var(--muted); font-size:.9em; }
-.videoPh .phSpin { display:none; width:28px; height:28px; border-radius:50%; border:3px solid var(--line);
-                   border-top-color:var(--accent); -webkit-animation:dbSpin 1s linear infinite; animation:dbSpin 1s linear infinite; }
-.videoPh.connecting .phSpin { display:block; }
-.videoPh.offline { background:var(--surface-2); }
-@-webkit-keyframes dbSpin { to { -webkit-transform:rotate(360deg); } }
-@keyframes dbSpin { to { transform:rotate(360deg); } }
-#videoBox #noVideo { position:absolute; color:var(--on-surface); font-size:20px; }
-.callMedia { position:relative; }
-
-/* ================================================================ Call page action zone */
-body.callPage #controls { display:grid; grid-template-columns:auto minmax(0, 1fr);
-  grid-template-areas:"sos primary" "sos secondary" "status status"; gap:8px 12px; -webkit-align-items:start;
-  align-items:start; width:100%; max-width:960px; position:-webkit-sticky; position:sticky; bottom:0; z-index:3;
-  background:var(--surface); padding:12px 0 calc(12px + env(safe-area-inset-bottom)); }
-body.callPage #controls > .dbSosTrigger { grid-area:sos; }
-#primaryRow { grid-area:primary; display:-webkit-flex; display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap; gap:8px; }
-#primaryRow #callBtn { -webkit-flex:1 1 100%; flex:1 1 100%; padding-left:16px; padding-right:16px; }
-#primaryRow #replyBtn, #primaryRow #ignoreBtn, #secondaryRow button {
-  -webkit-flex:1 1 40%; flex:1 1 40%; min-height:56px; font-size:17px; border-radius:14px; padding:8px 14px;
-  background:var(--surface-3); border:1px solid var(--line); color:var(--on-surface); }
-#primaryRow #ignoreBtn { background:transparent; color:var(--muted); }
-#primaryRow [hidden], #secondaryRow [hidden], #replySheet[hidden] { display:none !important; }
-#secondaryRow { grid-area:secondary; display:-webkit-flex; display:flex; -webkit-flex-wrap:wrap; flex-wrap:wrap;
-                gap:8px; -webkit-align-items:center; align-items:center; }
-#secondaryRow #micBtn[aria-pressed="true"] { background:var(--warning); color:var(--on-warning); }
-body.callPage #controls #status { grid-area:status; text-align:left; padding:0; min-height:0; }
-body.callPage #controls > :not(.dbSosTrigger):first-child { grid-column:1 / -1; }
-@media (min-width: 900px), (orientation: landscape) and (min-width: 600px) {
-  @supports (display:grid) {
-    body.callPage #controls { grid-template-columns:auto minmax(0, 1fr); align-self:end; }
-  }
-}
-
-/* ================================================================ Door strip (call page) */
-#doorTabs { -webkit-mask-image:linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
-            mask-image:linear-gradient(to right, transparent 0, #000 12px, #000 calc(100% - 28px), transparent 100%);
-            scroll-snap-type:x proximity; scroll-padding:0 16px; padding-right:28px; }
-#doorTabs button { scroll-snap-align:start; max-width:70vw; }
-#doorTabs button span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:block; }
-
-/* ================================================================ Dashboard: expanded fill */
-@media (min-width: 900px) {
-  @supports (display:grid) {
-    #snapGrid { grid-auto-rows:minmax(0, 1fr); }
-    #snapGrid .snapCard { display:-webkit-flex; display:flex; -webkit-flex-direction:column; flex-direction:column; min-height:0; }
-    #snapGrid .snapCard .tileMedia { -webkit-flex:1 1 auto; flex:1 1 auto; aspect-ratio:auto; min-height:0; }
-    #snapGrid .snapCard .tileMedia img, #snapGrid .snapCard .tileMedia video { object-fit:contain; position:absolute;
-      left:0; top:0; }
-    #historyPane { height:var(--dash-avail, auto); overflow:auto; overscroll-behavior:contain; }
-    #historyPane #evCard { min-height:100%; }
-  }
-}
-
-/* Incoming-call actions: SOS in the leading column, Answer across the top, Reply and Ignore below. */
+#callStatus { min-height:32px; font-size:20px; font-size:1.25rem; line-height:1.4; padding:4px 4px 16px;
+              color:#9aa7b5; color:var(--muted); }
+#purposeStep { display:none; padding:0 0 8px; }
+.purposeBtn { display:inline-block; vertical-align:top; width:47%; margin:6px 1%; min-height:96px; padding:14px 12px;
+              border-radius:14px; background:#1a2027; background:var(--surface-2); font-size:22px; font-size:1.375rem;
+              line-height:1.3; }
+.purposeBtn .pIcon { display:block; font-size:1.8em; line-height:1.2; }
+.purposeBtn .pLabel { display:block; overflow-wrap:anywhere; }
+.purposeBtn.skip { display:block; width:98%; min-height:72px; min-height:var(--tap-visitor); background:transparent;
+                   color:#9aa7b5; color:var(--muted); }
+#visitorActions { display:-webkit-box; -webkit-box-align:stretch; padding:12px 16px;
+                  background:#101418; background:var(--surface); border-top:1px solid #343f4b; border-top:1px solid var(--line); }
+#visitorActions #doorList { -webkit-box-flex:1; min-width:0; }
+#visitorActions .doorBtn { margin:0; max-width:none; }
+#cancelCall { display:none; -webkit-box-flex:1; min-width:0; min-height:80px; padding:14px 10px; border-radius:16px;
+              background:#b3261e; background:var(--negative); color:#fff; color:var(--on-negative); border-color:transparent;
+              font-size:26px; font-size:1.625rem; font-weight:bold; line-height:1.2; }
+/* Back out of the purpose step: nothing was sent yet, so it is not a destructive action. */
+#cancelCall.back { background:#27313b; background:var(--surface-3); color:#e8edf2; color:var(--on-surface);
+                   border-color:#343f4b; border-color:var(--line); }
+body #visitorActions .dbSosTrigger { position:static; z-index:auto; width:88px; min-width:88px; min-height:80px; margin:0 12px 0 0;
+              border-radius:16px; }
+body .dbEmergencyOverlay { overflow:auto; }
+body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:auto; left:auto; right:auto; margin:8% 5%; }
 @supports (display:grid) {
-  #callActions { display:grid; grid-template-columns:auto minmax(0, 1fr) minmax(0, 1fr); gap:12px; }
-  #callActions .dbSosTrigger { grid-column:1; grid-row:1 / span 2; -webkit-align-self:stretch; align-self:stretch; }
-  #callActions #answerBtn { grid-column:2 / span 2; grid-row:1; }
+  #layout { display:flex; flex-direction:column; height:100vh; height:100dvh; }
+  .visitorHeading { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px 12px;
+                    padding:max(12px, env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 4px calc(16px + env(safe-area-inset-left)); }
+  .visitorHeading h1 { flex:1 1 auto; min-width:0; padding:0; }
+  .langSwitch { display:flex; gap:8px; }
+  .langSwitch button { margin:0; }
+  #main { flex:1 1 auto; display:flex; flex-direction:column;
+          padding-left:calc(16px + env(safe-area-inset-left)); padding-right:calc(16px + env(safe-area-inset-right)); }
+  #main > * { flex:none; width:100%; max-width:1100px; margin-left:auto; margin-right:auto; }
+  /* Centred while it fits, scrollable from the top when it does not. */
+  #main:before, #main:after { content:""; flex:1 1 0; }
+  #hint { font-size:clamp(1.25rem, 1rem + 1.4vw, 2rem); }
+  .doorBtn { font-size:clamp(2rem, 1.4rem + 2.4vw, 3.25rem); min-height:clamp(96px, 14vh, 144px); }
+  .doorBtn.half { display:block; width:100%; margin:0; }
+  #main #doorList { display:grid; grid-template-columns:minmax(0, 1fr); gap:12px; max-width:720px; }
+  #main #doorList .doorBtn { margin:0; max-width:none; }
+  #callingView .big { font-size:clamp(2rem, 1.2rem + 3vw, 3.5rem); }
+  #purposeGrid { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:12px; }
+  .purposeBtn { display:block; width:auto; margin:0; min-height:112px; font-size:clamp(1.25rem, 1rem + .8vw, 1.625rem); }
+  .purposeBtn.skip { grid-column:1 / -1; width:auto; }
+  #visitorActions { display:flex; align-items:stretch; gap:12px; flex:none;
+                    padding:12px calc(16px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); }
+  #visitorActions #doorList, #cancelCall { flex:1 1 auto; }
+  body #visitorActions .dbSosTrigger { flex:0 0 88px; margin:0; }
+  @media (min-width: 600px) {
+    #main #doorList.many { grid-template-columns:repeat(2, minmax(0, 1fr)); max-width:1100px; }
+  }
+  @media (min-width: 900px) {
+    #purposeGrid { grid-template-columns:repeat(3, minmax(0, 1fr)); }
+    #visitorActions { padding-left:max(24px, calc(50vw - 480px)); padding-right:max(24px, calc(50vw - 480px)); }
+  }
+  @media (min-width: 1400px) { #purposeGrid { grid-template-columns:repeat(4, minmax(0, 1fr)); } }
+  /* Short landscape screens: keep the action zone and at least one row of content in view. */
+  @media (max-height: 500px) {
+    .visitorHeading h1 { font-size:1rem; }
+    #hint { padding:0 0 4px; }
+    #callingView .big { padding:4px; font-size:1.75rem; }
+    #callStatus { padding-bottom:8px; }
+    .purposeBtn { min-height:var(--tap-visitor); }
+    #note { padding:4px 0; }
+  }
+}
+
+/* ================================================================ Dashboard (monitor.html) */
+body.monitorPage { padding-bottom:84px; }
+#dashHeader { padding:12px 16px; background:#101418; background:var(--surface);
+              border-bottom:1px solid #343f4b; border-bottom:1px solid var(--line); }
+#dashHeader:after, #dashBody:after { content:""; display:block; clear:both; }
+.dashClock { float:left; margin-right:16px; }
+#clock { display:block; font-size:44px; font-size:2.75rem; font-weight:600; line-height:1; letter-spacing:-.01em; }
+#dashHeader h1 { font-size:15px; font-size:.9375rem; color:#9aa7b5; color:var(--muted); font-weight:normal; margin-top:4px; }
+#statusChips { float:left; padding-top:10px; }
+#statusChips .chip { margin:0 8px 4px 0; font-size:16px; font-size:1rem; padding:6px 14px; }
+#pushBar { float:right; padding-top:6px; color:#9aa7b5; color:var(--muted); font-size:14px; font-size:.875rem; text-align:right; }
+#pushBar #pushStatus { display:inline-block; vertical-align:middle; margin-left:8px; }
+#dashTabs { position:fixed; left:0; right:0; bottom:0; z-index:6; display:-webkit-box; -webkit-box-align:center;
+            padding:6px 8px; background:#1a2027; background:var(--surface-2);
+            border-top:1px solid #343f4b; border-top:1px solid var(--line); }
+#dashTabs button[role=tab] { -webkit-box-flex:1; display:block; min-height:56px; margin:0 3px; background:transparent;
+            border-color:transparent; color:#9aa7b5; color:var(--muted); font-size:15px; font-size:.9375rem; border-radius:12px; }
+#dashTabs button[aria-selected="true"] { color:#4da3ff; color:var(--accent); font-weight:600; }
+#dashBody { padding:16px; }
+#dashBody[data-pane="doors"] #historyPane, #dashBody[data-pane="history"] #doorsPane { display:none; }
+.paneEmpty { color:#9aa7b5; color:var(--muted); padding:24px 8px; text-align:center; }
+.paneEmpty:empty { display:none; }
+.snapCard { position:relative; display:inline-block; vertical-align:top; width:47%; margin:0 1.5% 16px; overflow:hidden;
+            cursor:pointer; background:#1a2027; background:var(--surface-2);
+            border:1px solid #343f4b; border:1px solid var(--line); border-radius:12px; }
+.tileFoot { padding:10px 12px 12px; }
+.tileFoot:after { content:""; display:block; clear:both; }
+.tileFoot .lbl { float:left; max-width:65%; font-size:18px; font-size:1.125rem; font-weight:600; overflow-wrap:anywhere; }
+.tileFoot .chip { float:right; }
+.tileLast { clear:both; padding-top:4px; font-size:14px; font-size:.875rem; color:#9aa7b5; color:var(--muted); }
+.tileLast:empty { display:none; }
+.snapCard.is-ringing { border-color:#4da3ff; border-color:var(--accent); box-shadow:0 0 0 3px #4da3ff; box-shadow:0 0 0 3px var(--accent); }
+.snapCard.is-offline .tileMedia img, .snapCard.is-offline .tileMedia video { opacity:.4; }
+
+#evCard { padding:8px 16px 12px; background:#1a2027; background:var(--surface-2);
+          border:1px solid #343f4b; border:1px solid var(--line); border-radius:12px; }
+#evHead { display:-webkit-box; -webkit-box-align:center; min-height:52px; }
+#evHead h2 { -webkit-box-flex:1; font-size:20px; font-size:1.25rem; }
+#markSeen { display:none; background:transparent; border-color:transparent; color:#4da3ff; color:var(--accent); font-weight:600; padding:10px 8px; }
+.hday { font-size:13px; font-size:.8125rem; letter-spacing:.04em; text-transform:uppercase; color:#9aa7b5; color:var(--muted);
+        font-weight:600; margin:16px 0 4px; }
+.hday:first-child { margin-top:4px; }
+.hlist { list-style:none; }
+.hrow { display:-webkit-box; -webkit-box-align:center; min-height:56px; padding:8px 0;
+        border-bottom:1px solid #343f4b; border-bottom:1px solid var(--line); }
+.hrow:last-child { border-bottom:0; }
+.hicon { display:block; width:32px; height:32px; margin-right:12px; border-radius:16px; text-align:center; line-height:32px;
+         background:#27313b; background:var(--surface-3); color:#9aa7b5; color:var(--muted); }
+.hicon .ic { width:18px; height:18px; margin:7px 0 0; vertical-align:top; }
+.out-answered .hicon { background:#1a7f43; background:var(--positive); color:#fff; color:var(--on-positive); }
+.out-missed .hicon { background:#b3261e; background:var(--negative); color:#fff; color:var(--on-negative); }
+.out-replied .hicon { background:#4da3ff; background:var(--accent); color:#04121f; color:var(--on-accent); }
+.htime { display:block; min-width:3.2em; margin-right:8px; color:#9aa7b5; color:var(--muted); font-variant-numeric:tabular-nums; }
+.hmain { display:block; -webkit-box-flex:1; min-width:0; }
+.hdoor { font-weight:600; overflow-wrap:anywhere; }
+.hpurpose { color:#9aa7b5; color:var(--muted); }
+.hout { display:block; color:#9aa7b5; color:var(--muted); font-size:14px; font-size:.875rem; }
+.hrow.unread .hdoor:after { content:""; display:inline-block; width:8px; height:8px; margin-left:8px; border-radius:4px;
+                            background:#b3261e; background:var(--negative); vertical-align:middle; }
+.out-missed .hout { color:#ff8e8e; color:var(--negative-text); font-weight:600; }
+.hthumb { display:block; width:72px; height:40px; margin-left:12px; object-fit:cover; border-radius:6px; }
+body #dashTabs .dbSosTrigger, body #dashHeader .dbSosTrigger, body #callActions .dbSosTrigger, body #controls .dbSosTrigger {
+  position:static; z-index:auto; min-width:76px; min-height:56px; margin:0 8px 0 0; padding:6px 8px; border-radius:14px; }
+body #dashHeader .dbSosTrigger { float:left; margin-right:16px; }
+body .dbSosTrigger .dbSosLabel { font-size:20px; font-size:1.25rem; }
+body .dbSosTrigger .dbSosHint { font-size:11px; font-size:.6875rem; margin-top:2px; }
+.tabBadge { display:inline-block; min-width:20px; margin-left:6px; padding:0 6px; border-radius:10px; font-size:12px;
+            font-size:.75rem; line-height:20px; font-weight:bold; text-align:center; vertical-align:middle;
+            background:#b3261e; background:var(--negative); color:#fff; color:var(--on-negative); }
+.tabBadge:empty { display:none; }
+/* Unread missed calls on the Doors view: one notice that opens History. */
+.notice { display:block; width:100%; margin:0 0 16px; padding:12px 16px; min-height:52px; text-align:left;
+          border-radius:12px; background:#1a2027; background:var(--surface-2); font-weight:600;
+          color:#ff8e8e; color:var(--negative-text); }
+/* Expanded: the same two tabs as a top tab list under the header instead of a bottom bar. */
+@media (min-width: 900px) {
+  body.monitorPage { padding-bottom:0; }
+  #dashTabs { position:static; padding:8px 16px 0; background:transparent; border-top:0; }
+  #dashTabs button[role=tab] { -webkit-box-flex:0; min-height:44px; padding:8px 18px; }
+  #dashTabs button[aria-selected="true"] { background:#27313b; background:var(--surface-3); }
+}
+@supports (display:grid) {
+  body.monitorPage { padding-bottom:calc(76px + env(safe-area-inset-bottom)); }
+  #dashHeader { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px;
+                padding:max(10px, env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 10px calc(16px + env(safe-area-inset-left)); }
+  #dashHeader:after { display:none; }
+  .dashClock, #statusChips, #pushBar, body #dashHeader .dbSosTrigger { float:none; margin:0; padding:0; }
+  .dashClock { display:flex; flex-direction:column; }
+  #clock { font-size:clamp(2.25rem, 1.6rem + 2.4vw, 3.5rem); font-variant-numeric:tabular-nums; }
+  #statusChips { display:flex; flex-wrap:wrap; align-items:center; gap:8px; flex:1 1 auto; min-width:0; }
+  #statusChips .chip { margin:0; }
+  #pushBar { display:flex; align-items:center; gap:10px; }
+  #pushBar #pushStatus { margin:0; }
+  #dashTabs { display:flex; align-items:stretch; gap:6px;
+              padding:6px calc(8px + env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left)); }
+  #dashTabs button[role=tab] { flex:1 1 0; margin:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
+  #dashTabs button[role=tab] .ic { width:24px; height:24px; margin:0; }
+  body #dashTabs .dbSosTrigger { margin:0; flex:none; }
+  #dashBody { padding:16px calc(16px + env(safe-area-inset-right)) 24px calc(16px + env(safe-area-inset-left)); }
+  #snapGrid { display:grid; grid-template-columns:minmax(0, 1fr); gap:16px; }
+  .snapCard { display:block; width:auto; margin:0; box-shadow:var(--shadow); transition:box-shadow var(--dur) var(--ease); }
+  .tileFoot { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; }
+  .tileFoot:after { display:none; }
+  .tileFoot .lbl { float:none; max-width:none; flex:1 1 auto; min-width:0; }
+  .tileFoot .chip { float:none; }
+  .tileLast { flex-basis:100%; padding:0; }
+  #evCard { box-shadow:var(--shadow); }
+  #evHead { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  #evHead h2 { flex:1 1 auto; min-width:0; }
+  .hrow { display:flex; align-items:center; gap:12px; }
+  .hicon { flex:none; margin:0; display:flex; align-items:center; justify-content:center; }
+  .hicon .ic { margin:0; }
+  .htime { flex:none; margin:0; }
+  .hmain { flex:1 1 auto; }
+  .hthumb { flex:none; margin:0; }
+  @media (max-width: 599.98px) {
+    #pushBar { flex-basis:100%; justify-content:space-between; }
+    #pushBar #pushStatus { order:-1; text-align:left; }
+  }
+  @media (min-width: 600px) {
+    #snapGrid { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    #dashBody { padding-top:20px; padding-left:calc(24px + env(safe-area-inset-left)); padding-right:calc(24px + env(safe-area-inset-right)); }
+    #dashHeader { padding-left:calc(24px + env(safe-area-inset-left)); padding-right:calc(24px + env(safe-area-inset-right)); }
+    #evCard { max-width:720px; margin:0 auto; }
+  }
+  .notice { display:flex; align-items:center; box-shadow:var(--shadow); }
+  #dashTabs button[role=tab] .tabBadge { position:absolute; margin:0; top:6px; left:50%; transform:translateX(8px); }
+  #dashTabs button[role=tab] { position:relative; }
+  @media (min-width: 900px) {
+    body.monitorPage { padding-bottom:0; }
+    #dashTabs { padding:12px calc(24px + env(safe-area-inset-right)) 0 calc(24px + env(safe-area-inset-left)); gap:8px; }
+    #dashTabs button[role=tab] { flex:none; flex-direction:row; gap:8px; }
+    #dashTabs button[role=tab] .ic { width:20px; height:20px; }
+    #dashTabs button[role=tab] .tabBadge { position:static; transform:none; }
+    #snapGrid { grid-template-columns:repeat(auto-fill, minmax(260px, 1fr)); }
+    .notice { max-width:720px; }
+  }
+}
+
+/* ================================================================ Incoming call (monitor.html) */
+#callView { display:none; position:fixed; left:0; top:0; right:0; bottom:0; z-index:10; overflow:auto;
+            -webkit-overflow-scrolling:touch; background:#101418; background:var(--surface); text-align:center; }
+#callView .callMedia { max-width:640px; margin:0 auto; }
+#callView .callSide { padding:16px; }
+#callView .msg { font-size:36px; font-size:2.25rem; font-weight:bold; line-height:1.2; padding:8px 0; overflow-wrap:anywhere; }
+#callBadges { margin:4px 0 16px; }
+#callBadges .chip { margin:0 4px 6px; font-size:16px; font-size:1rem; padding:6px 14px; }
+#callActions { max-width:640px; margin:0 auto; }
+#callActions button { min-height:56px; font-size:18px; font-size:1.125rem; border-radius:14px; }
+#callActions #answerBtn { display:block; width:100%; min-height:72px; margin-bottom:12px; font-size:26px; font-size:1.625rem; }
+#callActions #replyBtn, #callActions #monitorClose { display:inline-block; width:48%; margin:0 1%; }
+@supports (display:grid) {
+  .callFrame { display:flex; flex-direction:column; min-height:100%;
+               padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+  #callView .callMedia { max-width:none; margin:0; flex:none; }
+  #callView .callSide { flex:1 1 auto; display:flex; flex-direction:column; padding:16px 16px 0; }
+  #callView .msg { font-size:clamp(1.75rem, 1.1rem + 3vw, 3rem); }
+  #callBadges { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+  #callBadges .chip { margin:0; }
+  /* Fixed action zone: SOS leading, Answer (largest) across, Reply and Ignore below it. */
+  #callActions { position:sticky; bottom:0; margin:auto 0 0; max-width:none; width:100%; display:grid;
+                 grid-template-columns:auto minmax(0, 1fr) minmax(0, 1fr); gap:12px;
+                 padding:12px 0 calc(16px + env(safe-area-inset-bottom)); background:var(--surface); }
+  body #callActions .dbSosTrigger { grid-column:1; grid-row:1 / span 2; margin:0; align-self:stretch; }
+  #callActions #answerBtn { grid-column:2 / span 2; grid-row:1; margin:0; width:auto; }
+  #callActions #replyBtn, #callActions #monitorClose { width:auto; margin:0; display:flex; align-items:center; justify-content:center; }
+  #callActions #answerBtn { display:flex; align-items:center; justify-content:center; }
   #callActions #replyBtn { grid-column:2; grid-row:2; }
   #callActions #monitorClose { grid-column:3; grid-row:2; }
   #callActions #replyBtn[style*="none"] + #monitorClose { grid-column:2 / span 2; }
+  #callActions #answerBtn[style*="none"] ~ #replyBtn, #callActions #answerBtn[style*="none"] ~ #monitorClose { grid-row:1; }
+  /* Compact: the two secondary actions are narrow, so their labels get the whole width. */
+  @media (max-width: 599.98px) {
+    #callActions #replyBtn .ic, #callActions #monitorClose .ic { display:none; }
+    #callActions #replyBtn, #callActions #monitorClose { padding-left:8px; padding-right:8px; }
+  }
+  /* Landscape and expanded: video left (at least 60%), details and actions in the right column. */
+  @media (min-width: 900px), (orientation: landscape) and (min-width: 600px) {
+    .callFrame { display:grid; grid-template-columns:minmax(0, 62fr) minmax(300px, 38fr); height:100%; text-align:left; }
+    #callView .callMedia { display:flex; align-items:center; justify-content:center; padding:16px; min-height:0; }
+    #callView .callMedia .ratio { max-width:calc((100vh - 32px) * 16 / 9); max-width:calc((100dvh - 32px) * 16 / 9);
+                                  border-radius:var(--radius); }
+    #callView .callSide { padding:24px 24px 0 8px; min-height:0; overflow:auto; }
+    #callBadges { justify-content:flex-start; }
+  }
+}
+
+/* ================================================================ Live view / in call (call.html) */
+body.callPage { height:100%; }
+#callShell { display:flex; flex-direction:column; height:100vh; height:100dvh;
+             padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
+#callHeader { display:flex; align-items:center; gap:8px; padding:8px 16px; min-height:56px; flex:none; }
+#callHeader h1 { flex:1 1 auto; min-width:0; font-size:1.25rem; overflow-wrap:anywhere; }
+#backLink { display:inline-flex; align-items:center; min-height:44px; min-height:var(--tap); padding:0 10px 0 4px; border-radius:10px;
+            color:var(--accent); text-decoration:none; font-weight:600; flex:none; }
+#backLink .ic { transform:rotate(180deg); margin-right:2px; }
+#notices { flex:none; }
+body.callPage .band { text-align:left; padding:8px 16px; font-size:.9375rem; }
+body.callPage #offlineBand { background:var(--warning); color:var(--on-warning); border-bottom-color:transparent; }
+#doorTabs { flex:none; display:flex; gap:8px; padding:4px 16px 12px; overflow-x:auto; scrollbar-width:none;
+            -webkit-overflow-scrolling:touch; scroll-snap-type:x proximity; scroll-padding:0 16px; }
+#doorTabs::-webkit-scrollbar { display:none; }
+#doorTabs:empty { display:none; }
+#doorTabs button { flex:none; max-width:70vw; min-height:56px; padding:8px 16px; text-align:left; border-radius:12px;
+                   background:var(--surface-2); scroll-snap-align:start; }
+#doorTabs button span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#doorTabs button .st { font-size:.8125rem; color:var(--muted); }
+#doorTabs button .st:empty { display:none; }
+#doorTabs button.sel { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); font-weight:600; }
+#doorTabs button.is-ringing .st { color:var(--accent); font-weight:600; }
+#doorTabs button.is-in_call .st { color:var(--positive-text); font-weight:600; }
+body.callPage main { flex:1 1 auto; min-height:0; overflow:auto; padding:0 16px 12px; }
+#videoBox { border-radius:var(--radius); margin:0 auto;
+            max-width:calc((100vh - 340px) * 16 / 9); max-width:calc((100dvh - 340px) * 16 / 9); min-width:min(100%, 240px); }
+#videoBox #selfPreview { position:absolute; left:auto; top:auto; right:10px; bottom:10px; z-index:2; width:28%; max-width:160px;
+                         height:auto; border-radius:8px; border:1px solid var(--line); display:none; }
+#conversationSummary { white-space:pre-line; padding:12px 0 0; color:var(--muted); }
+#conversationSummary:empty { display:none; }
+#conversationActions { display:flex; flex-wrap:wrap; gap:8px; padding:8px 0 0; }
+#conversationActions:empty { display:none; }
+#conversationActions button { min-height:48px; }
+/* Fixed action zone: SOS leading; primary row (Call/Answer/End, Reply, Ignore); secondary row. */
+#controls { flex:none; display:grid; grid-template-columns:auto minmax(0, 1fr);
+            grid-template-areas:"sos primary" "sos secondary" "status status" "note note"; gap:8px 12px;
+            padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:var(--surface);
+            border-top:1px solid var(--line); }
+body #controls .dbSosTrigger { grid-area:sos; margin:0; align-self:stretch; }
+#primaryRow { grid-area:primary; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
+#controls > #primaryRow:first-child, #controls > #primaryRow:first-child ~ #secondaryRow { grid-column:1 / -1; }
+#primaryRow button, #secondaryRow button { display:flex; align-items:center; justify-content:center; min-height:56px;
+            font-size:1.0625rem; border-radius:14px; }
+#primaryRow #callBtn { grid-column:1 / -1; min-height:72px; font-size:clamp(1.375rem, 1.1rem + 1vw, 1.75rem); font-weight:bold;
+            background:var(--positive); color:var(--on-positive); border-color:transparent; }
+#primaryRow #callBtn.hang { background:var(--negative); color:var(--on-negative); }
+#primaryRow #callBtn:disabled { background:var(--surface-3); color:var(--muted); opacity:1; }
+#primaryRow #ignoreBtn:first-child, #primaryRow #replyBtn[hidden] + #ignoreBtn { grid-column:1 / -1; }
+#secondaryRow { grid-area:secondary; display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+#secondaryRow button { flex:1 1 40%; }
+#secondaryRow #micBtn[aria-pressed="true"] { background:var(--warning); color:var(--on-warning); border-color:transparent; }
+#videoToggle { display:inline-flex; align-items:center; gap:10px; min-height:44px; min-height:var(--tap); padding:0 4px; cursor:pointer; }
+#videoToggle input { width:22px; height:22px; flex:none; }
+#status { grid-area:status; min-height:1.4em; font-size:1.0625rem; }
+#status:empty { min-height:0; }
+#status.err { color:var(--negative-text); }
+#adminNote { grid-area:note; font-size:.8125rem; color:var(--muted); overflow-wrap:anywhere; }
+#adminNote span { display:block; }
+#adminNote span:empty { display:none; }
+@media (max-height: 520px) and (max-width: 599.98px) {
+  #primaryRow #callBtn { min-height:56px; }
+}
+/* Landscape and expanded: picture left (at least 60%), door list and actions in a right column. */
+@media (min-width: 900px), (orientation: landscape) and (min-width: 600px) {
+  #callShell { display:grid; grid-template-columns:minmax(0, 1fr) minmax(300px, 400px);
+               grid-template-rows:auto auto minmax(0, 1fr) auto;
+               grid-template-areas:"main header" "main notices" "main tabs" "main controls"; }
+  #callHeader { grid-area:header; padding:12px 20px 8px 8px; }
+  #notices { grid-area:notices; padding-right:12px; }
+  body.callPage .band { border-radius:10px; border:0; margin:0 8px 8px 0; }
+  #doorTabs { grid-area:tabs; flex-direction:column; overflow-x:hidden; overflow-y:auto; padding:4px 20px 12px 8px; align-content:start; }
+  #doorTabs button { max-width:none; width:100%; flex:none; display:flex; align-items:center; justify-content:space-between; gap:12px; }
+  #doorTabs button span:first-child { flex:1 1 auto; min-width:0; }
+  #doorTabs button .st { flex:none; }
+  body.callPage main { grid-area:main; display:flex; flex-direction:column; justify-content:center; padding:16px; }
+  #videoBox { max-width:calc((100vh - 32px) * 16 / 9); max-width:calc((100dvh - 32px) * 16 / 9); flex:none; }
+  #controls { grid-area:controls; border-top:0; padding:8px 20px calc(16px + env(safe-area-inset-bottom)) 8px; }
+}
+
+/* ================================================================ SOS (runtime.js overlay) */
+.dbEmergencyOverlay { background:#8f1010; background:var(--negative); color:#fff; color:var(--on-negative); }
+body .dbSosTrigger { background:#8f1010; background:var(--negative); color:#fff; color:var(--on-negative); }
+@supports (display:grid) {
+  .dbEmergencyOverlay { overflow:auto; padding:env(safe-area-inset-top) env(safe-area-inset-right)
+                        env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  .dbEmergencyOverlay h2 { font-size:clamp(2rem, 1rem + 5vw, 4rem) !important; overflow-wrap:anywhere; }
+  .dbEmergencyOverlay p { font-size:clamp(1.1rem, .9rem + 1vw, 1.6rem) !important; }
+  body .dbSosOperation { bottom:calc(118px + env(safe-area-inset-bottom)); right:calc(18px + env(safe-area-inset-right)); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *:before, *:after { -webkit-animation:none !important; animation:none !important;
+                         transition-duration:.01ms !important; scroll-behavior:auto !important; }
 }

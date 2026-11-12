@@ -133,9 +133,18 @@ class GenIconsTest(unittest.TestCase):
     def test_outputs_carry_the_generated_banner(self):
         for path in ("android/app/src/main/res/drawable/ic_tabler_door.xml",
                      "win/DoorbellApp/Resources/Icons.xaml",
-                     "webui/icons/tabler-sprite.svg"):
+                     "webui/icons/tabler-sprite.svg",
+                     "webui/panel/icons/tabler-sprite.svg"):
             with open(os.path.join(ROOT, path), "r", encoding="utf-8") as handle:
                 self.assertIn(gen_icons.BANNER, handle.read(), path)
+
+    def test_the_panel_sprite_is_the_generated_sprite(self):
+        # Core serves webui/panel only, so the panel pages reference their own copy. It is
+        # written by the generator and covered by --check; it must never drift from the source.
+        with open(os.path.join(ROOT, "webui/icons/tabler-sprite.svg"), "rb") as handle:
+            standalone = handle.read()
+        with open(os.path.join(ROOT, "webui/panel/icons/tabler-sprite.svg"), "rb") as handle:
+            self.assertEqual(handle.read(), standalone)
 
     def test_geometry_is_passed_through_unchanged(self):
         """Every output but Android carries the vendored path data byte for byte.

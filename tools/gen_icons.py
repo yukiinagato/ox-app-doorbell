@@ -12,6 +12,7 @@ Outputs:
   ios-kiosk/resources/icons/tabler_<name>[@2x].png         raster for iOS 5 (needs Pillow)
   win/DoorbellApp/Resources/Icons.xaml                     Geometry resource dictionary
   webui/icons/tabler-sprite.svg                            standalone sprite
+  webui/panel/icons/tabler-sprite.svg                      the same sprite, served to the panel pages
   webui/admin/index.html                                   the sprite, inlined between markers
 
 Android pathData and the XAML mini-language both take SVG path syntax unchanged, so those two
@@ -301,6 +302,9 @@ def main():
     act(os.path.join(ROOT, "win/DoorbellApp/Resources/Icons.xaml"),
         xaml_dictionary(icons), results)
     act(os.path.join(ROOT, "webui/icons/tabler-sprite.svg"), sprite_svg(icons), results)
+    # Core embeds webui/panel (not webui/icons), so the panel pages get their own copy to
+    # reference with <use href="/panel/icons/tabler-sprite.svg#i-name">.
+    act(os.path.join(ROOT, "webui/panel/icons/tabler-sprite.svg"), sprite_svg(icons), results)
 
     index_path = os.path.join(ROOT, "webui/admin/index.html")
     with open(index_path, "r", encoding="utf-8") as handle:

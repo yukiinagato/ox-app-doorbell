@@ -65,6 +65,6 @@ const server=http.createServer((req,res)=>{
   }
   const file=path.resolve(sourceRoot,"webui",url.pathname.replace(/^\//,""));
   if(!file.startsWith(path.join(sourceRoot,"webui")+path.sep)||!fs.existsSync(file)){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{"Content-Type":"application/javascript","Cache-Control":"no-store"});res.end(fs.readFileSync(file));
+  res.writeHead(200,{"Content-Type":file.endsWith(".css")?"text/css":file.endsWith(".svg")?"image/svg+xml":"application/javascript","Cache-Control":"no-store"});res.end(fs.readFileSync(file));
 });
 server.listen(18769,"127.0.0.1",()=>console.log("Visitor UI fixture: http://127.0.0.1:18769/"));

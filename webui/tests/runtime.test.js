@@ -133,6 +133,50 @@ ReportRuntime.applySemanticUi(reportState, { page: "monitor" });
 assert.strictEqual(uiReportSends, 2);
 delete global.window;
 
+// Manifest defaults are never painted (the stylesheet draws them in light or dark); only an
+// administrator's override is, and a color override paints the whole validated color set.
+{
+  const element = (id, tag, minHeight) => {
+    const attrs = { "data-semantic-id": id };
+    return { tagName: tag, style: { setProperty() {}, removeProperty() {} }, cssMinHeight: minHeight,
+      getAttribute: name => (name in attrs ? attrs[name] : null), hasAttribute: name => name in attrs,
+      setAttribute: (name, value) => { attrs[name] = value; } };
+  };
+  const primary = element("call.primary", "BUTTON", 96), cancel = element("cancel.call", "BUTTON", 0);
+  const saved = {};
+  global.window = {
+    document: { querySelectorAll: selector => selector === "[data-semantic-id]" ? [primary, cancel] : [] },
+    getComputedStyle: el => ({ fontSize: "20px", transform: "none", borderWidth: "0px",
+      minWidth: el.style.minWidth || "0px", minHeight: el.style.minHeight || el.cssMinHeight + "px" }),
+    localStorage: { getItem: key => saved[key] || null, setItem: (key, value) => { saved[key] = value; } }
+  };
+  delete require.cache[runtimePath];
+  const Paint = require(runtimePath);
+  const paint = elements => Paint.applySemanticUi({ web_ui: { device_id: "d", manifest: uiManifest, elements } }, { page: "door" });
+  let report = paint({});
+  assert.deepStrictEqual(report.elements, ["call.primary", "cancel.call"]);
+  for (const el of [primary, cancel]) {
+    assert.strictEqual(el.style.color, "");
+    assert.strictEqual(el.style.backgroundColor, "");
+    assert.strictEqual(el.style.borderRadius, "");
+    assert.strictEqual(el.style.fontSize, "");
+  }
+  assert.strictEqual(primary.style.minHeight, "", "a larger stylesheet minimum (visitor 72 px) is not lowered");
+  assert.strictEqual(cancel.style.minHeight, "44px", "the 44 px touch floor still applies");
+  assert.strictEqual(JSON.parse(saved["doorbell.semantic-ui.v2.d.door"]).elements["call.primary"].scale, undefined,
+    "last-known-good keeps overrides only");
+  paint({ "call.primary": { background: "#003366", radius: 4, font_scale: 1.5 } });
+  assert.strictEqual(primary.style.backgroundColor, "#003366");
+  assert.strictEqual(primary.style.color, "#E8EDF2", "the validated foreground travels with the background");
+  assert.strictEqual(primary.style.borderRadius, "4px");
+  assert.strictEqual(primary.style.fontSize, "30px");
+  assert.strictEqual(cancel.style.backgroundColor, "", "an override touches only its own element");
+  paint({});
+  assert.strictEqual(primary.style.backgroundColor, "", "removing an override returns the element to the stylesheet");
+  assert.strictEqual(primary.style.fontSize, "");
+  delete global.window;
+}
+
 function response(status, body) {
   return { ok: status >= 200 && status < 300, status: status,
            json: function () { return Promise.resolve(body || {}); } };

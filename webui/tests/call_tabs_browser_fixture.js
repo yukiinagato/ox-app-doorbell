@@ -44,6 +44,7 @@ const server = http.createServer((req, res) => {
   if (!resolved.startsWith(path.join(root, "webui") + path.sep) || !fs.existsSync(resolved)) {
     res.writeHead(404); res.end(); return;
   }
-  res.writeHead(200, { "Content-Type": "application/javascript", "Cache-Control": "no-store" }); res.end(fs.readFileSync(resolved));
+  const type = resolved.endsWith(".css") ? "text/css" : resolved.endsWith(".svg") ? "image/svg+xml" : "application/javascript";
+  res.writeHead(200, { "Content-Type": type, "Cache-Control": "no-store" }); res.end(fs.readFileSync(resolved));
 });
 server.listen(18763, "127.0.0.1", () => console.log("Door tab browser fixture: http://127.0.0.1:18763/"));
