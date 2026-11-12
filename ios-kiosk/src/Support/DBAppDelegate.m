@@ -1,5 +1,6 @@
 #import "DBAppDelegate.h"
 #import <dlfcn.h>
+#import <AVFoundation/AVFoundation.h>
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBCompatibilityProfile.h"
 #import "../Core/DBConfigUtil.h"
@@ -650,6 +651,7 @@ static BOOL DBBringAppToForeground(void) {
 }
 
 @implementation DBAppDelegate {
+  BOOL _micPermissionRequested;
   DBCameraFeeder *_camera;
   DBCoreBridge *_core;
   DBBootConfig *_boot;
@@ -1427,6 +1429,17 @@ static NSString *const DBScreenshotOutputPath = @"/var/mobile/Documents/screensh
 }
 
 - (void)applicationDidBecomeActive:(UIApplication *)application {
+  // iOS 7 and later hand a recording app silence until the user (or the TCC
+  // entitlement on a system-installed build) has granted the microphone.
+  if (_boot.micEnabled && !_micPermissionRequested) {
+    AVAudioSession *session = [AVAudioSession sharedInstance];
+    if ([session respondsToSelector:@selector(requestRecordPermission:)]) {
+      _micPermissionRequested = YES;
+      [session requestRecordPermission:^(BOOL granted) {
+        NSLog(@"[audio] microphone permission %@", granted ? @"granted" : @"denied");
+      }];
+    }
+  }
   [self endBackgroundKeepAlive:application];
   _listenerProbeArmedAt = MIN(_listenerProbeArmedAt, [[NSDate date] timeIntervalSince1970] - 20);
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)),
