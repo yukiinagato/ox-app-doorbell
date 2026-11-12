@@ -3,7 +3,8 @@ const assert=require("assert"),L=require("../admin/app.js");
 const ops=(entries,dels)=>L.configBatchOps(entries,dels);
 const base={settings:{name:"old",notify:true,unknown:{nullable:null},array:[1,2]}};
 let changes=L.configIntents(base,ops([{key:"settings",value:{name:"mine"}}]));
-assert.deepStrictEqual(L.configIntentOps(changes),[{op:"set",key:"settings",value:{name:"mine"}}]);
+// A changed field of an existing object is committed at its own leaf key.
+assert.deepStrictEqual(L.configIntentOps(changes),[{op:"set",key:"settings.name",value:"mine"}]);
 let merged=L.configRebase(changes,{settings:{name:"old",notify:false,unknown:{nullable:null}}});
 assert.strictEqual(merged.conflicts.length,0); assert.strictEqual(merged.changes.length,1);
 merged=L.configRebase(changes,{settings:{name:"theirs"}});

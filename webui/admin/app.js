@@ -717,28 +717,35 @@ var AdminLogic = (function () {
   }
 
   function configIntentOps(changes) {
-    var ops = [], groups = {}, deleted = [];
+    var ops = [], groups = {};
     function groupFor(key) {
       var group = groups["$" + key];
       if (!group) { group = { op: "set", key: key, value: {} }; groups["$" + key] = group; ops.push(group); }
       return group;
     }
+    // An object whose field names contain dots (a translation table) cannot be addressed by
+    // dot-path keys, so every change to it travels as one object patch, like a semantic element.
+    var patched = {};
     changes.forEach(function (change) {
-      if (change.op === "delete") deleted.push(change.key + (change.path.length ? "." + change.path.join(".") : ""));
+      if (change.path.some(function (part) { return part.indexOf(".") >= 0; })) patched["$" + change.key] = true;
     });
+    function asPatch(change) {
+      return change.key.indexOf(".local.ui.elements.") >= 0 || patched["$" + change.key] === true;
+    }
     changes.forEach(function (change) {
       var key = change.key + (change.path.length ? "." + change.path.join(".") : "");
-      var semantic = change.key.indexOf(".local.ui.elements.") >= 0;
-      if (semantic && change.path.length && change.op === "delete") {
+      var patch = asPatch(change);
+      if (patch && change.path.length && change.op === "delete") {
         if (change.path.length !== 1) throw new Error("ambiguous_config_removal");
         var removal = groupFor(change.key);
         (removal.remove_fields || (removal.remove_fields = [])).push(change.path[0]);
         return;
       }
-      var split = !semantic && deleted.some(function (removed) { return removed.indexOf(change.key + ".") === 0; });
-      if (change.op === "delete" || !change.path.length || split) {
-        if (split && change.path.some(function (part) { return part.indexOf(".") >= 0; }))
-          throw new Error("ambiguous_config_removal");
+      // Every other changed field is written at its own leaf key. Core lets a leaf entry replace
+      // the same member of a parent object entry whichever is newer, so a field written here as
+      // part of an object patch could be hidden by a leaf another replica wrote earlier; leaf
+      // against leaf is ordinary last-writer-wins.
+      if (!patch || !change.path.length) {
         var whole = { op: change.op, key: key };
         if (change.op === "set") whole.value = cloneJson(change.value);
         ops.push(whole); return;

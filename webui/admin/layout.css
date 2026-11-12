@@ -12,7 +12,8 @@
   --bg:#111315; --card:#1b1e22; --card2:#22262b; --field:#14171a; --fg:#eceef1; --dim:#9aa4af;
   --line:#343a42; --line2:#282d33; --chip:#2a3038; --sel:rgba(77,163,255,.16);
   --acc:#4da3ff; --on-acc:#04121f; --acc-text:#6cb4ff;
-  --ok:#4cc38a; --warn:#f0b35a; --err:#ff7b7b; --negative:#e5484d; --on-negative:#ffffff;
+  --ok:#4cc38a; --warn:#f0b35a; --err:#ff8a8a; --negative:#c9333a; --on-negative:#ffffff;
+  --negative-text:#ff8a8a;
   --scrim:rgba(0,0,0,.6); --shadow:0 8px 28px rgba(0,0,0,.45);
   color-scheme:dark;
 }
@@ -21,7 +22,7 @@
     --bg:#f4f5f7; --card:#ffffff; --card2:#f3f5f7; --field:#ffffff; --fg:#1a1d21; --dim:#5a646e;
     --line:#cfd4da; --line2:#e3e6ea; --chip:#e9edf2; --sel:rgba(11,98,196,.10);
     --acc:#0b62c4; --on-acc:#ffffff; --acc-text:#0b62c4;
-    --ok:#137a4b; --warn:#8a5300; --err:#c0262d; --negative:#c0262d; --on-negative:#ffffff;
+    --ok:#137a4b; --warn:#8a5300; --err:#c0262d; --negative:#c0262d; --on-negative:#ffffff; --negative-text:#c0262d;
     --scrim:rgba(20,24,28,.4); --shadow:0 8px 28px rgba(20,24,28,.18);
     color-scheme:light;
   }
@@ -30,7 +31,7 @@
   --bg:#f4f5f7; --card:#ffffff; --card2:#f3f5f7; --field:#ffffff; --fg:#1a1d21; --dim:#5a646e;
   --line:#cfd4da; --line2:#e3e6ea; --chip:#e9edf2; --sel:rgba(11,98,196,.10);
   --acc:#0b62c4; --on-acc:#ffffff; --acc-text:#0b62c4;
-  --ok:#137a4b; --warn:#8a5300; --err:#c0262d; --negative:#c0262d; --on-negative:#ffffff;
+  --ok:#137a4b; --warn:#8a5300; --err:#c0262d; --negative:#c0262d; --on-negative:#ffffff; --negative-text:#c0262d;
   --scrim:rgba(20,24,28,.4); --shadow:0 8px 28px rgba(20,24,28,.18);
   color-scheme:light;
 }
@@ -88,7 +89,10 @@ input[type=file] { background:none; border:0; padding:0; min-height:var(--tap); 
 .btn { background:var(--acc); color:var(--on-acc); }
 .btn.ghost, .btn2 { background:var(--card); color:var(--fg); border-color:var(--line); }
 .btn2 { padding:8px 14px; font-weight:500; }
-.btn2.danger, .btn.danger { color:var(--negative); border-color:var(--negative); background:none; }
+/* A role colour used as text or an outline has its own, lighter-in-dark variant so it reaches
+   4.5:1 on the neutral surface; the fill variant carries --on-negative text instead. */
+.btn2.danger, .btn.danger { color:var(--negative-text); border-color:var(--negative-text);
+                            background:var(--card); }
 .btn:hover, .btn2:hover, .iconbtn:hover { filter:brightness(1.08); }
 .btn.ghost:hover, .btn2:hover, .iconbtn:hover { background:var(--card2); filter:none; }
 .btn2.danger:hover, .btn.danger:hover { background:var(--negative); color:var(--on-negative); }
@@ -225,12 +229,12 @@ label.frow-check + .fhint { margin:-12px 0 16px; max-width:40rem; }
 .card [style*="display:flex"] input[type=range] { flex:1 1 160px; min-width:0; }
 .card [style*="display:flex"] > select { flex:1 1 12rem; }
 
-.dangerzone { margin:20px 0 0; padding:16px; border:1px solid var(--negative);
+.dangerzone { margin:20px 0 0; padding:16px; border:1px solid var(--negative-text);
               border-radius:var(--radius-s); }
-.dangerzone > h3 { margin:0 0 12px; color:var(--negative); }
+.dangerzone > h3 { margin:0 0 12px; color:var(--negative-text); }
 .dangerzone .frow { align-items:flex-start; }
-.card.danger { border-color:var(--negative); }
-.card.danger > h2 { color:var(--negative); }
+.card.danger { border-color:var(--negative-text); }
+.card.danger > h2 { color:var(--negative-text); }
 
 .empty { padding:28px 12px; text-align:center; }
 .empty .emptytitle { font-weight:650; margin:0 0 4px; }
@@ -252,7 +256,8 @@ td.ops > * { margin:3px 0 3px 6px; }
 td.ops:first-child { text-align:left; white-space:nowrap; }
 td:has(> input[type=number]) { white-space:nowrap; }
 td.ops:first-child > * { margin:3px 6px 3px 0; }
-tr.offline td:not(.ops) { opacity:.55; }
+/* Offline and disabled rows are muted with the dim text colour, not opacity, so they stay legible. */
+tr.offline td:not(.ops) { color:var(--dim); }
 .bounded-table { table-layout:fixed; }
 .bounded-table th, .bounded-table td { min-width:0; overflow-wrap:anywhere; }
 .event-detail { white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word;
@@ -324,7 +329,7 @@ tr.offline td:not(.ops) { opacity:.55; }
               transform-origin:center; }
 
 /* ---- Rules, assets, theme ---- */
-.card.rule.offline > :not(.chead):not(.ops) { opacity:.55; }
+.card.rule.offline > :not(.chead):not(.ops), .card.rule.offline h2 { color:var(--dim); }
 .card.rule .chead h2 { flex:1; }
 .dropzone { margin:0 0 12px; padding:22px; border:2px dashed var(--line); border-radius:var(--radius);
             color:var(--dim); text-align:center; cursor:pointer; user-select:none;
@@ -516,7 +521,8 @@ table.stacked td:empty { display:none; }
   --bg:#008080; --card:#c0c0c0; --card2:#c0c0c0; --field:#ffffff; --fg:#000000; --dim:#404040;
   --line:#808080; --line2:#808080; --chip:#c0c0c0; --sel:#000080;
   --acc:#000080; --on-acc:#ffffff; --acc-text:#000080;
-  --ok:#006000; --warn:#8a5000; --err:#a00000; --negative:#a00000; --on-negative:#ffffff;
+  --ok:#005000; --warn:#6b3d00; --err:#a00000; --negative:#a00000; --on-negative:#ffffff;
+  --negative-text:#a00000;
   --scrim:rgba(0,0,64,.35); --shadow:4px 4px 0 0 rgba(0,0,0,.5); --radius:0px; --radius-s:0px;
   color-scheme:light;
 }
