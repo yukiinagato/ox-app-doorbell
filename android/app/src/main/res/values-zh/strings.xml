@@ -1648,6 +1648,7 @@
     <string name="settings_appearance_auto_system">跟随设备设置</string>
     <string name="settings_appearance_dark">深色</string>
     <string name="settings_appearance_dark_from">深色开始时间</string>
+    <string name="settings_appearance_here">本设备的外观</string>
     <string name="settings_appearance_light">浅色</string>
     <string name="settings_appearance_light_from">浅色开始时间</string>
     <string name="settings_appearance_range">深色 %1$s → 浅色 %2$s</string>
@@ -1662,6 +1663,8 @@
     <string name="settings_assets_native">已上传的图片与声音。删除正在使用的素材会恢复默认</string>
     <string name="settings_back">设置</string>
     <string name="settings_backdrop">背景暗化层</string>
+    <string name="settings_backdrop_color">暗化层颜色</string>
+    <string name="settings_backdrop_color_native">叠加在背景图上的颜色，默认为黑色</string>
     <string name="settings_backdrop_opacity">暗化强度</string>
     <string name="settings_background_color">背景色</string>
     <string name="settings_background_image">背景图片</string>
@@ -1680,6 +1683,8 @@
     <string name="settings_buildings_manage">建筑</string>
     <string name="settings_buildings_manage_native">对门进行分组的建筑</string>
     <string name="settings_button_sound">按键音</string>
+    <string name="settings_call_button_color">呼叫按钮颜色（本设备）</string>
+    <string name="settings_call_button_color_native">未设置时根据背景自动选择</string>
     <string name="settings_call_flow">访客呼叫流程</string>
     <string name="settings_call_flow_purpose_first">先选目的，再呼叫</string>
     <string name="settings_call_flow_ring_then_purpose">先呼叫，再选目的</string>
@@ -2207,6 +2212,7 @@
     <string name="settings_theme_image">背景图片</string>
     <string name="settings_theme_image_none">不使用图片</string>
     <string name="settings_this_device">本机</string>
+    <string name="settings_time_status">同步状态</string>
     <string name="settings_time_sync">立即同步</string>
     <string name="settings_time_sync_action">同步</string>
     <string name="settings_time_sync_failed">时间同步失败</string>

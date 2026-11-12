@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The widget styles the shared layouts name, over stock framework widgets. -->
+<resources>
+    <style name="Widget.Doorbell.Button" parent="android:Widget.DeviceDefault.Button">
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Tonal" parent="android:Widget.DeviceDefault.Button">
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Outlined" parent="android:Widget.DeviceDefault.Button">
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Text" parent="android:Widget.DeviceDefault.Button.Borderless">
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Visitor" parent="android:Widget.DeviceDefault.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">72dp</item>
+        <item name="android:textSize">24sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Call" parent="android:Widget.DeviceDefault.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:textSize">18sp</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Call.Tonal" parent="android:Widget.DeviceDefault.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:textSize">18sp</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Call.Outlined" parent="android:Widget.DeviceDefault.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:textSize">18sp</item>
+    </style>
+
+    <style name="TextAppearance.Doorbell.Display" parent="android:TextAppearance.DeviceDefault.Large">
+        <item name="android:textSize">57sp</item>
+    </style>
+    <style name="TextAppearance.Doorbell.Headline" parent="android:TextAppearance.DeviceDefault.Large">
+        <item name="android:textSize">28sp</item>
+    </style>
+    <style name="TextAppearance.Doorbell.Title" parent="android:TextAppearance.DeviceDefault.Large"/>
+    <style name="TextAppearance.Doorbell.Subtitle" parent="android:TextAppearance.DeviceDefault.Medium"/>
+    <style name="TextAppearance.Doorbell.Body" parent="android:TextAppearance.DeviceDefault.Medium">
+        <item name="android:textSize">16sp</item>
+    </style>
+    <style name="TextAppearance.Doorbell.Supporting" parent="android:TextAppearance.DeviceDefault.Small"/>
+    <style name="TextAppearance.Doorbell.Label" parent="android:TextAppearance.DeviceDefault.Small">
+        <item name="android:textSize">13sp</item>
+    </style>
+</resources>

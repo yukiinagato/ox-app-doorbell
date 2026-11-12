@@ -1,6 +1,5 @@
 package jp.ox.doorbell
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
@@ -12,7 +11,11 @@ import android.widget.Button
 import android.widget.TextView
 
 /** Full-screen in-app SOS presentation. It is never launched for notification-only delivery. */
-class EmergencyActivity : Activity() {
+class EmergencyActivity : ShellActivity() {
+
+    /** The alarm overlay is the negative role in either appearance; nothing to rebuild. */
+    override fun onAppearanceChanged() = Unit
+
     private lateinit var app: App
     private var sticky = true
 
@@ -32,20 +35,11 @@ class EmergencyActivity : Activity() {
             )
         }
         setContentView(R.layout.activity_emergency)
-        // Clearing takes a deliberate gesture (guidelines "SOS"): a press and hold, which
-        // TalkBack also offers as its long-press action. A plain tap only points at the hint.
+        // Clearing takes the same two deliberate gestures as sending (guidelines "SOS"): a tap
+        // opens the confirmation surface, and a slide there (or its focusable button) confirms.
+        // There is no press-and-hold.
         val clearButton = findViewById<Button>(R.id.emergency_clear_button)
-        clearButton.setOnLongClickListener { button ->
-            requestClear(button)
-            true
-        }
-        clearButton.setOnClickListener {
-            findViewById<View>(R.id.emergency_hint_text).animate().alpha(0.3f)
-                .setDuration(UiTokens.MOTION_MS).withEndAction {
-                    findViewById<View>(R.id.emergency_hint_text).animate().alpha(1f)
-                        .setDuration(UiTokens.MOTION_MS)
-                }
-        }
+        clearButton.setOnClickListener { button -> confirmClear(button) }
         renderCurrent()
     }
 
@@ -54,6 +48,35 @@ class EmergencyActivity : Activity() {
      * only once one exists: emergency.cancel_requires_pin cannot make an alarm impossible to clear
      * on a cluster where nobody has set a password yet (§5.5).
      */
+    private var clearSurface: SosConfirmSurface? = null
+
+    private fun confirmClear(button: View) {
+        if (clearSurface?.showing == true) return
+        val texts = Texts(this).apply {
+            setConfig(if (app.coreOk) app.core.config() else null)
+            setLang(app.boot.uiLang)
+        }
+        var opened: SosConfirmSurface? = null
+        opened = SosConfirmSurface(
+            this, android.os.Handler(mainLooper),
+            title = texts.t("sos.clear_confirm_title", R.string.sos_clear_confirm_title),
+            message = "",
+            slideLabel = texts.t("sos.slide_clear", R.string.sos_slide_clear),
+            slideSub = "",
+            sendLabel = texts.t("emergency.cancel", R.string.emergency_cancel),
+            cancelLabel = texts.t("sos.countdown_cancel", R.string.sos_countdown_cancel),
+            // Clearing has no countdown: the slide itself is the confirmation.
+            countdownSeconds = 0,
+            countdownText = { it.toString() },
+            palette = PlatformUi.tokens(this),
+            enabled = { !isFinishing },
+            onConfirmed = { requestClear(button) },
+            onClosed = { if (clearSurface === opened) clearSurface = null },
+        )
+        clearSurface = opened
+        opened.show()
+    }
+
     private fun requestClear(button: View) {
         val config = if (app.coreOk) app.core.config() else null
         val texts = Texts(this).apply {
@@ -85,6 +108,7 @@ class EmergencyActivity : Activity() {
     }
 
     override fun onDestroy() {
+        clearSurface?.dismiss()
         if (app.emergencyActivity === this) app.emergencyActivity = null
         super.onDestroy()
     }
@@ -115,7 +139,7 @@ class EmergencyActivity : Activity() {
             title.text = value.title.ifEmpty { texts.t("emergency.title", R.string.emergency_title) }
             source.text = value.source.ifEmpty { texts.t("emergency.notified", R.string.emergency_notified) }
             clear.text = texts.t("emergency.cancel", R.string.emergency_cancel)
-            hint.text = texts.t("sos.hold_to_clear", R.string.sos_hold_to_clear)
+            hint.text = texts.t("sos.tap_to_clear", R.string.sos_tap_to_clear)
             if (value.receivedWallMs > 0L) {
                 val at = ClusterClock(app.core).format(value.receivedWallMs)
                 time.text = texts.t("sos.since", R.string.sos_since,
@@ -129,21 +153,27 @@ class EmergencyActivity : Activity() {
             val roles = UiRoles.from(Palette.LIGHT)
             var ground = roles.negative
             var ink = roles.onNegative
-            var button = Palette.LIGHT.dangerInk
+            // The one action is a filled button in the ink colour, so it stands off the ground.
+            var button = ink
+            var buttonInk = ground
             if (!app.safeMode) {
                 color(value.background)?.let { ground = it }
                 color(value.foreground)?.let { ink = it }
-                color(value.accent)?.let { button = it }
+                button = ink
+                buttonInk = ground
+                color(value.accent)?.let {
+                    button = it
+                    buttonInk = Palette.LIGHT.inkOver(it)
+                }
             }
             root.setBackgroundColor(ShellUi.opaque(ground))
             for (view in listOf(title, source, time, hint)) view.setTextColor(ShellUi.opaque(ink))
-            clear.background = ShellUi.rounded(this, button, UiTokens.RADIUS_CARD, ink)
-            clear.setTextColor(ShellUi.opaque(Palette.LIGHT.inkOver(button)))
+            SemanticUi.release(clear)
+            PlatformUi.styleButton(clear, ButtonKind.FILLED, button, buttonInk)
             clear.minHeight = ShellUi.dp(this, UiTokens.VISITOR_TOUCH_MIN_DP)
             clear.minimumHeight = ShellUi.dp(this, UiTokens.VISITOR_TOUCH_MIN_DP)
             clear.isEnabled = true
             val nodeId = app.core.status()?.optJSONObject("node")?.optString("id").orEmpty()
-            SemanticUi.invalidate(clear)
             SemanticUi.apply(
                 clear,
                 "sos.cancel",

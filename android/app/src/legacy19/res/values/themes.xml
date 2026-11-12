@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- legacy19 is a framework-widget application under the device theme: Holo on API 19. The
+     dark theme is the default; ShellActivity switches to the light one from Core's appearance. -->
+<resources>
+    <style name="Theme.Doorbell" parent="android:Theme.DeviceDefault.NoActionBar"/>
+    <style name="Theme.Doorbell.Light" parent="android:Theme.DeviceDefault.Light.NoActionBar"/>
+</resources>

@@ -1648,6 +1648,7 @@ ON</string>
     <string name="settings_appearance_auto_system">端末の設定に合わせる</string>
     <string name="settings_appearance_dark">ダーク</string>
     <string name="settings_appearance_dark_from">ダークにする時刻</string>
+    <string name="settings_appearance_here">この端末の外観</string>
     <string name="settings_appearance_light">ライト</string>
     <string name="settings_appearance_light_from">ライトにする時刻</string>
     <string name="settings_appearance_range">ダーク %1$s → ライト %2$s</string>
@@ -1662,6 +1663,8 @@ ON</string>
     <string name="settings_assets_native">登録済みの画像と音声。使われている素材を削除すると既定に戻ります</string>
     <string name="settings_back">設定</string>
     <string name="settings_backdrop">背景を暗くする層</string>
+    <string name="settings_backdrop_color">暗くする層の色</string>
+    <string name="settings_backdrop_color_native">背景画像の上に重ねる色。既定は黒</string>
     <string name="settings_backdrop_opacity">暗くする強さ</string>
     <string name="settings_background_color">背景色</string>
     <string name="settings_background_image">背景画像</string>
@@ -1680,6 +1683,8 @@ ON</string>
     <string name="settings_buildings_manage">建物</string>
     <string name="settings_buildings_manage_native">ドアをまとめる建物</string>
     <string name="settings_button_sound">ボタン音</string>
+    <string name="settings_call_button_color">呼出ボタンの色（この端末）</string>
+    <string name="settings_call_button_color_native">未設定のときは背景に合わせて自動で決まります</string>
     <string name="settings_call_flow">来訪者の呼出手順</string>
     <string name="settings_call_flow_purpose_first">用件を選んで呼び出す</string>
     <string name="settings_call_flow_ring_then_purpose">呼び出してから用件を選ぶ</string>
@@ -2207,6 +2212,7 @@ ON</string>
     <string name="settings_theme_image">背景画像</string>
     <string name="settings_theme_image_none">画像を使わない</string>
     <string name="settings_this_device">この端末</string>
+    <string name="settings_time_status">同期の状態</string>
     <string name="settings_time_sync">今すぐ同期</string>
     <string name="settings_time_sync_action">同期</string>
     <string name="settings_time_sync_failed">時刻を同期できませんでした</string>

@@ -1,11 +1,14 @@
-// Slide-to-trigger SOS control (spec §4.4). Framework views only: a custom View that draws its
-// own track, thumb, and two-part label, plus a D-pad path so the control is reachable on a TV.
+// The slide that confirms an SOS (docs/en/ui-guidelines.md, "SOS"). It lives on the confirmation
+// surface SosTriggerView opens, never on a screen itself: tapping the trigger and sliding here
+// are two deliberate gestures in two places. No stock control slides to arm, so this is a custom
+// View: a pill track in the error container, a thumb in the error colour, the two-part label.
+// It takes no key or accessibility click; that path is the surface's "Send SOS" button, which
+// calls [confirm].
 //
 // The control never calls core itself; it reports the countdown reaching zero to its owner.
 package jp.ox.doorbell
 
 import android.annotation.SuppressLint
-import android.app.AlertDialog
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
@@ -15,10 +18,8 @@ import android.graphics.Typeface
 import android.graphics.drawable.Drawable
 import android.os.Handler
 import android.os.Looper
-import android.view.KeyEvent
 import android.view.MotionEvent
 import android.view.View
-import android.view.accessibility.AccessibilityNodeInfo
 
 @SuppressLint("ViewConstructor")
 internal class SosSlideView(
@@ -55,8 +56,6 @@ internal class SosSlideView(
     private var accessibleStart = context.getString(R.string.sos_accessibility_start)
     private var accessibleHint = context.getString(R.string.sos_accessibility_hint)
     private var accessibleConfirm = context.getString(R.string.sos_accessibility_confirm)
-    private var confirmation: AlertDialog? = null
-    private var confirmationRevision = 0L
 
     private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.FILL }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply { textAlign = Paint.Align.CENTER }
@@ -71,9 +70,9 @@ internal class SosSlideView(
     }
 
     init {
-        isFocusable = true
-        isFocusableInTouchMode = false
+        isFocusable = false
         isClickable = true
+        importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         minimumHeight = dp(56)
         contentDescription = ""
     }
@@ -89,7 +88,6 @@ internal class SosSlideView(
         confirmLabel: String = context.getString(R.string.sos_accessibility_confirm),
         countdownText: (Int) -> String,
     ) {
-        dismissConfirmation()
         label = TwoPartLabels.of(primary, secondary)
         cancelText = cancelLabel
         accessibleStart = startLabel
@@ -109,16 +107,8 @@ internal class SosSlideView(
 
     /** Cancel an armed countdown, for example when the owning screen goes away. */
     fun cancelCountdown() {
-        dismissConfirmation()
         handler.removeCallbacks(tick)
         publish(state.cancel())
-    }
-
-    private fun dismissConfirmation() {
-        confirmationRevision += 1
-        val dialog = confirmation
-        confirmation = null
-        dialog?.dismiss()
     }
 
     fun isArmed(): Boolean = state.armed
@@ -164,61 +154,18 @@ internal class SosSlideView(
         return true
     }
 
-    override fun performClick(): Boolean {
-        super.performClick()
-        if (!isEnabled || !enabledProvider() || !isShown || windowToken == null) return false
-        if (state.armed) {
-            cancelCountdown()
-            return true
-        }
-        if (confirmation != null) return true
-        confirmationRevision += 1
-        val revision = confirmationRevision
-        val dialog = AlertDialog.Builder(context)
-            .setTitle(accessibleStart)
-            .setMessage(accessibleConfirm)
-            .setNegativeButton(cancelText, null)
-            .setPositiveButton(accessibleStart) { selected, _ ->
-                // Android queues button callbacks; dismissal must revoke an already queued action.
-                if (confirmation !== selected || confirmationRevision != revision ||
-                    !isEnabled || !enabledProvider() || !isShown || windowToken == null) return@setPositiveButton
-                dismissConfirmation()
-                val snapshot = state.confirm()
-                publish(snapshot)
-                if (snapshot.phase == SosPhase.COUNTDOWN) handler.postDelayed(tick, 1000L)
-            }
-            .create()
-        dialog.setOnDismissListener {
-            if (confirmation === dialog) {
-                confirmation = null
-                confirmationRevision += 1
-            }
-        }
-        confirmation = dialog
-        dialog.show()
-        return true
+    /**
+     * The non-drag path (D-pad, keyboard, screen reader): the surface's "Send SOS" button enters
+     * the same cancellable countdown a completed slide does.
+     */
+    fun confirm() {
+        if (!isEnabled || !enabledProvider() || state.armed) return
+        // A surface that has closed takes its slide off the window; it confirms nothing.
+        if (!isShown || windowToken == null) return
+        val snapshot = state.confirm()
+        publish(snapshot)
+        if (snapshot.phase == SosPhase.COUNTDOWN) handler.postDelayed(tick, 1000L)
     }
-
-    override fun onInitializeAccessibilityNodeInfo(info: AccessibilityNodeInfo) {
-        super.onInitializeAccessibilityNodeInfo(info)
-        info.className = android.widget.Button::class.java.name
-        info.isClickable = isEnabled && enabledProvider()
-    }
-
-    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
-        if (!isEnabled || !isTriggerKey(keyCode)) return super.onKeyDown(keyCode, event)
-        return true
-    }
-
-    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
-        if (!isEnabled || !isTriggerKey(keyCode)) return super.onKeyUp(keyCode, event)
-        if (!event.isCanceled) performClick()
-        return true
-    }
-
-    private fun isTriggerKey(keyCode: Int): Boolean =
-        keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER ||
-            keyCode == KeyEvent.KEYCODE_SPACE
 
     private fun finishSlide() {
         val snapshot = state.release()

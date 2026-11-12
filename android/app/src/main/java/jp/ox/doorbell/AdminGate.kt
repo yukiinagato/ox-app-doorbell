@@ -11,13 +11,11 @@
 package jp.ox.doorbell
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.os.Handler
 import android.os.Looper
 import android.text.InputType
 import android.view.Gravity
 import android.view.View
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.TextView
 import java.io.File
@@ -80,10 +78,10 @@ internal object AdminGate {
         val box = column(activity)
         val field = passwordField(activity, texts.t("admin.password", R.string.admin_password))
         val error = errorLabel(activity)
-        box.addView(field, ShellUi.matchWrap())
+        box.addView(field.view, ShellUi.matchWrap())
         box.addView(error, ShellUi.matchWrap())
 
-        val dialog = AlertDialog.Builder(activity)
+        val dialog = ShellDialogBuilder(activity)
             .setTitle(texts.t("admin.pin_prompt", R.string.admin_pin_prompt))
             .setView(box)
             .setPositiveButton(texts.t("admin.login", R.string.admin_login), null)
@@ -93,7 +91,7 @@ internal object AdminGate {
         fun fail(message: String, countsAgainstLockout: Boolean) {
             error.text = message
             error.visibility = View.VISIBLE
-            field.setText("")
+            field.text = ""
             if (!countsAgainstLockout) return
             if (++failures >= MAX_FAILURES) {
                 failures = 0
@@ -108,7 +106,7 @@ internal object AdminGate {
                 error.visibility = View.VISIBLE
                 return
             }
-            val password = field.text.toString()
+            val password = field.text
             if (password.isEmpty()) return
             // Core verification and the loopback login are both blocking; neither runs on the
             // main thread even though the loopback one never leaves the device.
@@ -151,10 +149,10 @@ internal object AdminGate {
         }
 
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { submit() }
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener { submit() }
         }
         dialog.show()
-        field.requestFocus()
+        field.input.requestFocus()
     }
 
     // ---------- setting the first password ----------
@@ -172,11 +170,11 @@ internal object AdminGate {
         val ui = Handler(Looper.getMainLooper())
         val box = column(activity)
         box.addView(
-            ShellUi.text(
+            ShellUi.label(
                 activity,
                 texts.t("settings.set_password_hint", R.string.settings_set_password_hint),
-                13f, Palette.LIGHT.muted,
-            ),
+                TextRole.SUPPORTING,
+            ).apply { setPadding(0, 0, 0, ShellUi.dp(activity, 8)) },
             ShellUi.matchWrap(),
         )
         val first = passwordField(
@@ -186,11 +184,11 @@ internal object AdminGate {
             activity, texts.t("settings.password_confirm", R.string.settings_password_confirm),
         )
         val error = errorLabel(activity)
-        box.addView(first, ShellUi.matchWrap())
-        box.addView(second, ShellUi.matchWrap())
+        box.addView(first.view, ShellUi.matchWrap())
+        box.addView(second.view, ShellUi.matchWrap().apply { topMargin = ShellUi.dp(activity, 8) })
         box.addView(error, ShellUi.matchWrap())
 
-        val dialog = AlertDialog.Builder(activity)
+        val dialog = ShellDialogBuilder(activity)
             .setTitle(texts.t("settings.set_password", R.string.settings_set_password))
             .setView(box)
             .setPositiveButton(texts.t("admin.save", R.string.admin_save), null)
@@ -198,8 +196,8 @@ internal object AdminGate {
             .create()
 
         fun submit() {
-            val value = first.text.toString()
-            val repeat = second.text.toString()
+            val value = first.text
+            val repeat = second.text
             if (!AdminPassword.newPasswordValid(value)) {
                 error.text = texts.t(
                     "settings.password_length", R.string.settings_password_length,
@@ -243,10 +241,10 @@ internal object AdminGate {
         }
 
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { submit() }
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener { submit() }
         }
         dialog.show()
-        first.requestFocus()
+        first.input.requestFocus()
     }
 
     // ---------- the legacy local digest ----------
@@ -288,20 +286,21 @@ internal object AdminGate {
         }
     }
 
-    private fun passwordField(activity: Activity, label: String): EditText = EditText(activity).apply {
-        inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-        isFocusable = true
-        isFocusableInTouchMode = true
-        minHeight = ShellUi.dp(activity, ShellUi.TOUCH_FLOOR_DP)
-        hint = label
-    }
+    private fun passwordField(activity: Activity, label: String): FieldHandle =
+        PlatformUi.field(
+            activity, label,
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+        ).apply {
+            input.isFocusable = true
+            input.isFocusableInTouchMode = true
+        }
 
-    private fun errorLabel(activity: Activity): TextView = TextView(activity).apply {
-        setTextColor(ShellUi.opaque(Palette.LIGHT.danger))
-        gravity = Gravity.START
-        textSize = 13f
-        visibility = View.GONE
-    }
+    private fun errorLabel(activity: Activity): TextView =
+        ShellUi.label(activity, "", TextRole.SUPPORTING, PlatformUi.tokens(activity).danger).apply {
+            gravity = Gravity.START
+            setPadding(0, ShellUi.dp(activity, 4), 0, 0)
+            visibility = View.GONE
+        }
 
     internal const val LEGACY_PIN_FILE = "exit_pin.txt"
     private const val MAX_FAILURES = 5

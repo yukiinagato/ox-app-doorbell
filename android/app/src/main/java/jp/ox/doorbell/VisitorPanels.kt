@@ -8,7 +8,6 @@ import android.speech.tts.TextToSpeech
 import android.os.Build
 import android.view.Gravity
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.GridLayout
 import android.widget.LinearLayout
 import java.util.Locale
@@ -32,14 +31,16 @@ internal class VisitorPurposePanel(
         val columns = minOf(ScreenLayouts.purposeColumns(window), ids.size)
         grid.columnCount = columns
         val gap = ShellUi.dp(activity, UiTokens.SPACE_S)
-        val available = grid.width.takeIf { it > 0 }
+        // The cells share what is inside the grid's own padding, or they run past its edge.
+        val available = (grid.width - grid.paddingLeft - grid.paddingRight).takeIf { it > 0 }
             ?: (activity.resources.displayMetrics.widthPixels - ShellUi.dp(activity, UiTokens.SPACE_XXXL))
         val cellWidth = (available - gap * columns) / columns
         for ((index, id) in ids.withIndex()) {
             val label = VisitPurposes.label(config, id, lang)
-            val card = Button(activity).apply {
+            val card = PlatformUi.button(activity, ButtonKind.TONAL).apply {
                 text = VisitPurposes.decoratedLabel(config, id, lang)
-                textSize = UiTokens.sp(UiTokens.TITLE)
+                @Suppress("DEPRECATION")
+                setTextAppearance(activity, R.style.TextAppearance_Doorbell_Title)
                 setSingleLine(false)
                 maxLines = 4
                 isFocusable = true
@@ -59,47 +60,33 @@ internal class VisitorPurposePanel(
     }
 }
 
-/** Text-labelled language switch (日本語 / English / 中文), selected one in the accent role. */
+/** Text-labelled language switch as the platform's segmented control; no flags. */
 internal class VisitorLanguageBar(
     private val activity: Activity,
     private val bar: LinearLayout,
     private val onPick: (String) -> Unit,
 ) {
-    private var roles = UiRoles.from(Palette.DARK)
+    private var control: SegmentedHandle? = null
 
     /** Returns false when there is nothing to switch (one language, or not a door station). */
-    fun build(config: JSONObject?, roles: UiRoles, enabled: Boolean): Boolean {
-        this.roles = roles
+    fun build(config: JSONObject?, @Suppress("UNUSED_PARAMETER") roles: UiRoles, enabled: Boolean): Boolean {
         bar.removeAllViews()
+        control = null
         val languages = languages(config)
         if (!enabled || languages.size < 2) return false
-        for (lang in languages) {
-            val button = Button(activity).apply {
-                text = Texts.langDisplayName(lang)
-                textSize = UiTokens.sp(UiTokens.BODY)
-                tag = lang
-                isFocusable = true
-                setOnClickListener { onPick(lang) }
-            }
-            bar.addView(button, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-                leftMargin = ShellUi.dp(activity, UiTokens.SPACE_XS)
-                rightMargin = ShellUi.dp(activity, UiTokens.SPACE_XS)
-            })
-        }
+        val segmented = PlatformUi.segmented(
+            activity, languages.map { it to Texts.langDisplayName(it) }, plated = true,
+            onPick = onPick,
+        )
+        control = segmented
+        bar.addView(segmented.view, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         bar.gravity = Gravity.CENTER
         return true
     }
 
     fun select(current: String) {
-        for (index in 0 until bar.childCount) {
-            val button = bar.getChildAt(index) as? Button ?: continue
-            val selected = button.tag == current
-            UiKit.styleAction(button, roles,
-                              if (selected) ActionRole.PRIMARY else ActionRole.SECONDARY,
-                              UiTokens.TOUCH_MIN_DP, emphasis = selected)
-            button.isSelected = selected
-        }
+        control?.select(current)
     }
 
     private fun languages(config: JSONObject?): List<String> {

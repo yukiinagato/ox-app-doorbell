@@ -90,18 +90,13 @@ internal object DashboardModel {
     /** The newest recorded call for [door]; [rows] arrive newest first from Core. */
     fun lastCall(rows: List<CallRow>, door: String): CallRow? = rows.firstOrNull { it.door == door }
 
-    /** Tiles beside the call list in wide landscape windows; stacked above it otherwise. */
-    fun split(window: WindowSpec): Boolean =
-        window.landscape && window.sizeClass != SizeClass.COMPACT
-
     /**
-     * The width the tile grid actually gets: the window less the rail, and about half of what is
-     * left when the call list sits beside it. Tile columns follow this, not the whole window.
+     * The width the tile grid gets: the window less the rail. The home surface shows no call
+     * list, so the tiles have the whole content width. Tile columns follow this.
      */
     fun tileAreaWidthDp(window: WindowSpec): Int {
         val rail = if (ScreenLayouts.navStyle(window) == NavStyle.RAIL) RAIL_WIDTH_DP else 0
-        val content = maxOf(0, window.widthDp - rail)
-        return if (split(window)) content * 52 / 100 else content
+        return maxOf(0, window.widthDp - rail)
     }
 
     fun tileColumns(window: WindowSpec, tileCount: Int): Int =

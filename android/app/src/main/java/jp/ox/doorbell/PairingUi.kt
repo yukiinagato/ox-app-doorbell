@@ -1,5 +1,6 @@
-// Shared framework-view building blocks for the pairing screens. Framework widgets only:
-// no androidx, no material, no third-party QR library.
+// Shared building blocks for the pairing, add-device, scanner and device-information screens.
+// Controls come from the flavor's PlatformUi; colours are the platform's own, read when a screen
+// binds. No third-party QR library: Core encodes and decodes.
 package jp.ox.doorbell
 
 import android.content.Context
@@ -18,15 +19,21 @@ import android.widget.TextView
 
 internal object PairingUi {
 
-    val BG = Color.parseColor("#0E1621")
-    val CARD = Color.parseColor("#16202D")
-    val TEXT = Color.WHITE
-    val DIM = Color.parseColor("#9FB0C0")
-    val FAINT = Color.parseColor("#63758A")
-    val ACCENT = Color.parseColor("#3FA9F5")
-    val OK = Color.parseColor("#4CC38A")
-    val ERR = Color.parseColor("#E05B4C")
-    val WARN = Color.parseColor("#E0A23C")
+    private var tokens: Palette = Palette.DARK
+
+    /** Take the colours of the screen being built; call before building any view. */
+    fun bind(context: Context) {
+        tokens = PlatformUi.tokens(context)
+    }
+
+    val BG: Int get() = ShellUi.opaque(tokens.ground)
+    val TEXT: Int get() = ShellUi.opaque(tokens.ink)
+    val DIM: Int get() = ShellUi.opaque(tokens.muted)
+    val FAINT: Int get() = ShellUi.opaque(tokens.muted)
+    val ACCENT: Int get() = ShellUi.opaque(ShellUi.accentInk(tokens))
+    val OK: Int get() = ShellUi.opaque(tokens.positive)
+    val ERR: Int get() = ShellUi.opaque(tokens.danger)
+    val WARN: Int get() = ShellUi.opaque(tokens.warning)
 
     fun dp(context: Context, value: Int): Int =
         (value * context.resources.displayMetrics.density).toInt()
@@ -36,31 +43,19 @@ internal object PairingUi {
         ViewGroup.LayoutParams.WRAP_CONTENT,
     )
 
-    fun title(context: Context, value: String): TextView = TextView(context).apply {
-        text = value
-        setTextColor(TEXT)
-        textSize = 24f
-        setTypeface(typeface, Typeface.BOLD)
-    }
+    fun title(context: Context, value: String): TextView =
+        ShellUi.label(context, value, TextRole.HEADLINE)
 
-    fun heading(context: Context, value: String): TextView = TextView(context).apply {
-        text = value
-        setTextColor(TEXT)
-        textSize = 17f
-        setTypeface(typeface, Typeface.BOLD)
-    }
+    fun heading(context: Context, value: String): TextView =
+        ShellUi.label(context, value, TextRole.SUBTITLE).apply {
+            setTypeface(typeface, Typeface.BOLD)
+        }
 
-    fun body(context: Context, value: String = ""): TextView = TextView(context).apply {
-        text = value
-        setTextColor(DIM)
-        textSize = 15f
-    }
+    fun body(context: Context, value: String = ""): TextView =
+        ShellUi.label(context, value, TextRole.BODY, tokens.muted)
 
-    fun small(context: Context, value: String = ""): TextView = TextView(context).apply {
-        text = value
-        setTextColor(FAINT)
-        textSize = 13f
-    }
+    fun small(context: Context, value: String = ""): TextView =
+        ShellUi.label(context, value, TextRole.SUPPORTING)
 
     fun mono(context: Context, value: String = "", size: Float = 34f): TextView =
         TextView(context).apply {
@@ -71,13 +66,10 @@ internal object PairingUi {
             setTypeface(typeface, Typeface.BOLD)
         }
 
-    /** A rounded panel used for every grouped block on the pairing screens. */
+    /** A grouped block on the platform's card container. */
     fun card(context: Context): LinearLayout = LinearLayout(context).apply {
         orientation = LinearLayout.VERTICAL
-        background = GradientDrawable().apply {
-            setColor(CARD)
-            cornerRadius = dp(context, 12).toFloat()
-        }
+        background = PlatformUi.cardBackground(context)
         val pad = dp(context, 16)
         setPadding(pad, pad, pad, pad)
     }
@@ -87,17 +79,11 @@ internal object PairingUi {
         value: String,
         primary: Boolean = false,
         onClick: () -> Unit,
-    ): Button = Button(context).apply {
+    ): Button = PlatformUi.button(context, if (primary) ButtonKind.FILLED else ButtonKind.TONAL).apply {
         text = value
-        isAllCaps = false
-        textSize = 17f
         minHeight = dp(context, 48)
+        minimumHeight = dp(context, 48)
         isFocusable = true
-        setTextColor(if (primary) Color.WHITE else TEXT)
-        background = GradientDrawable().apply {
-            setColor(if (primary) ACCENT else Color.parseColor("#243244"))
-            cornerRadius = dp(context, 10).toFloat()
-        }
         setOnClickListener { onClick() }
     }
 
@@ -107,21 +93,10 @@ internal object PairingUi {
         value: String,
         primary: Boolean = true,
         onClick: () -> Unit,
-    ): Button =
-        Button(context).apply {
-            text = value
-            isAllCaps = false
-            textSize = 15f
-            minWidth = dp(context, 88)
-            minHeight = dp(context, 48)
-            isFocusable = true
-            setTextColor(Color.WHITE)
-            background = GradientDrawable().apply {
-                setColor(if (primary) ACCENT else Color.parseColor("#243244"))
-                cornerRadius = dp(context, 8).toFloat()
-            }
-            setOnClickListener { onClick() }
-        }
+    ): Button = button(context, value, primary, onClick).apply {
+        minWidth = dp(context, 88)
+        minimumWidth = dp(context, 88)
+    }
 
     fun spacer(context: Context, height: Int): View = View(context).apply {
         layoutParams = LinearLayout.LayoutParams(
@@ -143,20 +118,18 @@ internal object PairingUi {
         for (row in rows) {
             val line = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
             for (key in row) {
-                val b = Button(context).apply {
-                    text = when (key) {
-                        KEY_BACK -> "⌫"
-                        KEY_OK -> "OK"
-                        else -> key
+                val b = PlatformUi.button(context, ButtonKind.TONAL).apply {
+                    when (key) {
+                        // The fleet's Tabler backspace rather than a font glyph.
+                        KEY_BACK -> {
+                            PlatformUi.setButtonIcon(this, R.drawable.ic_tabler_backspace)
+                            contentDescription = context.getString(R.string.pair_key_delete)
+                        }
+                        KEY_OK -> text = context.getString(android.R.string.ok)
+                        else -> text = key
                     }
                     textSize = 22f
-                    isAllCaps = false
                     isFocusable = true
-                    setTextColor(TEXT)
-                    background = GradientDrawable().apply {
-                        setColor(Color.parseColor("#243244"))
-                        cornerRadius = dp(context, 8).toFloat()
-                    }
                     setOnClickListener { onKey(key) }
                 }
                 val lp = LinearLayout.LayoutParams(0, dp(context, 56), 1f)
@@ -199,14 +172,12 @@ internal object PairingUi {
     }
 
     /** Placeholder shown until Core publishes pair_qr, so the QR box is never blank white. */
-    fun qrPlaceholder(context: Context): TextView = TextView(context).apply {
+    fun qrPlaceholder(context: Context): TextView = small(context).apply {
         gravity = Gravity.CENTER
-        setTextColor(FAINT)
-        textSize = 14f
         background = GradientDrawable().apply {
-            setColor(Color.parseColor("#1B2634"))
+            setColor(ShellUi.opaque(tokens.surfaceAlt))
             cornerRadius = dp(context, 8).toFloat()
-            setStroke(dp(context, 1), FAINT)
+            setStroke(dp(context, 1), ShellUi.opaque(tokens.line))
         }
     }
 }

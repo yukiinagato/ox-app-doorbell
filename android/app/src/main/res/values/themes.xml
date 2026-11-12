@@ -1,7 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- API 19 base.  Material resources only exist from API 21 and are overlaid in values-v21. -->
-<resources>
-    <style name="Theme.Doorbell" parent="android:Theme.Holo.NoActionBar">
-        <item name="android:windowBackground">@color/bg</item>
-    </style>
-</resources>

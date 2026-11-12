@@ -58,7 +58,7 @@ val doorbellNdk = if (doorbellTier == "legacy19") "25.2.9519653" else "27.1.1229
 // One build number per release; each flavour gets its own versionCode derived from it, so a
 // legacy19 and a modern APK of the same release never share a code (and both stay above the
 // single shared code 27 used through 0.3.26).
-val doorbellBuildNumber = 42
+val doorbellBuildNumber = 43
 fun flavorVersionCode(flavorDigit: Int): Int = doorbellBuildNumber * 10 + flavorDigit
 
 // Release signing comes from Gradle properties or the environment, never from the repository:
@@ -93,7 +93,7 @@ android {
     targetSdk = 35
     testInstrumentationRunner = "jp.ox.doorbell.VisitorUiInstrumentation"
     versionCode = flavorVersionCode(0)
-    versionName = "0.3.41+${doorbellGitRevision.take(7)}"
+    versionName = "0.4.0+${doorbellGitRevision.take(7)}"
     buildConfigField("String", "DOORBELL_SOURCE_ID", "\"$doorbellSourceIdentity\"")
 
     externalNativeBuild {
@@ -183,8 +183,11 @@ android {
   }
 }
 
-// The application runtime intentionally uses only Kotlin stdlib; these dependencies are host tests.
+// The legacy19 runtime uses only Kotlin stdlib and framework widgets. Material Components (and
+// the AndroidX libraries it brings) belong to the modern flavor alone; legacy19 must never see
+// them, which is why every Material type lives under src/modern.
 dependencies {
+  "modernImplementation"("com.google.android.material:material:1.12.0")
   testImplementation("junit:junit:4.13.2")
   testImplementation("org.json:json:20240303")
 }

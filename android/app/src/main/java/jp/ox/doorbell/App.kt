@@ -105,6 +105,7 @@ class App : Application(), DoorbellCore.Listener {
 
     override fun onCreate() {
         super.onCreate()
+        ShellAppearance.load(this)
         boot = BootConfig.load(File(filesDir, "boot.json"))
         bootSetupRequired = boot.setupRequired
         pairingPersistence.initialize(BootConfig.hasSecureMeshReference(boot.rawJson))

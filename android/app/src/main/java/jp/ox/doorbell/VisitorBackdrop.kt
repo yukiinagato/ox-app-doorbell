@@ -68,18 +68,16 @@ internal class VisitorBackdrop(
             themeColor = null
             themeBg.setImageDrawable(null)
             themeBg.visibility = View.GONE
-            @Suppress("DEPRECATION")
-            rootView.setBackgroundColor(activity.resources.getColor(R.color.bg))
+            rootView.setBackgroundColor(ShellUi.opaque(palette().ground))
             return
         }
         val color = themeValue("bg_color")
         if (color != themeColor) {
             themeColor = color
             try {
-                @Suppress("DEPRECATION")
                 rootView.setBackgroundColor(
                     if (color != null) Color.parseColor(color)
-                    else activity.resources.getColor(R.color.bg))
+                    else ShellUi.opaque(palette().ground))
             } catch (e: Exception) {
                 Log.w(TAG, "Ignoring invalid theme background color: $color ($e)")
             }
@@ -168,8 +166,12 @@ internal class VisitorBackdrop(
         val ground = flatBackgroundRgb()
         val drawn = themeBg.visibility == View.VISIBLE && themeBg.drawable != null
         val sample = if (drawn) RegionInk.sample(themeBg, view, ground) else null
+        // With neither a picture nor a configured colour the screen is the platform's own
+        // surface, which is a known colour; Core's ink was decided for the theme it publishes.
+        val systemSurface = !drawn && themeValue("bg_color") == null
         val result = CoreDisplays.inkFor(
-            coreDisplay().theme, target.region, ground, sample?.averageRgb, drawn, sample = sample,
+            coreDisplay().theme, target.region, ground, sample?.averageRgb, drawn,
+            knownSurface = systemSurface, sample = sample,
         )
         val ink = if (target.muted) ShellUi.mute(result.inkRgb, palette().dark) else result.inkRgb
         val signature = (if (result.needsShadow) 1 shl 25 else 0) or (ink and 0xffffff)

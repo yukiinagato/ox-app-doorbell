@@ -44,7 +44,7 @@
         tools:ignore="MissingTvBanner">
         <activity
             android:name=".MainActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="true"
             android:launchMode="singleTask">
@@ -76,14 +76,14 @@
         <!-- Visitor monitor with live video, audio, and quick replies; supports touch and D-pad. -->
         <activity
             android:name=".IncomingActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"/>
 
         <activity
             android:name=".EmergencyActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"/>
@@ -93,7 +93,7 @@
              device an invitation. Joining still needs the confirm button on this screen. -->
         <activity
             android:name=".PairingActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="true"
             android:launchMode="singleTop"
@@ -109,7 +109,7 @@
         <!-- Add-device panel: nearby list, Pairing PIN card, bulk add, own QR. -->
         <activity
             android:name=".AddDeviceActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"/>
@@ -117,7 +117,7 @@
         <!-- Add-QR scanner; decoding happens in Core, not in a bundled library. -->
         <activity
             android:name=".QrScanActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"/>
@@ -125,7 +125,7 @@
         <!-- Diagnostics behind the admin password. -->
         <activity
             android:name=".DeviceInfoActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"/>
@@ -133,7 +133,7 @@
         <!-- Native settings, always behind the administration password. -->
         <activity
             android:name=".SettingsActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"
@@ -142,7 +142,7 @@
         <!-- Full-screen paged call history. -->
         <activity
             android:name=".HistoryActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"/>
@@ -150,7 +150,7 @@
         <!-- Mandatory local identity gate for first run and invalid boot profiles. -->
         <activity
             android:name=".BootSetupActivity"
-            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|uiMode"
             android:excludeFromRecents="true"
             android:exported="false"
             android:launchMode="singleTop"/>

@@ -12,7 +12,7 @@
         android:id="@+id/incoming_root"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:background="@color/bg"
+        android:background="?android:attr/colorBackground"
         android:baselineAligned="false"
         android:orientation="vertical">
 
@@ -48,7 +48,7 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:text="@string/ring_no_video"
-                android:textColor="@color/dim"
+                android:textColor="?android:attr/textColorSecondary"
                 android:textSize="20sp"/>
             <!-- The admin QR stays visible in a corner; opening the page still needs the password. -->
             <LinearLayout
@@ -72,7 +72,7 @@
                 android:gravity="center_vertical"
                 android:paddingLeft="12dp"
                 android:paddingRight="12dp"
-                android:textColor="@color/dim"
+                android:textColor="?android:attr/textColorSecondary"
                 android:textSize="11sp"/>
             <TextView
                 android:id="@+id/sent_text"
@@ -80,9 +80,8 @@
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:layout_margin="24dp"
-                android:background="@drawable/bg_reply_card"
                 android:padding="24dp"
-                android:textColor="@color/fg"
+                android:textColor="?android:attr/textColorPrimary"
                 android:textSize="24sp"
                 android:visibility="gone"/>
         </FrameLayout>
@@ -109,15 +108,14 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:maxLines="2"
-                    android:textColor="@color/fg"
-                    android:textSize="26sp"
-                    android:textStyle="bold"/>
+                    android:textAppearance="@style/TextAppearance.Doorbell.Headline"
+                    android:textColor="?android:attr/textColorPrimary"/>
                 <TextView
                     android:id="@+id/status_text"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:maxLines="2"
-                    android:textColor="@color/accent"
+                    android:textColor="?android:attr/textColorSecondary"
                     android:textSize="16sp"/>
                 <!-- Wraps instead of clipping, so 200 % text and long zh/en labels stay whole. -->
                 <LinearLayout
@@ -132,13 +130,12 @@
                         android:id="@+id/purpose_badge"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:background="@drawable/bg_badge"
                         android:maxLines="2"
                         android:paddingLeft="12dp"
                         android:paddingTop="6dp"
                         android:paddingRight="12dp"
                         android:paddingBottom="6dp"
-                        android:textColor="@color/fg"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:textSize="15sp"
                         android:visibility="invisible"/>
                     <TextView
@@ -147,13 +144,12 @@
                         android:layout_height="wrap_content"
                         android:layout_marginLeft="8dp"
                         android:layout_marginStart="8dp"
-                        android:background="@drawable/bg_badge"
                         android:maxLines="1"
                         android:paddingLeft="12dp"
                         android:paddingTop="6dp"
                         android:paddingRight="12dp"
                         android:paddingBottom="6dp"
-                        android:textColor="@color/fg"
+                        android:textColor="?android:attr/textColorPrimary"
                         android:textSize="15sp"
                         android:visibility="gone"/>
                 </LinearLayout>
@@ -170,7 +166,7 @@
                 android:minWidth="48dp"
                 android:paddingLeft="12dp"
                 android:paddingRight="12dp"
-                android:textColor="@color/fg"
+                android:textColor="?android:attr/textColorPrimary"
                 android:textSize="14sp"/>
         </LinearLayout>
 
@@ -193,25 +189,26 @@
                 android:orientation="horizontal">
                 <Button
                     android:id="@+id/answer_button"
+                    style="@style/Widget.Doorbell.Button.Call"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="2"
                     android:focusable="true"
                     android:maxLines="2"
-                    android:text="@string/ring_answer"
-                    android:textSize="18sp"/>
+                    android:text="@string/ring_answer"/>
                 <Button
                     android:id="@+id/reply_button"
+                    style="@style/Widget.Doorbell.Button.Call.Tonal"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="8dp"
                     android:layout_marginStart="8dp"
                     android:layout_weight="1"
                     android:focusable="true"
-                    android:maxLines="2"
-                    android:textSize="16sp"/>
+                    android:maxLines="2"/>
                 <Button
                     android:id="@+id/close_button"
+                    style="@style/Widget.Doorbell.Button.Call.Outlined"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="8dp"
@@ -219,8 +216,7 @@
                     android:layout_weight="1"
                     android:focusable="true"
                     android:maxLines="2"
-                    android:text="@string/ring_ignore"
-                    android:textSize="16sp"/>
+                    android:text="@string/ring_ignore"/>
             </LinearLayout>
             <LinearLayout
                 android:id="@+id/secondary_row"
@@ -231,14 +227,15 @@
                 android:orientation="horizontal">
                 <Button
                     android:id="@+id/monitor_button"
+                    style="@style/Widget.Doorbell.Button.Tonal"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
                     android:focusable="true"
-                    android:maxLines="2"
-                    android:textSize="15sp"/>
+                    android:maxLines="2"/>
                 <Button
                     android:id="@+id/unlock_button"
+                    style="@style/Widget.Doorbell.Button.Tonal"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="8dp"
@@ -247,18 +244,17 @@
                     android:focusable="true"
                     android:maxLines="2"
                     android:text="@string/ring_unlock"
-                    android:textSize="15sp"
                     android:visibility="gone"/>
                 <Button
                     android:id="@+id/mic_button"
+                    style="@style/Widget.Doorbell.Button.Tonal"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="8dp"
                     android:layout_marginStart="8dp"
                     android:layout_weight="1"
                     android:focusable="true"
-                    android:maxLines="2"
-                    android:textSize="15sp"/>
+                    android:maxLines="2"/>
             </LinearLayout>
         </LinearLayout>
 
@@ -268,7 +264,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:baselineAligned="false"
-            android:gravity="center_vertical"
+            android:gravity="center"
             android:orientation="horizontal"
             android:paddingLeft="16dp"
             android:paddingRight="16dp"
@@ -279,13 +275,12 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:maxLines="2"
-                android:textColor="@color/dim"
+                android:textColor="?android:attr/textColorSecondary"
                 android:textSize="13sp"/>
             <FrameLayout
                 android:id="@+id/sos_slot"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="200dp"/>
+                android:layout_height="wrap_content"/>
         </LinearLayout>
     </LinearLayout>
 

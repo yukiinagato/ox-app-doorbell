@@ -7,7 +7,6 @@
 // and configuration export/import. Every write goes through the same Core validation as before.
 package jp.ox.doorbell
 
-import android.app.AlertDialog
 import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -16,7 +15,7 @@ import android.text.Editable
 import android.text.InputType
 import android.text.TextWatcher
 import android.view.View
-import android.widget.CheckBox
+import android.widget.CompoundButton
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.RadioButton
@@ -49,7 +48,9 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         ShellUi.row(a, a.palette, title, value, note, enabled = !a.readOnly, onClick = onClick)
 
     private fun info(card: LinearLayout, text: String) =
-        add(card, ShellUi.text(a, text, 12.5f, a.palette.muted))
+        add(card, ShellUi.label(a, text, TextRole.SUPPORTING).apply {
+            setPadding(ShellUi.dp(a, 16), ShellUi.dp(a, 8), ShellUi.dp(a, 16), ShellUi.dp(a, 8))
+        })
 
     private fun hexToken(bytes: Int): String {
         val b = ByteArray(bytes)
@@ -61,33 +62,28 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
     private fun form(): Pair<ScrollView, LinearLayout> {
         val box = LinearLayout(a).apply {
             orientation = LinearLayout.VERTICAL
-            val pad = ShellUi.dp(a, 16)
+            val pad = ShellUi.dp(a, 24)
             setPadding(pad, ShellUi.dp(a, 8), pad, ShellUi.dp(a, 8))
         }
         return ScrollView(a).apply { addView(box) } to box
     }
 
     private fun caption(box: LinearLayout, text: String) {
-        box.addView(ShellUi.text(a, text, 12.5f, Palette.LIGHT.muted).apply {
+        box.addView(ShellUi.label(a, text, TextRole.LABEL).apply {
             setPadding(0, ShellUi.dp(a, 10), 0, ShellUi.dp(a, 2))
         }, ShellUi.matchWrap())
     }
 
+    /** A labelled text field; the title floats as the field's own label. */
     private fun field(box: LinearLayout, title: String, value: String, kind: Int =
         InputType.TYPE_CLASS_TEXT, multiline: Boolean = false): EditText {
-        caption(box, title)
-        return EditText(a).apply {
-            inputType = kind or (if (multiline) InputType.TYPE_TEXT_FLAG_MULTI_LINE else 0)
-            setSingleLine(!multiline)
-            if (multiline) minLines = 2
-            setText(value)
-            minHeight = ShellUi.dp(a, ShellUi.TOUCH_FLOOR_DP)
-            box.addView(this, ShellUi.matchWrap())
-        }
+        val entry = PlatformUi.field(a, title, value, kind, if (multiline) 2 else 1)
+        box.addView(entry.view, ShellUi.matchWrap().apply { topMargin = ShellUi.dp(a, 8) })
+        return entry.input
     }
 
-    private fun check(box: LinearLayout, title: String, value: Boolean): CheckBox =
-        CheckBox(a).apply {
+    private fun check(box: LinearLayout, title: String, value: Boolean): CompoundButton =
+        PlatformUi.checkbox(a).apply {
             text = title
             isChecked = value
             minHeight = ShellUi.dp(a, ShellUi.TOUCH_FLOOR_DP)
@@ -100,7 +96,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         caption(box, title)
         val group = RadioGroup(a).apply { orientation = RadioGroup.VERTICAL }
         options.forEachIndexed { index, (value, text) ->
-            group.addView(RadioButton(a).apply {
+            group.addView(PlatformUi.radio(a).apply {
                 id = 0x5100 + index
                 this.text = text
                 isChecked = value == selected
@@ -122,19 +118,19 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
     /** A dialog whose positive button only closes when [onSave] returns true. */
     private fun dialog(title: String, view: View, neutral: String? = null,
                        onNeutral: (() -> Unit)? = null, onSave: () -> Boolean) {
-        val builder = AlertDialog.Builder(a).setTitle(title).setView(view)
+        val builder = ShellDialogBuilder(a).setTitle(title).setView(view)
             .setPositiveButton(L("admin.save"), null)
             .setNegativeButton(L("admin.cancel"), null)
         if (neutral != null) builder.setNeutralButton(neutral) { _, _ -> onNeutral?.invoke() }
         val d = builder.create()
         d.setOnShowListener {
-            d.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { if (onSave()) d.dismiss() }
+            d.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener { if (onSave()) d.dismiss() }
         }
         d.show()
     }
 
     private fun choose(title: String, options: List<Pair<String, String>>, onPick: (String) -> Unit) {
-        AlertDialog.Builder(a).setTitle(title)
+        ShellDialogBuilder(a).setTitle(title)
             .setItems(options.map { it.second as CharSequence }.toTypedArray()) { _, which ->
                 onPick(options[which].first)
             }
@@ -144,7 +140,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
     private fun multi(title: String, options: List<Pair<String, String>>, selected: Collection<String>,
                       onDone: (List<String>) -> Unit) {
         val checked = BooleanArray(options.size) { options[it].first in selected }
-        AlertDialog.Builder(a).setTitle(title)
+        ShellDialogBuilder(a).setTitle(title)
             .setMultiChoiceItems(options.map { it.second as CharSequence }.toTypedArray(), checked) {
                 _, which, on -> checked[which] = on
             }
@@ -155,7 +151,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
     }
 
     private fun confirm(title: String, message: String, action: String, onYes: () -> Unit) {
-        AlertDialog.Builder(a).setTitle(title).setMessage(message)
+        ShellDialogBuilder(a).setTitle(title).setMessage(message)
             .setPositiveButton(action) { _, _ -> onYes() }
             .setNegativeButton(L("admin.cancel"), null).show()
     }
@@ -356,7 +352,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         val state = TextView(a).apply { text = L("nset.record_ready"); textSize = 15f }
         box.addView(state, ShellUi.matchWrap())
         val name = field(box, L("admin.asset_label"), L("nset.record_default_name"))
-        val toggle = ShellUi.button(a, L("nset.record_start"), Palette.LIGHT) { }
+        val toggle = ShellUi.button(a, L("nset.record_start"), a.palette) { }
         box.addView(toggle, ShellUi.matchWrap())
         toggle.setOnClickListener {
             if (recorder.recording) {
@@ -526,7 +522,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         val query = field(box, L("settings.search"), "")
         val results = LinearLayout(a).apply { orientation = LinearLayout.VERTICAL }
         box.addView(results, ShellUi.matchWrap())
-        val d = AlertDialog.Builder(a).setTitle(L("nset.wording_add")).setView(scroll)
+        val d = ShellDialogBuilder(a).setTitle(L("nset.wording_add")).setView(scroll)
             .setNegativeButton(L("admin.cancel"), null).create()
         fun fill(q: String) {
             results.removeAllViews()
@@ -535,9 +531,9 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
             all.asSequence().filter { (key, id) ->
                 key.contains(needle) || a.getString(id).lowercase().contains(needle)
             }.take(40).forEach { (key, id) ->
-                results.addView(ShellUi.row(a, Palette.LIGHT, a.getString(id), key) {
+                results.addView(ShellUi.row(a, a.palette, a.getString(id), key) {
                     d.dismiss(); editOverride(key)
-                }, ShellUi.matchWrap().apply { topMargin = ShellUi.dp(a, 4) })
+                }, ShellUi.matchWrap())
             }
         }
         query.addTextChangedListener(object : TextWatcher {
@@ -567,11 +563,10 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         val fields = SettingsModel.LANGUAGES.associateWith { lang ->
             val original = builtIn(key, lang)
             caption(box, "${Texts.langDisplayName(lang)} — ${L("nset.wording_builtin")}: $original")
-            EditText(a).apply {
-                setText(I18nKeys.current(overrides, lang, key))
-                hint = original
-                box.addView(this, ShellUi.matchWrap())
-            }
+            PlatformUi.field(a, value = I18nKeys.current(overrides, lang, key)).also {
+                it.input.hint = original
+                box.addView(it.view, ShellUi.matchWrap())
+            }.input
         }
         caption(box, L("nset.wording_blank_resets"))
         dialog(L("nset.wording"), scroll) {
@@ -992,7 +987,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
             val enabled = check(box, L("admin.enabled"), draft.enabled)
             enabled.setOnCheckedChangeListener { _, on -> draft = draft.copy(enabled = on) }
             fun sub(title: String, value: String, onClick: () -> Unit) {
-                box.addView(ShellUi.row(a, Palette.LIGHT, title, value, onClick = onClick),
+                box.addView(ShellUi.row(a, a.palette, title, value, onClick = onClick),
                             ShellUi.matchWrap().apply { topMargin = ShellUi.dp(a, 6) })
             }
             sub(L("admin.rule_when"), whenLabel(draft.whenType)) {
@@ -1122,7 +1117,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
             "telegram" -> {
                 var households: Any = out.opt("households") ?: "all"
                 val allBox = check(box, L("nset.all_households"), households == "all")
-                val pick = ShellUi.button(a, L("admin.households"), Palette.LIGHT) {
+                val pick = ShellUi.button(a, L("admin.households"), a.palette) {
                     val current = (households as? JSONArray)?.let { arr -> (0 until arr.length()).map { arr.optString(it) } }.orEmpty()
                     multi(L("admin.households"), householdOptions(), current) {
                         households = JSONArray(it); allBox.isChecked = it.isEmpty()
@@ -1142,13 +1137,13 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
                 var devices: Any? = out.opt("devices")
                 var sound = out.optString("sound")
                 val label = TextView(a).apply { text = soundName(sound).takeIf { sound.isNotEmpty() } ?: L("nset.default_sound") }
-                box.addView(ShellUi.button(a, L("admin.sound"), Palette.LIGHT) {
+                box.addView(ShellUi.button(a, L("admin.sound"), a.palette) {
                     chooseSound(L("admin.sound"), SettingsModel.RINGTONES, true) {
                         sound = it; label.text = if (it.isEmpty()) L("nset.default_sound") else soundName(it)
                     }
                 }, ShellUi.matchWrap())
                 box.addView(label, ShellUi.matchWrap())
-                box.addView(ShellUi.button(a, L("admin.devices"), Palette.LIGHT) {
+                box.addView(ShellUi.button(a, L("admin.devices"), a.palette) {
                     val current = (devices as? JSONArray)?.let { arr -> (0 until arr.length()).map { arr.optString(it) } }.orEmpty()
                     multi(L("admin.devices"), deviceOptions("indoor_panel"), current) {
                         devices = if (it.isEmpty()) null else JSONArray(it)
@@ -1616,7 +1611,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
                             LinearLayout.LayoutParams(ShellUi.dp(a, 180), ShellUi.dp(a, 180)))
             }
         }
-        AlertDialog.Builder(a).setTitle(L("panels.one_time_title")).setView(scroll)
+        ShellDialogBuilder(a).setTitle(L("panels.one_time_title")).setView(scroll)
             .setPositiveButton(L("panels.one_time_done"), null).show()
     }
 
@@ -1686,11 +1681,11 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         val message = L("nset.import_summary", changes.toString(), missingSecrets.toString(),
                         missingAssets.toString(), problems.toString())
         if (!preflight.optBoolean("can_commit", false)) {
-            AlertDialog.Builder(a).setTitle(L("admin.import_blocked")).setMessage(message)
+            ShellDialogBuilder(a).setTitle(L("admin.import_blocked")).setMessage(message)
                 .setPositiveButton(L("admin.menu_close")) { _, _ -> cancelImport(ref, session) }.show()
             return
         }
-        AlertDialog.Builder(a).setTitle(L("admin.import_commit")).setMessage(message)
+        ShellDialogBuilder(a).setTitle(L("admin.import_commit")).setMessage(message)
             .setPositiveButton(L("admin.import_commit")) { _, _ ->
                 val commit = JSONObject(ref.toString()).put("operation_id", ConfigTransfer.randomOperationId())
                 a.coreCall({

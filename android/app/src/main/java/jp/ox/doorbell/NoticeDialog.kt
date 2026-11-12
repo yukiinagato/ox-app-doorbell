@@ -58,31 +58,24 @@ internal object NoticeDialog {
             setPadding(pad, ShellUi.dp(activity, 8), pad, 0)
         }
 
-        val field = EditText(activity).apply {
-            setText(existing?.text.orEmpty())
-            setSingleLine(false)
+        val entry = PlatformUi.field(activity, texts.t("notice.title", R.string.notice_title),
+                                     existing?.text.orEmpty(), lines = 2)
+        val field = entry.input.apply {
             maxLines = 4
-            minLines = 2
-            gravity = Gravity.TOP or Gravity.START
             filters = arrayOf<InputFilter>(InputFilter.LengthFilter(NoticeModel.MAX_TEXT))
-            isFocusable = true
-            isFocusableInTouchMode = true
-            textSize = UiTokens.sp(UiTokens.BODY)
-            setTextColor(ShellUi.opaque(palette.ink))
-            background = ShellUi.rounded(activity, palette.surfaceAlt, UiTokens.RADIUS_CARD, palette.line)
-            val inset = ShellUi.dp(activity, UiTokens.SPACE_M)
-            setPadding(inset, inset, inset, inset)
-            minHeight = ShellUi.dp(activity, UiTokens.TOUCH_MIN_DP * 2)
         }
-        root.addView(field, ShellUi.matchWrap())
+        root.addView(entry.view, ShellUi.matchWrap())
 
-        val counter = ShellUi.text(
+        val counter = ShellUi.label(
             activity,
             texts.t("notice.char_count", R.string.notice_char_count,
                     field.text.length.toString()),
-            12f, palette.muted,
+            TextRole.LABEL,
         )
         root.addView(counter, ShellUi.matchWrap())
+        fun heading(value: String) = ShellUi.sectionHeading(activity, palette, value).apply {
+            setPadding(0, paddingTop, 0, paddingBottom)
+        }
         field.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -103,9 +96,7 @@ internal object NoticeDialog {
             ),
         )
         if (presets.isNotEmpty()) {
-            root.addView(ShellUi.sectionHeading(
-                activity, palette, texts.t("notice.presets", R.string.notice_presets),
-            ))
+            root.addView(heading(texts.t("notice.presets", R.string.notice_presets)))
             val strip = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
             for (preset in presets) {
                 strip.addView(
@@ -121,41 +112,37 @@ internal object NoticeDialog {
 
         // Target selector: 全体 / この門口機（玄関）.
         val targetRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
-        val globalButton = ShellUi.button(
-            activity, texts.t("notice.target_global", R.string.notice_target_global), palette,
-        ) { }
-        val doorButton = ShellUi.button(
+        val globalButton = PlatformUi.chip(
+            activity, texts.t("notice.target_global", R.string.notice_target_global),
+            ChipKind.FILTER,
+        )
+        val doorButton = PlatformUi.chip(
             activity,
             texts.t("notice.target_door", R.string.notice_target_door,
                     doorLabel(preselectDoor)),
-            palette,
-        ) { }
+            ChipKind.FILTER,
+        )
         fun paintTargets() {
-            UiKit.styleAction(globalButton, roles,
-                if (target == NoticeTarget.GLOBAL) ActionRole.PRIMARY else ActionRole.SECONDARY)
-            UiKit.styleAction(doorButton, roles,
-                if (target == NoticeTarget.DOOR) ActionRole.PRIMARY else ActionRole.SECONDARY)
+            PlatformUi.setChipChecked(globalButton, target == NoticeTarget.GLOBAL)
+            PlatformUi.setChipChecked(doorButton, target == NoticeTarget.DOOR)
         }
         globalButton.setOnClickListener { target = NoticeTarget.GLOBAL; paintTargets() }
         doorButton.setOnClickListener { target = NoticeTarget.DOOR; paintTargets() }
         if (preselectDoor.isNotEmpty()) {
-            root.addView(ShellUi.sectionHeading(
-                activity, palette, texts.t("notice.target", R.string.notice_target),
-            ))
-            val half = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-            targetRow.addView(globalButton, LinearLayout.LayoutParams(half))
-            targetRow.addView(doorButton, LinearLayout.LayoutParams(half).apply {
-                leftMargin = ShellUi.dp(activity, 6)
+            root.addView(heading(texts.t("notice.target", R.string.notice_target)))
+            val wrap = LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                                                 LinearLayout.LayoutParams.WRAP_CONTENT)
+            targetRow.addView(globalButton, LinearLayout.LayoutParams(wrap))
+            targetRow.addView(doorButton, LinearLayout.LayoutParams(wrap).apply {
+                leftMargin = ShellUi.dp(activity, UiTokens.SPACE_S)
             })
             root.addView(targetRow, ShellUi.matchWrap())
             paintTargets()
         }
 
         // Expiry presets.
-        root.addView(ShellUi.sectionHeading(
-            activity, palette, texts.t("notice.expiry", R.string.notice_expiry),
-        ))
-        val expiryButtons = LinkedHashMap<ExpiryChoice, Button>()
+        root.addView(heading(texts.t("notice.expiry", R.string.notice_expiry)))
+        val expiryButtons = LinkedHashMap<ExpiryChoice, TextView>()
         val expiryLabels = linkedMapOf(
             ExpiryChoice.ONE_HOUR to texts.t("notice.expiry_1h", R.string.notice_expiry_1h),
             ExpiryChoice.TODAY to texts.t("notice.expiry_today", R.string.notice_expiry_today),
@@ -164,51 +151,48 @@ internal object NoticeDialog {
         )
         val expiryRow = LinearLayout(activity).apply { orientation = LinearLayout.HORIZONTAL }
         fun paintExpiry() {
-            for ((choice, button) in expiryButtons) UiKit.styleAction(
-                button, roles, if (choice == expiry) ActionRole.PRIMARY else ActionRole.SECONDARY,
-            )
+            for ((choice, button) in expiryButtons)
+                PlatformUi.setChipChecked(button, choice == expiry)
         }
         // Three presets share a row, except at large text on a compact window where each takes
         // its own full-width row so no label is cut.
         val stackExpiry = window.sizeClass == SizeClass.COMPACT && window.largeText
         if (stackExpiry) expiryRow.orientation = LinearLayout.VERTICAL
         for ((choice, label) in expiryLabels) {
-            val button = ShellUi.button(activity, label, palette) {
+            val button = PlatformUi.chip(activity, label, ChipKind.FILTER)
+            button.setOnClickListener {
                 expiry = choice
                 paintExpiry()
             }
             expiryButtons[choice] = button
             expiryRow.addView(
                 button,
-                if (stackExpiry) ShellUi.matchWrap().apply {
-                    topMargin = if (expiryButtons.size == 1) 0 else ShellUi.dp(activity, UiTokens.SPACE_S)
-                } else LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
-                    leftMargin = if (expiryButtons.size == 1) 0 else ShellUi.dp(activity, UiTokens.SPACE_S)
+                LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                                          LinearLayout.LayoutParams.WRAP_CONTENT).apply {
+                    if (!stackExpiry && expiryButtons.size > 1)
+                        leftMargin = ShellUi.dp(activity, UiTokens.SPACE_S)
                 },
             )
         }
         root.addView(expiryRow, ShellUi.matchWrap())
         paintExpiry()
 
-        val status = ShellUi.text(activity, "", 13f, palette.danger).apply {
+        val status = ShellUi.label(activity, "", TextRole.SUPPORTING, palette.danger).apply {
             visibility = View.GONE
             setPadding(0, ShellUi.dp(activity, 8), 0, 0)
         }
         root.addView(status, ShellUi.matchWrap())
 
-        // A sheet (guidelines: radius 20, fixed action zone): bottom sheet on compact windows,
-        // a centred panel otherwise. Built from plain views so API 19 looks the same.
-        val scroll = ScrollView(activity).apply { addView(root) }
-        val sheet = LinearLayout(activity).apply {
-            orientation = LinearLayout.VERTICAL
-            background = ShellUi.rounded(activity, palette.surface, UiTokens.RADIUS_SHEET)
-            setPadding(0, pad, 0, pad)
-        }
-        sheet.addView(UiKit.text(activity, texts.t("notice.title", R.string.notice_title),
-                                 UiTokens.TITLE, palette.ink, bold = true).apply {
-            setPadding(pad, 0, pad, ShellUi.dp(activity, UiTokens.SPACE_S))
+        // The editor is a modal sheet: at the bottom on compact windows, at the side otherwise.
+        // The action row stays fixed under the scrolling fields.
+        val dialog = PlatformUi.sheet(activity, window.sizeClass != SizeClass.COMPACT)
+        val sheet = dialog.content
+        sheet.addView(ShellUi.label(activity, texts.t("notice.title", R.string.notice_title),
+                                    TextRole.TITLE).apply {
+            setPadding(0, 0, 0, ShellUi.dp(activity, UiTokens.SPACE_S))
         }, ShellUi.matchWrap())
-        sheet.addView(scroll, LinearLayout.LayoutParams(
+        root.setPadding(0, 0, 0, 0)
+        sheet.addView(ScrollView(activity).apply { addView(root) }, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f,
         ))
         val publishButton = UiKit.actionButton(
@@ -216,27 +200,16 @@ internal object NoticeDialog {
         ) { }
         val clearButton = UiKit.actionButton(
             activity, texts.t("notice.clear", R.string.notice_clear), roles, ActionRole.NEGATIVE,
+            kind = ButtonKind.TEXT,
         ) { }
-        val dialog = Dialog(activity)
         val cancelButton = UiKit.actionButton(
             activity, texts.t("admin.cancel", R.string.admin_cancel), roles, ActionRole.SECONDARY,
+            kind = ButtonKind.TEXT,
         ) { dialog.dismiss() }
         // Destructive on the start edge, the primary action last where the thumb ends.
         val actions = UiKit.row(activity, listOf(clearButton to 1f, cancelButton to 1f, publishButton to 1.4f))
-        actions.setPadding(pad, ShellUi.dp(activity, UiTokens.SPACE_M), pad, 0)
+        actions.setPadding(0, ShellUi.dp(activity, UiTokens.SPACE_M), 0, 0)
         sheet.addView(actions, ShellUi.matchWrap())
-        dialog.requestWindowFeature(Window.FEATURE_NO_TITLE)
-        dialog.setContentView(sheet)
-        dialog.window?.let { w ->
-            w.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-            val compact = window.sizeClass == SizeClass.COMPACT
-            w.setGravity(if (compact) Gravity.BOTTOM else Gravity.CENTER)
-            w.setLayout(
-                if (compact) WindowManager.LayoutParams.MATCH_PARENT
-                else ShellUi.dp(activity, 560),
-                WindowManager.LayoutParams.WRAP_CONTENT,
-            )
-        }
 
         val ui = Handler(Looper.getMainLooper())
         fun report(view: TextView, message: String, isError: Boolean) {

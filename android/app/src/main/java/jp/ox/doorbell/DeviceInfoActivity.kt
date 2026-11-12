@@ -22,7 +22,7 @@ import java.util.Locale
 import org.json.JSONArray
 import org.json.JSONObject
 
-class DeviceInfoActivity : Activity() {
+class DeviceInfoActivity : ShellActivity() {
 
     private lateinit var app: App
     private lateinit var texts: Texts
@@ -292,10 +292,23 @@ class DeviceInfoActivity : Activity() {
     private fun dp(v: Int) = PairingUi.dp(this, v)
 
     private fun buildUi(): View {
-        val scroll = ScrollView(this).apply { setBackgroundColor(PairingUi.BG) }
+        PairingUi.bind(this)
+        val frame = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(PairingUi.BG)
+        }
+        val bar = PlatformUi.appBar(this, texts.t("info.title", R.string.info_title))
+        bar.setBack(texts.t("panel.back", R.string.panel_back)) { finish() }
+        bar.addAction(R.drawable.ic_tabler_reload, texts.t("info.refresh", R.string.info_refresh)) {
+            refresh()
+        }
+        frame.addView(bar.view, PairingUi.matchWrap())
+        val scroll = ScrollView(this)
+        frame.addView(scroll, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(24), dp(20), dp(32))
+            setPadding(dp(16), dp(8), dp(16), dp(32))
         }
         scroll.addView(
             root,
@@ -304,30 +317,16 @@ class DeviceInfoActivity : Activity() {
                 ViewGroup.LayoutParams.WRAP_CONTENT,
             ),
         )
-        root.addView(
-            PairingUi.title(this, texts.t("info.title", R.string.info_title)),
-            PairingUi.matchWrap(),
-        )
+        val card = PairingUi.card(this)
         bodyView = TextView(this).apply {
-            setTextColor(PairingUi.DIM)
+            setTextColor(PairingUi.TEXT)
             textSize = 13f
             typeface = android.graphics.Typeface.MONOSPACE
             setTextIsSelectable(true)
-            setPadding(0, dp(14), 0, dp(14))
         }
-        root.addView(bodyView, PairingUi.matchWrap())
-        root.addView(
-            PairingUi.button(this, texts.t("info.refresh", R.string.info_refresh)) { refresh() },
-            PairingUi.matchWrap(),
-        )
-        root.addView(PairingUi.spacer(this, 8))
-        root.addView(
-            PairingUi.button(this, texts.t("admin.menu_close", R.string.admin_menu_close)) {
-                finish()
-            },
-            PairingUi.matchWrap(),
-        )
-        return scroll
+        card.addView(bodyView, PairingUi.matchWrap())
+        root.addView(card, PairingUi.matchWrap())
+        return frame
     }
 
     companion object {

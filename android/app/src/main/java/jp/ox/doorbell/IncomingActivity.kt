@@ -2,7 +2,6 @@
 // quick replies. It supports touch and D-pad input and can appear above the lock screen.
 package jp.ox.doorbell
 
-import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
@@ -19,7 +18,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONObject
 
-class IncomingActivity : Activity() {
+class IncomingActivity : ShellActivity() {
 
     private val ui = Handler(Looper.getMainLooper())
     private val visits = ResidentCallQueue()
@@ -48,11 +47,12 @@ class IncomingActivity : Activity() {
     private var peerHost: String? = null
     private var directPort = DIRECT_PORT
     private lateinit var clusterClock: ClusterClock
-    private lateinit var sosSlider: SosSlideView
+    private lateinit var sosSlider: SosTriggerView
     private var palette: Palette = Palette.DARK
     private var roles: UiRoles = UiRoles.from(Palette.DARK)
     private lateinit var screen: IncomingScreen
-    private var replySheet: UiKit.Sheet? = null
+    private var replySheet: SheetHandle? = null
+    private var videoZoom: VideoZoom? = null
     private var cachedConfig: JSONObject? = null
     private var cachedStatus: JSONObject? = null
 
@@ -140,15 +140,7 @@ class IncomingActivity : Activity() {
         clusterClock = ClusterClock(app.core)
         debugVisible = getSharedPreferences(PREFS, MODE_PRIVATE)
             .getBoolean(PREF_DEBUG_VISIBLE, true)
-        val appearance = CoreDisplays.parse(st?.optJSONObject("display")).appearance
-        palette = if (appearance != null)
-            Appearance.palette(CoreDisplays.isDark(appearance, systemDarkMode(this)))
-        else Appearance.resolve(
-            cfg,
-            st?.optJSONObject("node")?.optString("id").orEmpty(),
-            systemDarkMode(this),
-            clusterClock.now().minuteOfDay(),
-        )
+        palette = ShellAppearance.resolve(this, st, cfg, clusterClock.now().minuteOfDay())
 
         findViewById<TextView>(R.id.door_label).text = doorLabel()
         findViewById<TextView>(R.id.status_text).text =
@@ -170,14 +162,15 @@ class IncomingActivity : Activity() {
             if (visits.items.isEmpty()) finish() else refreshVisits()
         }
 
-        sosSlider = SosSlideView(this, ui)
+        sosSlider = SosTriggerView(this, ui)
         sosSlider.enabledProvider = { app.coreOk }
         sosSlider.onTrigger = { app.commitEmergency(true) }
         val sosSlot = findViewById<android.widget.FrameLayout>(R.id.sos_slot)
         sosSlot.addView(
             sosSlider,
             android.widget.FrameLayout.LayoutParams(
-                android.view.ViewGroup.LayoutParams.MATCH_PARENT, dp(56),
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
             ),
         )
         // The same cluster rule as every other screen: emergency.button_on_roles, defaulting to
@@ -192,7 +185,7 @@ class IncomingActivity : Activity() {
         updateDoorSwitcher()
         screen.arrange(roles, liveView = callId.isEmpty())
         val videoBox = findViewById<android.view.View>(R.id.video_box)
-        VideoZoom(findViewById(R.id.video_zoom_layer), videoBox)
+        videoZoom = VideoZoom(findViewById(R.id.video_zoom_layer), videoBox)
         videoBox.contentDescription = texts.t("ring.video_zoom_hint", R.string.ring_video_zoom_hint)
         buildControlRow(cfg)
         buildNoticeChip()
@@ -283,6 +276,8 @@ class IncomingActivity : Activity() {
         newExpiry: Long,
     ) {
         ui.removeCallbacksAndMessages(null)  // Also cancels a delayed answer for the old door.
+        // A zoomed or panned picture belongs to the door that was on screen.
+        videoZoom?.reset()
         videoPlayer?.stop()
         videoPlayer = null
         if (sipCalling) app.core.sipHangup()
@@ -368,7 +363,7 @@ class IncomingActivity : Activity() {
     }
     private fun installVisitViews() {
         val details = findViewById<LinearLayout>(R.id.details_box)
-        occupancy = TextView(this).also { it.setTextColor(android.graphics.Color.WHITE); details.addView(it) }
+        occupancy = ShellUi.label(this, "", TextRole.SUPPORTING).also { details.addView(it) }
         queueLayout = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
         val scroll = android.widget.ScrollView(this)
         scroll.addView(queueLayout)
@@ -388,7 +383,7 @@ class IncomingActivity : Activity() {
                 texts.t("conversation.pending", R.string.conversation_pending)
             else texts.t("conversation.failed", R.string.conversation_failed)
         }
-        if (action == "takeover") android.app.AlertDialog.Builder(this)
+        if (action == "takeover") ShellDialogBuilder(this)
             .setMessage(texts.t("conversation.takeover_confirm", R.string.conversation_takeover_confirm))
             .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
             .setPositiveButton(texts.t("conversation.takeover", R.string.conversation_takeover)) { _, _ -> perform() }.show()
@@ -431,7 +426,7 @@ class IncomingActivity : Activity() {
             queueSignature = signature
             queueLayout?.removeAllViews()
             for (visit in visits.items) {
-                val button = Button(this)
+                val button = PlatformUi.button(this, ButtonKind.TONAL)
                 button.text = texts.t(if (visit.key == ResidentCallQueue.Key(door, callId)) "ring.queue_selected" else "ring.queue_waiting",
                     if (visit.key == ResidentCallQueue.Key(door, callId)) R.string.ring_queue_selected else R.string.ring_queue_waiting,
                     doorLabel(visit.key.door))
@@ -476,7 +471,7 @@ class IncomingActivity : Activity() {
                     else -> emptyList()
                 }
                 for (action in actions) {
-                    val button = Button(this)
+                    val button = PlatformUi.button(this, ButtonKind.TONAL)
                     val resource = resources.getIdentifier("conversation_$action", "string", packageName)
                     button.text = texts.t("conversation.$action", resource)
                     bindTarget(button)
@@ -498,6 +493,12 @@ class IncomingActivity : Activity() {
             }
         }
     }
+
+    /**
+     * The call screen keeps the appearance it opened in: rebuilding it would tear the live video
+     * and the audio leg down. It closes on its own countdown and reopens in the new appearance.
+     */
+    override fun onAppearanceChanged() = Unit
 
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
@@ -762,7 +763,7 @@ class IncomingActivity : Activity() {
         if (visitorLang.isEmpty() || visitorLang == "ja") {
             langBadge.visibility = View.GONE
         } else {
-            langBadge.text = "🌐 " + visitorLang.uppercase()
+            langBadge.text = visitorLang.uppercase()
             langBadge.contentDescription = texts.t("ring.lang_badge", R.string.ring_lang_badge,
                                                    Texts.langDisplayName(visitorLang))
             langBadge.visibility = View.VISIBLE
@@ -961,9 +962,8 @@ class IncomingActivity : Activity() {
         for (id in ids) {
             val q = replies.optJSONObject(id) ?: continue
             val label = labelOf(q, lang, id)
-            val b = Button(this)
+            val b = PlatformUi.button(this, ButtonKind.TONAL)
             b.text = label
-            b.textSize = UiTokens.sp(UiTokens.BODY)
             b.maxLines = 3
             b.isFocusable = true
             IncomingScreen.styleReply(b, roles, UiKit.window(this))
@@ -1018,13 +1018,28 @@ class IncomingActivity : Activity() {
 
     private fun applyAppearance() {
         findViewById<View>(R.id.incoming_frame).setBackgroundColor(ShellUi.opaque(palette.ground))
-        findViewById<TextView>(R.id.door_label).setTextColor(ShellUi.opaque(palette.ink))
-        findViewById<TextView>(R.id.status_text).setTextColor(ShellUi.opaque(palette.accent))
-        findViewById<TextView>(R.id.audio_hint).setTextColor(ShellUi.opaque(palette.muted))
-        findViewById<TextView>(R.id.no_video_text).setTextColor(ShellUi.opaque(palette.muted))
+        // The picture area is always black, so what sits on it keeps a fixed light ink.
+        findViewById<TextView>(R.id.no_video_text).setTextColor(ON_VIDEO_INK)
         val debug = findViewById<TextView>(R.id.debug_line)
         debug.setTextColor(ShellUi.opaque(palette.muted))
         debug.background = ShellUi.rounded(this, palette.surfaceAlt, 8)
+        findViewById<TextView>(R.id.sent_text).apply {
+            background = ShellUi.rounded(this@IncomingActivity, palette.surfaceAlt, UiTokens.RADIUS_SHEET)
+            setTextColor(ShellUi.opaque(palette.ink))
+        }
+        for (id in listOf(R.id.purpose_badge, R.id.lang_badge)) findViewById<TextView>(id).apply {
+            background = ShellUi.rounded(this@IncomingActivity, palette.surfaceAlt, 8)
+            setTextColor(ShellUi.opaque(palette.ink))
+        }
+        @Suppress("DEPRECATION")
+        resources.getDrawable(R.drawable.ic_tabler_world).mutate().let { icon ->
+            val size = dp(18)
+            icon.setBounds(0, 0, size, size)
+            icon.setColorFilter(ShellUi.opaque(palette.ink), android.graphics.PorterDuff.Mode.SRC_IN)
+            val badge = findViewById<TextView>(R.id.lang_badge)
+            badge.setCompoundDrawables(icon, null, null, null)
+            badge.compoundDrawablePadding = dp(6)
+        }
         sosSlider.applyPalette(palette)
     }
 
@@ -1056,12 +1071,16 @@ class IncomingActivity : Activity() {
             text = if (monitorOn) texts.t("ring.monitor_on", R.string.ring_monitor_on)
             else texts.t("ring.monitor_off", R.string.ring_monitor_off)
             isSelected = monitorOn
+            PlatformUi.setButtonIcon(this, if (monitorOn) R.drawable.ic_tabler_volume
+                                           else R.drawable.ic_tabler_eye_off)
         }
         findViewById<Button>(R.id.mic_button).apply {
             text = if (micMuted) texts.t("ring.mic_off", R.string.ring_mic_off)
             else texts.t("ring.mic_on", R.string.ring_mic_on)
             isSelected = !micMuted
             isEnabled = inCall
+            PlatformUi.setButtonIcon(this, if (micMuted) R.drawable.ic_tabler_microphone_off
+                                           else R.drawable.ic_tabler_microphone)
         }
         findViewById<TextView>(R.id.audio_hint).visibility =
             if (sipCalling && monitorOn && !inCall) View.VISIBLE else View.GONE
@@ -1153,18 +1172,17 @@ class IncomingActivity : Activity() {
             cachedStatus, cachedConfig, door, clusterClock.now().wallMs,
         )
         val active = notice != null
-        chip.text = (if (active) "● " else "") +
-            texts.t("notice.title", R.string.notice_title)
+        chip.text = texts.t("notice.title", R.string.notice_title)
         chip.background = ShellUi.rounded(
-            this, if (active) palette.noticeBg else palette.surfaceAlt, 999,
-            if (active) palette.noticeLine else palette.line,
+            this, if (active) palette.noticeBg else palette.surfaceAlt, 8,
+            if (active) palette.noticeLine else null,
         )
         chip.setTextColor(ShellUi.opaque(if (active) palette.noticeInk else palette.muted))
         chip.setOnClickListener { showNoticePopover(notice) }
     }
 
     private fun showNoticePopover(notice: Notice?) {
-        val builder = android.app.AlertDialog.Builder(this)
+        val builder = ShellDialogBuilder(this)
             .setTitle(texts.t("notice.title", R.string.notice_title))
             .setMessage(notice?.text ?: texts.t("notice.none", R.string.notice_none))
             .setPositiveButton(
@@ -1200,6 +1218,10 @@ class IncomingActivity : Activity() {
     private fun buildAdminQr(status: JSONObject?) {
         val slot = findViewById<LinearLayout>(R.id.admin_qr_slot)
         slot.removeAllViews()
+        // A plate under the address: the picture behind it is whatever the camera shows.
+        slot.background = ShellUi.rounded(this, palette.surface, 8)
+        val inset = dp(6)
+        slot.setPadding(inset, inset, inset, inset)
         slot.addView(
             AdminLinks.view(
                 this, palette, app.core, AdminLinks.resolve(status, app.boot.httpPort),
@@ -1250,12 +1272,13 @@ class IncomingActivity : Activity() {
     }
 
     private fun toast(message: String) {
-        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
+        PlatformUi.toast(this, message)
     }
 
     private fun dp(v: Int): Int = (v * resources.displayMetrics.density).toInt()
 
     companion object {
+        private const val ON_VIDEO_INK = 0xFFD0D4DA.toInt()
         private const val PREFS = "doorbell-incoming"
         private const val PREF_DEBUG_VISIBLE = "debug_line_visible"
         private const val DEBUG_INTERVAL_MS = 1_000L

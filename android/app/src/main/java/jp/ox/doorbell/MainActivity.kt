@@ -3,7 +3,6 @@
 package jp.ox.doorbell
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -35,7 +34,7 @@ import java.util.Calendar
 import org.json.JSONArray
 import org.json.JSONObject
 
-class MainActivity : Activity(), DoorbellCore.Listener {
+class MainActivity : ShellActivity(), DoorbellCore.Listener {
 
     private val ui = Handler(Looper.getMainLooper())
     private lateinit var app: App
@@ -79,7 +78,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private lateinit var noticeCard: TextView
     private lateinit var visitorFooter: LinearLayout
     private lateinit var sosSlot: android.widget.FrameLayout
-    private lateinit var sosSlider: SosSlideView
+    private lateinit var sosSlider: SosTriggerView
     private lateinit var clusterClock: ClusterClock
 
     /** Present only on an indoor panel; the door station never builds a dashboard. */
@@ -123,17 +122,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private var nodeId = ""
     private var visitorLang = "ja"
     private var choosingPurpose = false
-    private val backdrop by lazy(LazyThreadSafetyMode.NONE) {
-        VisitorBackdrop(this, app, rootView, themeBg, nightTint, ui,
-            config = { cfg }, nodeId = { nodeId }, palette = { palette },
-            coreDisplay = { coreDisplay },
-            inkRegions = {
-                listOf(
-                    InkRegion(clockText, "clock", false), InkRegion(dateText, "date", true),
-                    InkRegion(touchHint, "hint", true), InkRegion(nodeInfo, "footer", true),
-                )
-            })
-    }
+    private lateinit var backdrop: VisitorBackdrop
+    private var resumed = false
     private val audio by lazy(LazyThreadSafetyMode.NONE) { ShellAudio(this) }
     private var callTitleOverride: String? = null
     private var callFlowMode = CallFlowMode.PURPOSE_FIRST
@@ -182,11 +172,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         clusterClock = ClusterClock(app.core)
         visitorLang = app.boot.uiLang
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        setContentView(R.layout.activity_main)
-        bindViews()
-        purposePanel = VisitorPurposePanel(this, purposeGrid) { id, label -> onPurposeClick(id, label) }
-        languageBar = VisitorLanguageBar(this, langBar) { lang -> onLangClick(lang) }
-        installRoleHome()
+        buildContent()
 
         val worker = HandlerThread("doorbell-home", Process.THREAD_PRIORITY_BACKGROUND)
         worker.start()
@@ -196,6 +182,43 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         refreshConfigCache()
         texts.setLang(visitorLang)
         applyStrings()
+
+        speech = ShellSpeech(this)
+
+        requestPermissionsIfNeeded()
+
+        // The foreground registration itself happens in onResume so a screen opened above this
+        // one (pairing, maintenance) can never leave the main UI without Core events.
+        if (!app.coreOk) showOffline() else restoreCurrentCallUi()
+        refreshNodeInfo()
+        restoreRequestedCall(intent)
+        ui.postDelayed({ playLaunchSound() }, 350)
+    }
+
+    /**
+     * Inflate the screen and wire its controls. Runs again when the appearance changes, because
+     * a view keeps the theme it was built with.
+     */
+    private fun buildContent() {
+        setContentView(R.layout.activity_main)
+        bindViews()
+        backdrop = VisitorBackdrop(this, app, rootView, themeBg, nightTint, ui,
+            config = { cfg }, nodeId = { nodeId }, palette = { palette },
+            coreDisplay = { coreDisplay },
+            inkRegions = {
+                listOf(
+                    InkRegion(clockText, "clock", false), InkRegion(dateText, "date", true),
+                    InkRegion(touchHint, "hint", true), InkRegion(nodeInfo, "footer", true),
+                )
+            })
+        purposePanel = VisitorPurposePanel(this, purposeGrid) { id, label -> onPurposeClick(id, label) }
+        languageBar = VisitorLanguageBar(this, langBar) { lang -> onLangClick(lang) }
+        dashboard = null
+        installRoleHome()
+        membershipRenderKey = ""
+        lastClockText = ""
+        lastClockDate = ""
+        (pulse as android.view.ViewGroup).addView(PlatformUi.progress(this))
 
         callButton.setOnClickListener { onCallClick() }
         purposeSkipButton.setOnClickListener { continueWithoutPurpose(true) }
@@ -210,17 +233,26 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             app.resumePairingSetup()
             PairingActivity.launch(this)
         }
+    }
 
-        speech = ShellSpeech(this)
-
-        requestPermissionsIfNeeded()
-
-        // The foreground registration itself happens in onResume so a screen opened above this
-        // one (pairing, maintenance) can never leave the main UI without Core events.
+    /**
+     * Core's appearance flipped while the home screen is up. The home screen is rebuilt in place
+     * rather than recreated: a visitor call in progress, the chime and the audio all carry on.
+     */
+    override fun onAppearanceChanged() {
+        if (!::app.isInitialized || isFinishing) return
+        dashboard?.onPause()
+        stopRegionInkWatch()
+        sosSlider.cancelCountdown()
+        pulse.clearAnimation()
+        buildContent()
         if (!app.coreOk) showOffline() else restoreCurrentCallUi()
         refreshNodeInfo()
-        restoreRequestedCall(intent)
-        ui.postDelayed({ playLaunchSound() }, 350)
+        if (resumed) {
+            dashboard?.onResume()
+            applyVisitorLayout()
+            startRegionInkWatch()
+        }
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -239,13 +271,18 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             return
         }
         setupLaunchRequested = false
+        resumed = true
         // Re-register on every resume: a pairing or maintenance screen closing above this one
         // must hand the event stream back, or chimes and display events are lost until restart.
         app.bindForeground(this)
         // Keep unenrolled devices in the pairing flow. The pairing document is read off the main
         // thread: core may be holding its run loop (SQLite, sync) and the visitor screen must not
         // freeze while it answers.
-        checkPairingAsync()
+        checkPairingAsync {
+            // Core may have come up while onboarding covered this screen; the offline pane shown
+            // at creation must not outlive it.
+            if (app.coreOk && offlineView.visibility == View.VISIBLE) restoreCurrentCallUi()
+        }
         enterImmersive()
         ui.post(clockTick)
         if (choosingPurpose) {
@@ -358,7 +395,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             texts.t("admin.menu_boot_setup", R.string.admin_menu_boot_setup),
             texts.t("admin.menu_exit_kiosk", R.string.admin_menu_exit_kiosk),
         )
-        android.app.AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setTitle(texts.t("admin.menu_title", R.string.admin_menu_title))
             .setItems(labels) { _, which ->
                 when (which) {
@@ -391,6 +428,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         // Leaving with setup still required must re-open setup on the next resume;
         // otherwise backing out of first-run setup strands the operator on an empty screen.
         setupLaunchRequested = false
+        resumed = false
         ui.removeCallbacks(clockTick)
         ui.removeCallbacks(purposeTimeout)
         ui.removeCallbacks(homeRefreshTick)
@@ -481,7 +519,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         noticeCard = findViewById(R.id.notice_card)
         visitorFooter = findViewById(R.id.visitor_footer)
         sosSlot = findViewById(R.id.sos_slot)
-        sosSlider = SosSlideView(this, ui)
+        sosSlider = SosTriggerView(this, ui)
         sosSlot.addView(
             sosSlider,
             android.widget.FrameLayout.LayoutParams(
@@ -594,13 +632,10 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         val roles = visitorRoles()
         callButton.minHeight = dp(height)
         callButton.minimumHeight = dp(height)
-        callButton.textSize = UiTokens.sp(UiTokens.HEADLINE)
         UiKit.styleAction(cancelButton, roles, ActionRole.NEGATIVE, height, emphasis = true)
         UiKit.styleAction(purposeCancelButton, roles, ActionRole.NEGATIVE, height, emphasis = true)
         UiKit.styleAction(purposeSkipButton, roles, ActionRole.SECONDARY,
                           ScreenLayouts.touchTargetDp(window, 56))
-        for (button in listOf(cancelButton, purposeCancelButton))
-            button.textSize = UiTokens.sp(UiTokens.TITLE)
         pairingBanner.background = ShellUi.rounded(this, roles.warning, UiTokens.RADIUS_CARD)
         pairingBanner.setTextColor(ShellUi.opaque(roles.onWarning))
         applyCallButtonAccent()
@@ -680,13 +715,13 @@ class MainActivity : Activity(), DoorbellCore.Listener {
     private fun applyAppearance() {
         // Core resolves the schedule in the cluster time zone; the shell only adds the platform's
         // own light/dark setting for auto_system, and computes everything locally on an older core.
-        val appearance = coreDisplay.appearance
-        palette = if (appearance != null)
-            Appearance.palette(CoreDisplays.isDark(appearance, systemDarkMode(this)))
-        else Appearance.resolve(
-            cfg, nodeId, systemDarkMode(this), clusterClock.now().minuteOfDay(),
+        palette = ShellAppearance.resolve(
+            this, statusSnapshot, cfg, clusterClock.now().minuteOfDay(),
         )
         if (dashboard != null) return
+        replyBanner.background = ShellUi.rounded(this, palette.surfaceAlt, UiTokens.RADIUS_SHEET)
+        replyCaption.setTextColor(ShellUi.opaque(palette.muted))
+        replyText.setTextColor(ShellUi.opaque(palette.ink))
         // A configured background colour or image wins; the palette ground is the fallback.
         if (themeValue("bg_color") == null && themeValue("bg_image").isNullOrEmpty())
             rootView.setBackgroundColor(ShellUi.opaque(palette.ground))
@@ -724,9 +759,8 @@ class MainActivity : Activity(), DoorbellCore.Listener {
         val (background, ink) = CoreDisplays.callButton(
             coreDisplay.theme, effectiveBackgroundRgb(),
         )
-        callButton.background = ShellUi.rounded(this, background, UiTokens.RADIUS_CARD)
-        callButton.setTextColor(ShellUi.opaque(ink))
-        SemanticUi.invalidate(callButton)
+        SemanticUi.release(callButton)
+        PlatformUi.styleButton(callButton, ButtonKind.FILLED, background, ink)
     }
 
     /**
@@ -854,9 +888,9 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             texts.t("sos.slide_sub", R.string.sos_slide_sub, countdown.toString()),
             texts.t("sos.countdown_cancel", R.string.sos_countdown_cancel),
             countdown,
-            texts.t("sos.accessibility_start", R.string.sos_accessibility_start),
-            texts.t("sos.accessibility_hint", R.string.sos_accessibility_hint),
-            texts.t("sos.accessibility_confirm", R.string.sos_accessibility_confirm),
+            texts.t("sos.confirm_title", R.string.sos_confirm_title),
+            texts.t("sos.hint", R.string.sos_hint),
+            texts.t("sos.send", R.string.sos_send),
         ) { seconds -> texts.t("sos.countdown", R.string.sos_countdown, seconds.toString()) }
         sosSlot.visibility = if (sosVisibleForRole()) View.VISIBLE else View.GONE
     }
@@ -878,6 +912,7 @@ class MainActivity : Activity(), DoorbellCore.Listener {
             "call.end" else "cancel.call", styleConfig, nodeId)
         for (index in 0 until purposeGrid.childCount)
             SemanticUi.apply(purposeGrid.getChildAt(index), "purpose.button", styleConfig, nodeId)
+        sosSlider.applySemantic(styleConfig, nodeId)
         SemanticUi.apply(offlineTitle, "status.offline", styleConfig, nodeId)
         SemanticUi.apply(offlineBody, "status.offline", styleConfig, nodeId)
     }

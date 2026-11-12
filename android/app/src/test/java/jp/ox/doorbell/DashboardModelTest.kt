@@ -79,20 +79,18 @@ class DashboardModelTest {
     fun tileGridFollowsTheAreaItActuallyGets() {
         // Phone portrait: tabs, stacked, one column.
         val phone = WindowSpec(390, 840)
-        assertFalse(DashboardModel.split(phone))
         assertEquals(390, DashboardModel.tileAreaWidthDp(phone))
         assertEquals(1, DashboardModel.tileColumns(phone, 4))
         // Tablet portrait: rail, stacked, two columns.
         val tabletPortrait = WindowSpec(800, 1280)
         assertEquals(704, DashboardModel.tileAreaWidthDp(tabletPortrait))
         assertEquals(2, DashboardModel.tileColumns(tabletPortrait, 4))
-        // Tablet landscape: rail and split with the call list.
+        // Tablet landscape: the rail only; the home surface has no call list beside the tiles.
         val tabletLandscape = WindowSpec(1280, 800)
-        assertTrue(DashboardModel.split(tabletLandscape))
-        assertEquals(615, DashboardModel.tileAreaWidthDp(tabletLandscape))
-        assertEquals(2, DashboardModel.tileColumns(tabletLandscape, 4))
-        // Large desktop window: three columns even beside the list.
-        assertEquals(3, DashboardModel.tileColumns(WindowSpec(1920, 1080), 6))
+        assertEquals(1184, DashboardModel.tileAreaWidthDp(tabletLandscape))
+        assertEquals(3, DashboardModel.tileColumns(tabletLandscape, 4))
+        // Large desktop window: the tiles have the full width, so four columns.
+        assertEquals(4, DashboardModel.tileColumns(WindowSpec(1920, 1080), 6))
         // 200 % text drops a column.
         assertEquals(1, DashboardModel.tileColumns(WindowSpec(800, 1280, 2f), 4))
         assertEquals(0, DashboardModel.tileRows(0, 2))

@@ -5,7 +5,6 @@
 package jp.ox.doorbell
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
@@ -17,17 +16,15 @@ import android.text.TextWatcher
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
-import android.widget.SeekBar
 import android.widget.TextView
 import java.util.Locale
 import java.util.TimeZone
 import org.json.JSONArray
 import org.json.JSONObject
 
-class SettingsActivity : Activity(), DoorbellCore.Listener {
+class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
 
     internal val ui = Handler(Looper.getMainLooper())
     internal lateinit var app: App
@@ -44,8 +41,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     private var query = ""
     private var roles: UiRoles = UiRoles.from(Palette.DARK)
     private lateinit var detailScroll: ScrollView
-    private lateinit var backButton: TextView
-    private lateinit var titleView: TextView
+    private lateinit var appBar: AppBarHandle
     private var twoPane = false
     /** The open category; null shows the category list on a phone. */
     private var selected: SettingsCategory? = null
@@ -176,7 +172,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     override fun onUiEvent(ev: JSONObject) {
         when (ev.optString("t")) {
             "config_changed", "peers_changed", "notice_changed", "time_changed",
-            "power_changed", "cluster_key_changed", "peer_rejected", "pairing_state",
+            "power_changed", "cluster_key_changed", "peer_rejected", "pairing_state", "display",
             -> ui.post {
                 if (isFinishing) return@post
                 refreshSnapshots()
@@ -195,12 +191,8 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         nodeId = status?.optJSONObject("node")?.optString("id").orEmpty()
     }
 
-    private fun resolvePalette(): Palette {
-        val appearance = CoreDisplays.parse(status?.optJSONObject("display")).appearance
-        if (appearance != null)
-            return Appearance.palette(CoreDisplays.isDark(appearance, systemDarkMode(this)))
-        return Appearance.resolve(config, nodeId, systemDarkMode(this), clock.now().minuteOfDay())
-    }
+    private fun resolvePalette(): Palette =
+        ShellAppearance.resolve(this, status, config, clock.now().minuteOfDay())
 
     // ---------- layout: drill-down on phones, two panes on tablets ----------
 
@@ -216,57 +208,31 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(ShellUi.opaque(palette.ground))
         }
-        // Toolbar: a back arrow while a phone shows one category, then the screen title.
-        val toolbar = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = ShellUi.dp(this@SettingsActivity, 56)
-            val pad = ShellUi.dp(this@SettingsActivity, 8)
-            setPadding(pad, 0, ShellUi.dp(this@SettingsActivity, 16), 0)
-        }
-        backButton = ShellUi.text(this, "\u2039", 30f, palette.ink, bold = true).apply {
-            gravity = Gravity.CENTER
-            contentDescription = texts.t("settings.back", R.string.settings_back)
-            isClickable = true
-            isFocusable = true
-            setOnClickListener { showCategoryList() }
-        }
-        toolbar.addView(backButton, LinearLayout.LayoutParams(
-            ShellUi.dp(this, ShellUi.TOUCH_FLOOR_DP), ShellUi.dp(this, ShellUi.TOUCH_FLOOR_DP)))
-        titleView = ShellUi.text(this, "", 22f, palette.ink, bold = true)
-        toolbar.addView(titleView, LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        root.addView(toolbar, ShellUi.matchWrap())
+        // Top app bar: back steps from a category to the list on a phone, and out of settings
+        // otherwise.
+        appBar = PlatformUi.appBar(this, texts.t("settings.title", R.string.settings_title))
+        root.addView(appBar.view, ShellUi.matchWrap())
 
         categoryList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         listView = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         categoryScroll = paneScroll(categoryList)
         roles = UiRoles.from(palette)
         categoryPane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val search = EditText(this).apply {
-            setText(query)
-            hint = texts.t("settings.search_hint", R.string.settings_search_hint)
-            setSingleLine(true)
-            textSize = UiTokens.sp(UiTokens.BODY)
-            setTextColor(ShellUi.opaque(palette.ink))
-            setHintTextColor(ShellUi.opaque(palette.muted))
-            background = ShellUi.rounded(this@SettingsActivity, palette.surface,
-                                         UiTokens.RADIUS_PILL, palette.line)
-            val padH = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L)
-            setPadding(padH, 0, padH, 0)
-            minHeight = ShellUi.dp(this@SettingsActivity, UiTokens.TOUCH_MIN_DP)
-            inputType = InputType.TYPE_CLASS_TEXT
-            addTextChangedListener(object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun afterTextChanged(value: Editable?) {
-                    val next = value?.toString().orEmpty()
-                    if (next == query) return
-                    query = next
-                    applySearch()
-                }
-            })
-        }
+        val searchEntry = PlatformUi.field(
+            this, texts.t("settings.search_hint", R.string.settings_search_hint), query,
+            icon = R.drawable.ic_tabler_search,
+        )
+        val search = searchEntry.view
+        searchEntry.input.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(value: Editable?) {
+                val next = value?.toString().orEmpty()
+                if (next == query) return
+                query = next
+                applySearch()
+            }
+        })
         categoryPane.addView(search, ShellUi.matchWrap().apply {
             val m = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L)
             setMargins(m, ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_S), m, 0)
@@ -284,7 +250,8 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             body.addView(categoryPane, LinearLayout.LayoutParams(
                 ShellUi.dp(this, CATEGORY_PANE_DP), ViewGroup.LayoutParams.MATCH_PARENT))
             body.addView(View(this).apply { setBackgroundColor(ShellUi.opaque(palette.line)) },
-                         LinearLayout.LayoutParams(1, ViewGroup.LayoutParams.MATCH_PARENT))
+                         LinearLayout.LayoutParams(ShellUi.dp(this, 1),
+                                                   ViewGroup.LayoutParams.MATCH_PARENT))
             body.addView(detailScroll, LinearLayout.LayoutParams(
                 0, ViewGroup.LayoutParams.MATCH_PARENT, 1f))
         } else {
@@ -300,7 +267,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     private fun paneScroll(content: LinearLayout): ScrollView = ScrollView(this).apply {
         isFillViewport = true
         val pad = ShellUi.dp(this@SettingsActivity, 16)
-        setPadding(pad, 0, pad, pad)
+        setPadding(0, 0, 0, pad)
         clipToPadding = false
         addView(content, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -328,31 +295,51 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         selected?.let { outState.putString(STATE_CATEGORY, it.id) }
     }
 
+    /**
+     * Rebuilt in place rather than recreated: the administrator session handed over by the
+     * password gate lives in this instance and must not be lost to an appearance flip.
+     */
+    override fun onAppearanceChanged() {
+        palette = PlatformUi.tokens(this)
+        setContentView(buildShell())
+        render()
+    }
+
     override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
         super.onConfigurationChanged(newConfig)
+        palette = PlatformUi.tokens(this)
         // Rotating a tablet can move between one and two panes; the open category survives.
         setContentView(buildShell())
         render()
     }
 
     internal fun render() {
+        // Every render follows a fresh snapshot; an appearance changed on this very screen is
+        // reported here so it shows at once.
+        resolvePalette()
         renderCategoryList()
         val category = selected
         listView.removeAllViews()
         if (readOnly) listView.addView(
             ShellUi.pill(this, texts.t("settings.offline", R.string.settings_offline),
-                         palette.noticeBg, palette.noticeInk, 13f),
-            ShellUi.matchWrap(),
+                         palette.noticeBg, palette.noticeInk),
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                                      ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                leftMargin = ShellUi.dp(this@SettingsActivity, 16)
+            },
         )
         if (category != null) renderCategory(category)
         if (!twoPane) {
             categoryPane.visibility = if (category == null) View.VISIBLE else View.GONE
             detailScroll.visibility = if (category == null) View.GONE else View.VISIBLE
         }
-        backButton.visibility =
-            if (!twoPane && category != null) View.VISIBLE else View.INVISIBLE
-        titleView.text = if (!twoPane && category != null) label(category.titleKey)
-            else texts.t("settings.title", R.string.settings_title)
+        val drilled = !twoPane && category != null
+        appBar.setTitle(if (drilled) label(category!!.titleKey)
+                        else texts.t("settings.title", R.string.settings_title))
+        appBar.setBack(
+            if (drilled) texts.t("settings.back", R.string.settings_back)
+            else texts.t("admin.menu_close", R.string.admin_menu_close),
+        ) { if (drilled) showCategoryList() else finish() }
     }
 
     /** Categories the search matches: by their own title or any setting title inside them. */
@@ -380,57 +367,34 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         categoryList.removeAllViews()
         val matches = visibleCategories()
         if (matches.isEmpty()) categoryList.addView(
-            UiKit.text(this, texts.t("settings.search_empty", R.string.settings_search_empty),
-                       UiTokens.BODY, palette.muted).apply {
-                setPadding(0, ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L), 0, 0)
+            ShellUi.label(this, texts.t("settings.search_empty", R.string.settings_search_empty),
+                          TextRole.BODY, palette.muted).apply {
+                val pad = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L)
+                setPadding(pad, pad, pad, 0)
             },
             ShellUi.matchWrap(),
         )
         for (category in matches) {
             val active = twoPane && category == selected
-            val row = categoryRow(category, active)
-            categoryList.addView(row, ShellUi.matchWrap().apply {
-                topMargin = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_XS)
-            })
+            categoryList.addView(categoryRow(category, active), ShellUi.matchWrap())
         }
-        categoryList.addView(
-            UiKit.actionButton(this, texts.t("admin.menu_close", R.string.admin_menu_close),
-                               roles, ActionRole.SECONDARY) { finish() },
-            ShellUi.matchWrap().apply { topMargin = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L) },
-        )
     }
 
     /** Icon and title, as Android Settings lists its categories; the open one is highlighted. */
     private fun categoryRow(category: SettingsCategory, active: Boolean): View =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = ShellUi.dp(this@SettingsActivity, UiTokens.TOUCH_MIN_DP + UiTokens.SPACE_S)
-            val padH = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_M)
-            setPadding(padH, 0, padH, 0)
-            isClickable = true
-            isFocusable = true
+        ShellUi.row(this, palette, label(category.titleKey), icon = categoryIcon(category)) {
+            selected = category
+            render()
+            detailScroll.scrollTo(0, 0)
+        }.apply {
             isSelected = active
-            background = ShellUi.rounded(this@SettingsActivity,
-                                         if (active) palette.surfaceAlt else palette.ground,
-                                         UiTokens.RADIUS_CARD, if (active) roles.accent else null)
             contentDescription = label(category.titleKey)
-            setOnClickListener {
-                selected = category
-                render()
-                detailScroll.scrollTo(0, 0)
+            if (active) {
+                // The open category keeps a tonal plate, as a selected list item does.
+                setBackgroundColor(ShellUi.opaque(palette.surfaceAlt))
+                (getChildAt(0) as? android.widget.ImageView)
+                    ?.setColorFilter(ShellUi.opaque(ShellUi.accentInk(palette)))
             }
-            addView(android.widget.ImageView(this@SettingsActivity).apply {
-                setImageResource(categoryIcon(category))
-                setColorFilter(ShellUi.opaque(if (active) roles.accent else palette.muted))
-                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(ShellUi.dp(this@SettingsActivity, 24),
-                                         ShellUi.dp(this@SettingsActivity, 24)).apply {
-                rightMargin = ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_L)
-            })
-            addView(UiKit.text(this@SettingsActivity, label(category.titleKey), UiTokens.BODY,
-                               palette.ink, bold = active).apply { maxLines = 2 },
-                    LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         }
 
     private fun categoryIcon(category: SettingsCategory): Int = when (category) {
@@ -449,20 +413,13 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     /**
-     * A destructive or security action (guidelines "Settings"): a full-width button in the
-     * negative role with its consequence written under it; the caller confirms before acting.
+     * A destructive or security action (guidelines "Settings"): a list row in the negative
+     * colour with its consequence written under it; the caller confirms before acting.
      */
     internal fun destructiveRow(title: String, note: String, onClick: () -> Unit): View =
-        LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            addView(UiKit.actionButton(this@SettingsActivity, title, roles, ActionRole.NEGATIVE) {
-                if (!readOnly) onClick()
-            }.apply { isEnabled = !readOnly }, ShellUi.matchWrap())
-            if (note.isNotEmpty()) addView(UiKit.text(this@SettingsActivity, note, UiTokens.CAPTION,
-                                                      palette.muted).apply {
-                setPadding(ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_XS),
-                           ShellUi.dp(this@SettingsActivity, UiTokens.SPACE_XS), 0, 0)
-            }, ShellUi.matchWrap())
+        ShellUi.row(this, palette, title, note = note, enabled = !readOnly) { onClick() }.apply {
+            ((getChildAt(0) as? LinearLayout)?.getChildAt(0) as? TextView)
+                ?.setTextColor(ShellUi.opaque(if (readOnly) palette.muted else palette.danger))
         }
 
     private fun renderCategory(category: SettingsCategory) {
@@ -530,17 +487,20 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
 
     // ---------- sections ----------
 
+    /** A titled group of rows on a card; returns the card's content column. */
     internal fun section(title: String): LinearLayout {
         listView.addView(ShellUi.sectionHeading(this, palette, title), ShellUi.matchWrap())
         val card = ShellUi.card(this, palette)
-        listView.addView(card, ShellUi.matchWrap())
-        return card
+        listView.addView(card.root, ShellUi.matchWrap().apply {
+            val margin = ShellUi.dp(this@SettingsActivity, 16)
+            leftMargin = margin
+            rightMargin = margin
+        })
+        return card.content
     }
 
     internal fun LinearLayout.row(view: View) {
-        addView(view, ShellUi.matchWrap().apply {
-            topMargin = if (childCount == 0) 0 else ShellUi.dp(this@SettingsActivity, 6)
-        })
+        addView(view, ShellUi.matchWrap())
     }
 
     private fun sectionThisDevice() {
@@ -617,9 +577,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
                 ?: defaultVolume(level)
             card.row(volumeRow(texts.t(titleKey, titleRes), deviceKey, value, inherited, level))
         }
-        card.row(ShellUi.text(
-            this, texts.t("volume.hint", R.string.volume_hint), 12.5f, palette.muted,
-        ))
+        card.row(rowNote(texts.t("volume.hint", R.string.volume_hint)))
     }
 
     private fun sectionTime() {
@@ -663,9 +621,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         }
         card.row(ShellUi.row(this, palette,
                              texts.t("time.status", R.string.time_status), detail))
-        card.row(ShellUi.button(
-            this, texts.t("time.sync_now", R.string.time_sync_now), palette,
-        ) {
+        card.row(rowAction(texts.t("time.sync_now", R.string.time_sync_now)) {
             Thread({
                 val previousSync = app.core.status()?.optJSONObject("time")?.optLong("last_sync_ms", 0L) ?: 0L
                 val started = app.core.timeSyncNow()
@@ -696,8 +652,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         val card = section(texts.t("settings.doors", R.string.settings_doors))
         val doors = doorIds()
         if (doors.isEmpty()) {
-            card.row(ShellUi.text(this, texts.t("dash.no_doors", R.string.dash_no_doors), 14f,
-                                  palette.muted))
+            card.row(rowNote(texts.t("dash.no_doors", R.string.dash_no_doors)))
             native.addDoorRow(card)
             return
         }
@@ -774,9 +729,10 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     /** Security v3 key state, the re-pair notice after an upgrade, and key rotation. */
     private fun sectionClusterSecurity(card: LinearLayout) {
         PairingModel.upgradeRejoinReason(pairing)?.let { reason ->
-            card.row(ShellUi.pill(this, texts.t("pair.upgrade_rejoin", R.string.pair_upgrade_rejoin) +
-                " · " + texts.t("pair.err_detail", R.string.pair_err_detail, reason),
-                palette.dangerSoft, palette.dangerInk, 13f))
+            card.row(rowNote(texts.t("pair.upgrade_rejoin", R.string.pair_upgrade_rejoin) +
+                " · " + texts.t("pair.err_detail", R.string.pair_err_detail, reason)).apply {
+                setTextColor(ShellUi.opaque(palette.danger))
+            })
         }
         val security = PairingModel.security(pairing)
         if (security != null) {
@@ -794,7 +750,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
 
     /** The confirmation names the consequence and repeats the action on its button. */
     private fun confirmRotateKey() {
-        AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setTitle(label("settings.item_rotate_key"))
             .setMessage(label("settings.item_rotate_key_confirm"))
             .setPositiveButton(label("settings.item_rotate_key")) { _, _ ->
@@ -819,29 +775,31 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     private fun changePassword() {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            val pad = ShellUi.dp(this@SettingsActivity, 16)
+            val pad = ShellUi.dp(this@SettingsActivity, 24)
             setPadding(pad, ShellUi.dp(this@SettingsActivity, 8), pad, 0)
         }
-        fun field(hintKey: String) = EditText(this).apply {
-            setSingleLine(true)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
-            hint = label(hintKey)
-            box.addView(this, ShellUi.matchWrap())
+        fun field(hintKey: String) = PlatformUi.field(
+            this, label(hintKey),
+            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD,
+        ).also {
+            box.addView(it.view, ShellUi.matchWrap().apply {
+                topMargin = ShellUi.dp(this@SettingsActivity, 8)
+            })
         }
         val current = field("settings.item_password_current")
         val next = field("settings.item_password_new")
         val confirm = field("settings.item_password_confirm")
-        AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setTitle(label("settings.item_password_change"))
             .setView(box)
             .setPositiveButton(texts.t("admin.save", R.string.admin_save)) { _, _ ->
-                val nextValue = next.text.toString()
-                when (SettingsModel.checkNewPassword(nextValue, confirm.text.toString())) {
+                val nextValue = next.text
+                when (SettingsModel.checkNewPassword(nextValue, confirm.text)) {
                     PasswordCheck.TOO_SHORT, PasswordCheck.TOO_LONG ->
                         toast(label("settings.item_password_short"))
                     PasswordCheck.MISMATCH -> toast(label("settings.item_password_mismatch"))
                     PasswordCheck.OK -> {
-                        val currentValue = current.text.toString()
+                        val currentValue = current.text
                         Thread({
                             val result = app.core.adminPasswordSet(currentValue, nextValue)
                             ui.post {
@@ -869,20 +827,15 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun sectionWebAdmin() {
-        listView.addView(
-            ShellUi.sectionHeading(this, palette,
-                                   texts.t("web_admin.open", R.string.web_admin_open)),
-            ShellUi.matchWrap(),
-        )
-        val card = ShellUi.card(this, palette)
+        val card = section(texts.t("web_admin.open", R.string.web_admin_open))
+        val pad = ShellUi.dp(this, 16)
         card.addView(
             AdminLinks.view(
                 this, palette, app.core, AdminLinks.resolve(status, app.boot.httpPort),
                 texts.t("web_admin.scan_hint", R.string.web_admin_scan_hint), 96,
-            ),
+            ).apply { setPadding(pad, pad, pad, pad) },
             ShellUi.matchWrap(),
         )
-        listView.addView(card, ShellUi.matchWrap())
     }
 
     private fun sectionAbout() {
@@ -955,7 +908,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         }
         return ShellUi.row(this, palette, title, summary, enabled = !readOnly) {
             val checked = BooleanArray(spec.options.size) { spec.options[it] in current }
-            AlertDialog.Builder(this)
+            ShellDialogBuilder(this)
                 .setTitle(title)
                 .setMultiChoiceItems(
                     spec.options.map {
@@ -974,7 +927,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         }
     }
 
-    /** A SeekBar that writes once, when the finger lifts. */
+    /** A slider that writes once, when the finger lifts. */
     private fun sliderRow(
         spec: SettingSpec.IntRange,
         key: String,
@@ -982,40 +935,68 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         current: Int,
         note: String,
     ): View {
-        val column = LinearLayout(this).apply {
+        val readout = ShellUi.label(this, current.coerceIn(spec.min, spec.max).toString(),
+                                    TextRole.BODY, palette.muted)
+        var slider: SliderHandle? = null
+        slider = PlatformUi.slider(
+            this, spec.min, spec.max, current, !readOnly,
+            onChange = { readout.text = it.toString() },
+            onCommit = { value ->
+                val json = SettingsModel.encodeInt(spec, value.toString())
+                if (json != null) write(key, json) { ok -> if (!ok) slider?.value = current }
+            },
+        )
+        return sliderBlock(title, note, readout, slider.view)
+    }
+
+    /** Title with a live readout, an optional note, then the slider across the row. */
+    private fun sliderBlock(title: String, note: String, readout: View, slider: View,
+                            below: View? = null): View =
+        LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = ShellUi.rounded(this@SettingsActivity, palette.surface,
-                                         ShellUi.PILL_RADIUS_DP, palette.line)
-            val pad = ShellUi.dp(this@SettingsActivity, ShellUi.PILL_PADDING_H_DP)
-            setPadding(pad, ShellUi.dp(this@SettingsActivity, 8), pad,
+            val padH = ShellUi.dp(this@SettingsActivity, 16)
+            setPadding(padH, ShellUi.dp(this@SettingsActivity, 12), padH,
+                       ShellUi.dp(this@SettingsActivity, 4))
+            val header = LinearLayout(this@SettingsActivity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            header.addView(ShellUi.label(this@SettingsActivity, title, TextRole.BODY),
+                           LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            header.addView(readout)
+            addView(header, ShellUi.matchWrap())
+            if (note.isNotEmpty())
+                addView(ShellUi.label(this@SettingsActivity, note, TextRole.LABEL), ShellUi.matchWrap())
+            addView(slider, ShellUi.matchWrap())
+            if (below != null) addView(below, ShellUi.matchWrap())
+        }
+
+    /** Explanatory text inside a section, aligned with the rows around it. */
+    internal fun rowNote(text: String): TextView =
+        ShellUi.label(this, text, TextRole.SUPPORTING).apply {
+            val padH = ShellUi.dp(this@SettingsActivity, 16)
+            setPadding(padH, ShellUi.dp(this@SettingsActivity, 8), padH,
                        ShellUi.dp(this@SettingsActivity, 8))
         }
-        val heading = ShellUi.text(this, "$title  ${current.coerceIn(spec.min, spec.max)}", 15f,
-                                   palette.ink)
-        column.addView(heading)
-        if (note.isNotEmpty()) column.addView(ShellUi.text(this, note, 12.5f, palette.muted))
-        val bar = SeekBar(this).apply {
-            max = spec.max - spec.min
-            progress = current.coerceIn(spec.min, spec.max) - spec.min
-            isEnabled = !readOnly
-            minimumHeight = ShellUi.dp(this@SettingsActivity, ShellUi.TOUCH_FLOOR_DP)
+
+    /** A secondary action inside a section: a tonal button at the row inset. */
+    internal fun rowAction(title: String, onClick: () -> Unit): View =
+        LinearLayout(this).apply {
+            val padH = ShellUi.dp(this@SettingsActivity, 16)
+            setPadding(padH, ShellUi.dp(this@SettingsActivity, 4), padH,
+                       ShellUi.dp(this@SettingsActivity, 12))
+            addView(ShellUi.button(this@SettingsActivity, title, palette) { onClick() })
         }
-        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                heading.text = "$title  ${progress + spec.min}"
-            }
 
-            override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
-
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                val json = SettingsModel.encodeInt(spec, (seekBar.progress + spec.min).toString())
-                    ?: return
-                write(key, json) { ok -> if (!ok) seekBar.progress = current - spec.min }
-            }
-        })
-        column.addView(bar, ShellUi.matchWrap())
-        return column
-    }
+    /** A dialog's single text field, inset to the dialog's content margin. */
+    private fun dialogField(entry: FieldHandle, extra: View? = null): View =
+        LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = ShellUi.dp(this@SettingsActivity, 24)
+            setPadding(pad, ShellUi.dp(this@SettingsActivity, 8), pad, 0)
+            addView(entry.view, ShellUi.matchWrap())
+            if (extra != null) addView(extra, ShellUi.matchWrap())
+        }
 
     /** A time picker; [ops] turns the picked "HH:MM" into the batch to write (null = invalid). */
     internal fun timeRow(
@@ -1041,16 +1022,15 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         ShellUi.row(this, palette, title,
                     current.ifEmpty { texts.t("settings.value_unset", R.string.settings_value_unset) },
                     note, enabled = !readOnly) {
-            val field = EditText(this).apply {
-                setSingleLine(true)
-                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-                setText(current)
-            }
-            AlertDialog.Builder(this)
+            val field = PlatformUi.field(
+                this, value = current,
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI,
+            )
+            ShellDialogBuilder(this)
                 .setTitle(title)
-                .setView(field)
+                .setView(dialogField(field))
                 .setPositiveButton(texts.t("admin.save", R.string.admin_save)) { _, _ ->
-                    val raw = field.text.toString().trim()
+                    val raw = field.text.trim()
                     val json = SettingsModel.encodeText(kind, raw)
                     when {
                         json == null -> toast(label("settings.invalid_value"))
@@ -1072,23 +1052,23 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     ) {
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            val pad = ShellUi.dp(this@SettingsActivity, 16)
+            val pad = ShellUi.dp(this@SettingsActivity, 24)
             setPadding(pad, ShellUi.dp(this@SettingsActivity, 8), pad, 0)
         }
         val fields = SettingsModel.LANGUAGES.associateWith { lang ->
-            EditText(this).apply {
-                setSingleLine(true)
-                hint = label("admin.label_$lang")
-                setText(current?.optString(lang).orEmpty())
-                box.addView(this, ShellUi.matchWrap())
+            PlatformUi.field(this, label("admin.label_$lang"),
+                             current?.optString(lang).orEmpty()).also {
+                box.addView(it.view, ShellUi.matchWrap().apply {
+                    topMargin = ShellUi.dp(this@SettingsActivity, 8)
+                })
             }
         }
         if (extra != null) box.addView(extra, ShellUi.matchWrap())
-        val builder = AlertDialog.Builder(this)
+        val builder = ShellDialogBuilder(this)
             .setTitle(title)
             .setView(box)
             .setPositiveButton(texts.t("admin.save", R.string.admin_save)) { _, _ ->
-                onSave(fields.mapValues { it.value.text.toString() })
+                onSave(fields.mapValues { it.value.text })
             }
             .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
         if (onDelete != null) builder.setNeutralButton(label("admin.delete")) { _, _ -> onDelete() }
@@ -1123,7 +1103,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     internal fun editQuickReply(id: String?, reply: JSONObject?) {
-        val speak = android.widget.CheckBox(this).apply {
+        val speak = PlatformUi.checkbox(this).apply {
             text = label("admin.qr_speak")
             isChecked = reply?.optBoolean("speak", true) ?: true
         }
@@ -1214,7 +1194,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
             this, palette, texts.t("unlock.title", R.string.unlock_title),
             choices.first { it.first == current }.second, note, enabled = !readOnly,
         ) {
-            AlertDialog.Builder(this)
+            ShellDialogBuilder(this)
                 .setTitle(texts.t("unlock.title", R.string.unlock_title))
                 .setItems(choices.map { it.second as CharSequence }.toTypedArray()) { _, which ->
                     // "自動" is the absence of the key, so it is a delete rather than a write.
@@ -1235,37 +1215,19 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         value: Boolean,
         note: String = "",
     ): View {
-        val row = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            minimumHeight = ShellUi.dp(this@SettingsActivity, ShellUi.TOUCH_FLOOR_DP)
-            background = ShellUi.rounded(this@SettingsActivity, palette.surface,
-                                         ShellUi.PILL_RADIUS_DP, palette.line)
-            val padH = ShellUi.dp(this@SettingsActivity, ShellUi.PILL_PADDING_H_DP)
-            setPadding(padH, ShellUi.dp(this@SettingsActivity, 8), padH,
-                       ShellUi.dp(this@SettingsActivity, 8))
-        }
-        val labels = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        labels.addView(ShellUi.text(this, title, 15f, palette.ink))
-        if (note.isNotEmpty())
-            labels.addView(ShellUi.text(this, note, 12.5f, palette.muted))
-        row.addView(labels, LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
-        ))
-        // A framework Switch keeps D-pad focus without pulling in a support library.
-        val toggle = android.widget.Switch(this).apply {
+        val toggle = PlatformUi.toggle(this).apply {
             isChecked = value
             isFocusable = true
             isEnabled = !readOnly
-            minimumHeight = ShellUi.dp(this@SettingsActivity, ShellUi.TOUCH_FLOOR_DP)
         }
         toggle.setOnCheckedChangeListener { _, checked ->
             write(key, if (checked) "true" else "false") { ok ->
                 if (!ok) toggle.isChecked = !checked
             }
         }
-        row.addView(toggle)
-        return row
+        // The whole row toggles, as a settings switch row does.
+        return ShellUi.row(this, palette, title, note = note, enabled = !readOnly,
+                           trailing = toggle) { toggle.toggle() }
     }
 
     /** The dashboard still rate is this panel's own preference, so it bypasses core writes. */
@@ -1274,7 +1236,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         fun label(rate: Double) = texts.t("dashboard.preview_rate_format",
             R.string.dashboard_preview_rate_format, PreviewRate.valueText(rate))
         return ShellUi.row(this, palette, title, label(PreviewRate.saved(this))) {
-            AlertDialog.Builder(this)
+            ShellDialogBuilder(this)
                 .setTitle(title)
                 .setItems(PreviewRate.RATES.map { label(it) as CharSequence }.toTypedArray()) { _, which ->
                     PreviewRate.save(this, PreviewRate.RATES[which])
@@ -1296,7 +1258,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     ): View = ShellUi.row(
         this, palette, title, label(current), note, enabled = !readOnly,
     ) {
-        AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setTitle(title)
             .setItems(options.map { label(it) as CharSequence }.toTypedArray()) { _, which ->
                 val chosen = options[which]
@@ -1308,15 +1270,13 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
 
     internal fun numberRow(title: String, key: String, current: Int, min: Int, max: Int): View =
         ShellUi.row(this, palette, title, current.toString(), enabled = !readOnly) {
-            val field = EditText(this).apply {
-                inputType = InputType.TYPE_CLASS_NUMBER
-                setText(current.toString())
-            }
-            AlertDialog.Builder(this)
+            val field = PlatformUi.field(this, "$min – $max", current.toString(),
+                                         InputType.TYPE_CLASS_NUMBER)
+            ShellDialogBuilder(this)
                 .setTitle(title)
-                .setView(field)
+                .setView(dialogField(field))
                 .setPositiveButton(texts.t("admin.save", R.string.admin_save)) { _, _ ->
-                    val value = field.text.toString().toIntOrNull()
+                    val value = field.text.toIntOrNull()
                     if (value == null || value < min || value > max) {
                         toast(texts.t("admin.save_failed", R.string.admin_save_failed))
                         return@setPositiveButton
@@ -1336,16 +1296,12 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         return ShellUi.row(
             this, palette, title, values.joinToString(", "), note, enabled = !readOnly,
         ) {
-            val field = EditText(this).apply {
-                setSingleLine(false)
-                minLines = 2
-                setText(values.joinToString("\n"))
-            }
-            AlertDialog.Builder(this)
+            val field = PlatformUi.field(this, value = values.joinToString("\n"), lines = 2)
+            ShellDialogBuilder(this)
                 .setTitle(title)
-                .setView(field)
+                .setView(dialogField(field))
                 .setPositiveButton(texts.t("admin.save", R.string.admin_save)) { _, _ ->
-                    val entries = field.text.toString().split("\n")
+                    val entries = field.text.split("\n")
                         .map { it.trim() }.filter { it.isNotEmpty() }
                     if (entries.isEmpty() || entries.size > 4) {
                         toast(texts.t("time.invalid_servers", R.string.time_invalid_servers))
@@ -1366,20 +1322,25 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         val zones = TimeZone.getAvailableIDs()
             .filter { it.contains('/') && !it.startsWith("SystemV") }
             .sorted()
-        val container = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        val search = EditText(this).apply {
-            inputType = InputType.TYPE_CLASS_TEXT
-            hint = texts.t("time.zone", R.string.time_zone)
+        val container = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, ShellUi.dp(this@SettingsActivity, 8), 0, 0)
         }
+        val searchEntry = PlatformUi.field(this, texts.t("time.zone", R.string.time_zone))
+        val search = searchEntry.input
         val results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        container.addView(search, ShellUi.matchWrap())
+        container.addView(searchEntry.view, ShellUi.matchWrap().apply {
+            val margin = ShellUi.dp(this@SettingsActivity, 24)
+            leftMargin = margin
+            rightMargin = margin
+        })
         container.addView(
             ScrollView(this).apply { addView(results) },
             LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(this@SettingsActivity, 280),
             ),
         )
-        val dialog = AlertDialog.Builder(this)
+        val dialog = ShellDialogBuilder(this)
             .setTitle(texts.t("time.zone", R.string.time_zone))
             .setView(container)
             .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
@@ -1392,7 +1353,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
                     dialog.dismiss()
                     write("time.zone", JSONObject.quote(zone)) { }
                 },
-                ShellUi.matchWrap().apply { topMargin = ShellUi.dp(this@SettingsActivity, 4) },
+                ShellUi.matchWrap(),
             )
         }
         search.addTextChangedListener(object : TextWatcher {
@@ -1411,61 +1372,37 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
         inherited: Boolean,
         level: String,
     ): View {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            background = ShellUi.rounded(this@SettingsActivity, palette.surface,
-                                         ShellUi.PILL_RADIUS_DP, palette.line)
-            val padH = ShellUi.dp(this@SettingsActivity, ShellUi.PILL_PADDING_H_DP)
-            setPadding(padH, ShellUi.dp(this@SettingsActivity, 8), padH,
-                       ShellUi.dp(this@SettingsActivity, 8))
-        }
-        val header = LinearLayout(this).apply {
+        val readout = ShellUi.label(this, value.toString(), TextRole.BODY, palette.muted)
+        val bar = PlatformUi.slider(
+            this, 0, 100, value, !readOnly,
+            onChange = { readout.text = it.toString() },
+            onCommit = { write(deviceKey, it.toString()) { } },
+        )
+        val actions = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        val readout = ShellUi.text(this, value.toString(), 15f, palette.muted)
-        header.addView(ShellUi.text(this, title, 15f, palette.ink),
-                       LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        header.addView(readout)
-        box.addView(header, ShellUi.matchWrap())
-
-        val bar = SeekBar(this).apply {
-            max = 100
-            progress = value.coerceIn(0, 100)
-            isFocusable = true
-            isEnabled = !readOnly
-            minimumHeight = ShellUi.dp(this@SettingsActivity, ShellUi.TOUCH_FLOOR_DP)
-        }
-        bar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                readout.text = progress.toString()
-            }
-            override fun onStartTrackingTouch(seekBar: SeekBar) {}
-            override fun onStopTrackingTouch(seekBar: SeekBar) {
-                write(deviceKey, seekBar.progress.toString()) { }
-            }
-        })
-        box.addView(bar, ShellUi.matchWrap())
-
-        val actions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        val inheritToggle = android.widget.Switch(this).apply {
-            text = texts.t("volume.inherit", R.string.volume_inherit)
+        val inheritToggle = PlatformUi.toggle(this).apply {
             isChecked = inherited
             isFocusable = true
             isEnabled = !readOnly
-            minimumHeight = ShellUi.dp(this@SettingsActivity, ShellUi.TOUCH_FLOOR_DP)
         }
         inheritToggle.setOnCheckedChangeListener { _, checked ->
-            if (checked) deleteKey(deviceKey) else write(deviceKey, bar.progress.toString()) { }
+            if (checked) deleteKey(deviceKey) else write(deviceKey, bar.value.toString()) { }
         }
-        actions.addView(inheritToggle, LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
-        ))
+        actions.addView(inheritToggle)
+        actions.addView(
+            ShellUi.label(this, texts.t("volume.inherit", R.string.volume_inherit),
+                          TextRole.SUPPORTING).apply {
+                setPadding(ShellUi.dp(this@SettingsActivity, 12), 0, 0, 0)
+                setOnClickListener { if (!readOnly) inheritToggle.toggle() }
+            },
+            LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f),
+        )
         actions.addView(ShellUi.button(
             this, texts.t("volume.preview", R.string.volume_preview), palette,
-        ) { previewVolume(level, bar.progress) })
-        box.addView(actions, ShellUi.matchWrap())
-        return box
+        ) { previewVolume(level, bar.value) })
+        return sliderBlock(title, "", readout, bar.view, actions)
     }
 
     /**
@@ -1475,30 +1412,23 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     private fun colourRow(title: String, key: String, current: String): View {
         val warning = contrastWarning(current)
         return ShellUi.row(this, palette, title, current, warning, enabled = !readOnly) {
-            val field = EditText(this).apply {
-                inputType = InputType.TYPE_CLASS_TEXT
-                setText(current)
+            val field = PlatformUi.field(this, "#RRGGBB", current)
+            val advice = ShellUi.label(this, warning, TextRole.SUPPORTING, palette.warning).apply {
+                setPadding(0, ShellUi.dp(this@SettingsActivity, 8), 0, 0)
             }
-            val advice = ShellUi.text(this, warning, 12.5f, palette.noticeInk)
-            val container = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL
-                val pad = ShellUi.dp(this@SettingsActivity, 16)
-                setPadding(pad, ShellUi.dp(this@SettingsActivity, 8), pad, 0)
-                addView(field, ShellUi.matchWrap())
-                addView(advice, ShellUi.matchWrap())
-            }
-            field.addTextChangedListener(object : TextWatcher {
+            val container = dialogField(field, advice)
+            field.input.addTextChangedListener(object : TextWatcher {
                 override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
                 override fun afterTextChanged(s: Editable?) {
                     advice.text = contrastWarning(s?.toString().orEmpty())
                 }
             })
-            AlertDialog.Builder(this)
+            ShellDialogBuilder(this)
                 .setTitle(title)
                 .setView(container)
                 .setPositiveButton(texts.t("admin.save", R.string.admin_save)) { _, _ ->
-                    val value = field.text.toString().trim()
+                    val value = field.text.trim()
                     if (UiContrast.parseRgb(value) == null) {
                         toast(texts.t("admin.save_failed", R.string.admin_save_failed))
                         return@setPositiveButton
@@ -1600,7 +1530,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun confirmUnpair() {
-        AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setTitle(texts.t("pair.clear_title", R.string.pair_clear_title))
             .setMessage(texts.t("pair.clear_confirm", R.string.pair_clear_confirm))
             .setPositiveButton(texts.t("pair.clear_title", R.string.pair_clear_title)) { _, _ ->
@@ -1665,7 +1595,7 @@ class SettingsActivity : Activity(), DoorbellCore.Listener {
     }
 
     internal fun toast(message: String) {
-        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_SHORT).show()
+        PlatformUi.toast(this, message)
     }
 
     companion object {

@@ -2642,3 +2642,9 @@ settings.page_logs: { ja: "ログとイベント", en: "Logs and events", zh: "�
 settings.page_other_devices: { ja: "ほかの端末の設定", en: "Other devices' settings", zh: "其他设备的设置" }
 settings.reset_confirm: { ja: "この設定を消して既定に戻しますか？", en: "Remove this setting and go back to the default?", zh: "要清除此设置并恢复默认吗？" }
 settings.err_languages_empty: { ja: "言語を 1 つ以上選んでください", en: "Keep at least one language", zh: "请至少保留一种语言" }
+settings.time_status: { ja: "同期の状態", en: "Sync status", zh: "同步状态" }
+settings.backdrop_color: { ja: "暗くする層の色", en: "Dimming layer colour", zh: "暗化层颜色" }
+settings.backdrop_color_native: { ja: "背景画像の上に重ねる色。既定は黒", en: "The colour laid over the background picture; black by default", zh: "叠加在背景图上的颜色，默认为黑色" }
+settings.call_button_color: { ja: "呼出ボタンの色（この端末）", en: "Call button colour (this device)", zh: "呼叫按钮颜色（本设备）" }
+settings.call_button_color_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
+settings.appearance_here: { ja: "この端末の外観", en: "Appearance on this device", zh: "本设备的外观" }

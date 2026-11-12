@@ -65,13 +65,15 @@ internal class DoorTilesPanel(
 
     /** A door tile's mutable parts, so a status poll updates rather than rebuilds. */
     private class DoorTile(
-        val root: LinearLayout,
+        val card: CardHandle,
+        val body: LinearLayout,
         val still: ImageView,
         val chips: LinearLayout,
         val label: TextView,
         val activityLine: TextView,
         val noticeText: TextView,
     ) {
+        val root: View get() = card.root
         var lastKey: String = "\u0000"
     }
 
@@ -120,19 +122,23 @@ internal class DoorTilesPanel(
             column.addView(
                 ShellUi.sectionHeading(activity, palette,
                                        texts.t("settings.doors", R.string.settings_doors))
-                    .also { heading = it },
+                    .also {
+                        it.setPadding(ShellUi.dp(activity, UiTokens.SPACE_XS), it.paddingTop,
+                                      ShellUi.dp(activity, UiTokens.SPACE_XS), it.paddingBottom)
+                        heading = it
+                    },
                 ShellUi.matchWrap(),
             )
-            offlineDoorsButton = ShellUi.button(activity, "", palette) { host.showOfflineDoors() }
+            offlineDoorsButton = PlatformUi.button(activity, ButtonKind.TONAL)
                 .also { button ->
-                    button.textSize = UiTokens.sp(UiTokens.CAPTION)
+                    button.setOnClickListener { host.showOfflineDoors() }
                     button.visibility = View.GONE
                     column.addView(button, ShellUi.matchWrap())
                 }
             if (doors.isEmpty()) {
                 column.addView(
-                    ShellUi.text(activity, texts.t("dash.no_doors", R.string.dash_no_doors),
-                                 UiTokens.sp(UiTokens.BODY), palette.muted),
+                    ShellUi.label(activity, texts.t("dash.no_doors", R.string.dash_no_doors),
+                                  TextRole.BODY, palette.muted),
                     ShellUi.matchWrap(),
                 )
                 return
@@ -205,51 +211,56 @@ internal class DoorTilesPanel(
     /** The parts that never change for a door. Called once. */
     private fun createTile(door: String): DoorTile {
         val card = ShellUi.card(activity, palette)
-        card.isFocusable = true
-        card.isClickable = true
-        card.setOnClickListener { IncomingActivity.launch(activity, door) }
+        card.root.isFocusable = true
+        card.root.isClickable = true
+        card.root.setOnClickListener { IncomingActivity.launch(activity, door) }
 
         val still = ImageView(activity).apply {
             scaleType = ImageView.ScaleType.CENTER_CROP
-            background = ShellUi.rounded(activity, palette.surfaceAlt, 8)
+            setBackgroundColor(ShellUi.opaque(palette.surfaceAlt))
             contentDescription = host.doorLabel(door)
         }
-        // The still is the only part that may shrink; the label and chips keep their height.
-        card.addView(still, LinearLayout.LayoutParams(
+        // The still runs edge to edge at the top of the card and is the only part that may
+        // shrink; the label and chips keep their height.
+        card.content.addView(still, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 120),
         ))
         still.minimumHeight = ShellUi.dp(activity, 64)
 
-        val label = ShellUi.text(activity, host.doorLabel(door), UiTokens.sp(UiTokens.TITLE),
-                                 palette.ink, bold = true).apply {
+        val body = LinearLayout(activity).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = ShellUi.dp(activity, UiTokens.SPACE_L)
+            setPadding(pad, ShellUi.dp(activity, UiTokens.SPACE_M), pad, ShellUi.dp(activity, UiTokens.SPACE_M))
+        }
+        card.content.addView(body, ShellUi.matchWrap())
+
+        val label = ShellUi.label(activity, host.doorLabel(door), TextRole.SUBTITLE).apply {
             maxLines = 2
             ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(0, ShellUi.dp(activity, UiTokens.SPACE_S), 0, 0)
         }
-        card.addView(label, ShellUi.matchWrap())
+        body.addView(label, ShellUi.matchWrap())
 
-        val activityLine = ShellUi.text(activity, "", UiTokens.sp(UiTokens.CAPTION), palette.muted)
-            .apply {
-                maxLines = 1
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                visibility = View.GONE
-            }
-        card.addView(activityLine, ShellUi.matchWrap())
+        val activityLine = ShellUi.label(activity, "", TextRole.SUPPORTING).apply {
+            maxLines = 1
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            visibility = View.GONE
+        }
+        body.addView(activityLine, ShellUi.matchWrap())
 
         val chips = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
             setPadding(0, ShellUi.dp(activity, UiTokens.SPACE_S), 0, 0)
         }
-        card.addView(chips, ShellUi.matchWrap())
+        body.addView(chips, ShellUi.matchWrap())
 
-        val noticeText = ShellUi.text(activity, "", UiTokens.sp(UiTokens.CAPTION), palette.muted)
-            .apply {
-                maxLines = 2
-                ellipsize = android.text.TextUtils.TruncateAt.END
-                visibility = View.GONE
-            }
-        card.addView(noticeText, ShellUi.matchWrap())
-        return DoorTile(card, still, chips, label, activityLine, noticeText)
+        val noticeText = ShellUi.label(activity, "", TextRole.SUPPORTING).apply {
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            visibility = View.GONE
+        }
+        body.addView(noticeText, ShellUi.matchWrap())
+        return DoorTile(card, body, still, chips, label, activityLine, noticeText)
     }
 
     /** Everything a status poll can change, applied only when it actually changed. */
@@ -265,12 +276,7 @@ internal class DoorTilesPanel(
         if (tile.lastKey == key) return
         tile.lastKey = key
 
-        tile.root.background = if (DashboardModel.highlighted(state)) {
-            ShellUi.rounded(activity, palette.surface, UiTokens.RADIUS_CARD).apply { setStroke(ShellUi.dp(activity, 3), ShellUi.opaque(roles.accent)) }
-        } else {
-            ShellUi.rounded(activity, palette.surface, UiTokens.RADIUS_CARD, palette.line)
-        }
-        tile.still.background = ShellUi.rounded(activity, palette.surfaceAlt, 8)
+        tile.card.setHighlighted(DashboardModel.highlighted(state))
         tile.label.text = label
         // A tile label sits on the card surface, a different background from the ground.
         host.paintRegion(tile.label, "tile_label", palette.surface, false)
@@ -281,18 +287,17 @@ internal class DoorTilesPanel(
         tile.chips.removeAllViews()
         val stateText = stateLabel(state)
         val role = DashboardModel.chipRole(state)
-        tile.chips.addView(ShellUi.pill(activity, stateText, roles.fill(role), roles.ink(role),
-                                        UiTokens.sp(UiTokens.CAPTION),
-                                        if (role == ActionRole.SECONDARY) roles.line else null))
+        tile.chips.addView(
+            if (role == ActionRole.SECONDARY) PlatformUi.chip(activity, stateText, ChipKind.STATUS)
+            else PlatformUi.chip(activity, stateText, ChipKind.STATUS,
+                                 fillRgb = roles.fill(role), inkRgb = roles.ink(role)),
+        )
         if (notice != null) {
-            // A compact chip with a dot while an announcement is showing (§5.2).
-            val chip = ShellUi.pill(
-                activity, "● " + texts.t("notice.active", R.string.notice_active),
-                palette.noticeBg, palette.noticeInk, UiTokens.sp(UiTokens.CAPTION),
+            // A chip while an announcement is showing (§5.2); tapping it opens the editor.
+            val chip = PlatformUi.chip(
+                activity, texts.t("notice.active", R.string.notice_active), ChipKind.ACTION,
+                R.drawable.ic_tabler_note, palette.noticeBg, palette.noticeInk,
             )
-            chip.isFocusable = true
-            chip.isClickable = true
-            chip.minimumHeight = ShellUi.dp(activity, UiTokens.TOUCH_MIN_DP)
             chip.setOnClickListener { host.openNotice(door) }
             tile.chips.addView(chip, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
@@ -333,13 +338,8 @@ internal class DoorTilesPanel(
             val viewport = scroll.height
             if (viewport <= 0 || tile.still.layoutParams == null) return@post
             val card = tile.root
-            var others = card.paddingTop + card.paddingBottom
-            for (index in 0 until card.childCount) {
-                val child = card.getChildAt(index)
-                if (child === tile.still || child.visibility == View.GONE) continue
-                others += child.height +
-                    ((child.layoutParams as? LinearLayout.LayoutParams)?.topMargin ?: 0)
-            }
+            // Everything in the card except the still: the padded text block under it.
+            val others = tile.body.height
             val heading = if (column.childCount > 0) column.getChildAt(0).height else 0
             val rows = DashboardModel.tileRows(tiles.size, columns)
             val cellWidth = maxOf(1, card.width.takeIf { it > 0 } ?: (scroll.width / columns))

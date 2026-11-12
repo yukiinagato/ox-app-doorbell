@@ -6,7 +6,6 @@
 package jp.ox.doorbell
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.Intent
 import android.os.Build
 import android.graphics.Color
@@ -19,16 +18,18 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
-import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import org.json.JSONObject
 
-class PairingActivity : Activity(), DoorbellCore.Listener {
+class PairingActivity : ShellActivity(), DoorbellCore.Listener {
+
+    /** Onboarding state (a typed address, a PIN in progress) must survive an appearance flip. */
+    override fun onAppearanceChanged() = Unit
+
 
     private lateinit var app: App
     private lateinit var texts: Texts
@@ -43,7 +44,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private lateinit var upgradeBanner: LinearLayout
     private lateinit var upgradeAction: Button
     private lateinit var identityView: TextView
-    private lateinit var spinner: ProgressBar
+    private lateinit var spinner: View
     private lateinit var statusView: TextView
     private lateinit var hintView: TextView
     private lateinit var qrView: ImageView
@@ -57,7 +58,8 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private lateinit var laterButton: Button
 
     private lateinit var joinCard: LinearLayout
-    private lateinit var hostField: EditText
+    private lateinit var hostEntry: FieldHandle
+    private val hostField: android.widget.EditText get() = hostEntry.input
     private lateinit var pinDisplay: TextView
     private lateinit var joinSubmit: Button
     private lateinit var scanButton: Button
@@ -72,7 +74,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     private lateinit var createdRenew: Button
 
     private lateinit var persistCard: LinearLayout
-    private lateinit var sosSlider: SosSlideView
+    private lateinit var sosSlider: SosTriggerView
 
     private var lastQr = ""
     private var pin = ""
@@ -143,6 +145,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
 
     /** Back behaves like "set up later": the main UI keeps a banner, and never relaunches here. */
     @Deprecated("Framework Activity API")
+    @android.annotation.SuppressLint("MissingSuperCall") // Back must not finish onboarding itself.
     override fun onBackPressed() {
         setUpLater()
     }
@@ -462,7 +465,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         val invite = (result as PairUriResult.Ok).invite
         when (PairLinkPolicy.actionFor(result, app.pairingReady())) {
             PairLinkAction.REJECT -> return
-            PairLinkAction.CONFIRM_LEAVE_CURRENT -> AlertDialog.Builder(this)
+            PairLinkAction.CONFIRM_LEAVE_CURRENT -> ShellDialogBuilder(this)
                 .setTitle(texts.t("pair.join_this_cluster", R.string.pair_join_this_cluster))
                 .setMessage(
                     texts.t("pair.link_leave_current", R.string.pair_link_leave_current),
@@ -518,7 +521,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun onCreateCluster() {
-        AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setTitle(texts.t("pair.create_home", R.string.pair_create_home))
             .setMessage(texts.t("pair.create_home_confirm", R.string.pair_create_home_confirm))
             .setPositiveButton(texts.t("pair.create_home", R.string.pair_create_home)) { _, _ ->
@@ -588,12 +591,13 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         scanButton.visibility = if (hasCamera()) View.VISIBLE else View.GONE
         hostField.hint = texts.t("pair.address_label", R.string.pair_address_label) + " " +
             texts.t("pair.address_example", R.string.pair_address_example)
-        createdTitle.text = texts.t("pair.created", R.string.pair_created) + " ✓"
+        createdTitle.text = texts.t("pair.created", R.string.pair_created)
     }
 
     private fun dp(v: Int) = PairingUi.dp(this, v)
 
     private fun buildUi(): View {
+        PairingUi.bind(this)
         val frame = FrameLayout(this)
         val scroll = ScrollView(this).apply { setBackgroundColor(PairingUi.BG) }
         // Content stays a readable column in the centre of medium and expanded windows.
@@ -615,7 +619,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         root.addView(titleView, PairingUi.matchWrap())
         identityView = PairingUi.small(this).apply { setPadding(0, dp(6), 0, dp(14)) }
         root.addView(identityView, PairingUi.matchWrap())
-        val warning = UiRoles.from(Palette.DARK)
+        val warning = UiRoles.from(PlatformUi.tokens(this))
         upgradeBanner = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             visibility = View.GONE
@@ -632,9 +636,8 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         }
         upgradeBanner.addView(upgradeAction, PairingUi.matchWrap().apply { topMargin = dp(UiTokens.SPACE_M) })
         root.addView(upgradeBanner, PairingUi.matchWrap().apply { bottomMargin = dp(UiTokens.SPACE_M) })
-        confirmCodeView = PairingUi.title(this, "").apply {
+        confirmCodeView = ShellUi.label(this, "", TextRole.HEADLINE).apply {
             gravity = Gravity.CENTER
-            textSize = UiTokens.sp(UiTokens.DISPLAY)
             visibility = View.GONE
             setPadding(0, dp(4), 0, dp(14))
         }
@@ -645,13 +648,11 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        spinner = ProgressBar(this).apply {
-            isIndeterminate = true
-        }
+        spinner = PlatformUi.progress(this)
         statusRow.addView(spinner, LinearLayout.LayoutParams(dp(28), dp(28)).apply {
             rightMargin = dp(10)
         })
-        statusView = PairingUi.body(this).apply { textSize = 17f; setTextColor(PairingUi.TEXT) }
+        statusView = ShellUi.label(this, "", TextRole.SUBTITLE)
         statusRow.addView(statusView, LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
         root.addView(statusRow, PairingUi.matchWrap())
@@ -685,7 +686,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
 
         // Secondary actions.
         actionBlock = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        joinButton = PairingUi.button(this, "") { toggleJoinCard() }
+        joinButton = PairingUi.button(this, "", primary = true) { toggleJoinCard() }
         actionBlock.addView(joinButton, PairingUi.matchWrap())
         scanButton = PairingUi.button(this, "") { openScanner() }
         actionBlock.addView(scanButton, PairingUi.matchWrap().apply { topMargin = dp(8) })
@@ -709,14 +710,17 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
                 ViewGroup.LayoutParams.MATCH_PARENT,
             ),
         )
-        // The SOS control is a slide everywhere, including during onboarding.
-        sosSlider = SosSlideView(this, ui).apply {
+        // The SOS trigger is offered everywhere, including during onboarding.
+        sosSlider = SosTriggerView(this, ui).apply {
             enabledProvider = { app.coreOk }
             onTrigger = { app.commitEmergency(true) }
         }
         frame.addView(
             sosSlider,
-            FrameLayout.LayoutParams(dp(240), dp(56), Gravity.BOTTOM or Gravity.END).apply {
+            FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM or Gravity.END,
+            ).apply {
                 setMargins(dp(16), dp(16), dp(16), dp(16))
             },
         )
@@ -729,14 +733,7 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
         if (!::sosSlider.isInitialized) return
         val config = if (app.coreOk) app.core.config() else null
         val countdown = SosSlideState.countdownFromConfig(config)
-        sosSlider.applyPalette(
-            Appearance.resolve(
-                config,
-                app.core.status()?.optJSONObject("node")?.optString("id").orEmpty(),
-                systemDarkMode(this),
-                ClusterClock(app.core).now().minuteOfDay(),
-            ),
-        )
+        sosSlider.applyPalette(PlatformUi.tokens(this))
         sosSlider.configure(
             texts.t("sos.slide_label", R.string.sos_slide_label),
             texts.t("sos.slide_sub", R.string.sos_slide_sub, countdown.toString()),
@@ -758,13 +755,11 @@ class PairingActivity : Activity(), DoorbellCore.Listener {
             PairingUi.matchWrap(),
         )
         joinCard.addView(PairingUi.spacer(this, 8))
-        hostField = EditText(this).apply {
-            setTextColor(PairingUi.TEXT)
-            setHintTextColor(PairingUi.FAINT)
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_URI
-            setSingleLine(true)
-        }
-        joinCard.addView(hostField, PairingUi.matchWrap())
+        hostEntry = PlatformUi.field(
+            this, inputType = android.text.InputType.TYPE_CLASS_TEXT or
+                android.text.InputType.TYPE_TEXT_VARIATION_URI,
+        )
+        joinCard.addView(hostEntry.view, PairingUi.matchWrap())
         joinCard.addView(
             PairingUi.small(this, texts.t("pair.code_label", R.string.pair_code_label)).apply {
                 setPadding(0, dp(12), 0, dp(4))

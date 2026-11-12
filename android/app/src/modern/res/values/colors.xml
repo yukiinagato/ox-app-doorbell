@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material 3 colour roles for the light appearance. The primary palette is the household
+     default accent; Core's accent replaces it per widget at runtime (PlatformUi). -->
+<resources>
+    <color name="db_primary">#0061A4</color>
+    <color name="db_on_primary">#FFFFFF</color>
+    <color name="db_primary_container">#D1E4FF</color>
+    <color name="db_on_primary_container">#001D36</color>
+    <color name="db_secondary">#535F70</color>
+    <color name="db_on_secondary">#FFFFFF</color>
+    <color name="db_secondary_container">#D7E3F7</color>
+    <color name="db_on_secondary_container">#101C2B</color>
+    <color name="db_tertiary">#6B5778</color>
+    <color name="db_on_tertiary">#FFFFFF</color>
+    <color name="db_tertiary_container">#F2DAFF</color>
+    <color name="db_on_tertiary_container">#251431</color>
+    <color name="db_error">#B02A25</color>
+    <color name="db_on_error">#FFFFFF</color>
+    <color name="db_error_container">#FFDAD6</color>
+    <color name="db_on_error_container">#410002</color>
+    <color name="db_background">#F9F9FF</color>
+    <color name="db_on_background">#191C20</color>
+    <color name="db_surface">#F9F9FF</color>
+    <color name="db_on_surface">#191C20</color>
+    <color name="db_surface_variant">#DFE2EB</color>
+    <color name="db_on_surface_variant">#43474E</color>
+    <color name="db_outline">#73777F</color>
+    <color name="db_outline_variant">#C3C7CF</color>
+    <color name="db_inverse_surface">#2E3035</color>
+    <color name="db_inverse_on_surface">#F0F0F7</color>
+    <color name="db_inverse_primary">#9ECAFF</color>
+    <color name="db_surface_dim">#D9D9E0</color>
+    <color name="db_surface_bright">#F9F9FF</color>
+    <color name="db_surface_container_lowest">#FFFFFF</color>
+    <color name="db_surface_container_low">#F3F3FA</color>
+    <color name="db_surface_container">#EDEDF4</color>
+    <color name="db_surface_container_high">#E7E8EE</color>
+    <color name="db_surface_container_highest">#E2E2E9</color>
+    <color name="db_positive">#1F7A3A</color>
+    <color name="db_on_positive">#FFFFFF</color>
+    <color name="db_warning">#9A5B00</color>
+    <color name="db_on_warning">#FFFFFF</color>
+    <color name="db_notice_container">#FBF0D5</color>
+    <color name="db_on_notice_container">#6A4706</color>
+    <color name="db_notice_outline">#E4C36A</color>
+    <color name="db_positive_container">#DFF1E3</color>
+    <color name="db_on_positive_container">#1F6B36</color>
+</resources>

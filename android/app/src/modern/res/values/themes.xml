@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The modern flavor is a Material 3 application. Light and dark follow Core's effective
+     appearance through AppCompat's night mode (ShellAppearance). -->
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <style name="Theme.Doorbell" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/db_primary</item>
+        <item name="colorOnPrimary">@color/db_on_primary</item>
+        <item name="colorPrimaryContainer">@color/db_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/db_on_primary_container</item>
+        <item name="colorPrimaryInverse">@color/db_inverse_primary</item>
+        <item name="colorSecondary">@color/db_secondary</item>
+        <item name="colorOnSecondary">@color/db_on_secondary</item>
+        <item name="colorSecondaryContainer">@color/db_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/db_on_secondary_container</item>
+        <item name="colorTertiary">@color/db_tertiary</item>
+        <item name="colorOnTertiary">@color/db_on_tertiary</item>
+        <item name="colorTertiaryContainer">@color/db_tertiary_container</item>
+        <item name="colorOnTertiaryContainer">@color/db_on_tertiary_container</item>
+        <item name="colorError">@color/db_error</item>
+        <item name="colorOnError">@color/db_on_error</item>
+        <item name="colorErrorContainer">@color/db_error_container</item>
+        <item name="colorOnErrorContainer">@color/db_on_error_container</item>
+        <item name="android:colorBackground">@color/db_background</item>
+        <item name="colorOnBackground">@color/db_on_background</item>
+        <item name="colorSurface">@color/db_surface</item>
+        <item name="colorOnSurface">@color/db_on_surface</item>
+        <item name="colorSurfaceVariant">@color/db_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/db_on_surface_variant</item>
+        <item name="colorOutline">@color/db_outline</item>
+        <item name="colorOutlineVariant">@color/db_outline_variant</item>
+        <item name="colorSurfaceInverse">@color/db_inverse_surface</item>
+        <item name="colorOnSurfaceInverse">@color/db_inverse_on_surface</item>
+        <item name="colorSurfaceDim">@color/db_surface_dim</item>
+        <item name="colorSurfaceBright">@color/db_surface_bright</item>
+        <item name="colorSurfaceContainerLowest">@color/db_surface_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/db_surface_container_low</item>
+        <item name="colorSurfaceContainer">@color/db_surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/db_surface_container_high</item>
+        <item name="colorSurfaceContainerHighest">@color/db_surface_container_highest</item>
+        <item name="android:windowBackground">@color/db_background</item>
+        <item name="android:statusBarColor">@color/db_background</item>
+        <item name="android:navigationBarColor">@color/db_background</item>
+        <item name="android:windowLightStatusBar" tools:targetApi="23">@bool/db_light_system_bars</item>
+        <item name="android:windowLightNavigationBar" tools:targetApi="27">@bool/db_light_system_bars</item>
+        <item name="dbButtonTonalStyle">@style/Widget.Material3.Button.TonalButton</item>
+        <item name="dbButtonTextStyle">@style/Widget.Material3.Button.TextButton</item>
+        <item name="dbChipStatusStyle">@style/Widget.Material3.Chip.Suggestion</item>
+        <item name="dbChipActionStyle">@style/Widget.Material3.Chip.Assist</item>
+        <item name="dbChipFilterStyle">@style/Widget.Material3.Chip.Filter</item>
+        <item name="dbPositiveColor">@color/db_positive</item>
+        <item name="dbOnPositiveColor">@color/db_on_positive</item>
+        <item name="dbWarningColor">@color/db_warning</item>
+        <item name="dbOnWarningColor">@color/db_on_warning</item>
+    </style>
+</resources>

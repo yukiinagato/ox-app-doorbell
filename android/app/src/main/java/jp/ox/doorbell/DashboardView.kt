@@ -1,10 +1,16 @@
 // The indoor dashboard (spec §4.1, docs/en/ui-guidelines.md "Dashboard").
 //
-// Header: cluster clock, counters and status chips (SOS, offline devices, missed calls), plus the
-// global announcement button. Body: the door tile grid (DoorTilesPanel) above the recent calls
-// (RecentCallsPanel), or beside them in wide landscape. Navigation to History, Monitor and
-// Settings is a bottom tab bar on compact windows and a rail from 600 dp up. Footer: admin QR +
-// URL and `name · core vX · app vY · battery`, then the SOS slider. Framework views only.
+// A top app bar carries the device name and the announcement, add-device and device-information
+// actions. Under it: the cluster clock with the fleet and status chips (SOS, offline devices,
+// missed calls), then the door tile grid (DoorTilesPanel), which has the whole body: the home
+// surface shows no call history. While missed calls are unread one notice above the tiles opens
+// History, and the History destination carries the count as a badge. History, Monitor and
+// Settings are the platform's navigation bar on compact windows and its rail from 600 dp up.
+// Footer: admin QR +
+// URL and `name · core vX · app vY · battery`. The SOS trigger is a compact outlined button in
+// the header row. The wallpaper stays behind
+// it all; everything on it sits on a card or chip except the clock and headings, which take
+// Core's region ink.
 package jp.ox.doorbell
 
 import android.app.Activity
@@ -21,7 +27,6 @@ import android.os.Handler
 import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup
-import android.widget.Button
 import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
@@ -117,16 +122,15 @@ internal class DashboardView(
     }
 
     private val clock = ClusterClock(app.core)
-    private var palette: Palette = Palette.DARK
+    private var palette: Palette = PlatformUi.tokens(activity)
     private var config: JSONObject? = null
     private var status: JSONObject? = null
     private var nodeId = ""
     private var coreDisplay: CoreDisplay = CoreDisplay(null, null)
 
-    private val clockText = ShellUi.text(activity, "", 40f, palette.ink)
-    private val dateText = ShellUi.text(activity, "", 14f, palette.muted)
-    /** One icon-and-number counter in the header. */
-    private class Counter(val root: LinearLayout, val icon: ImageView, val value: TextView)
+    private val clockText = ShellUi.label(activity, "", TextRole.DISPLAY)
+    private val dateText = ShellUi.label(activity, "", TextRole.SUBTITLE)
+    private val appBar = PlatformUi.appBar(activity, app.boot.name)
 
     private val countersRow = LinearLayout(activity).apply {
         orientation = LinearLayout.HORIZONTAL
@@ -135,15 +139,17 @@ internal class DashboardView(
     private val deviceCount = counter(R.drawable.ic_tabler_topology_star_3)
     private val doorCount = counter(R.drawable.ic_tabler_door)
     private val panelCount = counter(R.drawable.ic_tabler_device_tablet)
-    private val missedBadge = ShellUi.pill(activity, "", palette.dangerSoft, palette.dangerInk)
-    private val sosChip = ShellUi.pill(activity, "", palette.danger, palette.onNegative)
-    private val offlineChip = ShellUi.pill(activity, "", palette.warning, palette.onWarning)
-    private lateinit var noticeButton: Button
+    /** The one notice for unread missed calls; tapping it opens History. */
+    private val missedNotice = PlatformUi.card(activity)
+    private var missedText: TextView? = null
+    private val sosChip = PlatformUi.chip(activity, "", ChipKind.STATUS, R.drawable.ic_tabler_alert_triangle,
+                                          palette.danger, palette.onNegative)
+    private val offlineChip = PlatformUi.chip(activity, "", ChipKind.ACTION, R.drawable.ic_tabler_video_off,
+                                              palette.warning, palette.onWarning)
     private lateinit var header: LinearLayout
     private lateinit var clockBox: LinearLayout
-    private lateinit var headerActions: LinearLayout
+    private lateinit var headerActions: android.widget.HorizontalScrollView
 
-    private val bodySplit = LinearLayout(activity).apply { isBaselineAligned = false }
 
     /** Navigation and the dashboard column side by side (rail) or stacked (tabs). */
     private val shell = LinearLayout(activity)
@@ -167,7 +173,7 @@ internal class DashboardView(
         isSingleLine = true
     }
     private val versionText = ShellUi.text(activity, "", 11.5f, palette.muted)
-    private val sosSlider = SosSlideView(activity, ui)
+    private val sosSlider = SosTriggerView(activity, ui)
 
     /** The backdrop currently on screen, as picture-hash@width x height. */
     private var backdropKey = ""
@@ -212,7 +218,6 @@ internal class DashboardView(
             this@DashboardView.paintRegion(view, region, backgroundRgb, muted, cacheKey = null)
     })
 
-    private val callsPanel = RecentCallsPanel(activity, texts, clock, ::doorLabel, ::purposeLabel)
 
     init {
         build()
@@ -260,12 +265,7 @@ internal class DashboardView(
         coreDisplay = CoreDisplays.parse(status?.optJSONObject("display"))
         clock.refreshIfStale()
         val now = clock.cached()
-        // Core resolves the appearance in the cluster time zone; auto_system still consults the
-        // platform, and an older core falls back to the local computation.
-        val appearance = coreDisplay.appearance
-        palette = if (appearance != null)
-            Appearance.palette(CoreDisplays.isDark(appearance, systemDarkMode(activity)))
-        else Appearance.resolve(config, nodeId, systemDarkMode(activity), now.minuteOfDay())
+        palette = ShellAppearance.resolve(activity, status, config, now.minuteOfDay())
         roles = UiRoles.from(palette, CoreDisplays.callButton(coreDisplay.theme, palette.ground))
         applyPalette()
         applyThemeBackdrop()
@@ -318,7 +318,7 @@ internal class DashboardView(
     // ---------- construction ----------
 
     private fun build() {
-        val pad = ShellUi.dp(activity, 14)
+        val pad = ShellUi.dp(activity, UiTokens.SPACE_L)
         root.addView(themeBg, FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT,
         ))
@@ -328,19 +328,20 @@ internal class DashboardView(
         shell.addView(column, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT, 1f,
         ))
-        // The padding belongs to the column: the backdrop covers the whole frame, edge to edge.
-        column.setPadding(pad, pad, pad, pad)
+        // The backdrop covers the whole frame, edge to edge; the body carries its own margins.
 
+        column.addView(appBar.view, ShellUi.matchWrap())
         header = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             isBaselineAligned = false
+            val padH = ShellUi.dp(activity, UiTokens.SPACE_L)
+            setPadding(padH, 0, padH, ShellUi.dp(activity, UiTokens.SPACE_S))
         }
-        // The clock and the date each keep to one line. Sharing a row with the header buttons left
-        // the clock about one character wide on a portrait phone, and it wrapped to one glyph per
-        // line down the edge; applyHeaderLayout gives portrait its own row, and this makes the
-        // failure unreachable even if a future arrangement gets the widths wrong again.
+        // The clock and the date each keep to one line; applyHeaderLayout gives a portrait
+        // window its own clock row so the chips can never squeeze it.
         clockText.maxLines = 1
+        clockText.includeFontPadding = false
         dateText.maxLines = 1
         clockBox = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -350,47 +351,43 @@ internal class DashboardView(
         header.addView(clockBox, LinearLayout.LayoutParams(
             0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
         ))
-        headerActions = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-        }
-        noticeButton = ShellUi.button(
-            activity, texts.t("notice.global_button", R.string.notice_global_button), palette,
-        ) { openNoticeDialog("") }.apply { textSize = 13f }
-        headerActions.addView(noticeButton, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
+        // The SOS trigger is a compact outlined control at the leading edge of the header row;
+        // it opens the confirmation surface and nothing else.
+        countersRow.addView(sosSlider, chipParams())
         for (counter in listOf(deviceCount, doorCount, panelCount))
-            countersRow.addView(counter.root, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { leftMargin = if (counter === deviceCount) 0 else ShellUi.dp(activity, 10) })
-        headerActions.addView(countersRow, chipParams())
+            countersRow.addView(counter, chipParams())
         // Status chips (guidelines: offline devices, SOS state, missed calls with badge).
         sosChip.visibility = View.GONE
         offlineChip.visibility = View.GONE
-        offlineChip.isClickable = true
-        offlineChip.isFocusable = true
         offlineChip.setOnClickListener { showOfflineDoors() }
-        for (chip in listOf(sosChip, offlineChip, missedBadge))
-            chip.minimumHeight = ShellUi.dp(activity, UiTokens.TOUCH_MIN_DP)
-        headerActions.addView(sosChip, chipParams())
-        headerActions.addView(offlineChip, chipParams())
-        headerActions.addView(missedBadge, chipParams())
-        missedBadge.isFocusable = true
-        missedBadge.isClickable = true
-        missedBadge.setOnClickListener { HistoryActivity.launch(activity) }
+        for (chip in listOf(sosChip, offlineChip)) countersRow.addView(chip, chipParams())
+        headerActions = android.widget.HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(countersRow)
+        }
         header.addView(headerActions)
         column.addView(header, ShellUi.matchWrap())
 
-        bodySplit.addView(tilesPanel.scroll, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
-        bodySplit.addView(callsPanel.root, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ))
-        column.addView(bodySplit, LinearLayout.LayoutParams(
+        val missedRow = ShellUi.row(activity, palette, "", icon = R.drawable.ic_tabler_phone_off) {
+            HistoryActivity.launch(activity)
+        }
+        (missedRow.getChildAt(0) as? ImageView)?.setColorFilter(ShellUi.opaque(palette.danger))
+        missedText = (missedRow.getChildAt(1) as? LinearLayout)?.getChildAt(0) as? TextView
+        missedRow.addView(ImageView(activity).apply {
+            setImageResource(R.drawable.ic_tabler_chevron_right)
+            setColorFilter(ShellUi.opaque(palette.muted))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(ShellUi.dp(activity, 24), ShellUi.dp(activity, 24)))
+        missedNotice.content.addView(missedRow, ShellUi.matchWrap())
+        missedNotice.root.visibility = View.GONE
+        column.addView(missedNotice.root, ShellUi.matchWrap().apply {
+            leftMargin = pad
+            rightMargin = pad
+            bottomMargin = ShellUi.dp(activity, UiTokens.SPACE_S)
+        })
+        column.addView(tilesPanel.scroll, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f,
-        ))
+        ).apply { leftMargin = pad; rightMargin = pad })
 
         val footerText = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
@@ -408,44 +405,47 @@ internal class DashboardView(
         ).apply { leftMargin = ShellUi.dp(activity, 10) })
         column.addView(footer, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 88),
-        ))
-
-        column.addView(sosSlider, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 56),
-        ).apply {
-            topMargin = ShellUi.dp(activity, 8)
-        })
+        ).apply { leftMargin = pad; rightMargin = pad; topMargin = ShellUi.dp(activity, 8) })
 
         sosSlider.enabledProvider = { app.coreOk }
         sosSlider.onTrigger = { app.commitEmergency(true) }
     }
 
     /**
-     * A counter: a small vector icon and a number. Drawn rather than written out, so the header
-     * stays readable at a glance and in any language; the spoken label carries the words.
+     * A counter: an icon and a number on a chip, so the header stays readable at a glance and in
+     * any language; the spoken label carries the words.
      */
-    private fun counter(iconRes: Int): Counter {
-        val icon = ImageView(activity).apply {
-            setImageResource(iconRes)
-            scaleType = ImageView.ScaleType.FIT_CENTER
-        }
-        val value = ShellUi.text(activity, "", 13f, palette.muted, bold = true)
-        val root = LinearLayout(activity).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            addView(icon, LinearLayout.LayoutParams(
-                ShellUi.dp(activity, 16), ShellUi.dp(activity, 16),
-            ))
-            addView(value, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { leftMargin = ShellUi.dp(activity, 4) })
-        }
-        return Counter(root, icon, value)
-    }
+    private fun counter(iconRes: Int): TextView =
+        PlatformUi.chip(activity, "", ChipKind.STATUS, iconRes)
 
     private fun chipParams(): LinearLayout.LayoutParams = LinearLayout.LayoutParams(
         ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-    ).apply { leftMargin = ShellUi.dp(activity, 8) }
+    ).apply { rightMargin = ShellUi.dp(activity, 8) }
+
+    /** The app bar's trailing actions; rebuilt with the language. */
+    private fun buildActions() {
+        appBar.clearActions()
+        appBar.addAction(R.drawable.ic_tabler_note,
+                         texts.t("notice.global_button", R.string.notice_global_button)) {
+            openNoticeDialog("")
+        }
+        appBar.addAction(R.drawable.ic_tabler_plus,
+                         texts.t("admin.menu_add_device", R.string.admin_menu_add_device)) {
+            AdminGate.unlock(activity, app.boot.httpPort, texts) {
+                if (app.pairingReady()) AddDeviceActivity.launch(activity)
+                else {
+                    app.resumePairingSetup()
+                    PairingActivity.launch(activity)
+                }
+            }
+        }
+        appBar.addAction(R.drawable.ic_tabler_info_circle,
+                         texts.t("admin.menu_info", R.string.admin_menu_info)) {
+            AdminGate.unlock(activity, app.boot.httpPort, texts) {
+                DeviceInfoActivity.launch(activity)
+            }
+        }
+    }
 
     // ---------- painting ----------
 
@@ -455,15 +455,6 @@ internal class DashboardView(
         root.setBackgroundColor(ShellUi.opaque(palette.ground))
         // A new palette means every region's decision was taken against a colour that has gone.
         regionInkApplied.clear()
-        missedBadge.background = ShellUi.rounded(activity, palette.dangerSoft, 999)
-        missedBadge.setTextColor(ShellUi.opaque(palette.dangerInk))
-        UiKit.styleAction(noticeButton, roles, ActionRole.SECONDARY)
-        noticeButton.textSize = UiTokens.sp(UiTokens.CAPTION)
-        sosChip.background = ShellUi.rounded(activity, roles.negative, UiTokens.RADIUS_PILL)
-        sosChip.setTextColor(ShellUi.opaque(roles.onNegative))
-        offlineChip.background = ShellUi.rounded(activity, roles.warning, UiTokens.RADIUS_PILL)
-        offlineChip.setTextColor(ShellUi.opaque(roles.onWarning))
-        callsPanel.applyPalette(palette, roles)
         tilesPanel.invalidate()
         applyNavigation()
         footerAddress.setTextColor(ShellUi.opaque(palette.ink))
@@ -474,12 +465,17 @@ internal class DashboardView(
         footer.background = footerGlass
         sosSlider.applyPalette(palette)
         // Labels are reapplied here too, so a language change reaches the controls built once.
-        noticeButton.text = texts.t("notice.global_button", R.string.notice_global_button)
+        if (actionsLang != texts.lang) {
+            actionsLang = texts.lang
+            buildActions()
+        }
         // The regions sit on the frame, so their ink depends on whether a picture is behind them
         // and where each one lands on it. Once now, and again after the next layout.
         applyRegionInk()
         scheduleRegionInk()
     }
+
+    private var actionsLang = ""
 
     // ---------- the theme backdrop ----------
 
@@ -609,19 +605,21 @@ internal class DashboardView(
     private fun applyRegionInk() {
         paintRegion(clockText, "clock", palette.ground, muted = false)
         paintRegion(dateText, "date", palette.ground, muted = true)
-        paintRegion(callsPanel.heading, "status_line", palette.ground, muted = true)
         tilesPanel.heading?.let { paintRegion(it, "status_line", palette.ground, muted = true,
                                         cacheKey = "doors_heading") }
-        // The counters carry no plate of their own: they sit straight on the wallpaper, so they
-        // take the same per-region measurement the rest of the frame text does rather than a
-        // fixed palette token, and each icon follows the number beside it.
-        val counters = listOf(deviceCount, doorCount, panelCount)
-        for (index in counters.indices) {
-            val counter = counters[index]
-            paintRegion(counter.value, "status_line", palette.ground, muted = true,
-                        cacheKey = "counter_$index")
-            counter.icon.setColorFilter(counter.value.currentTextColor)
+        // The app bar has no plate of its own either: its title and action icons take the ink
+        // measured for the strip of wallpaper it lies on.
+        val drawn = themeBg.visibility == View.VISIBLE && themeBg.drawable != null
+        if (!drawn) {
+            if (regionInkApplied.put("app_bar", -1) != -1) appBar.setInk(null)
+            return
         }
+        val sample = RegionInk.sample(themeBg, appBar.view, palette.ground)
+        val ink = CoreDisplays.inkFor(
+            coreDisplay.theme, "status_line", palette.ground, sample?.averageRgb,
+            imageDrawnLocally = true, sample = sample,
+        ).inkRgb
+        if (regionInkApplied.put("app_bar", ink) != ink) appBar.setInk(ink)
     }
 
     /**
@@ -704,33 +702,34 @@ internal class DashboardView(
 
     private fun updateHeader() {
         val counts = FleetCounting.of(status, config, app.boot.role, nodeId)
-        setTextIfChanged(deviceCount.value, counts.devices.toString())
-        setDescriptionIfChanged(deviceCount.root, texts.t(
+        setTextIfChanged(deviceCount, counts.devices.toString())
+        setDescriptionIfChanged(deviceCount, texts.t(
             "dash.count_devices", R.string.dash_count_devices, counts.devices.toString(),
         ))
         setTextIfChanged(
-            doorCount.value, "${counts.doorStations.online}/${counts.doorStations.total}",
+            doorCount, "${counts.doorStations.online}/${counts.doorStations.total}",
         )
-        setDescriptionIfChanged(doorCount.root, texts.t(
+        setDescriptionIfChanged(doorCount, texts.t(
             "dash.count_door_stations", R.string.dash_count_door_stations,
             counts.doorStations.online.toString(), counts.doorStations.total.toString(),
         ))
-        setTextIfChanged(panelCount.value, "${counts.panels.online}/${counts.panels.total}")
-        setDescriptionIfChanged(panelCount.root, texts.t(
+        setTextIfChanged(panelCount, "${counts.panels.online}/${counts.panels.total}")
+        setDescriptionIfChanged(panelCount, texts.t(
             "dash.count_indoor_panels", R.string.dash_count_indoor_panels,
             counts.panels.online.toString(), counts.panels.total.toString(),
         ))
-        setTextIfChanged(
-            missedBadge,
-            texts.t("history.missed_badge", R.string.history_missed_badge, unreadMissed.toString()),
-        )
+        missedText?.let {
+            setTextIfChanged(it, texts.t("history.missed_badge", R.string.history_missed_badge,
+                                         unreadMissed.toString()))
+        }
         val offline = DashboardModel.offlineDevices(counts)
         val chips = DashboardModel.headerChips(DashboardModel.sosActive(status), offline, unreadMissed)
         setTextIfChanged(sosChip, texts.t("dash.chip_sos", R.string.dash_chip_sos))
         setTextIfChanged(offlineChip, texts.t("dash.chip_offline", R.string.dash_chip_offline, offline.toString()))
         setVisible(sosChip, HeaderChip.SOS in chips)
         setVisible(offlineChip, HeaderChip.OFFLINE_DEVICES in chips)
-        setVisible(missedBadge, HeaderChip.MISSED in chips)
+        setVisible(missedNotice.root, HeaderChip.MISSED in chips)
+        applyNavigation()
     }
 
     private fun setVisible(view: View, visible: Boolean) {
@@ -782,11 +781,12 @@ internal class DashboardView(
             texts.t("sos.slide_sub", R.string.sos_slide_sub, countdown.toString()),
             texts.t("sos.countdown_cancel", R.string.sos_countdown_cancel),
             countdown,
-            texts.t("sos.accessibility_start", R.string.sos_accessibility_start),
-            texts.t("sos.accessibility_hint", R.string.sos_accessibility_hint),
-            texts.t("sos.accessibility_confirm", R.string.sos_accessibility_confirm),
+            texts.t("sos.confirm_title", R.string.sos_confirm_title),
+            texts.t("sos.hint", R.string.sos_hint),
+            texts.t("sos.send", R.string.sos_send),
         ) { seconds -> texts.t("sos.countdown", R.string.sos_countdown, seconds.toString()) }
         sosSlider.visibility = if (sosVisible()) View.VISIBLE else View.GONE
+        sosSlider.applySemantic(if (app.safeMode) null else config, nodeId)
     }
 
     /**
@@ -809,7 +809,6 @@ internal class DashboardView(
                 lastRows = rows
                 unreadMissed = missed
                 updateHeader()
-                callsPanel.render(lastRows, palette, roles)
                 tilesPanel.update()
             }
         }, "doorbell-dashboard-calls").apply { isDaemon = true }.start()
@@ -830,35 +829,11 @@ internal class DashboardView(
 
     /**
      * The guideline arrangement for the current window: tabs below on compact, a rail on the
-     * start edge from medium up; tiles above the call list, or beside it in wide landscape; the
-     * tile grid's columns follow the width the tiles actually get.
+     * start edge from medium up; the tile grid's columns follow the width the tiles get.
      */
     private fun applyArrangement() {
         val window = UiKit.window(activity)
         applyNavigation()
-        val side = DashboardModel.split(window)
-        bodySplit.orientation = if (side) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-        val tileParams = tilesPanel.scroll.layoutParams as LinearLayout.LayoutParams
-        val callParams = callsPanel.root.layoutParams as LinearLayout.LayoutParams
-        if (side) {
-            tileParams.width = 0
-            tileParams.height = ViewGroup.LayoutParams.MATCH_PARENT
-            tileParams.weight = 1.1f
-            callParams.width = 0
-            callParams.height = ViewGroup.LayoutParams.MATCH_PARENT
-            callParams.weight = 1f
-            callParams.leftMargin = ShellUi.dp(activity, UiTokens.SPACE_M)
-        } else {
-            tileParams.width = ViewGroup.LayoutParams.MATCH_PARENT
-            tileParams.height = ViewGroup.LayoutParams.WRAP_CONTENT
-            tileParams.weight = 0f
-            callParams.width = ViewGroup.LayoutParams.MATCH_PARENT
-            callParams.height = 0
-            callParams.weight = 1f
-            callParams.leftMargin = 0
-        }
-        tilesPanel.scroll.layoutParams = tileParams
-        callsPanel.root.layoutParams = callParams
         tilesPanel.setColumns(DashboardModel.tileColumns(window, maxOf(1, tilesPanel.count)))
         applyHeaderLayout(window.widthDp, window.heightDp)
         tilesPanel.fitTilesToViewport()
@@ -869,17 +844,18 @@ internal class DashboardView(
         val window = UiKit.window(activity)
         val style = ScreenLayouts.navStyle(window)
         // Refreshes arrive often; rebuild only when something the bar shows actually changed.
-        val key = listOf(style, roles, texts.lang)
+        val key = listOf(style, roles, texts.lang, unreadMissed)
         if (nav != null && key == navKey) return
         navKey = key
         nav?.let { shell.removeView(it) }
         val items = listOf(
             NavItem(Destination.HOME.id, texts.t("nav.home", R.string.nav_home), R.drawable.ic_tabler_home),
-            NavItem(Destination.HISTORY.id, texts.t("nav.history", R.string.nav_history), R.drawable.ic_tabler_list),
+            NavItem(Destination.HISTORY.id, texts.t("nav.history", R.string.nav_history), R.drawable.ic_tabler_history),
             NavItem(Destination.MONITOR.id, texts.t("nav.monitor", R.string.nav_monitor), R.drawable.ic_tabler_eye),
             NavItem(Destination.SETTINGS.id, texts.t("nav.settings", R.string.nav_settings), R.drawable.ic_tabler_settings),
         )
-        val view = UiKit.navigation(activity, roles, style, items, Destination.HOME.id) { item ->
+        val badges = if (unreadMissed > 0) mapOf(Destination.HISTORY.id to unreadMissed) else emptyMap()
+        val view = UiKit.navigation(activity, style, items, Destination.HOME.id, badges) { item ->
             when (item.id) {
                 Destination.HISTORY.id -> HistoryActivity.launch(activity)
                 Destination.MONITOR.id -> tilesPanel.firstDoor.takeIf { it.isNotEmpty() }
@@ -890,7 +866,7 @@ internal class DashboardView(
         if (style == NavStyle.RAIL) {
             shell.orientation = LinearLayout.HORIZONTAL
             shell.addView(view, 0, LinearLayout.LayoutParams(
-                ShellUi.dp(activity, DashboardModel.RAIL_WIDTH_DP), ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT,
             ))
             (column.layoutParams as LinearLayout.LayoutParams).apply {
                 width = 0; height = ViewGroup.LayoutParams.MATCH_PARENT; weight = 1f
@@ -918,28 +894,19 @@ internal class DashboardView(
         header.gravity = if (stacked) Gravity.START else Gravity.CENTER_VERTICAL
         val clockParams = clockBox.layoutParams as LinearLayout.LayoutParams
         val actionParams = headerActions.layoutParams as LinearLayout.LayoutParams
-        val countersParams = countersRow.layoutParams as LinearLayout.LayoutParams
         if (stacked) {
             clockParams.width = ViewGroup.LayoutParams.MATCH_PARENT
             clockParams.weight = 0f
             actionParams.width = ViewGroup.LayoutParams.MATCH_PARENT
             actionParams.topMargin = ShellUi.dp(activity, 8)
-            // The counters absorb the row's slack; they never need to shrink.
-            countersParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
-            countersParams.weight = 1f
-            countersParams.leftMargin = 0
         } else {
             clockParams.width = 0
             clockParams.weight = 1f
             actionParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
             actionParams.topMargin = 0
-            countersParams.width = ViewGroup.LayoutParams.WRAP_CONTENT
-            countersParams.weight = 0f
-            countersParams.leftMargin = ShellUi.dp(activity, 8)
         }
         clockBox.layoutParams = clockParams
         headerActions.layoutParams = actionParams
-        countersRow.layoutParams = countersParams
     }
 
     // ---------- helpers ----------
@@ -956,7 +923,7 @@ internal class DashboardView(
     private fun showOfflineDoors() {
         val offline = DoorStations.offlineDoors(status, config)
         val title = texts.t("dashboard.offline_doors_title", R.string.dashboard_offline_doors_title)
-        val builder = android.app.AlertDialog.Builder(activity).setTitle(title)
+        val builder = ShellDialogBuilder(activity).setTitle(title)
         if (offline.isEmpty()) {
             builder.setMessage(
                 texts.t("dashboard.offline_doors_empty", R.string.dashboard_offline_doors_empty))

@@ -70,6 +70,7 @@ internal class IncomingScreen(private val activity: Activity) {
         overlayBottom.removeAllViews()
         root.removeAllViews()
         root.setBackgroundColor(ShellUi.opaque(roles.ground))
+        videoBox.setBackgroundColor(android.graphics.Color.BLACK)
         layoutRows(ScreenLayouts.incomingSideBySide(window))
         if (liveView) arrangeLiveView() else arrangeCall()
         setOverlaysShown(true)
@@ -172,16 +173,25 @@ internal class IncomingScreen(private val activity: Activity) {
         }
     }
 
-    /** Role colours: Answer positive, End negative, everything else secondary. */
+    /**
+     * Answer filled in the positive role (End in the negative role once in call), Reply tonal,
+     * Ignore outlined, and the secondary row tonal; each with its Tabler icon beside the label.
+     */
     fun styleActions(inCall: Boolean) {
         val primaryHeight = ScreenLayouts.touchTargetDp(window, 56)
         val secondaryHeight = ScreenLayouts.touchTargetDp(window)
         UiKit.styleAction(answer, roles, if (inCall) ActionRole.NEGATIVE else ActionRole.POSITIVE,
                           primaryHeight, emphasis = true)
         UiKit.styleAction(reply, roles, ActionRole.SECONDARY, primaryHeight)
-        UiKit.styleAction(ignore, roles, ActionRole.SECONDARY, primaryHeight)
+        UiKit.styleAction(ignore, roles, ActionRole.SECONDARY, primaryHeight,
+                          kind = ButtonKind.OUTLINED)
         for (button in listOf(monitor, unlock, mic))
             UiKit.styleAction(button, roles, ActionRole.SECONDARY, secondaryHeight)
+        PlatformUi.setButtonIcon(answer, if (inCall) R.drawable.ic_tabler_phone_off
+                                         else R.drawable.ic_tabler_phone)
+        PlatformUi.setButtonIcon(reply, R.drawable.ic_tabler_message_reply)
+        PlatformUi.setButtonIcon(ignore, R.drawable.ic_tabler_bell_off)
+        PlatformUi.setButtonIcon(unlock, R.drawable.ic_tabler_lock_open)
     }
 
     /** Door chips for the live view; tapping one opens that door's live view. */
@@ -201,20 +211,14 @@ internal class IncomingScreen(private val activity: Activity) {
         switcher.setPadding(pad, 0, pad, 0)
         for ((id, label) in doors) {
             val active = id == currentDoor
-            val chip = ShellUi.pill(activity, label,
-                if (active) roles.accent else roles.surface,
-                if (active) roles.onAccent else roles.onSurface, UiTokens.sp(UiTokens.BODY),
-                if (active) null else roles.line).apply {
-                minHeight = ShellUi.dp(activity, UiTokens.TOUCH_MIN_DP)
-                isClickable = true
-                isFocusable = true
+            val chip = PlatformUi.chip(activity, label, ChipKind.FILTER).apply {
+                PlatformUi.setChipChecked(this, active)
                 isSelected = active
-                if (vertical) {
-                    gravity = Gravity.CENTER_VERTICAL or Gravity.START
-                    background = ShellUi.rounded(activity, if (active) roles.accent else roles.surface,
-                                                 UiTokens.RADIUS_CARD, if (active) null else roles.line)
+                setOnClickListener {
+                    // The chip marks the door on screen; a tap must not toggle that mark off.
+                    PlatformUi.setChipChecked(this, active)
+                    if (!active) onPickDoor(id)
                 }
-                setOnClickListener { if (!active) onPickDoor(id) }
             }
             switcher.addView(chip, if (vertical) ShellUi.matchWrap().apply {
                 bottomMargin = ShellUi.dp(activity, UiTokens.SPACE_S)
@@ -249,17 +253,26 @@ internal class IncomingScreen(private val activity: Activity) {
         ui.removeCallbacks(hideOverlays)
     }
 
-    /** Quick replies in a bottom sheet (compact) or side sheet; one tap sends. */
-    fun replySheet(list: LinearLayout, onDismiss: () -> Unit = {}): UiKit.Sheet {
-        val sheet = UiKit.Sheet(frame, roles, ScreenLayouts.replySheetAtSide(window), onDismiss)
+    /** Quick replies in a modal bottom sheet (compact) or side sheet; one tap sends. */
+    fun replySheet(list: LinearLayout, onDismiss: () -> Unit = {}): SheetHandle {
+        val scroll = ScrollView(activity)
+        val sheet = PlatformUi.sheet(activity, ScreenLayouts.replySheetAtSide(window)) {
+            // The list goes back under the screen so the next sheet can take it, unless a newer
+            // sheet already has: a dismissal is delivered after the replacement is built.
+            if (list.parent === scroll) {
+                scroll.removeView(list)
+                list.visibility = View.GONE
+                frame.addView(list)
+            }
+            onDismiss()
+        }
         UiKit.detach(list)
         list.visibility = View.VISIBLE
-        val scroll = ScrollView(activity).apply { addView(list) }
-        sheet.panel.addView(UiKit.text(activity, reply.text, UiTokens.TITLE, roles.onSurface,
-                                       bold = true).apply {
+        scroll.addView(list)
+        sheet.content.addView(ShellUi.label(activity, reply.text, TextRole.TITLE).apply {
             setPadding(0, 0, 0, ShellUi.dp(activity, UiTokens.SPACE_M))
         }, ShellUi.matchWrap())
-        sheet.panel.addView(scroll, ShellUi.matchWrap())
+        sheet.content.addView(scroll, ShellUi.matchWrap())
         return sheet
     }
 
@@ -268,7 +281,6 @@ internal class IncomingScreen(private val activity: Activity) {
         fun styleReply(button: TextView, roles: UiRoles, window: WindowSpec) {
             UiKit.styleAction(button, roles, ActionRole.SECONDARY,
                               ScreenLayouts.touchTargetDp(window, 56))
-            button.gravity = Gravity.CENTER_VERTICAL or Gravity.START
         }
 
         /** Width of the expanded live view's door list. */

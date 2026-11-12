@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Default-style attributes for the Material widgets PlatformUi builds in code and that the
+     library does not expose a theme attribute for. -->
+<resources>
+    <attr name="dbButtonTonalStyle" format="reference"/>
+    <attr name="dbButtonTextStyle" format="reference"/>
+    <attr name="dbChipStatusStyle" format="reference"/>
+    <attr name="dbChipActionStyle" format="reference"/>
+    <attr name="dbChipFilterStyle" format="reference"/>
+    <attr name="dbPositiveColor" format="color"/>
+    <attr name="dbOnPositiveColor" format="color"/>
+    <attr name="dbWarningColor" format="color"/>
+    <attr name="dbOnWarningColor" format="color"/>
+</resources>

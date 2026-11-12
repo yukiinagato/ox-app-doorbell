@@ -29,7 +29,11 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import org.json.JSONObject
 
-class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback {
+class QrScanActivity : ShellActivity(), DoorbellCore.Listener, SurfaceHolder.Callback {
+
+    /** The camera preview keeps running; the scanner closes after one read anyway. */
+    override fun onAppearanceChanged() = Unit
+
 
 
     private lateinit var app: App
@@ -215,6 +219,7 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
     private fun dp(v: Int) = PairingUi.dp(this, v)
 
     private fun buildUi(): View {
+        PairingUi.bind(this)
         val frame = FrameLayout(this).apply { setBackgroundColor(Color.BLACK) }
         preview = SurfaceView(this)
         preview.holder.addCallback(this)
@@ -236,10 +241,12 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
         val overlay = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(20), dp(20), dp(20), dp(24))
+            // The instructions and actions sit on a card, so they read over any camera picture.
+            background = PlatformUi.cardBackground(this@QrScanActivity)
+            setPadding(dp(20), dp(20), dp(20), dp(20))
         }
         hintView = PairingUi.body(this, texts.t("pair.scan_hint", R.string.pair_scan_hint)).apply {
-            setTextColor(Color.WHITE)
+            setTextColor(PairingUi.TEXT)
             gravity = Gravity.CENTER
         }
         overlay.addView(hintView, PairingUi.matchWrap())
@@ -274,7 +281,7 @@ class QrScanActivity : Activity(), DoorbellCore.Listener, SurfaceHolder.Callback
                 ViewGroup.LayoutParams.MATCH_PARENT,
                 ViewGroup.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM,
-            ),
+            ).apply { setMargins(dp(16), dp(16), dp(16), dp(16)) },
         )
         return frame
     }

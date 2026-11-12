@@ -1648,6 +1648,7 @@ On</string>
     <string name="settings_appearance_auto_system">Follow the device setting</string>
     <string name="settings_appearance_dark">Dark</string>
     <string name="settings_appearance_dark_from">Dark from</string>
+    <string name="settings_appearance_here">Appearance on this device</string>
     <string name="settings_appearance_light">Light</string>
     <string name="settings_appearance_light_from">Light from</string>
     <string name="settings_appearance_range">Dark %1$s → light %2$s</string>
@@ -1662,6 +1663,8 @@ On</string>
     <string name="settings_assets_native">Uploaded images and sounds. Removing one in use falls back to the default</string>
     <string name="settings_back">Settings</string>
     <string name="settings_backdrop">Dimming layer</string>
+    <string name="settings_backdrop_color">Dimming layer colour</string>
+    <string name="settings_backdrop_color_native">The colour laid over the background picture; black by default</string>
     <string name="settings_backdrop_opacity">Dimming strength</string>
     <string name="settings_background_color">Background colour</string>
     <string name="settings_background_image">Background image</string>
@@ -1680,6 +1683,8 @@ On</string>
     <string name="settings_buildings_manage">Buildings</string>
     <string name="settings_buildings_manage_native">Buildings that group doors</string>
     <string name="settings_button_sound">Button sound</string>
+    <string name="settings_call_button_color">Call button colour (this device)</string>
+    <string name="settings_call_button_color_native">Chosen automatically from the background when not set</string>
     <string name="settings_call_flow">Visitor call flow</string>
     <string name="settings_call_flow_purpose_first">Choose purpose, then ring</string>
     <string name="settings_call_flow_ring_then_purpose">Ring, then choose purpose</string>
@@ -2207,6 +2212,7 @@ On</string>
     <string name="settings_theme_image">Background image</string>
     <string name="settings_theme_image_none">No image</string>
     <string name="settings_this_device">This device</string>
+    <string name="settings_time_status">Sync status</string>
     <string name="settings_time_sync">Sync now</string>
     <string name="settings_time_sync_action">Sync</string>
     <string name="settings_time_sync_failed">Time sync failed</string>

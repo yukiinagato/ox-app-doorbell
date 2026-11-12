@@ -34,6 +34,8 @@ internal object SemanticUi {
         val minimumHeight: Int,
         val foregroundArgb: Int?,
         val backgroundRgb: Int?,
+        /** What the flavor's own widget needs to undo an override applied through it. */
+        val platform: Any?,
     )
 
     /** A bounded wrapper is used instead of mutating an arbitrary platform or OEM drawable. */
@@ -149,8 +151,12 @@ internal object SemanticUi {
         )
     }
 
-    fun invalidate(view: View) {
-        baselines.remove(view)
+    /**
+     * Take any override off [view] and forget its baseline. Call before restyling a view, so the
+     * next [apply] measures the new style rather than the override.
+     */
+    fun release(view: View) {
+        baselines.remove(view)?.let { restore(view, it) }
     }
 
     private fun captureBaseline(view: View): Baseline {
@@ -171,6 +177,7 @@ internal object SemanticUi {
             view.minimumHeight,
             foreground,
             backgroundRgb,
+            PlatformUi.captureStyle(view),
         )
     }
 
@@ -195,6 +202,7 @@ internal object SemanticUi {
             }
             style.foregroundRgb?.let { view.setTextColor(opaque(it)) }
         }
+        if (applyThroughPlatform(view, baseline, semanticId, style)) return
         styledBackground(view, baseline, semanticId, style)?.let {
             @Suppress("DEPRECATION")
             view.setBackgroundDrawable(it)
@@ -205,6 +213,38 @@ internal object SemanticUi {
                 baseline.padding[3],
             )
         }
+    }
+
+    /** The same colour rules as [styledBackground], applied through the widget's own shape. */
+    private fun applyThroughPlatform(
+        view: View,
+        baseline: Baseline,
+        semanticId: String,
+        style: ValidatedUiStyle,
+    ): Boolean {
+        if (baseline.platform == null) return false
+        if (style.backgroundRgb == null && style.accentRgb == null &&
+            style.borderRgb == null && style.radiusDp == null) return true
+        val defaults = AndroidRuntimeContracts.uiDefaults(semanticId)
+        val density = view.resources.displayMetrics.density
+        val defaultAccent = UiStylePolicy.parseRgb(defaults.accent)?.let(::opaque)
+        val defaultBorder = UiStylePolicy.parseRgb(defaults.border)?.let(::opaque)
+        val accent = style.accentRgb?.let(::opaque) ?: if (style.backgroundRgb != null)
+            defaultAccent else null
+        val border = style.borderRgb?.let(::opaque) ?: when {
+            style.accentRgb != null -> accent
+            style.backgroundRgb != null -> defaultBorder
+            else -> null
+        }
+        return PlatformUi.applyStyle(
+            view,
+            style.backgroundRgb?.let(::opaque),
+            border,
+            accent,
+            style.radiusDp?.let { it * density },
+            BORDER_DP * density,
+            ACCENT_BORDER_DP * density,
+        )
     }
 
     private fun styledBackground(
@@ -271,8 +311,10 @@ internal object SemanticUi {
             value.textSizePx?.let { view.setTextSize(TypedValue.COMPLEX_UNIT_PX, it) }
             value.textColors?.let(view::setTextColor)
         }
-        @Suppress("DEPRECATION")
-        view.setBackgroundDrawable(value.background)
+        if (!PlatformUi.restoreStyle(view, value.platform)) {
+            @Suppress("DEPRECATION")
+            view.setBackgroundDrawable(value.background)
+        }
         view.setPadding(value.padding[0], value.padding[1], value.padding[2], value.padding[3])
         view.minimumWidth = value.minimumWidth
         view.minimumHeight = value.minimumHeight
@@ -300,6 +342,7 @@ internal object SemanticUi {
     }
 
     private fun effectiveBackgroundRgb(view: View): Int? {
+        PlatformUi.fillRgb(view)?.let { return it }
         val layers = ArrayList<Int>()
         var current: View? = view
         while (current != null) {

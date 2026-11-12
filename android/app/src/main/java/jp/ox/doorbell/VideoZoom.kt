@@ -1,8 +1,12 @@
-// Pinch-to-zoom, pan, and double-tap reset for the incoming-call video (parity with iOS).
+// Pinch-to-zoom, pan, and double-tap for every live picture (docs/en/ui-guidelines.md, "Live
+// view / monitor"). The incoming call, the established call and the monitor share one video box,
+// and both renderers (the H.264 TextureView and the MJPEG/still ImageView) sit in one layer, so
+// one transform covers them all on both flavors.
 //
-// The transform is applied to one layer that holds only the video views, so overlays on the
-// video box (admin QR, debug line, sent-reply text) keep their size. The texture view's own
-// rotation transform is left to the player.
+// The transform is applied to that layer only, so overlays on the video box (admin QR, debug
+// line, sent-reply text) keep their size. The texture view's own rotation transform is left to
+// the player. The call actions live outside the video box, so a gesture can neither press nor
+// block them.
 package jp.ox.doorbell
 
 import android.annotation.SuppressLint
@@ -12,15 +16,13 @@ import android.view.ScaleGestureDetector
 import android.view.View
 
 internal class VideoZoom(private val layer: View, touchSurface: View) {
-    private var scale = 1f
-    private var dx = 0f
-    private var dy = 0f
+    private var state = ZoomState()
 
     private val scaleDetector = ScaleGestureDetector(layer.context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                scale = (scale * detector.scaleFactor).coerceIn(MIN_SCALE, MAX_SCALE)
-                apply()
+                apply(VideoZoomMath.pinch(state, detector.scaleFactor, detector.focusX,
+                                          detector.focusY, layer.width, layer.height))
                 return true
             }
         })
@@ -29,53 +31,47 @@ internal class VideoZoom(private val layer: View, touchSurface: View) {
         object : GestureDetector.SimpleOnGestureListener() {
             override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float,
                                   distanceY: Float): Boolean {
-                if (scale <= 1f) return false
-                dx -= distanceX
-                dy -= distanceY
-                apply()
+                if (!state.zoomed) return false
+                apply(VideoZoomMath.pan(state, -distanceX, -distanceY, layer.width, layer.height))
                 return true
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                reset()
+                apply(VideoZoomMath.doubleTap(state, e.x, e.y, layer.width, layer.height))
                 return true
             }
         })
 
     init {
         attach(touchSurface)
+        // A rotation or a pane change resizes the box; the pan limits move with it.
+        layer.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop,
+                                          oldRight, oldBottom ->
+            if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop)
+                apply(VideoZoomMath.clamp(state, layer.width, layer.height))
+        }
     }
 
-    @SuppressLint("ClickableViewAccessibility") // Gestures only; double-tap mirrors reset().
+    @SuppressLint("ClickableViewAccessibility") // Gestures only; there is nothing to click.
     private fun attach(surface: View) {
         surface.setOnTouchListener { _, event ->
             scaleDetector.onTouchEvent(event)
             gestureDetector.onTouchEvent(event)
-            scale > 1f || event.pointerCount > 1
+            // Claim the gesture while zoomed or pinching so a scrolling parent cannot take it.
+            val claim = state.zoomed || event.pointerCount > 1
+            if (claim) surface.parent?.requestDisallowInterceptTouchEvent(true)
+            claim || event.actionMasked == MotionEvent.ACTION_DOWN
         }
     }
 
-    fun reset() {
-        scale = 1f
-        dx = 0f
-        dy = 0f
-        apply()
-    }
+    /** Back to fit; called when the door or the call changes. */
+    fun reset() = apply(ZoomState())
 
-    private fun apply() {
-        // Keep the zoomed picture covering the box: panning stops at the edges.
-        val maxX = layer.width * (scale - 1f) / 2f
-        val maxY = layer.height * (scale - 1f) / 2f
-        dx = dx.coerceIn(-maxX, maxX)
-        dy = dy.coerceIn(-maxY, maxY)
-        layer.scaleX = scale
-        layer.scaleY = scale
-        layer.translationX = dx
-        layer.translationY = dy
-    }
-
-    private companion object {
-        const val MIN_SCALE = 1f
-        const val MAX_SCALE = 4f
+    private fun apply(next: ZoomState) {
+        state = next
+        layer.scaleX = next.scale
+        layer.scaleY = next.scale
+        layer.translationX = next.dx
+        layer.translationY = next.dy
     }
 }

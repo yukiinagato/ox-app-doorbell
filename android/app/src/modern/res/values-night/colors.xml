@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material 3 colour roles for the dark appearance. -->
+<resources>
+    <color name="db_primary">#9ECAFF</color>
+    <color name="db_on_primary">#003258</color>
+    <color name="db_primary_container">#00497D</color>
+    <color name="db_on_primary_container">#D1E4FF</color>
+    <color name="db_secondary">#BBC7DB</color>
+    <color name="db_on_secondary">#253140</color>
+    <color name="db_secondary_container">#3B4858</color>
+    <color name="db_on_secondary_container">#D7E3F7</color>
+    <color name="db_tertiary">#D6BEE4</color>
+    <color name="db_on_tertiary">#3B2948</color>
+    <color name="db_tertiary_container">#523F5F</color>
+    <color name="db_on_tertiary_container">#F2DAFF</color>
+    <color name="db_error">#E06A63</color>
+    <color name="db_on_error">#1F0B0A</color>
+    <color name="db_error_container">#93000A</color>
+    <color name="db_on_error_container">#FFDAD6</color>
+    <color name="db_background">#111318</color>
+    <color name="db_on_background">#E2E2E9</color>
+    <color name="db_surface">#111318</color>
+    <color name="db_on_surface">#E2E2E9</color>
+    <color name="db_surface_variant">#43474E</color>
+    <color name="db_on_surface_variant">#C3C7CF</color>
+    <color name="db_outline">#8D9199</color>
+    <color name="db_outline_variant">#43474E</color>
+    <color name="db_inverse_surface">#E2E2E9</color>
+    <color name="db_inverse_on_surface">#2E3035</color>
+    <color name="db_inverse_primary">#0061A4</color>
+    <color name="db_surface_dim">#111318</color>
+    <color name="db_surface_bright">#37393E</color>
+    <color name="db_surface_container_lowest">#0C0E13</color>
+    <color name="db_surface_container_low">#191C20</color>
+    <color name="db_surface_container">#1D2024</color>
+    <color name="db_surface_container_high">#282A2F</color>
+    <color name="db_surface_container_highest">#33353A</color>
+    <color name="db_positive">#4CC277</color>
+    <color name="db_on_positive">#0B1A10</color>
+    <color name="db_warning">#F0B44C</color>
+    <color name="db_on_warning">#231600</color>
+    <color name="db_notice_container">#3A2E10</color>
+    <color name="db_on_notice_container">#F1D28A</color>
+    <color name="db_notice_outline">#6B5620</color>
+    <color name="db_positive_container">#1B3524</color>
+    <color name="db_on_positive_container">#9BD9AB</color>
+</resources>

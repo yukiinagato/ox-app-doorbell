@@ -6,7 +6,6 @@
 package jp.ox.doorbell
 
 import android.app.Activity
-import android.app.AlertDialog
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
@@ -22,12 +21,15 @@ import android.view.ViewGroup
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
 import org.json.JSONObject
 
-class AddDeviceActivity : Activity(), DoorbellCore.Listener {
+class AddDeviceActivity : ShellActivity(), DoorbellCore.Listener {
+
+    /** An enrolment in progress must not be thrown away by a rebuild. */
+    override fun onAppearanceChanged() = Unit
+
 
     private lateinit var app: App
     private lateinit var texts: Texts
@@ -39,7 +41,7 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
 
     private lateinit var nearbyList: LinearLayout
     private lateinit var nearbyEmpty: TextView
-    private lateinit var nearbySpinner: ProgressBar
+    private lateinit var nearbySpinner: View
 
     private lateinit var codeButton: Button
     private lateinit var codeCard: LinearLayout
@@ -346,35 +348,38 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
      * by accident, and an impostor answering for it cannot pass.
      */
     private fun onAdd(id: String) {
-        val field = android.widget.EditText(this).apply {
-            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+        val entry = PlatformUi.field(
+            this, texts.t("pair.confirm_code_hint", R.string.pair_confirm_code_hint),
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER,
+        )
+        val field = entry.input.apply {
             filters = arrayOf(android.text.InputFilter.LengthFilter(
                 PairingModel.CONFIRM_CODE_LENGTH))
-            hint = texts.t("pair.confirm_code_hint", R.string.pair_confirm_code_hint)
             gravity = Gravity.CENTER
             textSize = 28f
-            setSingleLine(true)
         }
         val box = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(8), dp(20), 0)
-            addView(TextView(this@AddDeviceActivity).apply {
-                text = texts.t("pair.confirm_code_prompt", R.string.pair_confirm_code_prompt)
-            }, PairingUi.matchWrap())
-            addView(field, PairingUi.matchWrap())
+            setPadding(dp(24), dp(8), dp(24), 0)
+            addView(ShellUi.label(
+                this@AddDeviceActivity,
+                texts.t("pair.confirm_code_prompt", R.string.pair_confirm_code_prompt),
+                TextRole.SUPPORTING,
+            ).apply { setPadding(0, 0, 0, dp(12)) }, PairingUi.matchWrap())
+            addView(entry.view, PairingUi.matchWrap())
         }
-        val dialog = AlertDialog.Builder(this)
+        val dialog = ShellDialogBuilder(this)
             .setTitle(texts.t("pair.confirm_code_title", R.string.pair_confirm_code_title))
             .setView(box)
             .setPositiveButton(texts.t("pair.add", R.string.pair_add), null)
             .setNegativeButton(texts.t("calling.cancel", R.string.calling_cancel), null)
             .create()
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
                 val code = field.text.toString().filter { it in '0'..'9' }
                 if (!PairingModel.validConfirmCode(code)) {
-                    field.error = texts.t("pair.confirm_code_invalid",
-                                          R.string.pair_confirm_code_invalid)
+                    entry.setError(texts.t("pair.confirm_code_invalid",
+                                           R.string.pair_confirm_code_invalid))
                     return@setOnClickListener
                 }
                 dialog.dismiss()
@@ -387,7 +392,7 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun onDeny(id: String) {
-        AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setMessage(texts.t("pair.deny", R.string.pair_deny))
             .setPositiveButton(texts.t("pair.deny", R.string.pair_deny)) { _, _ ->
                 app.core.denyDevice(id)
@@ -491,7 +496,7 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun onBulkAdd() {
-        AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setTitle(texts.t("pair.add_all", R.string.pair_add_all))
             .setMessage(texts.t("pair.add_all_warning", R.string.pair_add_all_warning))
             .setPositiveButton(texts.t("pair.add_all", R.string.pair_add_all)) { _, _ ->
@@ -522,7 +527,7 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
     }
 
     private fun onUnpair() {
-        AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setTitle(texts.t("pair.clear_title", R.string.pair_clear_title))
             .setMessage(texts.t("pair.clear_confirm", R.string.pair_clear_confirm))
             .setPositiveButton(texts.t("pair.clear_title", R.string.pair_clear_title)) { _, _ ->
@@ -534,7 +539,7 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
 
     /** Second step of the two-step confirmation; the shell state is cleared by App. */
     private fun confirmUnpair() {
-        AlertDialog.Builder(this)
+        ShellDialogBuilder(this)
             .setMessage(texts.t("pair.clear_confirm", R.string.pair_clear_confirm))
             .setPositiveButton(texts.t("pair.clear_title", R.string.pair_clear_title)) { _, _ ->
                 app.core.unpair()
@@ -559,10 +564,21 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
     private fun dp(v: Int) = PairingUi.dp(this, v)
 
     private fun buildUi(): View {
-        val scroll = ScrollView(this).apply { setBackgroundColor(PairingUi.BG) }
+        PairingUi.bind(this)
+        val frame = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(PairingUi.BG)
+        }
+        val bar = PlatformUi.appBar(
+            this, texts.t("admin.menu_add_device", R.string.admin_menu_add_device))
+        bar.setBack(texts.t("panel.back", R.string.panel_back)) { finish() }
+        frame.addView(bar.view, PairingUi.matchWrap())
+        val scroll = ScrollView(this)
+        frame.addView(scroll, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         val root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(20), dp(24), dp(20), dp(32))
+            setPadding(dp(16), dp(8), dp(16), dp(32))
         }
         scroll.addView(
             root,
@@ -572,14 +588,7 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
             ),
         )
 
-        root.addView(
-            PairingUi.title(this, texts.t("admin.menu_add_device", R.string.admin_menu_add_device)),
-            PairingUi.matchWrap(),
-        )
-        membershipView = PairingUi.body(this).apply {
-            setTextColor(PairingUi.TEXT)
-            setPadding(0, dp(8), 0, 0)
-        }
+        membershipView = PairingUi.body(this).apply { setTextColor(PairingUi.TEXT) }
         root.addView(membershipView, PairingUi.matchWrap())
         connectedView = PairingUi.small(this)
         root.addView(connectedView, PairingUi.matchWrap())
@@ -600,21 +609,15 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
         root.addView(buildBulkSection(), PairingUi.matchWrap())
         root.addView(PairingUi.spacer(this, 12))
         root.addView(buildQrCard(), PairingUi.matchWrap())
-        root.addView(PairingUi.spacer(this, 12))
+        root.addView(PairingUi.spacer(this, 24))
+        // Leaving the cluster is destructive: last, alone, and in the negative role.
         root.addView(
-            PairingUi.button(this, texts.t("pair.clear_title", R.string.pair_clear_title)) {
-                onUnpair()
-            },
+            UiKit.actionButton(this, texts.t("pair.clear_title", R.string.pair_clear_title),
+                               UiRoles.from(PlatformUi.tokens(this)), ActionRole.NEGATIVE,
+                               kind = ButtonKind.OUTLINED) { onUnpair() },
             PairingUi.matchWrap(),
         )
-        root.addView(PairingUi.spacer(this, 8))
-        root.addView(
-            PairingUi.button(this, texts.t("admin.menu_close", R.string.admin_menu_close)) {
-                finish()
-            },
-            PairingUi.matchWrap(),
-        )
-        return scroll
+        return frame
     }
 
     private fun buildNearbyCard(): View {
@@ -628,8 +631,8 @@ class AddDeviceActivity : Activity(), DoorbellCore.Listener {
             gravity = Gravity.CENTER_VERTICAL
             setPadding(0, dp(10), 0, 0)
         }
-        nearbySpinner = ProgressBar(this).apply { isIndeterminate = true }
-        emptyRow.addView(nearbySpinner, LinearLayout.LayoutParams(dp(20), dp(20)).apply {
+        nearbySpinner = PlatformUi.progress(this)
+        emptyRow.addView(nearbySpinner, LinearLayout.LayoutParams(dp(24), dp(24)).apply {
             rightMargin = dp(10)
         })
         nearbyEmpty = PairingUi.body(

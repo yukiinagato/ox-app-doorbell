@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Widget styles the shared layouts name; legacy19 defines the same names over framework
+     widgets, so one layout file serves both flavors. -->
+<resources>
+    <style name="Widget.Doorbell.Button" parent="Widget.Material3.Button">
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Tonal" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Text" parent="Widget.Material3.Button.TextButton">
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <!-- Door-station actions: the 72 dp visitor target with the largest label style. -->
+    <style name="Widget.Doorbell.Button.Visitor" parent="Widget.Material3.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">72dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceHeadlineSmall</item>
+        <item name="cornerRadius">20dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+    <!-- Call-screen actions: icon above nothing, label beside, a 56 dp target. -->
+    <style name="Widget.Doorbell.Button.Call" parent="Widget.Material3.Button">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleMedium</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Call.Tonal" parent="Widget.Material3.Button.TonalButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleMedium</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+    <style name="Widget.Doorbell.Button.Call.Outlined" parent="Widget.Material3.Button.OutlinedButton">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">56dp</item>
+        <item name="android:textAppearance">?attr/textAppearanceTitleMedium</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+    </style>
+
+    <style name="TextAppearance.Doorbell.Display" parent="TextAppearance.Material3.DisplayLarge"/>
+    <style name="TextAppearance.Doorbell.Headline" parent="TextAppearance.Material3.HeadlineMedium"/>
+    <style name="TextAppearance.Doorbell.Title" parent="TextAppearance.Material3.TitleLarge"/>
+    <style name="TextAppearance.Doorbell.Subtitle" parent="TextAppearance.Material3.TitleMedium"/>
+    <style name="TextAppearance.Doorbell.Body" parent="TextAppearance.Material3.BodyLarge"/>
+    <style name="TextAppearance.Doorbell.Supporting" parent="TextAppearance.Material3.BodyMedium"/>
+    <style name="TextAppearance.Doorbell.Label" parent="TextAppearance.Material3.LabelLarge"/>
+</resources>

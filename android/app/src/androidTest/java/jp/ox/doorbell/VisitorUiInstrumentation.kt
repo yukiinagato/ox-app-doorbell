@@ -2,7 +2,6 @@ package jp.ox.doorbell
 
 import android.app.Activity
 import android.app.Application
-import android.app.AlertDialog
 import android.app.Instrumentation
 import android.content.Intent
 import android.content.pm.ActivityInfo
@@ -120,81 +119,108 @@ class VisitorUiInstrumentation : Instrumentation() {
                     prepare("purpose_first")
                     ui { button(R.id.call_button).performClick(); invoke("showOffline") }
                     val pane = activity.findViewById<View>(R.id.offline_view)
+                    // Neutral recovery: the pane is the theme's plain background, never an alarm colour.
+                    val neutral = android.util.TypedValue()
+                    check(activity.theme.resolveAttribute(android.R.attr.colorBackground, neutral, true))
                     @Suppress("DEPRECATION")
-                    check((pane.background as ColorDrawable).color == activity.resources.getColor(R.color.bg))
+                    val expected = if (neutral.resourceId != 0)
+                        activity.resources.getColor(neutral.resourceId) else neutral.data
+                    check((pane.background as ColorDrawable).color == expected)
                     check(!button(R.id.cancel_button).isEnabled)
                     capture("recovering")
                     prepare("purpose_first")
-                    val slider = get(activity, "sosSlider") as SosSlideView
+                    val trigger = get(activity, "sosSlider") as SosTriggerView
                     var fired = 0
+                    // A tap, or the accessibility click, only opens the confirmation surface.
                     ui {
-                        slider.onTrigger = { fired++ }
-                        slider.performAccessibilityAction(android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK, null)
-                        check(!slider.isArmed() && fired == 0)
+                        trigger.onTrigger = { fired++ }
+                        triggerButton(trigger).performAccessibilityAction(
+                            android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK, null)
+                    }
+                    ui {
+                        val surface = checkNotNull(trigger.surface) { "The tap opened no surface" }
+                        check(surface.showing && !trigger.isArmed() && fired == 0)
+                        check(!surface.sendButton.isFocused) { "Send SOS took the default focus" }
+                        check(triggerButton(trigger).height < activity.resources.displayMetrics.density * 72) {
+                            "The SOS trigger competes with the primary action"
+                        }
                     }
                     capture("sos-confirm")
+                    // The focusable Send SOS button is the non-drag path into the same countdown.
+                    ui { trigger.surface!!.sendButton.performClick() }
                     ui {
-                        (get(slider, "confirmation") as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                        check(trigger.isArmed() && fired == 0)
+                        check(trigger.surface!!.sendButton.visibility == View.GONE)
+                        trigger.surface!!.cancelButton.performClick()
                     }
+                    ui { check(!trigger.isArmed() && fired == 0 && trigger.surface == null) }
+                    // A slide released short of the end springs back; a full slide arms.
+                    ui { trigger.open() }
                     ui {
-                        check(slider.isArmed() && fired == 0)
-                        slider.performClick()
-                        check(!slider.isArmed() && fired == 0)
+                        val slide = trigger.surface!!.slide
                         val time = SystemClock.uptimeMillis()
-                        slider.dispatchTouchEvent(MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 4f, slider.height / 2f, 0))
-                        slider.dispatchTouchEvent(MotionEvent.obtain(time, time + 20, MotionEvent.ACTION_UP, slider.width.toFloat(), slider.height / 2f, 0))
-                        check(slider.isArmed() && fired == 0)
-                        slider.cancelCountdown()
-                        slider.onKeyDown(android.view.KeyEvent.KEYCODE_ENTER,
-                            android.view.KeyEvent(android.view.KeyEvent.ACTION_DOWN, android.view.KeyEvent.KEYCODE_ENTER))
-                        slider.onKeyUp(android.view.KeyEvent.KEYCODE_ENTER,
-                            android.view.KeyEvent(android.view.KeyEvent.ACTION_UP, android.view.KeyEvent.KEYCODE_ENTER))
-                        check(get(slider, "confirmation") != null && !slider.isArmed())
-                        (get(slider, "confirmation") as AlertDialog).getButton(AlertDialog.BUTTON_NEGATIVE).performClick()
+                        slide.dispatchTouchEvent(MotionEvent.obtain(time, time, MotionEvent.ACTION_DOWN, 4f, slide.height / 2f, 0))
+                        slide.dispatchTouchEvent(MotionEvent.obtain(time, time + 20, MotionEvent.ACTION_UP, slide.width / 2f, slide.height / 2f, 0))
+                        check(!trigger.isArmed() && fired == 0) { "A short slide armed the SOS" }
+                        slide.dispatchTouchEvent(MotionEvent.obtain(time, time + 40, MotionEvent.ACTION_DOWN, 4f, slide.height / 2f, 0))
+                        slide.dispatchTouchEvent(MotionEvent.obtain(time, time + 60, MotionEvent.ACTION_UP, slide.width.toFloat(), slide.height / 2f, 0))
+                        check(trigger.isArmed() && fired == 0)
+                        // A press held on the slide or on the trigger arms nothing by itself.
+                        trigger.cancelCountdown()
+                        check(!triggerButton(trigger).performLongClick() || trigger.surface == null)
                     }
-                    ui { check(!slider.isArmed() && fired == 0) }
+                    ui { check(!trigger.isArmed() && fired == 0) }
                 }
                 for (interruption in listOf("cancel", "detach", "replace")) {
                     case("T35-R1 stale SOS confirmation after $interruption") {
                         prepare("purpose_first")
-                        val slider = get(activity, "sosSlider") as SosSlideView
+                        val trigger = get(activity, "sosSlider") as SosTriggerView
                         var fired = 0
-                        var replacement: AlertDialog? = null
+                        var replacement: SosConfirmSurface? = null
                         ui {
-                            slider.configure("SOS", "", "Cancel", 0) { it.toString() }
-                            slider.onTrigger = { fired++ }
-                            slider.performClick()
-                            val original = get(slider, "confirmation") as AlertDialog
-                            original.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
-                            if (interruption == "detach") {
-                                val parent = slider.parent as ViewGroup
-                                val index = parent.indexOfChild(slider)
-                                val parameters = slider.layoutParams
-                                parent.removeView(slider)
-                                parent.addView(slider, index, parameters)
-                            } else {
-                                slider.cancelCountdown()
-                                if (interruption == "replace") {
-                                    slider.performClick()
-                                    replacement = get(slider, "confirmation") as AlertDialog
-                                    check(replacement !== original)
-                                }
-                            }
+                            trigger.configure("SOS", "", "Cancel", 3) { it.toString() }
+                            trigger.onTrigger = { fired++ }
+                            trigger.open()
                         }
                         ui {
-                            check(fired == 0 && !slider.isArmed()) {
-                                "A queued SOS confirmation survived $interruption: triggers=$fired"
+                            val original = checkNotNull(trigger.surface)
+                            original.sendButton.performClick()
+                            check(trigger.isArmed())
+                            if (interruption == "detach") {
+                                val parent = trigger.parent as ViewGroup
+                                val index = parent.indexOfChild(trigger)
+                                val parameters = trigger.layoutParams
+                                parent.removeView(trigger)
+                                parent.addView(trigger, index, parameters)
+                            } else {
+                                trigger.cancelCountdown()
+                            }
+                            // The surface that was closed must never deliver its confirmation.
+                            original.slide.confirm()
+                            original.sendButton.performClick()
+                        }
+                        if (interruption == "replace") {
+                            ui {
+                                trigger.configure("SOS", "", "Cancel", 0) { it.toString() }
+                                trigger.onTrigger = { fired++ }
+                                trigger.open()
+                            }
+                            ui { replacement = checkNotNull(trigger.surface) }
+                        }
+                        ui {
+                            check(fired == 0 && !trigger.isArmed()) {
+                                "A closed SOS confirmation survived $interruption: triggers=$fired"
                             }
                             replacement?.let {
-                                check(get(slider, "confirmation") === it && it.isShowing) {
-                                    "The old dialog cleared its replacement"
+                                check(trigger.surface === it && it.showing) {
+                                    "The old surface cleared its replacement"
                                 }
-                                it.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+                                it.sendButton.performClick()
                             }
                         }
                         ui {
                             check(fired == if (interruption == "replace") 1 else 0)
-                            check(!slider.isArmed())
+                            check(!trigger.isArmed())
                         }
                     }
                 }
@@ -296,6 +322,7 @@ class VisitorUiInstrumentation : Instrumentation() {
         settle()
     }
     private fun button(id: Int) = activity.findViewById<Button>(id)
+    private fun triggerButton(trigger: SosTriggerView) = trigger.getChildAt(0) as Button
     private fun ui(body: () -> Unit) {
         var failure: Throwable? = null
         runOnMainSync { try { body() } catch (t: Throwable) { failure = t } }

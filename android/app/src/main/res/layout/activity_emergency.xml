@@ -20,8 +20,7 @@
             android:layout_height="wrap_content"
             android:gravity="center"
             android:text="@string/emergency_title"
-            android:textSize="44sp"
-            android:textStyle="bold"/>
+            android:textAppearance="@style/TextAppearance.Doorbell.Display"/>
 
         <TextView
             android:id="@+id/emergency_source_text"
@@ -43,15 +42,13 @@
 
         <Button
             android:id="@+id/emergency_clear_button"
+            style="@style/Widget.Doorbell.Button.Visitor"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="48dp"
             android:maxWidth="480dp"
             android:minHeight="72dp"
-            android:text="@string/emergency_cancel"
-            android:textAllCaps="false"
-            android:textSize="22sp"
-            android:textStyle="bold"/>
+            android:text="@string/emergency_cancel"/>
 
         <TextView
             android:id="@+id/emergency_hint_text"

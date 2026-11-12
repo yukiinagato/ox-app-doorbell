@@ -1,9 +1,9 @@
-// Shared framework-view building blocks for the batch-2 screens (spec §5, §5.1).
+// Shared building blocks for the code-built screens (docs/en/ui-guidelines.md).
 //
-// Every coloured-background text goes through [pill] or [button], which enforce the 6 dp vertical
-// and 12 dp horizontal padding plus the 8 dp radius the audit requires. Two-part labels are
-// rendered by [twoPartText] so the deliberate break and the smaller second line are identical
-// everywhere. Framework widgets only: no androidx, no material.
+// Controls come from the flavor's PlatformUi (Material Components on modern, framework widgets
+// on legacy19) with their stock appearance; this file only composes them into the recurring
+// arrangements: section headings, list rows, status chips. Two-part labels are rendered by
+// [twoPartText] so the deliberate break and the smaller second line are identical everywhere.
 package jp.ox.doorbell
 
 import android.content.Context
@@ -84,33 +84,54 @@ internal object ShellUi {
         includeFontPadding = false
     }
 
-    /** A section heading for the settings list and the dashboard cards. */
-    fun sectionHeading(context: Context, palette: Palette, value: String): TextView =
-        text(context, value, 13f, palette.muted, bold = true).apply {
-            setPadding(dp(context, 4), dp(context, 14), dp(context, 4), dp(context, 6))
+    /** Text in one step of the platform type ramp, in the theme's own ink. */
+    fun label(context: Context, value: CharSequence, role: TextRole, colorRgb: Int? = null): TextView =
+        TextView(context).apply {
+            text = value
+            @Suppress("DEPRECATION")
+            setTextAppearance(context, when (role) {
+                TextRole.DISPLAY -> R.style.TextAppearance_Doorbell_Display
+                TextRole.HEADLINE -> R.style.TextAppearance_Doorbell_Headline
+                TextRole.TITLE -> R.style.TextAppearance_Doorbell_Title
+                TextRole.SUBTITLE -> R.style.TextAppearance_Doorbell_Subtitle
+                TextRole.BODY -> R.style.TextAppearance_Doorbell_Body
+                TextRole.SUPPORTING -> R.style.TextAppearance_Doorbell_Supporting
+                TextRole.LABEL -> R.style.TextAppearance_Doorbell_Label
+            })
+            val tokens = PlatformUi.tokens(context)
+            setTextColor(opaque(colorRgb ?: when (role) {
+                TextRole.SUPPORTING, TextRole.LABEL -> tokens.muted
+                else -> tokens.ink
+            }))
         }
 
-    /**
-     * A padded coloured label. Never construct a coloured background for text by hand; this is
-     * the one place the padding and radius floor is enforced.
-     */
+    /** A section heading above a group of rows: the label style in the accent. */
+    fun sectionHeading(context: Context, palette: Palette, value: String): TextView =
+        label(context, value, TextRole.LABEL, accentInk(palette)).apply {
+            setTypeface(typeface, Typeface.BOLD)
+            setPadding(dp(context, 16), dp(context, 20), dp(context, 16), dp(context, 8))
+        }
+
+    /** The accent as text on the ground, or the plain ink when the accent would not read there. */
+    fun accentInk(palette: Palette): Int =
+        if (UiStylePolicy.contrast(palette.accent, palette.ground) >= 4.5) palette.accent
+        else palette.ink
+
+    /** A status chip in semantic colours. */
     fun pill(
         context: Context,
         value: CharSequence,
         backgroundRgb: Int,
         inkRgb: Int,
-        sizeSp: Float = 12.5f,
-        borderRgb: Int? = null,
-    ): TextView = text(context, value, sizeSp, inkRgb).apply {
-        background = rounded(context, backgroundRgb, 999, borderRgb)
-        setPadding(
-            dp(context, PILL_PADDING_H_DP), dp(context, PILL_PADDING_V_DP),
-            dp(context, PILL_PADDING_H_DP), dp(context, PILL_PADDING_V_DP),
-        )
-        gravity = Gravity.CENTER
-    }
+        @Suppress("UNUSED_PARAMETER") sizeSp: Float = 12.5f,
+        @Suppress("UNUSED_PARAMETER") borderRgb: Int? = null,
+    ): TextView = PlatformUi.chip(context, value, ChipKind.STATUS, fillRgb = backgroundRgb,
+                                  inkRgb = inkRgb)
 
-    /** A focusable action. Its label may carry a deliberate second line. */
+    /**
+     * A focusable action: filled when [primary] or given a role colour, tonal otherwise. Its
+     * label may carry a deliberate second line.
+     */
     fun button(
         context: Context,
         label: TwoPartLabel,
@@ -120,21 +141,14 @@ internal object ShellUi {
         inkRgb: Int? = null,
         onClick: () -> Unit,
     ): Button {
-        val fill = backgroundRgb ?: if (primary) palette.accent else palette.surfaceAlt
-        val ink = inkRgb ?: if (primary) palette.accentInk else palette.ink
-        return Button(context).apply {
-            text = twoPartText(label, ink, palette.dark)
-            isAllCaps = false
-            textSize = 15f
-            setTextColor(opaque(ink))
-            background = rounded(context, fill, 10)
+        val filled = primary || backgroundRgb != null
+        val kind = if (filled) ButtonKind.FILLED else ButtonKind.TONAL
+        return PlatformUi.button(context, kind).apply {
+            if (backgroundRgb != null) PlatformUi.styleButton(this, kind, backgroundRgb, inkRgb)
+            text = twoPartText(label, currentTextColor and 0xffffff, palette.dark)
             isFocusable = true
             minHeight = dp(context, TOUCH_FLOOR_DP)
             minimumHeight = dp(context, TOUCH_FLOOR_DP)
-            setPadding(
-                dp(context, PILL_PADDING_H_DP), dp(context, PILL_PADDING_V_DP),
-                dp(context, PILL_PADDING_H_DP), dp(context, PILL_PADDING_V_DP),
-            )
             contentDescription = TwoPartLabels.flatten(label)
             setOnClickListener { onClick() }
         }
@@ -183,15 +197,14 @@ internal object ShellUi {
 
     private const val MUTE_BLEND = 0.3
 
-    /** A grouped card used by the dashboard and the settings list. */
-    fun card(context: Context, palette: Palette): LinearLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        background = rounded(context, palette.surface, CARD_RADIUS_DP, palette.line)
-        val pad = dp(context, 12)
-        setPadding(pad, pad, pad, pad)
-    }
+    /** A group of rows: the platform's card, its content edge to edge so rows ripple fully. */
+    fun card(context: Context, @Suppress("UNUSED_PARAMETER") palette: Palette): CardHandle =
+        PlatformUi.card(context)
 
-    /** One tappable settings row: title, optional value, optional secondary explanation. */
+    /**
+     * One list row: title, the current value under it, an optional explanation, and an optional
+     * trailing control. The whole row is the touch target when [onClick] is given.
+     */
     fun row(
         context: Context,
         palette: Palette,
@@ -199,29 +212,44 @@ internal object ShellUi {
         value: String = "",
         note: String = "",
         enabled: Boolean = true,
+        trailing: View? = null,
+        icon: Int = 0,
         onClick: (() -> Unit)? = null,
     ): LinearLayout = LinearLayout(context).apply {
-        orientation = LinearLayout.VERTICAL
-        minimumHeight = dp(context, TOUCH_FLOOR_DP)
-        val padH = dp(context, PILL_PADDING_H_DP)
-        val padV = dp(context, 10)
-        setPadding(padH, padV, padH, padV)
-        background = rounded(context, palette.surface, PILL_RADIUS_DP, palette.line)
-        addView(text(context, title, 15f, if (enabled) palette.ink else palette.muted))
-        if (value.isNotEmpty())
-            addView(text(context, value, 13.5f, palette.muted).apply {
-                setPadding(0, dp(context, 2), 0, 0)
-            })
-        if (note.isNotEmpty())
-            addView(text(context, note, 12.5f, palette.muted).apply {
-                setPadding(0, dp(context, 4), 0, 0)
-            })
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        isBaselineAligned = false
+        minimumHeight = dp(context, if (value.isEmpty() && note.isEmpty()) ROW_MIN_DP else ROW_TALL_DP)
+        setPadding(dp(context, 16), dp(context, 8), dp(context, 16), dp(context, 8))
+        if (icon != 0) addView(android.widget.ImageView(context).apply {
+            setImageResource(icon)
+            setColorFilter(opaque(palette.muted))
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(dp(context, 24), dp(context, 24)).apply {
+            rightMargin = dp(context, 16)
+        })
+        val texts = LinearLayout(context).apply { orientation = LinearLayout.VERTICAL }
+        texts.addView(label(context, title, TextRole.BODY, if (enabled) palette.ink else palette.muted))
+        if (value.isNotEmpty()) texts.addView(label(context, value, TextRole.SUPPORTING))
+        if (note.isNotEmpty()) texts.addView(label(context, note, TextRole.LABEL).apply {
+            setPadding(0, dp(context, 2), 0, 0)
+        })
+        addView(texts, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        if (trailing != null) addView(trailing, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { leftMargin = dp(context, 16) })
         if (onClick != null && enabled) {
             isFocusable = true
             isClickable = true
+            val ripple = android.util.TypedValue()
+            context.theme.resolveAttribute(android.R.attr.selectableItemBackground, ripple, true)
+            setBackgroundResource(ripple.resourceId)
             setOnClickListener { onClick() }
         }
     }
+
+    private const val ROW_MIN_DP = 56
+    private const val ROW_TALL_DP = 72
 
     /**
      * The `name · core vX · app vY · battery` line shown on every screen (§5.1). The battery part
