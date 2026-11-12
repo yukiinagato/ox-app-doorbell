@@ -887,6 +887,9 @@ static const CGFloat kFooterGlassAlpha = 0.65;
       [tile addTarget:self action:@selector(onDoorTile:)
      forControlEvents:UIControlEventTouchUpInside];
       [self addSubview:tile];
+      // Tiles are re-added on refresh; keep the SOS confirmation and the alarm above them.
+      if (_sosPanel.superview == self) [self bringSubviewToFront:_sosPanel];
+      if (_emergencyView.superview == self && !_emergencyView.hidden) [self bringSubviewToFront:_emergencyView];
       [_doorTiles addObject:tile];
     }
     [live addObject:tile];

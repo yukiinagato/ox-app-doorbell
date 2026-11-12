@@ -236,6 +236,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
   // UI
   DBNavBar *_navBar;
+  UIBarButtonItem *_backItem;
   UIBarButtonItem *_noticeItem;
   // The zoomable video slot: the scroll view fills the slot, its one zooming subview is the
   // letterboxed picture rect, and the live view (the MJPEG/snapshot image and the container the
@@ -470,6 +471,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _navBar = [[DBNavBar alloc] init];
   [_navBar setRootTitle:@"" backTitle:nil onBack:nil];
   [self addSubview:_navBar.bar];
+  _backItem = DBChromeBarItem([_texts ts:@"ui.back"], self, @selector(onBack));
+  _navBar.topItem.leftBarButtonItem = _backItem;
   _noticeItem = DBChromeBarItem(@"", self, @selector(onNoticeChip));
 }
 
@@ -897,6 +900,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
       ? [NSString stringWithFormat:@"%@: %@", [_texts ts:@"notice.chip"], text] : @"";
   NSString *entry = [_texts ts:@"notice.for_this_door"];
   if (!DBSameString(_noticeItem.title, entry)) _noticeItem.title = entry;
+  NSString *back = [_texts ts:@"ui.back"];
+  if (!DBSameString(_backItem.title, back)) _backItem.title = back;
+  if (_navBar.topItem.leftBarButtonItem != _backItem) _navBar.topItem.leftBarButtonItem = _backItem;
   UIBarButtonItem *wanted = [_door length] > 0 ? _noticeItem : nil;
   if (_navBar.topItem.rightBarButtonItem != wanted) _navBar.topItem.rightBarButtonItem = wanted;
 }
@@ -2107,11 +2113,19 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _hintLabel.hidden = NO;
 }
 
+// Always leaves the screen; the router's close path ends any call or monitor session.
+- (void)onBack {
+  [self closeSelf];
+}
+
 - (void)onIgnore {
   NSString *key = [NSString stringWithFormat:@"%@:%@", _door, _callID];
+  NSUInteger before = [_visitOrder count];
   [_retiredVisits setObject:@(_stageRevision) forKey:key];
   [_visits removeObjectForKey:key]; [_visitOrder removeObject:key];
-  if ([_visitOrder count] == 0) [self closeSelf];
+  // A visit that was never queued under this key (monitor mode, a call whose identity
+  // changed) left the queue untouched, and Ignore then appeared to do nothing.
+  if (_monitorOnly || [_visitOrder count] == 0 || [_visitOrder count] == before) [self closeSelf];
   else { _answerButton.enabled = NO; [self refreshVisits]; }
 }
 
