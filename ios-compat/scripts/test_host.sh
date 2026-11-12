@@ -4,7 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MINISIP="$REPO_ROOT/ios-kiosk/mini_sip"
-OUT="$REPO_ROOT/build/ios-compat/host-tests"
+OUT="${DB_HOST_TEST_OUT:-$REPO_ROOT/build/ios-compat/host-tests}"
 CC="${CC:-$(xcrun -f clang 2>/dev/null || command -v clang || command -v cc)}"
 MACOS_SDK="$(xcrun --sdk macosx --show-sdk-path 2>/dev/null || true)"
 
@@ -94,6 +94,13 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
   "$REPO_ROOT/ios-compat/tests/door_visitor_layout_test.m" \
   -framework Foundation -framework CoreGraphics -o "$OUT/door_visitor_layout_test"
 "$OUT/door_visitor_layout_test"
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBHomeLayout.m" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBUiTheme.m" \
+  "$REPO_ROOT/ios-compat/tests/home_layout_test.m" \
+  -framework Foundation -framework CoreGraphics -o "$OUT/home_layout_test"
+"$OUT/home_layout_test"
 python3 "$REPO_ROOT/ios-compat/tests/run_door_visitor_actions_host.py" \
   --out "$OUT/door-visitor-actions"
 python3 "$REPO_ROOT/ios-compat/tests/run_door_visitor_actions_host.py" \
@@ -195,6 +202,13 @@ swiftc \
   "$REPO_ROOT/ios-compat/tests/pairing_ux_test.m" \
   -framework Foundation -o "$OUT/pairing_ux_test"
 
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBSettingsLogic.m" \
+  "$REPO_ROOT/ios-compat/tests/kiosk_settings_pages_test.m" \
+  -framework Foundation -o "$OUT/kiosk_settings_pages_test"
+
+"$OUT/kiosk_settings_pages_test"
 "$OUT/minisip_uas_loopback"
 bash "$SCRIPT_DIR/test_chime_host.sh"
 bash "$SCRIPT_DIR/test_semantic_style_host.sh"
@@ -225,6 +239,8 @@ python3 "$REPO_ROOT/ios-compat/tests/recovery_safe_mode_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/modern_keepalive_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/native_settings_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/pairing_flow_contract_test.py"
+python3 "$REPO_ROOT/ios-compat/tests/kiosk_settings_pages_contract_test.py"
+python3 "$REPO_ROOT/ios-compat/tests/kiosk_settings_parity_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/icon_asset_contract_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/pairing_flow_contract_swift_test.py"
 python3 "$REPO_ROOT/ios-compat/tests/frosted_blur_orientation_contract_test.py"

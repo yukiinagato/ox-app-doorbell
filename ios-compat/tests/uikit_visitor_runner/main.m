@@ -207,6 +207,15 @@ static NSDictionary *Fixture(NSString *mode, BOOL large) {
  @try { @autoreleasepool {
   UIButton *call=nil, *cancel=nil; CGRect anchor=CGRectZero; NSString *callID=nil;
   currentCase=@"T35-01"; [self mount:@"purpose_first" large:NO];
+  UISegmentedControl *language=(UISegmentedControl *)Find(_screen,@"door_language");
+  Check([language isKindOfClass:[UISegmentedControl class]] && language.numberOfSegments==3 && !language.hidden && language.frame.size.height>=44,@"Visitor languages are a stock segmented control");
+  Check(language.selectedSegmentIndex==0,@"Current visitor language is the selected segment");
+  language.selectedSegmentIndex=1; [language sendActionsForControlEvents:UIControlEventValueChanged];
+  Check([_router.core.trace.lastObject isEqual:@[@"language",@"test-door",@"ja"]],@"Segment change sets the visitor language");
+  Check(_screen.subviews.lastObject==[_screen valueForKey:@"emergencyOverlay"],@"Emergency layer stays above the navigation bar");
+  UINavigationBar *bar=nil; for (UIView *child in _screen.subviews) if ([child isKindOfClass:[UINavigationBar class]]) bar=(UINavigationBar *)child;
+  Check(bar!=nil && bar.topItem.leftBarButtonItem==nil && bar.topItem.rightBarButtonItem==nil && bar.backItem==nil,@"Navigation bar carries the door name and no route out of the visitor screen");
+  [self mount:@"purpose_first" large:NO];
   Check(Find(_screen,@"purpose_disabled")==nil,@"Disabled purpose absent");
   Tap((UIControl *)Find(_screen,@"purpose_p_delivery"));
   Check([[_router.core.trace.lastObject lastObject] isEqual:@"p_delivery"],@"Purpose-first sends the selected purpose once");
@@ -267,6 +276,10 @@ static NSDictionary *Fixture(NSString *mode, BOOL large) {
   Check(_router.pins==1 && [[_router.core.trace.lastObject objectAtIndex:0] isEqual:@"emergency"],@"Existing SOS clear passes PIN boundary");
   [_screen handleEmergencyEvent:@{@"active":@NO}];
   DBSosSlider *slider=[_screen valueForKey:@"sos"]; UIControl *accessible=[slider valueForKey:@"accessibilityButton"];
+  UIControl *sosOpen=(UIControl *)Find(_screen,@"door_sos_open");
+  Check(sosOpen!=nil && ![slider isDescendantOfView:_screen],@"SOS slide is not on the visitor screen itself");
+  [sosOpen sendActionsForControlEvents:UIControlEventTouchUpInside]; Wait(0.2);
+  Check([slider isDescendantOfView:_screen],@"SOS button opens the confirmation panel that hosts the slide");
   Check(accessible.isAccessibilityElement && (accessible.accessibilityTraits & UIAccessibilityTraitButton),@"SOS alternative is an explicit accessibility button");
   NSUInteger count=_router.core.trace.count; [accessible sendActionsForControlEvents:UIControlEventTouchUpInside]; Wait(0.3);
   Check(_router.core.trace.count==count,@"Accessible activation requires confirmation"); Capture(_window,@"03-sos-confirmation");

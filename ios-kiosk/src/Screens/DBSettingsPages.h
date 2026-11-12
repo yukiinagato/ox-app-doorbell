@@ -18,7 +18,9 @@
 @property(nonatomic, copy) NSString *nodeId;
 // Page identifiers: theme, wording, ntp_servers, rules, quiet_hours, telegram,
 // secrets, panels, media_sources, sounds, quick_replies, purposes,
-// notice_presets, places, devices, sip, mqtt, config_transfer, admin_password.
+// notice_presets, places, devices, sip, mqtt, config_transfer, admin_password,
+// web_push, assets, speech, playback_policy, capabilities, ui_elements,
+// raw_config, logs, other_devices, cluster_security. Any other name returns nil.
 - (DBEditPage *)pageNamed:(NSString *)name;
 // Called when the editor closes: the HTTP admin session is dropped.
 - (void)close;

@@ -147,8 +147,9 @@ class AdminPasswordAndWriteContracts(unittest.TestCase):
         # No loopback HTTP anywhere in the settings path.
         self.assertNotIn("api/config", settings)
         self.assertNotIn("api/login", settings)
-        self.assertIn("[_core setConfigKey:", settings)
-        self.assertIn("[_core deleteConfigKey:", settings)
+        # Every row writes through one helper that owns the Core call and its retry.
+        self.assertIn("[core setConfigKey:", settings)
+        self.assertIn("[core deleteConfigKey:", settings)
         # A Core without the export says so instead of claiming a save.
         self.assertIn("status == -100", settings)
 
@@ -157,6 +158,76 @@ class AdminPasswordAndWriteContracts(unittest.TestCase):
         self.assertIn("callLogSince:0 beforeMs:beforeMs", history)
         self.assertIn("[DBCoreBridge supportsMicMute]", incoming)
         self.assertIn("[_core setMicMuted:muted]", incoming)
+
+
+class NativeSettingsRoleAndParityContracts(unittest.TestCase):
+    """The kiosk's own settings: the role form, the admin-password retry, and the
+    keys it shares with the web admin."""
+
+    def test_role_change_persists_boot_then_takes_the_identity_restart(self):
+        form = read("ios-kiosk/src/Screens/DBRoleChange.m")
+        settings = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        app = read("ios-kiosk/src/Support/DBAppDelegate.m")
+
+        # The Device category opens the form for both the role and the door row.
+        self.assertIn('[_texts ts:@"settings.change_role"], [self roleLabel], @"role"',
+                      settings)
+        self.assertIn("[[DBRoleChange alloc] initWithRouter:_router editor:_editor]", settings)
+        # Nothing is written before the confirmation, and a busy device refuses.
+        self.assertIn("applyLocalIdentityName:_boot.name role:role door:door", form)
+        self.assertNotIn("setConfigKey", form)
+        self.assertIn("settings.role_busy", form)
+        for state in ('@"active_calls"', '@"emergency.active"', '@"joining"'):
+            self.assertIn(state, form)
+        self.assertIn("[DBBootConfig isValidDoor:door]", form)
+        self.assertIn("settings.role_door_in_use", form)
+        # Local and replicated edits share one commit: boot.json first, then the
+        # maintenance restart.
+        commit = app[app.rindex("- (DBIdentityCommit)commitIdentityName:"):
+                     app.index("- (void)restartForIdentityChange {")]
+        self.assertLess(commit.index("persistSetupName:name role:role door:door"),
+                        commit.index("_identityRestartPending = YES"))
+        local = app[app.index("- (BOOL)applyLocalIdentityName:"):
+                    app.rindex("- (DBIdentityCommit)commitIdentityName:")]
+        self.assertIn("[DBBootConfig isValidRole:role]", local)
+        self.assertIn("[DBBootConfig isValidDoor:door]", local)
+        replicated = app[app.index("- (BOOL)applyReplicatedIdentity {"):
+                         app.index("- (BOOL)applyLocalIdentityName:")]
+        self.assertIn("commitIdentityName:name role:role door:door", replicated)
+
+    def test_top_level_writes_retry_after_the_admin_password(self):
+        settings = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        write = settings[settings.index("- (BOOL)write:(int (^)(void))write {"):
+                         settings.index("- (BOOL)writeKey:(NSString *)key string:")]
+        self.assertIn("status != DBAdminRequiredResult", write)
+        self.assertIn("[_router requestPinThen:^{", write)
+        self.assertIn("[screen reportWriteStatus:write()]", write)
+        # No row bypasses the retrying writer.
+        self.assertNotIn("reportWriteStatus:[_core", settings)
+        self.assertNotIn("reportWriteStatus:[screen->_core", settings)
+
+    def test_settings_rows_use_the_keys_the_web_admin_edits(self):
+        settings = read("ios-kiosk/src/Screens/DBSettingsScreen.m")
+        admin = read("webui/admin/app.js")
+        # Each key must be one the Admin itself names, so a renamed key fails here
+        # rather than silently writing something Core ignores.
+        for leaf in ("ui_lang", "helper_mode", "visitor_layout", "mjpeg_fps",
+                     "mjpeg_quality", "h264_resolution", "h264_fps", "h264_bitrate_kbps",
+                     "device_hint", "wake_screen", "min_interval_s", "show_button",
+                     "launch_sound", "call_sound", "update_sound", "button_sound",
+                     "return_s", "alarm_volume", "appearance_schedule", "dark_from",
+                     "light_from", "auto_system"):
+            self.assertIn(leaf, admin)
+            self.assertIn(leaf, settings)
+        for key in ('@"devices.%@.local.ui_lang"', '@"devices.%@.local.recovery.helper_mode"',
+                    '@"ui.languages"', '@"call.indoor.return_s"',
+                    '@"devices.%@.local.call.return_s"', '@"emergency.trigger.mode"',
+                    '@"emergency.alarm_volume|0|100"', '@"audio.volume."',
+                    '@"display.appearance_schedule"', '@"display.screensaver.schedule"',
+                    '@"ui.launch_sound"', '@"ui.call_sound"', '@"ui.update_sound"'):
+            self.assertIn(key, settings)
+        # The visitor language list can never be written empty.
+        self.assertIn("settings.languages_required", settings)
 
 
 class VisitPurposeContracts(unittest.TestCase):
@@ -278,11 +349,19 @@ class ReadabilityContracts(unittest.TestCase):
         self.assertIn("_thumb = [[UIView alloc] init];", widgets)
         self.assertIn("_thumbChevron = [[UIImageView alloc] init];", widgets)
         # Small text over a busy picture gets a plate; headings keep region ink.
-        self.assertIn("static const CGFloat kScrimAlpha = 0.70;", home)
+        # The footer keeps its frosted plate. The dashboard lists no calls: the
+        # History tab does, and unread missed calls show as one notice that
+        # switches to it.
         self.assertIn("- (void)applyScrimTone", home)
-        self.assertIn("_historyScrim.frame", home)
         self.assertIn("_footerScrim.frame", home)
-        self.assertIn("colorWithAlphaComponent:kScrimAlpha", home)
+        self.assertIn("colorWithAlphaComponent:kFooterGlassAlpha", home)
+        self.assertNotIn("UITableView", home)
+        self.assertIn("_missedNotice.hidden = _unreadMissed <= 0;", home)
+        self.assertIn("action:@selector(onHistory)", home)
+        self.assertIn("[_router selectHomeTab:DBHomeTabHistory];", home)
+        self.assertIn("[_tabs setMissedCount:_unreadMissed];", home)
+        self.assertNotIn("DBNoticeChip", widgets)
+        self.assertNotIn("DBTwoPartButton", widgets)
         for reason in ('@"safe_mode"', '@"no_theme_image_configured"',
                        '@"theme_asset_fetch_failed"', '@"theme_asset_decode_failed"'):
             self.assertIn(reason, home)
@@ -321,7 +400,17 @@ class ReadabilityContracts(unittest.TestCase):
         # The dashboard takes all three frames from that one split, so nothing
         # can drift back into an overlap.
         self.assertIn("footerLayoutForViewWidth:size.width", home)
-        for element in ("qr", "version", "sos"):
+        # ...measured above the tab bar, and every other dashboard frame comes
+        # from the host-tested layout function.
+        self.assertIn("viewHeight:footerViewHeight", home)
+        self.assertIn("CGFloat footerViewHeight = size.height - tabHeight;", home)
+        self.assertIn("DBHomeLayoutMake(size, navHeight, tabHeight, footerHeight,", home)
+        self.assertIn("tile.frame = DBHomeLayoutTileFrame(layout, i, count);", home)
+        # SOS is no longer a footer bar: the footer is laid out without it and
+        # the compact trigger gets its frame from the dashboard layout.
+        self.assertIn("sosVisible:NO];", home)
+        self.assertIn("_sosButton.frame = layout.sos;", home)
+        for element in ("qr", "version"):
             self.assertIn('DBRectFromArray([footer objectForKey:@"%s"])' % element, home)
         # The band reserves its own height instead of a hardcoded constant.
         self.assertIn('[[footer objectForKey:@"height"] doubleValue]', home)
@@ -329,9 +418,27 @@ class ReadabilityContracts(unittest.TestCase):
         # The door station stacks them with an explicit gap.
         # The host layout test measures separation at every supported size;
         # this check retains the UIKit-to-production-layout wiring contract.
-        self.assertIn("DBDoorVisitorLayoutMake(size, !_sos.hidden, actionScale)", door)
+        self.assertIn("DBDoorVisitorLayoutMake(size, !_sosButton.hidden, actionScale)", door)
         self.assertIn("_versionLabel.frame = layout.version", door)
-        self.assertIn("_sos.frame = layout.sos", door)
+        self.assertIn("_sosButton.frame = layout.sos", door)
+        # Two deliberate gestures in two places: the button only opens the
+        # in-container panel, the slide lives in the panel, and neither screen
+        # ever puts the slide on its own surface or uses a long press.
+        panel = read("ios-kiosk/src/Screens/DBSosPanel.m")
+        for source in (home, door):
+            self.assertIn("[_sosPanel presentInView:self below:", source)
+            self.assertIn("[[DBSosPanel alloc] initWithSlider:_sos delegate:self]", source)
+            self.assertNotIn("addSubview:_sos]", source)
+            self.assertNotIn("UILongPressGestureRecognizer", source)
+        emergency = door[door.index("- (void)handleEmergencyEvent:"):]
+        self.assertIn("if (active) [_sosPanel dismiss];", emergency[:1400])
+        self.assertIn("[_sosPanel dismiss];\n  [_sos reset];", home)
+        self.assertIn('tintedImageNamed:@"alert-triangle"', panel)
+        self.assertIn("kSosPanelIdleCloseS = 10.0", panel)
+        self.assertIn("[_panel addSubview:_slider];", panel)
+        self.assertIn("[_forward sosSliderDidFire:slider];", panel)
+        self.assertNotIn("emergency:", panel)
+        self.assertNotIn("UILongPressGestureRecognizer", panel)
 
 
 if __name__ == "__main__":

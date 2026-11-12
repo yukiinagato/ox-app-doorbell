@@ -5,7 +5,7 @@ p=argparse.ArgumentParser(); p.add_argument('--source',type=pathlib.Path,require
 r=a.source.resolve(); out=a.out.resolve(); out.mkdir(parents=True,exist_ok=True); app=out/'DoorbellT35UIKit.app'; app.mkdir(exist_ok=True)
 here=pathlib.Path(__file__).resolve().parent
 core=['DBAdminAddress','DBBackdropCompositor','DBBootConfig','DBCallTiming','DBConfigUtil','DBDoorVisitorLayout','DBGeneratedStrings','DBIconAsset','DBMediaSource','DBNoticeModel','DBPairingModel','DBPurposeModel','DBSemanticStyle','DBSosSlideModel','DBTexts','DBUiTheme']
-sources=[r/'ios-kiosk/src/Core'/f'{s}.m' for s in core]+[r/'ios-kiosk/src/Screens'/f'{s}.m' for s in ['DBScreen','DBDoorScreen','DBWidgets']]+[r/'ios-kiosk/src/Media/DBQrCode.m',r/'ios-kiosk/qr/qrcodegen.c',here/'main.m']
+sources=[r/'ios-kiosk/src/Core'/f'{s}.m' for s in core]+[r/'ios-kiosk/src/Screens'/f'{s}.m' for s in ['DBScreen','DBChrome','DBDoorScreen','DBSosPanel','DBWidgets']]+[r/'ios-kiosk/src/Media/DBQrCode.m',r/'ios-kiosk/qr/qrcodegen.c',here/'main.m']
 clang=subprocess.check_output(['xcrun','-f','clang'],text=True).strip(); sdk=r/'tools/sdk/iPhoneOS7.1.sdk'; base=[clang,'-arch','armv7','-miphoneos-version-min=5.1','-isysroot',str(sdk),'-Wall','-Wno-incomplete-implementation','-O1','-g']
 includes=['-I'+str(r/'ios-kiosk/src'/d) for d in ['Core','Screens','Media','Net']]+['-I'+str(r/'core/include'),'-I'+str(r/'ios-kiosk/qr'),'-I'+str(r/'ios-kiosk/mini_sip')]
 objects=[]; commands=[]

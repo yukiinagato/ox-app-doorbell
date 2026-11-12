@@ -111,6 +111,13 @@ static void touchEvent(id target, NSString *name) {
   }
 }
 
+@interface FakeSosPanel : NSObject
+@property NSInteger dismissals;
+- (void)dismiss;
+@end
+@implementation FakeSosPanel
+- (void)dismiss { _dismissals++; }
+@end
 @interface DBDoorScreen : NSObject {
 @public
   FakeCore *_core; FakeBoot *_boot; FakeTexts *_texts; FakeRouter *_router; FakeAudio *_feedbackAudio;
@@ -128,6 +135,7 @@ static void touchEvent(id target, NSString *name) {
   FakeView *_emergencyOverlay, *_emergencyTitle, *_emergencyNote;
   UIButton *_emergencyCancel;
   FakeAudio *_alarmAudio;
+  FakeSosPanel *_sosPanel;
   BOOL ringFirst; NSInteger chooserCount; NSString *hint;
 }
 - (BOOL)beginCallWithPurpose:(NSString *)purpose;

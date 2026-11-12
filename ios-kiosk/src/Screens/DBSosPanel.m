@@ -14,7 +14,7 @@ UIButton *DBSosTriggerButton(void) {
   UIButton *button = DBChromeButton(@"SOS", 18);
   UIColor *negative = DBSosNegativeColor();
   [button setTitleColor:negative forState:UIControlStateNormal];
-  UIImage *icon = [DBIconAsset tintedImageNamed:@"bell" color:negative
+  UIImage *icon = [DBIconAsset tintedImageNamed:@"alert-triangle" color:negative
                                            size:CGSizeMake(22, 22)];
   if (icon) {
     [button setImage:icon forState:UIControlStateNormal];

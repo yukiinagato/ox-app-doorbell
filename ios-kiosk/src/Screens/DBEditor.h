@@ -31,6 +31,8 @@ typedef enum {
 @property(nonatomic, assign) UIKeyboardType keyboard;
 @property(nonatomic, assign) BOOL destructive;
 @property(nonatomic, assign) BOOL confirm;         // ask before running an action
+// The consequence named in that confirmation, for a destructive or confirmed action.
+@property(nonatomic, copy) NSString *confirmMessage;
 @property(nonatomic, assign) BOOL checked;         // shows the checkmark accessory
 @property(nonatomic, assign) NSInteger minimum;
 @property(nonatomic, assign) NSInteger maximum;
@@ -48,6 +50,8 @@ typedef enum {
 @property(nonatomic, strong) NSArray *fields;
 // A list section offers swipe/edit-mode delete and, with onMove, reordering.
 @property(nonatomic, copy) BOOL (^onDelete)(NSInteger index);
+// The consequence named when a row of this section is about to be deleted.
+@property(nonatomic, copy) NSString *(^deleteMessage)(NSInteger index);
 @property(nonatomic, copy) BOOL (^onMove)(NSInteger from, NSInteger to);
 + (DBEditSection *)title:(NSString *)title fields:(NSArray *)fields;
 @end

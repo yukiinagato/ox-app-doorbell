@@ -615,6 +615,17 @@ enum {
 - (void)restartForIdentityChange;
 @end
 
+typedef enum {
+  DBIdentityCommitFailed = 0,
+  DBIdentityCommitUnchanged,   // nothing to restart for; a new name is already applied
+  DBIdentityCommitRestarting,
+} DBIdentityCommit;
+
+@interface DBAppDelegate (DBIdentityCommit)
+- (DBIdentityCommit)commitIdentityName:(NSString *)name role:(NSString *)role
+                                  door:(NSString *)door;
+@end
+
 // ---- Staying reachable while backgrounded ----
 // SpringBoard relaunches a VoIP app in the background after it is killed or the
 // device reboots. A suspended kiosk stops serving Core's HTTPS and mesh ports.
@@ -911,24 +922,42 @@ static BOOL DBBringAppToForeground(void) {
   if ([role isEqualToString:@"door_station"] && ![DBBootConfig isValidDoor:door]) return NO;
   NSString *name = [device objectForKey:@"name"];
   if (![name isKindOfClass:[NSString class]]) name = _boot.name;
+  return [self commitIdentityName:name role:role door:door] == DBIdentityCommitRestarting;
+}
+
+// The local role form writes boot.json itself; Core republishes devices.<self> from it after
+// the restart, so no configuration write is needed here.
+- (BOOL)applyLocalIdentityName:(NSString *)name role:(NSString *)role door:(NSString *)door {
+  if (_identityRestartPending) return YES;
+  if (![DBBootConfig isValidRole:role]) return NO;
+  BOOL station = [role isEqualToString:@"door_station"];
+  if (!station) door = @"";
+  if (station && ![DBBootConfig isValidDoor:door]) return NO;
+  return [self commitIdentityName:name role:role door:door] != DBIdentityCommitFailed;
+}
+
+// Persists an already validated identity. A name is applied in place; a role or door change
+// needs a clean process boundary, so it schedules the maintenance restart.
+- (DBIdentityCommit)commitIdentityName:(NSString *)name role:(NSString *)role
+                                  door:(NSString *)door {
   name = [name stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
   if ([name length] > 64) name = [name substringToIndex:64];
   if ([name length] == 0) name = @"doorbell";
   if ([name isEqualToString:_boot.name] && [role isEqualToString:_boot.role] &&
       [door isEqualToString:_boot.door])
-    return NO;
+    return DBIdentityCommitUnchanged;
   if (![DBBootConfig persistSetupName:name role:role door:door]) {
-    NSLog(@"[doorbell] replicated identity could not be persisted");
-    return NO;
+    NSLog(@"[doorbell] identity could not be persisted");
+    return DBIdentityCommitFailed;
   }
   if ([role isEqualToString:_boot.role] && [door isEqualToString:_boot.door]) {
     _boot.name = name;
     _boot.rawJson = [DBBootConfig loadConfiguration].rawJson;
-    return NO;
+    return DBIdentityCommitUnchanged;
   }
   _identityRestartPending = YES;
   dispatch_async(dispatch_get_main_queue(), ^{ [self restartForIdentityChange]; });
-  return YES;
+  return DBIdentityCommitRestarting;
 }
 
 - (void)restartForIdentityChange {

@@ -8,6 +8,7 @@
 @synthesize placeholder = _placeholder, keyboard = _keyboard, destructive = _destructive;
 @synthesize confirm = _confirm, checked = _checked, minimum = _minimum, maximum = _maximum;
 @synthesize image = _image, onChange = _onChange, page = _page, action = _action;
+@synthesize confirmMessage = _confirmMessage;
 
 + (DBEditField *)kind:(DBEditKind)kind title:(NSString *)title value:(id)value {
   DBEditField *field = [[DBEditField alloc] init];
@@ -23,7 +24,7 @@
 
 @implementation DBEditSection
 @synthesize title = _title, footer = _footer, fields = _fields;
-@synthesize onDelete = _onDelete, onMove = _onMove;
+@synthesize onDelete = _onDelete, onMove = _onMove, deleteMessage = _deleteMessage;
 
 + (DBEditSection *)title:(NSString *)title fields:(NSArray *)fields {
   DBEditSection *section = [[DBEditSection alloc] init];
@@ -563,7 +564,8 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   NSInteger index = (NSInteger)[[indexes objectAtIndex:(NSUInteger)indexPath.row] integerValue];
   DBEditField *field = [self fieldAt:indexPath];
   __weak DBEditorView *weakSelf = self;
-  [self confirmTitle:field.title message:nil then:^{
+  NSString *message = section.deleteMessage ? section.deleteMessage(index) : nil;
+  [self confirmTitle:field.title message:message then:^{
     if (section.onDelete(index)) [weakSelf reloadPage];
   }];
 }
@@ -634,7 +636,7 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
       if (field.action == nil) break;
       if (field.confirm || field.destructive) {
         void (^action)(void) = field.action;
-        [self confirmTitle:field.title message:nil then:action];
+        [self confirmTitle:field.title message:field.confirmMessage then:action];
       } else {
         field.action();
       }

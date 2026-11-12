@@ -13,6 +13,7 @@
 #import "DBChrome.h"
 #import "DBEditor.h"
 #import "DBNoticeDialog.h"
+#import "DBRoleChange.h"
 #import "DBRouter.h"
 #import "DBSettingsPages.h"
 #import "DBWidgets.h"
@@ -28,8 +29,10 @@
 // [[value, label], ...] for "segment", "choose", and "local_choice" rows; `value` holds the
 // label.
 @property(nonatomic, copy) NSArray *choices;
-// The row opens a new group of the grouped table; groupFooter is that group's footer text.
+// The row opens a new group of the grouped table; groupHeader and groupFooter are that
+// group's system header and footer texts.
 @property(nonatomic, assign) BOOL startsGroup;
+@property(nonatomic, copy) NSString *groupHeader;
 @property(nonatomic, copy) NSString *groupFooter;
 @end
 
@@ -37,7 +40,7 @@
 @synthesize choices = _choices;
 @synthesize title = _title, value = _value, action = _action, argument = _argument,
             destructive = _destructive;
-@synthesize startsGroup = _startsGroup, groupFooter = _groupFooter;
+@synthesize startsGroup = _startsGroup, groupHeader = _groupHeader, groupFooter = _groupFooter;
 @end
 
 static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
@@ -178,6 +181,7 @@ static const CGFloat kDBQrSide = 96;
   // Native editors for list and form settings (DBSettingsPages), and this screen's prompts.
   DBEditorView *_editor;
   DBSettingsPages *_pages;
+  DBRoleChange *_roleChange;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -478,20 +482,42 @@ static const CGFloat kDBQrSide = 96;
   NSString *name = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
       @"devices.%@.name", _nodeId]] ?: _boot.name;
   [rows addObject:DBRow([_texts ts:@"settings.device_name"], name, @"device_name", nil)];
-  [rows addObject:DBRow([_texts ts:@"settings.device_role"], [self roleLabel], @"", nil)];
-  if ([_boot.door length] > 0)
-    [rows addObject:DBRow([_texts ts:@"settings.device_door"], _boot.door, @"", nil)];
+  // Role and door are one form: either change restarts the app, so nothing is written here.
+  [rows addObject:DBRow([_texts ts:@"settings.change_role"], [self roleLabel], @"role", nil)];
+  if ([_boot.role isEqualToString:@"door_station"]) {
+    id doorEntry = [DBConfigUtil dig:_cfg path:[@"doors." stringByAppendingString:
+        ([_boot.door length] > 0 ? _boot.door : @"-")]];
+    [rows addObject:DBRow([_texts ts:@"settings.device_door"],
+                          doorEntry ? [DBConfigUtil labelOf:doorEntry lang:_boot.uiLang
+                                                   fallback:_boot.door]
+                                    : (_boot.door ?: @""),
+                          @"role", nil)];
+  }
+  NSString *local = [NSString stringWithFormat:@"devices.%@.local", _nodeId];
+  // The replicated value is what the web admin shows and edits; it wins when the two differ.
+  NSString *uiLang = [_nodeId length] > 0
+      ? [DBConfigUtil str:_cfg path:[local stringByAppendingString:@".ui_lang"]] : nil;
+  if (![@[ @"ja", @"en", @"zh" ] containsObject:(uiLang ?: @"")]) uiLang = _boot.uiLang;
   NSMutableArray *languages = [NSMutableArray array];
   for (NSString *lang in @[ @"ja", @"en", @"zh" ])
     [languages addObject:@[ lang, [DBTexts langDisplayName:lang] ]];
   [rows addObject:[self localChoiceRow:[_texts ts:@"settings.ui_lang"] key:@"ui_lang"
-                                 value:[DBTexts langDisplayName:_boot.uiLang]
+                                 value:[DBTexts langDisplayName:uiLang]
                                choices:languages]];
+  NSString *helper = [_nodeId length] > 0
+      ? [DBConfigUtil str:_cfg path:[local stringByAppendingString:@".recovery.helper_mode"]]
+      : nil;
+  NSArray *helperChoices = @[ @[ @"auto", [_texts ts:@"admin.helper_auto"] ],
+                              @[ @"on", [_texts ts:@"admin.helper_on"] ],
+                              @[ @"off", [_texts ts:@"admin.helper_off"] ] ];
+  if (![@[ @"auto", @"on", @"off" ] containsObject:(helper ?: @"")])
+    helper = _boot.keepaliveHelperPolicy ?: @"off";
+  NSString *helperLabel = helper;
+  for (NSArray *choice in helperChoices)
+    if ([[choice objectAtIndex:0] isEqualToString:helper]) helperLabel = [choice objectAtIndex:1];
   [rows addObject:[self localChoiceRow:[_texts ts:@"settings.helper_mode"]
-                                   key:@"keepalive_helper"
-                                 value:(_boot.keepaliveHelperPolicy ?: @"off")
-                               choices:@[ @[ @"off", @"off" ], @[ @"auto", @"auto" ],
-                                          @[ @"on", @"on" ] ]]];
+                                   key:@"keepalive_helper" value:helperLabel
+                               choices:helperChoices]];
   NSString *configured = [DBConfigUtil str:_cfg path:@"display.appearance"] ?: @"auto_system";
   NSString *effective = [DBUiTheme appearanceModeForConfig:_cfg deviceId:_nodeId
                                                    display:[DBConfigUtil dig:_status
@@ -501,18 +527,25 @@ static const CGFloat kDBQrSide = 96;
                                     [self appearanceLabel:configured effective:effective],
                                     @"choose",
                                     [@"display.appearance|" stringByAppendingString:configured]);
-  appearance.choices = @[ @[ @"auto_schedule", [_texts ts:@"theme.appearance_auto_schedule"] ],
+  appearance.choices = @[ @[ @"auto_system", [_texts ts:@"theme.appearance_auto_system"] ],
+                          @[ @"auto_schedule", [_texts ts:@"theme.appearance_auto_schedule"] ],
                           @[ @"light", [_texts ts:@"theme.mode_light"] ],
                           @[ @"dark", [_texts ts:@"theme.mode_dark"] ] ];
   [rows addObject:DBGroupStart(appearance)];
+  DBSettingsRow *schedule = DBRow([_texts ts:@"settings.appearance_schedule_times"],
+      [NSString stringWithFormat:@"%@ / %@",
+          [DBConfigUtil str:_cfg path:@"display.appearance_schedule.dark_from"] ?: @"19:00",
+          [DBConfigUtil str:_cfg path:@"display.appearance_schedule.light_from"] ?: @"06:30"],
+      @"local_page", @"appearance_schedule");
+  [rows addObject:schedule];
   if ([_nodeId length] > 0) {
-    NSString *local = [NSString stringWithFormat:@"devices.%@.local.video", _nodeId];
+    NSString *video = [local stringByAppendingString:@".video"];
     [rows addObject:[self choiceRow:[_texts ts:@"settings.video_playback"]
-                                key:[local stringByAppendingString:@".playback"] def:@"low_latency"
+                                key:[video stringByAppendingString:@".playback"] def:@"low_latency"
                             choices:@[ @[ @"low_latency", [_texts ts:@"prefs.playback_low_latency"] ],
                                        @[ @"hls", @"HLS" ], @[ @"mjpeg", @"MJPEG" ] ]]];
     [rows addObject:[self choiceRow:[_texts ts:@"settings.video_rotation"]
-                                key:[local stringByAppendingString:@".rotation"] def:@"auto"
+                                key:[video stringByAppendingString:@".rotation"] def:@"auto"
                             choices:@[ @[ @"auto", [_texts ts:@"admin.rotation_auto"] ],
                                        @[ @"0", @"0°" ], @[ @"90", @"90°" ],
                                        @[ @"180", @"180°" ], @[ @"270", @"270°" ] ]]];
@@ -525,10 +558,83 @@ static const CGFloat kDBQrSide = 96;
                            page:@"admin_password"]];
   [rows addObject:[self pageRow:[_texts ts:@"editor.config_transfer"] value:nil
                            page:@"config_transfer"]];
+  [rows addObject:[self pageRow:[_texts ts:@"info.capabilities"] value:nil
+                           page:@"capabilities"]];
+  if ([_nodeId length] > 0 && [_boot.role isEqualToString:@"door_station"])
+    [rows addObjectsFromArray:[self doorStationRows:local]];
   // No "leave the kiosk" row here: on this jailbroken iPad the app *is* the kiosk,
   // so there is no mode to leave -- terminating it only makes the watchdog or
   // the root helper relaunch it. A row that cannot do what it says is worse
   // than no row (spec §5.2, no decorative controls).
+  return rows;
+}
+
+- (DBSettingsRow *)textRow:(NSString *)title key:(NSString *)key def:(NSString *)def {
+  NSString *value = [DBConfigUtil str:_cfg path:key];
+  return DBRow(title, [value length] > 0 ? value : def, @"text", key);
+}
+
+- (DBSettingsRow *)numberRow:(NSString *)title key:(NSString *)key def:(NSInteger)def
+                         min:(NSInteger)min max:(NSInteger)max {
+  return DBRow(title,
+               [NSString stringWithFormat:@"%ld", (long)[DBConfigUtil intVal:_cfg path:key def:def]],
+               @"number", [NSString stringWithFormat:@"%@|%ld|%ld", key, (long)min, (long)max]);
+}
+
+// What only a door station has: the visitor screen's layout, its camera, and motion
+// detection, all under devices.<self>.local with the web admin's keys and defaults. The
+// admin sets no numeric ranges; the bounds here only keep typing mistakes out.
+- (NSArray *)doorStationRows:(NSString *)local {
+  NSMutableArray *rows = [NSMutableArray array];
+  DBSettingsRow *layout = [self choiceRow:[_texts ts:@"settings.visitor_layout"]
+      key:[local stringByAppendingString:@".visitor_layout"] def:@"standard"
+      choices:@[ @[ @"standard", [_texts ts:@"settings.visitor_layout_standard"] ],
+                 @[ @"left", [_texts ts:@"settings.visitor_layout_left"] ],
+                 @[ @"right", [_texts ts:@"settings.visitor_layout_right"] ],
+                 @[ @"edges", [_texts ts:@"settings.visitor_layout_edges"] ] ]];
+  [rows addObject:DBGroupStart(layout)];
+
+  NSString *camera = [local stringByAppendingString:@".camera"];
+  DBSettingsRow *codec = [self choiceRow:[_texts ts:@"admin.cam_codec"]
+      key:[camera stringByAppendingString:@".codec"] def:@"auto"
+      choices:@[ @[ @"auto", [_texts ts:@"admin.codec_auto"] ], @[ @"mjpeg", @"MJPEG" ],
+                 @[ @"h264", @"H.264" ] ]];
+  codec.action = @"choose";
+  DBGroupStart(codec).groupHeader = [_texts ts:@"admin.camera"];
+  [rows addObject:codec];
+  [rows addObject:[self textRow:[_texts ts:@"admin.cam_resolution"]
+                            key:[camera stringByAppendingString:@".resolution"] def:@"640x480"]];
+  [rows addObject:[self numberRow:[_texts ts:@"admin.cam_fps"]
+                              key:[camera stringByAppendingString:@".mjpeg_fps"] def:8
+                              min:1 max:60]];
+  [rows addObject:[self numberRow:[_texts ts:@"admin.cam_quality"]
+                              key:[camera stringByAppendingString:@".mjpeg_quality"] def:60
+                              min:1 max:100]];
+  [rows addObject:[self textRow:[_texts ts:@"admin.cam_h264_resolution"]
+                            key:[camera stringByAppendingString:@".h264_resolution"]
+                            def:@"640x360"]];
+  [rows addObject:[self numberRow:[_texts ts:@"admin.cam_h264_fps"]
+                              key:[camera stringByAppendingString:@".h264_fps"] def:30
+                              min:1 max:60]];
+  [rows addObject:[self numberRow:[_texts ts:@"admin.cam_h264_bitrate"]
+                              key:[camera stringByAppendingString:@".h264_bitrate_kbps"] def:700
+                              min:50 max:20000]];
+  [rows addObject:[self textRow:[_texts ts:@"admin.cam_hint"]
+                            key:[camera stringByAppendingString:@".device_hint"] def:@""]];
+
+  NSString *motion = [local stringByAppendingString:@".motion"];
+  DBSettingsRow *enabled = [self toggleRow:[_texts ts:@"admin.motion"]
+                                       key:[motion stringByAppendingString:@".enabled"] def:YES];
+  DBGroupStart(enabled).groupHeader = [_texts ts:@"admin.motion"];
+  [rows addObject:enabled];
+  [rows addObject:[self toggleRow:[_texts ts:@"admin.motion_wake_screen"]
+                              key:[motion stringByAppendingString:@".wake_screen"] def:NO]];
+  [rows addObject:[self stepperRow:[_texts ts:@"admin.motion_sensitivity"]
+                               key:[motion stringByAppendingString:@".sensitivity"] def:40
+                               min:0 max:100 step:5 unit:nil]];
+  [rows addObject:[self stepperRow:[_texts ts:@"admin.motion_interval"]
+                               key:[motion stringByAppendingString:@".min_interval_s"] def:30
+                               min:0 max:3600 step:5 unit:nil]];
   return rows;
 }
 
@@ -552,11 +658,7 @@ static const CGFloat kDBQrSide = 96;
         @"devices.%@.local.audio.volume.%@", _nodeId, level_id];
     BOOL overridden = ([DBConfigUtil dig:_cfg path:deviceKey] != nil);
     if (overridden) effective = [DBConfigUtil intVal:_cfg path:deviceKey def:effective];
-    NSNumber *pending = [_pendingVolumeValues objectForKey:deviceKey];
-    if (pending) {
-      if (effective == [pending integerValue]) [_pendingVolumeValues removeObjectForKey:deviceKey];
-      else effective = [pending integerValue];
-    }
+    effective = [self volume:effective pendingForKey:deviceKey];
     if (overridden) anyDeviceOverride = YES;
     NSInteger clusterValue = [DBConfigUtil intVal:_cfg
         path:[NSString stringWithFormat:@"audio.volume.%@", level_id] def:-1];
@@ -574,13 +676,50 @@ static const CGFloat kDBQrSide = 96;
                           [NSString stringWithFormat:@"devices.%@.local.audio.volume",
                                                      _nodeId])];
   }
+  if ([rows count] > 0)
+    [(DBSettingsRow *)[rows objectAtIndex:0] setGroupHeader:[_texts ts:@"volume.device_title"]];
+
+  // The cluster defaults every device inherits (audio.volume.*), edited apart from this
+  // device's overrides. An installation that predates the SOS level falls back to
+  // emergency.alarm_volume, as Core does.
+  NSInteger alarm = [DBConfigUtil intVal:_cfg path:@"emergency.alarm_volume" def:100];
+  NSArray *defaults = @[ @80, @(alarm), @60 ];
+  for (NSUInteger i = 0; i < [levels count]; i++) {
+    NSArray *level = [levels objectAtIndex:i];
+    NSString *key = [@"audio.volume." stringByAppendingString:[level objectAtIndex:0]];
+    NSInteger value = [DBConfigUtil intVal:_cfg path:key
+                                       def:[[defaults objectAtIndex:i] integerValue]];
+    value = [self volume:MAX(0, MIN(100, value)) pendingForKey:key];
+    DBSettingsRow *row = DBRow([_texts ts:[level objectAtIndex:1]],
+                               [NSString stringWithFormat:@"%ld", (long)value],
+                               @"volume_slider", [NSString stringWithFormat:@"%@|0|100", key]);
+    if (i == 0) {
+      DBGroupStart(row).groupHeader = [_texts ts:@"volume.title"];
+      row.groupFooter = [_texts ts:@"volume.hint"];
+    }
+    [rows addObject:row];
+  }
   return rows;
+}
+
+// A slider's write is still in flight until Core's snapshot shows it; until then the row
+// keeps the value the operator released at.
+- (NSInteger)volume:(NSInteger)value pendingForKey:(NSString *)key {
+  NSNumber *pending = [_pendingVolumeValues objectForKey:key];
+  if (pending == nil) return value;
+  if (value == [pending integerValue]) {
+    [_pendingVolumeValues removeObjectForKey:key];
+    return value;
+  }
+  return [pending integerValue];
 }
 
 - (NSString *)appearanceLabel:(NSString *)configured effective:(NSString *)effective {
   if ([configured isEqualToString:@"light"]) return [_texts ts:@"theme.mode_light"];
   if ([configured isEqualToString:@"dark"]) return [_texts ts:@"theme.mode_dark"];
-  return [NSString stringWithFormat:@"%@  ·  %@", [_texts ts:@"theme.appearance_auto_schedule"],
+  return [NSString stringWithFormat:@"%@  ·  %@",
+      [_texts ts:([configured isEqualToString:@"auto_schedule"] ? @"theme.appearance_auto_schedule"
+                                                                : @"theme.appearance_auto_system")],
       [_texts ts:([effective isEqualToString:@"light"] ? @"theme.mode_light"
                                                        : @"theme.mode_dark")]];
 }
@@ -630,14 +769,24 @@ static const CGFloat kDBQrSide = 96;
                                          notice ? [DBNoticeModel noticeText:notice]
                                                 : [_texts ts:@"notice.none"],
                                          @"notice", door))];
-      NSDictionary *unlock = [DBConfigUtil dig:_status
-          path:[NSString stringWithFormat:@"doors.%@.unlock", door]];
-      BOOL configuredUnlock = [DBConfigUtil boolVal:unlock path:@"configured" def:NO];
-      BOOL showUnlock = [DBConfigUtil boolVal:unlock path:@"show_button"
-                                          def:configuredUnlock];
-      [rows addObject:DBRow([_texts ts:@"unlock.title"], @"", @"toggle",
-                            [NSString stringWithFormat:@"doors.%@.unlock.show_button|%d",
-                                                       door, showUnlock ? 1 : 0])];
+      // Three states, as in the web admin: no key shows the button only when the door has
+      // an unlock command; true and false force it.
+      NSString *unlockKey = [NSString stringWithFormat:@"doors.%@.unlock", door];
+      id shown = [DBConfigUtil dig:_cfg path:[unlockKey stringByAppendingString:@".show_button"]];
+      NSString *mode = shown == nil ? @"auto" : ([shown boolValue] ? @"show" : @"hide");
+      DBSettingsRow *unlockMode = DBRow([_texts ts:@"unlock.title"],
+          [_texts ts:[@"unlock." stringByAppendingString:mode]], @"unlock_mode",
+          [NSString stringWithFormat:@"%@.show_button|%@", unlockKey, mode]);
+      unlockMode.choices = @[ @[ @"auto", [_texts ts:@"unlock.auto"] ],
+                              @[ @"show", [_texts ts:@"unlock.show"] ],
+                              @[ @"hide", [_texts ts:@"unlock.hide"] ] ];
+      [rows addObject:unlockMode];
+      NSString *command = [DBConfigUtil str:_cfg
+                                       path:[unlockKey stringByAppendingString:@".command"]];
+      [rows addObject:DBRow([_texts ts:@"unlock.command"],
+                            [command length] > 0 ? command : [_texts ts:@"unlock.not_configured"],
+                            @"text",
+                            [NSString stringWithFormat:@"%@.command|command", unlockKey])];
     }
   }
   [rows addObject:DBGroupStart(DBRow([_texts ts:@"dash.notice_global"], @"", @"notice", @""))];
@@ -694,14 +843,16 @@ static const CGFloat kDBQrSide = 96;
                                                   : @"settings.not_configured")]
                            page:@"quiet_hours"]];
   BOOL telegram = [[DBConfigUtil str:_cfg path:@"integrations.telegram.bot_token_ref"] length] > 0;
-  [rows addObject:[self pageRow:@"Telegram"
+  [rows addObject:[self pageRow:[_texts ts:@"settings.telegram"]
                           value:[_texts ts:(telegram ? @"settings.configured"
                                                      : @"settings.not_configured")]
                            page:@"telegram"]];
-  [rows addObject:[self pageRow:@"SIP" value:[DBConfigUtil str:_cfg path:@"sip.server"] page:@"sip"]];
+  [rows addObject:[self pageRow:[_texts ts:@"settings.page_sip"]
+                          value:[DBConfigUtil str:_cfg path:@"sip.server"] page:@"sip"]];
   [rows addObject:[self pageRow:[_texts ts:@"editor.mqtt"]
                           value:[DBConfigUtil str:_cfg path:@"integrations.mqtt.host"]
                            page:@"mqtt"]];
+  [rows addObject:[self pageRow:[_texts ts:@"settings.web_push"] value:nil page:@"web_push"]];
   [rows addObject:[self pageRow:[_texts ts:@"editor.secrets"] value:nil page:@"secrets"]];
   return rows;
 }
@@ -756,6 +907,10 @@ static const CGFloat kDBQrSide = 96;
                                      ? [NSString stringWithFormat:@"%lu", (unsigned long)[sources count]]
                                      : nil)
                            page:@"media_sources"]];
+  [rows addObject:[self pageRow:[_texts ts:@"admin.video_playback_policy"] value:nil
+                           page:@"playback_policy"]];
+  [rows addObject:[self pageRow:[_texts ts:@"settings.page_other_devices"] value:nil
+                           page:@"other_devices"]];
   return rows;
 }
 
@@ -767,10 +922,25 @@ static const CGFloat kDBQrSide = 96;
                                                         @"classic" ] none:NO]]];
   [rows addObject:[self toggleRow:[_texts ts:@"prefs.call_sound_loop"] key:@"ui.call_sound_loop"
                               def:NO]];
-  [rows addObject:[self choiceRow:[_texts ts:@"prefs.button_sound"] key:@"ui.button_sound"
-                              def:@"button_click"
-                          choices:[self soundChoices:@[ @"button_click" ] none:YES]]];
+  // The four event sounds share the web admin's list: none, the built-in sounds, or an
+  // uploaded sound, which is picked on the Sounds page and kept selectable here.
+  for (NSArray *sound in @[ @[ @"admin.launch_sound", @"ui.launch_sound", @"title_display" ],
+                            @[ @"admin.door_call_sound", @"ui.call_sound", @"outdoor_call_alert" ],
+                            @[ @"prefs.button_sound", @"ui.button_sound", @"button_click" ],
+                            @[ @"admin.update_sound", @"ui.update_sound", @"indoor_update" ] ]) {
+    NSString *key = [sound objectAtIndex:1];
+    NSMutableArray *choices = [NSMutableArray arrayWithArray:
+        [self soundChoices:@[ @"outdoor_call_alert", @"button_click", @"school_chime",
+                              @"indoor_update", @"title_display" ] none:YES]];
+    NSString *current = [DBConfigUtil str:_cfg path:key];
+    if ([current hasPrefix:@"asset:"])
+      [choices addObject:@[ current, [_texts ts:@"settings.sound_custom"] ]];
+    DBSettingsRow *row = [self choiceRow:[_texts ts:[sound objectAtIndex:0]] key:key
+                                     def:[sound objectAtIndex:2] choices:choices];
+    [rows addObject:row];
+  }
   [rows addObject:[self pageRow:[_texts ts:@"editor.sounds"] value:nil page:@"sounds"]];
+  [rows addObject:[self pageRow:[_texts ts:@"admin.assets"] value:nil page:@"assets"]];
   return rows;
 }
 
@@ -800,6 +970,16 @@ static const CGFloat kDBQrSide = 96;
   [rows addObject:[self stepperRow:[_texts ts:@"prefs.screensaver_brightness"]
                                key:[saver stringByAppendingString:@".brightness"] def:10 min:1
                                max:100 step:5 unit:@"%"]];
+  NSString *window = [[DBConfigUtil str:_cfg path:@"display.screensaver.schedule"]
+      isEqualToString:@"daily"]
+      ? [NSString stringWithFormat:@"%@ - %@",
+            [DBConfigUtil str:_cfg path:@"display.screensaver.from"] ?: @"22:00",
+            [DBConfigUtil str:_cfg path:@"display.screensaver.to"] ?: @"06:00"]
+      : [_texts ts:@"prefs.saver_always"];
+  [rows addObject:DBRow([_texts ts:@"display.saver_schedule"], window, @"local_page",
+                        @"saver_schedule")];
+  [rows addObject:DBGroupStart([self pageRow:[_texts ts:@"settings.page_ui_elements"] value:nil
+                                        page:@"ui_elements"])];
   return rows;
 }
 
@@ -824,11 +1004,40 @@ static const CGFloat kDBQrSide = 96;
                                      ? [NSString stringWithFormat:@"%lu", (unsigned long)[replies count]]
                                      : nil)
                            page:@"quick_replies"]];
+  [rows addObject:[self pageRow:[_texts ts:@"speech.settings"] value:nil page:@"speech"]];
+  [rows addObject:DBRow([_texts ts:@"admin.visitor_languages"],
+                        [[self visitorLanguagesInConfig:_cfg] componentsJoinedByString:@", "],
+                        @"local_page", @"visitor_languages")];
+
+  // How long an indoor panel stays on the incoming-call page: the cluster value, then this
+  // device's override, which inherits again when its key is removed.
+  DBSettingsRow *clusterReturn = [self stepperRow:[_texts ts:@"call.return_title"]
+                                              key:@"call.indoor.return_s" def:60 min:5 max:600
+                                             step:5 unit:seconds];
+  [rows addObject:DBGroupStart(clusterReturn)];
+  if ([_nodeId length] > 0) {
+    NSString *deviceKey = [NSString stringWithFormat:@"devices.%@.local.call.return_s", _nodeId];
+    BOOL overridden = [DBConfigUtil dig:_cfg path:deviceKey] != nil;
+    NSInteger cluster = [DBConfigUtil intVal:_cfg path:@"call.indoor.return_s" def:60];
+    NSString *value = overridden
+        ? [NSString stringWithFormat:@"%ld %@",
+              (long)[DBConfigUtil intVal:_cfg path:deviceKey def:cluster], seconds]
+        : [NSString stringWithFormat:@"%ld %@  (%@)", (long)cluster, seconds,
+              [_texts ts:@"settings.inherit"]];
+    [rows addObject:DBRow([_texts ts:@"settings.call_return_device"], value, @"number",
+                          [deviceKey stringByAppendingString:@"|5|600"])];
+    if (overridden)
+      [rows addObject:DBRow([_texts ts:@"call.return_inherit"], @"", @"inherit", deviceKey)];
+  }
   return rows;
 }
 
 - (NSArray *)sosRows {
   NSMutableArray *rows = [NSMutableArray array];
+  [rows addObject:[self choiceRow:[_texts ts:@"sos.trigger_mode"] key:@"emergency.trigger.mode"
+                              def:@"slide"
+                          choices:@[ @[ @"slide", [_texts ts:@"sos.mode_slide"] ],
+                                     @[ @"hold", [_texts ts:@"sos.mode_hold"] ] ]]];
   [rows addObject:[self stepperRow:[_texts ts:@"prefs.sos_countdown"]
                                key:@"emergency.trigger.countdown_s" def:3 min:0 max:10 step:1
                               unit:[_texts ts:@"prefs.unit_seconds"]]];
@@ -846,9 +1055,17 @@ static const CGFloat kDBQrSide = 96;
                           @"", @"role_toggle",
                           [NSString stringWithFormat:@"%@|%d", [role objectAtIndex:0], on ? 1 : 0])];
   }
+  NSMutableArray *alarms = [NSMutableArray arrayWithArray:
+      [self soundChoices:@[ @"siren1", @"ding1", @"ding2", @"classic", @"school_chime" ] none:NO]];
+  NSString *alarm = [DBConfigUtil str:_cfg path:@"emergency.alarm_sound"];
+  if ([alarm hasPrefix:@"asset:"]) [alarms addObject:@[ alarm, [_texts ts:@"settings.sound_custom"] ]];
   [rows addObject:[self choiceRow:[_texts ts:@"prefs.sos_sound"] key:@"emergency.alarm_sound"
-                              def:@"siren1"
-                          choices:[self soundChoices:@[ @"siren1" ] none:NO]]];
+                              def:@"siren1" choices:alarms]];
+  NSInteger alarmVolume = [DBConfigUtil intVal:_cfg path:@"emergency.alarm_volume" def:100];
+  alarmVolume = [self volume:MAX(0, MIN(100, alarmVolume)) pendingForKey:@"emergency.alarm_volume"];
+  [rows addObject:DBRow([_texts ts:@"sos.alarm_volume"],
+                        [NSString stringWithFormat:@"%ld", (long)alarmVolume], @"volume_slider",
+                        @"emergency.alarm_volume|0|100")];
   return rows;
 }
 
@@ -856,6 +1073,10 @@ static const CGFloat kDBQrSide = 96;
   NSMutableArray *rows = [NSMutableArray array];
   [rows addObject:DBRow([_texts ts:@"info.safe_mode"], [self safeModeValue], @"", nil)];
   [rows addObject:DBRow([_texts ts:@"admin.menu_info"], @"", @"info", nil)];
+  [rows addObject:DBGroupStart([self pageRow:[_texts ts:@"settings.page_logs"] value:nil
+                                        page:@"logs"])];
+  [rows addObject:[self pageRow:[_texts ts:@"settings.page_raw_config"] value:nil
+                           page:@"raw_config"]];
   return rows;
 }
 
@@ -1149,6 +1370,18 @@ static const CGFloat kDBQrSide = 96;
 
 #pragma mark - actions
 
+// UI language and the recovery helper mode live in boot.json, which this shell reads at
+// launch, and under devices.<self>.local, which the web admin edits and Core replicates.
+// Both are written so the two never disagree; boot.json alone is enough on an unpaired device.
+- (NSString *)replicatedKeyForLocalKey:(NSString *)key {
+  if ([_nodeId length] == 0) return nil;
+  if ([key isEqualToString:@"ui_lang"])
+    return [NSString stringWithFormat:@"devices.%@.local.ui_lang", _nodeId];
+  if ([key isEqualToString:@"keepalive_helper"])
+    return [NSString stringWithFormat:@"devices.%@.local.recovery.helper_mode", _nodeId];
+  return nil;
+}
+
 - (void)setLocalKey:(NSString *)key value:(NSString *)next {
   NSString *json = [DBBootConfig persistLocalValue:next forKey:key];
   if ([json length] == 0) {
@@ -1162,7 +1395,12 @@ static const CGFloat kDBQrSide = 96;
   } else if ([key isEqualToString:@"keepalive_helper"]) {
     _boot.keepaliveHelperPolicy = next;
   }
-  [self showToast:[_texts ts:@"settings.saved"]];
+  NSString *replicated = [self replicatedKeyForLocalKey:key];
+  if (replicated != nil) {
+    [self writeKey:replicated string:next];
+  } else {
+    [self showToast:[_texts ts:@"settings.saved"]];
+  }
   [self rebuildSections];
 }
 
@@ -1185,6 +1423,50 @@ static const CGFloat kDBQrSide = 96;
     DBSettingsScreen *screen = weakSelf;
     if (screen && changed) [screen reload];
   }];
+}
+
+// Core answers DBAdminRequiredResult once the admin window has closed. The password is asked
+// for once and the same write runs again, as the editor pages do; any other status is
+// reported. Returns YES only when the first attempt was saved.
+- (BOOL)write:(int (^)(void))write {
+  int status = write();
+  if (status != DBAdminRequiredResult) return [self reportWriteStatus:status];
+  __weak DBSettingsScreen *weakSelf = self;
+  [_router requestPinThen:^{
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return;
+    [screen reportWriteStatus:write()];
+    if (screen->_editor.pageCount > 0) [screen->_editor reloadPage];
+  }];
+  return NO;
+}
+
+- (BOOL)writeKey:(NSString *)key string:(NSString *)value {
+  DBCoreBridge *core = _core;
+  return [self write:^int{ return [core setConfigKey:key stringValue:value]; }];
+}
+
+- (BOOL)writeKey:(NSString *)key number:(NSInteger)value {
+  DBCoreBridge *core = _core;
+  return [self write:^int{ return [core setConfigKey:key numberValue:value]; }];
+}
+
+- (BOOL)writeKey:(NSString *)key flag:(BOOL)value {
+  DBCoreBridge *core = _core;
+  return [self write:^int{ return [core setConfigKey:key boolValue:value]; }];
+}
+
+- (BOOL)writeKey:(NSString *)key object:(id)value {
+  NSData *data = [NSJSONSerialization dataWithJSONObject:value options:0 error:NULL];
+  NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+  if ([json length] == 0) return NO;
+  DBCoreBridge *core = _core;
+  return [self write:^int{ return [core setConfigKey:key valueJson:json]; }];
+}
+
+- (BOOL)deleteKey:(NSString *)key {
+  DBCoreBridge *core = _core;
+  return [self write:^int{ return [core deleteConfigKey:key]; }];
 }
 
 // Every cluster write goes through Core's C ABI, which applies the same
@@ -1235,7 +1517,7 @@ static const CGFloat kDBQrSide = 96;
       [screen showToast:[screen->_texts ts:@"settings.save_failed"]];
       return;
     }
-    [screen reportWriteStatus:[screen->_core setConfigKey:key numberValue:number]];
+    [screen writeKey:key number:number];
   }];
 }
 
@@ -1252,12 +1534,15 @@ static const CGFloat kDBQrSide = 96;
   NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
   if ([parts count] != 2) return;
   BOOL current = [[parts objectAtIndex:1] integerValue] != 0;
-  [self reportWriteStatus:[_core setConfigKey:[parts objectAtIndex:0] boolValue:!current]];
+  [self writeKey:[parts objectAtIndex:0] flag:!current];
 }
 
 - (void)inheritForRow:(DBSettingsRow *)row {
   // Clearing the device key restores inheritance from the cluster default.
-  [self reportWriteStatus:[_core deleteConfigKey:row.argument]];
+  NSString *key = row.argument;
+  __weak DBSettingsScreen *weakSelf = self;
+  [_editor confirmTitle:row.title message:[_texts ts:@"settings.inherit_confirm"]
+                   then:^{ [weakSelf deleteKey:key]; }];
 }
 
 // The zone list is a searchable page. Core publishes the zones it can actually resolve; the
@@ -1292,7 +1577,7 @@ static const CGFloat kDBQrSide = 96;
         DBSettingsScreen *screen = weakSelf;
         if (!screen) return;
         [editor popPage];
-        [screen reportWriteStatus:[screen->_core setConfigKey:key stringValue:zone]];
+        [screen writeKey:key string:zone];
       };
       [fields addObject:field];
     }
@@ -1314,14 +1599,18 @@ static const CGFloat kDBQrSide = 96;
     if (!screen) return;
     NSString *name = [text stringByTrimmingCharactersInSet:
         [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-    if ([name length] == 0 || [name length] > 64 || [screen->_nodeId length] == 0) {
+    if ([name length] == 0 || [name length] > 64) {
+      [screen showToast:[screen->_texts ts:@"settings.device_name_length"]];
+      return;
+    }
+    if ([screen->_nodeId length] == 0) {
       [screen showToast:[screen->_texts ts:@"settings.save_failed"]];
       return;
     }
     if ([name isEqualToString:screen->_boot.name]) return;
     // The replicated identity handler persists boot.json without leaving the settings screen.
-    [screen reportWriteStatus:[screen->_core setConfigKey:[NSString stringWithFormat:
-        @"devices.%@.name", screen->_nodeId] stringValue:name]];
+    [screen writeKey:[NSString stringWithFormat:@"devices.%@.name", screen->_nodeId]
+              string:name];
   }];
 }
 
@@ -1357,6 +1646,189 @@ static const CGFloat kDBQrSide = 96;
   });
 }
 
+- (void)pushLocalPage:(DBEditPage *)page {
+  if (page == nil) return;
+  [self applyEditorTexts];
+  [self bringSubviewToFront:_editor];
+  [_editor pushPage:page];
+}
+
+- (void)openRoleChange {
+  if (_roleChange == nil)
+    _roleChange = [[DBRoleChange alloc] initWithRouter:_router editor:_editor];
+  [self pushLocalPage:[_roleChange pageWithConfig:_cfg status:_status nodeId:_nodeId]];
+}
+
+// A free-text leaf. argument is "key|rule": an empty value removes the key; the "command"
+// rule is the Admin's unlock-command pattern.
+- (void)promptTextForRow:(DBSettingsRow *)row {
+  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+  NSString *key = [parts objectAtIndex:0];
+  BOOL command = [parts count] > 1 && [[parts objectAtIndex:1] isEqualToString:@"command"];
+  NSString *current = [DBConfigUtil str:_cfg path:key] ?: @"";
+  __weak DBSettingsScreen *weakSelf = self;
+  [_editor promptTitle:row.title value:current placeholder:row.value
+              keyboard:UIKeyboardTypeASCIICapable secure:NO then:^(NSString *text) {
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return;
+    NSString *value = [text stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if ([value isEqualToString:current]) return;
+    if ([value length] == 0) {
+      [screen deleteKey:key];
+      return;
+    }
+    NSCharacterSet *bad = [[NSCharacterSet characterSetWithCharactersInString:
+        @"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-"] invertedSet];
+    if (command && ([value length] > 32 ||
+                    [value rangeOfCharacterFromSet:bad].location != NSNotFound)) {
+      [screen showToast:[screen->_texts ts:@"unlock.command_invalid"]];
+      return;
+    }
+    if ([value length] > 128) {
+      [screen showToast:[screen->_texts ts:@"settings.save_failed"]];
+      return;
+    }
+    [screen writeKey:key string:value];
+  }];
+}
+
+- (DBEditField *)timeField:(NSString *)title value:(NSString *)value
+                      then:(BOOL (^)(NSString *time))then {
+  DBEditField *field = [DBEditField kind:DBEditKindTime title:title value:value];
+  field.onChange = ^BOOL(id time) { return then([time description]); };
+  return field;
+}
+
+// display.appearance_schedule is one object; the Admin writes it only with both times.
+- (DBEditPage *)appearanceSchedulePage {
+  __weak DBSettingsScreen *weakSelf = self;
+  return [DBEditPage title:[_texts ts:@"settings.appearance_schedule_times"] build:^NSArray *{
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return @[];
+    NSDictionary *cfg = [screen->_core config];
+    NSString *dark = [DBConfigUtil str:cfg path:@"display.appearance_schedule.dark_from"]
+        ?: @"19:00";
+    NSString *light = [DBConfigUtil str:cfg path:@"display.appearance_schedule.light_from"]
+        ?: @"06:30";
+    DBEditField *darkFrom = [screen timeField:[screen->_texts ts:@"theme.dark_from"] value:dark
+                                         then:^BOOL(NSString *time) {
+      return [weakSelf writeKey:@"display.appearance_schedule"
+                         object:@{ @"dark_from" : time, @"light_from" : light }];
+    }];
+    DBEditField *lightFrom = [screen timeField:[screen->_texts ts:@"theme.light_from"] value:light
+                                          then:^BOOL(NSString *time) {
+      return [weakSelf writeKey:@"display.appearance_schedule"
+                         object:@{ @"dark_from" : dark, @"light_from" : time }];
+    }];
+    DBEditSection *section = [DBEditSection title:nil fields:@[ darkFrom, lightFrom ]];
+    section.footer = [screen->_texts ts:@"editor.quiet_hint"];
+    return @[ section ];
+  }];
+}
+
+// display.screensaver.schedule is "always" or "daily"; a daily window needs two different
+// times and may cross midnight.
+- (DBEditPage *)screensaverSchedulePage {
+  __weak DBSettingsScreen *weakSelf = self;
+  return [DBEditPage title:[_texts ts:@"display.saver_schedule"] build:^NSArray *{
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return @[];
+    NSDictionary *cfg = [screen->_core config];
+    NSString *schedule = [DBConfigUtil str:cfg path:@"display.screensaver.schedule"] ?: @"always";
+    NSString *from = [DBConfigUtil str:cfg path:@"display.screensaver.from"] ?: @"22:00";
+    NSString *to = [DBConfigUtil str:cfg path:@"display.screensaver.to"] ?: @"06:00";
+    NSMutableArray *fields = [NSMutableArray array];
+    DBEditField *mode = [DBEditField kind:DBEditKindChoice
+                                    title:[screen->_texts ts:@"display.saver_schedule"]
+                                    value:schedule];
+    mode.choices = @[ @[ @"always", [screen->_texts ts:@"prefs.saver_always"] ],
+                      @[ @"daily", [screen->_texts ts:@"prefs.saver_daily"] ] ];
+    mode.onChange = ^BOOL(id value) {
+      return [weakSelf writeKey:@"display.screensaver.schedule" string:[value description]];
+    };
+    [fields addObject:mode];
+    if ([schedule isEqualToString:@"daily"]) {
+      BOOL (^writeTime)(NSString *, NSString *, NSString *) =
+          ^BOOL(NSString *key, NSString *time, NSString *other) {
+        DBSettingsScreen *inner = weakSelf;
+        if (!inner) return NO;
+        if ([time isEqualToString:other]) {
+          [inner showToast:[inner->_texts ts:@"display.saver_invalid"]];
+          return NO;
+        }
+        return [inner writeKey:key string:time];
+      };
+      [fields addObject:[screen timeField:[screen->_texts ts:@"display.saver_from"] value:from
+                                     then:^BOOL(NSString *time) {
+        return writeTime(@"display.screensaver.from", time, to);
+      }]];
+      [fields addObject:[screen timeField:[screen->_texts ts:@"display.saver_to"] value:to
+                                     then:^BOOL(NSString *time) {
+        return writeTime(@"display.screensaver.to", time, from);
+      }]];
+    }
+    DBEditSection *section = [DBEditSection title:nil fields:fields];
+    section.footer = [screen->_texts ts:@"editor.quiet_hint"];
+    return @[ section ];
+  }];
+}
+
+// ui.languages: the visitor's language buttons, first entry primary. The last one cannot be
+// removed, because an empty list has no meaning to Core.
+- (DBEditPage *)visitorLanguagesPage {
+  __weak DBSettingsScreen *weakSelf = self;
+  __weak DBEditorView *editor = _editor;
+  return [DBEditPage title:[_texts ts:@"admin.visitor_languages"] build:^NSArray *{
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return @[];
+    NSArray *enabled = [screen visitorLanguagesInConfig:[screen->_core config]];
+    NSMutableArray *fields = [NSMutableArray array];
+    for (NSString *lang in @[ @"ja", @"en", @"zh" ]) {
+      DBEditField *field = [DBEditField kind:DBEditKindAction
+                                       title:[DBTexts langDisplayName:lang] value:lang];
+      field.checked = [enabled containsObject:lang];
+      field.action = ^{
+        DBSettingsScreen *inner = weakSelf;
+        if (!inner) return;
+        NSMutableArray *next = [NSMutableArray arrayWithArray:enabled];
+        if ([next containsObject:lang]) [next removeObject:lang];
+        else [next addObject:lang];
+        if ([next count] == 0) {
+          [inner showToast:[inner->_texts ts:@"settings.languages_required"]];
+          return;
+        }
+        if ([inner writeKey:@"ui.languages" object:next]) [editor reloadPage];
+      };
+      [fields addObject:field];
+    }
+    return @[ [DBEditSection title:nil fields:fields] ];
+  }];
+}
+
+- (NSArray *)visitorLanguagesInConfig:(NSDictionary *)cfg {
+  NSMutableArray *out = [NSMutableArray array];
+  id langs = [DBConfigUtil dig:cfg path:@"ui.languages"];
+  if ([langs isKindOfClass:[NSArray class]]) {
+    for (id lang in (NSArray *)langs)
+      if ([lang isKindOfClass:[NSString class]] && ![out containsObject:lang] &&
+          [@[ @"ja", @"en", @"zh" ] containsObject:lang])
+        [out addObject:lang];
+  }
+  if ([out count] == 0) [out addObject:@"ja"];
+  return out;
+}
+
+- (void)openLocalPage:(NSString *)name {
+  if ([name isEqualToString:@"appearance_schedule"]) {
+    [self pushLocalPage:[self appearanceSchedulePage]];
+  } else if ([name isEqualToString:@"saver_schedule"]) {
+    [self pushLocalPage:[self screensaverSchedulePage]];
+  } else if ([name isEqualToString:@"visitor_languages"]) {
+    [self pushLocalPage:[self visitorLanguagesPage]];
+  }
+}
+
 - (void)performAction:(DBSettingsRow *)row {
   NSString *action = row.action;
   if ([action length] == 0) return;
@@ -1380,8 +1852,15 @@ static const CGFloat kDBQrSide = 96;
   } else if ([action isEqualToString:@"segment"]) {
     // The segmented control handles taps itself; without one the row offers the sheet.
     if ([self segmentWidthForRow:row] <= 0) [self presentChoicesForRow:row];
-  } else if ([action isEqualToString:@"choose"] || [action isEqualToString:@"local_choice"]) {
+  } else if ([action isEqualToString:@"choose"] || [action isEqualToString:@"local_choice"] ||
+             [action isEqualToString:@"unlock_mode"]) {
     [self presentChoicesForRow:row];
+  } else if ([action isEqualToString:@"role"]) {
+    [self openRoleChange];
+  } else if ([action isEqualToString:@"text"]) {
+    [self promptTextForRow:row];
+  } else if ([action isEqualToString:@"local_page"]) {
+    [self openLocalPage:row.argument];
   } else if ([action isEqualToString:@"role_toggle"]) {
     [self toggleRoleForRow:row];
   } else if ([action isEqualToString:@"rotate_key"]) {
@@ -1412,7 +1891,7 @@ static const CGFloat kDBQrSide = 96;
     [self setRole:[parts objectAtIndex:0] enabled:sender.on];
     return;
   }
-  if (![self reportWriteStatus:[_core setConfigKey:[parts objectAtIndex:0] boolValue:sender.on]])
+  if (![self writeKey:[parts objectAtIndex:0] flag:sender.on])
     [sender setOn:!sender.on animated:YES];
 }
 
@@ -1421,8 +1900,7 @@ static const CGFloat kDBQrSide = 96;
   NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
   if ([parts count] != 5) return;
   // Writes on release only: each change is a replicated config write.
-  [self reportWriteStatus:[_core setConfigKey:[parts objectAtIndex:0]
-                                  numberValue:(NSInteger)sender.value]];
+  [self writeKey:[parts objectAtIndex:0] number:(NSInteger)sender.value];
 }
 
 - (UITableViewCell *)cellContaining:(UIView *)view {
@@ -1450,8 +1928,7 @@ static const CGFloat kDBQrSide = 96;
   NSInteger index = sender.selectedSegmentIndex;
   if (row == nil || index < 0 || index >= (NSInteger)[row.choices count]) return;
   NSString *key = [[row.argument componentsSeparatedByString:@"|"] objectAtIndex:0];
-  [self reportWriteStatus:[_core setConfigKey:key
-      stringValue:[[row.choices objectAtIndex:(NSUInteger)index] objectAtIndex:0]]];
+  [self writeKey:key string:[[row.choices objectAtIndex:(NSUInteger)index] objectAtIndex:0]];
 }
 
 - (void)presentChoicesForRow:(DBSettingsRow *)row {
@@ -1475,12 +1952,16 @@ static const CGFloat kDBQrSide = 96;
   if (row == nil || buttonIndex == sheet.cancelButtonIndex || buttonIndex < 0 ||
       buttonIndex >= (NSInteger)[row.choices count]) return;
   NSString *value = [[row.choices objectAtIndex:(NSUInteger)buttonIndex] objectAtIndex:0];
-  if ([row.action isEqualToString:@"local_choice"]) {
-    [self setLocalKey:row.argument value:value];
-    return;
-  }
   NSString *key = [[row.argument componentsSeparatedByString:@"|"] objectAtIndex:0];
-  [self reportWriteStatus:[_core setConfigKey:key stringValue:value]];
+  if ([row.action isEqualToString:@"local_choice"]) {
+    [self setLocalKey:key value:value];
+  } else if ([row.action isEqualToString:@"unlock_mode"]) {
+    // "auto" is the absence of the key: Core then shows the button only for a bound door.
+    if ([value isEqualToString:@"auto"]) [self deleteKey:key];
+    else [self writeKey:key flag:[value isEqualToString:@"show"]];
+  } else {
+    [self writeKey:key string:value];
+  }
 }
 
 - (void)toggleRoleForRow:(DBSettingsRow *)row {
@@ -1495,10 +1976,7 @@ static const CGFloat kDBQrSide = 96;
       [current isKindOfClass:[NSArray class]] ? current : @[ @"indoor_panel" ]];
   [roles removeObject:role];
   if (enabled) [roles addObject:role];
-  NSData *data = [NSJSONSerialization dataWithJSONObject:roles options:0 error:NULL];
-  NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
-  if ([json length] == 0) return;
-  [self reportWriteStatus:[_core setConfigKey:@"emergency.button_on_roles" valueJson:json]];
+  [self writeKey:@"emergency.button_on_roles" object:roles];
 }
 
 - (void)rotateClusterKey {
@@ -1548,6 +2026,15 @@ static const CGFloat kDBQrSide = 96;
       if (!current || [[current->_volumeWriteGenerations objectForKey:key]
                           unsignedIntegerValue] != generation) return;
       if (result != 0) [current->_pendingVolumeValues removeObjectForKey:key];
+      if (result == DBAdminRequiredResult) {
+        [current->_router requestPinThen:^{
+          DBSettingsScreen *screen = weakSelf;
+          if (!screen) return;
+          slider.pendingVolume = value;
+          [screen commitVolume:slider];
+        }];
+        return;
+      }
       [current reportWriteStatus:result];
     });
   });
@@ -1625,7 +2112,8 @@ static const CGFloat kDBQrSide = 96;
 }
 
 - (BOOL)opensElsewhere:(DBSettingsRow *)row {
-  for (NSString *action in @[ @"page", @"zone", @"add_device", @"history", @"info" ])
+  for (NSString *action in @[ @"page", @"zone", @"add_device", @"history", @"info", @"role",
+                              @"local_page" ])
     if ([row.action isEqualToString:action]) return YES;
   return NO;
 }
@@ -1661,6 +2149,13 @@ static const CGFloat kDBQrSide = 96;
   if (tableView == _categoryTable) return (NSInteger)[_sections count];
   return section < (NSInteger)[_groups count]
       ? (NSInteger)[[_groups objectAtIndex:(NSUInteger)section] count] : 0;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+  if (tableView == _categoryTable || section >= (NSInteger)[_groups count]) return nil;
+  NSString *header = [(DBSettingsRow *)[[_groups objectAtIndex:(NSUInteger)section]
+      objectAtIndex:0] groupHeader];
+  return [header length] > 0 ? header : nil;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {

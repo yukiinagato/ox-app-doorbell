@@ -1780,6 +1780,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   id visualValue = [event objectForKey:@"visual"];
   BOOL visual = ![visualValue isKindOfClass:[NSNumber class]] || [visualValue boolValue];
   _emergencyOverlay.hidden = !(active && visual);
+  // A real alarm supersedes a confirmation that is still open underneath it.
+  if (active) [_sosPanel dismiss];
   if (active) {
     NSInteger volume = [DBConfigUtil intVal:event path:@"alarm_volume" def:100];
     NSString *sound = [DBConfigUtil evStr:event key:@"alarm_sound"];

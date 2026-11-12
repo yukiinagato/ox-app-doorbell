@@ -2719,3 +2719,37 @@ settings.ink_footer: { ja: "文字色: フッター", en: "Text colour: footer",
 settings.ink_footer_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
 settings.ink_notice: { ja: "文字色: お知らせ", en: "Text colour: announcement", zh: "文字颜色：公告" }
 settings.ink_notice_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
+settings.playback_all_pairs: { ja: "すべての組み合わせ（既定）", en: "Every pair (default)", zh: "所有组合（默认）" }
+settings.playback_pair_inherits: { ja: "この組み合わせは既定の再生方式を使っています。変更すると、この組み合わせ専用の設定になります。", en: "This pair uses the default policy. Changing anything here gives the pair its own policy.", zh: "此组合使用默认播放策略。在此更改后，将成为该组合的专用设置。" }
+settings.playback_pair_reset: { ja: "既定に戻す", en: "Use the default", zh: "恢复默认" }
+settings.cat_advanced: { ja: "詳細", en: "Advanced", zh: "高级" }
+settings.grp_ui_elements: { ja: "画面部品の見た目（この端末）", en: "Appearance of screen elements (this device)", zh: "界面元素外观（本设备）" }
+settings.ui_elements: { ja: "部品ごとの上書き", en: "Per-element overrides", zh: "按元素覆盖" }
+settings.ui_elements_native: { ja: "安全上重要な部品は縮小できません。コントラストが足りない色は適用されません", en: "Safety-critical elements cannot be made smaller, and colours without enough contrast are not applied", zh: "安全关键元素不能缩小，对比度不足的颜色不会生效" }
+settings.ui_element_id: { ja: "部品 ID（例: call.primary、ring.action、sos.trigger）", en: "Element ID (for example call.primary, ring.action, sos.trigger)", zh: "元素 ID（例如 call.primary、ring.action、sos.trigger）" }
+settings.ui_scale: { ja: "大きさの倍率 (0.75–2)", en: "Size scale (0.75–2)", zh: "大小倍率（0.75–2）" }
+settings.ui_font_scale: { ja: "文字の倍率 (0.75–2)", en: "Text scale (0.75–2)", zh: "文字倍率（0.75–2）" }
+settings.ui_radius: { ja: "角の丸み (0–64)", en: "Corner radius (0–64)", zh: "圆角（0–64）" }
+settings.ui_foreground: { ja: "文字色", en: "Text colour", zh: "文字颜色" }
+settings.ui_background: { ja: "背景色", en: "Background colour", zh: "背景色" }
+settings.ui_accent: { ja: "アクセント色", en: "Accent colour", zh: "强调色" }
+settings.ui_border: { ja: "枠の色", en: "Border colour", zh: "边框颜色" }
+settings.grp_diagnostics: { ja: "診断", en: "Diagnostics", zh: "诊断" }
+settings.view_log: { ja: "アプリのログ", en: "App log", zh: "应用日志" }
+settings.view_log_action: { ja: "表示", en: "Show", zh: "显示" }
+settings.log_refresh: { ja: "更新", en: "Refresh", zh: "刷新" }
+settings.log_copy: { ja: "コピー", en: "Copy", zh: "复制" }
+settings.log_empty: { ja: "ログはまだありません", en: "No log yet", zh: "暂无日志" }
+settings.log_crash: { ja: "異常終了の記録", en: "Crash record", zh: "异常退出记录" }
+settings.raw_config: { ja: "設定キーを直接編集", en: "Edit a configuration key directly", zh: "直接编辑配置键" }
+settings.raw_config_desc: { ja: "検証は Core が行います。誤った値は端末の動作を止めることがあります", en: "Core validates the write. A wrong value can stop devices from working", zh: "由 Core 校验写入。错误的值可能导致设备无法工作" }
+settings.raw_config_action: { ja: "開く", en: "Open", zh: "打开" }
+settings.raw_key: { ja: "キー（例: display.brightness）", en: "Key (for example display.brightness)", zh: "键（例如 display.brightness）" }
+settings.raw_value: { ja: "値 (JSON)", en: "Value (JSON)", zh: "值（JSON）" }
+settings.raw_read: { ja: "読み込む", en: "Read", zh: "读取" }
+settings.raw_write: { ja: "書き込む", en: "Write", zh: "写入" }
+settings.raw_delete: { ja: "キーを削除", en: "Delete key", zh: "删除键" }
+settings.raw_write_confirm: { ja: "「{key}」を書き換えますか？ すべての端末に反映されます。", en: "Write \"{key}\"? It applies to every device.", zh: "要写入“{key}”吗？会同步到所有设备。" }
+settings.raw_delete_confirm: { ja: "「{key}」を削除しますか？ すべての端末に反映されます。", en: "Delete \"{key}\"? It applies to every device.", zh: "要删除“{key}”吗？会同步到所有设备。" }
+settings.raw_invalid_json: { ja: "値が正しい JSON ではありません", en: "The value is not valid JSON", zh: "值不是有效的 JSON" }
+settings.raw_absent: { ja: "このキーは設定されていません", en: "This key is not set", zh: "此键未设置" }

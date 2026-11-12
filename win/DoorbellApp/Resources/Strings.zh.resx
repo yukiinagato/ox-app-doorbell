@@ -1758,6 +1758,7 @@
   <data name="settings_cam_source_builtin" xml:space="preserve"><value>内置摄像头</value></data>
   <data name="settings_cam_source_desc" xml:space="preserve"><value>选择外部摄像头后，此门口机使用其视频</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>关于</value></data>
+  <data name="settings_cat_advanced" xml:space="preserve"><value>高级</value></data>
   <data name="settings_cat_backup" xml:space="preserve"><value>备份</value></data>
   <data name="settings_cat_calls" xml:space="preserve"><value>呼叫</value></data>
   <data name="settings_cat_camera" xml:space="preserve"><value>摄像头与视频</value></data>
@@ -1872,6 +1873,7 @@
   <data name="settings_grp_appearance" xml:space="preserve"><value>外观</value></data>
   <data name="settings_grp_call_return" xml:space="preserve"><value>来电画面自动返回</value></data>
   <data name="settings_grp_cluster" xml:space="preserve"><value>集群</value></data>
+  <data name="settings_grp_diagnostics" xml:space="preserve"><value>诊断</value></data>
   <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>标识</value></data>
   <data name="settings_grp_idle_screen" xml:space="preserve"><value>暗屏与待机显示（所有设备）</value></data>
@@ -1890,6 +1892,7 @@
   <data name="settings_grp_theme" xml:space="preserve"><value>主题</value></data>
   <data name="settings_grp_this_device" xml:space="preserve"><value>本设备</value></data>
   <data name="settings_grp_time" xml:space="preserve"><value>时间</value></data>
+  <data name="settings_grp_ui_elements" xml:space="preserve"><value>界面元素外观（本设备）</value></data>
   <data name="settings_grp_video" xml:space="preserve"><value>视频播放</value></data>
   <data name="settings_grp_visitor" xml:space="preserve"><value>访客流程</value></data>
   <data name="settings_grp_web_only" xml:space="preserve"><value>仅可在网页管理中设置</value></data>
@@ -1993,6 +1996,10 @@
   <data name="settings_light_from" xml:space="preserve"><value>浅色开始时间</value></data>
   <data name="settings_list_empty" xml:space="preserve"><value>没有条目</value></data>
   <data name="settings_locked_hint" xml:space="preserve"><value>打开设置需要管理密码</value></data>
+  <data name="settings_log_copy" xml:space="preserve"><value>复制</value></data>
+  <data name="settings_log_crash" xml:space="preserve"><value>异常退出记录</value></data>
+  <data name="settings_log_empty" xml:space="preserve"><value>暂无日志</value></data>
+  <data name="settings_log_refresh" xml:space="preserve"><value>刷新</value></data>
   <data name="settings_media_bind" xml:space="preserve"><value>用于门口机</value></data>
   <data name="settings_media_credential" xml:space="preserve"><value>摄像头凭据</value></data>
   <data name="settings_media_credential_hint" xml:space="preserve"><value>用户名:密码 或令牌，保存在本设备的安全存储中</value></data>
@@ -2091,11 +2098,14 @@
   <data name="settings_peers_ok" xml:space="preserve"><value>无</value></data>
   <data name="settings_peers_rekey_required" xml:space="preserve"><value>需要重新配对：{0}</value></data>
   <data name="settings_pixel_shift" xml:space="preserve"><value>防烧屏移动间隔</value></data>
+  <data name="settings_playback_all_pairs" xml:space="preserve"><value>所有组合（默认）</value></data>
   <data name="settings_playback_auto" xml:space="preserve"><value>自动</value></data>
   <data name="settings_playback_h264" xml:space="preserve"><value>H.264</value></data>
   <data name="settings_playback_hls" xml:space="preserve"><value>HLS</value></data>
   <data name="settings_playback_low_latency" xml:space="preserve"><value>低延迟</value></data>
   <data name="settings_playback_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
+  <data name="settings_playback_pair_inherits" xml:space="preserve"><value>此组合使用默认播放策略。在此更改后，将成为该组合的专用设置。</value></data>
+  <data name="settings_playback_pair_reset" xml:space="preserve"><value>恢复默认</value></data>
   <data name="settings_preset_text" xml:space="preserve"><value>文本</value></data>
   <data name="settings_purpose_shown" xml:space="preserve"><value>向访客显示</value></data>
   <data name="settings_purposes" xml:space="preserve"><value>来访目的</value></data>
@@ -2105,6 +2115,18 @@
   <data name="settings_quiet_hours_native" xml:space="preserve"><value>在这些时段内暂停所选动作</value></data>
   <data name="settings_quiet_never_hint" xml:space="preserve"><value>此处选择的动作在静音时段也不暂停</value></data>
   <data name="settings_quiet_none" xml:space="preserve"><value>未设置</value></data>
+  <data name="settings_raw_absent" xml:space="preserve"><value>此键未设置</value></data>
+  <data name="settings_raw_config" xml:space="preserve"><value>直接编辑配置键</value></data>
+  <data name="settings_raw_config_action" xml:space="preserve"><value>打开</value></data>
+  <data name="settings_raw_config_desc" xml:space="preserve"><value>由 Core 校验写入。错误的值可能导致设备无法工作</value></data>
+  <data name="settings_raw_delete" xml:space="preserve"><value>删除键</value></data>
+  <data name="settings_raw_delete_confirm" xml:space="preserve"><value>要删除“{0}”吗？会同步到所有设备。</value></data>
+  <data name="settings_raw_invalid_json" xml:space="preserve"><value>值不是有效的 JSON</value></data>
+  <data name="settings_raw_key" xml:space="preserve"><value>键（例如 display.brightness）</value></data>
+  <data name="settings_raw_read" xml:space="preserve"><value>读取</value></data>
+  <data name="settings_raw_value" xml:space="preserve"><value>值（JSON）</value></data>
+  <data name="settings_raw_write" xml:space="preserve"><value>写入</value></data>
+  <data name="settings_raw_write_confirm" xml:space="preserve"><value>要写入“{0}”吗？会同步到所有设备。</value></data>
   <data name="settings_rebuild_cluster" xml:space="preserve"><value>以本设备重建集群</value></data>
   <data name="settings_rebuild_cluster_action" xml:space="preserve"><value>重建</value></data>
   <data name="settings_rebuild_cluster_desc" xml:space="preserve"><value>在创建设备已不在时使用。其他所有设备需重新配对</value></data>
@@ -2305,7 +2327,17 @@
   <data name="settings_tz_singapore" xml:space="preserve"><value>新加坡 (Asia/Singapore)</value></data>
   <data name="settings_tz_tokyo" xml:space="preserve"><value>东京 (Asia/Tokyo)</value></data>
   <data name="settings_tz_utc" xml:space="preserve"><value>协调世界时 (UTC)</value></data>
+  <data name="settings_ui_accent" xml:space="preserve"><value>强调色</value></data>
+  <data name="settings_ui_background" xml:space="preserve"><value>背景色</value></data>
+  <data name="settings_ui_border" xml:space="preserve"><value>边框颜色</value></data>
+  <data name="settings_ui_element_id" xml:space="preserve"><value>元素 ID（例如 call.primary、ring.action、sos.trigger）</value></data>
+  <data name="settings_ui_elements" xml:space="preserve"><value>按元素覆盖</value></data>
+  <data name="settings_ui_elements_native" xml:space="preserve"><value>安全关键元素不能缩小，对比度不足的颜色不会生效</value></data>
+  <data name="settings_ui_font_scale" xml:space="preserve"><value>文字倍率（0.75–2）</value></data>
+  <data name="settings_ui_foreground" xml:space="preserve"><value>文字颜色</value></data>
   <data name="settings_ui_lang" xml:space="preserve"><value>显示语言</value></data>
+  <data name="settings_ui_radius" xml:space="preserve"><value>圆角（0–64）</value></data>
+  <data name="settings_ui_scale" xml:space="preserve"><value>大小倍率（0.75–2）</value></data>
   <data name="settings_unit_fps" xml:space="preserve"><value>{0} fps</value></data>
   <data name="settings_unit_kbps" xml:space="preserve"><value>{0} kbps</value></data>
   <data name="settings_unit_percent" xml:space="preserve"><value>{0}%</value></data>
@@ -2326,6 +2358,8 @@
   <data name="settings_video_rotation" xml:space="preserve"><value>画面方向</value></data>
   <data name="settings_video_stats" xml:space="preserve"><value>显示视频统计</value></data>
   <data name="settings_video_stats_desc" xml:space="preserve"><value>在通话画面显示延迟和帧率</value></data>
+  <data name="settings_view_log" xml:space="preserve"><value>应用日志</value></data>
+  <data name="settings_view_log_action" xml:space="preserve"><value>显示</value></data>
   <data name="settings_visit_purposes" xml:space="preserve"><value>来访目的</value></data>
   <data name="settings_visit_purposes_desc" xml:space="preserve"><value>访客可选的按钮，按显示顺序排列</value></data>
   <data name="settings_visitor_layout" xml:space="preserve"><value>訪客畫面佈局</value></data>
