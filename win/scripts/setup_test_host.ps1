@@ -287,7 +287,7 @@ function Uninstall-TestHost {
     Write-Host 'Doorbell test host removal'
     $state = Read-State
     if ($null -eq $state) {
-        Write-Host "  No $StateFile: this script made no recorded change here. Nothing removed."
+        Write-Host "  No ${StateFile}: this script made no recorded change here. Nothing removed."
         return
     }
 
