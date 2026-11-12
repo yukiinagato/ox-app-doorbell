@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -49,12 +50,22 @@ namespace DoorbellApp.Ui
             }
         }
 
+        /// <summary>The current zoom factor, 1 when the picture is fitted.</summary>
+        public double Scale { get { return _math.Scale; } }
+
         /// <summary>Back to the fitted picture; called when the door or the call changes.</summary>
         public void Reset()
         {
             EndDrag();
             _math.Reset();
             Apply();
+        }
+
+        // A Decorator has no automation peer of its own; this one lets UI automation find the
+        // picture area by its x:Name and send it input.
+        protected override AutomationPeer OnCreateAutomationPeer()
+        {
+            return new FrameworkElementAutomationPeer(this);
         }
 
         // The whole area takes input, including the letterbox bars beside the picture.

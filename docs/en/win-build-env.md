@@ -102,3 +102,53 @@ Then, on the installed device (elevated prompt for the first three):
 10. In-app update with an unsigned or differently signed installer is refused with
     `web_admin.update_untrusted`.
 
+
+## 8. Automated UI tests on a LAN Windows PC
+
+The UI smoke suite runs on a real Windows PC on the LAN and is driven from the Mac over SSH.
+The PC needs one manual step, once.
+
+**One-time step on the PC.** Log on as the account that will show the app (it must be an
+administrator), copy `win/scripts/setup_test_host.ps1` to the PC, and run it from an elevated
+PowerShell:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup_test_host.ps1
+```
+
+It installs the built-in OpenSSH Server, starts `sshd` automatically, adds one firewall rule
+(TCP 22, Private profile, local subnet only), authorizes the test key in
+`%ProgramData%\ssh\administrators_authorized_keys`, makes PowerShell the SSH default shell,
+creates `C:\DoorbellTest`, and registers the on-demand scheduled task `DoorbellTest-RunJob`,
+which runs a job in the logged-on desktop session (an SSH session cannot show a window). It
+prints every change, is safe to run again, changes no password or other security setting, and
+`-Uninstall` reverts exactly what it did. The matching private key on the Mac is
+`~/.ssh/doorbell_win_test_ed25519`.
+
+**Every run, from the Mac.** Keep the test account logged on with the screen unlocked, then:
+
+```sh
+win/scripts/run_remote_tests.sh <host> [user]              # newest green CI build of this branch
+win/scripts/run_remote_tests.sh <host> [user] --run <id>   # a specific Actions run
+win/scripts/run_remote_tests.sh <host> [user] --zip <file> # a local bundle
+```
+
+The driver downloads the `doorbell-win-test-bundle` artifact of the `windows-contract` CI job
+(an unsigned SIP-stub build), copies it to the PC, runs `win/scripts/ui_smoke.ps1` once as an
+indoor panel and once as a door station, and copies back `result-<role>.json`, the app logs
+and a screenshot of every screen in light and dark under
+`build-redesign-win/remote-tests/<time>/`. It exits non-zero when any check fails.
+
+The app under test never touches a household cluster or the PC's installed data. It starts in
+UI test mode, which needs `--ui-test`, `--data-dir <throwaway directory>` and
+`DOORBELL_UI_TEST=1` together and refuses the installed data directory; its `boot.json` is
+unpaired, has no seed peers, uses ports 47972/47980 and disables HTTPS. Core has no switch
+for the discovery beacon, so for the length of each run the driver adds two firewall rules
+that block UDP 47171 for the test copy of `DoorbellApp.exe`
+(`DoorbellTest block discovery (in)` and `(out)`) and removes them when the run ends, also
+on failure.
+
+The suite uses the UI Automation assemblies that ship with Windows; nothing is installed on
+the PC. It finds elements by AutomationId (the XAML `x:Name`), so renaming a named control
+means updating `ui_smoke.ps1`. Host-side tests for the pieces that need no Windows:
+`win/scripts/test_ui_test_mode.sh` and `win/scripts/test_zoom_pan_math.sh`.

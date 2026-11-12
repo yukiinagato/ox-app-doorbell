@@ -13,16 +13,20 @@ static_assert(offsetof(db_platform_v2, version) == sizeof(std::uint32_t),
               "version offset changed");
 static_assert(offsetof(db_platform_v2, user) == 2 * sizeof(std::uint32_t),
               "pointer alignment/layout changed");
-// Ten callbacks since power_state was appended after secure_delete. Fields are only ever
-// appended, and the shell always reports sizeof(db_platform_v2) as struct_size.
-static_assert(sizeof(db_platform_v2) == 2 * sizeof(std::uint32_t) + 10 * sizeof(void*),
+// Eleven callbacks since https_request_v3 (binary-safe responses) was appended after
+// power_state. Fields are only ever appended, and the shell always reports
+// sizeof(db_platform_v2) as struct_size.
+static_assert(sizeof(db_platform_v2) == 2 * sizeof(std::uint32_t) + 11 * sizeof(void*),
               "db_platform_v2 size changed");
 static_assert(offsetof(db_platform_v2, secure_delete) ==
                   2 * sizeof(std::uint32_t) + 8 * sizeof(void*),
               "secure_delete offset changed");
 static_assert(offsetof(db_platform_v2, power_state) ==
                   2 * sizeof(std::uint32_t) + 9 * sizeof(void*),
-              "power_state must stay the last field");
+              "power_state offset changed");
+static_assert(offsetof(db_platform_v2, https_request_v3) ==
+                  2 * sizeof(std::uint32_t) + 10 * sizeof(void*),
+              "https_request_v3 must stay the last field");
 
 int main(int argc, char** argv) {
   const bool allow_stub = argc == 2 && std::strcmp(argv[1], "--allow-stub") == 0;

@@ -92,3 +92,52 @@ win\build.cmd
 8. 門口機カメラを抜き差ししても、アプリ再起動なしで映像が戻ること。
 9. 着信画面の開閉を繰り返しても `netstat -ano` にループバックのメディア接続が残らないこと。
 10. 未署名または別署名のインストーラによるアプリ内更新が `web_admin.update_untrusted` で拒否されること。
+
+## 8. LAN 上の Windows PC での自動 UI テスト
+
+UI スモークテストは LAN 上の実機 Windows PC で動き、Mac から SSH で操作します。PC 側の手作業は
+最初の一度だけです。
+
+**PC で一度だけ行う手順。** アプリを表示するアカウント（管理者であること）でログオンし、
+`win/scripts/setup_test_host.ps1` を PC にコピーして、管理者権限の PowerShell で実行します。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup_test_host.ps1
+```
+
+このスクリプトは、Windows 標準の OpenSSH サーバーをインストールし、`sshd` を自動起動にし、
+ファイアウォール規則を一つ（TCP 22、プライベート プロファイル、ローカル サブネットのみ）追加し、
+テスト用の鍵を `%ProgramData%\ssh\administrators_authorized_keys` に登録し、SSH の既定シェルを
+PowerShell にし、`C:\DoorbellTest` を作成し、オンデマンドのスケジュール タスク
+`DoorbellTest-RunJob` を登録します。このタスクはログオン中のデスクトップ セッションでジョブを
+実行します（SSH セッションはウィンドウを表示できないため）。変更点はすべて表示され、
+再実行しても安全で、パスワードやその他のセキュリティ設定は変更しません。`-Uninstall` で、
+このスクリプトが行った変更だけを元に戻します。対応する秘密鍵は Mac の
+`~/.ssh/doorbell_win_test_ed25519` です。
+
+**毎回、Mac から。** テスト用アカウントをログオンしたまま画面ロックを解除しておき、次を実行します。
+
+```sh
+win/scripts/run_remote_tests.sh <host> [user]              # このブランチで最新の成功した CI ビルド
+win/scripts/run_remote_tests.sh <host> [user] --run <id>   # 指定した Actions の実行
+win/scripts/run_remote_tests.sh <host> [user] --zip <file> # ローカルのバンドル
+```
+
+ドライバーは CI の `windows-contract` ジョブの成果物 `doorbell-win-test-bundle`（署名なしの
+SIP スタブ ビルド）をダウンロードして PC にコピーし、`win/scripts/ui_smoke.ps1` を室内機として
+一回、門口機として一回実行し、`result-<role>.json`、アプリのログ、各画面のライト／ダーク両方の
+スクリーンショットを `build-redesign-win/remote-tests/<時刻>/` に持ち帰ります。チェックが一つでも
+失敗すると 0 以外で終了します。
+
+テスト対象のアプリは、家庭のクラスタにも PC にインストール済みのデータにも触れません。UI テスト
+モードで起動し、このモードは `--ui-test`、`--data-dir <使い捨てディレクトリ>`、
+`DOORBELL_UI_TEST=1` の三つがそろった場合だけ有効で、インストール済みのデータ ディレクトリは
+拒否します。`boot.json` は未ペアリングで、シード ピアを持たず、ポート 47972/47980 を使い、
+HTTPS を無効にします。Core には探索ビーコンを止めるスイッチがないため、ドライバーは実行の間だけ、
+テスト用の `DoorbellApp.exe` に対して UDP 47171 を遮断するファイアウォール規則を二つ
+（`DoorbellTest block discovery (in)` と `(out)`）追加し、実行が終わると（失敗時も）削除します。
+
+テストは Windows に付属する UI オートメーションのアセンブリだけを使い、PC には何もインストール
+しません。要素は AutomationId（XAML の `x:Name`）で探すため、名前付きコントロールの名前を
+変えたら `ui_smoke.ps1` も更新してください。Windows を必要としない部分のホスト側テストは
+`win/scripts/test_ui_test_mode.sh` と `win/scripts/test_zoom_pan_math.sh` です。

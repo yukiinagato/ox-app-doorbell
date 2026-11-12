@@ -92,3 +92,48 @@ win\build.cmd
 8. 拔插门口机摄像头后，无需重启应用视频即可恢复。
 9. 反复打开和关闭来电画面后，`netstat -ano` 中没有残留的回环媒体连接。
 10. 用未签名或其他签名的安装程序进行应用内更新会被拒绝，并显示 `web_admin.update_untrusted`。
+
+## 8. 在局域网 Windows 电脑上的自动化 UI 测试
+
+UI 冒烟测试在局域网内的一台真实 Windows 电脑上运行，由 Mac 通过 SSH 驱动。电脑上只需要手动
+操作一次。
+
+**在电脑上只做一次的步骤。** 用将要显示应用的账户（必须是管理员）登录，把
+`win/scripts/setup_test_host.ps1` 复制到电脑上，在管理员权限的 PowerShell 中运行：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\setup_test_host.ps1
+```
+
+该脚本会安装 Windows 自带的 OpenSSH 服务器，把 `sshd` 设为自动启动，添加一条防火墙规则
+（TCP 22，专用网络配置文件，仅限本地子网），把测试密钥写入
+`%ProgramData%\ssh\administrators_authorized_keys`，把 SSH 默认 shell 设为 PowerShell，创建
+`C:\DoorbellTest`，并注册按需运行的计划任务 `DoorbellTest-RunJob`。该任务在已登录的桌面会话中
+运行作业（SSH 会话无法显示窗口）。脚本会打印每一项更改，可以重复运行，不会更改密码或其他安全
+设置；`-Uninstall` 只撤销它自己做过的更改。对应的私钥是 Mac 上的
+`~/.ssh/doorbell_win_test_ed25519`。
+
+**每次运行，在 Mac 上。** 保持测试账户已登录且屏幕未锁定，然后执行：
+
+```sh
+win/scripts/run_remote_tests.sh <host> [user]              # 当前分支最新的成功 CI 构建
+win/scripts/run_remote_tests.sh <host> [user] --run <id>   # 指定的 Actions 运行
+win/scripts/run_remote_tests.sh <host> [user] --zip <file> # 本地构建包
+```
+
+驱动脚本会下载 CI `windows-contract` 作业的产物 `doorbell-win-test-bundle`（未签名的 SIP 桩
+构建），复制到电脑上，分别以室内机和门口机身份各运行一次 `win/scripts/ui_smoke.ps1`，并把
+`result-<role>.json`、应用日志以及每个界面的浅色和深色截图取回到
+`build-redesign-win/remote-tests/<时间>/`。只要有一项检查失败，就以非零状态退出。
+
+被测应用不会接触家庭集群，也不会接触电脑上已安装的数据。它以 UI 测试模式启动，该模式必须同时
+具备 `--ui-test`、`--data-dir <一次性目录>` 和 `DOORBELL_UI_TEST=1` 三项才生效，并且拒绝使用
+已安装的数据目录；它的 `boot.json` 未配对，没有种子节点，使用端口 47972/47980，并关闭 HTTPS。
+Core 没有关闭发现信标的开关，因此驱动脚本在每次运行期间会添加两条防火墙规则，阻止测试用的
+`DoorbellApp.exe` 使用 UDP 47171（`DoorbellTest block discovery (in)` 和 `(out)`），运行结束
+（包括失败时）即删除。
+
+测试只使用 Windows 自带的 UI 自动化程序集，不在电脑上安装任何东西。它通过 AutomationId
+（XAML 的 `x:Name`）查找元素，所以重命名带名称的控件时要同步更新 `ui_smoke.ps1`。不需要
+Windows 的部分有主机侧测试：`win/scripts/test_ui_test_mode.sh` 和
+`win/scripts/test_zoom_pan_math.sh`。

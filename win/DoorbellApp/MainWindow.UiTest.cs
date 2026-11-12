@@ -88,6 +88,11 @@ namespace DoorbellApp
                     if (IncomingView.Visibility == Visibility.Visible) CloseIncoming(false);
                     if (InCallView.Visibility == Visibility.Visible) CloseInCall();
                     return "ok";
+                case "zoom-scale":
+                    // What the suite reads back after sending mouse-wheel input to the picture.
+                    return "ok " + (InCallView.Visibility == Visibility.Visible
+                        ? InCallZoom.Scale : IncomingZoom.Scale).ToString(
+                            "0.###", System.Globalization.CultureInfo.InvariantCulture);
                 case "settings":
                     // Modal: answered before it opens, so the suite can drive the window.
                     Dispatcher.BeginInvoke(new Action(OpenSettings));

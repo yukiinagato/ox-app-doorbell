@@ -2652,6 +2652,91 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("win/DoorbellApp/Ui/ZoomPanMath.cs", script)
         self.assertIn("win/tests/ZoomPanMathTests.cs", script)
 
+    def test_ui_test_mode_needs_three_explicit_conditions_and_a_throwaway_directory(self):
+        mode = read("win/DoorbellApp/Util/UiTestMode.cs")
+        app = read("win/DoorbellApp/App.xaml.cs")
+        hooks = read("win/DoorbellApp/MainWindow.UiTest.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        appearance = read("win/DoorbellApp/Util/Appearance.cs")
+        # Switch, data directory and environment flag together; the installed data is refused.
+        self.assertIn('if (args == null || environmentFlag != "1") return null;', mode)
+        self.assertIn("if (!requested || string.IsNullOrEmpty(dataDir)) return null;", mode)
+        self.assertIn("SameOrInside(wanted, installed)", mode)
+        self.assertNotIn("System.Windows", mode)
+        # The app decides before it opens any data directory, and only this path sets UiTest.
+        self.assertLess(app.index("UiTestMode.ResolveDataDir(e.Args,"),
+                        app.index("else DataDir = ResolveDataDir();"))
+        self.assertEqual(app.count("UiTest = true;"), 1)
+        self.assertLess(app.index("UiTestMode.ResolveDataDir(e.Args,"),
+                        app.index("BootConfig.Load(Path.Combine(DataDir"))
+        # The command channel and the fixed appearance exist only behind that flag.
+        self.assertIn("if (!App.UiTest || _uiTestPoll != null) return;", hooks)
+        self.assertEqual(window.count("StartUiTestHooks();"), 1)
+        for path in sorted((WIN / "DoorbellApp").rglob("*.cs")):
+            if path.name in ("MainWindow.UiTest.cs", "Appearance.cs"):
+                continue
+            with self.subTest(path=path.name):
+                self.assertNotIn("TestOverride", path.read_text(encoding="utf-8"))
+        self.assertIn("internal static string TestOverride;", appearance)
+
+    def test_remote_ui_test_scaffold_is_reversible_and_isolated(self):
+        setup = read("win/scripts/setup_test_host.ps1")
+        driver = read("win/scripts/run_remote_tests.sh")
+        suite = read("win/scripts/ui_smoke.ps1")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        # One-time setup: elevated, reversible, SSH limited to the LAN, nothing else touched.
+        self.assertIn("#Requires -RunAsAdministrator", setup)
+        self.assertIn("[switch]$Uninstall", setup)
+        self.assertIn("-Profile Private -RemoteAddress LocalSubnet", setup)
+        self.assertIn("administrators_authorized_keys", setup)
+        self.assertIn("/inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F'", setup)
+        self.assertIn("-LogonType Interactive -RunLevel Limited", setup)
+        self.assertIn("setup-state.json", setup)
+        for forbidden in ("Set-ExecutionPolicy", "net user", "Set-LocalUser", "Disable-NetFirewallRule",
+                          "Set-NetFirewallProfile", "Set-MpPreference"):
+            self.assertNotIn(forbidden, setup)
+        # The owner is told about the temporary discovery block, by the names the driver uses.
+        for rule in ("DoorbellTest block discovery (in)", "DoorbellTest block discovery (out)"):
+            self.assertIn(rule, setup)
+            self.assertIn(rule, driver)
+        # The driver removes the block on every exit path, and marks it before creating it.
+        self.assertIn("trap cleanup EXIT", driver)
+        cleanup = driver[driver.index("cleanup() {"):driver.index("trap cleanup EXIT")]
+        self.assertIn("Remove-NetFirewallRule", cleanup)
+        self.assertLess(driver.index("RULES_ADDED=1"), driver.index("New-NetFirewallRule"))
+        self.assertIn("doorbell_win_test_ed25519", driver)
+        self.assertIn('ARTIFACT="doorbell-win-test-bundle"', driver)
+        self.assertIn("name: doorbell-win-test-bundle", read(".github/workflows/build.yml"))
+        # The suite starts an isolated instance: test mode, own ports, no pairing material.
+        self.assertIn("$env:DOORBELL_UI_TEST = '1'", suite)
+        self.assertIn("'--ui-test', '--data-dir'", suite)
+        self.assertIn("https_port = 0", suite)
+        for secret in ("psk_hex", "psk_ref", "seed_peers"):
+            self.assertNotIn(secret, suite)
+        # Every id the suite asserts on or clicks is a real x:Name (or a settings id).
+        names = set()
+        for path in sorted((WIN / "DoorbellApp").rglob("*.xaml")):
+            names |= set(re.findall(r'x:Name="(\w+)"', path.read_text(encoding="utf-8")))
+        settings = read("win/DoorbellApp/Settings/SettingsWindow.cs")
+        names |= set(re.findall(r'AutomationId\(\w+, "(\w+)"\)', settings))
+        used = set(re.findall(r"(?:Assert-Element|Click-Id|Assert-Gone) '[^']+' '(\w+)'", suite))
+        for group in re.findall(r"foreach \(\$id in @\(([^)]*)\)\)", suite):
+            used |= set(re.findall(r"'(\w+)'", group))
+        used |= set(re.findall(r"Find-ById '(\w+)'", suite))
+        self.assertGreater(len(used), 30)
+        for name in sorted(used):
+            with self.subTest(id=name):
+                self.assertIn(name, names)
+        # Panels and borders have no automation peer; the suite must not rely on them.
+        root = ET.fromstring(xaml)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        kinds = {e.get(ns): e.tag.split("}")[-1] for e in root.iter() if e.get(ns)}
+        for name in sorted(used):
+            if name in kinds:
+                with self.subTest(peer=name):
+                    self.assertNotIn(kinds[name], ("Grid", "Border", "StackPanel", "WrapPanel",
+                                                   "UniformGrid", "DockPanel", "Canvas"))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

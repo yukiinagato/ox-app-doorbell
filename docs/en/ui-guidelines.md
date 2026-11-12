@@ -92,6 +92,9 @@ switch live on rotation or window resize.
 - Door tiles in an adaptive grid (1 column compact, 2 medium, 3–4 expanded):
   live/still preview, door name, last activity, state chip (idle, ringing,
   in call, offline). Tap opens live view; a ringing tile is highlighted.
+- The home surface shows no call history. History has its own destination;
+  unread missed calls appear as a badge on that destination and, while any are
+  unread, as one notice on the home surface that opens History.
 - Secondary destinations: History, Monitor, Settings via the tab bar or side
   navigation.
 
