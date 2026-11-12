@@ -1684,6 +1684,8 @@ On</value></data>
   <data name="settings_call_flow" xml:space="preserve"><value>Visitor call flow</value></data>
   <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>Choose purpose, then ring</value></data>
   <data name="settings_call_flow_ring_then_purpose" xml:space="preserve"><value>Ring, then choose purpose</value></data>
+  <data name="settings_call_return" xml:space="preserve"><value>Seconds before returning home (default for all devices)</value></data>
+  <data name="settings_call_return_here" xml:space="preserve"><value>Seconds on this device</value></data>
   <data name="settings_call_sound" xml:space="preserve"><value>Door-station call sound</value></data>
   <data name="settings_call_sound_loop" xml:space="preserve"><value>Repeat the call sound</value></data>
   <data name="settings_call_sound_loop_desc" xml:space="preserve"><value>Repeats until a reply or the 30-second timeout</value></data>
@@ -1727,6 +1729,8 @@ On</value></data>
   <data name="settings_change_password" xml:space="preserve"><value>Change the admin password</value></data>
   <data name="settings_change_password_action" xml:space="preserve"><value>Change</value></data>
   <data name="settings_change_password_desc" xml:space="preserve"><value>At least 8 characters, shared by every device and the web admin</value></data>
+  <data name="settings_change_role" xml:space="preserve"><value>Change role</value></data>
+  <data name="settings_change_role_action" xml:space="preserve"><value>Change…</value></data>
   <data name="settings_close" xml:space="preserve"><value>Close</value></data>
   <data name="settings_cluster" xml:space="preserve"><value>Cluster</value></data>
   <data name="settings_cluster_key" xml:space="preserve"><value>Cluster key</value></data>
@@ -1806,6 +1810,7 @@ On</value></data>
   <data name="settings_grp_about" xml:space="preserve"><value>Version and identity</value></data>
   <data name="settings_grp_all_devices" xml:space="preserve"><value>Default for all devices</value></data>
   <data name="settings_grp_appearance" xml:space="preserve"><value>Appearance</value></data>
+  <data name="settings_grp_call_return" xml:space="preserve"><value>Returning from the call screen</value></data>
   <data name="settings_grp_cluster" xml:space="preserve"><value>Cluster</value></data>
   <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>Identity</value></data>
@@ -2034,12 +2039,19 @@ On</value></data>
   <data name="settings_restart_required" xml:space="preserve"><value>Changing the role needs a restart</value></data>
   <data name="settings_ringtone" xml:space="preserve"><value>Indoor ringtone</value></data>
   <data name="settings_role" xml:space="preserve"><value>Role</value></data>
+  <data name="settings_role_busy" xml:space="preserve"><value>The role cannot be changed during a call, an SOS or pairing.</value></data>
   <data name="settings_role_door" xml:space="preserve"><value>Door station</value></data>
+  <data name="settings_role_door_in_use" xml:space="preserve"><value>This door is already assigned to the door station &quot;{0}&quot;.</value></data>
   <data name="settings_role_door_station" xml:space="preserve"><value>Door station</value></data>
   <data name="settings_role_indoor" xml:space="preserve"><value>Indoor panel</value></data>
+  <data name="settings_role_indoor_note" xml:space="preserve"><value>An indoor panel serves no door. The door assignment is cleared.</value></data>
   <data name="settings_role_indoor_panel" xml:space="preserve"><value>Indoor panel</value></data>
+  <data name="settings_role_new_door" xml:space="preserve"><value>New door</value></data>
+  <data name="settings_role_new_door_id" xml:space="preserve"><value>ID of the new door</value></data>
   <data name="settings_role_restart" xml:space="preserve"><value>Changing the role restarts the app</value></data>
+  <data name="settings_role_restart_confirm" xml:space="preserve"><value>Changing the role restarts the app now. A door station needs a camera and a microphone. Continue?</value></data>
   <data name="settings_role_restart_notice" xml:space="preserve"><value>A new role takes effect the next time the app is opened</value></data>
+  <data name="settings_role_unchanged" xml:space="preserve"><value>Nothing was changed.</value></data>
   <data name="settings_rotate_cluster_key" xml:space="preserve"><value>Change the cluster key</value></data>
   <data name="settings_rotate_cluster_key_action" xml:space="preserve"><value>Change</value></data>
   <data name="settings_rotate_cluster_key_confirm" xml:space="preserve"><value>Change the cluster key? Devices offline for more than seven days will need to be paired again.</value></data>
@@ -2247,6 +2259,13 @@ On</value></data>
   <data name="settings_web_only_upload" xml:space="preserve"><value>Add images on the web admin</value></data>
   <data name="settings_web_only_wording" xml:space="preserve"><value>Reword the interface from the web admin</value></data>
   <data name="settings_web_push" xml:space="preserve"><value>Web Push</value></data>
+  <data name="settings_web_push_private_key" xml:space="preserve"><value>VAPID private key</value></data>
+  <data name="settings_web_push_private_key_native" xml:space="preserve"><value>Stored in this device's secure store. Enter it on every device that may deliver Web Push</value></data>
+  <data name="settings_web_push_public_key" xml:space="preserve"><value>VAPID public key</value></data>
+  <data name="settings_web_push_sender_bearer" xml:space="preserve"><value>Sender bearer token</value></data>
+  <data name="settings_web_push_sender_bearer_native" xml:space="preserve"><value>Only needed when the sender requires authentication</value></data>
+  <data name="settings_web_push_sender_url" xml:space="preserve"><value>HTTPS sender URL</value></data>
+  <data name="settings_web_push_subject" xml:space="preserve"><value>VAPID subject</value></data>
   <data name="settings_week_1" xml:space="preserve"><value>1 week</value></data>
   <data name="settings_when_button" xml:space="preserve"><value>Call button</value></data>
   <data name="settings_when_call_missed" xml:space="preserve"><value>Missed call</value></data>

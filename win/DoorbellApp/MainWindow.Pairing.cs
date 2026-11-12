@@ -121,7 +121,11 @@ namespace DoorbellApp
             if (++_secretTaps < 7) return;
             _secretTaps = 0;
             var dlg = new AdminDialog { Owner = this };
-            if (dlg.ShowDialog() == true) UnlockKiosk();
+            if (dlg.ShowDialog() != true) return;
+            // A door station shows no administration entry, so this corner, behind the admin
+            // password, is also its only way into settings (role, door, camera).
+            if (App.Boot.Role == "door_station") OpenSettings();
+            UnlockKiosk();
         }
     }
 }

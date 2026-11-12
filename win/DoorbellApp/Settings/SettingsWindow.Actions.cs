@@ -39,6 +39,11 @@ namespace DoorbellApp.Settings
             switch (handler)
             {
                 case "node_id": return _store.Context.NodeId;
+                case "role":
+                    return Texts.T(App.Boot != null && App.Boot.Role == "door_station"
+                        ? "admin.role_door" : "admin.role_indoor");
+                case "door":
+                    return App.Boot == null ? "" : DoorTitle(App.Boot.Door);
                 case "pairing_state":
                 {
                     var pairing = App.Core == null ? null : App.Core.PairingInfo();
@@ -111,6 +116,7 @@ namespace DoorbellApp.Settings
         private FrameworkElement BuildAction(SettingItem item, RowParts parts)
         {
             var button = CommandButton(Texts.T(item.LabelKey + "_action"));
+            AutomationId(button, "SettingsAction_" + item.Id);
             if (item.Destructive)
             {
                 button.SetResourceReference(Control.ForegroundProperty, "Negative");
@@ -128,6 +134,9 @@ namespace DoorbellApp.Settings
                     if (Report(_store.Delete(item.Key + ".call", item.Key + ".sos", item.Key + ".idle"),
                                parts))
                         Refresh();
+                    break;
+                case "change_role":
+                    ShowRoleForm(parts);
                     break;
                 case "notice_edit":
                     _main.OpenNoticeDialogFromSettings();
@@ -233,34 +242,18 @@ namespace DoorbellApp.Settings
         }
 
         /// <summary>
-        /// Name, role and door are this device's identity: boot.json is the source the shell and
-        /// mesh start from, and devices.&lt;self&gt; is the replicated desired identity. Both are
-        /// written, then the app restarts so Core advertises the new identity.
+        /// The device name is part of this device's identity. boot.json is what the shell and
+        /// the mesh start from, so it is written first; Core republishes devices.&lt;self&gt; from
+        /// it when the app restarts. Role and door change through the role form instead.
         /// </summary>
         private bool WriteIdentity(SettingItem item, string value, RowParts parts)
         {
-            if (App.Boot == null) return false;
-            string name = App.Boot.Name, role = App.Boot.Role, door = App.Boot.Door;
-            if (item.Id == "device_name") name = value;
-            else if (item.Id == "device_role") role = value;
-            else door = value;
-            if (role == "door_station" && !BootConfig.ValidDoor(door))
-            {
-                if (item.Id == "device_door")
-                    return Report(new SettingsWriteResult { Error = Texts.T("settings.err_door_id") }, parts);
-                door = BootConfig.ValidDoor(App.Boot.SuggestedDoor) ? App.Boot.SuggestedDoor : "";
-            }
+            if (App.Boot == null || item.Id != "device_name") return false;
+            if (_main.IdentityChangeBlocked)
+                return Report(new SettingsWriteResult { Error = Texts.T("settings.role_busy") }, parts);
             if (!Confirm(Texts.T("settings.identity_restart_confirm"))) return false;
-            var sets = new List<KeyValuePair<string, object>>
-            {
-                new KeyValuePair<string, object>("devices.{self}.name", name),
-                new KeyValuePair<string, object>("devices.{self}.role", role),
-                new KeyValuePair<string, object>("devices.{self}.door",
-                    role == "door_station" ? (object)door : null),
-            };
-            if (!Report(_store.Commit(sets, null), parts)) return false;
-            if (BootConfig.PersistSetup(App.Boot.FilePath, name, role, door) == null)
-                return Report(new SettingsWriteResult { Error = Texts.T("settings.err_door_id") }, parts);
+            if (BootConfig.PersistSetup(App.Boot.FilePath, value, App.Boot.Role, App.Boot.Door) == null)
+                return Report(new SettingsWriteResult { Error = "boot_write_failed" }, parts);
             App.RestartApp("identity_changed");
             return true;
         }

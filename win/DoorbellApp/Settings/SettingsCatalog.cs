@@ -189,15 +189,15 @@ namespace DoorbellApp.Settings
             var name = Add(g, Text("device_name", Self + ".name", "doorbell", SettingScope.ThisDevice));
             name.Handler = "identity";
             name.RequiresRestart = true;
-            var role = Add(g, Choice("device_role", Self + ".role", "indoor_panel",
-                SettingScope.ThisDevice, O("door_station", "admin.role_door"),
-                O("indoor_panel", "admin.role_indoor")));
-            role.Handler = "identity";
-            role.RequiresRestart = true;
-            var door = Add(g, Describe(Text("device_door", Self + ".door", "", SettingScope.ThisDevice)));
-            door.Handler = "identity";
-            door.RequiresRestart = true;
+            // Role and door change together in one form (SettingsWindow.Role.cs): nothing is
+            // written until it is confirmed, and the app restarts.
+            Add(g, Info("device_role", "role"));
+            var door = Add(g, Info("device_door", "door"));
             door.Visible = ctx => ctx.IsDoorStation;
+            var change = Add(g, Action("change_role", "change_role"));
+            change.Key = Self + ".role";
+            change.AlsoCovers = new[] { Self + ".door" };
+            change.RequiresRestart = true;
             var lang = Add(g, Choice("ui_lang", Local + ".ui_lang", "ja", SettingScope.ThisDevice,
                 O("ja", "language.name_ja"), O("en", "language.name_en"),
                 O("zh", "language.name_zh")));
@@ -249,9 +249,10 @@ namespace DoorbellApp.Settings
         {
             var c = Category("display", "IconBrush");
             var here = Group(c, "settings.grp_this_device");
-            Add(here, Slider("brightness_here", Local + ".screen_brightness", 0, 100, 1, 70,
+            // Core reads the per-device display override from devices.<self>.local.display.*.
+            Add(here, Slider("brightness_here", Local + ".display.brightness", 0, 100, 1, 70,
                 SettingScope.ThisDevice, "settings.unit_percent"));
-            Add(here, Choice("screensaver", Local + ".screensaver_after_s", 120,
+            Add(here, Choice("screensaver", Local + ".display.screensaver_after_s", 120,
                 SettingScope.ThisDevice, O(0, "settings.off"), O(60, "settings.min_1"),
                 O(120, "settings.min_2"), O(300, "settings.min_5"), O(600, "settings.min_10"),
                 O(1800, "settings.min_30")));
@@ -295,6 +296,13 @@ namespace DoorbellApp.Settings
         private static SettingCategory Calls()
         {
             var c = Category("calls", "IconPhone");
+            // How long the incoming page stays before returning home: the cluster default and
+            // this device's own value (Core reads devices.<self>.local.call.return_s first).
+            var back = Group(c, "settings.grp_call_return");
+            Add(back, Stepper("call_return", "call.indoor.return_s", 5, 600, 5, 60,
+                SettingScope.AllDevices, "settings.unit_seconds"));
+            Add(back, Stepper("call_return_here", Local + ".call.return_s", 5, 600, 5, 60,
+                SettingScope.ThisDevice, "settings.unit_seconds"));
             var g = Group(c, "settings.grp_visitor");
             Add(g, Choice("call_flow", "ui.call_flow", "purpose_first", SettingScope.AllDevices,
                 O("purpose_first", "admin.call_flow_purpose_first_label"),
@@ -428,9 +436,11 @@ namespace DoorbellApp.Settings
                 O("optional", "settings.srtp_optional"), O("mandatory", "settings.srtp_mandatory"))));
             var account = Group(c, "settings.grp_sip_account");
             Add(account, Text("sip_user", "sip.accounts.{self}.user", "", SettingScope.ThisDevice));
-            Add(account, Choice("sip_answer_mode", "sip.accounts.{self}.answer_mode", "auto",
-                SettingScope.ThisDevice, O("auto", "settings.answer_auto"),
-                O("manual", "settings.answer_manual")));
+            // Core knows "auto" and "ring"; unset follows the role (a door station answers
+            // automatically, an indoor panel rings), so there is no default to show.
+            Add(account, Choice("sip_answer_mode", "sip.accounts.{self}.answer_mode", null,
+                SettingScope.ThisDevice, O("auto", "settings.answer_mode_auto"),
+                O("ring", "settings.answer_mode_ring")));
             Add(account, Secret("sip_password", "sip.accounts.{self}.pass_ref", "sip.{self}",
                 SettingScope.ThisDevice));
             Add(Group(c, "settings.sip_dtmf"), Editor("sip_dtmf", "dtmf")).Scope = SettingScope.AllDevices;
@@ -542,6 +552,19 @@ namespace DoorbellApp.Settings
             Add(tg, Describe(Text("telegram_template", "integrations.telegram.text_template.ja", "",
                 SettingScope.AllDevices)));
             Add(tg, Describe(Action("telegram_test", "telegram_test")));
+            // Web Push: the non-secret fields replicate; each key stays in a device's own
+            // secure store and configuration carries only the secret:<name> reference.
+            var push = Group(c, "settings.web_push");
+            Add(push, Text("web_push_sender_url", "integrations.web_push.sender_url", "",
+                SettingScope.AllDevices));
+            Add(push, Text("web_push_public_key", "integrations.web_push.vapid_public_key", "",
+                SettingScope.AllDevices));
+            Add(push, Text("web_push_subject", "integrations.web_push.vapid_subject", "",
+                SettingScope.AllDevices));
+            Add(push, Secret("web_push_private_key", "integrations.web_push.vapid_private_key_ref",
+                "webpush.vapid_private", SettingScope.AllDevices));
+            Add(push, Secret("web_push_sender_bearer", "integrations.web_push.sender_secret_ref",
+                "webpush.sender", SettingScope.AllDevices));
             return c;
         }
 

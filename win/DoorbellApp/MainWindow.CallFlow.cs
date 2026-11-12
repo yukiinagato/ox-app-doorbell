@@ -622,7 +622,7 @@ namespace DoorbellApp
             bool unlock = UnlockShown(_incomingDoor);
             OpenDoorButton.Visibility = unlock ? Visibility.Visible : Visibility.Collapsed;
             InCallOpenDoorButton.Visibility = OpenDoorButton.Visibility;
-            IgnoreButton.Content = IconStack("IconX",
+            IgnoreButton.Content = IconStack(monitorOnly ? "IconX" : "IconBellOff",
                 monitorOnly ? Texts.T("monitor.close") : Texts.T("ring.ignore"),
                 (Brush)FindResource("Negative"));
 

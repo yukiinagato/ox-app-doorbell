@@ -65,6 +65,8 @@ namespace DoorbellApp.Settings
         public Func<SettingsContext, bool> Visible;
         /// <summary>Further keys written to the same value, in the same batch.</summary>
         public string[] AlsoWrites;
+        /// <summary>Further configuration keys this row's editor or form covers.</summary>
+        public string[] AlsoCovers;
         /// <summary>
         /// For a secret row: the secure-store name ("{self}" allowed). The value goes to this
         /// device's DPAPI store and Key receives the reference "secret:&lt;name&gt;".

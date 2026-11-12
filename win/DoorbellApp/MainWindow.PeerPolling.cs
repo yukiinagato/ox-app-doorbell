@@ -123,6 +123,7 @@ namespace DoorbellApp
                 SetVisitorLang(vl != null ? vl.ToString() : "ja");
             }
             RefreshSosConfig(_cfg);
+            ApplyReplicatedIdentity();
             ApplyAudioVolumes(snapshot.Audio);
             var dp = CoreClient.Dig(_cfg, "sip.direct_port");
             if (dp != null)

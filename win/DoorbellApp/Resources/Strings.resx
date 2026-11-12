@@ -1684,6 +1684,8 @@ ON</value></data>
   <data name="settings_call_flow" xml:space="preserve"><value>来訪者の呼出手順</value></data>
   <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>用件を選んで呼び出す</value></data>
   <data name="settings_call_flow_ring_then_purpose" xml:space="preserve"><value>呼び出してから用件を選ぶ</value></data>
+  <data name="settings_call_return" xml:space="preserve"><value>ホームに戻るまでの秒数（全端末の既定）</value></data>
+  <data name="settings_call_return_here" xml:space="preserve"><value>この端末での秒数</value></data>
   <data name="settings_call_sound" xml:space="preserve"><value>門口機の呼出受付音</value></data>
   <data name="settings_call_sound_loop" xml:space="preserve"><value>呼出受付音を繰り返す</value></data>
   <data name="settings_call_sound_loop_desc" xml:space="preserve"><value>応答または 30 秒のタイムアウトまで繰り返します</value></data>
@@ -1727,6 +1729,8 @@ ON</value></data>
   <data name="settings_change_password" xml:space="preserve"><value>管理パスワードを変更</value></data>
   <data name="settings_change_password_action" xml:space="preserve"><value>変更</value></data>
   <data name="settings_change_password_desc" xml:space="preserve"><value>8 文字以上。すべての端末と管理画面で共通です</value></data>
+  <data name="settings_change_role" xml:space="preserve"><value>役割を変更</value></data>
+  <data name="settings_change_role_action" xml:space="preserve"><value>変更…</value></data>
   <data name="settings_close" xml:space="preserve"><value>閉じる</value></data>
   <data name="settings_cluster" xml:space="preserve"><value>クラスタ</value></data>
   <data name="settings_cluster_key" xml:space="preserve"><value>クラスタ鍵</value></data>
@@ -1806,6 +1810,7 @@ ON</value></data>
   <data name="settings_grp_about" xml:space="preserve"><value>バージョンと識別情報</value></data>
   <data name="settings_grp_all_devices" xml:space="preserve"><value>全端末の既定値</value></data>
   <data name="settings_grp_appearance" xml:space="preserve"><value>外観</value></data>
+  <data name="settings_grp_call_return" xml:space="preserve"><value>着信画面からの自動復帰</value></data>
   <data name="settings_grp_cluster" xml:space="preserve"><value>クラスタ</value></data>
   <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>識別</value></data>
@@ -2034,12 +2039,19 @@ ON</value></data>
   <data name="settings_restart_required" xml:space="preserve"><value>役割を変えると再起動が必要です</value></data>
   <data name="settings_ringtone" xml:space="preserve"><value>室内機の呼出音</value></data>
   <data name="settings_role" xml:space="preserve"><value>役割</value></data>
+  <data name="settings_role_busy" xml:space="preserve"><value>通話中、SOS 発報中、ペアリング中は役割を変更できません。</value></data>
   <data name="settings_role_door" xml:space="preserve"><value>門口機</value></data>
+  <data name="settings_role_door_in_use" xml:space="preserve"><value>このドアは別の門口機「{0}」に割り当てられています。</value></data>
   <data name="settings_role_door_station" xml:space="preserve"><value>門口機</value></data>
   <data name="settings_role_indoor" xml:space="preserve"><value>室内機</value></data>
+  <data name="settings_role_indoor_note" xml:space="preserve"><value>室内機はドアを担当しません。ドアの割り当ては解除されます。</value></data>
   <data name="settings_role_indoor_panel" xml:space="preserve"><value>室内機</value></data>
+  <data name="settings_role_new_door" xml:space="preserve"><value>新しいドア</value></data>
+  <data name="settings_role_new_door_id" xml:space="preserve"><value>新しいドアの ID</value></data>
   <data name="settings_role_restart" xml:space="preserve"><value>役割を変えると再起動します</value></data>
+  <data name="settings_role_restart_confirm" xml:space="preserve"><value>役割を変更するとアプリがすぐに再起動します。門口機にはカメラとマイクが必要です。続けますか？</value></data>
   <data name="settings_role_restart_notice" xml:space="preserve"><value>役割を変えると、アプリを開き直したときに切り替わります</value></data>
+  <data name="settings_role_unchanged" xml:space="preserve"><value>変更はありません。</value></data>
   <data name="settings_rotate_cluster_key" xml:space="preserve"><value>クラスタ鍵を更新</value></data>
   <data name="settings_rotate_cluster_key_action" xml:space="preserve"><value>更新</value></data>
   <data name="settings_rotate_cluster_key_confirm" xml:space="preserve"><value>クラスタ鍵を更新しますか？ 7 日以上オフラインの端末は再ペアリングが必要になります。</value></data>
@@ -2247,6 +2259,13 @@ ON</value></data>
   <data name="settings_web_only_upload" xml:space="preserve"><value>画像の追加は Web 管理で行います</value></data>
   <data name="settings_web_only_wording" xml:space="preserve"><value>文言の書き換えは Web 管理から行います</value></data>
   <data name="settings_web_push" xml:space="preserve"><value>Web Push</value></data>
+  <data name="settings_web_push_private_key" xml:space="preserve"><value>VAPID 秘密鍵</value></data>
+  <data name="settings_web_push_private_key_native" xml:space="preserve"><value>この端末の安全な保管領域に保存されます。Web Push を担当する各端末で登録してください</value></data>
+  <data name="settings_web_push_public_key" xml:space="preserve"><value>VAPID 公開鍵</value></data>
+  <data name="settings_web_push_sender_bearer" xml:space="preserve"><value>送信サーバー Bearer token</value></data>
+  <data name="settings_web_push_sender_bearer_native" xml:space="preserve"><value>送信サーバーが認証を求める場合だけ登録します</value></data>
+  <data name="settings_web_push_sender_url" xml:space="preserve"><value>HTTPS 送信 URL</value></data>
+  <data name="settings_web_push_subject" xml:space="preserve"><value>VAPID subject</value></data>
   <data name="settings_week_1" xml:space="preserve"><value>1 週間</value></data>
   <data name="settings_when_button" xml:space="preserve"><value>呼び出しボタン</value></data>
   <data name="settings_when_call_missed" xml:space="preserve"><value>不在着信</value></data>

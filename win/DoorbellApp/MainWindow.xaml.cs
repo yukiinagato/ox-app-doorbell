@@ -542,11 +542,11 @@ namespace DoorbellApp
                 (Brush)FindResource(ending ? "OnNegative" : "OnPositive"));
             PaintAnswerSlot(ending);
             MonitorButton.Content = IconStack("IconEye", Texts.T("ring.monitor"));
-            OpenDoorButton.Content = IconStack("IconDoor", Texts.T("ring.open_door"),
+            OpenDoorButton.Content = IconStack("IconLockOpen", Texts.T("ring.open_door"),
                 (Brush)FindResource("Warning"));
-            InCallOpenDoorButton.Content = IconStack("IconDoor", Texts.T("ring.open_door"),
+            InCallOpenDoorButton.Content = IconStack("IconLockOpen", Texts.T("ring.open_door"),
                 (Brush)FindResource("Warning"));
-            IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Negative"));
+            IgnoreButton.Content = IconStack("IconBellOff", Texts.T("ring.ignore"), (Brush)FindResource("Negative"));
             IncomingNoVideo.Text = Texts.T("ring.no_video");
             InCallTitle.Text = Texts.T("incall.title");
             EndCallButton.Content = Texts.T("incall.end_call");

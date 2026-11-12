@@ -1684,6 +1684,8 @@
   <data name="settings_call_flow" xml:space="preserve"><value>访客呼叫流程</value></data>
   <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>先选目的，再呼叫</value></data>
   <data name="settings_call_flow_ring_then_purpose" xml:space="preserve"><value>先呼叫，再选目的</value></data>
+  <data name="settings_call_return" xml:space="preserve"><value>返回首页前的秒数（所有设备的默认值）</value></data>
+  <data name="settings_call_return_here" xml:space="preserve"><value>本设备的秒数</value></data>
   <data name="settings_call_sound" xml:space="preserve"><value>门口机呼叫提示音</value></data>
   <data name="settings_call_sound_loop" xml:space="preserve"><value>重复呼叫提示音</value></data>
   <data name="settings_call_sound_loop_desc" xml:space="preserve"><value>重复到有回复或 30 秒超时</value></data>
@@ -1727,6 +1729,8 @@
   <data name="settings_change_password" xml:space="preserve"><value>更改管理密码</value></data>
   <data name="settings_change_password_action" xml:space="preserve"><value>更改</value></data>
   <data name="settings_change_password_desc" xml:space="preserve"><value>至少 8 个字符，所有设备与网页管理共用</value></data>
+  <data name="settings_change_role" xml:space="preserve"><value>更改角色</value></data>
+  <data name="settings_change_role_action" xml:space="preserve"><value>更改…</value></data>
   <data name="settings_close" xml:space="preserve"><value>关闭</value></data>
   <data name="settings_cluster" xml:space="preserve"><value>集群</value></data>
   <data name="settings_cluster_key" xml:space="preserve"><value>集群密钥</value></data>
@@ -1806,6 +1810,7 @@
   <data name="settings_grp_about" xml:space="preserve"><value>版本与标识</value></data>
   <data name="settings_grp_all_devices" xml:space="preserve"><value>所有设备的默认值</value></data>
   <data name="settings_grp_appearance" xml:space="preserve"><value>外观</value></data>
+  <data name="settings_grp_call_return" xml:space="preserve"><value>来电画面自动返回</value></data>
   <data name="settings_grp_cluster" xml:space="preserve"><value>集群</value></data>
   <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>标识</value></data>
@@ -2034,12 +2039,19 @@
   <data name="settings_restart_required" xml:space="preserve"><value>更改角色后需要重新启动</value></data>
   <data name="settings_ringtone" xml:space="preserve"><value>室内机铃声</value></data>
   <data name="settings_role" xml:space="preserve"><value>角色</value></data>
+  <data name="settings_role_busy" xml:space="preserve"><value>通话、SOS 或配对进行期间不能更改角色。</value></data>
   <data name="settings_role_door" xml:space="preserve"><value>门口机</value></data>
+  <data name="settings_role_door_in_use" xml:space="preserve"><value>此门口已分配给门口机“{0}”。</value></data>
   <data name="settings_role_door_station" xml:space="preserve"><value>门口机</value></data>
   <data name="settings_role_indoor" xml:space="preserve"><value>室内机</value></data>
+  <data name="settings_role_indoor_note" xml:space="preserve"><value>室内机不负责门口，门口分配将被清除。</value></data>
   <data name="settings_role_indoor_panel" xml:space="preserve"><value>室内机</value></data>
+  <data name="settings_role_new_door" xml:space="preserve"><value>新门口</value></data>
+  <data name="settings_role_new_door_id" xml:space="preserve"><value>新门口的 ID</value></data>
   <data name="settings_role_restart" xml:space="preserve"><value>更改角色会重启应用</value></data>
+  <data name="settings_role_restart_confirm" xml:space="preserve"><value>更改角色后应用会立即重启。门口机需要摄像头和麦克风。要继续吗？</value></data>
   <data name="settings_role_restart_notice" xml:space="preserve"><value>更改角色后，下次打开应用时生效</value></data>
+  <data name="settings_role_unchanged" xml:space="preserve"><value>没有更改。</value></data>
   <data name="settings_rotate_cluster_key" xml:space="preserve"><value>更换集群密钥</value></data>
   <data name="settings_rotate_cluster_key_action" xml:space="preserve"><value>更换</value></data>
   <data name="settings_rotate_cluster_key_confirm" xml:space="preserve"><value>要更换集群密钥吗？离线超过 7 天的设备需要重新配对。</value></data>
@@ -2247,6 +2259,13 @@
   <data name="settings_web_only_upload" xml:space="preserve"><value>请在网页管理中添加图片</value></data>
   <data name="settings_web_only_wording" xml:space="preserve"><value>请在网页管理中修改文案</value></data>
   <data name="settings_web_push" xml:space="preserve"><value>Web Push</value></data>
+  <data name="settings_web_push_private_key" xml:space="preserve"><value>VAPID 私钥</value></data>
+  <data name="settings_web_push_private_key_native" xml:space="preserve"><value>保存在本设备的安全存储中。请在每台可能负责 Web Push 的设备上录入</value></data>
+  <data name="settings_web_push_public_key" xml:space="preserve"><value>VAPID 公钥</value></data>
+  <data name="settings_web_push_sender_bearer" xml:space="preserve"><value>发送服务器 Bearer 令牌</value></data>
+  <data name="settings_web_push_sender_bearer_native" xml:space="preserve"><value>仅在发送服务器要求认证时录入</value></data>
+  <data name="settings_web_push_sender_url" xml:space="preserve"><value>HTTPS 发送 URL</value></data>
+  <data name="settings_web_push_subject" xml:space="preserve"><value>VAPID 主题</value></data>
   <data name="settings_week_1" xml:space="preserve"><value>1 周</value></data>
   <data name="settings_when_button" xml:space="preserve"><value>呼叫按钮</value></data>
   <data name="settings_when_call_missed" xml:space="preserve"><value>未接来电</value></data>

@@ -816,7 +816,8 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("OpenSettings();", shell)
         # The device-side keys an administrator edits are native controls.
         for key in ('Self + ".name"', 'Local + ".audio.volume.call"', '"ui.ringtone"',
-                    '"ui.call_flow"', '"ui.languages"', 'Local + ".screen_brightness"',
+                    '"ui.call_flow"', '"ui.languages"', 'Local + ".display.brightness"',
+                    'Local + ".display.screensaver_after_s"',
                     '"display.night.enabled"', '"quick_replies"', '"visit_purposes"',
                     '"notice.presets"', '"emergency.trigger.mode"', '"sip.server"',
                     '"time.zone"', 'Local + ".camera.codec"', '"boot:kiosk"'):
@@ -2822,8 +2823,15 @@ class WindowsContracts(unittest.TestCase):
         names = set()
         for path in sorted((WIN / "DoorbellApp").rglob("*.xaml")):
             names |= set(re.findall(r'x:Name="(\w+)"', path.read_text(encoding="utf-8")))
-        settings = read("win/DoorbellApp/Settings/SettingsWindow.cs")
-        names |= set(re.findall(r'AutomationId\(\w+, "(\w+)"\)', settings))
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        for path in sorted((WIN / "DoorbellApp" / "Settings").glob("*.cs")):
+            names |= set(re.findall(r'AutomationId\(\w+, "(\w+)"\)',
+                                    path.read_text(encoding="utf-8")))
+        # Category and action ids are built from the catalog ids.
+        names |= {"SettingsCategory_" + ident
+                  for ident in re.findall(r'Category\("([a-z]+)"', catalog)}
+        names |= {"SettingsAction_" + ident
+                  for ident in re.findall(r'Action\("([a-z_0-9]+)"', catalog)}
         used = set(re.findall(r"(?:Assert-Element|Click-Id|Assert-Gone) '[^']+' '(\w+)'", suite))
         for group in re.findall(r"foreach \(\$id in @\(([^)]*)\)\)", suite):
             used |= set(re.findall(r"'(\w+)'", group))
@@ -2867,6 +2875,143 @@ class WindowsContracts(unittest.TestCase):
                                conversations.index("private void RefreshConversations()")]
         self.assertNotIn("LeaveConversations", select)
         self.assertIn('if (UsesConversation()) App.Core.Conversation(', select)
+
+    # ---- settings parity and role change ------------------------------------------------
+
+    # Dotted literals in the web Admin that look like configuration keys but are not.
+    ADMIN_LITERALS_THAT_ARE_NOT_SETTINGS = {
+        "call.end": "semantic UI id",
+        "call.primary": "semantic UI id",
+        "doors.d_front.label": "placeholder example in a hint",
+        "notice.global": "written by the announcement dialog through SetGlobalNotice, "
+                         "not by a settings row",
+        "notice.preset_id": "DOM id",
+        "notice.preset_text": "DOM id",
+        "notice.presets_max": "DOM id",
+        "integrations.tz_offset_min": "derived by Core from time.zone; Admin only reads it",
+    }
+    # Admin settings with no Windows row yet. Remove an entry when its row is added: the
+    # test fails on a stale entry as well as on an unlisted gap.
+    ADMIN_SETTINGS_NOT_YET_NATIVE_ON_WINDOWS = {
+        "video_playback.pairs.": "per-pair playback overrides have no native editor yet",
+    }
+    ADMIN_CONFIG_ROOTS = ("display", "ui", "sip", "emergency", "call", "time", "notice",
+                          "integrations", "audio", "media", "video_playback", "quiet_hours",
+                          "devices", "doors", "rules", "quick_replies", "visit_purposes",
+                          "buildings", "households", "speech")
+
+    def test_every_config_key_the_web_admin_names_has_a_windows_row(self):
+        """Derived from webui/admin/app.js, not hand-copied.
+
+        Every dotted string literal in the Admin script that is not a translation key and
+        starts with a configuration root is a key (or key prefix) the Admin reads or writes. Each
+        must appear in the Windows settings sources. Keys the Admin assembles at run time are
+        outside what this can see; it guards the literal ones, which is where new settings land.
+        """
+        admin = read("webui/admin/app.js")
+        translations = set(re.findall(r"^([a-z_.0-9]+):", read("i18n/strings.yaml"), re.M))
+        literals = set(re.findall(r"""['"`]([a-z][a-z_0-9]*(?:\.[a-z_0-9]+)+\.?)['"`]""", admin))
+        keys = sorted(
+            key for key in literals
+            if key not in translations and key.rstrip(".") not in translations
+            and key.split(".")[0] in self.ADMIN_CONFIG_ROOTS
+            and not key.endswith((".jp", ".com", ".mp3")))
+        self.assertGreater(len(keys), 40, "the Admin key extraction found too little")
+        sources = "\n".join(path.read_text(encoding="utf-8") for path in
+                            sorted((WIN / "DoorbellApp" / "Settings").glob("*.cs")))
+        sources = sources.replace('Self + "', '"devices.{self}').replace(
+            'Local + "', '"devices.{self}.local')
+        missing = []
+        for key in keys:
+            covered = ('"' + key) in sources
+            if key in self.ADMIN_LITERALS_THAT_ARE_NOT_SETTINGS:
+                continue
+            if key in self.ADMIN_SETTINGS_NOT_YET_NATIVE_ON_WINDOWS:
+                with self.subTest(stale=key):
+                    self.assertFalse(covered, "%s is native now; remove it from the list" % key)
+                continue
+            if not covered:
+                missing.append(key)
+        self.assertEqual(missing, [], "Admin settings with no Windows settings row")
+        for listed in list(self.ADMIN_LITERALS_THAT_ARE_NOT_SETTINGS) + \
+                list(self.ADMIN_SETTINGS_NOT_YET_NATIVE_ON_WINDOWS):
+            with self.subTest(listed=listed):
+                self.assertIn(listed, keys, "%s is no longer in the Admin; remove it" % listed)
+
+    def test_settings_write_the_keys_core_reads(self):
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        node = read("core/src/node/node.cpp")
+        # Per-device display values live under devices.<id>.local.display, which is where
+        # Core's displayState() looks before the cluster value.
+        self.assertIn('cfgAt("devices." + node_id + ".local.display")', node)
+        self.assertIn('num("brightness", 70)', node)
+        self.assertIn('num("screensaver_after_s", 120)', node)
+        self.assertNotIn('".screen_brightness"', catalog)
+        self.assertNotIn('Local + ".screensaver_after_s"', catalog)
+        # SIP answer mode: Core reports and accepts auto / ring.
+        self.assertIn('sipSettings().auto_answer ? "auto" : "ring"', node)
+        answer = catalog[catalog.index('Choice("sip_answer_mode"'):]
+        answer = answer[:answer.index(";")]
+        self.assertIn('O("auto",', answer)
+        self.assertIn('O("ring",', answer)
+        self.assertNotIn('"manual"', answer)
+
+    def test_role_changes_in_one_confirmed_form_from_either_role(self):
+        role = read("win/DoorbellApp/Settings/SettingsWindow.Role.cs")
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        actions = read("win/DoorbellApp/Settings/SettingsWindow.Actions.cs")
+        pairing = read("win/DoorbellApp/MainWindow.Pairing.cs")
+        shell = read("win/DoorbellApp/MainWindow.Shell.cs")
+        app = read("win/DoorbellApp/App.xaml.cs")
+        self.assertIn('Action("change_role", "change_role")', catalog)
+        self.assertIn('case "change_role":\n                    ShowRoleForm(parts);', actions)
+        # Both roles, a door picker with "New door", and the boot validators.
+        for token in ('Tag = "door_station"', 'Tag = "indoor_panel"', "NewDoorChoice",
+                      "DoorsServedByOthers()", "BootConfig.ValidRole(wantedRole)",
+                      "BootConfig.ValidDoor(wantedDoor)", "BootConfig.SuggestedDoorId()"):
+            self.assertIn(token, role)
+        apply = role[role.index("apply.Click += (s, e) =>"):]
+        # Refused while a call, an SOS or pairing is in progress; confirmed; boot.json is
+        # written before the restart and nothing else is written.
+        order = [apply.index(token) for token in (
+            "_main.IdentityChangeBlocked", 'Texts.T("settings.role_restart_confirm")',
+            "BootConfig.PersistSetup(App.Boot.FilePath, App.Boot.Name, wantedRole, wantedDoor)",
+            'App.RestartApp("identity_changed");')]
+        self.assertEqual(order, sorted(order))
+        self.assertNotIn("_store.Commit", role)
+        self.assertNotIn("_store.Set", role)
+        self.assertNotIn("IsDefault = true", role)
+        # A door station gets into settings only through the hidden corner and the admin
+        # password; its visitor screen still shows no administration entry.
+        corner = pairing[pairing.index("private void OnSecretCorner"):]
+        self.assertLess(corner.index("new AdminDialog { Owner = this }"),
+                        corner.index('if (App.Boot.Role == "door_station") OpenSettings();'))
+        self.assertIn("if (dlg.ShowDialog() != true) return;", corner)
+        self.assertIn("AdminEntryButton.Visibility = door ? Visibility.Collapsed", shell)
+        # A UI test instance never relaunches itself into the installed data directory.
+        self.assertEqual(app.count("if (!watchdog && !UiTest)"), 2)
+
+    def test_a_remotely_edited_identity_is_applied_like_on_the_other_shells(self):
+        settings = read("win/DoorbellApp/MainWindow.Settings.cs")
+        polling = read("win/DoorbellApp/MainWindow.PeerPolling.cs")
+        rule = read("win/DoorbellApp/Util/ReplicatedIdentity.cs")
+        self.assertIn("ApplyReplicatedIdentity();", polling)
+        applied = settings[settings.index("private void ApplyReplicatedIdentity()"):
+                           settings.index("private static string IdentityMarkerPath")]
+        self.assertIn('"devices." + _nodeId', applied)
+        self.assertIn("BootConfig.ValidRole(role), BootConfig.ValidDoor(door)", applied)
+        self.assertIn("if (!decision.Apply || IdentityChangeBlocked) return;", applied)
+        self.assertLess(applied.index("BootConfig.PersistSetup("),
+                        applied.index('App.RestartApp("identity_changed");'))
+        # One attempt per identity: no restart loop if the record never converges.
+        self.assertIn("signature == _identityAttempt || IdentityAppliedRecently(signature)",
+                      applied)
+        self.assertNotIn("System.Windows", rule)
+        script = read("win/scripts/test_replicated_identity.sh")
+        self.assertIn("win/tests/ReplicatedIdentityTests.cs", script)
+        # The other shells have the same hook.
+        self.assertIn("applyReplicatedIdentity",
+                      read("android/app/src/main/java/jp/ox/doorbell/App.kt"))
 
 
 if __name__ == "__main__":

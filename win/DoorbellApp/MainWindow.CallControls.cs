@@ -279,7 +279,7 @@ namespace DoorbellApp
             AnswerButton.Visibility = Visibility.Visible;
             MonitorButton.Visibility = Visibility.Visible;
             IgnoreButton.Visibility = Visibility.Visible;
-            IgnoreButton.Content = IconStack("IconX", Texts.T("ring.ignore"), (Brush)FindResource("Negative"));
+            IgnoreButton.Content = IconStack("IconBellOff", Texts.T("ring.ignore"), (Brush)FindResource("Negative"));
             OpenDoorButton.IsEnabled = false;
         }
 

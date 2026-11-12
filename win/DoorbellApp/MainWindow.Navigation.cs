@@ -22,7 +22,7 @@ namespace DoorbellApp
             SetNavigationItem(NavHome, "IconHome", Texts.T("nav.home"));
             // History keeps its own content (label plus unread badge), so only the icon is set.
             NavHistoryLabel.Text = Texts.T("nav.history");
-            if (NavHistory.Icon == null) NavHistory.Icon = Fluent.Icon("IconCalendarTime");
+            if (NavHistory.Icon == null) NavHistory.Icon = Fluent.Icon("IconHistory");
             ApplyMissedBadge();
             SetNavigationItem(OpenMonitorButton, "IconEye", Texts.T("nav.monitor"));
             SetNavigationItem(AdminEntryButton, "IconSettings", Texts.T("nav.settings"));

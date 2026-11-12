@@ -293,6 +293,22 @@ function Test-Sos([string]$look) {
     Add-Check 'sos confirm: cancel starts no countdown' (-not (Test-OnScreen (Find-ById 'SosCountdownCancel' 500)))
 }
 
+# Role change: open the form from This device and cancel it. The suite never applies it (that
+# would restart the app), so it only checks that the form and its fields are there.
+function Test-RoleForm([string]$look) {
+    if (-not (Click-Id 'settings' 'SettingsCategory_device')) { return }
+    if (-not (Click-Id 'role form' 'SettingsAction_change_role')) { return }
+    foreach ($id in @('RoleFormRole', 'RoleFormCancel', 'RoleFormApply')) { [void](Assert-Element 'role form' $id) }
+    $apply = Find-ById 'RoleFormApply'
+    if ($null -ne $apply) {
+        Add-Check 'role form: Change role does not have the focus' (-not $apply.Current.HasKeyboardFocus)
+    }
+    Save-Shot ("role-form-" + $look)
+    [void](Click-Id 'role form' 'RoleFormCancel')
+    Assert-Gone 'role form' 'RoleFormRole'
+    Add-Check 'role form: cancel keeps the app running' (-not $script:Process.HasExited)
+}
+
 function Test-IndoorPanel {
     # A fresh, unpaired instance opens on pairing onboarding.
     $pairing = Find-ById 'PairingOverlay' 8000
@@ -365,6 +381,7 @@ function Test-IndoorPanel {
                     Save-Shot ("settings-{0}-{1}" -f ($id -replace '^SettingsCategory_', ''), $look)
                 }
             }
+            Test-RoleForm $look
             [void](Click-Id 'settings' 'SettingsClose')
             Assert-Gone 'settings' 'SettingsNavigation'
         }
@@ -388,6 +405,15 @@ function Test-DoorStation {
             Add-Check 'visitor: Call button is at least 72 px tall' ($rect.Height -ge 72) ("{0} px" -f [int]$rect.Height)
         }
         Save-Shot ("visitor-" + $look)
+        # A door station reaches settings only through the hidden corner and the admin
+        # password; the test hook stands in for that to check the role form opens here too.
+        [void](Assert-Command 'settings')
+        if (Test-OnScreen (Assert-Element 'door station settings' 'SettingsNavigation' 8000)) {
+            Test-RoleForm $look
+            [void](Assert-Element 'role form (door station)' 'SettingsAction_change_role')
+            [void](Click-Id 'door station settings' 'SettingsClose')
+            Assert-Gone 'door station settings' 'SettingsNavigation'
+        }
         [void](Assert-Command 'incall')
         foreach ($id in @('InCallTitle', 'EndCallButton')) { [void](Assert-Element 'visitor in call' $id) }
         Save-Shot ("visitor-in-call-" + $look)

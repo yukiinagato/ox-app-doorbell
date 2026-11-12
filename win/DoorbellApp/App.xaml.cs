@@ -285,7 +285,9 @@ namespace DoorbellApp
             catch { }
             if (app != null) app._runtimeProcess?.RecordExit("factory_reset");
             bool watchdog = Watchdog != null && Watchdog.Available;
-            if (!watchdog)
+            // A UI test instance is not relaunched: the new process would not carry the test
+            // switches and would open the installed data directory.
+            if (!watchdog && !UiTest)
             {
                 try
                 {
@@ -320,7 +322,9 @@ namespace DoorbellApp
             _factoryResetStarted = true;
             app._runtimeProcess?.RecordExit(reason);
             bool watchdog = Watchdog != null && Watchdog.Available;
-            if (!watchdog)
+            // A UI test instance is not relaunched: the new process would not carry the test
+            // switches and would open the installed data directory.
+            if (!watchdog && !UiTest)
             {
                 try
                 {

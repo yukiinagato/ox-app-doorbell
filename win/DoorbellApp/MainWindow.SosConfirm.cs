@@ -23,7 +23,7 @@ namespace DoorbellApp
         private void ApplySosConfirmStrings()
         {
             var negative = (Brush)FindResource("Negative");
-            SosButton.Content = IconLabel("IconBell", Texts.T("sos.title"), 18, negative);
+            SosButton.Content = IconLabel("IconAlertTriangle", Texts.T("sos.title"), 18, negative);
             System.Windows.Automation.AutomationProperties.SetName(SosButton,
                 Texts.T("sos.accessibility_start"));
             System.Windows.Automation.AutomationProperties.SetHelpText(SosButton,

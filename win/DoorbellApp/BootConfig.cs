@@ -98,7 +98,7 @@ namespace DoorbellApp
             return true;
         }
 
-        private static string SuggestedDoorId()
+        internal static string SuggestedDoorId()
         {
             byte[] bytes = new byte[4];
             using (var random = RandomNumberGenerator.Create()) random.GetBytes(bytes);
