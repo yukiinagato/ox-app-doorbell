@@ -130,6 +130,7 @@ final class MainViewController: UIViewController {
     private var inviteObserver: NSObjectProtocol?
     private var activeObserver: NSObjectProtocol?
     private var backgroundObserver: NSObjectProtocol?
+    private var debugScreenObserver: NSObjectProtocol?
 
     private var clockTimer: Timer?
     private var callTimeoutTimer: Timer?
@@ -160,9 +161,14 @@ final class MainViewController: UIViewController {
     /// The grid never grows past this, however wide the panel is; below it the columns share
     /// whatever width the layout actually offers.
     private static let purposeGridMaxWidth: CGFloat = 552
-    private let langBar = UIStackView()
-    private lazy var sosSlider = SosSlideControl(texts: texts)
+    /// The visitor's language, as the stock segmented control with flag-free names.
+    private let langBar = UISegmentedControl(items: [])
+    private var langCodes: [String] = []
+    private lazy var sosSlider = SosTriggerButton(texts: texts)
     private var dashboard: DashboardView?
+    /// The indoor panel's destinations. A door station has none: its home is the visitor screen.
+    private var tabs: PanelTabBarController?
+    private var homeScreen: HomeViewController?
     private var visitorScreen: VisitorScreenView?
     private var palette = DoorbellPalette.dark
     private var idleSkin = DoorbellSkin.plain(.dark)
@@ -174,6 +180,8 @@ final class MainViewController: UIViewController {
     private let cancelButton = UIButton(type: .system)
     private let inCallView = UIView()
     private let peerVideo = UIImageView()
+    /// Pinch, drag and double-tap zoom for the resident's picture during a call.
+    private let peerZoom = ZoomableVideoView()
     private let inCallTitle = UILabel()
     private let endCallButton = UIButton(type: .system)
     private var visitorActionHeights: [NSLayoutConstraint] = []
@@ -194,11 +202,11 @@ final class MainViewController: UIViewController {
     private let emergencyCancel = UIButton(type: .system)
     private var purposeColumns = 3
 
-    private static let bgColor = UIColor(red: 0.063, green: 0.078, blue: 0.094, alpha: 1)
-    private static let fgColor = UIColor(white: 0.94, alpha: 1)
-    private static let dimColor = UIColor(white: 0.62, alpha: 1)
-    private static let cardColor = UIColor(white: 1, alpha: 0.10)
-    private static let accentColor = UIColor(red: 1.0, green: 0.80, blue: 0.25, alpha: 1)
+    private static var bgColor: UIColor { return SystemStyle.background }
+    private static var fgColor: UIColor { return SystemStyle.label }
+    private static var dimColor: UIColor { return SystemStyle.secondaryLabel }
+    private static var cardColor: UIColor { return SystemStyle.fill }
+    private static var accentColor: UIColor { return SystemStyle.tint }
     private static let nightClock = UIColor(red: 0.545, green: 0.141, blue: 0.110, alpha: 1)
     private static let saverClockColor = UIColor(white: 0.85, alpha: 1)
 
@@ -217,7 +225,7 @@ final class MainViewController: UIViewController {
     deinit {
         callTimeoutTimer?.invalidate()
         for observer in [pairingObserver, wakeObserver, inviteObserver, activeObserver,
-                         backgroundObserver] {
+                         backgroundObserver, debugScreenObserver] {
             guard let observer = observer else { continue }
             NotificationCenter.default.removeObserver(observer)
         }
@@ -247,6 +255,9 @@ final class MainViewController: UIViewController {
         inviteObserver = NotificationCenter.default.addObserver(
             forName: .doorbellPairInvitation, object: nil, queue: .main
         ) { [weak self] _ in self?.onActivity() }
+        debugScreenObserver = NotificationCenter.default.addObserver(
+            forName: ScreenshotResponder.showScreen, object: nil, queue: .main
+        ) { [weak self] note in self?.showDebugScreen(note.object as? String ?? "") }
         activeObserver = NotificationCenter.default.addObserver(
             forName: UIApplication.didBecomeActiveNotification, object: nil, queue: .main
         ) { [weak self] _ in self?.resumeCallTiming() }
@@ -371,6 +382,9 @@ final class MainViewController: UIViewController {
         buildEmergencyView()
         applyVisitorTypography()
 
+        // The hidden corner is the door station's only way into settings. An indoor panel has
+        // the Settings tab, and a corner hot spot there would sit on its bar buttons.
+        guard boot.role == "door_station" else { return }
         let secret = UIButton(type: .custom)
         secret.translatesAutoresizingMaskIntoConstraints = false
         secret.addTarget(self, action: #selector(onSecretCorner), for: .touchUpInside)
@@ -389,8 +403,8 @@ final class MainViewController: UIViewController {
         pairingBanner.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
         pairingBanner.titleLabel?.numberOfLines = 0
         pairingBanner.titleLabel?.textAlignment = .center
-        pairingBanner.setTitleColor(.black, for: .normal)
-        pairingBanner.backgroundColor = MainViewController.accentColor
+        pairingBanner.setTitleColor(.white, for: .normal)
+        pairingBanner.backgroundColor = SystemStyle.warning
         pairingBanner.layer.cornerRadius = 12
         pairingBanner.contentEdgeInsets = UIEdgeInsets(top: 12, left: 22, bottom: 12, right: 22)
         pairingBanner.accessibilityIdentifier = "pairing_banner"
@@ -415,6 +429,10 @@ final class MainViewController: UIViewController {
     /// password so a kiosk visitor cannot open it.
     @objc private func onMembershipTap() {
         guard presentedViewController == nil else { return }
+        guard PairingSnapshot.load(core).state == .ready else {
+            onPairingBannerTap()
+            return
+        }
         let dlg = AdminPinViewController(texts: texts, core: core)
         dlg.onUnlocked = { [weak self] in self?.showAddDevicePanel() }
         present(dlg, animated: true)
@@ -424,6 +442,8 @@ final class MainViewController: UIViewController {
         guard presentedViewController == nil else { return }
         present(AddDeviceViewController(core: core, boot: boot, texts: texts), animated: true)
     }
+
+    @objc private func onGlobalNotice() { openNoticeDialog(door: "") }
 
     /// Renders the authoritative pairing snapshot into the membership line and the banner.
     private func refreshPairingStatus() {
@@ -442,7 +462,11 @@ final class MainViewController: UIViewController {
         if snapshot.state != .ready { text = texts.t("pair.not_set_up_banner") }
         membershipLabel.text = text
         pairingBanner.setTitle(texts.t("pair.not_set_up_banner"), for: .normal)
-        pairingBanner.isHidden = snapshot.state == .ready
+        // An indoor panel says so in its status card, where it cannot cover the navigation bar;
+        // the door station keeps the banner over its visitor screen.
+        pairingBanner.isHidden = snapshot.state == .ready || dashboard != nil
+        dashboard?.setPairingNotice(snapshot.state == .ready
+            ? nil : texts.t("pair.not_set_up_banner"))
     }
 
     private func addFull(_ v: UIView, into parent: UIView? = nil) {
@@ -512,12 +536,11 @@ final class MainViewController: UIViewController {
         purposeSection.addArrangedSubview(purposeGrid)
         purposeGrid.widthAnchor.constraint(lessThanOrEqualTo: purposeSection.widthAnchor).isActive = true
 
-        langBar.axis = .horizontal
-        langBar.spacing = 12
-        langBar.alignment = .fill
-        langBar.distribution = .fillEqually
+        langBar.accessibilityIdentifier = "visitor_language"
+        langBar.addTarget(self, action: #selector(onLangChanged), for: .valueChanged)
+        langBar.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum)
+            .isActive = true
 
-        sosSlider.accessibilityIdentifier = "sos_slider"
         sosSlider.onTriggered = { [weak self] in self?.triggerEmergency() }
 
         nodeInfo.font = .systemFont(ofSize: 14)
@@ -528,33 +551,65 @@ final class MainViewController: UIViewController {
         appVersionLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
         appVersionLabel.numberOfLines = 2
 
-        let content: UIView
-        if boot.role == "door_station" {
-            purposeHint.isHidden = true
-            let screen = VisitorScreenView(texts: texts, callButton: callButton, langBar: langBar,
-                                           purposeSection: purposeSection, sosControl: sosSlider)
-            visitorScreen = screen
-            content = screen
-        } else {
-            let board = DashboardView(core: core, boot: boot, texts: texts,
-                                      sosControl: sosSlider)
-            board.onOpenAdmin = { [weak self] in self?.onAdminEntry() }
-            board.onOpenHistory = { [weak self] in self?.openCallHistory() }
-            board.onOpenDoor = { [weak self] door in self?.openMonitor(door: door) }
-            board.onOpenOfflineDoors = { [weak self] in self?.openOfflineDoorStations() }
-            board.onOpenNotice = { [weak self] door in self?.openNoticeDialog(door: door) }
-            dashboard = board
-            content = board
+        guard boot.role == "door_station" else {
+            buildPanelTabs()
+            return
         }
-        content.translatesAutoresizingMaskIntoConstraints = false
-        idleView.addSubview(content)
+        purposeHint.isHidden = true
+        let screen = VisitorScreenView(texts: texts, callButton: callButton, langBar: langBar,
+                                       purposeSection: purposeSection, sosControl: sosSlider)
+        visitorScreen = screen
+        screen.translatesAutoresizingMaskIntoConstraints = false
+        idleView.addSubview(screen)
         let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
-            content.topAnchor.constraint(equalTo: g.topAnchor, constant: 14),
-            content.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -12),
-            content.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 20),
-            content.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -20),
+            screen.topAnchor.constraint(equalTo: g.topAnchor, constant: 14),
+            screen.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -12),
+            screen.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 20),
+            screen.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -20),
         ])
+        applyIdleLayout(for: view.bounds.size)
+    }
+
+    /// The indoor panel's home: a tab bar with Home, History and Settings, each in its own
+    /// navigation controller. The wallpaper this controller paints stays behind the tabs and
+    /// shows through the Home tab only; the full-screen states (screensaver, emergency) are laid
+    /// over the whole tab controller.
+    private func buildPanelTabs() {
+        let board = DashboardView(core: core, boot: boot, texts: texts, sosControl: sosSlider)
+        board.onOpenHistory = { [weak self] in self?.openCallHistory() }
+        board.onOpenDoor = { [weak self] door in self?.openMonitor(door: door) }
+        board.onOpenOfflineDoors = { [weak self] in self?.openOfflineDoorStations() }
+        board.onOpenNotice = { [weak self] door in self?.openNoticeDialog(door: door) }
+        board.onOpenPairing = { [weak self] in self?.onPairingBannerTap() }
+        board.onUnreadMissedChanged = { [weak self] count in self?.tabs?.setUnreadMissed(count) }
+        dashboard = board
+
+        let home = HomeViewController(dashboard: board,
+                                      title: boot.name.isEmpty ? texts.t("nav.home") : boot.name)
+        home.navigationItem.rightBarButtonItems = [
+            SystemStyle.barItem(icon: "TablerPlus", label: texts.t("pair.panel_title"),
+                                target: self, action: #selector(onMembershipTap),
+                                identifier: "home_add_device"),
+            SystemStyle.barItem(icon: "TablerEye", label: texts.t("monitor.open"),
+                                target: self, action: #selector(onMonitorOpen),
+                                identifier: "home_monitor"),
+            SystemStyle.barItem(icon: "TablerNote", label: texts.t("notice.global_button"),
+                                target: self, action: #selector(onGlobalNotice),
+                                identifier: "dashboard_notice_global"),
+        ]
+        homeScreen = home
+        let history = CallHistoryViewController(core: core, texts: texts, lang: texts.lang,
+                                                embedded: true)
+        history.onSeen = { [weak board] in board?.refreshMissedBadge() }
+        let gate = SettingsGateViewController(texts: texts)
+        gate.onUnlockRequested = { [weak self] in self?.onAdminEntry() }
+        let controller = PanelTabBarController(home: home, history: history, settingsGate: gate,
+                                               texts: texts)
+        tabs = controller
+        addChild(controller)
+        addFull(controller.view, into: idleView)
+        controller.didMove(toParent: self)
         applyIdleLayout(for: view.bounds.size)
     }
 
@@ -585,7 +640,7 @@ final class MainViewController: UIViewController {
         pulse.layer.cornerRadius = 40
         pulse.translatesAutoresizingMaskIntoConstraints = false
         let bell = UIImageView(image: TablerIcon.image("TablerBell"))
-        bell.tintColor = .black
+        bell.tintColor = .white
         bell.contentMode = .scaleAspectFit
         bell.translatesAutoresizingMaskIntoConstraints = false
         pulse.addSubview(bell)
@@ -690,7 +745,8 @@ final class MainViewController: UIViewController {
         addFull(inCallView)
 
         peerVideo.contentMode = .scaleAspectFit
-        addFull(peerVideo, into: inCallView)
+        addFull(peerZoom, into: inCallView)
+        peerZoom.host(peerVideo)
 
         inCallTitle.font = .systemFont(ofSize: 24, weight: .semibold)
         inCallTitle.textColor = MainViewController.fgColor
@@ -703,7 +759,7 @@ final class MainViewController: UIViewController {
 
         endCallButton.titleLabel?.font = .systemFont(ofSize: 24, weight: .semibold)
         endCallButton.setTitleColor(.white, for: .normal)
-        endCallButton.backgroundColor = UIColor(red: 0.78, green: 0.16, blue: 0.12, alpha: 1)
+        endCallButton.backgroundColor = SystemStyle.negative
         endCallButton.layer.cornerRadius = 12
         endCallButton.contentEdgeInsets = UIEdgeInsets(top: 14, left: 44, bottom: 14, right: 44)
         endCallButton.addTarget(self, action: #selector(onEndCallClick), for: .touchUpInside)
@@ -712,7 +768,7 @@ final class MainViewController: UIViewController {
         inCallView.addSubview(endCallButton)
         pinVisitorAction(endCallButton, in: inCallView)
 
-        let statusScroll = UIScrollView()
+        let statusScroll = PassthroughScrollView()
         statusScroll.accessibilityIdentifier = "incall_status_scroll"
         statusScroll.translatesAutoresizingMaskIntoConstraints = false
         statusScroll.clipsToBounds = true
@@ -1010,15 +1066,18 @@ final class MainViewController: UIViewController {
         // holding. The values `applyDisplayValues` also owns — brightness, the night tint, the
         // screensaver timers — keep their own state and are not re-armed here.
         if let display = status?["display"] as? [String: Any] { displayDoc = display }
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            display: displayDoc, config: cfg, nodeId: nodeId,
-            localTime: reading?.raw ?? core.localTime()))
+        // The system look follows Core's appearance and wears Core's accent; the palette is the
+        // matching set of static colours for the arithmetic done on the wallpaper.
+        palette = SystemStyle.adopt(display: displayDoc, config: cfg, nodeId: nodeId,
+                                    localTime: reading?.raw ?? core.localTime())
         let skin = applyTheme()
+        applyStateColors()
         applyVolumes()
         updateClock()
         applyIdleControlSkin(skin)
         if let dashboard = dashboard {
             dashboard.reload(config: cfg, skin: skin)
+            homeScreen?.apply(skin: skin)
         }
         if let visitor = visitorScreen {
             visitor.setLayoutStyle(ConfigUtil.str(cfg, "devices.\(nodeId).local.visitor_layout") ?? "standard")
@@ -1050,6 +1109,18 @@ final class MainViewController: UIViewController {
         }
         idleSkin = skin
         updateLangBarSelection()
+    }
+
+    /// The visitor-state screens (calling, offline) are system surfaces. Dynamic colours follow
+    /// the appearance by themselves; this repaints the static ones on systems without them.
+    private func applyStateColors() {
+        callingView.backgroundColor = MainViewController.bgColor
+        offlineView.backgroundColor = MainViewController.bgColor
+        for label in [callingText, offlineTitle] { label.textColor = MainViewController.fgColor }
+        for label in [callingDetail, offlineBody] { label.textColor = MainViewController.dimColor }
+        cancelButton.setTitleColor(MainViewController.fgColor, for: .normal)
+        cancelButton.backgroundColor = MainViewController.cardColor
+        pulse.backgroundColor = MainViewController.accentColor
     }
 
     /// Applies the three effective volumes to the players that own each kind of sound.
@@ -1232,7 +1303,6 @@ final class MainViewController: UIViewController {
     }
 
     private func buildLangBar() {
-        for v in langBar.arrangedSubviews { v.removeFromSuperview() }
         var list: [String] = []
         if let langs = ConfigUtil.dig(cfg, "ui.languages") as? [Any] {
             for l in langs {
@@ -1243,45 +1313,31 @@ final class MainViewController: UIViewController {
             langBar.isHidden = true
             return
         }
-        for lang in list {
-            let b = UIButton(type: .system)
-            b.layer.cornerRadius = 10
-            #if !os(tvOS)
-            b.contentEdgeInsets = UIEdgeInsets(top: 10, left: 8, bottom: 10, right: 8)
-            #endif
-            b.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-            b.accessibilityIdentifier = "lang_\(lang)"
-            b.addTarget(self, action: #selector(onLangClick(_:)), for: .primaryActionTriggered)
-            langBar.addArrangedSubview(b)
+        if list != langCodes {
+            langCodes = list
+            langBar.removeAllSegments()
+            for (index, code) in list.enumerated() {
+                let name = Texts.langDisplayName(code).replacingOccurrences(of: "\n", with: " ")
+                langBar.insertSegment(withTitle: name, at: index, animated: false)
+            }
+            let font = IOSAvailability.visitorFont(size: 17, weight: .medium,
+                                                   traits: traitCollection)
+            langBar.setTitleTextAttributes([.font: font], for: .normal)
         }
         langBar.isHidden = false
         updateLangBarSelection()
     }
 
-    /// A language chip says one thing — the language's own name — so it has no authored second
-    /// line; adding a tag under it would be exactly the decorative label §5.2 rules out. It still
-    /// goes through the two-part renderer, so a name that needs a break (「Tiếng Việt」) breaks
-    /// where the catalog puts it instead of being squeezed to fit.
     private func updateLangBarSelection() {
-        for v in langBar.arrangedSubviews {
-            guard let b = v as? UIButton,
-                  let lang = b.accessibilityIdentifier?.dropFirst("lang_".count) else { continue }
-            let code = String(lang)
-            let on = code == visitorLang
-            b.accessibilityTraits = on ? [.button, .selected] : .button
-            let fill = on ? idleSkin.palette.accent : idleSkin.surface
-            b.backgroundColor = fill
-            let ink = on ? idleSkin.palette.onAccent : idleSkin.cardMuted("hint")
-            DoorbellTheme.twoPartTitle(Texts.langDisplayName(code), on: b, primarySize: 17,
-                                       color: ink, focusColor: idleSkin.palette.onAccent,
-                                       bold: on)
-        }
+        let index = langCodes.firstIndex(of: visitorLang) ?? UISegmentedControl.noSegment
+        if langBar.selectedSegmentIndex != index { langBar.selectedSegmentIndex = index }
     }
 
-    @objc private func onLangClick(_ sender: UIButton) {
-        guard let lang = sender.accessibilityIdentifier?.dropFirst("lang_".count) else { return }
-        core.setVisitorLang(door: boot.door, lang: String(lang))
-        setVisitorLang(String(lang))
+    @objc private func onLangChanged() {
+        let index = langBar.selectedSegmentIndex
+        guard index >= 0, index < langCodes.count else { return }
+        core.setVisitorLang(door: boot.door, lang: langCodes[index])
+        setVisitorLang(langCodes[index])
     }
 
     private func setVisitorLang(_ lang: String) {
@@ -1345,6 +1401,8 @@ final class MainViewController: UIViewController {
     private func enterScreensaver() {
         guard !screensaverOn else { return }
         screensaverOn = true
+        // An unattended panel goes back to its home tab, and the admin window closes with it.
+        tabs?.returnHome()
         updateClock()
         updateScreensaverPresentation()
         moveSaverClock()
@@ -1468,7 +1526,16 @@ final class MainViewController: UIViewController {
         applyDisplay()
     }
 
+    /// Clearing an alarm takes the same deliberate slide as raising one, then the admin rules
+    /// Core defines.
     @objc private func onEmergencyCancel() {
+        guard presentedViewController == nil else { return }
+        present(SosConfirmViewController(texts: texts, purpose: .clear) { [weak self] in
+            self?.clearEmergencyConfirmed()
+        }, animated: !Motion.reduced)
+    }
+
+    private func clearEmergencyConfirmed() {
         if cancelRequiresPin {
             let dlg = AdminPinViewController(texts: texts, core: core)
             dlg.onUnlocked = { [weak self] in
@@ -1818,6 +1885,8 @@ final class MainViewController: UIViewController {
     private func showInCall(streamUrl: String?) {
         retirePeerFrameRequest()
         exitScreensaver()
+        // A new call is a new picture: the zoom starts over.
+        peerZoom.resetZoom()
         idleView.isHidden = true
         callingView.isHidden = true
         inCallStreamer?.stop()
@@ -1854,6 +1923,7 @@ final class MainViewController: UIViewController {
         inCallStreamer = nil
         peerVideo.image = nil
         peerVideo.transform = .identity
+        peerZoom.resetZoom()
         inCallView.isHidden = true
     }
 
@@ -2108,25 +2178,30 @@ final class MainViewController: UIViewController {
     private func showSettings() {
         guard presentedViewController == nil else { return }
         let settings = SettingsViewController(core: core, boot: boot, texts: texts)
+        defer {
+            // An indoor panel shows settings in its Settings tab; a door station, which has no
+            // tabs and no visible entry, presents them.
+            if let tabs = tabs { tabs.revealSettings(settings) }
+            else { present(settings, animated: true) }
+        }
         settings.onOpenAddDevice = { [weak self] in self?.showAddDevicePanel() }
         settings.onOpenDeviceInfo = { [weak self] in self?.showAdminInfo() }
         // A deliberate exit from kiosk mode is the one thing allowed to let the screen sleep,
         // and it is remembered, so re-asserting the override on the next activation does not
         // silently undo the administrator's choice.
         settings.onExitKiosk = { ScreenAwake.want(false) }
-        present(settings, animated: true)
     }
 
     private func openCallHistory() {
         guard presentedViewController == nil else { return }
-        present(CallHistoryViewController(core: core, texts: texts, lang: texts.lang),
-                animated: true)
+        tabs?.show(.history)
     }
 
     private func openOfflineDoorStations() {
         guard presentedViewController == nil else { return }
-        present(OfflineDoorStationsViewController(core: core, config: core.config(), texts: texts),
-                animated: true)
+        homeScreen?.navigationController?.pushViewController(
+            OfflineDoorStationsViewController(core: core, config: core.config(), texts: texts),
+            animated: true)
     }
 
     /// `door` empty opens the dialog with the home-wide target preselected.
@@ -2295,6 +2370,43 @@ final class MainViewController: UIViewController {
         }
         if videoEncoder.isRunning && core.takeVideoKeyframeRequest() {
             videoEncoder.requestKeyFrame()
+        }
+    }
+
+    /// Puts one screen up for a verification capture. Reached only through the screenshot
+    /// responder, which exists only while boot.json sets `debug_screenshots`; every screen here
+    /// is one a user can reach, and settings still go through the admin password.
+    private func showDebugScreen(_ name: String) {
+        onActivity()
+        let door = ConfigUtil.doorsWithCamera(config: cfg, status: core.status()).first
+            ?? ((ConfigUtil.dig(cfg, "doors") as? [String: Any])?.keys.sorted().first ?? "front")
+        switch name {
+        case "dismiss":
+            presentedViewController?.dismiss(animated: false)
+            hideEmergency()
+            if boot.role == "door_station" { inCall = false; closeInCall(); showIdle() }
+        case "home": tabs?.show(.home)
+        case "history": tabs?.show(.history)
+        case "settings": tabs?.show(.settings)
+        case "incoming":
+            guard presentedViewController == nil else { return }
+            present(IncomingViewController(core: core, boot: boot, door: door,
+                                           purpose: ConfigUtil.enabledPurposeIds(cfg).first ?? "",
+                                           visitorLang: "en", callId: "debug-capture"),
+                    animated: false)
+        case "monitor": openMonitor(door: nil)
+        case "notice": openNoticeDialog(door: "")
+        case "add_device": showAddDevicePanel()
+        case "info": showAdminInfo()
+        case "calling": showCalling()
+        case "incall":
+            inCall = true
+            showInCall(streamUrl: nil)
+        case "offline": offlineView.isHidden = false
+        case "sos": showEmergency(visual: true)
+        case "saver": enterScreensaver()
+        case "purpose": showPurposeChoice(afterRing: false)
+        default: break
         }
     }
 
@@ -2515,5 +2627,14 @@ private final class PurposeChoiceCard: UIButton {
             layer.borderColor = (isHighlighted ? colors.accent : colors.separator).cgColor
             layer.borderWidth = isHighlighted ? 2 : 1
         }
+    }
+}
+
+/// A scroll view that scrolls its own content but lets touches on its empty area through, so the
+/// status text above the End button never takes a pinch or a drag meant for the picture behind.
+final class PassthroughScrollView: UIScrollView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
     }
 }

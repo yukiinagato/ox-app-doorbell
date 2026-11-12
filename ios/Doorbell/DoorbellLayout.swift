@@ -110,14 +110,116 @@ enum Motion {
 /// Colour roles from the guidelines. Surfaces and inks come from Core's regions through the
 /// palette and skin; positive and negative are the fixed answer/hang-up roles.
 enum ColorRole {
-    static let positive = UIColor(red: 0.20, green: 0.70, blue: 0.36, alpha: 1)
+    static var positive: UIColor { return SystemStyle.positive }
 
-    static func negative(_ palette: DoorbellPalette) -> UIColor { return palette.danger }
+    static func negative(_ palette: DoorbellPalette) -> UIColor { return SystemStyle.negative }
     static func warning(_ palette: DoorbellPalette) -> UIColor { return palette.notice }
 }
 
-/// The fixed action zone: a bar pinned to the bottom (portrait) or right edge (landscape),
-/// above the safe area. Content scrolls behind it; actions never move.
+/// One call action: a circular button with a caption under it, as on the system call screen.
+/// The disc carries the role colour (positive, negative, or a quiet fill) and a vendored icon;
+/// the caption is the button's own title, so two-part titles and semantic style overrides keep
+/// working through the ordinary `UIButton` API. `backgroundColor` is the disc's colour.
+final class CallActionButton: UIButton {
+    private let disc = UIView()
+    private let glyph = UIImageView()
+    private var discColor: UIColor?
+
+    var diameter: CGFloat = 60 {
+        didSet { invalidateIntrinsicContentSize(); setNeedsLayout() }
+    }
+
+    var icon: String = "" {
+        didSet { if icon != oldValue { glyph.image = TablerIcon.image(icon) } }
+    }
+
+    /// The icon's colour on the disc.
+    var glyphColor: UIColor = .white {
+        didSet { glyph.tintColor = glyphColor }
+    }
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        disc.isUserInteractionEnabled = false
+        glyph.contentMode = .scaleAspectFit
+        glyph.tintColor = glyphColor
+        disc.addSubview(glyph)
+        insertSubview(disc, at: 0)
+        titleLabel?.numberOfLines = 0
+        titleLabel?.textAlignment = .center
+        titleLabel?.font = SystemStyle.font(.footnote)
+        SystemStyle.followContentSize(titleLabel)
+        isAccessibilityElement = true
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    override var backgroundColor: UIColor? {
+        get { return discColor }
+        set {
+            discColor = newValue
+            disc.backgroundColor = newValue
+        }
+    }
+
+    private func captionSize(width: CGFloat) -> CGSize {
+        guard let label = titleLabel, !(label.text ?? "").isEmpty
+            || label.attributedText?.length ?? 0 > 0 else { return .zero }
+        return label.sizeThatFits(CGSize(width: max(1, width), height: .greatestFiniteMagnitude))
+    }
+
+    override var intrinsicContentSize: CGSize {
+        let width = max(diameter + 16, bounds.width > 0 ? bounds.width : diameter + 32)
+        let caption = captionSize(width: width)
+        return CGSize(width: max(diameter + 16, min(caption.width, 160)),
+                      height: diameter + (caption.height > 0 ? 6 + ceil(caption.height) : 0))
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        disc.frame = CGRect(x: (bounds.width - diameter) / 2, y: 0, width: diameter,
+                            height: diameter)
+        disc.layer.cornerRadius = diameter / 2
+        let side = diameter * 0.46
+        glyph.frame = CGRect(x: (diameter - side) / 2, y: (diameter - side) / 2, width: side,
+                             height: side)
+        let caption = captionSize(width: bounds.width)
+        titleLabel?.frame = CGRect(x: 0, y: diameter + 6, width: bounds.width,
+                                   height: ceil(caption.height))
+        imageView?.isHidden = true
+        if abs(intrinsicContentSize.height - bounds.height) > 0.5 {
+            invalidateIntrinsicContentSize()
+        }
+    }
+
+    override var isHighlighted: Bool {
+        didSet { disc.alpha = isHighlighted ? 0.6 : 1 }
+    }
+
+    override var isEnabled: Bool {
+        didSet { alpha = isEnabled ? 1 : 0.4 }
+    }
+
+    #if os(tvOS)
+    override var canBecomeFocused: Bool { return isEnabled && !isHidden }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext,
+                                 with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        let focused = context.nextFocusedView === self
+        coordinator.addCoordinatedAnimations({ [weak self] in
+            self?.disc.transform = focused ? CGAffineTransform(scaleX: 1.15, y: 1.15) : .identity
+            self?.disc.layer.shadowOpacity = focused ? 0.4 : 0
+            self?.disc.layer.shadowRadius = 12
+            self?.disc.layer.shadowOffset = CGSize(width: 0, height: 8)
+        }, completion: nil)
+    }
+    #endif
+}
+
+/// The fixed action zone: call actions in a fixed order, pinned to the bottom (portrait) or the
+/// trailing column (landscape) inside the safe area. Content scrolls; actions never move. A
+/// hidden action leaves its row, and the others keep their order.
 final class ActionZoneView: UIView {
     let primaryRow = UIStackView()
     let secondaryRow = UIStackView()
@@ -128,11 +230,11 @@ final class ActionZoneView: UIView {
         for row in [primaryRow, secondaryRow] {
             row.axis = .horizontal
             row.spacing = Space.xs
-            row.distribution = .fill
-            row.alignment = .fill
+            row.distribution = .fillEqually
+            row.alignment = .top
         }
         stack.axis = .vertical
-        stack.spacing = Space.xs
+        stack.spacing = Space.m
         stack.addArrangedSubview(primaryRow)
         stack.addArrangedSubview(secondaryRow)
         stack.translatesAutoresizingMaskIntoConstraints = false
@@ -147,9 +249,9 @@ final class ActionZoneView: UIView {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    /// `primary` buttons share the first row with the first one twice as wide; `secondary`
-    /// buttons share the second row equally. Hidden buttons simply leave the row.
-    func setActions(primary: [UIButton], secondary: [UIButton]) {
+    /// `primary` is Answer (or End), Reply, Ignore in that order, with the first one the
+    /// largest; `secondary` is Monitor, Unlock and the in-call microphone.
+    func setActions(primary: [CallActionButton], secondary: [CallActionButton]) {
         for row in [primaryRow, secondaryRow] {
             for view in row.arrangedSubviews {
                 row.removeArrangedSubview(view)
@@ -157,154 +259,104 @@ final class ActionZoneView: UIView {
             }
         }
         for (index, button) in primary.enumerated() {
+            button.diameter = index == 0 ? TouchTarget.visitor : TouchTarget.primary
             primaryRow.addArrangedSubview(button)
-            button.heightAnchor.constraint(greaterThanOrEqualToConstant:
-                index == 0 ? TouchTarget.primary : TouchTarget.minimum + 12).isActive = true
-            if index > 0 {
-                let wide = primary[0].widthAnchor.constraint(equalTo: button.widthAnchor, multiplier: 2)
-                wide.priority = UILayoutPriority(250)
-                wide.isActive = true
-            }
         }
-        secondaryRow.distribution = .fillEqually
         for button in secondary {
+            button.diameter = TouchTarget.minimum + 8
             secondaryRow.addArrangedSubview(button)
-            button.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum + 4).isActive = true
         }
+    }
+
+    /// The second row disappears with its last action so it leaves no gap.
+    func refreshRows() {
+        secondaryRow.isHidden = secondaryRow.arrangedSubviews.allSatisfy { $0.isHidden }
+        primaryRow.isHidden = primaryRow.arrangedSubviews.allSatisfy { $0.isHidden }
     }
 }
 
-/// A bottom sheet on compact windows and a popover beside its source on wider ones. The
-/// presenting screen stays underneath and alive.
-final class ActionSheetController: UIViewController {
+/// A list of one-tap choices in a system sheet: a medium-detent sheet on iOS 15 and later, a
+/// form sheet before that, and a popover beside its source on wider windows. The presenting
+/// screen stays underneath and alive.
+final class ActionSheetController: UINavigationController {
     struct Choice {
         let id: String
         let title: String
     }
 
-    private let titleText: String
-    private let choices: [Choice]
-    private let palette: DoorbellPalette
-    private let onChoose: (Choice) -> Void
-    private let card = UIView()
-    private let usesPopover: Bool
-
-    init(title: String, choices: [Choice], palette: DoorbellPalette, source: UIView,
+    init(title: String, choices: [Choice], source: UIView,
          onChoose: @escaping (Choice) -> Void) {
-        self.titleText = title
-        self.choices = choices
-        self.palette = palette
-        self.onChoose = onChoose
+        let list = ActionSheetListController(choices: choices, onChoose: onChoose)
+        list.title = title
+        super.init(rootViewController: list)
         #if os(iOS)
-        usesPopover = LayoutClass.of(width: source.window?.bounds.width ?? 0) != .compact
-        #else
-        usesPopover = false
-        #endif
-        super.init(nibName: nil, bundle: nil)
-        #if os(iOS)
-        if usesPopover {
+        if LayoutClass.of(width: source.window?.bounds.width ?? 0) != .compact {
             modalPresentationStyle = .popover
             popoverPresentationController?.sourceView = source
             popoverPresentationController?.sourceRect = source.bounds
-            popoverPresentationController?.backgroundColor = palette.surfaceSolid
             preferredContentSize = CGSize(width: 380,
-                                          height: min(560, CGFloat(choices.count) * 64 + 72))
+                                          height: min(560, CGFloat(choices.count) * 52 + 64))
+        } else if #available(iOS 15.0, *) {
+            modalPresentationStyle = .pageSheet
+            sheetPresentationController?.detents = [.medium(), .large()]
+            sheetPresentationController?.prefersGrabberVisible = true
         } else {
-            modalPresentationStyle = .overFullScreen
-            modalTransitionStyle = .crossDissolve
+            modalPresentationStyle = .formSheet
         }
         #else
         modalPresentationStyle = .overFullScreen
         #endif
     }
 
+    override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
+        super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+}
+
+private final class ActionSheetListController: UITableViewController {
+    private let choices: [ActionSheetController.Choice]
+    private let onChoose: (ActionSheetController.Choice) -> Void
+
+    init(choices: [ActionSheetController.Choice],
+         onChoose: @escaping (ActionSheetController.Choice) -> Void) {
+        self.choices = choices
+        self.onChoose = onChoose
+        super.init(style: SystemStyle.tableStyle())
+    }
+
     required init?(coder: NSCoder) { fatalError("not supported") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        let title = UILabel()
-        title.text = titleText
-        title.font = TypeRole.title.font(weight: .semibold)
-        title.textColor = palette.ink
-        title.numberOfLines = 0
-        let list = UIStackView(arrangedSubviews: [title])
-        list.axis = .vertical
-        list.spacing = Space.xs
-        for (index, choice) in choices.enumerated() {
-            let button = UIButton(type: .system)
-            button.setTitle(choice.title, for: .normal)
-            button.titleLabel?.font = TypeRole.body.font(weight: .medium, base: 20)
-            button.titleLabel?.numberOfLines = 0
-            button.contentHorizontalAlignment = .left
-            button.tag = index
-            button.accessibilityIdentifier = "sheet_\(choice.id)"
-            #if os(iOS)
-            button.setTitleColor(palette.ink, for: .normal)
-            button.backgroundColor = palette.surfaceStrongSolid
-            button.layer.cornerRadius = Radius.card
-            button.contentEdgeInsets = UIEdgeInsets(top: Space.s, left: Space.m,
-                                                    bottom: Space.s, right: Space.m)
-            #endif
-            button.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum + 8)
-                .isActive = true
-            button.addTarget(self, action: #selector(chose(_:)), for: .primaryActionTriggered)
-            list.addArrangedSubview(button)
-        }
-        let scroll = UIScrollView()
-        list.translatesAutoresizingMaskIntoConstraints = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(list)
-        card.addSubview(scroll)
-        card.translatesAutoresizingMaskIntoConstraints = false
-        card.backgroundColor = palette.surfaceSolid
-        view.addSubview(card)
-        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
-        NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: card.topAnchor, constant: Space.m),
-            scroll.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -Space.m),
-            scroll.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: Space.m),
-            scroll.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Space.m),
-            list.topAnchor.constraint(equalTo: scroll.topAnchor),
-            list.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
-            list.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
-            list.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
-            list.widthAnchor.constraint(equalTo: scroll.widthAnchor),
-        ])
-        let fit = scroll.heightAnchor.constraint(equalTo: list.heightAnchor)
-        fit.priority = UILayoutPriority(750)
-        fit.isActive = true
-        if usesPopover {
-            view.backgroundColor = palette.surfaceSolid
-            NSLayoutConstraint.activate([
-                card.topAnchor.constraint(equalTo: guide.topAnchor),
-                card.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-                card.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-                card.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            ])
-        } else {
-            view.backgroundColor = UIColor(white: 0, alpha: 0.45)
-            card.layer.cornerRadius = Radius.sheet
-            NSLayoutConstraint.activate([
-                card.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-                card.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-                card.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
-                card.topAnchor.constraint(greaterThanOrEqualTo: guide.topAnchor, constant: Space.xxl),
-                scroll.bottomAnchor.constraint(lessThanOrEqualTo: guide.bottomAnchor, constant: -Space.m),
-            ])
-            let tap = UITapGestureRecognizer(target: self, action: #selector(cancel(_:)))
-            tap.cancelsTouchesInView = false
-            view.addGestureRecognizer(tap)
-        }
+        SystemStyle.style(tableView)
+        tableView.accessibilityIdentifier = "action_sheet"
+        #if os(iOS)
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            barButtonSystemItem: .cancel, target: self, action: #selector(cancel))
+        #endif
     }
 
-    @objc private func chose(_ sender: UIButton) {
-        guard sender.tag < choices.count else { return }
-        let choice = choices[sender.tag]
+    @objc private func cancel() { dismiss(animated: !Motion.reduced) }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return choices.count
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        SystemStyle.style(cell)
+        cell.textLabel?.text = choices[indexPath.row].title
+        cell.textLabel?.numberOfLines = 0
+        cell.accessibilityIdentifier = "sheet_\(choices[indexPath.row].id)"
+        cell.accessibilityTraits = .button
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        let choice = choices[indexPath.row]
         dismiss(animated: !Motion.reduced) { [onChoose] in onChoose(choice) }
-    }
-
-    @objc private func cancel(_ recognizer: UITapGestureRecognizer) {
-        guard !card.frame.contains(recognizer.location(in: view)) else { return }
-        dismiss(animated: !Motion.reduced)
     }
 }

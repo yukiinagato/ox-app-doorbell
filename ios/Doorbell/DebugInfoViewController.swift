@@ -2,28 +2,60 @@ import CoreImage
 import Darwin
 import UIKit
 
-/// PIN-gated diagnostics for the modern iOS shell. Values come from bounded Core snapshots;
-/// secrets and the persisted boot JSON are intentionally not rendered here.
-final class DebugInfoViewController: UIViewController {
+/// PIN-gated diagnostics for the modern iOS shell: one grouped table of label and value rows
+/// under the stock navigation bar. Values come from bounded Core snapshots; secrets and the
+/// persisted boot JSON are intentionally not rendered here.
+final class DebugInfoViewController: PairingTableScreen {
     private let core: CoreBridge
     private let boot: BootConfig
     private let texts: Texts
     private let onPairing: () -> Void
     private let onMonitor: (() -> Void)?
 
-    private let scrollView = UIScrollView()
-    private let contentStack = UIStackView()
-    private let titleLabel = UILabel()
-    private let infoLabel = UILabel()
-    private let addressLabel = UILabel()
-    private let ipSelector = UISegmentedControl(items: ["IPv4", "IPv6"])
-    private let cycleButton = UIButton(type: .system)
-    private let qrImageView = UIImageView()
-    private let qrURLLabel = UILabel()
-    private let refreshButton = UIButton(type: .system)
-    private let pairingButton = UIButton(type: .system)
-    private let monitorButton = UIButton(type: .system)
+    private typealias Line = (label: String, value: String)
 
+    private let ipSelector = UISegmentedControl(items: ["IPv4", "IPv6"])
+    private lazy var selectorRow = PairingCells.custom(ipSelector, vertical: 8)
+    private lazy var cycleRow = PairingCells.action(title: "", identifier: "debug_info_cycle") {
+        [weak self] in self?.cycleAddress()
+    }
+    private let qrImageView = UIImageView()
+    private lazy var qrRow: PairingRow = {
+        let box = UIView()
+        qrImageView.contentMode = .scaleAspectFit
+        qrImageView.backgroundColor = .white
+        qrImageView.layer.cornerRadius = 6
+        qrImageView.clipsToBounds = true
+        qrImageView.isAccessibilityElement = true
+        qrImageView.accessibilityIdentifier = "debug_info_qr"
+        qrImageView.translatesAutoresizingMaskIntoConstraints = false
+        box.addSubview(qrImageView)
+        let side = qrImageView.widthAnchor.constraint(equalToConstant: 280)
+        side.priority = UILayoutPriority(999)
+        NSLayoutConstraint.activate([
+            side,
+            qrImageView.heightAnchor.constraint(equalTo: qrImageView.widthAnchor),
+            qrImageView.widthAnchor.constraint(lessThanOrEqualTo: box.widthAnchor),
+            qrImageView.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+            qrImageView.topAnchor.constraint(equalTo: box.topAnchor),
+            qrImageView.bottomAnchor.constraint(equalTo: box.bottomAnchor),
+        ])
+        return PairingCells.custom(box)
+    }()
+    private let noAddressRow = PairingCells.text(tone: .secondary)
+    private lazy var pairingRow = disclosure(PairingCells.action(
+        title: texts.t("pair.panel_title"), identifier: "debug_info_pairing") {
+        [weak self] in self?.openPairing()
+    })
+    private lazy var monitorRow = disclosure(PairingCells.action(
+        title: texts.t("monitor.open"), identifier: "debug_info_monitor") {
+        [weak self] in self?.openMonitor()
+    })
+    private lazy var refreshItem = SystemStyle.barItem(
+        icon: "TablerReload", label: texts.t("info.refresh"), target: self,
+        action: #selector(refresh), identifier: "debug_info_refresh")
+
+    private var summary: [PairingSection] = []
     private var ipv4 = [String]()
     private var ipv6 = [String]()
     private var addressIndex = 0
@@ -31,6 +63,8 @@ final class DebugInfoViewController: UIViewController {
     private var refreshGeneration = 0
 
     private static let qrContext = CIContext()
+
+    override var prefersLargeTitle: Bool { return false }
 
     init(core: CoreBridge, boot: BootConfig, texts: Texts,
          onPairing: @escaping () -> Void, onMonitor: (() -> Void)?) {
@@ -47,7 +81,6 @@ final class DebugInfoViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.07, green: 0.08, blue: 0.10, alpha: 1)
         texts.setConfig(core.config())
         buildUI()
         refresh()
@@ -67,125 +100,29 @@ final class DebugInfoViewController: UIViewController {
     }
 
     private func buildUI() {
-        titleLabel.text = texts.t("info.title")
-        titleLabel.font = .systemFont(ofSize: 28, weight: .bold)
-        titleLabel.textColor = .white
-        titleLabel.numberOfLines = 2
-
-        let closeButton = makeButton(title: texts.t("monitor.close"), filled: true)
-        closeButton.accessibilityIdentifier = "debug_info_close"
-        closeButton.addTarget(self, action: #selector(close), for: .touchUpInside)
-        let header = UIStackView(arrangedSubviews: [titleLabel, closeButton])
-        header.axis = .horizontal
-        header.alignment = .center
-        header.spacing = 16
-        header.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(header)
-
-        infoLabel.font = UIFont(name: "Menlo", size: 14) ?? .monospacedDigitSystemFont(ofSize: 14, weight: .regular)
-        infoLabel.textColor = UIColor(white: 0.92, alpha: 1)
-        infoLabel.numberOfLines = 0
-        infoLabel.accessibilityIdentifier = "debug_info_summary"
-
-        addressLabel.font = UIFont(name: "Menlo", size: 14) ?? .monospacedDigitSystemFont(ofSize: 14, weight: .regular)
-        addressLabel.textColor = UIColor(red: 0.55, green: 0.85, blue: 1, alpha: 1)
-        addressLabel.numberOfLines = 0
-        addressLabel.accessibilityIdentifier = "debug_info_addresses"
+        barItem.title = texts.t("info.title")
+        let closeItem = UIBarButtonItem(title: texts.t("monitor.close"), style: .done,
+                                        target: self, action: #selector(close))
+        closeItem.accessibilityIdentifier = "debug_info_close"
+        barItem.leftBarButtonItem = closeItem
+        barItem.rightBarButtonItem = refreshItem
+        table.accessibilityIdentifier = "debug_info_summary"
 
         ipSelector.selectedSegmentIndex = 0
         ipSelector.addTarget(self, action: #selector(addressTypeChanged), for: .valueChanged)
         ipSelector.accessibilityIdentifier = "debug_info_address_type"
-
-        cycleButton.titleLabel?.font = .systemFont(ofSize: 16)
-        cycleButton.setTitleColor(UIColor(red: 0.35, green: 0.72, blue: 1, alpha: 1), for: .normal)
-        cycleButton.addTarget(self, action: #selector(cycleAddress), for: .touchUpInside)
-        cycleButton.isHidden = true
-
-        qrImageView.contentMode = .scaleAspectFit
-        qrImageView.backgroundColor = .white
-        qrImageView.layer.cornerRadius = 6
-        qrImageView.clipsToBounds = true
-        qrImageView.heightAnchor.constraint(equalToConstant: 280).isActive = true
-        qrImageView.accessibilityIdentifier = "debug_info_qr"
-
-        qrURLLabel.font = UIFont(name: "Menlo", size: 14) ?? .monospacedDigitSystemFont(ofSize: 14, weight: .regular)
-        qrURLLabel.textColor = UIColor(white: 0.85, alpha: 1)
-        qrURLLabel.textAlignment = .center
-        qrURLLabel.numberOfLines = 0
-
-        refreshButton.setTitle(texts.t("info.refresh"), for: .normal)
-        refreshButton.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
-        refreshButton.setTitleColor(UIColor(red: 0.35, green: 0.72, blue: 1, alpha: 1), for: .normal)
-        refreshButton.addTarget(self, action: #selector(refresh), for: .touchUpInside)
-        refreshButton.accessibilityIdentifier = "debug_info_refresh"
-
-        pairingButton.setTitle(texts.t("pair.panel_title"), for: .normal)
-        pairingButton.addTarget(self, action: #selector(openPairing), for: .touchUpInside)
-        pairingButton.accessibilityIdentifier = "debug_info_pairing"
-
-        monitorButton.setTitle(texts.t("monitor.open"), for: .normal)
-        monitorButton.addTarget(self, action: #selector(openMonitor), for: .touchUpInside)
-        monitorButton.isHidden = onMonitor == nil
-        monitorButton.accessibilityIdentifier = "debug_info_monitor"
-
-        let actions = UIStackView(arrangedSubviews: [pairingButton, monitorButton, refreshButton])
-        actions.axis = .vertical
-        actions.spacing = 8
-
-        contentStack.axis = .vertical
-        contentStack.spacing = 16
-        contentStack.alignment = .fill
-        contentStack.isLayoutMarginsRelativeArrangement = true
-        contentStack.layoutMargins = UIEdgeInsets(top: 8, left: 20, bottom: 28, right: 20)
-        contentStack.addArrangedSubview(infoLabel)
-        contentStack.addArrangedSubview(addressLabel)
-        contentStack.addArrangedSubview(ipSelector)
-        contentStack.addArrangedSubview(cycleButton)
-        contentStack.addArrangedSubview(qrImageView)
-        contentStack.addArrangedSubview(qrURLLabel)
-        contentStack.addArrangedSubview(actions)
-
-        scrollView.alwaysBounceVertical = true
-        scrollView.translatesAutoresizingMaskIntoConstraints = false
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(scrollView)
-        scrollView.addSubview(contentStack)
-
-        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
-        NSLayoutConstraint.activate([
-            header.topAnchor.constraint(equalTo: guide.topAnchor, constant: 12),
-            header.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 20),
-            header.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -20),
-            closeButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
-            scrollView.topAnchor.constraint(equalTo: header.bottomAnchor, constant: 8),
-            scrollView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scrollView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-            contentStack.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor),
-            contentStack.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor),
-            contentStack.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor),
-            contentStack.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor),
-            contentStack.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor),
-        ])
+        noAddressRow.cell.textLabel?.text = texts.t("info.no_address")
     }
 
-    private func makeButton(title: String, filled: Bool = false) -> UIButton {
-        let button = UIButton(type: .system)
-        button.setTitle(title, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
-        button.setTitleColor(.white, for: .normal)
-        button.backgroundColor = filled
-            ? UIColor(red: 0.20, green: 0.24, blue: 0.30, alpha: 1)
-            : UIColor(white: 1, alpha: 0.12)
-        button.layer.cornerRadius = 10
-        button.contentEdgeInsets = UIEdgeInsets(top: 12, left: 18, bottom: 12, right: 18)
-        return button
+    private func disclosure(_ row: PairingRow) -> PairingRow {
+        row.cell.accessoryType = .disclosureIndicator
+        return row
     }
 
     @objc private func refresh() {
         refreshGeneration += 1
         let generation = refreshGeneration
-        refreshButton.isEnabled = false
+        refreshItem.isEnabled = false
         let core = self.core
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             let status = core.status()
@@ -195,7 +132,7 @@ final class DebugInfoViewController: UIViewController {
             DispatchQueue.main.async {
                 guard let self = self, self.refreshGeneration == generation else { return }
                 self.texts.setConfig(config)
-                self.refreshButton.isEnabled = true
+                self.refreshItem.isEnabled = true
                 self.apply(status: status, debug: debug, capabilities: capabilities, config: config)
             }
         }
@@ -221,14 +158,14 @@ final class DebugInfoViewController: UIViewController {
         ipv4 = addresses.filter { !$0.contains(":") }.sorted()
         ipv6 = addresses.filter { $0.contains(":") }.sorted()
 
-        var sections = [[String]]()
-        sections.append([
+        var sections = [PairingSection]()
+        sections.append(section(nil, lines: [
             line("info.node", value: "\(value(node["name"], fallback: value(debugNode["node"], fallback: "-"))) (\(value(node["id"], fallback: "-")))"),
             line("info.role", value: value(node["role"], fallback: boot.role)),
             line("info.version", value: "App \(appVersion) · Core \(DoorbellTheme.shortVersion(coreVersion))"),
             line("info.microphone", value: capabilityState(capabilities?["microphone"])),
             line("info.camera", value: capabilityState(capabilities?["camera"])),
-        ])
+        ]))
 
         let system = [value(device["system"]), value(device["system_version"])].compactMap { $0 }.joined(separator: " ")
         sections.append(section("info.device", lines: [
@@ -259,52 +196,60 @@ final class DebugInfoViewController: UIViewController {
         }
 
         sections.append(section("info.runtime", lines: [
-            "safe_mode: \(localizedBool(runtime["safe_mode"]))",
-            "last_exit: \(value(runtime["last_exit_reason"], fallback: texts.t("info.unknown")))",
-            "heartbeat: \(timestamp(runtime["heartbeat_ms"]))",
-            "sip: \(value(sip["state"], fallback: value(runtime["sip"], fallback: texts.t("info.unknown"))))",
+            ("safe_mode", localizedBool(runtime["safe_mode"])),
+            ("last_exit", value(runtime["last_exit_reason"], fallback: texts.t("info.unknown"))),
+            ("heartbeat", timestamp(runtime["heartbeat_ms"])),
+            ("sip", value(sip["state"], fallback: value(runtime["sip"], fallback: texts.t("info.unknown")))),
         ]))
 
         if let components = runtime["components"] as? [String: Any], !components.isEmpty {
             sections.append(section("info.components", lines: components.keys.sorted().map {
-                "\($0): \(value(components[$0], fallback: "-") )"
+                ($0, value(components[$0], fallback: "-"))
             }))
         }
 
         if let capabilities = capabilities, !capabilities.isEmpty {
-            var capabilityLines = [String]()
+            var capabilityLines = [Line]()
             for key in ["sip_backend", "camera", "microphone", "h264_encode", "h264_decode", "sip", "tls12", "wan"] {
-                if let item = capabilities[key] { capabilityLines.append("\(key): \(value(item, fallback: "-"))") }
+                if let item = capabilities[key] { capabilityLines.append((key, value(item, fallback: "-"))) }
             }
             if let features = capabilities["features"] as? [String: Any] {
                 let enabled = features.keys.sorted().filter { localizedBool(features[$0]) == texts.t("admin.enabled") }
-                capabilityLines.append("features: \(enabled.isEmpty ? texts.t("info.no_data") : enabled.joined(separator: ", "))")
+                capabilityLines.append(("features", enabled.isEmpty ? texts.t("info.no_data") : enabled.joined(separator: ", ")))
             }
             sections.append(section("info.capabilities", lines: capabilityLines))
         }
 
         if let peers = status?["peers"] as? [[String: Any]] {
-            let peerLines = peers.sorted { value($0["name"], fallback: value($0["id"], fallback: "")) <
+            let peerLines: [Line] = peers.sorted { value($0["name"], fallback: value($0["id"], fallback: "")) <
                 value($1["name"], fallback: value($1["id"], fallback: "")) }.map { peer in
                 let name = value(peer["name"], fallback: value(peer["id"], fallback: "-"))
-                return "\(name): \(value(peer["status"], fallback: "-")) / \(value(peer["role"], fallback: "-") )"
+                return (name, "\(value(peer["status"], fallback: "-")) / \(value(peer["role"], fallback: "-"))")
             }
-            sections.append(section("info.peers", lines: peerLines.isEmpty ? [texts.t("info.no_data")] : peerLines))
+            sections.append(section("info.peers", lines: peerLines.isEmpty ? [(texts.t("info.no_data"), "")] : peerLines))
         }
 
         let activeCalls = (status?["active_calls"] as? [[String: Any]])?.count ?? 0
-        sections.append(section("info.active_calls", lines: [String(activeCalls)]))
-        infoLabel.text = sections.filter { !$0.isEmpty }.map { $0.joined(separator: "\n") }.joined(separator: "\n\n")
+        sections.append(section(nil, lines: [line("info.active_calls", value: String(activeCalls))]))
+        summary = sections.filter { !$0.rows.isEmpty }
         updateAddressUI()
     }
 
-    private func line(_ key: String, value: String) -> String {
-        "\(texts.t(key)) : \(value)"
+    private func line(_ key: String, value: String) -> Line {
+        return (texts.t(key), value)
     }
 
-    private func section(_ key: String, lines: [String]) -> [String] {
-        guard !lines.isEmpty else { return [] }
-        return ["── \(texts.t(key)) ──"] + lines
+    /// Short values sit beside their label; long ones wrap underneath it.
+    private func section(_ key: String?, lines: [Line],
+                         identifier: String? = nil) -> PairingSection {
+        let rows = lines.map { line -> PairingRow in
+            let row = PairingCells.text(style: line.value.count > 22 ? .subtitle : .value1,
+                                        identifier: identifier)
+            row.cell.textLabel?.text = line.label
+            row.cell.detailTextLabel?.text = line.value
+            return row
+        }
+        return PairingSection(header: key.map { texts.t($0) }, rows: rows)
     }
 
     private func value(_ raw: Any?, fallback: String = "") -> String {
@@ -348,7 +293,7 @@ final class DebugInfoViewController: UIViewController {
         } else {
             percent = "-"
         }
-        return "\(percent) (\(value(device["battery_state"], fallback: texts.t("info.unknown"))) )"
+        return "\(percent) (\(value(device["battery_state"], fallback: texts.t("info.unknown"))))"
     }
 
     private func timestamp(_ raw: Any?) -> String {
@@ -358,11 +303,11 @@ final class DebugInfoViewController: UIViewController {
         return formatter.string(from: Date(timeIntervalSince1970: Double(number.int64Value) / 1000))
     }
 
-    private func portLine(_ name: String, port: Int, suffix: String? = nil) -> String {
-        guard port > 0, port <= 65535 else { return "\(name) : \(texts.t("info.unknown"))" }
-        let state = isPortListening(port) ? "LISTEN ✓" : texts.t("info.port_closed")
+    private func portLine(_ name: String, port: Int, suffix: String? = nil) -> Line {
+        guard port > 0, port <= 65535 else { return (name, texts.t("info.unknown")) }
+        let state = isPortListening(port) ? "LISTEN" : texts.t("info.port_closed")
         let tail = suffix.map { "  \($0)" } ?? ""
-        return "\(name)  \(port) : \(state)\(tail)"
+        return ("\(name)  \(port)", "\(state)\(tail)")
     }
 
     private func isPortListening(_ port: Int) -> Bool {
@@ -386,7 +331,7 @@ final class DebugInfoViewController: UIViewController {
         updateAddressUI()
     }
 
-    @objc private func cycleAddress() {
+    private func cycleAddress() {
         let list = selectedAddresses()
         if list.count > 1 { addressIndex = (addressIndex + 1) % list.count }
         updateAddressUI()
@@ -397,12 +342,13 @@ final class DebugInfoViewController: UIViewController {
     }
 
     private func updateAddressUI() {
-        let addressLines = [
-            "── \(texts.t("info.addresses")) ──",
-            ipv4.isEmpty ? "IPv4: \(texts.t("info.no_address"))" : "IPv4:\n  \(ipv4.joined(separator: "\n  "))",
-            ipv6.isEmpty ? "IPv6: \(texts.t("info.no_address"))" : "IPv6:\n  \(ipv6.joined(separator: "\n  "))",
-        ]
-        addressLabel.text = addressLines.joined(separator: "\n")
+        let none = texts.t("info.no_address")
+        let listed: [Line] = (ipv4.isEmpty ? [("IPv4", none)] : ipv4.map { ("IPv4", $0) })
+            + (ipv6.isEmpty ? [("IPv6", none)] : ipv6.map { ("IPv6", $0) })
+        var sections = summary
+        sections.append(section("info.addresses", lines: listed,
+                                identifier: "debug_info_addresses"))
+
         ipSelector.setEnabled(!ipv4.isEmpty, forSegmentAt: 0)
         ipSelector.setEnabled(!ipv6.isEmpty, forSegmentAt: 1)
         if ipSelector.selectedSegmentIndex == 1 && ipv6.isEmpty { ipSelector.selectedSegmentIndex = 0 }
@@ -410,31 +356,38 @@ final class DebugInfoViewController: UIViewController {
 
         let list = selectedAddresses()
         if addressIndex >= list.count { addressIndex = 0 }
-        cycleButton.isHidden = list.count <= 1
+        var admin = [selectorRow]
         if list.count > 1 {
-            cycleButton.setTitle(texts.t("info.address_cycle", "\(addressIndex + 1)", "\(list.count)"), for: .normal)
+            cycleRow.setTitle(texts.t("info.address_cycle", "\(addressIndex + 1)", "\(list.count)"))
+            admin.append(cycleRow)
         }
-        guard !list.isEmpty else {
+        var footer: String?
+        if list.isEmpty {
             currentQRURL = nil
             qrImageView.image = nil
-            qrImageView.isHidden = true
-            qrURLLabel.text = texts.t("info.no_address")
-            return
-        }
-        let address = list[addressIndex]
-        let host = ipSelector.selectedSegmentIndex == 1 ? "[\(address)]" : address
-        let url = "https://\(host):\(ConfigUtil.peerAdminHttpsPort)/admin/"
-        currentQRURL = url
-        qrImageView.isHidden = false
-        qrURLLabel.text = "\(texts.t("info.scan_admin"))\n\(url)"
-        qrImageView.image = nil
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let image = Self.qrImage(for: url)
-            DispatchQueue.main.async {
-                guard let self = self, self.currentQRURL == url else { return }
-                self.qrImageView.image = image
+            admin.append(noAddressRow)
+        } else {
+            let address = list[addressIndex]
+            let host = ipSelector.selectedSegmentIndex == 1 ? "[\(address)]" : address
+            let url = "https://\(host):\(ConfigUtil.peerAdminHttpsPort)/admin/"
+            admin.append(qrRow)
+            footer = "\(texts.t("info.scan_admin"))\n\(url)"
+            if currentQRURL != url {
+                currentQRURL = url
+                qrImageView.image = nil
+                DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                    let image = Self.qrImage(for: url)
+                    DispatchQueue.main.async {
+                        guard let self = self, self.currentQRURL == url else { return }
+                        self.qrImageView.image = image
+                    }
+                }
             }
         }
+        sections.append(PairingSection(footer: footer, rows: admin))
+        sections.append(PairingSection(
+            rows: [pairingRow] + (onMonitor == nil ? [] : [monitorRow])))
+        setSections(sections)
     }
 
     private static func qrImage(for value: String) -> UIImage? {
@@ -451,11 +404,11 @@ final class DebugInfoViewController: UIViewController {
 
     @objc private func close() { dismiss(animated: true) }
 
-    @objc private func openPairing() {
+    private func openPairing() {
         dismiss(animated: true) { [weak self] in self?.onPairing() }
     }
 
-    @objc private func openMonitor() {
+    private func openMonitor() {
         guard onMonitor != nil else { return }
         dismiss(animated: true) { [weak self] in self?.onMonitor?() }
     }

@@ -14,6 +14,9 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
     private let writer: ConfigWriter
     private(set) var palette = DoorbellPalette.dark
     private(set) var usesSplit = false
+    /// True while the screen lives in the Settings tab rather than being presented. The tab's
+    /// gate then owns the admin window, and there is nothing to close.
+    var isEmbedded = false
 
     /// The screen that hosts settings supplies these so the entries behave exactly as they do
     /// from the home screen.
@@ -55,7 +58,7 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         let config = core.config()
         palette = DoorbellPalette.of(DoorbellTheme.appearance(
             config: config, nodeId: nodeId(), localTime: core.localTime()))
-        view.backgroundColor = palette.background
+        view.backgroundColor = SystemStyle.groupedBackground
         #if os(tvOS)
         usesSplit = true
         #else
@@ -63,6 +66,7 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         #endif
 
         let list = SettingsCategoryListController(host: self)
+        list.showsClose = !isEmbedded
         list.onClose = { [weak self] in self?.dismiss(animated: true) }
         categoryList = list
         let master = UINavigationController(rootViewController: list)
@@ -79,7 +83,6 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
             split.preferredDisplayMode = .allVisible
             split.preferredPrimaryColumnWidthFraction = 0.34
             split.maximumPrimaryColumnWidth = 380
-            split.view.backgroundColor = palette.background
             root = split
             list.select(firstId)
         } else {
@@ -113,20 +116,31 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        // Leaving settings closes the native admin window (security protocol v3 §10); a screen
-        // presented over settings is not a departure.
-        if isBeingDismissed || presentingViewController == nil {
-            core.adminLock()
-            core.removeHandler(SettingsViewController.handlerKey)
-        }
+        // Leaving settings closes the native admin window (security protocol v3 section 10); a
+        // screen presented over settings is not a departure. In the Settings tab the gate
+        // decides when the tab has been left.
+        guard !isEmbedded else { return }
+        if isBeingDismissed || presentingViewController == nil { leaveAdminWindow() }
+    }
+
+    /// Closes Core's admin window and stops listening. Called once this screen is gone for good.
+    func leaveAdminWindow() {
+        core.adminLock()
+        core.removeHandler(SettingsViewController.handlerKey)
+    }
+
+    /// Runs `next` once this screen is out of the way: after its own dismissal when it was
+    /// presented, at once when it lives in the Settings tab.
+    private func leave(then next: @escaping () -> Void) {
+        if isEmbedded { next() } else { dismiss(animated: true) { next() } }
     }
 
     private func buildToast() {
-        toast.backgroundColor = palette.surfaceStrongSolid
-        toast.textColor = palette.ink
+        toast.backgroundColor = UIColor(white: 0.2, alpha: 0.92)
+        toast.textColor = .white
         toast.textAlignment = .center
         toast.numberOfLines = 0
-        toast.font = .systemFont(ofSize: 15, weight: .semibold)
+        toast.font = SystemStyle.font(.subheadline, weight: .semibold)
         toast.layer.cornerRadius = 10
         toast.clipsToBounds = true
         toast.alpha = 0
@@ -272,7 +286,7 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
             confirmKeyRotation(from: from)
             return true
         case "exit_kiosk":
-            dismiss(animated: true) { [weak self] in self?.onExitKiosk?() }
+            leave { [weak self] in self?.onExitKiosk?() }
             return true
         default:
             return editorActions.perform(id, value: value, from: from)
@@ -368,13 +382,18 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         }
         switch id {
         case "history":
-            present(CallHistoryViewController(core: core, texts: texts, lang: boot.uiLang), animated: true)
+            if let tabs = tabBarController as? PanelTabBarController {
+                tabs.show(.history)
+            } else {
+                present(CallHistoryViewController(core: core, texts: texts, lang: boot.uiLang),
+                        animated: true)
+            }
         case "add_device":
             guard let handler = onOpenAddDevice else { return }
-            dismiss(animated: true) { handler() }
+            leave(then: handler)
         case "device_info":
             guard let handler = onOpenDeviceInfo else { return }
-            dismiss(animated: true) { handler() }
+            leave(then: handler)
         case "web_admin":
             openWeb(title: title, reason: "", from: from)
         case "panels":

@@ -1,20 +1,39 @@
 import ImageIO
 import UIKit
 
-/// Indoor home screen. Everything the household needs at a glance: the household clock, who is
-/// in the cluster, unanswered calls, one tile per door with a recent still, a history shortcut,
-/// the admin QR that is always visible, and the SOS slider.
+/// Indoor home surface. One job: the doors. A status header (the household clock, who is in the
+/// cluster, a notice while missed calls are unread), then one tile per door in a collection view
+/// that takes one, two or three columns from the width it has, and the admin QR underneath. The
+/// SOS slide is pinned below the scrolling content, in the fixed action zone.
 ///
-/// The view owns no call state; `MainViewController` hosts it and routes every action.
-final class DashboardView: UIView {
+/// The household wallpaper is behind this view; the clock and date are drawn straight on it with
+/// Core's per-region ink, and everything else sits on the system material. Call history lives in
+/// its own tab and is not repeated here.
+///
+/// The view owns no call state; its host routes every action.
+final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
 
     private var lastCounts = ClusterCounts()
 
-    var onOpenAdmin: (() -> Void)?
     var onOpenHistory: (() -> Void)?
     var onOpenDoor: ((String) -> Void)?
     var onOpenOfflineDoors: (() -> Void)?
     var onOpenNotice: ((String) -> Void)?
+    var onOpenPairing: (() -> Void)?
+    /// The unread missed-call count, for the History tab's badge.
+    var onUnreadMissedChanged: ((Int) -> Void)?
+    /// Extra focusable entries shown as a row of cells. tvOS has no bar button items to put the
+    /// home actions in, so its host lists them here; iOS leaves this empty.
+    var quickActions: [QuickAction] = [] {
+        didSet { collection.reloadData() }
+    }
+
+    struct QuickAction {
+        let title: String
+        let icon: String
+        let identifier: String
+        let handler: () -> Void
+    }
 
     private let core: CoreBridge
     private let boot: BootConfig
@@ -22,48 +41,50 @@ final class DashboardView: UIView {
 
     private let clockLabel = HaloLabel()
     private let dateLabel = HaloLabel()
-    /// Three counts with a drawn mark each, in place of the old one-line membership pill.
     private lazy var counters = ClusterCountersView(texts: texts)
-    private let missedBadge = PaddedLabel()
-    private let adminButton = UIButton(type: .system)
-    private let noticeButton = UIButton(type: .system)
-    private let doorPageButton = UIButton(type: .system)
+    private let missedButton = UIButton(type: .system)
+    private let pairingButton = UIButton(type: .system)
     private let offlineDoorButton = UIButton(type: .system)
-    private let historyHeader = HaloLabel()
-    private let seeAllButton = UIButton(type: .system)
-    private let tilesStack = UIStackView()
+    private let doorPageButton = UIButton(type: .system)
+    private let statusCard = MaterialCardView()
+    private let headerView = UIStackView()
+    private let footerCard = MaterialCardView()
     private let adminQr: AdminQrView
-    private let footerEffect = UIVisualEffectView(effect: UIBlurEffect(style: .dark))
-    let sosControl: SosSlideControl
+    let sosControl: UIView
 
-    private let columns = UIStackView()
-    private let leftColumn = UIStackView()
-    private let rightColumn = UIStackView()
-    private let dashboardHeader = UIStackView()
-    private let headerControls = UIStackView()
-    private let leftHeader = UIStackView()
-    private let rightHeader = UIView()
+    private let layout = UICollectionViewFlowLayout()
+    private(set) lazy var collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
+    private let root = UIStackView()
 
     private var config: [String: Any]?
     private var skin = DoorbellSkin.plain(.dark)
     private var tiles: [String: DoorTileView] = [:]
+    private var shownDoors: [String] = []
     private var allDoors: [String] = []
     private var previewPriority: [String] = []
     private var previewPage = 0
     private var stillTimer: Timer?
     private var activePreviewRate: Double?
+    private var unreadMissed = 0
+    private var laidOutWidth: CGFloat = 0
 
-    init(core: CoreBridge, boot: BootConfig, texts: Texts, sosControl: SosSlideControl) {
+    private enum Section: Int, CaseIterable {
+        case header, actions, doors, footer
+    }
+
+    init(core: CoreBridge, boot: BootConfig, texts: Texts, sosControl: UIView) {
         self.core = core
         self.boot = boot
         self.texts = texts
         self.adminQr = AdminQrView(core: core, boot: boot, texts: texts, compact: true,
-                                   qrSide: 36, showsCaption: false)
+                                   qrSide: 44, showsCaption: false)
         self.sosControl = sosControl
         super.init(frame: .zero)
         NotificationCenter.default.addObserver(self, selector: #selector(previewRateChanged),
                                                name: UserDefaults.didChangeNotification,
                                                object: UserDefaults.standard)
+        NotificationCenter.default.addObserver(self, selector: #selector(styleChanged),
+                                               name: SystemStyle.changed, object: nil)
         build()
     }
 
@@ -79,180 +100,268 @@ final class DashboardView: UIView {
     private func build() {
         translatesAutoresizingMaskIntoConstraints = false
 
-        clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 64, weight: .light)
         clockLabel.accessibilityIdentifier = "dashboard_clock"
-        dateLabel.font = .systemFont(ofSize: 20, weight: .semibold)
-        dateLabel.textColor = .white
-        dateLabel.outlineColor = UIColor.black.withAlphaComponent(0.9)
+        clockLabel.adjustsFontSizeToFitWidth = true
+        clockLabel.minimumScaleFactor = 0.5
+        dateLabel.font = SystemStyle.font(.title3, weight: .semibold)
+        dateLabel.numberOfLines = 0
+        SystemStyle.followContentSize(dateLabel)
+        clockLabel.inkCompanion = dateLabel
+        dateLabel.inkCompanion = clockLabel
 
-        DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
-                           ink: DoorbellTheme.readableInk(on: skin.palette.danger),
-                           fontSize: 15)
         counters.accessibilityIdentifier = "cluster_counters"
-        DoorbellTheme.pill(missedBadge, background: skin.palette.danger, ink: .white, fontSize: 15)
-        missedBadge.accessibilityIdentifier = "missed_badge"
-        missedBadge.isHidden = true
-        missedBadge.isUserInteractionEnabled = true
-        missedBadge.addGestureRecognizer(
-            UITapGestureRecognizer(target: self, action: #selector(openHistory)))
 
-        style(adminButton, title: texts.t("admin.title"), filled: false)
-        adminButton.accessibilityIdentifier = "dashboard_admin"
-        adminButton.addTarget(self, action: #selector(openAdmin), for: .primaryActionTriggered)
-
-        style(noticeButton, title: texts.t("notice.global_button"), filled: false)
-        noticeButton.accessibilityIdentifier = "dashboard_notice_global"
-        noticeButton.addTarget(self, action: #selector(openGlobalNotice),
-                               for: .primaryActionTriggered)
-
-        let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel])
-        clockColumn.axis = .vertical
-        clockColumn.spacing = 2
-
-        let statusRow = UIStackView(arrangedSubviews: [counters, missedBadge, UIView(), adminButton])
-        statusRow.axis = .horizontal
-        statusRow.spacing = 8
-        statusRow.alignment = .center
-
-        leftHeader.axis = .vertical
-        leftHeader.addArrangedSubview(clockColumn)
-
-        tilesStack.axis = .vertical
-        tilesStack.spacing = 12
-        tilesStack.distribution = .equalSpacing
-        tilesStack.setContentHuggingPriority(.required, for: .vertical)
-
-        style(doorPageButton, title: "", filled: false)
-        doorPageButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
-        doorPageButton.contentHorizontalAlignment = .left
-        doorPageButton.addTarget(self, action: #selector(nextDoorPage),
-                                 for: .primaryActionTriggered)
+        statusRow(missedButton, icon: "TablerBell", identifier: "missed_badge",
+                  action: #selector(openHistory))
+        missedButton.isHidden = true
+        statusRow(offlineDoorButton, icon: "TablerVideoOff", identifier: "dashboard_offline_doors",
+                  action: #selector(openOfflineDoors))
+        offlineDoorButton.isHidden = true
+        statusRow(doorPageButton, icon: "TablerDoor", identifier: "dashboard_door_page",
+                  action: #selector(nextDoorPage))
         doorPageButton.isHidden = true
 
-        style(offlineDoorButton, title: "", filled: false)
-        offlineDoorButton.titleLabel?.font = .systemFont(ofSize: 15, weight: .semibold)
-        offlineDoorButton.contentHorizontalAlignment = .left
-        offlineDoorButton.accessibilityIdentifier = "dashboard_offline_doors"
-        offlineDoorButton.addTarget(self, action: #selector(openOfflineDoors),
-                                    for: .primaryActionTriggered)
-        offlineDoorButton.isHidden = true
+        statusRow(pairingButton, icon: "TablerAlertTriangle", identifier: "pairing_banner",
+                  action: #selector(openPairing))
+        pairingButton.isHidden = true
 
-        historyHeader.text = texts.t("history.title")
-        historyHeader.font = .systemFont(ofSize: 19, weight: .semibold)
-        style(seeAllButton, title: texts.t("history.see_all"), filled: false)
-        seeAllButton.accessibilityIdentifier = "dashboard_see_all"
-        seeAllButton.addTarget(self, action: #selector(openHistory), for: .primaryActionTriggered)
-        let historyRow = UIStackView(arrangedSubviews: [historyHeader, UIView(), seeAllButton])
-        historyRow.axis = .horizontal
-        historyRow.spacing = 12
-        historyRow.alignment = .center
-        historyRow.translatesAutoresizingMaskIntoConstraints = false
-        rightHeader.addSubview(historyRow)
+        let statusStack = UIStackView(arrangedSubviews: [pairingButton, counters, missedButton,
+                                                         offlineDoorButton, doorPageButton])
+        statusStack.axis = .vertical
+        statusStack.spacing = 0
+        statusStack.translatesAutoresizingMaskIntoConstraints = false
+        statusCard.contentView.addSubview(statusStack)
         NSLayoutConstraint.activate([
-            historyRow.topAnchor.constraint(equalTo: rightHeader.topAnchor),
-            historyRow.bottomAnchor.constraint(equalTo: rightHeader.bottomAnchor),
-            historyRow.leadingAnchor.constraint(equalTo: rightHeader.leadingAnchor),
-            historyRow.trailingAnchor.constraint(equalTo: rightHeader.trailingAnchor),
+            statusStack.topAnchor.constraint(equalTo: statusCard.contentView.topAnchor),
+            statusStack.bottomAnchor.constraint(equalTo: statusCard.contentView.bottomAnchor),
+            statusStack.leadingAnchor.constraint(equalTo: statusCard.contentView.leadingAnchor),
+            statusStack.trailingAnchor.constraint(equalTo: statusCard.contentView.trailingAnchor),
+            counters.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum),
         ])
 
-        footerEffect.layer.cornerRadius = 12
-        footerEffect.layer.borderWidth = 0.5
-        footerEffect.clipsToBounds = true
-        footerEffect.contentView.addSubview(adminQr)
+        headerView.axis = .vertical
+        headerView.spacing = Space.xxs
+        headerView.addArrangedSubview(clockLabel)
+        headerView.addArrangedSubview(dateLabel)
+        headerView.addArrangedSubview(statusCard)
+        IOSAvailability.setCustomSpacing(Space.s, after: dateLabel, in: headerView)
+
+        footerCard.contentView.addSubview(adminQr)
         NSLayoutConstraint.activate([
-            footerEffect.heightAnchor.constraint(equalToConstant: 44),
-            adminQr.topAnchor.constraint(equalTo: footerEffect.contentView.topAnchor, constant: 4),
-            adminQr.bottomAnchor.constraint(equalTo: footerEffect.contentView.bottomAnchor,
-                                            constant: -4),
-            adminQr.leadingAnchor.constraint(equalTo: footerEffect.contentView.leadingAnchor,
-                                             constant: 8),
-            adminQr.trailingAnchor.constraint(equalTo: footerEffect.contentView.trailingAnchor,
-                                              constant: -8),
+            adminQr.topAnchor.constraint(equalTo: footerCard.contentView.topAnchor,
+                                         constant: Space.xs),
+            adminQr.bottomAnchor.constraint(equalTo: footerCard.contentView.bottomAnchor,
+                                            constant: -Space.xs),
+            adminQr.leadingAnchor.constraint(equalTo: footerCard.contentView.leadingAnchor,
+                                             constant: Space.s),
+            adminQr.trailingAnchor.constraint(equalTo: footerCard.contentView.trailingAnchor,
+                                              constant: -Space.s),
         ])
 
-        dashboardHeader.axis = .horizontal
-        dashboardHeader.spacing = 16
-        dashboardHeader.alignment = .center
-        dashboardHeader.distribution = .fill
-        headerControls.axis = .vertical
-        headerControls.spacing = 4
-        headerControls.alignment = .fill
-        headerControls.addArrangedSubview(statusRow)
-        headerControls.addArrangedSubview(footerEffect)
-        dashboardHeader.addArrangedSubview(leftHeader)
-        dashboardHeader.addArrangedSubview(headerControls)
-        leftHeader.widthAnchor.constraint(equalTo: dashboardHeader.widthAnchor,
-                                          multiplier: 0.30).isActive = true
-        dashboardHeader.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(dashboardHeader)
+        layout.minimumInteritemSpacing = Space.s
+        layout.minimumLineSpacing = Space.s
+        collection.backgroundColor = .clear
+        collection.dataSource = self
+        collection.delegate = self
+        collection.alwaysBounceVertical = true
+        collection.accessibilityIdentifier = "dashboard_tiles"
+        collection.register(HostCell.self, forCellWithReuseIdentifier: HostCell.reuse)
+        collection.register(QuickActionCell.self, forCellWithReuseIdentifier: QuickActionCell.reuse)
+        #if os(tvOS)
+        collection.clipsToBounds = false
+        collection.remembersLastFocusedIndexPath = true
+        #endif
 
-        leftColumn.axis = .vertical
-        leftColumn.spacing = 14
-        for view in [doorPageButton, offlineDoorButton, tilesStack, noticeButton] {
-            leftColumn.addArrangedSubview(view)
-        }
-        leftColumn.addArrangedSubview(UIView())
-
-        rightColumn.axis = .vertical
-        rightColumn.spacing = 14
-        for view in [rightHeader, UIView(), sosControl] {
-            rightColumn.addArrangedSubview(view)
-        }
-
-        columns.axis = .horizontal
-        columns.spacing = 24
-        columns.alignment = .fill
-        columns.distribution = .fill
-        columns.addArrangedSubview(leftColumn)
-        columns.addArrangedSubview(rightColumn)
-        leftColumn.widthAnchor.constraint(equalTo: rightColumn.widthAnchor,
-                                          multiplier: 1.35).isActive = true
-        columns.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(columns)
+        // The SOS trigger sits at the leading edge of the fixed action zone, below the scrolling
+        // content: compact, outlined, and gone entirely where SOS is not offered.
+        sosControl.setContentCompressionResistancePriority(.required, for: .vertical)
+        root.axis = .vertical
+        root.spacing = Space.s
+        root.alignment = .leading
+        root.addArrangedSubview(collection)
+        root.addArrangedSubview(sosControl)
+        collection.widthAnchor.constraint(equalTo: root.widthAnchor).isActive = true
+        root.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(root)
         NSLayoutConstraint.activate([
-            dashboardHeader.topAnchor.constraint(equalTo: topAnchor),
-            dashboardHeader.leadingAnchor.constraint(equalTo: leadingAnchor),
-            dashboardHeader.trailingAnchor.constraint(equalTo: trailingAnchor),
-            columns.topAnchor.constraint(equalTo: dashboardHeader.bottomAnchor, constant: 14),
-            columns.bottomAnchor.constraint(equalTo: bottomAnchor),
-            columns.leadingAnchor.constraint(equalTo: leadingAnchor),
-            columns.trailingAnchor.constraint(equalTo: trailingAnchor),
+            root.topAnchor.constraint(equalTo: topAnchor),
+            root.bottomAnchor.constraint(equalTo: bottomAnchor),
+            root.leadingAnchor.constraint(equalTo: leadingAnchor),
+            root.trailingAnchor.constraint(equalTo: trailingAnchor),
         ])
-
+        applyClockFont(for: bounds.size)
         startStillTimer()
     }
 
-    private func style(_ button: UIButton, title: String, filled: Bool) {
-        button.setTitle(title, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: 18, weight: .semibold)
+    /// One tappable line of the status card: an icon, a sentence and a chevron, like a table row.
+    private func statusRow(_ button: UIButton, icon: String, identifier: String,
+                           action: Selector) {
+        button.setImage(TablerIcon.image(icon), for: .normal)
+        button.titleLabel?.font = SystemStyle.font(.body)
         button.titleLabel?.numberOfLines = 0
-        button.titleLabel?.textAlignment = .center
-        button.layer.cornerRadius = 10
+        SystemStyle.followContentSize(button.titleLabel)
+        button.contentHorizontalAlignment = .left
         #if !os(tvOS)
-        button.contentEdgeInsets = UIEdgeInsets(top: 10, left: 18, bottom: 10, right: 18)
+        button.contentEdgeInsets = UIEdgeInsets(top: Space.xs, left: Space.m, bottom: Space.xs,
+                                                right: Space.m)
+        button.titleEdgeInsets = UIEdgeInsets(top: 0, left: Space.xs, bottom: 0, right: -Space.xs)
         #endif
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        button.accessibilityIdentifier = identifier
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum)
+            .isActive = true
+        button.addTarget(self, action: action, for: .primaryActionTriggered)
     }
 
     // MARK: - Layout
 
-    /// Portrait stacks the tiles above the call list; landscape puts them side by side. The
-    /// decision is made from the size the view is about to have, never from a fixed orientation.
+    /// The grid is chosen from the size the view is about to have, never from the device model:
+    /// one column when compact, two when medium, three when expanded.
     func applyLayout(for size: CGSize) {
-        let portrait = size.height > size.width
-        columns.axis = portrait ? .vertical : .horizontal
-        columns.distribution = .fill
-        clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: portrait ? 48 : 64,
-                                                           weight: .light)
+        applyClockFont(for: size)
+        layout.invalidateLayout()
+    }
+
+    private func applyClockFont(for size: CGSize) {
+        let compact = LayoutClass.of(width: size.width) == .compact || size.height < 500
+        clockLabel.font = SystemStyle.digits(size: compact ? 52 : 72, traits: traitCollection)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if abs(bounds.width - laidOutWidth) > 0.5 {
+            laidOutWidth = bounds.width
+            applyLayout(for: bounds.size)
+        }
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        applyLayout(for: bounds.size)
+    }
+
+    static func columnCount(forWidth width: CGFloat) -> Int {
+        return LayoutClass.of(width: width).columns(maximum: 3)
+    }
+
+    private var contentWidth: CGFloat {
+        return max(1, collection.bounds.width - layout.sectionInset.left - layout.sectionInset.right)
+    }
+
+    static func tileSize(contentWidth: CGFloat, columns: Int, spacing: CGFloat) -> CGSize {
+        let count = CGFloat(max(1, columns))
+        let width = floor((contentWidth - spacing * (count - 1)) / count)
+        // A door camera is 16:9; the tile keeps that shape between a height a finger can hit and
+        // one that still leaves the second row on screen.
+        return CGSize(width: width, height: min(360, max(160, (width * 9 / 16).rounded())))
+    }
+
+    // MARK: - Collection view
+
+    func numberOfSections(in collectionView: UICollectionView) -> Int {
+        return Section.allCases.count
+    }
+
+    func collectionView(_ collectionView: UICollectionView,
+                        numberOfItemsInSection section: Int) -> Int {
+        switch Section(rawValue: section) {
+        case .header?, .footer?: return 1
+        case .actions?: return quickActions.count
+        case .doors?: return shownDoors.count
+        case nil: return 0
+        }
+    }
+
+    func collectionView(_ collectionView: UICollectionView,
+                        cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
+        if Section(rawValue: indexPath.section) == .actions {
+            let cell = collectionView.dequeueReusableCell(
+                withReuseIdentifier: QuickActionCell.reuse, for: indexPath) as! QuickActionCell
+            cell.apply(quickActions[indexPath.item])
+            return cell
+        }
+        let cell = collectionView.dequeueReusableCell(withReuseIdentifier: HostCell.reuse,
+                                                      for: indexPath) as! HostCell
+        switch Section(rawValue: indexPath.section) {
+        case .header?:
+            cell.host(headerView)
+            cell.isAccessibilityElement = false
+        case .footer?:
+            cell.host(footerCard)
+        case .doors?:
+            let door = shownDoors[indexPath.item]
+            if let tile = tiles[door] { cell.host(tile) }
+            cell.accessibilityIdentifier = "door_tile_\(door)"
+        default:
+            break
+        }
+        return cell
+    }
+
+    func collectionView(_ collectionView: UICollectionView,
+                        layout collectionViewLayout: UICollectionViewLayout,
+                        sizeForItemAt indexPath: IndexPath) -> CGSize {
+        let width = contentWidth
+        switch Section(rawValue: indexPath.section) {
+        case .doors?:
+            return DashboardView.tileSize(contentWidth: width,
+                                          columns: DashboardView.columnCount(forWidth: width),
+                                          spacing: layout.minimumInteritemSpacing)
+        case .actions?:
+            let count = CGFloat(max(1, quickActions.count))
+            return CGSize(width: floor((width - layout.minimumInteritemSpacing * (count - 1))
+                                        / count), height: 120)
+        case .header?:
+            return CGSize(width: width, height: fittingHeight(headerView, width: width))
+        default:
+            return CGSize(width: width, height: fittingHeight(footerCard, width: width))
+        }
+    }
+
+    private func fittingHeight(_ view: UIView, width: CGFloat) -> CGFloat {
+        let size = view.systemLayoutSizeFitting(
+            CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
+            withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel)
+        return ceil(max(1, size.height))
+    }
+
+    func collectionView(_ collectionView: UICollectionView,
+                        layout collectionViewLayout: UICollectionViewLayout,
+                        insetForSectionAt section: Int) -> UIEdgeInsets {
+        let empty = self.collectionView(collectionView, numberOfItemsInSection: section) == 0
+        return UIEdgeInsets(top: 0, left: 0, bottom: empty ? 0 : Space.m, right: 0)
+    }
+
+    func collectionView(_ collectionView: UICollectionView,
+                        shouldHighlightItemAt indexPath: IndexPath) -> Bool {
+        let section = Section(rawValue: indexPath.section)
+        return section == .doors || section == .actions
+    }
+
+    func collectionView(_ collectionView: UICollectionView,
+                        canFocusItemAt indexPath: IndexPath) -> Bool {
+        let section = Section(rawValue: indexPath.section)
+        return section == .doors || section == .actions
+    }
+
+    func collectionView(_ collectionView: UICollectionView,
+                        didSelectItemAt indexPath: IndexPath) {
+        collectionView.deselectItem(at: indexPath, animated: false)
+        switch Section(rawValue: indexPath.section) {
+        case .doors?:
+            guard indexPath.item < shownDoors.count else { return }
+            onOpenDoor?(shownDoors[indexPath.item])
+        case .actions?:
+            guard indexPath.item < quickActions.count else { return }
+            quickActions[indexPath.item].handler()
+        default:
+            break
+        }
     }
 
     // MARK: - Content
 
-    /// `skin` carries both halves of the answer: the household's theme background, which this
-    /// panel paints like the door station does, and the light/dark palette that owns the cards
-    /// laid on top of it.
-    /// One reload, one snapshot. Every part of this page used to fetch `core.status()` for
-    /// itself — five parses of the same JSON, microseconds apart, on the main thread.
+    /// `skin` carries the household's theme background, which this panel wears, and the ink for
+    /// the text drawn straight on it. One reload, one status snapshot.
     func reload(config: [String: Any]?, skin: DoorbellSkin) {
         IOSAvailability.PerfProbe.measure("dashboard.reload") {
             reloadBody(config: config, skin: skin)
@@ -267,50 +376,76 @@ final class DashboardView: UIView {
         lastCounts = ClusterCounts.from(status: status, selfRole: boot.role)
         applySkin()
         rebuildTiles(status: status, nowMs: nowMs)
-        adminQr.skin = skin
         adminQr.reload(status: status)
         refreshMissedBadge()
         refreshVersionLine(status: status)
-        sosControl.countdownSeconds = ConfigUtil.int(config, "emergency.trigger.countdown_s", 3)
-        sosControl.refreshStrings()
         refreshStills(status: status)
     }
 
-    /// The clock, the date, the section heading and the identity line sit straight on the theme
-    /// background, so their colours come from Core's per-region automatic ink. Everything with a
-    /// fill of its own — pills, chips, buttons, the tiles, the call list — is a surface this view
-    /// painted from the palette, and keeps the palette's ink.
+    /// The clock and the date sit straight on the theme background, so their colours come from
+    /// Core's per-region automatic ink. Everything else is on the system material and takes the
+    /// system label colours.
     private func applySkin() {
         skin.apply("clock", to: clockLabel)
-        dateLabel.textColor = .white
-        skin.apply("status_line", to: historyHeader)
-        footerEffect.contentView.backgroundColor = skin.surface.withAlphaComponent(0.65)
-        footerEffect.layer.borderColor = skin.cardInk("footer").withAlphaComponent(0.35).cgColor
-        counters.update(lastCounts, ink: skin.cardInk("status_line"), surface: skin.surface)
-        DoorbellTheme.pill(missedBadge, background: skin.palette.danger,
-                           ink: DoorbellTheme.readableInk(on: skin.palette.danger), fontSize: 15)
-        for button in [adminButton, noticeButton, doorPageButton,
-                       offlineDoorButton, seeAllButton] {
-            button.setTitleColor(skin.cardInk("status_line"), for: .normal)
-            button.backgroundColor = skin.surface
-        }
+        skin.apply("date", to: dateLabel)
+        counters.update(lastCounts, ink: SystemStyle.label, surface: .clear)
+        missedButton.tintColor = SystemStyle.negative
+        pairingButton.tintColor = SystemStyle.warning
+        offlineDoorButton.tintColor = SystemStyle.label
+        doorPageButton.tintColor = SystemStyle.label
+        statusCard.refresh()
+        footerCard.refresh()
+        adminQr.refreshColors()
+    }
+
+    @objc private func styleChanged() {
+        applySkin()
+        collection.reloadData()
     }
 
     /// The reading is handed in by the screen that owns the clock. Asking Core for a second one
     /// meant two synchronous Core calls per tick on the main thread.
     func updateClock(_ reading: DoorbellClock.Reading) {
         clockLabel.text = reading.hhmmss
-        dateLabel.text = DoorbellClock.longDate(reading, lang: boot.uiLang)
+        let date = DoorbellClock.longDate(reading, lang: boot.uiLang)
+        if dateLabel.text != date { dateLabel.text = date }
     }
 
+    /// While missed calls are unread, one row says so and leads to the History tab; the count
+    /// itself is the tab's badge.
     func refreshMissedBadge() {
         let unread = CallHistory.unreadMissed(core)
-        missedBadge.isHidden = unread <= 0
-        missedBadge.text = texts.t("history.missed_badge", "\(unread)")
+        let hidden = unread <= 0
+        let title = texts.t("history.missed_badge", "\(unread)")
+        var changed = false
+        if missedButton.isHidden != hidden { missedButton.isHidden = hidden; changed = true }
+        if missedButton.title(for: .normal) != title {
+            missedButton.setTitle(title, for: .normal)
+            changed = true
+        }
+        if unread != unreadMissed {
+            unreadMissed = unread
+            onUnreadMissedChanged?(unread)
+        }
+        if changed { invalidateHeader() }
+    }
+
+    /// While this device is not in a cluster, one row says so and leads to pairing. Nil hides it.
+    func setPairingNotice(_ text: String?) {
+        let hidden = text == nil
+        guard pairingButton.isHidden != hidden || pairingButton.title(for: .normal) != text
+        else { return }
+        pairingButton.isHidden = hidden
+        pairingButton.setTitle(text, for: .normal)
+        invalidateHeader()
     }
 
     func refreshHistory() {
         refreshMissedBadge()
+    }
+
+    private func invalidateHeader() {
+        layout.invalidateLayout()
     }
 
     static let previewRates: [Double] = [0.5, 1, 2, 4]
@@ -359,7 +494,7 @@ final class DashboardView: UIView {
         for (door, tile) in tiles {
             let notice = DoorbellNotice.effective(status: status, config: config, door: door,
                                                   nowMs: nowMs)
-            tile.updateNotice(active: notice != nil, skin: skin)
+            tile.updateNotice(active: notice != nil)
         }
     }
 
@@ -383,48 +518,34 @@ final class DashboardView: UIView {
         // the monitor page's device list and still delivers its notices.
         allDoors = ConfigUtil.doorsWithCamera(config: config, status: status)
         let doors = selectedDoors()
-        doorPageButton.isHidden = allDoors.count <= Self.previewCapacity
-        if !doorPageButton.isHidden {
-            doorPageButton.setTitle("\(texts.t("settings.doors")) · \(doors.count)/\(allDoors.count) ›",
-                                    for: .normal)
+        var headerChanged = false
+        let paged = allDoors.count > Self.previewCapacity
+        if doorPageButton.isHidden == paged { doorPageButton.isHidden = !paged; headerChanged = true }
+        if paged {
+            doorPageButton.setTitle(
+                "\(texts.t("settings.doors")) · \(doors.count)/\(allDoors.count)", for: .normal)
         }
         let offlinePeers = ConfigUtil.offlineDoorPeers(config: config, status: status)
-        offlineDoorButton.isHidden = offlinePeers.isEmpty
-        if !offlineDoorButton.isHidden {
-            offlineDoorButton.setTitle("\(texts.t("dashboard.offline_doors")) · \(offlinePeers.count) ›",
-                                       for: .normal)
+        if offlineDoorButton.isHidden != offlinePeers.isEmpty {
+            offlineDoorButton.isHidden = offlinePeers.isEmpty
+            headerChanged = true
         }
-        let existing = Set(tiles.keys)
-        if existing != Set(doors) {
-            for view in tilesStack.arrangedSubviews { view.removeFromSuperview() }
-            tiles = [:]
-            for door in doors {
+        if !offlinePeers.isEmpty {
+            offlineDoorButton.setTitle(
+                "\(texts.t("dashboard.offline_doors")) · \(offlinePeers.count)", for: .normal)
+        }
+        if doors != shownDoors {
+            for door in doors where tiles[door] == nil {
                 let tile = DoorTileView(texts: texts)
                 tile.door = door
-                tile.onOpen = { [weak self] in self?.onOpenDoor?(door) }
                 tile.onNotice = { [weak self] in self?.onOpenNotice?(door) }
                 tiles[door] = tile
             }
-        }
-        for row in tilesStack.arrangedSubviews { tilesStack.removeArrangedSubview(row); row.removeFromSuperview() }
-        let rows = Self.previewRows(for: doors)
-        for rowDoors in rows {
-            let row = UIStackView()
-            row.axis = .horizontal
-            row.alignment = .fill
-            row.distribution = .fillEqually
-            row.spacing = 12
-            row.setContentHuggingPriority(.required, for: .vertical)
-            let cardHeight: CGFloat = rowDoors.count > 1
-                ? (doors.count == 4 ? 170 : 204) : 304
-            row.heightAnchor.constraint(equalToConstant: cardHeight).isActive = true
-            for door in rowDoors {
-                guard let tile = tiles[door] else { continue }
-                tile.applyDensity(visibleCount: doors.count, grid: rowDoors.count > 1)
-                tile.setContentHuggingPriority(.required, for: .vertical)
-                row.addArrangedSubview(tile)
-            }
-            tilesStack.addArrangedSubview(row)
+            for door in Array(tiles.keys) where !doors.contains(door) { tiles[door] = nil }
+            shownDoors = doors
+            collection.reloadData()
+        } else if headerChanged {
+            invalidateHeader()
         }
         for door in doors {
             guard let tile = tiles[door] else { continue }
@@ -433,14 +554,14 @@ final class DashboardView: UIView {
             let notice = DoorbellNotice.effective(status: status, config: config, door: door,
                                                   nowMs: nowMs)
             tile.apply(label: ConfigUtil.labelOf(entry, boot.uiLang, door),
-                       online: peer != nil,
-                       noticeActive: notice != nil,
-                       skin: skin)
+                       online: peer != nil, noticeActive: notice != nil)
         }
     }
 
+    /// At most this many doors are sampled at once; more are paged through from the status card.
     private static let previewCapacity = 4
 
+    /// The rows a two-column grid arranges a set of doors in.
     static func previewRows(for doors: [String]) -> [[String]] {
         switch doors.count {
         case 0: return []
@@ -474,6 +595,7 @@ final class DashboardView: UIView {
     }
 
     private func refreshStillsBody(status: [String: Any]?) {
+        guard window != nil, !tiles.isEmpty else { return }
         let snapshot = status ?? core.status()
         for (door, tile) in tiles {
             guard let peer = ConfigUtil.onlineDoorPeer(snapshot, door: door),
@@ -485,8 +607,9 @@ final class DashboardView: UIView {
         }
     }
 
-    /// Core publishes peer media as loopback proxy URLs (security protocol v3 §8); the still is
-    /// the stream's sibling. A peer is never fetched directly, so there is no host fallback.
+    /// Core publishes peer media as loopback proxy URLs (security protocol v3 section 8); the
+    /// still is the stream's sibling. A peer is never fetched directly, so there is no host
+    /// fallback.
     private func snapshotUrl(peer: [String: Any]) -> URL? {
         guard let stream = ConfigUtil.str(peer, "stream"), let url = URL(string: stream) else {
             return nil
@@ -506,11 +629,9 @@ final class DashboardView: UIView {
 
     // MARK: - Actions
 
-    @objc private func openAdmin() { onOpenAdmin?() }
-
     @objc private func openHistory() { onOpenHistory?() }
 
-    @objc private func openGlobalNotice() { onOpenNotice?("") }
+    @objc private func openPairing() { onOpenPairing?() }
 
     @objc private func nextDoorPage() {
         guard allDoors.count > Self.previewCapacity else { return }
@@ -525,23 +646,124 @@ final class DashboardView: UIView {
     @objc private func openOfflineDoors() { onOpenOfflineDoors?() }
 }
 
-final class OfflineDoorStationsViewController: SettingsFormViewController {
-    private let core: CoreBridge
-    private let config: [String: Any]?
+/// A collection cell that shows one view the dashboard keeps alive across reloads.
+private final class HostCell: UICollectionViewCell {
+    static let reuse = "host"
+    private weak var hosted: UIView?
 
-    init(core: CoreBridge, config: [String: Any]?, texts: Texts) {
-        self.core = core
-        self.config = config
-        super.init(texts: texts)
-        screenTitle = texts.t("dashboard.offline_doors_title")
+    func host(_ view: UIView) {
+        accessibilityIdentifier = nil
+        guard hosted !== view || view.superview !== contentView else { return }
+        if let old = hosted, old.superview === contentView { old.removeFromSuperview() }
+        hosted = view
+        view.translatesAutoresizingMaskIntoConstraints = false
+        contentView.addSubview(view)
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: contentView.topAnchor),
+            view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+        ])
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        if let old = hosted, old.superview === contentView { old.removeFromSuperview() }
+        hosted = nil
+    }
+
+    override var isHighlighted: Bool {
+        didSet { contentView.alpha = isHighlighted ? 0.7 : 1 }
+    }
+
+    #if os(tvOS)
+    override func didUpdateFocus(in context: UIFocusUpdateContext,
+                                 with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        (hosted as? DoorTileView)?.setFocused(isFocused, coordinator: coordinator)
+    }
+    #endif
+}
+
+/// One home action as a focusable card: an icon over its title.
+private final class QuickActionCell: UICollectionViewCell {
+    static let reuse = "action"
+    private let card = MaterialCardView()
+    private let icon = UIImageView()
+    private let title = SystemStyle.label(.headline, lines: 2)
+
+    override init(frame: CGRect) {
+        super.init(frame: frame)
+        icon.contentMode = .scaleAspectFit
+        icon.tintColor = SystemStyle.label
+        title.textAlignment = .center
+        let stack = UIStackView(arrangedSubviews: [icon, title])
+        stack.axis = .vertical
+        stack.spacing = Space.xs
+        stack.alignment = .center
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        card.contentView.addSubview(stack)
+        contentView.addSubview(card)
+        NSLayoutConstraint.activate([
+            card.topAnchor.constraint(equalTo: contentView.topAnchor),
+            card.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
+            card.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
+            card.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
+            stack.centerYAnchor.constraint(equalTo: card.contentView.centerYAnchor),
+            stack.leadingAnchor.constraint(equalTo: card.contentView.leadingAnchor,
+                                           constant: Space.xs),
+            stack.trailingAnchor.constraint(equalTo: card.contentView.trailingAnchor,
+                                            constant: -Space.xs),
+            icon.heightAnchor.constraint(equalToConstant: 36),
+            icon.widthAnchor.constraint(equalToConstant: 36),
+        ])
+        isAccessibilityElement = true
+        accessibilityTraits = .button
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    override func fields() -> [SettingsField] {
+    func apply(_ action: DashboardView.QuickAction) {
+        icon.image = TablerIcon.image(action.icon)
+        title.text = action.title
+        accessibilityLabel = action.title
+        accessibilityIdentifier = action.identifier
+    }
+
+    override func didUpdateFocus(in context: UIFocusUpdateContext,
+                                 with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        coordinator.addCoordinatedAnimations({ [weak self] in
+            guard let self = self else { return }
+            self.transform = self.isFocused ? CGAffineTransform(scaleX: 1.06, y: 1.06) : .identity
+        }, completion: nil)
+    }
+}
+
+/// The door stations that are not answering, as a plain list pushed from the home screen.
+final class OfflineDoorStationsViewController: UITableViewController {
+    private let core: CoreBridge
+    private let config: [String: Any]?
+    private let texts: Texts
+    private var rows: [(title: String, detail: String)] = []
+
+    init(core: CoreBridge, config: [String: Any]?, texts: Texts) {
+        self.core = core
+        self.config = config
+        self.texts = texts
+        super.init(style: SystemStyle.tableStyle())
+        title = texts.t("dashboard.offline_doors_title")
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        SystemStyle.style(tableView)
+        tableView.accessibilityIdentifier = "offline_doors"
+        tableView.allowsSelection = false
         let peers = ConfigUtil.offlineDoorPeers(config: config, status: core.status())
-        guard !peers.isEmpty else { return [.note(texts.t("dashboard.offline_doors_empty"))] }
-        return peers.map { peer in
+        rows = peers.map { peer in
             let door = ConfigUtil.evStr(peer, "door")
             let entry = ConfigUtil.dig(config, "doors.\(door)") as? [String: Any]
             let label = ConfigUtil.labelOf(entry, texts.lang, door)
@@ -549,16 +771,35 @@ final class OfflineDoorStationsViewController: SettingsFormViewController {
             let state = ConfigUtil.evStr(peer, "status") == "missing"
                 ? texts.t("dashboard.device_status_missing")
                 : texts.t("dashboard.device_status_offline")
-            let detail = [label, state].filter { !$0.isEmpty }.joined(separator: " · ")
-            return .value(title: name.isEmpty ? (label.isEmpty ? door : label) : name,
-                          detail: detail)
+            return (name.isEmpty ? (label.isEmpty ? door : label) : name,
+                    [label, state].filter { !$0.isEmpty }.joined(separator: " · "))
         }
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return rows.count
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        return rows.isEmpty ? texts.t("dashboard.offline_doors_empty") : nil
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .subtitle, reuseIdentifier: nil)
+        SystemStyle.style(cell)
+        cell.textLabel?.text = rows[indexPath.row].title
+        cell.detailTextLabel?.text = rows[indexPath.row].detail
+        cell.imageView?.image = TablerIcon.image("TablerVideoOff")
+        cell.imageView?.tintColor = SystemStyle.secondaryLabel
+        return cell
     }
 }
 
 /// One door: its most recent still, its name, whether it is reachable, and whether an
 /// announcement is showing there.
-final class DoorTileView: UIView, UIGestureRecognizerDelegate {
+final class DoorTileView: UIView {
 
     /// One session for every tile. Tiles are rebuilt whenever the door set changes; a session per
     /// tile was never invalidated and accumulated for the life of the process.
@@ -569,7 +810,6 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
     }()
 
     var door = ""
-    var onOpen: (() -> Void)?
     var onNotice: (() -> Void)?
 
     private let still = UIImageView()
@@ -592,7 +832,6 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
     private var lastStillData: Data?
     private var session: URLSession { return DoorTileView.sharedSession }
     private let texts: Texts
-    private var minimumHeightConstraint: NSLayoutConstraint!
 
     init(texts: Texts) {
         self.texts = texts
@@ -602,7 +841,9 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
         accessibilityIdentifier = "door_tile"
         isAccessibilityElement = true
         accessibilityTraits = [.button]
+        backgroundColor = UIColor(white: 0.12, alpha: 1)
         layer.cornerRadius = 12
+        if #available(iOS 13.0, tvOS 13.0, *) { layer.cornerCurve = .continuous }
         clipsToBounds = true
 
         still.contentMode = .scaleAspectFill
@@ -610,8 +851,12 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
         still.translatesAutoresizingMaskIntoConstraints = false
         addSubview(still)
 
-        nameLabel.font = .systemFont(ofSize: 17, weight: .semibold)
-        stateLabel.font = .systemFont(ofSize: 14)
+        nameLabel.font = SystemStyle.font(.headline)
+        stateLabel.font = SystemStyle.font(.subheadline)
+        SystemStyle.followContentSize(nameLabel)
+        SystemStyle.followContentSize(stateLabel)
+        nameLabel.textColor = .white
+        stateLabel.textColor = .white
         nameLabel.numberOfLines = 0
         nameLabel.lineBreakMode = .byCharWrapping
         nameLabel.setContentCompressionResistancePriority(.required, for: .vertical)
@@ -637,7 +882,6 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
         captionRow.translatesAutoresizingMaskIntoConstraints = false
         addSubview(captionRow)
 
-        minimumHeightConstraint = heightAnchor.constraint(greaterThanOrEqualToConstant: 200)
         NSLayoutConstraint.activate([
             still.topAnchor.constraint(equalTo: topAnchor),
             still.bottomAnchor.constraint(equalTo: bottomAnchor),
@@ -651,11 +895,7 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
             captionRow.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
             captionRow.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
             captionRow.topAnchor.constraint(greaterThanOrEqualTo: topAnchor, constant: 10),
-            minimumHeightConstraint,
         ])
-        let tap = UITapGestureRecognizer(target: self, action: #selector(open))
-        tap.delegate = self
-        addGestureRecognizer(tap)
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
@@ -665,40 +905,35 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
         captionGradient.frame = captionBackground.bounds
     }
 
-    func applyDensity(visibleCount: Int, grid: Bool) {
-        let height: CGFloat = grid ? (visibleCount == 4 ? 116 : 150) : 250
-        let minimum = height + 54
-        if minimumHeightConstraint.constant != minimum { minimumHeightConstraint.constant = minimum }
+    #if os(tvOS)
+    /// The system focus look for a card: lifted, slightly larger, with a shadow.
+    func setFocused(_ focused: Bool, coordinator: UIFocusAnimationCoordinator) {
+        coordinator.addCoordinatedAnimations({ [weak self] in
+            guard let self = self else { return }
+            self.transform = focused ? CGAffineTransform(scaleX: 1.06, y: 1.06) : .identity
+            self.layer.borderWidth = focused ? 4 : 0
+            self.layer.borderColor = UIColor.white.cgColor
+        }, completion: nil)
     }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
-                           shouldReceive touch: UITouch) -> Bool {
-        var candidate = touch.view
-        while let view = candidate, view !== self {
-            if view is UIControl { return false }
-            candidate = view.superview
-        }
-        return true
-    }
+    #endif
 
     /// The name sits over the live image, so its ink and gradient remain legible independently of
     /// the household theme or the colours in the camera frame.
-    func apply(label: String, online: Bool, noticeActive: Bool, skin: DoorbellSkin) {
+    func apply(label: String, online: Bool, noticeActive: Bool) {
         if nameLabel.text != label { nameLabel.text = label }
         accessibilityLabel = label
         accessibilityHint = texts.t("door.view")
         let state = online ? "" : texts.t("admin.offline")
         if stateLabel.text != state { stateLabel.text = state }
         stateLabel.isHidden = state.isEmpty
-        if nameLabel.textColor != .white { nameLabel.textColor = .white }
-        if stateLabel.textColor != .white { stateLabel.textColor = .white }
+        accessibilityValue = state
         let alpha: CGFloat = online ? 1 : 0.35
         if still.alpha != alpha { still.alpha = alpha }
-        noticeChip.update(active: noticeActive, palette: skin.palette)
+        noticeChip.update(active: noticeActive, overPicture: true)
     }
 
-    func updateNotice(active: Bool, skin: DoorbellSkin) {
-        noticeChip.update(active: active, palette: skin.palette)
+    func updateNotice(active: Bool) {
+        noticeChip.update(active: active, overPicture: true)
     }
 
     func setStill(_ image: UIImage?) {
@@ -821,6 +1056,4 @@ final class DoorTileView: UIView, UIGestureRecognizerDelegate {
         UIGraphicsEndImageContext()
         return output ?? image
     }
-
-    @objc private func open() { onOpen?() }
 }

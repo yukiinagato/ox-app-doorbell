@@ -24,42 +24,20 @@ final class HomePerformanceTests: XCTestCase {
         }
     }
 
-    /// The old list tore down every row and allocated a fresh one — four labels, two stacks and
-    /// five constraints each — on every reload.
-    func testBuildingTwentyRowsFromScratch() {
-        let texts = Texts()
-        let host = UIStackView()
-        let rows = sampleRows(20)
-        measure {
-            for view in host.arrangedSubviews { view.removeFromSuperview() }
-            for _ in rows {
-                let view = CallHistoryRowView(texts: texts)
-                host.addArrangedSubview(view)
-            }
-            host.layoutIfNeeded()
-        }
-    }
-
-    /// The new list keeps its rows and points them at whatever is showing now.
-    func testUpdatingTwentyRowsInPlace() {
+    /// What the history table pays per row: a stock subtitle cell configured from one call.
+    func testConfiguringTwentyStockHistoryCells() {
         let texts = Texts()
         let core = CoreBridge()
-        let host = UIStackView()
         let rows = sampleRows(20)
-        var views: [CallHistoryRowView] = []
-        for _ in rows {
-            let view = CallHistoryRowView(texts: texts)
-            views.append(view)
-            host.addArrangedSubview(view)
-        }
-        host.layoutIfNeeded()
+        let cells = rows.map { _ in UITableViewCell(style: .subtitle, reuseIdentifier: "call") }
         measure {
             for (index, row) in rows.enumerated() {
-                views[index].update(core: core, config: nil, row: row, lang: "ja",
-                                    palette: .dark)
+                CallHistory.configure(cells[index], core: core, texts: texts, config: nil,
+                                      row: row, lang: "ja")
             }
-            host.layoutIfNeeded()
         }
+        XCTAssertEqual(cells[0].accessibilityIdentifier, "history_row_row-0")
+        XCTAssertNotNil(cells[0].imageView?.image, "the outcome icon is a vendored asset")
     }
 
     // MARK: - The door tile still

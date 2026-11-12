@@ -31,8 +31,7 @@ struct CallLogRow {
     }
 }
 
-/// Shared reading and rendering of the call log, so the dashboard's short list and the full-screen
-/// history page describe a call the same way.
+/// Shared reading and wording of the call log, so every surface describes a call the same way.
 enum CallHistory {
 
     static let pageSize = 50
@@ -110,269 +109,180 @@ enum CallHistory {
     }
 }
 
-/// Scrollable list of the most recent calls used on the dashboard. It never pages; the full page
-/// behind 「すべて見る」 does.
-final class RecentCallsView: UIView {
-
-    var onSelect: ((CallLogRow) -> Void)?
-
-    private let core: CoreBridge
-    private let texts: Texts
-    private let lang: String
-    private let scroll = UIScrollView()
-    private let stack = UIStackView()
-    private let emptyLabel = UILabel()
-    private var skin = DoorbellSkin.plain(.dark)
-    private var rowViews: [CallHistoryRowView] = []
-    private var renderedRows: [String] = []
-    private var renderedLang = ""
-    private var renderedAppearance: DoorbellAppearance?
-
-    init(core: CoreBridge, texts: Texts, lang: String) {
-        self.core = core
-        self.texts = texts
-        self.lang = lang
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        // The list is a card in its own right. On a panel wearing a theme picture that is what
-        // keeps its rows readable: the palette ink they carry belongs to this fill, not to
-        // whatever the household put behind the screen.
-        layer.cornerRadius = 12
-        clipsToBounds = true
-
-        stack.axis = .vertical
-        stack.spacing = 2
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(stack)
-        addSubview(scroll)
-
-        emptyLabel.text = texts.t("history.empty")
-        emptyLabel.font = .systemFont(ofSize: 17)
-        emptyLabel.numberOfLines = 0
-        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(emptyLabel)
-
-        NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: topAnchor, constant: 10),
-            scroll.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -10),
-            scroll.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            scroll.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-            stack.topAnchor.constraint(equalTo: scroll.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
-            stack.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
-            stack.widthAnchor.constraint(equalTo: scroll.widthAnchor),
-            emptyLabel.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            emptyLabel.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 12),
-            emptyLabel.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -12),
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    /// Rows are built once and updated in place. Tearing the list down and rebuilding it meant
-    /// twenty row views, each with four labels and five constraints, allocated on the main thread
-    /// every time anything on the page changed — and twenty Core round-trips to format the times.
-    /// An unchanged list now costs one comparison.
-    func reload(config: [String: Any]?, skin: DoorbellSkin, limit: Int = 20) {
-        self.skin = skin
-        if backgroundColor != skin.surface { backgroundColor = skin.surface }
-        let rows = IOSAvailability.PerfProbe.measure("history.page") {
-            CallHistory.page(core, beforeMs: 0, limit: limit)
-        }
-        emptyLabel.isHidden = !rows.isEmpty
-        emptyLabel.textColor = skin.cardMuted("status_line")
-
-        let identity = rows.map { "\($0.id)/\($0.outcome)" }
-        guard identity != renderedRows || lang != renderedLang
-                || skin.palette.appearance != renderedAppearance else { return }
-        renderedRows = identity
-        renderedLang = lang
-        renderedAppearance = skin.palette.appearance
-
-        while rowViews.count > rows.count {
-            rowViews.removeLast().removeFromSuperview()
-        }
-        while rowViews.count < rows.count {
-            let view = CallHistoryRowView(texts: texts)
-            rowViews.append(view)
-            stack.addArrangedSubview(view)
-        }
-        for (index, row) in rows.enumerated() {
-            rowViews[index].update(core: core, config: config, row: row, lang: lang,
-                                   palette: skin.palette)
+extension CallHistory {
+    /// The vendored icon and the colour role for one outcome.
+    static func outcomeIcon(_ outcome: String) -> (name: String, color: UIColor) {
+        switch outcome {
+        case "answered": return ("TablerPhone", SystemStyle.positive)
+        case "replied": return ("TablerMessageReply", SystemStyle.tint)
+        case "cancelled": return ("TablerX", SystemStyle.secondaryLabel)
+        default: return ("TablerPhoneOff", SystemStyle.negative)
         }
     }
-}
 
-/// A single history entry. It is a control so the same view works with the tvOS focus engine.
-final class CallHistoryRowView: UIControl {
-
-    private(set) var row = CallLogRow.empty
-    private let texts: Texts
-    private let timeLabel = UILabel()
-    private let titleLabel = UILabel()
-    private let subtitleLabel = UILabel()
-    private let missedBadge = PaddedLabel()
-    /// The wall time the visible stamp was formatted from, so a reused row only asks Core again
-    /// when it is actually showing a different call.
-    private var renderedTsMs: Int64 = -1
-    private var renderedPalette: DoorbellAppearance?
-
-    init(texts: Texts) {
-        self.texts = texts
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-
-        timeLabel.font = .monospacedDigitSystemFont(ofSize: 16, weight: .medium)
-        timeLabel.setContentHuggingPriority(.required, for: .horizontal)
-        titleLabel.font = .systemFont(ofSize: 17, weight: .medium)
-        subtitleLabel.font = .systemFont(ofSize: 15)
-
-        // A pill hugs its text; only the title column takes the leftover width.
-        missedBadge.setContentHuggingPriority(.required, for: .horizontal)
-        missedBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
-        let textColumn = UIStackView(arrangedSubviews: [titleLabel, subtitleLabel])
-        textColumn.axis = .vertical
-        textColumn.spacing = 1
-
-        let stack = UIStackView(arrangedSubviews: [timeLabel, textColumn, UIView(),
-                                                   missedBadge])
-        stack.axis = .horizontal
-        stack.spacing = 12
-        stack.alignment = .center
-        stack.isUserInteractionEnabled = false
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 8),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -8),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 4),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -4),
-            heightAnchor.constraint(greaterThanOrEqualToConstant: 44),
-        ])
-    }
-
-    /// Points an existing row at a different call. Only what actually differs is assigned: every
-    /// text or colour written here invalidates layout for the whole list.
-    func update(core: CoreBridge, config: [String: Any]?, row: CallLogRow, lang: String,
-                palette: DoorbellPalette) {
-        self.row = row
-        accessibilityIdentifier = "history_row_\(row.id)"
-
-        if row.tsMs != renderedTsMs {
-            renderedTsMs = row.tsMs
-            timeLabel.text = DoorbellClock.timeOfDay(core, wallMs: row.tsMs)
-        }
+    /// Fills a stock subtitle cell for one call: outcome icon, door and purpose, the outcome
+    /// line, and the time of day on the trailing edge. An unread missed call is set in bold.
+    static func configure(_ cell: UITableViewCell, core: CoreBridge, texts: Texts,
+                          config: [String: Any]?, row: CallLogRow, lang: String) {
+        SystemStyle.style(cell)
+        let unread = row.outcome == "missed" && !row.seen
         let title = CallHistory.title(config: config, row: row, lang: lang)
-        if titleLabel.text != title { titleLabel.text = title }
-        let subtitle = CallHistory.subtitle(texts, config: config, row: row, lang: lang)
-        if subtitleLabel.text != subtitle { subtitleLabel.text = subtitle }
-
-        if renderedPalette != palette.appearance {
-            renderedPalette = palette.appearance
-            timeLabel.textColor = palette.inkMuted
-            titleLabel.textColor = palette.ink
-            subtitleLabel.textColor = palette.inkMuted
-            DoorbellTheme.pill(missedBadge, background: palette.danger,
-                               ink: DoorbellTheme.readableInk(on: palette.danger), fontSize: 13)
-            missedBadge.text = texts.t("history.outcome_missed")
-        }
-        let missed = row.outcome != "missed"
-        if missedBadge.isHidden != missed { missedBadge.isHidden = missed }
+        cell.textLabel?.text = title.isEmpty ? outcomeText(texts, row.outcome) : title
+        cell.textLabel?.font = SystemStyle.font(.body, weight: unread ? .semibold : nil)
+        cell.detailTextLabel?.text = subtitle(texts, config: config, row: row, lang: lang)
+        cell.detailTextLabel?.font = SystemStyle.font(.subheadline)
+        cell.detailTextLabel?.textColor = row.outcome == "missed" ? SystemStyle.negative
+            : SystemStyle.secondaryLabel
+        let icon = outcomeIcon(row.outcome)
+        cell.imageView?.image = TablerIcon.image(icon.name)
+        cell.imageView?.tintColor = icon.color
+        let time = (cell.accessoryView as? UILabel) ?? UILabel()
+        time.font = SystemStyle.digits(size: 15, weight: .regular)
+        time.textColor = SystemStyle.secondaryLabel
+        time.text = DoorbellClock.timeOfDay(core, wallMs: row.tsMs)
+        time.sizeToFit()
+        cell.accessoryView = time
+        cell.accessibilityIdentifier = "history_row_\(row.id)"
     }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    #if os(tvOS)
-    override var canBecomeFocused: Bool { return true }
-
-    override func didUpdateFocus(in context: UIFocusUpdateContext,
-                                 with coordinator: UIFocusAnimationCoordinator) {
-        super.didUpdateFocus(in: context, with: coordinator)
-        let focused = context.nextFocusedView === self
-        coordinator.addCoordinatedAnimations({ [weak self] in
-            self?.backgroundColor = focused ? UIColor(white: 1, alpha: 0.16) : .clear
-        }, completion: nil)
-    }
-    #endif
 }
 
-/// Full-screen call history: filters, day groups, 50 rows a page and 「さらに読み込む」. Opening it
-/// moves the device-local seen watermark, which is what clears the dashboard's missed badge.
-final class CallHistoryViewController: UIViewController {
+/// Call history: a table grouped by day with a filter in the navigation bar, fifty rows a page
+/// and a row that loads more. Selecting a call shows its details, pushed on a compact window and
+/// in the secondary column of a split view on a wide one. Showing the list moves the device-local
+/// seen watermark, which is what clears the History tab's badge.
+final class CallHistoryViewController: UIViewController, UISplitViewControllerDelegate {
 
     private let core: CoreBridge
     private let texts: Texts
     private let lang: String
-    private var config: [String: Any]?
-    private var palette = DoorbellPalette.dark
+    private let embedded: Bool
+    private var list: CallHistoryListController?
+    private var split: UISplitViewController?
+    /// Called after the list marked the log seen, so the host can refresh its badge.
+    var onSeen: (() -> Void)?
 
-    private var filter = "all"
-    private var rows: [CallLogRow] = []
-    private var reachedEnd = false
-
-    private let filterControl = UISegmentedControl(items: [])
-    private let scroll = UIScrollView()
-    private let stack = UIStackView()
-    private let loadMoreButton = UIButton(type: .system)
-    private let emptyLabel = UILabel()
-    private var doorFilters: [String] = []
-
-    init(core: CoreBridge, texts: Texts, lang: String) {
+    /// `embedded` is true for the History tab; a presented history carries a Close button.
+    init(core: CoreBridge, texts: Texts, lang: String, embedded: Bool = false) {
         self.core = core
         self.texts = texts
         self.lang = lang
+        self.embedded = embedded
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
+        title = texts.t("history.title")
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        config = core.config()
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            config: config, nodeId: "", localTime: core.localTime()))
-        view.backgroundColor = palette.background
-        build()
-        // Mark-seen on open, as the owner asked; the badge is gone by the time the list appears.
-        core.markCallLogSeen()
-        reload(reset: true)
+        view.backgroundColor = SystemStyle.groupedBackground
+        let list = CallHistoryListController(core: core, texts: texts, lang: lang)
+        list.onClose = embedded ? nil : { [weak self] in self?.dismiss(animated: true) }
+        list.onSeen = { [weak self] in self?.onSeen?() }
+        self.list = list
+        let master = SystemStyle.navigation(list, largeTitles: false)
+        let root: UIViewController
+        #if os(tvOS)
+        let wide = true
+        #else
+        let wide = UIDevice.current.userInterfaceIdiom == .pad
+        #endif
+        if wide {
+            let split = UISplitViewController()
+            let placeholder = CallHistoryDetailController(core: core, texts: texts, lang: lang,
+                                                          row: nil)
+            split.viewControllers = [master, SystemStyle.navigation(placeholder,
+                                                                    largeTitles: false)]
+            split.delegate = self
+            split.preferredDisplayMode = .allVisible
+            split.preferredPrimaryColumnWidthFraction = 0.42
+            split.maximumPrimaryColumnWidth = 460
+            list.showsDetailInSplit = true
+            self.split = split
+            root = split
+        } else {
+            root = master
+        }
+        addChild(root)
+        root.view.frame = view.bounds
+        root.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(root.view)
+        root.didMove(toParent: self)
     }
 
-    private func build() {
-        let title = UILabel()
-        title.text = texts.t("history.title")
-        title.font = .systemFont(ofSize: 28, weight: .bold)
-        title.textColor = palette.ink
+    /// A compact window shows the list first, never an empty detail.
+    func splitViewController(_ splitViewController: UISplitViewController,
+                             collapseSecondary secondaryViewController: UIViewController,
+                             onto primaryViewController: UIViewController) -> Bool {
+        return true
+    }
 
-        let close = UIButton(type: .system)
-        close.setTitle(texts.t("settings.close"), for: .normal)
-        close.titleLabel?.font = .systemFont(ofSize: 20, weight: .semibold)
-        close.setTitleColor(palette.ink, for: .normal)
-        close.accessibilityIdentifier = "history_close"
-        close.addTarget(self, action: #selector(closeSelf), for: .primaryActionTriggered)
+    func refresh() { list?.reload(reset: true) }
+}
 
-        let markSeen = UIButton(type: .system)
-        markSeen.setTitle(texts.t("history.mark_seen"), for: .normal)
-        markSeen.titleLabel?.font = .systemFont(ofSize: 18)
-        markSeen.setTitleColor(palette.inkMuted, for: .normal)
-        markSeen.accessibilityIdentifier = "history_mark_seen"
-        markSeen.addTarget(self, action: #selector(markAllSeen), for: .primaryActionTriggered)
+final class CallHistoryListController: UITableViewController {
 
-        let header = UIStackView(arrangedSubviews: [title, UIView(), markSeen, close])
-        header.axis = .horizontal
-        header.spacing = 16
-        header.alignment = .center
+    private let core: CoreBridge
+    private let texts: Texts
+    private let lang: String
+    private var config: [String: Any]?
+    var onClose: (() -> Void)?
+    var onSeen: (() -> Void)?
+    var showsDetailInSplit = false
 
+    private var filter = "all"
+    private var rows: [CallLogRow] = []
+    private var days: [(key: String, title: String, rows: [CallLogRow])] = []
+    private var reachedEnd = false
+    private var doorFilters: [String] = []
+    private let filterControl = UISegmentedControl(items: [])
+    private var logObserverKey: String { return "history-\(ObjectIdentifier(self).hashValue)" }
+
+    init(core: CoreBridge, texts: Texts, lang: String) {
+        self.core = core
+        self.texts = texts
+        self.lang = lang
+        super.init(style: SystemStyle.tableStyle())
+        title = texts.t("history.title")
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        SystemStyle.style(tableView)
+        tableView.accessibilityIdentifier = "history_list"
+        config = core.config()
+        buildFilter()
+        #if os(iOS)
+        if #available(iOS 11.0, *) { navigationItem.largeTitleDisplayMode = .never }
+        navigationItem.titleView = filterControl
+        if onClose != nil {
+            navigationItem.leftBarButtonItem = UIBarButtonItem(
+                title: texts.t("settings.close"), style: .done, target: self,
+                action: #selector(closeSelf))
+            navigationItem.leftBarButtonItem?.accessibilityIdentifier = "history_close"
+        }
+        navigationItem.rightBarButtonItem = SystemStyle.barItem(
+            icon: "TablerCheck", label: texts.t("history.mark_seen"), target: self,
+            action: #selector(markAllSeen), identifier: "history_mark_seen")
+        #else
+        filterControl.sizeToFit()
+        tableView.tableHeaderView = filterControl
+        #endif
+    }
+
+    private func buildFilter() {
         doorFilters = (ConfigUtil.dig(config, "doors") as? [String: Any])
             .map { ConfigUtil.sortedByOrder($0) } ?? []
+        // A segmented control holds a handful of choices; beyond that the per-door filters would
+        // be too narrow to read or touch.
+        if doorFilters.count > 3 { doorFilters = Array(doorFilters.prefix(3)) }
         filterControl.removeAllSegments()
         filterControl.insertSegment(withTitle: texts.t("history.filter_all"), at: 0,
                                     animated: false)
-        filterControl.insertSegment(withTitle: texts.t("history.filter_missed"), at: 1,
+        filterControl.insertSegment(withTitle: texts.t("history.outcome_missed"), at: 1,
                                     animated: false)
         for (index, door) in doorFilters.enumerated() {
             filterControl.insertSegment(
@@ -382,51 +292,35 @@ final class CallHistoryViewController: UIViewController {
         filterControl.selectedSegmentIndex = 0
         filterControl.accessibilityIdentifier = "history_filter"
         filterControl.addTarget(self, action: #selector(filterChanged), for: .valueChanged)
-
-        emptyLabel.text = texts.t("history.empty")
-        emptyLabel.font = .systemFont(ofSize: 18)
-        emptyLabel.textColor = palette.inkMuted
-        emptyLabel.isHidden = true
-
-        loadMoreButton.setTitle(texts.t("history.load_more"), for: .normal)
-        loadMoreButton.titleLabel?.font = .systemFont(ofSize: 19, weight: .semibold)
-        loadMoreButton.setTitleColor(palette.ink, for: .normal)
-        loadMoreButton.backgroundColor = palette.surface
-        loadMoreButton.layer.cornerRadius = 12
-        loadMoreButton.accessibilityIdentifier = "history_load_more"
-        loadMoreButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
-        loadMoreButton.addTarget(self, action: #selector(loadMore), for: .primaryActionTriggered)
-
-        stack.axis = .vertical
-        stack.spacing = 4
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(stack)
-
-        let root = UIStackView(arrangedSubviews: [header, filterControl, emptyLabel, scroll])
-        root.axis = .vertical
-        root.spacing = 16
-        root.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(root)
-
-        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
-        NSLayoutConstraint.activate([
-            root.topAnchor.constraint(equalTo: guide.topAnchor, constant: 18),
-            root.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -18),
-            root.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 24),
-            root.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -24),
-            stack.topAnchor.constraint(equalTo: scroll.topAnchor),
-            stack.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
-            stack.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
-            stack.widthAnchor.constraint(equalTo: scroll.widthAnchor),
-        ])
     }
 
-    @objc private func closeSelf() { dismiss(animated: true) }
+    /// The list is on screen: load what is there, then move the seen watermark. The rows keep
+    /// the unread emphasis they were loaded with, so the user sees which calls were new.
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        core.addHandler(logObserverKey) { [weak self] event in
+            if ConfigUtil.evStr(event, "t") == "call_log_changed" { self?.reload(reset: true) }
+        }
+        config = core.config()
+        reload(reset: true)
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        core.markCallLogSeen()
+        onSeen?()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        core.removeHandler(logObserverKey)
+    }
+
+    @objc private func closeSelf() { onClose?() }
 
     @objc private func markAllSeen() {
         core.markCallLogSeen()
+        onSeen?()
         reload(reset: true)
     }
 
@@ -442,7 +336,7 @@ final class CallHistoryViewController: UIViewController {
         reload(reset: true)
     }
 
-    @objc private func loadMore() {
+    private func loadMore() {
         let oldest = rows.last?.tsMs ?? 0
         let page = CallHistory.page(core, beforeMs: oldest)
             .filter { CallHistory.matches($0, filter: filter) }
@@ -454,7 +348,8 @@ final class CallHistoryViewController: UIViewController {
         render()
     }
 
-    private func reload(reset: Bool) {
+    func reload(reset: Bool) {
+        guard isViewLoaded else { return }
         if reset {
             rows = []
             reachedEnd = false
@@ -466,26 +361,146 @@ final class CallHistoryViewController: UIViewController {
 
     /// Rows grouped by day in the cluster's zone, newest day first.
     private func render() {
-        for view in stack.arrangedSubviews { view.removeFromSuperview() }
-        emptyLabel.isHidden = !rows.isEmpty
-        var currentDay = ""
+        days = []
         for row in rows {
-            let day = DoorbellClock.dayKey(core, wallMs: row.tsMs)
-            if day != currentDay {
-                currentDay = day
-                let header = UILabel()
-                header.text = DoorbellClock.dayTitle(core, texts: texts, dayKey: day, lang: lang)
-                header.font = .systemFont(ofSize: 15, weight: .semibold)
-                header.textColor = palette.inkMuted
-                stack.addArrangedSubview(header)
+            let key = DoorbellClock.dayKey(core, wallMs: row.tsMs)
+            if days.last?.key != key {
+                days.append((key, DoorbellClock.dayTitle(core, texts: texts, dayKey: key,
+                                                         lang: lang), []))
             }
-            let view = CallHistoryRowView(texts: texts)
-            view.update(core: core, config: config, row: row, lang: lang, palette: palette)
-            stack.addArrangedSubview(view)
+            days[days.count - 1].rows.append(row)
         }
-        loadMoreButton.removeFromSuperview()
-        if !reachedEnd && rows.count >= CallHistory.pageSize {
-            stack.addArrangedSubview(loadMoreButton)
+        tableView.reloadData()
+    }
+
+    private var hasLoadMore: Bool { return !reachedEnd && rows.count >= CallHistory.pageSize }
+
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        return max(1, days.count) + (hasLoadMore ? 1 : 0)
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        if section >= days.count { return days.isEmpty && section == 0 ? 0 : 1 }
+        return days[section].rows.count
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForHeaderInSection section: Int) -> String? {
+        return section < days.count ? days[section].title : nil
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        return days.isEmpty && section == 0 ? texts.t("history.empty") : nil
+    }
+
+    override func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView,
+                            forSection section: Int) {
+        SystemStyle.style(headerFooter: view)
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        guard indexPath.section < days.count else {
+            let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+            SystemStyle.style(cell)
+            cell.textLabel?.text = texts.t("history.load_more")
+            cell.textLabel?.textColor = SystemStyle.tint
+            cell.accessibilityIdentifier = "history_load_more"
+            cell.accessibilityTraits = .button
+            return cell
         }
+        let cell = tableView.dequeueReusableCell(withIdentifier: "call")
+            ?? UITableViewCell(style: .subtitle, reuseIdentifier: "call")
+        CallHistory.configure(cell, core: core, texts: texts, config: config,
+                              row: days[indexPath.section].rows[indexPath.row], lang: lang)
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        guard indexPath.section < days.count else {
+            tableView.deselectRow(at: indexPath, animated: true)
+            loadMore()
+            return
+        }
+        let row = days[indexPath.section].rows[indexPath.row]
+        let detail = CallHistoryDetailController(core: core, texts: texts, lang: lang, row: row)
+        if showsDetailInSplit, let split = splitViewController {
+            split.showDetailViewController(
+                SystemStyle.navigation(detail, largeTitles: false), sender: self)
+            if split.isCollapsed { tableView.deselectRow(at: indexPath, animated: true) }
+        } else {
+            tableView.deselectRow(at: indexPath, animated: true)
+            navigationController?.pushViewController(detail, animated: true)
+        }
+    }
+}
+
+/// One call's details as a grouped table. With no call it is the split view's empty state.
+final class CallHistoryDetailController: UITableViewController {
+
+    private let core: CoreBridge
+    private let texts: Texts
+    private let lang: String
+    private let row: CallLogRow?
+    private var fields: [(title: String, value: String)] = []
+
+    init(core: CoreBridge, texts: Texts, lang: String, row: CallLogRow?) {
+        self.core = core
+        self.texts = texts
+        self.lang = lang
+        self.row = row
+        super.init(style: SystemStyle.tableStyle())
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        SystemStyle.style(tableView)
+        tableView.accessibilityIdentifier = "history_detail"
+        tableView.allowsSelection = false
+        guard let row = row else { return }
+        let config = core.config()
+        let day = DoorbellClock.dayTitle(core, texts: texts,
+                                         dayKey: DoorbellClock.dayKey(core, wallMs: row.tsMs),
+                                         lang: lang)
+        let time = DoorbellClock.timeOfDay(core, wallMs: row.tsMs)
+        title = time
+        let seconds = Int(row.durationMs / 1000)
+        let all: [(String, String)] = [
+            (texts.t("history.detail_time"), day + " " + time),
+            (texts.t("history.detail_door"), CallHistory.doorLabel(config, row.door, lang: lang)),
+            (texts.t("history.detail_purpose"),
+             CallHistory.purposeLabel(config, row.purpose, lang: lang)),
+            (texts.t("history.detail_outcome"), CallHistory.outcomeText(texts, row.outcome)),
+            (texts.t("history.detail_answered_by"), row.answeredBy),
+            (texts.t("history.detail_duration"),
+             row.durationMs > 0 ? String(format: "%d:%02d", seconds / 60, seconds % 60) : ""),
+        ]
+        fields = all.filter { !$0.1.isEmpty }.map { (title: $0.0, value: $0.1) }
+    }
+
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return fields.count
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        return row == nil ? texts.t("history.detail_empty") : nil
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
+        SystemStyle.style(cell)
+        cell.textLabel?.text = fields[indexPath.row].title
+        cell.detailTextLabel?.text = fields[indexPath.row].value
+        if fields[indexPath.row].title == texts.t("history.detail_outcome"), let row = row {
+            let icon = CallHistory.outcomeIcon(row.outcome)
+            cell.imageView?.image = TablerIcon.image(icon.name)
+            cell.imageView?.tintColor = icon.color
+        }
+        return cell
     }
 }

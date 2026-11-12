@@ -568,21 +568,27 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
 
 }
 
-private final class BootstrapSetupViewController: UIViewController, UITextFieldDelegate,
-                                                  UIGestureRecognizerDelegate {
+/// First-run setup: the device's name, its role and, for a door station, its door ID, as one
+/// grouped form under the stock navigation bar.
+private final class BootstrapSetupViewController: PairingTableScreen {
     var onSave: ((String, String, String) -> Bool)?
 
     private let initial: BootConfig
-    private let nameField = UITextField()
+    private let nameRow = PairingFieldRow(label: NSLocalizedString("setup.name", comment: ""),
+                                          placeholder: "", identifier: "setup_name")
     private let roleControl = UISegmentedControl(items: [
         NSLocalizedString("admin.role_door", comment: ""),
         NSLocalizedString("admin.role_indoor", comment: "")
     ])
-    private let doorField = UITextField()
-    private let doorRow = UIStackView()
-    private let errorLabel = UILabel()
-    private let scroll = UIScrollView()
-    private var keyboardInset: NSLayoutConstraint?
+    private lazy var roleRow = PairingCells.custom(roleControl, vertical: 8)
+    private let doorRow = PairingFieldRow(label: NSLocalizedString("setup.door", comment: ""),
+                                          placeholder: "", identifier: "setup_door")
+    private lazy var saveRow = PairingCells.button(
+        title: NSLocalizedString("setup.finish", comment: ""), identifier: "setup_save") {
+        [weak self] in self?.saveTapped()
+    }
+
+    private var isDoorStation: Bool { return roleControl.selectedSegmentIndex == 0 }
 
     init(boot: BootConfig) {
         initial = boot
@@ -591,26 +597,10 @@ private final class BootstrapSetupViewController: UIViewController, UITextFieldD
 
     required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    deinit {
-        NotificationCenter.default.removeObserver(self)
-    }
-
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = PairingTheme.background
-
-        let title = UILabel()
-        title.text = NSLocalizedString("setup.title", comment: "")
-        title.font = UIFont.boldSystemFont(ofSize: 30)
-        title.textAlignment = .center
-        title.textColor = PairingTheme.foreground
-
-        let message = UILabel()
-        message.text = NSLocalizedString("setup.message", comment: "")
-        message.font = UIFont.systemFont(ofSize: 17)
-        message.textAlignment = .center
-        message.numberOfLines = 0
-        message.textColor = PairingTheme.dim
+        barItem.title = NSLocalizedString("setup.title", comment: "")
+        table.accessibilityIdentifier = "setup_scroll"
 
         let keyboardToolbar = UIToolbar()
         keyboardToolbar.items = [
@@ -619,170 +609,57 @@ private final class BootstrapSetupViewController: UIViewController, UITextFieldD
                             action: #selector(dismissKeyboard))
         ]
         keyboardToolbar.sizeToFit()
-        for field in [nameField, doorField] {
-            field.backgroundColor = UIColor(white: 1, alpha: 0.12)
-            field.textColor = PairingTheme.foreground
-            field.delegate = self
-            field.inputAccessoryView = keyboardToolbar
-        }
-        roleControl.tintColor = PairingTheme.accent
+        nameRow.field.inputAccessoryView = keyboardToolbar
+        doorRow.field.inputAccessoryView = keyboardToolbar
 
-        nameField.borderStyle = .roundedRect
-        nameField.placeholder = NSLocalizedString("setup.name", comment: "")
-        nameField.text = initial.name
-        nameField.autocorrectionType = .no
-        nameField.autocapitalizationType = .none
-        nameField.accessibilityIdentifier = "setup_name"
+        nameRow.text = initial.name
+        nameRow.onReturn = { [weak self] in
+            guard let self = self else { return }
+            if self.isDoorStation { self.doorRow.focus() } else { self.dismissKeyboard() }
+        }
+        doorRow.text = initial.suggestedDoor
+        doorRow.field.returnKeyType = .done
+        doorRow.onReturn = { [weak self] in self?.dismissKeyboard() }
 
         roleControl.selectedSegmentIndex = initial.role == "indoor_panel" ? 1 : 0
         roleControl.addTarget(self, action: #selector(roleChanged), for: .valueChanged)
-
-        doorField.borderStyle = .roundedRect
-        doorField.placeholder = NSLocalizedString("setup.door_hint", comment: "")
-        doorField.text = initial.suggestedDoor
-        doorField.autocorrectionType = .no
-        doorField.autocapitalizationType = .none
-        doorField.returnKeyType = .done
-        doorField.accessibilityIdentifier = "setup_door"
-
-        let doorLabel = UILabel()
-        doorLabel.text = NSLocalizedString("setup.door", comment: "")
-        doorLabel.textColor = PairingTheme.dim
-        doorLabel.setContentHuggingPriority(.required, for: .horizontal)
-        doorRow.axis = .horizontal
-        doorRow.spacing = 12
-        doorRow.alignment = .center
-        doorRow.addArrangedSubview(doorLabel)
-        doorRow.addArrangedSubview(doorField)
-
-        errorLabel.text = NSLocalizedString("setup.invalid_door", comment: "")
-        errorLabel.textColor = PairingTheme.danger
-        errorLabel.textAlignment = .center
-        errorLabel.numberOfLines = 0
-        errorLabel.isHidden = true
-
-        let save = UIButton(type: .system)
-        save.setTitle(NSLocalizedString("setup.finish", comment: ""), for: .normal)
-        save.titleLabel?.font = UIFont.boldSystemFont(ofSize: 20)
-        save.backgroundColor = PairingTheme.accent
-        save.setTitleColor(.black, for: .normal)
-        save.layer.cornerRadius = 8
-        save.heightAnchor.constraint(greaterThanOrEqualToConstant: 52).isActive = true
-        save.addTarget(self, action: #selector(saveTapped), for: .touchUpInside)
-        save.accessibilityIdentifier = "setup_save"
-
-        let stack = UIStackView(arrangedSubviews: [title, message, nameField, roleControl,
-                                                   doorRow, errorLabel, save])
-        stack.axis = .vertical
-        stack.spacing = 18
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.keyboardDismissMode = .interactive
-        scroll.accessibilityIdentifier = "setup_scroll"
-        view.addSubview(scroll)
-        let content = UIView()
-        content.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(content)
-        content.addSubview(stack)
-        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
-        let bottom = scroll.bottomAnchor.constraint(equalTo: guide.bottomAnchor)
-        keyboardInset = bottom
-        NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: guide.topAnchor),
-            scroll.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
-            bottom,
-            content.topAnchor.constraint(equalTo: scroll.topAnchor),
-            content.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
-            content.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
-            content.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
-            content.widthAnchor.constraint(equalTo: scroll.widthAnchor),
-            content.heightAnchor.constraint(greaterThanOrEqualTo: scroll.heightAnchor),
-            stack.centerXAnchor.constraint(equalTo: content.centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: content.centerYAnchor),
-            stack.topAnchor.constraint(greaterThanOrEqualTo: content.topAnchor, constant: 24),
-            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -24),
-            stack.widthAnchor.constraint(lessThanOrEqualToConstant: 560)
-        ])
-        let preferredHeight = content.heightAnchor.constraint(equalTo: scroll.heightAnchor)
-        preferredHeight.priority = .defaultLow
-        preferredHeight.isActive = true
-        let columnWidth = stack.widthAnchor.constraint(equalTo: content.widthAnchor, constant: -48)
-        columnWidth.priority = UILayoutPriority(999)
-        columnWidth.isActive = true
-        let dismissTap = UITapGestureRecognizer(target: self, action: #selector(dismissKeyboard))
-        dismissTap.cancelsTouchesInView = false
-        dismissTap.delegate = self
-        scroll.addGestureRecognizer(dismissTap)
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(keyboardWillChange(_:)),
-            name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(keyboardWillChange(_:)),
-            name: UIResponder.keyboardWillHideNotification, object: nil)
         roleChanged()
     }
 
     @objc private func roleChanged() {
-        doorRow.isHidden = roleControl.selectedSegmentIndex == 1
-        nameField.returnKeyType = doorRow.isHidden ? .done : .next
-        if nameField.isFirstResponder { nameField.reloadInputViews() }
-        if doorRow.isHidden { doorField.resignFirstResponder() }
-        errorLabel.isHidden = true
+        nameRow.field.returnKeyType = isDoorStation ? .next : .done
+        if nameRow.field.isFirstResponder { nameRow.field.reloadInputViews() }
+        if !isDoorStation { doorRow.field.resignFirstResponder() }
+        var sections = [
+            PairingSection(footer: NSLocalizedString("setup.message", comment: ""),
+                           rows: [nameRow.row]),
+            PairingSection(header: NSLocalizedString("setup.role", comment: ""),
+                           rows: [roleRow]),
+        ]
+        if isDoorStation {
+            sections.append(PairingSection(
+                footer: NSLocalizedString("setup.door_hint", comment: ""),
+                rows: [doorRow.row]))
+        }
+        sections.append(PairingSection(rows: [saveRow]))
+        setSections(sections)
     }
 
     @objc private func dismissKeyboard() {
         view.endEditing(true)
     }
 
-    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        if textField === nameField && !doorRow.isHidden {
-            doorField.becomeFirstResponder()
-        } else {
-            dismissKeyboard()
-        }
-        return true
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
-                           shouldReceive touch: UITouch) -> Bool {
-        var touchedView = touch.view
-        while let current = touchedView {
-            if current is UIControl { return false }
-            touchedView = current.superview
-        }
-        return true
-    }
-
-    @objc private func keyboardWillChange(_ note: Notification) {
-        guard let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey]
-                           as? NSValue)?.cgRectValue else { return }
-        let keyboardFrame = view.convert(frame, from: nil)
-        let visibleFrame = IOSAvailability.safeAreaLayoutGuide(for: view).layoutFrame
-        let overlap = note.name == UIResponder.keyboardWillHideNotification
-            ? 0 : visibleFrame.intersection(keyboardFrame).height
-        keyboardInset?.constant = -overlap
-        let duration = (note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey]
-                        as? NSNumber)?.doubleValue ?? 0.25
-        let curve = (note.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey]
-                     as? NSNumber)?.uintValue ?? 0
-        UIView.animate(withDuration: duration, delay: 0,
-                       options: [.beginFromCurrentState,
-                                 UIView.AnimationOptions(rawValue: curve << 16)], animations: {
-            self.view.layoutIfNeeded()
-            if let field = [self.nameField, self.doorField].first(where: { $0.isFirstResponder }) {
-                self.scroll.scrollRectToVisible(field.convert(field.bounds, to: self.scroll)
-                    .insetBy(dx: 0, dy: -16), animated: false)
-            }
-        })
-    }
-
-    @objc private func saveTapped() {
+    private func saveTapped() {
         view.endEditing(true)
-        let role = roleControl.selectedSegmentIndex == 1 ? "indoor_panel" : "door_station"
-        let door = role == "door_station" ? (doorField.text ?? "") : ""
-        guard onSave?(nameField.text ?? "", role, door) == true else {
-            errorLabel.isHidden = false
+        let role = isDoorStation ? "door_station" : "indoor_panel"
+        let door = isDoorStation ? doorRow.text : ""
+        guard onSave?(nameRow.text, role, door) == true else {
+            let alert = UIAlertController(
+                title: NSLocalizedString("setup.invalid_door", comment: ""), message: nil,
+                preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: NSLocalizedString("editor.ok", comment: ""),
+                                          style: .default))
+            present(alert, animated: true)
             return
         }
     }

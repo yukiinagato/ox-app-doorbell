@@ -42,7 +42,7 @@ struct IncomingCallLifecycleState {
     mutating func reset() { self = IncomingCallLifecycleState() }
 }
 
-final class IncomingViewController: UIViewController, UIGestureRecognizerDelegate {
+final class IncomingViewController: UIViewController {
 
     private let core: CoreBridge
     private let coreGeneration: UInt64?
@@ -65,7 +65,6 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     private var conversationButtons: [String: UIButton] = [:]
     private var conversationDocuments: [String: [String: Any]] = [:]
     private var touchedConversationVersion: Int64?
-    private let queueScroll = UIScrollView()
     private var actionTarget: String?
     private var selectedIsLive = true
     private var endingDialog = false
@@ -87,42 +86,38 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     private var returnCountdown = IncomingReturnCountdown(seconds: 0)
     private let returnButton = UIButton(type: .system)
 
-    private let themeBg = ThemeBackgroundView()
     private let videoBackdrop = UIView()
-    private let videoZoomView = UIView()
+    /// Pinch, drag and double-tap zoom for the live picture, whichever renderer is drawing it.
+    private let videoZoom = ZoomableVideoView()
     private let liveView = UIImageView()
     private let h264View = UIView()
     private let noVideoLabel = UILabel()
-    private let titleLabel = HaloLabel()
+    private let titleLabel = UILabel()
     private let purposeBadge = PaddedLabel()
     private let langBadge = PaddedLabel()
-    private let statusLabel = HaloLabel()
+    private let statusLabel = UILabel()
     private let hintLabel = UILabel()
     private let replyStack = UIStackView()
-    private let answerButton = UIButton(type: .system)
-    private let monitorButton = UIButton(type: .system)
-    private let micButton = UIButton(type: .system)
-    private let unlockButton = UIButton(type: .system)
-    private let ignoreButton = UIButton(type: .system)
-    private let quickReplyButton = UIButton(type: .system)
+    private let answerButton = CallActionButton(type: .custom)
+    private let monitorButton = CallActionButton(type: .custom)
+    private let micButton = CallActionButton(type: .custom)
+    private let unlockButton = CallActionButton(type: .custom)
+    private let ignoreButton = CallActionButton(type: .custom)
+    private let quickReplyButton = CallActionButton(type: .custom)
+    private let actionZone = ActionZoneView()
+    private let detailScroll = UIScrollView()
     private lazy var noticeChip = NoticeChipView(texts: texts)
     private lazy var adminQr = AdminQrView(core: core, boot: boot, texts: texts, compact: true)
     private let purposeSlot = UIView()
-    private let debugLine = HaloLabel()
+    private let debugLine = UILabel()
     private var debugTimer: Timer?
     private var micMuted = false
     private var debugCollapsed = false
     private var monitorOn = false
     private var replyExpanded = false
     private var videoAspect: NSLayoutConstraint?
-    private var zoomScale: CGFloat = 1
-    private var pinchStartScale: CGFloat = 1
-    private var zoomOffset = CGPoint.zero
-    private var panStartOffset = CGPoint.zero
     private var lastDeviceInfoRefresh: CFTimeInterval = 0
-    private var palette = DoorbellPalette.dark
-    private var skin = DoorbellSkin.plain(.dark)
-    private var displayDoc: [String: Any]?
+    private var styleObserver: NSObjectProtocol?
 
     private static let debugHiddenKey = "incoming.debug_line_hidden"
 
@@ -150,7 +145,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.04, green: 0.05, blue: 0.07, alpha: 1)
+        view.backgroundColor = SystemStyle.background
         cfg = core.config()
         if let node = core.status()?["node"] as? [String: Any] {
             nodeId = ConfigUtil.evStr(node, "id")
@@ -225,7 +220,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         answerDelayTimer?.invalidate()
         videoPlayer?.stop()
         videoPlayer = nil
-        resetVideoZoom()
+        videoZoom.resetZoom()
         if !sipMode.isEmpty {
             reportEndedIfNeeded()
             core.sipHangup(coreGeneration: coreGeneration)
@@ -239,8 +234,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         videoPlayer = nil
         liveView.image = nil
         liveView.transform = .identity
-        resetVideoZoom()
-        themeBg.releaseImage()
+        videoZoom.resetZoom()
         noVideoLabel.isHidden = false
         // Keep the established audio dialog and its End Call button visible. viewDidDisappear is
         // still the single owner that hangs up when the user actually leaves this screen.
@@ -318,7 +312,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         revisionLifecycle = CallRevisionLifecycle(stageRevision: stageRevision)
         lastChimeRevision = stageRevision
         callLifecycle.reset()
-        resetVideoZoom()
+        videoZoom.resetZoom()
         cfg = core.config()
         texts.setConfig(cfg)
         directPort = ConfigUtil.int(cfg, "sip.direct_port", 47190)
@@ -460,7 +454,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             queueStack.removeArrangedSubview(child)
             child.removeFromSuperview()
         }
-        queueScroll.isHidden = queue.items.count < 2 && queue.items.allSatisfy { $0.callId == callId }
+        queueStack.isHidden = queue.items.count < 2 && queue.items.allSatisfy { $0.callId == callId }
         for item in queue.items {
             let entry = ConfigUtil.dig(cfg, "doors.\(item.door)") as? [String: Any]
             let name = ConfigUtil.labelOf(entry, boot.uiLang, item.door)
@@ -476,8 +470,9 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
                 title = texts.t(current ? "ring.queue_selected" : "ring.queue_waiting", name)
             }
             button.setTitle(title, for: .normal)
-            button.contentHorizontalAlignment = .leading
+            button.contentHorizontalAlignment = .left
             button.titleLabel?.numberOfLines = 0
+            button.titleLabel?.font = SystemStyle.font(.body, weight: current ? .semibold : nil)
             button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
             button.accessibilityIdentifier = item.door + ":" + item.callId
             button.addTarget(self, action: #selector(onQueueSelection(_:)), for: .touchUpInside)
@@ -507,71 +502,40 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     }
 
     private func buildUi() {
-        // The household's theme background reaches this screen too, so a call does not drop the
-        // panel back to a slab of grey. Only the picture keeps its own black frame.
-        themeBg.onImageLoaded = { [weak self] in self?.applySkin() }
-        themeBg.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(themeBg)
-
+        // The call screen is a system surface: the picture keeps its own black frame, and the
+        // details and actions sit on the system background.
         videoBackdrop.backgroundColor = .black
-        videoBackdrop.layer.cornerRadius = 12
         videoBackdrop.clipsToBounds = true
         videoBackdrop.accessibilityIdentifier = "incoming_video"
         videoBackdrop.accessibilityHint = texts.t("ring.video_zoom_hint")
         videoBackdrop.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(videoBackdrop)
 
-        videoZoomView.translatesAutoresizingMaskIntoConstraints = false
-        videoBackdrop.addSubview(videoZoomView)
-
+        videoZoom.translatesAutoresizingMaskIntoConstraints = false
+        videoBackdrop.addSubview(videoZoom)
         liveView.contentMode = .scaleAspectFit
-        liveView.translatesAutoresizingMaskIntoConstraints = false
-        videoZoomView.addSubview(liveView)
+        videoZoom.host(liveView)
+        videoZoom.host(h264View)
 
-        h264View.translatesAutoresizingMaskIntoConstraints = false
-        videoZoomView.addSubview(h264View)
-
-        noVideoLabel.font = .systemFont(ofSize: 22)
-        noVideoLabel.textColor = UIColor(white: 1, alpha: 0.45)
+        noVideoLabel.font = SystemStyle.font(.title3)
+        noVideoLabel.textColor = UIColor(white: 1, alpha: 0.6)
         noVideoLabel.textAlignment = .center
+        noVideoLabel.numberOfLines = 0
         noVideoLabel.translatesAutoresizingMaskIntoConstraints = false
         videoBackdrop.addSubview(noVideoLabel)
 
-        #if os(iOS)
-        let pinch = UIPinchGestureRecognizer(target: self, action: #selector(onVideoPinch(_:)))
-        pinch.delegate = self
-        videoBackdrop.addGestureRecognizer(pinch)
-        #endif
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(onVideoPan(_:)))
-        pan.delegate = self
-        videoBackdrop.addGestureRecognizer(pan)
-        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(onVideoDoubleTap))
-        doubleTap.numberOfTapsRequired = 2
-        doubleTap.delegate = self
-        videoBackdrop.addGestureRecognizer(doubleTap)
-
-        titleLabel.font = .systemFont(ofSize: 30, weight: .bold)
-        titleLabel.textColor = .white
+        titleLabel.font = SystemStyle.font(.title1, weight: .bold)
+        titleLabel.textColor = SystemStyle.label
+        titleLabel.numberOfLines = 2
         titleLabel.adjustsFontSizeToFitWidth = true
-        titleLabel.minimumScaleFactor = 0.5
-
-        purposeBadge.font = .systemFont(ofSize: 20, weight: .semibold)
-        purposeBadge.textColor = .black
-        purposeBadge.backgroundColor = UIColor(red: 1.0, green: 0.80, blue: 0.25, alpha: 1)
-        purposeBadge.layer.cornerRadius = 8
-        purposeBadge.clipsToBounds = true
-
-        langBadge.font = .systemFont(ofSize: 20, weight: .semibold)
-        langBadge.textColor = .black
-        langBadge.backgroundColor = UIColor(red: 0.45, green: 0.75, blue: 1.0, alpha: 1)
-        langBadge.layer.cornerRadius = 8
-        langBadge.clipsToBounds = true
+        titleLabel.minimumScaleFactor = 0.6
+        titleLabel.accessibilityTraits = .header
+        SystemStyle.followContentSize(titleLabel)
 
         // The return countdown reads as the title's own "(60)" suffix but is a control: it is a
         // button so it carries a real tap target and an accessibility label, and it keeps its
         // natural width beside a title that is allowed to shrink.
-        returnButton.titleLabel?.font = .monospacedDigitSystemFont(ofSize: 30, weight: .bold)
-        returnButton.setTitleColor(.white, for: .normal)
+        returnButton.titleLabel?.font = SystemStyle.digits(size: 22, weight: .semibold)
         returnButton.isHidden = true
         returnButton.accessibilityIdentifier = "ring_return_countdown"
         returnButton.accessibilityLabel = texts.t("ring.return_countdown_a11y")
@@ -581,22 +545,24 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         returnButton.setContentHuggingPriority(.required, for: .horizontal)
         returnButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
         returnButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 60).isActive = true
-
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        purposeBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
-        langBadge.setContentCompressionResistancePriority(.required, for: .horizontal)
+
+        for badge in [purposeBadge, langBadge] {
+            badge.font = SystemStyle.font(.subheadline, weight: .semibold)
+            badge.layer.cornerRadius = 8
+            badge.clipsToBounds = true
+            badge.setContentCompressionResistancePriority(.required, for: .horizontal)
+            SystemStyle.followContentSize(badge)
+        }
 
         // The announcement is a compact chip, not a bar: a dot marks an active announcement and a
-        // tap opens the same dialog the dashboard uses, with this door already selected.
+        // tap opens the same editor the home screen uses, with this door already selected.
         noticeChip.onTap = { [weak self] in self?.openNoticeDialog() }
 
-        let badgeRow = UIStackView(arrangedSubviews: [titleLabel, returnButton, langBadge,
-                                                      UIView(), noticeChip])
-        badgeRow.axis = .horizontal
-        badgeRow.spacing = 12
-        badgeRow.alignment = .center
-        badgeRow.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(badgeRow)
+        let titleRow = UIStackView(arrangedSubviews: [titleLabel, returnButton])
+        titleRow.axis = .horizontal
+        titleRow.spacing = Space.xs
+        titleRow.alignment = .firstBaseline
 
         // The purpose the visitor chose keeps its own slot under the door name. The slot holds its
         // height even when it is empty, so a purpose arriving after the ring never shifts the
@@ -610,49 +576,54 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             purposeBadge.centerYAnchor.constraint(equalTo: purposeSlot.centerYAnchor),
             purposeBadge.trailingAnchor.constraint(lessThanOrEqualTo: purposeSlot.trailingAnchor),
         ])
+        let badgeRow = UIStackView(arrangedSubviews: [purposeSlot, langBadge, noticeChip])
+        badgeRow.axis = .horizontal
+        badgeRow.spacing = Space.xs
+        badgeRow.alignment = .center
 
-        statusLabel.font = .systemFont(ofSize: 20)
-        statusLabel.textColor = UIColor(white: 1, alpha: 0.7)
+        statusLabel.font = SystemStyle.font(.body)
+        statusLabel.textColor = SystemStyle.secondaryLabel
+        statusLabel.numberOfLines = 0
+        SystemStyle.followContentSize(statusLabel)
 
-        hintLabel.font = .systemFont(ofSize: 20)
-        hintLabel.textColor = UIColor(red: 0.55, green: 0.9, blue: 0.55, alpha: 1)
+        hintLabel.font = SystemStyle.font(.body, weight: .semibold)
+        hintLabel.textColor = SystemStyle.positive
+        hintLabel.numberOfLines = 0
         hintLabel.isHidden = true
+        hintLabel.accessibilityIdentifier = "incoming_hint"
+        SystemStyle.followContentSize(hintLabel)
 
         replyStack.axis = .vertical
         replyStack.spacing = 12
-
-        styleActionButton(answerButton, prominent: true)
-        styleActionButton(monitorButton, prominent: false)
-        styleActionButton(micButton, prominent: false)
-        styleActionButton(unlockButton, prominent: false)
-        styleActionButton(ignoreButton, prominent: false)
-        styleActionButton(quickReplyButton, prominent: false)
-        answerButton.addTarget(self, action: #selector(onAnswer), for: .primaryActionTriggered)
-        monitorButton.addTarget(self, action: #selector(onMonitor), for: .primaryActionTriggered)
-        micButton.addTarget(self, action: #selector(onMic), for: .primaryActionTriggered)
-        unlockButton.addTarget(self, action: #selector(onUnlock), for: .primaryActionTriggered)
-        ignoreButton.addTarget(self, action: #selector(onIgnore), for: .primaryActionTriggered)
-        quickReplyButton.addTarget(self, action: #selector(onToggleReplies),
-                                   for: .primaryActionTriggered)
-        micButton.accessibilityIdentifier = "incoming_mic"
-        monitorButton.accessibilityIdentifier = "incoming_monitor"
-        unlockButton.accessibilityIdentifier = "incoming_unlock"
-        quickReplyButton.accessibilityIdentifier = "incoming_quick_reply"
-        applyButtonVisibility()
-        // The fixed action zone (ui-guidelines §4): Answer — the largest, positive control —
-        // then Reply and Ignore; Monitor, Unlock and the in-call microphone below. In a call,
-        // End takes Answer's place, so the hand never has to look for it.
-        let actionRows = ActionZoneView()
-        actionRows.setActions(primary: [answerButton, quickReplyButton, ignoreButton],
-                              secondary: [monitorButton, unlockButton, micButton])
-        actionRows.accessibilityIdentifier = "incoming_actions"
-
         replyStack.isHidden = true
+
+        let buttons: [(CallActionButton, Selector, String)] = [
+            (answerButton, #selector(onAnswer), "incoming_answer"),
+            (monitorButton, #selector(onMonitor), "incoming_monitor"),
+            (micButton, #selector(onMic), "incoming_mic"),
+            (unlockButton, #selector(onUnlock), "incoming_unlock"),
+            (ignoreButton, #selector(onIgnore), "incoming_ignore"),
+            (quickReplyButton, #selector(onToggleReplies), "incoming_quick_reply"),
+        ]
+        for (button, action, identifier) in buttons {
+            styleActionButton(button, prominent: button === answerButton)
+            button.addTarget(self, action: action, for: .primaryActionTriggered)
+            button.accessibilityIdentifier = identifier
+        }
+        applyButtonVisibility()
+        // The fixed action zone (ui-guidelines section 4): Answer, the largest and the positive
+        // control, then Reply and Ignore; Monitor, Unlock and the in-call microphone below. In a
+        // call, End takes Answer's place, so the hand never has to look for it.
+        actionZone.setActions(primary: [answerButton, quickReplyButton, ignoreButton],
+                              secondary: [monitorButton, unlockButton, micButton])
+        actionZone.accessibilityIdentifier = "incoming_actions"
+        actionZone.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(actionZone)
 
         // Muted single line with the player's live counters. It never covers the video, and the
         // choice to hide it is remembered on this device.
         debugLine.font = .monospacedDigitSystemFont(ofSize: 11, weight: .regular)
-        debugLine.textColor = UIColor(white: 1, alpha: 0.38)
+        debugLine.textColor = SystemStyle.tertiaryLabel
         debugLine.numberOfLines = 1
         debugLine.adjustsFontSizeToFitWidth = true
         debugLine.minimumScaleFactor = 0.7
@@ -660,29 +631,19 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         debugLine.isUserInteractionEnabled = true
         debugLine.addGestureRecognizer(
             UITapGestureRecognizer(target: self, action: #selector(onToggleDebugLine)))
-        // Collapsed rather than removed: the strip stays in the corner so the counters can be
+        // Collapsed rather than removed: the strip stays in place so the counters can be
         // brought back with the same tap that hid them.
         debugCollapsed = UserDefaults.standard.bool(forKey: IncomingViewController.debugHiddenKey)
         debugLine.heightAnchor.constraint(greaterThanOrEqualToConstant: 16).isActive = true
 
         queueStack.axis = .vertical
         queueStack.spacing = 4
-        queueStack.translatesAutoresizingMaskIntoConstraints = false
-        queueScroll.addSubview(queueStack)
-        NSLayoutConstraint.activate([
-            queueStack.leadingAnchor.constraint(equalTo: queueScroll.leadingAnchor),
-            queueStack.trailingAnchor.constraint(equalTo: queueScroll.trailingAnchor),
-            queueStack.topAnchor.constraint(equalTo: queueScroll.topAnchor),
-            queueStack.bottomAnchor.constraint(equalTo: queueScroll.bottomAnchor),
-            queueStack.widthAnchor.constraint(equalTo: queueScroll.widthAnchor),
-            queueScroll.heightAnchor.constraint(equalToConstant: 132)
-        ])
         for button in [answerButton, unlockButton, quickReplyButton, monitorButton, ignoreButton] {
             button.addTarget(self, action: #selector(captureActionTarget), for: .touchDown)
         }
         occupancyLabel.numberOfLines = 0
-        occupancyLabel.textColor = .white
-        occupancyLabel.font = .preferredFont(forTextStyle: .caption1)
+        occupancyLabel.textColor = SystemStyle.secondaryLabel
+        occupancyLabel.font = SystemStyle.font(.footnote)
         occupancyLabel.isHidden = true
         conversationControls.axis = .vertical
         conversationControls.spacing = 4
@@ -690,6 +651,8 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         for action in ["respond", "join", "takeover", "hold", "resume"] {
             let button = UIButton(type: .system)
             button.setTitle(texts.t("conversation." + action), for: .normal)
+            button.titleLabel?.font = SystemStyle.font(.body)
+            button.contentHorizontalAlignment = .left
             button.accessibilityIdentifier = action
             button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
             button.addTarget(self, action: #selector(captureActionTarget), for: .touchDown)
@@ -697,58 +660,77 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             conversationButtons[action] = button
             conversationControls.addArrangedSubview(button)
         }
-        let rightCol = UIStackView(arrangedSubviews: [purposeSlot, statusLabel, occupancyLabel, queueScroll, conversationControls, replyStack,
-                                                      hintLabel, UIView(), actionRows, debugLine,
-                                                      adminQr])
-        rightCol.axis = .vertical
-        rightCol.spacing = 12
-        rightCol.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(rightCol)
+        let details = UIStackView(arrangedSubviews: [titleRow, badgeRow, statusLabel, hintLabel,
+                                                     occupancyLabel, queueStack,
+                                                     conversationControls, replyStack, debugLine,
+                                                     adminQr])
+        details.axis = .vertical
+        details.spacing = Space.s
+        details.translatesAutoresizingMaskIntoConstraints = false
+        detailScroll.translatesAutoresizingMaskIntoConstraints = false
+        detailScroll.alwaysBounceVertical = false
+        detailScroll.addSubview(details)
+        view.addSubview(detailScroll)
 
         let g = IOSAvailability.safeAreaLayoutGuide(for: view)
+        let margins = view.layoutMarginsGuide
         NSLayoutConstraint.activate([
-            themeBg.topAnchor.constraint(equalTo: view.topAnchor),
-            themeBg.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            themeBg.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            themeBg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            videoZoomView.topAnchor.constraint(equalTo: videoBackdrop.topAnchor),
-            videoZoomView.bottomAnchor.constraint(equalTo: videoBackdrop.bottomAnchor),
-            videoZoomView.leadingAnchor.constraint(equalTo: videoBackdrop.leadingAnchor),
-            videoZoomView.trailingAnchor.constraint(equalTo: videoBackdrop.trailingAnchor),
-            liveView.topAnchor.constraint(equalTo: videoZoomView.topAnchor),
-            liveView.bottomAnchor.constraint(equalTo: videoZoomView.bottomAnchor),
-            liveView.leadingAnchor.constraint(equalTo: videoZoomView.leadingAnchor),
-            liveView.trailingAnchor.constraint(equalTo: videoZoomView.trailingAnchor),
-            h264View.topAnchor.constraint(equalTo: videoZoomView.topAnchor),
-            h264View.bottomAnchor.constraint(equalTo: videoZoomView.bottomAnchor),
-            h264View.leadingAnchor.constraint(equalTo: videoZoomView.leadingAnchor),
-            h264View.trailingAnchor.constraint(equalTo: videoZoomView.trailingAnchor),
-            badgeRow.topAnchor.constraint(equalTo: g.topAnchor, constant: 18),
-            badgeRow.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
-            badgeRow.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
-
+            videoZoom.topAnchor.constraint(equalTo: videoBackdrop.topAnchor),
+            videoZoom.bottomAnchor.constraint(equalTo: videoBackdrop.bottomAnchor),
+            videoZoom.leadingAnchor.constraint(equalTo: videoBackdrop.leadingAnchor),
+            videoZoom.trailingAnchor.constraint(equalTo: videoBackdrop.trailingAnchor),
             noVideoLabel.centerXAnchor.constraint(equalTo: videoBackdrop.centerXAnchor),
             noVideoLabel.centerYAnchor.constraint(equalTo: videoBackdrop.centerYAnchor),
+            noVideoLabel.widthAnchor.constraint(lessThanOrEqualTo: videoBackdrop.widthAnchor,
+                                                constant: -Space.l),
 
-            videoBackdrop.topAnchor.constraint(equalTo: badgeRow.bottomAnchor, constant: 14),
-            videoBackdrop.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
+            videoBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            videoBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             videoBackdrop.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
-            rightCol.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
-            rightCol.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -18),
+
+            details.topAnchor.constraint(equalTo: detailScroll.topAnchor),
+            details.bottomAnchor.constraint(equalTo: detailScroll.bottomAnchor),
+            details.leadingAnchor.constraint(equalTo: detailScroll.leadingAnchor),
+            details.trailingAnchor.constraint(equalTo: detailScroll.trailingAnchor),
+            details.widthAnchor.constraint(equalTo: detailScroll.widthAnchor),
+
+            detailScroll.trailingAnchor.constraint(equalTo: margins.trailingAnchor),
+            detailScroll.bottomAnchor.constraint(equalTo: actionZone.topAnchor,
+                                                 constant: -Space.m),
+            actionZone.leadingAnchor.constraint(equalTo: detailScroll.leadingAnchor),
+            actionZone.trailingAnchor.constraint(equalTo: detailScroll.trailingAnchor),
+            actionZone.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -Space.m),
         ])
+        actionZone.setContentCompressionResistancePriority(.required, for: .vertical)
+        // Side by side: the picture takes the leading two thirds at full height.
         landscapeCs = [
-            videoBackdrop.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -18),
-            videoBackdrop.widthAnchor.constraint(equalTo: g.widthAnchor, multiplier: 0.68),
-            rightCol.topAnchor.constraint(equalTo: badgeRow.bottomAnchor, constant: 14),
-            rightCol.leadingAnchor.constraint(equalTo: videoBackdrop.trailingAnchor, constant: 20),
+            videoBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            videoBackdrop.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.64),
+            detailScroll.topAnchor.constraint(equalTo: g.topAnchor, constant: Space.m),
+            detailScroll.leadingAnchor.constraint(equalTo: videoBackdrop.trailingAnchor,
+                                                  constant: Space.l),
         ]
+        // Stacked: the picture on top at its own aspect, never more than half the screen.
+        let stackedHeight = videoBackdrop.heightAnchor.constraint(equalTo: view.heightAnchor,
+                                                                  multiplier: 0.42)
+        stackedHeight.priority = UILayoutPriority(750)
         portraitCs = [
-            videoBackdrop.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -24),
-            videoBackdrop.heightAnchor.constraint(equalTo: g.heightAnchor, multiplier: 0.38),
-            rightCol.topAnchor.constraint(equalTo: videoBackdrop.bottomAnchor, constant: 16),
-            rightCol.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 24),
+            videoBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            stackedHeight,
+            videoBackdrop.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor,
+                                                  multiplier: 0.5),
+            detailScroll.topAnchor.constraint(equalTo: videoBackdrop.bottomAnchor,
+                                              constant: Space.m),
+            detailScroll.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
         ]
         applyOrientationConstraints()
+        styleObserver = NotificationCenter.default.addObserver(
+            forName: SystemStyle.changed, object: nil, queue: .main
+        ) { [weak self] _ in self?.applyColors() }
+    }
+
+    deinit {
+        if let observer = styleObserver { NotificationCenter.default.removeObserver(observer) }
     }
 
     private var landscapeCs: [NSLayoutConstraint] = []
@@ -756,9 +738,10 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
 
     private func applyOrientationConstraints(for size: CGSize? = nil) {
         let s = size ?? view.bounds.size
-        let portrait = s.height > s.width
-        NSLayoutConstraint.deactivate(portrait ? landscapeCs : portraitCs)
-        NSLayoutConstraint.activate(portrait ? portraitCs : landscapeCs)
+        let side = LayoutClass.sideBySide(s)
+        NSLayoutConstraint.deactivate(side ? portraitCs : landscapeCs)
+        NSLayoutConstraint.activate(side ? landscapeCs : portraitCs)
+        videoAspect?.isActive = !side
     }
 
     override func viewWillTransition(to size: CGSize,
@@ -767,16 +750,12 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         applyOrientationConstraints(for: size)
     }
 
-    private func styleActionButton(_ b: UIButton, prominent: Bool) {
-        b.titleLabel?.font = TypeRole.title.font(weight: .semibold, base: prominent ? 20 : 17)
-        b.titleLabel?.adjustsFontSizeToFitWidth = true
-        b.titleLabel?.minimumScaleFactor = 0.6
-        #if os(iOS)
-        b.setTitleColor(prominent ? .black : .white, for: .normal)
-        b.backgroundColor = prominent ? ColorRole.positive : UIColor(white: 1, alpha: 0.14)
-        b.layer.cornerRadius = Radius.card
-        b.contentEdgeInsets = UIEdgeInsets(top: 14, left: 10, bottom: 14, right: 10)
-        #endif
+    private func styleActionButton(_ b: CallActionButton, prominent: Bool) {
+        b.titleLabel?.font = SystemStyle.font(prominent ? .subheadline : .footnote,
+                                              weight: prominent ? .semibold : .regular)
+        b.setTitleColor(SystemStyle.label, for: .normal)
+        b.backgroundColor = prominent ? ColorRole.positive : SystemStyle.fill
+        b.glyphColor = prominent ? .white : SystemStyle.label
     }
 
     private func applyContent() {
@@ -811,10 +790,25 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         ]
         for (button, text) in titles {
             DoorbellTheme.twoPartTitle(text, on: button,
-                                       primarySize: button.titleLabel?.font.pointSize ?? 22,
-                                       color: button.titleColor(for: .normal) ?? palette.ink,
-                                       focusColor: palette.onAccent)
+                                       primarySize: button.titleLabel?.font.pointSize ?? 13,
+                                       color: button.titleColor(for: .normal) ?? SystemStyle.label,
+                                       focusColor: SystemStyle.label, bold: button === answerButton)
+            button.invalidateIntrinsicContentSize()
         }
+        // The same vendored icons on every shell: handset, crossed handset, reply bubble.
+        answerButton.icon = inCall ? "TablerPhoneOff" : "TablerPhone"
+        quickReplyButton.icon = "TablerMessageReply"
+        ignoreButton.icon = "TablerBellOff"
+        monitorButton.icon = "TablerVolume"
+        unlockButton.icon = "TablerLockOpen"
+        micButton.icon = micMuted ? "TablerMicrophoneOff" : "TablerMicrophone"
+        // A toggle that is on wears the control colour, so its state reads without the caption.
+        answerButton.backgroundColor = inCall ? SystemStyle.negative : ColorRole.positive
+        monitorButton.backgroundColor = monitorOn ? SystemStyle.tint : SystemStyle.fill
+        monitorButton.glyphColor = monitorOn ? DoorbellTheme.readableInk(on: SystemStyle.tint)
+                                             : SystemStyle.label
+        micButton.backgroundColor = micMuted ? SystemStyle.label : SystemStyle.fill
+        micButton.glyphColor = micMuted ? SystemStyle.background : SystemStyle.label
         micButton.isEnabled = inCall
         applyButtonVisibility()
     }
@@ -835,6 +829,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         micButton.isHidden = !sipCapable || !hasMicrophone || !inCall
         quickReplyButton.isHidden = inCall
         ignoreButton.isHidden = inCall
+        actionZone.refreshRows()
     }
 
     /// The unlock control stays, and an administrator decides whether it is offered. When it is
@@ -846,18 +841,17 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         unlockButton.isHidden = !DoorUnlock.showsButton(status: core.status(), config: cfg,
                                                         door: door)
         #endif
+        actionZone.refreshRows()
     }
 
     private func updateNoticeChip() {
         let status = core.status()
         let notice = DoorbellNotice.effective(status: status, config: cfg, door: door,
                                               nowMs: DoorbellClock.nowMs(core))
-        displayDoc = status?["display"] as? [String: Any]
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            display: displayDoc, config: cfg, nodeId: nodeId, localTime: core.localTime()))
-        applySkin()
-        noticeChip.update(active: notice != nil, palette: palette)
-        adminQr.skin = skin
+        SystemStyle.adopt(display: status?["display"] as? [String: Any], config: cfg,
+                          nodeId: nodeId, localTime: core.localTime())
+        applyColors()
+        noticeChip.update(active: notice != nil)
         updateDoorStationAdminEntry(status: status)
         adminQr.reload()
     }
@@ -869,29 +863,29 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         adminQr.setDetailText(DoorbellTheme.peerVersionLine(peer: peer, texts: texts))
     }
 
-    /// The bare text on this screen — the door name, the prompt, the counters line — takes Core's
-    /// per-region automatic ink over the theme background. The controls are cards the shell
-    /// painted itself and keep the palette. The video keeps its own black frame, because a
-    /// picture is what belongs there.
-    private func applySkin() {
-        skin = themeBg.apply(display: displayDoc, config: cfg, nodeId: nodeId, palette: palette,
-                             httpPort: boot.httpPort, host: view)
-        skin.apply("status_line", to: titleLabel)
-        returnButton.setTitleColor(titleLabel.textColor, for: .normal)
-        skin.apply("hint", to: statusLabel, quiet: true)
-        skin.apply("footer", to: debugLine, quiet: true)
-        // Over the video's black frame, not over the theme background.
-        noVideoLabel.textColor = UIColor(white: 1, alpha: 0.6)
+    /// Every colour here is a system role. The answer disc is the positive role and turns into
+    /// the negative one while a call is up; the quieter actions sit on the system fill. The video
+    /// keeps its own black frame, because a picture is what belongs there.
+    private func applyColors() {
+        view.backgroundColor = SystemStyle.background
+        titleLabel.textColor = SystemStyle.label
+        statusLabel.textColor = SystemStyle.secondaryLabel
+        hintLabel.textColor = SystemStyle.positive
+        occupancyLabel.textColor = SystemStyle.secondaryLabel
+        debugLine.textColor = SystemStyle.tertiaryLabel
         for button in [monitorButton, micButton, unlockButton, quickReplyButton, ignoreButton] {
-            button.setTitleColor(skin.cardInk("status_line"), for: .normal)
-            button.backgroundColor = skin.surface
+            button.setTitleColor(SystemStyle.label, for: .normal)
+            button.backgroundColor = SystemStyle.fill
+            button.glyphColor = SystemStyle.label
         }
-        answerButton.setTitleColor(DoorbellTheme.readableInk(on: answerButton.backgroundColor
-            ?? palette.accent), for: .normal)
-        purposeBadge.backgroundColor = palette.accent
-        purposeBadge.textColor = DoorbellTheme.readableInk(on: palette.accent)
-        langBadge.backgroundColor = palette.notice
-        langBadge.textColor = DoorbellTheme.readableInk(on: palette.notice)
+        answerButton.setTitleColor(SystemStyle.label, for: .normal)
+        answerButton.backgroundColor = inCall ? SystemStyle.negative : ColorRole.positive
+        answerButton.glyphColor = .white
+        purposeBadge.backgroundColor = SystemStyle.tint
+        purposeBadge.textColor = DoorbellTheme.readableInk(on: SystemStyle.tint)
+        langBadge.backgroundColor = SystemStyle.fill
+        langBadge.textColor = SystemStyle.label
+        adminQr.refreshColors()
         updateToggleTitles()
     }
 
@@ -914,15 +908,14 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             purposeBadge.isHidden = true
         } else {
             let label = ConfigUtil.labelOf(entry, boot.uiLang, purpose)
-            let icon = entry?["icon"] as? String ?? ""
-            purposeBadge.text = icon.isEmpty ? label : "\(icon) \(label)"
+            purposeBadge.text = label
             purposeBadge.accessibilityLabel = texts.t("ring.purpose_badge", label)
             purposeBadge.isHidden = false
         }
         if visitorLang.isEmpty || visitorLang == "ja" {
             langBadge.isHidden = true
         } else {
-            langBadge.text = "🌐 " + visitorLang.uppercased()
+            langBadge.text = Texts.langDisplayName(visitorLang)
             langBadge.accessibilityLabel =
                 texts.t("ring.lang_badge", Texts.langDisplayName(visitorLang))
             langBadge.isHidden = false
@@ -940,15 +933,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             let entry = replies[id] as? [String: Any]
             let b = UIButton(type: .system)
             b.setTitle(ConfigUtil.labelOf(entry, lang, id), for: .normal)
-            b.titleLabel?.font = .systemFont(ofSize: 22)
-            b.titleLabel?.adjustsFontSizeToFitWidth = true
-            b.titleLabel?.minimumScaleFactor = 0.6
-            #if os(iOS)
-            b.setTitleColor(.white, for: .normal)
-            b.backgroundColor = UIColor(white: 1, alpha: 0.10)
-            b.layer.cornerRadius = 12
-            b.contentEdgeInsets = UIEdgeInsets(top: 14, left: 10, bottom: 14, right: 10)
-            #endif
+            SystemStyle.style(b, kind: .gray, classic: true)
             b.accessibilityIdentifier = "qr_button_\(id)"
             b.addTarget(self, action: #selector(onReply(_:)), for: .primaryActionTriggered)
             replyStack.addArrangedSubview(b)
@@ -984,84 +969,19 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         player.start(h264URLString: incomingStreamMp4Url, mjpegURL: url, h264Enabled: !safeMode)
     }
 
-    /// The video box takes the door camera's own aspect, so a portrait stream is shown portrait
-    /// and is never cropped or stretched to fit a landscape frame.
+    /// The video box takes the door camera's own aspect when it is stacked above the details, so
+    /// a portrait stream is shown portrait and is never cropped or stretched. Beside the details
+    /// the box fills its column and the picture is letterboxed inside it.
     private func applyVideoAspect(_ size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
         if let existing = videoAspect { existing.isActive = false }
         let constraint = videoBackdrop.heightAnchor.constraint(equalTo: videoBackdrop.widthAnchor,
                                                                 multiplier: size.height / size.width)
-        constraint.priority = UILayoutPriority(999)
-        constraint.isActive = true
+        constraint.priority = UILayoutPriority(900)
+        constraint.isActive = !LayoutClass.sideBySide(view.bounds.size)
         videoAspect = constraint
         view.setNeedsLayout()
     }
-
-    #if os(iOS)
-    @objc private func onVideoPinch(_ gesture: UIPinchGestureRecognizer) {
-        switch gesture.state {
-        case .began:
-            pinchStartScale = zoomScale
-        case .changed, .ended:
-            zoomScale = min(4, max(1, pinchStartScale * gesture.scale))
-            if zoomScale == 1 { zoomOffset = .zero }
-            applyVideoZoom()
-        default:
-            break
-        }
-    }
-
-    #endif
-
-    @objc private func onVideoPan(_ gesture: UIPanGestureRecognizer) {
-        guard zoomScale > 1 else { return }
-        switch gesture.state {
-        case .began:
-            panStartOffset = zoomOffset
-        case .changed, .ended:
-            let delta = gesture.translation(in: videoBackdrop)
-            zoomOffset = CGPoint(x: panStartOffset.x + delta.x,
-                                 y: panStartOffset.y + delta.y)
-            applyVideoZoom()
-        default:
-            break
-        }
-    }
-
-    @objc private func onVideoDoubleTap() {
-        zoomScale = zoomScale > 1 ? 1 : 2
-        zoomOffset = .zero
-        applyVideoZoom()
-    }
-
-    private func applyVideoZoom() {
-        let size = videoBackdrop.bounds.size
-        let maxX = max(0, size.width * (zoomScale - 1) / 2)
-        let maxY = max(0, size.height * (zoomScale - 1) / 2)
-        zoomOffset.x = min(maxX, max(-maxX, zoomOffset.x))
-        zoomOffset.y = min(maxY, max(-maxY, zoomOffset.y))
-        videoZoomView.transform = CGAffineTransform(translationX: zoomOffset.x,
-                                                    y: zoomOffset.y)
-            .scaledBy(x: zoomScale, y: zoomScale)
-    }
-
-    private func resetVideoZoom() {
-        zoomScale = 1
-        pinchStartScale = 1
-        zoomOffset = .zero
-        panStartOffset = .zero
-        videoZoomView.transform = .identity
-    }
-
-    func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
-        return !(gestureRecognizer is UIPanGestureRecognizer) || zoomScale > 1
-    }
-
-    func gestureRecognizer(_ gestureRecognizer: UIGestureRecognizer,
-                           shouldRecognizeSimultaneouslyWith otherGestureRecognizer: UIGestureRecognizer) -> Bool {
-        return true
-    }
-
 
     /// A call arrived, or the screen went back to ringing: the return starts over.
     private func restartReturnCountdown() {
@@ -1275,7 +1195,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         let expectedCall = callId
         let expectedRevision = stageRevision
         let sheet = ActionSheetController(title: texts.t("ring.quick_reply"), choices: choices,
-                                          palette: palette, source: quickReplyButton) {
+                                          source: quickReplyButton) {
             [weak self] choice in
             guard let self = self, self.door == expectedDoor, self.callId == expectedCall,
                   self.stageRevision == expectedRevision else { return }

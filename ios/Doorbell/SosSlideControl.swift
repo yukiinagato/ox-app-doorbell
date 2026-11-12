@@ -1,17 +1,24 @@
 import UIKit
 
-/// Slide-to-trigger SOS. Releasing past 90 % of the track starts a cancellable countdown; only
-/// when the countdown reaches zero does the owner call Core. A tap anywhere during the countdown
-/// cancels it, and nothing is reported.
+/// The slide that confirms an SOS, shown on the confirmation surface and nowhere else. Releasing
+/// past 90 % of the track starts a cancellable countdown; releasing early springs back; only when
+/// the countdown reaches zero does the owner call Core. A tap anywhere during the countdown
+/// cancels it, and nothing is reported. There is no press-and-hold.
 ///
-/// On tvOS there is no touch track, so the same control becomes a focusable button: selecting it
-/// starts the identical countdown, and selecting it again cancels.
+/// On tvOS there is no touch track, so the confirmation there is an alert with a Send button
+/// (see `SosTriggerButton`).
 final class SosSlideControl: UIControl {
 
     /// Fired once the countdown has elapsed. Nothing else in this control talks to Core.
     var onTriggered: (() -> Void)?
     /// Fired every second while the countdown runs, and with nil when it stops.
     var onCountdown: ((Int?) -> Void)?
+    /// Fired when a finger lands on the control, so its surface can restart its idle timer.
+    var onTouch: (() -> Void)?
+    /// Replaces the idle label, for the surface that clears an alarm rather than raising one.
+    var idleText: String? {
+        didSet { if !counting { applyIdleLabel() } }
+    }
 
     var countdownSeconds = 3 {
         didSet { if !counting { applyIdleLabel() } }
@@ -19,7 +26,7 @@ final class SosSlideControl: UIControl {
 
     private let texts: Texts
     private let track = UIView()
-    private let thumb = UILabel()
+    private let thumb = UIView()
     private let label = UILabel()
     private let countdownLabel = UILabel()
     private let cancelButton = UIButton(type: .system)
@@ -57,7 +64,7 @@ final class SosSlideControl: UIControl {
         isAccessibilityElement = true
         accessibilityTraits = .button
 
-        track.backgroundColor = UIColor(red: 0.55, green: 0.10, blue: 0.09, alpha: 1)
+        track.backgroundColor = SystemStyle.negative
         track.layer.cornerRadius = SosSlideControl.barHeight / 2
         // The track and everything drawn on it are decoration: the control itself has to receive
         // the touch, or hit testing would hand the drag to a subview and nothing would track.
@@ -73,32 +80,25 @@ final class SosSlideControl: UIControl {
         // The double chevron is the vendored Tabler glyph, not the "\u{00BB}" character: a text
         // guillemet is a different shape in every font the fleet's devices ship with, and on the
         // older ones it is not the arrow this control means at all.
-        thumb.text = nil
-        thumb.textAlignment = .center
-        thumb.textColor = UIColor(red: 0.55, green: 0.10, blue: 0.09, alpha: 1)
         thumb.backgroundColor = .white
-        if let chevrons = TablerIcon.image("TablerChevronsRight") {
-            let mark = UIImageView(image: chevrons)
-            mark.tintColor = thumb.textColor
-            mark.contentMode = .scaleAspectFit
-            mark.translatesAutoresizingMaskIntoConstraints = false
-            thumb.addSubview(mark)
-            NSLayoutConstraint.activate([
-                mark.centerXAnchor.constraint(equalTo: thumb.centerXAnchor),
-                mark.centerYAnchor.constraint(equalTo: thumb.centerYAnchor),
-                mark.widthAnchor.constraint(equalToConstant: 28),
-                mark.heightAnchor.constraint(equalToConstant: 28),
-            ])
-        } else {
-            thumb.text = "\u{00BB}"
-            thumb.font = .systemFont(ofSize: 30, weight: .heavy)
-        }
+        thumb.isUserInteractionEnabled = false
+        let mark = UIImageView(image: TablerIcon.image("TablerChevronsRight"))
+        mark.tintColor = SystemStyle.negative
+        mark.contentMode = .scaleAspectFit
+        mark.translatesAutoresizingMaskIntoConstraints = false
+        thumb.addSubview(mark)
+        NSLayoutConstraint.activate([
+            mark.centerXAnchor.constraint(equalTo: thumb.centerXAnchor),
+            mark.centerYAnchor.constraint(equalTo: thumb.centerYAnchor),
+            mark.widthAnchor.constraint(equalToConstant: 28),
+            mark.heightAnchor.constraint(equalToConstant: 28),
+        ])
         thumb.layer.cornerRadius = SosSlideControl.thumbSide / 2
         thumb.clipsToBounds = true
         thumb.translatesAutoresizingMaskIntoConstraints = false
         track.addSubview(thumb)
 
-        countdownLabel.font = .systemFont(ofSize: 22, weight: .bold)
+        countdownLabel.font = SystemStyle.font(.headline)
         countdownLabel.textColor = .white
         countdownLabel.textAlignment = .center
         countdownLabel.numberOfLines = 2
@@ -107,9 +107,8 @@ final class SosSlideControl: UIControl {
         track.addSubview(countdownLabel)
 
         cancelButton.setTitle(texts.t("sos.cancel_countdown"), for: .normal)
-        cancelButton.titleLabel?.font = .systemFont(ofSize: 20, weight: .semibold)
-        cancelButton.setTitleColor(UIColor(red: 0.55, green: 0.10, blue: 0.09, alpha: 1),
-                                   for: .normal)
+        cancelButton.titleLabel?.font = SystemStyle.font(.headline)
+        cancelButton.setTitleColor(SystemStyle.negative, for: .normal)
         cancelButton.backgroundColor = .white
         cancelButton.layer.cornerRadius = 12
         cancelButton.accessibilityIdentifier = "sos_cancel_countdown"
@@ -154,7 +153,8 @@ final class SosSlideControl: UIControl {
 
     private func applyIdleLabel() {
         label.attributedText = DoorbellTheme.twoPart(
-            texts.t("sos.slide_two_line", "\(countdownSeconds)"), primarySize: 17,
+            idleText ?? texts.t("sos.slide_two_line", "\(countdownSeconds)"),
+            primarySize: UIFont.preferredFont(forTextStyle: .body).pointSize,
             color: .white, bold: false)
         accessibilityLabel = texts.t("sos.accessibility_start")
         accessibilityHint = texts.t("sos.accessibility_hint")
@@ -261,11 +261,18 @@ final class SosSlideControl: UIControl {
     // MARK: - Touch tracking
 
     #if os(iOS)
+    /// A drag that starts on the track belongs to the slide. Without this the sheet the control
+    /// sits in takes the pan for its own dismissal and cancels the slide half way.
+    override func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        return !(gestureRecognizer is UIPanGestureRecognizer)
+    }
+
     override func beginTracking(_ touch: UITouch, with event: UIEvent?) -> Bool {
         if counting {
             cancelCountdown()
             return false
         }
+        onTouch?()
         dragging = true
         return true
     }
@@ -383,3 +390,301 @@ final class SosSlideControl: UIControl {
 
     var isCountingDown: Bool { return counting }
 }
+
+/// The SOS trigger: a compact outlined button, an icon and "SOS", that never competes with a
+/// screen's primary action. Tapping it only opens the confirmation surface. The alert itself
+/// needs a second, different gesture there (a slide end to end), so a resting palm, a stray tap
+/// or a long press cannot raise it. After the slide the cancellable countdown runs, and
+/// `onTriggered` fires only when it reaches zero.
+final class SosTriggerButton: UIButton {
+
+    /// Fired once the countdown has elapsed. Nothing in this file talks to Core.
+    var onTriggered: (() -> Void)?
+    var countdownSeconds = 3
+
+    private let texts: Texts
+    private weak var surface: UIViewController?
+    private var countdownTimer: Timer?
+
+    init(texts: Texts) {
+        self.texts = texts
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        accessibilityIdentifier = "sos_trigger"
+        setImage(TablerIcon.image("TablerAlertTriangle"), for: .normal)
+        titleLabel?.font = SystemStyle.font(.subheadline, weight: .semibold)
+        SystemStyle.followContentSize(titleLabel)
+        layer.cornerRadius = 10
+        layer.borderWidth = 1.5
+        #if !os(tvOS)
+        contentEdgeInsets = UIEdgeInsets(top: 8, left: 12, bottom: 8, right: 14)
+        titleEdgeInsets = UIEdgeInsets(top: 0, left: 6, bottom: 0, right: -6)
+        #endif
+        heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum).isActive = true
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentHuggingPriority(.required, for: .vertical)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+        addTarget(self, action: #selector(open), for: .primaryActionTriggered)
+        refreshStrings()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    deinit { countdownTimer?.invalidate() }
+
+    func refreshStrings() {
+        setTitle(texts.t("sos.title"), for: .normal)
+        accessibilityLabel = texts.t("sos.title")
+        accessibilityHint = texts.t("sos.accessibility_hint")
+        // An outline in the negative role and no fill: present, but quieter than any primary.
+        setTitleColor(SystemStyle.negative, for: .normal)
+        tintColor = SystemStyle.negative
+        layer.borderColor = SystemStyle.negative.cgColor
+    }
+
+    var isConfirming: Bool { return surface != nil }
+
+    /// Closes the confirmation surface and stops any countdown on it.
+    func cancelCountdown() {
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        #if os(iOS)
+        (surface as? SosConfirmViewController)?.abandon()
+        #endif
+        surface?.dismiss(animated: false)
+        surface = nil
+    }
+
+    private func presenter() -> UIViewController? {
+        var responder: UIResponder? = self
+        while let current = responder, !(current is UIViewController) { responder = current.next }
+        var top = responder as? UIViewController
+        while let parent = top?.parent { top = parent }
+        guard top?.presentedViewController == nil else { return nil }
+        return top
+    }
+
+    @objc private func open() {
+        guard isEnabled, !isHidden, window != nil, surface == nil,
+              let presenter = presenter() else { return }
+        #if os(tvOS)
+        openAlert(from: presenter)
+        #else
+        let confirm = SosConfirmViewController(texts: texts,
+                                               purpose: .send(countdown: countdownSeconds)) {
+            [weak self] in self?.onTriggered?()
+        }
+        surface = confirm
+        presenter.present(confirm, animated: !Motion.reduced)
+        #endif
+    }
+
+    #if os(tvOS)
+    /// A remote has no drag, so the confirmation is an alert whose Send button is not the
+    /// default focus; the countdown that follows is the same cancellable one.
+    private func openAlert(from presenter: UIViewController) {
+        let alert = SosConfirmation.alert(texts: texts, title: texts.t("sos.confirm_title"),
+                                          message: texts.t("sos.hint"),
+                                          confirm: texts.t("sos.send")) { [weak self] in
+            self?.runCountdown(from: presenter)
+        }
+        surface = alert
+        presenter.present(alert, animated: true)
+    }
+
+    private func runCountdown(from presenter: UIViewController) {
+        var remaining = max(0, countdownSeconds)
+        guard remaining > 0 else { onTriggered?(); return }
+        let alert = UIAlertController(title: texts.t("sos.countdown", "\(remaining)"),
+                                      message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: texts.t("sos.cancel_countdown"), style: .cancel) {
+            [weak self] _ in self?.cancelCountdown()
+        })
+        surface = alert
+        presenter.present(alert, animated: true)
+        countdownTimer = IOSAvailability.scheduledTimer(withTimeInterval: 1, repeats: true) {
+            [weak self, weak alert] _ in
+            guard let self = self else { return }
+            remaining -= 1
+            if remaining > 0 {
+                alert?.title = self.texts.t("sos.countdown", "\(remaining)")
+                return
+            }
+            self.countdownTimer?.invalidate()
+            self.countdownTimer = nil
+            self.surface = nil
+            alert?.dismiss(animated: true) { [weak self] in self?.onTriggered?() }
+        }
+    }
+    #endif
+}
+
+/// The alert form of the SOS confirmation, for input without a drag: Cancel is the preferred
+/// action and takes the default focus, the confirming action is the destructive one, and the
+/// alert closes by itself after ten seconds without input.
+enum SosConfirmation {
+    static let idleTimeout: TimeInterval = 10
+
+    static func alert(texts: Texts, title: String, message: String, confirm: String,
+                      onConfirm: @escaping () -> Void) -> UIAlertController {
+        let alert = UIAlertController(title: title, message: message, preferredStyle: .alert)
+        let cancel = UIAlertAction(title: texts.t("admin.cancel"), style: .cancel)
+        alert.addAction(cancel)
+        alert.addAction(UIAlertAction(title: confirm, style: .destructive) { _ in onConfirm() })
+        alert.preferredAction = cancel
+        alert.view.accessibilityIdentifier = "sos_confirm"
+        DispatchQueue.main.asyncAfter(deadline: .now() + idleTimeout) { [weak alert] in
+            guard let alert = alert, alert.presentingViewController != nil else { return }
+            alert.dismiss(animated: true)
+        }
+        return alert
+    }
+}
+
+#if os(iOS)
+/// The SOS confirmation surface: a sheet that says what will happen and who is alerted, with the
+/// slide that confirms it and a plain Cancel. It closes by itself after ten seconds without
+/// input. The same surface, worded for it, confirms clearing an active alarm.
+final class SosConfirmViewController: UIViewController {
+
+    enum Purpose {
+        /// Raise an SOS after the cancellable countdown.
+        case send(countdown: Int)
+        /// Clear the alarm that is active now.
+        case clear
+    }
+
+    private let texts: Texts
+    private let purpose: Purpose
+    private var onConfirmed: (() -> Void)?
+    let slide: SosSlideControl
+    private var idleTimer: Timer?
+
+    init(texts: Texts, purpose: Purpose, onConfirmed: @escaping () -> Void) {
+        self.texts = texts
+        self.purpose = purpose
+        self.onConfirmed = onConfirmed
+        self.slide = SosSlideControl(texts: texts)
+        super.init(nibName: nil, bundle: nil)
+        if #available(iOS 15.0, *) {
+            modalPresentationStyle = .pageSheet
+            sheetPresentationController?.detents = [.medium(), .large()]
+            sheetPresentationController?.prefersGrabberVisible = true
+        } else {
+            modalPresentationStyle = .formSheet
+        }
+        preferredContentSize = CGSize(width: 480, height: 420)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    deinit { idleTimer?.invalidate() }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = SystemStyle.background
+        view.accessibilityIdentifier = "sos_confirm"
+        let icon = UIImageView(image: TablerIcon.image("TablerAlertTriangle"))
+        icon.tintColor = SystemStyle.negative
+        icon.contentMode = .scaleAspectFit
+        let heading = SystemStyle.label(.title2, weight: .bold)
+        heading.textAlignment = .center
+        heading.accessibilityTraits = .header
+        let body = SystemStyle.label(.body, color: SystemStyle.secondaryLabel)
+        body.textAlignment = .center
+        let send = SystemStyle.button(.destructive, large: true)
+        send.accessibilityIdentifier = "sos_send"
+        send.addTarget(self, action: #selector(sendWithoutSlide), for: .touchUpInside)
+        // A drag is not available to everyone: with VoiceOver or Switch Control running, the
+        // confirming step is a button, placed after Cancel so it is not the first thing reached.
+        send.isHidden = !(UIAccessibility.isVoiceOverRunning
+            || UIAccessibility.isSwitchControlRunning)
+        let cancel = SystemStyle.button(.gray, title: texts.t("admin.cancel"), large: true)
+        cancel.accessibilityIdentifier = "sos_confirm_cancel"
+        cancel.addTarget(self, action: #selector(close), for: .touchUpInside)
+
+        switch purpose {
+        case .send(let countdown):
+            heading.text = texts.t("sos.confirm_title")
+            body.text = texts.t("sos.hint")
+            slide.countdownSeconds = countdown
+            SystemStyle.style(send, kind: .destructive, title: texts.t("sos.send"), large: true)
+        case .clear:
+            heading.text = texts.t("emergency.cancel")
+            body.text = texts.t("emergency.clear_confirm")
+            slide.countdownSeconds = 0
+            slide.idleText = texts.t("sos.slide_to_clear")
+            slide.accessibilityLabel = texts.t("emergency.cancel")
+            SystemStyle.style(send, kind: .destructive, title: texts.t("emergency.cancel"),
+                              large: true)
+        }
+        slide.isAccessibilityElement = send.isHidden
+        slide.onTouch = { [weak self] in self?.restartIdleTimer() }
+        slide.onCountdown = { [weak self] remaining in
+            // The countdown is its own deadline; the idle timer starts again if it is cancelled.
+            if remaining == nil { self?.restartIdleTimer() } else { self?.idleTimer?.invalidate() }
+        }
+        slide.onTriggered = { [weak self] in self?.confirmed() }
+
+        let stack = UIStackView(arrangedSubviews: [icon, heading, body, slide, cancel, send])
+        stack.axis = .vertical
+        stack.spacing = Space.m
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(stack)
+        let margins = view.layoutMarginsGuide
+        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
+        NSLayoutConstraint.activate([
+            icon.heightAnchor.constraint(equalToConstant: 40),
+            stack.topAnchor.constraint(equalTo: guide.topAnchor, constant: Space.xl),
+            stack.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: margins.trailingAnchor),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: guide.bottomAnchor,
+                                          constant: -Space.m),
+            cancel.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum),
+            send.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum),
+        ])
+    }
+
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        restartIdleTimer()
+    }
+
+    override func viewDidDisappear(_ animated: Bool) {
+        super.viewDidDisappear(animated)
+        abandon()
+    }
+
+    private func restartIdleTimer() {
+        idleTimer?.invalidate()
+        idleTimer = IOSAvailability.scheduledTimer(
+            withTimeInterval: SosConfirmation.idleTimeout, repeats: false
+        ) { [weak self] _ in self?.close() }
+    }
+
+    /// Drops the pending confirmation: nothing fires after this.
+    func abandon() {
+        idleTimer?.invalidate()
+        idleTimer = nil
+        onConfirmed = nil
+        slide.cancelCountdown()
+    }
+
+    @objc private func close() {
+        abandon()
+        dismiss(animated: !Motion.reduced)
+    }
+
+    @objc private func sendWithoutSlide() {
+        restartIdleTimer()
+        slide.startCountdown()
+    }
+
+    private func confirmed() {
+        idleTimer?.invalidate()
+        let action = onConfirmed
+        onConfirmed = nil
+        dismiss(animated: !Motion.reduced) { action?() }
+    }
+}
+#endif

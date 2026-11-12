@@ -43,8 +43,8 @@
       "path": "ios/Doorbell/AppDelegate.swift",
       "ordered_literals": [
         "let eventKind = ConfigUtil.evStr(ev, \"t\")",
-        "if eventKind == \"chime\" && boot.role != \"door_station\"",
-        "presentIncoming(door:"
+        "// Only a targeted chime opens the incoming screen.",
+        "if boot.role != \"door_station\" { incomingRouter.handle(ev) }"
       ]
     },
     {
@@ -71,8 +71,8 @@
       "id": "tvos-targeted-chime-routing",
       "path": "ios/DoorbellTV/TVAppDelegate.swift",
       "ordered_literals": [
-        "if t == \"chime\"",
-        "presentIncoming(door:"
+        "private lazy var incomingRouter = IncomingCallRouter(",
+        "incomingRouter.handle(ev)"
       ]
     },
     {

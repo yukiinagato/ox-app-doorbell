@@ -16,6 +16,7 @@
 		AC0000000000000000000004 /* ThemeInkTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000003 /* ThemeInkTests.swift */; };
 		AC000000000000000000000E /* IncomingReturnCountdownTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC000000000000000000000D /* IncomingReturnCountdownTests.swift */; };
 		AC0000000000000000000010 /* HomePerformanceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC000000000000000000000F /* HomePerformanceTests.swift */; };
+		AC0000000000000000000201 /* HomeLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000101 /* HomeLayoutTests.swift */; };
 		AC0000000000000000000012 /* PairUriTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000011 /* PairUriTests.swift */; };
 		AC0000000000000000000014 /* VisitorScreenLayoutTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */; };
 		AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */; };
@@ -143,16 +144,25 @@
 		F90000000000000000000071 /* DoorbellClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000031 /* DoorbellClock.swift */; };
 		FB0000000000000000000072 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
 		DEB9A3612E2F3F95486207AD /* DoorbellLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */; };
+		FB0000000000000000000103 /* HomeTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000103 /* HomeTabs.swift */; };
+		FB0000000000000000000102 /* ZoomableVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000102 /* ZoomableVideoView.swift */; };
+		FB0000000000000000000101 /* SystemStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000101 /* SystemStyle.swift */; };
 		E802D0E23A11C6650FB13367 /* SettingsUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E836B9F8D7829313832B7060 /* SettingsUI.swift */; };
 		E8101E66FAE61287262E6AE3 /* SettingsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */; };
 		E064C8AD47D8C3986393B292 /* SettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E84E39C4B00251F5A31125 /* SettingsModel.swift */; };
 		FB0000000000000000000092 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
 		D4748C3C60EF7B9432F4BA35 /* DoorbellLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */; };
+		FB0000000000000000000203 /* HomeTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000103 /* HomeTabs.swift */; };
+		FB0000000000000000000202 /* ZoomableVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000102 /* ZoomableVideoView.swift */; };
+		FB0000000000000000000201 /* SystemStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000101 /* SystemStyle.swift */; };
 		E520E971266FD58DCC1A2F64 /* SettingsUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E836B9F8D7829313832B7060 /* SettingsUI.swift */; };
 		E14419BC401646000109D42E /* SettingsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */; };
 		E1EAB6AE8BDBA9407E73535C /* SettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E84E39C4B00251F5A31125 /* SettingsModel.swift */; };
 		F90000000000000000000072 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
 		DEE168A331E0F68CF19FACFE /* DoorbellLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */; };
+		F90000000000000000000103 /* HomeTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000103 /* HomeTabs.swift */; };
+		F90000000000000000000102 /* ZoomableVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000102 /* ZoomableVideoView.swift */; };
+		F90000000000000000000101 /* SystemStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000101 /* SystemStyle.swift */; };
 		ED023E838B1F0E5E0AD016D1 /* SettingsUI.swift in Sources */ = {isa = PBXBuildFile; fileRef = E836B9F8D7829313832B7060 /* SettingsUI.swift */; };
 		E6B15835F88E48E248161291 /* SettingsCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */; };
 		E0A28CEB5B39E2FE6DBA4C41 /* SettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E84E39C4B00251F5A31125 /* SettingsModel.swift */; };
@@ -165,9 +175,6 @@
 		FB0000000000000000000075 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
 		FB0000000000000000000095 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
 		F90000000000000000000075 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
-		FB0000000000000000000076 /* SettingsForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000036 /* SettingsForm.swift */; };
-		FB0000000000000000000096 /* SettingsForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000036 /* SettingsForm.swift */; };
-		F90000000000000000000076 /* SettingsForm.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000036 /* SettingsForm.swift */; };
 		FB0000000000000000000077 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000037 /* SettingsViewController.swift */; };
 		FB0000000000000000000097 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000037 /* SettingsViewController.swift */; };
 		F90000000000000000000077 /* SettingsViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000037 /* SettingsViewController.swift */; };
@@ -197,6 +204,7 @@
 		AC0000000000000000000003 /* ThemeInkTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ThemeInkTests.swift; sourceTree = "<group>"; };
 		AC000000000000000000000D /* IncomingReturnCountdownTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IncomingReturnCountdownTests.swift; sourceTree = "<group>"; };
 		AC000000000000000000000F /* HomePerformanceTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomePerformanceTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000101 /* HomeLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeLayoutTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000011 /* PairUriTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairUriTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorScreenLayoutTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MonitorRetryPolicyTests.swift; sourceTree = "<group>"; };
@@ -258,13 +266,15 @@
 		FA0000000000000000000031 /* DoorbellClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorbellClock.swift; sourceTree = "<group>"; };
 		FA0000000000000000000032 /* ConfigWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigWriter.swift; sourceTree = "<group>"; };
 		DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorbellLayout.swift; sourceTree = "<group>"; };
+		FA0000000000000000000103 /* HomeTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTabs.swift; sourceTree = "<group>"; };
+		FA0000000000000000000102 /* ZoomableVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomableVideoView.swift; sourceTree = "<group>"; };
+		FA0000000000000000000101 /* SystemStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemStyle.swift; sourceTree = "<group>"; };
 		E836B9F8D7829313832B7060 /* SettingsUI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsUI.swift; sourceTree = "<group>"; };
 		E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsCatalog.swift; sourceTree = "<group>"; };
 		E5E84E39C4B00251F5A31125 /* SettingsModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsModel.swift; sourceTree = "<group>"; };
 		FA0000000000000000000033 /* SosSlideControl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SosSlideControl.swift; sourceTree = "<group>"; };
 		FA0000000000000000000034 /* NoticeSupport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NoticeSupport.swift; sourceTree = "<group>"; };
 		FA0000000000000000000035 /* CallHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallHistory.swift; sourceTree = "<group>"; };
-		FA0000000000000000000036 /* SettingsForm.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsForm.swift; sourceTree = "<group>"; };
 		FA0000000000000000000037 /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000038 /* AdminQrView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminQrView.swift; sourceTree = "<group>"; };
 		FA0000000000000000000039 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
@@ -324,13 +334,15 @@
 				FA0000000000000000000031 /* DoorbellClock.swift */,
 				FA0000000000000000000032 /* ConfigWriter.swift */,
 				DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */,
+				FA0000000000000000000103 /* HomeTabs.swift */,
+				FA0000000000000000000102 /* ZoomableVideoView.swift */,
+				FA0000000000000000000101 /* SystemStyle.swift */,
 				E836B9F8D7829313832B7060 /* SettingsUI.swift */,
 				E2832C63F761CC711FC64F31 /* SettingsCatalog.swift */,
 				E5E84E39C4B00251F5A31125 /* SettingsModel.swift */,
 				FA0000000000000000000033 /* SosSlideControl.swift */,
 				FA0000000000000000000034 /* NoticeSupport.swift */,
 				FA0000000000000000000035 /* CallHistory.swift */,
-				FA0000000000000000000036 /* SettingsForm.swift */,
 				FA0000000000000000000037 /* SettingsViewController.swift */,
 				FA0000000000000000000038 /* AdminQrView.swift */,
 				FA0000000000000000000039 /* DashboardView.swift */,
@@ -389,6 +401,7 @@
 				AC0000000000000000000003 /* ThemeInkTests.swift */,
 				AC000000000000000000000D /* IncomingReturnCountdownTests.swift */,
 				AC000000000000000000000F /* HomePerformanceTests.swift */,
+				AC0000000000000000000101 /* HomeLayoutTests.swift */,
 				AC0000000000000000000011 /* PairUriTests.swift */,
 				AC0000000000000000000013 /* VisitorScreenLayoutTests.swift */,
 				AC0000000000000000000015 /* MonitorRetryPolicyTests.swift */,
@@ -680,6 +693,7 @@
 				AC0000000000000000000004 /* ThemeInkTests.swift in Sources */,
 				AC000000000000000000000E /* IncomingReturnCountdownTests.swift in Sources */,
 				AC0000000000000000000010 /* HomePerformanceTests.swift in Sources */,
+				AC0000000000000000000201 /* HomeLayoutTests.swift in Sources */,
 				AC0000000000000000000012 /* PairUriTests.swift in Sources */,
 				AC0000000000000000000014 /* VisitorScreenLayoutTests.swift in Sources */,
 				AC0000000000000000000016 /* MonitorRetryPolicyTests.swift in Sources */,
@@ -698,13 +712,15 @@
 				FB0000000000000000000071 /* DoorbellClock.swift in Sources */,
 				FB0000000000000000000072 /* ConfigWriter.swift in Sources */,
 				DEB9A3612E2F3F95486207AD /* DoorbellLayout.swift in Sources */,
+				FB0000000000000000000103 /* HomeTabs.swift in Sources */,
+				FB0000000000000000000102 /* ZoomableVideoView.swift in Sources */,
+				FB0000000000000000000101 /* SystemStyle.swift in Sources */,
 				E802D0E23A11C6650FB13367 /* SettingsUI.swift in Sources */,
 				E8101E66FAE61287262E6AE3 /* SettingsCatalog.swift in Sources */,
 				E064C8AD47D8C3986393B292 /* SettingsModel.swift in Sources */,
 				FB0000000000000000000073 /* SosSlideControl.swift in Sources */,
 				FB0000000000000000000074 /* NoticeSupport.swift in Sources */,
 				FB0000000000000000000075 /* CallHistory.swift in Sources */,
-				FB0000000000000000000076 /* SettingsForm.swift in Sources */,
 				FB0000000000000000000077 /* SettingsViewController.swift in Sources */,
 				FB0000000000000000000078 /* AdminQrView.swift in Sources */,
 				FB0000000000000000000079 /* DashboardView.swift in Sources */,
@@ -752,13 +768,15 @@
 				FB0000000000000000000091 /* DoorbellClock.swift in Sources */,
 				FB0000000000000000000092 /* ConfigWriter.swift in Sources */,
 				D4748C3C60EF7B9432F4BA35 /* DoorbellLayout.swift in Sources */,
+				FB0000000000000000000203 /* HomeTabs.swift in Sources */,
+				FB0000000000000000000202 /* ZoomableVideoView.swift in Sources */,
+				FB0000000000000000000201 /* SystemStyle.swift in Sources */,
 				E520E971266FD58DCC1A2F64 /* SettingsUI.swift in Sources */,
 				E14419BC401646000109D42E /* SettingsCatalog.swift in Sources */,
 				E1EAB6AE8BDBA9407E73535C /* SettingsModel.swift in Sources */,
 				FB0000000000000000000093 /* SosSlideControl.swift in Sources */,
 				FB0000000000000000000094 /* NoticeSupport.swift in Sources */,
 				FB0000000000000000000095 /* CallHistory.swift in Sources */,
-				FB0000000000000000000096 /* SettingsForm.swift in Sources */,
 				FB0000000000000000000097 /* SettingsViewController.swift in Sources */,
 				FB0000000000000000000098 /* AdminQrView.swift in Sources */,
 				FB0000000000000000000099 /* DashboardView.swift in Sources */,
@@ -800,13 +818,15 @@
 				F90000000000000000000071 /* DoorbellClock.swift in Sources */,
 				F90000000000000000000072 /* ConfigWriter.swift in Sources */,
 				DEE168A331E0F68CF19FACFE /* DoorbellLayout.swift in Sources */,
+				F90000000000000000000103 /* HomeTabs.swift in Sources */,
+				F90000000000000000000102 /* ZoomableVideoView.swift in Sources */,
+				F90000000000000000000101 /* SystemStyle.swift in Sources */,
 				ED023E838B1F0E5E0AD016D1 /* SettingsUI.swift in Sources */,
 				E6B15835F88E48E248161291 /* SettingsCatalog.swift in Sources */,
 				E0A28CEB5B39E2FE6DBA4C41 /* SettingsModel.swift in Sources */,
 				F90000000000000000000073 /* SosSlideControl.swift in Sources */,
 				F90000000000000000000074 /* NoticeSupport.swift in Sources */,
 				F90000000000000000000075 /* CallHistory.swift in Sources */,
-				F90000000000000000000076 /* SettingsForm.swift in Sources */,
 				F90000000000000000000077 /* SettingsViewController.swift in Sources */,
 				F90000000000000000000078 /* AdminQrView.swift in Sources */,
 				F90000000000000000000079 /* DashboardView.swift in Sources */,

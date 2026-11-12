@@ -3,6 +3,9 @@
 // AVFoundation metadata detection reads the QR; the payload Core defines is `doorbell-pair:`.
 // The earlier implementation looked for `doorbell-join:`, which no device has ever produced.
 // A camera-less or camera-denied device gets a message, never a blank preview.
+//
+// The screen is presented as itself and hosts its own navigation controller: Cancel and the
+// camera switch are bar button items, and only the viewfinder over the preview is custom.
 #if os(iOS)
 import AVFoundation
 import UIKit
@@ -16,11 +19,18 @@ final class PairingScannerViewController: UIViewController,
     private var preview: AVCaptureVideoPreviewLayer?
     private var delivered = false
 
+    private let stage = PairingScannerStage()
     private let viewfinder = UIView()
-    private let hintLabel = UILabel()
-    private let messageLabel = UILabel()
-    private lazy var cancelButton = PairingTheme.button(texts.t("admin.cancel"))
-    private lazy var switchButton = PairingTheme.button(texts.t("pair.scan_switch_camera"))
+    private let card = MaterialCardView(cornerRadius: 14)
+    private let hintLabel = SystemStyle.label(.body, weight: .semibold)
+    private let messageLabel = SystemStyle.label(.subheadline, color: SystemStyle.negative)
+    private lazy var switchItem: UIBarButtonItem = {
+        // Opens on the back camera; a panel on a wall or a stand can flip to the front one.
+        let item = UIBarButtonItem(title: texts.t("pair.scan_switch_camera"), style: .plain,
+                                   target: self, action: #selector(switchCamera))
+        item.accessibilityIdentifier = "pair_scan_switch_camera"
+        return item
+    }()
     private var currentInput: AVCaptureDeviceInput?
 
     init(texts: Texts, onPayload: @escaping ((addr: String, id: String, pk: String)) -> Void) {
@@ -39,70 +49,90 @@ final class PairingScannerViewController: UIViewController,
         requestAccessAndStart()
     }
 
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        preview?.frame = view.bounds
-    }
-
     override func viewWillDisappear(_ animated: Bool) {
         super.viewWillDisappear(animated)
         if session.isRunning { session.stopRunning() }
     }
 
+    override var childForStatusBarStyle: UIViewController? { return children.first }
+
     private func buildUi() {
-        viewfinder.layer.borderColor = PairingTheme.accent.cgColor
+        let nav = SystemStyle.navigation(stage, largeTitles: false)
+        // A camera screen is dark whatever the household appearance is, so the bar keeps its
+        // material over the preview and its text stays legible.
+        if #available(iOS 13.0, *) {
+            overrideUserInterfaceStyle = .dark
+            let appearance = UINavigationBarAppearance()
+            appearance.configureWithDefaultBackground()
+            nav.navigationBar.standardAppearance = appearance
+            nav.navigationBar.scrollEdgeAppearance = appearance
+        } else {
+            nav.navigationBar.barStyle = .black
+        }
+        addChild(nav)
+        nav.view.frame = view.bounds
+        nav.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(nav.view)
+        nav.didMove(toParent: self)
+
+        stage.title = texts.t("pair.scan_qr")
+        let cancelItem = UIBarButtonItem(title: texts.t("admin.cancel"), style: .plain,
+                                         target: self, action: #selector(cancel))
+        cancelItem.accessibilityIdentifier = "pair_scan_cancel"
+        stage.navigationItem.leftBarButtonItem = cancelItem
+        stage.view.backgroundColor = .black
+        stage.onLayout = { [weak self] in
+            guard let self = self else { return }
+            self.preview?.frame = self.stage.view.bounds
+        }
+
+        viewfinder.layer.borderColor = UIColor.white.cgColor
         viewfinder.layer.borderWidth = 3
         viewfinder.layer.cornerRadius = 16
         viewfinder.backgroundColor = .clear
         viewfinder.translatesAutoresizingMaskIntoConstraints = false
         viewfinder.accessibilityIdentifier = "pair_scan_viewfinder"
-        view.addSubview(viewfinder)
+        stage.view.addSubview(viewfinder)
 
         hintLabel.text = texts.t("pair.scan_hint")
-        hintLabel.font = .systemFont(ofSize: PairingTheme.bodySize, weight: .semibold)
-        hintLabel.textColor = .white
         hintLabel.textAlignment = .center
-        hintLabel.numberOfLines = 0
-        hintLabel.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(hintLabel)
-
-        messageLabel.font = .systemFont(ofSize: PairingTheme.bodySize)
-        messageLabel.textColor = PairingTheme.danger
         messageLabel.textAlignment = .center
-        messageLabel.numberOfLines = 0
         messageLabel.isHidden = true
-        messageLabel.translatesAutoresizingMaskIntoConstraints = false
         messageLabel.accessibilityIdentifier = "pair_scan_message"
-        view.addSubview(messageLabel)
+        let stack = UIStackView(arrangedSubviews: [hintLabel, messageLabel])
+        stack.axis = .vertical
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        card.contentView.addSubview(stack)
+        stage.view.addSubview(card)
 
-        cancelButton.addTarget(self, action: #selector(cancel), for: .primaryActionTriggered)
-        cancelButton.translatesAutoresizingMaskIntoConstraints = false
-        cancelButton.accessibilityIdentifier = "pair_scan_cancel"
-        view.addSubview(cancelButton)
-
-        // Opens on the back camera; a panel on a wall or a stand can flip to the front one.
-        switchButton.addTarget(self, action: #selector(switchCamera), for: .primaryActionTriggered)
-        switchButton.translatesAutoresizingMaskIntoConstraints = false
-        switchButton.accessibilityIdentifier = "pair_scan_switch_camera"
-        switchButton.isHidden = true
-        view.addSubview(switchButton)
-
-        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
+        let guide = IOSAvailability.safeAreaLayoutGuide(for: stage.view)
+        let side = viewfinder.widthAnchor.constraint(equalTo: stage.view.widthAnchor,
+                                                     multiplier: 0.62)
+        side.priority = .defaultHigh
+        let centered = viewfinder.centerYAnchor.constraint(equalTo: stage.view.centerYAnchor)
+        centered.priority = .defaultLow
         NSLayoutConstraint.activate([
-            viewfinder.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            viewfinder.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            viewfinder.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.62),
+            viewfinder.centerXAnchor.constraint(equalTo: stage.view.centerXAnchor),
+            centered,
+            side,
             viewfinder.heightAnchor.constraint(equalTo: viewfinder.widthAnchor),
-            hintLabel.bottomAnchor.constraint(equalTo: viewfinder.topAnchor, constant: -24),
-            hintLabel.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 32),
-            hintLabel.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -32),
-            messageLabel.topAnchor.constraint(equalTo: viewfinder.bottomAnchor, constant: 24),
-            messageLabel.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: 32),
-            messageLabel.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -32),
-            cancelButton.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -28),
-            cancelButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            switchButton.bottomAnchor.constraint(equalTo: cancelButton.topAnchor, constant: -12),
-            switchButton.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            viewfinder.topAnchor.constraint(greaterThanOrEqualTo: guide.topAnchor, constant: 16),
+            viewfinder.bottomAnchor.constraint(lessThanOrEqualTo: card.topAnchor, constant: -16),
+            card.leadingAnchor.constraint(greaterThanOrEqualTo: guide.leadingAnchor,
+                                          constant: 16),
+            card.trailingAnchor.constraint(lessThanOrEqualTo: guide.trailingAnchor,
+                                           constant: -16),
+            card.centerXAnchor.constraint(equalTo: stage.view.centerXAnchor),
+            card.widthAnchor.constraint(lessThanOrEqualToConstant: 520),
+            card.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -20),
+            stack.topAnchor.constraint(equalTo: card.contentView.topAnchor, constant: 14),
+            stack.bottomAnchor.constraint(equalTo: card.contentView.bottomAnchor,
+                                          constant: -14),
+            stack.leadingAnchor.constraint(equalTo: card.contentView.leadingAnchor,
+                                           constant: 16),
+            stack.trailingAnchor.constraint(equalTo: card.contentView.trailingAnchor,
+                                            constant: -16),
         ])
     }
 
@@ -131,7 +161,8 @@ final class PairingScannerViewController: UIViewController,
         }
         session.addInput(input)
         currentInput = input
-        switchButton.isHidden = !(Self.device(at: .front) != nil && Self.device(at: .back) != nil)
+        let canSwitch = Self.device(at: .front) != nil && Self.device(at: .back) != nil
+        stage.navigationItem.rightBarButtonItem = canSwitch ? switchItem : nil
         let output = AVCaptureMetadataOutput()
         guard session.canAddOutput(output) else {
             showUnavailable(denied: false)
@@ -143,8 +174,8 @@ final class PairingScannerViewController: UIViewController,
 
         let layer = AVCaptureVideoPreviewLayer(session: session)
         layer.videoGravity = .resizeAspectFill
-        layer.frame = view.bounds
-        view.layer.insertSublayer(layer, at: 0)
+        layer.frame = stage.view.bounds
+        stage.view.layer.insertSublayer(layer, at: 0)
         preview = layer
         session.startRunning()
     }
@@ -175,10 +206,10 @@ final class PairingScannerViewController: UIViewController,
     }
 
     private func showUnavailable(denied: Bool) {
-        switchButton.isHidden = true
+        stage.navigationItem.rightBarButtonItem = nil
         viewfinder.isHidden = true
         hintLabel.isHidden = true
-        messageLabel.text = texts.t(denied ? "pair.scan_denied" : "pair.scan_no_camera")
+        messageLabel.text = texts.t(denied ? "pair.scan_camera_denied" : "pair.scan_no_camera")
         messageLabel.isHidden = false
     }
 
@@ -201,7 +232,6 @@ final class PairingScannerViewController: UIViewController,
             }
             guard let payload = PairingQR.parse(value) else {
                 // Keep scanning: a foreign QR is a mis-aim, not a failure of the flow.
-                messageLabel.textColor = PairingTheme.danger
                 messageLabel.text = texts.t("pair.scan_not_device_qr")
                 messageLabel.isHidden = false
                 continue
@@ -216,6 +246,16 @@ final class PairingScannerViewController: UIViewController,
     @objc private func cancel() {
         session.stopRunning()
         dismiss(animated: true)
+    }
+}
+
+/// The scanner's content controller: it only reports its layout so the preview layer follows.
+private final class PairingScannerStage: UIViewController {
+    var onLayout: (() -> Void)?
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        onLayout?()
     }
 }
 #endif

@@ -35,7 +35,7 @@ enum SettingEffect {
 }
 
 struct SettingIcon: Equatable {
-    /// A short glyph drawn on a rounded tile; no image assets, so every OS draws the same icon.
+    /// The name of the vendored Tabler icon shown on a rounded tile.
     let glyph: String
     /// 0xRRGGBB tile colour.
     let tint: UInt32

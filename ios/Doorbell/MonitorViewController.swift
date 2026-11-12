@@ -27,15 +27,17 @@ final class MonitorViewController: UIViewController {
     private static let silentDialogS: TimeInterval = 2
     private var safeMode = UserDefaults.standard.bool(forKey: "runtime.safe_mode")
 
-    private let themeBg = ThemeBackgroundView()
+    private let navBar = UINavigationBar()
+    private let navItem = UINavigationItem()
     private let videoBackdrop = UIView()
+    /// Pinch, drag and double-tap zoom for the live picture, whichever renderer is drawing it.
+    private let videoZoom = ZoomableVideoView()
     private let video = UIImageView()
     private let h264View = UIView()
-    private let titleLabel = HaloLabel()
-    private let emptyLabel = HaloLabel()
-    private let deviceStack = UIStackView()
+    private let emptyLabel = UILabel()
+    private let doorList = UITableView(frame: .zero, style: SystemStyle.tableStyle())
     private let closeButton = UIButton(type: .system)
-    private var skin = DoorbellSkin.plain(.dark)
+    private var peers: [[String: Any]] = []
 
     init(core: CoreBridge, boot: BootConfig, initialDoor: String? = nil) {
         self.core = core
@@ -49,7 +51,7 @@ final class MonitorViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
+        view.backgroundColor = SystemStyle.background
         texts.setLang(boot.uiLang)
         config = core.config()
         texts.setConfig(config)
@@ -57,16 +59,12 @@ final class MonitorViewController: UIViewController {
             nodeId = ConfigUtil.evStr(node, "id")
         }
         buildUi()
-        applySkin()
         rebuildDevices()
         core.addHandler("active-monitor") { [weak self] event in
             let type = ConfigUtil.evStr(event, "t")
             if type == "peers_changed" || type == "config_changed" {
                 self?.config = self?.core.config()
-                self?.applySkin()
                 self?.rebuildDevices()
-            } else if type == "display" {
-                self?.applySkin()
             } else if type == "state" {
                 let state = ConfigUtil.evStr(event, "state")
                 if state == "in_call" {
@@ -105,130 +103,123 @@ final class MonitorViewController: UIViewController {
         videoPlayer?.stop()
         videoPlayer = nil
         video.image = nil
-        themeBg.releaseImage()
+        videoZoom.resetZoom()
         emptyLabel.isHidden = false
         // Monitoring audio and the Close control remain available until the user exits.
     }
 
     private func buildUi() {
-        themeBg.onImageLoaded = { [weak self] in self?.applySkin() }
-        themeBg.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(themeBg)
+        // A stock navigation bar carries the door's name and Close. It is hosted directly because
+        // this controller itself has to stay the presented screen: the call router looks for it.
+        navItem.title = texts.t("monitor.choose")
+        closeButton.setTitle(texts.t("monitor.close"), for: .normal)
+        closeButton.titleLabel?.font = SystemStyle.font(.body, weight: .semibold)
+        closeButton.accessibilityIdentifier = "monitor_close"
+        closeButton.addTarget(self, action: #selector(close), for: .primaryActionTriggered)
+        #if os(iOS)
+        navItem.leftBarButtonItem = UIBarButtonItem(customView: closeButton)
+        navBar.delegate = self
+        #endif
+        navBar.items = [navItem]
+        navBar.translatesAutoresizingMaskIntoConstraints = false
 
         videoBackdrop.backgroundColor = .black
+        videoBackdrop.clipsToBounds = true
+        videoBackdrop.accessibilityIdentifier = "monitor_video"
+        videoBackdrop.accessibilityHint = texts.t("ring.video_zoom_hint")
         videoBackdrop.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(videoBackdrop)
-
+        videoZoom.translatesAutoresizingMaskIntoConstraints = false
+        videoBackdrop.addSubview(videoZoom)
         video.contentMode = .scaleAspectFit
-        video.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(video)
-
-        h264View.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(h264View)
-
-        titleLabel.text = texts.t("monitor.choose")
-        titleLabel.font = TypeRole.headline.font(weight: .semibold)
-        titleLabel.numberOfLines = 2
+        videoZoom.host(video)
+        videoZoom.host(h264View)
 
         emptyLabel.text = texts.t("ring.no_video")
         emptyLabel.textAlignment = .center
+        emptyLabel.numberOfLines = 0
+        emptyLabel.font = SystemStyle.font(.title3)
+        emptyLabel.textColor = UIColor(white: 1, alpha: 0.6)
+        emptyLabel.translatesAutoresizingMaskIntoConstraints = false
+        videoBackdrop.addSubview(emptyLabel)
 
-        deviceStack.axis = .vertical
-        deviceStack.spacing = Space.s
-
-        closeButton.setTitle(texts.t("monitor.close"), for: .normal)
-        closeButton.accessibilityIdentifier = "monitor_close"
-        closeButton.titleLabel?.font = .systemFont(ofSize: 22, weight: .semibold)
-        closeButton.setTitleColor(.white, for: .normal)
-        closeButton.layer.cornerRadius = Radius.card
-        #if !os(tvOS)
-        closeButton.contentEdgeInsets = UIEdgeInsets(top: 14, left: 30, bottom: 14, right: 30)
+        // Door switcher: a list under the picture on compact windows, beside it on wider ones.
+        SystemStyle.style(doorList)
+        doorList.dataSource = self
+        doorList.delegate = self
+        doorList.accessibilityIdentifier = "monitor_doors"
+        doorList.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(doorList)
+        view.addSubview(navBar)
+        #if os(tvOS)
+        closeButton.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(closeButton)
         #endif
-        closeButton.addTarget(self, action: #selector(close), for: .primaryActionTriggered)
 
-        // Door switcher: a horizontal strip on compact windows, a side list on wider ones.
-        deviceScroll.translatesAutoresizingMaskIntoConstraints = false
-        deviceStack.translatesAutoresizingMaskIntoConstraints = false
-        deviceScroll.addSubview(deviceStack)
-        NSLayoutConstraint.activate([
-            deviceStack.topAnchor.constraint(equalTo: deviceScroll.topAnchor),
-            deviceStack.bottomAnchor.constraint(equalTo: deviceScroll.bottomAnchor),
-            deviceStack.leadingAnchor.constraint(equalTo: deviceScroll.leadingAnchor),
-            deviceStack.trailingAnchor.constraint(equalTo: deviceScroll.trailingAnchor),
-        ])
-        stripHeight = deviceScroll.heightAnchor.constraint(equalTo: deviceStack.heightAnchor)
-        listWidth = deviceStack.widthAnchor.constraint(equalTo: deviceScroll.widthAnchor)
-
-        sidebar.addArrangedSubview(titleLabel)
-        sidebar.addArrangedSubview(deviceScroll)
-        sidebar.addArrangedSubview(emptyLabel)
-        sidebar.addArrangedSubview(UIView())
-        sidebar.addArrangedSubview(closeButton)
-        sidebar.axis = .vertical
-        sidebar.spacing = Space.m
-        sidebar.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(sidebar)
-
-        // Tapping the picture brings hidden controls back (ui-guidelines §4, live view).
+        // Tapping the picture brings hidden controls back (ui-guidelines section 4, live view).
+        // The single tap waits for the zoom's double tap, so zooming never toggles the controls.
         let tap = UITapGestureRecognizer(target: self, action: #selector(showControls))
-        videoBackdrop.isUserInteractionEnabled = true
+        #if os(iOS)
+        tap.require(toFail: videoZoom.doubleTap)
+        #endif
         videoBackdrop.addGestureRecognizer(tap)
-        h264View.isUserInteractionEnabled = false
-        video.isUserInteractionEnabled = false
 
         let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
-            themeBg.topAnchor.constraint(equalTo: view.topAnchor),
-            themeBg.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            themeBg.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            themeBg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            videoBackdrop.topAnchor.constraint(equalTo: video.topAnchor),
-            videoBackdrop.bottomAnchor.constraint(equalTo: video.bottomAnchor),
-            videoBackdrop.leadingAnchor.constraint(equalTo: video.leadingAnchor),
-            videoBackdrop.trailingAnchor.constraint(equalTo: video.trailingAnchor),
-            video.topAnchor.constraint(equalTo: guide.topAnchor),
-            video.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-            h264View.topAnchor.constraint(equalTo: video.topAnchor),
-            h264View.bottomAnchor.constraint(equalTo: video.bottomAnchor),
-            h264View.leadingAnchor.constraint(equalTo: video.leadingAnchor),
-            h264View.trailingAnchor.constraint(equalTo: video.trailingAnchor),
-            closeButton.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum + 8),
+            navBar.topAnchor.constraint(equalTo: guide.topAnchor),
+            navBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            navBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            videoZoom.topAnchor.constraint(equalTo: videoBackdrop.topAnchor),
+            videoZoom.bottomAnchor.constraint(equalTo: videoBackdrop.bottomAnchor),
+            videoZoom.leadingAnchor.constraint(equalTo: videoBackdrop.leadingAnchor),
+            videoZoom.trailingAnchor.constraint(equalTo: videoBackdrop.trailingAnchor),
+            emptyLabel.centerXAnchor.constraint(equalTo: videoBackdrop.centerXAnchor),
+            emptyLabel.centerYAnchor.constraint(equalTo: videoBackdrop.centerYAnchor),
+            emptyLabel.widthAnchor.constraint(lessThanOrEqualTo: videoBackdrop.widthAnchor,
+                                              constant: -Space.l),
+            videoBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            doorList.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            doorList.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+        #if os(tvOS)
+        NSLayoutConstraint.activate([
+            closeButton.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+            closeButton.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
+        ])
+        #endif
         sideConstraints = [
-            video.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-            video.widthAnchor.constraint(equalTo: guide.widthAnchor, multiplier: 0.68),
-            sidebar.topAnchor.constraint(equalTo: guide.topAnchor, constant: Space.l),
-            sidebar.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -Space.l),
-            sidebar.leadingAnchor.constraint(equalTo: video.trailingAnchor, constant: Space.l),
-            sidebar.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -Space.l),
+            videoBackdrop.topAnchor.constraint(equalTo: navBar.bottomAnchor),
+            videoBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            videoBackdrop.widthAnchor.constraint(equalTo: view.widthAnchor, multiplier: 0.68),
+            doorList.topAnchor.constraint(equalTo: navBar.bottomAnchor),
+            doorList.leadingAnchor.constraint(equalTo: videoBackdrop.trailingAnchor),
         ]
         stackedConstraints = [
-            video.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
-            video.heightAnchor.constraint(equalTo: video.widthAnchor, multiplier: 9.0 / 16.0),
-            sidebar.topAnchor.constraint(equalTo: video.bottomAnchor, constant: Space.m),
-            sidebar.bottomAnchor.constraint(equalTo: guide.bottomAnchor, constant: -Space.m),
-            sidebar.leadingAnchor.constraint(equalTo: guide.leadingAnchor, constant: Space.m),
-            sidebar.trailingAnchor.constraint(equalTo: guide.trailingAnchor, constant: -Space.m),
+            videoBackdrop.topAnchor.constraint(equalTo: navBar.bottomAnchor),
+            videoBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            videoBackdrop.heightAnchor.constraint(equalTo: videoBackdrop.widthAnchor,
+                                                  multiplier: 9.0 / 16.0),
+            doorList.topAnchor.constraint(equalTo: videoBackdrop.bottomAnchor),
+            doorList.leadingAnchor.constraint(equalTo: view.leadingAnchor),
         ]
         immersiveConstraints = [
-            video.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-            video.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
+            videoBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
+            videoBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            videoBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            doorList.topAnchor.constraint(equalTo: view.bottomAnchor),
+            doorList.leadingAnchor.constraint(equalTo: view.leadingAnchor),
         ]
         applyArrangement(for: view.bounds.size)
     }
 
-    private let deviceScroll = UIScrollView()
-    private let sidebar = UIStackView()
-    private var stripHeight: NSLayoutConstraint?
-    private var listWidth: NSLayoutConstraint?
     private var sideConstraints: [NSLayoutConstraint] = []
     private var stackedConstraints: [NSLayoutConstraint] = []
     private var immersiveConstraints: [NSLayoutConstraint] = []
     private var controlsHidden = false
     private var hideTimer: Timer?
 
-    /// Video beside the list on wide windows, above a door strip on compact ones, or alone once
-    /// the controls have hidden themselves.
+    /// Video beside the list on wide windows, above it on compact ones, or alone once the
+    /// controls have hidden themselves.
     private func applyArrangement(for size: CGSize) {
         NSLayoutConstraint.deactivate(sideConstraints + stackedConstraints + immersiveConstraints)
         let side = LayoutClass.sideBySide(size)
@@ -237,11 +228,10 @@ final class MonitorViewController: UIViewController {
         } else {
             NSLayoutConstraint.activate(side ? sideConstraints : stackedConstraints)
         }
-        deviceStack.axis = side ? .vertical : .horizontal
-        stripHeight?.isActive = !side
-        listWidth?.isActive = side
-        sidebar.alpha = controlsHidden ? 0 : 1
-        sidebar.isUserInteractionEnabled = !controlsHidden
+        navBar.alpha = controlsHidden ? 0 : 1
+        doorList.alpha = controlsHidden ? 0 : 1
+        navBar.isUserInteractionEnabled = !controlsHidden
+        doorList.isUserInteractionEnabled = !controlsHidden
     }
 
     override func viewWillTransition(to size: CGSize,
@@ -257,7 +247,8 @@ final class MonitorViewController: UIViewController {
         #if os(iOS)
         hideTimer = IOSAvailability.scheduledTimer(withTimeInterval: 4, repeats: false) {
             [weak self] _ in
-            guard let self = self, self.videoPlayer != nil else { return }
+            guard let self = self, self.videoPlayer != nil,
+                  !UIAccessibility.isVoiceOverRunning else { return }
             self.controlsHidden = true
             Motion.animate { self.applyArrangement(for: self.view.bounds.size); self.view.layoutIfNeeded() }
         }
@@ -274,29 +265,6 @@ final class MonitorViewController: UIViewController {
         scheduleControlsHide()
     }
 
-    /// The monitor page wears the same theme background as the home screens; only the picture
-    /// keeps its black frame, and the sidebar's heading takes the automatic ink for the
-    /// background behind it.
-    /// The monitor page wears the same theme background as the home screens; only the picture
-    /// keeps its black frame, and the sidebar takes the automatic ink for what is behind it.
-    private func applySkin() {
-        let display = core.status()?["display"] as? [String: Any]
-        let palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            display: display, config: config, nodeId: nodeId, localTime: core.localTime()))
-        skin = themeBg.apply(display: display, config: config, nodeId: nodeId, palette: palette,
-                             httpPort: boot.httpPort, host: view)
-        skin.apply("status_line", to: titleLabel)
-        closeButton.backgroundColor = ColorRole.negative(palette)
-        // The empty-video notice lives in the sidebar, not over the picture, so it follows the
-        // sidebar's background rather than the video's black frame.
-        skin.apply("hint", to: emptyLabel, quiet: true)
-        for view in deviceStack.arrangedSubviews {
-            guard let button = view as? UIButton else { continue }
-            button.setTitleColor(skin.cardInk("tile_label"), for: .normal)
-            button.backgroundColor = skin.surfaceStrong
-        }
-    }
-
     private func confirmedDoorPeers() -> [[String: Any]] {
         guard let peers = core.status()?["peers"] as? [[String: Any]] else { return [] }
         return peers.filter {
@@ -307,26 +275,9 @@ final class MonitorViewController: UIViewController {
     }
 
     private func rebuildDevices() {
-        for child in deviceStack.arrangedSubviews { child.removeFromSuperview() }
-        let peers = confirmedDoorPeers()
-        emptyLabel.isHidden = !peers.isEmpty
-        for peer in peers.prefix(8) {
-            let button = UIButton(type: .system)
-            let name = ConfigUtil.evStr(peer, "name")
-            button.setTitle(name.isEmpty ? ConfigUtil.evStr(peer, "id") : name, for: .normal)
-            button.setTitleColor(skin.cardInk("tile_label"), for: .normal)
-            button.titleLabel?.font = TypeRole.body.font(weight: .medium, base: 19)
-            button.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum + 4)
-                .isActive = true
-            button.backgroundColor = skin.surfaceStrong
-            button.layer.cornerRadius = 10
-            #if !os(tvOS)
-            button.contentEdgeInsets = UIEdgeInsets(top: 13, left: 14, bottom: 13, right: 14)
-            #endif
-            button.accessibilityIdentifier = ConfigUtil.evStr(peer, "id")
-            button.addTarget(self, action: #selector(selectDevice(_:)), for: .primaryActionTriggered)
-            deviceStack.addArrangedSubview(button)
-        }
+        peers = Array(confirmedDoorPeers().prefix(8))
+        doorList.reloadData()
+        if videoPlayer == nil { emptyLabel.isHidden = false }
         // Restarting here on every peers_changed is what produced the retry storm: no video
         // frame meant "start again", and starting again is what kept the door too busy to send
         // one. The first open picks a door; after that only the user does.
@@ -343,13 +294,6 @@ final class MonitorViewController: UIViewController {
         return peers.first
     }
 
-    @objc private func selectDevice(_ sender: UIButton) {
-        guard let id = sender.accessibilityIdentifier,
-              let peer = confirmedDoorPeers().first(where: { ConfigUtil.evStr($0, "id") == id })
-        else { return }
-        start(peer: peer)
-    }
-
     /// A deliberate request: the page opening, or the user choosing a door. It clears whatever
     /// the last door taught the policy, because this is a different question being asked.
     private func start(peer: [String: Any]) {
@@ -360,8 +304,11 @@ final class MonitorViewController: UIViewController {
         videoPlayer?.stop()
         videoPlayer = nil
         video.image = nil
+        // A different door is a different picture: the zoom starts over.
+        videoZoom.resetZoom()
         let name = ConfigUtil.evStr(peer, "name")
-        titleLabel.text = texts.t("monitor.title", name)
+        navItem.title = texts.t("monitor.title", name)
+        doorList.reloadData()
         let mjpeg = ConfigUtil.str(peer, "stream") ?? ""
         let h264 = ConfigUtil.str(peer, "stream_mp4") ?? ""
         videoPlayer = AdaptiveH264MjpegPlayer(h264Host: h264View, mjpegView: video,
@@ -423,3 +370,43 @@ final class MonitorViewController: UIViewController {
 
     @objc private func close() { dismiss(animated: true) }
 }
+
+extension MonitorViewController: UITableViewDataSource, UITableViewDelegate {
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return peers.count
+    }
+
+    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        return texts.t("monitor.choose")
+    }
+
+    func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+        return peers.isEmpty ? texts.t("ring.no_video") : nil
+    }
+
+    func tableView(_ tableView: UITableView,
+                   cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        SystemStyle.style(cell)
+        let peer = peers[indexPath.row]
+        let id = ConfigUtil.evStr(peer, "id")
+        let name = ConfigUtil.evStr(peer, "name")
+        cell.textLabel?.text = name.isEmpty ? id : name
+        cell.imageView?.image = TablerIcon.image("TablerDoor")
+        cell.accessoryType = id == selectedPeerId ? .checkmark : .none
+        cell.accessibilityIdentifier = id
+        return cell
+    }
+
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        guard indexPath.row < peers.count else { return }
+        start(peer: peers[indexPath.row])
+    }
+}
+
+#if os(iOS)
+extension MonitorViewController: UINavigationBarDelegate {
+    func position(for bar: UIBarPositioning) -> UIBarPosition { return .topAttached }
+}
+#endif

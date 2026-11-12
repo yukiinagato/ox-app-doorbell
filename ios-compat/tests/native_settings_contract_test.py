@@ -107,8 +107,12 @@ assert "retireLegacyDigest()" in admin and "exit_pin.txt" in admin
 assert "FileManager.default.removeItem(atPath: path)" in admin
 assert "settings.change_password" in source("ios/Doorbell/SettingsCatalog.swift") and \
     "core.setAdminPassword(current:" in settings
-assert "case secret(title: String" in source("ios/Doorbell/SettingsForm.swift"), \
+settings_ui = source("ios/Doorbell/SettingsUI.swift")
+assert "final class SettingsSecretCell" in settings_ui and \
+    "field.isSecureTextEntry = true" in settings_ui, \
     "a password field is never pre-filled or echoed"
+assert "field.isSecureTextEntry = true" in admin and "UIAlertController(" in admin, \
+    "the admin password prompt is the system alert with a secure field"
 
 # The home-wide announcement and history paging prefer Core's entry points.
 assert "core.setGlobalNotice(text:" in notice and "core.clearGlobalNotice()" in notice
@@ -160,14 +164,26 @@ assert notice.index('doors.\\(door).notice') < notice.index('"notice.global"'), 
     "a door-specific announcement must win over the home-wide one"
 
 # --- SOS: Core hears about it only at countdown zero ------------------------
-assert "emergency.trigger.countdown_s" in main and "emergency.trigger.countdown_s" in dashboard
+assert "emergency.trigger.countdown_s" in main and "emergency.trigger.countdown_s" in tv
 assert "core.emergency" not in sos, "the slider must not talk to Core itself"
 assert "onTriggered?()" in sos and "private func fire()" in sos
 assert "func cancelCountdown()" in sos
 assert "sosSlider.onTriggered = { [weak self] in self?.triggerEmergency() }" in main
 assert 'ConfigUtil.double(cfg, "emergency.hold_to_trigger_s"' not in main, \
     "the legacy long-press must no longer drive the trigger"
-assert "UILongPressGestureRecognizer" not in main, "the SOS long press is replaced by the slider"
+assert "UILongPressGestureRecognizer" not in main + tv + sos + dashboard + visitor, \
+    "no press-and-hold anywhere in the SOS flow"
+# The trigger is a compact outlined button that only opens the confirmation surface; the slide
+# that confirms lives on that surface, and the same slide confirms clearing an alarm.
+assert "final class SosTriggerButton: UIButton" in sos and "layer.borderWidth = 1.5" in sos
+assert "final class SosConfirmViewController" in sos and "SosConfirmation.idleTimeout" in sos
+assert "static let idleTimeout: TimeInterval = 10" in sos, "the surface closes after 10 s idle"
+assert "alert.preferredAction = cancel" in sos, "Send SOS is never the default focus"
+assert "private lazy var sosSlider = SosTriggerButton(texts: texts)" in main
+assert "private lazy var sosSlider = SosTriggerButton(texts: texts)" in tv
+assert "SosConfirmViewController(texts: texts, purpose: .clear)" in main
+assert "SosSlideControl(" not in main + tv + dashboard + visitor, \
+    "the slide is never laid out on a home screen"
 
 # --- visitor safety --------------------------------------------------------
 assert "onOpenAdmin" not in visitor and "SettingsViewController" not in visitor, \
@@ -181,6 +197,18 @@ assert "NoticeChipView" in incoming, "the announcement is a compact chip"
 assert "purposeSlot.heightAnchor.constraint(equalToConstant:" in incoming, \
     "the purpose slot keeps its height so the layout never jumps"
 assert "applyVideoAspect" in incoming and "videoBackdrop.heightAnchor.constraint(equalTo:" in incoming
+# Every live picture zooms: pinch 1x-4x, drag while zoomed, double tap for fit/2x, reset when the
+# door or call changes. One view owns it for both renderers.
+zoom = source("ios/Doorbell/ZoomableVideoView.swift")
+monitor = source("ios/Doorbell/MonitorViewController.swift")
+assert "static let maximumScale: CGFloat = 4" in zoom and "doubleTapScale: CGFloat = 2" in zoom
+for shell, name in ((incoming, "incoming"), (monitor, "monitor"), (main, "in-call")):
+    assert "ZoomableVideoView()" in shell and "resetZoom()" in shell, name
+assert "videoZoom.host(liveView)" in incoming and "videoZoom.host(h264View)" in incoming
+# The fixed action zone keeps its order: Answer (End in a call), Reply, Ignore.
+assert "actionZone.setActions(primary: [answerButton, quickReplyButton, ignoreButton]," in incoming
+assert "secondary: [monitorButton, unlockButton, micButton])" in incoming
+assert "CallActionButton(type: .custom)" in incoming, "call actions are circular buttons with captions"
 # Both toggles show their state, and the state is the authored second line rather than a suffix
 # the button would have to shrink to fit.
 assert "ring.monitor_two_line_on" in incoming and "ring.mic_two_line_on" in incoming
@@ -190,25 +218,30 @@ assert 'color: button.titleColor(for: .normal)' in incoming, \
     "a semantic foreground override must survive the two-part rendering"
 assert "incoming.debug_line_hidden" in incoming, "the debug line's state is remembered"
 assert "AdminQrView(core: core, boot: boot, texts: texts, compact: true)" in incoming
+assert "sheetPresentationController?.detents = [.medium(), .large()]" in \
+    source("ios/Doorbell/DoorbellLayout.swift"), "quick replies open in a system sheet"
 assert "DoorUnlock.showsButton(status: core.status(), config: cfg,\n" in incoming
 assert "core.openDoor(door: door, callId: callId, stageRevision: stageRevision)" in incoming, \
     "incoming unlock binds the door, call identity and revision through Core"
 assert "door.unlock_not_configured" in incoming, "an unconfigured unlock must explain itself"
 
-# --- the theme background reaches every panel, not only the door station ----
-# The owner's decision: an indoor panel wears the household's theme background too, and §5's
-# automatic contrast — not a switch back to the palette — is what keeps its text readable.
+# --- the theme background is behind the home surfaces only -------------------
+# An indoor panel wears the household's theme background on its Home tab, as the door station does
+# on the visitor screen, and automatic contrast keeps the text drawn on it readable. Every other
+# screen, the call and monitor screens included, is a system surface.
 assert "class ThemeBackgroundView" in theme and "func apply(display:" in theme
 assert "struct DoorbellSkin" in theme and "func cardInk(" in theme, \
     "bare text takes the region's automatic ink; cards this shell painted keep the palette"
 assert "surfaceSolid" in theme and "func solid(" in theme, \
     "a card over a theme picture has to be opaque or its palette ink stops being readable"
 for region in ("clock", "date", "status_line", "hint", "tile_label", "footer", "notice"):
-    assert f'"{region}"' in theme + dashboard + visitor + incoming + main, region
-for shell, name in ((main, "MainViewController"), (tv, "TVMainViewController"),
-                    (incoming, "IncomingViewController"),
-                    (source("ios/Doorbell/MonitorViewController.swift"), "Monitor")):
+    assert f'"{region}"' in theme + dashboard + visitor + main + \
+        source("ios/Doorbell/HomeTabs.swift"), region
+for shell, name in ((main, "MainViewController"), (tv, "TVMainViewController")):
     assert "themeBg.apply(display:" in shell, name
+for shell, name in ((incoming, "IncomingViewController"), (monitor, "Monitor")):
+    assert "ThemeBackgroundView" not in shell, f"{name} uses the system background"
+    assert "SystemStyle.background" in shell, name
 assert 'boot.role == "door_station"' not in main.split("private func applyTheme")[1][:400], \
     "the theme background is no longer gated on the door station"
 assert 'skin.apply("clock", to: clockLabel)' in dashboard
@@ -236,15 +269,26 @@ assert 'write([.set("visit_purposes.\\(id).enabled", on)])' in settings, \
 # --- dashboard -------------------------------------------------------------
 assert 'LocalMediaAuth.sibling(url, "snapshot.jpg")' in dashboard and \
     "withTimeInterval: Self.previewInterval(for: rate)" in dashboard
-assert "history.missed_badge" in dashboard and "history.see_all" in dashboard
+assert "history.missed_badge" in dashboard, "unread missed calls get one row on Home"
+assert "onUnreadMissedChanged?(unread)" in dashboard, "and the count is the History tab's badge"
+assert "RecentCallsView" not in dashboard + history, "call history is not repeated on Home"
+assert "UICollectionViewFlowLayout()" in dashboard and "func columnCount(forWidth" in dashboard, \
+    "door tiles are a collection view with adaptive columns"
+tabs = source("ios/Doorbell/HomeTabs.swift")
+assert "final class PanelTabBarController: UITabBarController" in tabs
+assert "settingsGate.onUnlockRequested?()" in tabs and "return false" in tabs, \
+    "the Settings tab does not open without the admin password"
+assert "settingsGate.lock()" in tabs, "leaving the Settings tab closes the admin window"
 assert "self.adminQr = AdminQrView(core: core, boot: boot, texts: texts," in dashboard, \
     "the admin QR is always visible on an indoor panel"
-assert "footerEffect.heightAnchor.constraint(equalToConstant: 44)" in dashboard
+assert "footerCard.contentView.addSubview(adminQr)" in dashboard
 assert "let side = qrSide ?? 72" in source("ios/Doorbell/AdminQrView.swift")
 assert "adminQr.setDetailText(DoorbellTheme.versionLine" in dashboard
 assert "func applyLayout(for size: CGSize)" in dashboard and \
     "func applyLayout(for size: CGSize)" in visitor, "both home screens are size-driven"
-assert "core.markCallLogSeen()" in history, "opening the history marks it seen"
+assert "core.markCallLogSeen()" in history, "showing the history marks it seen"
+assert "UISegmentedControl" in history and "UISplitViewController()" in history and \
+    "final class CallHistoryDetailController: UITableViewController" in history
 assert "CallHistory.pageSize" in history and "history.load_more" in strings
 
 # --- cross-cutting rules ---------------------------------------------------

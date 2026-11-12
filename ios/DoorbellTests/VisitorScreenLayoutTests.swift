@@ -15,7 +15,7 @@ final class VisitorScreenLayoutTests: XCTestCase {
         let host: UIView
         let view: VisitorScreenView
         let langBar: UIStackView
-        let sos: SosSlideControl
+        let sos: SosTriggerButton
         let purposeHint: UILabel
         let purposeButtons: [UIButton]
         let purposeSection: UIStackView
@@ -87,7 +87,7 @@ final class VisitorScreenLayoutTests: XCTestCase {
         purposeSection.alignment = .center
         grid.widthAnchor.constraint(lessThanOrEqualTo: purposeSection.widthAnchor).isActive = true
 
-        let sos = SosSlideControl(texts: texts)
+        let sos = SosTriggerButton(texts: texts)
         let callButton = UIButton(type: .system)
         callButton.setTitle(texts.t("idle.call_button_verb"), for: .normal)
         callButton.titleLabel?.font = .systemFont(ofSize: 40, weight: .bold)
@@ -226,26 +226,27 @@ final class VisitorScreenLayoutTests: XCTestCase {
         }
     }
 
-    // MARK: - The SOS bar is a bar
+    // MARK: - The SOS trigger is compact
 
-    /// It took a third of the iPad's height on the device: inside a filling stack it had no
-    /// height of its own to defend.
-    func testTheSosBarStaysACompactBandInBothOrientations() {
+    /// The trigger is a secondary control: a finger can hit it, and it never grows into the band
+    /// the old slide was.
+    func testTheSosTriggerStaysCompactInBothOrientations() {
         for (name, size) in [("portrait", portrait), ("landscape", landscape)] {
             let screen = makeScreen(size)
             let height = screen.sos.bounds.height
-            XCTAssertGreaterThanOrEqual(height, 72, "\(name): tall enough to hit")
-            XCTAssertLessThanOrEqual(height, 88, "\(name): and no taller than a band")
-            XCTAssertLessThan(height, size.height / 4,
-                              "\(name): it is a bar, not a third of the screen")
+            XCTAssertGreaterThanOrEqual(height, 44, "\(name): tall enough to hit")
+            XCTAssertLessThanOrEqual(height, 64, "\(name): and no taller than a secondary button")
+            XCTAssertLessThan(screen.sos.bounds.width, size.width / 3,
+                              "\(name): it does not compete with the call button")
+            XCTAssertLessThan(screen.sos.bounds.width, screen.callButton.bounds.width, name)
         }
     }
 
-    func testTheSosBarSpansTheFullWidth() {
+    func testTheSosTriggerSitsAtTheLeadingEdge() {
         for (name, size) in [("portrait", portrait), ("landscape", landscape)] {
             let screen = makeScreen(size)
-            XCTAssertEqual(screen.sos.bounds.width, size.width, accuracy: 1,
-                           "\(name): the band runs the whole width")
+            XCTAssertEqual(screen.sos.convert(screen.sos.bounds, to: screen.view).minX, 0,
+                           accuracy: 1, "\(name): the leading edge of the action zone")
         }
     }
 

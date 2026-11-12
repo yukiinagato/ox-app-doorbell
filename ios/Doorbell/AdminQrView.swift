@@ -4,22 +4,15 @@ import UIKit
 /// needs the admin password.
 final class AdminQrView: UIView {
 
-    /// The caption and the URL sit straight on the screen background — the footer of the
-    /// dashboard, the corner of the incoming screen — so they take the footer region's automatic
-    /// ink. The code itself is always drawn on white, because that is what a camera reads.
-    var skin = DoorbellSkin.plain(.dark) {
-        didSet { applySkin() }
-    }
-
     private let core: CoreBridge
     private let boot: BootConfig
     private let texts: Texts
     private let compact: Bool
     private let showsCaption: Bool
     private let imageView = UIImageView()
-    private let urlLabel = HaloLabel()
-    private let captionLabel = HaloLabel()
-    private let detailLabel = HaloLabel()
+    private let urlLabel = UILabel()
+    private let captionLabel = UILabel()
+    private let detailLabel = UILabel()
     private var renderedUrl = ""
     private var hasTargetOverride = false
     private var targetUrlOverride: String?
@@ -42,7 +35,7 @@ final class AdminQrView: UIView {
         imageView.translatesAutoresizingMaskIntoConstraints = false
 
         captionLabel.text = texts.t("web_admin.open")
-        captionLabel.font = .systemFont(ofSize: compact ? 12 : 15, weight: .semibold)
+        captionLabel.font = SystemStyle.font(compact ? .caption1 : .subheadline, weight: .semibold)
         captionLabel.numberOfLines = 1
         captionLabel.isHidden = !compact || !showsCaption
 
@@ -80,20 +73,17 @@ final class AdminQrView: UIView {
             imageView.widthAnchor.constraint(equalToConstant: side),
             imageView.heightAnchor.constraint(equalToConstant: side),
         ])
-        applySkin()
+        refreshColors()
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    private func applySkin() {
-        if compact {
-            skin.apply("footer", to: captionLabel, quiet: true)
-            skin.apply("footer", to: urlLabel)
-        } else {
-            let ink = skin.cardInk("footer")
-            urlLabel.textColor = ink
-            detailLabel.textColor = ink
-        }
+    /// The code is always drawn on white, because that is what a camera reads; the text beside
+    /// it takes the system label colours of the card or screen it sits on.
+    func refreshColors() {
+        captionLabel.textColor = SystemStyle.secondaryLabel
+        urlLabel.textColor = SystemStyle.label
+        detailLabel.textColor = SystemStyle.secondaryLabel
     }
 
     func setDetailText(_ text: String) {

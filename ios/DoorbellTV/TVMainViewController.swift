@@ -15,12 +15,10 @@ final class TVMainViewController: UIViewController {
     private var cancelRequiresPin = true
     private var nodeId = ""
 
-    private let clockLabel = UILabel()
-    private let dateLabel = UILabel()
-    private let statusLabel = UILabel()
-    private let monitorButton = UIButton(type: .system)
-    private let membershipButton = UIButton(type: .system)
-    private let nodeInfo = UILabel()
+    /// Home, History and Settings: the same tab shell an indoor panel uses, focus-driven here.
+    private var tabs: PanelTabBarController?
+    private var homeScreen: HomeViewController?
+    private var membershipTitle = ""
     private let replyBanner = UIView()
     private let replyCaption = UILabel()
     private let replyText = UILabel()
@@ -30,7 +28,7 @@ final class TVMainViewController: UIViewController {
     private let emergencyCancel = UIButton(type: .system)
 
     private let themeBg = ThemeBackgroundView()
-    private lazy var sosSlider = SosSlideControl(texts: texts)
+    private lazy var sosSlider = SosTriggerButton(texts: texts)
     private lazy var dashboard = DashboardView(core: core, boot: boot, texts: texts,
                                                sosControl: sosSlider)
     private var palette = DoorbellPalette.dark
@@ -62,7 +60,7 @@ final class TVMainViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(red: 0.063, green: 0.078, blue: 0.094, alpha: 1)
+        view.backgroundColor = SystemStyle.groupedBackground
         texts.setLang(boot.uiLang)
         buildUi()
         refreshNodeInfo()
@@ -102,43 +100,37 @@ final class TVMainViewController: UIViewController {
             themeBg.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
 
-        clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 140, weight: .thin)
-        clockLabel.textColor = UIColor(white: 0.94, alpha: 1)
-        dateLabel.font = .systemFont(ofSize: 40)
-        dateLabel.textColor = UIColor(white: 0.62, alpha: 1)
-        statusLabel.font = .systemFont(ofSize: 30)
-        statusLabel.textColor = UIColor(white: 0.62, alpha: 1)
-        monitorButton.titleLabel?.font = .systemFont(ofSize: 30, weight: .semibold)
-        monitorButton.addTarget(self, action: #selector(openMonitor), for: .primaryActionTriggered)
-        // Membership status is focusable so the remote reaches the Add-device panel without any
-        // hidden gesture; while the device is not a member it reopens the onboarding screen.
-        membershipButton.titleLabel?.font = .systemFont(ofSize: 28, weight: .semibold)
-        membershipButton.accessibilityIdentifier = "membership_status"
-        membershipButton.addTarget(self, action: #selector(openPairing),
-                                   for: .primaryActionTriggered)
-        // The living-room screen shows the same dashboard as an indoor panel; the focus engine
-        // reaches every control on it, and the two TV-only entries stay in a row underneath.
-        dashboard.onOpenAdmin = { [weak self] in self?.onAdminEntry() }
+        // The living-room screen shows the same dashboard as an indoor panel under the system
+        // tab bar. tvOS has no bar button items to hold the home actions, so they are a row of
+        // focusable cards above the door tiles.
         dashboard.onOpenHistory = { [weak self] in self?.openHistory() }
         dashboard.onOpenDoor = { [weak self] _ in self?.openMonitor() }
         dashboard.onOpenNotice = { [weak self] door in self?.openNotice(door: door) }
+        dashboard.onOpenOfflineDoors = { [weak self] in self?.openOfflineDoors() }
+        dashboard.onUnreadMissedChanged = { [weak self] count in self?.tabs?.setUnreadMissed(count) }
         sosSlider.onTriggered = { [weak self] in self?.core.emergency(true) }
 
-        let tvRow = UIStackView(arrangedSubviews: [monitorButton, membershipButton])
-        tvRow.axis = .horizontal
-        tvRow.spacing = 30
-        tvRow.alignment = .center
-
-        let stack = UIStackView(arrangedSubviews: [dashboard, tvRow])
-        stack.axis = .vertical
-        stack.spacing = 20
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(stack)
-
-        nodeInfo.font = .systemFont(ofSize: 24)
-        nodeInfo.textColor = UIColor(white: 1, alpha: 0.35)
-        nodeInfo.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(nodeInfo)
+        let home = HomeViewController(dashboard: dashboard,
+                                      title: boot.name.isEmpty ? texts.t("nav.home") : boot.name)
+        homeScreen = home
+        let history = CallHistoryViewController(core: core, texts: texts, lang: texts.lang,
+                                                embedded: true)
+        history.onSeen = { [weak self] in self?.dashboard.refreshMissedBadge() }
+        let gate = SettingsGateViewController(texts: texts)
+        gate.onUnlockRequested = { [weak self] in self?.onAdminEntry() }
+        let controller = PanelTabBarController(home: home, history: history, settingsGate: gate,
+                                               texts: texts)
+        tabs = controller
+        addChild(controller)
+        controller.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(controller.view)
+        NSLayoutConstraint.activate([
+            controller.view.topAnchor.constraint(equalTo: view.topAnchor),
+            controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+        ])
+        controller.didMove(toParent: self)
 
         replyBanner.backgroundColor = UIColor(red: 0.11, green: 0.30, blue: 0.16, alpha: 0.97)
         replyBanner.layer.cornerRadius = 20
@@ -167,6 +159,7 @@ final class TVMainViewController: UIViewController {
         emergencyNote.font = .systemFont(ofSize: 38)
         emergencyNote.textColor = UIColor(white: 1, alpha: 0.85)
         emergencyCancel.titleLabel?.font = .systemFont(ofSize: 34, weight: .semibold)
+        emergencyCancel.accessibilityIdentifier = "visitor_sos_clear"
         emergencyCancel.addTarget(self, action: #selector(onEmergencyCancel),
                                   for: .primaryActionTriggered)
         let estack = UIStackView(arrangedSubviews: [emergencyTitle, emergencyNote,
@@ -179,12 +172,6 @@ final class TVMainViewController: UIViewController {
 
         let g = view.safeAreaLayoutGuide
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: g.topAnchor, constant: 30),
-            stack.bottomAnchor.constraint(equalTo: nodeInfo.topAnchor, constant: -16),
-            stack.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 60),
-            stack.trailingAnchor.constraint(equalTo: g.trailingAnchor, constant: -60),
-            nodeInfo.leadingAnchor.constraint(equalTo: g.leadingAnchor, constant: 40),
-            nodeInfo.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -30),
             replyBanner.topAnchor.constraint(equalTo: g.topAnchor, constant: 40),
             replyBanner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             replyBanner.widthAnchor.constraint(lessThanOrEqualTo: g.widthAnchor, constant: -120),
@@ -202,9 +189,7 @@ final class TVMainViewController: UIViewController {
     }
 
     private func applyStrings() {
-        statusLabel.text = texts.t("panel.monitor_title")
         refreshPairingStatus()
-        monitorButton.setTitle(texts.t("monitor.open"), for: .normal)
         replyCaption.text = texts.t("reply.banner")
         emergencyTitle.text = texts.t("emergency.title")
         emergencyNote.text = texts.t("emergency.notified")
@@ -215,8 +200,6 @@ final class TVMainViewController: UIViewController {
     /// hand-held shells.
     private func updateClock() {
         guard let reading = clockSource.reading() else { return }
-        clockLabel.text = reading.hhmmss
-        dateLabel.text = DoorbellClock.longDate(reading, lang: texts.lang)
         dashboard.updateClock(reading)
     }
 
@@ -236,13 +219,43 @@ final class TVMainViewController: UIViewController {
         guard presentedViewController == nil else { return }
         let settings = SettingsViewController(core: core, boot: boot, texts: texts)
         settings.onOpenAddDevice = { [weak self] in self?.openPairing() }
-        present(settings, animated: true)
+        tabs?.revealSettings(settings)
     }
 
     private func openHistory() {
         guard presentedViewController == nil else { return }
-        present(CallHistoryViewController(core: core, texts: texts, lang: texts.lang),
-                animated: true)
+        tabs?.show(.history)
+    }
+
+    private func openOfflineDoors() {
+        homeScreen?.navigationController?.pushViewController(
+            OfflineDoorStationsViewController(core: core, config: core.config(), texts: texts),
+            animated: true)
+    }
+
+    /// The home actions, as the row of cards the dashboard shows above the door tiles.
+    private func refreshQuickActions() {
+        dashboard.quickActions = [
+            DashboardView.QuickAction(title: texts.t("monitor.open"), icon: "TablerEye",
+                                      identifier: "home_monitor") { [weak self] in
+                self?.openMonitor()
+            },
+            DashboardView.QuickAction(title: texts.t("notice.global_button"), icon: "TablerNote",
+                                      identifier: "dashboard_notice_global") { [weak self] in
+                self?.openNotice(door: "")
+            },
+            DashboardView.QuickAction(title: membershipTitle.isEmpty
+                                          ? texts.t("pair.panel_title") : membershipTitle,
+                                      icon: "TablerPlus",
+                                      identifier: "membership_status") { [weak self] in
+                self?.openPairing()
+            },
+        ]
+    }
+
+    override var preferredFocusEnvironments: [UIFocusEnvironment] {
+        if emergencyActive && !emergencyView.isHidden { return [emergencyCancel] }
+        return tabs.map { [$0] } ?? super.preferredFocusEnvironments
     }
 
     private func openNotice(door: String) {
@@ -258,26 +271,26 @@ final class TVMainViewController: UIViewController {
         // alone would stand between a household and a running alarm on a cluster that
         // has never set one.
         cancelRequiresPin = core.sosCancelRequiresPassword
+        sosSlider.countdownSeconds = max(0, min(10,
+            ConfigUtil.int(cfg, "emergency.trigger.countdown_s", 3)))
+        sosSlider.refreshStrings()
         if let st = core.status() {
             if let node = st["node"] as? [String: Any] {
                 nodeId = ConfigUtil.evStr(node, "id")
-                let peers = (st["peers"] as? [Any])?.count ?? 0
-                nodeInfo.text =
-                    "\(ConfigUtil.evStr(node, "name")) · v\(ConfigUtil.evStr(node, "version"))" +
-                    " · peers \(peers)"
             }
             if let em = st["emergency"] as? [String: Any] {
                 if !ConfigUtil.evBool(em, "active") { hideEmergency() }
             }
         }
         let display = core.status()?["display"] as? [String: Any]
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            display: display, config: cfg, nodeId: nodeId, localTime: core.localTime()))
+        palette = SystemStyle.adopt(display: display, config: cfg, nodeId: nodeId,
+                                    localTime: core.localTime())
         // A living-room screen is an indoor panel like any other and wears the household's own
         // theme background; light/dark then owns the cards the dashboard lays on top of it.
         let skin = themeBg.apply(display: display, config: cfg, nodeId: nodeId, palette: palette,
                                  httpPort: boot.httpPort, host: view)
         dashboard.reload(config: cfg, skin: skin)
+        homeScreen?.apply(skin: skin)
         // An Apple TV has no battery of its own; the version line simply omits it.
         applyStrings()
         updateClock()
@@ -323,13 +336,14 @@ final class TVMainViewController: UIViewController {
     private func refreshPairingStatus() {
         let snapshot = PairingSnapshot.load(core)
         guard snapshot.hasSnapshot else {
-            membershipButton.isHidden = true
+            membershipTitle = ""
+            refreshQuickActions()
             return
         }
-        membershipButton.isHidden = false
         pairingReady = snapshot.state == .ready
         guard pairingReady else {
-            membershipButton.setTitle(texts.t("pair.not_set_up_banner"), for: .normal)
+            membershipTitle = texts.t("pair.not_set_up_banner")
+            refreshQuickActions()
             return
         }
         var title = texts.t("pair.membership",
@@ -337,7 +351,8 @@ final class TVMainViewController: UIViewController {
         if snapshot.connectedCount > 0 {
             title += " · " + texts.t("pair.membership_connected", "\(snapshot.connectedCount)")
         }
-        membershipButton.setTitle(title, for: .normal)
+        membershipTitle = title
+        refreshQuickActions()
     }
 
     @objc private func openPairing() {
@@ -461,7 +476,18 @@ final class TVMainViewController: UIViewController {
         emergencyView.isHidden = true
     }
 
+    /// A remote has no slide: clearing is confirmed in an alert whose default focus is Cancel,
+    /// then the admin rules Core defines apply.
     @objc private func onEmergencyCancel() {
+        guard presentedViewController == nil else { return }
+        present(SosConfirmation.alert(texts: texts, title: texts.t("emergency.cancel"),
+                                      message: texts.t("emergency.clear_confirm"),
+                                      confirm: texts.t("emergency.cancel")) { [weak self] in
+            self?.clearEmergencyConfirmed()
+        }, animated: true)
+    }
+
+    private func clearEmergencyConfirmed() {
         if cancelRequiresPin {
             let dlg = AdminPinViewController(texts: texts, core: core)
             dlg.onUnlocked = { [weak self] in

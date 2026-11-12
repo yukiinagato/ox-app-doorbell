@@ -83,19 +83,20 @@ final class NoticeChipView: UIControl {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         accessibilityIdentifier = "notice_chip"
-        backgroundColor = UIColor(white: 1, alpha: 0.14)
+        backgroundColor = SystemStyle.fill
         layer.cornerRadius = 8
         clipsToBounds = true
 
-        dot.backgroundColor = UIColor(red: 0.45, green: 0.75, blue: 1.0, alpha: 1)
+        dot.backgroundColor = SystemStyle.warning
         dot.layer.cornerRadius = 5
         dot.isHidden = true
         dot.translatesAutoresizingMaskIntoConstraints = false
         addSubview(dot)
 
         label.text = texts.t("notice.chip")
-        label.font = .systemFont(ofSize: 15, weight: .semibold)
-        label.textColor = .white
+        label.font = SystemStyle.font(.subheadline, weight: .semibold)
+        label.textColor = SystemStyle.label
+        SystemStyle.followContentSize(label)
         label.translatesAutoresizingMaskIntoConstraints = false
         addSubview(label)
 
@@ -120,16 +121,15 @@ final class NoticeChipView: UIControl {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    func update(active: Bool, palette: DoorbellPalette) {
+    /// A dot marks an announcement that is showing. `overPicture` is for a chip laid on a camera
+    /// still, where only a fixed dark fill with white text stays readable.
+    func update(active: Bool, overPicture: Bool = false) {
         dot.isHidden = !active
-        dot.backgroundColor = palette.notice
-        // Opaque on both states: the chip may be lying on the household's theme picture, and a
-        // translucent fill would let that picture decide whether its label is readable.
-        backgroundColor = active
-            ? DoorbellTheme.solid(palette.notice.withAlphaComponent(0.24),
-                                  over: palette.background)
-            : palette.surfaceSolid
-        label.textColor = palette.ink
+        dot.backgroundColor = SystemStyle.warning
+        backgroundColor = overPicture ? UIColor(white: 0, alpha: 0.55) : SystemStyle.fill
+        label.textColor = overPicture ? .white : SystemStyle.label
+        accessibilityTraits = .button
+        accessibilityLabel = label.text
     }
 
     @objc private func fire() { onTap?() }
@@ -149,43 +149,18 @@ final class NoticeChipView: UIControl {
     #endif
 }
 
-/// The announcement dialog shared by all three entry points: the dashboard's home-wide button, a
-/// door tile's status chip, and the monitor/incoming screen's "この門口機にお知らせ".
-final class NoticeDialogViewController: UIViewController {
-
-    private let core: CoreBridge
-    private let texts: Texts
-    private let writer: ConfigWriter
-    private let lang: String
-    private var config: [String: Any]?
-
-    /// door ids offered in the target selector, in configuration order.
-    private var doors: [String] = []
-    private var selectedDoor: String
-    private var expiryChoice = 2
-
-    private let scroll = UIScrollView()
-    private let content = UIStackView()
-    private let targetControl = UISegmentedControl(items: [])
-    private let textView = UITextView()
-    private let counter = UILabel()
-    private let presetStack = UIStackView()
-    private let expiryControl = UISegmentedControl(items: [])
-    private let customHours = UITextField()
-    private let statusLabel = UILabel()
-    private let publishButton = UIButton(type: .system)
-    private let clearButton = UIButton(type: .system)
-
-    private var palette = DoorbellPalette.dark
+/// The announcement editor shared by its entry points: the home screen's bar button, a door
+/// tile's chip, and the call screen's chip. A navigation bar with Close and Publish over a
+/// grouped table: target, text, saved messages, expiry, and Clear in red at the end. It opens as
+/// a sheet, so the screen underneath (a live call included) stays in place.
+final class NoticeDialogViewController: UINavigationController {
 
     /// `door` empty selects the home-wide target.
     init(core: CoreBridge, texts: Texts, httpPort: Int, lang: String, door: String) {
-        self.core = core
-        self.texts = texts
-        self.writer = ConfigWriter(core: core, httpPort: httpPort)
-        self.lang = lang
-        self.selectedDoor = door
-        super.init(nibName: nil, bundle: nil)
+        let editor = NoticeEditorController(core: core, texts: texts, httpPort: httpPort,
+                                            lang: lang, door: door)
+        super.init(rootViewController: editor)
+        SystemStyle.style(self, largeTitles: false)
         #if os(tvOS)
         modalPresentationStyle = .fullScreen
         #else
@@ -193,22 +168,94 @@ final class NoticeDialogViewController: UIViewController {
         #endif
     }
 
+    override init(nibName nibNameOrNil: String?, bundle nibBundleOrNil: Bundle?) {
+        super.init(nibName: nibNameOrNil, bundle: nibBundleOrNil)
+    }
+
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    /// The style to use when the dialog opens over a live call. A form sheet becomes a full-screen
-    /// presentation on a compact iPhone and on tvOS, which would remove the call screen from the
-    /// hierarchy; over-full-screen keeps the presenter in place on every size class.
-    static var overCallPresentationStyle: UIModalPresentationStyle { return .overFullScreen }
+    /// The style to use when the editor opens over a live call. A sheet keeps its presenter in
+    /// the hierarchy from iOS 13; before that a form sheet on a compact iPhone, and any
+    /// presentation on tvOS, replaces it, so those use over-full-screen instead.
+    static var overCallPresentationStyle: UIModalPresentationStyle {
+        #if os(iOS)
+        if #available(iOS 13.0, *) { return .formSheet }
+        #endif
+        return .overFullScreen
+    }
+}
+
+private final class NoticeEditorController: UITableViewController, UITextViewDelegate {
+
+    private enum Section: Int, CaseIterable {
+        case target, text, presets, expiry, actions
+    }
+
+    private let core: CoreBridge
+    private let texts: Texts
+    private let writer: ConfigWriter
+    private let lang: String
+    private var config: [String: Any]?
+
+    /// door ids offered as targets, in configuration order.
+    private var doors: [String] = []
+    private var selectedDoor: String
+    private var expiryChoice = 2
+    private var presets: [String] = []
+    private var busy = false
+
+    private let textView = UITextView()
+    private let customHours = UITextField()
+    private static let expiryKeys = ["notice.expiry_1h", "notice.expiry_today",
+                                     "notice.expiry_until_cleared", "notice.expiry_custom"]
+
+    init(core: CoreBridge, texts: Texts, httpPort: Int, lang: String, door: String) {
+        self.core = core
+        self.texts = texts
+        self.writer = ConfigWriter(core: core, httpPort: httpPort)
+        self.lang = lang
+        self.selectedDoor = door
+        super.init(style: SystemStyle.tableStyle())
+        title = texts.t("notice.title")
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        SystemStyle.style(tableView)
+        tableView.accessibilityIdentifier = "notice_editor"
+        tableView.keyboardDismissMode = .interactive
         config = core.config()
-        palette = DoorbellPalette.of(DoorbellTheme.appearance(
-            config: config, nodeId: "", localTime: core.localTime()))
-        view.backgroundColor = palette.background
         doors = doorIds()
         if !selectedDoor.isEmpty && !doors.contains(selectedDoor) { selectedDoor = "" }
-        build()
+        presets = DoorbellNotice.presets(config: config, texts: texts)
+
+        textView.font = SystemStyle.font(.body)
+        textView.textColor = SystemStyle.label
+        textView.backgroundColor = .clear
+        textView.accessibilityIdentifier = "notice_text"
+        textView.accessibilityLabel = texts.t("notice.text")
+        textView.delegate = self
+        if #available(iOS 10.0, tvOS 10.0, *) { textView.adjustsFontForContentSizeCategory = true }
+
+        customHours.placeholder = texts.t("notice.expiry_hours")
+        customHours.text = "3"
+        customHours.textAlignment = .right
+        customHours.font = SystemStyle.font(.body)
+        customHours.textColor = SystemStyle.label
+        customHours.accessibilityIdentifier = "notice_expiry_hours"
+        #if os(iOS)
+        customHours.keyboardType = .numberPad
+        navigationItem.leftBarButtonItem = UIBarButtonItem(
+            title: texts.t("settings.close"), style: .plain, target: self,
+            action: #selector(dismissSelf))
+        navigationItem.leftBarButtonItem?.accessibilityIdentifier = "notice_close"
+        navigationItem.rightBarButtonItem = UIBarButtonItem(
+            title: texts.t("notice.publish"), style: .done, target: self,
+            action: #selector(publish))
+        navigationItem.rightBarButtonItem?.accessibilityIdentifier = "notice_publish"
+        #endif
         loadExistingText()
     }
 
@@ -222,149 +269,128 @@ final class NoticeDialogViewController: UIViewController {
         return ConfigUtil.labelOf(entry, lang, door)
     }
 
-    // MARK: - Layout
+    // MARK: - Table
 
-    private func build() {
-        let title = UILabel()
-        title.text = texts.t("notice.title")
-        title.font = .systemFont(ofSize: 26, weight: .bold)
-        title.textColor = palette.ink
-
-        targetControl.removeAllSegments()
-        targetControl.insertSegment(withTitle: texts.t("notice.target_global"), at: 0,
-                                    animated: false)
-        for (index, door) in doors.enumerated() {
-            targetControl.insertSegment(
-                withTitle: texts.t("notice.target_door", doorLabel(door)),
-                at: index + 1, animated: false)
-        }
-        targetControl.selectedSegmentIndex = selectedDoor.isEmpty
-            ? 0 : (doors.firstIndex(of: selectedDoor).map { $0 + 1 } ?? 0)
-        targetControl.accessibilityIdentifier = "notice_target"
-        targetControl.addTarget(self, action: #selector(targetChanged), for: .valueChanged)
-
-        textView.font = .systemFont(ofSize: 20)
-        textView.textColor = palette.ink
-        textView.backgroundColor = palette.surface
-        textView.layer.cornerRadius = 10
-        textView.accessibilityIdentifier = "notice_text"
-        textView.delegate = self
-        textView.heightAnchor.constraint(equalToConstant: 120).isActive = true
-
-        counter.font = .systemFont(ofSize: 14)
-        counter.textColor = palette.inkMuted
-
-        presetStack.axis = .vertical
-        presetStack.spacing = 8
-        rebuildPresets()
-
-        expiryControl.removeAllSegments()
-        for (index, key) in ["notice.expiry_1h", "notice.expiry_today",
-                             "notice.expiry_until_cleared", "notice.expiry_custom"].enumerated() {
-            expiryControl.insertSegment(withTitle: texts.t(key), at: index, animated: false)
-        }
-        expiryControl.selectedSegmentIndex = expiryChoice
-        expiryControl.accessibilityIdentifier = "notice_expiry"
-        expiryControl.addTarget(self, action: #selector(expiryChanged), for: .valueChanged)
-
-        customHours.placeholder = texts.t("notice.expiry_hours")
-        customHours.text = "3"
-        customHours.textColor = palette.ink
-        customHours.backgroundColor = palette.surface
-        customHours.borderStyle = .roundedRect
-        customHours.isHidden = true
-        #if os(iOS)
-        customHours.keyboardType = .numberPad
+    /// tvOS has no bar buttons to carry Publish and Close, so they are rows there.
+    private var actionRows: [String] {
+        #if os(tvOS)
+        return ["notice.publish", "notice.clear", "settings.close"]
+        #else
+        return ["notice.clear"]
         #endif
+    }
 
-        statusLabel.font = .systemFont(ofSize: 16)
-        statusLabel.textColor = palette.inkMuted
-        statusLabel.numberOfLines = 0
+    override func numberOfSections(in tableView: UITableView) -> Int {
+        return Section.allCases.count
+    }
 
-        publishButton.setTitle(texts.t("notice.publish"), for: .normal)
-        publishButton.accessibilityIdentifier = "notice_publish"
-        style(publishButton, filled: true)
-        publishButton.addTarget(self, action: #selector(publish), for: .primaryActionTriggered)
-
-        clearButton.setTitle(texts.t("notice.clear"), for: .normal)
-        clearButton.accessibilityIdentifier = "notice_clear"
-        style(clearButton, filled: false)
-        clearButton.addTarget(self, action: #selector(clear), for: .primaryActionTriggered)
-
-        let close = UIButton(type: .system)
-        close.setTitle(texts.t("settings.close"), for: .normal)
-        style(close, filled: false)
-        close.addTarget(self, action: #selector(dismissSelf), for: .primaryActionTriggered)
-
-        let actions = UIStackView(arrangedSubviews: [clearButton, publishButton])
-        actions.axis = .horizontal
-        actions.spacing = 12
-        actions.distribution = .fillEqually
-
-        content.axis = .vertical
-        content.spacing = 14
-        content.translatesAutoresizingMaskIntoConstraints = false
-        for item in [title, sectionLabel(texts.t("notice.target")), targetControl,
-                     sectionLabel(texts.t("notice.text")), textView, counter,
-                     sectionLabel(texts.t("notice.presets")), presetStack,
-                     sectionLabel(texts.t("notice.expiry")), expiryControl, customHours,
-                     statusLabel, actions, close] {
-            content.addArrangedSubview(item)
+    override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        switch Section(rawValue: section) {
+        case .target?: return doors.count + 1
+        case .text?: return 1
+        case .presets?: return presets.count
+        case .expiry?: return NoticeEditorController.expiryKeys.count + (expiryChoice == 3 ? 1 : 0)
+        case .actions?: return actionRows.count
+        case nil: return 0
         }
-
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(content)
-        view.addSubview(scroll)
-        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
-        NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: guide.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-            scroll.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
-            content.topAnchor.constraint(equalTo: scroll.topAnchor, constant: 20),
-            content.bottomAnchor.constraint(equalTo: scroll.bottomAnchor, constant: -20),
-            content.leadingAnchor.constraint(equalTo: scroll.leadingAnchor, constant: 20),
-            content.trailingAnchor.constraint(equalTo: scroll.trailingAnchor, constant: -20),
-            content.widthAnchor.constraint(equalTo: scroll.widthAnchor, constant: -40),
-        ])
     }
 
-    private func sectionLabel(_ text: String) -> UILabel {
-        let label = UILabel()
-        label.text = text
-        label.font = .systemFont(ofSize: 16, weight: .semibold)
-        label.textColor = palette.inkMuted
-        return label
+    override func tableView(_ tableView: UITableView,
+                            titleForHeaderInSection section: Int) -> String? {
+        switch Section(rawValue: section) {
+        case .target?: return texts.t("notice.target")
+        case .text?: return texts.t("notice.text")
+        case .presets?: return presets.isEmpty ? nil : texts.t("notice.presets")
+        case .expiry?: return texts.t("notice.expiry")
+        default: return nil
+        }
     }
 
-    private func style(_ button: UIButton, filled: Bool) {
-        button.titleLabel?.font = .systemFont(ofSize: 20, weight: .semibold)
-        button.setTitleColor(filled ? palette.onAccent : palette.ink, for: .normal)
-        button.backgroundColor = filled ? palette.accent : palette.surface
-        button.layer.cornerRadius = 12
-        #if !os(tvOS)
-        button.contentEdgeInsets = UIEdgeInsets(top: 12, left: 22, bottom: 12, right: 22)
-        #endif
-        button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+    override func tableView(_ tableView: UITableView,
+                            titleForFooterInSection section: Int) -> String? {
+        guard Section(rawValue: section) == .text else { return nil }
+        return counterText()
     }
 
-    private func rebuildPresets() {
-        for view in presetStack.arrangedSubviews { view.removeFromSuperview() }
-        for (index, preset) in DoorbellNotice.presets(config: config, texts: texts).enumerated() {
-            let button = UIButton(type: .system)
-            button.setTitle(preset, for: .normal)
-            button.titleLabel?.font = .systemFont(ofSize: 17)
-            button.titleLabel?.numberOfLines = 0
-            button.setTitleColor(palette.ink, for: .normal)
-            button.backgroundColor = palette.surface
-            button.layer.cornerRadius = 10
-            button.tag = index
-            button.accessibilityIdentifier = "notice_preset_\(index)"
-            #if !os(tvOS)
-            button.contentEdgeInsets = UIEdgeInsets(top: 10, left: 14, bottom: 10, right: 14)
-            #endif
-            button.addTarget(self, action: #selector(usePreset(_:)), for: .primaryActionTriggered)
-            presetStack.addArrangedSubview(button)
+    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath)
+        -> CGFloat {
+        return Section(rawValue: indexPath.section) == .text ? 132 : UITableView.automaticDimension
+    }
+
+    override func tableView(_ tableView: UITableView,
+                            cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let cell = UITableViewCell(style: .value1, reuseIdentifier: nil)
+        SystemStyle.style(cell)
+        switch Section(rawValue: indexPath.section) {
+        case .target?:
+            let door = indexPath.row == 0 ? "" : doors[indexPath.row - 1]
+            cell.textLabel?.text = door.isEmpty ? texts.t("notice.target_global")
+                : texts.t("notice.target_door", doorLabel(door))
+            cell.accessoryType = door == selectedDoor ? .checkmark : .none
+            cell.accessibilityIdentifier = "notice_target_" + (door.isEmpty ? "global" : door)
+        case .text?:
+            cell.selectionStyle = .none
+            textView.translatesAutoresizingMaskIntoConstraints = false
+            cell.contentView.addSubview(textView)
+            let margins = cell.contentView.layoutMarginsGuide
+            NSLayoutConstraint.activate([
+                textView.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: 4),
+                textView.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor,
+                                                 constant: -4),
+                textView.leadingAnchor.constraint(equalTo: margins.leadingAnchor, constant: -4),
+                textView.trailingAnchor.constraint(equalTo: margins.trailingAnchor, constant: 4),
+            ])
+        case .presets?:
+            cell.textLabel?.text = presets[indexPath.row]
+            cell.accessibilityIdentifier = "notice_preset_\(indexPath.row)"
+        case .expiry?:
+            if indexPath.row < NoticeEditorController.expiryKeys.count {
+                cell.textLabel?.text = texts.t(NoticeEditorController.expiryKeys[indexPath.row])
+                cell.accessoryType = indexPath.row == expiryChoice ? .checkmark : .none
+                cell.accessibilityIdentifier = "notice_expiry_\(indexPath.row)"
+            } else {
+                cell.selectionStyle = .none
+                cell.textLabel?.text = texts.t("notice.expiry_hours")
+                customHours.frame = CGRect(x: 0, y: 0, width: 96, height: 36)
+                cell.accessoryView = customHours
+            }
+        case .actions?:
+            let key = actionRows[indexPath.row]
+            cell.textLabel?.text = texts.t(key)
+            // Clearing removes the announcement from every screen showing it.
+            cell.textLabel?.textColor = key == "notice.clear" ? SystemStyle.negative
+                : SystemStyle.tint
+            cell.accessibilityIdentifier = key.replacingOccurrences(of: ".", with: "_")
+                .replacingOccurrences(of: "settings_close", with: "notice_close")
+            cell.accessibilityTraits = .button
+        case nil:
+            break
+        }
+        return cell
+    }
+
+    override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        switch Section(rawValue: indexPath.section) {
+        case .target?:
+            selectedDoor = indexPath.row == 0 ? "" : doors[indexPath.row - 1]
+            loadExistingText()
+            tableView.reloadData()
+        case .presets?:
+            textView.text = presets[indexPath.row]
+            updateCounter()
+        case .expiry?:
+            guard indexPath.row < NoticeEditorController.expiryKeys.count else { return }
+            expiryChoice = indexPath.row
+            tableView.reloadData()
+        case .actions?:
+            switch actionRows[indexPath.row] {
+            case "notice.publish": publish()
+            case "notice.clear": clear()
+            default: dismissSelf()
+            }
+        default:
+            break
         }
     }
 
@@ -384,27 +410,21 @@ final class NoticeDialogViewController: UIViewController {
         updateCounter()
     }
 
-    private func updateCounter() {
+    private func counterText() -> String {
         let count = (textView.text ?? "").count
-        counter.text = count > 200 ? texts.t("notice.too_long", "\(count)") : "\(count) / 200"
-        counter.textColor = count > 200 ? palette.danger : palette.inkMuted
+        return count > 200 ? texts.t("notice.too_long", "\(count)") : "\(count) / 200"
     }
 
-    @objc private func targetChanged() {
-        let index = targetControl.selectedSegmentIndex
-        selectedDoor = index <= 0 ? "" : doors[index - 1]
-        loadExistingText()
+    private func updateCounter() {
+        guard isViewLoaded,
+              let footer = tableView.footerView(forSection: Section.text.rawValue) else { return }
+        footer.textLabel?.text = counterText()
+        footer.textLabel?.textColor = (textView.text ?? "").count > 200 ? SystemStyle.negative
+            : SystemStyle.secondaryLabel
+        footer.setNeedsLayout()
     }
 
-    @objc private func expiryChanged() {
-        expiryChoice = expiryControl.selectedSegmentIndex
-        customHours.isHidden = expiryChoice != 3
-    }
-
-    @objc private func usePreset(_ sender: UIButton) {
-        textView.text = sender.currentTitle ?? ""
-        updateCounter()
-    }
+    func textViewDidChange(_ textView: UITextView) { updateCounter() }
 
     @objc private func dismissSelf() { dismiss(animated: true) }
 
@@ -420,16 +440,31 @@ final class NoticeDialogViewController: UIViewController {
         }
     }
 
+    /// What happened to the last action, in the navigation bar's prompt line.
+    private func setStatus(_ message: String) {
+        #if os(iOS)
+        navigationItem.prompt = message
+        #else
+        title = message
+        #endif
+    }
+
+    private func setBusy(_ value: Bool) {
+        busy = value
+        navigationItem.rightBarButtonItem?.isEnabled = !value
+    }
+
     // MARK: - Writes
 
     @objc private func publish() {
+        guard !busy else { return }
         let text = (textView.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
-            statusLabel.text = texts.t("notice.empty")
+            setStatus(texts.t("notice.empty"))
             return
         }
         guard text.count <= 200 else {
-            statusLabel.text = texts.t("notice.too_long", "\(text.count)")
+            setStatus(texts.t("notice.too_long", "\(text.count)"))
             return
         }
         let deadline = expiresMs()
@@ -458,24 +493,25 @@ final class NoticeDialogViewController: UIViewController {
             "created_ms": DoorbellClock.nowMs(core),
             "expires_ms": expiresMs,
         ]
-        publishButton.isEnabled = false
+        setBusy(true)
         writer.apply([.set("notice.global", value)]) { [weak self] result in
             guard let self = self else { return }
-            self.publishButton.isEnabled = true
+            self.setBusy(false)
             self.finish(result.isOk ? self.texts.t("notice.saved") : self.texts.t("notice.failed"))
         }
     }
 
-    @objc private func clear() {
+    private func clear() {
+        guard !busy else { return }
         if selectedDoor.isEmpty {
             if core.clearGlobalNotice() {
                 finish(texts.t("notice.cleared"))
                 return
             }
-            clearButton.isEnabled = false
+            setBusy(true)
             writer.apply([.delete("notice.global")]) { [weak self] result in
                 guard let self = self else { return }
-                self.clearButton.isEnabled = true
+                self.setBusy(false)
                 self.finish(result.isOk ? self.texts.t("notice.cleared")
                     : self.texts.t("notice.failed"))
             }
@@ -486,15 +522,11 @@ final class NoticeDialogViewController: UIViewController {
     }
 
     private func finish(_ message: String) {
-        statusLabel.text = message
+        setStatus(message)
         config = core.config()
         guard message != texts.t("notice.failed") else { return }
         _ = IOSAvailability.scheduledTimer(withTimeInterval: 0.9, repeats: false) {
             [weak self] _ in self?.dismiss(animated: true)
         }
     }
-}
-
-extension NoticeDialogViewController: UITextViewDelegate {
-    func textViewDidChange(_ textView: UITextView) { updateCounter() }
 }

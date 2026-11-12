@@ -83,7 +83,7 @@ final class SosVisibilityTests: XCTestCase {
 
     private struct BuiltScreen {
         let view: VisitorScreenView
-        let sos: SosSlideControl
+        let sos: SosTriggerButton
     }
 
     /// Builds the visitor screen the way `MainViewController` does, taking the slider's presence
@@ -91,7 +91,7 @@ final class SosVisibilityTests: XCTestCase {
     private func makeVisitorScreen(config: [String: Any], role: String,
                                    size: CGSize) -> BuiltScreen {
         let texts = Texts()
-        let sos = SosSlideControl(texts: texts)
+        let sos = SosTriggerButton(texts: texts)
         let view = VisitorScreenView(texts: texts, callButton: UIButton(type: .system),
                                      langBar: UIStackView(),
                                      purposeSection: UIStackView(), sosControl: sos)
@@ -109,21 +109,40 @@ final class SosVisibilityTests: XCTestCase {
         return BuiltScreen(view: view, sos: sos)
     }
 
-    /// Every SOS slider anywhere under `root`, however it got there.
-    private static func sliders(in root: UIView) -> [SosSlideControl] {
-        var found: [SosSlideControl] = []
+    /// Every SOS control anywhere under `root`, however it got there: the trigger, and the
+    /// confirming slide, which belongs on the confirmation surface and never on this screen.
+    private static func sliders(in root: UIView) -> [UIView] {
+        var found: [UIView] = []
         for child in root.subviews {
-            if let slider = child as? SosSlideControl { found.append(slider) }
+            if child is SosTriggerButton || child is SosSlideControl { found.append(child) }
             found += sliders(in: child)
         }
         return found
+    }
+
+    /// The trigger is a compact outlined control at the leading edge; the slide is not on the
+    /// home screen at all.
+    func testTheTriggerIsCompactOutlinedAndTheSlideIsNotOnTheScreen() {
+        let screen = makeVisitorScreen(config: ["emergency": ["button_on_roles": ["door_station"]]],
+                                       role: "door_station",
+                                       size: CGSize(width: 768, height: 1024))
+        let controls = SosVisibilityTests.sliders(in: screen.view)
+        XCTAssertEqual(controls.count, 1)
+        XCTAssertTrue(controls.first is SosTriggerButton)
+        XCTAssertGreaterThanOrEqual(screen.sos.bounds.height, 44)
+        XCTAssertLessThanOrEqual(screen.sos.bounds.height, 64)
+        XCTAssertLessThan(screen.sos.bounds.width, 768 / 3, "it does not compete with Call")
+        XCTAssertEqual(screen.sos.convert(screen.sos.bounds, to: screen.view).minX, 0, accuracy: 1)
+        XCTAssertGreaterThan(screen.sos.layer.borderWidth, 0, "outlined")
+        XCTAssertNil(screen.sos.backgroundColor, "and never filled")
+        XCTAssertFalse(screen.sos.isConfirming, "nothing is armed until it is tapped")
     }
 
     /// `applyLayout` takes the whole stack apart and puts it back, which is the path that could
     /// otherwise put the slider back on a door station after a rotation.
     func testTheVisitorScreenKeepsTheSliderHiddenAcrossARotation() {
         let texts = Texts()
-        let sos = SosSlideControl(texts: texts)
+        let sos = SosTriggerButton(texts: texts)
         let view = VisitorScreenView(texts: texts, callButton: UIButton(type: .system),
                                      langBar: UIStackView(),
                                      purposeSection: UIStackView(), sosControl: sos)

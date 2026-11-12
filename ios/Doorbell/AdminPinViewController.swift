@@ -6,7 +6,10 @@ import UIKit
 // still accepts the same password. A build whose Core does not publish that entry point yet falls
 // back to the legacy per-node digest in `exit_pin.txt`; the first successful Core verification
 // deletes that file, which is the migration the owner asked for.
-final class AdminPinViewController: UIViewController, UITextFieldDelegate {
+///
+/// The prompt itself is the system alert with a secure text field. This controller is the
+/// transparent host that presents it, so callers keep presenting one object and get one answer.
+final class AdminPinViewController: UIViewController {
 
     // Core's admin password bounds (admin_password.h). The password is free text, so it is typed on
     // the system keyboard rather than a digits-only pad.
@@ -21,11 +24,11 @@ final class AdminPinViewController: UIViewController, UITextFieldDelegate {
     private let core: CoreBridge?
     private let texts: Texts
     private var pin = ""
-    private let field = UITextField()
-    private let errorLabel = UILabel()
-    private let promptLabel = UILabel()
+    private var errorText = ""
+    private weak var alert: UIAlertController?
+    private weak var confirmAction: UIAlertAction?
     /// A cluster with no password must never be locked out of its own device: the gate turns into
-    /// 「管理パスワードを設定」 and the first password entered here becomes the cluster's.
+    /// the set-password prompt and the first password entered here becomes the cluster's.
     private var settingPassword = false
 
     init(texts: Texts, core: CoreBridge? = nil) {
@@ -40,111 +43,73 @@ final class AdminPinViewController: UIViewController, UITextFieldDelegate {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = UIColor(white: 0, alpha: 0.75)
-
-        let card = UIView()
-        card.backgroundColor = UIColor(red: 0.10, green: 0.12, blue: 0.16, alpha: 1)
-        card.layer.cornerRadius = 14
-        card.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(card)
-
+        view.backgroundColor = .clear
         settingPassword = core.map { $0.supportsAdminPassword && !$0.adminPasswordIsSet } ?? false
-        promptLabel.text = texts.t(settingPassword ? "admin.password_set_prompt"
-                                                   : "admin.pin_prompt")
-        promptLabel.font = .systemFont(ofSize: 24, weight: .semibold)
-        promptLabel.textColor = .white
-        promptLabel.textAlignment = .center
-
-        field.isSecureTextEntry = true
-        field.keyboardType = .asciiCapable
-        field.autocorrectionType = .no
-        field.autocapitalizationType = .none
-        field.returnKeyType = .done
-        field.delegate = self
-        field.font = .systemFont(ofSize: 24)
-        field.textColor = UIColor(white: 0.1, alpha: 1)
-        field.backgroundColor = .white
-        field.textAlignment = .center
-        field.layer.cornerRadius = 8
-        field.accessibilityIdentifier = "admin_password_field"
-        field.heightAnchor.constraint(greaterThanOrEqualToConstant: 48).isActive = true
-
-        errorLabel.font = .systemFont(ofSize: 17)
-        errorLabel.textColor = UIColor(red: 0.88, green: 0.36, blue: 0.30, alpha: 1)
-        errorLabel.textAlignment = .center
-        errorLabel.text = " "
-
-        let stack = UIStackView(arrangedSubviews: [promptLabel, field, errorLabel])
-        stack.axis = .vertical
-        stack.spacing = 10
-        stack.translatesAutoresizingMaskIntoConstraints = false
-
-        let cancel = UIButton(type: .system)
-        cancel.setTitle(texts.t("calling.cancel"), for: .normal)
-        cancel.titleLabel?.font = .systemFont(ofSize: 20)
-        cancel.setTitleColor(UIColor(white: 1, alpha: 0.75), for: .normal)
-        cancel.backgroundColor = UIColor(white: 1, alpha: 0.12)
-        cancel.layer.cornerRadius = 10
-        cancel.addTarget(self, action: #selector(onCancel), for: .primaryActionTriggered)
-        let ok = UIButton(type: .system)
-        ok.setTitle(texts.t("admin.login"), for: .normal)
-        ok.titleLabel?.font = .systemFont(ofSize: 20, weight: .semibold)
-        ok.setTitleColor(.white, for: .normal)
-        ok.backgroundColor = UIColor(red: 0.05, green: 0.36, blue: 0.75, alpha: 1)
-        ok.layer.cornerRadius = 10
-        ok.accessibilityIdentifier = "pin_ok"
-        ok.addTarget(self, action: #selector(onSubmit), for: .primaryActionTriggered)
-        let buttons = UIStackView(arrangedSubviews: [cancel, ok])
-        buttons.axis = .horizontal
-        buttons.spacing = 12
-        buttons.distribution = .fillEqually
-        buttons.heightAnchor.constraint(equalToConstant: 52).isActive = true
-        stack.addArrangedSubview(buttons)
-
-        card.addSubview(stack)
-        NSLayoutConstraint.activate([
-            card.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            card.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-            card.widthAnchor.constraint(equalToConstant: 380),
-            stack.topAnchor.constraint(equalTo: card.topAnchor, constant: 22),
-            stack.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -18),
-            stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 22),
-            stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -22),
-        ])
-    }
-
-    @objc private func onCancel() {
-        let callback = onCancelled
-        dismiss(animated: true) { callback?() }
     }
 
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        field.becomeFirstResponder()
+        if alert == nil { presentPrompt() }
     }
 
-    func textField(_ textField: UITextField, shouldChangeCharactersIn range: NSRange,
-                   replacementString string: String) -> Bool {
-        let current = (textField.text ?? "") as NSString
-        let next = current.replacingCharacters(in: range, with: string)
-        errorLabel.text = " "
-        return next.count <= AdminPinViewController.maxLen
+    /// The system alert: the prompt as its title, the last error as its message, one secure
+    /// field, Cancel and the confirming action.
+    private func presentPrompt() {
+        let prompt = UIAlertController(
+            title: texts.t(settingPassword ? "admin.password_set_prompt" : "admin.pin_prompt"),
+            message: errorText.isEmpty ? nil : errorText, preferredStyle: .alert)
+        prompt.view.accessibilityIdentifier = "admin_password_prompt"
+        prompt.addTextField { [weak self] field in
+            field.isSecureTextEntry = true
+            field.keyboardType = .asciiCapable
+            field.autocorrectionType = .no
+            field.autocapitalizationType = .none
+            field.returnKeyType = .done
+            field.placeholder = self?.texts.t("admin.password")
+            field.accessibilityIdentifier = "admin_password_field"
+            field.addTarget(self, action: #selector(AdminPinViewController.fieldChanged(_:)),
+                            for: .editingChanged)
+        }
+        prompt.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel) {
+            [weak self] _ in self?.onCancel()
+        })
+        let confirm = UIAlertAction(title: texts.t("admin.login"), style: .default) {
+            [weak self, weak prompt] _ in
+            self?.pin = prompt?.textFields?.first?.text ?? ""
+            self?.submit()
+        }
+        confirm.accessibilityIdentifier = "pin_ok"
+        confirm.isEnabled = false
+        prompt.addAction(confirm)
+        prompt.preferredAction = confirm
+        alert = prompt
+        confirmAction = confirm
+        present(prompt, animated: true)
     }
 
-    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        onSubmit()
-        return false
+    @objc private func fieldChanged(_ field: UITextField) {
+        let text = field.text ?? ""
+        if text.count > AdminPinViewController.maxLen {
+            field.text = String(text.prefix(AdminPinViewController.maxLen))
+        }
+        confirmAction?.isEnabled = !(field.text ?? "").isEmpty
     }
 
-    @objc private func onSubmit() {
-        pin = field.text ?? ""
-        submit()
+    private func onCancel() {
+        let callback = onCancelled
+        dismiss(animated: false) { callback?() }
+    }
+
+    /// A refused entry puts the prompt back with the reason in it and an empty field.
+    private func show(error: String) {
+        errorText = error
+        pin = ""
+        presentPrompt()
     }
 
     private func submit() {
         if Date() < AdminPinViewController.lockedUntil {
-            errorLabel.text = texts.t("admin.locked")
-            clearEntry()
+            show(error: texts.t("admin.locked"))
             return
         }
         if settingPassword {
@@ -160,22 +125,18 @@ final class AdminPinViewController: UIViewController, UITextFieldDelegate {
         case .wrong:
             // Core owns the lockout in this path; the local counter only shapes the message.
             AdminPinViewController.fails += 1
-            errorLabel.text = AdminPinViewController.fails >= 5 ? texts.t("admin.locked")
-                : texts.t("admin.pin_wrong")
-            clearEntry()
+            show(error: AdminPinViewController.fails >= 5 ? texts.t("admin.locked")
+                : texts.t("admin.pin_wrong"))
             return
         case .lockedOut:
             // Core has stopped answering for everyone; the old local digest must not become a
             // second way past that.
             AdminPinViewController.retireLegacyDigest()
-            errorLabel.text = texts.t("admin.locked")
-            clearEntry()
+            show(error: texts.t("admin.locked"))
             return
         case .unset:
             settingPassword = true
-            promptLabel.text = texts.t("admin.password_set_prompt")
-            errorLabel.text = " "
-            clearEntry()
+            show(error: "")
             return
         case .unavailable:
             break
@@ -187,26 +148,24 @@ final class AdminPinViewController: UIViewController, UITextFieldDelegate {
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if !expected.isEmpty && AdminPinViewController.sha256Hex(pin) == expected {
             AdminPinViewController.fails = 0
-            let cb = onUnlocked
-            dismiss(animated: true) { cb?() }
+            unlock()
             return
         }
         AdminPinViewController.fails += 1
         if AdminPinViewController.fails >= 5 {
             AdminPinViewController.fails = 0
             AdminPinViewController.lockedUntil = Date().addingTimeInterval(10 * 60)
-            errorLabel.text = texts.t("admin.locked")
+            show(error: texts.t("admin.locked"))
         } else {
-            errorLabel.text = texts.t("admin.pin_wrong")
+            show(error: texts.t("admin.pin_wrong"))
         }
-        clearEntry()
     }
 
     /// The set-once path: an empty current password is accepted only while the cluster has none,
     /// so this is the same trust-on-first-use the first web login takes.
     private func setFirstPassword() {
         guard pin.count >= AdminPinViewController.minLen else {
-            errorLabel.text = texts.t("admin.password_too_short")
+            show(error: texts.t("admin.password_too_short"))
             return
         }
         switch core?.setAdminPassword(current: "", new: pin) ?? .failed {
@@ -215,22 +174,15 @@ final class AdminPinViewController: UIViewController, UITextFieldDelegate {
             AdminPinViewController.retireLegacyDigest()
             unlock()
         case .lockedOut:
-            errorLabel.text = texts.t("admin.locked")
-            clearEntry()
+            show(error: texts.t("admin.locked"))
         default:
-            errorLabel.text = texts.t("settings.password_failed")
-            clearEntry()
+            show(error: texts.t("settings.password_failed"))
         }
     }
 
     private func unlock() {
         let callback = onUnlocked
-        dismiss(animated: true) { callback?() }
-    }
-
-    private func clearEntry() {
-        pin = ""
-        field.text = ""
+        dismiss(animated: false) { callback?() }
     }
 
     private static func legacyDigestPath() -> String {

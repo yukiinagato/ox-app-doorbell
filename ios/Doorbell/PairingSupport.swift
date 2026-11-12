@@ -3,7 +3,8 @@
 // Core owns the pairing state machine (docs/en/config-schema.md, "Pairing state and events").
 // Nothing here infers a state: every screen renders `pairing.state` from the snapshot Core
 // returns and reacts to the pairing events delivered through the UI callback. The same types
-// back the iOS onboarding gate, the iOS "Add device" panel, and the tvOS display-only variants.
+// back the iOS onboarding gate, the iOS "Add device" panel, and the tvOS display-only variants,
+// together with the grouped-table building blocks those screens share.
 import UIKit
 
 extension Notification.Name {
@@ -285,65 +286,17 @@ enum PairingCopy {
     }
 }
 
-/// Dark/amber palette shared by every pairing surface, matching the main UI.
+/// Sizes shared by the pairing surfaces. Colours and type come from `SystemStyle`.
 enum PairingTheme {
-    static let background = UIColor(red: 0.063, green: 0.078, blue: 0.094, alpha: 1)
-    static let card = UIColor(white: 1, alpha: 0.08)
-    static let foreground = UIColor(white: 0.94, alpha: 1)
-    static let dim = UIColor(white: 0.62, alpha: 1)
-    static let accent = UIColor(red: 1.0, green: 0.80, blue: 0.25, alpha: 1)
-    static let danger = UIColor(red: 0.88, green: 0.36, blue: 0.30, alpha: 1)
-    static let ok = UIColor(red: 0.42, green: 0.80, blue: 0.45, alpha: 1)
-
 #if os(tvOS)
-    static let titleSize: CGFloat = 54
-    static let bodySize: CGFloat = 30
-    static let smallSize: CGFloat = 24
-    static let buttonSize: CGFloat = 30
     static let codeSize: CGFloat = 64
     static let qrSize: CGFloat = 420
     static let codeQrSize: CGFloat = 220
 #else
-    static let titleSize: CGFloat = 30
-    static let bodySize: CGFloat = 19
-    static let smallSize: CGFloat = 15
-    static let buttonSize: CGFloat = 20
     static let codeSize: CGFloat = 44
     static let qrSize: CGFloat = 260
     static let codeQrSize: CGFloat = 160
 #endif
-
-    static func label(_ size: CGFloat, _ color: UIColor, bold: Bool = false) -> UILabel {
-        let label = UILabel()
-        label.font = bold ? .boldSystemFont(ofSize: size) : .systemFont(ofSize: size)
-        label.textColor = color
-        label.numberOfLines = 0
-        return label
-    }
-
-    static func button(_ title: String, filled: Bool = false) -> UIButton {
-        let button = UIButton(type: .system)
-        button.setTitle(title, for: .normal)
-        button.titleLabel?.font = .systemFont(ofSize: buttonSize, weight: .semibold)
-        button.titleLabel?.numberOfLines = 0
-        button.titleLabel?.textAlignment = .center
-        button.setTitleColor(filled ? .black : foreground, for: .normal)
-        button.setTitleColor(dim, for: .disabled)
-        button.backgroundColor = filled ? accent : card
-        button.layer.cornerRadius = 12
-#if !os(tvOS)
-        // tvOS supplies its own focus-aware padding and ignores this on modern releases.
-        button.contentEdgeInsets = UIEdgeInsets(top: 12, left: 22, bottom: 12, right: 22)
-#endif
-        return button
-    }
-
-    static func cardView() -> UIView {
-        let view = UIView()
-        view.backgroundColor = card
-        view.layer.cornerRadius = 14
-        return view
-    }
 }
 
 /// The pairing invitation a QR carries: `doorbell://pair?host=<ip:port>&pin=<6 digits>
@@ -486,232 +439,666 @@ enum PairingQR {
     }
 }
 
-/// The device's own Add QR with its mandatory caption. Shows a placeholder while Core has not
-/// published `pair_qr`, so the box is never a blank white square.
-final class PairingQrCardView: UIView {
-    private let texts: Texts
+// MARK: - Grouped table screens
+
+/// The colour role of a row's primary text.
+enum PairingTone {
+    case primary
+    case secondary
+    case tint
+    case positive
+    case negative
+    case warning
+
+    var color: UIColor {
+        switch self {
+        case .primary: return SystemStyle.label
+        case .secondary: return SystemStyle.secondaryLabel
+        case .tint: return SystemStyle.tint
+        case .positive: return SystemStyle.positive
+        case .negative: return SystemStyle.negative
+        case .warning: return SystemStyle.warning
+        }
+    }
+}
+
+/// One row of a `PairingTableScreen`. The row owns its cell for as long as it lives, so a text
+/// field keeps its focus and its text across the once-a-second snapshot refresh.
+final class PairingRow {
+    let cell: UITableViewCell
+    /// Nil for a row that only informs.
+    var onSelect: (() -> Void)?
+    /// Text a custom cell shows, so the table knows when to measure the row again.
+    var note = ""
+    /// Nil leaves the labels of a custom cell alone.
+    var tone: PairingTone? { didSet { paint() } }
+    var isEnabled = true { didSet { enable?(isEnabled) } }
+    /// Runs after the stock styling, for whatever the cell adds to it.
+    var decorate: (() -> Void)?
+    fileprivate var enable: ((Bool) -> Void)?
+    fileprivate var retitle: ((String) -> Void)?
+    /// Keeps a target object alive for as long as the row.
+    fileprivate var keep: AnyObject?
+
+    init(cell: UITableViewCell, tone: PairingTone? = nil) {
+        self.cell = cell
+        self.tone = tone
+        paint()
+    }
+
+    func setTitle(_ title: String) { retitle?(title) }
+
+    /// Called again whenever the static palette of a system without semantic colours moves.
+    func paint() {
+        SystemStyle.style(cell)
+        if let tone = tone {
+            cell.textLabel?.textColor = tone.color
+            cell.detailTextLabel?.textColor = SystemStyle.secondaryLabel
+        }
+        decorate?()
+    }
+
+    fileprivate var signature: String {
+        let detail = cell.detailTextLabel?.attributedText?.string ?? ""
+        return [cell.textLabel?.text ?? "", detail, note].joined(separator: "\u{1F}")
+    }
+}
+
+struct PairingSection {
+    var header: String?
+    var footer: String?
+    var rows: [PairingRow]
+
+    init(header: String? = nil, footer: String? = nil, rows: [PairingRow]) {
+        self.header = header
+        self.footer = footer
+        self.rows = rows
+    }
+}
+
+private final class PairingTapRelay: NSObject {
+    private let run: () -> Void
+    init(_ run: @escaping () -> Void) { self.run = run }
+    @objc func fire() { run() }
+}
+
+/// The stock cells the pairing screens are built from.
+enum PairingCells {
+
+    /// An informational row in one of the standard cell styles; both labels wrap.
+    static func text(style: UITableViewCell.CellStyle = .default, tone: PairingTone = .primary,
+                     identifier: String? = nil) -> PairingRow {
+        let cell = UITableViewCell(style: style, reuseIdentifier: nil)
+        cell.selectionStyle = .none
+        cell.textLabel?.numberOfLines = 0
+        cell.detailTextLabel?.numberOfLines = 0
+        cell.textLabel?.accessibilityIdentifier = identifier
+        return PairingRow(cell: cell, tone: tone)
+    }
+
+    /// A row that is itself the control: tinted text, or red for a destructive action.
+    static func action(title: String, tone: PairingTone = .tint, identifier: String,
+                       handler: @escaping () -> Void) -> PairingRow {
+        let row = text(tone: tone)
+        let cell = row.cell
+        cell.textLabel?.text = title
+        cell.selectionStyle = .default
+        cell.accessibilityIdentifier = identifier
+        cell.accessibilityTraits = .button
+        row.onSelect = handler
+        row.retitle = { [unowned cell] title in cell.textLabel?.text = title }
+        row.enable = { [unowned cell] enabled in
+            cell.textLabel?.isEnabled = enabled
+            cell.selectionStyle = enabled ? .default : .none
+        }
+        return row
+    }
+
+    /// The primary action of a screen. A filled system button on the inset grouped tables of
+    /// iOS 13 and later; the centred emphasised row of the grouped style before that and on tvOS,
+    /// where the row itself takes the focus.
+    static func button(title: String, identifier: String,
+                       handler: @escaping () -> Void) -> PairingRow {
+        #if os(iOS)
+        if #available(iOS 13.0, *) {
+            let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+            cell.selectionStyle = .none
+            cell.backgroundColor = .clear
+            let button = SystemStyle.button(.filled, title: title)
+            button.accessibilityIdentifier = identifier
+            button.translatesAutoresizingMaskIntoConstraints = false
+            cell.contentView.addSubview(button)
+            let bottom = button.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor)
+            bottom.priority = UILayoutPriority(999)
+            NSLayoutConstraint.activate([
+                button.topAnchor.constraint(equalTo: cell.contentView.topAnchor),
+                button.leadingAnchor.constraint(equalTo: cell.contentView.leadingAnchor),
+                button.trailingAnchor.constraint(equalTo: cell.contentView.trailingAnchor),
+                button.heightAnchor.constraint(greaterThanOrEqualToConstant: 50),
+                bottom,
+            ])
+            let relay = PairingTapRelay(handler)
+            button.addTarget(relay, action: #selector(PairingTapRelay.fire),
+                             for: .primaryActionTriggered)
+            let row = PairingRow(cell: cell)
+            row.keep = relay
+            var current = title
+            row.retitle = { [unowned button] title in
+                current = title
+                SystemStyle.style(button, kind: .filled, title: title)
+            }
+            row.enable = { [unowned button] enabled in button.isEnabled = enabled }
+            row.decorate = { [unowned button, unowned cell] in
+                cell.backgroundColor = .clear
+                SystemStyle.style(button, kind: .filled, title: current)
+            }
+            return row
+        }
+        #endif
+        let row = action(title: title, identifier: identifier, handler: handler)
+        let cell = row.cell
+        cell.textLabel?.textAlignment = .center
+        row.decorate = { [unowned cell] in
+            cell.textLabel?.font = SystemStyle.font(.body, weight: .semibold)
+        }
+        row.paint()
+        return row
+    }
+
+    /// A row that hosts one view between the cell's layout margins.
+    static func custom(_ view: UIView, vertical: CGFloat = 12) -> PairingRow {
+        let cell = UITableViewCell(style: .default, reuseIdentifier: nil)
+        cell.selectionStyle = .none
+        view.translatesAutoresizingMaskIntoConstraints = false
+        cell.contentView.addSubview(view)
+        let margins = cell.contentView.layoutMarginsGuide
+        let bottom = view.bottomAnchor.constraint(equalTo: cell.contentView.bottomAnchor,
+                                                  constant: -vertical)
+        bottom.priority = UILayoutPriority(999)
+        NSLayoutConstraint.activate([
+            view.topAnchor.constraint(equalTo: cell.contentView.topAnchor, constant: vertical),
+            view.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
+            view.trailingAnchor.constraint(equalTo: margins.trailingAnchor),
+            bottom,
+        ])
+        return PairingRow(cell: cell)
+    }
+
+    static func spinner() -> UIActivityIndicatorView {
+        let spinner = IOSAvailability.activityIndicator(large: false)
+        spinner.color = SystemStyle.secondaryLabel
+        spinner.hidesWhenStopped = true
+        spinner.sizeToFit()
+        return spinner
+    }
+
+    /// Shows or removes the progress indicator in a row's accessory position.
+    static func setBusy(_ busy: Bool, _ row: PairingRow, spinner: UIActivityIndicatorView) {
+        if busy {
+            spinner.color = SystemStyle.secondaryLabel
+            if row.cell.accessoryView !== spinner { row.cell.accessoryView = spinner }
+            spinner.startAnimating()
+        } else if row.cell.accessoryView === spinner {
+            spinner.stopAnimating()
+            row.cell.accessoryView = nil
+        }
+    }
+}
+
+/// One line of text entry in a table row. iOS edits in place with a `UITextField`; tvOS has no
+/// inline keyboard, so the row shows the value and edits it through the system text alert.
+final class PairingFieldRow: NSObject, UITextFieldDelegate {
+    private(set) var row: PairingRow!
+    var onReturn: (() -> Void)?
+    var onChange: (() -> Void)?
+
+#if os(iOS)
+    let field = UITextField()
+    var text: String {
+        get { return field.text ?? "" }
+        set { field.text = newValue }
+    }
+#else
+    weak var presenter: UIViewController?
+    var confirmTitle = ""
+    var cancelTitle = ""
+    var keyboardType = UIKeyboardType.default
+    private let label: String
+    private let placeholder: String
+    private let identifier: String
+    var text = "" { didSet { show() } }
+#endif
+
+    init(label: String, placeholder: String, identifier: String) {
+#if os(tvOS)
+        self.label = label
+        self.placeholder = placeholder
+        self.identifier = identifier
+#endif
+        super.init()
+#if os(iOS)
+        let title = SystemStyle.label(.body)
+        title.text = label
+        title.isHidden = label.isEmpty
+        title.setContentHuggingPriority(.required, for: .horizontal)
+        title.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        field.font = SystemStyle.font(.body)
+        if #available(iOS 10.0, *) { field.adjustsFontForContentSizeCategory = true }
+        field.placeholder = placeholder
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.clearButtonMode = .whileEditing
+        field.accessibilityIdentifier = identifier
+        field.delegate = self
+        field.addTarget(self, action: #selector(edited), for: .editingChanged)
+        let stack = UIStackView(arrangedSubviews: [title, field])
+        stack.axis = .horizontal
+        stack.spacing = 12
+        stack.alignment = .center
+        stack.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+        field.widthAnchor.constraint(greaterThanOrEqualToConstant: 110).isActive = true
+        row = PairingCells.custom(stack, vertical: 0)
+        row.decorate = { [unowned self] in
+            title.textColor = SystemStyle.label
+            self.field.textColor = SystemStyle.label
+        }
+        row.paint()
+        row.onSelect = { [unowned self] in self.field.becomeFirstResponder() }
+#else
+        row = PairingCells.text(style: .value1)
+        row.cell.selectionStyle = .default
+        row.cell.accessibilityIdentifier = identifier
+        row.onSelect = { [unowned self] in self.edit() }
+        show()
+#endif
+    }
+
+    func focus() {
+#if os(iOS)
+        field.becomeFirstResponder()
+#endif
+    }
+
+#if os(iOS)
+    @objc private func edited() { onChange?() }
+
+    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        onReturn?()
+        return true
+    }
+#else
+    private func show() {
+        row.cell.textLabel?.text = label
+        row.cell.detailTextLabel?.text = text.isEmpty ? placeholder : text
+    }
+
+    private func edit() {
+        let alert = UIAlertController(title: label, message: nil, preferredStyle: .alert)
+        alert.addTextField { [placeholder, text, keyboardType, identifier] field in
+            field.placeholder = placeholder
+            field.text = text
+            field.keyboardType = keyboardType
+            field.autocorrectionType = .no
+            field.autocapitalizationType = .none
+            field.accessibilityIdentifier = identifier
+        }
+        alert.addAction(UIAlertAction(title: cancelTitle, style: .cancel))
+        alert.addAction(UIAlertAction(title: confirmTitle, style: .default) {
+            [weak self, weak alert] _ in
+            guard let self = self else { return }
+            self.text = alert?.textFields?.first?.text ?? ""
+            self.onChange?()
+            self.onReturn?()
+        })
+        presenter?.present(alert, animated: true)
+    }
+#endif
+}
+
+/// A modal screen that is presented as itself and still shows the stock navigation bar: it
+/// hosts its own navigation controller around one grouped table. Subclasses describe the table
+/// as sections of `PairingRow` and hand a new description to `setSections` whenever state moves.
+class PairingTableScreen: UIViewController, UITableViewDataSource, UITableViewDelegate {
+
+    private let list = UITableViewController(style: SystemStyle.tableStyle())
+    private(set) var bar: UINavigationController?
+    private var sections: [PairingSection] = []
+    private var measured = ""
+    private var header: UIView?
+
+    var table: UITableView { return list.tableView }
+    /// Title and bar buttons of the hosted navigation bar.
+    var barItem: UINavigationItem { return list.navigationItem }
+    var prefersLargeTitle: Bool { return true }
+
+    deinit {
+        NotificationCenter.default.removeObserver(self)
+    }
+
+    override func viewDidLoad() {
+        super.viewDidLoad()
+        view.backgroundColor = SystemStyle.groupedBackground
+        let nav = SystemStyle.navigation(list, largeTitles: prefersLargeTitle)
+        bar = nav
+        addChild(nav)
+        nav.view.frame = view.bounds
+        nav.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(nav.view)
+        nav.didMove(toParent: self)
+        table.dataSource = self
+        table.delegate = self
+        SystemStyle.style(table)
+#if os(iOS)
+        table.keyboardDismissMode = .interactive
+#endif
+        NotificationCenter.default.addObserver(self, selector: #selector(styleChanged),
+                                               name: SystemStyle.changed, object: nil)
+    }
+
+#if os(iOS)
+    override var childForStatusBarStyle: UIViewController? { return bar }
+#endif
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard let header = header else { return }
+        bar?.view.layoutIfNeeded()
+        let width = table.bounds.width
+        guard width > 0 else { return }
+        let fitted = header.systemLayoutSizeFitting(
+            CGSize(width: width, height: 0),
+            withHorizontalFittingPriority: .required,
+            verticalFittingPriority: .fittingSizeLevel)
+        guard abs(header.frame.height - fitted.height) > 0.5 ||
+                abs(header.frame.width - width) > 0.5 else { return }
+        header.frame = CGRect(x: 0, y: 0, width: width, height: fitted.height)
+        table.tableHeaderView = header
+    }
+
+    /// A view above the first section. It is measured again after `headerChanged()`.
+    func setHeader(_ view: UIView) {
+        header = view
+        table.tableHeaderView = view
+        headerChanged()
+    }
+
+    func headerChanged() {
+        if isViewLoaded { view.setNeedsLayout() }
+    }
+
+    /// Replaces the table's content. Rows are compared by identity: the table reloads only when
+    /// rows or section texts were added, removed or moved, and otherwise just measures again.
+    func setSections(_ next: [PairingSection]) {
+        let reshaped = !PairingTableScreen.sameShape(next, sections)
+        sections = next
+        guard isViewLoaded else { return }
+        let text = next.flatMap { $0.rows }.map { $0.signature }.joined(separator: "\u{1E}")
+        if reshaped {
+            measured = text
+            // A row that was off screen missed any palette or accent change in the meantime.
+            for row in next.flatMap({ $0.rows }) { row.paint() }
+            // A reload detaches the cells for a moment, which would drop the keyboard from
+            // under somebody typing; the field takes it back.
+            let editing = PairingTableScreen.firstResponder(in: table)
+            table.reloadData()
+            if let editing = editing, !editing.isFirstResponder {
+                table.layoutIfNeeded()
+                if editing.window != nil { editing.becomeFirstResponder() }
+            }
+            return
+        }
+        guard text != measured else { return }
+        measured = text
+        UIView.performWithoutAnimation {
+            table.beginUpdates()
+            table.endUpdates()
+        }
+    }
+
+    private static func firstResponder(in view: UIView) -> UIView? {
+        if view.isFirstResponder { return view }
+        for child in view.subviews {
+            if let found = firstResponder(in: child) { return found }
+        }
+        return nil
+    }
+
+    private static func sameShape(_ first: [PairingSection], _ second: [PairingSection]) -> Bool {
+        guard first.count == second.count else { return false }
+        for (a, b) in zip(first, second) {
+            guard (a.header ?? "") == (b.header ?? ""), (a.footer ?? "") == (b.footer ?? ""),
+                  a.rows.count == b.rows.count,
+                  !zip(a.rows, b.rows).contains(where: { $0 !== $1 }) else { return false }
+        }
+        return true
+    }
+
+    /// Anchors an action sheet to the row it belongs to, as a popover needs on iPad.
+    func anchor(_ alert: UIAlertController, to row: PairingRow) {
+        alert.popoverPresentationController?.sourceView = row.cell
+        alert.popoverPresentationController?.sourceRect = row.cell.bounds
+    }
+
+    @objc private func styleChanged() {
+        view.backgroundColor = SystemStyle.groupedBackground
+        SystemStyle.style(table)
+        if let bar = bar { SystemStyle.style(bar, largeTitles: prefersLargeTitle) }
+        for row in sections.flatMap({ $0.rows }) { row.paint() }
+        styleDidChange()
+        table.reloadData()
+    }
+
+    /// For whatever a subclass painted outside its rows.
+    func styleDidChange() {}
+
+    func numberOfSections(in tableView: UITableView) -> Int { return sections.count }
+
+    func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
+        return sections[section].rows.count
+    }
+
+    func tableView(_ tableView: UITableView,
+                   cellForRowAt indexPath: IndexPath) -> UITableViewCell {
+        let row = sections[indexPath.section].rows[indexPath.row]
+        return row.cell
+    }
+
+    /// Focus lands only on rows that do something. An informational row under the focus platter
+    /// would have its own text washed out, and the remote has nothing to do there.
+    func tableView(_ tableView: UITableView, canFocusRowAt indexPath: IndexPath) -> Bool {
+        let row = sections[indexPath.section].rows[indexPath.row]
+        return row.onSelect != nil && row.isEnabled
+    }
+
+    func tableView(_ tableView: UITableView, titleForHeaderInSection section: Int) -> String? {
+        return sections[section].header
+    }
+
+    func tableView(_ tableView: UITableView, titleForFooterInSection section: Int) -> String? {
+        return sections[section].footer
+    }
+
+    func tableView(_ tableView: UITableView, willDisplayHeaderView view: UIView,
+                   forSection section: Int) {
+        SystemStyle.style(headerFooter: view)
+    }
+
+    func tableView(_ tableView: UITableView, willDisplayFooterView view: UIView,
+                   forSection section: Int) {
+        SystemStyle.style(headerFooter: view)
+    }
+
+    func tableView(_ tableView: UITableView, shouldHighlightRowAt indexPath: IndexPath) -> Bool {
+#if os(tvOS)
+        // Focus is how a remote scrolls, so informational rows stay focusable.
+        return true
+#else
+        let row = sections[indexPath.section].rows[indexPath.row]
+        return row.onSelect != nil && row.isEnabled
+#endif
+    }
+
+    func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
+        tableView.deselectRow(at: indexPath, animated: true)
+        let row = sections[indexPath.section].rows[indexPath.row]
+        guard row.isEnabled else { return }
+        row.onSelect?()
+    }
+}
+
+// MARK: - Shared pairing rows
+
+/// The device's own Add QR. Shows a placeholder while Core has not published `pair_qr`, so the
+/// row is never an empty box.
+final class PairingQrRow {
+    let row: PairingRow
     private let core: CoreBridge
     private let imageView = UIImageView()
-    private let placeholder = UILabel()
-    private let caption = UILabel()
+    private let placeholder = SystemStyle.label(.footnote, color: SystemStyle.secondaryLabel)
     private var renderedPayload = ""
 
     init(core: CoreBridge, texts: Texts) {
         self.core = core
-        self.texts = texts
-        super.init(frame: .zero)
-
+        let box = UIView()
         imageView.contentMode = .scaleAspectFit
-        imageView.backgroundColor = UIColor(white: 1, alpha: 0.06)
         imageView.layer.cornerRadius = 8
         imageView.clipsToBounds = true
         imageView.accessibilityIdentifier = "pair_own_qr"
+        imageView.isAccessibilityElement = true
         imageView.translatesAutoresizingMaskIntoConstraints = false
-
         placeholder.text = texts.t("pair.searching")
-        placeholder.font = .systemFont(ofSize: PairingTheme.smallSize)
-        placeholder.textColor = PairingTheme.dim
         placeholder.textAlignment = .center
-        placeholder.numberOfLines = 0
         placeholder.translatesAutoresizingMaskIntoConstraints = false
-
-        caption.text = texts.t("pair.qr_caption")
-        caption.font = .systemFont(ofSize: PairingTheme.smallSize)
-        caption.textColor = PairingTheme.dim
-        caption.textAlignment = .center
-        caption.numberOfLines = 0
-
-        let stack = UIStackView(arrangedSubviews: [imageView, caption])
-        stack.axis = .vertical
-        stack.spacing = 10
-        stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        box.addSubview(imageView)
         imageView.addSubview(placeholder)
-
+        let side = imageView.widthAnchor.constraint(equalToConstant: PairingTheme.qrSize)
+        side.priority = UILayoutPriority(999)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-            imageView.widthAnchor.constraint(equalToConstant: PairingTheme.qrSize),
-            imageView.heightAnchor.constraint(equalToConstant: PairingTheme.qrSize),
-            caption.widthAnchor.constraint(equalTo: stack.widthAnchor),
+            side,
+            imageView.heightAnchor.constraint(equalTo: imageView.widthAnchor),
+            imageView.widthAnchor.constraint(lessThanOrEqualTo: box.widthAnchor),
+            imageView.centerXAnchor.constraint(equalTo: box.centerXAnchor),
+            imageView.topAnchor.constraint(equalTo: box.topAnchor),
+            imageView.bottomAnchor.constraint(equalTo: box.bottomAnchor),
             placeholder.centerXAnchor.constraint(equalTo: imageView.centerXAnchor),
             placeholder.centerYAnchor.constraint(equalTo: imageView.centerYAnchor),
             placeholder.widthAnchor.constraint(equalTo: imageView.widthAnchor, constant: -24),
         ])
+        row = PairingCells.custom(box)
+        row.decorate = { [unowned self] in
+            self.placeholder.textColor = SystemStyle.secondaryLabel
+            self.imageView.backgroundColor = self.imageView.image == nil
+                ? SystemStyle.fill : .white
+        }
+        row.paint()
     }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
 
     func update(payload: String) {
         guard payload != renderedPayload else { return }
         renderedPayload = payload
-        guard !payload.isEmpty,
-              let image = PairingQR.image(core: core, text: payload,
-                                          points: PairingTheme.qrSize) else {
-            imageView.image = nil
-            placeholder.isHidden = false
-            return
-        }
-        imageView.image = image
-        placeholder.isHidden = true
+        imageView.image = payload.isEmpty ? nil
+            : PairingQR.image(core: core, text: payload, points: PairingTheme.qrSize)
+        placeholder.isHidden = imageView.image != nil
+        row.paint()
     }
 }
 
-/// The "Add with a Pairing PIN" card: authoritative address, live PIN, countdown and attempts.
-/// It re-renders itself from `pairing.token` so reopening a screen never loses a live code.
-final class PairingCodeCardView: UIView {
+/// The "Add with a Pairing PIN" section: authoritative address, live PIN, countdown, attempts
+/// and the invitation QR. It renders `pairing.token`, so reopening a screen never loses a live
+/// code, and an expired token keeps the section on screen with the way to a new one.
+final class PairingCodeRows {
     var onNewCode: (() -> Void)?
+    /// The invitation QR finished rendering, so the section gained or lost a row.
+    var onChange: (() -> Void)?
 
     private let texts: Texts
-    private let title = UILabel()
-    private let addressLabel = UILabel()
-    private let addressValue = UILabel()
-    private let addressCopy = UIButton(type: .system)
-    private let codeLabel = UILabel()
-    private let codeValue = UILabel()
-    private let codeCopy = UIButton(type: .system)
-    private let countdown = UILabel()
-    private let attempts = UILabel()
-    private let instructions = UILabel()
-    private let expired = UILabel()
-    private let newCodeButton: UIButton
-    /// The same invitation as a QR, so the other device can point a camera at it instead of
-    /// copying six digits. Hidden entirely on a Core that does not publish `token.uri`.
-    private let uriQr = UIImageView()
     private let core: CoreBridge?
+    private let addressRow = PairingCells.text(style: .value1)
+    private let pinLabel = UILabel()
+    private let pinRow: PairingRow
+    private let timerRow = PairingCells.text(style: .subtitle)
+    private let expiredRow = PairingCells.text(tone: .negative)
+    private let qrView = UIImageView()
+    private let qrRow: PairingRow
+    private var newCodeRow: PairingRow!
+    private var live = false
     private var renderedUri = ""
-
-    /// The card renders the invitation QR through Core's encoder when it has one.
-    convenience init(texts: Texts) { self.init(texts: texts, core: nil) }
+    private var address = ""
+    private var pin = ""
 
     init(texts: Texts, core: CoreBridge?) {
         self.texts = texts
         self.core = core
-        newCodeButton = PairingTheme.button(texts.t("pair.add_with_code"), filled: true)
-        super.init(frame: .zero)
-        backgroundColor = PairingTheme.card
-        layer.cornerRadius = 14
 
-        title.text = texts.t("pair.add_with_code")
-        title.font = .boldSystemFont(ofSize: PairingTheme.bodySize)
-        title.textColor = PairingTheme.foreground
+        pinLabel.font = SystemStyle.digits(size: PairingTheme.codeSize, weight: .semibold)
+        pinLabel.textAlignment = .center
+        pinLabel.adjustsFontSizeToFitWidth = true
+        pinLabel.minimumScaleFactor = 0.5
+        pinLabel.accessibilityIdentifier = "pair_code_pin"
+        pinRow = PairingCells.custom(pinLabel)
 
-        addressLabel.text = texts.t("pair.address_label")
-        addressLabel.font = .systemFont(ofSize: PairingTheme.smallSize)
-        addressLabel.textColor = PairingTheme.dim
-
-        addressValue.font = UIFont.monospacedDigitSystemFont(ofSize: PairingTheme.bodySize,
-                                                             weight: .semibold)
-        addressValue.textColor = PairingTheme.foreground
-        addressValue.numberOfLines = 0
-        addressValue.accessibilityIdentifier = "pair_code_address"
-
-        codeLabel.text = texts.t("pair.code_label")
-        codeLabel.font = .systemFont(ofSize: PairingTheme.smallSize)
-        codeLabel.textColor = PairingTheme.dim
-
-        codeValue.font = UIFont.monospacedDigitSystemFont(ofSize: PairingTheme.codeSize,
-                                                          weight: .bold)
-        codeValue.textColor = PairingTheme.accent
-        codeValue.accessibilityIdentifier = "pair_code_pin"
-
-        countdown.font = UIFont.monospacedDigitSystemFont(ofSize: PairingTheme.bodySize,
-                                                          weight: .medium)
-        countdown.textColor = PairingTheme.foreground
-
-        attempts.font = .systemFont(ofSize: PairingTheme.smallSize)
-        attempts.textColor = PairingTheme.dim
-
-        instructions.text = texts.t("pair.code_instructions")
-        instructions.font = .systemFont(ofSize: PairingTheme.smallSize)
-        instructions.textColor = PairingTheme.dim
-        instructions.numberOfLines = 0
-
-        expired.text = texts.t("pair.code_expired")
-        expired.font = .systemFont(ofSize: PairingTheme.bodySize, weight: .semibold)
-        expired.textColor = PairingTheme.danger
-        expired.numberOfLines = 0
-        expired.isHidden = true
-
-        newCodeButton.addTarget(self, action: #selector(newCodeTapped),
-                                for: .primaryActionTriggered)
-
-        for (button, identifier) in [(addressCopy, "pair_copy_address"),
-                                     (codeCopy, "pair_copy_pin")] {
-            button.setTitle(texts.t("pair.copy"), for: .normal)
-            button.titleLabel?.font = .systemFont(ofSize: PairingTheme.smallSize)
-            button.setTitleColor(PairingTheme.accent, for: .normal)
-            button.accessibilityIdentifier = identifier
-            button.addTarget(self, action: #selector(copyTapped(_:)),
-                             for: .primaryActionTriggered)
-#if os(tvOS)
-            // tvOS has no pasteboard; the value is read off the screen instead.
-            button.isHidden = true
-#endif
-        }
-
-        let addressRow = UIStackView(arrangedSubviews: [addressValue, addressCopy])
-        addressRow.axis = .horizontal
-        addressRow.spacing = 12
-        addressRow.alignment = .center
-        let codeRow = UIStackView(arrangedSubviews: [codeValue, codeCopy])
-        codeRow.axis = .horizontal
-        codeRow.spacing = 12
-        codeRow.alignment = .center
-        let countdownRow = UIStackView(arrangedSubviews: [countdown, attempts])
-        countdownRow.axis = .horizontal
-        countdownRow.spacing = 16
-        countdownRow.alignment = .firstBaseline
-
-        let stack = UIStackView(arrangedSubviews: [title, addressLabel, addressRow, codeLabel,
-                                                   codeRow, countdownRow, expired,
-                                                   newCodeButton, instructions])
-        stack.axis = .vertical
-        stack.spacing = 8
-        stack.alignment = .leading
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        uriQr.contentMode = .scaleAspectFit
-        uriQr.isHidden = true
-        uriQr.accessibilityIdentifier = "pair_code_qr"
-        uriQr.translatesAutoresizingMaskIntoConstraints = false
-        stack.insertArrangedSubview(uriQr, at: stack.arrangedSubviews.count)
-
-        addSubview(stack)
+        let qrBox = UIView()
+        qrView.contentMode = .scaleAspectFit
+        qrView.accessibilityIdentifier = "pair_code_qr"
+        qrView.isAccessibilityElement = true
+        qrView.translatesAutoresizingMaskIntoConstraints = false
+        qrBox.addSubview(qrView)
         NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor, constant: 16),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -16),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
-            uriQr.widthAnchor.constraint(equalToConstant: PairingTheme.codeQrSize),
-            uriQr.heightAnchor.constraint(equalToConstant: PairingTheme.codeQrSize),
+            qrView.widthAnchor.constraint(equalToConstant: PairingTheme.codeQrSize),
+            qrView.heightAnchor.constraint(equalToConstant: PairingTheme.codeQrSize),
+            qrView.centerXAnchor.constraint(equalTo: qrBox.centerXAnchor),
+            qrView.topAnchor.constraint(equalTo: qrBox.topAnchor),
+            qrView.bottomAnchor.constraint(equalTo: qrBox.bottomAnchor),
         ])
-        IOSAvailability.setCustomSpacing(16, after: addressRow, in: stack)
-        IOSAvailability.setCustomSpacing(14, after: countdownRow, in: stack)
+        qrRow = PairingCells.custom(qrBox)
+
+        addressRow.cell.textLabel?.text = texts.t("pair.address_label")
+        addressRow.cell.detailTextLabel?.accessibilityIdentifier = "pair_code_address"
+        expiredRow.cell.textLabel?.text = texts.t("pair.code_expired")
+        pinRow.decorate = { [unowned self] in self.pinLabel.textColor = SystemStyle.label }
+        pinRow.paint()
+        newCodeRow = PairingCells.button(title: texts.t("pair.new_code"),
+                                         identifier: "pair_new_code") { [weak self] in
+            self?.onNewCode?()
+        }
+#if os(iOS)
+        // tvOS has no pasteboard; the values are read off the screen there.
+        addressRow.cell.accessoryView = copyButton("pair_copy_address", #selector(copyAddress))
+        pinRow.cell.accessoryView = copyButton("pair_copy_pin", #selector(copyPin))
+#endif
     }
 
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    /// Renders one snapshot. An inactive token keeps the card visible with the expiry message so
-    /// a user who looked away is told what happened instead of finding an empty box.
     func update(_ snapshot: PairingSnapshot) {
-        let live = snapshot.tokenActive && snapshot.tokenExpiresS > 0
+        live = snapshot.tokenActive && snapshot.tokenExpiresS > 0
         updateInvitationQr(live ? snapshot.tokenUri : "")
-        addressValue.text = snapshot.tokenHost.isEmpty
-            ? texts.t("pair.address_example") : snapshot.tokenHost
-        codeValue.text = live && !snapshot.tokenPin.isEmpty ? snapshot.tokenPin : "······"
-        countdown.text = live ? PairingCopy.expiresIn(texts, snapshot.tokenExpiresS) : ""
-        attempts.text = live ? texts.t("pair.code_attempts_left",
-                                       "\(snapshot.tokenAttemptsLeft)") : ""
-        countdown.isHidden = !live
-        attempts.isHidden = !live
-        expired.isHidden = live
-        newCodeButton.isHidden = live
-        addressCopy.isEnabled = !snapshot.tokenHost.isEmpty
-        codeCopy.isEnabled = live
-        instructions.isHidden = !live
+        address = snapshot.tokenHost
+        pin = live ? snapshot.tokenPin : ""
+        addressRow.cell.detailTextLabel?.text = address.isEmpty
+            ? texts.t("pair.address_example") : address
+        pinLabel.text = pin
+        pinRow.note = pin
+        timerRow.cell.textLabel?.text = live
+            ? PairingCopy.expiresIn(texts, snapshot.tokenExpiresS) : ""
+        timerRow.cell.detailTextLabel?.text = live
+            ? texts.t("pair.code_attempts_left", "\(snapshot.tokenAttemptsLeft)") : ""
+        (addressRow.cell.accessoryView as? UIButton)?.isEnabled = !address.isEmpty
+    }
+
+    /// The sections for the snapshot last given to `update`: the invitation itself, and the
+    /// way to a new one once it has expired.
+    func sections() -> [PairingSection] {
+        var rows = [addressRow]
+        if live {
+            if !pin.isEmpty { rows.append(pinRow) }
+            rows.append(timerRow)
+            if qrView.image != nil { rows.append(qrRow) }
+        } else {
+            rows.append(expiredRow)
+        }
+        let invitation = PairingSection(header: texts.t("pair.add_with_code"),
+                                        footer: live ? texts.t("pair.code_instructions") : nil,
+                                        rows: rows)
+        return live ? [invitation] : [invitation, PairingSection(rows: [newCodeRow])]
     }
 
     /// Core owns the payload; the shell only draws it. Encoding is a nested module loop and a
@@ -720,8 +1107,7 @@ final class PairingCodeCardView: UIView {
         guard uri != renderedUri else { return }
         renderedUri = uri
         guard !uri.isEmpty, let core = core else {
-            uriQr.image = nil
-            uriQr.isHidden = true
+            qrView.image = nil
             return
         }
         let points = PairingTheme.codeQrSize
@@ -729,19 +1115,34 @@ final class PairingCodeCardView: UIView {
             let image = PairingQR.image(core: core, text: uri, points: points)
             DispatchQueue.main.async {
                 guard let self = self, self.renderedUri == uri else { return }
-                self.uriQr.image = image
-                self.uriQr.isHidden = image == nil
+                self.qrView.image = image
+                self.onChange?()
             }
         }
     }
 
-    @objc private func newCodeTapped() { onNewCode?() }
-
-    @objc private func copyTapped(_ sender: UIButton) {
 #if os(iOS)
-        let value = sender === codeCopy ? codeValue.text : addressValue.text
-        UIPasteboard.general.string = value ?? ""
-        sender.setTitle(texts.t("pair.copy"), for: .normal)
-#endif
+    private func copyButton(_ identifier: String, _ action: Selector) -> UIButton {
+        let button = UIButton(type: .system)
+        if let icon = TablerIcon.image("TablerCopy") {
+            button.setImage(icon, for: .normal)
+        } else {
+            button.setTitle(texts.t("pair.copy"), for: .normal)
+        }
+        button.accessibilityLabel = texts.t("pair.copy")
+        button.accessibilityIdentifier = identifier
+        button.addTarget(self, action: action, for: .primaryActionTriggered)
+        button.sizeToFit()
+        button.frame.size = CGSize(width: max(44, button.frame.width), height: 44)
+        return button
     }
+
+    @objc private func copyAddress() {
+        UIPasteboard.general.string = address
+    }
+
+    @objc private func copyPin() {
+        UIPasteboard.general.string = pin
+    }
+#endif
 }

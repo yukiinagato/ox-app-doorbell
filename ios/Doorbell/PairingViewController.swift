@@ -4,11 +4,12 @@
 // renders every pairing event Core publishes: join_result, pairing_state, paired,
 // pairing_persistence_error, join_token_changed. Nothing here decides the state on its own.
 //
-// The same controller serves iOS and tvOS. tvOS gets the focusable keypad for the Pairing PIN and
-// never offers a camera path; the shared layout otherwise matches so the copy stays identical.
+// The same controller serves iOS and tvOS: one grouped table under the stock navigation bar.
+// tvOS never offers a camera path and enters the address and the Pairing PIN through the system
+// text alert; its actions are table rows, because a row is what the remote focuses.
 import UIKit
 
-final class PairingViewController: UIViewController {
+final class PairingViewController: PairingTableScreen {
 
     /// Called when the user chooses "Set up later"; the host shows the persistent banner.
     var onDefer: (() -> Void)?
@@ -22,7 +23,7 @@ final class PairingViewController: UIViewController {
     private enum Screen {
         case status        // searching / joining / joined
         case codeEntry     // address + Pairing PIN
-        case created       // cluster created: keep the code card on screen
+        case created       // cluster created: keep the PIN section on screen
         case persistError
     }
 
@@ -35,35 +36,76 @@ final class PairingViewController: UIViewController {
     private var finishing = false
     private var pollTimer: Timer?
     private var dismissTimer: Timer?
+    private var errorText: String?
+    private var errorDetail = ""
 
-    private let scroll = UIScrollView()
-    private let contentStack = UIStackView()
-    private let titleLabel = UILabel()
-    private let identityLabel = UILabel()
-    private let spinner = IOSAvailability.activityIndicator(large: true)
-    private let statusLabel = UILabel()
-    private let hintLabel = UILabel()
-    private let errorLabel = UILabel()
-    private let detailLabel = UILabel()
+    private let headerView = UIView()
+    private let titleLabel = SystemStyle.label(.title1, weight: .bold)
+    private let identityLabel = SystemStyle.label(.footnote, color: SystemStyle.secondaryLabel)
+    private let spinner = PairingCells.spinner()
+
     /// This device's eight-digit confirmation code, read out to whoever adds it.
-    private let confirmCaption = UILabel()
     private let confirmLabel = UILabel()
-    private lazy var qrCard = PairingQrCardView(core: core, texts: texts)
-    private lazy var codeCard = PairingCodeCardView(texts: texts, core: core)
+    private lazy var confirmRow = PairingCells.custom(confirmLabel, vertical: 16)
+    private let statusRow = PairingCells.text(identifier: "pair_status")
+    private let errorRow = PairingCells.text(style: .subtitle, tone: .negative,
+                                             identifier: "pair_error")
+    private let inviteRow = PairingCells.text(tone: .secondary)
+    private lazy var qrRow = PairingQrRow(core: core, texts: texts)
+    private lazy var codeRows = PairingCodeRows(texts: texts, core: core)
 
-    private let actionStack = UIStackView()
-    private lazy var joinButton = PairingTheme.button(texts.t("pair.join_with_code"))
-    private lazy var createButton = PairingTheme.button(texts.t("pair.create_home"))
-    private lazy var laterButton = PairingTheme.button(texts.t("pair.later"))
-    private lazy var retryButton = PairingTheme.button(texts.t("pair.retry"), filled: true)
+    private lazy var hostRow = PairingFieldRow(label: texts.t("pair.address_label"),
+                                               placeholder: texts.t("pair.address_example"),
+                                               identifier: "pair_host_field")
+    private lazy var pinRow = PairingFieldRow(label: texts.t("pair.code_label"),
+                                              placeholder: "",
+                                              identifier: "pair_pin_field")
 
-    private let codeEntryCard = UIView()
-    private let hostField = UITextField()
-    private let pinField = UITextField()
-    private lazy var submitButton = PairingTheme.button(texts.t("pair.join_with_code"),
-                                                        filled: true)
-    private lazy var backButton = PairingTheme.button(texts.t("panel.back"))
-    private var keyboardInset: NSLayoutConstraint?
+    private lazy var joinRow = PairingCells.action(
+        title: texts.t("pair.join_with_code"), identifier: "pair_join_with_code") {
+        [weak self] in self?.showCodeEntry()
+    }
+    /// The one action of the "pair again after the upgrade" warning.
+    private lazy var rejoinRow = PairingCells.button(
+        title: texts.t("pair.upgrade_rejoin_action"), identifier: "pair_join_with_code") {
+        [weak self] in self?.showCodeEntry()
+    }
+    private lazy var createRow = PairingCells.action(
+        title: texts.t("pair.create_home"), identifier: "pair_create_home") {
+        [weak self] in self?.createCluster()
+    }
+    private lazy var retryRow = PairingCells.button(
+        title: texts.t("pair.retry"), identifier: "pair_retry") {
+        [weak self] in self?.retryPersistence()
+    }
+    private lazy var submitRow = PairingCells.button(
+        title: texts.t("pair.join_with_code"), identifier: "pair_join_submit") {
+        [weak self] in self?.submitJoin()
+    }
+
+#if os(iOS)
+    private lazy var laterItem = barButton(texts.t("pair.later"), #selector(deferSetup),
+                                           "pair_later", style: .plain)
+    private lazy var doneItem = barButton(texts.t("editor.done"), #selector(deferSetup),
+                                          "pair_later", style: .done)
+    private lazy var backItem = barButton(texts.t("panel.back"), #selector(showStatus),
+                                          "pair_back", style: .plain)
+#else
+    private lazy var laterRow = PairingCells.action(
+        title: texts.t("pair.later"), identifier: "pair_later") {
+        [weak self] in self?.deferSetup()
+    }
+    private lazy var doneRow = PairingCells.action(
+        title: texts.t("editor.done"), identifier: "pair_later") {
+        [weak self] in self?.deferSetup()
+    }
+    private lazy var backRow = PairingCells.action(
+        title: texts.t("panel.back"), identifier: "pair_back") {
+        [weak self] in self?.showStatus()
+    }
+#endif
+
+    override var prefersLargeTitle: Bool { return false }
 
     init(core: CoreBridge, boot: BootConfig, texts: Texts) {
         self.core = core
@@ -79,12 +121,10 @@ final class PairingViewController: UIViewController {
         pollTimer?.invalidate()
         dismissTimer?.invalidate()
         core.removeHandler("pairing_gate")
-        NotificationCenter.default.removeObserver(self)
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = PairingTheme.background
         buildUi()
         core.addHandler("pairing_gate") { [weak self] ev in self?.onUiEvent(ev) }
         refresh(PairingSnapshot.load(core))
@@ -108,214 +148,83 @@ final class PairingViewController: UIViewController {
         pollTimer = nil
     }
 
-
     private func buildUi() {
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(scroll)
-        contentStack.axis = .vertical
-        contentStack.spacing = 16
-        contentStack.alignment = .center
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(contentStack)
-
-        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
-        let bottom = scroll.bottomAnchor.constraint(equalTo: guide.bottomAnchor)
-        keyboardInset = bottom
-        NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: guide.topAnchor),
-            scroll.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
-            bottom,
-            contentStack.topAnchor.constraint(equalTo: scroll.topAnchor, constant: 24),
-            contentStack.bottomAnchor.constraint(equalTo: scroll.bottomAnchor, constant: -24),
-            contentStack.centerXAnchor.constraint(equalTo: scroll.centerXAnchor),
-        ])
-        let columnWidth = contentStack.widthAnchor.constraint(equalTo: scroll.widthAnchor,
-                                                              constant: -48)
-        columnWidth.priority = UILayoutPriority(999)
-        columnWidth.isActive = true
-
         titleLabel.text = texts.t("pair.title_unpaired")
-        titleLabel.font = .boldSystemFont(ofSize: PairingTheme.titleSize)
-        titleLabel.textColor = PairingTheme.foreground
         titleLabel.textAlignment = .center
-        titleLabel.numberOfLines = 0
         titleLabel.accessibilityIdentifier = "pair_title"
-
-        identityLabel.font = .systemFont(ofSize: PairingTheme.smallSize)
-        identityLabel.textColor = PairingTheme.dim
+        titleLabel.accessibilityTraits = .header
         identityLabel.textAlignment = .center
-        identityLabel.numberOfLines = 0
+        let heading = UIStackView(arrangedSubviews: [titleLabel, identityLabel])
+        heading.axis = .vertical
+        heading.spacing = 6
+        heading.translatesAutoresizingMaskIntoConstraints = false
+        headerView.addSubview(heading)
+        headerView.layoutMargins = UIEdgeInsets(top: 0, left: 20, bottom: 0, right: 20)
+        let margins = headerView.layoutMarginsGuide
+        let bottom = heading.bottomAnchor.constraint(equalTo: headerView.bottomAnchor,
+                                                     constant: -8)
+        bottom.priority = UILayoutPriority(999)
+        let trailing = heading.trailingAnchor.constraint(equalTo: margins.trailingAnchor)
+        trailing.priority = UILayoutPriority(999)
+        NSLayoutConstraint.activate([
+            heading.topAnchor.constraint(equalTo: headerView.topAnchor, constant: 16),
+            heading.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
+            trailing,
+            bottom,
+        ])
+        setHeader(headerView)
 
-        spinner.color = PairingTheme.foreground
-        spinner.hidesWhenStopped = true
-
-        statusLabel.font = .systemFont(ofSize: PairingTheme.bodySize, weight: .semibold)
-        statusLabel.textColor = PairingTheme.foreground
-        statusLabel.textAlignment = .center
-        statusLabel.numberOfLines = 0
-        statusLabel.accessibilityIdentifier = "pair_status"
-
-        hintLabel.font = .systemFont(ofSize: PairingTheme.smallSize)
-        hintLabel.textColor = PairingTheme.dim
-        hintLabel.textAlignment = .center
-        hintLabel.numberOfLines = 0
-
-        errorLabel.font = .systemFont(ofSize: PairingTheme.bodySize, weight: .semibold)
-        errorLabel.textColor = PairingTheme.danger
-        errorLabel.textAlignment = .center
-        errorLabel.numberOfLines = 0
-        errorLabel.isHidden = true
-        errorLabel.accessibilityIdentifier = "pair_error"
-
-        detailLabel.font = .systemFont(ofSize: PairingTheme.smallSize)
-        detailLabel.textColor = PairingTheme.dim
-        detailLabel.textAlignment = .center
-        detailLabel.numberOfLines = 0
-        detailLabel.isHidden = true
-
-        confirmCaption.text = texts.t("pair.confirm_code_caption")
-        confirmCaption.font = .systemFont(ofSize: PairingTheme.smallSize)
-        confirmCaption.textColor = PairingTheme.dim
-        confirmCaption.textAlignment = .center
-        confirmCaption.numberOfLines = 0
-        confirmLabel.font = .monospacedDigitSystemFont(ofSize: PairingTheme.titleSize * 1.4,
-                                                       weight: .bold)
-        confirmLabel.textColor = PairingTheme.foreground
+        confirmLabel.font = SystemStyle.digits(size: PairingTheme.codeSize, weight: .semibold)
         confirmLabel.textAlignment = .center
-        confirmLabel.accessibilityIdentifier = "pair_confirm_code"
         confirmLabel.adjustsFontSizeToFitWidth = true
-
-        buildCodeEntryCard()
-
-        joinButton.addTarget(self, action: #selector(showCodeEntry),
-                             for: .primaryActionTriggered)
-        joinButton.accessibilityIdentifier = "pair_join_with_code"
-        createButton.addTarget(self, action: #selector(createCluster),
-                               for: .primaryActionTriggered)
-        createButton.accessibilityIdentifier = "pair_create_home"
-        laterButton.addTarget(self, action: #selector(deferSetup), for: .primaryActionTriggered)
-        laterButton.accessibilityIdentifier = "pair_later"
-        retryButton.addTarget(self, action: #selector(retryPersistence),
-                              for: .primaryActionTriggered)
-        retryButton.accessibilityIdentifier = "pair_retry"
-        codeCard.onNewCode = { [weak self] in self?.startCodeCard() }
-
-        actionStack.axis = .vertical
-        actionStack.spacing = 12
-        actionStack.alignment = .fill
-
-        let statusRow = UIStackView(arrangedSubviews: [spinner, statusLabel])
-        statusRow.axis = .horizontal
-        statusRow.spacing = 12
-        statusRow.alignment = .center
-
-        for element in [titleLabel, identityLabel, confirmCaption, confirmLabel, statusRow,
-                        hintLabel, errorLabel, detailLabel,
-                        qrCard, codeCard, codeEntryCard, actionStack] as [UIView] {
-            contentStack.addArrangedSubview(element)
-            element.translatesAutoresizingMaskIntoConstraints = false
+        confirmLabel.minimumScaleFactor = 0.5
+        confirmLabel.accessibilityIdentifier = "pair_confirm_code"
+        confirmRow.decorate = { [unowned self] in
+            self.confirmLabel.textColor = SystemStyle.label
         }
-        // Every element that carries text takes the whole column. `contentStack` centres its
-        // children, so anything left out of this list is laid out at its intrinsic width instead:
-        // a multi-line label inside a horizontal row has no useful intrinsic width and collapses
-        // to a couple of characters per line, which is what the status row did on an iPad mini.
-        for wide in [titleLabel, identityLabel, confirmCaption, confirmLabel, statusRow,
-                     hintLabel, errorLabel, detailLabel,
-                     qrCard, codeCard, codeEntryCard, actionStack] as [UIView] {
-            wide.widthAnchor.constraint(equalTo: contentStack.widthAnchor).isActive = true
+        confirmRow.paint()
+
+#if os(iOS)
+        hostRow.onReturn = { [weak self] in self?.pinRow.focus() }
+        pinRow.onReturn = { [weak self] in self?.submitJoin() }
+        hostRow.field.keyboardType = .numbersAndPunctuation
+        hostRow.field.returnKeyType = .next
+        pinRow.field.keyboardType = .numberPad
+#else
+        hostRow.keyboardType = .numbersAndPunctuation
+        pinRow.keyboardType = .numberPad
+        for field in [hostRow, pinRow] {
+            field.presenter = self
+            field.confirmTitle = texts.t("editor.ok")
+            field.cancelTitle = texts.t("admin.cancel")
         }
-        contentStack.widthAnchor.constraint(
-            lessThanOrEqualToConstant: PairingTheme.qrSize * 2.6).isActive = true
-        contentStack.widthAnchor.constraint(greaterThanOrEqualToConstant:
-                                            PairingTheme.qrSize).isActive = true
+#endif
+        codeRows.onNewCode = { [weak self] in self?.startCodeCard() }
+        codeRows.onChange = { [weak self] in self?.render() }
 
         NotificationCenter.default.addObserver(
             self, selector: #selector(onInvitation(_:)),
             name: .doorbellPairInvitation, object: nil)
+    }
+
 #if os(iOS)
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(keyboardWillChange(_:)),
-            name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(keyboardWillHide),
-            name: UIResponder.keyboardWillHideNotification, object: nil)
+    private func barButton(_ title: String, _ action: Selector, _ identifier: String,
+                           style: UIBarButtonItem.Style) -> UIBarButtonItem {
+        let item = UIBarButtonItem(title: title, style: style, target: self, action: action)
+        item.accessibilityIdentifier = identifier
+        return item
+    }
 #endif
+
+    override func styleDidChange() {
+        titleLabel.textColor = SystemStyle.label
+        identityLabel.textColor = SystemStyle.secondaryLabel
     }
 
-    private func buildCodeEntryCard() {
-        codeEntryCard.backgroundColor = PairingTheme.card
-        codeEntryCard.layer.cornerRadius = 14
-        codeEntryCard.isHidden = true
-
-        let addressLabel = PairingTheme.label(PairingTheme.smallSize, PairingTheme.dim)
-        addressLabel.text = texts.t("pair.address_label")
-        let codeLabel = PairingTheme.label(PairingTheme.smallSize, PairingTheme.dim)
-        codeLabel.text = texts.t("pair.code_label")
-        let instructions = PairingTheme.label(PairingTheme.smallSize, PairingTheme.dim)
-        instructions.text = texts.t("pair.code_instructions")
-
-        for field in [hostField, pinField] {
-            field.borderStyle = .roundedRect
-            field.backgroundColor = UIColor(white: 1, alpha: 0.12)
-            field.textColor = PairingTheme.foreground
-            field.font = UIFont.monospacedDigitSystemFont(ofSize: PairingTheme.bodySize,
-                                                          weight: .medium)
-            field.autocorrectionType = .no
-            field.autocapitalizationType = .none
-            field.delegate = self
-        }
-        hostField.placeholder = texts.t("pair.address_example")
-        hostField.keyboardType = .numbersAndPunctuation
-        hostField.accessibilityIdentifier = "pair_host_field"
-        pinField.placeholder = texts.t("pair.code_label")
-        pinField.keyboardType = .numberPad
-        pinField.accessibilityIdentifier = "pair_pin_field"
-
-        submitButton.addTarget(self, action: #selector(submitJoin), for: .primaryActionTriggered)
-        submitButton.accessibilityIdentifier = "pair_join_submit"
-        backButton.addTarget(self, action: #selector(showStatus), for: .primaryActionTriggered)
-
-        let stack = UIStackView(arrangedSubviews: [addressLabel, hostField, codeLabel, pinField,
-                                                   instructions, submitButton, backButton])
-        stack.axis = .vertical
-        stack.spacing = 10
-        stack.alignment = .fill
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        codeEntryCard.addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: codeEntryCard.topAnchor, constant: 16),
-            stack.bottomAnchor.constraint(equalTo: codeEntryCard.bottomAnchor, constant: -16),
-            stack.leadingAnchor.constraint(equalTo: codeEntryCard.leadingAnchor, constant: 18),
-            stack.trailingAnchor.constraint(equalTo: codeEntryCard.trailingAnchor, constant: -18),
-        ])
-
-#if os(tvOS)
-        // The remote has no numeric row; reuse the drawn keypad style used by the admin password.
-        pinField.isHidden = true
-        codeLabel.isHidden = true
-        let keypad = PairingKeypadView(texts: texts)
-        keypad.onChange = { [weak self] value in self?.pinField.text = value }
-        keypad.onSubmit = { [weak self] in self?.submitJoin() }
-        stack.insertArrangedSubview(keypad, at: 4)
-#endif
-    }
-
-
-    /// Renders one authoritative snapshot. Every visible element is derived from it.
+    /// Takes one authoritative snapshot and renders it. Every visible element is derived from it.
     private func refresh(_ next: PairingSnapshot) {
         guard next.hasSnapshot || snapshot.hasSnapshot else { return }
         if next.hasSnapshot { snapshot = next }
-        identityLabel.text = snapshot.identityLine()
-        statusLabel.isHidden = false
-        statusLabel.textColor = PairingTheme.foreground
-        qrCard.update(payload: snapshot.pairQr)
-        codeCard.update(snapshot)
-        let showsConfirmCode = screen == .status && snapshot.state == .unpaired &&
-            !snapshot.confirmCode.isEmpty
-        confirmLabel.text = PairingCopy.groupedCode(snapshot.confirmCode)
-        confirmLabel.isHidden = !showsConfirmCode
-        confirmCaption.isHidden = !showsConfirmCode
 
         if snapshot.state == .persistError { screen = .persistError }
         if screen == .persistError && snapshot.state != .persistError { screen = .status }
@@ -323,90 +232,141 @@ final class PairingViewController: UIViewController {
         // dismiss silently from behind the keyboard.
         if snapshot.state == .ready && screen == .codeEntry { screen = .status }
 
-        switch screen {
-        case .persistError:
-            titleLabel.text = texts.t("pair.persist_error_title")
-            statusLabel.text = texts.t("pair.persist_error_body")
-            hintLabel.text = ""
-            spinner.stopAnimating()
-            qrCard.isHidden = true
-            codeCard.isHidden = true
-            codeEntryCard.isHidden = true
-            setActions([retryButton])
-        case .codeEntry:
-            titleLabel.text = texts.t("pair.join_with_code")
-            statusLabel.text = joinInFlight ? texts.t("pair.joining") : ""
-            statusLabel.isHidden = !joinInFlight
-            hintLabel.text = ""
-            if joinInFlight { spinner.startAnimating() } else { spinner.stopAnimating() }
-            qrCard.isHidden = true
-            codeCard.isHidden = true
-            codeEntryCard.isHidden = false
-            submitButton.isEnabled = !joinInFlight
-            setActions([])
-        case .created:
-            titleLabel.text = texts.t("pair.created")
-            statusLabel.text = texts.t("pair.created_next")
-            statusLabel.isHidden = false
-            hintLabel.text = texts.t("pair.membership", "\(max(1, snapshot.memberCount))")
-            spinner.stopAnimating()
-            qrCard.isHidden = true
-            codeCard.isHidden = false
-            codeEntryCard.isHidden = true
-            setActions([laterButton])
-        case .status:
-            titleLabel.text = texts.t("pair.title_unpaired")
-            codeEntryCard.isHidden = true
-            codeCard.isHidden = true
-            qrCard.isHidden = false
-            statusLabel.isHidden = false
-            switch snapshot.state {
-            case .joining:
-                statusLabel.text = texts.t("pair.joining")
-                hintLabel.text = ""
-                spinner.startAnimating()
-                setActions([])
-            case .ready:
-                statusLabel.text = texts.t("pair.joined") + " ✓"
-                statusLabel.textColor = PairingTheme.ok
-                hintLabel.text = ""
-                spinner.stopAnimating()
-                qrCard.isHidden = true
-                setActions([])
-            case .revoked:
-                statusLabel.text = texts.t("pair.revoked")
-                hintLabel.text = ""
-                spinner.stopAnimating()
-                setActions([])
-            default:
-                if snapshot.upgradeRejoinRequired {
-                    // Paired under protocol v2: the old key no longer opens the cluster, but the
-                    // local history is kept. Joining again is the only way back.
-                    titleLabel.text = texts.t("pair.upgrade_title")
-                    statusLabel.text = texts.t("pair.upgrade_body")
-                } else {
-                    statusLabel.text = texts.t("pair.searching")
-                }
-                hintLabel.text = texts.t("pair.searching_hint")
-                spinner.startAnimating()
-                setActions([joinButton, createButton, laterButton])
-            }
-        }
-
+        render()
         if snapshot.state == .ready && screen != .created { finish() }
     }
 
-    private func setActions(_ buttons: [UIButton]) {
-        let current = actionStack.arrangedSubviews
-        let unchanged = current.count == buttons.count &&
-            !zip(current, buttons).contains { $0 !== $1 }
-        guard !unchanged else { return }
-        for view in current {
-            actionStack.removeArrangedSubview(view)
-            view.removeFromSuperview()
+    private enum Trailing {
+        case none
+        case later
+        case done
+    }
+
+    private func render() {
+        qrRow.update(payload: snapshot.pairQr)
+        codeRows.update(snapshot)
+        confirmLabel.text = PairingCopy.groupedCode(snapshot.confirmCode)
+        confirmRow.note = snapshot.confirmCode
+        errorRow.cell.textLabel?.text = errorText
+        errorRow.cell.detailTextLabel?.text = errorDetail
+        let errors = errorText == nil ? [] : [errorRow]
+
+        var title = texts.t("pair.title_unpaired")
+        var sections: [PairingSection] = []
+        var trailing = Trailing.none
+        var back = false
+        let qrSection = PairingSection(footer: texts.t("pair.qr_caption"), rows: [qrRow.row])
+
+        switch screen {
+        case .persistError:
+            title = texts.t("pair.persist_error_title")
+            setStatus(texts.t("pair.persist_error_body"), notice: .negative)
+            sections.append(PairingSection(rows: [statusRow] + errors))
+            sections.append(PairingSection(rows: [retryRow]))
+        case .codeEntry:
+            title = texts.t("pair.join_with_code")
+            back = true
+            if let cluster = pendingInvitation?.cluster, !cluster.isEmpty {
+                inviteRow.cell.textLabel?.text = texts.t("pair.invite_cluster", cluster)
+                sections.append(PairingSection(rows: [inviteRow]))
+            }
+            sections.append(PairingSection(footer: texts.t("pair.code_instructions"),
+                                           rows: [hostRow.row, pinRow.row]))
+            setStatus(texts.t("pair.joining"), busy: true)
+            let progress = (joinInFlight ? [statusRow] : []) + errors
+            if !progress.isEmpty { sections.append(PairingSection(rows: progress)) }
+            submitRow.isEnabled = !joinInFlight
+            sections.append(PairingSection(rows: [submitRow]))
+        case .created:
+            title = texts.t("pair.created")
+            trailing = .done
+            setStatus(texts.t("pair.created_next"))
+            sections.append(PairingSection(
+                footer: texts.t("pair.membership", "\(max(1, snapshot.memberCount))"),
+                rows: [statusRow] + errors))
+            sections += codeRows.sections()
+        case .status:
+            switch snapshot.state {
+            case .joining:
+                setStatus(texts.t("pair.joining"), busy: true)
+                sections.append(PairingSection(rows: [statusRow] + errors))
+                sections.append(qrSection)
+            case .ready:
+                setStatus(texts.t("pair.joined"), tone: .positive, done: true)
+                sections.append(PairingSection(rows: [statusRow] + errors))
+            case .revoked:
+                setStatus(texts.t("pair.revoked"))
+                sections.append(PairingSection(rows: [statusRow] + errors))
+                sections.append(qrSection)
+            default:
+                trailing = .later
+                let confirm = snapshot.state == .unpaired && !snapshot.confirmCode.isEmpty
+                    ? [PairingSection(footer: texts.t("pair.confirm_code_caption"),
+                                      rows: [confirmRow])] : []
+                if snapshot.upgradeRejoinRequired {
+                    // Paired under protocol v2: the old key no longer opens the cluster, but the
+                    // local history is kept. Joining again is the only way back, so the warning
+                    // leads and carries the one action.
+                    title = texts.t("pair.upgrade_title")
+                    setStatus(texts.t("pair.upgrade_body"), notice: .warning)
+                    sections.append(PairingSection(footer: texts.t("pair.searching_hint"),
+                                                   rows: [statusRow] + errors))
+                    sections.append(PairingSection(rows: [rejoinRow]))
+                    sections += confirm
+                    sections.append(qrSection)
+                    sections.append(PairingSection(rows: [createRow]))
+                } else {
+                    setStatus(texts.t("pair.searching"), busy: true)
+                    sections += confirm
+                    sections.append(PairingSection(footer: texts.t("pair.searching_hint"),
+                                                   rows: [statusRow] + errors))
+                    sections.append(qrSection)
+                    sections.append(PairingSection(rows: [joinRow, createRow]))
+                }
+            }
         }
-        for button in buttons { actionStack.addArrangedSubview(button) }
-        actionStack.isHidden = buttons.isEmpty
+
+#if os(iOS)
+        let right: UIBarButtonItem?
+        switch trailing {
+        case .none: right = nil
+        case .later: right = laterItem
+        case .done: right = doneItem
+        }
+        if barItem.rightBarButtonItem !== right { barItem.rightBarButtonItem = right }
+        let left = back ? backItem : nil
+        if barItem.leftBarButtonItem !== left { barItem.leftBarButtonItem = left }
+#else
+        switch trailing {
+        case .none: break
+        case .later: sections.append(PairingSection(rows: [laterRow]))
+        case .done: sections.append(PairingSection(rows: [doneRow]))
+        }
+        if back { sections.append(PairingSection(rows: [backRow])) }
+#endif
+
+        let identity = snapshot.identityLine()
+        if titleLabel.text != title || identityLabel.text != identity {
+            titleLabel.text = title
+            identityLabel.text = identity
+            identityLabel.isHidden = identity.isEmpty
+            headerChanged()
+        }
+        setSections(sections)
+    }
+
+    /// The status row: progress, a finished state, or the leading notice of a warning state.
+    private func setStatus(_ text: String, busy: Bool = false, tone: PairingTone = .primary,
+                           done: Bool = false, notice: PairingTone? = nil) {
+        let cell = statusRow.cell
+        cell.textLabel?.text = text
+        if statusRow.tone != tone { statusRow.tone = tone }
+        PairingCells.setBusy(busy, statusRow, spinner: spinner)
+        let accessory: UITableViewCell.AccessoryType = done ? .checkmark : .none
+        if cell.accessoryType != accessory { cell.accessoryType = accessory }
+        let icon = notice == nil ? nil : TablerIcon.image("TablerAlertTriangle")
+        if (cell.imageView?.image == nil) != (icon == nil) { cell.imageView?.image = icon }
+        cell.imageView?.tintColor = notice?.color
     }
 
     /// Success is confirmed on screen before the gate closes; it is never a toast.
@@ -422,18 +382,19 @@ final class PairingViewController: UIViewController {
     }
 
     private func showError(code: String) {
-        errorLabel.text = PairingCopy.error(texts, code)
-        errorLabel.isHidden = false
-        let detail = PairingCopy.errorDetail(texts, code)
-        detailLabel.text = detail
-        detailLabel.isHidden = detail.isEmpty
+        errorText = PairingCopy.error(texts, code)
+        errorDetail = PairingCopy.errorDetail(texts, code)
+    }
+
+    private func showError(text: String) {
+        errorText = text
+        errorDetail = ""
     }
 
     private func clearError() {
-        errorLabel.isHidden = true
-        detailLabel.isHidden = true
+        errorText = nil
+        errorDetail = ""
     }
-
 
     private func onUiEvent(_ ev: [String: Any]) {
         switch ConfigUtil.evStr(ev, "t") {
@@ -464,7 +425,6 @@ final class PairingViewController: UIViewController {
         }
     }
 
-
     // MARK: - Invitations that arrive as a doorbell://pair link
 
     @objc private func onInvitation(_ note: Notification) {
@@ -494,9 +454,7 @@ final class PairingViewController: UIViewController {
         case .missingHost: key = "pair.invite_missing_host"
         case .notAPairUri: key = "pair.invite_invalid"
         }
-        errorLabel.text = texts.t(key)
-        errorLabel.isHidden = false
-        detailLabel.isHidden = true
+        showError(text: texts.t(key))
         refresh(snapshot)
     }
 
@@ -523,26 +481,21 @@ final class PairingViewController: UIViewController {
     private func fill(_ invitation: PairUri) {
         clearError()
         pendingInvitation = invitation
-        hostField.text = invitation.host
-        pinField.text = invitation.pin
+        hostRow.text = invitation.host
+        pinRow.text = invitation.pin
         screen = .codeEntry
-        submitButton.setTitle(texts.t("pair.invite_join"), for: .normal)
-        if !invitation.cluster.isEmpty {
-            detailLabel.text = texts.t("pair.invite_cluster", invitation.cluster)
-            detailLabel.isHidden = false
-        }
+        submitRow.setTitle(texts.t("pair.invite_join"))
         refresh(snapshot)
     }
 
-    @objc private func showCodeEntry() {
+    private func showCodeEntry() {
         pendingInvitation = nil
-        submitButton.setTitle(texts.t("pair.join_with_code"), for: .normal)
+        submitRow.setTitle(texts.t("pair.join_with_code"))
         clearError()
         screen = .codeEntry
         refresh(snapshot)
-#if os(iOS)
-        hostField.becomeFirstResponder()
-#endif
+        table.layoutIfNeeded()
+        hostRow.focus()
     }
 
     @objc private func showStatus() {
@@ -552,14 +505,13 @@ final class PairingViewController: UIViewController {
         refresh(snapshot)
     }
 
-    @objc private func submitJoin() {
+    private func submitJoin() {
         view.endEditing(true)
-        let host = (hostField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-        let pin = (pinField.text ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        let host = hostRow.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let pin = pinRow.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !host.isEmpty, pin.count == 6, pin.allSatisfy({ $0.isNumber }) else {
-            errorLabel.text = texts.t("setup.join_required")
-            errorLabel.isHidden = false
-            detailLabel.isHidden = true
+            showError(text: texts.t("setup.join_required"))
+            render()
             return
         }
         if let invitation = pendingInvitation, invitation.expiresAtS > 0,
@@ -575,7 +527,7 @@ final class PairingViewController: UIViewController {
         core.joinCluster(host: host, pin: pin)
     }
 
-    @objc private func createCluster() {
+    private func createCluster() {
         let alert = UIAlertController(title: texts.t("pair.create_home"),
                                       message: texts.t("pair.create_home_confirm"),
                                       preferredStyle: .alert)
@@ -587,8 +539,8 @@ final class PairingViewController: UIViewController {
             self.createConfirmed = true
             guard self.core.createCluster() else {
                 self.createConfirmed = false
-                self.errorLabel.text = self.texts.t("setup.new_cluster_failed")
-                self.errorLabel.isHidden = false
+                self.showError(text: self.texts.t("setup.new_cluster_failed"))
+                self.render()
                 return
             }
             self.refresh(PairingSnapshot.load(self.core))
@@ -596,21 +548,20 @@ final class PairingViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    /// After creating a cluster the code card must already be live, so the user can add the next
-    /// device without hunting for a menu. The screen never auto-dismisses here.
-    /// After 「この端末で新規作成」 the founder shows the PIN card and its own QR, and nothing is
-    /// added automatically: minting a PIN is separate from opening the bulk-add window.
+    /// After creating a cluster the PIN section must already be live, so the user can add the
+    /// next device without hunting for a menu. The screen never auto-dismisses here, and nothing
+    /// is added automatically: minting a PIN is separate from opening the bulk-add window.
     private func startCodeCard() {
         guard core.supportsMintJoinToken else {
-            errorLabel.text = texts.t("pair.pin_unavailable")
-            errorLabel.isHidden = false
+            showError(text: texts.t("pair.pin_unavailable"))
+            render()
             return
         }
         _ = core.mintJoinToken(seconds: 600)
         refresh(PairingSnapshot.load(core))
     }
 
-    @objc private func retryPersistence() {
+    private func retryPersistence() {
         clearError()
         core.retryPairingPersistence()
         refresh(PairingSnapshot.load(core))
@@ -621,108 +572,11 @@ final class PairingViewController: UIViewController {
         onDefer?()
     }
 
-    /// Called by the host when the cluster was created through this screen so the code card is
+    /// Called by the host when the cluster was created through this screen so the PIN section is
     /// primed before the user is asked to add the next device.
     func enterCreatedState() {
         createConfirmed = true
         screen = .created
         startCodeCard()
     }
-
-
-#if os(iOS)
-    @objc private func keyboardWillChange(_ note: Notification) {
-        guard let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey]
-                            as? NSValue)?.cgRectValue else { return }
-        let overlap = max(0, view.bounds.maxY - view.convert(frame, from: nil).minY)
-        keyboardInset?.constant = -overlap
-        view.layoutIfNeeded()
-        // Keep the field the user is typing into above the keyboard.
-        scroll.scrollRectToVisible(codeEntryCard.frame, animated: true)
-    }
-
-    @objc private func keyboardWillHide() {
-        keyboardInset?.constant = 0
-        view.layoutIfNeeded()
-    }
-#endif
 }
-
-extension PairingViewController: UITextFieldDelegate {
-    func textFieldShouldReturn(_ textField: UITextField) -> Bool {
-        if textField === hostField {
-            pinField.becomeFirstResponder()
-        } else {
-            submitJoin()
-        }
-        return true
-    }
-}
-
-#if os(tvOS)
-/// Focusable numeric keypad for remote-only devices. Mirrors the admin-password grid so the two
-/// entry surfaces behave identically.
-final class PairingKeypadView: UIView {
-    var onChange: ((String) -> Void)?
-    var onSubmit: (() -> Void)?
-
-    private let display = UILabel()
-    private var value = "" {
-        didSet {
-            display.text = value.isEmpty ? "······" : value
-            onChange?(value)
-        }
-    }
-
-    init(texts: Texts) {
-        super.init(frame: .zero)
-        display.font = UIFont.monospacedDigitSystemFont(ofSize: PairingTheme.codeSize,
-                                                        weight: .bold)
-        display.textColor = PairingTheme.accent
-        display.textAlignment = .center
-        display.text = "······"
-
-        let stack = UIStackView(arrangedSubviews: [display])
-        stack.axis = .vertical
-        stack.spacing = 10
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        for row in [["1", "2", "3"], ["4", "5", "6"], ["7", "8", "9"], ["back", "0", "ok"]] {
-            let line = UIStackView()
-            line.axis = .horizontal
-            line.spacing = 10
-            line.distribution = .fillEqually
-            for key in row {
-                let title = key == "back" ? "⌫" : (key == "ok" ? texts.t("pair.add") : key)
-                let button = PairingTheme.button(title, filled: key == "ok")
-                button.accessibilityIdentifier = "pair_key_\(key)"
-                button.addTarget(self, action: #selector(keyTapped(_:)),
-                                 for: .primaryActionTriggered)
-                line.addArrangedSubview(button)
-            }
-            stack.addArrangedSubview(line)
-        }
-        addSubview(stack)
-        NSLayoutConstraint.activate([
-            stack.topAnchor.constraint(equalTo: topAnchor),
-            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
-            stack.leadingAnchor.constraint(equalTo: leadingAnchor),
-            stack.trailingAnchor.constraint(equalTo: trailingAnchor),
-        ])
-    }
-
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    @objc private func keyTapped(_ sender: UIButton) {
-        guard let id = sender.accessibilityIdentifier?
-                .replacingOccurrences(of: "pair_key_", with: "") else { return }
-        switch id {
-        case "back":
-            if !value.isEmpty { value.removeLast() }
-        case "ok":
-            onSubmit?()
-        default:
-            if value.count < 6 { value += id }
-        }
-    }
-}
-#endif

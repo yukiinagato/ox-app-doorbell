@@ -27,79 +27,55 @@ protocol SettingsRefreshable: AnyObject {
 // MARK: - Styling shared by every settings screen
 
 enum SettingsStyle {
-    static func tableStyle() -> UITableView.Style {
-        #if os(iOS)
-        if #available(iOS 13.0, *) { return .insetGrouped }
-        #endif
-        return .grouped
-    }
+    static func tableStyle() -> UITableView.Style { return SystemStyle.tableStyle() }
 
+    /// Settings are stock tables: the system paints them, and `SystemStyle` fills in the static
+    /// colours on the systems that have no semantic ones. The palette argument stays for the
+    /// call sites that still pass one.
     static func apply(_ palette: DoorbellPalette, to table: UITableView) {
-        table.backgroundColor = palette.background
-        table.backgroundView = nil
-        #if os(iOS)
-        table.separatorColor = palette.separator
-        #endif
-        table.tintColor = palette.accent
-        table.estimatedRowHeight = 52
-        table.rowHeight = UITableView.automaticDimension
-        if #available(iOS 9.0, tvOS 9.0, *) { table.cellLayoutMarginsFollowReadableWidth = true }
+        SystemStyle.style(table)
     }
 
     static func apply(_ palette: DoorbellPalette, to cell: UITableViewCell) {
-        cell.backgroundColor = palette.surfaceSolid
-        cell.textLabel?.textColor = palette.ink
-        cell.detailTextLabel?.textColor = palette.inkMuted
-        cell.tintColor = palette.accent
-        let selected = UIView()
-        selected.backgroundColor = palette.surfaceStrongSolid
-        cell.selectedBackgroundView = selected
+        SystemStyle.style(cell)
     }
 
     static func apply(_ palette: DoorbellPalette, to bar: UINavigationBar) {
-        bar.barTintColor = palette.background
-        bar.tintColor = palette.accent
-        bar.isTranslucent = false
-        bar.titleTextAttributes = [.foregroundColor: palette.ink]
         #if os(iOS)
-        if #available(iOS 13.0, *) {
-            let appearance = UINavigationBarAppearance()
-            appearance.configureWithOpaqueBackground()
-            appearance.backgroundColor = palette.background
-            appearance.titleTextAttributes = [.foregroundColor: palette.ink]
-            appearance.largeTitleTextAttributes = [.foregroundColor: palette.ink]
-            bar.standardAppearance = appearance
-            bar.scrollEdgeAppearance = appearance
-            bar.compactAppearance = appearance
-        }
+        if #available(iOS 11.0, *) { bar.prefersLargeTitles = true }
+        if !SystemStyle.hasDynamicColors { bar.barStyle = SystemStyle.isDark ? .black : .default }
         #endif
     }
 
     static func header(_ palette: DoorbellPalette, _ view: UIView) {
-        guard let header = view as? UITableViewHeaderFooterView else { return }
-        header.textLabel?.textColor = palette.inkMuted
+        SystemStyle.style(headerFooter: view)
     }
 
     private static var iconCache: [String: UIImage] = [:]
 
-    /// The coloured rounded tile beside a category, drawn once per glyph.
+    /// The coloured rounded tile beside a category, as in the system Settings app: the vendored
+    /// Tabler icon in white on the category's colour. Composed from views and rendered once per
+    /// icon, so no glyph is drawn by hand.
     static func icon(_ icon: SettingIcon) -> UIImage? {
         let key = "\(icon.glyph)#\(icon.tint)"
         if let cached = iconCache[key] { return cached }
-        let size = CGSize(width: 30, height: 30)
-        UIGraphicsBeginImageContextWithOptions(size, false, 0)
+        let side: CGFloat = SettingsStyle.isTV ? 44 : 30
+        let tile = UIView(frame: CGRect(x: 0, y: 0, width: side, height: side))
+        tile.backgroundColor = UIColor(red: CGFloat((icon.tint >> 16) & 0xFF) / 255,
+                                       green: CGFloat((icon.tint >> 8) & 0xFF) / 255,
+                                       blue: CGFloat(icon.tint & 0xFF) / 255, alpha: 1)
+        tile.layer.cornerRadius = side * 0.23
+        tile.layer.masksToBounds = true
+        let glyph = UIImageView(image: TablerIcon.image(icon.glyph))
+        glyph.tintColor = .white
+        glyph.contentMode = .scaleAspectFit
+        glyph.frame = tile.bounds.insetBy(dx: side * 0.17, dy: side * 0.17)
+        tile.addSubview(glyph)
+        UIGraphicsBeginImageContextWithOptions(tile.bounds.size, false, 0)
         defer { UIGraphicsEndImageContext() }
-        let color = UIColor(red: CGFloat((icon.tint >> 16) & 0xFF) / 255,
-                            green: CGFloat((icon.tint >> 8) & 0xFF) / 255,
-                            blue: CGFloat(icon.tint & 0xFF) / 255, alpha: 1)
-        color.setFill()
-        UIBezierPath(roundedRect: CGRect(origin: .zero, size: size), cornerRadius: 7).fill()
-        let glyph = icon.glyph as NSString
-        let attributes: [NSAttributedString.Key: Any] = [.font: UIFont.systemFont(ofSize: 18)]
-        let measured = glyph.size(withAttributes: attributes)
-        glyph.draw(at: CGPoint(x: (size.width - measured.width) / 2,
-                               y: (size.height - measured.height) / 2), withAttributes: attributes)
-        let image = UIGraphicsGetImageFromCurrentImageContext()
+        guard let context = UIGraphicsGetCurrentContext() else { return nil }
+        tile.layer.render(in: context)
+        let image = UIGraphicsGetImageFromCurrentImageContext()?.withRenderingMode(.alwaysOriginal)
         if let image = image { iconCache[key] = image }
         return image
     }
@@ -139,6 +115,8 @@ final class SettingsCategoryListController: UITableViewController, SettingsRefre
     private var selectedId: String?
     private var query = ""
     var onClose: (() -> Void)?
+    /// False in the Settings tab, where there is nothing to close.
+    var showsClose = true
     #if os(iOS)
     private let search = UISearchBar()
     #endif
@@ -157,16 +135,18 @@ final class SettingsCategoryListController: UITableViewController, SettingsRefre
         SettingsStyle.apply(host.palette, to: tableView)
         tableView.accessibilityIdentifier = "settings_categories"
         #if os(iOS)
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title: host.texts.t("settings.close"),
-                                                           style: .done, target: self,
-                                                           action: #selector(close))
-        navigationItem.leftBarButtonItem?.accessibilityIdentifier = "settings_close"
+        if showsClose {
+            navigationItem.leftBarButtonItem = UIBarButtonItem(
+                title: host.texts.t("settings.close"), style: .done, target: self,
+                action: #selector(close))
+            navigationItem.leftBarButtonItem?.accessibilityIdentifier = "settings_close"
+        }
         #endif
         #if os(iOS)
         search.placeholder = host.texts.t("prefs.search")
         search.delegate = self
         search.autocapitalizationType = .none
-        search.barTintColor = host.palette.background
+        search.searchBarStyle = .minimal
         search.sizeToFit()
         tableView.tableHeaderView = search
         #endif
@@ -210,7 +190,7 @@ final class SettingsCategoryListController: UITableViewController, SettingsRefre
     @objc private func close() { onClose?() }
 
     override func numberOfSections(in tableView: UITableView) -> Int {
-        return SettingsStyle.isTV ? 2 : 1
+        return SettingsStyle.isTV && showsClose ? 2 : 1
     }
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
@@ -385,7 +365,6 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
             #if os(iOS)
             let toggle = UISwitch()
             toggle.isOn = on
-            toggle.onTintColor = palette.accent
             toggle.accessibilityIdentifier = item.id + "_switch"
             toggle.addTarget(self, action: #selector(toggled(_:)), for: .valueChanged)
             cell.accessoryView = toggle
@@ -401,7 +380,6 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
             stepper.maximumValue = Double(maximum)
             stepper.stepValue = Double(step)
             stepper.value = Double(value)
-            stepper.tintColor = palette.accent
             stepper.accessibilityIdentifier = item.id + "_stepper"
             stepper.addTarget(self, action: #selector(stepped(_:)), for: .valueChanged)
             cell.accessoryView = stepper
@@ -433,8 +411,10 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
             cell.detailTextLabel?.text = value
             cell.selectionStyle = .none
         case .action(let destructive):
-            cell.textLabel?.textColor = destructive ? palette.danger : palette.accent
-            cell.textLabel?.textAlignment = .center
+            // A destructive action is red and reads from the leading edge like any other row; it
+            // closes its section.
+            cell.textLabel?.textColor = destructive ? SystemStyle.negative : SystemStyle.tint
+            cell.accessibilityTraits = .button
         case .page, .list, .shell:
             cell.detailTextLabel?.text = item.detail
             cell.accessoryType = .disclosureIndicator
@@ -551,13 +531,14 @@ final class SettingsSliderCell: UITableViewCell {
         super.init(style: .default, reuseIdentifier: nil)
         SettingsStyle.apply(palette, to: self)
         selectionStyle = .none
-        title.textColor = palette.ink
-        valueLabel.textColor = palette.inkMuted
-        valueLabel.font = .monospacedDigitSystemFont(ofSize: 17, weight: .regular)
-        detail.textColor = palette.inkMuted
-        detail.font = .systemFont(ofSize: 13)
+        title.font = SystemStyle.font(.body)
+        title.textColor = SystemStyle.label
+        title.numberOfLines = 0
+        valueLabel.textColor = SystemStyle.secondaryLabel
+        valueLabel.font = SystemStyle.digits(size: 17, weight: .regular)
+        detail.textColor = SystemStyle.secondaryLabel
+        detail.font = SystemStyle.font(.footnote)
         detail.numberOfLines = 0
-        slider.minimumTrackTintColor = palette.accent
         let top = UIStackView(arrangedSubviews: [title, UIView(), valueLabel])
         top.axis = .horizontal
         let stack = UIStackView(arrangedSubviews: [top, slider, detail])
@@ -618,9 +599,9 @@ final class SettingsSegmentCell: UITableViewCell {
         super.init(style: .default, reuseIdentifier: nil)
         SettingsStyle.apply(palette, to: self)
         selectionStyle = .none
-        title.textColor = palette.ink
+        title.font = SystemStyle.font(.body)
+        title.textColor = SystemStyle.label
         title.numberOfLines = 0
-        control.tintColor = palette.accent
         let stack = UIStackView(arrangedSubviews: [title, control])
         stack.axis = .vertical
         stack.spacing = 8
@@ -667,7 +648,8 @@ final class SettingsSecretCell: UITableViewCell, UITextFieldDelegate {
         SettingsStyle.apply(palette, to: self)
         selectionStyle = .none
         field.isSecureTextEntry = true
-        field.textColor = palette.ink
+        field.textColor = SystemStyle.label
+        field.font = SystemStyle.font(.body)
         field.autocorrectionType = .no
         field.autocapitalizationType = .none
         field.clearButtonMode = .whileEditing
@@ -745,7 +727,7 @@ final class SettingsChoiceController: UITableViewController {
         SettingsStyle.apply(host.palette, to: tableView)
         #if os(iOS)
         if isSearchable {
-            search.barTintColor = host.palette.background
+            search.searchBarStyle = .minimal
             tableView.tableHeaderView = search
         }
         #endif
@@ -942,7 +924,8 @@ final class SettingsTextController: UITableViewController, UITextFieldDelegate {
         SettingsStyle.apply(host.palette, to: tableView)
         field.text = initial
         field.placeholder = placeholder
-        field.textColor = host.palette.ink
+        field.textColor = SystemStyle.label
+        field.font = SystemStyle.font(.body)
         field.isSecureTextEntry = secure
         field.autocorrectionType = .no
         field.autocapitalizationType = .none
@@ -1044,18 +1027,15 @@ final class SettingsTimeController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         guard let host = host else { return }
-        view.backgroundColor = host.palette.background
+        view.backgroundColor = SystemStyle.groupedBackground
         #if os(iOS)
         picker.datePickerMode = .time
         // 24-hour wheels in every UI language; the stored value is always HH:mm.
         picker.locale = Locale(identifier: "en_GB")
         picker.timeZone = TimeZone(secondsFromGMT: 0)
         if #available(iOS 13.4, *) { picker.preferredDatePickerStyle = .wheels }
-        if #available(iOS 13.0, *) {
-            picker.overrideUserInterfaceStyle = host.palette.appearance == .dark ? .dark : .light
-        } else {
-            picker.setValue(host.palette.ink, forKey: "textColor")
-        }
+        // The wheels have no semantic colour before iOS 13.
+        if !SystemStyle.hasDynamicColors { picker.setValue(SystemStyle.label, forKey: "textColor") }
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!
         let minutes = SettingValidation.minutes(ofClock: value) ?? 0
@@ -1139,7 +1119,7 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
             search.delegate = self
             search.autocapitalizationType = .none
             search.autocorrectionType = .no
-            search.barTintColor = host.palette.background
+            search.searchBarStyle = .minimal
             search.sizeToFit()
             tableView.tableHeaderView = search
         }
@@ -1173,7 +1153,7 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
         SettingsStyle.apply(host.palette, to: cell)
         guard indexPath.section == 0 else {
             cell.textLabel?.text = model.addTitle
-            cell.textLabel?.textColor = host.palette.accent
+            cell.textLabel?.textColor = SystemStyle.tint
             cell.accessibilityIdentifier = model.id + "_add"
             return cell
         }
@@ -1186,7 +1166,6 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
         if let enabled = row.enabled, row.toggle != nil {
             let toggle = UISwitch()
             toggle.isOn = enabled
-            toggle.onTintColor = host.palette.accent
             toggle.tag = indexPath.row
             toggle.addTarget(self, action: #selector(rowToggled(_:)), for: .valueChanged)
             cell.accessoryView = toggle
@@ -1302,15 +1281,14 @@ final class SettingsWebAdminController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = palette.background
+        view.backgroundColor = SystemStyle.groupedBackground
         let note = UILabel()
         note.text = reason.isEmpty ? texts.t("web_admin.scan_hint")
             : reason + "\n\n" + texts.t("web_admin.scan_hint")
-        note.textColor = palette.inkMuted
+        note.textColor = SystemStyle.secondaryLabel
         note.numberOfLines = 0
         note.textAlignment = .center
         let card = AdminQrView(core: core, boot: boot, texts: texts, compact: false)
-        card.skin = DoorbellSkin.plain(palette)
         card.reload()
         let stack = UIStackView(arrangedSubviews: [note, card])
         stack.axis = .vertical

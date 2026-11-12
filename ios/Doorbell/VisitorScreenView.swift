@@ -23,7 +23,7 @@ final class VisitorScreenView: UIView {
     private let callButton: UIButton
     private let langBar: UIView
     private let purposeSection: UIView
-    private let sosControl: SosSlideControl
+    private let sosControl: UIView
 
     private let root = UIStackView()
     private let scroll = UIScrollView()
@@ -66,7 +66,7 @@ final class VisitorScreenView: UIView {
     private var skin = DoorbellSkin.plain(.dark)
 
     init(texts: Texts, callButton: UIButton, langBar: UIView, purposeSection: UIView,
-         sosControl: SosSlideControl) {
+         sosControl: UIView) {
         self.texts = texts
         self.callButton = callButton
         self.langBar = langBar
@@ -103,8 +103,7 @@ final class VisitorScreenView: UIView {
         cameraWarning.textAlignment = .center
         cameraWarning.accessibilityIdentifier = "visitor_camera_warning"
         cameraWarning.isHidden = true
-        noticeExpand.setTitle("▾", for: .normal)
-        noticeExpand.titleLabel?.font = .systemFont(ofSize: 22, weight: .bold)
+        noticeExpand.setImage(TablerIcon.image("TablerChevronDown"), for: .normal)
         noticeExpand.accessibilityIdentifier = "visitor_notice_expand"
         noticeExpand.addTarget(self, action: #selector(toggleNotice), for: .primaryActionTriggered)
         noticeExpand.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
@@ -136,9 +135,11 @@ final class VisitorScreenView: UIView {
         // as well as portrait. Only the call button is centred at its own size.
         actionColumn.alignment = .fill
 
-        // The bar keeps its own height; the spacer above it is what absorbs the slack.
+        // The trigger keeps its own size; the identity line takes the rest of the row.
         sosControl.setContentHuggingPriority(.required, for: .vertical)
+        sosControl.setContentHuggingPriority(.required, for: .horizontal)
         sosControl.setContentCompressionResistancePriority(.required, for: .vertical)
+        footerLabel.setContentHuggingPriority(.defaultLow, for: .horizontal)
 
         root.axis = .vertical
         root.spacing = 18
@@ -149,7 +150,10 @@ final class VisitorScreenView: UIView {
         scroll.showsVerticalScrollIndicator = true
         scroll.addSubview(root)
         addSubview(scroll)
-        footer.axis = .vertical
+        // The action zone's last line: the compact SOS trigger at the leading edge, where the role
+        // offers one, and the identity line beside it.
+        footer.axis = .horizontal
+        footer.alignment = .bottom
         footer.spacing = 12
         footer.translatesAutoresizingMaskIntoConstraints = false
         addSubview(footer)
@@ -196,8 +200,8 @@ final class VisitorScreenView: UIView {
             footer.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
-        footer.addArrangedSubview(footerLabel)
         if sosVisible { footer.addArrangedSubview(sosControl) }
+        footer.addArrangedSubview(footerLabel)
 
         let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel])
         clockColumn.axis = .vertical
@@ -346,7 +350,7 @@ final class VisitorScreenView: UIView {
 
     private func applyNoticeLines() {
         noticeLabel.numberOfLines = noticeExpanded ? 0 : 2
-        noticeExpand.setTitle(noticeExpanded ? "▴" : "▾", for: .normal)
+        noticeExpand.transform = noticeExpanded ? CGAffineTransform(rotationAngle: .pi) : .identity
         noticeExpand.accessibilityLabel = texts.t(noticeExpanded ? "notice.collapse" : "notice.expand")
     }
 
@@ -398,7 +402,7 @@ final class VisitorScreenView: UIView {
         for (region, label) in regions {
             skin.apply(region, to: label, quiet: region == "footer")
         }
-        noticeExpand.setTitleColor(noticeLabel.textColor, for: .normal)
+        noticeExpand.tintColor = noticeLabel.textColor
         applyCameraWarningSkin()
 
         let colors = DoorbellTheme.callButtonColors(display: skin.display,

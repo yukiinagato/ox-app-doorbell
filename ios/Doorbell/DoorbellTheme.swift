@@ -26,31 +26,35 @@ struct DoorbellPalette {
     let danger: UIColor
     let separator: UIColor
 
+    /// The static equivalents of the iOS system colours for each appearance. Stock controls take
+    /// the dynamic system colours themselves; these are what the shell uses where it has to do
+    /// arithmetic on a colour (contrast, compositing) or run on a system without them. The two
+    /// inks are also the pair the wallpaper's automatic contrast chooses between.
     static let dark = DoorbellPalette(
         appearance: .dark,
-        background: UIColor(red: 0.063, green: 0.078, blue: 0.094, alpha: 1),
-        surface: UIColor(white: 1, alpha: 0.10),
-        surfaceStrong: UIColor(white: 1, alpha: 0.16),
+        background: .black,
+        surface: UIColor(red: 0.110, green: 0.110, blue: 0.118, alpha: 1),
+        surfaceStrong: UIColor(red: 0.173, green: 0.173, blue: 0.180, alpha: 1),
         ink: UIColor(white: 0.94, alpha: 1),
         inkMuted: UIColor(white: 0.66, alpha: 1),
-        accent: UIColor(red: 1.0, green: 0.80, blue: 0.25, alpha: 1),
-        onAccent: .black,
-        notice: UIColor(red: 0.45, green: 0.75, blue: 1.0, alpha: 1),
-        danger: UIColor(red: 0.88, green: 0.36, blue: 0.30, alpha: 1),
-        separator: UIColor(white: 1, alpha: 0.12))
+        accent: UIColor(red: 0.039, green: 0.518, blue: 1.0, alpha: 1),
+        onAccent: .white,
+        notice: UIColor(red: 1.0, green: 0.624, blue: 0.039, alpha: 1),
+        danger: UIColor(red: 1.0, green: 0.271, blue: 0.227, alpha: 1),
+        separator: UIColor(red: 0.329, green: 0.329, blue: 0.345, alpha: 0.6))
 
     static let light = DoorbellPalette(
         appearance: .light,
-        background: UIColor(red: 0.97, green: 0.97, blue: 0.96, alpha: 1),
-        surface: UIColor(white: 0, alpha: 0.06),
-        surfaceStrong: UIColor(white: 0, alpha: 0.10),
+        background: UIColor(red: 0.949, green: 0.949, blue: 0.969, alpha: 1),
+        surface: .white,
+        surfaceStrong: UIColor(red: 0.898, green: 0.898, blue: 0.918, alpha: 1),
         ink: UIColor(red: 0.09, green: 0.10, blue: 0.12, alpha: 1),
         inkMuted: UIColor(red: 0.36, green: 0.38, blue: 0.41, alpha: 1),
-        accent: UIColor(red: 0.16, green: 0.33, blue: 0.72, alpha: 1),
+        accent: UIColor(red: 0.0, green: 0.478, blue: 1.0, alpha: 1),
         onAccent: .white,
-        notice: UIColor(red: 0.13, green: 0.36, blue: 0.60, alpha: 1),
-        danger: UIColor(red: 0.72, green: 0.16, blue: 0.13, alpha: 1),
-        separator: UIColor(white: 0, alpha: 0.14))
+        notice: UIColor(red: 1.0, green: 0.584, blue: 0.0, alpha: 1),
+        danger: UIColor(red: 1.0, green: 0.231, blue: 0.188, alpha: 1),
+        separator: UIColor(red: 0.235, green: 0.235, blue: 0.263, alpha: 0.29))
 
     static func of(_ appearance: DoorbellAppearance) -> DoorbellPalette {
         return appearance == .light ? .light : .dark

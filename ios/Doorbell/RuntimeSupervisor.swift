@@ -507,10 +507,12 @@ final class RuntimeSupervisor {
     }
 
     private func uiDefaults(for semanticId: String) -> [String: Any] {
-        var foreground = "#E8EDF2"
-        var background = "#1A2027"
-        var accent = "#4DA3FF"
-        var border = "#4DA3FF"
+        // The defaults an override starts from: the static equivalents of the system colours
+        // these controls are drawn in (label on fill, white on the negative role).
+        var foreground = "#000000"
+        var background = "#E9E9EB"
+        var accent = "#007AFF"
+        var border = "#007AFF"
         var radius = 12
         switch semanticId {
         case "call.primary":
@@ -519,12 +521,18 @@ final class RuntimeSupervisor {
             accent = "#000000"
             border = "#000000"
             radius = 18
-        case "call.end", "sos.trigger":
+        case "call.end":
             foreground = "#FFFFFF"
-            background = "#C7291F"
+            background = "#FF3B30"
             accent = "#FFFFFF"
             border = "#FFFFFF"
             radius = 14
+        case "sos.trigger":
+            foreground = "#FF3B30"
+            background = "#FFFFFF"
+            accent = "#FF3B30"
+            border = "#FF3B30"
+            radius = 10
         case "sos.cancel":
             foreground = "#8C0D0A"
             background = "#FFFFFF"
@@ -532,13 +540,11 @@ final class RuntimeSupervisor {
             border = "#8C0D0A"
             radius = 14
         case "ring.title":
-            foreground = "#FFFFFF"
-            background = "#0A0D12"
+            foreground = "#000000"
+            background = "#FFFFFF"
         case "status.offline":
-            foreground = "#FFFFFF"
-            background = "#A21B00"
-            accent = "#FFFFFF"
-            border = "#FFFFFF"
+            foreground = "#000000"
+            background = "#FFFFFF"
         default:
             break
         }
@@ -656,6 +662,8 @@ final class RuntimeSupervisor {
 /// scheduled, so a shipped panel does not touch the file system for this at all.
 final class ScreenshotResponder {
 
+    static let showScreen = Notification.Name("doorbell.debugShowScreen")
+
     private let requestPath: String
     private let imagePath: String
     private var timer: Timer?
@@ -690,7 +698,15 @@ final class ScreenshotResponder {
         // A panel left alone goes to its screensaver, and from then on every capture is a black
         // screen with a clock on it. `wake` asks for what a finger would have done, idle timer
         // included; an empty request captures whatever is actually on screen.
-        guard body.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "wake" else {
+        let request = body.trimmingCharacters(in: .whitespacesAndNewlines)
+        // `screen:<name>` asks the shell to put one of its screens up for a capture taken by the
+        // next request. Like everything here it exists only while boot.json opts in.
+        if request.lowercased().hasPrefix("screen:") {
+            NotificationCenter.default.post(name: ScreenshotResponder.showScreen,
+                                            object: String(request.dropFirst("screen:".count)))
+            return
+        }
+        guard request.lowercased() == "wake" else {
             capture()
             return
         }

@@ -1,12 +1,14 @@
 // "Add device" panel for a device that is already a cluster member (spec §5.1).
 //
-// Replaces the old alert chain. Everything on screen comes from one authoritative
-// `db_core_pairing_json` snapshot plus the pairing events; the panel never infers an outcome.
+// Everything on screen comes from one authoritative `db_core_pairing_json` snapshot plus the
+// pairing events; the panel never infers an outcome. It is one grouped table under the stock
+// navigation bar: membership, nearby devices, the Pairing PIN, bulk add, the QR paths, and the
+// destructive "clear pairing" action last.
 // Reached from the visible membership status behind the admin password, and still from the
 // hidden diagnostics screen.
 import UIKit
 
-final class AddDeviceViewController: UIViewController {
+final class AddDeviceViewController: PairingTableScreen {
 
     private enum RowStatus {
         case idle
@@ -28,38 +30,68 @@ final class AddDeviceViewController: UIViewController {
     private var snapshot = PairingSnapshot(nil)
     private var states: [String: RowState] = [:]
     /// Devices Core no longer lists as pending but that the user must still see: a QR-invited
-    /// device before it announces, and a joined device while its "Added ✓" is on screen.
+    /// device before it announces, and a joined device while its "Added" is on screen.
     private var extraDevices: [String: PairingDevice] = [:]
-    private var rowViews: [String: PairingDeviceRowView] = [:]
+    private var deviceRows: [String: PairingDeviceRow] = [:]
+    private var orderedDevices: [PairingDevice] = []
     private var pollTimer: Timer?
-
-    private let scroll = UIScrollView()
-    private let contentStack = UIStackView()
-    private let membershipLabel = UILabel()
-    private let connectedLabel = UILabel()
-    private let founderBadge = UILabel()
-    private let nearbyTitle = UILabel()
-    private let nearbyStack = UIStackView()
-    private let nearbyEmpty = UILabel()
-    private let nearbySpinner = IOSAvailability.activityIndicator(large: false)
-    private lazy var codeButton = PairingTheme.button(texts.t("pair.add_with_code"), filled: true)
-    private lazy var codeCard = PairingCodeCardView(texts: texts, core: core)
-    private lazy var addAllButton = PairingTheme.button(texts.t("pair.add_all"))
-    private let addAllWarning = UILabel()
-    private let addAllStatus = UILabel()
-    private let codeUnavailable = UILabel()
-    private lazy var addAllStop = PairingTheme.button(texts.t("pair.add_all_stop"))
-    private lazy var scanButton = PairingTheme.button(texts.t("pair.scan_qr"))
-    private let scanUnavailable = UILabel()
-    private lazy var qrCard = PairingQrCardView(core: core, texts: texts)
-    private lazy var unpairButton = PairingTheme.button(texts.t("pair.clear_title"))
-    private lazy var closeButton = PairingTheme.button(texts.t("monitor.close"))
-    private let unpairedNotice = UILabel()
+    private var codeUnavailable = false
     /// Handshake rejections and key rotations, reported by Core events.
-    private let peerNotice = UILabel()
+    private var peerNotice: String?
+
+    private let membershipRow = PairingCells.text(style: .subtitle,
+                                                  identifier: "add_device_membership")
+    private let unpairedRow = PairingCells.text(tone: .negative)
+    private let peerRow = PairingCells.text(tone: .negative,
+                                            identifier: "add_device_peer_notice")
     /// Members that must be upgraded or re-keyed, from the snapshot's `security` section.
-    private let securityNotice = UILabel()
-    private lazy var createButton = PairingTheme.button(texts.t("pair.create_home"), filled: true)
+    private let securityRow = PairingCells.text(tone: .negative,
+                                                identifier: "add_device_security_notice")
+    private let nearbyEmptyRow = PairingCells.text(tone: .secondary)
+    private let nearbySpinner = PairingCells.spinner()
+    private let codeUnavailableRow = PairingCells.text(
+        tone: .negative, identifier: "add_device_code_unavailable")
+    private let addAllStatusRow = PairingCells.text()
+    private let addAllSpinner = PairingCells.spinner()
+    private let scanUnavailableRow = PairingCells.text(tone: .secondary)
+    private lazy var codeRows = PairingCodeRows(texts: texts, core: core)
+    private lazy var qrRow = PairingQrRow(core: core, texts: texts)
+
+    private lazy var createRow = PairingCells.button(
+        title: texts.t("pair.create_home"), identifier: "add_device_create") {
+        [weak self] in self?.createCluster()
+    }
+    private lazy var codeRow = PairingCells.button(
+        title: texts.t("pair.add_with_code"), identifier: "add_device_code") {
+        [weak self] in self?.startCode()
+    }
+    private lazy var addAllRow = PairingCells.action(
+        title: texts.t("pair.add_all"), identifier: "add_device_add_all") {
+        [weak self] in self?.startAddAll()
+    }
+    private lazy var addAllStopRow = PairingCells.action(
+        title: texts.t("pair.add_all_stop"), identifier: "add_device_add_all_stop") {
+        [weak self] in self?.stopAddAll()
+    }
+    private lazy var scanRow: PairingRow = {
+        let row = PairingCells.action(title: texts.t("pair.scan_qr"),
+                                      identifier: "add_device_scan") {
+            [weak self] in self?.openScanner()
+        }
+        row.cell.accessoryType = .disclosureIndicator
+        return row
+    }()
+    private lazy var unpairRow = PairingCells.action(
+        title: texts.t("pair.clear_title"), tone: .negative,
+        identifier: "add_device_unpair") {
+        [weak self] in self?.confirmUnpair()
+    }
+#if os(tvOS)
+    private lazy var closeRow = PairingCells.action(
+        title: texts.t("monitor.close"), identifier: "add_device_close") {
+        [weak self] in self?.close()
+    }
+#endif
 
     init(core: CoreBridge, boot: BootConfig, texts: Texts) {
         self.core = core
@@ -78,7 +110,6 @@ final class AddDeviceViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = PairingTheme.background
         buildUi()
         core.addHandler("add_device") { [weak self] ev in self?.onUiEvent(ev) }
         refresh()
@@ -99,199 +130,104 @@ final class AddDeviceViewController: UIViewController {
         if isBeingDismissed || presentingViewController == nil { core.adminLock() }
     }
 
-
     private func buildUi() {
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(scroll)
-        contentStack.axis = .vertical
-        contentStack.spacing = 14
-        contentStack.alignment = .fill
-        contentStack.translatesAutoresizingMaskIntoConstraints = false
-        scroll.addSubview(contentStack)
-
-        let guide = IOSAvailability.safeAreaLayoutGuide(for: view)
-        NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: guide.topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
-            scroll.leadingAnchor.constraint(equalTo: guide.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: guide.trailingAnchor),
-            contentStack.topAnchor.constraint(equalTo: scroll.topAnchor, constant: 22),
-            contentStack.bottomAnchor.constraint(equalTo: scroll.bottomAnchor, constant: -22),
-            contentStack.centerXAnchor.constraint(equalTo: scroll.centerXAnchor),
-        ])
-        let column = contentStack.widthAnchor.constraint(equalTo: scroll.widthAnchor,
-                                                         constant: -48)
-        column.priority = UILayoutPriority(999)
-        column.isActive = true
-        contentStack.widthAnchor.constraint(
-            lessThanOrEqualToConstant: PairingTheme.qrSize * 2.6).isActive = true
-
-        let title = PairingTheme.label(PairingTheme.titleSize, PairingTheme.foreground, bold: true)
-        title.text = texts.t("pair.panel_title")
-        title.accessibilityIdentifier = "add_device_title"
-
-        membershipLabel.font = .systemFont(ofSize: PairingTheme.bodySize, weight: .semibold)
-        membershipLabel.textColor = PairingTheme.foreground
-        membershipLabel.accessibilityIdentifier = "add_device_membership"
-        connectedLabel.font = .systemFont(ofSize: PairingTheme.smallSize)
-        connectedLabel.textColor = PairingTheme.dim
-        founderBadge.text = texts.t("pair.created_badge")
-        founderBadge.font = .systemFont(ofSize: PairingTheme.smallSize)
-        founderBadge.textColor = PairingTheme.accent
-        founderBadge.isHidden = true
-
-        nearbyTitle.text = texts.t("pair.nearby_title")
-        nearbyTitle.font = .boldSystemFont(ofSize: PairingTheme.bodySize)
-        nearbyTitle.textColor = PairingTheme.foreground
-        nearbyStack.axis = .vertical
-        nearbyStack.spacing = 10
-        nearbyStack.alignment = .fill
-        nearbyEmpty.text = texts.t("pair.nearby_none")
-        nearbyEmpty.font = .systemFont(ofSize: PairingTheme.smallSize)
-        nearbyEmpty.textColor = PairingTheme.dim
-        nearbyEmpty.numberOfLines = 0
-        nearbySpinner.color = PairingTheme.dim
-        nearbySpinner.startAnimating()
-        let emptyRow = UIStackView(arrangedSubviews: [nearbySpinner, nearbyEmpty])
-        emptyRow.axis = .horizontal
-        emptyRow.spacing = 10
-        emptyRow.alignment = .center
-
-        codeButton.addTarget(self, action: #selector(startCode), for: .primaryActionTriggered)
-        codeButton.accessibilityIdentifier = "add_device_code"
-        codeCard.onNewCode = { [weak self] in self?.startCode() }
-        codeCard.isHidden = true
-        codeUnavailable.font = .systemFont(ofSize: PairingTheme.smallSize, weight: .semibold)
-        codeUnavailable.textColor = PairingTheme.danger
-        codeUnavailable.numberOfLines = 0
-        codeUnavailable.accessibilityIdentifier = "add_device_code_unavailable"
-        codeUnavailable.isHidden = true
-
-        addAllWarning.text = texts.t("pair.add_all_warning")
-        addAllWarning.font = .systemFont(ofSize: PairingTheme.smallSize)
-        addAllWarning.textColor = PairingTheme.dim
-        addAllWarning.numberOfLines = 0
-        addAllStatus.font = .systemFont(ofSize: PairingTheme.bodySize, weight: .semibold)
-        addAllStatus.textColor = PairingTheme.accent
-        addAllStatus.numberOfLines = 0
-        addAllStatus.isHidden = true
-        addAllButton.addTarget(self, action: #selector(startAddAll), for: .primaryActionTriggered)
-        addAllButton.accessibilityIdentifier = "add_device_add_all"
-        addAllStop.addTarget(self, action: #selector(stopAddAll), for: .primaryActionTriggered)
-        addAllStop.accessibilityIdentifier = "add_device_add_all_stop"
-        addAllStop.isHidden = true
-
-        scanButton.addTarget(self, action: #selector(openScanner), for: .primaryActionTriggered)
-        scanButton.accessibilityIdentifier = "add_device_scan"
-        scanUnavailable.font = .systemFont(ofSize: PairingTheme.smallSize)
-        scanUnavailable.textColor = PairingTheme.dim
-        scanUnavailable.numberOfLines = 0
-        scanUnavailable.isHidden = true
-        configureScanAvailability()
-
-        unpairButton.setTitleColor(PairingTheme.danger, for: .normal)
-        unpairButton.addTarget(self, action: #selector(confirmUnpair),
-                               for: .primaryActionTriggered)
-        unpairButton.accessibilityIdentifier = "add_device_unpair"
-        closeButton.addTarget(self, action: #selector(close), for: .primaryActionTriggered)
-        closeButton.accessibilityIdentifier = "add_device_close"
-
-        unpairedNotice.text = texts.t("admin.pair_self_unpaired")
-        unpairedNotice.font = .systemFont(ofSize: PairingTheme.bodySize)
-        unpairedNotice.textColor = PairingTheme.danger
-        unpairedNotice.numberOfLines = 0
-        unpairedNotice.isHidden = true
-        for notice in [peerNotice, securityNotice] {
-            notice.font = .systemFont(ofSize: PairingTheme.smallSize)
-            notice.textColor = PairingTheme.danger
-            notice.numberOfLines = 0
-            notice.isHidden = true
-        }
-        peerNotice.accessibilityIdentifier = "add_device_peer_notice"
-        securityNotice.accessibilityIdentifier = "add_device_security_notice"
-        createButton.addTarget(self, action: #selector(createCluster),
-                               for: .primaryActionTriggered)
-        createButton.isHidden = true
-
-        let members = UIStackView(arrangedSubviews: [membershipLabel, connectedLabel,
-                                                     founderBadge])
-        members.axis = .vertical
-        members.spacing = 4
-        members.alignment = .leading
-
-        for element in [title, members, unpairedNotice, peerNotice, securityNotice, createButton,
-                        nearbyTitle, nearbyStack,
-                        emptyRow, codeButton, codeUnavailable, codeCard, addAllButton,
-                        addAllWarning,
-                        addAllStatus, addAllStop, scanButton, scanUnavailable, qrCard,
-                        unpairButton, closeButton] as [UIView] {
-            contentStack.addArrangedSubview(element)
-        }
-        IOSAvailability.setCustomSpacing(24, after: members, in: contentStack)
-        IOSAvailability.setCustomSpacing(24, after: emptyRow, in: contentStack)
-        IOSAvailability.setCustomSpacing(24, after: codeCard, in: contentStack)
-        IOSAvailability.setCustomSpacing(24, after: qrCard, in: contentStack)
-    }
-
-    private func configureScanAvailability() {
+        barItem.title = texts.t("pair.panel_title")
+        bar?.navigationBar.accessibilityIdentifier = "add_device_title"
 #if os(iOS)
-        if IOSAvailability.qrScanCaptureDevice() == nil {
-            scanButton.isHidden = true
-            scanUnavailable.text = texts.t("pair.scan_no_camera")
-            scanUnavailable.isHidden = false
-        }
-#else
-        // Apple TV has no camera: display-only, as decided in the spec.
-        scanButton.isHidden = true
-        scanUnavailable.text = texts.t("pair.scan_no_camera")
-        scanUnavailable.isHidden = false
+        let done = UIBarButtonItem(title: texts.t("monitor.close"), style: .done, target: self,
+                                   action: #selector(close))
+        done.accessibilityIdentifier = "add_device_close"
+        barItem.rightBarButtonItem = done
 #endif
-    }
-
-
-    private func refresh() {
-        let next = PairingSnapshot.load(core)
-        if next.hasSnapshot { snapshot = next }
-
-        let members = max(snapshot.memberCount, snapshot.paired ? 1 : 0)
-        membershipLabel.text = texts.t("pair.membership", "\(members)")
-        connectedLabel.text = texts.t("pair.membership_connected", "\(snapshot.connectedCount)")
-        founderBadge.isHidden = !snapshot.isFounder
-        qrCard.update(payload: snapshot.pairQr)
-
-        // An unpaired node cannot add anything; it may only create a cluster or join one.
-        let usable = snapshot.state == .ready
-        unpairedNotice.isHidden = usable
-        createButton.isHidden = usable
-        nearbyTitle.isHidden = !usable
-        nearbyStack.isHidden = !usable
-        codeButton.isHidden = !usable || snapshot.tokenActive
-        codeCard.isHidden = !usable || !snapshot.tokenActive
-        addAllButton.isHidden = !usable || snapshot.pairingMode
-        addAllWarning.isHidden = !usable || snapshot.pairingMode
-        addAllStatus.isHidden = !usable || !snapshot.pairingMode
-        addAllStop.isHidden = !usable || !snapshot.pairingMode
-        scanButton.isHidden = !usable || !scanAvailable
-        unpairButton.isHidden = !snapshot.paired
-
-        codeCard.update(snapshot)
-        let stale = snapshot.security.legacyPeers.count + snapshot.security.rekeyRequired.count
-        securityNotice.text = texts.t("pair.members_need_rejoin", "\(stale)")
-        securityNotice.isHidden = !usable || stale == 0
-        addAllStatus.text = PairingCopy.addAllOn(texts, leftS: snapshot.pairingModeLeftS,
-                                                 added: snapshot.autoAddedCount)
-        refreshRows(usable: usable)
+        unpairedRow.cell.textLabel?.text = texts.t("admin.pair_self_unpaired")
+        nearbyEmptyRow.cell.textLabel?.text = texts.t("pair.nearby_none")
+        codeUnavailableRow.cell.textLabel?.text = texts.t("pair.pin_unavailable")
+        scanUnavailableRow.cell.textLabel?.text = texts.t("pair.scan_no_camera")
+        codeRows.onNewCode = { [weak self] in self?.startCode() }
+        codeRows.onChange = { [weak self] in self?.render() }
     }
 
     private var scanAvailable: Bool {
 #if os(iOS)
         return IOSAvailability.qrScanCaptureDevice() != nil
 #else
+        // Apple TV has no camera: display-only, as decided in the spec.
         return false
 #endif
     }
 
-    private func refreshRows(usable: Bool) {
+    private func refresh() {
+        let next = PairingSnapshot.load(core)
+        if next.hasSnapshot { snapshot = next }
+        render()
+    }
+
+    private func render() {
+        let members = max(snapshot.memberCount, snapshot.paired ? 1 : 0)
+        membershipRow.cell.textLabel?.text = texts.t("pair.membership", "\(members)")
+        membershipRow.cell.detailTextLabel?.text =
+            texts.t("pair.membership_connected", "\(snapshot.connectedCount)")
+        qrRow.update(payload: snapshot.pairQr)
+        codeRows.update(snapshot)
+
+        // An unpaired node cannot add anything; it may only create a cluster or join one.
+        let usable = snapshot.state == .ready
+        var sections: [PairingSection] = []
+
+        var overview = [membershipRow]
+        if !usable { overview.append(unpairedRow) }
+        if let notice = peerNotice {
+            peerRow.cell.textLabel?.text = notice
+            overview.append(peerRow)
+        }
+        let stale = snapshot.security.legacyPeers.count + snapshot.security.rekeyRequired.count
+        if usable && stale > 0 {
+            securityRow.cell.textLabel?.text = texts.t("pair.members_need_rejoin", "\(stale)")
+            overview.append(securityRow)
+        }
+        sections.append(PairingSection(
+            footer: snapshot.isFounder ? texts.t("pair.created_badge") : nil, rows: overview))
+        if !usable { sections.append(PairingSection(rows: [createRow])) }
+
+        refreshDevices()
+        if usable {
+            var nearby = orderedDevices.compactMap { deviceRows[$0.id]?.row }
+            if nearby.isEmpty {
+                PairingCells.setBusy(true, nearbyEmptyRow, spinner: nearbySpinner)
+                nearby = [nearbyEmptyRow]
+            }
+            sections.append(PairingSection(header: texts.t("pair.nearby_title"), rows: nearby))
+
+            if snapshot.tokenActive {
+                sections += codeRows.sections()
+            } else {
+                sections.append(PairingSection(rows: [codeRow]))
+                if codeUnavailable {
+                    sections.append(PairingSection(rows: [codeUnavailableRow]))
+                }
+            }
+
+            if snapshot.pairingMode {
+                addAllStatusRow.cell.textLabel?.text = PairingCopy.addAllOn(
+                    texts, leftS: snapshot.pairingModeLeftS, added: snapshot.autoAddedCount)
+                PairingCells.setBusy(true, addAllStatusRow, spinner: addAllSpinner)
+                sections.append(PairingSection(rows: [addAllStatusRow, addAllStopRow]))
+            } else {
+                sections.append(PairingSection(footer: texts.t("pair.add_all_warning"),
+                                               rows: [addAllRow]))
+            }
+            sections.append(PairingSection(rows: [scanAvailable ? scanRow : scanUnavailableRow]))
+        }
+
+        sections.append(PairingSection(footer: texts.t("pair.qr_caption"), rows: [qrRow.row]))
+        if snapshot.paired { sections.append(PairingSection(rows: [unpairRow])) }
+#if os(tvOS)
+        sections.append(PairingSection(rows: [closeRow]))
+#endif
+        setSections(sections)
+    }
+
+    private func refreshDevices() {
         var devices: [String: PairingDevice] = [:]
         for device in snapshot.devices where !device.id.isEmpty { devices[device.id] = device }
         let now = Date()
@@ -307,64 +243,52 @@ final class AddDeviceViewController: UIViewController {
             if devices[id] == nil { devices[id] = device }
         }
 
-        let ordered = devices.values.sorted { lhs, rhs in
+        orderedDevices = devices.values.sorted { lhs, rhs in
             lhs.ageS != rhs.ageS ? lhs.ageS < rhs.ageS : lhs.id < rhs.id
         }
-        let visibleIds = Set(ordered.map { $0.id })
-        for (id, row) in rowViews where !visibleIds.contains(id) {
-            nearbyStack.removeArrangedSubview(row)
-            row.removeFromSuperview()
-            rowViews.removeValue(forKey: id)
+        let visibleIds = Set(orderedDevices.map { $0.id })
+        for id in deviceRows.keys where !visibleIds.contains(id) {
+            deviceRows.removeValue(forKey: id)
         }
-        for (index, device) in ordered.enumerated() {
-            let row: PairingDeviceRowView
-            if let existing = rowViews[device.id] {
-                row = existing
-                if nearbyStack.arrangedSubviews.firstIndex(of: row) != index {
-                    nearbyStack.removeArrangedSubview(row)
-                    nearbyStack.insertArrangedSubview(row, at: min(index,
-                                                                   nearbyStack.arrangedSubviews.count))
-                }
+        for device in orderedDevices {
+            let entry: PairingDeviceRow
+            if let existing = deviceRows[device.id] {
+                entry = existing
             } else {
-                row = PairingDeviceRowView(texts: texts)
-                row.onAdd = { [weak self] id in self?.add(id) }
-                row.onDeny = { [weak self] id in self?.confirmDeny(id) }
-                rowViews[device.id] = row
-                nearbyStack.insertArrangedSubview(row, at: min(index,
-                                                               nearbyStack.arrangedSubviews.count))
+                entry = PairingDeviceRow(texts: texts)
+                entry.onAdd = { [weak self] id in self?.add(id) }
+                entry.onChoose = { [weak self] id in self?.chooseAction(id) }
+                deviceRows[device.id] = entry
             }
             let state = states[device.id] ?? RowState(status: .idle, error: "", since: now)
-            row.update(device: device, status: statusText(device: device, state: state),
-                       busy: state.status == .adding,
-                       canAct: !device.pkConflict &&
-                           (state.status == .idle || state.status == .failed))
+            entry.update(device: device, status: statusText(device: device, state: state),
+                         busy: state.status == .adding, added: state.status == .added,
+                         canAct: !device.pkConflict &&
+                             (state.status == .idle || state.status == .failed))
         }
-        nearbyEmpty.isHidden = !ordered.isEmpty || !usable
-        nearbySpinner.isHidden = nearbyEmpty.isHidden
     }
 
     private func statusText(device: PairingDevice,
-                            state: RowState) -> (text: String, color: UIColor) {
+                            state: RowState) -> (text: String, tone: PairingTone) {
         switch state.status {
         case .adding:
-            return (texts.t("pair.adding"), PairingTheme.accent)
+            return (texts.t("pair.adding"), .secondary)
         case .added:
-            return (texts.t("pair.added") + " ✓", PairingTheme.ok)
+            return (texts.t("pair.added"), .positive)
         case .failed:
             let message = texts.t("pair.add_failed") + " — " + PairingCopy.error(texts,
                                                                                  state.error)
-            return (message, PairingTheme.danger)
+            return (message, .negative)
         case .idle:
             if device.pkConflict {
-                return (PairingCopy.error(texts, "pk_conflict"), PairingTheme.danger)
+                return (PairingCopy.error(texts, "pk_conflict"), .negative)
             }
             if device.inviteState == "sent" || device.inviteState == "acked" {
-                return (texts.t("pair.adding"), PairingTheme.accent)
+                return (texts.t("pair.adding"), .secondary)
             }
-            return (texts.t("pair.nearby_waiting_since", "\(device.ageS)"), PairingTheme.dim)
+            return (texts.t("pair.nearby_waiting_since", "\(device.ageS)"), .secondary)
         }
     }
-
 
     private func onUiEvent(_ ev: [String: Any]) {
         let kind = ConfigUtil.evStr(ev, "t")
@@ -397,12 +321,10 @@ final class AddDeviceViewController: UIViewController {
         case "peer_rejected":
             // A member that cannot complete the v3 handshake: shown, not silently dropped.
             let reason = ConfigUtil.evStr(ev, "reason")
-            peerNotice.text = texts.t("pair.peer_rejected", PairingCopy.error(texts, reason))
-            peerNotice.isHidden = false
+            peerNotice = texts.t("pair.peer_rejected", PairingCopy.error(texts, reason))
             refresh()
         case "cluster_key_changed":
-            peerNotice.text = texts.t("pair.cluster_key_changed")
-            peerNotice.isHidden = false
+            peerNotice = texts.t("pair.cluster_key_changed")
             refresh()
         case "pending_changed", "pairing_state", "pairing_mode_changed", "join_token_changed",
              "paired", "peers_changed":
@@ -412,6 +334,25 @@ final class AddDeviceViewController: UIViewController {
         }
     }
 
+    /// A nearby device offers its two verbs in one sheet: add it, or keep it out of the list.
+    private func chooseAction(_ id: String) {
+        guard let entry = deviceRows[id] else { return }
+        let sheet = UIAlertController(title: entry.title, message: nil,
+                                      preferredStyle: .actionSheet)
+        let addAction = UIAlertAction(title: texts.t("pair.add"), style: .default) {
+            [weak self] _ in self?.add(id)
+        }
+        addAction.accessibilityIdentifier = "pair_add_\(id)"
+        let denyAction = UIAlertAction(title: texts.t("pair.deny"), style: .destructive) {
+            [weak self] _ in self?.confirmDeny(id)
+        }
+        denyAction.accessibilityIdentifier = "pair_deny_\(id)"
+        sheet.addAction(addAction)
+        sheet.addAction(denyAction)
+        sheet.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+        anchor(sheet, to: entry.row)
+        present(sheet, animated: true)
+    }
 
     /// A discovered device's key arrived in an unauthenticated beacon, so Core invites it only
     /// with the eight-digit code that device shows on its own screen.
@@ -445,7 +386,8 @@ final class AddDeviceViewController: UIViewController {
     }
 
     private func confirmDeny(_ id: String) {
-        let alert = UIAlertController(title: texts.t("pair.deny"), message: nil,
+        let alert = UIAlertController(title: texts.t("pair.deny"),
+                                      message: texts.t("pair.deny_confirm"),
                                       preferredStyle: .alert)
         alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
         alert.addAction(UIAlertAction(title: texts.t("pair.deny"), style: .destructive) {
@@ -464,8 +406,9 @@ final class AddDeviceViewController: UIViewController {
     /// add every device it can see.
     @objc private func startCode() {
         guard core.supportsMintJoinToken else {
-            codeUnavailable.text = texts.t("pair.pin_unavailable")
-            codeUnavailable.isHidden = false
+            // The row reads `pair.pin_unavailable`.
+            codeUnavailable = true
+            render()
             return
         }
         _ = core.mintJoinToken(seconds: 600)
@@ -482,7 +425,7 @@ final class AddDeviceViewController: UIViewController {
         refresh()
     }
 
-    @objc private func createCluster() {
+    private func createCluster() {
         let alert = UIAlertController(title: texts.t("pair.create_home"),
                                       message: texts.t("pair.create_home_confirm"),
                                       preferredStyle: .alert)
@@ -495,7 +438,7 @@ final class AddDeviceViewController: UIViewController {
         present(alert, animated: true)
     }
 
-    @objc private func openScanner() {
+    private func openScanner() {
 #if os(iOS)
         let scanner = PairingScannerViewController(texts: texts) { [weak self] payload in
             self?.handleScan(payload)
@@ -513,7 +456,7 @@ final class AddDeviceViewController: UIViewController {
     }
 #endif
 
-    @objc private func confirmUnpair() {
+    private func confirmUnpair() {
         let first = UIAlertController(title: texts.t("pair.clear_title"),
                                       message: texts.t("pair.clear_confirm"),
                                       preferredStyle: .alert)
@@ -549,84 +492,80 @@ final class AddDeviceViewController: UIViewController {
     }
 }
 
-/// One nearby device: identity, waiting time, and the single "Add" verb with its result.
-final class PairingDeviceRowView: UIView {
+/// One nearby device as a subtitle row: identity, then its waiting time or the result of adding
+/// it. Selecting the row offers "Add" and "Ignore"; iOS also carries "Add" as the row's accessory.
+final class PairingDeviceRow {
+    let row = PairingCells.text(style: .subtitle)
     var onAdd: ((String) -> Void)?
-    var onDeny: ((String) -> Void)?
+    var onChoose: ((String) -> Void)?
+    private(set) var title = ""
 
     private let texts: Texts
     private var deviceId = ""
-    private let nameLabel = UILabel()
-    private let detailLabel = UILabel()
-    private let statusLabel = UILabel()
-    private let spinner = IOSAvailability.activityIndicator(large: false)
-    private lazy var addButton = PairingTheme.button(texts.t("pair.add"), filled: true)
-    private lazy var denyButton = PairingTheme.button(texts.t("pair.deny"))
+    private var detail = ""
+    private var status: (text: String, tone: PairingTone) = ("", .secondary)
+    private let spinner = PairingCells.spinner()
+#if os(iOS)
+    private lazy var addButton: UIButton = {
+        let button = SystemStyle.button(.gray, title: texts.t("pair.add"))
+        button.addTarget(self, action: #selector(addTapped), for: .primaryActionTriggered)
+        button.sizeToFit()
+        return button
+    }()
+#endif
 
     init(texts: Texts) {
         self.texts = texts
-        super.init(frame: .zero)
-        backgroundColor = PairingTheme.card
-        layer.cornerRadius = 12
-
-        nameLabel.font = .boldSystemFont(ofSize: PairingTheme.bodySize)
-        nameLabel.textColor = PairingTheme.foreground
-        nameLabel.numberOfLines = 0
-        detailLabel.font = .systemFont(ofSize: PairingTheme.smallSize)
-        detailLabel.textColor = PairingTheme.dim
-        detailLabel.numberOfLines = 0
-        statusLabel.font = .systemFont(ofSize: PairingTheme.smallSize, weight: .semibold)
-        statusLabel.numberOfLines = 0
-        spinner.color = PairingTheme.accent
-        spinner.hidesWhenStopped = true
-
-        addButton.addTarget(self, action: #selector(addTapped), for: .primaryActionTriggered)
-        denyButton.addTarget(self, action: #selector(denyTapped), for: .primaryActionTriggered)
-
-        let statusRow = UIStackView(arrangedSubviews: [spinner, statusLabel])
-        statusRow.axis = .horizontal
-        statusRow.spacing = 8
-        statusRow.alignment = .center
-        let info = UIStackView(arrangedSubviews: [nameLabel, detailLabel, statusRow])
-        info.axis = .vertical
-        info.spacing = 4
-        info.alignment = .leading
-        let buttons = UIStackView(arrangedSubviews: [addButton, denyButton])
-        buttons.axis = .horizontal
-        buttons.spacing = 10
-        buttons.alignment = .center
-        let row = UIStackView(arrangedSubviews: [info, buttons])
-        row.axis = .horizontal
-        row.spacing = 12
-        row.alignment = .center
-        row.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(row)
-        NSLayoutConstraint.activate([
-            row.topAnchor.constraint(equalTo: topAnchor, constant: 12),
-            row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -12),
-            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
-            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -16),
-        ])
+        row.tone = nil
+        row.decorate = { [unowned self] in self.paint() }
+        row.onSelect = { [unowned self] in self.onChoose?(self.deviceId) }
     }
 
-    required init?(coder: NSCoder) { fatalError("not supported") }
-
-    func update(device: PairingDevice, status: (text: String, color: UIColor), busy: Bool,
-                canAct: Bool) {
+    func update(device: PairingDevice, status: (text: String, tone: PairingTone), busy: Bool,
+                added: Bool, canAct: Bool) {
         deviceId = device.id
-        nameLabel.text = device.displayName
-        nameLabel.accessibilityIdentifier = "pair_row_\(device.id)"
-        detailLabel.text = device.subtitle(texts)
-        detailLabel.isHidden = (detailLabel.text ?? "").isEmpty
-        statusLabel.text = status.text
-        statusLabel.textColor = status.color
-        if busy { spinner.startAnimating() } else { spinner.stopAnimating() }
-        addButton.isEnabled = canAct
-        denyButton.isEnabled = canAct
-        addButton.accessibilityIdentifier = "pair_add_\(device.id)"
-        denyButton.accessibilityIdentifier = "pair_deny_\(device.id)"
+        title = device.displayName
+        detail = device.subtitle(texts)
+        self.status = status
+        let cell = row.cell
+        cell.textLabel?.text = title
+        cell.textLabel?.accessibilityIdentifier = "pair_row_\(device.id)"
+        paint()
+
+        row.isEnabled = canAct
+        cell.selectionStyle = canAct ? .default : .none
+        cell.accessoryType = added ? .checkmark : .none
+        if busy {
+            PairingCells.setBusy(true, row, spinner: spinner)
+        } else {
+            PairingCells.setBusy(false, row, spinner: spinner)
+#if os(iOS)
+            addButton.accessibilityIdentifier = "pair_add_\(device.id)"
+            let accessory: UIView? = canAct ? addButton : nil
+            if cell.accessoryView !== accessory { cell.accessoryView = accessory }
+#endif
+        }
     }
 
+    private func paint() {
+        let cell = row.cell
+        cell.textLabel?.textColor = SystemStyle.label
+        let font = cell.detailTextLabel?.font ?? SystemStyle.font(.footnote)
+        let text = NSMutableAttributedString()
+        if !detail.isEmpty {
+            text.append(NSAttributedString(string: detail + "\n", attributes: [
+                .foregroundColor: SystemStyle.secondaryLabel, .font: font,
+            ]))
+        }
+        text.append(NSAttributedString(string: status.text, attributes: [
+            .foregroundColor: status.tone.color, .font: font,
+        ]))
+        if cell.detailTextLabel?.attributedText?.isEqual(to: text) != true {
+            cell.detailTextLabel?.attributedText = text
+        }
+    }
+
+#if os(iOS)
     @objc private func addTapped() { onAdd?(deviceId) }
-    @objc private func denyTapped() { onDeny?(deviceId) }
+#endif
 }

@@ -66,41 +66,41 @@ struct SettingsCatalog {
     func categories() -> [SettingsCategory] {
         var result: [SettingsCategory] = [
             SettingsCategory(id: "device", title: t("settings.section_device"),
-                             icon: SettingIcon(glyph: "📱", tint: 0x8E8E93),
+                             icon: SettingIcon(glyph: "TablerDeviceTablet", tint: 0x8E8E93),
                              summary: ctx.name, page: devicePage),
             SettingsCategory(id: "sounds", title: t("prefs.sounds"),
-                             icon: SettingIcon(glyph: "🔔", tint: 0xFF3B30),
+                             icon: SettingIcon(glyph: "TablerBell", tint: 0xFF3B30),
                              summary: volumeSummary(), page: soundsPage),
             SettingsCategory(id: "display", title: t("prefs.display"),
-                             icon: SettingIcon(glyph: "☀️", tint: 0x007AFF),
+                             icon: SettingIcon(glyph: "TablerPalette", tint: 0x007AFF),
                              summary: appearanceTitle(), page: displayPage),
             SettingsCategory(id: "calls", title: t("prefs.calls"),
-                             icon: SettingIcon(glyph: "📞", tint: 0x34C759),
+                             icon: SettingIcon(glyph: "TablerPhone", tint: 0x34C759),
                              summary: callFlowTitle(), page: callsPage),
             SettingsCategory(id: "doors", title: t("settings.section_doors"),
-                             icon: SettingIcon(glyph: "🚪", tint: 0xA2845E),
+                             icon: SettingIcon(glyph: "TablerDoor", tint: 0xA2845E),
                              summary: countSummary("doors"), page: doorsPage),
             SettingsCategory(id: "sos", title: t("prefs.sos"),
-                             icon: SettingIcon(glyph: "🆘", tint: 0xFF2D55),
+                             icon: SettingIcon(glyph: "TablerAlertTriangle", tint: 0xFF2D55),
                              summary: "", page: sosPage),
             SettingsCategory(id: "time", title: t("time.title"),
-                             icon: SettingIcon(glyph: "🕒", tint: 0x5856D6),
+                             icon: SettingIcon(glyph: "TablerClock", tint: 0x5856D6),
                              summary: ConfigUtil.str(cfg, "time.zone") ?? "", page: timePage),
             SettingsCategory(id: "notifications", title: t("settings.section_rules"),
-                             icon: SettingIcon(glyph: "📣", tint: 0xFF9500),
+                             icon: SettingIcon(glyph: "TablerNote", tint: 0xFF9500),
                              summary: ruleSummary(), page: notificationsPage),
         ]
         if !ctx.isTV {
             result.append(SettingsCategory(id: "sip", title: t("prefs.sip"),
-                                           icon: SettingIcon(glyph: "☎️", tint: 0x30B0C7),
+                                           icon: SettingIcon(glyph: "TablerTopologyStar3", tint: 0x30B0C7),
                                            summary: ctx.sipBackend, page: sipPage))
         }
         result.append(contentsOf: [
             SettingsCategory(id: "cluster", title: t("settings.section_cluster"),
-                             icon: SettingIcon(glyph: "🔗", tint: 0x32ADE6),
+                             icon: SettingIcon(glyph: "TablerLink", tint: 0x32ADE6),
                              summary: ctx.membershipSummary, page: clusterPage),
             SettingsCategory(id: "about", title: t("prefs.about"),
-                             icon: SettingIcon(glyph: "ℹ️", tint: 0x636366),
+                             icon: SettingIcon(glyph: "TablerInfoCircle", tint: 0x636366),
                              summary: "", page: aboutPage),
         ])
         return result
