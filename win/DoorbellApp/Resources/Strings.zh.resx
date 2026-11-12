@@ -811,9 +811,11 @@
   <data name="history_answered_by" xml:space="preserve"><value>由 {0} 接听</value></data>
   <data name="history_detail_answered_by" xml:space="preserve"><value>接听设备</value></data>
   <data name="history_detail_door" xml:space="preserve"><value>门</value></data>
+  <data name="history_detail_duration" xml:space="preserve"><value>通话时长</value></data>
   <data name="history_detail_empty" xml:space="preserve"><value>选择一条呼叫以查看详情</value></data>
   <data name="history_detail_outcome" xml:space="preserve"><value>结果</value></data>
   <data name="history_detail_purpose" xml:space="preserve"><value>来意</value></data>
+  <data name="history_detail_time" xml:space="preserve"><value>时间</value></data>
   <data name="history_duration" xml:space="preserve"><value>通话 {0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>暂无呼叫</value></data>
   <data name="history_filter_all" xml:space="preserve"><value>全部</value></data>
@@ -1907,6 +1909,7 @@
   <data name="settings_launch_sound" xml:space="preserve"><value>启动音</value></data>
   <data name="settings_light_from" xml:space="preserve"><value>浅色开始时间</value></data>
   <data name="settings_list_empty" xml:space="preserve"><value>没有条目</value></data>
+  <data name="settings_locked_hint" xml:space="preserve"><value>打开设置需要管理密码</value></data>
   <data name="settings_media_bind" xml:space="preserve"><value>用于门口机</value></data>
   <data name="settings_media_credential" xml:space="preserve"><value>摄像头凭据</value></data>
   <data name="settings_media_credential_hint" xml:space="preserve"><value>用户名:密码 或令牌，保存在本设备的安全存储中</value></data>
@@ -2196,6 +2199,7 @@
   <data name="settings_unit_kbps" xml:space="preserve"><value>{0} kbps</value></data>
   <data name="settings_unit_percent" xml:space="preserve"><value>{0}%</value></data>
   <data name="settings_unit_seconds" xml:space="preserve"><value>{0} 秒</value></data>
+  <data name="settings_unlock" xml:space="preserve"><value>解锁</value></data>
   <data name="settings_unlock_button" xml:space="preserve"><value>显示开锁按钮</value></data>
   <data name="settings_unlock_show_button" xml:space="preserve"><value>显示开锁按钮</value></data>
   <data name="settings_update_channel" xml:space="preserve"><value>更新通道</value></data>
@@ -2290,6 +2294,8 @@ PIN：{1}</value></data>
   <data name="sos_button_on_roles" xml:space="preserve"><value>显示 SOS 的设备</value></data>
   <data name="sos_cancel_countdown" xml:space="preserve"><value>取消</value></data>
   <data name="sos_cancel_requires_pin" xml:space="preserve"><value>解除时要求管理密码</value></data>
+  <data name="sos_clear_confirm_title" xml:space="preserve"><value>要解除警报吗？</value></data>
+  <data name="sos_confirm_title" xml:space="preserve"><value>要发送 SOS 吗？</value></data>
   <data name="sos_countdown" xml:space="preserve"><value>{0} 秒后发送求助警报</value></data>
   <data name="sos_countdown_cancel" xml:space="preserve"><value>取消</value></data>
   <data name="sos_countdown_s" xml:space="preserve"><value>可取消的倒计时（秒）</value></data>
@@ -2297,12 +2303,16 @@ PIN：{1}</value></data>
   <data name="sos_hold_to_clear" xml:space="preserve"><value>长按以解除</value></data>
   <data name="sos_mode_hold" xml:space="preserve"><value>长按触发（旧方式）</value></data>
   <data name="sos_mode_slide" xml:space="preserve"><value>滑动触发</value></data>
+  <data name="sos_send" xml:space="preserve"><value>发送 SOS</value></data>
   <data name="sos_since" xml:space="preserve"><value>自 {0} 起</value></data>
+  <data name="sos_slide_clear" xml:space="preserve"><value>滑动解除</value></data>
   <data name="sos_slide_hint" xml:space="preserve"><value>向右滑动求助</value></data>
   <data name="sos_slide_label" xml:space="preserve"><value>滑动求助</value></data>
   <data name="sos_slide_sub" xml:space="preserve"><value>{0} 秒后发出警报</value></data>
+  <data name="sos_slide_to_clear" xml:space="preserve"><value>滑动解除</value></data>
   <data name="sos_slide_two_line" xml:space="preserve"><value>滑动求助
 {0} 秒后发出警报</value></data>
+  <data name="sos_tap_to_clear" xml:space="preserve"><value>点击后确认解除</value></data>
   <data name="sos_title" xml:space="preserve"><value>SOS</value></data>
   <data name="sos_trigger_mode" xml:space="preserve"><value>触发方式</value></data>
   <data name="sound_button_click" xml:space="preserve"><value>光标移动 4（按钮）</value></data>

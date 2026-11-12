@@ -431,26 +431,12 @@
                 </ui:NavigationView>
             </Grid>
 
-            <!-- Slide-to-trigger SOS. The semantic id "sos.trigger" keeps addressing this border,
-                 so an administrator's style override still applies to the visible control. -->
-            <Border x:Name="SosButton" Visibility="Collapsed"
-                    Background="{DynamicResource Danger}" CornerRadius="28"
-                    BorderBrush="#33FFFFFF" BorderThickness="1"
+            <!-- SOS trigger (semantic id "sos.trigger"): a compact outlined secondary button.
+                 A tap only opens the confirmation card below; nothing is sent from here. -->
+            <Button x:Name="SosButton" Visibility="Collapsed"
+                    Style="{StaticResource SosTriggerButton}"
                     HorizontalAlignment="Right" VerticalAlignment="Bottom"
-                    Margin="0,0,20,16" Width="248" Height="62">
-                <Grid>
-                    <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
-                                IsHitTestVisible="False" Margin="62,6,16,6">
-                        <TextBlock x:Name="SosText" FontSize="17" FontWeight="Bold"
-                                   Foreground="{DynamicResource OnDanger}"
-                                   HorizontalAlignment="Center"/>
-                        <TextBlock x:Name="SosHint" FontSize="13" Opacity="0.85"
-                                   Foreground="{DynamicResource OnDanger}"
-                                   HorizontalAlignment="Center"/>
-                    </StackPanel>
-                    <app:SosSlider x:Name="SosSlide" Style="{StaticResource SosTrack}"/>
-                </Grid>
-            </Border>
+                    Margin="0,0,20,16" Click="OnSosTriggerClick"/>
 
         </Grid>
 
@@ -791,6 +777,51 @@
             </StackPanel>
         </Canvas>
 
+        <!-- SOS confirmation (ui-guidelines 4, SOS): opened by the trigger, it says what will
+             happen and takes a second, different gesture: sliding the control end to end. A
+             keyboard or screen reader uses "Send SOS", which is never the default focus. It
+             closes by itself after 10 s without input. -->
+        <Grid x:Name="SosConfirmView" Visibility="Collapsed" Background="#99000000"
+              PreviewMouseDown="OnSosConfirmInput" PreviewTouchDown="OnSosConfirmInput"
+              PreviewKeyDown="OnSosConfirmInput">
+            <Border Style="{StaticResource CardBorder}" CornerRadius="8" Padding="24,20"
+                    MaxWidth="520" Margin="16" HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel>
+                    <TextBlock x:Name="SosConfirmTitle" FontSize="24" FontWeight="SemiBold"
+                               TextWrapping="Wrap" Foreground="{DynamicResource Fg}"/>
+                    <TextBlock x:Name="SosConfirmBody" FontSize="16" TextWrapping="Wrap"
+                               Margin="0,8,0,0" Foreground="{DynamicResource Dim}"/>
+                    <Border Background="{DynamicResource Danger}" CornerRadius="28" Height="62"
+                            BorderBrush="#33FFFFFF" BorderThickness="1" Margin="0,20,0,0">
+                        <Grid>
+                            <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center"
+                                        IsHitTestVisible="False" Margin="62,6,16,6">
+                                <TextBlock x:Name="SosText" FontSize="17" FontWeight="Bold"
+                                           Foreground="{DynamicResource OnDanger}"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock x:Name="SosHint" FontSize="13" Opacity="0.85"
+                                           Foreground="{DynamicResource OnDanger}"
+                                           HorizontalAlignment="Center"/>
+                            </StackPanel>
+                            <app:SosSlider x:Name="SosSlide" Style="{StaticResource SosTrack}"/>
+                        </Grid>
+                    </Border>
+                    <Grid Margin="0,20,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <Button x:Name="SosConfirmSend" Style="{StaticResource SosTriggerButton}"
+                                HorizontalAlignment="Left" Click="OnSosConfirmSend"/>
+                        <Button x:Name="SosConfirmCancel" Grid.Column="1"
+                                Style="{StaticResource ChipButton}" Margin="12,0,0,0"
+                                MinWidth="120" Click="OnSosConfirmCancel"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </Grid>
+
         <!-- Slide-to-trigger countdown; tapping cancel before zero tells core nothing. -->
         <Grid x:Name="SosCountdownView" Visibility="Collapsed" Background="#E68C0D0A">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
@@ -822,23 +853,37 @@
                 <TextBlock x:Name="EmergencyNote" FontSize="30" Foreground="{DynamicResource OnNegative}"
                            HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
                            Margin="0,18,0,0"/>
-                <Grid Margin="0,56,0,0" HorizontalAlignment="Center" MinWidth="420">
-                    <Button x:Name="EmergencyCancelButton" Style="{StaticResource SemanticButton}"
-                            BorderThickness="2" FontSize="30" Padding="64,18"
-                            MinHeight="88" Background="#7F1D1D" Foreground="#FFFFFF"
-                            BorderBrush="#FFFFFF"
-                            PreviewMouseLeftButtonDown="OnEmergencyClearPress"
-                            PreviewMouseLeftButtonUp="OnEmergencyClearRelease"
-                            MouseLeave="OnEmergencyClearLeave"
-                            LostMouseCapture="OnEmergencyClearLeave"
-                            Click="OnEmergencyCancelClick"/>
-                    <Border x:Name="EmergencyClearProgress" HorizontalAlignment="Left"
-                            VerticalAlignment="Bottom" Height="8" Width="0" CornerRadius="4"
-                            Margin="4" IsHitTestVisible="False" Background="#FFFFFF"/>
-                </Grid>
-                <TextBlock x:Name="EmergencyClearHint" FontSize="20"
-                           Foreground="{DynamicResource OnNegative}" HorizontalAlignment="Center"
-                           TextWrapping="Wrap" TextAlignment="Center" Margin="0,12,0,0"/>
+                <Button x:Name="EmergencyCancelButton" Style="{StaticResource SemanticButton}"
+                        BorderThickness="2" FontSize="30" Padding="64,18" Margin="0,56,0,0"
+                        MinHeight="88" MinWidth="420" HorizontalAlignment="Center"
+                        Background="#7F1D1D" Foreground="#FFFFFF" BorderBrush="#FFFFFF"
+                        Click="OnEmergencyCancelClick"/>
+                <!-- Clear confirmation: the same slide as arming, then the admin rules. -->
+                <StackPanel x:Name="EmergencyClearPanel" Visibility="Collapsed"
+                            Margin="0,24,0,0" HorizontalAlignment="Center" MinWidth="420"
+                            MaxWidth="520">
+                    <TextBlock x:Name="EmergencyClearHint" FontSize="20"
+                               Foreground="{DynamicResource OnNegative}"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                    <Border Background="#33000000" CornerRadius="28" Height="62"
+                            BorderBrush="#66FFFFFF" BorderThickness="1" Margin="0,16,0,0">
+                        <Grid>
+                            <TextBlock x:Name="EmergencyClearSlideText" FontSize="17"
+                                       FontWeight="Bold" Foreground="#FFFFFF"
+                                       IsHitTestVisible="False" Margin="62,6,16,6"
+                                       HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <app:SosSlider x:Name="EmergencyClearSlide"
+                                           Style="{StaticResource SosTrack}"/>
+                        </Grid>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                                Margin="0,16,0,0">
+                        <Button x:Name="EmergencyClearConfirm" Style="{StaticResource ChipButton}"
+                                Margin="0" Click="OnEmergencyClearConfirm"/>
+                        <Button x:Name="EmergencyClearBack" Style="{StaticResource ChipButton}"
+                                Margin="12,0,0,0" Click="OnEmergencyClearBack"/>
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
             </ScrollViewer>
         </Grid>

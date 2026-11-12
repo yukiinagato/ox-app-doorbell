@@ -811,9 +811,11 @@ Delete it?</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>Answered by {0}</value></data>
   <data name="history_detail_answered_by" xml:space="preserve"><value>Answered on</value></data>
   <data name="history_detail_door" xml:space="preserve"><value>Door</value></data>
+  <data name="history_detail_duration" xml:space="preserve"><value>Duration</value></data>
   <data name="history_detail_empty" xml:space="preserve"><value>Select a call to see its details</value></data>
   <data name="history_detail_outcome" xml:space="preserve"><value>Outcome</value></data>
   <data name="history_detail_purpose" xml:space="preserve"><value>Purpose</value></data>
+  <data name="history_detail_time" xml:space="preserve"><value>Time</value></data>
   <data name="history_duration" xml:space="preserve"><value>{0}</value></data>
   <data name="history_empty" xml:space="preserve"><value>No calls yet</value></data>
   <data name="history_filter_all" xml:space="preserve"><value>All</value></data>
@@ -1907,6 +1909,7 @@ On</value></data>
   <data name="settings_launch_sound" xml:space="preserve"><value>Startup sound</value></data>
   <data name="settings_light_from" xml:space="preserve"><value>Light from</value></data>
   <data name="settings_list_empty" xml:space="preserve"><value>No entries</value></data>
+  <data name="settings_locked_hint" xml:space="preserve"><value>Settings need the admin password</value></data>
   <data name="settings_media_bind" xml:space="preserve"><value>Use on door station</value></data>
   <data name="settings_media_credential" xml:space="preserve"><value>Camera credential</value></data>
   <data name="settings_media_credential_hint" xml:space="preserve"><value>user:password or a token, kept in this device's secure store</value></data>
@@ -2196,6 +2199,7 @@ On</value></data>
   <data name="settings_unit_kbps" xml:space="preserve"><value>{0} kbps</value></data>
   <data name="settings_unit_percent" xml:space="preserve"><value>{0}%</value></data>
   <data name="settings_unit_seconds" xml:space="preserve"><value>{0} s</value></data>
+  <data name="settings_unlock" xml:space="preserve"><value>Unlock</value></data>
   <data name="settings_unlock_button" xml:space="preserve"><value>Show the unlock button</value></data>
   <data name="settings_unlock_show_button" xml:space="preserve"><value>Show the unlock button</value></data>
   <data name="settings_update_channel" xml:space="preserve"><value>Update channel</value></data>
@@ -2290,6 +2294,8 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="sos_button_on_roles" xml:space="preserve"><value>Devices that show SOS</value></data>
   <data name="sos_cancel_countdown" xml:space="preserve"><value>Cancel</value></data>
   <data name="sos_cancel_requires_pin" xml:space="preserve"><value>Require the admin password to clear it</value></data>
+  <data name="sos_clear_confirm_title" xml:space="preserve"><value>Clear the alarm?</value></data>
+  <data name="sos_confirm_title" xml:space="preserve"><value>Send an SOS?</value></data>
   <data name="sos_countdown" xml:space="preserve"><value>Sending an alert in {0} seconds</value></data>
   <data name="sos_countdown_cancel" xml:space="preserve"><value>Cancel</value></data>
   <data name="sos_countdown_s" xml:space="preserve"><value>Cancellable countdown (seconds)</value></data>
@@ -2297,12 +2303,16 @@ This device joins automatically. Only if it does not, enter the indoor panel add
   <data name="sos_hold_to_clear" xml:space="preserve"><value>Press and hold to clear</value></data>
   <data name="sos_mode_hold" xml:space="preserve"><value>Press and hold (legacy)</value></data>
   <data name="sos_mode_slide" xml:space="preserve"><value>Slide to trigger</value></data>
+  <data name="sos_send" xml:space="preserve"><value>Send SOS</value></data>
   <data name="sos_since" xml:space="preserve"><value>Since {0}</value></data>
+  <data name="sos_slide_clear" xml:space="preserve"><value>Slide to clear</value></data>
   <data name="sos_slide_hint" xml:space="preserve"><value>Slide right to call for help</value></data>
   <data name="sos_slide_label" xml:space="preserve"><value>Slide for SOS</value></data>
   <data name="sos_slide_sub" xml:space="preserve"><value>Alarm after {0}s</value></data>
+  <data name="sos_slide_to_clear" xml:space="preserve"><value>Slide to clear</value></data>
   <data name="sos_slide_two_line" xml:space="preserve"><value>Slide for SOS
 Sends in {0}s</value></data>
+  <data name="sos_tap_to_clear" xml:space="preserve"><value>Tap to confirm clearing</value></data>
   <data name="sos_title" xml:space="preserve"><value>SOS</value></data>
   <data name="sos_trigger_mode" xml:space="preserve"><value>How it is triggered</value></data>
   <data name="sound_button_click" xml:space="preserve"><value>Cursor move 4 (button)</value></data>

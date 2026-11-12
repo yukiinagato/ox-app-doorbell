@@ -270,6 +270,29 @@ function Test-Calls([string]$look) {
     [void](Assert-Command 'home')
 }
 
+# SOS: a compact trigger, then a confirmation card. The suite opens the card and cancels it;
+# it never slides or presses Send, so no countdown starts and Core is never told.
+function Test-Sos([string]$look) {
+    $trigger = Assert-Element 'sos' 'SosButton'
+    if (-not (Test-OnScreen $trigger)) { return }
+    $rect = $trigger.Current.BoundingRectangle
+    Add-Check 'sos: trigger is compact and touch sized' (($rect.Height -ge 44) -and ($rect.Height -le 64) -and ($rect.Width -le 200)) ("{0}x{1}" -f [int]$rect.Width, [int]$rect.Height)
+    Add-Check 'sos: the slide is not on the home surface' (-not (Test-OnScreen (Find-ById 'SosSlide' 300)))
+    Invoke-Click $trigger
+    foreach ($id in @('SosConfirmTitle', 'SosConfirmBody', 'SosSlide', 'SosConfirmSend', 'SosConfirmCancel')) {
+        [void](Assert-Element 'sos confirm' $id)
+    }
+    Add-Check 'sos confirm: opening it starts no countdown' (-not (Test-OnScreen (Find-ById 'SosCountdownCancel' 500)))
+    $send = Find-ById 'SosConfirmSend'
+    if ($null -ne $send) {
+        Add-Check 'sos confirm: Send SOS does not have the focus' (-not $send.Current.HasKeyboardFocus)
+    }
+    Save-Shot ("sos-confirm-" + $look)
+    [void](Click-Id 'sos confirm' 'SosConfirmCancel')
+    Assert-Gone 'sos confirm' 'SosConfirmTitle'
+    Add-Check 'sos confirm: cancel starts no countdown' (-not (Test-OnScreen (Find-ById 'SosCountdownCancel' 500)))
+}
+
 function Test-IndoorPanel {
     # A fresh, unpaired instance opens on pairing onboarding.
     $pairing = Find-ById 'PairingOverlay' 8000
@@ -292,6 +315,8 @@ function Test-IndoorPanel {
             [void](Assert-Element 'dashboard' $id)
         }
         Save-Shot ("dashboard-" + $look)
+
+        Test-Sos $look
 
         if (Click-Id 'dashboard' 'NavHistory') {
             foreach ($id in @('HistoryTitle', 'HistoryFilterAll', 'HistoryFilterMissed',

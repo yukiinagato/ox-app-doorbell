@@ -206,8 +206,8 @@ namespace DoorbellApp
         // The SOS slider floats over whichever home screen is showing, so the footers have to
         // reserve room for it explicitly. A real device found the version and battery line
         // running underneath it in the narrow layout; these are the numbers that stop it.
-        private const double SosBarWidth = 238;
-        private const double SosBarHeight = 62;
+        private const double SosBarWidth = 120;
+        private const double SosBarHeight = 48;
         private const double SosBarMargin = 20;
         private const double SosBarBottom = 16;
         private const double SosClearance = 12;
@@ -240,9 +240,10 @@ namespace DoorbellApp
                     (SosButton.Parent as Panel)?.Children.Remove(SosButton);
                     VisitorSosHost.Children.Add(SosButton);
                 }
-                SosButton.HorizontalAlignment = HorizontalAlignment.Stretch;
-                SosButton.Width = double.NaN;
-                SosButton.MaxWidth = 620;
+                // Leading edge under the visitor content; it keeps its compact size.
+                SosButton.HorizontalAlignment = HorizontalAlignment.Left;
+                SosButton.Width = SosBarWidth;
+                SosButton.Height = SosBarHeight;
                 SosButton.Margin = new Thickness(0);
                 VisitorFooter.Margin = new Thickness(0, 12, 0, 0);
                 return;
@@ -252,17 +253,16 @@ namespace DoorbellApp
                 (SosButton.Parent as Panel)?.Children.Remove(SosButton);
                 IdleView.Children.Add(SosButton);
             }
-            SosButton.MaxWidth = double.PositiveInfinity;
             bool sosVisible = SosButton.Visibility == Visibility.Visible;
             bool sosBelow = sosVisible &&
                 (portrait || width < SosReservedWidth + FooterMinimumWidth);
 
-            SosButton.HorizontalAlignment = sosBelow ?
-                HorizontalAlignment.Stretch : HorizontalAlignment.Right;
-            SosButton.Width = sosBelow ? double.NaN : SosBarWidth;
-            SosButton.Margin = sosBelow
-                ? new Thickness(SosBarMargin, 0, SosBarMargin, SosBarBottom)
-                : new Thickness(0, 0, SosBarMargin, SosBarBottom);
+            // Always the same compact control in the trailing corner; a narrow window only
+            // changes whether the footer reserves room beside it or above it.
+            SosButton.HorizontalAlignment = HorizontalAlignment.Right;
+            SosButton.Width = SosBarWidth;
+            SosButton.Height = SosBarHeight;
+            SosButton.Margin = new Thickness(0, 0, SosBarMargin, SosBarBottom);
 
             double reserveWidth = sosVisible && !sosBelow ? SosReservedWidth : 0;
             double reserveHeight = sosBelow ? SosReservedHeight : 0;

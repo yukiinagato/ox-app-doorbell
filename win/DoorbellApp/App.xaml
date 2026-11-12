@@ -168,6 +168,21 @@
             <Setter Property="Margin" Value="6,0,6,0"/>
         </Style>
 
+        <!-- SOS trigger and the keyboard "Send SOS": a secondary button with a negative outline
+             and no fill, so it never competes with a screen's primary action. -->
+        <Style x:Key="SosTriggerButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
+            <Setter Property="Foreground" Value="{DynamicResource Negative}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource Negative}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Padding" Value="16,8"/>
+            <Setter Property="MinHeight" Value="44"/>
+            <Setter Property="MinWidth" Value="88"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="VerticalAlignment" Value="Stretch"/>
+        </Style>
+
         <!-- Standard card: the surface for content that sits over the page or the wallpaper. -->
         <Style x:Key="CardBorder" TargetType="Border">
             <Setter Property="Background" Value="{DynamicResource Card}"/>

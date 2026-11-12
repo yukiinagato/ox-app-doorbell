@@ -256,10 +256,18 @@ namespace DoorbellApp
             };
             _saverDrift.Interval = TimeSpan.FromSeconds(30);
             _saverDrift.Tick += (s, e) => MoveSaverClock();
-            SosSlide.Armed += OnSosArmed;
+            SosSlide.Armed += ConfirmSos;
             SosSlide.ReviewRequested += OnSosReviewRequested;
-            SosSlide.Unloaded += (s, e) => StopSosCountdown();
-            SosSlide.IsVisibleChanged += (s, e) => { if (!SosSlide.IsVisible) StopSosCountdown(); };
+            EmergencyClearSlide.Armed += ConfirmEmergencyClear;
+            EmergencyClearSlide.ReviewRequested += () => EmergencyClearConfirm.Focus();
+            // When the trigger goes away (SOS switched off, or a call takes the screen) an open
+            // confirmation and a running countdown go with it.
+            SosButton.IsVisibleChanged += (s, e) =>
+            {
+                if (SosButton.IsVisible) return;
+                CloseSosConfirm();
+                StopSosCountdown();
+            };
             BindVisitorAction(CancelButton, Ui.VisitorActionKind.Cancel);
             BindVisitorAction(EndCallButton, Ui.VisitorActionKind.End);
             _tileRefresh.Interval = TimeSpan.FromSeconds(5);
@@ -527,7 +535,7 @@ namespace DoorbellApp
             EmergencyTitle.Text = Texts.T("emergency.title");
             EmergencyNote.Text = Texts.T("emergency.notified");
             EmergencyCancelButton.Content = Texts.T("emergency.cancel");
-            EmergencyClearHint.Text = Texts.T("emergency.clear_hold_hint");
+            ApplySosConfirmStrings();
             bool ending = _inCall && IncomingView.Visibility == Visibility.Visible;
             AnswerButton.Content = IconStack(ending ? "IconPhoneOff" : "IconPhone",
                 Texts.T(ending ? "incall.end_call" : "ring.answer"),

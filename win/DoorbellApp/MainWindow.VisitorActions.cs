@@ -12,7 +12,6 @@ namespace DoorbellApp
     {
         private readonly VisitorActionGuard _visitorAction = new VisitorActionGuard();
         private readonly SosReviewGuard _sosReview = new SosReviewGuard();
-        private bool _sosReviewOpen;
 
         private void BindVisitorAction(Button button, VisitorActionKind kind)
         {
@@ -59,22 +58,13 @@ namespace DoorbellApp
             CallingPurposeSection.Visibility = Visibility.Collapsed;
         }
 
+        /// <summary>
+        /// Enter, Space or a screen reader's Invoke on the slide control does not arm anything:
+        /// it moves to "Send SOS", the explicit keyboard confirmation.
+        /// </summary>
         private void OnSosReviewRequested()
         {
-            if (_sosReviewOpen || !SosSlide.IsLoaded || !SosSlide.IsVisible ||
-                !SosSlide.IsEnabled || _emergencyActive || _sosCountdownLeft > 0) return;
-            long revision = _sosReview.Begin(), generation = App.Core.Generation;
-            _sosReviewOpen = true;
-            MessageBoxResult result;
-            try {
-                result = MessageBox.Show(this, Texts.T("sos.accessibility_confirm"),
-                    Texts.T("sos.accessibility_start"), MessageBoxButton.OKCancel,
-                    MessageBoxImage.Warning, MessageBoxResult.Cancel);
-            }
-            finally { _sosReviewOpen = false; }
-            if (_sosReview.Consume(revision, generation, App.Core.Generation,
-                    result == MessageBoxResult.OK && SosSlide.IsLoaded && SosSlide.IsVisible &&
-                    SosSlide.IsEnabled && !_emergencyActive && _sosCountdownLeft == 0)) OnSosArmed();
+            if (SosConfirmView.Visibility == Visibility.Visible) SosConfirmSend.Focus();
         }
 
         private void UpdateVisitorActionHeights(double width)

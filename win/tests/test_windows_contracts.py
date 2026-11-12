@@ -1680,6 +1680,79 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('Thumb Width="48" Height="48"', app)
         self.assertIn('x:Name="SosButton"', window)
         self.assertIn('CornerRadius="28"', window)
+        # The slide is no longer on the home surfaces: it lives in the confirmation card and
+        # in the active-SOS clear panel, and the trigger is a compact outlined button.
+        root = ET.fromstring(window)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        parents = {child: parent for parent in root.iter() for child in parent}
+        by_name = {e.get(ns): e for e in root.iter() if e.get(ns)}
+
+        def inside(name, ancestor):
+            node = by_name[name]
+            while node in parents:
+                node = parents[node]
+                if node.get(ns) == ancestor:
+                    return True
+            return False
+
+        sliders = [e.get(ns) for e in root.iter() if e.tag.endswith("}SosSlider")]
+        self.assertEqual(sorted(sliders), ["EmergencyClearSlide", "SosSlide"])
+        self.assertTrue(inside("SosSlide", "SosConfirmView"))
+        self.assertFalse(inside("SosSlide", "IdleView"))
+        self.assertTrue(inside("EmergencyClearSlide", "EmergencyClearPanel"))
+        trigger = by_name["SosButton"]
+        self.assertTrue(trigger.tag.endswith("}Button"))
+        self.assertEqual(trigger.get("Style"), "{StaticResource SosTriggerButton}")
+        self.assertEqual(trigger.get("Click"), "OnSosTriggerClick")
+        self.assertIsNone(trigger.get("Background"))
+        style = app[app.index('<Style x:Key="SosTriggerButton"'):]
+        style = style[:style.index("</Style>")]
+        self.assertIn('BasedOn="{StaticResource DefaultButtonStyle}"', style)
+        self.assertIn('<Setter Property="BorderBrush" Value="{DynamicResource Negative}"/>', style)
+        self.assertNotIn('Property="Background"', style)
+
+    def test_sos_takes_a_tap_then_a_slide_and_never_a_hold(self):
+        flow = read("win/DoorbellApp/MainWindow.SosConfirm.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        catalog = read("i18n/strings.yaml")
+        # Step 1: the tap only opens the confirmation; it cannot start the countdown.
+        tap = flow[flow.index("private void OnSosTriggerClick"):
+                   flow.index("private void CloseSosConfirm()")]
+        self.assertIn("SosConfirmView.Visibility = Visibility.Visible;", tap)
+        self.assertNotIn("OnSosArmed", tap)
+        self.assertNotIn("App.Core.Emergency", flow[:flow.index("private void ConfirmSos()")])
+        # Cancel has the focus, so the keyboard confirmation is never the default.
+        self.assertIn("SosConfirmCancel.Focus();", tap)
+        self.assertNotIn('IsDefault="True"', xaml)
+        # Step 2: the slide, or "Send SOS", confirms; only while the card is open.
+        self.assertIn("SosSlide.Armed += ConfirmSos;", window)
+        self.assertNotIn("SosSlide.Armed += OnSosArmed;", window)
+        confirm = flow[flow.index("private void ConfirmSos()"):]
+        confirm = confirm[:confirm.index("\n        }\n")]
+        self.assertIn("if (SosConfirmView.Visibility != Visibility.Visible || "
+                      "!SosTriggerAvailable()) return;", confirm)
+        self.assertLess(confirm.index("CloseSosConfirm();"), confirm.index("OnSosArmed();"))
+        self.assertIn("private void OnSosConfirmSend(object sender, RoutedEventArgs e) => "
+                      "ConfirmSos();", flow)
+        # It closes by itself after ten seconds without input, and with the trigger.
+        self.assertIn("SosConfirmTimeout = TimeSpan.FromSeconds(10);", flow)
+        self.assertIn("_sosConfirmTimer.Tick += (s, e) => CloseSosConfirm();", flow)
+        for event in ("PreviewMouseDown", "PreviewTouchDown", "PreviewKeyDown"):
+            self.assertIn('%s="OnSosConfirmInput"' % event, xaml)
+        hidden = window[window.index("SosButton.IsVisibleChanged += (s, e) =>"):]
+        hidden = hidden[:hidden.index("};")]
+        self.assertIn("CloseSosConfirm();", hidden)
+        self.assertIn("StopSosCountdown();", hidden)
+        # Nothing in the flow is a press-and-hold.
+        for source in (flow, read("win/DoorbellApp/MainWindow.Emergency.cs"),
+                       read("win/DoorbellApp/MainWindow.VisitorActions.cs")):
+            self.assertNotIn("MessageBox.Show(this, Texts.T(\"sos.accessibility_confirm\")", source)
+            self.assertNotIn("Hold", source.replace("Threshold", ""))
+        for key in ("sos.confirm_title", "sos.send", "sos.slide_to_clear"):
+            entry = re.search(r"^%s: (.*)$" % re.escape(key), catalog, re.M)
+            self.assertIsNotNone(entry, key)
+            self.assertEqual(set(re.findall(r'(\w+): "', entry.group(1))), {"ja", "en", "zh"})
 
     def test_incoming_screen_controls_notice_chip_and_debug_line(self):
         xaml = read("win/DoorbellApp/MainWindow.xaml")
@@ -2272,9 +2345,27 @@ class WindowsContracts(unittest.TestCase):
         view = next(e for e in root.iter() if e.get(ns) == "EmergencyView")
         self.assertEqual(view.get("Panel.ZIndex"), "1000")
         self.assertEqual(view.get("Background"), "{DynamicResource Negative}")
-        self.assertIn("TimeSpan.FromMilliseconds(1500)", sos)
-        self.assertIn("InputManager.Current.MostRecentInputDevice is MouseDevice", sos)
-        self.assertIn('Texts.T("emergency.clear_confirm")', sos)
+        # Clear is two steps with no press-and-hold: the button only opens the slide
+        # confirmation, and the slide (or its keyboard button) runs the admin rules.
+        self.assertNotIn("FromMilliseconds(1500)", sos)
+        self.assertNotIn("CaptureMouse", sos)
+        clear_button = next(e for e in root.iter() if e.get(ns) == "EmergencyCancelButton")
+        for event in ("PreviewMouseLeftButtonDown", "PreviewMouseLeftButtonUp", "MouseLeave",
+                      "LostMouseCapture"):
+            self.assertIsNone(clear_button.get(event))
+        self.assertEqual(clear_button.get("Click"), "OnEmergencyCancelClick")
+        opened = sos[sos.index("private void OnEmergencyCancelClick"):
+                     sos.index("private void CloseEmergencyClear()")]
+        self.assertIn("EmergencyClearPanel.Visibility = Visibility.Visible;", opened)
+        self.assertNotIn("ClearEmergencyConfirmed", opened)
+        self.assertNotIn("App.Core.Emergency", opened)
+        confirm = sos[sos.index("private void ConfirmEmergencyClear()"):
+                      sos.index("private void ClearEmergencyConfirmed()")]
+        self.assertIn("if (EmergencyClearPanel.Visibility != Visibility.Visible) return;", confirm)
+        self.assertIn("EmergencyClearSlide.Armed += ConfirmEmergencyClear;",
+                      read("win/DoorbellApp/MainWindow.xaml.cs"))
+        self.assertIn('Texts.T("emergency.clear_confirm")',
+                      read("win/DoorbellApp/MainWindow.SosConfirm.cs"))
         self.assertIn("EmergencySource.Text = EmergencySourceLine(ev);", sos)
 
     def test_pairing_code_is_the_largest_element_and_stacks_when_narrow(self):
@@ -2603,7 +2694,7 @@ class WindowsContracts(unittest.TestCase):
             heights = [int(v) for v in re.findall(
                 r'<Setter Property="MinHeight" Value="(\d+)"/>', block)]
             with self.subTest(style=style):
-                if style == "SemanticActionButton":
+                if style in ("SemanticActionButton",):
                     self.assertEqual(heights, [72])
                 else:
                     self.assertTrue(heights and min(heights) >= 44, style)

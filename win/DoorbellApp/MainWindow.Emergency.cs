@@ -37,6 +37,7 @@ namespace DoorbellApp
                     if (r != null && r.ToString() == App.Boot.Role) show = true;
             }
             SosButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (!show) CloseSosConfirm();
 
             // Sliding and confirmed accessible activation use the same cancellable countdown.
             // Legacy "hold" remains an accepted configuration spelling.
@@ -81,8 +82,8 @@ namespace DoorbellApp
         /// <summary>A complete slide or reviewed activation starts the same cancellable countdown.</summary>
         private void OnSosArmed()
         {
-            if (_emergencyActive || _sosCountdownLeft > 0 || !SosSlide.IsLoaded ||
-                !SosSlide.IsVisible || !SosSlide.IsEnabled) return;
+            if (_emergencyActive || _sosCountdownLeft > 0 ||
+                SosButton.Visibility != Visibility.Visible) return;
             _sosReview.Revoke();
             if (_sosCountdownS <= 0)
             {
@@ -228,6 +229,7 @@ namespace DoorbellApp
 
         private void HideEmergency()
         {
+            CloseEmergencyClear();
             StopSosCountdown();
             _emergencyPresentationTimeout.Stop();
             _alertNotifier.Clear();
@@ -313,7 +315,6 @@ namespace DoorbellApp
             EmergencyNote.Foreground = foregroundBrush;
             EmergencySource.Foreground = foregroundBrush;
             EmergencyClearHint.Foreground = foregroundBrush;
-            EmergencyClearProgress.Background = foregroundBrush;
             EmergencyCancelButton.Background = accentBrush;
             EmergencyCancelButton.Foreground = Frozen(new SolidColorBrush(
                 (Color)ColorConverter.ConvertFromString(accentText)));
@@ -379,66 +380,41 @@ namespace DoorbellApp
             return false;
         }
 
-        /// <summary>Hold time for the deliberate SOS clear gesture.</summary>
-        private static readonly TimeSpan EmergencyClearHold = TimeSpan.FromMilliseconds(1500);
         private DispatcherTimer _emergencyClearTimer;
-        private DateTime _emergencyClearStarted;
-        private bool _emergencyClearArmed;
 
-        private void OnEmergencyClearPress(object sender, MouseButtonEventArgs e)
-        {
-            // Pointer and touch (promoted to mouse) clear only after a long press; the button's
-            // own Click from the pointer is ignored below.
-            e.Handled = true;
-            EmergencyCancelButton.CaptureMouse();
-            _emergencyClearArmed = true;
-            _emergencyClearStarted = DateTime.UtcNow;
-            if (_emergencyClearTimer == null)
-            {
-                _emergencyClearTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
-                _emergencyClearTimer.Tick += OnEmergencyClearTick;
-            }
-            _emergencyClearTimer.Start();
-        }
+        // ---- clearing an active SOS -----------------------------------------------------------
 
-        private void OnEmergencyClearTick(object sender, EventArgs e)
-        {
-            double fraction = (DateTime.UtcNow - _emergencyClearStarted).TotalMilliseconds /
-                              EmergencyClearHold.TotalMilliseconds;
-            double track = Math.Max(0, EmergencyCancelButton.ActualWidth - 8);
-            EmergencyClearProgress.Width = Math.Min(1, fraction) * track;
-            if (fraction < 1) return;
-            ResetEmergencyClearGesture();
-            ClearEmergencyConfirmed();
-        }
-
-        private void OnEmergencyClearRelease(object sender, MouseButtonEventArgs e)
-        {
-            e.Handled = true;
-            ResetEmergencyClearGesture();
-        }
-
-        private void OnEmergencyClearLeave(object sender, EventArgs e)
-        {
-            if (_emergencyClearArmed) ResetEmergencyClearGesture();
-        }
-
-        private void ResetEmergencyClearGesture()
-        {
-            _emergencyClearArmed = false;
-            if (_emergencyClearTimer != null) _emergencyClearTimer.Stop();
-            EmergencyClearProgress.Width = 0;
-            if (EmergencyCancelButton.IsMouseCaptured) EmergencyCancelButton.ReleaseMouseCapture();
-        }
-
-        /// <summary>Keyboard and automation invoke Click; they confirm instead of holding.</summary>
+        /// <summary>The Clear button only opens the slide confirmation inside the overlay.</summary>
         private void OnEmergencyCancelClick(object sender, RoutedEventArgs e)
         {
-            if (InputManager.Current.MostRecentInputDevice is MouseDevice ||
-                InputManager.Current.MostRecentInputDevice is StylusDevice) return;
-            if (MessageBox.Show(this, Texts.T("emergency.clear_confirm"), Texts.T("emergency.title"),
-                    MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) !=
-                MessageBoxResult.Yes) return;
+            if (EmergencyClearPanel.Visibility == Visibility.Visible) return;
+            EmergencyClearSlide.Reset();
+            EmergencyClearPanel.Visibility = Visibility.Visible;
+            if (_emergencyClearTimer == null)
+            {
+                _emergencyClearTimer = new DispatcherTimer { Interval = SosConfirmTimeout };
+                _emergencyClearTimer.Tick += (s, args) => CloseEmergencyClear();
+            }
+            _emergencyClearTimer.Stop();
+            _emergencyClearTimer.Start();
+            EmergencyClearBack.Focus();
+        }
+
+        private void CloseEmergencyClear()
+        {
+            if (_emergencyClearTimer != null) _emergencyClearTimer.Stop();
+            EmergencyClearPanel.Visibility = Visibility.Collapsed;
+            EmergencyClearSlide.Reset();
+        }
+
+        private void OnEmergencyClearBack(object sender, RoutedEventArgs e) => CloseEmergencyClear();
+
+        private void OnEmergencyClearConfirm(object sender, RoutedEventArgs e) => ConfirmEmergencyClear();
+
+        private void ConfirmEmergencyClear()
+        {
+            if (EmergencyClearPanel.Visibility != Visibility.Visible) return;
+            CloseEmergencyClear();
             ClearEmergencyConfirmed();
         }
 
