@@ -100,9 +100,8 @@
     var triggers = doc.getElementsByClassName("dbSosTrigger");
     if (triggers.length) {
       var spans = triggers[0].getElementsByTagName("span");
-      triggers[0].setAttribute("aria-label", t("emergency.button"));
+      triggers[0].setAttribute("aria-label", t("sos.accessibility_start"));
       if (spans.length) setText(spans[0], t("emergency.button"));
-      if (spans.length > 1) setText(spans[1], t("emergency.hold_hint", { sec: "2" }));
     }
   }
 

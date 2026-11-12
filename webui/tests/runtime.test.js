@@ -88,22 +88,17 @@ assert.strictEqual(overlay.update({}).active, true); // unknown rolling-upgrade 
 assert.strictEqual(overlay.update({ emergency: { active: true } }).active, true);
 assert.strictEqual(overlay.update({ emergency: { active: false } }).active, false);
 
-let holdTimer = null, holdDelay = 0, holdFires = 0, holdCancels = 0;
-const hold = R.sosHoldController(function () { holdFires++; }, function (fn, delay) {
-  holdTimer = fn; holdDelay = delay; return 7;
-}, function (id) { assert.strictEqual(id, 7); holdCancels++; holdTimer = null; });
-assert.strictEqual(hold.duration_ms, 2000);
-assert.strictEqual(hold.start(), true);
-assert.strictEqual(hold.start(), false); // Repeated touch/mouse events do not shorten the hold.
-assert.strictEqual(holdDelay, 2000);
-hold.cancel();
-assert.strictEqual(holdFires, 0);
-assert.strictEqual(holdCancels, 1);
-assert.strictEqual(hold.start(), true);
-const completeHold = holdTimer;
-completeHold();
-assert.strictEqual(holdFires, 1);
-assert.strictEqual(hold.holding(), false);
+// SOS is confirmed by sliding end to end; there is no hold controller any more.
+assert.strictEqual(R.sosHoldController, undefined);
+assert.strictEqual(R.SOS_CONFIRM_TIMEOUT_MS, 10000);
+assert.strictEqual(R.sosSlideProgress(10, 10, 240), 0);
+assert.strictEqual(R.sosSlideProgress(10, 130, 240), 0.5);
+assert.strictEqual(R.sosSlideProgress(10, 900, 240), 1);
+assert.strictEqual(R.sosSlideProgress(10, -50, 240), 0, "dragging backwards never arms");
+assert.strictEqual(R.sosSlideProgress(10, 100, 0), 0, "an unmeasured track never arms");
+assert.strictEqual(R.sosSlideArmed(0.89), false);
+assert.strictEqual(R.sosSlideArmed(0.9), true);
+assert.strictEqual(R.sosSlideArmed(NaN), false);
 
 // A failed semantic-UI report is retried with backoff; only a 2xx acknowledgement is deduplicated.
 let uiReportSends = 0, uiReportRetry = null;

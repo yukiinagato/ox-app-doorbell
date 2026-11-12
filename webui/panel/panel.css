@@ -217,8 +217,8 @@ body.doorPage .band { max-height:30%; overflow:auto; font-size:18px; font-size:1
 /* Back out of the purpose step: nothing was sent yet, so it is not a destructive action. */
 #cancelCall.back { background:#27313b; background:var(--surface-3); color:#e8edf2; color:var(--on-surface);
                    border-color:#343f4b; border-color:var(--line); }
-body #visitorActions .dbSosTrigger { position:static; z-index:auto; width:88px; min-width:88px; min-height:80px; margin:0 12px 0 0;
-              border-radius:16px; }
+body #visitorActions .dbSosTrigger { position:static; z-index:auto; min-width:72px; min-width:var(--tap-visitor);
+              min-height:72px; min-height:var(--tap-visitor); margin:0 12px 0 0; }
 body .dbEmergencyOverlay { overflow:auto; }
 body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:auto; left:auto; right:auto; margin:8% 5%; }
 @supports (display:grid) {
@@ -245,7 +245,7 @@ body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:aut
   #visitorActions { display:flex; align-items:stretch; gap:12px; flex:none;
                     padding:12px calc(16px + env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left)); }
   #visitorActions #doorList, #cancelCall { flex:1 1 auto; }
-  body #visitorActions .dbSosTrigger { flex:0 0 88px; margin:0; }
+  body #visitorActions .dbSosTrigger { flex:none; margin:0; align-self:center; }
   @media (min-width: 600px) {
     #main #doorList.many { grid-template-columns:repeat(2, minmax(0, 1fr)); max-width:1100px; }
   }
@@ -326,11 +326,11 @@ body.monitorPage { padding-bottom:84px; }
                             background:#b3261e; background:var(--negative); vertical-align:middle; }
 .out-missed .hout { color:#ff8e8e; color:var(--negative-text); font-weight:600; }
 .hthumb { display:block; width:72px; height:40px; margin-left:12px; object-fit:cover; border-radius:6px; }
+/* Docked SOS: a compact outlined control at the leading edge of a fixed zone. It never floats
+ * over content and never competes with the primary action in size or fill. */
 body #dashTabs .dbSosTrigger, body #dashHeader .dbSosTrigger, body #callActions .dbSosTrigger, body #controls .dbSosTrigger {
-  position:static; z-index:auto; min-width:76px; min-height:56px; margin:0 8px 0 0; padding:6px 8px; border-radius:14px; }
-body #dashHeader .dbSosTrigger { float:left; margin-right:16px; }
-body .dbSosTrigger .dbSosLabel { font-size:20px; font-size:1.25rem; }
-body .dbSosTrigger .dbSosHint { font-size:11px; font-size:.6875rem; margin-top:2px; }
+  position:static; z-index:auto; margin:0 8px 0 0; }
+body #dashHeader .dbSosTrigger { float:left; margin:6px 16px 0 0; }
 .tabBadge { display:inline-block; min-width:20px; margin-left:6px; padding:0 6px; border-radius:10px; font-size:12px;
             font-size:.75rem; line-height:20px; font-weight:bold; text-align:center; vertical-align:middle;
             background:#b3261e; background:var(--negative); color:#fff; color:var(--on-negative); }
@@ -351,7 +351,8 @@ body .dbSosTrigger .dbSosHint { font-size:11px; font-size:.6875rem; margin-top:2
   #dashHeader { position:sticky; top:0; z-index:5; display:flex; flex-wrap:wrap; align-items:center; gap:8px 16px;
                 padding:max(10px, env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 10px calc(16px + env(safe-area-inset-left)); }
   #dashHeader:after { display:none; }
-  .dashClock, #statusChips, #pushBar, body #dashHeader .dbSosTrigger { float:none; margin:0; padding:0; }
+  .dashClock, #statusChips, #pushBar { float:none; margin:0; padding:0; }
+  body #dashHeader .dbSosTrigger { float:none; margin:0; }
   .dashClock { display:flex; flex-direction:column; }
   #clock { font-size:clamp(2.25rem, 1.6rem + 2.4vw, 3.5rem); font-variant-numeric:tabular-nums; }
   #statusChips { display:flex; flex-wrap:wrap; align-items:center; gap:8px; flex:1 1 auto; min-width:0; }
@@ -362,7 +363,7 @@ body .dbSosTrigger .dbSosHint { font-size:11px; font-size:.6875rem; margin-top:2
               padding:6px calc(8px + env(safe-area-inset-right)) calc(6px + env(safe-area-inset-bottom)) calc(8px + env(safe-area-inset-left)); }
   #dashTabs button[role=tab] { flex:1 1 0; margin:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; }
   #dashTabs button[role=tab] .ic { width:24px; height:24px; margin:0; }
-  body #dashTabs .dbSosTrigger { margin:0; flex:none; }
+  body #dashTabs .dbSosTrigger { margin:0 4px; flex:none; align-self:center; }
   #dashBody { padding:16px calc(16px + env(safe-area-inset-right)) 24px calc(16px + env(safe-area-inset-left)); }
   #snapGrid { display:grid; grid-template-columns:minmax(0, 1fr); gap:16px; }
   .snapCard { display:block; width:auto; margin:0; box-shadow:var(--shadow); transition:box-shadow var(--dur) var(--ease); }
@@ -428,7 +429,7 @@ body .dbSosTrigger .dbSosHint { font-size:11px; font-size:.6875rem; margin-top:2
   #callActions { position:sticky; bottom:0; margin:auto 0 0; max-width:none; width:100%; display:grid;
                  grid-template-columns:auto minmax(0, 1fr) minmax(0, 1fr); gap:12px;
                  padding:12px 0 calc(16px + env(safe-area-inset-bottom)); background:var(--surface); }
-  body #callActions .dbSosTrigger { grid-column:1; grid-row:1 / span 2; margin:0; align-self:stretch; }
+  body #callActions .dbSosTrigger { grid-column:1; grid-row:1 / span 2; margin:0; align-self:end; }
   #callActions #answerBtn { grid-column:2 / span 2; grid-row:1; margin:0; width:auto; }
   #callActions #replyBtn, #callActions #monitorClose { width:auto; margin:0; display:flex; align-items:center; justify-content:center; }
   #callActions #answerBtn { display:flex; align-items:center; justify-content:center; }
@@ -491,7 +492,7 @@ body.callPage main { flex:1 1 auto; min-height:0; overflow:auto; padding:0 16px 
             grid-template-areas:"sos primary" "sos secondary" "status status" "note note"; gap:8px 12px;
             padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:var(--surface);
             border-top:1px solid var(--line); }
-body #controls .dbSosTrigger { grid-area:sos; margin:0; align-self:stretch; }
+body #controls .dbSosTrigger { grid-area:sos; margin:0; align-self:end; }
 #primaryRow { grid-area:primary; display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; }
 #controls > #primaryRow:first-child, #controls > #primaryRow:first-child ~ #secondaryRow { grid-column:1 / -1; }
 #primaryRow button, #secondaryRow button { display:flex; align-items:center; justify-content:center; min-height:56px;
@@ -534,12 +535,21 @@ body #controls .dbSosTrigger { grid-area:sos; margin:0; align-self:stretch; }
 
 /* ================================================================ SOS (runtime.js overlay) */
 .dbEmergencyOverlay { background:#8f1010; background:var(--negative); color:#fff; color:var(--on-negative); }
-body .dbSosTrigger { background:#8f1010; background:var(--negative); color:#fff; color:var(--on-negative); }
+body .dbSosTrigger { background:transparent; color:#ff8e8e; color:var(--negative-text);
+                     border-color:#ff8e8e; border-color:var(--negative-text); }
+.dbSosTrigger .ic { margin-right:.3em; }
+body .dbSosConfirm { background:#1a2027; background:var(--surface-2); color:#e8edf2; color:var(--on-surface); }
+body .dbSosScrim { background:rgba(0,0,0,.6); background:var(--scrim); }
+body .dbSosConfirm .dbSosSend { color:#ff8e8e; color:var(--negative-text); border-color:#ff8e8e; border-color:var(--negative-text); }
+body .dbSosSlide { background:#27313b; background:var(--surface-3); border-color:#b3261e; border-color:var(--negative); }
+body .dbSosSlideLabel { color:#ff8e8e; color:var(--negative-text); }
+body .dbSosThumb { background:#b3261e; background:var(--negative); color:#fff; color:var(--on-negative); }
 @supports (display:grid) {
   .dbEmergencyOverlay { overflow:auto; padding:env(safe-area-inset-top) env(safe-area-inset-right)
                         env(safe-area-inset-bottom) env(safe-area-inset-left); }
   .dbEmergencyOverlay h2 { font-size:clamp(2rem, 1rem + 5vw, 4rem) !important; overflow-wrap:anywhere; }
   .dbEmergencyOverlay p { font-size:clamp(1.1rem, .9rem + 1vw, 1.6rem) !important; }
+  body .dbSosConfirm { padding-bottom:calc(16px + env(safe-area-inset-bottom)); box-shadow:var(--shadow); }
   body .dbSosOperation { bottom:calc(118px + env(safe-area-inset-bottom)); right:calc(18px + env(safe-area-inset-right)); }
 }
 

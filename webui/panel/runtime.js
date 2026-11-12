@@ -398,33 +398,19 @@
     return report;
   }
 
-  var SOS_HOLD_MS = 2000;
-  function sosHoldController(fire, schedule, cancel, delayMs) {
-    var timer = null, holding = false;
-    delayMs = Number(delayMs) || SOS_HOLD_MS;
-    function stop() {
-      holding = false;
-      if (timer !== null && cancel) cancel(timer);
-      timer = null;
-    }
-    function start() {
-      if (holding || !schedule) return false;
-      holding = true;
-      timer = schedule(function () {
-        timer = null;
-        if (!holding) return;
-        holding = false;
-        fire();
-      }, delayMs);
-      return true;
-    }
-    return { start: start, cancel: stop, holding: function () { return holding; },
-             duration_ms: delayMs };
+  // SOS confirmation: tapping the compact SOS control only opens a dialog; the alert is sent
+  // after its slide control has been dragged end to end. There is no press-and-hold anywhere,
+  // because an accidental touch can also be a long one.
+  var SOS_CONFIRM_TIMEOUT_MS = 10000, SOS_SLIDE_ARM = 0.9;
+  // Fraction of the track travelled, 0..1. travel is the track width minus the thumb width.
+  function sosSlideProgress(startX, currentX, travel) {
+    travel = Number(travel);
+    if (!(travel > 0)) return 0;
+    var moved = (Number(currentX) - Number(startX)) / travel;
+    return isFinite(moved) ? Math.max(0, Math.min(1, moved)) : 0;
   }
+  function sosSlideArmed(progress) { return Number(progress) >= SOS_SLIDE_ARM; }
 
-  // Replicated SOS state is the active-page safety authority while the administrator switch is
-  // enabled. A rule-projected device_alert may add presentation detail, but cannot suppress that
-  // state. When the switch is disabled, only an explicit Web alert or Push is presented.
   function orderedHlc(value) {
     value = typeof value === "string" ? value : "";
     return /^[0-9a-f]{12}-[0-9a-f]{4}-[0-9a-f]{1,8}$/.test(value) ? value : "";
@@ -817,7 +803,10 @@
   function installEmergencyOverlay(options) {
     options = options || {};
     var doc = root.document, overlay = null, title = null, detail = null;
-    var trigger = null, triggerLabel = null, triggerHint = null, sosWhen = null;
+    var trigger = null, triggerLabel = null, sosWhen = null;
+    var confirmBox = null, confirmScrim = null, confirmTitle = null, confirmText = null;
+    var slideTrack = null, slideThumb = null, slideLabel = null, confirmCancel = null, confirmSend = null;
+    var confirmTimer = null, confirmOpen = false, slide = null, confirmReturnFocus = null;
     var current = { known: false, active: false, source: "none" };
     var expiryTimer = null, expiryKey = "", expired = {}, alarm = null;
     var operationBox = null, operationText = null, operationReason = null, operationHelp = null;
@@ -833,12 +822,31 @@
         ".dbEmergencyOverlay p{font-size:26px;line-height:1.5;margin:8px;}" +
         ".dbEmergencyOverlay .dbSosWhen{font-size:22px;opacity:.9;margin:16px 0 0;}" +
         ".dbSosTrigger{position:fixed;right:18px;bottom:18px;z-index:2147483645;" +
-        "min-width:88px;min-height:88px;padding:10px;border:2px solid #fff;border-radius:44px;" +
-        "background:#8f1010;color:#fff;font-weight:bold;line-height:1.1;touch-action:none;}" +
-        ".dbSosTrigger .dbSosLabel{display:block;font-size:24px;}" +
-        ".dbSosTrigger .dbSosHint{display:block;margin-top:5px;font-size:11px;font-weight:normal;}" +
-        ".dbSosTrigger.dbSosHolding{outline:5px solid #ffd166;outline-offset:3px;}" +
+        "min-width:64px;min-height:44px;padding:8px 14px;border:2px solid #ff8e8e;border-radius:10px;" +
+        "background:transparent;color:#ff8e8e;font-weight:bold;line-height:1.1;}" +
+        ".dbSosTrigger .dbSosLabel{font-size:16px;}" +
         ".dbSosTrigger:disabled{opacity:.6;}" +
+        ".dbSosScrim{display:none;position:fixed;left:0;top:0;right:0;bottom:0;z-index:2147483640;" +
+        "background:rgba(0,0,0,.6);}" +
+        ".dbSosConfirm{display:none;position:fixed;left:0;right:0;bottom:0;z-index:2147483641;" +
+        "padding:20px 16px 16px;border-radius:20px 20px 0 0;background:#1a2027;color:#e8edf2;" +
+        "text-align:left;-webkit-box-sizing:border-box;box-sizing:border-box;}" +
+        ".dbSosConfirm h2{font-size:22px;line-height:1.25;margin:0 0 8px;}" +
+        ".dbSosConfirm p{font-size:16px;line-height:1.4;margin:0 0 16px;}" +
+        ".dbSosSlide{position:relative;height:64px;margin:0 0 12px;border-radius:32px;overflow:hidden;" +
+        "background:#3a1512;border:2px solid #b3261e;-webkit-user-select:none;user-select:none;" +
+        "touch-action:none;}" +
+        ".dbSosSlideLabel{position:absolute;left:68px;right:16px;top:0;line-height:60px;text-align:center;" +
+        "font-size:17px;font-weight:bold;color:#ffb4ab;white-space:nowrap;overflow:hidden;" +
+        "text-overflow:ellipsis;}" +
+        ".dbSosThumb{position:absolute;left:0;top:0;width:60px;height:60px;border-radius:30px;" +
+        "background:#b3261e;color:#fff;text-align:center;line-height:60px;font-size:26px;font-weight:bold;}" +
+        ".dbSosConfirm button{display:block;width:100%;min-height:48px;margin:8px 0 0;padding:10px 16px;" +
+        "font-size:17px;border-radius:12px;}" +
+        ".dbSosConfirm .dbSosSend{background:transparent;border:2px solid #ff8e8e;color:#ff8e8e;" +
+        "font-weight:bold;}" +
+        "@media (min-width:900px){.dbSosConfirm{left:50%;right:auto;bottom:auto;top:30%;width:440px;" +
+        "margin-left:-220px;border-radius:20px;}}" +
         ".dbSosOperation{display:none;position:fixed;right:18px;bottom:118px;z-index:2147483647;" +
         "width:320px;max-width:90%;max-height:60%;overflow:auto;padding:16px;box-sizing:border-box;" +
         "border:2px solid #8f1010;border-radius:12px;background:#fff;color:#20242a;text-align:left;}" +
@@ -871,12 +879,46 @@
       trigger.className = "dbSosTrigger";
       trigger.setAttribute("data-semantic-id", "sos.trigger");
       trigger.setAttribute("aria-label", options.triggerLabel || "SOS");
-      trigger.innerHTML = "<span class='dbSosLabel'></span><span class='dbSosHint'></span>";
-      triggerLabel = trigger.getElementsByTagName("span")[0];
-      triggerHint = trigger.getElementsByTagName("span")[1];
+      trigger.setAttribute("aria-haspopup", "dialog");
+      if (options.triggerIcon) trigger.appendChild(options.triggerIcon);
+      triggerLabel = doc.createElement("span");
+      triggerLabel.className = "dbSosLabel";
       triggerLabel.appendChild(doc.createTextNode(options.triggerLabel || "SOS"));
-      triggerHint.appendChild(doc.createTextNode(options.triggerHint || "Hold 2s"));
+      trigger.appendChild(triggerLabel);
       doc.body.appendChild(trigger);
+
+      confirmScrim = doc.createElement("div");
+      confirmScrim.className = "dbSosScrim";
+      confirmBox = doc.createElement("div");
+      confirmBox.className = "dbSosConfirm";
+      confirmBox.setAttribute("role", "dialog");
+      confirmBox.setAttribute("aria-modal", "true");
+      confirmTitle = doc.createElement("h2");
+      confirmText = doc.createElement("p");
+      slideTrack = doc.createElement("div");
+      slideTrack.className = "dbSosSlide";
+      slideLabel = doc.createElement("span");
+      slideLabel.className = "dbSosSlideLabel";
+      slideThumb = doc.createElement("div");
+      slideThumb.className = "dbSosThumb";
+      slideThumb.setAttribute("aria-hidden", "true");
+      slideThumb.appendChild(doc.createTextNode("\u203A"));
+      slideTrack.appendChild(slideLabel);
+      slideTrack.appendChild(slideThumb);
+      confirmCancel = doc.createElement("button");
+      confirmCancel.type = "button";
+      confirmCancel.className = "dbSosCancel";
+      // For keyboards and screen readers, where a drag is not possible. Never the default focus.
+      confirmSend = doc.createElement("button");
+      confirmSend.type = "button";
+      confirmSend.className = "dbSosSend";
+      confirmBox.appendChild(confirmTitle);
+      confirmBox.appendChild(confirmText);
+      confirmBox.appendChild(slideTrack);
+      confirmBox.appendChild(confirmCancel);
+      confirmBox.appendChild(confirmSend);
+      doc.body.appendChild(confirmScrim);
+      doc.body.appendChild(confirmBox);
       operationBox = doc.createElement("div");
       operationBox.className = "dbSosOperation";
       operationBox.setAttribute("role", "status");
@@ -968,7 +1010,7 @@
         }
       }
       if (trigger) trigger.disabled = current.active || !!(operation && operation.state().busy);
-      if (current.active && triggerHold) cancelTriggerHold();
+      if (current.active) closeConfirm();
       if (current.active && !isExpired) startAlarm(presentation); else stopAlarm();
       if (shouldExpire && !expiryTimer) {
         expiryKey = presentation.key;
@@ -1062,43 +1104,115 @@
     renderOperation(operation.state());
     function postEmergency() {
       if (current.active) return;
-      if (trigger) trigger.className = "dbSosTrigger";
       operation.start();
     }
     if (operationAction && operationAction.addEventListener)
       operationAction.addEventListener("click", function () { operation.start(); }, false);
     if (root.addEventListener) root.addEventListener("pagehide", function () {
-      cancelTriggerHold(); operation.retire();
+      closeConfirm(); operation.retire();
     }, false);
-    var triggerHold = sosHoldController(postEmergency, root.setTimeout, root.clearTimeout,
-                                        SOS_HOLD_MS);
-    function cancelTriggerHold() {
-      triggerHold.cancel();
-      if (trigger) trigger.className = "dbSosTrigger";
+
+    function renderConfirmText() {
+      text(confirmTitle, translate("sos.confirm_title"));
+      text(confirmText, translate("sos.hint"));
+      text(slideLabel, translate("sos.slide_hint"));
+      text(confirmCancel, translate("sos.abort"));
+      text(confirmSend, translate("sos.send"));
     }
-    function startTriggerHold(ev) {
-      if (!trigger || trigger.disabled || current.active || operation.state().busy) return;
+    function paintSlide(progress) {
+      if (!slideThumb || !slideTrack) return;
+      var travel = slideTravel();
+      slideThumb.style.left = Math.round(progress * travel) + "px";
+      if (slideLabel) slideLabel.style.opacity = String(1 - progress);
+    }
+    function slideTravel() {
+      var track = slideTrack && slideTrack.clientWidth, thumb = slideThumb && slideThumb.offsetWidth;
+      return Math.max(0, (Number(track) || 0) - (Number(thumb) || 0));
+    }
+    // Any input inside the dialog restarts the 10 s auto-close.
+    function armConfirmTimeout() {
+      if (confirmTimer !== null && root.clearTimeout) root.clearTimeout(confirmTimer);
+      confirmTimer = confirmOpen && root.setTimeout ?
+        root.setTimeout(function () { confirmTimer = null; closeConfirm(); }, SOS_CONFIRM_TIMEOUT_MS) : null;
+    }
+    function openConfirm() {
+      if (!confirmBox || confirmOpen || current.active || (trigger && trigger.disabled) ||
+          operation.state().busy) return false;
+      confirmOpen = true; slide = null;
+      renderConfirmText();
+      confirmReturnFocus = trigger;
+      confirmScrim.style.display = "block";
+      confirmBox.style.display = "block";
+      paintSlide(0);
+      armConfirmTimeout();
+      if (confirmCancel.focus) { try { confirmCancel.focus(); } catch (e) {} }
+      return true;
+    }
+    function closeConfirm() {
+      if (!confirmOpen) return;
+      confirmOpen = false; slide = null;
+      if (confirmTimer !== null && root.clearTimeout) root.clearTimeout(confirmTimer);
+      confirmTimer = null;
+      confirmScrim.style.display = "none";
+      confirmBox.style.display = "none";
+      if (confirmReturnFocus && confirmReturnFocus.focus) { try { confirmReturnFocus.focus(); } catch (e) {} }
+    }
+    function sendConfirmed() {
+      if (!confirmOpen) return false;
+      closeConfirm();
+      postEmergency();
+      return true;
+    }
+    function pointX(ev) {
+      var t = ev && ((ev.touches && ev.touches[0]) || (ev.changedTouches && ev.changedTouches[0]));
+      return Number(t ? t.clientX : ev && ev.clientX) || 0;
+    }
+    function slideStart(ev) {
+      if (!confirmOpen || slide) return;
+      slide = { x: pointX(ev), progress: 0 };
+      armConfirmTimeout();
       if (ev && ev.preventDefault) ev.preventDefault();
-      if (triggerHold.start()) trigger.className = "dbSosTrigger dbSosHolding";
+    }
+    function slideMove(ev) {
+      if (!slide) return;
+      slide.progress = sosSlideProgress(slide.x, pointX(ev), slideTravel());
+      paintSlide(slide.progress);
+      armConfirmTimeout();
+      if (ev && ev.preventDefault) ev.preventDefault();
+    }
+    // Released at the end: send. Released early or cancelled: spring back.
+    function slideEnd(ev, cancelled) {
+      if (!slide) return;
+      var armed = !cancelled && sosSlideArmed(slide.progress);
+      slide = null;
+      if (armed) sendConfirmed(); else paintSlide(0);
+    }
+    function slideCancel(ev) { slideEnd(ev, true); }
+    function listen(target, names, handler) {
+      if (!target || !target.addEventListener) return;
+      for (var i = 0; i < names.length; i++) target.addEventListener(names[i], handler, false);
     }
     if (trigger && trigger.addEventListener) {
-      ["mousedown", "touchstart"].forEach(function (name) {
-        trigger.addEventListener(name, startTriggerHold, false);
-      });
-      ["mouseup", "mouseleave", "touchend", "touchcancel"].forEach(function (name) {
-        trigger.addEventListener(name, cancelTriggerHold, false);
-      });
-      trigger.addEventListener("keydown", function (ev) {
-        if (ev && (ev.key === " " || ev.key === "Enter" || ev.keyCode === 32 || ev.keyCode === 13))
-          startTriggerHold(ev);
-      }, false);
-      trigger.addEventListener("keyup", cancelTriggerHold, false);
       trigger.addEventListener("click", function (ev) {
-        if (ev) ev.preventDefault();
-        // Assistive technology activates native buttons with a zero-detail click.
-        if (ev && ev.detail === 0) { cancelTriggerHold(); postEmergency(); }
+        if (ev && ev.preventDefault) ev.preventDefault();
+        openConfirm();
       }, false);
     }
+    // Touch events come first so iOS 5 Safari works; the mouse listeners sit on the document so a
+    // drag that leaves the track still ends.
+    listen(slideTrack, ["touchstart", "mousedown"], slideStart);
+    listen(slideTrack, ["touchmove"], slideMove);
+    listen(slideTrack, ["touchend"], slideEnd);
+    listen(slideTrack, ["touchcancel"], slideCancel);
+    listen(doc, ["mousemove"], slideMove);
+    listen(doc, ["mouseup"], slideEnd);
+    listen(confirmCancel, ["click"], function () { closeConfirm(); });
+    listen(confirmSend, ["click"], function () { sendConfirmed(); });
+    listen(confirmScrim, ["click"], function () { closeConfirm(); });
+    listen(confirmBox, ["keydown"], function (ev) {
+      armConfirmTimeout();
+      if (ev && (ev.key === "Escape" || ev.keyCode === 27)) closeConfirm();
+    });
     if (root.navigator && root.navigator.serviceWorker &&
         root.navigator.serviceWorker.addEventListener) {
       root.navigator.serviceWorker.addEventListener("message", function (ev) {
@@ -1107,8 +1221,12 @@
       });
     }
     return { update: update, onPush: onPush, state: function () { return current; },
-             trigger: function () { return trigger; }, hold: triggerHold,
-             operationState: operation.state, refreshText: function () { renderOperation(); } };
+             trigger: function () { return trigger; },
+             confirm: { open: openConfirm, close: closeConfirm, send: sendConfirmed,
+                        isOpen: function () { return confirmOpen; },
+                        slideStart: slideStart, slideMove: slideMove, slideEnd: slideEnd },
+             operationState: operation.state,
+             refreshText: function () { renderOperation(); if (confirmOpen) renderConfirmText(); } };
   }
 
   function base64Key(s) {
@@ -1308,5 +1426,6 @@
            pushTargetsGroup: pushTargetsGroup,
            semanticUiModel: semanticUiModel,
            applySemanticUi: applySemanticUi,
-           sosHoldController: sosHoldController, SOS_HOLD_MS: SOS_HOLD_MS };
+           sosSlideProgress: sosSlideProgress, sosSlideArmed: sosSlideArmed,
+           SOS_CONFIRM_TIMEOUT_MS: SOS_CONFIRM_TIMEOUT_MS };
 });

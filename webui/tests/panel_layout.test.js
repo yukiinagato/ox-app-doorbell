@@ -60,7 +60,7 @@ assert(order.every(i => i > 0) && order[0] < order[1] && order[1] < order[2],
 assert(/id="answerBtn" class="positive"/.test(monitor), "Answer uses the positive role");
 assert(monitor.includes('id="replySheet" role="dialog"') && monitor.includes("hidden>"),
   "quick replies live in a sheet that starts closed");
-assert(monitor.includes('C.setLabel($("monitorClose"), t("ring.ignore"), "x")'), "Ignore is labelled Ignore");
+assert(monitor.includes('C.setLabel($("monitorClose"), t("ring.ignore"), "bell-off")'), "Ignore is labelled Ignore");
 assert(monitor.includes('id="dashTabs" role="tablist"') && monitor.includes("C.groupByDay("));
 assert((monitor.match(/role="tab" /g) || []).length === 2 && (monitor.match(/role="tabpanel"/g) || []).length === 2 &&
   monitor.includes('aria-controls="doorsPane"') && monitor.includes('aria-controls="historyPane"'),
@@ -150,6 +150,20 @@ assert(css.includes("prefers-color-scheme: dark") && css.includes(':root[data-th
   }
 }
 
+// SOS: a compact outlined control docked in a fixed zone, with no hold hint and no red fill.
+for (const [name, page] of [["door.html", door], ["monitor.html", monitor], ["call.html", call]])
+  assert(!/hold_hint|triggerHint|dbSosHolding/.test(page) && /triggerIcon: (C|DoorbellPanelCommon)\.icon\("alert-triangle"\)/.test(page),
+    name + " installs the compact SOS control");
+assert(/body \.dbSosTrigger \{ background:transparent;/.test(css) && !/dbSosHint/.test(css) &&
+  css.includes("body #dashTabs .dbSosTrigger, body #dashHeader .dbSosTrigger, body #callActions .dbSosTrigger, body #controls .dbSosTrigger {\n  position:static;"),
+  "the docked SOS control is outlined and never floats");
+{
+  const rt = read("runtime.js");
+  assert(!/sosHoldController|SOS_HOLD_MS|Hold 2s/.test(rt), "no press-and-hold remains");
+  assert(rt.includes('trigger.setAttribute("data-semantic-id", "sos.trigger")') && rt.includes("if (confirmCancel.focus)"),
+    "the compact control keeps its semantic id and Cancel takes the default focus");
+}
+
 // Appearance: Core's fixed appearance wins; follow_system leaves it to the system setting.
 assert.strictEqual(C.appearanceTheme({ appearance: { effective: "dark", follow_system: false } }), "dark");
 assert.strictEqual(C.appearanceTheme({ appearance: { effective: "light", follow_system: false } }), "light");
@@ -167,7 +181,8 @@ assert.strictEqual(C.appearanceTheme(null), "");
 
 // Icons come from the Tabler sprite that tools/gen_icons.py writes beside the pages.
 const sprite = read("icons/tabler-sprite.svg");
-for (const name of ["door", "list", "phone", "message-reply", "x", "bell", "check", "phone-off", "chevron-right"])
+for (const name of ["door", "history", "phone", "message-reply", "x", "bell", "bell-off", "lock-open", "alert-triangle",
+  "microphone", "microphone-off", "check", "phone-off", "chevron-right"])
   assert(sprite.includes('id="i-' + name + '"'), "icon " + name + " exists in the sprite");
 assert.strictEqual(C.iconMarkup("x\"><script>"), "", "icon names are validated, never interpolated raw");
 assert(C.iconMarkup("phone").includes("/panel/icons/tabler-sprite.svg#i-phone"));

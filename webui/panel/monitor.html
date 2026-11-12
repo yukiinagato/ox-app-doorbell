@@ -121,7 +121,7 @@
       detail: t("emergency.active_detail"),
       clearInstruction: t("emergency.clear_instruction"),
       triggerLabel: t("emergency.button"),
-      triggerHint: t("emergency.hold_hint", { sec: "2" })
+      triggerIcon: C.icon("alert-triangle")
     });
     if (typeof dockSos === "function") dockSos();
     applyEmergencyI18n();
@@ -146,11 +146,11 @@
     $("historyTitle").innerHTML = esc(t("history.title"));
     $("markSeen").innerHTML = esc(t("history.mark_seen"));
     C.setLabel($("tabDoors"), t("dash.doors"), "door");
-    C.setLabel($("tabHistory"), t("history.title"), "list");
+    C.setLabel($("tabHistory"), t("history.title"), "history");
     C.setLabel($("replyBtn"), t("ring.quick_replies"), "message-reply");
     C.setText($("replyTitle"), t("reply.choose"));
     C.setText($("replySheetClose"), t("monitor.close"));
-    C.setLabel($("monitorClose"), t("ring.ignore"), "x");
+    C.setLabel($("monitorClose"), t("ring.ignore"), "bell-off");
     C.setText($("doorsEmpty"), t("dash.no_doors"));
     renderCallLog();
     C.setLabel($("pushBtn"), pushSubscribed ? t("panel.push_disable") : t("panel.push_enable"), "bell");

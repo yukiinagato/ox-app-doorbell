@@ -133,9 +133,8 @@ function applyEmergencyI18n() {
   const trigger = document.getElementsByClassName("dbSosTrigger")[0];
   if (trigger) {
     const spans = trigger.getElementsByTagName("span");
-    trigger.setAttribute("aria-label", t("emergency.button"));
+    trigger.setAttribute("aria-label", t("sos.accessibility_start"));
     if (spans[0]) spans[0].textContent = t("emergency.button");
-    if (spans[1]) spans[1].textContent = t("emergency.hold_hint", { sec: "2" });
   }
 }
 
@@ -146,7 +145,7 @@ function installEmergency() {
     detail: t("emergency.active_detail"),
     clearInstruction: t("emergency.clear_instruction"),
     triggerLabel: t("emergency.button"),
-    triggerHint: t("emergency.hold_hint", { sec: "2" }),
+    triggerIcon: DoorbellPanelCommon.icon("alert-triangle"),
   });
   // SOS lives at the leading edge of the fixed action zone, so it never covers content.
   const zone = document.getElementById && document.getElementById("controls");
@@ -361,9 +360,10 @@ function applyI18n() {
   els.backText.textContent = t("panel.monitor_title");
   if (DoorbellPanelRuntime.panelUrl && LANG)
     els.back.setAttribute("href", DoorbellPanelRuntime.panelUrl("monitor", "", false) + "?lang=" + encodeURIComponent(LANG));
-  els.reply.textContent = t("ring.quick_replies");
-  els.ignore.textContent = t("ring.ignore");
-  els.unlock.textContent = t("ring.unlock");
+  DoorbellPanelCommon.setLabel(els.reply, t("ring.quick_replies"), "message-reply");
+  DoorbellPanelCommon.setLabel(els.ignore, t("ring.ignore"), "bell-off");
+  DoorbellPanelCommon.setLabel(els.unlock, t("ring.unlock"), "lock-open");
+  micLabel = "";
   document.getElementById("replyTitle").textContent = t("reply.choose");
   document.getElementById("replySheetClose").textContent = t("monitor.close");
   renderPlaceholder();
@@ -490,6 +490,7 @@ function selectDoor(d, forcePlaybackRefresh) {
 let playbackState = "loading";
 let ignoredRing = "";
 let micMuted = false;
+let micLabel = "";
 
 function ringKey(d) {
   return d ? d.id + "|" + (d.call_id || "") : "";
@@ -586,7 +587,11 @@ function renderSecondaryActions() {
   if (els.reply.hidden && !els.replySheet.hidden) setReplySheet(false);
   els.mic.hidden = !session;
   if (!session) micMuted = false;
-  els.mic.textContent = t(micMuted ? "ring.mic_off" : "ring.mic_on");
+  const micText = t(micMuted ? "ring.mic_off" : "ring.mic_on");
+  if (micLabel !== micText) {
+    micLabel = micText;
+    DoorbellPanelCommon.setLabel(els.mic, micText, micMuted ? "microphone-off" : "microphone");
+  }
   els.mic.setAttribute("aria-pressed", micMuted ? "true" : "false");
   const unlock = selected && selected.unlock;
   els.unlock.hidden = !((ringing || session) && unlock && unlock.show_button === true);

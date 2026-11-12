@@ -68,7 +68,7 @@ function fixture(page, storage = new Map()) {
     const install = functionSource("installEmergency");
     const translate = functionSource("applyEmergencyI18n");
     vm.runInContext(fs.readFileSync(path.join(__dirname, "../panel/panel-common.js"), "utf8"), context);
-    Object.assign(context, { DoorbellPanelRuntime: root.DoorbellPanelRuntime, C: root.DoorbellPanelCommon,
+    Object.assign(context, { DoorbellPanelRuntime: root.DoorbellPanelRuntime, C: root.DoorbellPanelCommon, DoorbellPanelCommon: root.DoorbellPanelCommon,
       emergencyOverlay: null, t: key => key, esc: value => value });
     vm.runInContext(translate + "\n" + install + "\ninstallEmergency();", context);
     overlay = context.emergencyOverlay;
@@ -78,7 +78,10 @@ function fixture(page, storage = new Map()) {
     for (const [token, timer] of Array.from(timers)) if (timer.at <= now) { timers.delete(token); timer.fn(); }
   }
   return { overlay, requests, timers, advance, events, notices, document,
-    begin() { overlay.hold.start(); advance(2000); },
+    // The two deliberate steps: tap the compact control (opens the dialog), then confirm there.
+    open() { overlay.trigger().fire("click", { detail: 1 }); return overlay.confirm.isOpen(); },
+    begin() { this.open(); assert.strictEqual(overlay.confirm.send(), true); },
+    find(cls) { return document.getElementsByClassName(cls)[0]; },
     session() { assert.strictEqual(requests.at(-1).url, "/api/panel/session"); requests.at(-1).respond(200, { ok: true, csrf_token: csrf }); },
     prepare() {
       const request = requests.at(-1); assert.strictEqual(request.url, "/api/operations/prepare");
@@ -129,7 +132,9 @@ test("T12-03: permission, validation, and authentication failures remain actiona
   }
 });
 test("T12-04: double activation and native timeout/watchdog/late success settle once", () => {
-  const f = fixture(); f.begin(); f.overlay.hold.start(); f.advance(2000);
+  const f = fixture(); f.begin();
+  assert.strictEqual(f.open(), false, "a busy SOS cannot be confirmed a second time");
+  assert.strictEqual(f.overlay.confirm.send(), false);
   assert.strictEqual(f.requests.length, 1); f.session(); f.prepare();
   const send = f.requests.at(-1), nativeTimeout = send.ontimeout, lateSuccess = send.onload;
   const watchdog = Array.from(f.timers.values())[0].fn;
@@ -205,14 +210,59 @@ test("a denied status query retains the ambiguous original handle", () => {
 });
 test("assistive button activation shares one intent, and authoritative clear permits a later SOS", () => {
   const f = fixture(); f.overlay.trigger().fire("click", { detail: 0 });
+  assert.strictEqual(f.requests.length, 0, "activating the SOS control only opens the confirmation");
+  f.find("dbSosSend").fire("click", { detail: 0 });
   assert.strictEqual(f.requests.length, 1); f.session(); f.prepare();
   f.requests.at(-1).respond(202, record("dispatched"));
   f.overlay.update({ emergency: { active: true } });
   assert.strictEqual(f.overlay.trigger().disabled, true);
   f.overlay.update({ emergency: { active: false } });
   assert.strictEqual(f.overlay.operationState().phase, "idle");
-  f.overlay.trigger().fire("click", { detail: 0 });
+  f.overlay.trigger().fire("click", { detail: 0 }); f.find("dbSosSend").fire("click", { detail: 0 });
   assert.strictEqual(f.requests.at(-1).url, "/api/operations/prepare");
+});
+test("SOS takes a tap and then a full slide; a touch, a hold or an early release sends nothing", () => {
+  const f = fixture(), trigger = f.overlay.trigger(), confirm = f.overlay.confirm;
+  assert.strictEqual(trigger.attributes["data-semantic-id"], "sos.trigger");
+  for (const name of ["mousedown", "touchstart", "keydown"]) trigger.fire(name, { key: "Enter", keyCode: 13 });
+  f.advance(60000);
+  assert.strictEqual(f.requests.length, 0, "press-and-hold does nothing");
+  assert.strictEqual(confirm.isOpen(), false);
+  assert.strictEqual(f.open(), true);
+  const track = f.find("dbSosSlide"), thumb = f.find("dbSosThumb");
+  track.clientWidth = 300; thumb.offsetWidth = 60;
+  track.fire("touchstart", { touches: [{ clientX: 10 }] });
+  track.fire("touchmove", { touches: [{ clientX: 150 }] });
+  track.fire("touchend", { touches: [], changedTouches: [{ clientX: 150 }] });
+  assert.strictEqual(f.requests.length, 0, "releasing early springs back");
+  assert.strictEqual(thumb.style.left, "0px");
+  assert.strictEqual(confirm.isOpen(), true);
+  track.fire("touchstart", { touches: [{ clientX: 10 }] });
+  track.fire("touchmove", { touches: [{ clientX: 400 }] });
+  track.fire("touchcancel", {});
+  assert.strictEqual(f.requests.length, 0, "a cancelled touch never sends");
+  track.fire("mousedown", { clientX: 10 });
+  track.fire("touchmove", { touches: [{ clientX: 260 }] });
+  assert.strictEqual(thumb.style.left, "240px");
+  track.fire("touchend", { touches: [], changedTouches: [{ clientX: 260 }] });
+  assert.strictEqual(confirm.isOpen(), false);
+  assert.strictEqual(f.requests.length, 1, "a slide to the end sends once");
+  assert.strictEqual(f.requests[0].url, "/api/panel/session");
+});
+test("the SOS confirmation closes by itself after 10 s, on Cancel, and when an SOS becomes active", () => {
+  const f = fixture();
+  assert.strictEqual(f.open(), true);
+  assert.strictEqual(f.find("dbSosConfirm").attributes.role, "dialog");
+  assert(f.find("dbSosConfirm").textContent.includes("sos.hint") && f.find("dbSosSend").textContent === "sos.send");
+  f.advance(9999); assert.strictEqual(f.overlay.confirm.isOpen(), true);
+  f.advance(1); assert.strictEqual(f.overlay.confirm.isOpen(), false);
+  assert.strictEqual(f.find("dbSosConfirm").style.display, "none");
+  f.open(); f.find("dbSosCancel").fire("click"); assert.strictEqual(f.overlay.confirm.isOpen(), false);
+  f.open(); f.overlay.update({ emergency: { active: true } });
+  assert.strictEqual(f.overlay.confirm.isOpen(), false);
+  assert.strictEqual(f.open(), false, "an active SOS cannot be raised again");
+  assert.strictEqual(f.requests.length, 0);
+  assert.strictEqual(f.timers.size, 0);
 });
 test("page reload recovers the persisted handle by query without another SOS", () => {
   const storage = new Map(), first = fixture(null, storage);

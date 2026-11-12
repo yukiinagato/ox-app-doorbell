@@ -177,9 +177,15 @@ async function runDoorVisitorChecks(phase) {
   await test('Keyboard cancellation and assistive activation retain the existing SOS operation path',async()=>{
     const p=await open([320,480]),trigger=p.doc.querySelector('.dbSosTrigger');
     trigger.dispatchEvent(new p.win.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
-    trigger.dispatchEvent(new p.win.KeyboardEvent('keyup',{key:'Enter',bubbles:true}));
-    await new Promise(resolve=>setTimeout(resolve,2100));assert(p.requests('/api/operations/prepare').length===0,'Short keyboard hold sent SOS');
+    trigger.dispatchEvent(new p.win.MouseEvent('mousedown',{bubbles:true}));
+    await new Promise(resolve=>setTimeout(resolve,2100));assert(p.requests('/api/operations/prepare').length===0,'A held SOS control sent SOS');
     trigger.dispatchEvent(new p.win.MouseEvent('click',{detail:0,bubbles:true}));
+    const dialog=p.doc.querySelector('.dbSosConfirm'),send=p.doc.querySelector('.dbSosSend'),frameSize=[p.win.innerWidth,p.win.innerHeight];
+    assert(p.win.getComputedStyle(dialog).display!=='none'&&dialog.getAttribute('role')==='dialog','Activating SOS did not open the confirmation');
+    assert(p.requests('/api/operations/prepare').length===0,'Opening the confirmation sent SOS');
+    assert(p.doc.activeElement!==send&&p.doc.activeElement===p.doc.querySelector('.dbSosCancel'),'Send SOS took the default focus');
+    for(const el of [p.doc.querySelector('.dbSosSlide'),p.doc.querySelector('.dbSosCancel'),send])assert(inside(el.getBoundingClientRect(),...frameSize),'SOS confirmation control is clipped');
+    send.click();assert(p.win.getComputedStyle(dialog).display==='none','Confirmation stayed open after sending');
     await wait(()=>p.requests('/api/operations/'+'a'.repeat(32)+'/execute').length===1,'AT activation did not reach the existing operation path');
     assert(p.requests('/api/emergency').length===0,'SOS used the legacy mutation endpoint');
   });
