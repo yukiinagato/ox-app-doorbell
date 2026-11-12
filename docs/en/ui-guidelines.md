@@ -82,8 +82,8 @@ switch live on rotation or window resize.
   choosing" in purpose-first mode).
 - States reuse the same frame: calling (pulsing status + Cancel), connected
   (talk indicator + End), reply shown (large reply text, auto-return countdown),
-  unanswered (message + Call again). The SOS slide sits in the action zone's
-  leading edge only where configured.
+  unanswered (message + Call again). The SOS control (see SOS below)
+  sits in the action zone's leading edge only where configured.
 
 ### Dashboard (indoor panel)
 
@@ -152,9 +152,26 @@ switch live on rotation or window resize.
 
 ### SOS
 
+- Trigger: a compact secondary control (icon plus "SOS", `negative` outline,
+  standard secondary size, semantic ID `sos.trigger`) at the leading edge of the
+  action zone or in the header. It never competes with the primary action in
+  size or fill, and it is shown only where SOS is configured.
+- Arming takes two different deliberate gestures in two different places, so a
+  resting palm, a stray tap, or a long press cannot complete it:
+  1. Tap the SOS control. This only opens the confirmation surface (sheet,
+     dialog, or full-screen panel) that says what will happen and who is
+     alerted.
+  2. On that surface, slide the confirm control end to end. Releasing early
+     springs back. Cancel is a plain button, and the surface closes by itself
+     after 10 s without input.
+- No press-and-hold anywhere in the flow. Where there is no touch or pointer
+  drag (remote control, keyboard, screen reader), step 2 is a focusable
+  "Send SOS" button that is not the default focus.
+- After the slide, the existing countdown runs with one large Cancel
+  (`sos.cancel`); Core is told only when the countdown reaches zero.
 - Active SOS: full-screen `negative` overlay that cannot be hidden by other
-  screens, source and time, one "Clear" action that needs a deliberate gesture
-  (slide or long press) and the admin rules already defined in Core.
+  screens, source and time, one "Clear" action that uses the same slide
+  confirmation and the admin rules already defined in Core.
 
 ## 5. Platform notes
 

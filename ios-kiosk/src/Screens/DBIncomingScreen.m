@@ -846,7 +846,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   if (!DBSameString(_navBar.topItem.title, barTitle ?: @"")) _navBar.topItem.title = barTitle ?: @"";
   _noVideoLabel.text = [_texts ts:@"ring.no_video"];
   _statusLabel.text = _monitorOnly ? [_texts ts:@"monitor.live"]
-                                   : [_texts ts:(_cancelled ? @"ring.cancelled" : @"reply.choose")];
+                                   : (_cancelled ? [_texts ts:@"ring.cancelled"] : @"");
   [_answerButton setTitle:(_inCall ? [_texts ts:@"incall.end"] : [_texts ts:@"ring.answer"])
                  forState:UIControlStateNormal];
   // The monitor and mic entries are toggles whose title states the current position.
@@ -2509,7 +2509,16 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 - (void)layoutDetailsInRect:(CGRect)rect {
   CGFloat x = CGRectGetMinX(rect);
   CGFloat width = CGRectGetWidth(rect);
-  CGFloat maxY = CGRectGetMaxY(rect);
+  // The return countdown is the last details row, directly above the action zone, so it reads
+  // as part of the actions and never as the caption of the line above it.
+  CGFloat bottom = CGRectGetMaxY(rect);
+  if (_countdownButton.hidden || width <= 0 || CGRectGetHeight(rect) < 44 + 60) {
+    _countdownButton.frame = CGRectZero;
+  } else {
+    _countdownButton.frame = CGRectMake(x, bottom - 44, width, 44);
+    bottom -= 44 + 8;
+  }
+  CGFloat maxY = bottom;
   __block CGFloat y = CGRectGetMinY(rect);
   CGRect (^row)(CGFloat) = ^CGRect(CGFloat height) {
     if (width <= 0 || y + height > maxY) return CGRectZero;
@@ -2548,8 +2557,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     _statusLabel.layer.cornerRadius = 0;
   }
   _statusLabel.frame = row(_cancelled ? 44 : 28);
-  // The return countdown is its own full-width row that says what the number is.
-  _countdownButton.frame = _countdownButton.hidden ? CGRectZero : row(44);
 
   // The hint keeps its slot while hidden for the same reason the purpose does.
   _hintLabel.frame = row(44);

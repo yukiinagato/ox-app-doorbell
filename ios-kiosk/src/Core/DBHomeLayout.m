@@ -5,7 +5,7 @@
 
 DBHomeLayout DBHomeLayoutMake(CGSize size, CGFloat navHeight, CGFloat tabHeight,
                               CGFloat footerHeight, BOOL showsBanner, BOOL showsMissed,
-                              BOOL showsPager) {
+                              BOOL showsPager, BOOL showsSOS) {
   DBHomeLayout layout;
   memset(&layout, 0, sizeof(layout));
   if (size.width <= 0 || size.height <= 0) return layout;
@@ -24,12 +24,21 @@ DBHomeLayout DBHomeLayoutMake(CGSize size, CGFloat navHeight, CGFloat tabHeight,
   CGFloat rightX = pad + leftWidth + pad;
   CGFloat rightWidth = MAX(0, size.width - pad - rightX);
   layout.counters = CGRectMake(rightX, top + 8, rightWidth, 34);
-  if (showsPager) {
-    CGFloat pagerWidth = MIN(rightWidth, 220);
-    layout.pager = CGRectMake(size.width - pad - pagerWidth, CGRectGetMaxY(layout.counters) + 10,
-                              pagerWidth, 44);
+  // Secondary controls share one row under the counters: SOS at the trailing edge, the door
+  // pager beside it.
+  CGFloat rowY = CGRectGetMaxY(layout.counters) + 10;
+  CGFloat rowRight = size.width - pad;
+  if (showsSOS) {
+    CGFloat sosWidth = MIN(rightWidth, 120);
+    layout.sos = CGRectMake(rowRight - sosWidth, rowY, sosWidth, 44);
+    rowRight = CGRectGetMinX(layout.sos) - 10;
   }
-  CGFloat y = MAX(CGRectGetMaxY(layout.date), CGRectGetMaxY(layout.pager)) + 8;
+  if (showsPager) {
+    CGFloat pagerWidth = MAX(0, MIN(rowRight - rightX, 220));
+    layout.pager = CGRectMake(rowRight - pagerWidth, rowY, pagerWidth, 44);
+  }
+  CGFloat y = MAX(CGRectGetMaxY(layout.date),
+                  MAX(CGRectGetMaxY(layout.pager), CGRectGetMaxY(layout.sos))) + 12;
 
   // The two notices share one row when both are present and the row is wide enough.
   CGFloat noticeWidth = MIN(size.width - 2 * pad, 560);

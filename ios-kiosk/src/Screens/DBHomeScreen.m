@@ -18,6 +18,7 @@
 #import "DBChrome.h"
 #import "DBNoticeDialog.h"
 #import "DBRouter.h"
+#import "DBSosPanel.h"
 #import "DBWidgets.h"
 #import <AudioToolbox/AudioToolbox.h>
 
@@ -220,7 +221,9 @@ static const NSInteger kMissedScanLimit = 20;
   UILabel *_noDoorsLabel;
   NSMutableArray *_doorTiles;
   DBAdminQrView *_qr;
-  DBSosSlider *_sos;
+  DBSosSlider *_sos;        // Lives inside the confirmation panel, never on the dashboard.
+  DBSosPanel *_sosPanel;
+  UIButton *_sosButton;
   UIView *_nightTint;
   UIView *_replyBanner;
   UILabel *_replyCaption;
@@ -336,8 +339,13 @@ static const NSInteger kMissedScanLimit = 20;
   [self addSubview:_qr];
 
   _sos = [[DBSosSlider alloc] initWithFrame:CGRectZero];
-  _sos.delegate = self;
-  [self addSubview:_sos];
+  _sosPanel = [[DBSosPanel alloc] initWithSlider:_sos delegate:self];
+  _sosButton = DBSosTriggerButton();
+  _sosButton.accessibilityIdentifier = @"home_sos_open";
+  _sosButton.hidden = YES;
+  [_sosButton addTarget:self action:@selector(onSosButton)
+       forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_sosButton];
 
   _nav = [[DBNavBar alloc] init];
   [self addSubview:_nav.bar];
@@ -469,6 +477,7 @@ static const NSInteger kMissedScanLimit = 20;
   _snapshotTimer = nil;
   ++_snapshotGeneration;
   [_noticeDialog dismiss];
+  [_sosPanel dismiss];
   [_monitorSheet dismissWithClickedButtonIndex:_monitorSheet.cancelButtonIndex animated:NO];
   _monitorSheet = nil;
 }
@@ -620,6 +629,7 @@ static const NSInteger kMissedScanLimit = 20;
   [_qr applyPalette:_palette];
   [_sos applyPalette:_palette];
   [_sos applyConfig:_cfg texts:_texts];
+  [_sosPanel applyTexts:_texts];
   _offlineView.backgroundColor = _palette.surface;
   _offlineTitle.textColor = _palette.ink;
   _offlineBody.textColor = _palette.mutedInk;
@@ -1172,7 +1182,15 @@ static const CGFloat kFooterGlassAlpha = 0.65;
         show = YES;
     }
   }
-  _sos.hidden = !show;
+  if (_sosButton.hidden == show) [self setNeedsLayout];
+  _sosButton.hidden = !show;
+  if (!show) [_sosPanel dismiss];
+}
+
+// The button only opens the confirmation panel; the slide inside it is the second gesture.
+- (void)onSosButton {
+  if (_emergencyActive) return;
+  [_sosPanel presentInView:self below:_emergencyView];
 }
 
 - (void)sosSliderDidArm:(DBSosSlider *)slider {
@@ -1345,6 +1363,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
 - (void)showEmergencyEvent:(NSDictionary *)ev {
   _emergencyActive = YES;
   _replyBanner.hidden = YES;
+  [_sosPanel dismiss];
   [_sos reset];
   NSDictionary *palette = [DBConfigUtil emergencyPalette:ev];
   _emergencyView.backgroundColor = [palette objectForKey:@"background"];
@@ -1422,11 +1441,11 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   NSDictionary *footer = [DBUiTheme footerLayoutForViewWidth:size.width
                                                   viewHeight:footerViewHeight
                                                     portrait:portrait
-                                                  sosVisible:!_sos.hidden];
+                                                  sosVisible:NO];
   CGFloat footerHeight = (CGFloat)[[footer objectForKey:@"height"] doubleValue];
   DBHomeLayout layout = DBHomeLayoutMake(size, navHeight, tabHeight, footerHeight,
                                          !_pairBanner.hidden, !_missedNotice.hidden,
-                                         !_doorsPager.hidden);
+                                         !_doorsPager.hidden, !_sosButton.hidden);
 
   _clockLabel.font = [UIFont systemFontOfSize:floorf((float)layout.clock.size.height * 0.9f)];
   _dateLabel.font = [UIFont systemFontOfSize:floorf((float)layout.date.size.height * 0.75f)];
@@ -1460,8 +1479,8 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   CGRect footerBlock = CGRectUnion(DBRectFromArray([footer objectForKey:@"qr"]),
                                    DBRectFromArray([footer objectForKey:@"version"]));
   _qr.frame = footerBlock;
-  _sos.frame = DBRectFromArray([footer objectForKey:@"sos"]);
-  // One plate under the footer block. The SOS bar is its own red control and stays outside it.
+  _sosButton.frame = layout.sos;
+  // One plate under the footer block.
   CGFloat footerPad = 8;
   _footerScrim.frame = CGRectIsEmpty(footerBlock)
       ? CGRectZero : CGRectInset(footerBlock, -footerPad, -footerPad);

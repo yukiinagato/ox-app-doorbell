@@ -34,8 +34,9 @@ static DBDoorVisitorLayout DBDoorVisitorLayoutBuild(CGSize size, BOOL showsSOS,
   CGFloat columnWidth = sideBySide ? floor(MAX(160, MIN(420, size.width * 0.38))) : width;
   CGFloat columnX = sideBySide ? size.width - margin - columnWidth : margin;
   if (showsSOS) {
-    CGFloat sosWidth = MIN(380, columnWidth);
-    layout.sos = CGRectMake(columnX + (columnWidth - sosWidth) / 2, bottom - 56, sosWidth, 56);
+    // A compact secondary control at the leading edge of the action zone.
+    CGFloat sosWidth = MIN(132, columnWidth);
+    layout.sos = CGRectMake(columnX, bottom - 48, sosWidth, 48);
     bottom = CGRectGetMinY(layout.sos) - gap;
   }
   CGFloat actionWidth = MIN(560, columnWidth);

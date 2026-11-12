@@ -20,6 +20,7 @@
 #import "../Net/DBSnapshotPoller.h"
 #import "DBChrome.h"
 #import "DBRouter.h"
+#import "DBSosPanel.h"
 #import "DBWidgets.h"
 #import <math.h>
 
@@ -225,7 +226,9 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   BOOL _samplerBuilding;
   NSDictionary *_display;   // status.display: core-resolved appearance and theme.
   NSDictionary *_status;
-  DBSosSlider *_sos;
+  DBSosSlider *_sos;        // Lives inside the confirmation panel, never on the visitor screen.
+  DBSosPanel *_sosPanel;
+  UIButton *_sosButton;
   DBUiPalette *_palette;
   NSTimer *_clockTimer;
   NSTimer *_keyframeTimer;
@@ -466,9 +469,13 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   [self addSubview:_cancelButton];
 
   _sos = [[DBSosSlider alloc] initWithFrame:CGRectZero];
-  _sos.delegate = self;
-  _sos.hidden = YES;
-  [self addSubview:_sos];
+  _sosPanel = [[DBSosPanel alloc] initWithSlider:_sos delegate:self];
+  _sosButton = DBSosTriggerButton();
+  _sosButton.accessibilityIdentifier = @"door_sos_open";
+  _sosButton.hidden = YES;
+  [_sosButton addTarget:self action:@selector(onSosButton)
+       forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_sosButton];
 
   // The emergency layer stays custom and is the last subview, so it covers the navigation
   // bar and every control.
@@ -671,6 +678,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   [self applyRegionInk];
   [_sos applyPalette:_palette];
   [_sos applyConfig:_cfg texts:_texts];
+  [_sosPanel applyTexts:_texts];
 
   // The same rule as every other shell: the bar is drawn when the cluster's
   // emergency.button_on_roles names this role.
@@ -682,12 +690,13 @@ static const CGFloat kLanguageSegmentMinimum = 64;
           [(NSString *)role isEqualToString:@"door_station"])
         showSos = YES;
   }
-  if (showSos != !_sos.hidden) {
+  if (showSos != !_sosButton.hidden) {
     NSLog(@"[doorbell][sos] door station bar %@ (button_on_roles=%@)",
           showSos ? @"shown" : @"hidden", roles ?: @"<unset>");
   }
-  if (_sos.hidden == showSos) [self setNeedsLayout];
-  _sos.hidden = !showSos;
+  if (_sosButton.hidden == showSos) [self setNeedsLayout];
+  _sosButton.hidden = !showSos;
+  if (!showSos) [_sosPanel dismiss];
 
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:_boot.door config:_cfg
@@ -730,6 +739,12 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 
 - (void)sosSliderDidArm:(DBSosSlider *)slider { (void)slider; }
 - (void)sosSliderDidCancel:(DBSosSlider *)slider { (void)slider; }
+
+// The button only opens the confirmation panel; the slide inside it is the second gesture.
+- (void)onSosButton {
+  if (!_emergencyOverlay.hidden) return;
+  [_sosPanel presentInView:self below:_emergencyOverlay];
+}
 
 - (void)sosSliderDidFire:(DBSosSlider *)slider {
   (void)slider;
@@ -1875,7 +1890,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   CGFloat actionScale = MAX(DBDoorStyleNumber(callStyle, @"scale", 1, 0.75, 2),
       MAX(DBDoorStyleNumber(cancelStyle, @"scale", 1, 1, 2),
           DBDoorStyleNumber(endStyle, @"scale", 1, 1, 2)));
-  DBDoorVisitorLayout layout = DBDoorVisitorLayoutMake(size, !_sos.hidden, actionScale);
+  DBDoorVisitorLayout layout = DBDoorVisitorLayoutMake(size, !_sosButton.hidden, actionScale);
   NSInteger languageCount = (NSInteger)[_languages count];
   layout = DBDoorVisitorLayoutFit(layout, languageCount >= 2, !_noticeLabel.hidden);
   BOOL compact = layout.compact;
@@ -1889,7 +1904,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _touchHint.frame = layout.status;
   _touchHint.font = [UIFont systemFontOfSize:compact ? 15 : (layout.sideBySide ? 20 : 24)];
   _versionLabel.frame = layout.version;
-  _sos.frame = layout.sos;
+  _sosButton.frame = layout.sos;
 
   // Segments while each stays wide enough to hit and read; one button that opens a sheet
   // once more languages are enabled than fit.
