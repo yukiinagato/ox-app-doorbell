@@ -787,7 +787,22 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("public const double WideBreakpoint = 900;", window)
         self.assertIn("public const double MinTouchTarget = 44;", window)
         self.assertIn('<Setter Property="MinHeight" Value="44"/>', styles)
-        self.assertIn("SettingsSwitch", styles)
+        # The on/off row is the Fluent ToggleSwitch at the same touch minimum, and a refused
+        # write puts it back without writing again.
+        fluent = read("win/DoorbellApp/Ui/Fluent.cs")
+        self.assertIn("public const double TouchMin = 44;", fluent)
+        self.assertIn("MinHeight = TouchMin,", fluent)
+        toggle = rows[rows.index("private FrameworkElement BuildToggle("):
+                      rows.index("private FrameworkElement BuildSlider(")]
+        self.assertIn("var toggle = Fluent.Switch(stored);", toggle)
+        self.assertIn("if (reverting) return;", toggle)
+        self.assertIn("toggle.IsOn = !next;", toggle)
+        # Categories are a NavigationView that adapts at the two size-class breakpoints.
+        self.assertIn("public const double CompactBreakpoint = 600;", window)
+        self.assertIn("CompactModeThresholdWidth = CompactBreakpoint,", window)
+        self.assertIn("ExpandedModeThresholdWidth = WideBreakpoint,", window)
+        # No style replaces a Fluent control template in settings.
+        self.assertNotIn("<ControlTemplate", styles)
         self.assertIn("OpenSettings();", shell)
         # The device-side keys an administrator edits are native controls.
         for key in ('Self + ".name"', 'Local + ".audio.volume.call"', '"ui.ringtone"',
@@ -899,8 +914,12 @@ class WindowsContracts(unittest.TestCase):
         keypad = read("win/DoorbellApp/Pairing/PairingKeypad.xaml")
         for digit in "0123456789":
             self.assertIn('Content="%s" Tag="%s"' % (digit, digit), keypad)
-        self.assertIn('Background" Value="{DynamicResource Card}"', keypad)
-        self.assertNotIn('#0C1014', keypad)
+        # The keys are Fluent buttons: no template of their own and no literal colours.
+        self.assertIn('<Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">',
+                      keypad)
+        self.assertNotIn("<ControlTemplate", keypad)
+        self.assertIsNone(re.search(r'="#[0-9A-Fa-f]{6,8}"', keypad))
+        self.assertIn('<Setter Property="MinHeight" Value="54"/>', keypad)
 
     def test_windows_network_discovery_never_advertises_the_wildcard_listener(self):
         sockets = read("core/src/mesh/socket_compat.h")
@@ -1086,8 +1105,14 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('"/api/pairing/rebuild"', admin)
         self.assertIn("UpdateChecker.Channel = value;", admin)
         self.assertIn('Category("pairing", "IconTopologyStar3")', catalog)
-        # The Windows version moved with this change.
-        self.assertIn("<Version>0.1.21</Version>", project)
+        # The user-visible version and the numeric build number move together: FileVersion is
+        # the same version with the build number as its fourth part.
+        version = re.search(r"<Version>(\d+\.\d+\.\d+)</Version>", project)
+        file_version = re.search(r"<FileVersion>(\d+\.\d+\.\d+)\.(\d+)</FileVersion>", project)
+        self.assertIsNotNone(version)
+        self.assertIsNotNone(file_version)
+        self.assertEqual(file_version.group(1), version.group(1))
+        self.assertGreater(int(file_version.group(2)), 0)
 
     # ---- batch 2 (WP-N-win) ----------------------------------------------------------
 
@@ -2202,7 +2227,11 @@ class WindowsContracts(unittest.TestCase):
     def test_history_has_list_detail_and_unread_marks(self):
         layout = read("win/DoorbellApp/MainWindow.Layout.cs")
         history = read("win/DoorbellApp/MainWindow.History.cs")
-        self.assertIn("HistoryList.Children.Add(HistoryRow(row));", history)
+        # The history is a ListView; each call is a list item and day headers are not targets.
+        self.assertIn("HistoryList.Items.Add(HistoryRow(row));", history)
+        self.assertIn('<ListView x:Name="HistoryList"', read("win/DoorbellApp/MainWindow.xaml"))
+        self.assertIn("IsHitTestVisible = false,", read("win/DoorbellApp/MainWindow.Dashboard.cs"))
+        self.assertIn("IsSelected = _historySelected != null &&", layout)
         self.assertIn("HistoryDetailColumn.Width = new GridLength(1.2, GridUnitType.Star);", layout)
         self.assertIn("grid.MinHeight = LayoutMetrics.TouchMin;", layout)
         self.assertIn('Texts.T("history.unread")', layout)
@@ -2458,6 +2487,156 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('CoreClient.Dig(status, "call")', shell)
         self.assertIn('call.ContainsKey("mic_muted")', shell)
         self.assertIn("App.Core.SipSetMicMuted(wanted)", call)
+
+    # ---- Fluent redesign (ModernWpf) ---------------------------------------------------
+
+    def test_fluent_theme_is_pinned_packaged_and_driven_by_core(self):
+        project = read("win/DoorbellApp/DoorbellApp.csproj")
+        app = read("win/DoorbellApp/App.xaml")
+        appearance = read("win/DoorbellApp/Util/Appearance.cs")
+        build = read("win/build.cmd")
+        self.assertIn('<PackageReference Include="ModernWpfUI" Version="0.9.6" />', project)
+        self.assertIn('xmlns:ui="http://schemas.modernwpf.com/2019"', app)
+        self.assertLess(app.index("<ui:ThemeResources/>"), app.index("<ui:XamlControlsResources/>"))
+        # The release bundle must carry the Fluent assemblies the shell cannot start without.
+        for assembly in ("ModernWpf.dll", "ModernWpf.Controls.dll"):
+            self.assertIn('if not exist "!DB_STAGE!\\app\\%s"' % assembly, build)
+        # Core's effective appearance and accent reach the Fluent theme; nothing else sets it.
+        apply_theme = appearance[appearance.index("private static void ApplyTheme("):
+                                 appearance.index("private static void PointTokens(")]
+        self.assertIn("ModernWpf.ThemeManager.Current.ApplicationTheme = light", apply_theme)
+        self.assertIn("ModernWpf.ThemeManager.Current.AccentColor = accent;", apply_theme)
+        self.assertIn('CoreClient.Dig(display, "theme.auto_accent.call_button")', appearance)
+        self.assertIn("!ThemeContrast.CoreSampledBackground(display)", appearance)
+        for path in sorted((WIN / "DoorbellApp").rglob("*.cs")):
+            if path.name == "Appearance.cs":
+                continue
+            with self.subTest(path=path.name):
+                self.assertNotIn("ThemeManager", path.read_text(encoding="utf-8"))
+        # Neutral tokens alias ModernWpf theme brushes instead of a hand-rolled palette.
+        for token, brush in (("Bg", "ApplicationPageBackgroundThemeBrush"),
+                             ("Fg", "SystemControlForegroundBaseHighBrush"),
+                             ("Accent", "SystemControlBackgroundAccentBrush")):
+            self.assertIn('{ "%s", "%s",' % (token, brush), appearance)
+        # Fluent styles are extended, never re-templated; the only templates left are the
+        # semantic-fill button and the SOS slide, which no stock control provides.
+        self.assertEqual(app.count("<ControlTemplate TargetType="), 3)
+        for style in ("ChipButton", "ActionButton", "PairSecondaryButton", "BigSecondaryButton"):
+            self.assertIn('<Style x:Key="%s" TargetType="Button" '
+                          'BasedOn="{StaticResource DefaultButtonStyle}">' % style, app)
+        for style in ("BigButton", "PairPrimaryButton", "ChipAccentButton"):
+            self.assertIn('<Style x:Key="%s" TargetType="Button" '
+                          'BasedOn="{StaticResource AccentButtonStyle}">' % style, app)
+
+    def test_indoor_home_is_a_navigation_view_and_settings_stay_behind_the_password(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        navigation = read("win/DoorbellApp/MainWindow.Navigation.cs")
+        root = ET.fromstring(xaml)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        by_name = {e.get(ns): e for e in root.iter() if e.get(ns)}
+        nav = by_name["HomeNav"]
+        self.assertTrue(nav.tag.endswith("}NavigationView"))
+        self.assertEqual(nav.get("CompactModeThresholdWidth"), "600")
+        self.assertEqual(nav.get("ExpandedModeThresholdWidth"), "900")
+        # The library's own settings item is off: Settings is this shell's item, behind the
+        # admin password.
+        self.assertEqual(nav.get("IsSettingsVisible"), "False")
+        items = [e.get(ns) for e in nav.iter() if e.tag.endswith("}NavigationViewItem")]
+        self.assertEqual(items, ["NavHome", "NavHistory", "OpenMonitorButton", "AdminEntryButton"])
+        for item in items:
+            self.assertGreaterEqual(int(by_name[item].get("MinHeight")), 44)
+        invoked = navigation[navigation.index("private void OnHomeNavInvoked("):
+                             navigation.index("private void SyncHomeNavigation()")]
+        self.assertIn("ReferenceEquals(item, AdminEntryButton)", invoked)
+        self.assertIn("OnAdminEntryClick(this, new RoutedEventArgs());", invoked)
+        self.assertNotIn("OpenSettings", navigation)
+        # The dashboard and the history page both live inside the navigation view, and the
+        # visitor screen is outside it: a door station has no route to settings.
+        inside = {e.get(ns) for e in nav.iter() if e.get(ns)}
+        self.assertTrue({"DashboardPage", "HistoryView", "DoorTileGrid", "RecentCallsList",
+                         "MissedBadge"} <= inside)
+        self.assertFalse({"VisitorHome", "CallButton", "SosButton", "IncomingView",
+                          "EmergencyView"} & inside)
+        self.assertTrue(by_name["MissedBadge"].tag.endswith("}InfoBar"))
+        self.assertTrue(by_name["RecentCallsList"].tag.endswith("}ListView"))
+        # The hidden corner counts taps while they tunnel, so it works under the navigation
+        # view without taking a tap from it.
+        self.assertEqual(by_name["IdleView"].get("PreviewMouseLeftButtonDown"),
+                         "OnIdlePreviewDown")
+        self.assertEqual(by_name["SecretCorner"].get("IsHitTestVisible"), "False")
+        self.assertIn("OnSecretCorner(sender, e);", navigation)
+
+    def test_touch_minimums_hold_on_the_fluent_controls(self):
+        app = read("win/DoorbellApp/App.xaml")
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        for style in re.findall(r'<Style x:Key="(\w+)" TargetType="Button"', app):
+            block = app[app.index('<Style x:Key="%s" TargetType="Button"' % style):]
+            block = block[:block.index("</Style>")]
+            heights = [int(v) for v in re.findall(
+                r'<Setter Property="MinHeight" Value="(\d+)"/>', block)]
+            with self.subTest(style=style):
+                if style == "SemanticActionButton":
+                    self.assertEqual(heights, [72])
+                else:
+                    self.assertTrue(heights and min(heights) >= 44, style)
+        # Visitor actions keep the 72-pixel floor (they are 96).
+        for style in ("VisitorPrimaryAction", "VisitorSecondaryAction", "VisitorNegativeAction"):
+            block = xaml[xaml.index('<Style x:Key="%s"' % style):]
+            block = block[:block.index("</Style>")]
+            self.assertIn('<Setter Property="MinHeight" Value="96"/>', block)
+        root = ET.fromstring(xaml)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        by_name = {e.get(ns): e for e in root.iter() if e.get(ns)}
+        self.assertEqual(by_name["CallButton"].get("Style"), "{StaticResource VisitorPrimaryAction}")
+        self.assertEqual(by_name["EndCallButton"].get("Style"),
+                         "{StaticResource VisitorNegativeAction}")
+        self.assertEqual(by_name["AnswerButton"].get("Style"),
+                         "{StaticResource SemanticActionButton}")
+
+    def test_live_pictures_zoom_and_pan_inside_their_edges(self):
+        xaml = read("win/DoorbellApp/MainWindow.xaml")
+        host = read("win/DoorbellApp/Ui/ZoomPanHost.cs")
+        math_source = read("win/DoorbellApp/Ui/ZoomPanMath.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        root = ET.fromstring(xaml)
+        ns = "{http://schemas.microsoft.com/winfx/2006/xaml}Name"
+        parents = {child: parent for parent in root.iter() for child in parent}
+        by_name = {e.get(ns): e for e in root.iter() if e.get(ns)}
+
+        def zoom_host(name):
+            node = by_name[name]
+            while node in parents:
+                node = parents[node]
+                if node.tag.endswith("}ZoomPanHost"):
+                    return node.get(ns)
+            return None
+
+        # Every live picture, on the incoming/monitor screen and in a call.
+        for name in ("IncomingLive", "IncomingH264Image", "IncomingH264"):
+            self.assertEqual(zoom_host(name), "IncomingZoom")
+        for name in ("PeerVideo", "PeerH264Image", "PeerH264"):
+            self.assertEqual(zoom_host(name), "InCallZoom")
+        # No call action sits inside a zoom host, so a gesture cannot trigger or block one.
+        for name in ("AnswerButton", "QuickReplyToggle", "IgnoreButton", "EndCallButton",
+                     "MonitorButton", "OpenDoorButton", "MicButton"):
+            self.assertIsNone(zoom_host(name))
+        self.assertIn("public const double MaxScale = 4.0;", math_source)
+        self.assertIn("public const double DoubleTapScale = 2.0;", math_source)
+        self.assertNotIn("System.Windows", math_source)
+        self.assertIn("IsManipulationEnabled = true;", host)
+        self.assertIn("ClipToBounds = true;", host)
+        self.assertIn("e.Mode = ManipulationModes.Scale | ManipulationModes.Translate;", host)
+        inertia = host[host.index("if (e.IsInertial)"):]
+        self.assertIn("e.Complete();", inertia[:inertia.index("return;")])
+        for handler in ("OnMouseWheel", "OnMouseLeftButtonDown", "OnMouseMove", "OnTouchDown"):
+            self.assertIn("protected override void %s(" % handler, host)
+        self.assertIn("if (e.ClickCount == 2)", host)
+        # A new door or call starts fitted.
+        self.assertIn("IncomingZoom.Reset();", window)
+        self.assertIn("InCallZoom.Reset();", window)
+        script = read("win/scripts/test_zoom_pan_math.sh")
+        self.assertIn("win/DoorbellApp/Ui/ZoomPanMath.cs", script)
+        self.assertIn("win/tests/ZoomPanMathTests.cs", script)
 
 
 if __name__ == "__main__":

@@ -23,7 +23,7 @@ namespace DoorbellApp.Pairing
             {
                 Owner = owner,
                 Topmost = owner != null && owner.Topmost,
-                WindowStyle = WindowStyle.None,
+                Title = Texts.T("pair.add"),
                 ResizeMode = ResizeMode.NoResize,
                 SizeToContent = SizeToContent.Height,
                 Width = 480,
@@ -31,8 +31,7 @@ namespace DoorbellApp.Pairing
                 ShowInTaskbar = false,
             };
             if (owner != null) dialog.FontFamily = owner.FontFamily;
-            dialog.SetResourceReference(Control.BackgroundProperty, "Card");
-            dialog.SetResourceReference(Control.ForegroundProperty, "Fg");
+            DoorbellApp.Ui.Fluent.StyleWindow(dialog);
             var form = new StackPanel { Margin = new Thickness(28) };
             form.Children.Add(new TextBlock
             {
@@ -87,8 +86,10 @@ namespace DoorbellApp.Pairing
                 IsDefault = true,
                 Margin = new Thickness(10, 0, 0, 0),
             };
-            ok.SetResourceReference(Control.BackgroundProperty, "Accent");
-            ok.SetResourceReference(Control.ForegroundProperty, "OnAccent");
+            DoorbellApp.Ui.Fluent.MakeAccent(ok);
+            ok.FontSize = 15;
+            ok.MinHeight = DoorbellApp.Ui.Fluent.TouchMin;
+            ok.Padding = new Thickness(16, 6, 16, 6);
             actions.Children.Add(cancel);
             actions.Children.Add(ok);
             form.Children.Add(actions);

@@ -326,7 +326,8 @@ namespace DoorbellApp.Settings
             var search = new TextBox { Style = (Style)FindResource("SettingsTextBox"), Text = _textsQuery,
                                        Margin = new Thickness(0, 10, 0, 6) };
             AutomationLabel(search, Texts.T("settings.texts_search"));
-            panel.Children.Add(WithPlaceholder(search, Texts.T("settings.texts_search")));
+            DoorbellApp.Ui.Fluent.Placeholder(search, Texts.T("settings.texts_search"));
+            panel.Children.Add(search);
             var results = new StackPanel();
             panel.Children.Add(results);
             panel.Children.Add(parts.Error);
@@ -1062,8 +1063,7 @@ namespace DoorbellApp.Settings
                 string labelKey = "settings.update_channel_" + channel;
                 var button = CommandButton(Texts.T(labelKey));
                 bool on = UpdateChecker.Channel == channel;
-                button.SetResourceReference(BackgroundProperty, on ? "Accent" : "Pill");
-                button.SetResourceReference(ForegroundProperty, on ? "OnAccent" : "Fg");
+                if (on) DoorbellApp.Ui.Fluent.MakeAccent(button);
                 button.Margin = new Thickness(0, 0, 6, 6);
                 button.Click += (s, e) =>
                 {

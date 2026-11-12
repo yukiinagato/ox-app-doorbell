@@ -27,7 +27,7 @@ namespace DoorbellApp.Ui
         // Type scale relative to body.
         public const double Caption = 0.8, Body = 1.0, Title = 1.25, Headline = 1.6, Display = 2.2;
 
-        public const double CardRadius = 12, PillRadius = 999, SheetRadius = 20;
+        public const double CardRadius = 8, PillRadius = 999, SheetRadius = 8;
 
         /// <summary>Live-view overlay controls hide after this long without input.</summary>
         public static readonly TimeSpan OverlayAutoHide = TimeSpan.FromSeconds(4);

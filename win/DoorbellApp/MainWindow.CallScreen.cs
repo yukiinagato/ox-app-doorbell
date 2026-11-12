@@ -80,10 +80,8 @@ namespace DoorbellApp
             Brush ink = _monitorAudioOn ? (Brush)FindResource("OnAccent") : null;
             MonitorButton.Content = IconStack(_monitorAudioOn ? "IconEye" : "IconEyeOff",
                 _monitorAudioOn ? Texts.T("ring.monitor_on") : Texts.T("ring.monitor_off"), ink);
-            MonitorButton.Background = _monitorAudioOn ?
-                (Brush)FindResource("Accent") : (Brush)FindResource("Pill");
-            MonitorButton.Foreground = _monitorAudioOn ?
-                (Brush)FindResource("OnAccent") : (Brush)FindResource("Fg");
+            // On: accent fill. Off: the standard Fluent button, with no local colours.
+            PaintToggle(MonitorButton, _monitorAudioOn, "Accent", "OnAccent");
         }
 
         private void ApplyMicLabel()
@@ -92,14 +90,22 @@ namespace DoorbellApp
             Brush micInk = _micMuted ? (Brush)FindResource("OnDanger") : null;
             MicButton.Content = IconStack(_micMuted ? "IconMicrophoneOff" : "IconMicrophone", label, micInk);
             InCallMicButton.Content = IconStack(_micMuted ? "IconMicrophoneOff" : "IconMicrophone", label, micInk);
-            Brush background = _micMuted ?
-                (Brush)FindResource("Negative") : (Brush)FindResource("Pill");
-            Brush foreground = _micMuted ?
-                (Brush)FindResource("OnDanger") : (Brush)FindResource("Fg");
-            MicButton.Background = background;
-            MicButton.Foreground = foreground;
-            InCallMicButton.Background = background;
-            InCallMicButton.Foreground = foreground;
+            PaintToggle(MicButton, _micMuted, "Negative", "OnDanger");
+            PaintToggle(InCallMicButton, _micMuted, "Negative", "OnDanger");
+        }
+
+        private static void PaintToggle(Control button, bool on, string fill, string ink)
+        {
+            if (on)
+            {
+                button.SetResourceReference(Control.BackgroundProperty, fill);
+                button.SetResourceReference(Control.ForegroundProperty, ink);
+            }
+            else
+            {
+                button.ClearValue(Control.BackgroundProperty);
+                button.ClearValue(Control.ForegroundProperty);
+            }
         }
 
         /// <summary>

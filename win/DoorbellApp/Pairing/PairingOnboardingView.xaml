@@ -25,12 +25,10 @@
                     <StackPanel Grid.Column="0">
                         <!-- Warning / error states tint this card (upgrade re-pair: warning,
                              persist failure: negative) so the state reads full width. -->
-                        <Border x:Name="StatusCard" CornerRadius="12" BorderThickness="0">
+                        <Border x:Name="StatusCard" CornerRadius="4" BorderThickness="0">
                         <StackPanel x:Name="StatusPanel">
                             <ProgressBar x:Name="StatusSpinner" Height="4" Width="260"
-                                         HorizontalAlignment="Left" IsIndeterminate="True"
-                                         Foreground="{DynamicResource Accent}"
-                                         Background="#1A2027" BorderThickness="0"/>
+                                         HorizontalAlignment="Left" IsIndeterminate="True"/>
                             <TextBlock x:Name="StatusText" FontSize="27" FontWeight="SemiBold"
                                        Margin="0,14,0,0" TextWrapping="Wrap"
                                        Foreground="{DynamicResource Fg}"/>
@@ -57,7 +55,7 @@
                         <!-- Two-step confirm: creating a Cluster on the wrong device is the most
                              common onboarding mistake, so it is never a single tap. -->
                         <Border x:Name="CreateConfirmPanel" Visibility="Collapsed"
-                                Background="{DynamicResource Card}" CornerRadius="16"
+                                Background="{DynamicResource Card}" CornerRadius="8"
                                 BorderBrush="{DynamicResource Line}" BorderThickness="1" Padding="24"
                                 Margin="0,22,0,0" HorizontalAlignment="Left" MaxWidth="620">
                             <StackPanel>
@@ -82,7 +80,7 @@
                         </Border>
 
                         <Border x:Name="CodeEntryPanel" Visibility="Collapsed"
-                                Background="{DynamicResource Card}" CornerRadius="16"
+                                Background="{DynamicResource Card}" CornerRadius="8"
                                 BorderBrush="{DynamicResource Line}" BorderThickness="1" Padding="24"
                                 Margin="0,22,0,0" HorizontalAlignment="Left" MaxWidth="620">
                             <StackPanel>
@@ -90,9 +88,8 @@
                                            FontWeight="SemiBold"
                                            Foreground="{DynamicResource Dim}"/>
                                 <TextBox x:Name="AddressBox" FontSize="22" Margin="0,6,0,0"
-                                         MinHeight="44" Padding="10,6" MaxLength="128"
-                                         Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
-                                         CaretBrush="{DynamicResource Fg}" BorderBrush="{DynamicResource Line}"/>
+                                         MinHeight="44" MaxLength="128"
+                                         VerticalContentAlignment="Center"/>
                                 <TextBlock x:Name="EntryAddressExample" FontSize="13"
                                            Margin="0,4,0,0"
                                            Foreground="{DynamicResource Dim}"/>
@@ -140,7 +137,7 @@
                         </StackPanel>
 
                         <Border x:Name="PersistErrorPanel" Visibility="Collapsed"
-                                Background="#2A1B1B" CornerRadius="16" BorderBrush="#7F1D1D"
+                                Background="{DynamicResource Card}" CornerRadius="8" BorderBrush="{DynamicResource Negative}"
                                 BorderThickness="1" Padding="24" Margin="0,22,0,0"
                                 HorizontalAlignment="Left" MaxWidth="620">
                             <StackPanel>
@@ -165,7 +162,7 @@
                          status when narrower (PairingOnboardingView.ApplySizeClass). -->
                     <StackPanel x:Name="PairingSidePanel" Grid.Column="1" Margin="40,0,0,0"
                                 Width="300">
-                        <Border Background="#FFFFFF" CornerRadius="12" Padding="10"
+                        <Border Background="#FFFFFF" CornerRadius="4" Padding="10"
                                 Width="280" Height="280">
                             <Grid>
                                 <Image x:Name="QrImage" Stretch="Uniform"

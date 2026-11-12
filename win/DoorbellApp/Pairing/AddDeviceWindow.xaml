@@ -20,8 +20,8 @@
                     <TextBlock x:Name="ConnectedText" FontSize="18" Margin="18,0,0,0"
                                VerticalAlignment="Bottom"
                                Foreground="{DynamicResource Dim}"/>
-                    <Border x:Name="CreatedBadge" Visibility="Collapsed" Background="#2A3A4C"
-                            CornerRadius="8" Padding="10,3" Margin="18,0,0,0"
+                    <Border x:Name="CreatedBadge" Visibility="Collapsed" Background="{DynamicResource Row}"
+                            CornerRadius="4" Padding="12,6" Margin="18,0,0,0"
                             VerticalAlignment="Bottom">
                         <TextBlock x:Name="CreatedBadgeText" FontSize="13"
                                    Foreground="{DynamicResource Fg}"/>
@@ -60,8 +60,7 @@
                            Margin="0,0,0,14"/>
                 <StackPanel x:Name="NearbyEmptyPanel" DockPanel.Dock="Top" Margin="0,0,0,14">
                     <ProgressBar Height="4" Width="200" HorizontalAlignment="Left"
-                                 IsIndeterminate="True" Background="#1A2027"
-                                 Foreground="{DynamicResource Accent}" BorderThickness="0"/>
+                                 IsIndeterminate="True"/>
                     <TextBlock x:Name="NearbyEmptyText" FontSize="16" Margin="0,10,0,0"
                                Foreground="{DynamicResource Dim}"/>
                 </StackPanel>
@@ -70,7 +69,7 @@
                     <ItemsControl x:Name="NearbyList" Margin="0,0,20,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Background="{DynamicResource Card}" CornerRadius="12"
+                                <Border Background="{DynamicResource Card}" CornerRadius="4"
                                         BorderBrush="{DynamicResource Line}" BorderThickness="1"
                                         Padding="18" Margin="0,0,0,10">
                                     <Grid>
@@ -102,8 +101,6 @@
                                             <ProgressBar Width="70" Height="4"
                                                          IsIndeterminate="True"
                                                          VerticalAlignment="Center"
-                                                         Background="#1A2027" BorderThickness="0"
-                                                         Foreground="{DynamicResource Accent}"
                                                          Visibility="{Binding BusyVisibility}"/>
                                             <Button Content="{Binding ActionText}"
                                                     IsEnabled="{Binding CanAct}" Margin="14,0,0,0"
@@ -132,7 +129,7 @@
                     <pairing:PairingCodeCard x:Name="CodeCard" Visibility="Collapsed"
                                              Margin="0,14,0,0"/>
 
-                    <Border Background="{DynamicResource Card}" CornerRadius="16"
+                    <Border Background="{DynamicResource Card}" CornerRadius="8"
                             BorderBrush="{DynamicResource Line}" BorderThickness="1" Padding="20"
                             Margin="0,20,0,0">
                         <StackPanel>
@@ -150,13 +147,13 @@
                     <Button x:Name="ScanQrButton" Margin="0,20,0,0" HorizontalAlignment="Left"
                             Style="{StaticResource PairSecondaryButton}" Click="OnScanQrClick"/>
 
-                    <Border Background="{DynamicResource Card}" CornerRadius="16"
+                    <Border Background="{DynamicResource Card}" CornerRadius="8"
                             BorderBrush="{DynamicResource Line}" BorderThickness="1" Padding="20"
                             Margin="0,20,0,0">
                         <StackPanel>
                             <TextBlock x:Name="OwnQrTitle" FontSize="19" FontWeight="Bold"
                                        Foreground="{DynamicResource Fg}" TextWrapping="Wrap"/>
-                            <Border Background="#FFFFFF" CornerRadius="10" Padding="8"
+                            <Border Background="#FFFFFF" CornerRadius="4" Padding="8"
                                     Width="200" Height="200" HorizontalAlignment="Left"
                                     Margin="0,12,0,0">
                                 <Grid>
@@ -172,7 +169,7 @@
                         </StackPanel>
                     </Border>
 
-                    <Border Background="#2A1B1B" CornerRadius="16" BorderBrush="#7F1D1D"
+                    <Border Background="{DynamicResource Card}" CornerRadius="8" BorderBrush="{DynamicResource Negative}"
                             BorderThickness="1" Padding="20" Margin="0,20,0,0">
                         <StackPanel>
                             <TextBlock x:Name="ClearTitle" FontSize="19" FontWeight="Bold"

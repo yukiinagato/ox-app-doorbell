@@ -183,9 +183,7 @@ namespace DoorbellApp.Settings
                 case "goto_rules":
                     if (_query.Length > 0) _search.Text = "";
                     _categoryId = "rules";
-                    _showingCategory = true;
-                    if (_wide == true) { RenderNav(); RenderContent(); }
-                    else RenderNarrowBody();
+                    RenderContent();
                     break;
             }
         }

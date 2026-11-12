@@ -545,7 +545,7 @@ namespace DoorbellApp
             NoticeEditButton.Content = Texts.T("notice.edit");
             NoticeClearButton.Content = Texts.T("notice.clear");
             NoticePopoverClose.Content = Texts.T("monitor.close");
-            AdminEntryButton.Content = IconLabel("IconSettings", Texts.T("admin.title"));
+            ApplyNavigationStrings();
             AdminLinkTitle.Text = Texts.T("web_admin.title");
             NoticeGlobalButton.Content = IconLabel("IconBell", Texts.T("dash.notice_global"));
             RecentCallsTitle.Text = Texts.T("history.title");
@@ -562,7 +562,6 @@ namespace DoorbellApp
             HistoryNote.Text = Texts.T("history.page_limit");
             ApplyMicLabel();
             ApplyMonitorLabel();
-            OpenMonitorButton.Content = IconLabel("IconEye", Texts.T("monitor.open"));
             MonitorPickerTitle.Text = Texts.T("monitor.choose");
             MonitorPickerClose.Content = Texts.T("monitor.close");
             CallingPurposeHint.Text = Texts.T("idle.choose_purpose");

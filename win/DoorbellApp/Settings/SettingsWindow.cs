@@ -6,16 +6,23 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
 using DoorbellApp.Core;
+using DoorbellApp.Ui;
 using DoorbellApp.Util;
+using InfoBar = ModernWpf.Controls.InfoBar;
+using InfoBarSeverity = ModernWpf.Controls.InfoBarSeverity;
+using NavigationView = ModernWpf.Controls.NavigationView;
+using NavigationViewBackButtonVisible = ModernWpf.Controls.NavigationViewBackButtonVisible;
+using NavigationViewItem = ModernWpf.Controls.NavigationViewItem;
+using NavigationViewPaneDisplayMode = ModernWpf.Controls.NavigationViewPaneDisplayMode;
 
 namespace DoorbellApp.Settings
 {
     /// <summary>
-    /// Native settings, laid out like the system Settings app. At 900 effective pixels and wider
-    /// (landscape tablets, desktops) it is two panes: categories with icons and a search box on
-    /// the left, grouped cards of rows on the right. Narrower (portrait tablets) it drills down:
-    /// the category list, then one category with a back button. Widths are WPF device-independent
-    /// pixels, so the breakpoint follows the system DPI scale.
+    /// Native settings as a Fluent settings app: a NavigationView carries the categories (open
+    /// pane from 900 effective pixels, icon rail from 600, a menu button below that) and the
+    /// selected category shows as titled cards of rows. A search box in the page header replaces
+    /// the page with every matching row. Widths are WPF device-independent pixels, so the
+    /// breakpoints follow the system DPI scale.
     ///
     /// Every row writes through SettingsStore, i.e. one Core config batch per change, and saves
     /// immediately; there is no separate Save step. Admin-required answers are prompted for by
@@ -24,6 +31,7 @@ namespace DoorbellApp.Settings
     internal sealed partial class SettingsWindow : Window
     {
         public const double WideBreakpoint = 900;
+        public const double CompactBreakpoint = 600;
         public const double MinTouchTarget = 44;
 
         private readonly MainWindow _main;
@@ -31,26 +39,24 @@ namespace DoorbellApp.Settings
         private readonly List<SettingCategory> _catalog;
         private readonly Func<bool> _previousPrompt;
         private readonly DispatcherTimer _statusTimer = new DispatcherTimer();
-        private bool? _wide;
         private string _categoryId;
-        private bool _showingCategory;
         private string _query = "";
+        private bool? _stackedRows;
 
-        private DockPanel _shell;
-        private Button _back;
+        private NavigationView _navigation;
+        private Grid _header;
         private TextBlock _title;
         private TextBox _search;
-        private FrameworkElement _searchHost;
-        private StackPanel _nav;
         private StackPanel _content;
         private ScrollViewer _contentScroll;
-        private TextBlock _status;
+        private InfoBar _status;
 
         public SettingsWindow(MainWindow main, string nodeId, string role)
         {
             _main = main;
             Owner = main;
             Topmost = main.Topmost;
+            // A kiosk surface like the main window: borderless and maximized.
             WindowStyle = WindowStyle.None;
             ResizeMode = ResizeMode.NoResize;
             WindowState = WindowState.Maximized;
@@ -78,7 +84,7 @@ namespace DoorbellApp.Settings
             _statusTimer.Tick += (s, e) =>
             {
                 _statusTimer.Stop();
-                if (_status != null) _status.Visibility = Visibility.Collapsed;
+                if (_status != null) _status.IsOpen = false;
             };
             PreviewKeyDown += OnKey;
             SizeChanged += (s, e) => ApplyLayoutMode(false);
@@ -87,168 +93,137 @@ namespace DoorbellApp.Settings
 
         // ---- layout ---------------------------------------------------------------------------
 
-        private bool IsWide { get { return ActualWidth >= WideBreakpoint; } }
-
+        /// <summary>
+        /// The NavigationView adapts its own pane to the width. What this window still decides is
+        /// where the header starts (clear of the menu button on a compact window) and whether wide
+        /// controls stack under their label, which means rebuilding the rows.
+        /// </summary>
         private void ApplyLayoutMode(bool force)
         {
-            bool wide = IsWide;
-            if (!force && _wide == wide) return;
-            _wide = wide;
-            BuildShell();
+            if (_navigation == null) BuildShell();
+            _header.Margin = new Thickness(ActualWidth < CompactBreakpoint ? 56 : 24, 8, 16, 4);
+            bool stacked = ActualWidth < 700;
+            if (!force && _stackedRows == stacked) return;
+            _stackedRows = stacked;
+            RenderContent();
         }
 
         private void BuildShell()
         {
-            _shell = new DockPanel { LastChildFill = true };
-            var header = BuildHeader();
-            DockPanel.SetDock(header, Dock.Top);
-            _shell.Children.Add(header);
-
-            _status = new TextBlock
+            _navigation = new NavigationView
             {
-                FontSize = 15,
-                Margin = new Thickness(24, 8, 24, 12),
-                TextWrapping = TextWrapping.Wrap,
-                Visibility = Visibility.Collapsed,
+                PaneDisplayMode = NavigationViewPaneDisplayMode.Auto,
+                CompactModeThresholdWidth = CompactBreakpoint,
+                ExpandedModeThresholdWidth = WideBreakpoint,
+                OpenPaneLength = 300,
+                IsSettingsVisible = false,
+                IsBackButtonVisible = NavigationViewBackButtonVisible.Collapsed,
             };
-            DockPanel.SetDock(_status, Dock.Bottom);
-            _shell.Children.Add(_status);
-
-            _search = new TextBox
+            foreach (var category in _catalog)
             {
-                Style = (Style)FindResource("SettingsTextBox"),
-                Text = _query,
-            };
-            _search.TextChanged += (s, e) =>
-            {
-                _query = _search.Text.Trim();
-                if (_wide == true) RenderContent();
-                else
+                string label = Texts.T(category.TitleKey);
+                var item = new NavigationViewItem
                 {
-                    _showingCategory = false;
-                    RenderNarrowBody();
-                }
+                    Content = label,
+                    Icon = Fluent.Icon(category.IconKey),
+                    Tag = category.Id,
+                    MinHeight = 48,
+                };
+                AutomationLabel(item, label);
+                _navigation.MenuItems.Add(item);
+            }
+            // ItemInvoked rather than SelectionChanged: tapping the category that is already
+            // selected still has to leave the search results.
+            _navigation.ItemInvoked += (s, e) =>
+            {
+                var item = e.InvokedItemContainer as NavigationViewItem;
+                string id = item == null ? null : item.Tag as string;
+                if (id == null) return;
+                _categoryId = id;
+                // Choosing a category leaves the search results.
+                if (_query.Length > 0) _search.Text = "";
+                else RenderContent();
             };
-            AutomationLabel(_search, Texts.T("settings.search"));
-            _searchHost = WithPlaceholder(_search, Texts.T("settings.search"));
 
-            if (_wide == true)
-            {
-                var body = new Grid();
-                body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(320) });
-                body.ColumnDefinitions.Add(new ColumnDefinition
-                    { Width = new GridLength(1, GridUnitType.Star) });
-                var left = new DockPanel { Margin = new Thickness(16, 4, 8, 16) };
-                DockPanel.SetDock(_searchHost, Dock.Top);
-                left.Children.Add(_searchHost);
-                _nav = new StackPanel();
-                left.Children.Add(new ScrollViewer
-                {
-                    Content = _nav,
-                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                    PanningMode = PanningMode.VerticalOnly,
-                });
-                Grid.SetColumn(left, 0);
-                body.Children.Add(left);
-                _contentScroll = ContentScroll();
-                Grid.SetColumn(_contentScroll, 1);
-                body.Children.Add(_contentScroll);
-                _shell.Children.Add(body);
-                RenderNav();
-                RenderContent();
-            }
-            else
-            {
-                // Narrow: the search box stays put above the page, so typing (including IME
-                // composition) never loses its text box to a re-render.
-                ((FrameworkElement)_searchHost).Margin = new Thickness(16, 4, 16, 8);
-                DockPanel.SetDock(_searchHost, Dock.Top);
-                _shell.Children.Add(_searchHost);
-                _contentScroll = ContentScroll();
-                _shell.Children.Add(_contentScroll);
-                RenderNarrowBody();
-            }
-            Content = _shell;
-        }
-
-        private ScrollViewer ContentScroll()
-        {
-            _content = new StackPanel { Margin = new Thickness(16, 4, 16, 24), MaxWidth = 980 };
-            return new ScrollViewer
+            var page = new Grid();
+            page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            page.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            _header = BuildHeader();
+            page.Children.Add(_header);
+            _content = new StackPanel { Margin = new Thickness(24, 4, 24, 24), MaxWidth = 980 };
+            _contentScroll = new ScrollViewer
             {
                 Content = _content,
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
                 PanningMode = PanningMode.VerticalOnly,
             };
+            Grid.SetRow(_contentScroll, 1);
+            page.Children.Add(_contentScroll);
+            _status = new InfoBar
+            {
+                IsOpen = false,
+                IsClosable = true,
+                Margin = new Thickness(24, 0, 24, 12),
+            };
+            Grid.SetRow(_status, 2);
+            page.Children.Add(_status);
+            _navigation.Content = page;
+            Content = _navigation;
+            SyncNavigation();
         }
 
-        private FrameworkElement BuildHeader()
+        private Grid BuildHeader()
         {
-            var bar = new Grid { Margin = new Thickness(8, 8, 8, 4), MinHeight = 60 };
+            var bar = new Grid { MinHeight = 60 };
             bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             bar.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             bar.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            _back = new Button
-            {
-                Style = (Style)FindResource("SettingsFlatButton"),
-                Content = _main.IconGlyph("IconChevronRight", 22),
-                MinWidth = 56,
-                Visibility = Visibility.Collapsed,
-            };
-            // The chevron points right in the icon set; mirrored it reads as "back".
-            _back.RenderTransformOrigin = new Point(0.5, 0.5);
-            _back.RenderTransform = new ScaleTransform(-1, 1);
-            AutomationLabel(_back, Texts.T("settings.back"));
-            _back.Click += (s, e) => GoBack();
-            Grid.SetColumn(_back, 0);
-            bar.Children.Add(_back);
             _title = new TextBlock
             {
-                FontSize = 26,
+                FontSize = 28,
                 FontWeight = FontWeights.SemiBold,
                 VerticalAlignment = VerticalAlignment.Center,
-                Margin = new Thickness(12, 0, 12, 0),
-                TextTrimming = TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(0, 0, 16, 0),
+                TextWrapping = TextWrapping.Wrap,
             };
-            Grid.SetColumn(_title, 1);
             bar.Children.Add(_title);
+            _search = new TextBox
+            {
+                Style = (Style)FindResource("SettingsTextBox"),
+                Text = _query,
+                MaxWidth = 360,
+                MinWidth = 120,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Fluent.Placeholder(_search, Texts.T("settings.search"));
+            AutomationLabel(_search, Texts.T("settings.search"));
+            _search.TextChanged += (s, e) =>
+            {
+                _query = _search.Text.Trim();
+                RenderContent();
+            };
+            Grid.SetColumn(_search, 1);
+            bar.Children.Add(_search);
             var close = new Button
             {
                 Style = (Style)FindResource("SettingsCommandButton"),
                 Content = Texts.T("monitor.close"),
+                Margin = new Thickness(12, 0, 0, 0),
+                VerticalAlignment = VerticalAlignment.Center,
             };
             close.Click += (s, e) => Close();
             Grid.SetColumn(close, 2);
             bar.Children.Add(close);
-            UpdateHeader();
             return bar;
-        }
-
-        private void UpdateHeader()
-        {
-            if (_title == null) return;
-            bool inside = _wide != true && (_showingCategory || _query.Length > 0);
-            _back.Visibility = inside ? Visibility.Visible : Visibility.Collapsed;
-            _title.Text = inside && _query.Length == 0 ? Texts.T(Category(_categoryId).TitleKey)
-                                                       : Texts.T("settings.title");
-        }
-
-        private void GoBack()
-        {
-            if (_query.Length > 0)
-            {
-                _query = "";
-                _search.Text = "";
-            }
-            _showingCategory = false;
-            RenderNarrowBody();
         }
 
         private void OnKey(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Escape)
             {
-                if (_wide != true && (_showingCategory || _query.Length > 0)) GoBack();
+                if (_query.Length > 0) _search.Text = "";
                 else Close();
                 e.Handled = true;
             }
@@ -267,105 +242,35 @@ namespace DoorbellApp.Settings
 
         // ---- navigation -----------------------------------------------------------------------
 
-        private void RenderNav()
+        /// <summary>
+        /// Shows only the categories that have something to show on this device and keeps the
+        /// selection on the current one.
+        /// </summary>
+        private void SyncNavigation()
         {
-            _nav.Children.Clear();
-            foreach (var category in _catalog)
+            if (_navigation == null) return;
             {
-                if (!HasVisibleItems(category)) continue;
-                var button = NavButton(category, _wide == true && category.Id == _categoryId);
-                string id = category.Id;
-                button.Click += (s, e) =>
+                object selected = null;
+                foreach (object entry in _navigation.MenuItems)
                 {
-                    _categoryId = id;
-                    if (_query.Length > 0) _search.Text = "";
-                    RenderNav();
-                    RenderContent();
-                };
-                _nav.Children.Add(button);
+                    var item = entry as NavigationViewItem;
+                    if (item == null) continue;
+                    string id = item.Tag as string;
+                    item.Visibility = HasVisibleItems(Category(id))
+                        ? Visibility.Visible : Visibility.Collapsed;
+                    if (id == _categoryId) selected = item;
+                }
+                if (selected != null && !ReferenceEquals(_navigation.SelectedItem, selected))
+                    _navigation.SelectedItem = selected;
             }
-        }
-
-        private Button NavButton(SettingCategory category, bool selected)
-        {
-            var row = new Grid();
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            var glyph = _main.IconGlyph(category.IconKey, 22, selected ? Brush("Accent") : null);
-            glyph.Margin = new Thickness(0, 0, 14, 0);
-            row.Children.Add(glyph);
-            var label = new TextBlock
-            {
-                Text = Texts.T(category.TitleKey),
-                FontSize = 17,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            };
-            Grid.SetColumn(label, 1);
-            row.Children.Add(label);
-            if (_wide != true)
-            {
-                var chevron = _main.IconGlyph("IconChevronRight", 18, Brush("Dim"));
-                Grid.SetColumn(chevron, 2);
-                row.Children.Add(chevron);
-            }
-            var button = new Button
-            {
-                Style = (Style)FindResource("SettingsFlatButton"),
-                Content = row,
-                MinHeight = 52,
-                Margin = new Thickness(0, 0, 0, 2),
-            };
-            if (selected) button.SetResourceReference(BackgroundProperty, "Row");
-            AutomationLabel(button, label.Text);
-            return button;
-        }
-
-        private void RenderNarrowBody()
-        {
-            UpdateHeader();
-            _content.Children.Clear();
-            _searchHost.Visibility = _showingCategory && _query.Length == 0
-                ? Visibility.Collapsed : Visibility.Visible;
-            if (_query.Length > 0)
-            {
-                RenderSearchResults();
-                return;
-            }
-            if (_showingCategory)
-            {
-                RenderCategory(Category(_categoryId));
-                _contentScroll.ScrollToTop();
-                return;
-            }
-            var card = Card();
-            var list = (StackPanel)card.Child;
-            foreach (var category in _catalog)
-            {
-                if (!HasVisibleItems(category)) continue;
-                var button = NavButton(category, false);
-                string id = category.Id;
-                button.Click += (s, e) =>
-                {
-                    _categoryId = id;
-                    _showingCategory = true;
-                    RenderNarrowBody();
-                };
-                list.Children.Add(button);
-            }
-            _content.Children.Add(card);
-            _contentScroll.ScrollToTop();
         }
 
         private void RenderContent()
         {
-            UpdateHeader();
-            if (_wide != true)
-            {
-                RenderNarrowBody();
-                return;
-            }
+            if (_content == null) return;
+            SyncNavigation();
+            _title.Text = _query.Length > 0 ? Texts.T("settings.title")
+                                            : Texts.T(Category(_categoryId).TitleKey);
             _content.Children.Clear();
             if (_query.Length > 0) RenderSearchResults();
             else RenderCategory(Category(_categoryId));
@@ -376,21 +281,12 @@ namespace DoorbellApp.Settings
         private void Refresh()
         {
             double offset = _contentScroll == null ? 0 : _contentScroll.VerticalOffset;
-            if (_wide == true) RenderContent();
-            else RenderNarrowBody();
+            RenderContent();
             if (_contentScroll != null) _contentScroll.ScrollToVerticalOffset(offset);
         }
 
         private void RenderCategory(SettingCategory category)
         {
-            if (_wide == true)
-                _content.Children.Add(new TextBlock
-                {
-                    Text = Texts.T(category.TitleKey),
-                    FontSize = 30,
-                    FontWeight = FontWeights.SemiBold,
-                    Margin = new Thickness(4, 4, 0, 16),
-                });
             foreach (var group in category.Groups)
             {
                 var rows = new List<FrameworkElement>();
@@ -484,11 +380,13 @@ namespace DoorbellApp.Settings
         {
             var border = new Border
             {
-                CornerRadius = new CornerRadius(12),
+                CornerRadius = new CornerRadius(4),
+                BorderThickness = new Thickness(1),
                 Padding = new Thickness(4),
                 Child = new StackPanel(),
             };
             border.SetResourceReference(Border.BackgroundProperty, "Card");
+            border.SetResourceReference(Border.BorderBrushProperty, "Line");
             return border;
         }
 
@@ -514,33 +412,12 @@ namespace DoorbellApp.Settings
             System.Windows.Automation.AutomationProperties.SetName(element, name ?? "");
         }
 
-        /// <summary>A search box with its hint drawn underneath while it is empty.</summary>
-        private FrameworkElement WithPlaceholder(TextBox box, string hint)
-        {
-            var host = new Grid { Margin = new Thickness(0, 0, 0, 12) };
-            var hintText = new TextBlock
-            {
-                Text = hint,
-                FontSize = 16,
-                Margin = new Thickness(14, 0, 0, 0),
-                VerticalAlignment = VerticalAlignment.Center,
-                IsHitTestVisible = false,
-                Visibility = box.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed,
-            };
-            hintText.SetResourceReference(TextBlock.ForegroundProperty, "Dim");
-            box.TextChanged += (s, e) =>
-                hintText.Visibility = box.Text.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-            host.Children.Add(box);
-            host.Children.Add(hintText);
-            return host;
-        }
-
         internal void ShowStatus(string text, bool error)
         {
             if (_status == null) return;
-            _status.Text = text;
-            _status.SetResourceReference(TextBlock.ForegroundProperty, error ? "Negative" : "Ok");
-            _status.Visibility = Visibility.Visible;
+            _status.Message = text;
+            _status.Severity = error ? InfoBarSeverity.Error : InfoBarSeverity.Success;
+            _status.IsOpen = true;
             _statusTimer.Stop();
             if (!error) _statusTimer.Start();
         }

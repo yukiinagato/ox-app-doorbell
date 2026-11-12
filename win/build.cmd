@@ -129,6 +129,15 @@ if not exist "!DB_DIST_PARENT!" mkdir "!DB_DIST_PARENT!" || exit /b 1
 mkdir "!DB_STAGE!\app" || exit /b 1
 mkdir "!DB_STAGE!\checks" || exit /b 1
 xcopy win\DoorbellApp\bin\Release\net48\* "!DB_STAGE!\app\" /E /I /Q /Y >nul || exit /b 1
+rem The Fluent control library is restored by msbuild; the shell cannot start without it.
+if not exist "!DB_STAGE!\app\ModernWpf.dll" (
+  echo ERROR: ModernWpf.dll is missing from the staged application.
+  exit /b 1
+)
+if not exist "!DB_STAGE!\app\ModernWpf.Controls.dll" (
+  echo ERROR: ModernWpf.Controls.dll is missing from the staged application.
+  exit /b 1
+)
 copy /b build-watchdog\Release\doorbell-watchdog.exe "!DB_STAGE!\" >nul || exit /b 1
 copy /b build-win-abi-x64\Release\doorbell-abi-probe.exe "!DB_STAGE!\checks\doorbell-abi-probe-x64.exe" >nul || exit /b 1
 copy /b build-win-abi-x86\Release\doorbell-abi-probe.exe "!DB_STAGE!\checks\doorbell-abi-probe-x86.exe" >nul || exit /b 1

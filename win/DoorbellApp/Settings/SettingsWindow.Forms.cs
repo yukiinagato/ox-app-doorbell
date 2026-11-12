@@ -113,7 +113,7 @@ namespace DoorbellApp.Settings
             {
                 Owner = this,
                 Topmost = Topmost,
-                WindowStyle = WindowStyle.None,
+                Title = title ?? "",
                 ResizeMode = ResizeMode.NoResize,
                 SizeToContent = SizeToContent.Height,
                 Width = Math.Min(width, Math.Max(320, ActualWidth - 32)),
@@ -122,8 +122,7 @@ namespace DoorbellApp.Settings
                 ShowInTaskbar = false,
                 FontFamily = FontFamily,
             };
-            dialog.SetResourceReference(BackgroundProperty, "Card");
-            dialog.SetResourceReference(ForegroundProperty, "Fg");
+            DoorbellApp.Ui.Fluent.StyleWindow(dialog);
             var outer = new DockPanel { Margin = new Thickness(24) };
             var heading = new TextBlock
             {
@@ -162,9 +161,16 @@ namespace DoorbellApp.Settings
 
         private Button PrimaryButton(string text)
         {
-            var button = CommandButton(text);
-            button.SetResourceReference(BackgroundProperty, "Accent");
-            button.SetResourceReference(ForegroundProperty, "OnAccent");
+            // The dialog's one primary action: the Fluent accent button at touch size.
+            var button = new Button
+            {
+                Content = text,
+                FontSize = 15,
+                MinHeight = MinTouchTarget,
+                MinWidth = MinTouchTarget,
+                Padding = new Thickness(16, 6, 16, 6),
+            };
+            DoorbellApp.Ui.Fluent.MakeAccent(button);
             return button;
         }
 
@@ -276,11 +282,7 @@ namespace DoorbellApp.Settings
                 case FieldKind.Bool:
                 {
                     var line = new DockPanel { Margin = new Thickness(0, 14, 0, 0) };
-                    var toggle = new ToggleButton
-                    {
-                        Style = (Style)FindResource("SettingsSwitch"),
-                        IsChecked = SettingsStore.AsBool(value, false),
-                    };
+                    var toggle = DoorbellApp.Ui.Fluent.Switch(SettingsStore.AsBool(value, false));
                     AutomationLabel(toggle, label);
                     DockPanel.SetDock(toggle, Dock.Right);
                     line.Children.Add(toggle);
@@ -292,7 +294,7 @@ namespace DoorbellApp.Settings
                         VerticalAlignment = VerticalAlignment.Center,
                     });
                     form.Children.Add(line);
-                    reader = draft => put(draft, toggle.IsChecked == true);
+                    reader = draft => put(draft, toggle.IsOn);
                     break;
                 }
                 case FieldKind.Number:
@@ -319,8 +321,7 @@ namespace DoorbellApp.Settings
                 }
                 case FieldKind.Choice:
                 {
-                    var combo = new ComboBox { FontSize = 16, MinHeight = MinTouchTarget,
-                                               Padding = new Thickness(10, 6, 10, 6) };
+                    var combo = new ComboBox { Style = (Style)FindResource("SettingsComboBox") };
                     AutomationLabel(combo, label);
                     int selected = -1;
                     string wanted = value == null ? null : Convert.ToString(value, CultureInfo.InvariantCulture);
@@ -359,7 +360,6 @@ namespace DoorbellApp.Settings
                             VerticalContentAlignment = VerticalAlignment.Center,
                             Margin = new Thickness(0, 0, 18, 0),
                         };
-                        box.SetResourceReference(ForegroundProperty, "Fg");
                         boxes.Add(box);
                         wrap.Children.Add(box);
                     }
@@ -382,7 +382,7 @@ namespace DoorbellApp.Settings
                     bool stored = !string.IsNullOrEmpty(reference) && App.Core != null &&
                                   App.Core.HasSecret(SecretNameOf(reference));
                     var box = new PasswordBox { FontSize = 16, MinHeight = MinTouchTarget,
-                                                Padding = new Thickness(10, 8, 10, 8), MaxLength = 512 };
+                                                MaxLength = 512 };
                     AutomationLabel(box, label);
                     form.Children.Add(box);
                     form.Children.Add(FieldHint(Texts.T(stored ? "settings.secret_stored"
@@ -681,7 +681,7 @@ namespace DoorbellApp.Settings
             var dialog = FormWindow(Texts.T("settings.session_title"), out form, out actions, out error, 480);
             form.Children.Add(FieldHint(Texts.T("settings.session_hint")));
             var box = new PasswordBox { FontSize = 16, MinHeight = MinTouchTarget,
-                                        Padding = new Thickness(10, 8, 10, 8), Margin = new Thickness(0, 12, 0, 0) };
+                                        Margin = new Thickness(0, 12, 0, 0) };
             AutomationLabel(box, Texts.T("admin.password"));
             form.Children.Add(box);
             var cancel = CommandButton(Texts.T("admin.cancel"));

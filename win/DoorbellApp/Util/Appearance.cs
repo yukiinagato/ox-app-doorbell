@@ -8,26 +8,36 @@ using Microsoft.Win32;
 namespace DoorbellApp.Util
 {
     /// <summary>
-    /// Resolves <c>display.appearance</c> into the light or dark palette and swaps the application
-    /// resource brushes. Every XAML consumer binds with DynamicResource, so a swap repaints the
-    /// whole shell. Windows 7/8 have no system light/dark setting; there
-    /// <c>auto_system</c> is read as <c>auto_schedule</c>, exactly like the iOS 5 kiosk.
+    /// Resolves <c>display.appearance</c> into light or dark and hands it to ModernWpf's
+    /// <c>ThemeManager</c>, which repaints every Fluent control. Core's accent becomes the Fluent
+    /// accent. The shell's own brush tokens are then re-pointed: the neutral ones at the matching
+    /// ModernWpf theme brushes, the semantic roles at their fixed light or dark values. Every XAML
+    /// consumer binds with DynamicResource, so a swap repaints the whole shell. Windows 7/8 have
+    /// no system light/dark setting; there <c>auto_system</c> is read as <c>auto_schedule</c>,
+    /// exactly like the iOS 5 kiosk.
     /// </summary>
     internal static class Appearance
     {
         public const string Light = "light";
         public const string Dark = "dark";
 
-        private static readonly string[] TokenOrder =
+        /// <summary>
+        /// Neutral tokens and the ModernWpf theme brush each one aliases. The colour beside it
+        /// (light, dark) is used only if the theme dictionary does not answer.
+        /// </summary>
+        private static readonly string[,] ThemeBrushes =
         {
-            "Bg", "Card", "Fg", "Dim", "Accent", "Warn", "Line", "Danger", "Ok", "Notice",
-            "OnAccent", "OnDanger", "Track", "Plate", "PlateLine", "Pill", "Row",
-            "Positive", "OnPositive",
+            { "Bg", "ApplicationPageBackgroundThemeBrush", "#FFFFFF", "#000000" },
+            { "Card", "SystemControlBackgroundChromeMediumLowBrush", "#F2F2F2", "#2B2B2B" },
+            { "Fg", "SystemControlForegroundBaseHighBrush", "#000000", "#FFFFFF" },
+            { "Dim", "SystemControlForegroundBaseMediumBrush", "#99000000", "#99FFFFFF" },
+            { "Line", "SystemControlForegroundBaseLowBrush", "#33000000", "#33FFFFFF" },
+            { "Accent", "SystemControlBackgroundAccentBrush", "#0063B1", "#0078D4" },
         };
 
         /// <summary>
-        /// Semantic color roles (ui-guidelines section 3) as aliases of the palette tokens that
-        /// Core's effective appearance selects. Screens bind the role, never a literal color.
+        /// Semantic color roles (ui-guidelines section 3) as aliases of the tokens that Core's
+        /// effective appearance selects. Screens bind the role, never a literal color.
         /// </summary>
         internal static readonly string[,] RoleAliases =
         {
@@ -35,33 +45,28 @@ namespace DoorbellApp.Util
             { "OnNegative", "OnDanger" }, { "Warning", "Warn" }, { "Muted", "Dim" },
         };
 
-        private static readonly Dictionary<string, string> DarkPalette =
+        // Fixed role colours. They are not part of the Fluent theme: positive and negative mean
+        // the same thing on every platform, whatever the accent is.
+        private static readonly Dictionary<string, string> DarkRoles =
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                { "Bg", "#101418" }, { "Card", "#1A2027" }, { "Fg", "#E8EDF2" },
-                { "Dim", "#8A97A5" }, { "Accent", "#4DA3FF" }, { "Warn", "#FFB454" },
-                { "Line", "#2A333D" }, { "Danger", "#C0392B" }, { "Ok", "#5DD39E" },
-                { "Notice", "#B7791F" }, { "OnAccent", "#04121F" }, { "OnDanger", "#FFFFFF" },
-                { "Track", "#802A21" },
-                // Frosted plates (spec 5.7): dark appearance = dark translucent plate, light ink.
-                { "Plate", "#A6161C23" }, { "PlateLine", "#26FFFFFF" }, { "Pill", "#B31F262E" },
-                { "Row", "#14FFFFFF" }, { "Positive", "#1E8E4B" }, { "OnPositive", "#FFFFFF" },
+                { "Warn", "#FFB454" }, { "Danger", "#C0392B" }, { "Ok", "#5DD39E" },
+                { "Notice", "#B7791F" }, { "OnDanger", "#FFFFFF" }, { "Track", "#802A21" },
+                { "Positive", "#1E8E4B" }, { "OnPositive", "#FFFFFF" },
             };
 
-        private static readonly Dictionary<string, string> LightPalette =
+        private static readonly Dictionary<string, string> LightRoles =
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                { "Bg", "#F3F5F8" }, { "Card", "#FFFFFF" }, { "Fg", "#171B21" },
-                { "Dim", "#56616D" }, { "Accent", "#1B62B8" }, { "Warn", "#8A5A00" },
-                { "Line", "#D2DAE2" }, { "Danger", "#B3261E" }, { "Ok", "#1E7F55" },
-                { "Notice", "#8A5A00" }, { "OnAccent", "#FFFFFF" }, { "OnDanger", "#FFFFFF" },
-                { "Track", "#E4C9C6" },
-                { "Plate", "#A6F7F8FA" }, { "PlateLine", "#1F000000" }, { "Pill", "#CCFFFFFF" },
-                { "Row", "#14000000" }, { "Positive", "#1E7F55" }, { "OnPositive", "#FFFFFF" },
+                { "Warn", "#8A5A00" }, { "Danger", "#B3261E" }, { "Ok", "#1E7F55" },
+                { "Notice", "#8A5A00" }, { "OnDanger", "#FFFFFF" }, { "Track", "#E4C9C6" },
+                { "Positive", "#1E7F55" }, { "OnPositive", "#FFFFFF" },
             };
 
         private static DateTime _systemProbedAt = DateTime.MinValue;
         private static int _systemAppsUseLightTheme = -1;
+        private static bool _applied;
+        private static Color? _accent;
 
         /// <summary>The appearance in force right now, "light" or "dark".</summary>
         public static string Current { get; private set; } = Dark;
@@ -69,16 +74,34 @@ namespace DoorbellApp.Util
         /// <summary>Configured mode before automatic resolution, for diagnostics.</summary>
         public static string ConfiguredMode { get; private set; } = "auto_system";
 
+        /// <summary>The colour a token resolves to in the current appearance.</summary>
         public static Color Token(string key)
         {
-            var palette = Current == Light ? LightPalette : DarkPalette;
+            var resources = Application.Current == null ? null : Application.Current.Resources;
+            var brush = resources == null || !resources.Contains(key)
+                ? null : resources[key] as SolidColorBrush;
+            if (brush != null) return brush.Color;
+            for (int i = 0; i < ThemeBrushes.GetLength(0); i++)
+                if (ThemeBrushes[i, 0] == key)
+                    return Parse(ThemeBrushes[i, Current == Light ? 2 : 3]);
+            var roles = Current == Light ? LightRoles : DarkRoles;
             string value;
-            if (!palette.TryGetValue(key, out value)) value = "#000000";
-            return (Color)ColorConverter.ConvertFromString(value);
+            return Parse(roles.TryGetValue(key, out value) ? value : "#000000");
         }
 
         /// <summary>
-        /// Recomputes the effective appearance and, when it changed, replaces the palette brushes.
+        /// The appearance before Core is running (first-run setup): the system setting where
+        /// Windows has one, dark otherwise.
+        /// </summary>
+        public static void ApplySystemDefault()
+        {
+            Current = SystemAppsUseLightTheme() == 1 ? Light : Dark;
+            ApplyTheme(null);
+        }
+
+        /// <summary>
+        /// Recomputes the effective appearance and accent and, when either changed, switches the
+        /// Fluent theme and re-points the tokens.
         /// <paramref name="localTime"/> is the core clock document so the schedule is evaluated in
         /// the cluster time zone; null falls back to this machine's local time.
         /// </summary>
@@ -93,26 +116,99 @@ namespace DoorbellApp.Util
                 ConfiguredMode = Resolve(config, nodeId);
                 effective = Effective(ConfiguredMode, config, localTime);
             }
-            if (effective == Current && Application.Current != null &&
-                Application.Current.Resources.Contains("Line")) return false;
+            Color? accent = CoreAccent(display);
+            if (_applied && effective == Current && accent == _accent) return false;
             Current = effective;
-            var palette = effective == Light ? LightPalette : DarkPalette;
+            ApplyTheme(accent);
+            return true;
+        }
+
+        /// <summary>
+        /// Core's accent for this household: the automatic accent it derived from the theme
+        /// background. Null (the Windows accent) when core publishes none, or when it says it
+        /// never read the configured background image and the value describes something else.
+        /// </summary>
+        private static Color? CoreAccent(Dictionary<string, object> display)
+        {
+            if (display == null || !ThemeContrast.CoreSampledBackground(display)) return null;
+            object value = CoreClient.Dig(display, "theme.auto_accent.call_button");
+            Color parsed;
+            if (value != null && ThemeContrast.TryParse(value.ToString(), out parsed) &&
+                parsed.A == 255) return parsed;
+            return null;
+        }
+
+        private static void ApplyTheme(Color? accent)
+        {
+            _applied = true;
+            _accent = accent;
+            bool light = Current == Light;
             var resources = Application.Current == null ? null : Application.Current.Resources;
-            if (resources == null) return true;
-            foreach (string key in TokenOrder)
+            if (resources == null) return;
+            try
             {
-                string value;
-                if (!palette.TryGetValue(key, out value)) continue;
-                var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value));
-                brush.Freeze();
-                resources[key] = brush;
+                ModernWpf.ThemeManager.Current.ApplicationTheme = light
+                    ? ModernWpf.ApplicationTheme.Light : ModernWpf.ApplicationTheme.Dark;
+                ModernWpf.ThemeManager.Current.AccentColor = accent;
             }
+            catch (Exception ex)
+            {
+                // A theme that cannot switch must not take the doorbell down; the tokens below
+                // still follow the appearance.
+                System.Diagnostics.Debug.WriteLine("Fluent theme switch failed: " + ex.Message);
+            }
+            PointTokens(resources, light);
+            // ThemeManager may finish swapping its dictionaries after this call returns; one
+            // more pass once the dispatcher is idle picks up the final brushes.
+            var dispatcher = Application.Current.Dispatcher;
+            if (dispatcher != null)
+                dispatcher.BeginInvoke(new Action(() =>
+                {
+                    var current = Application.Current == null ? null : Application.Current.Resources;
+                    if (current != null) PointTokens(current, Current == Light);
+                }), System.Windows.Threading.DispatcherPriority.Background);
+        }
+
+        private static void PointTokens(ResourceDictionary resources, bool light)
+        {
+            for (int i = 0; i < ThemeBrushes.GetLength(0); i++)
+            {
+                var themed = Application.Current.TryFindResource(ThemeBrushes[i, 1])
+                    as SolidColorBrush;
+                Set(resources, ThemeBrushes[i, 0],
+                    themed != null ? themed.Color : Parse(ThemeBrushes[i, light ? 2 : 3]));
+            }
+            Color card = ((SolidColorBrush)resources["Card"]).Color;
+            Color ink = ((SolidColorBrush)resources["Fg"]).Color;
+            Color accent = ((SolidColorBrush)resources["Accent"]).Color;
+            Set(resources, "OnAccent", ThemeContrast.BetterInk(accent));
+            // The card material over the wallpaper (Ui/Frost) and its tints, from the same theme.
+            Set(resources, "Plate", Color.FromArgb(0xA6, card.R, card.G, card.B));
+            Set(resources, "Pill", Color.FromArgb(0xCC, card.R, card.G, card.B));
+            Set(resources, "PlateLine", Color.FromArgb(light ? (byte)0x1F : (byte)0x26,
+                                                       ink.R, ink.G, ink.B));
+            Set(resources, "Row", Color.FromArgb(0x14, ink.R, ink.G, ink.B));
+            foreach (KeyValuePair<string, string> role in light ? LightRoles : DarkRoles)
+                Set(resources, role.Key, Parse(role.Value));
             for (int i = 0; i < RoleAliases.GetLength(0); i++)
             {
                 object source = resources[RoleAliases[i, 1]];
                 if (source != null) resources[RoleAliases[i, 0]] = source;
             }
-            return true;
+        }
+
+        private static void Set(ResourceDictionary resources, string key, Color color)
+        {
+            var existing = resources.Contains(key) ? resources[key] as SolidColorBrush : null;
+            if (existing != null && existing.Color == color) return;
+            var brush = new SolidColorBrush(color);
+            brush.Freeze();
+            resources[key] = brush;
+        }
+
+        private static Color Parse(string value)
+        {
+            return (Color)ColorConverter.ConvertFromString(value);
         }
 
         /// <summary>

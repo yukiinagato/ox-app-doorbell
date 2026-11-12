@@ -1,11 +1,12 @@
 using System;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Media;
+using DoorbellApp.Ui;
 using DoorbellApp.Util;
 
 namespace DoorbellApp
 {
+    /// <summary>First-run setup: a Fluent form for the device name, its role and the door id.</summary>
     public sealed class BootstrapSetupWindow : Window
     {
         private readonly BootConfig _initial;
@@ -25,74 +26,76 @@ namespace DoorbellApp
             SizeToContent = SizeToContent.Height;
             ResizeMode = ResizeMode.NoResize;
             WindowStartupLocation = WindowStartupLocation.CenterScreen;
-            Background = Brushes.White;
+            Fluent.StyleWindow(this);
             Content = BuildContent();
         }
 
         private UIElement BuildContent()
         {
-            var root = new StackPanel { Margin = new Thickness(36) };
+            var root = new StackPanel { Margin = new Thickness(32, 24, 32, 32) };
             root.Children.Add(new TextBlock
             {
-                Text = L10n.T("setup.title"), FontSize = 30, FontWeight = FontWeights.Bold,
-                TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 0, 0, 14)
+                Text = L10n.T("setup.title"), FontSize = 28, FontWeight = FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8)
             });
             root.Children.Add(new TextBlock
             {
-                Text = L10n.T("setup.message"), FontSize = 16, TextWrapping = TextWrapping.Wrap,
-                TextAlignment = TextAlignment.Center, Margin = new Thickness(0, 0, 0, 20)
+                Text = L10n.T("setup.message"), FontSize = 15, TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 20)
             });
 
-            root.Children.Add(Label(L10n.T("setup.name")));
             _name.Text = _initial.Name ?? "";
-            _name.FontSize = 18;
-            _name.Margin = new Thickness(0, 4, 0, 14);
-            root.Children.Add(_name);
+            _name.FontSize = 16;
+            _name.MinHeight = Fluent.TouchMin;
+            _name.Margin = new Thickness(0, 0, 0, 16);
+            root.Children.Add(Fluent.WithHeader(_name, L10n.T("setup.name")));
 
-            root.Children.Add(Label(L10n.T("setup.role")));
-            _role.FontSize = 18;
-            _role.Margin = new Thickness(0, 4, 0, 14);
+            _role.FontSize = 16;
+            _role.MinHeight = Fluent.TouchMin;
+            _role.HorizontalAlignment = HorizontalAlignment.Stretch;
+            _role.Margin = new Thickness(0, 0, 0, 16);
             _role.Items.Add(new ComboBoxItem
-                { Content = L10n.T("admin.role_door"), Tag = "door_station" });
+                { Content = L10n.T("admin.role_door"), Tag = "door_station",
+                  MinHeight = Fluent.TouchMin });
             _role.Items.Add(new ComboBoxItem
-                { Content = L10n.T("admin.role_indoor"), Tag = "indoor_panel" });
+                { Content = L10n.T("admin.role_indoor"), Tag = "indoor_panel",
+                  MinHeight = Fluent.TouchMin });
             _role.SelectedIndex = _initial.Role == "indoor_panel" ? 1 : 0;
             _role.SelectionChanged += (sender, args) => UpdateRole();
-            root.Children.Add(_role);
+            root.Children.Add(Fluent.WithHeader(_role, L10n.T("setup.role")));
 
-            _doorRow.Children.Add(Label(L10n.T("setup.door")));
             _door.Text = _initial.SuggestedDoor ?? "";
-            _door.FontSize = 18;
-            _door.Margin = new Thickness(0, 4, 0, 3);
-            _doorRow.Children.Add(_door);
-            _doorRow.Children.Add(new TextBlock
+            _door.FontSize = 16;
+            _door.MinHeight = Fluent.TouchMin;
+            _door.Margin = new Thickness(0, 0, 0, 4);
+            _doorRow.Children.Add(Fluent.WithHeader(_door, L10n.T("setup.door")));
+            var hint = new TextBlock
             {
-                Text = L10n.T("setup.door_hint"), Foreground = Brushes.DimGray,
-                Margin = new Thickness(0, 0, 0, 14)
-            });
+                Text = L10n.T("setup.door_hint"), TextWrapping = TextWrapping.Wrap,
+                Margin = new Thickness(0, 0, 0, 16)
+            };
+            hint.SetResourceReference(TextBlock.ForegroundProperty, "Dim");
+            _doorRow.Children.Add(hint);
             root.Children.Add(_doorRow);
 
             _error.Text = L10n.T("setup.invalid_door");
-            _error.Foreground = Brushes.DarkRed;
-            _error.TextAlignment = TextAlignment.Center;
+            _error.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
+            _error.TextWrapping = TextWrapping.Wrap;
             _error.Visibility = Visibility.Collapsed;
-            _error.Margin = new Thickness(0, 0, 0, 10);
+            _error.Margin = new Thickness(0, 0, 0, 12);
             root.Children.Add(_error);
 
             var save = new Button
             {
-                Content = L10n.T("setup.finish"), FontSize = 20, FontWeight = FontWeights.Bold,
-                MinHeight = 52, Padding = new Thickness(20, 8, 20, 8)
+                Content = L10n.T("setup.finish"), FontSize = 18, IsDefault = true,
+                MinHeight = 52, Padding = new Thickness(24, 8, 24, 8),
+                HorizontalAlignment = HorizontalAlignment.Right
             };
+            Fluent.MakeAccent(save);
             save.Click += Save;
             root.Children.Add(save);
             UpdateRole();
             return root;
-        }
-
-        private static TextBlock Label(string value)
-        {
-            return new TextBlock { Text = value, FontSize = 15, FontWeight = FontWeights.SemiBold };
         }
 
         private string SelectedRole()

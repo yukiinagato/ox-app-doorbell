@@ -175,10 +175,8 @@ namespace DoorbellApp
 
         private void Select(Button button, bool selected)
         {
-            button.Background = selected ?
-                (Brush)FindResource("Accent") : (Brush)FindResource("Card");
-            button.Foreground = selected ?
-                (Brush)FindResource("OnAccent") : (Brush)FindResource("Fg");
+            // The chosen option is the accent button; the others stay standard.
+            button.Style = (Style)FindResource(selected ? "ChipAccentButton" : "ChipButton");
         }
 
         private void OnPublishClick(object sender, RoutedEventArgs e)

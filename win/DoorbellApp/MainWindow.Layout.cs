@@ -239,7 +239,7 @@ namespace DoorbellApp
             {
                 HistoryListColumn.Width = new GridLength(1, GridUnitType.Star);
                 HistoryDetailColumn.Width = new GridLength(1.2, GridUnitType.Star);
-                HistoryListScroll.Visibility = Visibility.Visible;
+                HistoryList.Visibility = Visibility.Visible;
                 HistoryDetailPane.Visibility = Visibility.Visible;
                 HistoryDetailPane.Margin = new Thickness(LayoutMetrics.S4, LayoutMetrics.S2, 0, LayoutMetrics.S2);
                 Grid.SetColumn(HistoryDetailPane, 1);
@@ -252,7 +252,7 @@ namespace DoorbellApp
                 HistoryDetailColumn.Width = new GridLength(0);
                 Grid.SetColumn(HistoryDetailPane, 0);
                 HistoryDetailPane.Margin = new Thickness(0, LayoutMetrics.S2, 0, LayoutMetrics.S2);
-                HistoryListScroll.Visibility = detail ? Visibility.Collapsed : Visibility.Visible;
+                HistoryList.Visibility = detail ? Visibility.Collapsed : Visibility.Visible;
                 HistoryDetailPane.Visibility = detail ? Visibility.Visible : Visibility.Collapsed;
                 HistoryDetailBack.Visibility = Visibility.Visible;
             }
@@ -281,10 +281,14 @@ namespace DoorbellApp
                 System.Windows.Automation.AutomationProperties.SetName(dot, Texts.T("history.unread"));
                 grid.Children.Add(dot);
             }
-            if (_historySelected != null && DictStr(_historySelected, "id") == DictStr(row, "id"))
-                grid.SetResourceReference(Panel.BackgroundProperty, "Row");
             grid.MouseLeftButtonUp += (s, e) => SelectHistoryRow(row);
-            return grid;
+            // The list item is the selection visual; it follows the row whose detail is shown.
+            return new ListViewItem
+            {
+                Content = grid,
+                IsSelected = _historySelected != null &&
+                             DictStr(_historySelected, "id") == DictStr(row, "id"),
+            };
         }
 
         private void SelectHistoryRow(Dictionary<string, object> row)

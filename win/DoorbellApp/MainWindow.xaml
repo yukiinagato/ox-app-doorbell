@@ -2,23 +2,46 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:pairing="clr-namespace:DoorbellApp.Pairing"
-        xmlns:ui="clr-namespace:DoorbellApp.Ui"
-        Title="ドアホン" Background="{DynamicResource Bg}"
+        xmlns:app="clr-namespace:DoorbellApp.Ui"
+        xmlns:ui="http://schemas.modernwpf.com/2019"
+        Title="ドアホン" Background="{DynamicResource Bg}" Foreground="{DynamicResource Fg}"
         WindowStyle="None" ResizeMode="NoResize" WindowState="Maximized"
         Topmost="False" Cursor="Arrow" FontFamily="Yu Gothic UI, Meiryo UI, Segoe UI">
     <Window.Resources>
+        <DataTemplate x:Key="WrappedLabel">
+            <TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center"/>
+        </DataTemplate>
         <Style x:Key="VisitorPrimaryAction" TargetType="Button" BasedOn="{StaticResource BigButton}">
-            <Setter Property="FontSize" Value="28"/>
-            <Setter Property="Padding" Value="20,16"/>
             <Setter Property="MinWidth" Value="0"/>
             <Setter Property="MinHeight" Value="96"/>
             <Setter Property="MaxWidth" Value="620"/>
             <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-            <Setter Property="ContentTemplate">
-                <Setter.Value>
-                    <DataTemplate><TextBlock Text="{Binding}" TextWrapping="Wrap" TextAlignment="Center"/></DataTemplate>
-                </Setter.Value>
-            </Setter>
+            <Setter Property="ContentTemplate" Value="{StaticResource WrappedLabel}"/>
+        </Style>
+        <Style x:Key="VisitorSecondaryAction" TargetType="Button"
+               BasedOn="{StaticResource BigSecondaryButton}">
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="96"/>
+            <Setter Property="MaxWidth" Value="620"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="ContentTemplate" Value="{StaticResource WrappedLabel}"/>
+        </Style>
+        <!-- End call: the same full-width slot in the fixed negative role. -->
+        <Style x:Key="VisitorNegativeAction" TargetType="Button"
+               BasedOn="{StaticResource SemanticButton}">
+            <Setter Property="FontSize" Value="28"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="MinWidth" Value="0"/>
+            <Setter Property="MinHeight" Value="96"/>
+            <Setter Property="MaxWidth" Value="620"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="ContentTemplate" Value="{StaticResource WrappedLabel}"/>
+        </Style>
+        <!-- Rows of the call lists: full width, touch height, the Fluent list item visuals. -->
+        <Style x:Key="CallListItem" TargetType="ListViewItem"
+               BasedOn="{StaticResource {x:Type ListViewItem}}">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="MinHeight" Value="44"/>
         </Style>
     </Window.Resources>
     <Grid ClipToBounds="True">
@@ -30,16 +53,15 @@
              Colour and opacity come from display.theme.backdrop. -->
         <Border x:Name="ThemeBackdrop" Visibility="Collapsed" IsHitTestVisible="False"/>
 
-        <Grid x:Name="IdleView">
+        <Grid x:Name="IdleView" PreviewMouseLeftButtonDown="OnIdlePreviewDown">
             <Grid.RenderTransform>
                 <TranslateTransform x:Name="IdleShift"/>
             </Grid.RenderTransform>
 
-            <!-- Hidden 7-tap corner, drawn first so the dashboard chips above it still take
-                 their own taps; panels without a background never steal one. -->
-            <Border x:Name="SecretCorner" Width="48" Height="48" Background="Transparent"
-                    HorizontalAlignment="Right" VerticalAlignment="Top"
-                    MouseLeftButtonDown="OnSecretCorner"/>
+            <!-- Hidden 7-tap corner. It only marks the area: IdleView counts the taps while
+                 they tunnel, so whatever is drawn over the corner still takes its own taps. -->
+            <Border x:Name="SecretCorner" Width="48" Height="48" IsHitTestVisible="False"
+                    HorizontalAlignment="Right" VerticalAlignment="Top"/>
 
             <!-- B · door-station visitor screen: top bar, notice, purpose grid, then the fixed
                  bottom action zone with the full-width Call button (VisitorCallBlock). -->
@@ -85,7 +107,7 @@
                 </Grid>
 
                 <Border x:Name="VisitorNoticeCard" Grid.Row="1"
-                        Visibility="Collapsed" Margin="0,16,0,0" CornerRadius="12"
+                        Visibility="Collapsed" Margin="0,16,0,0" CornerRadius="4"
                         Padding="16,12" Background="{DynamicResource Surface}"
                         BorderBrush="{DynamicResource Notice}" BorderThickness="1,1,1,4"
                         VerticalAlignment="Top">
@@ -121,220 +143,303 @@
                 </StackPanel>
             </Grid>
 
-            <!-- A · indoor dashboard, after the iPad 1 layout: clock with small seconds, action
-                 chips and the counter strip top-right, section titles above the door tiles and
-                 the call list, frosted plates (ui:Frost) for the list and the footer. -->
-            <Grid x:Name="DashboardHome" Margin="24,16,24,16" Visibility="Collapsed">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                </Grid.RowDefinitions>
+            <!-- A · indoor panel. A Fluent NavigationView carries the destinations (Home,
+                 History, Monitor, Settings): expanded pane from 900 px, icon rail from 600 px,
+                 hamburger below that. Home is the dashboard over the wallpaper; History is an
+                 opaque page. Item labels and icons are set in MainWindow.Navigation.cs. -->
+            <Grid x:Name="DashboardHome" Visibility="Collapsed">
+                <ui:NavigationView x:Name="HomeNav" PaneDisplayMode="Auto"
+                                   CompactModeThresholdWidth="600" ExpandedModeThresholdWidth="900"
+                                   OpenPaneLength="240" IsSettingsVisible="False"
+                                   IsBackButtonVisible="Collapsed"
+                                   ItemInvoked="OnHomeNavInvoked">
+                    <ui:NavigationView.Resources>
+                        <!-- The Home page shows the wallpaper: the content area stays clear. -->
+                        <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent"/>
+                    </ui:NavigationView.Resources>
+                    <ui:NavigationView.MenuItems>
+                        <ui:NavigationViewItem x:Name="NavHome" MinHeight="48"/>
+                        <ui:NavigationViewItem x:Name="NavHistory" MinHeight="48"/>
+                        <ui:NavigationViewItem x:Name="OpenMonitorButton" MinHeight="48"
+                                               Visibility="Collapsed"/>
+                        <ui:NavigationViewItemSeparator/>
+                        <ui:NavigationViewItem x:Name="AdminEntryButton" MinHeight="48"/>
+                    </ui:NavigationView.MenuItems>
+                    <Grid>
+                        <Grid x:Name="DashboardPage" Margin="24,16,24,16">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0">
-                    <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock x:Name="DashClock" FontSize="66" FontWeight="Light"
-                                       Foreground="{DynamicResource Fg}"/>
-                            <TextBlock x:Name="DashClockSeconds" FontSize="28" FontWeight="Light"
-                                       Margin="6,0,0,12" VerticalAlignment="Bottom"
-                                       Foreground="{DynamicResource Dim}"/>
-                        </StackPanel>
-                        <TextBlock x:Name="DashDate" FontSize="18"
-                                   Foreground="{DynamicResource Dim}" Margin="2,0,0,0"/>
-                    </StackPanel>
-                    <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top">
-                        <WrapPanel x:Name="DashboardChips" Orientation="Horizontal"
-                                   HorizontalAlignment="Right">
-                            <Border x:Name="MissedBadge" Visibility="Collapsed" Cursor="Hand"
-                                    Background="{DynamicResource Danger}" CornerRadius="10"
-                                    Padding="14,8" Margin="8,0,0,0" MinHeight="40"
-                                    MouseLeftButtonDown="OnMissedBadgeClick">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                                    <Viewbox Width="18" Height="18" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource IconCalendarTime}"
-                                              Stroke="{DynamicResource OnDanger}" StrokeThickness="2"
-                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                              StrokeLineJoin="Round"/>
-                                    </Viewbox>
-                                    <TextBlock x:Name="MissedBadgeText" FontSize="16" FontWeight="Bold"
-                                               Margin="8,0,0,0" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource OnDanger}"/>
-                                </StackPanel>
-                            </Border>
-                            <Button x:Name="NoticeGlobalButton" Style="{StaticResource ChipButton}"
-                                    Click="OnGlobalNoticeClick"/>
-                            <Button x:Name="OpenMonitorButton" Style="{StaticResource ChipButton}"
-                                    Visibility="Collapsed" Click="OnOpenMonitorClick"/>
-                            <Button x:Name="AdminEntryButton" Style="{StaticResource ChipButton}"
-                                    Click="OnAdminEntryClick"/>
-                        </WrapPanel>
-                        <!-- Counter strip: cluster size, door stations and indoor panels online,
-                             battery. Vector icons take the ink colour; no plate behind the
-                             numbers beyond this one translucent pill (spec 5.7). -->
-                        <Border x:Name="MembershipStatus" Visibility="Collapsed" Cursor="Hand"
-                                Background="{DynamicResource Pill}" CornerRadius="10"
-                                Padding="14,7" BorderBrush="{DynamicResource PlateLine}"
-                                BorderThickness="1" Margin="0,8,0,0"
-                                HorizontalAlignment="Right"
-                                MouseLeftButtonDown="OnMembershipClick">
-                            <StackPanel Orientation="Horizontal">
-                                <StackPanel x:Name="ClusterCounter" Orientation="Horizontal"
-                                            VerticalAlignment="Center">
-                                    <Viewbox Width="17" Height="17" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource IconTopologyStar3}" Stroke="{DynamicResource Dim}"
-                                              StrokeThickness="2" StrokeStartLineCap="Round"
-                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-                                    </Viewbox>
-                                    <TextBlock x:Name="ClusterCountText" FontSize="15"
-                                               Margin="6,0,0,0" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Fg}"/>
-                                    <TextBlock x:Name="ClusterOnlineText" FontSize="15"
-                                               Margin="8,0,0,0" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Ok}"/>
-                                </StackPanel>
-                                <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
-                                <StackPanel x:Name="DoorCounter" Orientation="Horizontal"
-                                            VerticalAlignment="Center">
-                                    <Viewbox Width="17" Height="17" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource IconDoor}" Stroke="{DynamicResource Dim}"
-                                              StrokeThickness="2" StrokeStartLineCap="Round"
-                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-                                    </Viewbox>
-                                    <TextBlock x:Name="DoorCounterLabel" FontSize="15"
-                                               Margin="6,0,0,0" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Dim}"/>
-                                    <TextBlock x:Name="DoorCountText" FontSize="15" FontWeight="Bold"
-                                               Margin="6,0,0,0" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Fg}"/>
-                                </StackPanel>
-                                <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
-                                <StackPanel x:Name="PanelCounter" Orientation="Horizontal"
-                                            VerticalAlignment="Center">
-                                    <Viewbox Width="17" Height="17" VerticalAlignment="Center">
-                                        <Path Data="{StaticResource IconDeviceTablet}" Stroke="{DynamicResource Dim}"
-                                              StrokeThickness="2" StrokeStartLineCap="Round"
-                                              StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
-                                    </Viewbox>
-                                    <TextBlock x:Name="PanelCounterLabel" FontSize="15"
-                                               Margin="6,0,0,0" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Dim}"/>
-                                    <TextBlock x:Name="PanelCountText" FontSize="15" FontWeight="Bold"
-                                               Margin="6,0,0,0" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Fg}"/>
-                                </StackPanel>
-                                <StackPanel x:Name="BatteryCounter" Orientation="Horizontal"
-                                            VerticalAlignment="Center" Visibility="Collapsed">
-                                    <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
-                                    <Viewbox Width="17" Height="17" VerticalAlignment="Center">
-                                        <Path x:Name="BatteryIcon" Data="{StaticResource IconBattery}"
-                                              Stroke="{DynamicResource Dim}" StrokeThickness="2"
-                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                                              StrokeLineJoin="Round"/>
-                                    </Viewbox>
-                                    <TextBlock x:Name="BatteryText" FontSize="15"
-                                               Margin="6,0,0,0" VerticalAlignment="Center"
-                                               Foreground="{DynamicResource Fg}"/>
-                                </StackPanel>
-                                <Ellipse x:Name="MeshDot" Width="9" Height="9"
-                                         Fill="{DynamicResource Ok}" Margin="12,0,0,0"
-                                         VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
-                    </StackPanel>
-                </Grid>
-
-                <Grid Grid.Row="1" Margin="0,16,0,8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition x:Name="DashboardTitleLeftColumn" Width="1.4*"/>
-                        <ColumnDefinition x:Name="DashboardTitleRightColumn" Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid Grid.Column="0" Margin="4,0,12,0">
-                        <TextBlock x:Name="DoorsSectionTitle" FontSize="15" FontWeight="Bold"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
-                    </Grid>
-                    <Grid Grid.Column="1" Margin="12,0,4,0">
-                        <TextBlock x:Name="RecentCallsTitle" FontSize="15" FontWeight="Bold"
-                                   VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
-                        <Button x:Name="SeeAllCallsButton" Style="{StaticResource LinkButton}"
-                                HorizontalAlignment="Right" Click="OnOpenHistoryClick"/>
-                    </Grid>
-                </Grid>
-
-                <Grid x:Name="DashboardContent" Grid.Row="2">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition x:Name="DashboardLeftColumn" Width="1.4*"/>
-                        <ColumnDefinition x:Name="DashboardRightColumn" Width="*"/>
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition x:Name="DashboardTopRow" Height="*"/>
-                        <RowDefinition x:Name="DashboardBottomRow" Height="0"/>
-                    </Grid.RowDefinitions>
-
-                    <ScrollViewer x:Name="DoorTilesPanel" Grid.Row="0" Grid.Column="0"
-                                  VerticalScrollBarVisibility="Auto"
-                                  HorizontalScrollBarVisibility="Disabled" Margin="0,0,12,0">
-                        <UniformGrid x:Name="DoorTileGrid" Columns="2" VerticalAlignment="Top"/>
-                    </ScrollViewer>
-
-                    <Border x:Name="RecentCallsPanel" Grid.Row="0" Grid.Column="1"
-                            ui:Frost.Enabled="True" CornerRadius="16" Margin="12,4,4,0"
-                            BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
-                            ClipToBounds="True" VerticalAlignment="Top">
-                        <Border Background="{DynamicResource Plate}" CornerRadius="16"
-                                Padding="14,6,14,8">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                          HorizontalScrollBarVisibility="Disabled">
-                                <StackPanel x:Name="RecentCallsList"/>
-                            </ScrollViewer>
-                        </Border>
-                    </Border>
-                </Grid>
-
-                <Grid x:Name="DashboardFooter" Grid.Row="3" Margin="0,16,0,0">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/>
-                        <ColumnDefinition Width="*"/>
-                        <ColumnDefinition Width="Auto"/>
-                        <!-- Width is reserved at runtime from the SOS slider's real footprint. -->
-                        <ColumnDefinition x:Name="DashboardSosColumn" Width="0"/>
-                    </Grid.ColumnDefinitions>
-                    <!-- Footer plate: QR, admin address, then the name · versions · battery
-                         line — left-aligned lines beside the QR (spec 5.7). -->
-                    <Border x:Name="AdminLinkCard" Grid.Column="0" Cursor="Hand"
-                            ui:Frost.Enabled="True" CornerRadius="14" ClipToBounds="True"
-                            BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
-                            MinWidth="320" MaxWidth="560" HorizontalAlignment="Left"
-                            MouseLeftButtonDown="OnWebAdminClick">
-                        <Border Background="{DynamicResource Plate}" CornerRadius="14"
-                                Padding="12,8">
-                            <StackPanel Orientation="Horizontal">
-                                <Border Background="#FFFFFF" CornerRadius="8" Padding="3">
-                                    <Image x:Name="AdminQrImage" Width="66" Height="66"
-                                           RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                                </Border>
-                                <StackPanel Margin="12,0,6,0" VerticalAlignment="Center">
+                            <!-- Header: clock left; announcement command and the device status
+                                 card right. -->
+                            <Grid Grid.Row="0">
+                                <StackPanel HorizontalAlignment="Left" VerticalAlignment="Top">
                                     <StackPanel Orientation="Horizontal">
-                                        <TextBlock x:Name="AdminLinkTitle" FontSize="15" FontWeight="Bold"
+                                        <TextBlock x:Name="DashClock" FontSize="66" FontWeight="Light"
                                                    Foreground="{DynamicResource Fg}"/>
-                                        <TextBlock x:Name="AdminAddressCount" FontSize="14"
-                                                   Margin="6,0,0,0" VerticalAlignment="Bottom"
+                                        <TextBlock x:Name="DashClockSeconds" FontSize="28" FontWeight="Light"
+                                                   Margin="6,0,0,12" VerticalAlignment="Bottom"
                                                    Foreground="{DynamicResource Dim}"/>
                                     </StackPanel>
-                                    <Border Background="{DynamicResource Row}" CornerRadius="7"
-                                            Padding="12,6" Margin="0,4,0,0" HorizontalAlignment="Left">
-                                        <TextBlock x:Name="AdminUrlText" FontSize="14"
-                                                   Foreground="{DynamicResource Fg}"/>
-                                    </Border>
-                                    <TextBlock x:Name="NodeInfo" FontSize="13" Margin="0,4,0,0"
-                                               TextWrapping="Wrap" MaxWidth="440"
-                                               Foreground="{DynamicResource Dim}"/>
+                                    <TextBlock x:Name="DashDate" FontSize="18"
+                                               Foreground="{DynamicResource Dim}" Margin="2,0,0,0"/>
                                 </StackPanel>
+                                <StackPanel HorizontalAlignment="Right" VerticalAlignment="Top">
+                                    <WrapPanel x:Name="DashboardChips" Orientation="Horizontal"
+                                               HorizontalAlignment="Right">
+                                        <Button x:Name="NoticeGlobalButton" Style="{StaticResource ChipButton}"
+                                                Click="OnGlobalNoticeClick"/>
+                                    </WrapPanel>
+                                    <!-- Status card: cluster size, door stations and indoor panels
+                                         online, battery. Tapping it opens Add device. -->
+                                    <Border x:Name="MembershipStatus" Visibility="Collapsed" Cursor="Hand"
+                                            Background="{DynamicResource Pill}" CornerRadius="4"
+                                            Padding="14,10" BorderBrush="{DynamicResource PlateLine}"
+                                            BorderThickness="1" Margin="0,8,0,0" MinHeight="44"
+                                            HorizontalAlignment="Right"
+                                            MouseLeftButtonDown="OnMembershipClick">
+                                        <StackPanel Orientation="Horizontal">
+                                            <StackPanel x:Name="ClusterCounter" Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
+                                                <Viewbox Width="17" Height="17" VerticalAlignment="Center">
+                                                    <Path Data="{StaticResource IconTopologyStar3}" Stroke="{DynamicResource Dim}"
+                                                          StrokeThickness="2" StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                                </Viewbox>
+                                                <TextBlock x:Name="ClusterCountText" FontSize="15"
+                                                           Margin="6,0,0,0" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Fg}"/>
+                                                <TextBlock x:Name="ClusterOnlineText" FontSize="15"
+                                                           Margin="8,0,0,0" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Ok}"/>
+                                            </StackPanel>
+                                            <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
+                                            <StackPanel x:Name="DoorCounter" Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
+                                                <Viewbox Width="17" Height="17" VerticalAlignment="Center">
+                                                    <Path Data="{StaticResource IconDoor}" Stroke="{DynamicResource Dim}"
+                                                          StrokeThickness="2" StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                                </Viewbox>
+                                                <TextBlock x:Name="DoorCounterLabel" FontSize="15"
+                                                           Margin="6,0,0,0" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Dim}"/>
+                                                <TextBlock x:Name="DoorCountText" FontSize="15" FontWeight="Bold"
+                                                           Margin="6,0,0,0" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Fg}"/>
+                                            </StackPanel>
+                                            <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
+                                            <StackPanel x:Name="PanelCounter" Orientation="Horizontal"
+                                                        VerticalAlignment="Center">
+                                                <Viewbox Width="17" Height="17" VerticalAlignment="Center">
+                                                    <Path Data="{StaticResource IconDeviceTablet}" Stroke="{DynamicResource Dim}"
+                                                          StrokeThickness="2" StrokeStartLineCap="Round"
+                                                  StrokeEndLineCap="Round" StrokeLineJoin="Round"/>
+                                                </Viewbox>
+                                                <TextBlock x:Name="PanelCounterLabel" FontSize="15"
+                                                           Margin="6,0,0,0" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Dim}"/>
+                                                <TextBlock x:Name="PanelCountText" FontSize="15" FontWeight="Bold"
+                                                           Margin="6,0,0,0" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Fg}"/>
+                                            </StackPanel>
+                                            <StackPanel x:Name="BatteryCounter" Orientation="Horizontal"
+                                                        VerticalAlignment="Center" Visibility="Collapsed">
+                                                <Rectangle Width="1" Margin="12,2,12,2" Fill="{DynamicResource PlateLine}"/>
+                                                <Viewbox Width="17" Height="17" VerticalAlignment="Center">
+                                                    <Path x:Name="BatteryIcon" Data="{StaticResource IconBattery}"
+                                                          Stroke="{DynamicResource Dim}" StrokeThickness="2"
+                                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                                          StrokeLineJoin="Round"/>
+                                                </Viewbox>
+                                                <TextBlock x:Name="BatteryText" FontSize="15"
+                                                           Margin="6,0,0,0" VerticalAlignment="Center"
+                                                           Foreground="{DynamicResource Fg}"/>
+                                            </StackPanel>
+                                            <Ellipse x:Name="MeshDot" Width="9" Height="9"
+                                                     Fill="{DynamicResource Ok}" Margin="12,0,0,0"
+                                                     VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Border>
+                                </StackPanel>
+                            </Grid>
+
+                            <!-- Unread missed calls: a Fluent InfoBar whose action opens History. -->
+                            <ui:InfoBar x:Name="MissedBadge" Grid.Row="1" Visibility="Collapsed"
+                                        IsOpen="True" IsClosable="False" Severity="Warning"
+                                        Margin="0,12,0,0">
+                                <ui:InfoBar.ActionButton>
+                                    <Button x:Name="MissedBadgeAction" MinHeight="44"
+                                            HorizontalAlignment="Right" Click="OnOpenHistoryClick"/>
+                                </ui:InfoBar.ActionButton>
+                            </ui:InfoBar>
+
+                            <Grid Grid.Row="2" Margin="0,16,0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="DashboardTitleLeftColumn" Width="1.4*"/>
+                                    <ColumnDefinition x:Name="DashboardTitleRightColumn" Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid Grid.Column="0" Margin="4,0,12,0">
+                                    <TextBlock x:Name="DoorsSectionTitle" FontSize="15" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
+                                </Grid>
+                                <Grid Grid.Column="1" Margin="12,0,4,0">
+                                    <TextBlock x:Name="RecentCallsTitle" FontSize="15" FontWeight="SemiBold"
+                                               VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
+                                    <Button x:Name="SeeAllCallsButton" Style="{StaticResource LinkButton}"
+                                            HorizontalAlignment="Right" Click="OnOpenHistoryClick"/>
+                                </Grid>
+                            </Grid>
+
+                            <Grid x:Name="DashboardContent" Grid.Row="3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="DashboardLeftColumn" Width="1.4*"/>
+                                    <ColumnDefinition x:Name="DashboardRightColumn" Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition x:Name="DashboardTopRow" Height="*"/>
+                                    <RowDefinition x:Name="DashboardBottomRow" Height="0"/>
+                                </Grid.RowDefinitions>
+
+                                <ScrollViewer x:Name="DoorTilesPanel" Grid.Row="0" Grid.Column="0"
+                                              VerticalScrollBarVisibility="Auto"
+                                              HorizontalScrollBarVisibility="Disabled" Margin="0,0,12,0">
+                                    <UniformGrid x:Name="DoorTileGrid" Columns="2" VerticalAlignment="Top"/>
+                                </ScrollViewer>
+
+                                <!-- Recent calls: a card holding a ListView with day headers. -->
+                                <Border x:Name="RecentCallsPanel" Grid.Row="0" Grid.Column="1"
+                                        app:Frost.Enabled="True" CornerRadius="8" Margin="12,4,4,0"
+                                        BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
+                                        ClipToBounds="True" VerticalAlignment="Top">
+                                    <Border Background="{DynamicResource Plate}" CornerRadius="8">
+                                        <ListView x:Name="RecentCallsList" Background="Transparent"
+                                                  BorderThickness="0" SelectionMode="Single"
+                                                  ItemContainerStyle="{StaticResource CallListItem}"
+                                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                                  ScrollViewer.PanningMode="VerticalOnly"/>
+                                    </Border>
+                                </Border>
+                            </Grid>
+
+                            <Grid x:Name="DashboardFooter" Grid.Row="4" Margin="0,16,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="Auto"/>
+                                    <!-- Width is reserved at runtime from the SOS slider's real footprint. -->
+                                    <ColumnDefinition x:Name="DashboardSosColumn" Width="0"/>
+                                </Grid.ColumnDefinitions>
+                                <!-- Footer card: admin QR and address, then the name, versions
+                                     and battery line. -->
+                                <Border x:Name="AdminLinkCard" Grid.Column="0" Cursor="Hand"
+                                        app:Frost.Enabled="True" CornerRadius="8" ClipToBounds="True"
+                                        BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
+                                        MinWidth="320" MaxWidth="560" HorizontalAlignment="Left"
+                                        MouseLeftButtonDown="OnWebAdminClick">
+                                    <Border Background="{DynamicResource Plate}" CornerRadius="8"
+                                            Padding="12,8">
+                                        <StackPanel Orientation="Horizontal">
+                                            <Border Background="#FFFFFF" CornerRadius="4" Padding="3">
+                                                <Image x:Name="AdminQrImage" Width="66" Height="66"
+                                                       RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                            </Border>
+                                            <StackPanel Margin="12,0,6,0" VerticalAlignment="Center">
+                                                <StackPanel Orientation="Horizontal">
+                                                    <TextBlock x:Name="AdminLinkTitle" FontSize="15" FontWeight="SemiBold"
+                                                               Foreground="{DynamicResource Fg}"/>
+                                                    <TextBlock x:Name="AdminAddressCount" FontSize="14"
+                                                               Margin="6,0,0,0" VerticalAlignment="Bottom"
+                                                               Foreground="{DynamicResource Dim}"/>
+                                                </StackPanel>
+                                                <Border Background="{DynamicResource Row}" CornerRadius="4"
+                                                        Padding="12,6" Margin="0,4,0,0" HorizontalAlignment="Left">
+                                                    <TextBlock x:Name="AdminUrlText" FontSize="14"
+                                                               Foreground="{DynamicResource Fg}"/>
+                                                </Border>
+                                                <TextBlock x:Name="NodeInfo" FontSize="13" Margin="0,4,0,0"
+                                                           TextWrapping="Wrap" MaxWidth="440"
+                                                           Foreground="{DynamicResource Dim}"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Border>
+                                </Border>
+                            </Grid>
+                        </Grid>
+
+                        <!-- History page: filters, then the list (and the detail beside it when
+                             expanded), 50 rows per page, grouped by day. -->
+                        <Grid x:Name="HistoryView" Visibility="Collapsed" Background="{DynamicResource Bg}">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+                            <Grid x:Name="HistoryHeader" Grid.Row="0" Margin="24,16,24,8">
+                                <TextBlock x:Name="HistoryTitle" FontSize="28" FontWeight="SemiBold"
+                                           HorizontalAlignment="Left" VerticalAlignment="Center"
+                                           Foreground="{DynamicResource Fg}"/>
+                                <Button x:Name="HistoryCloseButton" Style="{StaticResource ChipButton}"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Center" Click="OnHistoryCloseClick"/>
+                            </Grid>
+                            <WrapPanel x:Name="HistoryFilterRow" Grid.Row="1" Orientation="Horizontal"
+                                       Margin="24,0,24,8">
+                                <Button x:Name="HistoryFilterAll" Style="{StaticResource ChipButton}"
+                                        Margin="0,0,0,0"
+                                        Click="OnHistoryFilterClick" Tag="all"/>
+                                <Button x:Name="HistoryFilterMissed" Style="{StaticResource ChipButton}"
+                                        Click="OnHistoryFilterClick"
+                                        Tag="missed"/>
+                                <StackPanel x:Name="HistoryDoorFilters" Orientation="Horizontal"/>
+                                <Button x:Name="HistoryMarkSeenButton" Style="{StaticResource ChipButton}"
+                                        Margin="18,0,0,0"
+                                        Click="OnHistoryMarkSeenClick"/>
+                            </WrapPanel>
+                            <!-- Expanded: list left, detail right. Compact/medium: the detail
+                                 replaces the list (drill-down) with a back action. -->
+                            <Grid x:Name="HistoryBody" Grid.Row="2" Margin="24,0,24,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="HistoryListColumn" Width="*"/>
+                                    <ColumnDefinition x:Name="HistoryDetailColumn" Width="0"/>
+                                </Grid.ColumnDefinitions>
+                                <ListView x:Name="HistoryList" Background="Transparent"
+                                          BorderThickness="0" SelectionMode="Single"
+                                          ItemContainerStyle="{StaticResource CallListItem}"
+                                          ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                          ScrollViewer.PanningMode="VerticalOnly"/>
+                                <Border x:Name="HistoryDetailPane" Grid.Column="1" Visibility="Collapsed"
+                                        Margin="16,8,0,8" CornerRadius="8" Padding="16"
+                                        Style="{StaticResource CardBorder}">
+                                    <DockPanel>
+                                        <Button x:Name="HistoryDetailBack" DockPanel.Dock="Top"
+                                                Style="{StaticResource ChipButton}" MinHeight="44"
+                                                HorizontalAlignment="Left"
+                                                Margin="0,0,0,12" Click="OnHistoryDetailBackClick"/>
+                                        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                                                      HorizontalScrollBarVisibility="Disabled">
+                                            <StackPanel x:Name="HistoryDetail"/>
+                                        </ScrollViewer>
+                                    </DockPanel>
+                                </Border>
+                            </Grid>
+                            <StackPanel Grid.Row="3" Margin="24,10,24,18" HorizontalAlignment="Center">
+                                <Button x:Name="HistoryMoreButton" Style="{StaticResource ChipButton}"
+                                        Margin="0" HorizontalAlignment="Center"
+                                        Click="OnHistoryMoreClick"/>
+                                <TextBlock x:Name="HistoryNote" FontSize="13" Margin="0,8,0,0"
+                                           HorizontalAlignment="Center" Foreground="{DynamicResource Dim}"
+                                           Visibility="Collapsed"/>
                             </StackPanel>
-                        </Border>
-                    </Border>
-                </Grid>
+                        </Grid>
+                    </Grid>
+                </ui:NavigationView>
             </Grid>
 
             <!-- Slide-to-trigger SOS. The semantic id "sos.trigger" keeps addressing this border,
@@ -354,7 +459,7 @@
                                    Foreground="{DynamicResource OnDanger}"
                                    HorizontalAlignment="Center"/>
                     </StackPanel>
-                    <ui:SosSlider x:Name="SosSlide" Style="{StaticResource SosTrack}"/>
+                    <app:SosSlider x:Name="SosSlide" Style="{StaticResource SosTrack}"/>
                 </Grid>
             </Border>
 
@@ -375,19 +480,18 @@
                         <TextBlock x:Name="CallingPurposeHint" FontSize="20" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Dim}" TextAlignment="Center" Margin="0,0,0,8"/>
                         <UniformGrid x:Name="CallingPurposeGrid" Columns="3" HorizontalAlignment="Stretch"/>
-                        <Button x:Name="CallingPurposeSkip" MinHeight="48" FontSize="22" Padding="16,10"
+                        <Button x:Name="CallingPurposeSkip" MinHeight="72" FontSize="22" Padding="16,10"
                                 Margin="0,12,0,0" Click="OnPurposeSkipClick"/>
                     </StackPanel>
                 </StackPanel>
             </ScrollViewer>
-            <Button x:Name="CancelButton" Grid.Row="1" Style="{StaticResource VisitorPrimaryAction}"
-                    Margin="20,12,20,18" Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
-                    BorderBrush="{DynamicResource Line}" Click="OnCancelClick"/>
+            <Button x:Name="CancelButton" Grid.Row="1" Style="{StaticResource VisitorSecondaryAction}"
+                    Margin="20,12,20,18" Click="OnCancelClick"/>
         </Grid>
 
         <Border x:Name="ReplyBanner" Visibility="Collapsed" VerticalAlignment="Center"
-                HorizontalAlignment="Center" Background="{DynamicResource Card}"
-                CornerRadius="20" Padding="60,40" MaxWidth="900">
+                HorizontalAlignment="Center" Style="{StaticResource CardBorder}"
+                CornerRadius="8" Padding="60,40" MaxWidth="900">
             <StackPanel>
                 <TextBlock x:Name="ReplyCaption" FontSize="22" Foreground="{DynamicResource Dim}"
                            HorizontalAlignment="Center"/>
@@ -408,9 +512,8 @@
                                TextAlignment="Center" TextWrapping="Wrap" Margin="0,16,0,0"/>
                 </StackPanel>
             </ScrollViewer>
-            <Button x:Name="OfflineAction" Grid.Row="1" Style="{StaticResource VisitorPrimaryAction}"
-                    Margin="20,12,20,18" IsEnabled="False" Background="{DynamicResource Card}"
-                    Foreground="{DynamicResource Dim}"/>
+            <Button x:Name="OfflineAction" Grid.Row="1" Style="{StaticResource VisitorSecondaryAction}"
+                    Margin="20,12,20,18" IsEnabled="False"/>
         </Grid>
 
         <!-- A2 · incoming / monitor screen. -->
@@ -441,7 +544,7 @@
                         <!-- Seconds until the panel returns home. Tapping it stops the return
                              and leaves the live view up. -->
                         <Border x:Name="ReturnCountdown" Visibility="Collapsed" Cursor="Hand"
-                                Margin="12,0,0,0" CornerRadius="10" Padding="12,6"
+                                Margin="12,0,0,0" CornerRadius="4" Padding="12,6"
                                 VerticalAlignment="Center" Background="{DynamicResource Pill}"
                                 BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
                                 MouseLeftButtonDown="OnReturnCountdownClick">
@@ -487,8 +590,9 @@
                 </StackPanel>
             </Grid>
             <Grid x:Name="IncomingStage" Grid.Row="1" Margin="24,4,24,0">
-                <Border x:Name="IncomingVideoFrame" CornerRadius="12" Background="#000000"
+                <Border x:Name="IncomingVideoFrame" CornerRadius="4" Background="#000000"
                         ClipToBounds="True" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <app:ZoomPanHost x:Name="IncomingZoom">
                     <Grid x:Name="IncomingVideoArea" ClipToBounds="True">
                         <MediaElement x:Name="IncomingH264" Stretch="Uniform" Visibility="Collapsed"
                                       LoadedBehavior="Manual" UnloadedBehavior="Manual"
@@ -501,16 +605,17 @@
                                    TextAlignment="Center" Margin="16"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
+                    </app:ZoomPanHost>
                 </Border>
             </Grid>
             <!-- Fixed action zone. In live view (monitor only) it floats over the video on a
                  plate and hides after 4 s without input; a tap brings it back. -->
             <Border x:Name="IncomingActionZone" Grid.Row="2" Grid.ColumnSpan="2"
-                    Margin="16,12,16,16" Padding="8" CornerRadius="20"
+                    Margin="16,12,16,16" Padding="8" CornerRadius="8"
                     Background="Transparent">
                 <StackPanel x:Name="IncomingActionStack">
                     <UniformGrid x:Name="IncomingPrimaryRow" Rows="1" HorizontalAlignment="Stretch">
-                        <Button x:Name="AnswerButton" Style="{StaticResource ActionButton}"
+                        <Button x:Name="AnswerButton" Style="{StaticResource SemanticActionButton}"
                                 Background="{DynamicResource Positive}"
                                 Foreground="{DynamicResource OnPositive}"
                                 BorderBrush="{DynamicResource Positive}"
@@ -539,14 +644,14 @@
             <Border x:Name="QuickReplySheet" Grid.RowSpan="3" Grid.ColumnSpan="2"
                     Visibility="Collapsed" VerticalAlignment="Bottom"
                     Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}"
-                    BorderThickness="1" CornerRadius="20,20,0,0" Padding="16,12,16,16">
+                    BorderThickness="1" CornerRadius="8,8,0,0" Padding="16,12,16,16">
                 <DockPanel>
                     <Grid DockPanel.Dock="Top" Margin="8,0,0,8">
                         <TextBlock x:Name="QuickReplySheetTitle" FontSize="20" FontWeight="SemiBold"
                                    VerticalAlignment="Center" TextWrapping="Wrap" Margin="0,0,60,0"
                                    Foreground="{DynamicResource OnSurface}"/>
                         <Button x:Name="QuickReplySheetClose" HorizontalAlignment="Right"
-                                Style="{StaticResource SettingsFlatButton}"
+                                Style="{StaticResource ChipButton}" Margin="0"
                                 MinWidth="48" MinHeight="48" Click="OnQuickReplySheetClose"/>
                     </Grid>
                     <ScrollViewer VerticalScrollBarVisibility="Auto"
@@ -585,8 +690,9 @@
             </StackPanel>
             </ScrollViewer>
             <Grid x:Name="InCallStage" Grid.Row="1" Margin="24,4,24,0">
-                <Border CornerRadius="12" Background="#000000" ClipToBounds="True"
+                <Border CornerRadius="4" Background="#000000" ClipToBounds="True"
                         HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <app:ZoomPanHost x:Name="InCallZoom">
                     <Grid ClipToBounds="True">
                         <MediaElement x:Name="PeerH264" Stretch="Uniform" Visibility="Collapsed"
                                       LoadedBehavior="Manual" UnloadedBehavior="Manual"
@@ -594,11 +700,12 @@
                         <Image x:Name="PeerVideo" Stretch="Uniform"/>
                         <Image x:Name="PeerH264Image" Stretch="Uniform" Visibility="Collapsed"/>
                     </Grid>
+                    </app:ZoomPanHost>
                 </Border>
             </Grid>
             <StackPanel x:Name="InCallActionZone" Grid.Row="2" Grid.ColumnSpan="2"
                         Margin="24,12,24,16">
-                <Button x:Name="EndCallButton" Style="{StaticResource VisitorPrimaryAction}"
+                <Button x:Name="EndCallButton" Style="{StaticResource VisitorNegativeAction}"
                         Background="{DynamicResource Negative}" Foreground="{DynamicResource OnNegative}"
                         BorderBrush="{DynamicResource Negative}" Click="OnEndCallClick"/>
                 <WrapPanel x:Name="InCallSecondaryRow" Orientation="Horizontal"
@@ -616,7 +723,7 @@
              the unobtrusive player statistics line. -->
         <Grid x:Name="CallOverlay" Visibility="Collapsed">
             <Border x:Name="NoticeChip" HorizontalAlignment="Right" VerticalAlignment="Top"
-                    Margin="0,20,24,0" Cursor="Hand" CornerRadius="10" Padding="14,8"
+                    Margin="0,20,24,0" Cursor="Hand" CornerRadius="4" Padding="14,8"
                     Background="{DynamicResource Pill}" BorderBrush="{DynamicResource PlateLine}"
                     BorderThickness="1" MouseLeftButtonDown="OnNoticeChipClick">
                 <StackPanel Orientation="Horizontal">
@@ -649,9 +756,8 @@
             </Border>
 
             <Border x:Name="NoticePopover" Visibility="Collapsed" HorizontalAlignment="Right"
-                    VerticalAlignment="Top" Margin="0,58,20,0" MaxWidth="440" CornerRadius="12"
-                    Padding="16,14" Background="{DynamicResource Card}"
-                    BorderBrush="{DynamicResource Line}" BorderThickness="1">
+                    VerticalAlignment="Top" Margin="0,58,20,0" MaxWidth="440" CornerRadius="8"
+                    Padding="16,14" Style="{StaticResource CardBorder}">
                 <StackPanel>
                     <TextBlock x:Name="NoticePopoverTarget" FontSize="13"
                                Foreground="{DynamicResource Dim}"/>
@@ -659,13 +765,10 @@
                                Margin="0,8,0,0" Foreground="{DynamicResource Fg}"/>
                     <WrapPanel Orientation="Horizontal" Margin="0,12,0,0">
                         <Button x:Name="NoticeEditButton" Style="{StaticResource ChipButton}"
-                                BorderBrush="{DynamicResource Line}"
                                 Click="OnNoticeEditClick"/>
                         <Button x:Name="NoticeClearButton" Style="{StaticResource ChipButton}"
-                                BorderBrush="{DynamicResource Line}"
                                 Click="OnNoticeClearClick"/>
                         <Button x:Name="NoticePopoverClose" Style="{StaticResource ChipButton}"
-                                BorderBrush="{DynamicResource Line}"
                                 Click="OnNoticePopoverCloseClick"/>
                     </WrapPanel>
                 </StackPanel>
@@ -673,84 +776,18 @@
         </Grid>
 
         <!-- Indoor proactive monitoring selects a door station without requiring a chime. -->
-        <Grid x:Name="MonitorPickerView" Visibility="Collapsed" Background="#E6101418">
-            <Border Background="{DynamicResource Card}" CornerRadius="20" Padding="38"
+        <Grid x:Name="MonitorPickerView" Visibility="Collapsed" Background="#99000000">
+            <Border Style="{StaticResource CardBorder}" CornerRadius="8" Padding="32"
                     HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="760">
                 <StackPanel>
-                    <TextBlock x:Name="MonitorPickerTitle" FontSize="34" FontWeight="Bold"
+                    <TextBlock x:Name="MonitorPickerTitle" FontSize="28" FontWeight="SemiBold"
                                Foreground="{DynamicResource Fg}" HorizontalAlignment="Center"/>
                     <StackPanel x:Name="MonitorDoorList" Margin="0,24,0,18"/>
-                    <Button x:Name="MonitorPickerClose" FontSize="24" Padding="34,12"
-                            Background="{DynamicResource Card}" Foreground="{DynamicResource Fg}"
-                            BorderBrush="{DynamicResource Line}" HorizontalAlignment="Center"
+                    <Button x:Name="MonitorPickerClose" FontSize="20" Padding="34,12"
+                            MinHeight="48" HorizontalAlignment="Center"
                             Click="OnMonitorPickerClose"/>
                 </StackPanel>
             </Border>
-        </Grid>
-
-        <!-- Full-screen call history, 50 rows per page, grouped by day. -->
-        <Grid x:Name="HistoryView" Visibility="Collapsed" Background="{DynamicResource Bg}">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
-                <RowDefinition Height="Auto"/>
-            </Grid.RowDefinitions>
-            <Grid Grid.Row="0" Margin="26,20,26,6">
-                <TextBlock x:Name="HistoryTitle" FontSize="30" FontWeight="Bold"
-                           HorizontalAlignment="Left" Foreground="{DynamicResource Fg}"/>
-                <Button x:Name="HistoryCloseButton" Style="{StaticResource ChipButton}"
-                        BorderBrush="{DynamicResource Line}" HorizontalAlignment="Right"
-                        VerticalAlignment="Center" Click="OnHistoryCloseClick"/>
-            </Grid>
-            <WrapPanel x:Name="HistoryFilterRow" Grid.Row="1" Orientation="Horizontal"
-                       Margin="26,0,26,8">
-                <Button x:Name="HistoryFilterAll" Style="{StaticResource ChipButton}"
-                        BorderBrush="{DynamicResource Line}" Margin="0,0,0,0"
-                        Click="OnHistoryFilterClick" Tag="all"/>
-                <Button x:Name="HistoryFilterMissed" Style="{StaticResource ChipButton}"
-                        BorderBrush="{DynamicResource Line}" Click="OnHistoryFilterClick"
-                        Tag="missed"/>
-                <StackPanel x:Name="HistoryDoorFilters" Orientation="Horizontal"/>
-                <Button x:Name="HistoryMarkSeenButton" Style="{StaticResource ChipButton}"
-                        BorderBrush="{DynamicResource Line}" Margin="18,0,0,0"
-                        Click="OnHistoryMarkSeenClick"/>
-            </WrapPanel>
-            <!-- Expanded: list left, detail right. Compact/medium: the detail replaces the list
-                 (drill-down) with a back action. -->
-            <Grid x:Name="HistoryBody" Grid.Row="2" Margin="24,0,24,0">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition x:Name="HistoryListColumn" Width="*"/>
-                    <ColumnDefinition x:Name="HistoryDetailColumn" Width="0"/>
-                </Grid.ColumnDefinitions>
-                <ScrollViewer x:Name="HistoryListScroll" VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Disabled" PanningMode="VerticalOnly">
-                    <StackPanel x:Name="HistoryList"/>
-                </ScrollViewer>
-                <Border x:Name="HistoryDetailPane" Grid.Column="1" Visibility="Collapsed"
-                        Margin="16,8,0,8" CornerRadius="12" Padding="16"
-                        Background="{DynamicResource Surface}" BorderBrush="{DynamicResource Line}"
-                        BorderThickness="1">
-                    <DockPanel>
-                        <Button x:Name="HistoryDetailBack" DockPanel.Dock="Top"
-                                Style="{StaticResource ChipButton}" MinHeight="44"
-                                BorderBrush="{DynamicResource Line}" HorizontalAlignment="Left"
-                                Margin="0,0,0,12" Click="OnHistoryDetailBackClick"/>
-                        <ScrollViewer VerticalScrollBarVisibility="Auto"
-                                      HorizontalScrollBarVisibility="Disabled">
-                            <StackPanel x:Name="HistoryDetail"/>
-                        </ScrollViewer>
-                    </DockPanel>
-                </Border>
-            </Grid>
-            <StackPanel Grid.Row="3" Margin="26,10,26,18" HorizontalAlignment="Center">
-                <Button x:Name="HistoryMoreButton" Style="{StaticResource ChipButton}"
-                        BorderBrush="{DynamicResource Line}" HorizontalAlignment="Center"
-                        Click="OnHistoryMoreClick"/>
-                <TextBlock x:Name="HistoryNote" FontSize="13" Margin="0,8,0,0"
-                           HorizontalAlignment="Center" Foreground="{DynamicResource Dim}"
-                           Visibility="Collapsed"/>
-            </StackPanel>
         </Grid>
 
         <Canvas x:Name="ScreensaverView" Visibility="Collapsed" Background="#000000">
@@ -771,9 +808,10 @@
                 <TextBlock x:Name="SosCountdownText" FontSize="86" FontWeight="Bold"
                            Foreground="#FFFFFF" HorizontalAlignment="Center"
                            TextAlignment="Center"/>
-                <Button x:Name="SosCountdownCancel" FontSize="32" Padding="70,20"
+                <Button x:Name="SosCountdownCancel" Style="{StaticResource SemanticButton}"
+                        FontSize="32" Padding="70,20"
                         Margin="0,44,0,0" Background="#FFFFFF" Foreground="#8C0D0A"
-                        BorderThickness="0" HorizontalAlignment="Center"
+                        HorizontalAlignment="Center"
                         Click="OnSosCountdownCancel"/>
             </StackPanel>
         </Grid>
@@ -796,7 +834,8 @@
                            HorizontalAlignment="Center" TextWrapping="Wrap" TextAlignment="Center"
                            Margin="0,18,0,0"/>
                 <Grid Margin="0,56,0,0" HorizontalAlignment="Center" MinWidth="420">
-                    <Button x:Name="EmergencyCancelButton" FontSize="30" Padding="64,18"
+                    <Button x:Name="EmergencyCancelButton" Style="{StaticResource SemanticButton}"
+                            BorderThickness="2" FontSize="30" Padding="64,18"
                             MinHeight="88" Background="#7F1D1D" Foreground="#FFFFFF"
                             BorderBrush="#FFFFFF"
                             PreviewMouseLeftButtonDown="OnEmergencyClearPress"

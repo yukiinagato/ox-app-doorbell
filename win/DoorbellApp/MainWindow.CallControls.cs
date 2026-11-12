@@ -118,9 +118,6 @@ namespace DoorbellApp
                     FontSize = 22,
                     Padding = new Thickness(26, 12, 26, 12),
                     Margin = new Thickness(8),
-                    Background = (Brush)FindResource("Card"),
-                    Foreground = (Brush)FindResource("Fg"),
-                    BorderBrush = (Brush)FindResource("Dim"),
                     Cursor = Cursors.Hand,
                     Tag = id,
                 };
@@ -454,9 +451,6 @@ namespace DoorbellApp
                     {
                         Content = DoorLabel(door), Tag = door, FontSize = 26,
                         Padding = new Thickness(34, 16, 34, 16), Margin = new Thickness(6),
-                        Background = (Brush)FindResource("Card"),
-                        Foreground = (Brush)FindResource("Fg"),
-                        BorderBrush = (Brush)FindResource("Dim"),
                     };
                     button.Click += OnMonitorDoorClick;
                     MonitorDoorList.Children.Add(button);

@@ -240,7 +240,7 @@ namespace DoorbellApp.Settings
             {
                 Owner = this,
                 Topmost = Topmost,
-                WindowStyle = WindowStyle.None,
+                Title = Texts.T(existing == null ? "admin.add" : "admin.edit"),
                 ResizeMode = ResizeMode.NoResize,
                 SizeToContent = SizeToContent.Height,
                 Width = Math.Min(560, Math.Max(320, ActualWidth - 32)),
@@ -248,8 +248,7 @@ namespace DoorbellApp.Settings
                 ShowInTaskbar = false,
                 FontFamily = FontFamily,
             };
-            dialog.SetResourceReference(BackgroundProperty, "Card");
-            dialog.SetResourceReference(ForegroundProperty, "Fg");
+            DoorbellApp.Ui.Fluent.StyleWindow(dialog);
             var form = new StackPanel { Margin = new Thickness(24) };
             form.Children.Add(new TextBlock
             {
@@ -259,7 +258,7 @@ namespace DoorbellApp.Settings
                 Margin = new Thickness(0, 0, 0, 12),
             });
             var fields = new Dictionary<string, TextBox>();
-            var flags = new Dictionary<string, ToggleButton>();
+            var flags = new Dictionary<string, ModernWpf.Controls.ToggleSwitch>();
             Func<string, string, TextBox> field = (labelKey, value) =>
             {
                 form.Children.Add(new TextBlock
@@ -277,14 +276,10 @@ namespace DoorbellApp.Settings
                 form.Children.Add(box);
                 return box;
             };
-            Func<string, bool, ToggleButton> flag = (labelKey, value) =>
+            Func<string, bool, ModernWpf.Controls.ToggleSwitch> flag = (labelKey, value) =>
             {
                 var line = new DockPanel { Margin = new Thickness(0, 12, 0, 0) };
-                var toggle = new ToggleButton
-                {
-                    Style = (Style)FindResource("SettingsSwitch"),
-                    IsChecked = value,
-                };
+                var toggle = DoorbellApp.Ui.Fluent.Switch(value);
                 DockPanel.SetDock(toggle, Dock.Right);
                 line.Children.Add(toggle);
                 line.Children.Add(new TextBlock
@@ -330,10 +325,8 @@ namespace DoorbellApp.Settings
                 Margin = new Thickness(0, 20, 0, 0),
             };
             var cancel = CommandButton(Texts.T("admin.cancel"));
-            var save = CommandButton(Texts.T("admin.save"));
+            var save = PrimaryButton(Texts.T("admin.save"));
             save.Margin = new Thickness(8, 0, 0, 0);
-            save.SetResourceReference(BackgroundProperty, "Accent");
-            save.SetResourceReference(ForegroundProperty, "OnAccent");
             save.IsDefault = true;
             cancel.IsCancel = true;
             actions.Children.Add(cancel);
@@ -371,7 +364,7 @@ namespace DoorbellApp.Settings
                     }
                     data["label"] = label;
                     if (fields.ContainsKey("icon")) data["icon"] = fields["icon"].Text.Trim();
-                    foreach (var pair in flags) data[pair.Key] = pair.Value.IsChecked == true;
+                    foreach (var pair in flags) data[pair.Key] = pair.Value.IsOn;
                 }
                 dialog.DialogResult = true;
             };

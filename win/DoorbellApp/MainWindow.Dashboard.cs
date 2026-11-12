@@ -259,7 +259,7 @@ namespace DoorbellApp
             var noticeChip = new Border
             {
                 Background = (Brush)FindResource("Notice"),
-                CornerRadius = new CornerRadius(8),
+                CornerRadius = new CornerRadius(4),
                 Padding = new Thickness(12, 6, 12, 6),
                 Margin = new Thickness(8),
                 HorizontalAlignment = HorizontalAlignment.Left,
@@ -290,7 +290,7 @@ namespace DoorbellApp
             media.Children.Add(noticeChip);
             var mediaFrame = new Border
             {
-                CornerRadius = new CornerRadius(14, 14, 0, 0),
+                CornerRadius = new CornerRadius(8, 8, 0, 0),
                 ClipToBounds = true,
                 Child = media,
             };
@@ -337,12 +337,12 @@ namespace DoorbellApp
             body.Children.Add(mediaFrame);
             body.Children.Add(caption);
 
-            var plate = new Border { CornerRadius = new CornerRadius(16), Child = body };
+            var plate = new Border { CornerRadius = new CornerRadius(8), Child = body };
             plate.SetResourceReference(Border.BackgroundProperty, "Plate");
             var tile = new Border
             {
                 BorderThickness = new Thickness(1),
-                CornerRadius = new CornerRadius(16),
+                CornerRadius = new CornerRadius(8),
                 Margin = new Thickness(4, 4, 8, 12),
                 VerticalAlignment = VerticalAlignment.Top,
                 ClipToBounds = true,
@@ -438,11 +438,6 @@ namespace DoorbellApp
             }
         }
 
-        private void OnMissedBadgeClick(object sender, MouseButtonEventArgs e)
-        {
-            OpenHistory();
-        }
-
         private void OnOpenHistoryClick(object sender, RoutedEventArgs e)
         {
             OpenHistory();
@@ -460,17 +455,17 @@ namespace DoorbellApp
         private void RefreshCallHistory(Dictionary<string, object> log)
         {
             if (App.Boot.Role != "indoor_panel") return;
-            RecentCallsList.Children.Clear();
+            RecentCallsList.Items.Clear();
             var rows = log == null ? null : Rows(log);
             if (rows == null || rows.Count == 0)
             {
-                RecentCallsList.Children.Add(new TextBlock
+                RecentCallsList.Items.Add(ListHeader(new TextBlock
                 {
                     Text = Texts.T("history.empty"),
                     FontSize = 14,
                     Margin = new Thickness(2, 8, 2, 8),
                     Foreground = (Brush)FindResource("Dim"),
-                });
+                }));
             }
             else
             {
@@ -489,15 +484,30 @@ namespace DoorbellApp
                             Margin = new Thickness(2, 8, 2, 4),
                         };
                         header.SetResourceReference(TextBlock.ForegroundProperty, "Dim");
-                        RecentCallsList.Children.Add(header);
+                        RecentCallsList.Items.Add(ListHeader(header));
                     }
-                    RecentCallsList.Children.Add(BuildCallRow(row, false));
+                    RecentCallsList.Items.Add(BuildCallRow(row, false));
                 }
             }
             _unreadMissed = log == null ? 0 : DictInt(log, "unread_missed", 0);
-            MissedBadgeText.Text = Texts.T("history.missed_badge", _unreadMissed);
+            MissedBadge.Message = Texts.T("history.missed_badge", _unreadMissed);
             MissedBadge.Visibility = _unreadMissed > 0 ?
                 Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>
+        /// A day header or an empty-state line inside a call list: a list item that is not a
+        /// target, so it takes no hover, selection or focus.
+        /// </summary>
+        private static ListViewItem ListHeader(UIElement content)
+        {
+            return new ListViewItem
+            {
+                Content = content,
+                MinHeight = 0,
+                IsHitTestVisible = false,
+                Focusable = false,
+            };
         }
 
         private static List<Dictionary<string, object>> Rows(Dictionary<string, object> log)
@@ -582,7 +592,7 @@ namespace DoorbellApp
             resultText.SetResourceReference(TextBlock.ForegroundProperty, missed ? "OnDanger" : "Fg");
             var result = new Border
             {
-                CornerRadius = new CornerRadius(8),
+                CornerRadius = new CornerRadius(4),
                 Padding = new Thickness(10, 4, 10, 4),
                 Margin = new Thickness(8, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
@@ -591,12 +601,6 @@ namespace DoorbellApp
             result.SetResourceReference(Border.BackgroundProperty, missed ? "Negative" : "Row");
             Grid.SetColumn(result, 2);
             grid.Children.Add(result);
-            // Hairline under each row, as on the kiosk list.
-            var rule = new Border { Height = 1, VerticalAlignment = VerticalAlignment.Bottom,
-                                    Margin = new Thickness(0, 0, 0, -4) };
-            rule.SetResourceReference(Border.BackgroundProperty, "PlateLine");
-            Grid.SetColumnSpan(rule, 3);
-            grid.Children.Add(rule);
             return grid;
         }
 

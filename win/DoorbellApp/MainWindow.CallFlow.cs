@@ -628,6 +628,9 @@ namespace DoorbellApp
 
             StartIncomingVideo();
 
+            // A different door is a different picture: it starts fitted, not at the old zoom.
+            if (IncomingView.Visibility != Visibility.Visible || _returnDoor != _incomingDoor)
+                IncomingZoom.Reset();
             IncomingView.Visibility = Visibility.Visible;
             ApplyLiveOverlayMode();
             _returnDoor = _incomingDoor;

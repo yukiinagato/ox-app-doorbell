@@ -9,7 +9,7 @@
 
         <!-- Viewfinder: a fixed frame the operator aims at, over the live preview. -->
         <Border x:Name="Viewfinder" Width="420" Height="420" BorderThickness="4"
-                BorderBrush="{DynamicResource Accent}" CornerRadius="18"
+                BorderBrush="{DynamicResource Accent}" CornerRadius="8"
                 Background="Transparent" HorizontalAlignment="Center"
                 VerticalAlignment="Center" IsHitTestVisible="False"/>
 
@@ -19,7 +19,7 @@
                        TextAlignment="Center" Foreground="{DynamicResource Fg}"/>
         </StackPanel>
 
-        <Border Background="#C0141B22" CornerRadius="14" Padding="26,14"
+        <Border Background="{DynamicResource Pill}" CornerRadius="8" Padding="26,14"
                 HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,40,0,0">
             <StackPanel>
                 <TextBlock x:Name="HintText" FontSize="20" TextWrapping="Wrap"

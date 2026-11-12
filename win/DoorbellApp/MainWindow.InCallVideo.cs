@@ -27,6 +27,7 @@ namespace DoorbellApp
         private void ShowInCall(string streamUrl)
         {
             StopSosCountdown();
+            InCallZoom.Reset();
             OfflineView.Visibility = Visibility.Collapsed;
             UpdateVisitorActionHeights(ActualWidth);
             ExitScreensaver();

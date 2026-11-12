@@ -37,6 +37,7 @@ namespace DoorbellApp
             _historySelected = null;
             BuildHistoryDoorFilters();
             HistoryView.Visibility = Visibility.Visible;
+            SyncHomeNavigation();
             ApplyHistoryLayout(_sizeClass);
             LoadHistoryPage(true, true);
             RenderHistory();
@@ -119,6 +120,7 @@ namespace DoorbellApp
         private void OnHistoryCloseClick(object sender, RoutedEventArgs e)
         {
             HistoryView.Visibility = Visibility.Collapsed;
+            SyncHomeNavigation();
             RequestHomeRefresh(HomeRefresh.History);
         }
 
@@ -167,7 +169,6 @@ namespace DoorbellApp
                     Content = DoorLabel(door),
                     Tag = door,
                     Style = (Style)FindResource("ChipButton"),
-                    BorderBrush = (Brush)FindResource("Line"),
                 };
                 button.Click += OnHistoryFilterClick;
                 HistoryDoorFilters.Children.Add(button);
@@ -176,7 +177,7 @@ namespace DoorbellApp
 
         private void RenderHistory()
         {
-            HistoryList.Children.Clear();
+            HistoryList.Items.Clear();
             List<Dictionary<string, object>> rows = _historyRows;
             HighlightHistoryFilters();
 
@@ -192,26 +193,26 @@ namespace DoorbellApp
                 if (rowDay != day)
                 {
                     day = rowDay;
-                    HistoryList.Children.Add(new TextBlock
+                    HistoryList.Items.Add(ListHeader(new TextBlock
                     {
                         Text = rowDay,
                         FontSize = 14,
-                        FontWeight = FontWeights.Bold,
+                        FontWeight = FontWeights.SemiBold,
                         Margin = new Thickness(0, 14, 0, 4),
                         Foreground = (Brush)FindResource("Dim"),
-                    });
+                    }));
                 }
-                HistoryList.Children.Add(HistoryRow(row));
+                HistoryList.Items.Add(HistoryRow(row));
                 shown++;
             }
             if (shown == 0)
-                HistoryList.Children.Add(new TextBlock
+                HistoryList.Items.Add(ListHeader(new TextBlock
                 {
                     Text = Texts.T("history.empty"),
                     FontSize = 16,
                     Margin = new Thickness(0, 16, 0, 0),
                     Foreground = (Brush)FindResource("Dim"),
-                });
+                }));
 
             HistoryMoreButton.Visibility = _historyExhausted ?
                 Visibility.Collapsed : Visibility.Visible;
@@ -235,10 +236,8 @@ namespace DoorbellApp
 
         private void SetFilterSelected(Button button, bool selected)
         {
-            button.Background = selected ?
-                (Brush)FindResource("Accent") : (Brush)FindResource("Card");
-            button.Foreground = selected ?
-                (Brush)FindResource("OnAccent") : (Brush)FindResource("Fg");
+            // The chosen filter is the accent button; the others stay standard.
+            button.Style = (Style)FindResource(selected ? "ChipAccentButton" : "ChipButton");
         }
     }
 }

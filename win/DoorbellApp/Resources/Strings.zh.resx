@@ -114,6 +114,8 @@
   <data name="admin_copied" xml:space="preserve"><value>已复制</value></data>
   <data name="admin_copy" xml:space="preserve"><value>复制</value></data>
   <data name="admin_copy_failed" xml:space="preserve"><value>复制失败</value></data>
+  <data name="admin_copy_value" xml:space="preserve"><value>复制 {0}</value></data>
+  <data name="admin_danger_zone" xml:space="preserve"><value>危险操作</value></data>
   <data name="admin_dashboard" xml:space="preserve"><value>仪表盘</value></data>
   <data name="admin_delete" xml:space="preserve"><value>删除</value></data>
   <data name="admin_delete_pair_override" xml:space="preserve"><value>删除并继承全局配置</value></data>
@@ -133,11 +135,39 @@
   <data name="admin_draft_sign_in" xml:space="preserve"><value>请重新登录后继续。草稿已保留，密码和密钥已清除。</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>将文件拖放到此处或点击选择</value></data>
   <data name="admin_duty" xml:space="preserve"><value>职责</value></data>
+  <data name="admin_duty_mqtt_bridge" xml:space="preserve"><value>MQTT 桥接</value></data>
+  <data name="admin_duty_none" xml:space="preserve"><value>无职责</value></data>
+  <data name="admin_duty_telegram" xml:space="preserve"><value>Telegram 通知</value></data>
+  <data name="admin_duty_web_push" xml:space="preserve"><value>Web Push 推送</value></data>
   <data name="admin_edit" xml:space="preserve"><value>编辑</value></data>
+  <data name="admin_empty_buildings" xml:space="preserve"><value>尚未添加建筑</value></data>
+  <data name="admin_empty_buildings_hint" xml:space="preserve"><value>添加建筑后可将门口归组管理</value></data>
+  <data name="admin_empty_devices" xml:space="preserve"><value>尚无设备</value></data>
+  <data name="admin_empty_devices_hint" xml:space="preserve"><value>配对设备后会显示在这里</value></data>
+  <data name="admin_empty_doors" xml:space="preserve"><value>尚未添加门口</value></data>
+  <data name="admin_empty_doors_hint" xml:space="preserve"><value>添加门口，然后为其分配门口机</value></data>
+  <data name="admin_empty_events" xml:space="preserve"><value>暂无事件</value></data>
+  <data name="admin_empty_events_filtered" xml:space="preserve"><value>没有此类型的事件</value></data>
+  <data name="admin_empty_events_hint" xml:space="preserve"><value>呼叫、移动侦测和设备状态变化会显示在这里</value></data>
+  <data name="admin_empty_households" xml:space="preserve"><value>尚无通知对象</value></data>
+  <data name="admin_empty_households_hint" xml:space="preserve"><value>通知对象会收到呼叫规则发出的 Telegram 消息和 SIP 来电</value></data>
+  <data name="admin_empty_purposes" xml:space="preserve"><value>尚无来访目的</value></data>
+  <data name="admin_empty_purposes_hint" xml:space="preserve"><value>来访目的是访客在门口机上看到的选项</value></data>
+  <data name="admin_empty_quick_replies" xml:space="preserve"><value>尚无快捷回复</value></data>
+  <data name="admin_empty_quick_replies_hint" xml:space="preserve"><value>快捷回复可一键答复访客</value></data>
+  <data name="admin_empty_rules" xml:space="preserve"><value>尚无呼叫规则</value></data>
+  <data name="admin_empty_rules_hint" xml:space="preserve"><value>规则决定在按下按钮、检测到移动或设备离线时通知谁</value></data>
   <data name="admin_enabled" xml:space="preserve"><value>启用</value></data>
   <data name="admin_err_no_chat" xml:space="preserve"><value>没有配置 chat ID</value></data>
   <data name="admin_err_no_token" xml:space="preserve"><value>未设置 bot token</value></data>
   <data name="admin_err_not_leader" xml:space="preserve"><value>此设备不是 telegram 主节点</value></data>
+  <data name="admin_event_answered" xml:space="preserve"><value>已接听</value></data>
+  <data name="admin_event_cluster_key_changed" xml:space="preserve"><value>集群密钥已更新</value></data>
+  <data name="admin_event_config_changed" xml:space="preserve"><value>配置已更改</value></data>
+  <data name="admin_event_missed" xml:space="preserve"><value>未接</value></data>
+  <data name="admin_event_offline" xml:space="preserve"><value>离线</value></data>
+  <data name="admin_event_online" xml:space="preserve"><value>恢复在线</value></data>
+  <data name="admin_event_peer_rejected" xml:space="preserve"><value>设备被拒绝</value></data>
   <data name="admin_events" xml:space="preserve"><value>事件记录</value></data>
   <data name="admin_export" xml:space="preserve"><value>导出</value></data>
   <data name="admin_file_read_failed" xml:space="preserve"><value>读取文件失败</value></data>
@@ -213,6 +243,7 @@
   <data name="admin_launch_sound" xml:space="preserve"><value>启动音</value></data>
   <data name="admin_leader" xml:space="preserve"><value>主节点</value></data>
   <data name="admin_list_or_all" xml:space="preserve"><value>逗号分隔，或填写 all</value></data>
+  <data name="admin_live_view" xml:space="preserve"><value>实时画面</value></data>
   <data name="admin_load_or_add" xml:space="preserve"><value>载入 / 新增</value></data>
   <data name="admin_local_addrs" xml:space="preserve"><value>本机地址</value></data>
   <data name="admin_locked" xml:space="preserve"><value>管理密码输入已锁定 10 分钟</value></data>
@@ -220,6 +251,7 @@
   <data name="admin_login_network" xml:space="preserve"><value>无法连接服务器。请检查网络后重试</value></data>
   <data name="admin_login_server" xml:space="preserve"><value>服务器无法完成登录。请重试</value></data>
   <data name="admin_logs" xml:space="preserve"><value>日志</value></data>
+  <data name="admin_menu" xml:space="preserve"><value>菜单</value></data>
   <data name="admin_menu_add_device" xml:space="preserve"><value>添加设备</value></data>
   <data name="admin_menu_boot_setup" xml:space="preserve"><value>初始设置</value></data>
   <data name="admin_menu_close" xml:space="preserve"><value>关闭</value></data>
@@ -231,6 +263,8 @@
   <data name="admin_motion_interval" xml:space="preserve"><value>最小间隔 (秒)</value></data>
   <data name="admin_motion_sensitivity" xml:space="preserve"><value>灵敏度</value></data>
   <data name="admin_motion_wake_screen" xml:space="preserve"><value>检测到移动时点亮屏幕并退出屏保</value></data>
+  <data name="admin_move_down" xml:space="preserve"><value>下移</value></data>
+  <data name="admin_move_up" xml:space="preserve"><value>上移</value></data>
   <data name="admin_native_ui" xml:space="preserve"><value>原生 UI</value></data>
   <data name="admin_native_ui_apply_report" xml:space="preserve"><value>原生客户端应用结果</value></data>
   <data name="admin_never_suppress" xml:space="preserve"><value>始终允许</value></data>
@@ -273,6 +307,7 @@
   <data name="admin_password_set_failed" xml:space="preserve"><value>无法设置管理密码</value></data>
   <data name="admin_password_set_prompt" xml:space="preserve"><value>设置管理密码</value></data>
   <data name="admin_password_too_short" xml:space="preserve"><value>请至少输入 8 个字符</value></data>
+  <data name="admin_peer_suspect" xml:space="preserve"><value>无响应</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>请输入管理密码</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>管理密码错误</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web 会立即跳过 HLS；后续的 MJPEG 策略会从一开始预热。切换到 MJPEG 前最多额外等待：</value></data>
@@ -291,6 +326,7 @@
   <data name="admin_quiet_hours" xml:space="preserve"><value>静音时段</value></data>
   <data name="admin_raw_config" xml:space="preserve"><value>配置 (原始 JSON，只读)</value></data>
   <data name="admin_ready" xml:space="preserve"><value>就绪</value></data>
+  <data name="admin_refresh" xml:space="preserve"><value>刷新</value></data>
   <data name="admin_remove_device" xml:space="preserve"><value>移出设备</value></data>
   <data name="admin_remove_device_confirm" xml:space="preserve"><value>移出 {0}？离线记录也会删除，该设备重新连接时将退出集群。</value></data>
   <data name="admin_removed" xml:space="preserve"><value>此设备已被移出集群</value></data>
@@ -322,6 +358,7 @@
   <data name="admin_secret_configured" xml:space="preserve"><value>已配置（留空保持不变）</value></data>
   <data name="admin_secret_on_target_only" xml:space="preserve"><value>请在目标节点上配置</value></data>
   <data name="admin_secret_unchanged" xml:space="preserve"><value>留空保持不变</value></data>
+  <data name="admin_services" xml:space="preserve"><value>服务</value></data>
   <data name="admin_sip_accounts" xml:space="preserve"><value>SIP 账号（每台设备）</value></data>
   <data name="admin_sip_extensions" xml:space="preserve"><value>SIP 分机 (逗号分隔)</value></data>
   <data name="admin_sos_active" xml:space="preserve"><value>紧急 SOS 已触发</value></data>
@@ -350,6 +387,14 @@
   <data name="admin_stall_timeout" xml:space="preserve"><value>卡顿检测超时</value></data>
   <data name="admin_status" xml:space="preserve"><value>状态</value></data>
   <data name="admin_suppress" xml:space="preserve"><value>抑制</value></data>
+  <data name="admin_svc_active" xml:space="preserve"><value>运行中</value></data>
+  <data name="admin_svc_connected" xml:space="preserve"><value>已连接</value></data>
+  <data name="admin_svc_disconnected" xml:space="preserve"><value>未连接</value></data>
+  <data name="admin_svc_failed" xml:space="preserve"><value>失败</value></data>
+  <data name="admin_svc_idle" xml:space="preserve"><value>空闲</value></data>
+  <data name="admin_svc_inactive" xml:space="preserve"><value>未运行</value></data>
+  <data name="admin_svc_registered" xml:space="preserve"><value>已注册</value></data>
+  <data name="admin_svc_registering" xml:space="preserve"><value>注册中</value></data>
   <data name="admin_sync_state" xml:space="preserve"><value>已同步 {0}/{1} 台</value></data>
   <data name="admin_system" xml:space="preserve"><value>系统</value></data>
   <data name="admin_target_ext" xml:space="preserve"><value>分机号</value></data>
@@ -385,6 +430,8 @@
   <data name="admin_ui_manifest_unreported" xml:space="preserve"><value>ui_manifest 不可用；此节点未报告运行时能力。</value></data>
   <data name="admin_ui_offline_queued" xml:space="preserve"><value>设备处于离线状态；已验证的更改将在重新连接后应用。</value></data>
   <data name="admin_ui_style" xml:space="preserve"><value>UI 样式</value></data>
+  <data name="admin_ui_style_modern" xml:space="preserve"><value>现代</value></data>
+  <data name="admin_ui_style_retro" xml:space="preserve"><value>复古（90 年代）</value></data>
   <data name="admin_unchecked_all" xml:space="preserve"><value>未选择表示全部</value></data>
   <data name="admin_unknown_action" xml:space="preserve"><value>未知动作</value></data>
   <data name="admin_unknown_trigger" xml:space="preserve"><value>未知触发器</value></data>
@@ -1124,6 +1171,7 @@
   <data name="pair_join_with_code" xml:space="preserve"><value>使用配对 PIN 加入</value></data>
   <data name="pair_joined" xml:space="preserve"><value>已加入集群</value></data>
   <data name="pair_joining" xml:space="preserve"><value>正在加入集群…</value></data>
+  <data name="pair_key_delete" xml:space="preserve"><value>删除一位</value></data>
   <data name="pair_later" xml:space="preserve"><value>稍后设置</value></data>
   <data name="pair_link_from" xml:space="preserve"><value>加入 {0} 的邀请</value></data>
   <data name="pair_link_leave_current" xml:space="preserve"><value>此设备已加入其他集群。加入将清除其当前的全部设置。</value></data>
@@ -1181,6 +1229,7 @@
   <data name="pair_upgrade_title" xml:space="preserve"><value>需要重新配对</value></data>
   <data name="pairing_persist_failed_detail" xml:space="preserve"><value>配对已成功，但安全保存失败，因此此设备尚未就绪。请检查 pairing-error.log、磁盘空间和访问权限。</value></data>
   <data name="pairing_persist_failed_title" xml:space="preserve"><value>配对未能保存</value></data>
+  <data name="panel_admin_note" xml:space="preserve"><value>管理员提示：{0}</value></data>
   <data name="panel_answering" xml:space="preserve"><value>正在接听…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>面板认证失败</value></data>
   <data name="panel_back" xml:space="preserve"><value>返回</value></data>
@@ -1196,6 +1245,7 @@
   <data name="panel_call_finished" xml:space="preserve"><value>呼叫已结束</value></data>
   <data name="panel_call_title" xml:space="preserve"><value>通话面板</value></data>
   <data name="panel_calling" xml:space="preserve"><value>呼叫中→已通知</value></data>
+  <data name="panel_calling_unavailable" xml:space="preserve"><value>此画面尚未开通通话功能，仍可查看门口画面。</value></data>
   <data name="panel_camera_failed" xml:space="preserve"><value>获取摄像头失败 ({0}) — 需要 HTTPS 或 localhost (webrtc.md §1)</value></data>
   <data name="panel_cancel_accepted" xml:space="preserve"><value>取消请求已受理，正在等待状态同步</value></data>
   <data name="panel_cancel_failed" xml:space="preserve"><value>取消失败{0}</value></data>
@@ -1210,6 +1260,7 @@
   <data name="panel_control_reconnecting" xml:space="preserve"><value>通话控制连接中断，正在恢复…</value></data>
   <data name="panel_deadline_reached" xml:space="preserve"><value>已到呼叫期限 — 正在确认结束状态</value></data>
   <data name="panel_dialog_identity_missing" xml:space="preserve"><value>无法创建安全的浏览器通话标识，通话未开始</value></data>
+  <data name="panel_door_call_unavailable" xml:space="preserve"><value>无法从此画面呼叫这个门口。</value></data>
   <data name="panel_event_auto_reply" xml:space="preserve"><value>自动回复</value></data>
   <data name="panel_event_call_answered" xml:space="preserve"><value>呼叫已接听</value></data>
   <data name="panel_event_call_cancelled" xml:space="preserve"><value>呼叫已取消</value></data>
@@ -1323,6 +1374,8 @@
   <data name="panels_scope_required" xml:space="preserve"><value>请至少选择一个门和一个操作</value></data>
   <data name="panels_tab" xml:space="preserve"><value>面板</value></data>
   <data name="panels_title" xml:space="preserve"><value>面板凭据</value></data>
+  <data name="password_hide" xml:space="preserve"><value>隐藏密码</value></data>
+  <data name="password_show" xml:space="preserve"><value>显示密码</value></data>
   <data name="power_charging" xml:space="preserve"><value>充电中</value></data>
   <data name="power_mains" xml:space="preserve"><value>已接电源</value></data>
   <data name="power_no_battery" xml:space="preserve"><value>无电池</value></data>

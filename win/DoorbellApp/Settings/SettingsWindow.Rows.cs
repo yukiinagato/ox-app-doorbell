@@ -8,7 +8,10 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Threading;
+using DoorbellApp.Ui;
 using DoorbellApp.Util;
+using NumberBox = ModernWpf.Controls.NumberBox;
+using NumberBoxSpinButtonPlacementMode = ModernWpf.Controls.NumberBoxSpinButtonPlacementMode;
 
 namespace DoorbellApp.Settings
 {
@@ -186,15 +189,17 @@ namespace DoorbellApp.Settings
             bool stored = item.Key.StartsWith(LocalPrefix, StringComparison.Ordinal)
                 ? _main.VideoStatsVisibleForSettings
                 : SettingsStore.AsBool(_store.Effective(item), (bool)item.Default);
-            var toggle = new ToggleButton
+            var toggle = Fluent.Switch(stored);
+            // Toggled also fires when a refused write puts the switch back.
+            bool reverting = false;
+            toggle.Toggled += (s, e) =>
             {
-                Style = (Style)FindResource("SettingsSwitch"),
-                IsChecked = stored,
-            };
-            toggle.Click += (s, e) =>
-            {
-                bool next = toggle.IsChecked == true;
-                if (!Write(item, next, parts)) toggle.IsChecked = !next;
+                if (reverting) return;
+                bool next = toggle.IsOn;
+                if (Write(item, next, parts)) return;
+                reverting = true;
+                toggle.IsOn = !next;
+                reverting = false;
             };
             return toggle;
         }
@@ -258,45 +263,37 @@ namespace DoorbellApp.Settings
             double stored = Clamp(SettingsStore.AsNumber(_store.Effective(item),
                                                          Convert.ToDouble(item.Default)), item);
             var panel = new StackPanel { Orientation = Orientation.Horizontal };
-            var minus = CommandButton("−");
-            var plus = CommandButton("+");
-            var box = new TextBox
+            var box = new NumberBox
             {
-                Style = (Style)FindResource("SettingsTextBox"),
-                Width = 110,
-                TextAlignment = TextAlignment.Center,
-                Margin = new Thickness(8, 0, 8, 0),
-                Text = FormatNumber(stored, item, false),
-                InputScope = new InputScope { Names = { new InputScopeName(InputScopeNameValue.Number) } },
+                Minimum = item.Min,
+                Maximum = item.Max,
+                SmallChange = item.Step,
+                LargeChange = item.Step,
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
+                Value = stored,
+                FontSize = 16,
+                MinHeight = MinTouchTarget,
+                MinWidth = 180,
+                VerticalAlignment = VerticalAlignment.Center,
             };
-            AutomationLabel(minus, Texts.T("settings.decrease"));
-            AutomationLabel(plus, Texts.T("settings.increase"));
             double committed = stored;
-            Action<double> commit = next =>
+            // ValueChanged also fires for the corrections made here, hence the guard.
+            bool adjusting = false;
+            box.ValueChanged += (s, e) =>
             {
-                next = Clamp(next, item);
-                box.Text = FormatNumber(next, item, false);
-                if (Math.Abs(next - committed) < 1e-9) return;
-                if (Write(item, SettingsStore.NumberValue(next, item.Step), parts)) committed = next;
-                else box.Text = FormatNumber(committed, item, false);
+                if (adjusting) return;
+                double typed = box.Value;
+                // An emptied box reports NaN; it goes back to the stored value.
+                double next = double.IsNaN(typed) || double.IsInfinity(typed)
+                    ? committed : Clamp(Math.Round(typed / item.Step) * item.Step, item);
+                if (Math.Abs(next - committed) >= 1e-9 &&
+                    Write(item, SettingsStore.NumberValue(next, item.Step), parts))
+                    committed = next;
+                adjusting = true;
+                box.Value = committed;
+                adjusting = false;
             };
-            minus.Click += (s, e) => commit(committed - item.Step);
-            plus.Click += (s, e) => commit(committed + item.Step);
-            Action fromBox = () =>
-            {
-                double typed;
-                if (double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture,
-                                    out typed) ||
-                    double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.InvariantCulture,
-                                    out typed))
-                    commit(Math.Round(typed / item.Step) * item.Step);
-                else box.Text = FormatNumber(committed, item, false);
-            };
-            box.LostKeyboardFocus += (s, e) => fromBox();
-            box.KeyDown += (s, e) => { if (e.Key == Key.Enter) fromBox(); };
-            panel.Children.Add(minus);
             panel.Children.Add(box);
-            panel.Children.Add(plus);
             if (!string.IsNullOrEmpty(item.UnitKey))
                 panel.Children.Add(new TextBlock
                 {
@@ -315,134 +312,29 @@ namespace DoorbellApp.Settings
             object stored = _store.Effective(item);
             if (item.Handler == "identity" && item.Id == "device_role") stored = _store.Context.Role;
             if (item.Handler == "ui_lang" && App.Boot != null) stored = App.Boot.UiLang;
-            int selected = IndexOf(item.Options, stored);
-            if (item.Options.Count <= 3 && ActualWidth >= 600) return Segmented(item, parts, selected);
-            return Picker(item, parts, selected);
-        }
-
-        /// <summary>Two or three short options side by side, like a segmented control.</summary>
-        private FrameworkElement Segmented(SettingItem item, RowParts parts, int selected)
-        {
-            var panel = new StackPanel { Orientation = Orientation.Horizontal };
-            var buttons = new List<Button>();
-            int current = selected;
-            Action paint = () =>
+            int current = IndexOf(item.Options, stored);
+            var combo = new ComboBox { Style = (Style)FindResource("SettingsComboBox") };
+            if (ActualWidth >= 700) combo.HorizontalAlignment = HorizontalAlignment.Right;
+            Fluent.Placeholder(combo, Texts.T("settings.not_set"));
+            foreach (var option in item.Options) combo.Items.Add(OptionText(option));
+            combo.SelectedIndex = current;
+            // SelectionChanged also fires when a refused write puts the selection back.
+            bool reverting = false;
+            combo.SelectionChanged += (s, e) =>
             {
-                for (int i = 0; i < buttons.Count; i++)
+                if (reverting) return;
+                int index = combo.SelectedIndex;
+                if (index < 0 || index == current) return;
+                if (Write(item, item.Options[index].Value, parts))
                 {
-                    bool on = i == current;
-                    buttons[i].SetResourceReference(BackgroundProperty, on ? "Accent" : "Pill");
-                    buttons[i].SetResourceReference(ForegroundProperty, on ? "OnAccent" : "Fg");
-                }
-            };
-            for (int i = 0; i < item.Options.Count; i++)
-            {
-                int index = i;
-                var button = CommandButton(OptionText(item.Options[i]));
-                button.Margin = new Thickness(i == 0 ? 0 : 6, 0, 0, 0);
-                button.Click += (s, e) =>
-                {
-                    if (index == current) return;
-                    if (!Write(item, item.Options[index].Value, parts)) return;
                     current = index;
-                    paint();
-                };
-                buttons.Add(button);
-                panel.Children.Add(button);
-            }
-            paint();
-            return panel;
-        }
-
-        /// <summary>A button showing the current value; tapping it opens a touch-sized list.</summary>
-        private FrameworkElement Picker(SettingItem item, RowParts parts, int selected)
-        {
-            int current = selected;
-            var label = new TextBlock
-            {
-                FontSize = 16,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-            };
-            var row = new DockPanel();
-            var chevron = _main.IconGlyph("IconChevronDown", 18);
-            chevron.Margin = new Thickness(10, 0, 0, 0);
-            DockPanel.SetDock(chevron, Dock.Right);
-            row.Children.Add(chevron);
-            row.Children.Add(label);
-            var button = new Button
-            {
-                Style = (Style)FindResource("SettingsCommandButton"),
-                Content = row,
-                MinWidth = 220,
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
-            };
-            Action paint = () => label.Text = current >= 0
-                ? OptionText(item.Options[current]) : Texts.T("settings.not_set");
-            paint();
-            var list = new StackPanel();
-            var popup = new Popup
-            {
-                PlacementTarget = button,
-                Placement = PlacementMode.Bottom,
-                StaysOpen = false,
-                AllowsTransparency = true,
-                PopupAnimation = PopupAnimation.Fade,
-            };
-            var frame = new Border
-            {
-                CornerRadius = new CornerRadius(12),
-                Padding = new Thickness(6),
-                BorderThickness = new Thickness(1),
-                MinWidth = 260,
-                Child = new ScrollViewer
-                {
-                    Content = list,
-                    MaxHeight = 440,
-                    VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                    PanningMode = PanningMode.VerticalOnly,
-                },
-            };
-            frame.SetResourceReference(Border.BackgroundProperty, "Card");
-            frame.SetResourceReference(Border.BorderBrushProperty, "Line");
-            popup.Child = frame;
-            button.Click += (s, e) =>
-            {
-                list.Children.Clear();
-                for (int i = 0; i < item.Options.Count; i++)
-                {
-                    int index = i;
-                    var line = new DockPanel();
-                    if (index == current)
-                    {
-                        var check = _main.IconGlyph("IconCheck", 18, Brush("Accent"));
-                        DockPanel.SetDock(check, Dock.Right);
-                        line.Children.Add(check);
-                    }
-                    line.Children.Add(new TextBlock
-                    {
-                        Text = OptionText(item.Options[index]),
-                        FontSize = 16,
-                        VerticalAlignment = VerticalAlignment.Center,
-                    });
-                    var option = new Button
-                    {
-                        Style = (Style)FindResource("SettingsFlatButton"),
-                        Content = line,
-                    };
-                    option.Click += (s2, e2) =>
-                    {
-                        popup.IsOpen = false;
-                        if (index == current) return;
-                        if (!Write(item, item.Options[index].Value, parts)) return;
-                        current = index;
-                        paint();
-                    };
-                    list.Children.Add(option);
+                    return;
                 }
-                popup.IsOpen = true;
+                reverting = true;
+                combo.SelectedIndex = current;
+                reverting = false;
             };
-            return button;
+            return combo;
         }
 
         private FrameworkElement BuildMulti(SettingItem item, RowParts parts)

@@ -14,8 +14,8 @@
     <Deterministic>true</Deterministic>
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <PathMap>$(MSBuildProjectDirectory)=X:\src\win\DoorbellApp</PathMap>
-    <Version>0.1.24</Version>
-    <FileVersion>0.1.24.21</FileVersion>
+    <Version>0.2.0</Version>
+    <FileVersion>0.2.0.22</FileVersion>
     <EnableDefaultEmbeddedResourceItems>true</EnableDefaultEmbeddedResourceItems>
   </PropertyGroup>
   <ItemGroup>
@@ -34,6 +34,11 @@
     <Reference Include="System.Security" />
     <Reference Include="System.Drawing" />
     <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- WinUI (Fluent) control styles for WPF. The version is pinned: the shell's XAML and
+         code-behind name its controls and theme resource keys directly. -->
+    <PackageReference Include="ModernWpfUI" Version="0.9.6" />
   </ItemGroup>
   <ItemGroup>
     <!-- win/build.cmd places the native Core DLL in this output tree. -->

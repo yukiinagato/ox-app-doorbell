@@ -63,6 +63,8 @@ namespace DoorbellApp
             ServicePointManager.DefaultConnectionLimit = 16;
             _runtimeProcess = RuntimeProcessState.Begin(
                 Path.Combine(DataDir, "runtime-process-v1.json"));
+            // First-run setup opens before Core can publish an appearance.
+            Appearance.ApplySystemDefault();
             if (Boot.SetupRequired)
             {
                 var setup = new BootstrapSetupWindow(Boot);

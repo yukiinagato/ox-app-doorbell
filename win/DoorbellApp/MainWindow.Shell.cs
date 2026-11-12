@@ -108,6 +108,13 @@ namespace DoorbellApp
                 DashboardTitleLeftColumn.Width = new GridLength(1.4, GridUnitType.Star);
                 DashboardTitleRightColumn.Width = new GridLength(1, GridUnitType.Star);
             }
+            // Below 600 px the navigation pane collapses to a menu button over the top-left
+            // corner of the page, so both pages start underneath it.
+            double menuButton = compact ? LayoutMetrics.TouchMin : 0;
+            DashboardPage.Margin = new Thickness(LayoutMetrics.S6, LayoutMetrics.S4 + menuButton,
+                                                 LayoutMetrics.S6, LayoutMetrics.S4);
+            HistoryHeader.Margin = new Thickness(LayoutMetrics.S6, LayoutMetrics.S4 + menuButton,
+                                                 LayoutMetrics.S6, LayoutMetrics.S2);
             // Door tiles: 1 column compact, 2 medium, 3–4 expanded.
             DoorTileGrid.Columns = LayoutMetrics.TileColumns(size, width, DoorTileGrid.Children.Count);
 

@@ -187,9 +187,6 @@ namespace DoorbellApp
                 HorizontalContentAlignment = HorizontalAlignment.Stretch,
                 Margin = new Thickness(8),
                 Padding = new Thickness(12, 10, 12, 10),
-                Background = (Brush)FindResource("Card"),
-                Foreground = (Brush)FindResource("Fg"),
-                BorderBrush = (Brush)FindResource("Dim"),
                 Cursor = Cursors.Hand,
                 Tag = id,
             };
@@ -256,10 +253,7 @@ namespace DoorbellApp
                     FontSize = 20,
                     Padding = new Thickness(22, 8, 22, 8),
                     Margin = new Thickness(6, 0, 6, 0),
-                    Background = (Brush)FindResource("Card"),
-                    Foreground = (Brush)FindResource("Dim"),
-                    BorderBrush = (Brush)FindResource("Dim"),
-                    Cursor = Cursors.Hand,
+                    MinHeight = Ui.LayoutMetrics.VisitorTouchMin,
                     Tag = lang,
                 };
                 b.Click += OnLangClick;
@@ -288,8 +282,9 @@ namespace DoorbellApp
                 var b = child as Button;
                 if (b == null) continue;
                 bool on = (b.Tag as string) == _visitorLang;
-                b.Background = on ? (Brush)FindResource("Accent") : (Brush)FindResource("Card");
-                b.Foreground = on ? Brushes.Black : (Brush)FindResource("Dim");
+                // The language in use is the accent button; the others stay standard.
+                if (on) Ui.Fluent.MakeAccent(b);
+                else b.ClearValue(StyleProperty);
             }
         }
 

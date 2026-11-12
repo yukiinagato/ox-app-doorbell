@@ -114,6 +114,8 @@ Delete it?</value></data>
   <data name="admin_copied" xml:space="preserve"><value>Copied</value></data>
   <data name="admin_copy" xml:space="preserve"><value>Copy</value></data>
   <data name="admin_copy_failed" xml:space="preserve"><value>Copy failed</value></data>
+  <data name="admin_copy_value" xml:space="preserve"><value>Copy {0}</value></data>
+  <data name="admin_danger_zone" xml:space="preserve"><value>Danger zone</value></data>
   <data name="admin_dashboard" xml:space="preserve"><value>Dashboard</value></data>
   <data name="admin_delete" xml:space="preserve"><value>Delete</value></data>
   <data name="admin_delete_pair_override" xml:space="preserve"><value>Delete and inherit global</value></data>
@@ -133,11 +135,39 @@ Delete it?</value></data>
   <data name="admin_draft_sign_in" xml:space="preserve"><value>Sign in again to continue. Your draft is preserved; passwords and secrets have been cleared.</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>Drop a file here or click to choose</value></data>
   <data name="admin_duty" xml:space="preserve"><value>Duty</value></data>
+  <data name="admin_duty_mqtt_bridge" xml:space="preserve"><value>MQTT bridge</value></data>
+  <data name="admin_duty_none" xml:space="preserve"><value>No duty</value></data>
+  <data name="admin_duty_telegram" xml:space="preserve"><value>Telegram</value></data>
+  <data name="admin_duty_web_push" xml:space="preserve"><value>Web Push</value></data>
   <data name="admin_edit" xml:space="preserve"><value>Edit</value></data>
+  <data name="admin_empty_buildings" xml:space="preserve"><value>No buildings yet</value></data>
+  <data name="admin_empty_buildings_hint" xml:space="preserve"><value>Add a building to group its doors</value></data>
+  <data name="admin_empty_devices" xml:space="preserve"><value>No devices yet</value></data>
+  <data name="admin_empty_devices_hint" xml:space="preserve"><value>Pair a device and it appears here</value></data>
+  <data name="admin_empty_doors" xml:space="preserve"><value>No doors yet</value></data>
+  <data name="admin_empty_doors_hint" xml:space="preserve"><value>Add a door, then assign a door station to it</value></data>
+  <data name="admin_empty_events" xml:space="preserve"><value>No events yet</value></data>
+  <data name="admin_empty_events_filtered" xml:space="preserve"><value>No events of this type</value></data>
+  <data name="admin_empty_events_hint" xml:space="preserve"><value>Calls, motion and device changes appear here as they happen</value></data>
+  <data name="admin_empty_households" xml:space="preserve"><value>No recipients yet</value></data>
+  <data name="admin_empty_households_hint" xml:space="preserve"><value>Recipients receive Telegram messages and SIP calls from call rules</value></data>
+  <data name="admin_empty_purposes" xml:space="preserve"><value>No visit purposes yet</value></data>
+  <data name="admin_empty_purposes_hint" xml:space="preserve"><value>Purposes are the choices a visitor sees on the door station</value></data>
+  <data name="admin_empty_quick_replies" xml:space="preserve"><value>No quick replies yet</value></data>
+  <data name="admin_empty_quick_replies_hint" xml:space="preserve"><value>Quick replies answer a visitor with one tap</value></data>
+  <data name="admin_empty_rules" xml:space="preserve"><value>No call rules yet</value></data>
+  <data name="admin_empty_rules_hint" xml:space="preserve"><value>A rule decides who is notified when the button is pressed, motion is seen, or a device goes offline</value></data>
   <data name="admin_enabled" xml:space="preserve"><value>Enabled</value></data>
   <data name="admin_err_no_chat" xml:space="preserve"><value>No chat IDs configured</value></data>
   <data name="admin_err_no_token" xml:space="preserve"><value>Bot token is not set</value></data>
   <data name="admin_err_not_leader" xml:space="preserve"><value>This node is not the telegram leader</value></data>
+  <data name="admin_event_answered" xml:space="preserve"><value>Answered</value></data>
+  <data name="admin_event_cluster_key_changed" xml:space="preserve"><value>Cluster key changed</value></data>
+  <data name="admin_event_config_changed" xml:space="preserve"><value>Settings changed</value></data>
+  <data name="admin_event_missed" xml:space="preserve"><value>Missed</value></data>
+  <data name="admin_event_offline" xml:space="preserve"><value>Went offline</value></data>
+  <data name="admin_event_online" xml:space="preserve"><value>Back online</value></data>
+  <data name="admin_event_peer_rejected" xml:space="preserve"><value>Device rejected</value></data>
   <data name="admin_events" xml:space="preserve"><value>Event history</value></data>
   <data name="admin_export" xml:space="preserve"><value>Export</value></data>
   <data name="admin_file_read_failed" xml:space="preserve"><value>Failed to read the file</value></data>
@@ -213,6 +243,7 @@ Delete it?</value></data>
   <data name="admin_launch_sound" xml:space="preserve"><value>Launch sound</value></data>
   <data name="admin_leader" xml:space="preserve"><value>Leader</value></data>
   <data name="admin_list_or_all" xml:space="preserve"><value>Comma-separated values or all</value></data>
+  <data name="admin_live_view" xml:space="preserve"><value>Live view</value></data>
   <data name="admin_load_or_add" xml:space="preserve"><value>Load / add</value></data>
   <data name="admin_local_addrs" xml:space="preserve"><value>Local addresses</value></data>
   <data name="admin_locked" xml:space="preserve"><value>Admin password entry locked for 10 minutes</value></data>
@@ -220,6 +251,7 @@ Delete it?</value></data>
   <data name="admin_login_network" xml:space="preserve"><value>Can't reach the server. Check the network and try again</value></data>
   <data name="admin_login_server" xml:space="preserve"><value>The server could not complete sign-in. Try again</value></data>
   <data name="admin_logs" xml:space="preserve"><value>Logs</value></data>
+  <data name="admin_menu" xml:space="preserve"><value>Menu</value></data>
   <data name="admin_menu_add_device" xml:space="preserve"><value>Add a device</value></data>
   <data name="admin_menu_boot_setup" xml:space="preserve"><value>Initial setup</value></data>
   <data name="admin_menu_close" xml:space="preserve"><value>Close</value></data>
@@ -231,6 +263,8 @@ Delete it?</value></data>
   <data name="admin_motion_interval" xml:space="preserve"><value>Min interval (s)</value></data>
   <data name="admin_motion_sensitivity" xml:space="preserve"><value>Sensitivity</value></data>
   <data name="admin_motion_wake_screen" xml:space="preserve"><value>Wake screen and exit screensaver on motion</value></data>
+  <data name="admin_move_down" xml:space="preserve"><value>Move down</value></data>
+  <data name="admin_move_up" xml:space="preserve"><value>Move up</value></data>
   <data name="admin_native_ui" xml:space="preserve"><value>Native UI</value></data>
   <data name="admin_native_ui_apply_report" xml:space="preserve"><value>Native client apply report</value></data>
   <data name="admin_never_suppress" xml:space="preserve"><value>Never suppress</value></data>
@@ -273,6 +307,7 @@ Delete it?</value></data>
   <data name="admin_password_set_failed" xml:space="preserve"><value>Couldn't set the admin password</value></data>
   <data name="admin_password_set_prompt" xml:space="preserve"><value>Set the admin password</value></data>
   <data name="admin_password_too_short" xml:space="preserve"><value>Use at least eight characters</value></data>
+  <data name="admin_peer_suspect" xml:space="preserve"><value>Not responding</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>Enter the admin password</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>Wrong admin password</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web skips HLS immediately. A later MJPEG strategy is prewarmed from time zero. Maximum extra wait before MJPEG:</value></data>
@@ -291,6 +326,7 @@ Delete it?</value></data>
   <data name="admin_quiet_hours" xml:space="preserve"><value>Quiet hours</value></data>
   <data name="admin_raw_config" xml:space="preserve"><value>Config (raw JSON, read-only)</value></data>
   <data name="admin_ready" xml:space="preserve"><value>Ready</value></data>
+  <data name="admin_refresh" xml:space="preserve"><value>Refresh</value></data>
   <data name="admin_remove_device" xml:space="preserve"><value>Remove device</value></data>
   <data name="admin_remove_device_confirm" xml:space="preserve"><value>Remove {0}? Its offline record will be removed, and it will leave the cluster if it reconnects.</value></data>
   <data name="admin_removed" xml:space="preserve"><value>This device was removed from the cluster</value></data>
@@ -322,6 +358,7 @@ Delete it?</value></data>
   <data name="admin_secret_configured" xml:space="preserve"><value>Configured (leave blank to keep)</value></data>
   <data name="admin_secret_on_target_only" xml:space="preserve"><value>Configure on the target node</value></data>
   <data name="admin_secret_unchanged" xml:space="preserve"><value>Leave blank to keep</value></data>
+  <data name="admin_services" xml:space="preserve"><value>Services</value></data>
   <data name="admin_sip_accounts" xml:space="preserve"><value>SIP accounts (per device)</value></data>
   <data name="admin_sip_extensions" xml:space="preserve"><value>SIP extensions (comma separated)</value></data>
   <data name="admin_sos_active" xml:space="preserve"><value>Emergency SOS active</value></data>
@@ -350,6 +387,14 @@ Delete it?</value></data>
   <data name="admin_stall_timeout" xml:space="preserve"><value>Stall timeout</value></data>
   <data name="admin_status" xml:space="preserve"><value>Status</value></data>
   <data name="admin_suppress" xml:space="preserve"><value>Suppress</value></data>
+  <data name="admin_svc_active" xml:space="preserve"><value>Active</value></data>
+  <data name="admin_svc_connected" xml:space="preserve"><value>Connected</value></data>
+  <data name="admin_svc_disconnected" xml:space="preserve"><value>Disconnected</value></data>
+  <data name="admin_svc_failed" xml:space="preserve"><value>Failed</value></data>
+  <data name="admin_svc_idle" xml:space="preserve"><value>Idle</value></data>
+  <data name="admin_svc_inactive" xml:space="preserve"><value>Inactive</value></data>
+  <data name="admin_svc_registered" xml:space="preserve"><value>Registered</value></data>
+  <data name="admin_svc_registering" xml:space="preserve"><value>Registering</value></data>
   <data name="admin_sync_state" xml:space="preserve"><value>Synced to {0}/{1} nodes</value></data>
   <data name="admin_system" xml:space="preserve"><value>System</value></data>
   <data name="admin_target_ext" xml:space="preserve"><value>Extension</value></data>
@@ -385,6 +430,8 @@ Delete it?</value></data>
   <data name="admin_ui_manifest_unreported" xml:space="preserve"><value>ui_manifest is unavailable because this node has not reported the runtime capability.</value></data>
   <data name="admin_ui_offline_queued" xml:space="preserve"><value>The device is offline; validated changes are queued until it reconnects.</value></data>
   <data name="admin_ui_style" xml:space="preserve"><value>UI style</value></data>
+  <data name="admin_ui_style_modern" xml:space="preserve"><value>Modern</value></data>
+  <data name="admin_ui_style_retro" xml:space="preserve"><value>Retro (90s)</value></data>
   <data name="admin_unchecked_all" xml:space="preserve"><value>No selection means all</value></data>
   <data name="admin_unknown_action" xml:space="preserve"><value>Unknown action</value></data>
   <data name="admin_unknown_trigger" xml:space="preserve"><value>Unknown trigger</value></data>
@@ -1124,6 +1171,7 @@ Delete it?</value></data>
   <data name="pair_join_with_code" xml:space="preserve"><value>Join with a Pairing PIN</value></data>
   <data name="pair_joined" xml:space="preserve"><value>Joined the Cluster</value></data>
   <data name="pair_joining" xml:space="preserve"><value>Joining the Cluster…</value></data>
+  <data name="pair_key_delete" xml:space="preserve"><value>Delete one digit</value></data>
   <data name="pair_later" xml:space="preserve"><value>Set up later</value></data>
   <data name="pair_link_from" xml:space="preserve"><value>Invitation to {0}</value></data>
   <data name="pair_link_leave_current" xml:space="preserve"><value>This device is already in another cluster. Joining erases all of its current settings.</value></data>
@@ -1181,6 +1229,7 @@ Delete it?</value></data>
   <data name="pair_upgrade_title" xml:space="preserve"><value>Pair this device again</value></data>
   <data name="pairing_persist_failed_detail" xml:space="preserve"><value>Pairing succeeded, but secure storage failed, so this device has not been marked ready. Check pairing-error.log, free disk space and permissions.</value></data>
   <data name="pairing_persist_failed_title" xml:space="preserve"><value>Pairing not saved</value></data>
+  <data name="panel_admin_note" xml:space="preserve"><value>For the administrator: {0}</value></data>
   <data name="panel_answering" xml:space="preserve"><value>Answering…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>Panel authentication failed</value></data>
   <data name="panel_back" xml:space="preserve"><value>Back</value></data>
@@ -1196,6 +1245,7 @@ Delete it?</value></data>
   <data name="panel_call_finished" xml:space="preserve"><value>The call has finished</value></data>
   <data name="panel_call_title" xml:space="preserve"><value>Call panel</value></data>
   <data name="panel_calling" xml:space="preserve"><value>Calling → notified</value></data>
+  <data name="panel_calling_unavailable" xml:space="preserve"><value>Calling isn't set up on this screen yet. You can still watch the door.</value></data>
   <data name="panel_camera_failed" xml:space="preserve"><value>Camera access failed ({0}) — HTTPS or localhost is required (webrtc.md §1)</value></data>
   <data name="panel_cancel_accepted" xml:space="preserve"><value>Cancellation accepted — waiting for state synchronization</value></data>
   <data name="panel_cancel_failed" xml:space="preserve"><value>Cancellation failed{0}</value></data>
@@ -1210,6 +1260,7 @@ Delete it?</value></data>
   <data name="panel_control_reconnecting" xml:space="preserve"><value>Control connection interrupted. Reconnecting…</value></data>
   <data name="panel_deadline_reached" xml:space="preserve"><value>The call deadline was reached — checking the terminal state</value></data>
   <data name="panel_dialog_identity_missing" xml:space="preserve"><value>A secure browser dialog identity is unavailable; the call was not started</value></data>
+  <data name="panel_door_call_unavailable" xml:space="preserve"><value>This door can't be called from this screen.</value></data>
   <data name="panel_event_auto_reply" xml:space="preserve"><value>Automatic reply</value></data>
   <data name="panel_event_call_answered" xml:space="preserve"><value>Call answered</value></data>
   <data name="panel_event_call_cancelled" xml:space="preserve"><value>Call cancelled</value></data>
@@ -1323,6 +1374,8 @@ Delete it?</value></data>
   <data name="panels_scope_required" xml:space="preserve"><value>Choose at least one door and one action</value></data>
   <data name="panels_tab" xml:space="preserve"><value>Panels</value></data>
   <data name="panels_title" xml:space="preserve"><value>Panel credentials</value></data>
+  <data name="password_hide" xml:space="preserve"><value>Hide password</value></data>
+  <data name="password_show" xml:space="preserve"><value>Show password</value></data>
   <data name="power_charging" xml:space="preserve"><value>Charging</value></data>
   <data name="power_mains" xml:space="preserve"><value>On mains power</value></data>
   <data name="power_no_battery" xml:space="preserve"><value>No battery</value></data>

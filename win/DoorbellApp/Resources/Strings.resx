@@ -114,6 +114,8 @@
   <data name="admin_copied" xml:space="preserve"><value>コピーしました</value></data>
   <data name="admin_copy" xml:space="preserve"><value>コピー</value></data>
   <data name="admin_copy_failed" xml:space="preserve"><value>コピー失敗</value></data>
+  <data name="admin_copy_value" xml:space="preserve"><value>{0} をコピー</value></data>
+  <data name="admin_danger_zone" xml:space="preserve"><value>危険な操作</value></data>
   <data name="admin_dashboard" xml:space="preserve"><value>ダッシュボード</value></data>
   <data name="admin_delete" xml:space="preserve"><value>削除</value></data>
   <data name="admin_delete_pair_override" xml:space="preserve"><value>削除して全体設定を継承</value></data>
@@ -133,11 +135,39 @@
   <data name="admin_draft_sign_in" xml:space="preserve"><value>再ログインして続行してください。入力内容は保持されていますが、パスワードとシークレットは消去しました。</value></data>
   <data name="admin_drop_here" xml:space="preserve"><value>ここにファイルをドラッグ＆ドロップ／クリックで選択</value></data>
   <data name="admin_duty" xml:space="preserve"><value>担当</value></data>
+  <data name="admin_duty_mqtt_bridge" xml:space="preserve"><value>MQTT ブリッジ</value></data>
+  <data name="admin_duty_none" xml:space="preserve"><value>担当なし</value></data>
+  <data name="admin_duty_telegram" xml:space="preserve"><value>Telegram 通知</value></data>
+  <data name="admin_duty_web_push" xml:space="preserve"><value>Web Push 配信</value></data>
   <data name="admin_edit" xml:space="preserve"><value>編集</value></data>
+  <data name="admin_empty_buildings" xml:space="preserve"><value>建物はまだありません</value></data>
+  <data name="admin_empty_buildings_hint" xml:space="preserve"><value>建物を追加すると、ドアをまとめて管理できます</value></data>
+  <data name="admin_empty_devices" xml:space="preserve"><value>端末はまだありません</value></data>
+  <data name="admin_empty_devices_hint" xml:space="preserve"><value>端末をペアリングすると、ここに表示されます</value></data>
+  <data name="admin_empty_doors" xml:space="preserve"><value>ドアはまだありません</value></data>
+  <data name="admin_empty_doors_hint" xml:space="preserve"><value>ドアを追加し、門口機を割り当ててください</value></data>
+  <data name="admin_empty_events" xml:space="preserve"><value>イベントはまだありません</value></data>
+  <data name="admin_empty_events_filtered" xml:space="preserve"><value>この種別のイベントはありません</value></data>
+  <data name="admin_empty_events_hint" xml:space="preserve"><value>呼出、動体検知、端末の状態変化がここに表示されます</value></data>
+  <data name="admin_empty_households" xml:space="preserve"><value>通知先はまだありません</value></data>
+  <data name="admin_empty_households_hint" xml:space="preserve"><value>通知先は、呼出ルールから Telegram メッセージや SIP 着信を受け取ります</value></data>
+  <data name="admin_empty_purposes" xml:space="preserve"><value>用件はまだありません</value></data>
+  <data name="admin_empty_purposes_hint" xml:space="preserve"><value>用件は、門口機で来客が選ぶ項目です</value></data>
+  <data name="admin_empty_quick_replies" xml:space="preserve"><value>クイック返信はまだありません</value></data>
+  <data name="admin_empty_quick_replies_hint" xml:space="preserve"><value>クイック返信を使うと、ワンタップで来客に返事できます</value></data>
+  <data name="admin_empty_rules" xml:space="preserve"><value>呼出ルールはまだありません</value></data>
+  <data name="admin_empty_rules_hint" xml:space="preserve"><value>ボタンが押されたとき、動きを検知したとき、端末がオフラインになったときの通知先を決めます</value></data>
   <data name="admin_enabled" xml:space="preserve"><value>有効</value></data>
   <data name="admin_err_no_chat" xml:space="preserve"><value>宛先 chat ID がありません</value></data>
   <data name="admin_err_no_token" xml:space="preserve"><value>bot token が未設定です</value></data>
   <data name="admin_err_not_leader" xml:space="preserve"><value>この端末は telegram leader ではありません</value></data>
+  <data name="admin_event_answered" xml:space="preserve"><value>応答</value></data>
+  <data name="admin_event_cluster_key_changed" xml:space="preserve"><value>クラスター鍵の更新</value></data>
+  <data name="admin_event_config_changed" xml:space="preserve"><value>設定変更</value></data>
+  <data name="admin_event_missed" xml:space="preserve"><value>不在着信</value></data>
+  <data name="admin_event_offline" xml:space="preserve"><value>オフライン</value></data>
+  <data name="admin_event_online" xml:space="preserve"><value>オンライン復帰</value></data>
+  <data name="admin_event_peer_rejected" xml:space="preserve"><value>端末の接続拒否</value></data>
   <data name="admin_events" xml:space="preserve"><value>イベント履歴</value></data>
   <data name="admin_export" xml:space="preserve"><value>エクスポート</value></data>
   <data name="admin_file_read_failed" xml:space="preserve"><value>ファイルを読み込めませんでした</value></data>
@@ -213,6 +243,7 @@
   <data name="admin_launch_sound" xml:space="preserve"><value>起動音</value></data>
   <data name="admin_leader" xml:space="preserve"><value>リーダー</value></data>
   <data name="admin_list_or_all" xml:space="preserve"><value>カンマ区切り、または all</value></data>
+  <data name="admin_live_view" xml:space="preserve"><value>ライブ映像</value></data>
   <data name="admin_load_or_add" xml:space="preserve"><value>読込／追加</value></data>
   <data name="admin_local_addrs" xml:space="preserve"><value>本機アドレス</value></data>
   <data name="admin_locked" xml:space="preserve"><value>管理パスワードの入力を 10 分間ロックしました</value></data>
@@ -220,6 +251,7 @@
   <data name="admin_login_network" xml:space="preserve"><value>ネットワークに接続できません。接続を確認して再試行してください</value></data>
   <data name="admin_login_server" xml:space="preserve"><value>ログインを完了できませんでした。もう一度お試しください</value></data>
   <data name="admin_logs" xml:space="preserve"><value>ログ</value></data>
+  <data name="admin_menu" xml:space="preserve"><value>メニュー</value></data>
   <data name="admin_menu_add_device" xml:space="preserve"><value>デバイスを追加</value></data>
   <data name="admin_menu_boot_setup" xml:space="preserve"><value>初期設定</value></data>
   <data name="admin_menu_close" xml:space="preserve"><value>閉じる</value></data>
@@ -231,6 +263,8 @@
   <data name="admin_motion_interval" xml:space="preserve"><value>最小間隔 (秒)</value></data>
   <data name="admin_motion_sensitivity" xml:space="preserve"><value>感度</value></data>
   <data name="admin_motion_wake_screen" xml:space="preserve"><value>動体検知で画面を点灯し、スクリーンセーバーを終了</value></data>
+  <data name="admin_move_down" xml:space="preserve"><value>下へ移動</value></data>
+  <data name="admin_move_up" xml:space="preserve"><value>上へ移動</value></data>
   <data name="admin_native_ui" xml:space="preserve"><value>ネイティブ UI</value></data>
   <data name="admin_native_ui_apply_report" xml:space="preserve"><value>ネイティブ UI 適用結果</value></data>
   <data name="admin_never_suppress" xml:space="preserve"><value>常に許可</value></data>
@@ -273,6 +307,7 @@
   <data name="admin_password_set_failed" xml:space="preserve"><value>管理パスワードを設定できませんでした</value></data>
   <data name="admin_password_set_prompt" xml:space="preserve"><value>管理パスワードを設定</value></data>
   <data name="admin_password_too_short" xml:space="preserve"><value>8 文字以上にしてください</value></data>
+  <data name="admin_peer_suspect" xml:space="preserve"><value>応答なし</value></data>
   <data name="admin_pin_prompt" xml:space="preserve"><value>管理パスワードを入力してください</value></data>
   <data name="admin_pin_wrong" xml:space="preserve"><value>管理パスワードが違います</value></data>
   <data name="admin_playback_fallback_hint" xml:space="preserve"><value>Web は HLS を即時スキップします。後段の MJPEG は時刻 0 から予熱します。MJPEG までの最大追加待機:</value></data>
@@ -291,6 +326,7 @@
   <data name="admin_quiet_hours" xml:space="preserve"><value>静音時間帯</value></data>
   <data name="admin_raw_config" xml:space="preserve"><value>設定 (生 JSON・読取)</value></data>
   <data name="admin_ready" xml:space="preserve"><value>準備完了</value></data>
+  <data name="admin_refresh" xml:space="preserve"><value>更新</value></data>
   <data name="admin_remove_device" xml:space="preserve"><value>機器を削除</value></data>
   <data name="admin_remove_device_confirm" xml:space="preserve"><value>{0} を削除しますか？オフラインの記録も削除され、再接続時にはクラスタから退出します。</value></data>
   <data name="admin_removed" xml:space="preserve"><value>この端末はクラスタから削除されました</value></data>
@@ -322,6 +358,7 @@
   <data name="admin_secret_configured" xml:space="preserve"><value>設定済み（変更しない場合は空欄）</value></data>
   <data name="admin_secret_on_target_only" xml:space="preserve"><value>対象ノードで設定してください</value></data>
   <data name="admin_secret_unchanged" xml:space="preserve"><value>変更しない場合は空欄</value></data>
+  <data name="admin_services" xml:space="preserve"><value>サービス</value></data>
   <data name="admin_sip_accounts" xml:space="preserve"><value>SIP アカウント (デバイス毎)</value></data>
   <data name="admin_sip_extensions" xml:space="preserve"><value>SIP 内線 (カンマ区切り)</value></data>
   <data name="admin_sos_active" xml:space="preserve"><value>緊急 SOS 発報中</value></data>
@@ -350,6 +387,14 @@
   <data name="admin_stall_timeout" xml:space="preserve"><value>停止検出</value></data>
   <data name="admin_status" xml:space="preserve"><value>状態</value></data>
   <data name="admin_suppress" xml:space="preserve"><value>抑制する</value></data>
+  <data name="admin_svc_active" xml:space="preserve"><value>稼働中</value></data>
+  <data name="admin_svc_connected" xml:space="preserve"><value>接続済み</value></data>
+  <data name="admin_svc_disconnected" xml:space="preserve"><value>未接続</value></data>
+  <data name="admin_svc_failed" xml:space="preserve"><value>失敗</value></data>
+  <data name="admin_svc_idle" xml:space="preserve"><value>待機中</value></data>
+  <data name="admin_svc_inactive" xml:space="preserve"><value>停止中</value></data>
+  <data name="admin_svc_registered" xml:space="preserve"><value>登録済み</value></data>
+  <data name="admin_svc_registering" xml:space="preserve"><value>登録中</value></data>
   <data name="admin_sync_state" xml:space="preserve"><value>同期状態: {0}/{1} 台に反映済み</value></data>
   <data name="admin_system" xml:space="preserve"><value>システム</value></data>
   <data name="admin_target_ext" xml:space="preserve"><value>内線番号</value></data>
@@ -385,6 +430,8 @@
   <data name="admin_ui_manifest_unreported" xml:space="preserve"><value>ui_manifest を利用できません。このノードは runtime capability を報告していません。</value></data>
   <data name="admin_ui_offline_queued" xml:space="preserve"><value>デバイスはオフラインです。検証済みの変更は再接続時まで待機します。</value></data>
   <data name="admin_ui_style" xml:space="preserve"><value>UI スタイル</value></data>
+  <data name="admin_ui_style_modern" xml:space="preserve"><value>モダン</value></data>
+  <data name="admin_ui_style_retro" xml:space="preserve"><value>レトロ（90 年代）</value></data>
   <data name="admin_unchecked_all" xml:space="preserve"><value>未選択の場合はすべて</value></data>
   <data name="admin_unknown_action" xml:space="preserve"><value>不明な action</value></data>
   <data name="admin_unknown_trigger" xml:space="preserve"><value>不明な trigger</value></data>
@@ -1124,6 +1171,7 @@
   <data name="pair_join_with_code" xml:space="preserve"><value>ペアリング PIN で参加</value></data>
   <data name="pair_joined" xml:space="preserve"><value>クラスタに参加しました</value></data>
   <data name="pair_joining" xml:space="preserve"><value>クラスタに参加しています…</value></data>
+  <data name="pair_key_delete" xml:space="preserve"><value>1 文字削除</value></data>
   <data name="pair_later" xml:space="preserve"><value>あとで設定</value></data>
   <data name="pair_link_from" xml:space="preserve"><value>{0} への招待</value></data>
   <data name="pair_link_leave_current" xml:space="preserve"><value>この端末はすでに別のクラスタに参加しています。参加すると現在の設定はすべて消去されます。</value></data>
@@ -1181,6 +1229,7 @@
   <data name="pair_upgrade_title" xml:space="preserve"><value>再配対が必要です</value></data>
   <data name="pairing_persist_failed_detail" xml:space="preserve"><value>ペアリングは成功しましたが、安全な保存に失敗したため、この端末はまだ使用可能になっていません。pairing-error.log と空き容量・アクセス権を確認してください。</value></data>
   <data name="pairing_persist_failed_title" xml:space="preserve"><value>ペアリングの保存に失敗</value></data>
+  <data name="panel_admin_note" xml:space="preserve"><value>管理者向け: {0}</value></data>
   <data name="panel_answering" xml:space="preserve"><value>応答中…</value></data>
   <data name="panel_auth_failed" xml:space="preserve"><value>パネル認証に失敗しました</value></data>
   <data name="panel_back" xml:space="preserve"><value>戻る</value></data>
@@ -1196,6 +1245,7 @@
   <data name="panel_call_finished" xml:space="preserve"><value>呼出は終了しました</value></data>
   <data name="panel_call_title" xml:space="preserve"><value>通話パネル</value></data>
   <data name="panel_calling" xml:space="preserve"><value>呼び出し中→通知済み</value></data>
+  <data name="panel_calling_unavailable" xml:space="preserve"><value>この画面ではまだ通話を利用できません。映像は引き続き確認できます。</value></data>
   <data name="panel_camera_failed" xml:space="preserve"><value>カメラ取得失敗 ({0}) — HTTPS または localhost が必要です (webrtc.md §1)</value></data>
   <data name="panel_cancel_accepted" xml:space="preserve"><value>取消しを受理しました — 状態同期を待っています</value></data>
   <data name="panel_cancel_failed" xml:space="preserve"><value>取消しに失敗しました{0}</value></data>
@@ -1210,6 +1260,7 @@
   <data name="panel_control_reconnecting" xml:space="preserve"><value>制御接続が中断されました。再接続中…</value></data>
   <data name="panel_deadline_reached" xml:space="preserve"><value>呼出期限に達しました — 終了状態を確認中です</value></data>
   <data name="panel_dialog_identity_missing" xml:space="preserve"><value>安全なブラウザ通話識別子を作成できなかったため、通話を開始しませんでした</value></data>
+  <data name="panel_door_call_unavailable" xml:space="preserve"><value>この玄関にはここから発信できません。</value></data>
   <data name="panel_event_auto_reply" xml:space="preserve"><value>自動返信</value></data>
   <data name="panel_event_call_answered" xml:space="preserve"><value>応答</value></data>
   <data name="panel_event_call_cancelled" xml:space="preserve"><value>呼出取消</value></data>
@@ -1323,6 +1374,8 @@
   <data name="panels_scope_required" xml:space="preserve"><value>ドアと操作をそれぞれ 1 つ以上選んでください</value></data>
   <data name="panels_tab" xml:space="preserve"><value>パネル</value></data>
   <data name="panels_title" xml:space="preserve"><value>パネルの資格情報</value></data>
+  <data name="password_hide" xml:space="preserve"><value>パスワードを隠す</value></data>
+  <data name="password_show" xml:space="preserve"><value>パスワードを表示</value></data>
   <data name="power_charging" xml:space="preserve"><value>充電中</value></data>
   <data name="power_mains" xml:space="preserve"><value>電源に接続</value></data>
   <data name="power_no_battery" xml:space="preserve"><value>電池なし</value></data>
