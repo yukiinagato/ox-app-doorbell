@@ -1534,7 +1534,7 @@ class WindowsContracts(unittest.TestCase):
         shell = read("win/DoorbellApp/MainWindow.Shell.cs")
         dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
         history = read("win/DoorbellApp/MainWindow.History.cs")
-        for name in ('DashboardHome', 'DoorTileGrid', 'RecentCallsList', 'MissedBadge',
+        for name in ('DashboardHome', 'DoorTileGrid', 'NavHistoryBadge', 'MissedBadge',
                      'AdminQrImage', 'AdminUrlText', 'NoticeGlobalButton', 'HistoryView'):
             self.assertIn('x:Name="%s"' % name, xaml)
         # Five-second stills come from the door station's own snapshot endpoint.
@@ -2049,7 +2049,7 @@ class WindowsContracts(unittest.TestCase):
                       xaml)
         order = [xaml.index('x:Name="%s"' % name) for name in
                  ("ThemeBgImage", "ThemeBackdrop", "IdleView", "DoorTilesPanel",
-                  "RecentCallsPanel")]
+                  "AdminLinkCard")]
         self.assertEqual(order, sorted(order), "the scrim must sit under every plate")
 
         resolved = shell[shell.index("private void ApplyThemeBackdrop()"):
@@ -2166,8 +2166,9 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("if (width < CompactMax) return SizeClass.Compact;", metrics)
         self.assertIn("if (width < ExpandedMin) return SizeClass.Medium;", metrics)
         # Dashboard: stacked below Expanded, list beside the tiles from Expanded.
-        self.assertIn("PlaceDashboard(RecentCallsPanel, 1, 0, 2);", layout)
-        self.assertIn("PlaceDashboard(RecentCallsPanel, 0, 1, 1);", layout)
+        # Home shows no call history: the door tiles have the page at every size class.
+        self.assertNotIn("RecentCalls", layout)
+        self.assertNotIn("RecentCalls", read("win/DoorbellApp/MainWindow.xaml"))
         self.assertIn("LayoutMetrics.PurposeColumns(size, width, PurposeGrid.Children.Count)", layout)
         self.assertIn("LayoutMetrics.TileColumns(size, width, DoorTileGrid.Children.Count)", layout)
         self.assertIn("ApplyCallLayout(width, height);", layout)
@@ -2567,12 +2568,25 @@ class WindowsContracts(unittest.TestCase):
         # The dashboard and the history page both live inside the navigation view, and the
         # visitor screen is outside it: a door station has no route to settings.
         inside = {e.get(ns) for e in nav.iter() if e.get(ns)}
-        self.assertTrue({"DashboardPage", "HistoryView", "DoorTileGrid", "RecentCallsList",
+        self.assertTrue({"DashboardPage", "HistoryView", "DoorTileGrid", "NavHistoryBadge",
                          "MissedBadge"} <= inside)
         self.assertFalse({"VisitorHome", "CallButton", "SosButton", "IncomingView",
                           "EmergencyView"} & inside)
-        self.assertTrue(by_name["MissedBadge"].tag.endswith("}InfoBar"))
-        self.assertTrue(by_name["RecentCallsList"].tag.endswith("}ListView"))
+        # ModernWpf 0.9.6 has no InfoBar control: the bar is stock elements in that layout.
+        self.assertNotIn("ui:InfoBar", xaml)
+        self.assertEqual(by_name["MissedBadge"].get("BorderBrush"), "{DynamicResource Warning}")
+        self.assertIn(by_name["MissedBadgeText"], list(by_name["MissedBadge"].iter()))
+        # Unread missed calls: a badge on the History item and one InfoBar on Home whose
+        # action opens History. The home page itself lists no calls.
+        dashboard = read("win/DoorbellApp/MainWindow.Dashboard.cs")
+        badge = dashboard[dashboard.index("private void ApplyMissedBadge()"):
+                          dashboard.index("private static ListViewItem ListHeader(")]
+        self.assertIn("NavHistoryBadge.Visibility = unread ?", badge)
+        self.assertIn("MissedBadge.Visibility = unread ?", badge)
+        self.assertEqual(by_name["MissedBadgeAction"].get("Click"), "OnOpenHistoryClick")
+        home_lists = [e for e in by_name["DashboardPage"].iter() if e.tag.endswith("}ListView")]
+        self.assertEqual(home_lists, [])
+        self.assertTrue(by_name["HistoryList"].tag.endswith("}ListView"))
         # The hidden corner counts taps while they tunnel, so it works under the navigation
         # view without taking a tap from it.
         self.assertEqual(by_name["IdleView"].get("PreviewMouseLeftButtonDown"),
@@ -2736,6 +2750,32 @@ class WindowsContracts(unittest.TestCase):
                 with self.subTest(peer=name):
                     self.assertNotIn(kinds[name], ("Grid", "Border", "StackPanel", "WrapPanel",
                                                    "UniformGrid", "DockPanel", "Canvas"))
+
+    def test_conversations_are_left_when_the_call_screen_goes_away(self):
+        conversations = read("win/DoorbellApp/MainWindow.Conversations.cs")
+        controls = read("win/DoorbellApp/MainWindow.CallControls.cs")
+        window = read("win/DoorbellApp/MainWindow.xaml.cs")
+        android = read("android/app/src/main/java/jp/ox/doorbell/IncomingActivity.kt")
+        # The same rule the Android incoming screen applies when it is destroyed: leave every
+        # room this device is still a member of, against the room version it last saw.
+        self.assertIn('.put("action", "leave")', android)
+        leave = conversations[conversations.index("private void LeaveConversations()"):
+                              conversations.index("private bool AdmitIncomingVisit(")]
+        self.assertIn("OwnConversationMember(room) == null) continue;", leave)
+        self.assertIn('{"action", "leave"}', leave)
+        self.assertIn('{"expected_version", DictLong(room, "version", 0)}', leave)
+        ignore = controls[controls.index("private void OnIgnoreClick"):
+                          controls.index("private void OnOpenDoorClick")]
+        self.assertLess(ignore.index("LeaveConversations();"), ignore.index("CloseIncoming(true);"))
+        tick = controls[controls.index("private void OnReturnTick()"):
+                        controls.index("private void OnReturnCountdownClick")]
+        self.assertLess(tick.index("LeaveConversations();"), tick.index("CloseIncoming(true);"))
+        self.assertIn("LeaveConversations();", window[window.index("Closed += (s, e) => {"):])
+        # Switching to another queued visit is not leaving: it never calls it.
+        select = conversations[conversations.index("private void SelectVisit("):
+                               conversations.index("private void RefreshConversations()")]
+        self.assertNotIn("LeaveConversations", select)
+        self.assertIn('if (UsesConversation()) App.Core.Conversation(', select)
 
 
 if __name__ == "__main__":

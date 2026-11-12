@@ -288,7 +288,7 @@ function Test-IndoorPanel {
     foreach ($look in @('light', 'dark')) {
         Set-Look $look
         foreach ($id in @('HomeNav', 'NavHome', 'NavHistory', 'AdminEntryButton', 'DashClock', 'DashDate',
-                          'NoticeGlobalButton', 'DoorsSectionTitle', 'RecentCallsList', 'AdminUrlText')) {
+                          'NoticeGlobalButton', 'DoorsSectionTitle', 'NavHistoryLabel', 'AdminUrlText')) {
             [void](Assert-Element 'dashboard' $id)
         }
         Save-Shot ("dashboard-" + $look)

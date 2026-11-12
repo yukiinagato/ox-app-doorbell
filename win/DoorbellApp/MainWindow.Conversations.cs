@@ -64,6 +64,26 @@ namespace DoorbellApp
             IncomingHint.Text = Texts.T(DictBool(result, "ok") ? "conversation.pending" : "conversation.failed");
             IncomingHint.Visibility = Visibility.Visible;
         }
+        /// <summary>
+        /// Leaving the call screen for good (Ignore on the last visit, the return countdown,
+        /// closing the app) leaves every conversation this device is still a member of, so the
+        /// door station does not keep a participant whose screen is gone. The other shells do
+        /// the same when their incoming screen is destroyed.
+        /// </summary>
+        private void LeaveConversations()
+        {
+            if (App.Core == null) return;
+            foreach (var call in ConversationCalls().ToList())
+            {
+                if (!DictBool(call, "conversation_supported")) continue;
+                var room = ConversationDocument(call);
+                if (room == null || OwnConversationMember(room) == null) continue;
+                App.Core.Conversation(new Dictionary<string, object> {
+                    {"action", "leave"}, {"door", DictStr(call, "door")}, {"call_id", DictStr(call, "call_id")},
+                    {"stage_revision", DictInt(call, "stage_revision", 0)},
+                    {"expected_version", DictLong(room, "version", 0)} });
+            }
+        }
         private bool AdmitIncomingVisit(UiEvent ev, bool monitorOnly)
         {
             if (monitorOnly || _selectingVisit) return false;
@@ -97,7 +117,8 @@ namespace DoorbellApp
         private void SelectVisit(Dictionary<string, object> call)
         {
             if (_inCall && !UsesConversation() || _sipMode == "answer") return;
-            App.Core.Conversation(new Dictionary<string, object> { {"action", "select"},
+            // Only a call core runs as a conversation has a selection to record.
+            if (UsesConversation()) App.Core.Conversation(new Dictionary<string, object> { {"action", "select"},
                 {"door", DictStr(call, "door")}, {"call_id", DictStr(call, "call_id")} });
             _selectingVisit = true;
             try { _inCall = false; CloseIncoming(true); ShowIncoming(new UiEvent { Data = call, T = "chime" }); }

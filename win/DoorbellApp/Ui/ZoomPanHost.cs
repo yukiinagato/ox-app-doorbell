@@ -71,7 +71,7 @@ namespace DoorbellApp.Ui
         // The whole area takes input, including the letterbox bars beside the picture.
         protected override HitTestResult HitTestCore(PointHitTestParameters hitTestParameters)
         {
-            return new PointHitTestResult(this, hitTestParameters.HitTestPoint);
+            return new PointHitTestResult(this, hitTestParameters.HitPoint);
         }
 
         protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)

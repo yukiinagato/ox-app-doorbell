@@ -203,6 +203,7 @@ namespace DoorbellApp
             }
             _returnTimer.Stop();
             _returnSecondsLeft = 0;
+            LeaveConversations();
             CloseIncoming(true);
         }
 
@@ -367,7 +368,7 @@ namespace DoorbellApp
             string key = _incomingDoor + ":" + _incomingCallId;
             _retiredVisits[key] = _incomingStageRevision;
             _visitQueue.Remove(key); _visitOrder.Remove(key);
-            if (_visitQueue.Count == 0) CloseIncoming(true);
+            if (_visitQueue.Count == 0) { LeaveConversations(); CloseIncoming(true); }
             else { AnswerButton.IsEnabled = false; RefreshConversations(); }
         }
 

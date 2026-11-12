@@ -19,6 +19,7 @@ namespace DoorbellApp
     /// </summary>
     public partial class MainWindow
     {
+        // The home refresh reads the newest rows only for the latest id and the unread count.
         private const int RecentCallRows = 20;
 
         /// <summary>Rebuilds the tile grid from the door stations core knows about.</summary>
@@ -444,55 +445,30 @@ namespace DoorbellApp
         }
 
         /// <summary>
-        /// Reads the newest rows for the dashboard list and the missed badge. The badge clears
-        /// when the full history page is opened, which is what moves the seen watermark.
-        /// </summary>
-        /// <summary>
-        /// Renders the dashboard list from a call log already read off the UI thread.
-        /// db_core_call_log_json marshals into core's run loop, so it never runs on the
-        /// dispatcher.
+        /// The home surface shows no call history (History is its own destination); from the
+        /// call log already read off the UI thread it keeps only the unread missed-call count,
+        /// shown as a badge on the History item and as one InfoBar that opens History. The
+        /// count clears when the history page is opened, which is what moves the seen watermark.
         /// </summary>
         private void RefreshCallHistory(Dictionary<string, object> log)
         {
             if (App.Boot.Role != "indoor_panel") return;
-            RecentCallsList.Items.Clear();
             var rows = log == null ? null : Rows(log);
-            if (rows == null || rows.Count == 0)
-            {
-                RecentCallsList.Items.Add(ListHeader(new TextBlock
-                {
-                    Text = Texts.T("history.empty"),
-                    FontSize = 14,
-                    Margin = new Thickness(2, 8, 2, 8),
-                    Foreground = (Brush)FindResource("Dim"),
-                }));
-            }
-            else
-            {
-                _latestCallHlc = DictStr(rows[0], "hlc");
-                string lastDay = null;
-                foreach (Dictionary<string, object> row in rows)
-                {
-                    string day = DayLabelOf(DictLong(row, "ts", 0));
-                    if (day != lastDay)
-                    {
-                        lastDay = day;
-                        var header = new TextBlock
-                        {
-                            Text = day,
-                            FontSize = 13,
-                            Margin = new Thickness(2, 8, 2, 4),
-                        };
-                        header.SetResourceReference(TextBlock.ForegroundProperty, "Dim");
-                        RecentCallsList.Items.Add(ListHeader(header));
-                    }
-                    RecentCallsList.Items.Add(BuildCallRow(row, false));
-                }
-            }
+            if (rows != null && rows.Count != 0) _latestCallHlc = DictStr(rows[0], "hlc");
             _unreadMissed = log == null ? 0 : DictInt(log, "unread_missed", 0);
-            MissedBadge.Message = Texts.T("history.missed_badge", _unreadMissed);
-            MissedBadge.Visibility = _unreadMissed > 0 ?
-                Visibility.Visible : Visibility.Collapsed;
+            ApplyMissedBadge();
+        }
+
+        private void ApplyMissedBadge()
+        {
+            bool unread = _unreadMissed > 0;
+            MissedBadgeText.Text = Texts.T("history.missed_badge", _unreadMissed);
+            MissedBadge.Visibility = unread ? Visibility.Visible : Visibility.Collapsed;
+            NavHistoryBadgeText.Text = _unreadMissed > 99 ? "99+" : _unreadMissed.ToString();
+            NavHistoryBadge.Visibility = unread ? Visibility.Visible : Visibility.Collapsed;
+            string label = Texts.T("nav.history");
+            AutomationProperties.SetName(NavHistory, unread
+                ? label + ", " + Texts.T("history.missed_badge", _unreadMissed) : label);
         }
 
         /// <summary>

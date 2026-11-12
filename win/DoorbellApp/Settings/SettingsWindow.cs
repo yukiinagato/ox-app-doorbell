@@ -8,8 +8,6 @@ using System.Windows.Threading;
 using DoorbellApp.Core;
 using DoorbellApp.Ui;
 using DoorbellApp.Util;
-using InfoBar = ModernWpf.Controls.InfoBar;
-using InfoBarSeverity = ModernWpf.Controls.InfoBarSeverity;
 using NavigationView = ModernWpf.Controls.NavigationView;
 using NavigationViewBackButtonVisible = ModernWpf.Controls.NavigationViewBackButtonVisible;
 using NavigationViewItem = ModernWpf.Controls.NavigationViewItem;
@@ -49,7 +47,8 @@ namespace DoorbellApp.Settings
         private TextBox _search;
         private StackPanel _content;
         private ScrollViewer _contentScroll;
-        private InfoBar _status;
+        private Border _status;
+        private TextBlock _statusText;
 
         public SettingsWindow(MainWindow main, string nodeId, string role)
         {
@@ -84,7 +83,7 @@ namespace DoorbellApp.Settings
             _statusTimer.Tick += (s, e) =>
             {
                 _statusTimer.Stop();
-                if (_status != null) _status.IsOpen = false;
+                if (_status != null) _status.Visibility = Visibility.Collapsed;
             };
             PreviewKeyDown += OnKey;
             SizeChanged += (s, e) => ApplyLayoutMode(false);
@@ -161,12 +160,29 @@ namespace DoorbellApp.Settings
             };
             Grid.SetRow(_contentScroll, 1);
             page.Children.Add(_contentScroll);
-            _status = new InfoBar
+            // Save status in the Fluent InfoBar layout (severity stripe and message). ModernWpf
+            // 0.9.6 ships no InfoBar control, so it is a card with a coloured leading edge.
+            _statusText = new TextBlock
             {
-                IsOpen = false,
-                IsClosable = true,
-                Margin = new Thickness(24, 0, 24, 12),
+                FontSize = 15,
+                TextWrapping = TextWrapping.Wrap,
+                VerticalAlignment = VerticalAlignment.Center,
             };
+            _status = new Border
+            {
+                CornerRadius = new CornerRadius(4),
+                BorderThickness = new Thickness(4, 1, 1, 1),
+                Padding = new Thickness(12, 10, 12, 10),
+                Margin = new Thickness(24, 0, 24, 12),
+                MinHeight = MinTouchTarget,
+                Visibility = Visibility.Collapsed,
+                Child = _statusText,
+            };
+            _status.SetResourceReference(Border.BackgroundProperty, "Card");
+            AutomationId(_status, "SettingsStatus");
+            AutomationId(_statusText, "SettingsStatusText");
+            System.Windows.Automation.AutomationProperties.SetLiveSetting(_statusText,
+                System.Windows.Automation.AutomationLiveSetting.Polite);
             Grid.SetRow(_status, 2);
             page.Children.Add(_status);
             AutomationId(_navigation, "SettingsNavigation");
@@ -426,9 +442,9 @@ namespace DoorbellApp.Settings
         internal void ShowStatus(string text, bool error)
         {
             if (_status == null) return;
-            _status.Message = text;
-            _status.Severity = error ? InfoBarSeverity.Error : InfoBarSeverity.Success;
-            _status.IsOpen = true;
+            _statusText.Text = text;
+            _status.SetResourceReference(Border.BorderBrushProperty, error ? "Negative" : "Ok");
+            _status.Visibility = Visibility.Visible;
             _statusTimer.Stop();
             if (!error) _statusTimer.Start();
         }

@@ -1598,6 +1598,7 @@ ON</value></data>
   <data name="ring_quick_replies" xml:space="preserve"><value>クイック返信</value></data>
   <data name="ring_quick_reply" xml:space="preserve"><value>クイック返信</value></data>
   <data name="ring_return_countdown_a11y" xml:space="preserve"><value>自動で戻るまでの秒数（タップで解除）</value></data>
+  <data name="ring_return_countdown_action" xml:space="preserve"><value>あと {0} 秒でホームに戻ります（タップで解除）</value></data>
   <data name="ring_unlock" xml:space="preserve"><value>解錠</value></data>
   <data name="ring_unlock_failed" xml:space="preserve"><value>開錠の操作を実行できませんでした</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>解錠信号を送信しました</value></data>

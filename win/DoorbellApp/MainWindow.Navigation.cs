@@ -20,7 +20,10 @@ namespace DoorbellApp
         private void ApplyNavigationStrings()
         {
             SetNavigationItem(NavHome, "IconHome", Texts.T("nav.home"));
-            SetNavigationItem(NavHistory, "IconCalendarTime", Texts.T("nav.history"));
+            // History keeps its own content (label plus unread badge), so only the icon is set.
+            NavHistoryLabel.Text = Texts.T("nav.history");
+            if (NavHistory.Icon == null) NavHistory.Icon = Fluent.Icon("IconCalendarTime");
+            ApplyMissedBadge();
             SetNavigationItem(OpenMonitorButton, "IconEye", Texts.T("nav.monitor"));
             SetNavigationItem(AdminEntryButton, "IconSettings", Texts.T("nav.settings"));
             MissedBadgeAction.Content = Texts.T("dash.see_all");

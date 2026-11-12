@@ -373,6 +373,7 @@ namespace DoorbellApp
                 else ResumeCallTiming();
             };
             Closed += (s, e) => {
+                LeaveConversations();
                 Microsoft.Win32.SystemEvents.PowerModeChanged -= OnPowerModeChanged;
                 StopSosCountdown();
                 _callTimeout.Stop();
@@ -549,8 +550,6 @@ namespace DoorbellApp
             ApplyNavigationStrings();
             AdminLinkTitle.Text = Texts.T("web_admin.title");
             NoticeGlobalButton.Content = IconLabel("IconBell", Texts.T("dash.notice_global"));
-            RecentCallsTitle.Text = Texts.T("history.title");
-            SeeAllCallsButton.Content = Texts.T("dash.see_all") + " ›";
             DoorCounterLabel.Text = Texts.T("admin.role_door");
             PanelCounterLabel.Text = Texts.T("admin.role_indoor");
             if (DoorsSectionTitle.Text.Length == 0) DoorsSectionTitle.Text = Texts.T("dash.doors");

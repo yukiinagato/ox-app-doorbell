@@ -153,13 +153,23 @@
                                    OpenPaneLength="240" IsSettingsVisible="False"
                                    IsBackButtonVisible="Collapsed"
                                    ItemInvoked="OnHomeNavInvoked">
-                    <ui:NavigationView.Resources>
-                        <!-- The Home page shows the wallpaper: the content area stays clear. -->
-                        <SolidColorBrush x:Key="NavigationViewContentBackground" Color="Transparent"/>
-                    </ui:NavigationView.Resources>
                     <ui:NavigationView.MenuItems>
                         <ui:NavigationViewItem x:Name="NavHome" MinHeight="48"/>
-                        <ui:NavigationViewItem x:Name="NavHistory" MinHeight="48"/>
+                        <!-- History carries the unread missed-call count beside its label. -->
+                        <ui:NavigationViewItem x:Name="NavHistory" MinHeight="48">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="NavHistoryLabel" VerticalAlignment="Center"/>
+                                <Border x:Name="NavHistoryBadge" Visibility="Collapsed"
+                                        Background="{DynamicResource Negative}" CornerRadius="10"
+                                        MinWidth="20" Height="20" Padding="6,0,6,0"
+                                        Margin="8,0,0,0" VerticalAlignment="Center">
+                                    <TextBlock x:Name="NavHistoryBadgeText" FontSize="12"
+                                               FontWeight="SemiBold" HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"
+                                               Foreground="{DynamicResource OnNegative}"/>
+                                </Border>
+                            </StackPanel>
+                        </ui:NavigationViewItem>
                         <ui:NavigationViewItem x:Name="OpenMonitorButton" MinHeight="48"
                                                Visibility="Collapsed"/>
                         <ui:NavigationViewItemSeparator/>
@@ -269,63 +279,42 @@
                                 </StackPanel>
                             </Grid>
 
-                            <!-- Unread missed calls: a Fluent InfoBar whose action opens History. -->
-                            <ui:InfoBar x:Name="MissedBadge" Grid.Row="1" Visibility="Collapsed"
-                                        IsOpen="True" IsClosable="False" Severity="Warning"
-                                        Margin="0,12,0,0">
-                                <ui:InfoBar.ActionButton>
-                                    <Button x:Name="MissedBadgeAction" MinHeight="44"
-                                            HorizontalAlignment="Right" Click="OnOpenHistoryClick"/>
-                                </ui:InfoBar.ActionButton>
-                            </ui:InfoBar>
+                            <!-- Unread missed calls: a status bar in the Fluent InfoBar layout
+                                 (severity stripe, icon, message, action). ModernWpf 0.9.6 ships
+                                 no InfoBar control, so it is assembled from stock elements. Its
+                                 action opens History. -->
+                            <Border x:Name="MissedBadge" Grid.Row="1" Visibility="Collapsed"
+                                    Style="{StaticResource CardBorder}" Margin="0,12,0,0"
+                                    BorderBrush="{DynamicResource Warning}" BorderThickness="4,1,1,1"
+                                    Padding="12,6" MinHeight="48">
+                                <DockPanel>
+                                    <Button x:Name="MissedBadgeAction" DockPanel.Dock="Right"
+                                            MinHeight="44" MinWidth="44" Margin="12,0,0,0"
+                                            VerticalAlignment="Center" Click="OnOpenHistoryClick"/>
+                                    <Viewbox DockPanel.Dock="Left" Width="20" Height="20"
+                                             VerticalAlignment="Center" Margin="0,0,12,0">
+                                        <Path Data="{StaticResource IconCalendarTime}"
+                                              Stroke="{DynamicResource Warning}" StrokeThickness="2"
+                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                              StrokeLineJoin="Round"/>
+                                    </Viewbox>
+                                    <TextBlock x:Name="MissedBadgeText" FontSize="15"
+                                               TextWrapping="Wrap" VerticalAlignment="Center"
+                                               Foreground="{DynamicResource Fg}"/>
+                                </DockPanel>
+                            </Border>
 
-                            <Grid Grid.Row="2" Margin="0,16,0,8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition x:Name="DashboardTitleLeftColumn" Width="1.4*"/>
-                                    <ColumnDefinition x:Name="DashboardTitleRightColumn" Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid Grid.Column="0" Margin="4,0,12,0">
-                                    <TextBlock x:Name="DoorsSectionTitle" FontSize="15" FontWeight="SemiBold"
-                                               VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
-                                </Grid>
-                                <Grid Grid.Column="1" Margin="12,0,4,0">
-                                    <TextBlock x:Name="RecentCallsTitle" FontSize="15" FontWeight="SemiBold"
-                                               VerticalAlignment="Center" Foreground="{DynamicResource Fg}"/>
-                                    <Button x:Name="SeeAllCallsButton" Style="{StaticResource LinkButton}"
-                                            HorizontalAlignment="Right" Click="OnOpenHistoryClick"/>
-                                </Grid>
-                            </Grid>
+                            <TextBlock x:Name="DoorsSectionTitle" Grid.Row="2" Margin="4,16,0,8"
+                                       FontSize="15" FontWeight="SemiBold"
+                                       Foreground="{DynamicResource Fg}"/>
 
-                            <Grid x:Name="DashboardContent" Grid.Row="3">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition x:Name="DashboardLeftColumn" Width="1.4*"/>
-                                    <ColumnDefinition x:Name="DashboardRightColumn" Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition x:Name="DashboardTopRow" Height="*"/>
-                                    <RowDefinition x:Name="DashboardBottomRow" Height="0"/>
-                                </Grid.RowDefinitions>
-
-                                <ScrollViewer x:Name="DoorTilesPanel" Grid.Row="0" Grid.Column="0"
-                                              VerticalScrollBarVisibility="Auto"
-                                              HorizontalScrollBarVisibility="Disabled" Margin="0,0,12,0">
-                                    <UniformGrid x:Name="DoorTileGrid" Columns="2" VerticalAlignment="Top"/>
-                                </ScrollViewer>
-
-                                <!-- Recent calls: a card holding a ListView with day headers. -->
-                                <Border x:Name="RecentCallsPanel" Grid.Row="0" Grid.Column="1"
-                                        app:Frost.Enabled="True" CornerRadius="8" Margin="12,4,4,0"
-                                        BorderBrush="{DynamicResource PlateLine}" BorderThickness="1"
-                                        ClipToBounds="True" VerticalAlignment="Top">
-                                    <Border Background="{DynamicResource Plate}" CornerRadius="8">
-                                        <ListView x:Name="RecentCallsList" Background="Transparent"
-                                                  BorderThickness="0" SelectionMode="Single"
-                                                  ItemContainerStyle="{StaticResource CallListItem}"
-                                                  ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                                                  ScrollViewer.PanningMode="VerticalOnly"/>
-                                    </Border>
-                                </Border>
-                            </Grid>
+                            <!-- The door tiles take the whole page; call history has its own
+                                 destination in the navigation pane. -->
+                            <ScrollViewer x:Name="DoorTilesPanel" Grid.Row="3"
+                                          VerticalScrollBarVisibility="Auto"
+                                          HorizontalScrollBarVisibility="Disabled">
+                                <UniformGrid x:Name="DoorTileGrid" Columns="2" VerticalAlignment="Top"/>
+                            </ScrollViewer>
 
                             <Grid x:Name="DashboardFooter" Grid.Row="4" Margin="0,16,0,0">
                                 <Grid.ColumnDefinitions>

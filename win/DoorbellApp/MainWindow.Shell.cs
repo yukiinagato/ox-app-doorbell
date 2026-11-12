@@ -82,32 +82,6 @@ namespace DoorbellApp
             VisitorNoticeText.FontSize = (compact ? 17 : 22) * scale;
             VisitorDoorName.Text = VisitorDoorTitle();
 
-            if (!expanded)
-            {
-                DashboardLeftColumn.Width = new GridLength(1, GridUnitType.Star);
-                DashboardRightColumn.Width = new GridLength(0);
-                DashboardTopRow.Height = new GridLength(1, GridUnitType.Star);
-                DashboardBottomRow.Height = new GridLength(1.1, GridUnitType.Star);
-                PlaceDashboard(DoorTilesPanel, 0, 0, 2);
-                PlaceDashboard(RecentCallsPanel, 1, 0, 2);
-                DoorTilesPanel.Margin = new Thickness(0, 0, 0, LayoutMetrics.S2);
-                RecentCallsPanel.Margin = new Thickness(LayoutMetrics.S1, LayoutMetrics.S2, LayoutMetrics.S1, 0);
-                DashboardTitleLeftColumn.Width = new GridLength(1, GridUnitType.Star);
-                DashboardTitleRightColumn.Width = new GridLength(0);
-            }
-            else
-            {
-                DashboardLeftColumn.Width = new GridLength(1.4, GridUnitType.Star);
-                DashboardRightColumn.Width = new GridLength(1, GridUnitType.Star);
-                DashboardTopRow.Height = new GridLength(1, GridUnitType.Star);
-                DashboardBottomRow.Height = new GridLength(0);
-                PlaceDashboard(DoorTilesPanel, 0, 0, 1);
-                PlaceDashboard(RecentCallsPanel, 0, 1, 1);
-                DoorTilesPanel.Margin = new Thickness(0, 0, LayoutMetrics.S3, 0);
-                RecentCallsPanel.Margin = new Thickness(LayoutMetrics.S3, LayoutMetrics.S1, LayoutMetrics.S1, 0);
-                DashboardTitleLeftColumn.Width = new GridLength(1.4, GridUnitType.Star);
-                DashboardTitleRightColumn.Width = new GridLength(1, GridUnitType.Star);
-            }
             // Below 600 px the navigation pane collapses to a menu button over the top-left
             // corner of the page, so both pages start underneath it.
             double menuButton = compact ? LayoutMetrics.TouchMin : 0;
@@ -297,15 +271,6 @@ namespace DoorbellApp
             VisitorFooter.Margin = new Thickness(0, 12, reserveWidth, reserveHeight);
         }
 
-        private static void PlaceDashboard(FrameworkElement element, int row, int column,
-                                           int columnSpan)
-        {
-            if (element == null) return;
-            Grid.SetRow(element, row);
-            Grid.SetColumn(element, column);
-            Grid.SetColumnSpan(element, columnSpan);
-        }
-
         /// <summary>
         /// The darkening over the theme picture. Administrators set colour and opacity through
         /// display.theme.backdrop, per cluster or per device; core resolves the two and publishes
@@ -413,7 +378,7 @@ namespace DoorbellApp
             InkText(ClusterCountText, RegionStatusLine, 0);
             InkText(DoorCountText, RegionStatusLine, 0);
             InkText(PanelCountText, RegionStatusLine, 0);
-            InkText(RecentCallsTitle, RegionTileLabel, 0);
+            InkText(DoorsSectionTitle, RegionTileLabel, 0);
             // The call screens draw over their own opaque surface, so the same rule resolves
             // there against that surface rather than against the theme background.
             InkText(IncomingTitle, RegionStatusLine, 0);

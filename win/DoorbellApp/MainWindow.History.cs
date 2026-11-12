@@ -112,7 +112,7 @@ namespace DoorbellApp
             {
                 if (!seenMoved) Debug.WriteLine("call-log seen watermark was not moved");
                 _unreadMissed = 0;
-                MissedBadge.Visibility = Visibility.Collapsed;
+                ApplyMissedBadge();
             }
             RenderHistory();
         }
