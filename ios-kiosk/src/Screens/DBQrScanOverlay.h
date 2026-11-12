@@ -5,6 +5,9 @@
 
 // Full-screen "scan the new device's Add QR" overlay for the kiosk (spec §5.1 item 4).
 //
+// A navigation bar carries the title, Cancel, and the camera flip; the live viewfinder with its
+// framing guide fills the rest, with the hint and the status as plain labels over the video.
+//
 // The overlay borrows the app's one camera session (a second session would take the device
 // away from a door station). On iOS 7+ it adds AVFoundation's own QR detector to that session
 // and invites the doorbell-pair: payload it reads. iOS 5/6 have no such detector, so there

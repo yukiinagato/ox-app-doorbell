@@ -7,11 +7,10 @@
 
 @class DBTexts;
 
-// Shared kiosk widgets for the batch-2 UI: the resolved appearance palette,
-// padded coloured labels, two-part labels, the SOS slide control, the admin QR
-// block, and the announcement chip. Every control is drawn with manual frames
-// and UIButtonTypeCustom because iOS 5 has no Auto Layout and renders
-// UIButtonTypeSystem invisibly.
+// The kiosk's custom-drawn pieces, which exist only where UIKit has no stock control: the
+// wallpaper backdrop with its sampled per-region ink, wallpaper labels, the fleet counters,
+// caption plates over a picture, the SOS slide control, and the admin QR block. Stock chrome
+// lives in DBChrome; nothing here may colour a stock control.
 
 UIColor *DBColorFromHex(NSString *hex, UIColor *fallback);
 // Letterboxed video placement: the door camera's aspect is preserved inside the
@@ -156,16 +155,9 @@ NSString *DBFleetGlyphIconName(DBFleetGlyph glyph);
 - (CGFloat)widthThatFits;
 @end
 
-// Coloured background text always gets 6/12 padding and a radius (spec §0.7).
+// A caption plate over a snapshot or video: 6/12 padding and a radius.
 @interface DBPillLabel : UILabel
 @property(nonatomic, assign) UIEdgeInsets contentInsets;
-@end
-
-// Deliberate two-part labels: the authored "\n" splits the title and the second
-// line renders smaller and muted (spec §5.1). Never auto-wrapped mid phrase.
-@interface DBTwoPartButton : UIButton
-- (void)setTwoPartTitle:(NSString *)title;
-- (void)setPrimaryColor:(UIColor *)primary secondaryColor:(UIColor *)secondary;
 @end
 
 @class DBSosSlider;
@@ -197,10 +189,4 @@ NSString *DBFleetGlyphIconName(DBFleetGlyph glyph);
 // label on line 1.
 - (void)setVersionLine:(NSString *)text;
 @property(nonatomic, readonly, copy) NSString *url;
-@end
-
-// Compact 「お知らせ」 chip with an active dot (spec §5.2).
-@interface DBNoticeChip : UIButton
-- (void)setChipTitle:(NSString *)title active:(BOOL)active;
-- (void)applyPalette:(DBUiPalette *)palette;
 @end

@@ -741,56 +741,6 @@ static const CGFloat kFleetGlyphGap = 6;
 
 @end
 
-#pragma mark - two-part button
-
-@implementation DBTwoPartButton {
-  UILabel *_secondary;
-  CGFloat _secondaryHeight;
-}
-
-- (id)initWithFrame:(CGRect)frame {
-  self = [super initWithFrame:frame];
-  if (self) {
-    self.titleLabel.textAlignment = NSTextAlignmentCenter;
-    _secondary = [[UILabel alloc] init];
-    _secondary.backgroundColor = [UIColor clearColor];
-    _secondary.textAlignment = NSTextAlignmentCenter;
-    _secondary.hidden = YES;
-    [self addSubview:_secondary];
-  }
-  return self;
-}
-
-- (void)setTwoPartTitle:(NSString *)title {
-  NSArray *parts = [DBUiTheme labelPartsFor:title];
-  [self setTitle:[parts objectAtIndex:0] forState:UIControlStateNormal];
-  NSString *secondary = [parts objectAtIndex:1];
-  _secondary.text = secondary;
-  _secondary.hidden = ([secondary length] == 0);
-  [self setNeedsLayout];
-}
-
-- (void)setPrimaryColor:(UIColor *)primary secondaryColor:(UIColor *)secondary {
-  [self setTitleColor:primary forState:UIControlStateNormal];
-  _secondary.textColor = secondary;
-}
-
-- (void)layoutSubviews {
-  CGFloat primarySize = self.titleLabel.font.pointSize;
-  CGFloat secondarySize = MAX(11, primarySize * (CGFloat)[DBUiTheme secondaryFontScale]);
-  _secondary.font = [UIFont systemFontOfSize:secondarySize];
-  _secondaryHeight = _secondary.hidden ? 0 : secondarySize + 4;
-  // The primary title is lifted by exactly the second line's height so the
-  // pair reads as one centred block instead of overlapping.
-  self.titleEdgeInsets = UIEdgeInsetsMake(-_secondaryHeight, 0, _secondaryHeight, 0);
-  [super layoutSubviews];
-  CGSize size = self.bounds.size;
-  _secondary.frame = CGRectMake(4, size.height / 2 + (primarySize / 2) - 2,
-                                MAX(0, size.width - 8), _secondaryHeight);
-}
-
-@end
-
 #pragma mark - SOS slider
 
 // The fleet's SOS red, matching the Android and Swift shells.
@@ -1272,51 +1222,6 @@ static const CGFloat kQrUrlMinPt = 9;
   _urlLabel.accessibilityLabel = [_caption length] > 0
       ? [NSString stringWithFormat:@"%@ %@", _caption, _urlLabel.text ?: @""]
       : _urlLabel.text;
-}
-
-@end
-
-#pragma mark - notice chip
-
-@implementation DBNoticeChip {
-  UIView *_dot;
-}
-
-- (id)initWithFrame:(CGRect)frame {
-  self = [super initWithFrame:frame];
-  if (self) {
-    self.titleLabel.font = [UIFont boldSystemFontOfSize:16];
-    self.layer.cornerRadius = (CGFloat)[DBUiTheme pillRadius];
-    self.clipsToBounds = YES;
-    self.contentEdgeInsets = UIEdgeInsetsMake((CGFloat)[DBUiTheme pillPaddingVertical],
-                                              (CGFloat)[DBUiTheme pillPaddingHorizontal] + 14,
-                                              (CGFloat)[DBUiTheme pillPaddingVertical],
-                                              (CGFloat)[DBUiTheme pillPaddingHorizontal]);
-    _dot = [[UIView alloc] init];
-    _dot.layer.cornerRadius = 4;
-    _dot.hidden = YES;
-    _dot.userInteractionEnabled = NO;
-    [self addSubview:_dot];
-  }
-  return self;
-}
-
-- (void)setChipTitle:(NSString *)title active:(BOOL)active {
-  [self setTitle:title forState:UIControlStateNormal];
-  _dot.hidden = !active;
-  [self setNeedsLayout];
-}
-
-- (void)applyPalette:(DBUiPalette *)palette {
-  self.backgroundColor = palette.elevated;
-  [self setTitleColor:palette.ink forState:UIControlStateNormal];
-  _dot.backgroundColor = palette.notice;
-}
-
-- (void)layoutSubviews {
-  [super layoutSubviews];
-  _dot.frame = CGRectMake(10, (self.bounds.size.height - 8) / 2, 8, 8);
-  [self bringSubviewToFront:_dot];
 }
 
 @end

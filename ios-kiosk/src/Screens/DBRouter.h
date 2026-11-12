@@ -45,6 +45,10 @@
 
 - (void)showSettings;
 - (void)closeSettingsAnimated:(BOOL)animated;
+// The indoor tab bar asked for another destination (a DBHomeTab value). Settings stays behind
+// the admin password unless History was opened from inside the administrator flow, whose
+// window is then still open.
+- (void)selectHomeTab:(NSInteger)tab;
 - (void)showHistory;
 - (void)closeHistoryAnimated:(BOOL)animated;
 - (void)showPairing;

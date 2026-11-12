@@ -2,16 +2,16 @@
 
 @class DBRouter, DBUiPalette;
 
-// Announcement dialog (spec §4.3). The same control is opened from the
-// dashboard's 「お知らせ（全体）」 button, from a door tile's chip, and from the
-// monitor/incoming screen's 「この門口機にお知らせ」 entry.
+// Announcement editor, shown as a sheet inside its parent view: a navigation bar with Cancel
+// and Show, and a grouped table for the target, saved messages, text, duration, and clearing.
+// The dashboard, the settings page, and the incoming/monitor screen open the same control.
 @interface DBNoticeDialog : UIView
 
 - (id)initWithRouter:(DBRouter *)router;
 
-// doorIds/doorLabels come from the caller's configuration snapshot so the
-// dialog never reads Core on the main thread. preselectedDoor of nil or an
-// empty string preselects the 全体 target.
+// doorIds/doorLabels come from the caller's configuration snapshot so the dialog never reads
+// Core on the main thread. A nil or empty preselectedDoor preselects the cluster-wide target.
+// palette is unused: the sheet is stock UIKit and keeps the system colours.
 - (void)presentInView:(UIView *)parent
                config:(NSDictionary *)config
               doorIds:(NSArray *)doorIds

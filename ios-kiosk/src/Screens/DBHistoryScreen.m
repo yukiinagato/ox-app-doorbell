@@ -5,40 +5,44 @@
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBTexts.h"
-#import "../Core/DBUiTheme.h"
 #import "DBRouter.h"
-#import "DBWidgets.h"
+#import "DBChrome.h"
 
 static const NSInteger kPageSize = 50;
 
-@interface DBHistoryScreen () <UITableViewDataSource, UITableViewDelegate>
+@interface DBHistoryScreen () <UITableViewDataSource, UITableViewDelegate, UIActionSheetDelegate>
 @end
+
+// The filter control shows All, Missed, and the doors themselves while they fit; a larger
+// household gets one "door stations" segment that opens the list.
+static const NSUInteger kMaxDoorSegments = 3;
 
 @implementation DBHistoryScreen {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
   DBTexts *_texts;
-  DBUiPalette *_palette;
   NSDictionary *_cfg;
   NSDictionary *_status;
-  NSString *_nodeId;
 
   NSArray *_allRows;      // Everything fetched so far, newest first.
   NSArray *_sections;     // Rendered day sections for the active filter.
   NSString *_filter;
+  NSArray *_doorIds;
+  NSArray *_doorLabels;
   NSInteger _tzOffsetMinutes;
   long long _nextBeforeMs;  // Paging cursor: rows strictly older than this.
   BOOL _mayHaveMore;
   BOOL _loading;
+  BOOL _seenDone;
   NSInteger _loadGeneration;
+  CGSize _placedSize;
 
-  UILabel *_title;
-  UIButton *_close;
-  UIButton *_markSeen;
-  UIScrollView *_filterBar;
-  NSMutableArray *_filterButtons;
+  DBNavBar *_nav;
+  DBHomeTabs *_tabs;
+  UISegmentedControl *_filterControl;
+  UIBarButtonItem *_markSeenItem;
+  UIActionSheet *_doorSheet;
   UITableView *_table;
-  UIButton *_loadMore;
   UILabel *_empty;
 }
 
@@ -52,10 +56,8 @@ static const NSInteger kPageSize = 50;
     _filter = DBCallHistoryFilterAll;
     _allRows = [NSArray array];
     _sections = [NSArray array];
-    _filterButtons = [[NSMutableArray alloc] init];
-    _nextBeforeMs = 0;
-    _tzOffsetMinutes = 0;
-    _nodeId = @"";
+    _doorIds = [NSArray array];
+    _doorLabels = [NSArray array];
     [self buildUi];
   }
   return self;
@@ -65,62 +67,52 @@ static const NSInteger kPageSize = 50;
   return @"history";
 }
 
-- (UIButton *)chipButton {
-  UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
-  button.titleLabel.font = [UIFont boldSystemFontOfSize:17];
-  button.layer.cornerRadius = 8;
-  button.clipsToBounds = YES;
-  button.contentEdgeInsets = UIEdgeInsetsMake(6, 14, 6, 14);
-  return button;
-}
-
 - (void)buildUi {
-  _title = [[UILabel alloc] init];
-  _title.backgroundColor = [UIColor clearColor];
-  _title.font = [UIFont boldSystemFontOfSize:28];
-  [self addSubview:_title];
-
-  _close = [self chipButton];
-  [_close addTarget:self action:@selector(onClose) forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_close];
-
-  _markSeen = [self chipButton];
-  [_markSeen addTarget:self action:@selector(onMarkSeen)
-      forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_markSeen];
-
-  _filterBar = [[UIScrollView alloc] init];
-  _filterBar.showsHorizontalScrollIndicator = NO;
-  [self addSubview:_filterBar];
-
-  _table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-  _table.dataSource = self;
-  _table.delegate = self;
-  _table.rowHeight = 72;
-  _table.separatorStyle = UITableViewCellSeparatorStyleSingleLine;
+  self.backgroundColor = DBChromeScreenBackground();
+  _table = DBChromeGroupedTable(self, self);
+  _table.rowHeight = 64;
   [self addSubview:_table];
 
-  _empty = [[UILabel alloc] init];
-  _empty.backgroundColor = [UIColor clearColor];
+  _empty = DBChromeSectionFooterLabel();
   _empty.textAlignment = NSTextAlignmentCenter;
   _empty.font = [UIFont systemFontOfSize:20];
-  _empty.hidden = YES;
-  [self addSubview:_empty];
 
-  _loadMore = [self chipButton];
-  _loadMore.titleLabel.font = [UIFont boldSystemFontOfSize:19];
-  [_loadMore addTarget:self action:@selector(onLoadMore)
-      forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_loadMore];
+  _nav = [[DBNavBar alloc] init];
+  [self addSubview:_nav.bar];
+  _tabs = [[DBHomeTabs alloc] initWithRouter:_router tab:DBHomeTabHistory];
+  [self addSubview:_tabs.bar];
+  _markSeenItem = DBChromeBarItem(@"", self, @selector(onMarkSeen));
+  [self applyNavigation];
+}
+
+// A door station has no tab bar, so its history goes back to the settings page that opened it.
+- (void)applyNavigation {
+  __weak DBHistoryScreen *weakSelf = self;
+  BOOL tabs = [DBHomeTabs shownForRole:_boot.role];
+  UINavigationItem *item = [_nav setRootTitle:[_texts ts:@"history.title"]
+                                    backTitle:tabs ? nil : [_texts ts:@"ui.back"]
+                                       onBack:^{ [weakSelf onClose]; }];
+  if (_filterControl) item.titleView = _filterControl;
+  [_markSeenItem setTitle:[_texts ts:@"history.mark_seen"]];
+  item.rightBarButtonItem = _markSeenItem;
+  [_tabs applyTexts:_texts];
 }
 
 - (void)onScreenWillAppear {
+  [_tabs syncSelection];
+  [self applyNavigation];
   [self reload];
+}
+
+- (void)onScreenWillDisappear {
+  [_doorSheet dismissWithClickedButtonIndex:_doorSheet.cancelButtonIndex animated:NO];
+  _doorSheet = nil;
 }
 
 - (void)reload {
   _nextBeforeMs = 0;
   _allRows = [NSArray array];
+  _seenDone = NO;
   [self loadPageAndMarkSeen:YES];
 }
 
@@ -158,89 +150,120 @@ static const NSInteger kPageSize = 50;
       screen->_loading = NO;
       screen->_cfg = cfg;
       screen->_status = status;
-      screen->_nodeId = [DBConfigUtil str:status path:@"node.id"] ?: @"";
       screen->_tzOffsetMinutes = [DBConfigUtil intVal:localTime path:@"offset_min" def:0];
       screen->_allRows = merged;
       screen->_mayHaveMore = [DBCallHistoryModel pageMayHaveMore:page limit:kPageSize];
       long long cursor = [DBCallHistoryModel nextBeforeMsForPage:page];
       if (cursor > 0) screen->_nextBeforeMs = cursor;
-      [screen applyPalette];
       [screen rebuildFilters];
-      [screen applyStrings];
       [screen rebuildSections];
     });
   });
 }
 
-- (void)applyPalette {
-  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId
-                                   display:[DBConfigUtil dig:_status path:@"display"]
-                             backgroundHex:nil minuteOfDay:[self minuteOfDay]];
-  self.backgroundColor = _palette.surface;
-  _title.textColor = _palette.ink;
-  _empty.textColor = _palette.mutedInk;
-  _table.backgroundColor = _palette.surface;
-  _table.separatorColor = _palette.separator;
-  for (UIButton *button in @[ _close, _markSeen, _loadMore ]) {
-    button.backgroundColor = _palette.elevated;
-    [button setTitleColor:_palette.ink forState:UIControlStateNormal];
-  }
-}
-
-- (NSInteger)minuteOfDay {
-  NSDictionary *local = [_core cachedLocalTime];
-  NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
-  if (hh < 0) return 12 * 60;
-  return hh * 60 + [DBConfigUtil intVal:local path:@"mm" def:0];
-}
-
-- (void)applyStrings {
-  _title.text = [_texts ts:@"history.title"];
-  [_close setTitle:[_texts ts:@"settings.close"] forState:UIControlStateNormal];
-  [_markSeen setTitle:[_texts ts:@"history.mark_seen"] forState:UIControlStateNormal];
-  [_loadMore setTitle:[_texts ts:@"history.load_more"] forState:UIControlStateNormal];
-  _empty.text = [_texts ts:@"history.empty"];
-}
-
 - (void)rebuildFilters {
-  for (UIButton *button in _filterButtons) [button removeFromSuperview];
-  [_filterButtons removeAllObjects];
-  NSMutableArray *entries = [NSMutableArray array];
-  [entries addObject:@[ DBCallHistoryFilterAll, [_texts ts:@"history.filter_all"] ]];
-  [entries addObject:@[ DBCallHistoryFilterMissed, [_texts ts:@"history.filter_missed"] ]];
+  NSMutableArray *ids = [NSMutableArray array];
+  NSMutableArray *labels = [NSMutableArray array];
   NSDictionary *doors = [DBConfigUtil dig:_cfg path:@"doors"];
   if ([doors isKindOfClass:[NSDictionary class]]) {
     for (NSString *door in [DBConfigUtil sortedByOrder:doors]) {
-      NSString *label = [DBConfigUtil labelOf:[doors objectForKey:door] lang:_boot.uiLang
-                                     fallback:door];
-      [entries addObject:@[ door, label ]];
+      [ids addObject:door];
+      [labels addObject:[DBConfigUtil labelOf:[doors objectForKey:door] lang:_boot.uiLang
+                                     fallback:door]];
     }
   }
-  for (NSArray *entry in entries) {
-    UIButton *button = [self chipButton];
-    [button setTitle:[entry objectAtIndex:1] forState:UIControlStateNormal];
-    button.accessibilityIdentifier = [entry objectAtIndex:0];
-    [button addTarget:self action:@selector(onFilter:)
-     forControlEvents:UIControlEventTouchUpInside];
-    [_filterBar addSubview:button];
-    [_filterButtons addObject:button];
+  _doorIds = ids;
+  _doorLabels = labels;
+  if (![_filter isEqualToString:DBCallHistoryFilterAll] &&
+      ![_filter isEqualToString:DBCallHistoryFilterMissed] && ![ids containsObject:_filter])
+    _filter = DBCallHistoryFilterAll;
+
+  NSMutableArray *titles = [NSMutableArray arrayWithObjects:
+      [_texts ts:@"history.filter_all"], [_texts ts:@"history.filter_missed"], nil];
+  if ([ids count] <= kMaxDoorSegments) {
+    [titles addObjectsFromArray:labels];
+  } else {
+    NSUInteger chosen = [ids indexOfObject:_filter];
+    [titles addObject:chosen == NSNotFound ? [_texts ts:@"dash.doors"]
+                                           : [labels objectAtIndex:chosen]];
   }
+  // A fresh control with a real frame, assigned again: on iOS 5 the bar sizes a title view
+  // only when it is set, so one that was empty at that moment stays invisible.
+  [_filterControl removeTarget:self action:NULL forControlEvents:UIControlEventAllEvents];
+  _filterControl = [[UISegmentedControl alloc] initWithItems:titles];
+  _filterControl.segmentedControlStyle = UISegmentedControlStyleBar;
+  [_filterControl addTarget:self action:@selector(onFilterChanged)
+           forControlEvents:UIControlEventValueChanged];
   [self updateFilterSelection];
+  [self placeFilterControl];
+}
+
+// The filter takes what the bar can give beside the back and mark-seen items, with segments
+// wide enough to read and to touch.
+- (void)placeFilterControl {
+  CGFloat available = MAX(160, self.bounds.size.width - 400);
+  CGFloat wanted = 120.0f * (CGFloat)MAX((NSUInteger)2, _filterControl.numberOfSegments);
+  _filterControl.frame = CGRectMake(0, 0, MIN(available, wanted), 30);
+  _nav.topItem.titleView = nil;
+  _nav.topItem.titleView = _filterControl;
 }
 
 - (void)updateFilterSelection {
-  for (UIButton *button in _filterButtons) {
-    BOOL selected = [(button.accessibilityIdentifier ?: @"") isEqualToString:_filter];
-    button.backgroundColor = selected ? _palette.accent : _palette.elevated;
-    [button setTitleColor:(selected ? _palette.accentInk : _palette.ink)
-                 forState:UIControlStateNormal];
+  NSInteger index = 0;
+  if ([_filter isEqualToString:DBCallHistoryFilterMissed]) {
+    index = 1;
+  } else if (![_filter isEqualToString:DBCallHistoryFilterAll]) {
+    NSUInteger door = [_doorIds indexOfObject:_filter];
+    index = [_doorIds count] <= kMaxDoorSegments ? 2 + (NSInteger)door : 2;
+  }
+  if (index < (NSInteger)_filterControl.numberOfSegments)
+    _filterControl.selectedSegmentIndex = index;
+}
+
+- (void)applyFilter:(NSString *)filter {
+  _filter = [filter copy];
+  if ([_doorIds count] > kMaxDoorSegments) [self rebuildFilters];
+  [self updateFilterSelection];
+  [self rebuildSections];
+}
+
+- (void)onFilterChanged {
+  NSInteger index = _filterControl.selectedSegmentIndex;
+  if (index <= 0) {
+    [self applyFilter:DBCallHistoryFilterAll];
+  } else if (index == 1) {
+    [self applyFilter:DBCallHistoryFilterMissed];
+  } else if ([_doorIds count] <= kMaxDoorSegments) {
+    NSUInteger door = (NSUInteger)(index - 2);
+    if (door < [_doorIds count]) [self applyFilter:[_doorIds objectAtIndex:door]];
+  } else {
+    [self updateFilterSelection];
+    [self presentDoorSheet];
   }
 }
 
-- (void)onFilter:(UIButton *)sender {
-  _filter = [(sender.accessibilityIdentifier ?: DBCallHistoryFilterAll) copy];
-  [self updateFilterSelection];
-  [self rebuildSections];
+- (void)presentDoorSheet {
+  UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:[_texts ts:@"dash.doors"]
+                                                     delegate:self
+                                            cancelButtonTitle:nil
+                                       destructiveButtonTitle:nil
+                                            otherButtonTitles:nil];
+  for (NSString *label in _doorLabels) [sheet addButtonWithTitle:label];
+  sheet.cancelButtonIndex = [sheet addButtonWithTitle:[_texts ts:@"admin.cancel"]];
+  _doorSheet = sheet;
+  CGRect anchor = [self convertRect:_filterControl.bounds fromView:_filterControl];
+  if (DBChromeIsPad())
+    [sheet showFromRect:anchor inView:self animated:NO];
+  else
+    [sheet showInView:self];
+}
+
+- (void)actionSheet:(UIActionSheet *)sheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+  if (sheet != _doorSheet) return;
+  _doorSheet = nil;
+  if (buttonIndex < 0 || buttonIndex == sheet.cancelButtonIndex ||
+      buttonIndex >= (NSInteger)[_doorIds count]) return;
+  [self applyFilter:[_doorIds objectAtIndex:(NSUInteger)buttonIndex]];
 }
 
 - (void)rebuildSections {
@@ -249,8 +272,9 @@ static const NSInteger kPageSize = 50;
   _sections = [DBCallHistoryModel groupRowsByDay:filtered dayKey:^NSString *(long long ms) {
     return [DBCallHistoryModel dayKeyForTs:ms offsetMinutes:offset];
   }];
-  _empty.hidden = ([filtered count] > 0);
-  _loadMore.hidden = !_mayHaveMore;
+  _empty.text = [_texts ts:_seenDone ? @"history.seen_done" : @"history.empty"];
+  _table.tableHeaderView = [filtered count] > 0 ? nil : _empty;
+  _markSeenItem.enabled = [_allRows count] > 0;
   [_table reloadData];
   [self setNeedsLayout];
 }
@@ -265,7 +289,9 @@ static const NSInteger kPageSize = 50;
     dispatch_async(dispatch_get_main_queue(), ^{
       DBHistoryScreen *screen = weakSelf;
       if (!screen || !ok) return;
+      screen->_seenDone = YES;
       screen->_empty.text = [screen->_texts ts:@"history.seen_done"];
+      screen->_markSeenItem.enabled = NO;
     });
   });
 }
@@ -276,6 +302,10 @@ static const NSInteger kPageSize = 50;
 
 #pragma mark - table
 
+- (BOOL)isLoadMoreSection:(NSInteger)section {
+  return _mayHaveMore && section == (NSInteger)[_sections count];
+}
+
 - (NSArray *)rowsInSection:(NSInteger)section {
   if (section < 0 || section >= (NSInteger)[_sections count]) return [NSArray array];
   return [[_sections objectAtIndex:(NSUInteger)section] objectForKey:@"rows"];
@@ -283,11 +313,12 @@ static const NSInteger kPageSize = 50;
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
   (void)tableView;
-  return (NSInteger)[_sections count];
+  return (NSInteger)[_sections count] + (_mayHaveMore ? 1 : 0);
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
   (void)tableView;
+  if ([self isLoadMoreSection:section]) return 1;
   return (NSInteger)[[self rowsInSection:section] count];
 }
 
@@ -304,9 +335,8 @@ static const NSInteger kPageSize = 50;
   return day;
 }
 
-// A node id is not something to show a resident: it is resolved to the device
-// name, and a name that cannot be resolved is left out rather than printed as
-// forty hex characters.
+// A node id is not something to show a resident: it is resolved to the device name, and a name
+// that cannot be resolved is left out rather than printed as forty hex characters.
 - (NSString *)deviceNameForId:(NSString *)identifier {
   if ([identifier length] == 0) return @"";
   NSString *name = [DBConfigUtil str:_cfg
@@ -319,7 +349,6 @@ static const NSInteger kPageSize = 50;
   if ([[DBConfigUtil str:_status path:@"node.id"] isEqualToString:identifier] &&
       [selfName length] > 0)
     return selfName;
-  // An id that resolves to nothing is noise, not information.
   return [identifier length] > 24 ? @"" : identifier;
 }
 
@@ -332,14 +361,29 @@ static const NSInteger kPageSize = 50;
   return outcome;
 }
 
+- (UITableViewCell *)loadMoreCellForTable:(UITableView *)tableView {
+  static NSString *identifier = @"more";
+  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+  if (cell == nil) {
+    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                  reuseIdentifier:identifier];
+    cell.textLabel.textAlignment = NSTextAlignmentCenter;
+  }
+  cell.textLabel.text = [_texts ts:@"history.load_more"];
+  return cell;
+}
+
 - (UITableViewCell *)tableView:(UITableView *)tableView
          cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+  if ([self isLoadMoreSection:indexPath.section]) return [self loadMoreCellForTable:tableView];
   static NSString *identifier = @"history";
   UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
   if (cell == nil) {
     cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
                                   reuseIdentifier:identifier];
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    cell.textLabel.adjustsFontSizeToFitWidth = YES;
+    cell.detailTextLabel.adjustsFontSizeToFitWidth = YES;
   }
   NSArray *rows = [self rowsInSection:indexPath.section];
   if (indexPath.row >= (NSInteger)[rows count]) return cell;
@@ -351,7 +395,6 @@ static const NSInteger kPageSize = 50;
   long long ts = [DBConfigUtil longLongVal:row path:@"ts" def:0];
   cell.textLabel.text = [NSString stringWithFormat:@"%@   %@",
       [DBCallHistoryModel clockForTs:ts offsetMinutes:_tzOffsetMinutes], doorLabel];
-  cell.textLabel.font = [UIFont boldSystemFontOfSize:23];
 
   NSMutableArray *detail = [NSMutableArray array];
   [detail addObject:[self outcomeTextForRow:row]];
@@ -362,41 +405,34 @@ static const NSInteger kPageSize = 50;
       [DBConfigUtil longLongVal:row path:@"duration_ms" def:0]];
   if ([duration length] > 0) [detail addObject:[_texts t:@"history.duration", duration, nil]];
   cell.detailTextLabel.text = [detail componentsJoinedByString:@"  ·  "];
-  cell.detailTextLabel.font = [UIFont systemFontOfSize:19];
-
-  cell.backgroundColor = _palette.surface;
-  cell.textLabel.backgroundColor = [UIColor clearColor];
-  cell.detailTextLabel.backgroundColor = [UIColor clearColor];
-  cell.textLabel.textColor = _palette.ink;
+  // A missed call is the one row state with a colour: the negative role. Every other row keeps
+  // the system's own detail colour, captured from a fresh cell.
+  static UIColor *stockDetail = nil;
+  if (stockDetail == nil) stockDetail = cell.detailTextLabel.textColor;
   cell.detailTextLabel.textColor = [DBCallHistoryModel rowIsMissed:row]
-      ? _palette.danger : _palette.mutedInk;
+      ? [UIColor colorWithRed:0.78f green:0.11f blue:0.10f alpha:1] : stockDetail;
   return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+  [tableView deselectRowAtIndexPath:indexPath animated:NO];
+  if ([self isLoadMoreSection:indexPath.section]) [self onLoadMore];
 }
 
 #pragma mark - layout
 
 - (void)layoutSubviews {
   [super layoutSubviews];
-  CGSize size = self.bounds.size;
-  CGFloat pad = 20;
-  _title.frame = CGRectMake(pad, 16, size.width - 2 * pad - 300, 36);
-  _markSeen.frame = CGRectMake(size.width - pad - 300, 16, 190, 40);
-  _close.frame = CGRectMake(size.width - pad - 100, 16, 100, 40);
-
-  _filterBar.frame = CGRectMake(pad, 64, size.width - 2 * pad, 44);
-  CGFloat x = 0;
-  for (UIButton *button in _filterButtons) {
-    CGSize fit = [button sizeThatFits:CGSizeMake(240, 40)];
-    CGFloat width = MIN(240, MAX(88, fit.width));
-    button.frame = CGRectMake(x, 2, width, 40);
-    x += width + 8;
+  CGRect bounds = self.bounds;
+  CGFloat top = [_nav layoutInBounds:bounds];
+  CGFloat bottom = [_tabs layoutInBounds:bounds];
+  if (_filterControl && !CGSizeEqualToSize(_placedSize, bounds.size)) {
+    _placedSize = bounds.size;
+    [self placeFilterControl];
   }
-  _filterBar.contentSize = CGSizeMake(x, 44);
-
-  CGFloat footer = _loadMore.hidden ? 0 : 62;
-  _table.frame = CGRectMake(0, 116, size.width, MAX(0, size.height - 116 - footer));
-  _empty.frame = CGRectMake(pad, 200, size.width - 2 * pad, 40);
-  _loadMore.frame = CGRectMake((size.width - 280) / 2, size.height - 54, 280, 46);
+  _table.frame = CGRectMake(0, top, bounds.size.width,
+                            MAX(0, bounds.size.height - top - bottom));
+  _empty.frame = CGRectMake(0, 0, bounds.size.width, 120);
 }
 
 @end

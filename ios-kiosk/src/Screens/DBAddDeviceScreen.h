@@ -1,9 +1,10 @@
 #import "DBScreen.h"
 
-// "Add a device" panel for a kiosk that is already in a Cluster (spec §5.1).
-// Reached from the Home membership line behind the admin password. A device with a
-// camera (iPad mini) can scan the new device's Add QR; the iPad 1 has none, so it
-// shows only this device's own QR and explains why the scan action is missing.
+// "Add a device" panel for a kiosk that is already in a Cluster (spec §5.1): a navigation bar
+// over one grouped table (nearby devices, Pairing PIN, this device's QR, bulk add, security
+// events, leave the cluster). Reached from the Home membership line behind the admin password.
+// A device with a camera (iPad mini) can scan the new device's Add QR; the iPad 1 has none, so
+// it shows only this device's own QR and explains why the scan action is missing.
 @interface DBAddDeviceScreen : DBScreen
 
 - (id)initWithRouter:(DBRouter *)router;

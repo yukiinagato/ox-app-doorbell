@@ -18,6 +18,7 @@
 #import "../Net/DBMjpegClient.h"
 #import "../Net/DBRTSPH264Source.h"
 #import "../Net/DBSnapshotPoller.h"
+#import "DBChrome.h"
 #import "DBRouter.h"
 #import "DBWidgets.h"
 #import <math.h>
@@ -50,6 +51,43 @@ static void DBApplyDoorButtonStyle(UIButton *button, NSDictionary *style,
   button.layer.cornerRadius = DBDoorStyleNumber(style, @"radius", radius, 0, 44);
 }
 
+// YES when a validated administrator override carries something a stock button cannot show.
+static BOOL DBDoorStyleNeedsFill(NSDictionary *style) {
+  return DBDoorStyleColor(style, @"foreground", nil) != nil ||
+      DBDoorStyleColor(style, @"background", nil) != nil ||
+      DBDoorStyleColor(style, @"border", nil) != nil ||
+      [[style objectForKey:@"radius"] isKindOfClass:[NSNumber class]];
+}
+
+// The standard card for content that sits on the wallpaper: the system's cell colours on a
+// plain view. No masking, so the A4 never renders it offscreen.
+static UIView *DBDoorPlate(void) {
+  UIView *plate = [[UIView alloc] init];
+  plate.backgroundColor = [UIColor whiteColor];
+  plate.layer.cornerRadius = 10;
+  if (!DBChromeIsFlat()) {
+    plate.layer.borderWidth = 1;
+    plate.layer.borderColor = [UIColor colorWithWhite:0.67f alpha:1].CGColor;
+  }
+  return plate;
+}
+
+static UIFont *DBDoorFont(CGFloat size, BOOL bold) {
+  return bold ? [UIFont boldSystemFontOfSize:size] : [UIFont systemFontOfSize:size];
+}
+
+// The largest font from size down to minimum whose wrapped text fits.
+static UIFont *DBDoorFittingFont(NSString *text, CGFloat size, CGFloat minimum, BOOL bold,
+                                 CGSize available) {
+  UIFont *font = DBDoorFont(size, bold);
+  while (size > minimum &&
+         [text sizeWithFont:font constrainedToSize:CGSizeMake(available.width, 1000)
+              lineBreakMode:NSLineBreakByWordWrapping].height > available.height) {
+    size -= 1;
+    font = DBDoorFont(size, bold);
+  }
+  return font;
+}
 
 typedef enum {
   DBDoorFlowIdle = 0,
@@ -63,7 +101,7 @@ typedef enum {
   DBDoorPurposeAlertActiveCall
 } DBDoorPurposeAlertMode;
 
-@interface DBDoorScreen () <UIAlertViewDelegate, DBSosSliderDelegate>
+@interface DBDoorScreen () <UIAlertViewDelegate, UIActionSheetDelegate, DBSosSliderDelegate>
 - (BOOL)beginCallWithPurpose:(NSString *)purpose;
 - (void)presentPurposeAlertForActiveCall:(BOOL)activeCall;
 - (void)dismissPurposeAlert;
@@ -74,8 +112,10 @@ typedef enum {
 - (void)publishMediaSourceStatus;
 @end
 
-// The purpose grid's Tabler icon, above its label.
-static const CGFloat kPurposeIconSide = 28;
+// The purpose icon on a button that carries an administrator override.
+static const CGFloat kPurposeIconSide = 24;
+// The narrowest language segment a visitor can still hit and read.
+static const CGFloat kLanguageSegmentMinimum = 64;
 
 @implementation DBDoorScreen {
   DBCoreBridge *_core;
@@ -126,31 +166,38 @@ static const CGFloat kPurposeIconSide = 28;
   NSString *_purposeAlertCallID;
   UIAlertView *_purposeAlert;
 
-  UILabel *_titleLabel;
+  DBNavBar *_nav;
   UIImageView *_cameraPreviewView;
   UILabel *_touchHint;
   UILabel *_mediaBadge;
   UIButton *_callButton;
-  UILabel *_purposeHint;
-  UIScrollView *_contentScroll;
   UIScrollView *_purposeScroll;
   NSMutableArray *_purposeButtons;
-  NSMutableArray *_purposeIcons;   // UIImageView or NSNull, aligned with the buttons.
+  // A UIView under each stock purpose button on a flat system, or NSNull.
+  NSMutableArray *_purposePlates;
+  BOOL _purposeButtonsFilled;
   NSArray *_purposeIds;
-  UIScrollView *_languageBar;
-  NSMutableArray *_languageButtons;
+  UISegmentedControl *_languageControl;
+  // Replaces the segmented control when the enabled languages would not fit as segments.
+  UIButton *_languageButton;
+  UIActionSheet *_languageSheet;
+  UIView *_languagePlate;
+  BOOL _languageUsesSheet;
   NSArray *_languages;
-  UIView *_callingOverlay;
+  UIView *_callPlate;
   UILabel *_callingLabel;
-  UIView *_pulse;
+  UIActivityIndicatorView *_callSpinner;
   UIButton *_cancelButton;
   BOOL _cancelTouchPending;
   DBDoorFlowState _cancelTouchPhase;
   NSString *_cancelTouchCallID;
   NSUInteger _cancelActionGeneration;
   NSUInteger _cancelTouchGeneration;
-  UIView *_replyBanner;
+  UIView *_replyPlate;
   UILabel *_replyText;
+  UILabel *_replyCountdown;
+  BOOL _replyShown;
+  NSTimeInterval _replyDeadline;
   UIView *_emergencyOverlay;
   UILabel *_emergencyTitle;
   UILabel *_emergencyNote;
@@ -159,11 +206,13 @@ static const CGFloat kPurposeIconSide = 28;
   NSInteger _adminTaps;
   NSDate *_adminFirstTap;
   UIButton *_pairBanner;      // pair.not_set_up_banner while the node is not ready.
+  UIView *_pairPlate;
   NSString *_pairingState;
+  BOOL _onScreen;
 
-  // Batch-2 visitor screen (spec §4.2, §5.1).
   UILabel *_clockLabel;
   UILabel *_dateLabel;
+  UIView *_noticeCard;
   UILabel *_noticeLabel;
   UIButton *_noticeExpand;
   BOOL _noticeExpanded;
@@ -193,8 +242,7 @@ static const CGFloat kPurposeIconSide = 28;
     _callTiming = [[DBCallTiming alloc] init];
     _visitorLang = [_boot.uiLang length] ? _boot.uiLang : @"ja";
     _purposeButtons = [[NSMutableArray alloc] init];
-    _purposeIcons = [[NSMutableArray alloc] init];
-    _languageButtons = [[NSMutableArray alloc] init];
+    _purposePlates = [[NSMutableArray alloc] init];
     _adminFirstTap = [NSDate distantPast];
     _feedbackAudio = [[DBSiren alloc] init];
     _replyAudio = [[DBSiren alloc] init];
@@ -210,6 +258,7 @@ static const CGFloat kPurposeIconSide = 28;
   [_keyframeTimer invalidate];
   [_callTimer invalidate];
   [_replyTimer invalidate];
+  _languageSheet.delegate = nil;
 }
 
 - (NSString *)screenName {
@@ -220,22 +269,37 @@ static const CGFloat kPurposeIconSide = 28;
   }
 }
 
-- (UIButton *)buttonWithTitle:(NSString *)title primary:(BOOL)primary {
-  UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+// Call, Cancel, End, and the SOS clear have no stock equivalent and keep a semantic fill.
+- (UIButton *)filledButton {
+  UIButton *button = DBChromeFilledButton(24);
   button.isAccessibilityElement = YES;
   button.accessibilityTraits = UIAccessibilityTraitButton;
-  [button setTitle:title forState:UIControlStateNormal];
   [button setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  button.titleLabel.font = [UIFont boldSystemFontOfSize:24];
-  button.titleLabel.adjustsFontSizeToFitWidth = YES;
-  button.titleLabel.minimumFontSize = 13;
+  button.titleLabel.adjustsFontSizeToFitWidth = NO;
   button.titleLabel.numberOfLines = 3;
+  button.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
   button.titleLabel.textAlignment = NSTextAlignmentCenter;
-  button.backgroundColor = primary
-      ? [UIColor colorWithRed:0.094 green:0.478 blue:0.235 alpha:1]
-      : [UIColor colorWithWhite:1 alpha:0.12];
-  button.layer.cornerRadius = 14;
+  button.contentEdgeInsets = UIEdgeInsetsMake(8, 12, 8, 12);
   return button;
+}
+
+// Text drawn straight on the wallpaper; applyRegionInk gives it the measured ink.
+- (UILabel *)wallpaperLabelWithFont:(UIFont *)font {
+  DBReadableLabel *label = [[DBReadableLabel alloc] init];
+  label.backgroundColor = [UIColor clearColor];
+  label.textColor = [UIColor whiteColor];
+  label.textAlignment = NSTextAlignmentCenter;
+  label.font = font;
+  return label;
+}
+
+// Text on a plate keeps the system's label colour. UILabel is opaque white before iOS 7.
+- (UILabel *)plateLabelWithFont:(UIFont *)font {
+  UILabel *label = [[UILabel alloc] init];
+  label.backgroundColor = [UIColor clearColor];
+  label.font = font;
+  label.numberOfLines = 0;
+  return label;
 }
 
 - (void)buildUI {
@@ -262,65 +326,36 @@ static const CGFloat kPurposeIconSide = 28;
   _cameraPreviewView.accessibilityIdentifier = @"door_camera_local_preview";
   [self addSubview:_cameraPreviewView];
 
-  _titleLabel = [[UILabel alloc] init];
-  _titleLabel.font = [UIFont boldSystemFontOfSize:42];
-  _titleLabel.textColor = [UIColor whiteColor];
-  _titleLabel.textAlignment = NSTextAlignmentCenter;
-  _titleLabel.adjustsFontSizeToFitWidth = YES;
-  _titleLabel.minimumFontSize = 22;
-  [self addSubview:_titleLabel];
+  // Clock, date, hint, and version are direct children of the screen: the background sampler
+  // is keyed to the screen's size, so only a direct child gets ink measured behind its frame.
+  _clockLabel = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:72]];
+  _clockLabel.adjustsFontSizeToFitWidth = YES;
+  _clockLabel.minimumFontSize = 20;
+  [self addSubview:_clockLabel];
 
-  _touchHint = [[UILabel alloc] init];
-  _touchHint.font = [UIFont systemFontOfSize:26];
-  _touchHint.numberOfLines = 3;
-  _touchHint.adjustsFontSizeToFitWidth = YES;
-  _touchHint.minimumFontSize = 16;
+  _dateLabel = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:22]];
+  _dateLabel.adjustsFontSizeToFitWidth = YES;
+  _dateLabel.minimumFontSize = 12;
+  [self addSubview:_dateLabel];
+
+  _touchHint = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:24]];
+  _touchHint.numberOfLines = 2;
   _touchHint.textColor = [UIColor colorWithWhite:1 alpha:0.65];
-  _touchHint.textAlignment = NSTextAlignmentCenter;
   [self addSubview:_touchHint];
 
-  _mediaBadge = [[UILabel alloc] init];
-  _mediaBadge.font = [UIFont boldSystemFontOfSize:14];
-  _mediaBadge.numberOfLines = 2;
-  _mediaBadge.textAlignment = NSTextAlignmentCenter;
-  _mediaBadge.layer.cornerRadius = 8;
-  _mediaBadge.clipsToBounds = YES;
-  _mediaBadge.accessibilityIdentifier = @"door_media_source";
-  [self addSubview:_mediaBadge];
+  _versionLabel = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:16]];
+  _versionLabel.adjustsFontSizeToFitWidth = YES;
+  _versionLabel.minimumFontSize = 12;
+  [self addSubview:_versionLabel];
 
-  _callButton = [self buttonWithTitle:@"" primary:YES];
-  _callButton.accessibilityIdentifier = @"door_call";
-  [_callButton addTarget:self action:@selector(onCall) forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_callButton];
+  _nav = [[DBNavBar alloc] init];
+  [_nav setRootTitle:@"" backTitle:nil onBack:nil];
+  _nav.bar.autoresizingMask = UIViewAutoresizingNone;
+  [self addSubview:_nav.bar];
 
-  _purposeHint = [[UILabel alloc] init];
-  _purposeHint.font = [UIFont systemFontOfSize:20];
-  _purposeHint.textColor = [UIColor colorWithWhite:1 alpha:0.7];
-  _purposeHint.textAlignment = NSTextAlignmentCenter;
-  [self addSubview:_purposeHint];
-
-  _purposeScroll = [[UIScrollView alloc] init];
-  _purposeScroll.alwaysBounceVertical = YES;
-  [self addSubview:_purposeScroll];
-
-  _languageBar = [[UIScrollView alloc] init];
-  _languageBar.showsHorizontalScrollIndicator = YES;
-  [self addSubview:_languageBar];
-
-  // A door station that was skipped with 「あとで設定」 keeps a persistent,
-  // tappable reminder instead of silently running unpaired.
-  _pairBanner = [self buttonWithTitle:@"" primary:NO];
-  _pairBanner.backgroundColor = [UIColor colorWithRed:0.72 green:0.45 blue:0.10 alpha:1];
-  _pairBanner.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-  _pairBanner.layer.cornerRadius = 10;
-  _pairBanner.accessibilityIdentifier = @"door_pair_banner";
-  _pairBanner.hidden = YES;
-  [_pairBanner addTarget:self action:@selector(onPairBanner)
-        forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_pairBanner];
-
-  // A door station shows no admin entry at all (spec §0.2): the corner is
-  // invisible and needs seven taps plus the admin password.
+  // A door station shows no admin entry at all: the corner is invisible and needs seven taps
+  // plus the admin password. It lies over the right end of the bar and under the language
+  // control, so it never takes a visitor's touch away from a visible control.
   _infoButton = [UIButton buttonWithType:UIButtonTypeCustom];
   _infoButton.backgroundColor = [UIColor clearColor];
   _infoButton.accessibilityIdentifier = @"door_admin_corner";
@@ -328,120 +363,172 @@ static const CGFloat kPurposeIconSide = 28;
         forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_infoButton];
 
-  // Large HH:MM:SS plus the date, on every size (spec §5.1).
-  _clockLabel = [[UILabel alloc] init];
-  _clockLabel.backgroundColor = [UIColor clearColor];
-  _clockLabel.textAlignment = NSTextAlignmentCenter;
-  _clockLabel.font = [UIFont systemFontOfSize:72];
-  [self addSubview:_clockLabel];
+  // A flat system draws its controls without a ground of their own, so there they get the
+  // standard plate; the iOS 5 controls are opaque and need none.
+  if (DBChromeIsFlat()) {
+    _languagePlate = DBDoorPlate();
+    [self addSubview:_languagePlate];
+  }
+  _languageControl = [[UISegmentedControl alloc] initWithItems:nil];
+  _languageControl.accessibilityIdentifier = @"door_language";
+  _languageControl.hidden = YES;
+  [_languageControl addTarget:self action:@selector(onLanguageChanged:)
+             forControlEvents:UIControlEventValueChanged];
+  [self addSubview:_languageControl];
+  _languageButton = DBChromeButton(@"", 18);
+  _languageButton.accessibilityIdentifier = @"door_language_menu";
+  _languageButton.hidden = YES;
+  [_languageButton addTarget:self action:@selector(onLanguageButton)
+            forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_languageButton];
 
-  _dateLabel = [[UILabel alloc] init];
-  _dateLabel.backgroundColor = [UIColor clearColor];
-  _dateLabel.textAlignment = NSTextAlignmentCenter;
-  _dateLabel.font = [UIFont systemFontOfSize:22];
-  [self addSubview:_dateLabel];
+  _purposeScroll = [[UIScrollView alloc] init];
+  _purposeScroll.backgroundColor = [UIColor clearColor];
+  _purposeScroll.accessibilityIdentifier = @"door_secondary_content";
+  [self addSubview:_purposeScroll];
+
+  // A door station that was set up without pairing keeps a persistent, tappable reminder
+  // instead of silently running unpaired.
+  if (DBChromeIsFlat()) {
+    _pairPlate = DBDoorPlate();
+    _pairPlate.hidden = YES;
+    [_purposeScroll addSubview:_pairPlate];
+  }
+  _pairBanner = DBChromeButton(@"", 18);
+  _pairBanner.accessibilityIdentifier = @"door_pair_banner";
+  _pairBanner.hidden = YES;
+  [_pairBanner addTarget:self action:@selector(onPairBanner)
+        forControlEvents:UIControlEventTouchUpInside];
+  [_purposeScroll addSubview:_pairBanner];
+
+  _mediaBadge = [[DBReadableLabel alloc] init];
+  _mediaBadge.backgroundColor = [UIColor clearColor];
+  _mediaBadge.textColor = [UIColor colorWithWhite:1 alpha:0.65];
+  _mediaBadge.font = [UIFont boldSystemFontOfSize:15];
+  _mediaBadge.numberOfLines = 2;
+  _mediaBadge.textAlignment = NSTextAlignmentCenter;
+  _mediaBadge.accessibilityIdentifier = @"door_media_source";
+  [_purposeScroll addSubview:_mediaBadge];
 
   // The visitor sees the announcement text only: no source line and no expiry.
-  _noticeLabel = [[UILabel alloc] init];
-  _noticeLabel.backgroundColor = [UIColor clearColor];
-  _noticeLabel.font = [UIFont systemFontOfSize:26];
+  _noticeCard = DBDoorPlate();
+  _noticeCard.hidden = YES;
+  _noticeLabel = [self plateLabelWithFont:[UIFont systemFontOfSize:20]];
   _noticeLabel.numberOfLines = 2;
   _noticeLabel.hidden = YES;
-  [self addSubview:_noticeLabel];
-
+  [_noticeCard addSubview:_noticeLabel];
   _noticeExpand = [UIButton buttonWithType:UIButtonTypeCustom];
   _noticeExpand.backgroundColor = [UIColor clearColor];
   _noticeExpand.hidden = YES;
+  _noticeExpand.accessibilityIdentifier = @"door_notice";
   [_noticeExpand addTarget:self action:@selector(onToggleNotice)
           forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_noticeExpand];
+  [_noticeCard addSubview:_noticeExpand];
+  [self addSubview:_noticeCard];
 
-  _versionLabel = [[UILabel alloc] init];
-  _versionLabel.backgroundColor = [UIColor clearColor];
-  _versionLabel.font = [UIFont systemFontOfSize:16];
-  _versionLabel.textAlignment = NSTextAlignmentCenter;
-  [self addSubview:_versionLabel];
+  _replyPlate = DBDoorPlate();
+  _replyPlate.hidden = YES;
+  _replyText = [self plateLabelWithFont:[UIFont boldSystemFontOfSize:28]];
+  _replyText.textAlignment = NSTextAlignmentCenter;
+  _replyText.accessibilityIdentifier = @"door_reply";
+  [_replyPlate addSubview:_replyText];
+  _replyCountdown = [self plateLabelWithFont:[UIFont systemFontOfSize:15]];
+  _replyCountdown.numberOfLines = 1;
+  _replyCountdown.textAlignment = NSTextAlignmentRight;
+  [_replyPlate addSubview:_replyCountdown];
+  [self addSubview:_replyPlate];
+
+  _callPlate = DBDoorPlate();
+  _callPlate.hidden = YES;
+  _callSpinner = [[UIActivityIndicatorView alloc]
+      initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
+  [_callPlate addSubview:_callSpinner];
+  _callingLabel = [self plateLabelWithFont:[UIFont boldSystemFontOfSize:40]];
+  _callingLabel.textAlignment = NSTextAlignmentCenter;
+  _callingLabel.accessibilityIdentifier = @"door_call_status";
+  [_callPlate addSubview:_callingLabel];
+  [self addSubview:_callPlate];
+
+  _callButton = [self filledButton];
+  _callButton.backgroundColor = [UIColor colorWithRed:0.094 green:0.478 blue:0.235 alpha:1];
+  _callButton.accessibilityIdentifier = @"door_call";
+  [_callButton addTarget:self action:@selector(onCall) forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_callButton];
+
+  _cancelButton = [self filledButton];
+  _cancelButton.backgroundColor = [UIColor colorWithRed:0.75 green:0.16 blue:0.13 alpha:1];
+  _cancelButton.accessibilityIdentifier = @"door_cancel_call";
+  _cancelButton.hidden = YES;
+  [_cancelButton addTarget:self action:@selector(onCancelTouchDown) forControlEvents:UIControlEventTouchDown];
+  [_cancelButton addTarget:self action:@selector(onCancel) forControlEvents:UIControlEventTouchUpInside];
+  [_cancelButton addTarget:self action:@selector(onCancelTouchCancel)
+         forControlEvents:UIControlEventTouchUpOutside | UIControlEventTouchCancel];
+  [self addSubview:_cancelButton];
 
   _sos = [[DBSosSlider alloc] initWithFrame:CGRectZero];
   _sos.delegate = self;
   _sos.hidden = YES;
   [self addSubview:_sos];
 
-  _replyBanner = [[UIView alloc] init];
-  _replyBanner.backgroundColor = [UIColor colorWithRed:0.10 green:0.34 blue:0.17 alpha:0.98];
-  _replyBanner.layer.cornerRadius = 14;
-  _replyBanner.hidden = YES;
-  _replyText = [[UILabel alloc] init];
-  _replyText.font = [UIFont boldSystemFontOfSize:28];
-  _replyText.textColor = [UIColor whiteColor];
-  _replyText.textAlignment = NSTextAlignmentCenter;
-  _replyText.numberOfLines = 4;
-  [_replyBanner addSubview:_replyText];
-  [self addSubview:_replyBanner];
-
-  _callingOverlay = [[UIView alloc] init];
-  _callingOverlay.backgroundColor = [UIColor colorWithRed:0.035 green:0.045 blue:0.06 alpha:0.99];
-  _callingOverlay.hidden = YES;
-  _callingOverlay.accessibilityViewIsModal = YES;
-  _pulse = [[UIView alloc] init];
-  _pulse.backgroundColor = [UIColor colorWithRed:0.2 green:0.75 blue:0.4 alpha:1];
-  _pulse.layer.cornerRadius = 55;
-  [_callingOverlay addSubview:_pulse];
-  _callingLabel = [[UILabel alloc] init];
-  _callingLabel.font = [UIFont boldSystemFontOfSize:44];
-  _callingLabel.textColor = [UIColor whiteColor];
-  _callingLabel.textAlignment = NSTextAlignmentCenter;
-  _callingLabel.numberOfLines = 3;
-  _callingLabel.accessibilityIdentifier = @"door_call_status";
-  [_callingOverlay addSubview:_callingLabel];
-  _cancelButton = [self buttonWithTitle:@"" primary:NO];
-  _cancelButton.backgroundColor = [UIColor colorWithRed:0.75 green:0.16 blue:0.13 alpha:1];
-  _cancelButton.accessibilityIdentifier = @"door_cancel_call";
-  [_cancelButton addTarget:self action:@selector(onCancelTouchDown) forControlEvents:UIControlEventTouchDown];
-  [_cancelButton addTarget:self action:@selector(onCancel) forControlEvents:UIControlEventTouchUpInside];
-  [_cancelButton addTarget:self action:@selector(onCancelTouchCancel)
-         forControlEvents:UIControlEventTouchUpOutside | UIControlEventTouchCancel];
-  [_callingOverlay addSubview:_cancelButton];
-  [self addSubview:_callingOverlay];
-
+  // The emergency layer stays custom and is the last subview, so it covers the navigation
+  // bar and every control.
   _emergencyOverlay = [[UIView alloc] init];
   _emergencyOverlay.backgroundColor = [UIColor colorWithRed:0.52 green:0.0 blue:0.0 alpha:0.98];
   _emergencyOverlay.hidden = YES;
   _emergencyOverlay.accessibilityViewIsModal = YES;
   _emergencyTitle = [[UILabel alloc] init];
+  _emergencyTitle.backgroundColor = [UIColor clearColor];
   _emergencyTitle.font = [UIFont boldSystemFontOfSize:56];
   _emergencyTitle.textColor = [UIColor whiteColor];
   _emergencyTitle.textAlignment = NSTextAlignmentCenter;
   _emergencyTitle.numberOfLines = 2;
   [_emergencyOverlay addSubview:_emergencyTitle];
   _emergencyNote = [[UILabel alloc] init];
+  _emergencyNote.backgroundColor = [UIColor clearColor];
   _emergencyNote.font = [UIFont systemFontOfSize:25];
   _emergencyNote.textColor = [UIColor whiteColor];
   _emergencyNote.textAlignment = NSTextAlignmentCenter;
   _emergencyNote.numberOfLines = 3;
   [_emergencyOverlay addSubview:_emergencyNote];
-  _emergencyCancel = [self buttonWithTitle:@"" primary:NO];
+  _emergencyCancel = [self filledButton];
+  _emergencyCancel.backgroundColor = [UIColor colorWithWhite:1 alpha:0.12];
   _emergencyCancel.accessibilityIdentifier = @"door_sos_clear";
   [_emergencyCancel addTarget:self action:@selector(onEmergencyCancel)
                forControlEvents:UIControlEventTouchUpInside];
   [_emergencyOverlay addSubview:_emergencyCancel];
   [self addSubview:_emergencyOverlay];
+}
 
-  _contentScroll = [[UIScrollView alloc] init];
-  _contentScroll.alwaysBounceVertical = NO;
-  _contentScroll.accessibilityIdentifier = @"door_secondary_content";
-  [self insertSubview:_contentScroll belowSubview:_callButton];
-  for (UIView *view in @[_titleLabel, _mediaBadge, _purposeHint, _purposeScroll,
-                         _languageBar, _pairBanner, _clockLabel, _dateLabel,
-                         _noticeLabel, _noticeExpand]) [_contentScroll addSubview:view];
-  _purposeScroll.scrollEnabled = NO;
-
-  [self clearLabelBackgrounds:self];
-  _mediaBadge.backgroundColor = [UIColor colorWithWhite:1 alpha:0.12];
-  _replyBanner.backgroundColor = [UIColor colorWithRed:0.10 green:0.34 blue:0.17 alpha:0.98];
+// One place decides what each call phase shows. The idle content, the call plate, and the
+// two action buttons share their rectangles, so exactly one of each is visible.
+- (void)applyFlowVisibility {
+  BOOL idle = _flowState == DBDoorFlowIdle;
+  BOOL languages = idle && [_languages count] >= 2;
+  _languageControl.hidden = !languages || _languageUsesSheet;
+  _languageButton.hidden = !languages || !_languageUsesSheet;
+  _languagePlate.hidden = !languages;
+  if (!languages) [self dismissLanguageSheet];
+  BOOL reply = idle && _replyShown;
+  BOOL notice = idle && !reply && !_noticeLabel.hidden;
+  BOOL covered = reply || (notice && _noticeExpanded);
+  _replyPlate.hidden = !reply;
+  _noticeCard.hidden = !notice;
+  _clockLabel.hidden = !idle || covered;
+  _dateLabel.hidden = !idle || covered;
+  _purposeScroll.hidden = !idle;
+  _touchHint.hidden = !idle;
+  _callButton.hidden = !idle;
+  _cancelButton.hidden = idle;
+  _callPlate.hidden = idle;
+  // The indicator runs only while a call is ringing on a visible screen, and never in safe
+  // mode.
+  if (_flowState == DBDoorFlowCalling && _onScreen && !_safeMode) [_callSpinner startAnimating];
+  else [_callSpinner stopAnimating];
 }
 
 - (void)onScreenWillAppear {
+  _onScreen = YES;
+  [self applyFlowVisibility];
   if (!_clockTimer) {
     _clockTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self
                                                  selector:@selector(updateClock)
@@ -465,6 +552,7 @@ static const CGFloat kPurposeIconSide = 28;
 // Rendered from Core's local-time document: no operating-system time-zone
 // database is needed and the clock follows the cluster zone and NTP offset.
 - (void)updateClock {
+  [self updateReplyCountdown];
   NSDictionary *local = [_core cachedLocalTime];
   if (![local isKindOfClass:[NSDictionary class]]) return;
   NSInteger hh = [DBConfigUtil intVal:local path:@"hh" def:-1];
@@ -494,7 +582,7 @@ static const CGFloat kPurposeIconSide = 28;
 
 - (void)onToggleNotice {
   _noticeExpanded = !_noticeExpanded;
-  _noticeLabel.numberOfLines = _noticeExpanded ? 0 : 2;
+  [self applyFlowVisibility];
   [self setNeedsLayout];
 }
 
@@ -583,10 +671,6 @@ static const CGFloat kPurposeIconSide = 28;
   [self applyRegionInk];
   [_sos applyPalette:_palette];
   [_sos applyConfig:_cfg texts:_texts];
-  [self updateLanguageSelection];
-
-  // The call button's colour is applied at the end of applySemanticStyles, so
-  // the semantic baseline cannot paint over the computed accent.
 
   // The same rule as every other shell: the bar is drawn when the cluster's
   // emergency.button_on_roles names this role.
@@ -602,15 +686,21 @@ static const CGFloat kPurposeIconSide = 28;
     NSLog(@"[doorbell][sos] door station bar %@ (button_on_roles=%@)",
           showSos ? @"shown" : @"hidden", roles ?: @"<unset>");
   }
+  if (_sos.hidden == showSos) [self setNeedsLayout];
   _sos.hidden = !showSos;
 
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:_boot.door config:_cfg
                                                           nowMs:nowMs];
   NSString *text = notice ? [DBNoticeModel noticeText:notice] : @"";
+  if (![text isEqualToString:_noticeLabel.text ?: @""]) [self setNeedsLayout];
   _noticeLabel.text = text;
+  // The label's own hidden flag records whether an announcement exists; the card around it
+  // follows the call phase.
   _noticeLabel.hidden = ([text length] == 0);
   _noticeExpand.hidden = _noticeLabel.hidden;
+  if (_noticeLabel.hidden) _noticeExpanded = NO;
+  [self applyFlowVisibility];
 
   NSDictionary *power = [_core powerStateNow];
   NSString *appVersion = [[NSBundle mainBundle]
@@ -626,18 +716,16 @@ static const CGFloat kPurposeIconSide = 28;
                                                                       path:@"charging" def:NO]];
 }
 
-// Each text region takes the ink measured behind its own frame. The visitor
-// screen paints a flat background today, so this resolves to core's per-region
-// decision plus any administrator override; it is the same code path the
-// dashboard uses over a theme image.
+// Each text region takes the ink measured behind its own frame; an administrator override
+// still wins. The media line scrolls with the purposes, so it takes the whole-background
+// answer.
 - (void)applyRegionInk {
   if (_palette == nil) return;
   [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
   [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
   [_palette applyInkToLabel:_touchHint region:DBUiRegionHint];
-  [_palette applyInkToLabel:_noticeLabel region:DBUiRegionStatusLine];
   [_palette applyInkToLabel:_versionLabel region:DBUiRegionStatusLine];
-  [_palette applyInkToLabel:_titleLabel region:DBUiRegionTileLabel];
+  [_palette applyInkToLabel:_mediaBadge region:DBUiRegionStatusLine];
 }
 
 - (void)sosSliderDidArm:(DBSosSlider *)slider { (void)slider; }
@@ -654,6 +742,9 @@ static const CGFloat kPurposeIconSide = 28;
   // only drawn here, so it stops until the screen appears again.
   [_clockTimer invalidate];
   _clockTimer = nil;
+  _onScreen = NO;
+  [_callSpinner stopAnimating];
+  [self dismissLanguageSheet];
 }
 
 - (void)refreshFromCore {
@@ -1017,12 +1108,10 @@ static const CGFloat kPurposeIconSide = 28;
 }
 
 - (void)applyStrings {
-  NSString *doorLabel = [self doorLabel];
-  _titleLabel.text = doorLabel;
+  _nav.topItem.title = [self doorLabel];
   _touchHint.text = [_texts ts:[self showsHomePurposes] ? @"door.hint_purpose_first" : @"door.hint_call"];
   [_callButton setTitle:[_texts ts:[self showsHomePurposes] ? @"door.call_direct" : @"idle.call"]
               forState:UIControlStateNormal];
-  _purposeHint.text = @"";
   _callingLabel.text = _callTimingChecking ? [_texts ts:@"visitor.restoring"] : _flowState == DBDoorFlowInCall
       ? [_texts ts:@"incall.title"]
       : (_callingTitleOverride ?: [_texts ts:@"calling.title"]);
@@ -1036,47 +1125,50 @@ static const CGFloat kPurposeIconSide = 28;
   _emergencyTitle.text = [_texts ts:@"emergency.title"];
   _emergencyNote.text = [_texts ts:@"emergency.active_detail"];
   [_emergencyCancel setTitle:[_texts ts:@"emergency.cancel"] forState:UIControlStateNormal];
+  [_pairBanner setTitle:[_texts ts:@"pair.not_set_up_banner"] forState:UIControlStateNormal];
+  [self updateLanguageSelection];
 
   _mediaBadge.accessibilityValue = [_mediaSource.sourceRef length]
       ? [NSString stringWithFormat:@"source_ref=%@", _mediaSource.sourceRef] : @"";
   if (_core.h264CameraActive) {
-    _mediaBadge.text = @" H.264 ";
-    _mediaBadge.textColor = [UIColor colorWithRed:0.55 green:1 blue:0.65 alpha:1];
+    _mediaBadge.text = @"H.264";
   } else if (_rtspForwardingMeasured) {
-    _mediaBadge.text = @" IP CAMERA · H.264 ";
-    _mediaBadge.textColor = [UIColor colorWithRed:0.55 green:1 blue:0.65 alpha:1];
+    _mediaBadge.text = @"IP CAMERA · H.264";
   } else if ([_mediaSource.kind isEqualToString:@"ip_camera"] && _previewMeasured) {
     _mediaBadge.text = [_mediaSource.degradedReason length] > 0
-        ? @" IP CAMERA · PREVIEW " : @" IP CAMERA ";
-    _mediaBadge.textColor = [_mediaSource.degradedReason length] > 0
-        ? [UIColor colorWithRed:1 green:0.75 blue:0.25 alpha:1]
-        : [UIColor colorWithRed:0.55 green:1 blue:0.65 alpha:1];
+        ? @"IP CAMERA · PREVIEW" : @"IP CAMERA";
   } else if (_mediaSource.h264SourceAvailable) {
-    _mediaBadge.text = @" H.264 SOURCE · DEGRADED ";
-    _mediaBadge.textColor = [UIColor colorWithRed:1 green:0.55 blue:0.25 alpha:1];
+    _mediaBadge.text = @"H.264 SOURCE · DEGRADED";
   } else if ([_mediaSource hasVideo]) {
-    _mediaBadge.text = @" VIDEO READY ";
-    _mediaBadge.textColor = [UIColor colorWithRed:0.55 green:1 blue:0.65 alpha:1];
+    _mediaBadge.text = @"VIDEO READY";
   } else {
-    _mediaBadge.text = [NSString stringWithFormat:@" %@ ", [_texts ts:@"ring.no_video"]];
-    _mediaBadge.textColor = [UIColor colorWithWhite:1 alpha:0.65];
+    _mediaBadge.text = [_texts ts:@"ring.no_video"];
   }
+  // The media source line is for the installer, not the visitor: it is drawn only on a panel
+  // with diagnostics enabled, and stays readable to tooling through its accessibility value.
+  _mediaBadge.hidden = !_boot.diagnosticDumps;
   [self applyVisitorTheme];
 }
 
 - (NSDictionary *)styleForSemanticID:(NSString *)semanticID {
-  UIColor *white = [UIColor whiteColor];
+  UIColor *foreground = [UIColor whiteColor];
   UIColor *background = [UIColor colorWithRed:0.15 green:0.16 blue:0.18 alpha:1];
-  if ([semanticID isEqualToString:@"call.primary"])
+  if ([semanticID isEqualToString:@"call.primary"]) {
     background = [UIColor colorWithRed:0.094 green:0.478 blue:0.235 alpha:1];
-  else if ([semanticID isEqualToString:@"cancel.call"] ||
-           [semanticID isEqualToString:@"call.end"])
+  } else if ([semanticID isEqualToString:@"cancel.call"] ||
+             [semanticID isEqualToString:@"call.end"]) {
     background = [UIColor colorWithRed:0.75 green:0.16 blue:0.13 alpha:1];
+  } else if ([semanticID isEqualToString:@"purpose.button"]) {
+    // A purpose override is drawn on a plate-coloured button, so a single overridden colour
+    // is contrast-checked against the colour it will really meet.
+    foreground = [UIColor blackColor];
+    background = [UIColor whiteColor];
+  }
   BOOL safety = [semanticID isEqualToString:@"cancel.call"] ||
       [semanticID isEqualToString:@"call.end"] ||
       [semanticID isEqualToString:@"sos.cancel"];
   return [DBSemanticStyle styleForConfig:_cfg deviceID:_deviceID semanticID:semanticID
-                          safetyCritical:safety baselineForeground:white
+                          safetyCritical:safety baselineForeground:foreground
                       baselineBackground:background baselineAccent:nil baselineBorder:nil];
 }
 
@@ -1087,80 +1179,92 @@ static const CGFloat kPurposeIconSide = 28;
   UIColor *red = [UIColor colorWithRed:0.75 green:0.16 blue:0.13 alpha:1];
 
   NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
-  DBApplyDoorButtonStyle(_callButton, callStyle, white, green, 14);
-  // An administrator's explicit colour wins; otherwise the button takes the
-  // accent computed from the effective background (spec §5.2). This runs after
-  // the semantic pass because that pass would otherwise paint the baseline
-  // green over it.
+  DBApplyDoorButtonStyle(_callButton, callStyle, white, green, 10);
+  // An administrator's explicit colour wins; otherwise the button takes the accent Core
+  // computed from the effective background. This runs after the semantic pass because that
+  // pass would otherwise paint the baseline green over it.
   if (_palette != nil && [callStyle objectForKey:@"background"] == nil) {
     _callButton.backgroundColor = _palette.accent;
     [_callButton setTitleColor:_palette.accentInk forState:UIControlStateNormal];
   }
   NSString *cancelID = _flowState == DBDoorFlowInCall ? @"call.end" : @"cancel.call";
   DBApplyDoorButtonStyle(_cancelButton, [self styleForSemanticID:cancelID],
-                         white, red, 14);
+                         white, red, 10);
+  // A purpose is the stock button. Only a validated override that names a colour, a border,
+  // or a radius turns it into a filled button, and then exactly that override is drawn.
   NSDictionary *purposeStyle = [self styleForSemanticID:@"purpose.button"];
-  UIColor *chipInk = _palette ? _palette.ink : white;
-  UIColor *chipPlate = _palette ? _palette.chipPlate : neutral;
-  for (UIButton *button in _purposeButtons) {
-    DBApplyDoorButtonStyle(button, purposeStyle, chipInk, chipPlate, 14);
-    // An explicit semantic override still wins; otherwise the chip follows the
-    // measured ground, because white on a light wallpaper is unreadable.
-    if ([purposeStyle objectForKey:@"background"] == nil && _palette != nil) {
-      button.backgroundColor = chipPlate;
-      [button setTitleColor:chipInk forState:UIControlStateNormal];
-    }
+  if (DBDoorStyleNeedsFill(purposeStyle) != _purposeButtonsFilled) {
+    [self rebuildPurposes];
+    [self setNeedsLayout];
+  }
+  if (_purposeButtonsFilled) {
+    for (UIButton *button in _purposeButtons)
+      DBApplyDoorButtonStyle(button, purposeStyle, [UIColor blackColor], white, 10);
   }
   DBApplyDoorButtonStyle(_emergencyCancel, [self styleForSemanticID:@"sos.cancel"],
-                         white, neutral, 14);
+                         white, neutral, 10);
 }
 
 - (void)rebuildPurposes {
   for (UIButton *button in _purposeButtons) [button removeFromSuperview];
+  for (id plate in _purposePlates)
+    if ([plate isKindOfClass:[UIView class]]) [(UIView *)plate removeFromSuperview];
   [_purposeButtons removeAllObjects];
-  [_purposeIcons removeAllObjects];
+  [_purposePlates removeAllObjects];
   NSDictionary *purposes = [DBConfigUtil dig:_cfg path:@"visit_purposes"];
   if (![purposes isKindOfClass:[NSDictionary class]]) purposes = nil;
   // A purpose an administrator switched off is not offered to the visitor, in
   // the grid or in the follow-up chooser, which reads the same list.
   _purposeIds = [DBPurposeModel enabledPurposeIdsInConfig:_cfg];
+  NSDictionary *style = [self styleForSemanticID:@"purpose.button"];
+  _purposeButtonsFilled = DBDoorStyleNeedsFill(style);
+  UIColor *ink = DBDoorStyleColor(style, @"foreground", [UIColor blackColor]);
+  BOOL shown = [self showsHomePurposes];
   for (NSInteger i = 0; i < (NSInteger)[_purposeIds count]; i++) {
     NSString *identifier = [_purposeIds objectAtIndex:(NSUInteger)i];
     NSDictionary *entry = [purposes objectForKey:identifier];
     NSString *label = [DBConfigUtil labelOf:entry lang:_visitorLang fallback:identifier];
     // A real icon when this shell has one for the purpose; otherwise whatever
     // glyph the administrator typed, which is all an invented purpose has.
-    UIImage *asset = [DBIconAsset tintedImageNamed:
-        [DBPurposeModel iconNameForPurpose:identifier]
-                                             color:[UIColor whiteColor]
-                                              size:CGSizeMake(kPurposeIconSide, kPurposeIconSide)];
-    NSString *icon = asset != nil ? @"" : [DBPurposeModel displayIconForConfiguredIcon:
+    NSString *iconName = [DBPurposeModel iconNameForPurpose:identifier];
+    UIImage *asset = _purposeButtonsFilled
+        ? [DBIconAsset tintedImageNamed:iconName color:ink
+                                   size:CGSizeMake(kPurposeIconSide, kPurposeIconSide)]
+        : [DBIconAsset imageNamed:iconName];
+    NSString *glyph = asset != nil ? @"" : [DBPurposeModel displayIconForConfiguredIcon:
         [entry objectForKey:@"icon"]];
-    NSString *title = [icon length] ? [NSString stringWithFormat:@"%@\n%@", icon, label] : label;
-    UIButton *button = [self buttonWithTitle:title primary:NO];
+    NSString *title = [glyph length] ? [NSString stringWithFormat:@"%@ %@", glyph, label] : label;
+    UIButton *button = _purposeButtonsFilled ? [self filledButton] : DBChromeButton(title, 22);
+    [button setTitle:title forState:UIControlStateNormal];
+    button.titleLabel.adjustsFontSizeToFitWidth = NO;
+    button.titleLabel.numberOfLines = 2;
+    button.titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    button.titleLabel.textAlignment = NSTextAlignmentCenter;
+    button.contentEdgeInsets = UIEdgeInsetsMake(4, 8, 4, 8);
+    if (asset != nil) {
+      [button setImage:asset forState:UIControlStateNormal];
+      button.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
+    }
     button.tag = i;
+    button.hidden = !shown;
     button.accessibilityIdentifier = [@"purpose_" stringByAppendingString:identifier];
     button.accessibilityLabel = label;
     [button addTarget:self action:@selector(onPurpose:) forControlEvents:UIControlEventTouchUpInside];
+    UIView *plate = nil;
+    if (DBChromeIsFlat() && !_purposeButtonsFilled) {
+      plate = DBDoorPlate();
+      plate.hidden = !shown;
+      [_purposeScroll addSubview:plate];
+    }
     [_purposeScroll addSubview:button];
     [_purposeButtons addObject:button];
-    // The icon rides above the label as its own view: iOS 5 button image and
-    // title insets fight each other once the title wraps to two lines.
-    UIImageView *iconView = nil;
-    if (asset != nil) {
-      iconView = [[UIImageView alloc] initWithImage:asset];
-      iconView.userInteractionEnabled = NO;
-      [button addSubview:iconView];
-    }
-    [_purposeIcons addObject:(iconView ?: (id)[NSNull null])];
+    [_purposePlates addObject:(plate ?: (id)[NSNull null])];
+    if (_purposeButtonsFilled) DBApplyDoorButtonStyle(button, style, [UIColor blackColor],
+                                                      [UIColor whiteColor], 10);
   }
-  _purposeHint.hidden = YES;
-  _purposeScroll.hidden = ![self showsHomePurposes];
 }
 
 - (void)rebuildLanguages {
-  for (UIButton *button in _languageButtons) [button removeFromSuperview];
-  [_languageButtons removeAllObjects];
   id raw = [DBConfigUtil dig:_cfg path:@"ui.languages"];
   NSMutableArray *languages = [NSMutableArray array];
   if ([raw isKindOfClass:[NSArray class]]) {
@@ -1168,37 +1272,28 @@ static const CGFloat kPurposeIconSide = 28;
       if ([value isKindOfClass:[NSString class]] && [(NSString *)value length] > 0 &&
           ![languages containsObject:value]) [languages addObject:value];
   }
-  _languages = [languages copy];
-  for (NSInteger i = 0; i < (NSInteger)[_languages count]; i++) {
-    NSString *lang = [_languages objectAtIndex:(NSUInteger)i];
-    UIButton *button = [self buttonWithTitle:[DBTexts langDisplayName:lang] primary:NO];
-    button.titleLabel.font = [UIFont boldSystemFontOfSize:19];
-    button.tag = i;
-    button.accessibilityIdentifier = [@"language_" stringByAppendingString:lang];
-    [button addTarget:self action:@selector(onLanguage:) forControlEvents:UIControlEventTouchUpInside];
-    [_languageBar addSubview:button];
-    [_languageButtons addObject:button];
+  if (![languages isEqualToArray:_languages ?: @[]]) {
+    [self dismissLanguageSheet];
+    _languages = [languages copy];
+    [_languageControl removeAllSegments];
+    for (NSUInteger i = 0; i < [_languages count]; i++)
+      [_languageControl insertSegmentWithTitle:[DBTexts langDisplayName:[_languages objectAtIndex:i]]
+                                       atIndex:i animated:NO];
+    [self setNeedsLayout];
   }
-  _languageBar.hidden = [_languageButtons count] < 2;
   [self updateLanguageSelection];
+  [self applyFlowVisibility];
 }
 
 - (void)updateLanguageSelection {
-  for (NSInteger i = 0; i < (NSInteger)[_languageButtons count]; i++) {
-    UIButton *button = [_languageButtons objectAtIndex:(NSUInteger)i];
-    NSString *lang = [_languages objectAtIndex:(NSUInteger)i];
-    BOOL selected = [lang isEqualToString:_visitorLang];
-    button.accessibilityTraits = UIAccessibilityTraitButton |
-        (selected ? UIAccessibilityTraitSelected : 0);
-    // The unselected chips follow the measured ground; the selected one keeps
-    // its own blue, which reads on either.
-    button.backgroundColor = selected
-        ? [UIColor colorWithRed:0.18 green:0.52 blue:0.78 alpha:1]
-        : (_palette ? _palette.chipPlate : [UIColor colorWithWhite:1 alpha:0.12]);
-    [button setTitleColor:(selected ? [UIColor whiteColor]
-                                    : (_palette ? _palette.ink : [UIColor whiteColor]))
-                 forState:UIControlStateNormal];
-  }
+  NSUInteger index = [_languages indexOfObject:_visitorLang ?: @""];
+  NSInteger selected = index == NSNotFound ? UISegmentedControlNoSegment : (NSInteger)index;
+  if (_languageControl.selectedSegmentIndex != selected)
+    _languageControl.selectedSegmentIndex = selected;
+  [_languageButton setTitle:[NSString stringWithFormat:@"%@: %@",
+                             [_texts ts:@"door.lang_switch"],
+                             [DBTexts langDisplayName:_visitorLang ?: @""]]
+                   forState:UIControlStateNormal];
 }
 
 - (void)setVisitorLanguage:(NSString *)lang {
@@ -1217,25 +1312,13 @@ static const CGFloat kPurposeIconSide = 28;
   _flowState = DBDoorFlowCalling;
   _callingTitleOverride = [title copy];
   [_callTimer invalidate];
-  _callingOverlay.hidden = NO;
   [self refreshCallingDeadline];
-  [self bringSubviewToFront:_callingOverlay];
+  [self applyFlowVisibility];
   [self applyStrings];
   [self applySemanticStyles];
   [self setNeedsLayout];
   if (self.window != nil && UIAccessibilityIsVoiceOverRunning())
     UIAccessibilityPostNotification(UIAccessibilityScreenChangedNotification, _callingLabel);
-  if (_safeMode) {
-    [_pulse.layer removeAllAnimations];
-    _pulse.alpha = 1.0;
-  } else {
-    _pulse.alpha = 0.25;
-    [UIView animateWithDuration:0.85 delay:0
-                       options:UIViewAnimationOptionAutoreverse | UIViewAnimationOptionRepeat |
-                               UIViewAnimationOptionAllowUserInteraction
-                    animations:^{ self->_pulse.alpha = 1.0; }
-                    completion:nil];
-  }
 }
 
 - (void)showInCall {
@@ -1248,8 +1331,7 @@ static const CGFloat kPurposeIconSide = 28;
   _callTimer = nil;
   [_callTiming invalidateCallbacks];
   [_feedbackAudio stop];
-  _callingOverlay.hidden = NO;
-  [self bringSubviewToFront:_callingOverlay];
+  [self applyFlowVisibility];
   [self applyStrings];
   [self applySemanticStyles];
   [self setNeedsLayout];
@@ -1270,9 +1352,7 @@ static const CGFloat kPurposeIconSide = 28;
   [_callTiming reset];
   _callTimingChecking = NO;
   [_feedbackAudio stop];
-  [_pulse.layer removeAllAnimations];
-  _pulse.alpha = 1;
-  _callingOverlay.hidden = YES;
+  [self applyFlowVisibility];
   _purposeAlertMode = DBDoorPurposeAlertNone;
   _purposeAlertIDs = nil;
   _purposePromptedCallID = nil;
@@ -1435,11 +1515,43 @@ static const CGFloat kPurposeIconSide = 28;
   }
 }
 
-- (void)onLanguage:(UIButton *)sender {
-  if (sender.tag < 0 || sender.tag >= (NSInteger)[_languages count]) return;
-  NSString *lang = [_languages objectAtIndex:(NSUInteger)sender.tag];
+- (void)selectLanguageAtIndex:(NSInteger)index {
+  if (index < 0 || index >= (NSInteger)[_languages count]) return;
+  NSString *lang = [_languages objectAtIndex:(NSUInteger)index];
   [_core setVisitorLang:_boot.door ?: @"" lang:lang];
   [self setVisitorLanguage:lang];
+}
+
+- (void)onLanguageChanged:(UISegmentedControl *)sender {
+  [self selectLanguageAtIndex:sender.selectedSegmentIndex];
+}
+
+- (void)onLanguageButton {
+  [self dismissLanguageSheet];
+  UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:[_texts ts:@"door.lang_switch"]
+                                                     delegate:self
+                                            cancelButtonTitle:nil
+                                       destructiveButtonTitle:nil
+                                            otherButtonTitles:nil];
+  for (NSString *lang in _languages) [sheet addButtonWithTitle:[DBTexts langDisplayName:lang]];
+  sheet.cancelButtonIndex = [sheet addButtonWithTitle:[_texts ts:@"admin.cancel"]];
+  _languageSheet = sheet;
+  [sheet showFromRect:_languageButton.frame inView:self animated:NO];
+}
+
+- (void)dismissLanguageSheet {
+  UIActionSheet *sheet = _languageSheet;
+  if (sheet == nil) return;
+  _languageSheet = nil;
+  sheet.delegate = nil;
+  [sheet dismissWithClickedButtonIndex:sheet.cancelButtonIndex animated:NO];
+}
+
+- (void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+  if (actionSheet != _languageSheet) return;
+  _languageSheet = nil;
+  if (buttonIndex == actionSheet.cancelButtonIndex) return;
+  [self selectLanguageAtIndex:buttonIndex];
 }
 
 - (void)onCancelTouchDown {
@@ -1540,19 +1652,30 @@ static const CGFloat kPurposeIconSide = 28;
   NSString *path = [DBConfigUtil evStr:event key:@"audio_path"];
   if ([path length] > 0) [_replyAudio playAssetPath:path];
   _replyText.text = [DBConfigUtil evStr:event key:@"text"];
-  _replyBanner.hidden = NO;
-  [self bringSubviewToFront:_replyBanner];
+  _replyShown = YES;
   [_replyTimer invalidate];
   NSTimeInterval ttl = [[event objectForKey:@"ttl_s"] doubleValue];
   if (ttl <= 0) ttl = 30;
+  _replyDeadline = DBCallMonotonicTime() + ttl;
+  [self updateReplyCountdown];
   _replyTimer = [NSTimer scheduledTimerWithTimeInterval:ttl target:self
       selector:@selector(hideReplyBanner) userInfo:nil repeats:NO];
   [self showIdleWithHint:nil];
 }
 
 - (void)hideReplyBanner {
-  _replyBanner.hidden = YES;
+  _replyShown = NO;
   [_replyAudio stop];
+  [self applyFlowVisibility];
+  [self setNeedsLayout];
+}
+
+// The seconds until the reply leaves the screen, refreshed by the clock tick so the screen
+// runs no second timer.
+- (void)updateReplyCountdown {
+  if (!_replyShown) return;
+  NSInteger seconds = (NSInteger)ceil(_replyDeadline - DBCallMonotonicTime());
+  _replyCountdown.text = [NSString stringWithFormat:@"%ld", (long)MAX(0, seconds)];
 }
 
 - (void)handleVisitorLangEvent:(NSDictionary *)event {
@@ -1682,6 +1805,7 @@ static const CGFloat kPurposeIconSide = 28;
   if (!_mediaSuspendedForBackground) [self configureLocalPreview];
   [self publishMediaSourceStatus];
   [self applyStrings];
+  [self applyFlowVisibility];
 }
 
 - (void)exitSafeMode {
@@ -1694,6 +1818,7 @@ static const CGFloat kPurposeIconSide = 28;
   }
   [self publishMediaSourceStatus];
   [self applyStrings];
+  [self applyFlowVisibility];
 }
 
 - (NSDictionary *)safeModeMediaStatus {
@@ -1742,7 +1867,6 @@ static const CGFloat kPurposeIconSide = 28;
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
-  BOOL compact = size.width < 500 || size.height < 500;
   NSDictionary *callStyle = [self styleForSemanticID:@"call.primary"];
   NSDictionary *cancelStyle = [self styleForSemanticID:@"cancel.call"];
   NSDictionary *endStyle = [self styleForSemanticID:@"call.end"];
@@ -1752,131 +1876,142 @@ static const CGFloat kPurposeIconSide = 28;
       MAX(DBDoorStyleNumber(cancelStyle, @"scale", 1, 1, 2),
           DBDoorStyleNumber(endStyle, @"scale", 1, 1, 2)));
   DBDoorVisitorLayout layout = DBDoorVisitorLayoutMake(size, !_sos.hidden, actionScale);
+  NSInteger languageCount = (NSInteger)[_languages count];
+  layout = DBDoorVisitorLayoutFit(layout, languageCount >= 2, !_noticeLabel.hidden);
+  BOOL compact = layout.compact;
   CGFloat margin = layout.margin;
-  CGFloat width = size.width - 2 * margin;
-  CGFloat gap = compact ? 8 : 12;
-  _contentScroll.frame = layout.content;
+  CGFloat gap = layout.gap;
+
+  _nav.bar.frame = layout.topBar;
+  _infoButton.frame = CGRectMake(size.width - 64, 0, 64, 64);
   _callButton.frame = layout.action;
   _cancelButton.frame = layout.action;
   _touchHint.frame = layout.status;
+  _touchHint.font = [UIFont systemFontOfSize:compact ? 15 : (layout.sideBySide ? 20 : 24)];
   _versionLabel.frame = layout.version;
-  _versionLabel.adjustsFontSizeToFitWidth = YES;
-  _versionLabel.minimumFontSize = 12;
   _sos.frame = layout.sos;
-  _infoButton.frame = CGRectMake(size.width - 64, 0, 64, 64);
 
-  CGFloat clockSize = compact ? 40 : 72;
-  _clockLabel.font = [UIFont systemFontOfSize:clockSize];
-  _clockLabel.frame = CGRectMake(margin, 0, width, clockSize + 8);
-  _dateLabel.font = [UIFont systemFontOfSize:compact ? 16 : 22];
-  _dateLabel.frame = CGRectMake(margin, CGRectGetMaxY(_clockLabel.frame), width, 30);
-  CGFloat y = CGRectGetMaxY(_dateLabel.frame) + gap;
-  _titleLabel.font = [UIFont boldSystemFontOfSize:compact ? 24 : 32];
-  _titleLabel.frame = CGRectMake(margin, y, width, compact ? 34 : 44);
-  y = CGRectGetMaxY(_titleLabel.frame) + gap;
-  if (!_pairBanner.hidden) {
-    _pairBanner.frame = CGRectMake(margin, y, width, 56);
-    y = CGRectGetMaxY(_pairBanner.frame) + gap;
-  } else _pairBanner.frame = CGRectZero;
+  // Segments while each stays wide enough to hit and read; one button that opens a sheet
+  // once more languages are enabled than fit.
+  _languageUsesSheet =
+      layout.language.size.width < kLanguageSegmentMinimum * (CGFloat)languageCount;
+  _languageControl.frame = layout.language;
+  _languageButton.frame = layout.language;
+  _languagePlate.frame = layout.language;
+  [self applyFlowVisibility];
 
+  _clockLabel.font = [UIFont systemFontOfSize:compact ? 36 : 72];
+  _clockLabel.frame = layout.clock;
+  _dateLabel.font = [UIFont systemFontOfSize:compact ? 15 : 22];
+  _dateLabel.frame = layout.date;
+
+  // Collapsed, the announcement shows two lines in its own row. Expanded, it grows over the
+  // clock and the date, and never over a purpose or an action.
+  _noticeLabel.font = [UIFont systemFontOfSize:compact ? 15 : 20];
   _noticeLabel.numberOfLines = _noticeExpanded ? 0 : 2;
-  if (!_noticeLabel.hidden) {
-    CGFloat noticeHeight = MAX(52, MIN(240,
-        [_noticeLabel sizeThatFits:CGSizeMake(width, 1000)].height));
-    _noticeLabel.frame = CGRectMake(margin, y, width, noticeHeight);
-    _noticeExpand.frame = _noticeLabel.frame;
-    y += noticeHeight + gap;
-  } else {
-    _noticeLabel.frame = CGRectZero;
-    _noticeExpand.frame = CGRectZero;
+  CGRect noticeFrame = layout.notice;
+  if (_noticeExpanded && !_noticeLabel.hidden) {
+    CGFloat wanted = [_noticeLabel sizeThatFits:
+        CGSizeMake(layout.headline.size.width - 24, 1000)].height + 16;
+    noticeFrame = layout.headline;
+    noticeFrame.size.height = MIN(layout.headline.size.height,
+                                  MAX(layout.notice.size.height, wanted));
   }
+  _noticeCard.frame = noticeFrame;
+  _noticeLabel.frame = CGRectInset(_noticeCard.bounds, 12, 6);
+  _noticeExpand.frame = _noticeCard.bounds;
 
-  CGFloat langHeight = 52;
-  if (!_languageBar.hidden) {
-    _languageBar.frame = CGRectMake(margin, y, width, langHeight);
-    CGFloat x = 0;
-    for (UIButton *button in _languageButtons) {
-      CGFloat buttonWidth = MAX(100, MIN(200,
-          [button.titleLabel sizeThatFits:CGSizeMake(180, langHeight)].width + 24));
-      button.frame = CGRectMake(x, 0, buttonWidth, langHeight);
-      x += buttonWidth + gap;
-    }
-    _languageBar.contentSize = CGSizeMake(MAX(width, x - gap), langHeight);
-    y += langHeight + gap;
-  } else _languageBar.frame = CGRectZero;
+  _replyPlate.frame = layout.headline;
+  CGRect replyBounds = CGRectInset(_replyPlate.bounds, 12, 6);
+  replyBounds.size.height = MAX(0, replyBounds.size.height - 20);
+  _replyText.frame = replyBounds;
+  _replyText.font = DBDoorFittingFont(_replyText.text ?: @"", compact ? 20 : 28, 13, YES,
+                                      replyBounds.size);
+  _replyCountdown.frame = CGRectMake(12, CGRectGetMaxY(replyBounds),
+                                     MAX(0, _replyPlate.bounds.size.width - 24), 20);
 
-  _purposeHint.frame = CGRectZero;
-  NSInteger columns = width < 420 ? 2 : 3;
-  CGFloat buttonWidth = (width - gap * (columns - 1)) / columns;
+  // The purposes scroll inside their viewport when the grid is taller than it. The pairing
+  // reminder leads and the media line trails the grid.
+  _purposeScroll.frame = layout.purposes;
+  CGFloat gridWidth = layout.purposes.size.width;
+  CGFloat y = 0;
+  CGRect pairFrame = CGRectZero;
+  if (!_pairBanner.hidden) {
+    pairFrame = CGRectMake(0, 0, gridWidth, compact ? 44 : 56);
+    y = CGRectGetMaxY(pairFrame) + gap;
+  }
+  _pairBanner.frame = pairFrame;
+  _pairPlate.frame = pairFrame;
+  _pairPlate.hidden = _pairBanner.hidden;
+
+  BOOL showsPurposes = [self showsHomePurposes];
+  NSInteger purposeCount = (NSInteger)[_purposeButtons count];
   NSDictionary *purposeStyle = [self styleForSemanticID:@"purpose.button"];
-  CGFloat purposeFontScale = DBDoorStyleNumber(purposeStyle, @"font_scale", 1, 0.75, 2);
-  CGFloat buttonHeight = compact ? 92 : 108;
+  CGFloat purposeFontSize = (compact ? 18 : 22) *
+      DBDoorStyleNumber(purposeStyle, @"font_scale", 1, 0.75, 2);
+  UIFont *purposeFont = DBDoorFont(purposeFontSize, _purposeButtonsFilled || !DBChromeIsFlat());
+  CGFloat cellWidth = DBDoorVisitorPurposeFrame(layout, 0, 0).size.width;
+  CGFloat rowHeight = 0;
   for (UIButton *button in _purposeButtons) {
-    button.titleLabel.numberOfLines = 0;
-    button.titleLabel.font = [UIFont boldSystemFontOfSize:(compact ? 18 : 22) * purposeFontScale];
-    CGSize textSize = [button.currentTitle sizeWithFont:button.titleLabel.font
-        constrainedToSize:CGSizeMake(MAX(44, buttonWidth - 16), 1000)
+    button.titleLabel.font = purposeFont;
+    CGFloat iconWidth = [button imageForState:UIControlStateNormal] != nil
+        ? kPurposeIconSide + 8 : 0;
+    CGSize textSize = [button.currentTitle sizeWithFont:purposeFont
+        constrainedToSize:CGSizeMake(MAX(44, cellWidth - 16 - iconWidth), 1000)
         lineBreakMode:NSLineBreakByWordWrapping];
-    buttonHeight = MAX(buttonHeight, textSize.height + kPurposeIconSide + 24);
+    rowHeight = MAX(rowHeight, MIN(textSize.height, purposeFont.lineHeight * 2) + 24);
   }
-  for (NSInteger i = 0; i < (NSInteger)[_purposeButtons count]; i++) {
+  for (NSInteger i = 0; i < purposeCount; i++) {
     UIButton *button = [_purposeButtons objectAtIndex:(NSUInteger)i];
-    button.frame = CGRectMake((i % columns) * (buttonWidth + gap),
-        (i / columns) * (buttonHeight + gap), buttonWidth, buttonHeight);
-    id icon = i < (NSInteger)[_purposeIcons count] ? [_purposeIcons objectAtIndex:(NSUInteger)i] : [NSNull null];
-    if ([icon isKindOfClass:[UIImageView class]]) {
-      UIImageView *iconView = icon;
-      iconView.frame = CGRectMake((buttonWidth - kPurposeIconSide) / 2, 8,
-                                  kPurposeIconSide, kPurposeIconSide);
-      button.titleEdgeInsets = UIEdgeInsetsMake(kPurposeIconSide + 12, 8, 4, 8);
-    } else button.titleEdgeInsets = UIEdgeInsetsMake(8, 8, 8, 8);
-  }
-  NSInteger rows = ([_purposeButtons count] + columns - 1) / columns;
-  CGFloat purposeHeight = [self showsHomePurposes] ? rows * (buttonHeight + gap) : 0;
-  _purposeScroll.frame = CGRectMake(margin, y, width, purposeHeight);
-  _purposeScroll.contentSize = CGSizeMake(width, purposeHeight);
-  y += purposeHeight;
-  _mediaBadge.frame = CGRectMake(margin, y + gap, width, 44);
-  _contentScroll.contentSize = CGSizeMake(size.width, CGRectGetMaxY(_mediaBadge.frame) + gap);
-
-  NSDictionary *activeCancelStyle = _flowState == DBDoorFlowInCall ? endStyle : cancelStyle;
-  _callButton.titleLabel.font = [UIFont boldSystemFontOfSize:
-      (compact ? 24 : 28) * DBDoorStyleNumber(callStyle, @"font_scale", 1, 0.75, 2)];
-  _cancelButton.titleLabel.font = [UIFont boldSystemFontOfSize:
-      (compact ? 24 : 28) * DBDoorStyleNumber(activeCancelStyle, @"font_scale", 1, 0.75, 2)];
-  for (UIButton *button in @[_callButton, _cancelButton]) {
-    CGFloat fontSize = button.titleLabel.font.pointSize;
-    CGSize available = CGSizeMake(button.bounds.size.width - 24, button.bounds.size.height - 16);
-    while (fontSize > 16 && [button.currentTitle sizeWithFont:button.titleLabel.font
-        constrainedToSize:CGSizeMake(available.width, 1000)
-        lineBreakMode:NSLineBreakByWordWrapping].height > available.height) {
-      button.titleLabel.font = [UIFont boldSystemFontOfSize:--fontSize];
+    CGRect frame = CGRectOffset(DBDoorVisitorPurposeFrame(layout, i, rowHeight), 0, y);
+    button.frame = frame;
+    button.hidden = !showsPurposes;
+    id plate = [_purposePlates objectAtIndex:(NSUInteger)i];
+    if ([plate isKindOfClass:[UIView class]]) {
+      [(UIView *)plate setFrame:frame];
+      [(UIView *)plate setHidden:!showsPurposes];
     }
-    button.contentEdgeInsets = UIEdgeInsetsMake(8, 12, 8, 12);
   }
-  [self applyRegionInk];
-  _replyBanner.frame = CGRectMake(margin, margin, width, compact ? 88 : 110);
-  _replyText.frame = CGRectInset(_replyBanner.bounds, 12, 8);
+  if (showsPurposes && purposeCount > 0)
+    y += DBDoorVisitorPurposeGridHeight(layout, purposeCount, rowHeight) + gap;
+  _mediaBadge.frame = CGRectMake(0, y, gridWidth, _mediaBadge.hidden ? 0 : 40);
+  _purposeScroll.contentSize = CGSizeMake(gridWidth, CGRectGetMaxY(_mediaBadge.frame));
 
-  _callingOverlay.frame = self.bounds;
-  CGFloat callTop = margin;
-  _pulse.hidden = size.height < 500;
-  if (!_pulse.hidden) {
-    CGFloat pulseSide = compact ? 78 : 110;
-    _pulse.layer.cornerRadius = pulseSide / 2;
-    _pulse.frame = CGRectMake((size.width - pulseSide) / 2, margin + 28, pulseSide, pulseSide);
-    callTop = CGRectGetMaxY(_pulse.frame) + 20;
-  }
-  _callingLabel.font = [UIFont boldSystemFontOfSize:compact ? 28 : 44];
-  _callingLabel.adjustsFontSizeToFitWidth = YES;
-  _callingLabel.minimumFontSize = 18;
-  _callingLabel.frame = CGRectMake(margin, callTop, width,
-      MAX(44, CGRectGetMinY(layout.action) - callTop - gap));
+  // The call button carries the largest text on the screen. A long label shrinks until it
+  // fits the fixed rectangle instead of moving it.
+  NSDictionary *activeCancelStyle = _flowState == DBDoorFlowInCall ? endStyle : cancelStyle;
+  CGSize actionText = CGSizeMake(layout.action.size.width - 24, layout.action.size.height - 16);
+  _callButton.titleLabel.font = DBDoorFittingFont(_callButton.currentTitle ?: @"",
+      (compact ? 24 : 40) * DBDoorStyleNumber(callStyle, @"font_scale", 1, 0.75, 2),
+      16, YES, actionText);
+  _cancelButton.titleLabel.font = DBDoorFittingFont(_cancelButton.currentTitle ?: @"",
+      (compact ? 24 : 40) * DBDoorStyleNumber(activeCancelStyle, @"font_scale", 1, 0.75, 2),
+      16, YES, actionText);
+
+  // Calling and connected: one status plate in the content zone, above the same action
+  // rectangle that now holds Cancel or End.
+  CGFloat plateHeight = MIN(layout.content.size.height, compact ? 140 : 240);
+  _callPlate.frame = CGRectMake(layout.content.origin.x,
+      floor(layout.content.origin.y + (layout.content.size.height - plateHeight) / 2),
+      layout.content.size.width, plateHeight);
+  CGSize spinnerSize = _callSpinner.bounds.size;
+  _callSpinner.center = CGPointMake(floor(_callPlate.bounds.size.width / 2),
+                                    12 + floor(spinnerSize.height / 2));
+  CGFloat statusTop = 12 + spinnerSize.height + 8;
+  CGRect statusFrame = CGRectMake(12, statusTop, MAX(0, _callPlate.bounds.size.width - 24),
+                                  MAX(0, plateHeight - statusTop - 12));
+  _callingLabel.frame = statusFrame;
+  _callingLabel.font = DBDoorFittingFont(_callingLabel.text ?: @"", compact ? 24 : 40, 14, YES,
+                                         statusFrame.size);
+
+  [self applyRegionInk];
 
   _emergencyOverlay.frame = self.bounds;
+  CGFloat width = size.width - 2 * margin;
   NSDictionary *sosStyle = [self styleForSemanticID:@"sos.cancel"];
   CGRect clearFrame = DBDoorVisitorLayoutMake(size, NO,
       DBDoorStyleNumber(sosStyle, @"scale", 1, 1, 2)).action;
+  clearFrame.origin.x = floor((size.width - clearFrame.size.width) / 2);
   clearFrame.origin.y = size.height - margin - clearFrame.size.height;
   _emergencyTitle.font = [UIFont boldSystemFontOfSize:compact ? 32 : 56];
   _emergencyTitle.frame = CGRectMake(margin, margin, width, compact ? 76 : 120);

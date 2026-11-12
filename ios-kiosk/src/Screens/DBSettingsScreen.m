@@ -8,10 +8,11 @@
 #import "../Core/DBPurposeModel.h"
 #import "../Core/DBTexts.h"
 #import "../Core/DBUiTheme.h"
+#import "../Media/DBQrCode.h"
 #import "../Support/DBSafeModeRecovery.h"
+#import "DBChrome.h"
 #import "DBEditor.h"
 #import "DBNoticeDialog.h"
-#import "DBNumericKeypad.h"
 #import "DBRouter.h"
 #import "DBSettingsPages.h"
 #import "DBWidgets.h"
@@ -24,14 +25,19 @@
 @property(nonatomic, copy) NSString *action;
 @property(nonatomic, copy) NSString *argument;
 @property(nonatomic, assign) BOOL destructive;
-// [[value, label], ...] for "segment" and "choose" rows; `value` holds the label.
+// [[value, label], ...] for "segment", "choose", and "local_choice" rows; `value` holds the
+// label.
 @property(nonatomic, copy) NSArray *choices;
+// The row opens a new group of the grouped table; groupFooter is that group's footer text.
+@property(nonatomic, assign) BOOL startsGroup;
+@property(nonatomic, copy) NSString *groupFooter;
 @end
 
 @implementation DBSettingsRow
 @synthesize choices = _choices;
 @synthesize title = _title, value = _value, action = _action, argument = _argument,
             destructive = _destructive;
+@synthesize startsGroup = _startsGroup, groupFooter = _groupFooter;
 @end
 
 static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
@@ -41,6 +47,11 @@ static DBSettingsRow *DBRow(NSString *title, NSString *value, NSString *action,
   row.value = value ?: @"";
   row.action = action ?: @"";
   row.argument = argument ?: @"";
+  return row;
+}
+
+static DBSettingsRow *DBGroupStart(DBSettingsRow *row) {
+  row.startsGroup = YES;
   return row;
 }
 
@@ -58,77 +69,24 @@ static NSArray *DBCommonTimeZones(void) {
       @"Pacific/Honolulu", @"UTC", nil];
 }
 
-@interface DBSettingsCell : UITableViewCell
-@property(nonatomic, assign) BOOL firstRow;
-@property(nonatomic, assign) BOOL lastRow;
-@property(nonatomic, strong) UIView *rowSeparator;
-+ (CGFloat)heightForTitle:(NSString *)title value:(NSString *)value width:(CGFloat)width;
-@end
-
-@implementation DBSettingsCell
-+ (CGFloat)heightForTitle:(NSString *)title value:(NSString *)value width:(CGFloat)width {
-  BOOL hasValue = [value length] > 0;
-  CGFloat available = MAX(120, width - 64);
-  CGFloat titleWidth = hasValue ? available * 0.43 : available;
-  CGFloat valueWidth = available * 0.57 - 16;
-  CGFloat titleHeight = [title sizeWithFont:[UIFont systemFontOfSize:17]
-      constrainedToSize:CGSizeMake(titleWidth, CGFLOAT_MAX)
-      lineBreakMode:NSLineBreakByWordWrapping].height;
-  CGFloat valueHeight = [value sizeWithFont:[UIFont systemFontOfSize:15]
-      constrainedToSize:CGSizeMake(valueWidth, CGFLOAT_MAX)
-      lineBreakMode:NSLineBreakByWordWrapping].height;
-  return MAX(52, ceil(MAX(titleHeight, valueHeight)) + 24);
-}
-
-- (void)layoutSubviews {
-  [super layoutSubviews];
-  BOOL hasValue = [self.detailTextLabel.text length] > 0;
-  // A switch, stepper or segmented control sits at the trailing edge; the
-  // labels share what is left.
-  CGFloat control = self.accessoryView && CGRectGetWidth(self.accessoryView.bounds) > 20
-      ? CGRectGetWidth(self.accessoryView.bounds) + 12 : 0;
-  CGFloat available = MAX(120, CGRectGetWidth(self.bounds) - 64 - control);
-  CGFloat titleWidth = hasValue ? available * 0.43 : available;
-  CGFloat valueWidth = available * 0.57 - 16;
-  CGFloat titleHeight = ceil([self.textLabel sizeThatFits:CGSizeMake(titleWidth, CGFLOAT_MAX)].height);
-  CGFloat valueHeight = ceil([self.detailTextLabel sizeThatFits:CGSizeMake(valueWidth, CGFLOAT_MAX)].height);
-  CGFloat height = CGRectGetHeight(self.bounds);
-  self.textLabel.frame = CGRectMake(16, floor((height - titleHeight) / 2), titleWidth, titleHeight);
-  self.detailTextLabel.hidden = !hasValue;
-  self.detailTextLabel.frame = CGRectMake(32 + titleWidth, floor((height - valueHeight) / 2),
-                                         valueWidth, valueHeight);
-  self.backgroundView.frame = self.bounds;
-  self.selectedBackgroundView.frame = self.bounds;
-  UIRectCorner corners = 0;
-  if (_firstRow) corners |= UIRectCornerTopLeft | UIRectCornerTopRight;
-  if (_lastRow) corners |= UIRectCornerBottomLeft | UIRectCornerBottomRight;
-  for (UIView *background in @[self.backgroundView, self.selectedBackgroundView]) {
-    CAShapeLayer *mask = [CAShapeLayer layer];
-    mask.frame = background.bounds;
-    mask.path = [UIBezierPath bezierPathWithRoundedRect:background.bounds byRoundingCorners:corners
-        cornerRadii:CGSizeMake(10, 10)].CGPath;
-    background.layer.mask = mask;
-  }
-  if (self.accessoryView) {
-    CGSize own = self.accessoryView.bounds.size;
-    CGRect frame = control > 0
-        ? CGRectMake(CGRectGetWidth(self.bounds) - 16 - own.width, floor((height - own.height) / 2),
-                     own.width, own.height)
-        : CGRectMake(CGRectGetWidth(self.bounds) - 28, (height - 20) / 2, 12, 20);
-    self.accessoryView.frame = [self convertRect:frame toView:self.accessoryView.superview];
-  }
-  _rowSeparator.hidden = _lastRow;
-  _rowSeparator.frame = CGRectMake(16, height - 0.5, CGRectGetWidth(self.bounds) - 16, 0.5);
-}
-@end
-
+// A volume slider previews nothing while it moves and writes once on release: the write is a
+// replicated configuration change. The slider outlives its cell, so a table reload during a
+// drag cannot replace the control under the finger.
 @interface DBVolumeSlider : UISlider
+@property(nonatomic, copy) NSString *configKey;
 @property(nonatomic, copy) void (^onBegin)(void);
 @property(nonatomic, copy) void (^onEnd)(float);
 @property(nonatomic, copy) void (^onCancel)(void);
+@property(nonatomic, assign) float savedValue;
+@property(nonatomic, assign) BOOL editingVolume;
+@property(nonatomic, assign) NSInteger pendingVolume;
 @end
 
 @implementation DBVolumeSlider
+@synthesize configKey = _configKey, onBegin = _onBegin, onEnd = _onEnd, onCancel = _onCancel;
+@synthesize savedValue = _savedValue, editingVolume = _editingVolume;
+@synthesize pendingVolume = _pendingVolume;
+
 - (BOOL)beginTrackingWithTouch:(UITouch *)touch withEvent:(UIEvent *)event {
   if (_onBegin) _onBegin();
   BOOL result = [super beginTrackingWithTouch:touch withEvent:event];
@@ -145,100 +103,15 @@ static NSArray *DBCommonTimeZones(void) {
 }
 @end
 
-@interface DBVolumeSettingsCell : DBSettingsCell
-@property(nonatomic, strong) UISlider *slider;
-@property(nonatomic, copy) void (^onCommit)(NSInteger value);
-@property(nonatomic, assign) float savedValue;
-@property(nonatomic, assign) BOOL editingVolume;
-@property(nonatomic, assign) NSInteger pendingVolume;
-@end
-
-@implementation DBVolumeSettingsCell
-- (id)initWithStyle:(UITableViewCellStyle)style reuseIdentifier:(NSString *)identifier {
-  self = [super initWithStyle:style reuseIdentifier:identifier];
-  if (self) {
-    DBVolumeSlider *slider = [[DBVolumeSlider alloc] init];
-    _slider = slider;
-    _slider.minimumValue = 0;
-    _slider.maximumValue = 100;
-    _slider.continuous = YES;
-    [_slider addTarget:self action:@selector(sliderChanged:)
-        forControlEvents:UIControlEventValueChanged];
-    __weak DBVolumeSettingsCell *weakSelf = self;
-    slider.onBegin = ^{ [weakSelf beginVolume]; };
-    slider.onEnd = ^(float value) {
-      weakSelf.pendingVolume = (NSInteger)(value + 0.5);
-      [weakSelf commitVolume];
-    };
-    slider.onCancel = ^{ [weakSelf cancelVolume]; };
-    [self.contentView addSubview:_slider];
-  }
-  return self;
-}
-
-- (void)sliderChanged:(UISlider *)slider {
-  _pendingVolume = (NSInteger)(slider.value + 0.5);
-  [self updateVolumeLabel];
-}
-
-- (void)beginVolume {
-  _editingVolume = YES;
-  _pendingVolume = (NSInteger)(_slider.value + 0.5);
-}
-
-- (void)updateVolumeLabel {
-  self.detailTextLabel.text = [NSString stringWithFormat:@"%ld", (long)(_slider.value + 0.5)];
-}
-
-- (void)commitVolume {
-  NSInteger value = _pendingVolume;
-  _editingVolume = NO;
-  _slider.value = value;
-  NSLog(@"[doorbell] volume slider committed %ld", (long)value);
-  if (_onCommit) _onCommit(value);
-}
-
-- (void)cancelVolume {
-  NSLog(@"[doorbell] volume slider cancelled at %ld", (long)_pendingVolume);
-  _editingVolume = NO;
-  _slider.value = _savedValue;
-  [self updateVolumeLabel];
-}
-
-- (void)layoutSubviews {
-  [super layoutSubviews];
-  CGFloat width = CGRectGetWidth(self.bounds);
-  CGFloat height = CGRectGetHeight(self.bounds);
-  self.textLabel.frame = CGRectMake(16, (height - 24) / 2, 120, 24);
-  _slider.frame = CGRectMake(150, (height - 44) / 2, MAX(80, width - 230), 44);
-  self.detailTextLabel.frame = CGRectMake(width - 64, (height - 24) / 2, 48, 24);
-}
-@end
-
-// A category in the left pane: icon tile, then the title beside it. Placed explicitly,
-// because indentationLevel does not move textLabel on iOS 5-9 and the tile then
-// covered the start of every title.
-@interface DBCategoryCell : UITableViewCell
-@end
-
-@implementation DBCategoryCell
-- (void)layoutSubviews {
-  [super layoutSubviews];
-  CGFloat width = CGRectGetWidth(self.contentView.bounds);
-  CGFloat height = CGRectGetHeight(self.contentView.bounds);
-  UIView *tile = [self.contentView viewWithTag:11];
-  tile.frame = CGRectMake(12, floor((height - 30) / 2), 30, 30);
-  CGFloat labelX = CGRectGetMaxX(tile.frame) + 12;
-  self.textLabel.frame = CGRectMake(labelX, 0, MAX(0, width - labelX - 8), height);
-  self.backgroundView.frame = CGRectInset(self.bounds, 0, 3);
-  self.selectedBackgroundView.frame = self.backgroundView.frame;
-}
-@end
-
-static const NSInteger kDBRotateKeyAlertTag = 701;
+// Accessory controls with the gap the cell keeps beside them.
+static const CGFloat kDBSwitchAccessoryWidth = 104;
+static const CGFloat kDBStepperAccessoryWidth = 114;
+static const CGFloat kDBIndicatorAccessoryWidth = 30;
+static const CGFloat kDBTwoPaneMinWidth = 700;
+static const CGFloat kDBPromptBarHeight = 74;
+static const CGFloat kDBQrSide = 96;
 
 @interface DBSettingsScreen () <UITableViewDataSource, UITableViewDelegate,
-                                UITextFieldDelegate, UIAlertViewDelegate,
                                 UIActionSheetDelegate>
 @end
 
@@ -246,6 +119,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   DBCoreBridge *_core;
   DBBootConfig *_boot;
   DBTexts *_texts;
+  // Only handed to the notice dialog; nothing on this screen is coloured from it.
   DBUiPalette *_palette;
   DBNoticeDialog *_noticeDialog;
 
@@ -254,52 +128,54 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   NSDictionary *_audio;
   NSDictionary *_localTime;
   NSString *_nodeId;
-  NSArray *_sections;  // [{title, rows:[DBSettingsRow]}]
+  NSArray *_sections;  // [{title, id, icon, rows:[DBSettingsRow]}]
+  NSArray *_groups;    // the selected category's rows, split into table groups
   dispatch_queue_t _volumeWriteQueue;
   NSMutableDictionary *_volumeWriteGenerations;
   NSMutableDictionary *_pendingVolumeValues;
+  NSMutableDictionary *_volumeSliders;  // configuration key -> DBVolumeSlider
   NSInteger _loadGeneration;
   NSTimer *_clockTimer;
   NSUInteger _clockGeneration;
   BOOL _clockReadPending;
   BOOL _screenVisible;
 
-  UILabel *_title;
-  UIButton *_close;
-  UITableView *_table;
-  // Two panes, as in Settings on a larger iPad: categories left, the chosen
-  // category's rows right. Only one category is ever built into cells, which
-  // keeps the A4 from laying out ~60 rows at once.
+  // Two panes on an iPad, as in the system Settings app: categories left, the chosen
+  // category's rows right, each under its own bar. A narrower view drills down on one bar.
+  // Only one category is ever built into cells, which keeps the A4 from laying out about
+  // 60 rows at once.
+  BOOL _modeApplied;
+  BOOL _twoPane;
+  BOOL _drillDetail;
+  DBNavBar *_masterNav;
+  UINavigationItem *_masterRoot;
+  DBNavBar *_nav;
+  UINavigationItem *_navRoot;
+  UINavigationItem *_categoryItem;
+  UIBarButtonItem *_closeItem;
   UITableView *_categoryTable;
+  UITableView *_table;
+  UIView *_divider;
+  DBHomeTabs *_tabs;
+  CGFloat _categoryWidth;
+  CGFloat _tableWidth;
   NSString *_selectedId;
   NSInteger _selectedSection;
   NSDictionary *_pairing;
-  CGFloat _footerWidth;
-  UIView *_footerContainer;
-  UIView *_adminFooter;
-  DBAdminQrView *_qr;
-  UILabel *_toast;
-  NSUInteger _toastGeneration;
 
-  // Editors keep numeric fields above the system keyboard.
-  CGFloat _numberKeyboardHeight;
-  UIView *_keypadOverlay;
-  UILabel *_keypadTitle;
-  DBNumericKeypad *_keypad;
-  NSString *_pendingNumberKey;
-  NSInteger _pendingNumberMin;
-  NSInteger _pendingNumberMax;
+  UIView *_footer;
+  UIImageView *_qrImage;
+  UILabel *_footerLabel;
+  NSString *_qrUrl;
 
-  UIView *_pickerOverlay;
-  UITextField *_pickerSearch;
-  UITableView *_pickerTable;
-  UIButton *_pickerCancel;
-  NSArray *_pickerAll;
-  NSArray *_pickerFiltered;
-  NSString *_pickerKey;
+  // The transient message shown on the navigation item's prompt line.
+  NSString *_promptText;
+  UINavigationItem *_promptItem;
+  NSUInteger _promptGeneration;
+
   DBSettingsRow *_pendingChoiceRow;
 
-  // Native editors for list and form settings (DBSettingsPages).
+  // Native editors for list and form settings (DBSettingsPages), and this screen's prompts.
   DBEditorView *_editor;
   DBSettingsPages *_pages;
 }
@@ -313,6 +189,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
     _texts = router.texts;
     _nodeId = @"";
     _sections = [NSArray array];
+    _groups = [NSArray array];
     [self buildUi];
   }
   return self;
@@ -323,126 +200,66 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 }
 
 - (void)buildUi {
-  _title = [[UILabel alloc] init];
-  _title.backgroundColor = [UIColor clearColor];
-  _title.font = [UIFont boldSystemFontOfSize:20];
-  _title.textAlignment = NSTextAlignmentCenter;
-  [self addSubview:_title];
+  self.backgroundColor = DBChromeScreenBackground();
 
-  _close = [UIButton buttonWithType:UIButtonTypeCustom];
-  _close.titleLabel.font = [UIFont systemFontOfSize:17];
-  _close.layer.cornerRadius = 8;
-  _close.clipsToBounds = YES;
-  [_close addTarget:self action:@selector(onClose) forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_close];
-
-  _categoryTable = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-  _categoryTable.dataSource = self;
-  _categoryTable.delegate = self;
-  _categoryTable.rowHeight = 56;
-  _categoryTable.separatorStyle = UITableViewCellSeparatorStyleNone;
-  _categoryTable.backgroundView = [[UIView alloc] init];
-  _categoryTable.backgroundView.backgroundColor = [UIColor clearColor];
+  _categoryTable = DBChromeGroupedTable(self, self);
   _categoryTable.accessibilityIdentifier = @"settings_categories";
   [self addSubview:_categoryTable];
 
-  _table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-  _table.dataSource = self;
-  _table.delegate = self;
-  _table.separatorStyle = UITableViewCellSeparatorStyleNone;
-  _table.backgroundView = [[UIView alloc] init];
-  _table.backgroundView.backgroundColor = [UIColor clearColor];
+  _table = DBChromeGroupedTable(self, self);
   [self addSubview:_table];
 
-  _qr = [[DBAdminQrView alloc] initWithFrame:CGRectZero];
-  _adminFooter = [[UIView alloc] init];
-  [_adminFooter addSubview:_qr];
-  _footerContainer = [[UIView alloc] init];
-  [_footerContainer addSubview:_adminFooter];
-  _table.tableFooterView = _footerContainer;
+  _footer = [[UIView alloc] initWithFrame:CGRectZero];
+  _footer.backgroundColor = [UIColor clearColor];
+  _qrImage = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, kDBQrSide, kDBQrSide)];
+  _qrImage.isAccessibilityElement = YES;
+  [_footer addSubview:_qrImage];
+  _footerLabel = DBChromeSectionFooterLabel();
+  [_footer addSubview:_footerLabel];
 
-  _toast = [[UILabel alloc] init];
-  _toast.backgroundColor = [UIColor clearColor];
-  _toast.font = [UIFont systemFontOfSize:12];
-  _toast.numberOfLines = 1;
-  _toast.adjustsFontSizeToFitWidth = YES;
-  _toast.minimumFontSize = 11;
-  _toast.textAlignment = NSTextAlignmentCenter;
-  [self addSubview:_toast];
+  _masterNav = [[DBNavBar alloc] init];
+  _masterRoot = [_masterNav setRootTitle:@"" backTitle:nil onBack:nil];
+  [self addSubview:_masterNav.bar];
+  _nav = [[DBNavBar alloc] init];
+  [self addSubview:_nav.bar];
 
-  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(numberKeyboardChanged:)
-      name:UIKeyboardWillChangeFrameNotification object:nil];
-  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(numberKeyboardChanged:)
-      name:UIKeyboardWillHideNotification object:nil];
-  _keypadOverlay = [[UIView alloc] init];
-  _keypadOverlay.backgroundColor = [UIColor colorWithWhite:0 alpha:0.86];
-  _keypadOverlay.hidden = YES;
-  [self addSubview:_keypadOverlay];
-  _keypadTitle = [[UILabel alloc] init];
-  _keypadTitle.backgroundColor = [UIColor clearColor];
-  _keypadTitle.textColor = [UIColor whiteColor];
-  _keypadTitle.textAlignment = NSTextAlignmentCenter;
-  _keypadTitle.font = [UIFont boldSystemFontOfSize:22];
-  [_keypadOverlay addSubview:_keypadTitle];
-  _keypad = [[DBNumericKeypad alloc] initWithSubmitTitle:@""];
-  _keypad.maxLength = 5;
+  _divider = [[UIView alloc] init];
+  _divider.backgroundColor = [UIColor colorWithWhite:0.55f alpha:1];
+  [self addSubview:_divider];
+
+  _editor = [[DBEditorView alloc] initWithNavBar:_nav];
   __weak DBSettingsScreen *weakSelf = self;
-  _keypad.onSubmit = ^(NSString *value) {
+  _editor.onClose = ^{
     DBSettingsScreen *screen = weakSelf;
-    if (screen) [screen commitPendingNumber:value];
+    if (!screen) return;
+    [screen->_pages close];
+    [screen reload];
   };
-  _keypad.onCancel = ^{
-    DBSettingsScreen *screen = weakSelf;
-    if (screen) screen->_keypadOverlay.hidden = YES;
-  };
-  [_keypadOverlay addSubview:_keypad];
+  _editor.onMessage = ^(NSString *message) { [weakSelf showToast:message]; };
+  _editor.onStackChanged = ^{ [weakSelf applyPrompt]; };
+  [self addSubview:_editor];
+
+  _tabs = [[DBHomeTabs alloc] initWithRouter:_router tab:DBHomeTabSettings];
+  [self addSubview:_tabs.bar];
+
+  [self applyMode:CGRectGetWidth(self.bounds) >= kDBTwoPaneMinWidth];
 
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(clockDidEnterBackground:)
       name:UIApplicationDidEnterBackgroundNotification object:nil];
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(clockDidBecomeActive:)
       name:UIApplicationDidBecomeActiveNotification object:nil];
-
-  _pickerOverlay = [[UIView alloc] init];
-  _pickerOverlay.backgroundColor = [UIColor colorWithWhite:0 alpha:0.9];
-  _pickerOverlay.hidden = YES;
-  [self addSubview:_pickerOverlay];
-  _pickerSearch = [[UITextField alloc] init];
-  _pickerSearch.borderStyle = UITextBorderStyleRoundedRect;
-  _pickerSearch.backgroundColor = [UIColor whiteColor];
-  _pickerSearch.textColor = [UIColor colorWithWhite:0.12 alpha:1];
-  _pickerSearch.font = [UIFont systemFontOfSize:19];
-  _pickerSearch.autocorrectionType = UITextAutocorrectionTypeNo;
-  _pickerSearch.autocapitalizationType = UITextAutocapitalizationTypeNone;
-  _pickerSearch.returnKeyType = UIReturnKeyDone;
-  _pickerSearch.delegate = self;
-  [_pickerSearch addTarget:self action:@selector(onPickerSearchChanged)
-          forControlEvents:UIControlEventEditingChanged];
-  [_pickerOverlay addSubview:_pickerSearch];
-  _pickerTable = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStylePlain];
-  _pickerTable.dataSource = self;
-  _pickerTable.delegate = self;
-  _pickerTable.rowHeight = 54;
-  [_pickerOverlay addSubview:_pickerTable];
-  _pickerCancel = [UIButton buttonWithType:UIButtonTypeCustom];
-  _pickerCancel.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-  _pickerCancel.layer.cornerRadius = 8;
-  _pickerCancel.clipsToBounds = YES;
-  [_pickerCancel addTarget:self action:@selector(onPickerCancel)
-          forControlEvents:UIControlEventTouchUpInside];
-  [_pickerOverlay addSubview:_pickerCancel];
 }
 
 - (void)onScreenWillAppear {
   _screenVisible = YES;
+  [_tabs syncSelection];
   [self reload];
   [self startClockUpdates];
 }
 
 - (void)onScreenWillDisappear {
   _screenVisible = NO;
-  if (_editor && !_editor.hidden) {
-    while (!_editor.hidden) [_editor popPage];
-  }
+  [_editor closeAllPages];
   [self stopClockUpdates];
   [_noticeDialog dismiss];
 }
@@ -466,6 +283,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 }
 
 - (void)refreshClock:(NSTimer *)timer {
+  (void)timer;
   if (!_screenVisible || !_clockTimer || _clockReadPending) return;
   _clockReadPending = YES;
   NSUInteger generation = _clockGeneration;
@@ -480,12 +298,11 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
       screen->_localTime = localTime;
       NSString *iso = [DBConfigUtil str:localTime path:@"iso"];
       if ([iso length] == 0) return;
-      NSArray *rows = [screen selectedRows];
-      for (NSUInteger index = 0; index < [rows count]; index++) {
-        DBSettingsRow *row = [rows objectAtIndex:index];
+      for (DBSettingsRow *row in [screen selectedRows]) {
         if (![row.argument isEqualToString:@"local_clock"]) continue;
         row.value = iso;
-        NSIndexPath *path = [NSIndexPath indexPathForRow:index inSection:0];
+        NSIndexPath *path = [screen indexPathForRow:row];
+        if (path == nil) continue;
         UITableViewCell *cell = [screen->_table cellForRowAtIndexPath:path];
         cell.detailTextLabel.text = iso;
         [cell setNeedsLayout];
@@ -495,23 +312,32 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 }
 
 - (void)clockDidEnterBackground:(NSNotification *)notification {
+  (void)notification;
   [self stopClockUpdates];
 }
 
 - (void)clockDidBecomeActive:(NSNotification *)notification {
+  (void)notification;
   [self startClockUpdates];
 }
 
 - (void)dealloc {
   [_clockTimer invalidate];
   [[NSNotificationCenter defaultCenter] removeObserver:self];
+  _categoryTable.dataSource = nil;
+  _categoryTable.delegate = nil;
+  _table.dataSource = nil;
+  _table.delegate = nil;
+}
+
+- (BOOL)volumeBeingDragged {
+  for (DBVolumeSlider *slider in [_volumeSliders allValues])
+    if (slider.editingVolume) return YES;
+  return NO;
 }
 
 - (void)reload {
-  for (UITableViewCell *cell in [_table visibleCells]) {
-    if ([cell isKindOfClass:[DBVolumeSettingsCell class]] &&
-        ((DBVolumeSettingsCell *)cell).editingVolume) return;
-  }
+  if ([self volumeBeingDragged]) return;
   NSInteger generation = ++_loadGeneration;
   DBCoreBridge *core = _core;
   __weak DBSettingsScreen *weakSelf = self;
@@ -533,7 +359,9 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
       screen->_localTime = localTime;
       [screen->_texts setConfig:cfg];
       [screen->_texts setLang:screen->_boot.uiLang];
-      [screen applyPalette];
+      screen->_palette = [DBUiPalette paletteForConfig:cfg deviceId:nodeId
+                                               display:[DBConfigUtil dig:status path:@"display"]
+                                         backgroundHex:nil minuteOfDay:[screen minuteOfDay]];
       [screen rebuildSections];
     });
   });
@@ -543,26 +371,6 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   NSInteger hh = [DBConfigUtil intVal:_localTime path:@"hh" def:-1];
   if (hh < 0) return 12 * 60;
   return hh * 60 + [DBConfigUtil intVal:_localTime path:@"mm" def:0];
-}
-
-- (void)applyPalette {
-  _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId
-                                   display:[DBConfigUtil dig:_status path:@"display"]
-                             backgroundHex:nil minuteOfDay:[self minuteOfDay]];
-  self.backgroundColor = _palette.surface;
-  _title.textColor = _palette.ink;
-  _toast.textColor = _palette.mutedInk;
-  _close.backgroundColor = [_palette plate];
-  _close.layer.borderWidth = 1;
-  _close.layer.borderColor = _palette.separator.CGColor;
-  [_close setTitleColor:_palette.ink forState:UIControlStateNormal];
-  _table.backgroundColor = _palette.surface;
-  _categoryTable.backgroundColor = _palette.surface;
-  _table.separatorColor = _palette.separator;
-  _adminFooter.backgroundColor = [_palette plate];
-  _adminFooter.layer.cornerRadius = 12;
-  [_qr applyPalette:_palette];
-  if (_editor) [_editor applyPalette:_palette];
 }
 
 - (NSString *)adminUrl {
@@ -583,16 +391,9 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 
 #pragma mark - sections
 
-- (NSDictionary *)section:(NSString *)titleKey rows:(NSArray *)rows {
-  return [self section:titleKey rows:rows icon:@"settings" tint:@"#8E8E93"];
-}
-
-// `tint` is the icon tile colour, as on iOS Settings; the glyph is always white.
-- (NSDictionary *)section:(NSString *)titleKey rows:(NSArray *)rows icon:(NSString *)icon
-                     tint:(NSString *)tint {
+- (NSDictionary *)section:(NSString *)titleKey rows:(NSArray *)rows icon:(NSString *)icon {
   return [NSDictionary dictionaryWithObjectsAndKeys:
-      [_texts ts:titleKey], @"title", rows, @"rows", titleKey, @"id", icon, @"icon",
-      tint, @"tint", nil];
+      [_texts ts:titleKey], @"title", rows, @"rows", titleKey, @"id", icon, @"icon", nil];
 }
 
 - (DBSettingsRow *)toggleRow:(NSString *)title key:(NSString *)key def:(BOOL)def {
@@ -612,8 +413,8 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
                                           (long)step, (long)value]);
 }
 
-// choices: [[value, label], ...]. Up to three fit a segmented control; more
-// open an action sheet.
+// choices: [[value, label], ...]. Up to three are offered as a segmented control when it
+// fits beside the title; otherwise the row opens an action sheet.
 - (DBSettingsRow *)choiceRow:(NSString *)title key:(NSString *)key def:(NSString *)def
                      choices:(NSArray *)choices {
   NSString *current = [DBConfigUtil str:_cfg path:key] ?: def;
@@ -622,6 +423,14 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
     if ([[choice objectAtIndex:0] isEqualToString:current]) label = [choice objectAtIndex:1];
   DBSettingsRow *row = DBRow(title, label, ([choices count] <= 3 ? @"segment" : @"choose"),
                              [NSString stringWithFormat:@"%@|%@", key, current]);
+  row.choices = choices;
+  return row;
+}
+
+// A choice kept in boot.json on this device rather than in the cluster configuration.
+- (DBSettingsRow *)localChoiceRow:(NSString *)title key:(NSString *)key value:(NSString *)value
+                          choices:(NSArray *)choices {
+  DBSettingsRow *row = DBRow(title, value, @"local_choice", key);
   row.choices = choices;
   return row;
 }
@@ -638,25 +447,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   return DBRow(title, value ?: @"", @"page", page);
 }
 
-- (void)openPage:(NSString *)name {
-  if (_editor == nil) {
-    _editor = [[DBEditorView alloc] initWithFrame:self.bounds];
-    _editor.hidden = YES;
-    __weak DBSettingsScreen *weakSelf = self;
-    _editor.onClose = ^{
-      DBSettingsScreen *screen = weakSelf;
-      if (!screen) return;
-      [screen->_pages close];
-      [screen reload];
-    };
-    [self addSubview:_editor];
-  }
-  if (_pages == nil) _pages = [[DBSettingsPages alloc] initWithRouter:_router editor:_editor
-                                                               nodeId:_nodeId];
-  _pages.nodeId = _nodeId;
-  _editor.backTitle = [_texts ts:@"editor.back"];
-  _editor.doneTitle = [_texts ts:@"editor.done"];
-  _editor.editTitle = [_texts ts:@"editor.edit"];
+- (void)applyEditorTexts {
   _editor.cancelTitle = [_texts ts:@"admin.cancel"];
   _editor.okTitle = [_texts ts:@"editor.ok"];
   _editor.confirmTitle = [_texts ts:@"editor.confirm"];
@@ -664,11 +455,15 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   _editor.unsetText = [_texts ts:@"editor.secret_unset"];
   _editor.customColorTitle = [_texts ts:@"editor.custom_color"];
   _editor.searchPlaceholder = [_texts ts:@"editor.search"];
-  [_editor applyPalette:_palette];
+}
+
+- (void)openPage:(NSString *)name {
+  if (_pages == nil) _pages = [[DBSettingsPages alloc] initWithRouter:_router editor:_editor
+                                                               nodeId:_nodeId];
+  _pages.nodeId = _nodeId;
+  [self applyEditorTexts];
   DBEditPage *page = [_pages pageNamed:name];
   if (page == nil) return;
-  _editor.frame = self.bounds;
-  _editor.hidden = NO;
   [self bringSubviewToFront:_editor];
   [_editor pushPage:page];
 }
@@ -686,19 +481,30 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   [rows addObject:DBRow([_texts ts:@"settings.device_role"], [self roleLabel], @"", nil)];
   if ([_boot.door length] > 0)
     [rows addObject:DBRow([_texts ts:@"settings.device_door"], _boot.door, @"", nil)];
-  [rows addObject:DBRow([_texts ts:@"settings.ui_lang"],
-                        [DBTexts langDisplayName:_boot.uiLang], @"ui_lang", nil)];
-  [rows addObject:DBRow([_texts ts:@"settings.helper_mode"],
-                        _boot.keepaliveHelperPolicy ?: @"off", @"helper_mode", nil)];
+  NSMutableArray *languages = [NSMutableArray array];
+  for (NSString *lang in @[ @"ja", @"en", @"zh" ])
+    [languages addObject:@[ lang, [DBTexts langDisplayName:lang] ]];
+  [rows addObject:[self localChoiceRow:[_texts ts:@"settings.ui_lang"] key:@"ui_lang"
+                                 value:[DBTexts langDisplayName:_boot.uiLang]
+                               choices:languages]];
+  [rows addObject:[self localChoiceRow:[_texts ts:@"settings.helper_mode"]
+                                   key:@"keepalive_helper"
+                                 value:(_boot.keepaliveHelperPolicy ?: @"off")
+                               choices:@[ @[ @"off", @"off" ], @[ @"auto", @"auto" ],
+                                          @[ @"on", @"on" ] ]]];
   NSString *configured = [DBConfigUtil str:_cfg path:@"display.appearance"] ?: @"auto_system";
   NSString *effective = [DBUiTheme appearanceModeForConfig:_cfg deviceId:_nodeId
                                                    display:[DBConfigUtil dig:_status
                                                                        path:@"display"]
                                                minuteOfDay:[self minuteOfDay]];
-  [rows addObject:DBRow([_texts ts:@"theme.appearance"],
-                        [self appearanceLabel:configured effective:effective],
-                        @"cycle",
-                        @"display.appearance|auto_schedule,light,dark")];
+  DBSettingsRow *appearance = DBRow([_texts ts:@"theme.appearance"],
+                                    [self appearanceLabel:configured effective:effective],
+                                    @"choose",
+                                    [@"display.appearance|" stringByAppendingString:configured]);
+  appearance.choices = @[ @[ @"auto_schedule", [_texts ts:@"theme.appearance_auto_schedule"] ],
+                          @[ @"light", [_texts ts:@"theme.mode_light"] ],
+                          @[ @"dark", [_texts ts:@"theme.mode_dark"] ] ];
+  [rows addObject:DBGroupStart(appearance)];
   if ([_nodeId length] > 0) {
     NSString *local = [NSString stringWithFormat:@"devices.%@.local.video", _nodeId];
     [rows addObject:[self choiceRow:[_texts ts:@"settings.video_playback"]
@@ -713,12 +519,13 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   }
   [rows addObject:[self pageRow:[_texts ts:@"settings.theme_bg"]
                           value:([self themeBackgroundHex] ?: @"") page:@"theme"]];
-  [rows addObject:[self pageRow:[_texts ts:@"editor.wording"] value:nil page:@"wording"]];
+  [rows addObject:DBGroupStart([self pageRow:[_texts ts:@"editor.wording"] value:nil
+                                        page:@"wording"])];
   [rows addObject:[self pageRow:[_texts ts:@"editor.admin_password"] value:nil
                            page:@"admin_password"]];
   [rows addObject:[self pageRow:[_texts ts:@"editor.config_transfer"] value:nil
                            page:@"config_transfer"]];
-  // No キオスクを終了 row here: on this jailbroken iPad the app *is* the kiosk,
+  // No "leave the kiosk" row here: on this jailbroken iPad the app *is* the kiosk,
   // so there is no mode to leave -- terminating it only makes the watchdog or
   // the root helper relaunch it. A row that cannot do what it says is worse
   // than no row (spec §5.2, no decorative controls).
@@ -799,10 +606,10 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
                                      ? [(NSArray *)servers componentsJoinedByString:@", "] : @"")
                            page:@"ntp_servers"]];
   long long lastSync = [DBConfigUtil longLongVal:_status path:@"time.last_sync_ms" def:0];
-  [rows addObject:DBRow([_texts ts:@"time.last_sync"],
+  [rows addObject:DBGroupStart(DBRow([_texts ts:@"time.last_sync"],
                         lastSync > 0 ? [NSString stringWithFormat:@"%lld ms",
                             [DBConfigUtil longLongVal:_status path:@"time.offset_ms" def:0]]
-                                     : [_texts ts:@"time.never"], @"", nil)];
+                                     : [_texts ts:@"time.never"], @"", nil))];
   [rows addObject:DBRow([_texts ts:@"time.sync_now"], @"", @"time_sync", nil)];
   NSString *iso = [DBConfigUtil str:_localTime path:@"iso"];
   if ([iso length] > 0)
@@ -819,10 +626,10 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
       NSString *label = [DBConfigUtil labelOf:[doors objectForKey:door] lang:_boot.uiLang
                                      fallback:door];
       NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:door config:_cfg nowMs:nowMs];
-      [rows addObject:DBRow(label,
-                            notice ? [DBNoticeModel noticeText:notice]
-                                   : [_texts ts:@"notice.none"],
-                            @"notice", door)];
+      [rows addObject:DBGroupStart(DBRow(label,
+                                         notice ? [DBNoticeModel noticeText:notice]
+                                                : [_texts ts:@"notice.none"],
+                                         @"notice", door))];
       NSDictionary *unlock = [DBConfigUtil dig:_status
           path:[NSString stringWithFormat:@"doors.%@.unlock", door]];
       BOOL configuredUnlock = [DBConfigUtil boolVal:unlock path:@"configured" def:NO];
@@ -833,7 +640,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
                                                        door, showUnlock ? 1 : 0])];
     }
   }
-  [rows addObject:DBRow([_texts ts:@"dash.notice_global"], @"", @"notice", @"")];
+  [rows addObject:DBGroupStart(DBRow([_texts ts:@"dash.notice_global"], @"", @"notice", @""))];
   [rows addObject:[self pageRow:[_texts ts:@"notice.presets"] value:nil page:@"notice_presets"]];
   [rows addObject:[self pageRow:[_texts ts:@"editor.places"] value:nil page:@"places"]];
   return rows;
@@ -909,31 +716,40 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
                         [_texts t:@"settings.rules_count",
                              [NSString stringWithFormat:@"%ld", (long)(count + 1)], nil],
                         @"page", @"devices")];
-  // Security protocol v3 state, from the pairing snapshot.
+  // Security protocol v3 state, from the pairing snapshot. The key rows form one group that
+  // ends with the destructive rotation.
+  NSMutableArray *keyRows = [NSMutableArray array];
   NSDictionary *security = [_pairing isKindOfClass:[NSDictionary class]]
       ? [_pairing objectForKey:@"security"] : nil;
   if ([security isKindOfClass:[NSDictionary class]]) {
     NSString *psk = [DBConfigUtil str:security path:@"psk_id"] ?: @"";
     if ([psk length] > 0)
-      [rows addObject:DBRow([_texts ts:@"prefs.cluster_key"], psk, @"", nil)];
+      [keyRows addObject:DBRow([_texts ts:@"prefs.cluster_key"], psk, @"", nil)];
     NSInteger stale = 0;
     for (NSString *key in @[ @"legacy_peers", @"rekey_required" ]) {
       id list = [security objectForKey:key];
       if ([list isKindOfClass:[NSArray class]]) stale += (NSInteger)[(NSArray *)list count];
     }
     if (stale > 0)
-      [rows addObject:DBRow([_texts ts:@"prefs.members_need_rejoin"],
-                            [_texts t:@"pair.members_need_rejoin",
-                                 [NSString stringWithFormat:@"%ld", (long)stale], nil],
-                            @"", nil)];
+      [keyRows addObject:DBRow([_texts ts:@"prefs.members_need_rejoin"],
+                               [_texts t:@"pair.members_need_rejoin",
+                                    [NSString stringWithFormat:@"%ld", (long)stale], nil],
+                               @"", nil)];
   }
   BOOL paired = [[DBConfigUtil str:_pairing path:@"state"] isEqualToString:@"ready"];
-  if ([DBCoreBridge supportsKeyRotation] && paired) {
+  BOOL canRotate = [DBCoreBridge supportsKeyRotation] && paired;
+  if (canRotate) {
     DBSettingsRow *rotate = DBRow([_texts ts:@"prefs.rotate_key"], @"", @"rotate_key", nil);
     rotate.destructive = YES;
-    [rows addObject:rotate];
+    [keyRows addObject:rotate];
   }
-  [rows addObject:[self pageRow:[_texts ts:@"prefs.panels"] value:nil page:@"panels"]];
+  if ([keyRows count] > 0) {
+    DBSettingsRow *first = DBGroupStart([keyRows objectAtIndex:0]);
+    if (canRotate) first.groupFooter = [_texts ts:@"prefs.rotate_key_footer"];
+    [rows addObjectsFromArray:keyRows];
+  }
+  [rows addObject:DBGroupStart([self pageRow:[_texts ts:@"prefs.panels"] value:nil
+                                        page:@"panels"])];
   NSDictionary *sources = [DBConfigUtil dig:_cfg path:@"media_sources"];
   [rows addObject:[self pageRow:[_texts ts:@"prefs.media_sources"]
                           value:([sources isKindOfClass:[NSDictionary class]] && [sources count]
@@ -1036,16 +852,6 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   return rows;
 }
 
-- (NSString *)versionLine {
-  NSDictionary *power = [_core powerStateNow];
-  NSInteger battery = [DBConfigUtil intVal:power path:@"battery_pct" def:-1];
-  BOOL charging = [DBConfigUtil boolVal:power path:@"charging" def:NO];
-  NSString *appVersion = [[NSBundle mainBundle]
-      objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"";
-  return [DBUiTheme versionLineForName:nil coreVersion:[_core coreVersion]
-                           appVersion:appVersion batteryPct:battery charging:charging];
-}
-
 - (NSArray *)infoRows {
   NSMutableArray *rows = [NSMutableArray array];
   [rows addObject:DBRow([_texts ts:@"info.safe_mode"], [self safeModeValue], @"", nil)];
@@ -1075,89 +881,275 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 }
 
 - (void)rebuildSections {
-  for (UITableViewCell *cell in [_table visibleCells]) {
-    if ([cell isKindOfClass:[DBVolumeSettingsCell class]] &&
-        ((DBVolumeSettingsCell *)cell).editingVolume) return;
-  }
+  if ([self volumeBeingDragged]) return;
   NSMutableArray *sections = [NSMutableArray array];
   [sections addObject:[self section:@"settings.section_device" rows:[self deviceRows]
-                               icon:@"device-tablet" tint:@"#8E8E93"]];
+                               icon:@"device-tablet"]];
   NSMutableArray *sound = [NSMutableArray arrayWithArray:[self volumeRows]];
-  [sound addObjectsFromArray:[self soundRows]];
-  [sections addObject:[self section:@"prefs.sounds" rows:sound icon:@"volume" tint:@"#FF2D55"]];
-  [sections addObject:[self section:@"prefs.display" rows:[self displayRows]
-                               icon:@"palette" tint:@"#007AFF"]];
-  [sections addObject:[self section:@"prefs.calls" rows:[self callRows]
-                               icon:@"phone" tint:@"#34C759"]];
+  NSArray *soundRows = [self soundRows];
+  if ([sound count] > 0 && [soundRows count] > 0) DBGroupStart([soundRows objectAtIndex:0]);
+  [sound addObjectsFromArray:soundRows];
+  [sections addObject:[self section:@"prefs.sounds" rows:sound icon:@"volume"]];
+  [sections addObject:[self section:@"prefs.display" rows:[self displayRows] icon:@"palette"]];
+  [sections addObject:[self section:@"prefs.calls" rows:[self callRows] icon:@"phone"]];
   [sections addObject:[self section:@"settings.section_doors" rows:[self doorRows]
-                               icon:@"door" tint:@"#FF9500"]];
+                               icon:@"door"]];
   NSArray *purposes = [self purposeRows];
   if ([purposes count] > 0)
     [sections addObject:[self section:@"settings.section_purposes" rows:purposes
-                                 icon:@"message-reply" tint:@"#5AC8FA"]];
-  [sections addObject:[self section:@"prefs.sos" rows:[self sosRows]
-                               icon:@"shield-lock" tint:@"#FF3B30"]];
+                                 icon:@"message-reply"]];
+  [sections addObject:[self section:@"prefs.sos" rows:[self sosRows] icon:@"shield-lock"]];
   [sections addObject:[self section:@"settings.section_time" rows:[self timeRows]
-                               icon:@"clock" tint:@"#5856D6"]];
+                               icon:@"clock"]];
   [sections addObject:[self section:@"settings.section_rules" rows:[self ruleRows]
-                               icon:@"bell" tint:@"#FF3B30"]];
+                               icon:@"bell"]];
   [sections addObject:[self section:@"settings.section_cluster" rows:[self clusterRows]
-                               icon:@"topology-star-3" tint:@"#30B0C7"]];
+                               icon:@"topology-star-3"]];
   [sections addObject:[self section:@"settings.section_history"
                                rows:[NSArray arrayWithObject:
                                         DBRow([_texts ts:@"history.title"], @"",
                                               @"history", nil)]
-                               icon:@"list" tint:@"#8E8E93"]];
+                               icon:@"list"]];
   [sections addObject:[self section:@"settings.section_info" rows:[self infoRows]
-                               icon:@"info-circle" tint:@"#8E8E93"]];
+                               icon:@"info-circle"]];
   _sections = sections;
   _selectedSection = 0;
   for (NSUInteger i = 0; i < [sections count]; i++)
     if ([[[sections objectAtIndex:i] objectForKey:@"id"] isEqualToString:_selectedId])
       _selectedSection = (NSInteger)i;
   _selectedId = [[sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"id"];
-  [_categoryTable reloadData];
+  [self regroup];
 
-  _title.text = [_texts ts:@"settings.title"];
-  [_close setTitle:[_texts ts:@"settings.close"] forState:UIControlStateNormal];
-  [_qr setUrl:[self adminUrl] caption:[_texts ts:@"web_admin.scan"]];
-  [_qr setVersionLine:[self versionLine]];
-  [self updateDetailHeader];
+  [_tabs applyTexts:_texts];
+  [self applyEditorTexts];
+  [self refreshChrome];
+  [self updateFooter];
+  [_categoryTable reloadData];
+  [self syncCategorySelection];
   [_table reloadData];
   [self setNeedsLayout];
 }
 
-#pragma mark - actions
+#pragma mark - panes
 
 - (NSArray *)selectedRows {
   if (_selectedSection < 0 || _selectedSection >= (NSInteger)[_sections count]) return nil;
   return [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"rows"];
 }
 
+- (NSString *)detailTitle {
+  if (_selectedSection < 0 || _selectedSection >= (NSInteger)[_sections count]) return nil;
+  return [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"title"];
+}
+
+- (void)regroup {
+  NSMutableArray *groups = [NSMutableArray array];
+  NSMutableArray *current = nil;
+  for (DBSettingsRow *row in [self selectedRows]) {
+    if (current == nil || row.startsGroup) {
+      current = [NSMutableArray array];
+      [groups addObject:current];
+    }
+    [current addObject:row];
+  }
+  _groups = groups;
+}
+
 - (DBSettingsRow *)rowAt:(NSIndexPath *)indexPath {
-  NSArray *rows = [self selectedRows];
+  if (indexPath.section < 0 || indexPath.section >= (NSInteger)[_groups count]) return nil;
+  NSArray *rows = [_groups objectAtIndex:(NSUInteger)indexPath.section];
   if (indexPath.row < 0 || indexPath.row >= (NSInteger)[rows count]) return nil;
   return [rows objectAtIndex:(NSUInteger)indexPath.row];
 }
 
+- (NSIndexPath *)indexPathForRow:(DBSettingsRow *)row {
+  for (NSUInteger section = 0; section < [_groups count]; section++) {
+    NSUInteger index = [[_groups objectAtIndex:section] indexOfObjectIdenticalTo:row];
+    if (index != NSNotFound)
+      return [NSIndexPath indexPathForRow:(NSInteger)index inSection:(NSInteger)section];
+  }
+  return nil;
+}
+
+// Controls carry the row's position in the selected category as their tag.
+- (DBSettingsRow *)rowForControlTag:(NSInteger)tag {
+  NSArray *rows = [self selectedRows];
+  if (tag < 0 || tag >= (NSInteger)[rows count]) return nil;
+  return [rows objectAtIndex:(NSUInteger)tag];
+}
+
+// The door station has no tab bar to leave by, so its root page carries Close.
+- (void)refreshChrome {
+  NSString *settingsTitle = [_texts ts:@"settings.title"];
+  UIBarButtonItem *close = nil;
+  if (![DBHomeTabs shownForRole:_router.boot.role]) {
+    if (_closeItem == nil) _closeItem = DBChromeBarItem(@"", self, @selector(onClose));
+    _closeItem.title = [_texts ts:@"settings.close"];
+    close = _closeItem;
+  }
+  _masterRoot.title = settingsTitle;
+  if (_twoPane) {
+    _navRoot.title = [self detailTitle] ?: @"";
+    if (_navRoot.leftBarButtonItem != nil) _navRoot.leftBarButtonItem = nil;
+    if (_masterRoot.leftBarButtonItem != close) _masterRoot.leftBarButtonItem = close;
+  } else {
+    _navRoot.title = settingsTitle;
+    _categoryItem.title = [self detailTitle] ?: @"";
+    if (_masterRoot.leftBarButtonItem != nil) _masterRoot.leftBarButtonItem = nil;
+    if (_navRoot.leftBarButtonItem != close) _navRoot.leftBarButtonItem = close;
+  }
+  _masterNav.bar.hidden = !_twoPane;
+  _divider.hidden = !_twoPane;
+  _categoryTable.hidden = !_twoPane && _drillDetail;
+  _table.hidden = !_twoPane && !_drillDetail;
+}
+
+- (void)applyMode:(BOOL)twoPane {
+  if (_modeApplied && twoPane == _twoPane) return;
+  _modeApplied = YES;
+  _twoPane = twoPane;
+  [_editor closeAllPages];
+  _drillDetail = NO;
+  _categoryItem = nil;
+  _navRoot = [_nav setRootTitle:@"" backTitle:nil onBack:nil];
+  [self refreshChrome];
+  [self applyPrompt];
+  [_categoryTable reloadData];
+  [self syncCategorySelection];
+  [_table reloadData];
+}
+
+// Two panes keep the chosen category highlighted, as the system Settings app does.
+- (void)syncCategorySelection {
+  if (!_twoPane || _selectedSection < 0 || _selectedSection >= (NSInteger)[_sections count])
+    return;
+  [_categoryTable selectRowAtIndexPath:[NSIndexPath indexPathForRow:_selectedSection inSection:0]
+                              animated:NO scrollPosition:UITableViewScrollPositionNone];
+}
+
+- (void)selectCategory:(NSInteger)index {
+  if (index < 0 || index >= (NSInteger)[_sections count]) return;
+  BOOL changed = index != _selectedSection;
+  if (_twoPane && !changed && _editor.pageCount == 0) return;
+  [_editor closeAllPages];
+  _selectedSection = index;
+  _selectedId = [[_sections objectAtIndex:(NSUInteger)index] objectForKey:@"id"];
+  [self regroup];
+  if (!_twoPane) {
+    __weak DBSettingsScreen *weakSelf = self;
+    _categoryItem = [_nav pushTitle:[self detailTitle] onPop:^{
+      DBSettingsScreen *screen = weakSelf;
+      if (!screen) return;
+      screen->_drillDetail = NO;
+      screen->_categoryItem = nil;
+      [screen refreshChrome];
+      [screen applyPrompt];
+    }];
+    _drillDetail = YES;
+  }
+  [self refreshChrome];
+  [self applyPrompt];
+  [_table reloadData];
+  [_table setContentOffset:CGPointZero animated:NO];
+}
+
+#pragma mark - footer
+
+- (NSString *)versionLine {
+  NSDictionary *power = [_core powerStateNow];
+  NSInteger battery = [DBConfigUtil intVal:power path:@"battery_pct" def:-1];
+  BOOL charging = [DBConfigUtil boolVal:power path:@"charging" def:NO];
+  NSString *appVersion = [[NSBundle mainBundle]
+      objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"";
+  return [DBUiTheme versionLineForName:nil coreVersion:[_core coreVersion]
+                           appVersion:appVersion batteryPct:battery charging:charging];
+}
+
+// The admin page's QR code, its address, and the version line close every category.
+- (void)updateFooter {
+  NSString *url = [self adminUrl];
+  NSString *caption = [_texts ts:@"web_admin.scan"];
+  _qrImage.accessibilityLabel = caption;
+  _footerLabel.text = [NSString stringWithFormat:@"%@\n%@\n%@", caption, url,
+                                                 [self versionLine] ?: @""];
+  if (![url isEqualToString:_qrUrl]) {
+    _qrUrl = [url copy];
+    __weak DBSettingsScreen *weakSelf = self;
+    // QR generation is pure CPU work and stays off the main thread of an A4 device.
+    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
+      UIImage *code = [DBQrCode imageForString:url targetPx:kDBQrSide * 2];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        DBSettingsScreen *screen = weakSelf;
+        if (screen && [screen->_qrUrl isEqualToString:url]) screen->_qrImage.image = code;
+      });
+    });
+  }
+  [self layoutFooter];
+}
+
+- (void)layoutFooter {
+  CGFloat width = CGRectGetWidth(_table.bounds);
+  if (width <= 0) return;
+  CGFloat inset = DBChromeIsFlat() ? 15 : 20;
+  CGFloat labelWidth = MAX(80, width - inset * 2);
+  CGFloat labelHeight = ceil([_footerLabel.text ?: @"" sizeWithFont:_footerLabel.font
+      constrainedToSize:CGSizeMake(labelWidth, 400)
+          lineBreakMode:NSLineBreakByWordWrapping].height);
+  // The footer label is centred before iOS 7 and leading on the flat look; the code follows.
+  CGFloat qrX = DBChromeIsFlat() ? inset : floor((width - kDBQrSide) / 2);
+  _qrImage.frame = CGRectMake(qrX, 8, kDBQrSide, kDBQrSide);
+  _footerLabel.frame = CGRectMake(inset, 8 + kDBQrSide + 8, labelWidth, labelHeight);
+  CGRect frame = CGRectMake(0, 0, width, CGRectGetMaxY(_footerLabel.frame) + 20);
+  if (_table.tableFooterView != _footer || !CGRectEqualToRect(_footer.frame, frame)) {
+    _footer.frame = frame;
+    _table.tableFooterView = _footer;
+  }
+}
+
+#pragma mark - messages
+
+// A short message rides the navigation item's prompt line for a few seconds; one that would
+// not fit there, or that has several lines, is an alert the operator acknowledges.
 - (void)showToast:(NSString *)text {
-  _toast.text = text;
-  _toast.alpha = 1;
-  NSUInteger generation = ++_toastGeneration;
+  if ([text length] == 0) return;
+  CGFloat room = CGRectGetWidth(_nav.bar.bounds) - 24;
+  BOOL fits = [text rangeOfString:@"\n"].location == NSNotFound &&
+      [text sizeWithFont:[UIFont systemFontOfSize:15]].width <= room;
+  if (!fits) {
+    [[[UIAlertView alloc] initWithTitle:nil message:text delegate:nil
+                      cancelButtonTitle:[_texts ts:@"editor.ok"] otherButtonTitles:nil] show];
+    return;
+  }
+  _promptText = [text copy];
+  NSUInteger generation = ++_promptGeneration;
+  [self applyPrompt];
   __weak DBSettingsScreen *weakSelf = self;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)),
       dispatch_get_main_queue(), ^{
     DBSettingsScreen *screen = weakSelf;
-    if (!screen || screen->_toastGeneration != generation) return;
-    [UIView animateWithDuration:0.2 animations:^{ screen->_toast.alpha = 0; }];
+    if (!screen || screen->_promptGeneration != generation) return;
+    screen->_promptText = nil;
+    [screen applyPrompt];
   });
+}
+
+// The prompt follows the page on top of the detail bar. A bar with a prompt is taller, so
+// the master bar takes a blank one to stay level with it.
+- (void)applyPrompt {
+  UINavigationItem *top = _nav.topItem;
+  if (_promptItem != top && _promptItem.prompt != nil) _promptItem.prompt = nil;
+  _promptItem = top;
+  if (top.prompt != _promptText && ![top.prompt isEqualToString:_promptText])
+    top.prompt = _promptText;
+  NSString *masterPrompt = (_twoPane && _promptText != nil) ? @" " : nil;
+  if (_masterRoot.prompt != masterPrompt && ![_masterRoot.prompt isEqualToString:masterPrompt])
+    _masterRoot.prompt = masterPrompt;
   [self setNeedsLayout];
 }
 
-- (void)cycleLocalKey:(NSString *)key values:(NSArray *)values current:(NSString *)current {
-  NSUInteger index = [values indexOfObject:(current ?: @"")];
-  NSString *next = [values objectAtIndex:(index == NSNotFound ? 0
-                                                             : (index + 1) % [values count])];
+#pragma mark - actions
+
+- (void)setLocalKey:(NSString *)key value:(NSString *)next {
   NSString *json = [DBBootConfig persistLocalValue:next forKey:key];
   if ([json length] == 0) {
     [self showToast:[_texts ts:@"settings.save_failed"]];
@@ -1226,32 +1218,34 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   return YES;
 }
 
-- (void)commitPendingNumber:(NSString *)value {
-  _keypadOverlay.hidden = YES;
-  if ([_pendingNumberKey length] == 0) return;
-  NSInteger number = [value integerValue];
-  if ([value length] == 0 || number < _pendingNumberMin || number > _pendingNumberMax) {
-    [self showToast:[_texts ts:@"settings.save_failed"]];
-    return;
-  }
-  [self reportWriteStatus:[_core setConfigKey:_pendingNumberKey numberValue:number]];
-  _pendingNumberKey = nil;
+- (void)promptNumberForKey:(NSString *)key title:(NSString *)title current:(NSString *)current
+                       min:(NSInteger)min max:(NSInteger)max {
+  if ([key length] == 0) return;
+  __weak DBSettingsScreen *weakSelf = self;
+  [_editor promptTitle:[NSString stringWithFormat:@"%@ (%ld–%ld)", title, (long)min, (long)max]
+                 value:[NSString stringWithFormat:@"%ld", (long)[current integerValue]]
+           placeholder:nil keyboard:UIKeyboardTypeNumberPad secure:NO
+                  then:^(NSString *text) {
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return;
+    NSString *value = [text stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSInteger number = [value integerValue];
+    if ([value length] == 0 || number < min || number > max) {
+      [screen showToast:[screen->_texts ts:@"settings.save_failed"]];
+      return;
+    }
+    [screen reportWriteStatus:[screen->_core setConfigKey:key numberValue:number]];
+  }];
 }
 
 - (void)promptNumberForRow:(DBSettingsRow *)row {
   NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
-  if ([parts count] != 3) return;
-  _pendingNumberKey = [[parts objectAtIndex:0] copy];
-  _pendingNumberMin = [[parts objectAtIndex:1] integerValue];
-  _pendingNumberMax = [[parts objectAtIndex:2] integerValue];
-  _keypadTitle.text = [NSString stringWithFormat:@"%@  (%ld–%ld)", row.title,
-                       (long)_pendingNumberMin, (long)_pendingNumberMax];
-  [_keypad setSubmitTitle:[_texts ts:@"admin.save"]];
-  [_keypad clear];
-  _keypadOverlay.hidden = NO;
-  [_keypad beginEditing];
-  [self bringSubviewToFront:_keypadOverlay];
-  [self setNeedsLayout];
+  // "key|min|max" for a number row, "key|min|max|step|value" for a stepper row.
+  if ([parts count] != 3 && [parts count] != 5) return;
+  [self promptNumberForKey:[parts objectAtIndex:0] title:row.title current:row.value
+                       min:[[parts objectAtIndex:1] integerValue]
+                       max:[[parts objectAtIndex:2] integerValue]];
 }
 
 - (void)toggleForRow:(DBSettingsRow *)row {
@@ -1261,113 +1255,106 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   [self reportWriteStatus:[_core setConfigKey:[parts objectAtIndex:0] boolValue:!current]];
 }
 
-- (void)cycleForRow:(DBSettingsRow *)row {
-  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
-  if ([parts count] != 2) return;
-  NSString *key = [parts objectAtIndex:0];
-  NSArray *values = [[parts objectAtIndex:1] componentsSeparatedByString:@","];
-  if ([values count] == 0) return;
-  NSString *current = [DBConfigUtil str:_cfg path:key] ?: @"";
-  NSUInteger index = [values indexOfObject:current];
-  NSString *next = [values objectAtIndex:(index == NSNotFound ? 0
-                                                              : (index + 1) % [values count])];
-  [self reportWriteStatus:[_core setConfigKey:key stringValue:next]];
-}
-
 - (void)inheritForRow:(DBSettingsRow *)row {
   // Clearing the device key restores inheritance from the cluster default.
   [self reportWriteStatus:[_core deleteConfigKey:row.argument]];
 }
 
-- (void)presentZonePickerForKey:(NSString *)key {
-  _pickerKey = [key copy];
-  // Core publishes the zones it can actually resolve; the built-in list is the
-  // fallback for a core that does not report them.
+// The zone list is a searchable page. Core publishes the zones it can actually resolve; the
+// built-in list is the fallback for a core that does not report them.
+- (void)openZonePickerForKey:(NSString *)key {
   id zones = [DBConfigUtil dig:_status path:@"time.zones"];
-  _pickerAll = ([zones isKindOfClass:[NSArray class]] && [(NSArray *)zones count] > 0)
+  NSArray *all = ([zones isKindOfClass:[NSArray class]] && [(NSArray *)zones count] > 0)
       ? (NSArray *)zones : DBCommonTimeZones();
-  _pickerFiltered = _pickerAll;
-  _pickerSearch.text = @"";
-  _pickerSearch.placeholder = [_texts ts:@"settings.zone_search"];
-  [_pickerCancel setTitle:[_texts ts:@"admin.cancel"] forState:UIControlStateNormal];
-  _pickerCancel.backgroundColor = _palette.elevated;
-  [_pickerCancel setTitleColor:_palette.ink forState:UIControlStateNormal];
-  _pickerTable.backgroundColor = _palette.surface;
-  _pickerTable.separatorColor = _palette.separator;
-  [_pickerTable reloadData];
-  _pickerOverlay.hidden = NO;
-  [self bringSubviewToFront:_pickerOverlay];
-  [self setNeedsLayout];
-}
-
-- (void)onPickerSearchChanged {
-  NSString *query = [_pickerSearch.text stringByTrimmingCharactersInSet:
-      [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-  if ([query length] == 0) {
-    _pickerFiltered = _pickerAll;
-  } else {
-    NSMutableArray *matches = [NSMutableArray array];
-    for (NSString *zone in _pickerAll) {
-      if ([zone rangeOfString:query options:NSCaseInsensitiveSearch].location != NSNotFound)
-        [matches addObject:zone];
+  NSString *current = [DBConfigUtil str:_status path:@"time.zone"];
+  if ([current length] == 0) current = [DBConfigUtil str:_cfg path:@"time.zone"];
+  __weak DBSettingsScreen *weakSelf = self;
+  __weak DBEditorView *editor = _editor;
+  DBEditPage *page = [DBEditPage title:[_texts ts:@"time.zone"] build:^NSArray *{
+    NSString *query = [editor.filterText stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    NSMutableArray *shown = [NSMutableArray array];
+    for (id zone in all) {
+      if (![zone isKindOfClass:[NSString class]]) continue;
+      if ([query length] == 0 ||
+          [zone rangeOfString:query options:NSCaseInsensitiveSearch].location != NSNotFound)
+        [shown addObject:zone];
     }
     // Anything the operator types is offered too: Core owns the real table and
     // rejects an identifier it does not know.
-    if ([matches count] == 0 && [query rangeOfString:@"/"].location != NSNotFound)
-      [matches addObject:query];
-    _pickerFiltered = matches;
-  }
-  [_pickerTable reloadData];
-}
-
-- (BOOL)textFieldShouldReturn:(UITextField *)textField {
-  [textField resignFirstResponder];
-  return YES;
-}
-
-- (void)onPickerCancel {
-  [_pickerSearch resignFirstResponder];
-  _pickerOverlay.hidden = YES;
-  _pickerKey = nil;
+    if ([shown count] == 0 && [query rangeOfString:@"/"].location != NSNotFound)
+      [shown addObject:query];
+    NSMutableArray *fields = [NSMutableArray array];
+    for (NSString *zone in shown) {
+      DBEditField *field = [DBEditField kind:DBEditKindAction title:zone value:zone];
+      field.checked = [zone isEqualToString:current];
+      field.action = ^{
+        DBSettingsScreen *screen = weakSelf;
+        if (!screen) return;
+        [editor popPage];
+        [screen reportWriteStatus:[screen->_core setConfigKey:key stringValue:zone]];
+      };
+      [fields addObject:field];
+    }
+    return @[ [DBEditSection title:nil fields:fields] ];
+  }];
+  page.searchable = YES;
+  page.filtersItself = YES;
+  page.searchPlaceholder = [_texts ts:@"settings.zone_search"];
+  [self applyEditorTexts];
+  [self bringSubviewToFront:_editor];
+  [_editor pushPage:page];
 }
 
 - (void)promptDeviceName {
-  UIAlertView *alert = [[UIAlertView alloc] initWithTitle:[_texts ts:@"settings.device_name"]
-      message:nil delegate:self
-      cancelButtonTitle:[_texts ts:@"admin.cancel"]
-      otherButtonTitles:[_texts ts:@"admin.save"], nil];
-  alert.alertViewStyle = UIAlertViewStylePlainTextInput;
-  UITextField *field = [alert textFieldAtIndex:0];
-  field.text = _boot.name;
-  field.autocorrectionType = UITextAutocorrectionTypeNo;
-  field.autocapitalizationType = UITextAutocapitalizationTypeNone;
-  field.clearButtonMode = UITextFieldViewModeWhileEditing;
-  [alert show];
+  __weak DBSettingsScreen *weakSelf = self;
+  [_editor promptTitle:[_texts ts:@"settings.device_name"] value:_boot.name placeholder:nil
+              keyboard:UIKeyboardTypeDefault secure:NO then:^(NSString *text) {
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return;
+    NSString *name = [text stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    if ([name length] == 0 || [name length] > 64 || [screen->_nodeId length] == 0) {
+      [screen showToast:[screen->_texts ts:@"settings.save_failed"]];
+      return;
+    }
+    if ([name isEqualToString:screen->_boot.name]) return;
+    // The replicated identity handler persists boot.json without leaving the settings screen.
+    [screen reportWriteStatus:[screen->_core setConfigKey:[NSString stringWithFormat:
+        @"devices.%@.name", screen->_nodeId] stringValue:name]];
+  }];
 }
 
-- (BOOL)alertViewShouldEnableFirstOtherButton:(UIAlertView *)alertView {
-  if (alertView.alertViewStyle != UIAlertViewStylePlainTextInput) return YES;
-  NSString *name = [[alertView textFieldAtIndex:0].text stringByTrimmingCharactersInSet:
-      [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-  return [name length] > 0 && [name length] <= 64;
-}
-
-- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
-  if (buttonIndex == alertView.cancelButtonIndex) return;
-  if (alertView.tag == kDBRotateKeyAlertTag) {
-    [self rotateClusterKey];
-    return;
-  }
-  NSString *name = [[alertView textFieldAtIndex:0].text stringByTrimmingCharactersInSet:
-      [NSCharacterSet whitespaceAndNewlineCharacterSet]];
-  if ([name length] == 0 || [name length] > 64 || [_nodeId length] == 0) {
-    [self showToast:[_texts ts:@"settings.save_failed"]];
-    return;
-  }
-  if ([name isEqualToString:_boot.name]) return;
-  // The replicated identity handler persists boot.json without leaving the settings screen.
-  [self reportWriteStatus:[_core setConfigKey:[NSString stringWithFormat:
-      @"devices.%@.name", _nodeId] stringValue:name]];
+- (void)syncTimeNow {
+  DBCoreBridge *core = _core;
+  __weak DBSettingsScreen *weakSelf = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSDictionary *before = [[core status] objectForKey:@"time"];
+    long long previousSync = [[before objectForKey:@"last_sync_ms"] longLongValue];
+    BOOL started = [core timeSyncNow];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBSettingsScreen *screen = weakSelf;
+      if (!screen) return;
+      [screen showToast:[screen->_texts ts:(started ? @"time.sync_started"
+                                                    : @"time.sync_failed")]];
+      if (started) [screen reload];
+    });
+    if (!started) return;
+    for (int attempt = 0; attempt < 60; attempt++) {
+      [NSThread sleepForTimeInterval:0.1];
+      NSDictionary *time = [[core status] objectForKey:@"time"];
+      if ([[time objectForKey:@"syncing"] boolValue]) continue;
+      BOOL succeeded = [[time objectForKey:@"last_sync_ms"] longLongValue] > previousSync;
+      dispatch_async(dispatch_get_main_queue(), ^{
+        DBSettingsScreen *screen = weakSelf;
+        if (!screen) return;
+        [screen showToast:[screen->_texts ts:(succeeded ? @"time.sync_succeeded"
+                                                      : @"time.sync_result_failed")]];
+        [screen reload];
+      });
+      break;
+    }
+  });
 }
 
 - (void)performAction:(DBSettingsRow *)row {
@@ -1377,78 +1364,31 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
     [self promptDeviceName];
   } else if ([action isEqualToString:@"page"]) {
     [self openPage:row.argument];
-  } else if ([action isEqualToString:@"number"]) {
+  } else if ([action isEqualToString:@"number"] || [action isEqualToString:@"stepper"]) {
+    // A tap on a stepper row asks for a typed value, which a wide range needs.
     [self promptNumberForRow:row];
   } else if ([action isEqualToString:@"toggle"]) {
     [self toggleForRow:row];
-  } else if ([action isEqualToString:@"cycle"]) {
-    [self cycleForRow:row];
   } else if ([action isEqualToString:@"inherit"]) {
     [self inheritForRow:row];
   } else if ([action isEqualToString:@"zone"]) {
-    [self presentZonePickerForKey:row.argument];
-  } else if ([action isEqualToString:@"ui_lang"]) {
-    [self cycleLocalKey:@"ui_lang"
-                 values:[NSArray arrayWithObjects:@"ja", @"en", @"zh", nil]
-                current:_boot.uiLang];
-  } else if ([action isEqualToString:@"helper_mode"]) {
-    [self cycleLocalKey:@"keepalive_helper"
-                 values:[NSArray arrayWithObjects:@"off", @"auto", @"on", nil]
-                current:_boot.keepaliveHelperPolicy];
+    [self openZonePickerForKey:row.argument];
   } else if ([action isEqualToString:@"time_sync"]) {
-    DBCoreBridge *core = _core;
-    __weak DBSettingsScreen *weakSelf = self;
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-      NSDictionary *before = [[core status] objectForKey:@"time"];
-      long long previousSync = [[before objectForKey:@"last_sync_ms"] longLongValue];
-      BOOL started = [core timeSyncNow];
-      dispatch_async(dispatch_get_main_queue(), ^{
-        DBSettingsScreen *screen = weakSelf;
-        if (!screen) return;
-        [screen showToast:[screen->_texts ts:(started ? @"time.sync_started"
-                                                      : @"time.sync_failed")]];
-        if (started) [screen reload];
-      });
-      if (!started) return;
-      for (int attempt = 0; attempt < 60; attempt++) {
-        [NSThread sleepForTimeInterval:0.1];
-        NSDictionary *time = [[core status] objectForKey:@"time"];
-        if ([[time objectForKey:@"syncing"] boolValue]) continue;
-        BOOL succeeded = [[time objectForKey:@"last_sync_ms"] longLongValue] > previousSync;
-        dispatch_async(dispatch_get_main_queue(), ^{
-          DBSettingsScreen *screen = weakSelf;
-          if (!screen) return;
-          [screen showToast:[screen->_texts ts:(succeeded ? @"time.sync_succeeded"
-                                                        : @"time.sync_result_failed")]];
-          [screen reload];
-        });
-        break;
-      }
-    });
+    [self syncTimeNow];
   } else if ([action isEqualToString:@"notice"]) {
     [self openNoticeDialogForDoor:row.argument];
-  } else if ([action isEqualToString:@"stepper"]) {
-    // A tap on a wide-range stepper row opens the keypad for a typed value.
-    NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
-    if ([parts count] == 5) {
-      DBSettingsRow *number = DBRow(row.title, row.value, @"number",
-          [NSString stringWithFormat:@"%@|%@|%@", [parts objectAtIndex:0],
-                                     [parts objectAtIndex:1], [parts objectAtIndex:2]]);
-      [self promptNumberForRow:number];
-    }
   } else if ([action isEqualToString:@"segment"]) {
-    // The segmented control handles taps itself.
-  } else if ([action isEqualToString:@"choose"]) {
+    // The segmented control handles taps itself; without one the row offers the sheet.
+    if ([self segmentWidthForRow:row] <= 0) [self presentChoicesForRow:row];
+  } else if ([action isEqualToString:@"choose"] || [action isEqualToString:@"local_choice"]) {
     [self presentChoicesForRow:row];
   } else if ([action isEqualToString:@"role_toggle"]) {
     [self toggleRoleForRow:row];
   } else if ([action isEqualToString:@"rotate_key"]) {
-    UIAlertView *confirm = [[UIAlertView alloc] initWithTitle:[_texts ts:@"prefs.rotate_key"]
-        message:[_texts ts:@"prefs.rotate_key_confirm"] delegate:self
-        cancelButtonTitle:[_texts ts:@"admin.cancel"]
-        otherButtonTitles:[_texts ts:@"prefs.rotate_key"], nil];
-    confirm.tag = kDBRotateKeyAlertTag;
-    [confirm show];
+    __weak DBSettingsScreen *weakSelf = self;
+    [_editor confirmTitle:[_texts ts:@"prefs.rotate_key"]
+                  message:[_texts ts:@"prefs.rotate_key_confirm"]
+                     then:^{ [weakSelf rotateClusterKey]; }];
   } else if ([action isEqualToString:@"add_device"]) {
     [_router showAddDevice];
   } else if ([action isEqualToString:@"history"]) {
@@ -1465,9 +1405,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 #pragma mark - native controls
 
 - (void)onSwitch:(UISwitch *)sender {
-  NSArray *rows = [self selectedRows];
-  if (sender.tag < 0 || sender.tag >= (NSInteger)[rows count]) return;
-  DBSettingsRow *row = [rows objectAtIndex:(NSUInteger)sender.tag];
+  DBSettingsRow *row = [self rowForControlTag:sender.tag];
   NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
   if ([parts count] != 2) return;
   if ([row.action isEqualToString:@"role_toggle"]) {
@@ -1479,9 +1417,7 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 }
 
 - (void)onStepper:(UIStepper *)sender {
-  NSArray *rows = [self selectedRows];
-  if (sender.tag < 0 || sender.tag >= (NSInteger)[rows count]) return;
-  DBSettingsRow *row = [rows objectAtIndex:(NSUInteger)sender.tag];
+  DBSettingsRow *row = [self rowForControlTag:sender.tag];
   NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
   if ([parts count] != 5) return;
   // Writes on release only: each change is a replicated config write.
@@ -1489,17 +1425,19 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
                                   numberValue:(NSInteger)sender.value]];
 }
 
-- (void)onStepperChanged:(UIStepper *)sender {
-  UIView *view = sender.superview;
+- (UITableViewCell *)cellContaining:(UIView *)view {
   while (view && ![view isKindOfClass:[UITableViewCell class]]) view = view.superview;
-  NSArray *rows = [self selectedRows];
-  if (!view || sender.tag < 0 || sender.tag >= (NSInteger)[rows count]) return;
-  DBSettingsRow *row = [rows objectAtIndex:(NSUInteger)sender.tag];
+  return (UITableViewCell *)view;
+}
+
+- (void)onStepperChanged:(UIStepper *)sender {
+  UITableViewCell *cell = [self cellContaining:sender];
+  DBSettingsRow *row = [self rowForControlTag:sender.tag];
+  if (!cell || !row) return;
   NSRange space = [row.value rangeOfString:@" "];
   NSString *unit = space.location == NSNotFound ? @"" : [row.value substringFromIndex:space.location];
-  if ([row.value hasSuffix:@"%"]) unit = @"%";
-  ((UITableViewCell *)view).detailTextLabel.text =
-      [NSString stringWithFormat:@"%ld%@", (long)sender.value, unit];
+  cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld%@", (long)sender.value, unit];
+  [cell setNeedsLayout];
   // UIStepper reports no release on iOS 5; writing after a short pause keeps
   // a run of taps to one replicated config write.
   [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(onStepper:)
@@ -1508,26 +1446,27 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 }
 
 - (void)onSegment:(UISegmentedControl *)sender {
-  NSArray *rows = [self selectedRows];
-  if (sender.tag < 0 || sender.tag >= (NSInteger)[rows count]) return;
-  DBSettingsRow *row = [rows objectAtIndex:(NSUInteger)sender.tag];
+  DBSettingsRow *row = [self rowForControlTag:sender.tag];
   NSInteger index = sender.selectedSegmentIndex;
-  if (index < 0 || index >= (NSInteger)[row.choices count]) return;
+  if (row == nil || index < 0 || index >= (NSInteger)[row.choices count]) return;
   NSString *key = [[row.argument componentsSeparatedByString:@"|"] objectAtIndex:0];
   [self reportWriteStatus:[_core setConfigKey:key
       stringValue:[[row.choices objectAtIndex:(NSUInteger)index] objectAtIndex:0]]];
 }
 
 - (void)presentChoicesForRow:(DBSettingsRow *)row {
+  if ([row.choices count] == 0) return;
   UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:row.title delegate:self
       cancelButtonTitle:nil destructiveButtonTitle:nil otherButtonTitles:nil];
   for (NSArray *choice in row.choices) [sheet addButtonWithTitle:[choice objectAtIndex:1]];
   sheet.cancelButtonIndex = [sheet addButtonWithTitle:[_texts ts:@"admin.cancel"]];
   _pendingChoiceRow = row;
-  NSUInteger index = [[self selectedRows] indexOfObject:row];
-  CGRect rect = index == NSNotFound ? CGRectMake(CGRectGetMidX(_table.bounds), 0, 1, 1)
-      : [_table rectForRowAtIndexPath:[NSIndexPath indexPathForRow:(NSInteger)index inSection:0]];
-  [sheet showFromRect:rect inView:_table animated:YES];
+  NSIndexPath *path = [self indexPathForRow:row];
+  if (DBChromeIsPad() && path != nil) {
+    [sheet showFromRect:[_table rectForRowAtIndexPath:path] inView:_table animated:YES];
+  } else {
+    [sheet showInView:self];
+  }
 }
 
 - (void)actionSheet:(UIActionSheet *)sheet clickedButtonAtIndex:(NSInteger)buttonIndex {
@@ -1535,9 +1474,13 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   _pendingChoiceRow = nil;
   if (row == nil || buttonIndex == sheet.cancelButtonIndex || buttonIndex < 0 ||
       buttonIndex >= (NSInteger)[row.choices count]) return;
+  NSString *value = [[row.choices objectAtIndex:(NSUInteger)buttonIndex] objectAtIndex:0];
+  if ([row.action isEqualToString:@"local_choice"]) {
+    [self setLocalKey:row.argument value:value];
+    return;
+  }
   NSString *key = [[row.argument componentsSeparatedByString:@"|"] objectAtIndex:0];
-  [self reportWriteStatus:[_core setConfigKey:key
-      stringValue:[[row.choices objectAtIndex:(NSUInteger)buttonIndex] objectAtIndex:0]]];
+  [self reportWriteStatus:[_core setConfigKey:key stringValue:value]];
 }
 
 - (void)toggleRoleForRow:(DBSettingsRow *)row {
@@ -1569,213 +1512,210 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
   }];
 }
 
+#pragma mark - volume
+
+- (void)updateVolumeLabel:(DBVolumeSlider *)slider {
+  UITableViewCell *cell = [self cellContaining:slider];
+  cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld", (long)(slider.value + 0.5)];
+  [cell setNeedsLayout];
+}
+
+- (void)onVolumeChanged:(DBVolumeSlider *)slider {
+  slider.pendingVolume = (NSInteger)(slider.value + 0.5);
+  [self updateVolumeLabel:slider];
+}
+
+- (void)commitVolume:(DBVolumeSlider *)slider {
+  NSInteger value = slider.pendingVolume;
+  NSString *key = slider.configKey;
+  slider.editingVolume = NO;
+  slider.value = value;
+  NSLog(@"[doorbell] volume slider committed %ld", (long)value);
+  if (!_volumeWriteQueue) {
+    _volumeWriteQueue = dispatch_queue_create("doorbell.volume-writes", DISPATCH_QUEUE_SERIAL);
+    _volumeWriteGenerations = [NSMutableDictionary dictionary];
+    _pendingVolumeValues = [NSMutableDictionary dictionary];
+  }
+  NSUInteger generation = [[_volumeWriteGenerations objectForKey:key] unsignedIntegerValue] + 1;
+  [_volumeWriteGenerations setObject:@(generation) forKey:key];
+  [_pendingVolumeValues setObject:@(value) forKey:key];
+  DBCoreBridge *core = _core;
+  __weak DBSettingsScreen *weakSelf = self;
+  dispatch_async(_volumeWriteQueue, ^{
+    int result = [core setConfigKey:key numberValue:value];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBSettingsScreen *current = weakSelf;
+      if (!current || [[current->_volumeWriteGenerations objectForKey:key]
+                          unsignedIntegerValue] != generation) return;
+      if (result != 0) [current->_pendingVolumeValues removeObjectForKey:key];
+      [current reportWriteStatus:result];
+    });
+  });
+}
+
+- (void)cancelVolume:(DBVolumeSlider *)slider {
+  NSLog(@"[doorbell] volume slider cancelled at %ld", (long)slider.pendingVolume);
+  slider.editingVolume = NO;
+  slider.value = slider.savedValue;
+  [self updateVolumeLabel:slider];
+}
+
+- (DBVolumeSlider *)volumeSliderForRow:(DBSettingsRow *)row width:(CGFloat)width {
+  NSString *key = [[row.argument componentsSeparatedByString:@"|"] objectAtIndex:0];
+  if (_volumeSliders == nil) _volumeSliders = [NSMutableDictionary dictionary];
+  DBVolumeSlider *slider = [_volumeSliders objectForKey:key];
+  if (slider == nil) {
+    slider = [[DBVolumeSlider alloc] initWithFrame:CGRectMake(0, 0, width, 34)];
+    slider.configKey = key;
+    slider.minimumValue = 0;
+    slider.maximumValue = 100;
+    slider.continuous = YES;
+    slider.accessibilityIdentifier = key;
+    [slider addTarget:self action:@selector(onVolumeChanged:)
+     forControlEvents:UIControlEventValueChanged];
+    __weak DBSettingsScreen *weakSelf = self;
+    __weak DBVolumeSlider *weakSlider = slider;
+    slider.onBegin = ^{
+      weakSlider.editingVolume = YES;
+      weakSlider.pendingVolume = (NSInteger)(weakSlider.value + 0.5);
+    };
+    slider.onEnd = ^(float value) {
+      DBVolumeSlider *current = weakSlider;
+      if (!current) return;
+      current.pendingVolume = (NSInteger)(value + 0.5);
+      [weakSelf commitVolume:current];
+    };
+    slider.onCancel = ^{
+      DBVolumeSlider *current = weakSlider;
+      if (current) [weakSelf cancelVolume:current];
+    };
+    [_volumeSliders setObject:slider forKey:key];
+  }
+  slider.accessibilityLabel = row.title;
+  if (!slider.editingVolume && ![slider isTracking]) {
+    slider.bounds = CGRectMake(0, 0, width, 34);
+    slider.savedValue = [row.value floatValue];
+    slider.value = slider.savedValue;
+    slider.pendingVolume = (NSInteger)slider.savedValue;
+  }
+  return slider;
+}
+
 #pragma mark - table
 
+- (BOOL)isVolumeRow:(DBSettingsRow *)row {
+  return [row.action isEqualToString:@"volume_slider"];
+}
+
+- (CGFloat)volumeSliderWidth {
+  return MAX(120, MIN(280, floor(DBEditCellTextWidth(_table, 0, 0) * 0.5f)));
+}
+
+// The width of the row's segmented control, or zero when the row has none: more than three
+// choices, or a control that would not leave room for the title.
+- (CGFloat)segmentWidthForRow:(DBSettingsRow *)row {
+  if (![row.action isEqualToString:@"segment"] || [row.choices count] == 0) return 0;
+  CGFloat widest = 0;
+  for (NSArray *choice in row.choices)
+    widest = MAX(widest, [[choice objectAtIndex:1]
+        sizeWithFont:[UIFont boldSystemFontOfSize:13]].width);
+  CGFloat width = ceil(MAX(56, widest + 24)) * [row.choices count];
+  CGFloat title = [row.title sizeWithFont:[UIFont boldSystemFontOfSize:17]].width;
+  return title + width + 24 <= DBEditCellTextWidth(_table, 0, 0) ? width : 0;
+}
+
+- (BOOL)opensElsewhere:(DBSettingsRow *)row {
+  for (NSString *action in @[ @"page", @"zone", @"add_device", @"history", @"info" ])
+    if ([row.action isEqualToString:action]) return YES;
+  return NO;
+}
+
+- (CGFloat)accessoryWidthForRow:(DBSettingsRow *)row {
+  NSString *action = row.action;
+  if ([action isEqualToString:@"toggle"] || [action isEqualToString:@"role_toggle"])
+    return kDBSwitchAccessoryWidth;
+  if ([action isEqualToString:@"stepper"]) return kDBStepperAccessoryWidth;
+  if ([self isVolumeRow:row]) return [self volumeSliderWidth] + 20;
+  CGFloat segment = [self segmentWidthForRow:row];
+  if (segment > 0) return segment + 20;
+  return [self opensElsewhere:row] ? kDBIndicatorAccessoryWidth : 0;
+}
+
+- (NSString *)detailForRow:(DBSettingsRow *)row {
+  if ([self isVolumeRow:row])
+    return [NSString stringWithFormat:@"%ld", (long)([row.value floatValue] + 0.5f)];
+  if ([self segmentWidthForRow:row] > 0) return @"";
+  return row.value;
+}
+
+- (DBEditCellLayout)layoutForRow:(DBSettingsRow *)row {
+  return DBEditCellLayoutMake(row.title, [self detailForRow:row],
+                              DBEditCellTextWidth(_table, [self accessoryWidthForRow:row], 0));
+}
+
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-  return 1;
+  return tableView == _categoryTable ? 1 : (NSInteger)[_groups count];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
-  if (tableView == _pickerTable) return (NSInteger)[_pickerFiltered count];
   if (tableView == _categoryTable) return (NSInteger)[_sections count];
-  return (NSInteger)[[self selectedRows] count];
+  return section < (NSInteger)[_groups count]
+      ? (NSInteger)[[_groups objectAtIndex:(NSUInteger)section] count] : 0;
 }
 
-- (NSString *)detailTitle {
-  if (_selectedSection < 0 || _selectedSection >= (NSInteger)[_sections count]) return nil;
-  return [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"title"];
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+  if (tableView == _categoryTable || section >= (NSInteger)[_groups count]) return nil;
+  NSString *footer = [(DBSettingsRow *)[[_groups objectAtIndex:(NSUInteger)section]
+      objectAtIndex:0] groupFooter];
+  return [footer length] > 0 ? footer : nil;
 }
 
-// The detail pane's large title is the table header view, not a section
-// header: a plain table's section header floats over the rows beneath it, which
-// is what clipped the first row on a 1024x768 iPad mini.
-- (void)updateDetailHeader {
-  CGFloat width = CGRectGetWidth(_table.bounds);
-  if (width <= 0) return;
-  UIView *header = _table.tableHeaderView;
-  UILabel *label = (UILabel *)[header viewWithTag:41];
-  if (header == nil || label == nil || CGRectGetWidth(header.bounds) != width) {
-    header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, width, 60)];
-    label = [[UILabel alloc] initWithFrame:CGRectMake(8, 12, width - 16, 32)];
-    label.tag = 41;
-    label.backgroundColor = [UIColor clearColor];
-    label.font = [UIFont boldSystemFontOfSize:24];
-    label.adjustsFontSizeToFitWidth = YES;
-    label.minimumFontSize = 16;
-    [header addSubview:label];
-  }
-  header.backgroundColor = [UIColor clearColor];
-  label.textColor = _palette.ink;
-  label.text = [self detailTitle];
-  _table.tableHeaderView = header;
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+  if (tableView == _categoryTable) return 44;
+  return [self layoutForRow:[self rowAt:indexPath]].height;
 }
 
 - (UITableViewCell *)categoryCellForRow:(NSInteger)index {
   static NSString *identifier = @"category";
   UITableViewCell *cell = [_categoryTable dequeueReusableCellWithIdentifier:identifier];
   if (cell == nil) {
-    cell = [[DBCategoryCell alloc] initWithStyle:UITableViewCellStyleDefault
-                                 reuseIdentifier:identifier];
-    cell.backgroundView = [[UIView alloc] init];
-    cell.selectedBackgroundView = [[UIView alloc] init];
-    cell.backgroundView.layer.cornerRadius = 10;
-    cell.selectedBackgroundView.layer.cornerRadius = 10;
-    cell.textLabel.font = [UIFont systemFontOfSize:17];
-    cell.textLabel.backgroundColor = [UIColor clearColor];
+    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                  reuseIdentifier:identifier];
+    // Long category names shrink instead of being cut off.
     cell.textLabel.adjustsFontSizeToFitWidth = YES;
-    cell.textLabel.minimumFontSize = 13;
+    cell.textLabel.minimumFontSize = 12;
     cell.textLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    UIView *tile = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 30, 30)];
-    tile.layer.cornerRadius = 7;
-    tile.tag = 11;
-    UIImageView *glyph = [[UIImageView alloc] initWithFrame:CGRectMake(5, 5, 20, 20)];
-    glyph.tag = 12;
-    [tile addSubview:glyph];
-    [cell.contentView addSubview:tile];
   }
   NSDictionary *section = [_sections objectAtIndex:(NSUInteger)index];
-  BOOL selected = index == _selectedSection;
   cell.textLabel.text = [section objectForKey:@"title"];
-  cell.textLabel.textColor = _palette.ink;
-  cell.backgroundColor = [UIColor clearColor];
-  cell.backgroundView.backgroundColor = selected ? [_palette plate] : [UIColor clearColor];
-  cell.selectedBackgroundView.backgroundColor = _palette.elevated;
-  cell.accessibilityTraits = selected ? UIAccessibilityTraitSelected : UIAccessibilityTraitNone;
-  UIView *tile = [cell.contentView viewWithTag:11];
-  tile.backgroundColor = [DBConfigUtil parseHexColor:[section objectForKey:@"tint"]];
-  ((UIImageView *)[tile viewWithTag:12]).image =
-      [DBIconAsset tintedImageNamed:[section objectForKey:@"icon"] color:[UIColor whiteColor]
-                               size:CGSizeMake(20, 20)];
+  cell.imageView.image = [DBIconAsset imageNamed:[section objectForKey:@"icon"]];
+  cell.accessoryType = _twoPane ? UITableViewCellAccessoryNone
+                                : UITableViewCellAccessoryDisclosureIndicator;
   return cell;
-}
-
-- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
-    forRowAtIndexPath:(NSIndexPath *)indexPath {
-  if (tableView != _categoryTable) return;
-  // DBCategoryCell places the tile and the title in its own layoutSubviews.
-  [cell setNeedsLayout];
-}
-
-- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-  if (tableView == _pickerTable) return 58;
-  if (tableView == _categoryTable) return 56;
-  DBSettingsRow *row = [self rowAt:indexPath];
-  NSString *value = row.value;
-  if ([row.action isEqualToString:@"volume_slider"]) return 64;
-  // Rows with a control lose its width (≈ 110 pt switch/stepper, more for a segment).
-  CGFloat controlWidth = [row.action isEqualToString:@"segment"]
-      ? MIN(360, 120 * [row.choices count]) + 12
-      : ([row.action isEqualToString:@"toggle"] || [row.action isEqualToString:@"stepper"] ||
-         [row.action isEqualToString:@"role_toggle"]) ? 110 : 0;
-  if ([row.action isEqualToString:@"segment"]) value = @"";
-  return MAX(56, [DBSettingsCell heightForTitle:row.title value:value
-                                          width:tableView.bounds.size.width - controlWidth]);
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView
          cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-  if (tableView == _pickerTable) {
-    static NSString *zoneIdentifier = @"zone";
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:zoneIdentifier];
-    if (cell == nil)
-      cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
-                                    reuseIdentifier:zoneIdentifier];
-    if (indexPath.row < (NSInteger)[_pickerFiltered count])
-      cell.textLabel.text = [_pickerFiltered objectAtIndex:(NSUInteger)indexPath.row];
-    cell.textLabel.font = [UIFont systemFontOfSize:19];
-    cell.textLabel.textColor = _palette.ink;
-    cell.textLabel.backgroundColor = [UIColor clearColor];
-    cell.backgroundColor = _palette.elevated;
-    return cell;
-  }
   if (tableView == _categoryTable) return [self categoryCellForRow:indexPath.row];
   DBSettingsRow *row = [self rowAt:indexPath];
-  BOOL volumeSlider = [row.action isEqualToString:@"volume_slider"];
-  NSString *identifier = volumeSlider ? @"volume_setting" : @"setting";
-  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
-  if (cell == nil) {
-    Class cellClass = volumeSlider ? [DBVolumeSettingsCell class] : [DBSettingsCell class];
-    cell = [[cellClass alloc] initWithStyle:UITableViewCellStyleSubtitle reuseIdentifier:identifier];
-    cell.backgroundView = [[UIView alloc] init];
-
-    cell.selectedBackgroundView = [[UIView alloc] init];
-    DBSettingsCell *settingsCell = (DBSettingsCell *)cell;
-    settingsCell.rowSeparator = [[UIView alloc] init];
-    [cell.contentView addSubview:settingsCell.rowSeparator];
-  }
+  UITableViewCell *cell = DBEditDequeueCell(tableView, [self layoutForRow:row].style,
+                                            row.destructive);
   cell.textLabel.text = row.title;
-  cell.textLabel.font = [UIFont systemFontOfSize:17];
-  cell.textLabel.numberOfLines = 0;
-  cell.detailTextLabel.font = [UIFont systemFontOfSize:15];
-  cell.detailTextLabel.textAlignment = NSTextAlignmentRight;
-  cell.detailTextLabel.numberOfLines = 0;
-  cell.detailTextLabel.text = [row.action isEqualToString:@"segment"] ? @"" : row.value;
-  cell.textLabel.textColor = _palette.ink;
-  cell.detailTextLabel.textColor = _palette.mutedInk;
-  cell.backgroundColor = [UIColor clearColor];
-  cell.backgroundView.backgroundColor = [_palette plate];
-  DBSettingsCell *settingsCell = (DBSettingsCell *)cell;
-  settingsCell.firstRow = indexPath.row == 0;
-  settingsCell.lastRow = indexPath.row + 1 == [self tableView:tableView numberOfRowsInSection:indexPath.section];
-  settingsCell.rowSeparator.backgroundColor = _palette.separator;
-  cell.selectedBackgroundView.backgroundColor = _palette.elevated;
-  cell.textLabel.backgroundColor = [UIColor clearColor];
-  cell.detailTextLabel.backgroundColor = [UIColor clearColor];
-  cell.accessoryType = UITableViewCellAccessoryNone;
-  UIView *control = [self controlForRow:row index:indexPath.row];
+  cell.detailTextLabel.text = [self detailForRow:row];
+  NSUInteger index = [[self selectedRows] indexOfObjectIdenticalTo:row];
+  UIView *control = index == NSNotFound ? nil : [self controlForRow:row index:(NSInteger)index];
   if (control != nil) {
+    // A volume slider outlives its cell. Its former cell lets go of it first, or that cell
+    // would pull the slider out of this one when it is reused.
+    UITableViewCell *former = [self cellContaining:control];
+    if (former != nil && former != cell) former.accessoryView = nil;
     cell.accessoryView = control;
-  } else if ([row.action length] > 0 && !volumeSlider) {
-    UIImageView *arrow = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, 12, 20)];
-    arrow.userInteractionEnabled = NO;
-    arrow.contentMode = UIViewContentModeCenter;
-    arrow.image = [DBIconAsset tintedImageNamed:@"chevron-right" color:_palette.mutedInk
-                                         size:CGSizeMake(20, 20)];
-    cell.accessoryView = arrow;
-  } else {
-    cell.accessoryView = nil;
+  } else if ([self opensElsewhere:row]) {
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   }
-  BOOL tappable = [row.action length] > 0 && !volumeSlider &&
-      ![row.action isEqualToString:@"segment"];
-  cell.selectionStyle = tappable ? UITableViewCellSelectionStyleGray
-                                 : UITableViewCellSelectionStyleNone;
-  if (row.destructive) cell.textLabel.textColor = [UIColor colorWithRed:1 green:0.23f blue:0.19f alpha:1];
-  if (volumeSlider) {
-    DBVolumeSettingsCell *volumeCell = (DBVolumeSettingsCell *)cell;
-    NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
-    NSString *key = [parts objectAtIndex:0];
-    volumeCell.slider.accessibilityLabel = row.title;
-    volumeCell.slider.accessibilityIdentifier = key;
-    if (!volumeCell.editingVolume && ![volumeCell.slider isTracking]) {
-      volumeCell.savedValue = [row.value floatValue];
-      volumeCell.slider.value = volumeCell.savedValue;
-      volumeCell.pendingVolume = (NSInteger)volumeCell.savedValue;
-    }
-    [volumeCell updateVolumeLabel];
-    __weak DBSettingsScreen *weakSelf = self;
-    volumeCell.onCommit = ^(NSInteger value) {
-      DBSettingsScreen *screen = weakSelf;
-      if (!screen) return;
-      if (!screen->_volumeWriteQueue) {
-        screen->_volumeWriteQueue = dispatch_queue_create("doorbell.volume-writes", DISPATCH_QUEUE_SERIAL);
-        screen->_volumeWriteGenerations = [NSMutableDictionary dictionary];
-        screen->_pendingVolumeValues = [NSMutableDictionary dictionary];
-      }
-      NSUInteger generation = [[screen->_volumeWriteGenerations objectForKey:key] unsignedIntegerValue] + 1;
-      [screen->_volumeWriteGenerations setObject:@(generation) forKey:key];
-      [screen->_pendingVolumeValues setObject:@(value) forKey:key];
-      DBCoreBridge *core = screen->_core;
-      dispatch_async(screen->_volumeWriteQueue, ^{
-        int result = [core setConfigKey:key numberValue:value];
-        dispatch_async(dispatch_get_main_queue(), ^{
-          DBSettingsScreen *current = weakSelf;
-          if (!current || [[current->_volumeWriteGenerations objectForKey:key] unsignedIntegerValue] != generation) return;
-          if (result != 0) [current->_pendingVolumeValues removeObjectForKey:key];
-          [current reportWriteStatus:result];
-        });
-      });
-    };
-  }
+  BOOL tappable = [row.action length] > 0 &&
+      (control == nil || [row.action isEqualToString:@"stepper"]);
+  if (!tappable) cell.selectionStyle = UITableViewCellSelectionStyleNone;
   return cell;
 }
 
@@ -1805,7 +1745,10 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
         forControlEvents:UIControlEventValueChanged];
     return stepper;
   }
-  if ([row.action isEqualToString:@"segment"] && [row.choices count] > 0) {
+  if ([self isVolumeRow:row] && [parts count] >= 1)
+    return [self volumeSliderForRow:row width:[self volumeSliderWidth]];
+  CGFloat segmentWidth = [self segmentWidthForRow:row];
+  if (segmentWidth > 0) {
     NSMutableArray *labels = [NSMutableArray array];
     NSInteger selected = UISegmentedControlNoSegment;
     NSString *current = [parts count] == 2 ? [parts objectAtIndex:1] : @"";
@@ -1815,10 +1758,12 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
       if ([[choice objectAtIndex:0] isEqualToString:current]) selected = (NSInteger)i;
     }
     UISegmentedControl *segment = [[UISegmentedControl alloc] initWithItems:labels];
+    // The compact stock style; it is the only one on iOS 7 and later.
     segment.segmentedControlStyle = UISegmentedControlStyleBar;
-    segment.frame = CGRectMake(0, 0, MIN(360, 120 * [labels count]), 36);
+    segment.frame = CGRectMake(0, 0, segmentWidth, 30);
     segment.selectedSegmentIndex = selected;
     segment.tag = index;
+    segment.accessibilityLabel = row.title;
     [segment addTarget:self action:@selector(onSegment:) forControlEvents:UIControlEventValueChanged];
     return segment;
   }
@@ -1826,82 +1771,58 @@ static const NSInteger kDBRotateKeyAlertTag = 701;
 }
 
 - (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-  [tableView deselectRowAtIndexPath:indexPath animated:YES];
   if (tableView == _categoryTable) {
-    if (indexPath.row >= (NSInteger)[_sections count] || indexPath.row == _selectedSection) return;
-    _selectedSection = indexPath.row;
-    _selectedId = [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"id"];
-    [_categoryTable reloadData];
-    [self updateDetailHeader];
-  [_table reloadData];
-    [_table setContentOffset:CGPointZero animated:NO];
+    if (!_twoPane) [tableView deselectRowAtIndexPath:indexPath animated:NO];
+    [self selectCategory:indexPath.row];
     return;
   }
-  if (tableView == _pickerTable) {
-    if (indexPath.row >= (NSInteger)[_pickerFiltered count]) return;
-    NSString *zone = [_pickerFiltered objectAtIndex:(NSUInteger)indexPath.row];
-    NSString *key = _pickerKey;
-    [self onPickerCancel];
-    if ([key length] > 0) [self reportWriteStatus:[_core setConfigKey:key stringValue:zone]];
-    return;
-  }
+  [tableView deselectRowAtIndexPath:indexPath animated:YES];
   [self performAction:[self rowAt:indexPath]];
 }
 
 #pragma mark - layout
 
-- (void)numberKeyboardChanged:(NSNotification *)note {
-  CGRect keyboard = [self convertRect:[[note.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue] fromView:nil];
-  CGRect overlap = CGRectIntersection(self.bounds, keyboard);
-  _numberKeyboardHeight = [note.name isEqualToString:UIKeyboardWillHideNotification] || CGRectIsNull(overlap)
-      ? 0 : CGRectGetHeight(overlap);
-  [self setNeedsLayout];
-}
-
+// One pass places everything. 1024x768: 320 pt of categories, a 1 pt rule, 703 pt of detail.
+// 768x1024: 280 + 1 + 487. Below 700 pt (the phone family) the category list and the detail
+// share the full width under one bar.
 - (void)layoutSubviews {
   [super layoutSubviews];
-  CGSize size = self.bounds.size;
-  CGFloat width = size.width;
-  CGFloat pad = 20;
-  _title.frame = CGRectMake(100, 16, width - 200, 28);
-  _close.frame = CGRectMake(size.width - pad - 80, 6, 80, 44);
-  // iPad 1 is 768 or 1024 points wide: the category pane takes a fixed share
-  // and the detail gets the rest.
-  CGFloat paneWidth = width >= 900 ? 280 : 236;
-  _categoryTable.frame = CGRectMake(12, 56, paneWidth, MAX(0, size.height - 56));
-  CGFloat detailX = 12 + paneWidth + 16;
-  CGFloat contentWidth = width - detailX - 16;
-  _table.frame = CGRectMake(detailX, 56, contentWidth, MAX(0, size.height - 56));
-  _table.contentInset = UIEdgeInsetsZero;
-  _table.scrollIndicatorInsets = UIEdgeInsetsZero;
-  _categoryTable.contentInset = UIEdgeInsetsZero;
-  if (CGRectGetWidth(_table.tableHeaderView.bounds) != contentWidth) [self updateDetailHeader];
-  _adminFooter.frame = CGRectMake(0, 20, contentWidth, 116);
-  _qr.frame = CGRectMake(20, 22, contentWidth - 40, 72);
-  if (_footerWidth != contentWidth) {
-    _footerWidth = contentWidth;
-    _footerContainer.frame = CGRectMake(0, 0, contentWidth, 136);
-    _table.tableFooterView = _footerContainer;
+  CGRect bounds = self.bounds;
+  CGFloat width = CGRectGetWidth(bounds);
+  CGFloat height = MAX(0, CGRectGetHeight(bounds) - [_tabs layoutInBounds:bounds]);
+  [self applyMode:width >= kDBTwoPaneMinWidth];
+
+  CGFloat bar = _promptText != nil ? kDBPromptBarHeight : DBChromeNavBarHeight();
+  CGFloat body = MAX(0, height - bar);
+  CGRect detail;
+  if (_twoPane) {
+    CGFloat master = width >= 900 ? 320 : 280;
+    _masterNav.bar.frame = CGRectMake(0, 0, master, bar);
+    _categoryTable.frame = CGRectMake(0, bar, master, body);
+    _divider.frame = CGRectMake(master, 0, 1, height);
+    CGFloat detailX = master + 1;
+    _nav.bar.frame = CGRectMake(detailX, 0, width - detailX, bar);
+    detail = CGRectMake(detailX, bar, width - detailX, body);
+  } else {
+    _nav.bar.frame = CGRectMake(0, 0, width, bar);
+    detail = CGRectMake(0, bar, width, body);
+    _categoryTable.frame = detail;
   }
-  _toast.frame = CGRectMake(100, 0, width - 200, 16);
-  _noticeDialog.frame = self.bounds;
-  if (_editor) _editor.frame = self.bounds;
+  _table.frame = detail;
+  _editor.frame = detail;
+  _noticeDialog.frame = bounds;
 
-  _keypadOverlay.frame = self.bounds;
-  CGFloat keypadWidth = MIN(320, size.width - 80);
-  CGFloat keypadHeight = [DBNumericKeypad heightForWidth:keypadWidth];
-  CGFloat keypadY = MAX(60, (size.height - _numberKeyboardHeight - keypadHeight) / 2);
-  _keypadTitle.frame = CGRectMake(0, keypadY - 46, size.width, 34);
-  _keypad.frame = CGRectMake((size.width - keypadWidth) / 2, keypadY, keypadWidth,
-                             keypadHeight);
-
-  _pickerOverlay.frame = self.bounds;
-  CGFloat pickerWidth = MIN(520, size.width - 60);
-  CGFloat pickerX = (size.width - pickerWidth) / 2;
-  _pickerSearch.frame = CGRectMake(pickerX, 40, pickerWidth, 46);
-  _pickerCancel.frame = CGRectMake(pickerX, size.height - 66, pickerWidth, 46);
-  _pickerTable.frame = CGRectMake(pickerX, 96, pickerWidth,
-                                  MAX(80, size.height - 96 - 80));
+  // Row heights, segmented controls, and the footer follow the pane widths.
+  if (CGRectGetWidth(_categoryTable.frame) != _categoryWidth) {
+    _categoryWidth = CGRectGetWidth(_categoryTable.frame);
+    [_categoryTable reloadData];
+    [self syncCategorySelection];
+  }
+  if (CGRectGetWidth(detail) != _tableWidth) {
+    _tableWidth = CGRectGetWidth(detail);
+    [self layoutFooter];
+    if (![self volumeBeingDragged]) [_table reloadData];
+  }
 }
 
 @end

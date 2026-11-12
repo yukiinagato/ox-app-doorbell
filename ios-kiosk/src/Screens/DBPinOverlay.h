@@ -2,9 +2,11 @@
 
 @class DBRouter;
 
-// In-container PIN keypad. Avoiding modal presentation prevents the iOS 5 crash caused by
-// presenting inside a dismissal transaction. Verification uses SHA-256 and locks for ten minutes
-// after five failed attempts.
+// In-container admin password prompt: a dimming view with a centred panel holding a navigation
+// bar (Cancel, Log in) and a one-row grouped form. It is a subview rather than a modal view
+// controller because presenting inside a dismissal transaction crashes on iOS 5. Core verifies
+// the cluster password and owns its lockout; five local failures also lock entry for ten
+// minutes.
 @interface DBPinOverlay : DBScreen
 
 - (id)initWithRouter:(DBRouter *)router;

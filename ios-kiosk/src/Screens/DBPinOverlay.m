@@ -3,6 +3,7 @@
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBTexts.h"
+#import "DBChrome.h"
 #import "DBRouter.h"
 #import <CommonCrypto/CommonDigest.h>
 
@@ -12,21 +13,29 @@ static const NSInteger kMaxLen = 128;
 static NSInteger sFails = 0;
 static NSTimeInterval sLockedUntil = 0;
 
-@interface DBPinOverlay () <UITextFieldDelegate>
+static const CGFloat kPanelWidth = 400;
+static const CGFloat kFormHeight = 196;
+static const CGFloat kTextInset = 20;
+
+@interface DBPinOverlay () <UITextFieldDelegate, UITableViewDataSource, UITableViewDelegate>
 @end
 
 @implementation DBPinOverlay {
   DBTexts *_texts;
   DBCoreBridge *_core;
   NSMutableString *_pin;
-  UITextField *_display;
   BOOL _needsNewPassword;
   CGFloat _keyboardHeight;
-  UIButton *_submitButton;
-  UILabel *_errorLabel;
-  UIView *_card;
-  UIButton *_cancelButton;
-  UILabel *_title;
+  UIView *_panel;
+  DBNavBar *_nav;
+  UITableView *_table;
+  UITableViewCell *_fieldCell;
+  UITextField *_field;
+  UIView *_promptHost;
+  UILabel *_prompt;
+  UIView *_messageHost;
+  UILabel *_message;
+  CGFloat _formWidth;
   void (^_onUnlocked)(void);
 }
 
@@ -36,119 +45,163 @@ static NSTimeInterval sLockedUntil = 0;
     _texts = router.texts;
     _core = router.core;
     _pin = [[NSMutableString alloc] init];
-    self.backgroundColor = [UIColor colorWithWhite:0 alpha:0.75];
+    self.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
     [self buildUi];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
+        name:UIKeyboardWillChangeFrameNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
+        name:UIKeyboardWillHideNotification object:nil];
   }
   return self;
 }
 
+- (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  _table.dataSource = nil;
+  _table.delegate = nil;
+}
+
 - (void)buildUi {
-  _card = [[UIView alloc] init];
-  _card.backgroundColor = [UIColor colorWithRed:0.09 green:0.10 blue:0.14 alpha:1];
-  _card.layer.cornerRadius = 14;
-  [self addSubview:_card];
+  _panel = [[UIView alloc] init];
+  _panel.backgroundColor = DBChromeScreenBackground();
+  _panel.clipsToBounds = YES;
+  [self addSubview:_panel];
 
-  _title = [[UILabel alloc] init];
-  _title.text = [_texts ts:@"admin.pin_prompt"];
-  _title.font = [UIFont boldSystemFontOfSize:18];
-  _title.numberOfLines = 0;
-  _title.textColor = [UIColor whiteColor];
-  _title.textAlignment = NSTextAlignmentCenter;
-  [_card addSubview:_title];
+  _nav = [[DBNavBar alloc] init];
+  UINavigationItem *item = [_nav setRootTitle:[_texts ts:@"admin.password"] backTitle:nil
+                                       onBack:nil];
+  item.leftBarButtonItem = DBChromeBarItem([_texts ts:@"admin.cancel"], self, @selector(onCancel));
+  item.rightBarButtonItem = DBChromeDoneBarItem([_texts ts:@"admin.login"], self,
+                                                @selector(submit));
+  [_panel addSubview:_nav.bar];
 
-  _display = [[UITextField alloc] init];
-  _display.secureTextEntry = YES;
+  _table = DBChromeGroupedTable(self, self);
+  _table.alwaysBounceVertical = NO;
+  [_panel addSubview:_table];
+
+  _fieldCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                      reuseIdentifier:nil];
+  _fieldCell.selectionStyle = UITableViewCellSelectionStyleNone;
+  _field = [[UITextField alloc] initWithFrame:CGRectInset(_fieldCell.contentView.bounds, 12, 0)];
+  _field.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  _field.secureTextEntry = YES;
   // The cluster password is free text of at least eight characters, so the full keyboard is
   // needed; a digits-only pad would make most passwords impossible to type on the device.
-  _display.keyboardType = UIKeyboardTypeASCIICapable;
-  _display.autocorrectionType = UITextAutocorrectionTypeNo;
-  _display.autocapitalizationType = UITextAutocapitalizationTypeNone;
-  _display.returnKeyType = UIReturnKeyDone;
-  _display.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
-  _display.delegate = self;
-  [_display addTarget:self action:@selector(pinChanged) forControlEvents:UIControlEventEditingChanged];
-  _display.font = [UIFont systemFontOfSize:24];
-  _display.textColor = [UIColor colorWithWhite:0.12 alpha:1];
-  _display.textAlignment = NSTextAlignmentCenter;
-  _display.backgroundColor = [UIColor whiteColor];
-  _display.layer.cornerRadius = 8;
-  _display.clipsToBounds = YES;
-  [_card addSubview:_display];
+  _field.keyboardType = UIKeyboardTypeASCIICapable;
+  _field.autocorrectionType = UITextAutocorrectionTypeNo;
+  _field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+  _field.returnKeyType = UIReturnKeyDone;
+  _field.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+  _field.clearButtonMode = UITextFieldViewModeWhileEditing;
+  _field.placeholder = [_texts ts:@"admin.password"];
+  _field.accessibilityIdentifier = @"admin_password";
+  _field.delegate = self;
+  [_field addTarget:self action:@selector(pinChanged)
+      forControlEvents:UIControlEventEditingChanged];
+  [_fieldCell.contentView addSubview:_field];
 
-  _errorLabel = [[UILabel alloc] init];
-  _errorLabel.font = [UIFont systemFontOfSize:14];
-  _errorLabel.numberOfLines = 0;
-  _errorLabel.textColor = [UIColor colorWithRed:1.0 green:0.45 blue:0.38 alpha:1];
-  _errorLabel.textAlignment = NSTextAlignmentCenter;
-  _errorLabel.text = @" ";
-  [_card addSubview:_errorLabel];
-
-  _submitButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  [_submitButton setTitle:[_texts ts:@"admin.login"] forState:UIControlStateNormal];
-  [_submitButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  _submitButton.backgroundColor = [UIColor colorWithRed:0.05 green:0.30 blue:0.65 alpha:1];
-  _submitButton.titleLabel.font = [UIFont boldSystemFontOfSize:17];
-  _submitButton.layer.cornerRadius = 8;
-  [_submitButton addTarget:self action:@selector(submit) forControlEvents:UIControlEventTouchUpInside];
-  [_card addSubview:_submitButton];
-  UIToolbar *toolbar = [[UIToolbar alloc] init];
-  toolbar.items = @[
-      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel target:self action:@selector(onCancel)],
-      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil],
-      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(submit)]];
-  [toolbar sizeToFit];
-  _display.inputAccessoryView = toolbar;
-  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
-      name:UIKeyboardWillChangeFrameNotification object:nil];
-  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
-      name:UIKeyboardWillHideNotification object:nil];
-
-  _cancelButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  [_cancelButton setTitle:[_texts ts:@"calling.cancel"] forState:UIControlStateNormal];
-  _cancelButton.titleLabel.font = [UIFont systemFontOfSize:17];
-  _cancelButton.backgroundColor = [UIColor colorWithRed:0.18 green:0.20 blue:0.25 alpha:1];
-  _cancelButton.layer.cornerRadius = 8;
-  _cancelButton.layer.borderWidth = 1;
-  _cancelButton.layer.borderColor = [UIColor colorWithWhite:1 alpha:0.14].CGColor;
-  [_cancelButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  [_cancelButton addTarget:self action:@selector(onCancel)
-          forControlEvents:UIControlEventTouchUpInside];
-  [_card addSubview:_cancelButton];
-
-
-
-  [self clearLabelBackgrounds:self];
-
-
-  _display.backgroundColor = [UIColor whiteColor];
+  // The prompt and the message are owned labels in the table's header and footer, so their
+  // text can change without a reload, which would take the keyboard away from the field.
+  _promptHost = [[UIView alloc] init];
+  _prompt = DBChromeSectionHeaderLabel();
+  _prompt.text = [_texts ts:@"admin.pin_prompt"];
+  [_promptHost addSubview:_prompt];
+  _messageHost = [[UIView alloc] init];
+  _message = DBChromeSectionFooterLabel();
+  _message.accessibilityIdentifier = @"admin_password_message";
+  [_messageHost addSubview:_message];
 }
+
+- (CGFloat)heightOfLabel:(UILabel *)label width:(CGFloat)width {
+  if ([label.text length] == 0) return 0;
+  return ceilf([label sizeThatFits:CGSizeMake(width, 9999)].height);
+}
+
+// Sizes the header and footer labels for the form width and hands them back to the table,
+// which is how a table learns that their heights changed.
+- (void)layoutFormTextForWidth:(CGFloat)width {
+  CGFloat textWidth = width - kTextInset * 2;
+  CGFloat promptHeight = [self heightOfLabel:_prompt width:textWidth];
+  _prompt.frame = CGRectMake(kTextInset, 12, textWidth, promptHeight);
+  _promptHost.frame = CGRectMake(0, 0, width, promptHeight + 16);
+  _table.tableHeaderView = _promptHost;
+  CGFloat messageHeight = [self heightOfLabel:_message width:textWidth];
+  _message.frame = CGRectMake(kTextInset, 4, textWidth, messageHeight);
+  _messageHost.frame = CGRectMake(0, 0, width, messageHeight + 12);
+  _table.tableFooterView = _messageHost;
+}
+
 - (void)layoutSubviews {
   [super layoutSubviews];
-  CGFloat cardW = MIN(380, self.bounds.size.width - 40), cardH = 230;
-  CGFloat available = MAX(cardH, self.bounds.size.height - _keyboardHeight);
-  _card.frame = CGRectMake((self.bounds.size.width - cardW) / 2,
-      MAX(10, (available - cardH) / 2), cardW, cardH);
-  _title.frame = CGRectMake(20, 16, cardW - 40, 44);
-  _display.frame = CGRectMake(20, 72, cardW - 40, 48);
-  _errorLabel.frame = CGRectMake(20, 124, cardW - 40, 28);
-  CGFloat buttonWidth = (cardW - 52) / 2;
-  _cancelButton.frame = CGRectMake(20, 166, buttonWidth, 44);
-  _submitButton.frame = CGRectMake(32 + buttonWidth, 166, buttonWidth, 44);
+  CGSize size = self.bounds.size;
+  CGFloat barHeight = DBChromeNavBarHeight();
+  CGFloat width = MIN(kPanelWidth, size.width);
+  // The panel sits in the area the keyboard leaves free and shrinks to it when that area is
+  // shorter than the form; the table then scrolls.
+  CGFloat available = MAX(barHeight + 44, size.height - _keyboardHeight);
+  CGFloat height = MIN(barHeight + kFormHeight, available);
+  _panel.frame = CGRectMake(floorf((size.width - width) / 2),
+                            MAX(0, floorf((available - height) / 2)), width, height);
+  [_nav layoutInBounds:_panel.bounds];
+  _table.frame = CGRectMake(0, barHeight, width, height - barHeight);
+  if (_formWidth != width) {
+    _formWidth = width;
+    [self layoutFormTextForWidth:width];
+  }
 }
 
 - (void)keyboardChanged:(NSNotification *)note {
-  CGRect keyboard = [self convertRect:[[note.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue] fromView:nil];
+  if (!self.window) {
+    _keyboardHeight = 0;
+    return;
+  }
+  CGRect keyboard = [self convertRect:[[note.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey]
+                                          CGRectValue]
+                             fromView:nil];
   CGRect overlap = CGRectIntersection(self.bounds, keyboard);
-  _keyboardHeight = [note.name isEqualToString:UIKeyboardWillHideNotification] || CGRectIsNull(overlap)
-      ? 0 : CGRectGetHeight(overlap);
+  _keyboardHeight =
+      [note.name isEqualToString:UIKeyboardWillHideNotification] || CGRectIsNull(overlap)
+          ? 0 : CGRectGetHeight(overlap);
   [self setNeedsLayout];
 }
 
-- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
+- (void)showPrompt:(NSString *)prompt message:(NSString *)message {
+  if (prompt) _prompt.text = prompt;
+  _message.text = message ?: @"";
+  if (_formWidth > 0) [self layoutFormTextForWidth:_formWidth];
+}
 
-- (BOOL)textField:(UITextField *)field shouldChangeCharactersInRange:(NSRange)range replacementString:(NSString *)string {
+- (void)clearEntry {
+  [_pin setString:@""];
+  _field.text = @"";
+}
+
+#pragma mark - table
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+  (void)tableView;
+  return 1;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+  (void)tableView;
+  (void)section;
+  return 1;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView
+         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+  (void)tableView;
+  (void)indexPath;
+  return _fieldCell;
+}
+
+#pragma mark - entry
+
+- (BOOL)textField:(UITextField *)field shouldChangeCharactersInRange:(NSRange)range
+    replacementString:(NSString *)string {
   NSString *next = [field.text ?: @"" stringByReplacingCharactersInRange:range withString:string];
-  return [next length] <= kMaxLen;
+  return (NSInteger)[next length] <= kMaxLen;
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField *)field {
@@ -158,50 +211,36 @@ static NSTimeInterval sLockedUntil = 0;
 }
 
 - (void)pinChanged {
-  [_pin setString:_display.text ?: @""];
-  _errorLabel.text = @" ";
+  [_pin setString:_field.text ?: @""];
+  if ([_message.text length] > 0) [self showPrompt:nil message:nil];
 }
 
 - (void)presentInView:(UIView *)parent then:(void (^)(void))onUnlocked {
-  if (self.superview) {
-    _onUnlocked = onUnlocked;
-    [_pin setString:@""];
-    _display.text = @"";
-    _errorLabel.text = @" ";
-    [_display becomeFirstResponder];
-    return;
-  }
   _onUnlocked = onUnlocked;
-  _pin = [[NSMutableString alloc] init];
-  _display.text = @"";
-  _errorLabel.text = @" ";
-  self.frame = parent.bounds;
-  self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  [parent addSubview:self];
-  [_display becomeFirstResponder];
-  self.alpha = 0.0;
-  [UIView animateWithDuration:0.2 animations:^{ self.alpha = 1.0; }];
+  [self clearEntry];
+  [self showPrompt:[_texts ts:@"admin.pin_prompt"] message:nil];
+  if (!self.superview) {
+    self.frame = parent.bounds;
+    self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [parent addSubview:self];
+    [self layoutIfNeeded];
+  }
+  [_field becomeFirstResponder];
 }
 
+// Removed at once, without a fade: the router reports this overlay for as long as it has a
+// superview, and a full-screen alpha animation is outside the A4 budget.
 - (void)dismiss {
-  [_display resignFirstResponder];
-  __weak DBPinOverlay *wself = self;
-  [UIView animateWithDuration:0.2
-      animations:^{ wself.alpha = 0.0; }
-      completion:^(BOOL finished) {
-        (void)finished;
-        [wself removeFromSuperview];
-      }];
+  [_field resignFirstResponder];
+  [self removeFromSuperview];
 }
-
-
 
 - (void)onCancel {
   _onUnlocked = nil;
   [self dismiss];
 }
 
-// The device 管理パスワード and the web admin password are one cluster-wide
+// The device admin password and the web admin password are one cluster-wide
 // secret (spec §5.5). Core owns the constant-time comparison and the lockout
 // counter it shares with /api/login, so this overlay must never keep a second,
 // weaker credential once Core can answer.
@@ -270,9 +309,8 @@ static NSTimeInterval sLockedUntil = 0;
 
 - (void)submit {
   if ([NSDate timeIntervalSinceReferenceDate] < sLockedUntil) {
-    _errorLabel.text = [_texts ts:@"admin.locked"];
-    [_pin setString:@""];
-    _display.text = @"";
+    [self showPrompt:nil message:[_texts ts:@"admin.locked"]];
+    [self clearEntry];
     return;
   }
   _needsNewPassword = NO;
@@ -281,28 +319,25 @@ static NSTimeInterval sLockedUntil = 0;
     void (^cb)(void) = _onUnlocked;
     _onUnlocked = nil;
     [self dismiss];
-
     if (cb) cb();
     return;
   }
   if (_needsNewPassword) {
     // Not a wrong password: the cluster has none yet and this entry is too short to become it.
-    _title.text = [_texts ts:@"admin.password_set_prompt"];
-    _errorLabel.text = [_texts ts:@"admin.password_too_short"];
-    [_pin setString:@""];
-    _display.text = @"";
+    [self showPrompt:[_texts ts:@"admin.password_set_prompt"]
+             message:[_texts ts:@"admin.password_too_short"]];
+    [self clearEntry];
     return;
   }
   sFails++;
   if (sFails >= 5) {
     sFails = 0;
     sLockedUntil = [NSDate timeIntervalSinceReferenceDate] + 10 * 60;
-    _errorLabel.text = [_texts ts:@"admin.locked"];
+    [self showPrompt:nil message:[_texts ts:@"admin.locked"]];
   } else {
-    _errorLabel.text = [_texts ts:@"admin.pin_wrong"];
+    [self showPrompt:nil message:[_texts ts:@"admin.pin_wrong"]];
   }
-  [_pin setString:@""];
-  _display.text = @"";
+  [self clearEntry];
 }
 
 + (NSString *)sha256Hex:(NSString *)s {

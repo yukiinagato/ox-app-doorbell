@@ -1,13 +1,13 @@
 #import "DBEditor.h"
 
 #import "../Core/DBConfigUtil.h"
-#import "DBWidgets.h"
+#import "DBChrome.h"
 
 @implementation DBEditField
 @synthesize kind = _kind, title = _title, detail = _detail, value = _value, choices = _choices;
 @synthesize placeholder = _placeholder, keyboard = _keyboard, destructive = _destructive;
-@synthesize confirm = _confirm, minimum = _minimum, maximum = _maximum, image = _image;
-@synthesize onChange = _onChange, page = _page, action = _action;
+@synthesize confirm = _confirm, checked = _checked, minimum = _minimum, maximum = _maximum;
+@synthesize image = _image, onChange = _onChange, page = _page, action = _action;
 
 + (DBEditField *)kind:(DBEditKind)kind title:(NSString *)title value:(id)value {
   DBEditField *field = [[DBEditField alloc] init];
@@ -34,8 +34,9 @@
 @end
 
 @implementation DBEditPage
-@synthesize title = _title, build = _build, onAdd = _onAdd, searchable = _searchable;
-@synthesize onAppear = _onAppear;
+@synthesize title = _title, build = _build, onAdd = _onAdd, onDone = _onDone;
+@synthesize searchable = _searchable, filtersItself = _filtersItself, headerView = _headerView;
+@synthesize onAppear = _onAppear, searchPlaceholder = _searchPlaceholder;
 
 + (DBEditPage *)title:(NSString *)title build:(NSArray *(^)(void))build {
   DBEditPage *page = [[DBEditPage alloc] init];
@@ -44,6 +45,82 @@
   return page;
 }
 @end
+
+#pragma mark - stock cell metrics
+
+static const CGFloat kDBEditMinRowHeight = 44;
+// A switch or a disclosure indicator with the gap the cell keeps beside it.
+static const CGFloat kDBEditSwitchWidth = 104;
+static const CGFloat kDBEditIndicatorWidth = 30;
+
+CGFloat DBEditCellTextWidth(UITableView *table, CGFloat accessoryWidth, CGFloat imageWidth) {
+  CGFloat width = CGRectGetWidth(table.bounds);
+  CGFloat chrome = 30;
+  if (!DBChromeIsFlat()) {
+    // Before iOS 7 a grouped table insets its cells: 10 pt on a phone or a narrow table,
+    // 6 % of the width clamped to 31...45 pt on a wide iPad table, plus 10 pt of cell padding
+    // on either side.
+    CGFloat margin = (!DBChromeIsPad() || width < 400) ? 10 : MAX(31, MIN(45, width * 0.06f));
+    chrome = margin * 2 + 20;
+  }
+  return MAX(80, width - chrome - accessoryWidth - imageWidth);
+}
+
+static CGFloat DBEditWrappedHeight(NSString *text, UIFont *font, CGFloat width) {
+  if ([text length] == 0) return 0;
+  return ceil([text sizeWithFont:font constrainedToSize:CGSizeMake(width, 2000)
+                   lineBreakMode:NSLineBreakByWordWrapping].height);
+}
+
+DBEditCellLayout DBEditCellLayoutMake(NSString *title, NSString *detail, CGFloat textWidth) {
+  // The fonts the stock styles draw with; they are only measured here, never set.
+  BOOL flat = DBChromeIsFlat();
+  UIFont *titleFont = flat ? [UIFont systemFontOfSize:17] : [UIFont boldSystemFontOfSize:17];
+  DBEditCellLayout layout;
+  if ([detail length] == 0) {
+    layout.style = UITableViewCellStyleDefault;
+    layout.height = DBEditWrappedHeight(title, titleFont, textWidth);
+  } else {
+    CGFloat titleWidth = [title ?: @"" sizeWithFont:titleFont].width;
+    CGFloat detailWidth = [detail sizeWithFont:[UIFont systemFontOfSize:17]].width;
+    if (titleWidth + detailWidth + 16 <= textWidth) {
+      layout.style = UITableViewCellStyleValue1;
+      layout.height = 0;
+    } else {
+      layout.style = UITableViewCellStyleSubtitle;
+      layout.height = DBEditWrappedHeight(title, titleFont, textWidth) + 2 +
+          DBEditWrappedHeight(detail, [UIFont systemFontOfSize:(flat ? 12 : 14)], textWidth);
+    }
+  }
+  layout.height = MAX(kDBEditMinRowHeight, layout.height + 22);
+  return layout;
+}
+
+UITableViewCell *DBEditDequeueCell(UITableView *table, UITableViewCellStyle style,
+                                   BOOL destructive) {
+  NSString *base = style == UITableViewCellStyleValue1 ? @"edit.value"
+      : (style == UITableViewCellStyleSubtitle ? @"edit.subtitle" : @"edit.default");
+  // A destructive cell is its own reuse pool, so the red never has to be undone on a cell
+  // that is reused for an ordinary row.
+  NSString *identifier = destructive ? [base stringByAppendingString:@".destructive"] : base;
+  UITableViewCell *cell = [table dequeueReusableCellWithIdentifier:identifier];
+  if (cell == nil) {
+    cell = [[UITableViewCell alloc] initWithStyle:style reuseIdentifier:identifier];
+    if (style != UITableViewCellStyleValue1) {
+      cell.textLabel.numberOfLines = 0;
+      cell.detailTextLabel.numberOfLines = 0;
+    }
+    if (destructive)
+      cell.textLabel.textColor = [UIColor colorWithRed:1 green:0.231f blue:0.188f alpha:1];
+  }
+  cell.textLabel.text = nil;
+  cell.detailTextLabel.text = nil;
+  cell.imageView.image = nil;
+  cell.accessoryView = nil;
+  cell.accessoryType = UITableViewCellAccessoryNone;
+  cell.selectionStyle = UITableViewCellSelectionStyleBlue;
+  return cell;
+}
 
 // UIAlertView with its completion attached, so several prompts never share state.
 @interface DBBlockAlert : UIAlertView
@@ -56,13 +133,10 @@
 static UIImage *DBSwatchImage(UIColor *color) {
   CGSize size = CGSizeMake(28, 28);
   UIGraphicsBeginImageContextWithOptions(size, NO, 0);
-  UIBezierPath *path = [UIBezierPath bezierPathWithRoundedRect:CGRectMake(1, 1, 26, 26)
-                                                  cornerRadius:6];
+  [[UIColor colorWithWhite:0.5 alpha:0.6] setFill];
+  UIRectFill(CGRectMake(1, 1, 26, 26));
   [color setFill];
-  [path fill];
-  [[UIColor colorWithWhite:0.5 alpha:0.6] setStroke];
-  path.lineWidth = 1;
-  [path stroke];
+  UIRectFill(CGRectMake(2, 2, 24, 24));
   UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
   UIGraphicsEndImageContext();
   return image;
@@ -81,49 +155,29 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 @end
 
 @implementation DBEditorView {
-  NSMutableArray *_stack;
+  DBNavBar *_nav;
+  NSMutableArray *_stack;   // DBEditPage
+  NSMutableArray *_items;   // the UINavigationItem of each page, parallel to _stack
   NSArray *_sections;
   NSArray *_visible;      // per section, the field indexes shown after filtering
   NSString *_filter;
-  UIView *_bar;
-  UIButton *_back;
-  UIButton *_add;
-  UIButton *_edit;
-  UILabel *_title;
   UITableView *_table;
   UISearchBar *_search;
-  UILabel *_message;
-  UIView *_timeOverlay;
-  UIDatePicker *_timePicker;
-  UIButton *_timeOk;
-  UIButton *_timeCancel;
-  DBEditField *_timeField;
-  DBUiPalette *_palette;
+  CGFloat _layoutWidth;
 }
-@synthesize backTitle = _backTitle, doneTitle = _doneTitle, editTitle = _editTitle;
 @synthesize cancelTitle = _cancelTitle, okTitle = _okTitle, confirmTitle = _confirmTitle;
 @synthesize setText = _setText, unsetText = _unsetText, customColorTitle = _customColorTitle;
 @synthesize searchPlaceholder = _searchPlaceholder, onClose = _onClose;
+@synthesize onMessage = _onMessage, onStackChanged = _onStackChanged;
 
-- (UIButton *)barButton:(SEL)action {
-  UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
-  button.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-  button.layer.cornerRadius = 8;
-  button.clipsToBounds = YES;
-  [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
-  [_bar addSubview:button];
-  return button;
-}
-
-- (id)initWithFrame:(CGRect)frame {
-  self = [super initWithFrame:frame];
+- (id)initWithNavBar:(DBNavBar *)navBar {
+  self = [super initWithFrame:CGRectZero];
   if (self) {
+    _nav = navBar;
     _stack = [[NSMutableArray alloc] init];
+    _items = [[NSMutableArray alloc] init];
     _sections = @[];
     _visible = @[];
-    _backTitle = @"‹";
-    _doneTitle = @"Done";
-    _editTitle = @"Edit";
     _cancelTitle = @"Cancel";
     _okTitle = @"OK";
     _confirmTitle = @"OK";
@@ -131,88 +185,25 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
     _unsetText = @"—";
     _customColorTitle = @"#RRGGBB";
     _searchPlaceholder = @"";
-    _bar = [[UIView alloc] init];
-    [self addSubview:_bar];
-    _back = [self barButton:@selector(onBack)];
-    _add = [self barButton:@selector(onAdd)];
-    [_add setTitle:@"+" forState:UIControlStateNormal];
-    _add.titleLabel.font = [UIFont boldSystemFontOfSize:28];
-    _add.accessibilityLabel = @"add";
-    _edit = [self barButton:@selector(onEdit)];
-    _title = [[UILabel alloc] init];
-    _title.backgroundColor = [UIColor clearColor];
-    _title.font = [UIFont boldSystemFontOfSize:22];
-    _title.textAlignment = NSTextAlignmentCenter;
-    _title.adjustsFontSizeToFitWidth = YES;
-    _title.minimumFontSize = 14;
-    [_bar addSubview:_title];
+    self.backgroundColor = DBChromeScreenBackground();
+    self.hidden = YES;
 
-    _table = [[UITableView alloc] initWithFrame:CGRectZero style:UITableViewStyleGrouped];
-    _table.dataSource = self;
-    _table.delegate = self;
+    _table = DBChromeGroupedTable(self, self);
     _table.allowsSelectionDuringEditing = YES;
-    _table.backgroundView = [[UIView alloc] init];
     [self addSubview:_table];
 
     _search = [[UISearchBar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
     _search.delegate = self;
     _search.autocorrectionType = UITextAutocorrectionTypeNo;
     _search.autocapitalizationType = UITextAutocapitalizationTypeNone;
-
-    _message = [[UILabel alloc] init];
-    _message.textAlignment = NSTextAlignmentCenter;
-    _message.font = [UIFont boldSystemFontOfSize:16];
-    _message.numberOfLines = 2;
-    _message.layer.cornerRadius = 10;
-    _message.clipsToBounds = YES;
-    _message.alpha = 0;
-    [self addSubview:_message];
-
-    _timeOverlay = [[UIView alloc] init];
-    _timeOverlay.backgroundColor = [UIColor colorWithWhite:0 alpha:0.7];
-    _timeOverlay.hidden = YES;
-    [self addSubview:_timeOverlay];
-    _timePicker = [[UIDatePicker alloc] init];
-    _timePicker.datePickerMode = UIDatePickerModeTime;
-    _timePicker.backgroundColor = [UIColor whiteColor];
-    // A fixed zone and a 24-hour locale: the picker edits a wall-clock "HH:MM"
-    // that Core interprets in the cluster zone, never an instant.
-    _timePicker.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
-    _timePicker.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_GB"];
-    _timePicker.minuteInterval = 5;
-    [_timeOverlay addSubview:_timePicker];
-    _timeOk = [UIButton buttonWithType:UIButtonTypeCustom];
-    _timeOk.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-    _timeOk.layer.cornerRadius = 8;
-    _timeOk.clipsToBounds = YES;
-    [_timeOk addTarget:self action:@selector(onTimeOk) forControlEvents:UIControlEventTouchUpInside];
-    [_timeOverlay addSubview:_timeOk];
-    _timeCancel = [UIButton buttonWithType:UIButtonTypeCustom];
-    _timeCancel.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-    _timeCancel.layer.cornerRadius = 8;
-    _timeCancel.clipsToBounds = YES;
-    [_timeCancel addTarget:self action:@selector(onTimeCancel)
-          forControlEvents:UIControlEventTouchUpInside];
-    [_timeOverlay addSubview:_timeCancel];
   }
   return self;
 }
 
-- (void)applyPalette:(DBUiPalette *)palette {
-  _palette = palette;
-  self.backgroundColor = palette.surface ?: [UIColor blackColor];
-  _bar.backgroundColor = palette.surface;
-  _title.textColor = palette.ink;
-  for (UIButton *button in @[ _back, _add, _edit, _timeOk, _timeCancel ]) {
-    button.backgroundColor = palette.elevated;
-    [button setTitleColor:palette.ink forState:UIControlStateNormal];
-  }
-  _table.backgroundColor = palette.surface;
-  _table.backgroundView.backgroundColor = palette.surface;
-  _table.separatorColor = palette.separator;
-  _message.backgroundColor = palette.plate;
-  _message.textColor = palette.ink;
-  [_table reloadData];
+- (void)dealloc {
+  _table.dataSource = nil;
+  _table.delegate = nil;
+  _search.delegate = nil;
 }
 
 #pragma mark - navigation
@@ -221,38 +212,91 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   return [_stack lastObject];
 }
 
-- (void)pushPage:(DBEditPage *)page {
-  if (page == nil) return;
-  [_stack addObject:page];
+- (NSUInteger)pageCount {
+  return [_stack count];
+}
+
+- (NSString *)filterText {
+  return _filter ?: @"";
+}
+
+- (void)resetPageState {
   _filter = nil;
   _search.text = @"";
   [_table setEditing:NO animated:NO];
+}
+
+- (void)pushPage:(DBEditPage *)page {
+  if (page == nil) return;
+  [self endEditing:YES];
+  __weak DBEditorView *weakSelf = self;
+  UINavigationItem *item = [_nav pushTitle:page.title onPop:^{ [weakSelf pageLeftByUser]; }];
+  [_stack addObject:page];
+  [_items addObject:item];
+  self.hidden = NO;
+  [self resetPageState];
   if (page.onAppear) page.onAppear();
   [self reloadPage];
   [_table setContentOffset:CGPointZero animated:NO];
+  if (_onStackChanged) _onStackChanged();
+}
+
+// The bar has already dropped the page's item.
+- (void)pageLeft {
+  [_stack removeLastObject];
+  [_items removeLastObject];
+  [self resetPageState];
+  if ([_stack count] == 0) {
+    [self finishClose];
+    return;
+  }
+  [self reloadPage];
+  if (_onStackChanged) _onStackChanged();
+}
+
+- (void)finishClose {
+  self.hidden = YES;
+  _sections = @[];
+  _visible = @[];
+  _table.tableHeaderView = nil;
+  [_table reloadData];
+  if (_onStackChanged) _onStackChanged();
+  if (_onClose) _onClose();
+}
+
+- (void)pageLeftByUser {
+  if ([_stack count] == 0) return;
+  [self endEditing:YES];
+  [self pageLeft];
 }
 
 - (void)popPage {
+  if ([_stack count] == 0) return;
   [self endEditing:YES];
-  if ([_stack count] > 0) [_stack removeLastObject];
-  if ([_stack count] == 0) {
-    self.hidden = YES;
-    if (_onClose) _onClose();
-    return;
-  }
-  _filter = nil;
-  _search.text = @"";
-  [_table setEditing:NO animated:NO];
-  [self reloadPage];
+  [_nav pop];
+  [self pageLeft];
 }
 
-- (void)onBack {
-  [self popPage];
+- (void)closeAllPages {
+  if ([_stack count] == 0) return;
+  [self endEditing:YES];
+  while ([_stack count] > 0) {
+    [_nav pop];
+    [_stack removeLastObject];
+    [_items removeLastObject];
+  }
+  [self resetPageState];
+  [self finishClose];
 }
 
 - (void)onAdd {
   DBEditPage *page = [self currentPage];
   if (page.onAdd) page.onAdd();
+}
+
+- (void)onDone {
+  DBEditPage *page = [self currentPage];
+  if (page.onDone) page.onDone();
 }
 
 - (void)onEdit {
@@ -268,30 +312,53 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 
 - (void)updateBar {
   DBEditPage *page = [self currentPage];
-  _title.text = page.title;
-  [_back setTitle:[NSString stringWithFormat:@"‹ %@", _backTitle] forState:UIControlStateNormal];
-  _add.hidden = page.onAdd == nil;
-  _edit.hidden = ![self hasEditableSection];
-  [_edit setTitle:(_table.editing ? _doneTitle : _editTitle) forState:UIControlStateNormal];
-  [self setNeedsLayout];
+  UINavigationItem *item = [_items lastObject];
+  if (page == nil || item == nil) return;
+  item.title = page.title;
+  // The first item is the rightmost one.
+  NSMutableArray *right = [NSMutableArray array];
+  if (page.onDone)
+    [right addObject:DBChromeSystemBarItem(UIBarButtonSystemItemDone, self, @selector(onDone))];
+  if (page.onAdd)
+    [right addObject:DBChromeSystemBarItem(UIBarButtonSystemItemAdd, self, @selector(onAdd))];
+  if ([self hasEditableSection])
+    [right addObject:DBChromeSystemBarItem(_table.editing ? UIBarButtonSystemItemDone
+                                                          : UIBarButtonSystemItemEdit,
+                                           self, @selector(onEdit))];
+  item.rightBarButtonItems = right;
+}
+
+- (void)applyHeader {
+  DBEditPage *page = [self currentPage];
+  UIView *header = page.headerView ?: (page.searchable ? _search : nil);
+  CGFloat width = CGRectGetWidth(_table.bounds);
+  if (header != nil && width > 0 && CGRectGetWidth(header.frame) != width) {
+    header.frame = CGRectMake(0, 0, width, CGRectGetHeight(header.frame));
+    _table.tableHeaderView = header;
+  } else if (_table.tableHeaderView != header) {
+    _table.tableHeaderView = header;
+  }
 }
 
 - (void)reloadPage {
   DBEditPage *page = [self currentPage];
+  if (page == nil) return;
   NSArray *built = page.build ? page.build() : @[];
   _sections = built ?: @[];
-  _table.tableHeaderView = page.searchable ? _search : nil;
-  _search.placeholder = _searchPlaceholder;
+  _search.placeholder = [page.searchPlaceholder length] > 0 ? page.searchPlaceholder
+                                                            : _searchPlaceholder;
+  [self applyHeader];
   [self applyFilter];
-  [self updateBar];
   if (_table.editing && ![self hasEditableSection]) [_table setEditing:NO animated:NO];
+  [self updateBar];
   [_table reloadData];
 }
 
 - (void)applyFilter {
   NSMutableArray *visible = [NSMutableArray array];
-  NSString *needle = [[_filter stringByTrimmingCharactersInSet:
-      [NSCharacterSet whitespaceCharacterSet]] lowercaseString];
+  NSString *needle = [self currentPage].filtersItself ? @""
+      : [[_filter stringByTrimmingCharactersInSet:
+             [NSCharacterSet whitespaceCharacterSet]] lowercaseString];
   for (DBEditSection *section in _sections) {
     NSMutableArray *indexes = [NSMutableArray array];
     for (NSUInteger i = 0; i < [section.fields count]; i++) {
@@ -312,42 +379,13 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 
 - (void)layoutSubviews {
   [super layoutSubviews];
-  CGSize size = self.bounds.size;
-  CGFloat pad = 16;
-  _bar.frame = CGRectMake(0, 0, size.width, 64);
-  CGSize backSize = [[_back titleForState:UIControlStateNormal] sizeWithFont:_back.titleLabel.font];
-  CGFloat backWidth = MIN(220, MAX(88, ceil(backSize.width) + 28));
-  _back.frame = CGRectMake(pad, 10, backWidth, 44);
-  CGFloat right = size.width - pad;
-  if (!_add.hidden) {
-    _add.frame = CGRectMake(right - 56, 10, 56, 44);
-    right -= 56 + 10;
-  }
-  if (!_edit.hidden) {
-    CGSize editSize = [[_edit titleForState:UIControlStateNormal] sizeWithFont:_edit.titleLabel.font];
-    CGFloat editWidth = MAX(80, ceil(editSize.width) + 28);
-    _edit.frame = CGRectMake(right - editWidth, 10, editWidth, 44);
-    right -= editWidth + 10;
-  }
-  CGFloat titleInset = MAX(backWidth + pad + 10, size.width - right);
-  _title.frame = CGRectMake(titleInset, 16, MAX(40, size.width - titleInset * 2), 32);
-  _table.frame = CGRectMake(0, 64, size.width, MAX(0, size.height - 64));
-  _table.contentInset = UIEdgeInsetsZero;
-  _search.frame = CGRectMake(0, 0, size.width, 44);
-  _message.frame = CGRectMake(floor(size.width * 0.15), size.height - 96, floor(size.width * 0.7), 60);
-
-  _timeOverlay.frame = self.bounds;
-  CGFloat pickerWidth = MIN(360, size.width - 40);
-  CGSize pickerSize = [_timePicker sizeThatFits:CGSizeMake(pickerWidth, 216)];
-  CGFloat pickerHeight = pickerSize.height > 0 ? pickerSize.height : 216;
-  CGFloat top = MAX(40, floor((size.height - pickerHeight - 70) / 2));
-  _timePicker.frame = CGRectMake(floor((size.width - pickerWidth) / 2), top, pickerWidth,
-                                 pickerHeight);
-  CGFloat buttonWidth = floor((pickerWidth - 12) / 2);
-  _timeCancel.frame = CGRectMake(CGRectGetMinX(_timePicker.frame), top + pickerHeight + 16,
-                                 buttonWidth, 48);
-  _timeOk.frame = CGRectMake(CGRectGetMaxX(_timeCancel.frame) + 12, top + pickerHeight + 16,
-                             buttonWidth, 48);
+  _table.frame = self.bounds;
+  CGFloat width = CGRectGetWidth(self.bounds);
+  if (width == _layoutWidth) return;
+  // Row heights and the header follow the width.
+  _layoutWidth = width;
+  [self applyHeader];
+  [_table reloadData];
 }
 
 #pragma mark - values
@@ -380,7 +418,8 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 }
 
 - (DBEditField *)fieldAt:(NSIndexPath *)path {
-  if (path.section < 0 || path.section >= (NSInteger)[_sections count]) return nil;
+  if (path.section < 0 || path.section >= (NSInteger)[_sections count] ||
+      path.section >= (NSInteger)[_visible count]) return nil;
   DBEditSection *section = [_sections objectAtIndex:(NSUInteger)path.section];
   NSArray *indexes = [_visible objectAtIndex:(NSUInteger)path.section];
   if (path.row < 0 || path.row >= (NSInteger)[indexes count]) return nil;
@@ -393,142 +432,105 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   if (field.onChange(value)) [self reloadPage];
 }
 
+// Kinds that open a page of their own carry the disclosure indicator.
+- (BOOL)opensPage:(DBEditField *)field {
+  switch (field.kind) {
+    case DBEditKindChoice:
+    case DBEditKindMulti:
+    case DBEditKindTime:
+    case DBEditKindColor:
+    case DBEditKindPage:
+      return YES;
+    default:
+      return NO;
+  }
+}
+
+- (DBEditCellLayout)layoutFor:(DBEditField *)field inTable:(UITableView *)tableView {
+  CGFloat accessory = field.kind == DBEditKindBool ? kDBEditSwitchWidth
+      : (([self opensPage:field] || field.checked) ? kDBEditIndicatorWidth : 0);
+  CGFloat image = field.image ? field.image.size.width + 10 : 0;
+  DBEditCellLayout layout = DBEditCellLayoutMake(
+      field.title, [self detailFor:field], DBEditCellTextWidth(tableView, accessory, image));
+  if (field.image) layout.height = MAX(layout.height, field.image.size.height + 16);
+  return layout;
+}
+
 #pragma mark - table
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+  (void)tableView;
   return (NSInteger)[_sections count];
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+  (void)tableView;
   return section < (NSInteger)[_visible count]
       ? (NSInteger)[[_visible objectAtIndex:(NSUInteger)section] count] : 0;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
-  return [(DBEditSection *)[_sections objectAtIndex:(NSUInteger)section] title];
+  (void)tableView;
+  NSString *title = [(DBEditSection *)[_sections objectAtIndex:(NSUInteger)section] title];
+  return [title length] > 0 ? title : nil;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-  return [(DBEditSection *)[_sections objectAtIndex:(NSUInteger)section] footer];
-}
-
-- (UIView *)tableView:(UITableView *)tableView viewForHeaderInSection:(NSInteger)section {
-  NSString *text = [self tableView:tableView titleForHeaderInSection:section];
-  if ([text length] == 0) return nil;
-  UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width, 40)];
-  UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(48, 12, tableView.bounds.size.width - 96, 24)];
-  label.backgroundColor = [UIColor clearColor];
-  label.font = [UIFont boldSystemFontOfSize:16];
-  label.textColor = _palette.mutedInk ?: [UIColor grayColor];
-  label.text = text;
-  label.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-  [header addSubview:label];
-  return header;
-}
-
-- (CGFloat)tableView:(UITableView *)tableView heightForHeaderInSection:(NSInteger)section {
-  return [[self tableView:tableView titleForHeaderInSection:section] length] > 0 ? 40 : 12;
-}
-
-- (UIView *)tableView:(UITableView *)tableView viewForFooterInSection:(NSInteger)section {
-  NSString *text = [self tableView:tableView titleForFooterInSection:section];
-  if ([text length] == 0) return nil;
-  CGFloat width = tableView.bounds.size.width - 96;
-  CGSize fit = [text sizeWithFont:[UIFont systemFontOfSize:14]
-                constrainedToSize:CGSizeMake(width, 400) lineBreakMode:NSLineBreakByWordWrapping];
-  UIView *footer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, tableView.bounds.size.width,
-                                                             ceil(fit.height) + 16)];
-  UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(48, 6, width, ceil(fit.height))];
-  label.backgroundColor = [UIColor clearColor];
-  label.font = [UIFont systemFontOfSize:14];
-  label.numberOfLines = 0;
-  label.textColor = _palette.mutedInk ?: [UIColor grayColor];
-  label.text = text;
-  [footer addSubview:label];
-  return footer;
-}
-
-- (CGFloat)tableView:(UITableView *)tableView heightForFooterInSection:(NSInteger)section {
-  NSString *text = [self tableView:tableView titleForFooterInSection:section];
-  if ([text length] == 0) return 8;
-  CGSize fit = [text sizeWithFont:[UIFont systemFontOfSize:14]
-                constrainedToSize:CGSizeMake(tableView.bounds.size.width - 96, 400)
-                    lineBreakMode:NSLineBreakByWordWrapping];
-  return ceil(fit.height) + 16;
+  (void)tableView;
+  NSString *footer = [(DBEditSection *)[_sections objectAtIndex:(NSUInteger)section] footer];
+  return [footer length] > 0 ? footer : nil;
 }
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
-  DBEditField *field = [self fieldAt:indexPath];
-  NSString *detail = [self detailFor:field];
-  CGFloat width = tableView.bounds.size.width - 140;
-  CGSize titleSize = [field.title ?: @"" sizeWithFont:[UIFont systemFontOfSize:18]
-                                  constrainedToSize:CGSizeMake(width * 0.55, 400)
-                                      lineBreakMode:NSLineBreakByWordWrapping];
-  CGSize detailSize = [detail ?: @"" sizeWithFont:[UIFont systemFontOfSize:16]
-                              constrainedToSize:CGSizeMake(width * 0.45, 400)
-                                  lineBreakMode:NSLineBreakByWordWrapping];
-  CGFloat height = MAX(54, ceil(MAX(titleSize.height, detailSize.height)) + 26);
-  if (field.image) height = MAX(height, field.image.size.height + 16);
-  return height;
+  return [self layoutFor:[self fieldAt:indexPath] inTable:tableView].height;
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tableView
          cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-  static NSString *identifier = @"edit";
-  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
-  if (cell == nil) {
-    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1
-                                  reuseIdentifier:identifier];
-    cell.textLabel.font = [UIFont systemFontOfSize:18];
-    cell.textLabel.numberOfLines = 0;
-    cell.detailTextLabel.font = [UIFont systemFontOfSize:16];
-    cell.detailTextLabel.numberOfLines = 0;
-    cell.textLabel.backgroundColor = [UIColor clearColor];
-    cell.detailTextLabel.backgroundColor = [UIColor clearColor];
-  }
   DBEditField *field = [self fieldAt:indexPath];
+  DBEditCellLayout layout = [self layoutFor:field inTable:tableView];
+  UITableViewCell *cell = DBEditDequeueCell(tableView, layout.style, field.destructive);
   cell.textLabel.text = field.title;
   cell.detailTextLabel.text = [self detailFor:field];
   cell.imageView.image = field.image;
-  cell.backgroundColor = _palette.elevated;
-  cell.textLabel.textColor = field.destructive ? (_palette.danger ?: [UIColor redColor])
-      : (field.kind == DBEditKindAction ? (_palette.accent ?: _palette.ink) : _palette.ink);
-  cell.detailTextLabel.textColor = _palette.mutedInk;
-  cell.accessoryView = nil;
-  cell.accessoryType = UITableViewCellAccessoryNone;
-  cell.selectionStyle = UITableViewCellSelectionStyleBlue;
   if (field.kind == DBEditKindBool) {
     UISwitch *toggle = [[UISwitch alloc] init];
     toggle.on = [field.value boolValue];
     toggle.tag = indexPath.section * 10000 + indexPath.row;
+    toggle.accessibilityLabel = field.title;
     [toggle addTarget:self action:@selector(onSwitch:) forControlEvents:UIControlEventValueChanged];
     cell.accessoryView = toggle;
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
   } else if (field.kind == DBEditKindInfo) {
     cell.selectionStyle = UITableViewCellSelectionStyleNone;
-  } else if (field.kind != DBEditKindAction) {
+  } else if ([self opensPage:field]) {
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   }
+  if (field.checked) cell.accessoryType = UITableViewCellAccessoryCheckmark;
   return cell;
 }
 
 - (BOOL)tableView:(UITableView *)tableView canEditRowAtIndexPath:(NSIndexPath *)indexPath {
+  (void)tableView;
   DBEditSection *section = [_sections objectAtIndex:(NSUInteger)indexPath.section];
   return section.onDelete != nil || section.onMove != nil;
 }
 
 - (UITableViewCellEditingStyle)tableView:(UITableView *)tableView
            editingStyleForRowAtIndexPath:(NSIndexPath *)indexPath {
+  (void)tableView;
   DBEditSection *section = [_sections objectAtIndex:(NSUInteger)indexPath.section];
   return section.onDelete ? UITableViewCellEditingStyleDelete : UITableViewCellEditingStyleNone;
 }
 
-- (BOOL)tableView:(UITableView *)tableView shouldIndentWhileEditingRowAtIndexPath:(NSIndexPath *)indexPath {
+- (BOOL)tableView:(UITableView *)tableView
+    shouldIndentWhileEditingRowAtIndexPath:(NSIndexPath *)indexPath {
   return [self tableView:tableView editingStyleForRowAtIndexPath:indexPath] !=
       UITableViewCellEditingStyleNone;
 }
 
 - (BOOL)tableView:(UITableView *)tableView canMoveRowAtIndexPath:(NSIndexPath *)indexPath {
+  (void)tableView;
   DBEditSection *section = [_sections objectAtIndex:(NSUInteger)indexPath.section];
   return section.onMove != nil && [_filter length] == 0;
 }
@@ -544,6 +546,7 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 
 - (void)tableView:(UITableView *)tableView moveRowAtIndexPath:(NSIndexPath *)source
       toIndexPath:(NSIndexPath *)destination {
+  (void)tableView;
   DBEditSection *section = [_sections objectAtIndex:(NSUInteger)source.section];
   if (section.onMove && source.row != destination.row) section.onMove(source.row, destination.row);
   __weak DBEditorView *weakSelf = self;
@@ -552,6 +555,7 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 
 - (void)tableView:(UITableView *)tableView commitEditingStyle:(UITableViewCellEditingStyle)style
     forRowAtIndexPath:(NSIndexPath *)indexPath {
+  (void)tableView;
   if (style != UITableViewCellEditingStyleDelete) return;
   DBEditSection *section = [_sections objectAtIndex:(NSUInteger)indexPath.section];
   NSArray *indexes = [_visible objectAtIndex:(NSUInteger)indexPath.section];
@@ -621,7 +625,7 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
       [self pushPage:[self colorPageFor:field]];
       break;
     case DBEditKindTime:
-      [self presentTimeFor:field];
+      [self pushPage:[self timePageFor:field]];
       break;
     case DBEditKindPage:
       if (field.page) [self pushPage:field.page()];
@@ -651,13 +655,11 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
     for (NSArray *choice in field.choices) {
       if ([choice count] < 2) continue;
       id value = [choice objectAtIndex:0];
-      BOOL selected = multi ? ([current isKindOfClass:[NSArray class]] &&
-                               [(NSArray *)current containsObject:value])
-                            : [value isEqual:current];
-      DBEditField *row = [DBEditField kind:DBEditKindAction
-                                     title:[NSString stringWithFormat:@"%@%@",
-                                               selected ? @"✓  " : @"", [choice objectAtIndex:1]]
+      DBEditField *row = [DBEditField kind:DBEditKindAction title:[choice objectAtIndex:1]
                                      value:value];
+      row.checked = multi ? ([current isKindOfClass:[NSArray class]] &&
+                             [(NSArray *)current containsObject:value])
+                          : [value isEqual:current];
       row.action = ^{
         DBEditorView *editor = weakSelf;
         if (!editor) return;
@@ -714,11 +716,8 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
     [rows addObject:custom];
     NSMutableArray *swatchRows = [NSMutableArray array];
     for (NSString *hex in swatches) {
-      BOOL selected = [[field.value description] caseInsensitiveCompare:hex] == NSOrderedSame;
-      DBEditField *row = [DBEditField kind:DBEditKindAction
-                                     title:[NSString stringWithFormat:@"%@%@",
-                                               selected ? @"✓  " : @"", hex]
-                                     value:hex];
+      DBEditField *row = [DBEditField kind:DBEditKindAction title:hex value:hex];
+      row.checked = [[field.value description] caseInsensitiveCompare:hex] == NSOrderedSame;
       row.image = DBSwatchImage([DBConfigUtil parseHexColor:hex]);
       row.action = ^{
         if (field.onChange && field.onChange(hex)) field.value = hex;
@@ -730,42 +729,54 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   }];
 }
 
-#pragma mark - time
-
-- (void)presentTimeFor:(DBEditField *)field {
-  _timeField = field;
+// The picker sits above an empty table; Done writes the time and the bar's back button
+// leaves it unchanged.
+- (DBEditPage *)timePageFor:(DBEditField *)field {
+  UIDatePicker *picker = [[UIDatePicker alloc] init];
+  picker.datePickerMode = UIDatePickerModeTime;
+  // A fixed zone and a 24-hour locale: the picker edits a wall-clock "HH:MM"
+  // that Core interprets in the cluster zone, never an instant.
+  picker.timeZone = [NSTimeZone timeZoneForSecondsFromGMT:0];
+  picker.locale = [[NSLocale alloc] initWithLocaleIdentifier:@"en_GB"];
+  picker.minuteInterval = 5;
   NSString *text = [field.value isKindOfClass:[NSString class]] ? field.value : @"00:00";
   NSArray *parts = [text componentsSeparatedByString:@":"];
   NSInteger hour = [parts count] > 0 ? [[parts objectAtIndex:0] integerValue] : 0;
   NSInteger minute = [parts count] > 1 ? [[parts objectAtIndex:1] integerValue] : 0;
-  _timePicker.date = [NSDate dateWithTimeIntervalSince1970:(hour * 60 + minute) * 60];
-  [_timeOk setTitle:_okTitle forState:UIControlStateNormal];
-  [_timeCancel setTitle:_cancelTitle forState:UIControlStateNormal];
-  _timeOverlay.hidden = NO;
-  [self bringSubviewToFront:_timeOverlay];
-  [self setNeedsLayout];
-}
+  picker.date = [NSDate dateWithTimeIntervalSince1970:(hour * 60 + minute) * 60];
 
-- (void)onTimeOk {
-  _timeOverlay.hidden = YES;
-  DBEditField *field = _timeField;
-  _timeField = nil;
-  if (field == nil) return;
-  long seconds = (long)fmod([_timePicker.date timeIntervalSince1970], 86400.0);
-  if (seconds < 0) seconds += 86400;
-  NSString *value = [NSString stringWithFormat:@"%02ld:%02ld", seconds / 3600, (seconds / 60) % 60];
-  [self apply:field value:value];
-}
+  CGSize size = picker.bounds.size;
+  if (size.width <= 0 || size.height <= 0) size = CGSizeMake(320, 216);
+  UIView *header = [[UIView alloc] initWithFrame:CGRectMake(0, 0, size.width, size.height + 20)];
+  header.backgroundColor = [UIColor clearColor];
+  picker.frame = CGRectMake(0, 10, size.width, size.height);
+  picker.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin |
+                            UIViewAutoresizingFlexibleRightMargin;
+  [header addSubview:picker];
 
-- (void)onTimeCancel {
-  _timeOverlay.hidden = YES;
-  _timeField = nil;
+  DBEditPage *page = [DBEditPage title:field.title build:^NSArray *{ return @[]; }];
+  page.headerView = header;
+  __weak DBEditorView *weakSelf = self;
+  page.onDone = ^{
+    DBEditorView *editor = weakSelf;
+    if (!editor) return;
+    long seconds = (long)fmod([picker.date timeIntervalSince1970], 86400.0);
+    if (seconds < 0) seconds += 86400;
+    NSString *value = [NSString stringWithFormat:@"%02ld:%02ld", seconds / 3600,
+                                                 (seconds / 60) % 60];
+    [editor popPage];
+    [editor apply:field value:value];
+  };
+  return page;
 }
 
 #pragma mark - search
 
 - (void)searchBar:(UISearchBar *)searchBar textDidChange:(NSString *)searchText {
+  (void)searchBar;
   _filter = [searchText copy];
+  DBEditPage *page = [self currentPage];
+  if (page.filtersItself) _sections = (page.build ? page.build() : nil) ?: @[];
   [self applyFilter];
   [_table reloadData];
 }
@@ -819,15 +830,12 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 
 - (void)showMessage:(NSString *)message {
   if ([message length] == 0) return;
-  _message.text = message;
-  [self bringSubviewToFront:_message];
-  [UIView animateWithDuration:0.2 animations:^{ self->_message.alpha = 0.96; }];
-  [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(hideMessage) object:nil];
-  [self performSelector:@selector(hideMessage) withObject:nil afterDelay:2.4];
-}
-
-- (void)hideMessage {
-  [UIView animateWithDuration:0.3 animations:^{ self->_message.alpha = 0; }];
+  if (_onMessage) {
+    _onMessage(message);
+    return;
+  }
+  [[[UIAlertView alloc] initWithTitle:nil message:message delegate:nil
+                    cancelButtonTitle:_okTitle otherButtonTitles:nil] show];
 }
 
 @end

@@ -3,85 +3,103 @@
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBPairUri.h"
 #import "../Core/DBPairingModel.h"
 #import "../Core/DBTexts.h"
 #import "../Media/DBQrCode.h"
-#import "DBNumericKeypad.h"
-#import "../Core/DBPairUri.h"
+#import "DBChrome.h"
 #import "DBRouter.h"
+#import <QuartzCore/QuartzCore.h>
 
-static UIColor *DBPairBg(void) {
-  return [UIColor colorWithRed:0.055 green:0.086 blue:0.129 alpha:1];
-}
-static UIColor *DBPairDim(void) { return [UIColor colorWithWhite:0.65 alpha:1]; }
-static UIColor *DBPairAccent(void) {
-  return [UIColor colorWithRed:0.13 green:0.45 blue:0.85 alpha:1];
-}
-static UIColor *DBPairError(void) {
-  return [UIColor colorWithRed:0.88 green:0.36 blue:0.30 alpha:1];
-}
-static UIColor *DBPairOk(void) {
-  return [UIColor colorWithRed:0.35 green:0.80 blue:0.45 alpha:1];
-}
+static const CGFloat kColumnMax = 620;
+static const CGFloat kQrSide = 240;
+static const CGFloat kQrSideMin = 160;
+static const CGFloat kSummaryPad = 20;
+static const NSUInteger kPinLength = 6;
+
+typedef enum {
+  DBPairSectionUpgrade = 0,
+  DBPairSectionPersist,
+  DBPairSectionCreated,
+  DBPairSectionJoin,
+  DBPairSectionNotice,
+  DBPairSectionCreate,
+  DBPairSectionExit,
+} DBPairSection;
+
+typedef enum {
+  DBPairRowUpgradeAction = 0,
+  DBPairRowRetry,
+  DBPairRowCreatedAddress,
+  DBPairRowCreatedCountdown,
+  DBPairRowHost,
+  DBPairRowPin,
+  DBPairRowJoin,
+  DBPairRowCreate,
+  DBPairRowExit,
+} DBPairRow;
+
+static NSString *const kSectionKind = @"kind";
+static NSString *const kSectionRows = @"rows";
+
+@interface DBPairingScreen () <UIAlertViewDelegate, UITextFieldDelegate, UITableViewDataSource,
+                               UITableViewDelegate>
+@end
 
 @implementation DBPairingScreen {
-  UIScrollView *_scroll;
-  UILabel *_title;
+  DBNavBar *_nav;
+  UITableView *_table;
+
+  // What this device is and how pairing stands. It is the table's header in one column and
+  // sits beside the table in two.
+  UIView *_summary;
+  BOOL _summaryInTable;
+  CGFloat _summaryHeight;
+  CGFloat _summaryWidth;
+  // Security protocol v3: the eight-digit code an administrator types to add this device.
+  // After founding a cluster the same label shows the minted Pairing PIN.
+  UILabel *_codeCaption;
+  UILabel *_codeLabel;
   UILabel *_identity;
-  // Security protocol v3: the eight-digit code an administrator types to add this device,
-  // and the clock hint for beacons that only count within ±120 s.
-  UILabel *_confirmCaption;
-  UILabel *_confirmCode;
-  BOOL _upgradeRejoin;
   UIActivityIndicatorView *_spinner;
   UILabel *_status;
   UILabel *_hint;
-
   UIImageView *_qr;
   UILabel *_qrPlaceholder;
   UILabel *_qrCaption;
 
-  // Create-Cluster / Pairing-PIN card. Never auto-dismissed.
-  UIView *_card;
-  UILabel *_cardTitle;
-  UILabel *_cardAddressLabel;
-  UILabel *_cardAddress;
-  UILabel *_cardCodeLabel;
-  UILabel *_cardCode;
-  UILabel *_cardCountdown;
-  UILabel *_cardInstructions;
-
-  // Join with a Pairing PIN.
-  UILabel *_joinTitle;
-  UILabel *_hostLabel;
+  // Join with a Pairing PIN. The field cells are built once so a reload keeps their text.
+  UITableViewCell *_hostCell;
   UITextField *_hostField;
+  UITableViewCell *_pinCell;
+  UITextField *_pinField;
   NSString *_pendingInvitationPin;
-  UILabel *_codeLabel;
-  UILabel *_codeDisplay;
-  DBNumericKeypad *_keypad;
-  UILabel *_errorLabel;
-  UILabel *_errorDetail;
 
-  UIButton *_createButton;
-  UILabel *_createConfirm;
-  UIButton *_laterButton;
+  // Sections on screen: dictionaries of a DBPairSection kind and its DBPairRow kinds.
+  NSArray *_model;
+  NSString *_modelSignature;
+  UIAlertView *_alert;
 
-  // Persistence failure.
-  UILabel *_persistTitle;
-  UILabel *_persistBody;
-  UIButton *_retryButton;
+  NSString *_confirmCode;
+  NSString *_errorText;
+  NSString *_errorDetail;
+  BOOL _upgradeRejoin;
 
   NSString *_state;
   NSString *_lastQr;
   NSTimer *_poll;
   BOOL _fetchBusy;
   BOOL _confirmingCreate;
-  BOOL _createdFlow;       // The create-Cluster card must stay on screen.
+  BOOL _creating;
+  BOOL _retrying;
+  BOOL _createdFlow;       // The create-Cluster section must stay on screen.
   BOOL _joining;
   BOOL _joinSuccessShown;
   BOOL _sawNotReady;   // Guards the auto-close against a stale first snapshot.
   BOOL _dismissed;
   NSDictionary *_token;    // pairing.token while active.
+  NSString *_tokenHost;
+  NSString *_tokenPin;
   NSInteger _tokenExpiresS;
   NSInteger _tokenAttemptsLeft;
   CFAbsoluteTime _tokenReadAt;
@@ -94,6 +112,8 @@ static UIColor *DBPairOk(void) {
     _router = router;
     _lastQr = @"";
     _state = DBPairingStateUnknown;
+    _model = @[];
+    _modelSignature = @"";
     [self buildUi];
     [[NSNotificationCenter defaultCenter] addObserver:self
                                              selector:@selector(onKeyboardWillShow:)
@@ -110,6 +130,9 @@ static UIColor *DBPairOk(void) {
 - (void)dealloc {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
   [_poll invalidate];
+  _alert.delegate = nil;
+  _table.dataSource = nil;
+  _table.delegate = nil;
 }
 
 - (NSString *)screenName {
@@ -118,214 +141,85 @@ static UIColor *DBPairOk(void) {
 
 #pragma mark - construction
 
-- (UILabel *)labelWithFont:(UIFont *)font color:(UIColor *)color center:(BOOL)center {
-  UILabel *l = [[UILabel alloc] init];
-  l.numberOfLines = 0;
-  l.font = font;
-  l.textColor = color;
-  l.backgroundColor = [UIColor clearColor];
-  l.textAlignment = center ? NSTextAlignmentCenter : NSTextAlignmentLeft;
-  return l;
+- (UILabel *)summaryLabel:(UILabel *)label {
+  label.textAlignment = NSTextAlignmentCenter;
+  [_summary addSubview:label];
+  return label;
 }
 
-// UIButtonTypeSystem renders with no visible title on iOS 5; always custom.
-- (UIButton *)flatButtonWithTitle:(NSString *)title background:(UIColor *)bg {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-  [b setTitle:title forState:UIControlStateNormal];
-  b.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-  b.titleLabel.textAlignment = NSTextAlignmentCenter;
-  [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  [b setTitleColor:[UIColor colorWithWhite:1 alpha:0.4] forState:UIControlStateDisabled];
-  if (bg) {
-    b.backgroundColor = bg;
-    b.layer.cornerRadius = 10;
-  }
-  return b;
+- (UITableViewCell *)fieldCellWithField:(UITextField *)field {
+  UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                                 reuseIdentifier:nil];
+  cell.selectionStyle = UITableViewCellSelectionStyleNone;
+  field.frame = CGRectInset(cell.contentView.bounds, 12, 0);
+  field.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  field.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+  field.autocorrectionType = UITextAutocorrectionTypeNo;
+  field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+  field.clearButtonMode = UITextFieldViewModeWhileEditing;
+  field.delegate = self;
+  [cell.contentView addSubview:field];
+  return cell;
 }
 
 - (void)buildUi {
-  self.backgroundColor = DBPairBg();
   DBTexts *texts = [_router texts];
+  self.backgroundColor = DBChromeScreenBackground();
+  DBChromeInstallBackdrop(self);
 
-  _scroll = [[UIScrollView alloc] init];
-  _scroll.alwaysBounceVertical = YES;
-  [self addSubview:_scroll];
+  _table = DBChromeGroupedTable(self, self);
+  DBChromeClearTableBackground(_table);
+  [self addSubview:_table];
 
-  _title = [self labelWithFont:[UIFont boldSystemFontOfSize:26]
-                         color:[UIColor whiteColor] center:YES];
-  _title.text = [texts ts:@"pair.title_unpaired"];
-  [_scroll addSubview:_title];
+  // First-run pairing has nowhere to go back to: the exit is the "set up later" row.
+  _nav = [[DBNavBar alloc] init];
+  [_nav setRootTitle:[texts ts:@"pair.title_unpaired"] backTitle:nil onBack:nil];
+  [self addSubview:_nav.bar];
 
-  _identity = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBPairDim() center:YES];
-  [_scroll addSubview:_identity];
-
-  _confirmCaption = [self labelWithFont:[UIFont systemFontOfSize:15] color:DBPairDim() center:YES];
-  _confirmCaption.text = [texts ts:@"pair.confirm_code_caption"];
-  _confirmCaption.hidden = YES;
-  [_scroll addSubview:_confirmCaption];
+  _summary = [[UIView alloc] init];
+  _codeCaption = [self summaryLabel:DBChromeSectionFooterLabel()];
   // Monospaced digits, sized to be read across a room; drawn once, no animation (A4 budget).
-  _confirmCode = [self labelWithFont:[UIFont fontWithName:@"Courier-Bold" size:56] ?:
-                                         [UIFont boldSystemFontOfSize:56]
-                               color:[UIColor whiteColor] center:YES];
-  _confirmCode.accessibilityIdentifier = @"pair_confirm_code";
-  _confirmCode.hidden = YES;
-  [_scroll addSubview:_confirmCode];
-
-  _spinner = [[UIActivityIndicatorView alloc]
-      initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
-  _spinner.hidesWhenStopped = YES;
-  [_scroll addSubview:_spinner];
-
-  _status = [self labelWithFont:[UIFont boldSystemFontOfSize:18] color:DBPairDim() center:YES];
+  _codeLabel = [self summaryLabel:[[UILabel alloc] init]];
+  _codeLabel.backgroundColor = [UIColor clearColor];
+  _codeLabel.font = [UIFont fontWithName:@"Courier-Bold" size:56] ?: [UIFont boldSystemFontOfSize:56];
+  _codeLabel.adjustsFontSizeToFitWidth = YES;
+  _codeLabel.accessibilityIdentifier = @"pair_confirm_code";
+  _identity = [self summaryLabel:DBChromeSectionFooterLabel()];
+  _status = [self summaryLabel:DBChromeSectionHeaderLabel()];
   _status.text = [texts ts:@"pair.searching"];
-  [_scroll addSubview:_status];
-
-  _hint = [self labelWithFont:[UIFont systemFontOfSize:15] color:DBPairDim() center:YES];
+  _spinner = [[UIActivityIndicatorView alloc]
+      initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
+  _spinner.hidesWhenStopped = YES;
+  [_summary addSubview:_spinner];
+  _hint = [self summaryLabel:DBChromeSectionFooterLabel()];
   _hint.text = [texts ts:@"pair.searching_hint"];
-  [_scroll addSubview:_hint];
 
   _qr = [[UIImageView alloc] init];
   _qr.contentMode = UIViewContentModeScaleAspectFit;
-  _qr.backgroundColor = [UIColor whiteColor];
-  [_scroll addSubview:_qr];
-
-  // A blank white square is never acceptable: keep a caption inside the frame
-  // until Core publishes pair_qr.
-  _qrPlaceholder = [self labelWithFont:[UIFont systemFontOfSize:15]
-                                 color:[UIColor colorWithWhite:0.35 alpha:1] center:YES];
+  // The bitmap is one pixel per point; enlarging it must keep the module edges hard.
+  _qr.layer.magnificationFilter = kCAFilterNearest;
+  [_summary addSubview:_qr];
+  // Never an empty square: a caption holds the place until Core publishes pair_qr.
+  _qrPlaceholder = [self summaryLabel:DBChromeSectionFooterLabel()];
   _qrPlaceholder.text = [texts ts:@"pair.qr_pending"];
-  [_qr addSubview:_qrPlaceholder];
-
-  _qrCaption = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBPairDim() center:YES];
+  _qrCaption = [self summaryLabel:DBChromeSectionFooterLabel()];
   _qrCaption.text = [texts ts:@"pair.qr_caption"];
-  [_scroll addSubview:_qrCaption];
-
-  _card = [[UIView alloc] init];
-  _card.backgroundColor = [UIColor colorWithRed:0.09 green:0.12 blue:0.17 alpha:1];
-  _card.layer.cornerRadius = 12;
-  _card.hidden = YES;
-  [_scroll addSubview:_card];
-
-  _cardTitle = [self labelWithFont:[UIFont boldSystemFontOfSize:19]
-                             color:[UIColor whiteColor] center:YES];
-  _cardTitle.text = [texts ts:@"pair.created_next"];
-  [_card addSubview:_cardTitle];
-
-  _cardAddressLabel = [self labelWithFont:[UIFont systemFontOfSize:14]
-                                    color:DBPairDim() center:NO];
-  _cardAddressLabel.text = [texts ts:@"pair.address_label"];
-  [_card addSubview:_cardAddressLabel];
-
-  _cardAddress = [self labelWithFont:[UIFont boldSystemFontOfSize:24]
-                               color:[UIColor whiteColor] center:NO];
-  [_card addSubview:_cardAddress];
-
-  _cardCodeLabel = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBPairDim() center:NO];
-  _cardCodeLabel.text = [texts ts:@"pair.code_label"];
-  [_card addSubview:_cardCodeLabel];
-
-  _cardCode = [self labelWithFont:[UIFont boldSystemFontOfSize:44]
-                            color:[UIColor whiteColor] center:NO];
-  [_card addSubview:_cardCode];
-
-  _cardCountdown = [self labelWithFont:[UIFont systemFontOfSize:16] color:DBPairDim() center:NO];
-  [_card addSubview:_cardCountdown];
-
-  _cardInstructions = [self labelWithFont:[UIFont systemFontOfSize:14]
-                                    color:DBPairDim() center:NO];
-  _cardInstructions.text = [texts ts:@"pair.code_instructions"];
-  [_card addSubview:_cardInstructions];
-
-  _joinTitle = [self labelWithFont:[UIFont boldSystemFontOfSize:18]
-                             color:[UIColor whiteColor] center:YES];
-  _joinTitle.text = [texts ts:@"pair.join_with_code"];
-  [_scroll addSubview:_joinTitle];
-
-  _hostLabel = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBPairDim() center:NO];
-  _hostLabel.text = [texts ts:@"pair.address_label"];
-  [_scroll addSubview:_hostLabel];
 
   _hostField = [[UITextField alloc] init];
-  _hostField.placeholder = [texts ts:@"pair.address_example"];
-  _hostField.borderStyle = UITextBorderStyleRoundedRect;
-  _hostField.autocorrectionType = UITextAutocorrectionTypeNo;
-  _hostField.autocapitalizationType = UITextAutocapitalizationTypeNone;
+  _hostField.placeholder = [NSString stringWithFormat:@"%@  %@", [texts ts:@"pair.address_label"],
+                                                      [texts ts:@"pair.address_example"]];
   _hostField.keyboardType = UIKeyboardTypeURL;
-  _hostField.returnKeyType = UIReturnKeyDone;
-  [_hostField addTarget:self action:@selector(onHostFieldDone:)
-       forControlEvents:UIControlEventEditingDidEndOnExit];
-  [_scroll addSubview:_hostField];
+  _hostField.returnKeyType = UIReturnKeyNext;
+  _hostField.accessibilityIdentifier = @"pair_join_host";
+  _hostCell = [self fieldCellWithField:_hostField];
 
-  _codeLabel = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBPairDim() center:NO];
-  _codeLabel.text = [texts ts:@"pair.code_label"];
-  [_scroll addSubview:_codeLabel];
+  _pinField = [[UITextField alloc] init];
+  _pinField.placeholder = [texts ts:@"pair.code_label"];
+  _pinField.keyboardType = UIKeyboardTypeNumberPad;
+  _pinField.returnKeyType = UIReturnKeyJoin;
+  _pinField.accessibilityIdentifier = @"pair_join_pin";
+  _pinCell = [self fieldCellWithField:_pinField];
 
-  _codeDisplay = [self labelWithFont:[UIFont boldSystemFontOfSize:40]
-                               color:[UIColor whiteColor] center:YES];
-  _codeDisplay.backgroundColor = [UIColor colorWithWhite:1 alpha:0.07];
-  _codeDisplay.layer.cornerRadius = 8;
-  _codeDisplay.clipsToBounds = YES;
-  [_scroll addSubview:_codeDisplay];
-
-  __weak DBPairingScreen *weakSelf = self;
-  _keypad = [[DBNumericKeypad alloc] initWithSubmitTitle:[texts ts:@"pair.join_with_code"]];
-  _keypad.onChange = ^(NSString *value) {
-    DBPairingScreen *screen = weakSelf;
-    if (screen) screen->_codeDisplay.text = value;
-  };
-  _keypad.onSubmit = ^(NSString *value) {
-    DBPairingScreen *screen = weakSelf;
-    if (screen) [screen submitJoinWithCode:value];
-  };
-  [_scroll addSubview:_keypad];
-
-  _errorLabel = [self labelWithFont:[UIFont boldSystemFontOfSize:16] color:DBPairError() center:YES];
-  _errorLabel.text = @"";
-  [_scroll addSubview:_errorLabel];
-
-  _errorDetail = [self labelWithFont:[UIFont systemFontOfSize:12]
-                               color:[UIColor colorWithWhite:0.45 alpha:1] center:YES];
-  _errorDetail.text = @"";
-  [_scroll addSubview:_errorDetail];
-
-  _createButton = [self flatButtonWithTitle:[texts ts:@"pair.create_home"] background:nil];
-  [_createButton setTitleColor:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1]
-                      forState:UIControlStateNormal];
-  [_createButton addTarget:self action:@selector(onCreate)
-          forControlEvents:UIControlEventTouchUpInside];
-  [_scroll addSubview:_createButton];
-
-  _createConfirm = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBPairDim() center:YES];
-  _createConfirm.text = @"";
-  [_scroll addSubview:_createConfirm];
-
-  _laterButton = [self flatButtonWithTitle:[texts ts:@"pair.later"] background:nil];
-  [_laterButton setTitleColor:[UIColor colorWithWhite:1 alpha:0.6] forState:UIControlStateNormal];
-  _laterButton.titleLabel.font = [UIFont systemFontOfSize:17];
-  [_laterButton addTarget:self action:@selector(onLater)
-         forControlEvents:UIControlEventTouchUpInside];
-  [_scroll addSubview:_laterButton];
-
-  _persistTitle = [self labelWithFont:[UIFont boldSystemFontOfSize:20]
-                                color:DBPairError() center:YES];
-  _persistTitle.text = [texts ts:@"pair.persist_error_title"];
-  [_scroll addSubview:_persistTitle];
-
-  _persistBody = [self labelWithFont:[UIFont systemFontOfSize:15] color:DBPairDim() center:YES];
-  _persistBody.text = [texts ts:@"pair.persist_error_body"];
-  [_scroll addSubview:_persistBody];
-
-  _retryButton = [self flatButtonWithTitle:[texts ts:@"pair.retry"] background:DBPairAccent()];
-  [_retryButton addTarget:self action:@selector(onRetryPersistence)
-         forControlEvents:UIControlEventTouchUpInside];
-  [_scroll addSubview:_retryButton];
-
-  // A door station is installed outside and is never the device an operator
-  // uses to create the Cluster.
-  if ([[_router boot].role isEqualToString:@"door_station"]) _createButton.hidden = YES;
-
-  [self clearLabelBackgrounds:_scroll];
-  _codeDisplay.backgroundColor = [UIColor colorWithWhite:1 alpha:0.07];
   [self applyState];
 }
 
@@ -340,7 +234,8 @@ static UIColor *DBPairOk(void) {
 
 - (void)onScreenWillDisappear {
   [self stopPolling];
-  [_hostField resignFirstResponder];
+  [self dismissAlert];
+  [self endEditing:YES];
 }
 
 - (void)startPolling {
@@ -422,9 +317,9 @@ static UIColor *DBPairOk(void) {
       NSString *head = [parts componentsJoinedByString:@" · "];
       _identity.text = [addr length] > 0 ? [NSString stringWithFormat:@"%@\n%@", head, addr] : head;
       NSString *code = [DBConfigUtil evStr:selfInfo key:@"confirm_code"];
-      _confirmCode.text = [code length] == 8
+      _confirmCode = [code length] == 8
           ? [NSString stringWithFormat:@"%@ %@", [code substringToIndex:4], [code substringFromIndex:4]]
-          : code;
+          : [code copy];
     }
     _upgradeRejoin = [DBConfigUtil evBool:info key:@"upgrade_rejoin_required"];
     id token = [info objectForKey:@"token"];
@@ -456,8 +351,8 @@ static UIColor *DBPairOk(void) {
   _tokenReadAt = CFAbsoluteTimeGetCurrent();
   NSString *host = [DBConfigUtil evStr:token key:@"host"];
   NSString *pin = [DBConfigUtil evStr:token key:@"pin"];
-  if ([host length] > 0) _cardAddress.text = host;
-  if ([pin length] > 0) _cardCode.text = pin;
+  if ([host length] > 0) _tokenHost = [host copy];
+  if ([pin length] > 0) _tokenPin = [pin copy];
 }
 
 - (NSInteger)remainingTokenSeconds {
@@ -480,107 +375,182 @@ static UIColor *DBPairOk(void) {
   __weak DBPairingScreen *weakSelf = self;
   // Rasterizing a QR on the A4 main thread visibly stalls the UI.
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    UIImage *image = [DBQrCode imageForString:payload targetPx:480];
+    UIImage *image = [DBQrCode imageForString:payload targetPx:kQrSide];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBPairingScreen *screen = weakSelf;
       if (!screen || ![screen->_lastQr isEqualToString:payload]) return;
       screen->_qr.image = image;
-      screen->_qrPlaceholder.hidden = (image != nil);
+      screen->_qrPlaceholder.hidden = (image != nil) || screen->_qr.hidden;
     });
   });
 }
 
 #pragma mark - state rendering
 
+- (BOOL)isPersistError {
+  return [_state isEqualToString:@"persist_error"];
+}
+
+- (BOOL)showsCreated {
+  return _createdFlow && ![self isPersistError];
+}
+
+// A persistence error is cleared only by a successful retry. Every other path
+// is hidden so nothing else can silently dismiss it.
+- (BOOL)showsJoinPath {
+  return ![self isPersistError] && ![self showsCreated] &&
+         ![_state isEqualToString:@"ready"] && ![_state isEqualToString:@"revoked"];
+}
+
+static NSDictionary *DBPairSectionMake(DBPairSection kind, NSArray *rows) {
+  return @{ kSectionKind : @(kind), kSectionRows : rows };
+}
+
+- (NSArray *)buildModel {
+  if ([self isPersistError])
+    return @[ DBPairSectionMake(DBPairSectionPersist, @[ @(DBPairRowRetry) ]) ];
+
+  NSMutableArray *model = [NSMutableArray array];
+  BOOL joining = [_state isEqualToString:@"joining"] || _joining;
+  if ([self showsCreated]) {
+    [model addObject:DBPairSectionMake(DBPairSectionCreated,
+        @[ @(DBPairRowCreatedAddress), @(DBPairRowCreatedCountdown) ])];
+  }
+  if ([self showsJoinPath]) {
+    // Paired under protocol v2: one clear warning state, then the ordinary join path.
+    if (_upgradeRejoin && !joining)
+      [model addObject:DBPairSectionMake(DBPairSectionUpgrade, @[ @(DBPairRowUpgradeAction) ])];
+    [model addObject:DBPairSectionMake(DBPairSectionJoin,
+        @[ @(DBPairRowHost), @(DBPairRowPin), @(DBPairRowJoin) ])];
+    // A door station is installed outside and is never the device an operator
+    // uses to create the Cluster.
+    if (![[_router boot].role isEqualToString:@"door_station"])
+      [model addObject:DBPairSectionMake(DBPairSectionCreate, @[ @(DBPairRowCreate) ])];
+  } else if ([_errorText length] > 0) {
+    [model addObject:DBPairSectionMake(DBPairSectionNotice, @[])];
+  }
+  [model addObject:DBPairSectionMake(DBPairSectionExit, @[ @(DBPairRowExit) ])];
+  return model;
+}
+
+- (NSString *)exitTitle {
+  DBTexts *texts = [_router texts];
+  BOOL finished = _createdFlow || [_state isEqualToString:@"ready"] ||
+                  [_state isEqualToString:@"revoked"];
+  return [texts ts:finished ? @"ui.close" : @"pair.later"];
+}
+
+- (NSString *)errorFooter {
+  if ([_errorText length] == 0) return nil;
+  return [_errorDetail length] > 0
+      ? [NSString stringWithFormat:@"%@\n%@", _errorText, _errorDetail] : _errorText;
+}
+
 - (void)applyState {
   DBTexts *texts = [_router texts];
-  BOOL persistError = [_state isEqualToString:@"persist_error"];
+  BOOL persistError = [self isPersistError];
   BOOL joining = [_state isEqualToString:@"joining"] || _joining;
   BOOL ready = [_state isEqualToString:@"ready"];
   BOOL revoked = [_state isEqualToString:@"revoked"];
-  BOOL showCard = _createdFlow && !persistError;
-
-  _persistTitle.hidden = !persistError;
-  _persistBody.hidden = !persistError;
-  _retryButton.hidden = !persistError;
-
-  // A persistence error is cleared only by a successful retry. Every other path
-  // is hidden so nothing else can silently dismiss it.
-  BOOL showJoinPath = !persistError && !showCard && !ready && !revoked;
-  _joinTitle.hidden = !showJoinPath;
-  _hostLabel.hidden = !showJoinPath;
-  _hostField.hidden = !showJoinPath;
-  _codeLabel.hidden = !showJoinPath;
-  _codeDisplay.hidden = !showJoinPath;
-  _keypad.hidden = !showJoinPath;
-  _createButton.hidden = !showJoinPath ||
-      [[_router boot].role isEqualToString:@"door_station"];
-  _createConfirm.hidden = _createButton.hidden || [_createConfirm.text length] == 0;
-
-  _card.hidden = !showCard;
-  _qr.hidden = persistError || showCard;
-  _qrCaption.hidden = _qr.hidden;
-  _hint.hidden = persistError || showCard || joining || ready;
-  _laterButton.hidden = persistError;
+  BOOL showCard = [self showsCreated];
+  BOOL upgrade = NO;
 
   _hostField.enabled = !joining;
-  [_keypad setKeysEnabled:!joining];
+  _pinField.enabled = !joining;
+  if (joining) [self endEditing:YES];
 
   if (persistError) {
     _status.text = @"";
     [_spinner stopAnimating];
   } else if (revoked) {
     _status.text = [texts ts:@"pair.revoked"];
-    _status.textColor = DBPairError();
     [_spinner stopAnimating];
   } else if (showCard) {
     _status.text = [NSString stringWithFormat:@"%@ ✓", [texts ts:@"pair.created"]];
-    _status.textColor = DBPairOk();
     [_spinner stopAnimating];
-    [self applyCardCountdown];
   } else if (ready) {
     _status.text = [NSString stringWithFormat:@"%@ ✓", [texts ts:@"pair.joined"]];
-    _status.textColor = DBPairOk();
     [_spinner stopAnimating];
   } else if (joining) {
     _status.text = [texts ts:@"pair.joining"];
-    _status.textColor = DBPairDim();
     [_spinner startAnimating];
   } else if (_upgradeRejoin) {
-    // Paired under protocol v2: one clear warning state, then the ordinary join path.
-    _title.text = [texts ts:@"pair.upgrade_title"];
-    _status.text = [texts ts:@"pair.upgrade_body"];
-    _status.textColor = DBPairError();
+    upgrade = YES;
+    _status.text = [texts ts:@"pair.upgrade_rejoin"];
     [_spinner stopAnimating];
   } else {
     _status.text = [texts ts:@"pair.searching"];
-    _status.textColor = DBPairDim();
     [_spinner startAnimating];
   }
+  _nav.topItem.title = [texts ts:upgrade ? @"pair.upgrade_title" : @"pair.title_unpaired"];
+
+  // The large code is this device's confirmation code while it waits to be added, and the
+  // minted Pairing PIN once it has founded a cluster.
   BOOL unpaired = [_state isEqualToString:@"unpaired"];
-  _confirmCode.hidden = !unpaired || persistError || showCard || [_confirmCode.text length] == 0;
-  _confirmCaption.hidden = _confirmCode.hidden;
-  if (!_upgradeRejoin || ready || joining) _title.text = [texts ts:@"pair.title_unpaired"];
+  NSString *code = nil;
+  if (showCard) {
+    code = _tokenPin;
+    _codeCaption.text = [texts ts:@"pair.code_label"];
+  } else if (unpaired && !persistError) {
+    code = _confirmCode;
+    _codeCaption.text = [texts ts:@"pair.confirm_code_caption"];
+  }
+  _codeLabel.text = code;
+  _codeLabel.hidden = [code length] == 0;
+  _codeCaption.hidden = _codeLabel.hidden;
+
+  _qr.hidden = persistError || showCard;
+  _qrCaption.hidden = _qr.hidden;
+  _qrPlaceholder.hidden = _qr.hidden || _qr.image != nil;
   // Core does not report clock skew, so a skew warning would only be a guess.
-  _hint.text = [texts ts:@"pair.searching_hint"];
+  _hint.hidden = persistError || showCard || joining || ready;
+
+  NSArray *model = [self buildModel];
+  NSMutableString *signature = [NSMutableString string];
+  for (NSDictionary *section in model)
+    [signature appendFormat:@"%@:%lu,", [section objectForKey:kSectionKind],
+                            (unsigned long)[[section objectForKey:kSectionRows] count]];
+  [signature appendFormat:@"/%d%d%d/%@/%@", (int)joining, (int)_creating, (int)_retrying,
+                          [self exitTitle], [self errorFooter] ?: @""];
+  _model = model;
+  if (![signature isEqualToString:_modelSignature]) {
+    _modelSignature = [signature copy];
+    [self reloadTable];
+  } else {
+    for (NSIndexPath *indexPath in [_table indexPathsForVisibleRows]) {
+      DBPairRow kind = [self rowKindAt:indexPath];
+      if (kind != DBPairRowCreatedAddress && kind != DBPairRowCreatedCountdown) continue;
+      UITableViewCell *cell = [_table cellForRowAtIndexPath:indexPath];
+      if (cell) [self configureCell:cell kind:kind];
+    }
+  }
   [self setNeedsLayout];
 }
 
-- (void)applyCardCountdown {
+// A reload detaches every cell, which takes the keyboard away from a field being edited;
+// the field gets it back once its cell is on screen again.
+- (void)reloadTable {
+  UITextField *editing = [_hostField isFirstResponder] ? _hostField
+      : ([_pinField isFirstResponder] ? _pinField : nil);
+  [_table reloadData];
+  if (editing && editing.enabled && [self showsJoinPath]) {
+    [_table layoutIfNeeded];
+    [editing becomeFirstResponder];
+  }
+}
+
+- (NSString *)countdownText {
   DBTexts *texts = [_router texts];
   NSInteger left = [self remainingTokenSeconds];
-  if (!_token || left <= 0) {
-    _cardCountdown.text = [texts ts:@"pair.code_expired"];
-    _cardCountdown.textColor = DBPairError();
-    return;
-  }
-  NSString *countdown = [texts t:@"pair.code_expires_in",
-                             [DBPairingModel countdownMinutesFromSeconds:left],
-                             [DBPairingModel countdownSecondsFromSeconds:left], nil];
-  NSString *attempts = [texts t:@"pair.code_attempts_left",
+  if (!_token || left <= 0) return [texts ts:@"pair.code_expired"];
+  return [texts t:@"pair.code_expires_in", [DBPairingModel countdownMinutesFromSeconds:left],
+                  [DBPairingModel countdownSecondsFromSeconds:left], nil];
+}
+
+- (NSString *)attemptsText {
+  if (!_token || [self remainingTokenSeconds] <= 0) return @"";
+  return [[_router texts] t:@"pair.code_attempts_left",
                             [NSString stringWithFormat:@"%ld", (long)_tokenAttemptsLeft], nil];
-  _cardCountdown.text = [NSString stringWithFormat:@"%@  ·  %@", countdown, attempts];
-  _cardCountdown.textColor = DBPairDim();
 }
 
 - (void)showJoinedAndClose {
@@ -598,6 +568,188 @@ static UIColor *DBPairOk(void) {
   });
 }
 
+#pragma mark - table
+
+- (DBPairSection)sectionKindAt:(NSInteger)section {
+  return (DBPairSection)[[[_model objectAtIndex:(NSUInteger)section] objectForKey:kSectionKind]
+      intValue];
+}
+
+- (DBPairRow)rowKindAt:(NSIndexPath *)indexPath {
+  NSArray *rows = [[_model objectAtIndex:(NSUInteger)indexPath.section]
+      objectForKey:kSectionRows];
+  return (DBPairRow)[[rows objectAtIndex:(NSUInteger)indexPath.row] intValue];
+}
+
+- (NSInteger)indexOfSection:(DBPairSection)kind {
+  for (NSUInteger i = 0; i < [_model count]; i++)
+    if ([self sectionKindAt:(NSInteger)i] == kind) return (NSInteger)i;
+  return NSNotFound;
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+  (void)tableView;
+  return (NSInteger)[_model count];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+  (void)tableView;
+  return (NSInteger)[[[_model objectAtIndex:(NSUInteger)section] objectForKey:kSectionRows]
+      count];
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+  (void)tableView;
+  DBTexts *texts = [_router texts];
+  switch ([self sectionKindAt:section]) {
+    case DBPairSectionUpgrade: return [texts ts:@"pair.upgrade_title"];
+    case DBPairSectionPersist: return [texts ts:@"pair.persist_error_title"];
+    case DBPairSectionCreated: return [texts ts:@"pair.created_next"];
+    case DBPairSectionJoin: return [texts ts:@"pair.join_with_code"];
+    default: return nil;
+  }
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+  (void)tableView;
+  DBTexts *texts = [_router texts];
+  switch ([self sectionKindAt:section]) {
+    case DBPairSectionUpgrade: return [texts ts:@"pair.upgrade_body"];
+    case DBPairSectionPersist: return [texts ts:@"pair.persist_error_body"];
+    case DBPairSectionCreated: return [texts ts:@"pair.code_instructions"];
+    case DBPairSectionJoin:
+    case DBPairSectionNotice: return [self errorFooter];
+    default: return nil;
+  }
+}
+
+- (UIActivityIndicatorView *)rowSpinner {
+  UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc]
+      initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
+  [spinner startAnimating];
+  return spinner;
+}
+
+- (void)configureActionCell:(UITableViewCell *)cell title:(NSString *)title busy:(BOOL)busy
+                    enabled:(BOOL)enabled {
+  cell.textLabel.text = title;
+  cell.textLabel.textAlignment = NSTextAlignmentCenter;
+  cell.textLabel.adjustsFontSizeToFitWidth = YES;
+  cell.textLabel.enabled = enabled && !busy;
+  cell.selectionStyle = (enabled && !busy) ? UITableViewCellSelectionStyleBlue
+                                           : UITableViewCellSelectionStyleNone;
+  cell.accessoryView = busy ? [self rowSpinner] : nil;
+}
+
+- (void)configureCell:(UITableViewCell *)cell kind:(DBPairRow)kind {
+  DBTexts *texts = [_router texts];
+  BOOL joining = [_state isEqualToString:@"joining"] || _joining;
+  switch (kind) {
+    case DBPairRowUpgradeAction:
+      [self configureActionCell:cell title:[texts ts:@"pair.upgrade_rejoin_action"] busy:NO
+                        enabled:YES];
+      break;
+    case DBPairRowRetry:
+      [self configureActionCell:cell title:[texts ts:@"pair.retry"] busy:_retrying enabled:YES];
+      break;
+    case DBPairRowCreatedAddress:
+      cell.textLabel.text = [texts ts:@"pair.address_label"];
+      cell.detailTextLabel.text = _tokenHost ?: @"";
+      cell.detailTextLabel.adjustsFontSizeToFitWidth = YES;
+      break;
+    case DBPairRowCreatedCountdown:
+      cell.textLabel.text = [self countdownText];
+      cell.textLabel.adjustsFontSizeToFitWidth = YES;
+      cell.detailTextLabel.text = [self attemptsText];
+      break;
+    case DBPairRowJoin:
+      [self configureActionCell:cell title:[texts ts:@"pair.join_submit"]
+                           busy:joining && !_creating enabled:YES];
+      cell.accessibilityIdentifier = @"pair_join_submit";
+      break;
+    case DBPairRowCreate:
+      [self configureActionCell:cell title:[texts ts:@"pair.create_home"] busy:_creating
+                        enabled:!joining];
+      break;
+    case DBPairRowExit:
+      [self configureActionCell:cell title:[self exitTitle] busy:NO enabled:YES];
+      break;
+    case DBPairRowHost:
+    case DBPairRowPin:
+      break;
+  }
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView
+         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+  DBPairRow kind = [self rowKindAt:indexPath];
+  if (kind == DBPairRowHost) return _hostCell;
+  if (kind == DBPairRowPin) return _pinCell;
+  BOOL value = kind == DBPairRowCreatedAddress || kind == DBPairRowCreatedCountdown;
+  NSString *identifier = value ? @"value" : @"action";
+  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+  if (!cell) {
+    cell = [[UITableViewCell alloc]
+          initWithStyle:value ? UITableViewCellStyleValue1 : UITableViewCellStyleDefault
+        reuseIdentifier:identifier];
+    if (value) cell.selectionStyle = UITableViewCellSelectionStyleNone;
+  }
+  cell.accessibilityIdentifier = nil;
+  [self configureCell:cell kind:kind];
+  return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+  [tableView deselectRowAtIndexPath:indexPath animated:NO];
+  BOOL joining = [_state isEqualToString:@"joining"] || _joining;
+  switch ([self rowKindAt:indexPath]) {
+    case DBPairRowUpgradeAction: [self focusField:_hostField]; break;
+    case DBPairRowRetry: if (!_retrying) [self onRetryPersistence]; break;
+    case DBPairRowJoin: if (!joining) [self submitJoinWithCode:_pinField.text ?: @""]; break;
+    case DBPairRowCreate: if (!joining && !_creating) [self onCreate]; break;
+    case DBPairRowExit: [self onLater]; break;
+    default: break;
+  }
+}
+
+#pragma mark - fields
+
+// A field can take the keyboard only while its cell is in the table, so the join section is
+// brought on screen and laid out first.
+- (void)focusField:(UITextField *)field {
+  NSInteger join = [self indexOfSection:DBPairSectionJoin];
+  if (join == NSNotFound || !field.enabled) return;
+  [_table scrollRectToVisible:[_table rectForSection:join] animated:NO];
+  [_table layoutIfNeeded];
+  [field becomeFirstResponder];
+}
+
+static NSString *DBPairDigits(NSString *text, NSUInteger limit) {
+  NSMutableString *digits = [NSMutableString string];
+  for (NSUInteger i = 0; i < [text length] && [digits length] < limit; i++) {
+    unichar c = [text characterAtIndex:i];
+    if (c >= '0' && c <= '9') [digits appendFormat:@"%C", c];
+  }
+  return digits;
+}
+
+- (BOOL)textField:(UITextField *)field shouldChangeCharactersInRange:(NSRange)range
+    replacementString:(NSString *)string {
+  if (field != _pinField) return YES;
+  NSString *next = [field.text ?: @"" stringByReplacingCharactersInRange:range withString:string];
+  return [next length] <= kPinLength &&
+         [DBPairDigits(next, kPinLength) length] == [next length];
+}
+
+- (BOOL)textFieldShouldReturn:(UITextField *)field {
+  if (field == _hostField) {
+    [_pinField becomeFirstResponder];
+  } else {
+    [self submitJoinWithCode:_pinField.text ?: @""];
+  }
+  return NO;
+}
+
 #pragma mark - events
 
 - (void)handleJoinResult:(NSDictionary *)ev {
@@ -605,8 +757,8 @@ static UIColor *DBPairOk(void) {
   if ([DBConfigUtil evBool:ev key:@"ok"]) {
     // Success is confirmed by pairing_state; keep the joining feedback until
     // then instead of announcing a result Core has not committed yet.
-    _errorLabel.text = @"";
-    _errorDetail.text = @"";
+    _errorText = nil;
+    _errorDetail = nil;
     _joining = YES;
     [self applyState];
     [self reload];
@@ -649,37 +801,46 @@ static UIColor *DBPairOk(void) {
   _state = @"persist_error";
   _createdFlow = NO;
   _joining = NO;
-  _errorLabel.text = @"";
-  _errorDetail.text = @"";
+  _errorText = nil;
+  _errorDetail = nil;
   [self applyState];
 }
 
 - (void)showErrorCode:(NSString *)code {
   DBTexts *texts = [_router texts];
-  _errorLabel.text = [texts ts:[DBPairingModel errorTextKeyForCode:code]];
-  _errorDetail.text = [code length] > 0
-      ? [texts t:@"pair.err_detail", code, nil] : @"";
+  _errorText = [texts ts:[DBPairingModel errorTextKeyForCode:code]];
+  _errorDetail = [code length] > 0 ? [texts t:@"pair.err_detail", code, nil] : nil;
   [self applyState];
 }
 
 #pragma mark - actions
 
-- (void)onHostFieldDone:(id)sender {
-  (void)sender;
-  [_hostField resignFirstResponder];
+- (void)dismissAlert {
+  UIAlertView *alert = _alert;
+  _alert = nil;
+  _confirmingCreate = NO;
+  alert.delegate = nil;
+  [alert dismissWithClickedButtonIndex:alert.cancelButtonIndex animated:NO];
+}
+
+- (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+  if (alertView != _alert) return;
+  _alert = nil;
+  if (buttonIndex != alertView.cancelButtonIndex) [self onCreate];
+  else _confirmingCreate = NO;
 }
 
 // An invitation opened from a QR or a doorbell://pair link. The device is not
 // taken out of a cluster without being asked: joining is a full local reset.
 - (void)presentInvitation:(DBPairUri *)invitation {
   DBTexts *texts = [_router texts];
-  _confirmingCreate = NO;
+  [self dismissAlert];
   if (invitation == nil || ![invitation isValid]) {
     NSString *reason = invitation.error;
-    _errorLabel.text = [texts ts:@"pair.invitation_title"];
-    _errorDetail.text = [texts ts:([reason isEqualToString:DBPairUriErrorExpired]
-                                       ? @"pair.invitation_expired"
-                                       : @"pair.invitation_invalid")];
+    _errorText = [texts ts:@"pair.invitation_title"];
+    _errorDetail = [texts ts:([reason isEqualToString:DBPairUriErrorExpired]
+                                  ? @"pair.invitation_expired"
+                                  : @"pair.invitation_invalid")];
     [self applyState];
     return;
   }
@@ -687,13 +848,13 @@ static UIColor *DBPairOk(void) {
   _pendingInvitationPin = [invitation.pin copy];
   // The PIN is filled in but not sent: the visitor of this screen still has to
   // press join, which is the confirmation, and can see what they are joining.
-  _keypad.value = invitation.pin;
-  _errorLabel.text = [invitation.cluster length] > 0
+  _pinField.text = DBPairDigits(invitation.pin, kPinLength);
+  _errorText = [invitation.cluster length] > 0
       ? [texts t:@"pair.invitation_confirm", invitation.cluster, nil]
       : [texts ts:@"pair.invitation_confirm_unnamed"];
   // Already in a cluster: say what joining costs before it happens.
-  _errorDetail.text = [_state isEqualToString:@"ready"]
-      ? [texts ts:@"pair.invitation_replace"] : @"";
+  _errorDetail = [_state isEqualToString:@"ready"]
+      ? [texts ts:@"pair.invitation_replace"] : nil;
   [self applyState];
 }
 
@@ -708,21 +869,22 @@ static UIColor *DBPairOk(void) {
   NSString *host = [_hostField.text
       stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
   if ([host length] == 0) {
-    _errorLabel.text = [texts ts:@"pair.enter_address_and_code"];
-    _errorDetail.text = [texts ts:@"pair.address_example"];
-    [_hostField becomeFirstResponder];
+    _errorText = [texts ts:@"pair.enter_address_and_code"];
+    _errorDetail = [texts ts:@"pair.address_example"];
     [self applyState];
+    [self focusField:_hostField];
     return;
   }
-  if ([code length] != 6) {
-    _errorLabel.text = [texts ts:@"pair.enter_address_and_code"];
-    _errorDetail.text = [texts ts:@"pair.code_label"];
+  if ([code length] != kPinLength) {
+    _errorText = [texts ts:@"pair.enter_address_and_code"];
+    _errorDetail = [texts ts:@"pair.code_label"];
     [self applyState];
+    [self focusField:_pinField];
     return;
   }
-  [_hostField resignFirstResponder];
-  _errorLabel.text = @"";
-  _errorDetail.text = @"";
+  [self endEditing:YES];
+  _errorText = nil;
+  _errorDetail = nil;
   _joining = YES;
   [self applyState];
   [[_router core] joinCluster:host pin:code];
@@ -731,27 +893,31 @@ static UIColor *DBPairOk(void) {
 - (void)onCreate {
   DBTexts *texts = [_router texts];
   if (!_confirmingCreate) {
+    if (_alert != nil) return;
     _confirmingCreate = YES;
-    _errorLabel.text = @"";
-    _errorDetail.text = @"";
-    _createConfirm.text = [texts ts:@"pair.create_home_confirm"];
-    [_createButton setTitle:[texts ts:@"pair.confirm_tap_again"]
-                   forState:UIControlStateNormal];
+    _errorText = nil;
+    _errorDetail = nil;
+    [self endEditing:YES];
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:[texts ts:@"pair.create_home"]
+                                                    message:[texts ts:@"pair.create_home_confirm"]
+                                                   delegate:self
+                                          cancelButtonTitle:[texts ts:@"admin.cancel"]
+                                          otherButtonTitles:[texts ts:@"editor.confirm"], nil];
+    _alert = alert;
+    [alert show];
     [self applyState];
     return;
   }
   _confirmingCreate = NO;
-  _createConfirm.text = @"";
-  [_createButton setTitle:[texts ts:@"pair.create_home"] forState:UIControlStateNormal];
-  _createButton.enabled = NO;
+  _creating = YES;
   _joining = YES;
   [self applyState];
 
   DBCoreBridge *core = [_router core];
   __weak DBPairingScreen *weakSelf = self;
   // foundCluster and the PIN mint both block on the Core queue; never on main.
-  // Founding shows the PIN card and this device's own QR and nothing else: it
-  // must not open the 「まとめて追加」 window, which would silently adopt every
+  // Founding shows the Pairing PIN and this device's own QR and nothing else: it
+  // must not open the bulk-add window, which would silently adopt every
   // device that asks (spec §5.4).
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
     BOOL created = [core foundCluster];
@@ -760,7 +926,7 @@ static UIColor *DBPairOk(void) {
       DBPairingScreen *screen = weakSelf;
       if (!screen) return;
       screen->_joining = NO;
-      screen->_createButton.enabled = YES;
+      screen->_creating = NO;
       if (!created) {
         // Core refuses only when this node is already in a Cluster; anything
         // else is a local failure with no specific code.
@@ -768,8 +934,8 @@ static UIColor *DBPairOk(void) {
                                   ? @"already_paired" : @""];
         return;
       }
-      // The generated Pairing PIN used to be dismissed at zero frames because
-      // the `paired` event closed the screen. The card now owns the screen
+      // A `paired` event must not close the screen at zero frames and take the
+      // generated Pairing PIN with it: the created section owns the screen
       // until the user chooses to leave.
       screen->_createdFlow = YES;
       screen->_state = @"ready";
@@ -789,13 +955,14 @@ static UIColor *DBPairOk(void) {
   if (_dismissed) return;
   _dismissed = YES;
   _createdFlow = NO;
-  [_hostField resignFirstResponder];
+  [self endEditing:YES];
   [_router pairingDeferredByUser];
   [_router closePairingAnimated:YES];
 }
 
 - (void)onRetryPersistence {
-  _retryButton.enabled = NO;
+  _retrying = YES;
+  [self applyState];
   DBCoreBridge *core = [_router core];
   __weak DBPairingScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
@@ -803,7 +970,7 @@ static UIColor *DBPairOk(void) {
     dispatch_async(dispatch_get_main_queue(), ^{
       DBPairingScreen *screen = weakSelf;
       if (!screen) return;
-      screen->_retryButton.enabled = YES;
+      screen->_retrying = NO;
       if (ok) screen->_state = @"ready";
       [screen applyState];
       [screen reload];
@@ -814,11 +981,11 @@ static UIColor *DBPairOk(void) {
 #pragma mark - keyboard
 
 - (void)onKeyboardWillShow:(NSNotification *)note {
+  // Another screen's keyboard (an alert's text field) is not this table's concern.
+  if (!self.window) return;
   NSValue *frame = [[note userInfo] objectForKey:UIKeyboardFrameEndUserInfoKey];
-  CGRect keyboard = [frame CGRectValue];
-  CGRect local = [self convertRect:keyboard fromView:nil];
-  CGFloat overlap = CGRectGetMaxY(self.bounds) - CGRectGetMinY(local);
-  _keyboardInset = MAX(0, overlap);
+  CGRect local = [self convertRect:[frame CGRectValue] fromView:nil];
+  _keyboardInset = MAX(0, CGRectGetMaxY(_table.frame) - CGRectGetMinY(local));
   [self applyKeyboardInsetAndScrollToField];
 }
 
@@ -828,153 +995,110 @@ static UIColor *DBPairOk(void) {
   [self applyKeyboardInsetAndScrollToField];
 }
 
+// The whole join section (both fields and the Join row) is brought above the keyboard.
 - (void)applyKeyboardInsetAndScrollToField {
   UIEdgeInsets insets = UIEdgeInsetsMake(0, 0, _keyboardInset, 0);
-  _scroll.contentInset = insets;
-  _scroll.scrollIndicatorInsets = insets;
-  if (_keyboardInset > 0) {
-    CGRect field = [_hostField isFirstResponder] ? _hostField.frame : _keypad.frame;
-    [_scroll scrollRectToVisible:CGRectInset(field, 0, -20) animated:YES];
+  _table.contentInset = insets;
+  _table.scrollIndicatorInsets = insets;
+  NSInteger join = [self indexOfSection:DBPairSectionJoin];
+  if (_keyboardInset > 0 && join != NSNotFound &&
+      ([_hostField isFirstResponder] || [_pinField isFirstResponder])) {
+    [_table scrollRectToVisible:[_table rectForSection:join] animated:YES];
   }
 }
 
 #pragma mark - layout
 
-- (void)layoutSubviews {
-  [super layoutSubviews];
-  CGSize size = self.bounds.size;
-  CGFloat pad = 24;
-  _scroll.frame = CGRectMake(0, 12, size.width, size.height - 12);
-  // Landscape on a tablet has room for two columns: what this device is and
-  // its status on the left, the join form on the right. Stacked, the code
-  // keypad ran off the bottom of a 768-point-tall screen.
-  BOOL twoColumns = size.width > size.height && size.width >= 900;
-  CGFloat width = twoColumns ? floor((size.width - pad * 3) / 2) : size.width - pad * 2;
-  CGFloat leftX = pad;
-  CGFloat rightX = twoColumns ? pad * 2 + width : pad;
+- (CGFloat)heightOfLabel:(UILabel *)label width:(CGFloat)width {
+  if (label.hidden || [label.text length] == 0) return 0;
+  return ceilf([label sizeThatFits:CGSizeMake(width, 9999)].height);
+}
 
-  CGFloat y = 8;
-  _title.frame = CGRectMake(leftX, y, width, 34);
-  y += 40;
-  CGFloat identityHeight = [_identity sizeThatFits:CGSizeMake(width, 9999)].height;
-  _identity.frame = CGRectMake(leftX, y, width, identityHeight);
-  y += identityHeight + 12;
-  if (!_confirmCode.hidden) {
-    CGFloat captionHeight = [_confirmCaption sizeThatFits:CGSizeMake(width, 9999)].height;
-    _confirmCaption.frame = CGRectMake(leftX, y, width, captionHeight);
+// Stacks the visible summary pieces in a column of the given width and returns its height.
+// A positive maxHeight shrinks the QR so the column fits beside the table.
+- (CGFloat)layoutSummaryForWidth:(CGFloat)width maxHeight:(CGFloat)maxHeight {
+  CGFloat inner = width - kSummaryPad * 2;
+  CGFloat x = kSummaryPad;
+  CGFloat y = 12;
+
+  if (!_codeLabel.hidden) {
+    CGFloat captionHeight = [self heightOfLabel:_codeCaption width:inner];
+    _codeCaption.frame = CGRectMake(x, y, inner, captionHeight);
     y += captionHeight + 4;
-    _confirmCode.frame = CGRectMake(leftX, y, width, 64);
-    y += 64 + 12;
+    _codeLabel.frame = CGRectMake(x, y, inner, 64);
+    y += 64 + 8;
   }
+
+  CGFloat identityHeight = [self heightOfLabel:_identity width:inner];
+  _identity.frame = CGRectMake(x, y, inner, identityHeight);
+  y += identityHeight > 0 ? identityHeight + 10 : 0;
 
   // The spinner sits right beside the status text, the pair centred together.
-  BOOL spinning = [_spinner isAnimating];
-  CGFloat spinnerSpace = spinning ? 28 : 0;
-  CGSize statusFit = [_status sizeThatFits:CGSizeMake(width - spinnerSpace, 9999)];
-  CGFloat statusWidth = MIN(width - spinnerSpace, ceil(statusFit.width));
-  CGFloat statusHeight = MAX(24, ceil(statusFit.height));
-  CGFloat groupX = leftX + floor((width - statusWidth - spinnerSpace) / 2);
-  _status.frame = CGRectMake(groupX + spinnerSpace, y, statusWidth, statusHeight);
-  _spinner.center = CGPointMake(groupX + 10, y + statusHeight / 2);
-  y += statusHeight + 6;
-
-  if (!_hint.hidden) {
-    CGFloat hintHeight = [_hint sizeThatFits:CGSizeMake(width, 9999)].height;
-    _hint.frame = CGRectMake(leftX, y, width, hintHeight);
-    y += hintHeight + 12;
+  CGFloat spinnerSpace = [_spinner isAnimating] ? 28 : 0;
+  if ([_status.text length] > 0) {
+    CGSize fit = [_status sizeThatFits:CGSizeMake(inner - spinnerSpace, 9999)];
+    CGFloat statusWidth = MIN(inner - spinnerSpace, ceilf(fit.width));
+    CGFloat statusHeight = MAX(24, ceilf(fit.height));
+    CGFloat groupX = x + floorf((inner - statusWidth - spinnerSpace) / 2);
+    _status.frame = CGRectMake(groupX + spinnerSpace, y, statusWidth, statusHeight);
+    _spinner.center = CGPointMake(groupX + 10, y + statusHeight / 2);
+    y += statusHeight + 6;
+  } else {
+    _status.frame = CGRectZero;
   }
 
-  if (!_persistTitle.hidden) {
-    CGFloat titleHeight = [_persistTitle sizeThatFits:CGSizeMake(width, 9999)].height;
-    _persistTitle.frame = CGRectMake(leftX, y, width, titleHeight);
-    y += titleHeight + 8;
-    CGFloat bodyHeight = [_persistBody sizeThatFits:CGSizeMake(width, 9999)].height;
-    _persistBody.frame = CGRectMake(leftX, y, width, bodyHeight);
-    y += bodyHeight + 14;
-    _retryButton.frame = CGRectMake(leftX, y, width, 48);
-    y += 58;
-  }
+  CGFloat hintHeight = [self heightOfLabel:_hint width:inner];
+  _hint.frame = CGRectMake(x, y, inner, hintHeight);
+  y += hintHeight > 0 ? hintHeight + 10 : 0;
 
   if (!_qr.hidden) {
-    CGFloat side = MIN(width * 0.62, 300);
-    if (side < 240) side = MIN(width, 240);
-    if (twoColumns) side = MIN(side, MAX(200, size.height - y - 120));
-    _qr.frame = CGRectMake(leftX + floor((width - side) / 2), y, side, side);
-    _qrPlaceholder.frame = CGRectMake(8, side / 2 - 20, side - 16, 40);
+    CGFloat captionHeight = [self heightOfLabel:_qrCaption width:inner];
+    CGFloat side = MIN(kQrSide, inner);
+    if (maxHeight > 0) side = MAX(kQrSideMin, MIN(side, maxHeight - y - captionHeight - 20));
+    _qr.frame = CGRectMake(x + floorf((inner - side) / 2), y, side, side);
+    _qrPlaceholder.frame = CGRectInset(_qr.frame, 8, 8);
     y += side + 8;
-    CGFloat captionHeight = [_qrCaption sizeThatFits:CGSizeMake(width, 9999)].height;
-    _qrCaption.frame = CGRectMake(leftX, y, width, captionHeight);
-    y += captionHeight + 14;
+    _qrCaption.frame = CGRectMake(x, y, inner, captionHeight);
+    y += captionHeight;
   }
+  return y + 12;
+}
 
-  if (!_card.hidden) {
-    CGFloat inner = width - 32;
-    CGFloat cy = 16;
-    CGFloat titleHeight = [_cardTitle sizeThatFits:CGSizeMake(inner, 9999)].height;
-    _cardTitle.frame = CGRectMake(16, cy, inner, titleHeight);
-    cy += titleHeight + 14;
-    _cardAddressLabel.frame = CGRectMake(16, cy, inner, 18);
-    cy += 20;
-    _cardAddress.frame = CGRectMake(16, cy, inner, 30);
-    cy += 38;
-    _cardCodeLabel.frame = CGRectMake(16, cy, inner, 18);
-    cy += 20;
-    _cardCode.frame = CGRectMake(16, cy, inner, 50);
-    cy += 56;
-    _cardCountdown.frame = CGRectMake(16, cy, inner, 22);
-    cy += 28;
-    CGFloat instructionsHeight =
-        [_cardInstructions sizeThatFits:CGSizeMake(inner, 9999)].height;
-    _cardInstructions.frame = CGRectMake(16, cy, inner, instructionsHeight);
-    cy += instructionsHeight + 16;
-    _card.frame = CGRectMake(leftX, y, width, cy);
-    y += cy + 16;
-  }
+- (void)layoutSubviews {
+  [super layoutSubviews];
+  CGRect bounds = self.bounds;
+  CGFloat top = [_nav layoutInBounds:bounds];
+  CGFloat height = bounds.size.height - top;
+  // Landscape on a tablet has room for two columns: what this device is and its status on
+  // the left, the form on the right. Everywhere else one centred column scrolls as a whole.
+  BOOL twoColumns = bounds.size.width > bounds.size.height && bounds.size.width >= 900;
 
-  CGFloat leftBottom = y;
-  if (twoColumns) y = 8;
-
-  if (!_joinTitle.hidden) {
-    _joinTitle.frame = CGRectMake(rightX, y, width, 24);
-    y += 30;
-    _hostLabel.frame = CGRectMake(rightX, y, width, 18);
-    y += 20;
-    _hostField.frame = CGRectMake(rightX, y, width, 40);
-    y += 48;
-    _codeLabel.frame = CGRectMake(rightX, y, width, 18);
-    y += 20;
-    _codeDisplay.hidden = YES;
-    CGFloat keypadWidth = MIN(width, 330);
-    CGFloat keypadHeight = [DBNumericKeypad heightForWidth:keypadWidth];
-    _keypad.frame = CGRectMake(rightX + floor((width - keypadWidth) / 2), y, keypadWidth,
-                               keypadHeight);
-    y += keypadHeight + 12;
-  }
-
-  CGFloat errorHeight = [_errorLabel.text length] > 0
-      ? [_errorLabel sizeThatFits:CGSizeMake(width, 9999)].height : 0;
-  _errorLabel.frame = CGRectMake(rightX, y, width, errorHeight);
-  y += errorHeight > 0 ? errorHeight + 4 : 0;
-  CGFloat detailHeight = [_errorDetail.text length] > 0 ? 16 : 0;
-  _errorDetail.frame = CGRectMake(rightX, y, width, detailHeight);
-  y += detailHeight > 0 ? detailHeight + 10 : 0;
-
-  if (!_createButton.hidden) {
-    _createButton.frame = CGRectMake(rightX, y, width, 44);
-    y += 50;
-    if (!_createConfirm.hidden) {
-      CGFloat confirmHeight = [_createConfirm sizeThatFits:CGSizeMake(width, 9999)].height;
-      _createConfirm.frame = CGRectMake(rightX, y, width, confirmHeight);
-      y += confirmHeight + 10;
+  if (twoColumns) {
+    CGFloat column = MIN(kColumnMax, floorf(bounds.size.width / 2));
+    CGFloat left = floorf((bounds.size.width - column * 2) / 2);
+    if (_summaryInTable) {
+      _table.tableHeaderView = nil;
+      _summaryInTable = NO;
+    }
+    if (_summary.superview != self) [self insertSubview:_summary belowSubview:_nav.bar];
+    CGFloat summaryHeight = [self layoutSummaryForWidth:column maxHeight:height];
+    _summary.frame = CGRectMake(left, top, column, MIN(summaryHeight, height));
+    _table.frame = CGRectMake(left + column, top, column, height);
+    _summaryHeight = 0;
+    _summaryWidth = 0;
+  } else {
+    CGFloat column = MIN(kColumnMax, bounds.size.width);
+    _table.frame = CGRectMake(floorf((bounds.size.width - column) / 2), top, column, height);
+    CGFloat summaryHeight = [self layoutSummaryForWidth:column maxHeight:0];
+    // Handing the header back is how a table learns that its height changed.
+    if (!_summaryInTable || summaryHeight != _summaryHeight || column != _summaryWidth) {
+      _summary.frame = CGRectMake(0, 0, column, summaryHeight);
+      _table.tableHeaderView = _summary;
+      _summaryInTable = YES;
+      _summaryHeight = summaryHeight;
+      _summaryWidth = column;
     }
   }
-
-  if (!_laterButton.hidden) {
-    _laterButton.frame = CGRectMake(rightX, y, width, 40);
-    y += 52;
-  }
-
-  _scroll.contentSize = CGSizeMake(size.width, MAX(y, leftBottom) + 20);
 }
 
 @end

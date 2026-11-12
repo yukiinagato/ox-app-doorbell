@@ -5,6 +5,7 @@
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBSemanticStyle.h"
+#import "../Screens/DBChrome.h"
 #import "../Core/DBTexts.h"
 #import "../Media/DBH264Player.h"
 #import "../Media/DBLowLatencyH264Player.h"
@@ -202,8 +203,9 @@ static NSDictionary *DBUIManifest(NSString *role) {
       @"call.end" : DBUIElement(YES, @[
         @"font_scale", @"foreground", @"background", @"border", @"radius"
       ]),
+      // Quick replies are stock table rows now; a row has no border or radius to restyle.
       @"reply.button" : DBUIElement(NO, @[
-        @"font_scale", @"foreground", @"background", @"border", @"radius"
+        @"font_scale", @"foreground", @"background"
       ]),
       @"monitor.close" : DBUIElement(YES, @[
         @"font_scale", @"foreground", @"background", @"border", @"radius"
@@ -307,31 +309,34 @@ static BOOL DBNativeKioskHealthy(void) {
 }
 @end
 
-@interface DBBootstrapSetupController : UIViewController <UITextFieldDelegate>
+// First-run setup: a navigation bar over one grouped form (name, role, and the door for a door
+// station). It is the window's root controller, never a presented one.
+@interface DBBootstrapSetupController : UIViewController <UITextFieldDelegate,
+                                                          UITableViewDataSource,
+                                                          UITableViewDelegate>
 @property(nonatomic, copy) BOOL (^onSave)(NSString *name, NSString *role, NSString *door);
 - (id)initWithBoot:(DBBootConfig *)boot;
 @end
 
+enum {
+  DBSetupSectionName = 0,
+  DBSetupSectionRole,
+  DBSetupSectionDoor,    // Present only for a door station.
+  DBSetupSectionFinish,
+};
+
 @implementation DBBootstrapSetupController {
   DBBootConfig *_boot;
   DBTexts *_texts;
-  UIScrollView *_scroll;
-  UIView *_form;
-  UILabel *_title;
-  UILabel *_message;
-  UILabel *_roleLabel;
-  UIButton *_saveButton;
-  UIButton *_doorRole;
-  UIButton *_indoorRole;
+  DBNavBar *_nav;
+  UITableView *_table;
   NSInteger _selectedRole;
   BOOL _automaticName;
   BOOL _automaticDoor;
   NSString *_nameIdentifier;
-  UILabel *_nameLabel;
   UITextField *_name;
   UITextField *_door;
-  UILabel *_doorLabel;
-  UILabel *_doorHint;
+  CGFloat _keyboardInset;
 }
 
 - (id)initWithBoot:(DBBootConfig *)boot {
@@ -363,65 +368,38 @@ static BOOL DBNativeKioskHealthy(void) {
   return self;
 }
 
-- (UILabel *)label:(NSString *)text size:(CGFloat)size {
-  UILabel *label = [[UILabel alloc] init];
-  label.text = text;
-  label.textColor = [UIColor colorWithWhite:0.12 alpha:1];
-  label.backgroundColor = [UIColor clearColor];
-  label.font = [UIFont systemFontOfSize:size];
-  label.numberOfLines = 0;
-  return label;
+- (UITextField *)textField:(NSString *)text identifier:(NSString *)identifier
+                    action:(SEL)action {
+  UITextField *field = [[UITextField alloc] init];
+  field.text = text;
+  field.font = [UIFont systemFontOfSize:20];
+  field.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+  field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+  field.autocorrectionType = UITextAutocorrectionTypeNo;
+  field.clearButtonMode = UITextFieldViewModeWhileEditing;
+  field.returnKeyType = UIReturnKeyDone;
+  field.delegate = self;
+  field.accessibilityIdentifier = identifier;
+  field.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  [field addTarget:self action:action forControlEvents:UIControlEventEditingChanged];
+  return field;
 }
 
 - (void)loadView {
   self.view = [[UIView alloc] initWithFrame:[UIScreen mainScreen].bounds];
-  self.view.backgroundColor = [UIColor colorWithWhite:0.96 alpha:1];
-  _scroll = [[UIScrollView alloc] initWithFrame:self.view.bounds];
-  _scroll.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
-  _scroll.alwaysBounceVertical = YES;
-  [self.view addSubview:_scroll];
-  _form = [[UIView alloc] init];
-  [_scroll addSubview:_form];
-  _title = [self label:[_texts ts:@"setup.title"] size:32];
-  _title.font = [UIFont boldSystemFontOfSize:32];
-  [_form addSubview:_title];
-  _message = [self label:[_texts ts:@"setup.message"] size:20];
-  _message.textColor = [UIColor colorWithWhite:0.30 alpha:1];
-  [_form addSubview:_message];
-  _nameLabel = [self label:[_texts ts:@"setup.name"] size:22];
-  _nameLabel.font = [UIFont boldSystemFontOfSize:22];
-  [_form addSubview:_nameLabel];
-  _name = [self textField:_boot.name];
-  _name.accessibilityIdentifier = @"setup_name";
-  [_name addTarget:self action:@selector(nameEdited) forControlEvents:UIControlEventEditingChanged];
-  [_form addSubview:_name];
-  _roleLabel = [self label:[_texts ts:@"setup.role"] size:22];
-  _roleLabel.font = [UIFont boldSystemFontOfSize:22];
-  [_form addSubview:_roleLabel];
+  self.view.backgroundColor = DBChromeScreenBackground();
+  DBChromeInstallBackdrop(self.view);
+  _table = DBChromeGroupedTable(self, self);
+  DBChromeClearTableBackground(_table);
+  _table.rowHeight = 52;
+  [self.view addSubview:_table];
+  _nav = [[DBNavBar alloc] init];
+  [_nav setRootTitle:[_texts ts:@"setup.title"] backTitle:nil onBack:nil];
+  [self.view addSubview:_nav.bar];
+  _name = [self textField:_boot.name identifier:@"setup_name" action:@selector(nameEdited)];
+  _door = [self textField:_boot.suggestedDoor identifier:@"setup_door"
+                   action:@selector(doorEdited)];
   _selectedRole = [_boot.role isEqualToString:@"indoor_panel"] ? 1 : 0;
-  _doorRole = [self roleButton:[_texts ts:@"admin.role_door"] index:0];
-  _indoorRole = [self roleButton:[_texts ts:@"admin.role_indoor"] index:1];
-  _doorLabel = [self label:[_texts ts:@"setup.door"] size:22];
-  _doorLabel.font = [UIFont boldSystemFontOfSize:22];
-  [_form addSubview:_doorLabel];
-  _door = [self textField:_boot.suggestedDoor];
-  _door.accessibilityIdentifier = @"setup_door";
-  [_door addTarget:self action:@selector(doorEdited) forControlEvents:UIControlEventEditingChanged];
-  [_form addSubview:_door];
-  _doorHint = [self label:[_texts ts:@"setup.door_hint"] size:18];
-  _doorHint.textColor = [UIColor colorWithWhite:0.30 alpha:1];
-  [_form addSubview:_doorHint];
-  _saveButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  [_saveButton setTitle:[_texts ts:@"setup.finish"] forState:UIControlStateNormal];
-  [_saveButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  _saveButton.titleLabel.font = [UIFont boldSystemFontOfSize:22];
-  _saveButton.titleLabel.numberOfLines = 0;
-  _saveButton.titleLabel.textAlignment = NSTextAlignmentCenter;
-  _saveButton.backgroundColor = [UIColor colorWithRed:0.05 green:0.30 blue:0.65 alpha:1];
-  _saveButton.layer.cornerRadius = 8;
-  [_saveButton addTarget:self action:@selector(save) forControlEvents:UIControlEventTouchUpInside];
-  _saveButton.accessibilityIdentifier = @"setup_save";
-  [_form addSubview:_saveButton];
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
       name:UIKeyboardWillChangeFrameNotification object:nil];
   [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
@@ -429,42 +407,20 @@ static BOOL DBNativeKioskHealthy(void) {
   [self roleChanged];
 }
 
-- (CGFloat)layoutLabel:(UILabel *)label y:(CGFloat)y width:(CGFloat)width {
-  CGFloat height = ceil([label sizeThatFits:CGSizeMake(width, CGFLOAT_MAX)].height);
-  label.frame = CGRectMake(0, y, width, height);
-  return y + height;
-}
-
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
-  CGFloat width = MIN(640.0, CGRectGetWidth(self.view.bounds) - 48.0);
-  CGFloat y = 0;
-  y = [self layoutLabel:_title y:y width:width] + 18;
-  y = [self layoutLabel:_message y:y width:width] + 28;
-  y = [self layoutLabel:_nameLabel y:y width:width] + 12;
-  _name.frame = CGRectMake(0, y, width, 60); y += 88;
-  y = [self layoutLabel:_roleLabel y:y width:width] + 12;
-  CGFloat roleWidth = (width - 12) / 2;
-  CGFloat roleHeight = MAX(60.0, MAX([_doorRole.titleLabel sizeThatFits:
-      CGSizeMake(roleWidth - 24, CGFLOAT_MAX)].height, [_indoorRole.titleLabel sizeThatFits:
-      CGSizeMake(roleWidth - 24, CGFLOAT_MAX)].height) + 24);
-  _doorRole.frame = CGRectMake(0, y, roleWidth, roleHeight);
-  _indoorRole.frame = CGRectMake(roleWidth + 12, y, roleWidth, roleHeight);
-  y += roleHeight + 28;
-  if (!_door.hidden) {
-    y = [self layoutLabel:_doorLabel y:y width:width] + 12;
-    _door.frame = CGRectMake(0, y, width, 60); y += 72;
-    y = [self layoutLabel:_doorHint y:y width:width] + 32;
-  }
-  CGFloat buttonHeight = MAX(60.0, [_saveButton.titleLabel sizeThatFits:
-      CGSizeMake(width - 32, CGFLOAT_MAX)].height + 24);
-  _saveButton.frame = CGRectMake(0, y, width, buttonHeight); y += buttonHeight;
-  CGFloat top = MAX(32.0, (CGRectGetHeight(self.view.bounds) - y) / 2.0);
-  _form.frame = CGRectMake((CGRectGetWidth(self.view.bounds) - width) / 2.0, top, width, y);
-  _scroll.contentSize = CGSizeMake(CGRectGetWidth(self.view.bounds), top + y + 32);
+  CGRect bounds = self.view.bounds;
+  CGFloat top = [_nav layoutInBounds:bounds];
+  // A readable column, centred; the table paints the system ground across it.
+  CGFloat width = MIN(700.0f, bounds.size.width);
+  _table.frame = CGRectMake((CGFloat)floor((bounds.size.width - width) / 2), top, width,
+                            MAX(0, bounds.size.height - top));
+  _table.contentInset = UIEdgeInsetsMake(0, 0, _keyboardInset, 0);
+  _table.scrollIndicatorInsets = _table.contentInset;
 }
 
 - (BOOL)shouldAutorotateToInterfaceOrientation:(UIInterfaceOrientation)orientation {
+  (void)orientation;
   return YES;
 }
 
@@ -473,69 +429,25 @@ static BOOL DBNativeKioskHealthy(void) {
       [[notification.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue]
       fromView:nil];
   CGRect overlap = CGRectIntersection(self.view.bounds, keyboard);
-  CGFloat bottom = [notification.name isEqualToString:UIKeyboardWillHideNotification] ||
+  _keyboardInset = [notification.name isEqualToString:UIKeyboardWillHideNotification] ||
       CGRectIsNull(overlap) ? 0 : CGRectGetHeight(overlap);
-  _scroll.contentInset = UIEdgeInsetsMake(0, 0, bottom, 0);
-  _scroll.scrollIndicatorInsets = _scroll.contentInset;
+  [self.view setNeedsLayout];
+  [self.view layoutIfNeeded];
   UITextField *active = [_name isFirstResponder] ? _name : _door;
   if ([active isFirstResponder]) {
-    CGRect field = [_form convertRect:CGRectInset(active.frame, 0, -16) toView:_scroll];
-    [_scroll scrollRectToVisible:field animated:YES];
+    CGRect field = [_table convertRect:CGRectInset(active.bounds, 0, -16) fromView:active];
+    [_table scrollRectToVisible:field animated:NO];
   }
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField *)textField {
-  if (textField == _name && !_door.hidden) [_door becomeFirstResponder];
+  if (textField == _name && _selectedRole == 0) [_door becomeFirstResponder];
   else [self.view endEditing:YES];
   return YES;
 }
 
 - (void)dealloc {
   [[NSNotificationCenter defaultCenter] removeObserver:self];
-}
-
-- (UITextField *)textField:(NSString *)text {
-  UITextField *field = [[UITextField alloc] init];
-  field.text = text;
-  field.textColor = [UIColor colorWithWhite:0.12 alpha:1];
-  field.backgroundColor = [UIColor whiteColor];
-  field.font = [UIFont systemFontOfSize:24];
-  field.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
-  field.layer.cornerRadius = 8;
-  field.layer.borderWidth = 1;
-  field.layer.borderColor = [UIColor colorWithWhite:0.45 alpha:1].CGColor;
-  field.leftView = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 16, 1)];
-  field.leftViewMode = UITextFieldViewModeAlways;
-  field.autocapitalizationType = UITextAutocapitalizationTypeNone;
-  field.autocorrectionType = UITextAutocorrectionTypeNo;
-  field.returnKeyType = UIReturnKeyDone;
-  field.delegate = self;
-  UIToolbar *toolbar = [[UIToolbar alloc] init];
-  toolbar.items = @[
-      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
-          target:nil action:nil],
-      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone
-          target:self action:@selector(dismissKeyboard)]];
-  [toolbar sizeToFit];
-  field.inputAccessoryView = toolbar;
-  return field;
-}
-
-- (void)dismissKeyboard {
-  [self.view endEditing:YES];
-}
-
-- (UIButton *)roleButton:(NSString *)title index:(NSInteger)index {
-  UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
-  button.tag = index;
-  [button setTitle:title forState:UIControlStateNormal];
-  button.titleLabel.font = [UIFont boldSystemFontOfSize:22];
-  button.titleLabel.numberOfLines = 0;
-  button.titleLabel.textAlignment = NSTextAlignmentCenter;
-  button.layer.cornerRadius = 8;
-  [button addTarget:self action:@selector(selectRole:) forControlEvents:UIControlEventTouchUpInside];
-  [_form addSubview:button];
-  return button;
 }
 
 - (void)doorEdited {
@@ -546,24 +458,7 @@ static BOOL DBNativeKioskHealthy(void) {
   _automaticName = NO;
 }
 
-- (void)selectRole:(UIButton *)button {
-  _selectedRole = button.tag;
-  [self roleChanged];
-}
-
 - (void)roleChanged {
-  UIColor *blue = [UIColor colorWithRed:0.05 green:0.30 blue:0.65 alpha:1];
-  for (UIButton *button in @[_doorRole, _indoorRole]) {
-    BOOL selected = button.tag == _selectedRole;
-    button.selected = selected;
-    button.backgroundColor = selected ? blue : [UIColor whiteColor];
-    [button setTitleColor:selected ? [UIColor whiteColor] : blue forState:UIControlStateNormal];
-    [button setTitleColor:[UIColor whiteColor] forState:UIControlStateSelected];
-    button.layer.borderColor = blue.CGColor;
-    button.layer.borderWidth = selected ? 3 : 1;
-    button.accessibilityTraits = UIAccessibilityTraitButton |
-        (selected ? UIAccessibilityTraitSelected : 0);
-  }
   BOOL isDoor = _selectedRole == 0;
   if (_automaticDoor) _door.text = [DBBootConfig suggestedDeviceNameForRole:
       @"door_station" identifier:_nameIdentifier];
@@ -572,10 +467,99 @@ static BOOL DBNativeKioskHealthy(void) {
   _name.returnKeyType = isDoor ? UIReturnKeyNext : UIReturnKeyDone;
   if ([_name isFirstResponder]) [_name reloadInputViews];
   if (!isDoor) [_door resignFirstResponder];
-  _door.hidden = !isDoor;
-  _doorLabel.hidden = !isDoor;
-  _doorHint.hidden = !isDoor;
-  [self.view setNeedsLayout];
+  [_table reloadData];
+}
+
+#pragma mark - form table
+
+// The door section exists only for a door station, so the visible sections map onto the enum.
+- (NSInteger)sectionKindAt:(NSInteger)section {
+  if (_selectedRole != 0 && section >= DBSetupSectionDoor) return section + 1;
+  return section;
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+  (void)tableView;
+  return _selectedRole == 0 ? 4 : 3;
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+  (void)tableView;
+  return [self sectionKindAt:section] == DBSetupSectionRole ? 2 : 1;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+  (void)tableView;
+  switch ([self sectionKindAt:section]) {
+    case DBSetupSectionName: return [_texts ts:@"setup.name"];
+    case DBSetupSectionRole: return [_texts ts:@"setup.role"];
+    case DBSetupSectionDoor: return [_texts ts:@"setup.door"];
+    default: return nil;
+  }
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+  (void)tableView;
+  switch ([self sectionKindAt:section]) {
+    case DBSetupSectionName: return [_texts ts:@"setup.message"];
+    case DBSetupSectionDoor: return [_texts ts:@"setup.door_hint"];
+    default: return nil;
+  }
+}
+
+- (UITableViewCell *)fieldCell:(UITextField *)field table:(UITableView *)tableView {
+  UITableViewCell *cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                                 reuseIdentifier:nil];
+  (void)tableView;
+  cell.selectionStyle = UITableViewCellSelectionStyleNone;
+  [field removeFromSuperview];
+  field.frame = CGRectInset(cell.contentView.bounds, 12, 0);
+  [cell.contentView addSubview:field];
+  return cell;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView
+         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+  NSInteger kind = [self sectionKindAt:indexPath.section];
+  if (kind == DBSetupSectionName) return [self fieldCell:_name table:tableView];
+  if (kind == DBSetupSectionDoor) return [self fieldCell:_door table:tableView];
+  static NSString *identifier = @"setup";
+  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+  if (cell == nil) {
+    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                  reuseIdentifier:identifier];
+    cell.textLabel.adjustsFontSizeToFitWidth = YES;
+  }
+  if (kind == DBSetupSectionRole) {
+    BOOL selected = indexPath.row == _selectedRole;
+    cell.textLabel.text = [_texts ts:indexPath.row == 0 ? @"admin.role_door"
+                                                        : @"admin.role_indoor"];
+    cell.textLabel.textAlignment = NSTextAlignmentLeft;
+    cell.accessoryType = selected ? UITableViewCellAccessoryCheckmark
+                                  : UITableViewCellAccessoryNone;
+    cell.accessibilityIdentifier = nil;
+    cell.accessibilityTraits = UIAccessibilityTraitButton |
+        (selected ? UIAccessibilityTraitSelected : 0);
+  } else {
+    cell.textLabel.text = [_texts ts:@"setup.finish"];
+    cell.textLabel.textAlignment = NSTextAlignmentCenter;
+    cell.accessoryType = UITableViewCellAccessoryNone;
+    cell.accessibilityIdentifier = @"setup_save";
+    cell.accessibilityTraits = UIAccessibilityTraitButton;
+  }
+  return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+  [tableView deselectRowAtIndexPath:indexPath animated:NO];
+  NSInteger kind = [self sectionKindAt:indexPath.section];
+  if (kind == DBSetupSectionRole) {
+    if (_selectedRole == indexPath.row) return;
+    _selectedRole = indexPath.row;
+    [self roleChanged];
+  } else if (kind == DBSetupSectionFinish) {
+    [self save];
+  }
 }
 
 - (void)save {

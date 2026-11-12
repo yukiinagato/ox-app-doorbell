@@ -17,21 +17,118 @@
 #import "../Core/DBPurposeModel.h"
 #import "../Core/DBUiTheme.h"
 #import "../Support/DBAppDelegate.h"
+#import "DBChrome.h"
 #import "DBNoticeDialog.h"
 #import "DBRouter.h"
 #import "DBWidgets.h"
 
 void DBH264Dbg(NSString *fmt, ...);
 
-// The debug line is remembered per device (spec §5.2).
+// The debug line is remembered per device.
 static NSString *const kDebugLineHiddenKey = @"DBIncomingDebugLineHidden";
 
+static const CGFloat kListRowHeight = 50;
+static const CGFloat kListWidth = 380;
+static const NSUInteger kListMaxVisibleRows = 8;
+static const CGFloat kPrimaryRowHeight = 64;
+static const CGFloat kAnswerColumnHeight = 72;
+static const CGFloat kReplyColumnHeight = 52;
+static const CGFloat kSecondaryHeight = 44;
+static const CGFloat kAdminQrSide = 84;
+
+typedef enum {
+  DBIncomingListNone = 0,
+  DBIncomingListReplies,
+  DBIncomingListAdminAddresses,
+} DBIncomingListKind;
 
 static BOOL DBSameString(NSString *a, NSString *b) {
   return (a == b) || [a isEqualToString:b];
 }
 
-@interface DBIncomingScreen ()
+// Popover content on the iPad idiom: a plain table of one-tap choices.
+@interface DBIncomingListController : UIViewController <UITableViewDataSource,
+                                                        UITableViewDelegate>
+@property(nonatomic, copy) NSArray *titles;
+@property(nonatomic, copy) NSString *headerTitle;
+// The row carrying a checkmark, or -1.
+@property(nonatomic, assign) NSInteger checkedIndex;
+// An administrator's semantic override for the rows, or nil for the stock look.
+@property(nonatomic, strong) NSDictionary *style;
+@property(nonatomic, copy) void (^onSelect)(NSInteger index);
+@end
+
+@implementation DBIncomingListController
+
+- (void)loadView {
+  UITableView *table = [[UITableView alloc] initWithFrame:CGRectMake(0, 0, kListWidth, 300)
+                                                    style:UITableViewStylePlain];
+  table.dataSource = self;
+  table.delegate = self;
+  table.rowHeight = kListRowHeight;
+  self.view = table;
+}
+
+- (void)dealloc {
+  if ([self isViewLoaded]) {
+    UITableView *table = (UITableView *)self.view;
+    table.dataSource = nil;
+    table.delegate = nil;
+  }
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+  (void)tableView;
+  (void)section;
+  return (NSInteger)[_titles count];
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+  (void)tableView;
+  (void)section;
+  return [_headerTitle length] > 0 ? _headerTitle : nil;
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView
+         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"choice"];
+  if (!cell) {
+    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                  reuseIdentifier:@"choice"];
+    cell.textLabel.numberOfLines = 2;
+    cell.textLabel.adjustsFontSizeToFitWidth = YES;
+  }
+  cell.textLabel.text = [_titles objectAtIndex:(NSUInteger)indexPath.row];
+  cell.accessoryType = indexPath.row == _checkedIndex ? UITableViewCellAccessoryCheckmark
+                                                      : UITableViewCellAccessoryNone;
+  return cell;
+}
+
+- (void)tableView:(UITableView *)tableView willDisplayCell:(UITableViewCell *)cell
+    forRowAtIndexPath:(NSIndexPath *)indexPath {
+  (void)tableView;
+  (void)indexPath;
+  if (!_style) return;
+  UIColor *background = [DBSemanticStyle colorInStyle:_style key:@"background" fallback:nil];
+  UIColor *foreground = [DBSemanticStyle colorInStyle:_style key:@"foreground" fallback:nil];
+  CGFloat fontScale = [DBSemanticStyle numberInStyle:_style key:@"font_scale" fallback:0
+                                             minimum:0.75 maximum:2];
+  if (background) cell.backgroundColor = background;
+  if (foreground) cell.textLabel.textColor = foreground;
+  if (fontScale > 0) cell.textLabel.font = [UIFont boldSystemFontOfSize:17 * fontScale];
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+  [tableView deselectRowAtIndexPath:indexPath animated:NO];
+  // The handler may let go of this controller; the local keeps the block alive until it returns.
+  void (^handler)(NSInteger) = _onSelect;
+  if (handler) handler(indexPath.row);
+}
+
+@end
+
+@interface DBIncomingScreen () <UIActionSheetDelegate, UIAlertViewDelegate,
+                                UIScrollViewDelegate>
 - (void)startVideoStatsTimer;
 - (void)updateVideoStats:(NSTimer *)timer;
 - (void)publishVideoRuntime:(DBVideoStats)stats force:(BOOL)force;
@@ -39,7 +136,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 - (void)pollVideoOrientation:(NSTimer *)timer;
 - (void)updateAdminAddressesFromPeer:(NSDictionary *)peer;
 - (void)updateAdminQr;
-- (void)layoutQrPicker:(CGSize)size;
 - (NSArray *)videoStrategiesFromProfile:(NSDictionary *)profile legacy:(NSString *)legacy;
 - (void)advanceVideoStrategy:(NSString *)reason;
 - (void)retryCurrentH264:(NSString *)reason;
@@ -52,6 +148,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
                                 safety:(BOOL)safety;
 - (void)applySemanticStyles;
 - (void)reportLifecycleEndedIfNeeded;
+- (void)dismissChoiceList;
+- (void)resetVideoZoom;
+- (void)rebuildReplies;
+- (void)sendReplyAtIndex:(NSInteger)index;
+- (void)chooseAdminAddressAtIndex:(NSInteger)index;
 @end
 
 @implementation DBIncomingScreen {
@@ -133,6 +234,16 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   NSInteger _adminQrGen;
 
   // UI
+  DBNavBar *_navBar;
+  UIBarButtonItem *_noticeItem;
+  // The zoomable video slot: the scroll view fills the slot, its one zooming subview is the
+  // letterboxed picture rect, and the live view (the MJPEG/snapshot image and the container the
+  // H.264 players attach to) fills that. The sensor rotation stays a transform on the live view,
+  // so it never collides with the zoom transform the scroll view puts on its parent.
+  UIScrollView *_videoScroll;
+  UIView *_zoomContent;
+  CGSize _zoomSlotSize;
+  CGSize _zoomPictureSize;
   UIImageView *_liveView;
   UILabel *_noVideoLabel;
   UILabel *_videoStatsLabel;
@@ -141,39 +252,42 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   UILabel *_langBadge;
   UILabel *_statusLabel;
   UILabel *_hintLabel;
-  UIView *_replyStack;
-  NSMutableArray *_replyButtons;
+  UILabel *_noticeLabel;
   UIButton *_answerButton;
   UIButton *_monitorButton;
   UIButton *_openButton;
   UIButton *_ignoreButton;
   DBCallReturnCountdown *_returnCountdown;
   NSTimer *_returnTimer;
-  UILabel *_countdownLabel;
   UIButton *_countdownButton;
   UIButton *_micButton;
   UIButton *_repliesButton;
-  DBNoticeChip *_noticeChip;
   DBNoticeDialog *_noticeDialog;
   DBUiPalette *_palette;
   NSDictionary *_display;   // status.display: core-resolved appearance and theme.
   NSDictionary *_doorUnlock;  // status.doors.<id>.unlock
   BOOL _monitorAudioOn;
   BOOL _micMuted;
-  BOOL _repliesVisible;
   BOOL _debugLineHidden;
   BOOL _unlockConfigured;
   BOOL _unlockVisible;
+  // YES while an administrator's ring.title override colours the headline instead of region ink.
+  BOOL _titleStyled;
   UIButton *_debugLineTap;
   UIButton *_adminQrButton;
   UILabel *_adminUrlLabel;
-  UIView *_qrPickerOverlay;
-  UIButton *_qrPickerBackdrop;
-  UIView *_qrPickerPanel;
-  UILabel *_qrPickerTitle;
-  UIScrollView *_qrPickerList;
-  UIButton *_qrPickerCancel;
-  NSMutableArray *_qrPickerButtons;
+
+  // Quick replies offered for the call on screen, in configuration order.
+  NSArray *_replyIds;
+  NSArray *_replyTitles;
+  NSDictionary *_replyStyle;  // reply.button override, or nil.
+  // The choice list on screen: a popover on the iPad idiom, an action sheet elsewhere. A
+  // dismissed popover stays referenced until the next one replaces it, because its content may
+  // still be running the selection handler that dismissed it.
+  DBIncomingListKind _listKind;
+  UIPopoverController *_listPopover;
+  __weak UIActionSheet *_listSheet;
+  CGSize _laidOutSize;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -199,9 +313,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     _videoPlayback = @"low_latency";
     _activeVideoTransport = @"NO STREAM";
     _directPort = 47190;
-    _replyButtons = [[NSMutableArray alloc] init];
+    _replyIds = @[];
+    _replyTitles = @[];
     _adminHosts = @[];
-    _qrPickerButtons = [[NSMutableArray alloc] init];
     _debugLineHidden = [[NSUserDefaults standardUserDefaults] boolForKey:kDebugLineHiddenKey];
     _returnCountdown = [[DBCallReturnCountdown alloc] init];
     [self buildUi];
@@ -215,26 +329,50 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 #pragma mark - UI
 
-- (UIButton *)makeButton:(BOOL)primary {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-  b.titleLabel.font = [UIFont boldSystemFontOfSize:22];
-  b.titleLabel.adjustsFontSizeToFitWidth = YES;
-  b.titleLabel.minimumFontSize = 13;
-  [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  b.backgroundColor = primary ? [UIColor colorWithRed:0.094 green:0.478 blue:0.235 alpha:1]
-                              : [UIColor colorWithWhite:1 alpha:0.12];
-  b.layer.cornerRadius = 12;
-  [b setBackgroundImage:nil forState:UIControlStateNormal];
-  return b;
+- (UILabel *)detailLabelWithFont:(UIFont *)font lines:(NSInteger)lines {
+  UILabel *label = [[UILabel alloc] init];
+  label.font = font;
+  label.textColor = [UIColor colorWithWhite:1 alpha:0.7];
+  label.numberOfLines = lines;
+  [self addSubview:label];
+  return label;
+}
+
+- (UIButton *)actionButton:(SEL)action {
+  UIButton *button = DBChromeButton(nil, 18);
+  [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:button];
+  return button;
 }
 
 - (void)buildUi {
+  // The call screen keeps a near-black ground so the picture reads well; only the video, the
+  // debug line, the QR plate, and the labels on that ground are drawn by this screen.
   self.backgroundColor = [UIColor colorWithRed:0.04 green:0.05 blue:0.07 alpha:1];
+
+  _videoScroll = [[UIScrollView alloc] init];
+  _videoScroll.delegate = self;
+  _videoScroll.minimumZoomScale = 1;
+  _videoScroll.maximumZoomScale = 4;
+  _videoScroll.bouncesZoom = YES;
+  _videoScroll.showsHorizontalScrollIndicator = NO;
+  _videoScroll.showsVerticalScrollIndicator = NO;
+  _videoScroll.scrollsToTop = NO;
+  // The whole slot is the video area, so a letterboxed picture has no stray bands beside it.
+  _videoScroll.backgroundColor = [UIColor blackColor];
+  [self addSubview:_videoScroll];
+  UITapGestureRecognizer *doubleTap =
+      [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(onVideoDoubleTap:)];
+  doubleTap.numberOfTapsRequired = 2;
+  [_videoScroll addGestureRecognizer:doubleTap];
+
+  _zoomContent = [[UIView alloc] init];
+  [_videoScroll addSubview:_zoomContent];
 
   _liveView = [[UIImageView alloc] init];
   _liveView.contentMode = UIViewContentModeScaleAspectFit;
   _liveView.backgroundColor = [UIColor blackColor];
-  [self addSubview:_liveView];
+  [_zoomContent addSubview:_liveView];
 
   _noVideoLabel = [[UILabel alloc] init];
   _noVideoLabel.font = [UIFont systemFontOfSize:22];
@@ -246,7 +384,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _videoStatsLabel.font = [UIFont fontWithName:@"Menlo-Bold" size:15];
   if (!_videoStatsLabel.font) _videoStatsLabel.font = [UIFont boldSystemFontOfSize:15];
   _videoStatsLabel.textColor = [UIColor colorWithRed:0.55 green:1.0 blue:0.65 alpha:1];
-  _videoStatsLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.72];
   _videoStatsLabel.layer.cornerRadius = 6;
   _videoStatsLabel.clipsToBounds = YES;
   _videoStatsLabel.adjustsFontSizeToFitWidth = YES;
@@ -255,112 +392,58 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _videoStatsLabel.accessibilityIdentifier = @"video_stream_stats";
   [self addSubview:_videoStatsLabel];
 
-  _titleLabel = [[UILabel alloc] init];
-  _titleLabel.font = [UIFont boldSystemFontOfSize:30];
-  _titleLabel.textColor = [UIColor whiteColor];
-  _titleLabel.numberOfLines = 0;
-  _titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
-  _titleLabel.adjustsFontSizeToFitWidth = YES;
-  _titleLabel.minimumFontSize = 15;
-  [self addSubview:_titleLabel];
-
-  _purposeBadge = [[UILabel alloc] init];
-  _purposeBadge.font = [UIFont boldSystemFontOfSize:20];
-  _purposeBadge.textColor = [UIColor blackColor];
-  _purposeBadge.backgroundColor = [UIColor colorWithRed:1.0 green:0.80 blue:0.25 alpha:1];
-  _purposeBadge.textAlignment = NSTextAlignmentCenter;
-  _purposeBadge.layer.cornerRadius = 8;
-  _purposeBadge.clipsToBounds = YES;
-  _purposeBadge.hidden = YES;
-  [self addSubview:_purposeBadge];
-
-  _langBadge = [[UILabel alloc] init];
-  _langBadge.font = [UIFont boldSystemFontOfSize:20];
-  _langBadge.textColor = [UIColor blackColor];
-  _langBadge.backgroundColor = [UIColor colorWithRed:0.45 green:0.75 blue:1.0 alpha:1];
-  _langBadge.textAlignment = NSTextAlignmentCenter;
-  _langBadge.layer.cornerRadius = 8;
-  _langBadge.clipsToBounds = YES;
-  _langBadge.hidden = YES;
-  [self addSubview:_langBadge];
-
-  _statusLabel = [[UILabel alloc] init];
-  _statusLabel.font = [UIFont systemFontOfSize:20];
-  _statusLabel.textColor = [UIColor colorWithWhite:1 alpha:0.7];
-  [self addSubview:_statusLabel];
-
-  _hintLabel = [[UILabel alloc] init];
-  _hintLabel.font = [UIFont systemFontOfSize:20];
-  _hintLabel.textColor = [UIColor colorWithRed:0.55 green:0.9 blue:0.55 alpha:1];
-  _hintLabel.numberOfLines = 0;
-  _hintLabel.hidden = YES;
-  [self addSubview:_hintLabel];
-
-  _replyStack = [[UIView alloc] init];
-  [self addSubview:_replyStack];
-
-  _visitPanel = [[UIScrollView alloc] init];
-  _visitPanel.hidden = YES;
-  [self addSubview:_visitPanel];
-  _answerButton = [self makeButton:YES];
-  [_answerButton addTarget:self action:@selector(onAnswer) forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_answerButton];
-
-  _monitorButton = [self makeButton:NO];
-  [_monitorButton addTarget:self action:@selector(onMonitor)
-           forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_monitorButton];
-
-  _openButton = [self makeButton:NO];
-  [_openButton addTarget:self action:@selector(onOpenDoor)
-        forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_openButton];
-  for (UIButton *button in @[_answerButton, _openButton])
-    [button addTarget:self action:@selector(captureVisit) forControlEvents:UIControlEventTouchDown];
-
-  _ignoreButton = [self makeButton:NO];
-  [_ignoreButton addTarget:self action:@selector(onIgnore)
-          forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_ignoreButton];
-
-  // One control row (spec §5.1): モニター ON/OFF · 応答/通話終了 · マイク · 開錠 ·
-  // クイック返信. Every entry shows its own state instead of a silent toggle.
-  _micButton = [self makeButton:NO];
-  [_micButton addTarget:self action:@selector(onMic)
-       forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_micButton];
-
-  _repliesButton = [self makeButton:NO];
-  [_repliesButton addTarget:self action:@selector(onToggleReplies)
-           forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_repliesButton];
-
-  // The countdown reads as a suffix of the title but is its own label, so the
-  // number itself is a comfortable tap target for cancelling it.
-  _countdownLabel = [[UILabel alloc] init];
-  _countdownLabel.backgroundColor = [UIColor clearColor];
-  _countdownLabel.font = [UIFont systemFontOfSize:26];
-  _countdownLabel.textAlignment = NSTextAlignmentLeft;
-  _countdownLabel.hidden = YES;
-  [self addSubview:_countdownLabel];
-  _countdownButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  _countdownButton.backgroundColor = [UIColor clearColor];
-  _countdownButton.hidden = YES;
-  [_countdownButton addTarget:self action:@selector(onCancelCountdown)
-            forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_countdownButton];
-
-  _noticeChip = [[DBNoticeChip alloc] initWithFrame:CGRectZero];
-  [_noticeChip addTarget:self action:@selector(onNoticeChip)
-        forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_noticeChip];
-
   // Tapping the debug line hides it; the choice is remembered per device.
   _debugLineTap = [UIButton buttonWithType:UIButtonTypeCustom];
   _debugLineTap.backgroundColor = [UIColor clearColor];
   [_debugLineTap addTarget:self action:@selector(onToggleDebugLine)
           forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_debugLineTap];
+
+  _titleLabel = [self detailLabelWithFont:[UIFont boldSystemFontOfSize:24] lines:2];
+  _titleLabel.textColor = [UIColor whiteColor];
+  _titleLabel.lineBreakMode = NSLineBreakByWordWrapping;
+
+  _purposeBadge = [self detailLabelWithFont:[UIFont boldSystemFontOfSize:17] lines:1];
+  _purposeBadge.adjustsFontSizeToFitWidth = YES;
+  _purposeBadge.minimumFontSize = 12;
+  _purposeBadge.hidden = YES;
+
+  _langBadge = [self detailLabelWithFont:[UIFont systemFontOfSize:17] lines:1];
+  _langBadge.adjustsFontSizeToFitWidth = YES;
+  _langBadge.minimumFontSize = 12;
+  _langBadge.hidden = YES;
+
+  _statusLabel = [self detailLabelWithFont:[UIFont systemFontOfSize:20] lines:1];
+  _statusLabel.adjustsFontSizeToFitWidth = YES;
+  _statusLabel.minimumFontSize = 12;
+
+  _hintLabel = [self detailLabelWithFont:[UIFont systemFontOfSize:17] lines:2];
+  _hintLabel.hidden = YES;
+
+  _noticeLabel = [self detailLabelWithFont:[UIFont systemFontOfSize:15] lines:2];
+  _noticeLabel.hidden = YES;
+
+  _visitPanel = [[UIScrollView alloc] init];
+  _visitPanel.hidden = YES;
+  [self addSubview:_visitPanel];
+
+  _answerButton = DBChromeFilledButton(24);
+  [_answerButton addTarget:self action:@selector(onAnswer)
+          forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_answerButton];
+
+  _repliesButton = [self actionButton:@selector(onReplies)];
+  _ignoreButton = [self actionButton:@selector(onIgnore)];
+  _monitorButton = [self actionButton:@selector(onMonitor)];
+  _openButton = [self actionButton:@selector(onOpenDoor)];
+  _micButton = [self actionButton:@selector(onMic)];
+  for (UIButton *button in @[_answerButton, _openButton])
+    [button addTarget:self action:@selector(captureVisit) forControlEvents:UIControlEventTouchDown];
+
+  // The remaining seconds are the button's title, so the number itself is the control that
+  // stops the countdown.
+  _countdownButton = [self actionButton:@selector(onCancelCountdown)];
+  _countdownButton.hidden = YES;
 
   _adminQrButton = [UIButton buttonWithType:UIButtonTypeCustom];
   // An opaque white plate with a radius and padding: a QR drawn straight onto
@@ -376,43 +459,17 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _adminQrButton.hidden = YES;
   [self addSubview:_adminQrButton];
 
-  _adminUrlLabel = [[UILabel alloc] init];
-  _adminUrlLabel.font = [UIFont systemFontOfSize:11];
-  _adminUrlLabel.textColor = [UIColor colorWithWhite:1 alpha:0.72];
-  _adminUrlLabel.textAlignment = NSTextAlignmentCenter;
-  _adminUrlLabel.numberOfLines = 0;
+  _adminUrlLabel = [self detailLabelWithFont:[UIFont systemFontOfSize:13] lines:0];
   _adminUrlLabel.lineBreakMode = NSLineBreakByCharWrapping;
   _adminUrlLabel.hidden = YES;
-  [self addSubview:_adminUrlLabel];
-
-  // A custom dialog avoids fragile iOS 5 modals and exposes every peer address.
-  _qrPickerOverlay = [[UIView alloc] init];
-  _qrPickerOverlay.hidden = YES;
-  _qrPickerBackdrop = [UIButton buttonWithType:UIButtonTypeCustom];
-  _qrPickerBackdrop.backgroundColor = [UIColor colorWithWhite:0 alpha:0.72];
-  [_qrPickerBackdrop addTarget:self action:@selector(onQrPickerCancel)
-              forControlEvents:UIControlEventTouchUpInside];
-  [_qrPickerOverlay addSubview:_qrPickerBackdrop];
-  _qrPickerPanel = [[UIView alloc] init];
-  _qrPickerPanel.backgroundColor = [UIColor colorWithRed:0.10 green:0.12 blue:0.16 alpha:1];
-  _qrPickerPanel.layer.cornerRadius = 14;
-  [_qrPickerOverlay addSubview:_qrPickerPanel];
-  _qrPickerTitle = [[UILabel alloc] init];
-  _qrPickerTitle.font = [UIFont boldSystemFontOfSize:22];
-  _qrPickerTitle.textColor = [UIColor whiteColor];
-  _qrPickerTitle.textAlignment = NSTextAlignmentCenter;
-  _qrPickerTitle.numberOfLines = 2;
-  [_qrPickerPanel addSubview:_qrPickerTitle];
-  _qrPickerList = [[UIScrollView alloc] init];
-  [_qrPickerPanel addSubview:_qrPickerList];
-  _qrPickerCancel = [self makeButton:NO];
-  [_qrPickerCancel addTarget:self action:@selector(onQrPickerCancel)
-              forControlEvents:UIControlEventTouchUpInside];
-  [_qrPickerPanel addSubview:_qrPickerCancel];
-  [self addSubview:_qrPickerOverlay];
 
   [self clearLabelBackgrounds:self];
   _videoStatsLabel.backgroundColor = [UIColor colorWithWhite:0 alpha:0.72];
+
+  _navBar = [[DBNavBar alloc] init];
+  [_navBar setRootTitle:@"" backTitle:nil onBack:nil];
+  [self addSubview:_navBar.bar];
+  _noticeItem = DBChromeBarItem(@"", self, @selector(onNoticeChip));
 }
 
 
@@ -455,6 +512,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [_router sipHangup];
   _sipMode = @"";
   _monitorOnly = NO;
+  [self resetVideoZoom];
   _liveView.contentMode = UIViewContentModeScaleAspectFit;
   _selectedPeerId = nil;
   _selectedPeerName = nil;
@@ -465,7 +523,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [_adminQrButton setImage:nil forState:UIControlStateNormal];
   _adminQrButton.hidden = YES;
   _adminUrlLabel.hidden = YES;
-  _qrPickerOverlay.hidden = YES;
+  [self dismissChoiceList];
   _door = [door copy];
   _purpose = [purpose copy];
   _visitorLang = [lang copy];
@@ -492,8 +550,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _monitorButton.enabled = NO;
   _monitorAudioOn = NO;
   _micMuted = NO;
-  // A ringing call shows the quick replies straight away; monitoring does not.
-  _repliesVisible = YES;
   // The page now closes itself on this countdown instead of the old fixed
   // auto-close, so a visitor cancelling no longer takes the live view away.
   [_returnCountdown startWithSeconds:[DBCallReturnCountdown defaultSeconds]];
@@ -544,6 +600,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [_router sipHangup];
   _sipMode = @"";
   _monitorOnly = YES;
+  [self resetVideoZoom];
   // Letterboxed, never cropped: a portrait door camera stays portrait.
   _liveView.contentMode = UIViewContentModeScaleAspectFit;
   _liveView.clipsToBounds = YES;
@@ -576,7 +633,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _monitorButton.enabled = ([_peerHost length] > 0);
   _monitorAudioOn = NO;
   _micMuted = NO;
-  _repliesVisible = NO;
+  [self dismissChoiceList];
   [_returnCountdown reset];
   [self stopReturnTimer];
   _noVideoLabel.hidden = NO;
@@ -778,45 +835,49 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 - (void)applyContent {
   NSDictionary *doorEntry = [DBConfigUtil dig:_cfg path:[NSString stringWithFormat:@"doors.%@", _door]];
   NSString *label = [DBConfigUtil labelOf:doorEntry lang:_boot.uiLang fallback:_door];
+  NSString *barTitle = label;
   if (_monitorOnly) {
     NSString *name = [_selectedPeerName length] > 0 ? _selectedPeerName : label;
     _titleLabel.text = [_texts t:@"monitor.title", name, nil];
+    barTitle = name;
   } else {
     _titleLabel.text = [_texts t:@"ring.incoming", label, nil];
   }
+  if (!DBSameString(_navBar.topItem.title, barTitle ?: @"")) _navBar.topItem.title = barTitle ?: @"";
   _noVideoLabel.text = [_texts ts:@"ring.no_video"];
   _statusLabel.text = _monitorOnly ? [_texts ts:@"monitor.live"]
                                    : [_texts ts:(_cancelled ? @"ring.cancelled" : @"reply.choose")];
   [_answerButton setTitle:(_inCall ? [_texts ts:@"incall.end"] : [_texts ts:@"ring.answer"])
                  forState:UIControlStateNormal];
-  // The monitor and mic entries are stateful toggles with a visible on/off
-  // state, not silent buttons (spec §5.1).
+  // The monitor and mic entries are toggles whose title states the current position.
   [_monitorButton setTitle:[_texts ts:(_monitorAudioOn ? @"ring.monitor_on"
                                                        : @"ring.monitor_off")]
                   forState:UIControlStateNormal];
   [_micButton setTitle:[_texts ts:(_micMuted ? @"ring.mic_off" : @"ring.mic_on")]
               forState:UIControlStateNormal];
-  [_repliesButton setTitle:[_texts ts:@"admin.quick_replies"] forState:UIControlStateNormal];
+  [_repliesButton setTitle:[_texts ts:@"ring.quick_reply"] forState:UIControlStateNormal];
   [_openButton setTitle:[_texts ts:@"ring.open_door"] forState:UIControlStateNormal];
   [_ignoreButton setTitle:[_texts ts:(_monitorOnly ? @"monitor.close" : @"ring.ignore")]
                   forState:UIControlStateNormal];
+  _countdownButton.accessibilityLabel = [_texts ts:@"ring.return_countdown_a11y"];
+  _videoScroll.accessibilityHint = [_texts ts:@"ring.video_zoom_hint"];
   _answerButton.hidden = _monitorOnly;
+  _repliesButton.hidden = _monitorOnly;
   _micButton.hidden = _monitorOnly;
   _langBadge.hidden = _monitorOnly;
   [self refreshUnlockVisibility];
-  [self refreshNoticeChip];
+  [self refreshNotice];
   [self applyPalette];
   [self updateBadges];
-  [self buildReplyButtons];
+  [self rebuildReplies];
   [self applySemanticStyles];
   [self setNeedsLayout];
 }
 
-// The unlock button is an admin decision (spec §5.2). It defaults to on when an
-// unlock action exists and off when it does not, and an explicit setting wins.
-// Core reports doors.<id>.unlock = {configured, command, show_button, source}:
-// show_button defaults to configured and an administrator may force either
-// answer (spec §5.2). An older core leaves the button on its configured state.
+// The unlock button is an administrator's decision. Core reports
+// doors.<id>.unlock = {configured, command, show_button, source}: show_button
+// defaults to configured and an administrator may force either answer. An
+// older core leaves the button on its configured state.
 - (void)refreshUnlockVisibility {
   _unlockConfigured = [DBConfigUtil boolVal:_doorUnlock path:@"configured" def:NO];
   _unlockVisible = [DBConfigUtil boolVal:_doorUnlock path:@"show_button"
@@ -824,11 +885,19 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _openButton.hidden = !_unlockVisible;
 }
 
-- (void)refreshNoticeChip {
+// The announcement entry lives in the navigation bar; an announcement that is showing at this
+// door is quoted in the details.
+- (void)refreshNotice {
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:_door config:_cfg nowMs:nowMs];
-  [_noticeChip setChipTitle:[_texts ts:@"notice.chip"] active:(notice != nil)];
-  _noticeChip.hidden = ([_door length] == 0);
+  NSString *text = notice ? [DBNoticeModel noticeText:notice] : nil;
+  _noticeLabel.hidden = ([text length] == 0);
+  _noticeLabel.text = [text length] > 0
+      ? [NSString stringWithFormat:@"%@: %@", [_texts ts:@"notice.chip"], text] : @"";
+  NSString *entry = [_texts ts:@"notice.for_this_door"];
+  if (!DBSameString(_noticeItem.title, entry)) _noticeItem.title = entry;
+  UIBarButtonItem *wanted = [_door length] > 0 ? _noticeItem : nil;
+  if (_navBar.topItem.rightBarButtonItem != wanted) _navBar.topItem.rightBarButtonItem = wanted;
 }
 
 - (void)applyPalette {
@@ -837,18 +906,19 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _palette = [DBUiPalette paletteForConfig:_cfg deviceId:_nodeId display:_display
                              backgroundHex:@"#0A0D12" minuteOfDay:[self minuteOfDay]];
   [_palette setUsesThemeBackground:NO];
-  [_noticeChip applyPalette:_palette];
   [self applyRegionInk];
 }
 
-// The same per-region ink rule the dashboard and the visitor screen use: each
-// label is measured against what is actually behind it, and an administrator's
-// override still wins. The stats line keeps its own opaque plate.
+// The same per-region ink rule the dashboard and the visitor screen use, applied to the labels
+// that sit on this screen's own dark ground. An administrator's override still wins. The stats
+// line keeps its own opaque plate and stock controls keep the system's colours.
 - (void)applyRegionInk {
   if (_palette == nil) return;
-  [_palette applyInkToLabel:_titleLabel region:DBUiRegionTileLabel];
+  if (!_titleStyled) [_palette applyInkToLabel:_titleLabel region:DBUiRegionTileLabel];
   if (!_cancelled) [_palette applyInkToLabel:_statusLabel region:DBUiRegionStatusLine];
   [_palette applyInkToLabel:_hintLabel region:DBUiRegionHint];
+  for (UILabel *label in @[ _purposeBadge, _langBadge, _noticeLabel ])
+    [_palette applyInkToLabel:label region:DBUiRegionStatusLine];
   _adminUrlLabel.textColor = [[_palette inkForRegion:DBUiRegionStatusLine
                                                frame:_adminUrlLabel.frame]
       colorWithAlphaComponent:0.85];
@@ -863,6 +933,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)onNoticeChip {
   if ([_door length] == 0) return;
+  [self dismissChoiceList];
   if (!_noticeDialog) _noticeDialog = [[DBNoticeDialog alloc] initWithRouter:_router];
   NSMutableArray *doorIds = [NSMutableArray array];
   NSMutableDictionary *labels = [NSMutableDictionary dictionary];
@@ -911,14 +982,21 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)updateCountdownLabel {
   BOOL visible = !_monitorOnly && _returnCountdown.isVisible;
-  _countdownLabel.hidden = !visible;
+  if (_countdownButton.hidden == visible) [self setNeedsLayout];
   _countdownButton.hidden = !visible;
   if (!visible) return;
-  _countdownLabel.text = [NSString stringWithFormat:@"(%ld)",
-                                                    (long)_returnCountdown.remaining];
-  _countdownLabel.textColor = _palette ? _palette.mutedInk
-                                       : [UIColor colorWithWhite:1 alpha:0.6];
-  [self setNeedsLayout];
+  NSString *title = [_texts t:@"ring.return_countdown_action",
+      [NSString stringWithFormat:@"%ld", (long)_returnCountdown.remaining], nil];
+  UIButton *button = _countdownButton;
+  // The flat system button cross-fades a new title; a number that changes every second must not.
+  if ([UIView respondsToSelector:@selector(performWithoutAnimation:)]) {
+    [UIView performWithoutAnimation:^{
+      [button setTitle:title forState:UIControlStateNormal];
+      [button layoutIfNeeded];
+    }];
+  } else {
+    [button setTitle:title forState:UIControlStateNormal];
+  }
 }
 
 - (void)onCancelCountdown {
@@ -944,11 +1022,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [self applyContent];
 }
 
-- (void)onToggleReplies {
-  _repliesVisible = !_repliesVisible;
-  [self setNeedsLayout];
-}
-
 - (void)onToggleDebugLine {
   _debugLineHidden = !_debugLineHidden;
   [[NSUserDefaults standardUserDefaults] setBool:_debugLineHidden forKey:kDebugLineHiddenKey];
@@ -956,6 +1029,80 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _videoStatsLabel.hidden = _debugLineHidden;
   [self setNeedsLayout];
 }
+
+#pragma mark - choice lists
+
+// Quick replies and the admin address choices share one presentation: a popover holding a plain
+// table on the iPad idiom, where UIPopoverController exists, and an action sheet elsewhere. The
+// call screen stays alive underneath either.
+- (void)presentChoices:(NSArray *)titles kind:(DBIncomingListKind)kind
+               checked:(NSInteger)checked title:(NSString *)title anchor:(UIView *)anchor
+                 style:(NSDictionary *)style {
+  [self dismissChoiceList];
+  if ([titles count] == 0 || !self.window || CGRectIsEmpty(anchor.frame)) return;
+  _listKind = kind;
+  if (DBChromeIsPad()) {
+    DBIncomingListController *list = [[DBIncomingListController alloc] init];
+    list.titles = titles;
+    list.headerTitle = title;
+    list.checkedIndex = checked;
+    list.style = style;
+    __weak DBIncomingScreen *weakSelf = self;
+    list.onSelect = ^(NSInteger index) {
+      [weakSelf choiceSelectedAtIndex:index];
+    };
+    NSUInteger rows = MIN([titles count], kListMaxVisibleRows);
+    CGFloat header = [title length] > 0 ? 28 : 0;
+    _listPopover = [[UIPopoverController alloc] initWithContentViewController:list];
+    _listPopover.popoverContentSize = CGSizeMake(kListWidth, rows * kListRowHeight + header);
+    [_listPopover presentPopoverFromRect:anchor.frame inView:self
+                permittedArrowDirections:UIPopoverArrowDirectionAny animated:NO];
+    return;
+  }
+  UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:title delegate:self
+                                            cancelButtonTitle:nil destructiveButtonTitle:nil
+                                            otherButtonTitles:nil];
+  for (NSString *choice in titles) [sheet addButtonWithTitle:choice];
+  sheet.cancelButtonIndex = [sheet addButtonWithTitle:[_texts ts:@"admin.cancel"]];
+  _listSheet = sheet;
+  [sheet showInView:self];
+}
+
+- (void)dismissChoiceList {
+  if ([_listPopover isPopoverVisible]) [_listPopover dismissPopoverAnimated:NO];
+  UIActionSheet *sheet = _listSheet;
+  _listSheet = nil;
+  if (sheet) {
+    sheet.delegate = nil;
+    [sheet dismissWithClickedButtonIndex:sheet.cancelButtonIndex animated:NO];
+  }
+  _listKind = DBIncomingListNone;
+}
+
+- (void)choiceSelectedAtIndex:(NSInteger)index {
+  DBIncomingListKind kind = _listKind;
+  [self dismissChoiceList];
+  if (kind == DBIncomingListReplies) [self sendReplyAtIndex:index];
+  else if (kind == DBIncomingListAdminAddresses) [self chooseAdminAddressAtIndex:index];
+}
+
+- (void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+  if (actionSheet != _listSheet) return;
+  // The sheet dismisses itself after this callback.
+  _listSheet = nil;
+  if (buttonIndex < 0 || buttonIndex == actionSheet.cancelButtonIndex) {
+    _listKind = DBIncomingListNone;
+    return;
+  }
+  [self choiceSelectedAtIndex:buttonIndex];
+}
+
+- (void)onReplies {
+  [self presentChoices:_replyTitles kind:DBIncomingListReplies checked:-1
+                 title:[_texts ts:@"reply.choose"] anchor:_repliesButton style:_replyStyle];
+}
+
+#pragma mark - semantic styles
 
 - (NSDictionary *)styleForSemanticID:(NSString *)semanticID
                             foreground:(UIColor *)foreground
@@ -966,42 +1113,77 @@ static BOOL DBSameString(NSString *a, NSString *b) {
                       baselineBackground:background baselineAccent:nil baselineBorder:nil];
 }
 
+// A stock button cannot carry an administrator's fill, border, or radius. A secondary action
+// whose semantic id has an override in effect is therefore swapped for a filled button, and
+// swapped back to the stock one when the override goes away. Title, state, and targets move
+// with it.
+- (UIButton *)button:(UIButton *)button usingFill:(BOOL)filled {
+  BOOL isFilled = button.buttonType == UIButtonTypeCustom;
+  if (isFilled == filled) return button;
+  UIButton *next = filled ? DBChromeFilledButton(18) : DBChromeButton(nil, 18);
+  [next setTitle:[button titleForState:UIControlStateNormal] forState:UIControlStateNormal];
+  next.enabled = button.enabled;
+  next.hidden = button.hidden;
+  next.frame = button.frame;
+  UIControlEvents events[] = {UIControlEventTouchDown, UIControlEventTouchUpInside};
+  for (NSUInteger i = 0; i < sizeof(events) / sizeof(events[0]); i++) {
+    for (NSString *action in [button actionsForTarget:self forControlEvent:events[i]])
+      [next addTarget:self action:NSSelectorFromString(action) forControlEvents:events[i]];
+  }
+  [self insertSubview:next aboveSubview:button];
+  [button removeFromSuperview];
+  return next;
+}
+
+- (void)applyFill:(UIButton *)button style:(NSDictionary *)style
+       foreground:(UIColor *)foreground background:(UIColor *)background
+         fontSize:(CGFloat)fontSize {
+  [DBSemanticStyle applyButton:button style:style foreground:foreground background:background
+                        border:nil radius:10 fontSize:fontSize];
+  // A filled button keeps its ink at full strength while disabled: a dimmed title on the fill
+  // was unreadable on the device, and the status line already says why the action is off.
+  UIColor *ink = [button titleColorForState:UIControlStateNormal] ?: foreground;
+  [button setTitleColor:ink forState:UIControlStateDisabled];
+}
+
 - (void)applySemanticStyles {
   UIColor *white = [UIColor whiteColor];
   UIColor *screen = [UIColor colorWithRed:0.04 green:0.05 blue:0.07 alpha:1];
   NSDictionary *title = [self styleForSemanticID:@"ring.title" foreground:white
                                        background:screen safety:NO];
+  _titleStyled = (title != nil);
   [DBSemanticStyle applyLabel:_titleLabel style:title foreground:white
-                    background:[UIColor clearColor] fontSize:30];
+                    background:[UIColor clearColor] fontSize:24];
 
+  // Answer and End are the one filled control: positive while ringing, negative in a call.
   UIColor *green = [UIColor colorWithRed:0.094 green:0.478 blue:0.235 alpha:1];
+  UIColor *red = [UIColor colorWithRed:0.749 green:0.161 blue:0.129 alpha:1];
+  UIColor *fill = _inCall ? red : green;
   NSString *answerID = _inCall ? @"call.end" : @"ring.action";
   NSDictionary *answer = [self styleForSemanticID:answerID foreground:white
-                                        background:green safety:_inCall];
-  [DBSemanticStyle applyButton:_answerButton style:answer foreground:white background:green
-                        border:nil radius:12 fontSize:22];
+                                        background:fill safety:_inCall];
+  [self applyFill:_answerButton style:answer foreground:white background:fill fontSize:24];
 
-  UIColor *neutralEffective = [UIColor colorWithRed:0.16 green:0.17 blue:0.19 alpha:1];
+  UIColor *neutral = [UIColor colorWithRed:0.16 green:0.17 blue:0.19 alpha:1];
   NSDictionary *action = [self styleForSemanticID:@"ring.action" foreground:white
-                                        background:neutralEffective safety:NO];
-  for (UIButton *button in @[ _monitorButton, _openButton ])
-    [DBSemanticStyle applyButton:button style:action foreground:white
-                      background:[UIColor colorWithWhite:1 alpha:0.12]
-                          border:nil radius:12 fontSize:22];
+                                        background:neutral safety:NO];
+  _monitorButton = [self button:_monitorButton usingFill:(action != nil)];
+  _openButton = [self button:_openButton usingFill:(action != nil)];
+  if (action) {
+    for (UIButton *button in @[ _monitorButton, _openButton ])
+      [self applyFill:button style:action foreground:white background:neutral fontSize:18];
+  }
 
   NSString *closeID = _monitorOnly ? @"monitor.close" : @"ring.action";
   NSDictionary *close = [self styleForSemanticID:closeID foreground:white
-                                       background:neutralEffective safety:_monitorOnly];
-  [DBSemanticStyle applyButton:_ignoreButton style:close foreground:white
-                    background:[UIColor colorWithWhite:1 alpha:0.12]
-                        border:nil radius:12 fontSize:22];
+                                       background:neutral safety:_monitorOnly];
+  _ignoreButton = [self button:_ignoreButton usingFill:(close != nil)];
+  if (close)
+    [self applyFill:_ignoreButton style:close foreground:white background:neutral fontSize:18];
 
-  NSDictionary *reply = [self styleForSemanticID:@"reply.button" foreground:white
-                                       background:neutralEffective safety:NO];
-  for (UIButton *button in _replyButtons)
-    [DBSemanticStyle applyButton:button style:reply foreground:white
-                      background:[UIColor colorWithWhite:1 alpha:0.10]
-                          border:nil radius:12 fontSize:22];
+  // The quick replies are table rows; the override, when there is one, colours those rows.
+  _replyStyle = [self styleForSemanticID:@"reply.button" foreground:white
+                              background:neutral safety:NO];
 }
 
 - (void)updateBadges {
@@ -1024,41 +1206,37 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     NSString *purposeText = [_texts t:@"ring.purpose_badge", label, nil];
     _purposeBadge.text = [icon length] == 0
                              ? purposeText
-                             : [NSString stringWithFormat:@" %@  %@ ", icon, purposeText];
-    _purposeBadge.backgroundColor = [UIColor colorWithRed:1.0 green:0.80 blue:0.25 alpha:1];
+                             : [NSString stringWithFormat:@"%@ %@", icon, purposeText];
     _purposeBadge.hidden = NO;
   }
   if ([_visitorLang length] == 0 || [_visitorLang isEqualToString:@"ja"]) {
     _langBadge.hidden = YES;
   } else {
-    _langBadge.text = [NSString stringWithFormat:@" 🌐 %@ ", [_visitorLang uppercaseString]];
+    _langBadge.text = [_texts t:@"ring.lang_badge", [_visitorLang uppercaseString], nil];
     _langBadge.hidden = NO;
   }
+  [self setNeedsLayout];
 }
 
-- (void)buildReplyButtons {
-  for (UIButton *b in _replyButtons) [b removeFromSuperview];
-  [_replyButtons removeAllObjects];
-  if (_monitorOnly || _inCall) return;
+// The replies offered for this call, labelled in the visitor's language. None while monitoring
+// or in a call, which disables the Reply button.
+- (void)rebuildReplies {
+  NSMutableArray *ids = [NSMutableArray array];
+  NSMutableArray *titles = [NSMutableArray array];
   NSDictionary *replies = [DBConfigUtil dig:_cfg path:@"quick_replies"];
-  if (![replies isKindOfClass:[NSDictionary class]] || [replies count] == 0) return;
-  NSString *lang = [_visitorLang length] == 0 ? @"ja" : _visitorLang;
-  for (NSString *rid in [DBConfigUtil sortedByOrder:replies]) {
-    NSDictionary *entry = [replies objectForKey:rid];
-    UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-    [b setTitle:[DBConfigUtil labelOf:entry lang:lang fallback:rid] forState:UIControlStateNormal];
-    b.titleLabel.font = [UIFont systemFontOfSize:22];
-    b.titleLabel.adjustsFontSizeToFitWidth = YES;
-    b.titleLabel.minimumFontSize = 13;
-    [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    b.backgroundColor = [UIColor colorWithWhite:1 alpha:0.10];
-    b.layer.cornerRadius = 12;
-    b.accessibilityIdentifier = rid;
-    [b addTarget:self action:@selector(onReply:) forControlEvents:UIControlEventTouchUpInside];
-    [_replyStack addSubview:b];
-    [_replyButtons addObject:b];
+  if (!_monitorOnly && !_inCall && [replies isKindOfClass:[NSDictionary class]]) {
+    NSString *lang = [_visitorLang length] == 0 ? @"ja" : _visitorLang;
+    for (NSString *rid in [DBConfigUtil sortedByOrder:replies]) {
+      [ids addObject:rid];
+      [titles addObject:[DBConfigUtil labelOf:[replies objectForKey:rid] lang:lang fallback:rid]
+                            ?: rid];
+    }
   }
-  [self setNeedsLayout];
+  BOOL changed = ![ids isEqualToArray:_replyIds] || ![titles isEqualToArray:_replyTitles];
+  _replyIds = ids;
+  _replyTitles = titles;
+  _repliesButton.enabled = [ids count] > 0;
+  if (changed && _listKind == DBIncomingListReplies) [self dismissChoiceList];
 }
 
 #pragma mark - Door-station Admin QR
@@ -1100,8 +1278,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)updateAdminQr {
   NSInteger gen = ++_adminQrGen;
-  // The door station's admin QR stays visible in a corner of the incoming
-  // screen too (spec §5.2, round 5), not only while actively monitoring.
+  // The door station's admin QR stays visible on the incoming screen too, not only while
+  // actively monitoring.
   BOOL available = ([_adminHosts count] > 0);
   _adminQrButton.hidden = !available;
   _adminUrlLabel.hidden = !available;
@@ -1144,59 +1322,16 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)onAdminQrTapped {
   if ([_adminHosts count] == 0) return;
-  for (UIButton *b in _qrPickerButtons) [b removeFromSuperview];
-  [_qrPickerButtons removeAllObjects];
-  for (NSInteger i = 0; i < (NSInteger)[_adminHosts count]; i++) {
-    NSString *url = [self adminUrlForHost:[_adminHosts objectAtIndex:i]];
-    UIButton *b = [self makeButton:(i == _adminHostIndex)];
-    b.tag = i;
-    b.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-    b.titleLabel.numberOfLines = 2;
-    b.titleLabel.lineBreakMode = NSLineBreakByCharWrapping;
-    NSString *title = i == _adminHostIndex ? [@"✓  " stringByAppendingString:url] : url;
-    [b setTitle:title forState:UIControlStateNormal];
-    [b addTarget:self action:@selector(onAdminAddressChoice:)
-        forControlEvents:UIControlEventTouchUpInside];
-    [_qrPickerList addSubview:b];
-    [_qrPickerButtons addObject:b];
-  }
-  _qrPickerTitle.text = [_texts ts:@"monitor.admin_qr_select"];
-  [_qrPickerCancel setTitle:[_texts ts:@"admin.cancel"] forState:UIControlStateNormal];
-  _qrPickerOverlay.hidden = NO;
-  [self bringSubviewToFront:_qrPickerOverlay];
-  [self setNeedsLayout];
-  [self layoutIfNeeded];
+  NSMutableArray *urls = [NSMutableArray array];
+  for (NSString *host in _adminHosts) [urls addObject:[self adminUrlForHost:host] ?: host];
+  [self presentChoices:urls kind:DBIncomingListAdminAddresses checked:_adminHostIndex
+                 title:[_texts ts:@"monitor.admin_qr_select"] anchor:_adminQrButton style:nil];
 }
 
-- (void)onAdminAddressChoice:(UIButton *)sender {
-  if (sender.tag >= 0 && sender.tag < (NSInteger)[_adminHosts count]) {
-    _adminHostIndex = sender.tag;
-    [self updateAdminQr];
-  }
-  _qrPickerOverlay.hidden = YES;
-}
-
-- (void)onQrPickerCancel {
-  _qrPickerOverlay.hidden = YES;
-}
-
-- (void)layoutQrPicker:(CGSize)size {
-  _qrPickerOverlay.frame = CGRectMake(0, 0, size.width, size.height);
-  _qrPickerBackdrop.frame = _qrPickerOverlay.bounds;
-  CGFloat panelW = MIN(620, size.width - 80);
-  CGFloat listH = MIN(MAX(58, [_adminHosts count] * 62), size.height - 230);
-  CGFloat panelH = 78 + listH + 72;
-  _qrPickerPanel.frame = CGRectMake((size.width - panelW) / 2,
-                                    (size.height - panelH) / 2, panelW, panelH);
-  _qrPickerTitle.frame = CGRectMake(18, 12, panelW - 36, 54);
-  _qrPickerList.frame = CGRectMake(18, 74, panelW - 36, listH);
-  CGFloat y = 0;
-  for (UIButton *b in _qrPickerButtons) {
-    b.frame = CGRectMake(0, y, panelW - 36, 54);
-    y += 62;
-  }
-  _qrPickerList.contentSize = CGSizeMake(panelW - 36, y);
-  _qrPickerCancel.frame = CGRectMake(18, panelH - 60, panelW - 36, 48);
+- (void)chooseAdminAddressAtIndex:(NSInteger)index {
+  if (index < 0 || index >= (NSInteger)[_adminHosts count]) return;
+  _adminHostIndex = index;
+  [self updateAdminQr];
 }
 
 #pragma mark - Video
@@ -1665,7 +1800,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   NSString *transport = [_activeVideoTransport length] ? _activeVideoTransport : @"NO STREAM";
   NSString *strategy = [_currentVideoStrategy length] ? _currentVideoStrategy : @"-";
   NSUInteger dropped = _lowLatency ? [_lowLatency droppedFrames] : 0;
-  _videoStatsLabel.hidden = _debugLineHidden;
+  // Residents see the line only for a real stream; without one it is diagnostics-only.
+  BOOL streaming = stats.valid || ![transport isEqualToString:@"NO STREAM"];
+  _videoStatsLabel.hidden = _debugLineHidden || !(streaming || _boot.diagnosticDumps);
   if (stats.valid) {
     _videoStatsLabel.text = [NSString stringWithFormat:
         @"  %@/%@ · %ld ms · jit %ld ms · %.1f fps · drop %lu  ", transport, strategy,
@@ -1821,6 +1958,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
         @"expected_version":[room objectForKey:@"version"] }];
   }
   ++_sipActionGen;
+  [self dismissChoiceList];
+  [self resetVideoZoom];
   [self stopReturnTimer];
   [_returnCountdown reset];
   [_videoStatsTimer invalidate];
@@ -1932,7 +2071,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)onMonitor {
   if (_peerHost == nil) return;
-  // モニター is a stateful ON/OFF toggle for door audio; the answered call is
+  // Monitor is a stateful on/off toggle for door audio; the answered call is
   // never torn down by it.
   if (_monitorAudioOn && [_sipMode isEqualToString:@"monitor"]) {
     [_router sipHangup];
@@ -1982,18 +2121,18 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   else { _answerButton.enabled = NO; [self refreshVisits]; }
 }
 
-- (void)onReply:(UIButton *)sender {
+- (void)sendReplyAtIndex:(NSInteger)index {
   if (_inCall) return;
-  NSString *rid = sender.accessibilityIdentifier;
+  if (index < 0 || index >= (NSInteger)[_replyIds count]) return;
+  NSString *rid = [_replyIds objectAtIndex:(NSUInteger)index];
+  NSString *title = [_replyTitles objectAtIndex:(NSUInteger)index];
   BOOL accepted = [_core quickReplyV2:rid door:_door callID:_callID
                         stageRevision:_stageRevision];
   _hintLabel.text = accepted
-      ? [_texts t:@"reply.sent", (sender.currentTitle ?: @""), nil]
+      ? [_texts t:@"reply.sent", (title ?: @""), nil]
       : [_texts ts:@"reply.failed"];
   _hintLabel.hidden = NO;
 }
-
-
 
 - (void)sipStateChanged:(DBMiniSipState)state {
   if (!self.superview) return;
@@ -2002,7 +2141,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     _inCall = YES;
     [_returnCountdown pauseForAnsweredCall];
     [self updateCountdownLabel];
-    [self buildReplyButtons];
+    [self rebuildReplies];
     if (!_lifecycleAnswered) {
       _lifecycleAnswered = [_core reportCallAnsweredV2:_door callID:_callID
                                         stageRevision:_stageRevision];
@@ -2053,7 +2192,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   if ([d length] == 0 || [d isEqualToString:_door]) {
     _visitorLang = [DBConfigUtil evStr:ev key:@"lang"];
     [self updateBadges];
-    [self buildReplyButtons];
+    [self rebuildReplies];
   }
 }
 
@@ -2184,11 +2323,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   for (UIView *view in [_visitPanel subviews]) [view removeFromSuperview];
   [_visitButtons removeAllObjects];
   CGFloat y = 0, width = MAX(200, self.bounds.size.width - 40);
-  for (NSString *key in _visitOrder) {
+  // A lone visit is already the one on screen; the switcher appears with a second door.
+  for (NSString *key in ([_visitOrder count] > 1 ? _visitOrder : [NSArray array])) {
     NSDictionary *call = [_visits objectForKey:key];
     NSString *door = [call objectForKey:@"door"];
     NSString *name = [DBConfigUtil labelOf:[DBConfigUtil dig:_cfg path:[@"doors." stringByAppendingString:door]] lang:_boot.uiLang fallback:door];
-    UIButton *button = [self makeButton:NO];
+    UIButton *button = DBChromeButton(nil, 17);
     button.tag = [_visitButtons count];
     [_visitButtons addObject:@{ @"key":key }];
     [button setTitle:[_texts t:[self isVisitSelected:call] ? @"ring.queue_selected" : @"ring.queue_waiting", name, nil] forState:UIControlStateNormal];
@@ -2203,7 +2343,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     else if (!me) [actions addObject:@"respond"];
   }
   for (NSString *action in actions) {
-    UIButton *button = [self makeButton:NO]; button.tag = [_visitButtons count];
+    UIButton *button = DBChromeButton(nil, 17); button.tag = [_visitButtons count];
     [_visitButtons addObject:@{ @"action":action }];
     [button setTitle:[_texts ts:[@"conversation." stringByAppendingString:action]] forState:UIControlStateNormal];
     [button addTarget:self action:@selector(captureVisit) forControlEvents:UIControlEventTouchDown];
@@ -2227,9 +2367,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 #pragma mark - layout
 
-// The door camera's aspect drives the video slot: a portrait stream is shown
-// portrait, letterboxed, never cropped or stretched (spec §5.1). The image's
-// own size wins; before the first frame the reported sensor rotation decides.
+// The door camera's aspect drives the picture inside its slot: a portrait stream is shown
+// portrait, letterboxed, never cropped or stretched. The image's own size wins; before the
+// first frame the reported sensor rotation decides.
 - (CGSize)videoContentSize {
   UIImage *frame = _liveView.image;
   if (frame != nil && frame.size.width > 0 && frame.size.height > 0) return frame.size;
@@ -2237,174 +2377,264 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   return rotatedPortrait ? CGSizeMake(3, 4) : CGSizeMake(4, 3);
 }
 
-- (void)layoutVideoInSlot:(CGRect)slot {
-  CGRect frame = DBAspectFitRect(slot, [self videoContentSize]);
-  _liveView.frame = frame;
-  _noVideoLabel.frame = frame;
-  // The debug line sits inside the video slot's bottom edge and never covers
-  // the picture's centre.
-  CGFloat statsWidth = MIN(CGRectGetWidth(slot) - 16, 460);
-  CGRect stats = CGRectMake(CGRectGetMinX(slot) + 8,
-                            CGRectGetMaxY(slot) - 30, statsWidth, 24);
-  _videoStatsLabel.frame = stats;
-  _debugLineTap.frame = CGRectInset(stats, -6, -6);
+#pragma mark - video zoom
+
+- (UIView *)viewForZoomingInScrollView:(UIScrollView *)scrollView {
+  (void)scrollView;
+  return _zoomContent;
 }
 
-- (NSArray *)visibleControlButtons {
-  NSMutableArray *buttons = [NSMutableArray array];
-  [buttons addObject:_monitorButton];
-  if (!_answerButton.hidden) [buttons addObject:_answerButton];
-  if (!_micButton.hidden) [buttons addObject:_micButton];
-  if (!_openButton.hidden) [buttons addObject:_openButton];
-  if ([_replyButtons count] > 0) [buttons addObject:_repliesButton];
-  [buttons addObject:_ignoreButton];
-  return buttons;
+// Keeps the picture centred in the slot while it is smaller than the slot on an axis. Once it
+// is larger, the scroll view's own content bounds stop a pan at the picture's edges.
+- (void)centreZoomContent {
+  CGSize slot = _videoScroll.bounds.size;
+  CGSize content = _videoScroll.contentSize;
+  _zoomContent.center = CGPointMake(content.width / 2 + MAX(0, (slot.width - content.width) / 2),
+                                    content.height / 2 +
+                                        MAX(0, (slot.height - content.height) / 2));
 }
 
-- (void)layoutControlRow:(CGRect)row {
-  NSArray *buttons = [self visibleControlButtons];
-  NSUInteger count = [buttons count];
-  if (count == 0) return;
-  CGFloat gap = 10;
-  CGFloat width = (CGRectGetWidth(row) - gap * (count - 1)) / count;
-  CGFloat x = CGRectGetMinX(row);
-  for (UIButton *button in buttons) {
-    button.frame = CGRectMake(x, CGRectGetMinY(row), width, CGRectGetHeight(row));
-    x += width + gap;
-  }
-  for (UIButton *button in @[ _monitorButton, _answerButton, _micButton, _openButton,
-                              _repliesButton, _ignoreButton ]) {
-    if (![buttons containsObject:button]) button.frame = CGRectZero;
-  }
+- (void)scrollViewDidZoom:(UIScrollView *)scrollView {
+  (void)scrollView;
+  [self centreZoomContent];
 }
 
-- (void)layoutAdminQr:(CGSize)size {
-  BOOL show = ([_adminHosts count] > 0);
-  _adminQrButton.hidden = !show;
-  _adminUrlLabel.hidden = !show;
-  if (!show) {
-    _adminQrButton.frame = CGRectZero;
-    _adminUrlLabel.frame = CGRectZero;
+- (void)resetVideoZoom {
+  if (_videoScroll.zoomScale != 1) [_videoScroll setZoomScale:1 animated:NO];
+  _videoScroll.contentOffset = CGPointZero;
+  [self centreZoomContent];
+}
+
+// Double tap toggles between fit and 2x around the touched point. Only the flat-UI devices
+// animate the change; the A4 switches at once.
+- (void)onVideoDoubleTap:(UITapGestureRecognizer *)recognizer {
+  BOOL animated = DBChromeIsFlat();
+  if (_videoScroll.zoomScale > 1.01f) {
+    [_videoScroll setZoomScale:1 animated:animated];
     return;
   }
-  // Small, in the corner, same component as the dashboard footer.
-  CGFloat side = 84;
-  _adminQrButton.frame = CGRectMake(size.width - side - 14, 14, side, side);
-  _adminUrlLabel.frame = CGRectMake(size.width - side - 30, 14 + side + 2, side + 16, 28);
+  CGSize slot = _videoScroll.bounds.size;
+  if (slot.width <= 0 || slot.height <= 0) return;
+  CGPoint point = [recognizer locationInView:_zoomContent];
+  CGSize visible = CGSizeMake(slot.width / 2, slot.height / 2);
+  [_videoScroll zoomToRect:CGRectMake(point.x - visible.width / 2, point.y - visible.height / 2,
+                                      visible.width, visible.height)
+                  animated:animated];
 }
 
+- (void)layoutVideoInSlot:(CGRect)slot {
+  CGRect frame = DBAspectFitRect(slot, [self videoContentSize]);
+  // A new slot or picture size starts again from 1x, which is also the only scale at which the
+  // zooming view's frame may be assigned. An unchanged layout pass leaves a zoomed picture alone.
+  BOOL resized = !CGSizeEqualToSize(slot.size, _zoomSlotSize) ||
+                 !CGSizeEqualToSize(frame.size, _zoomPictureSize);
+  _videoScroll.frame = slot;
+  if (resized) {
+    _zoomSlotSize = slot.size;
+    _zoomPictureSize = frame.size;
+    if (_videoScroll.zoomScale != 1) [_videoScroll setZoomScale:1 animated:NO];
+    _zoomContent.frame = CGRectMake(0, 0, frame.size.width, frame.size.height);
+    _videoScroll.contentSize = frame.size;
+    _videoScroll.contentOffset = CGPointZero;
+    // The sensor rotation is a transform on the live view, and a frame assigned under a
+    // non-identity transform is undefined, so the picture is placed by bounds and centre.
+    _liveView.bounds = CGRectMake(0, 0, frame.size.width, frame.size.height);
+    _liveView.center = CGPointMake(frame.size.width / 2, frame.size.height / 2);
+    [self centreZoomContent];
+  }
+  _noVideoLabel.frame = slot;
+  // The debug line sits inside the video slot's bottom edge and never covers
+  // the picture's centre. It and its tap target lie above the scroll view, outside the zoom.
+  CGFloat statsWidth = MAX(0, MIN(CGRectGetWidth(slot) - 16, 460));
+  CGRect stats = CGRectMake(CGRectGetMinX(slot) + 8,
+                            CGRectGetMaxY(slot) - 30, statsWidth, 24);
+  if (CGRectGetHeight(slot) < 40) stats = CGRectZero;
+  _videoStatsLabel.frame = stats;
+  _debugLineTap.frame = CGRectIsEmpty(stats) ? CGRectZero : CGRectInset(stats, -6, -6);
+}
+
+// Places the action zone against the bottom edge of rect and returns the height it takes. The
+// order never changes: Answer (End in a call), Reply, Ignore (Close while monitoring), then the
+// secondary toggles. In a column Answer takes its own row above Reply and Ignore.
+- (CGFloat)layoutActionsInRect:(CGRect)rect column:(BOOL)column {
+  CGFloat gap = 8;
+  CGFloat x = CGRectGetMinX(rect);
+  CGFloat width = CGRectGetWidth(rect);
+  NSMutableArray *secondary = [NSMutableArray array];
+  for (UIButton *button in @[ _monitorButton, _openButton, _micButton ]) {
+    if (button.hidden) button.frame = CGRectZero;
+    else [secondary addObject:button];
+  }
+  NSUInteger count = [secondary count];
+  NSUInteger perRow = column ? 2 : MAX((NSUInteger)1, count);
+  NSUInteger rows = count > 0 ? (count + perRow - 1) / perRow : 0;
+  CGFloat secondaryHeight = rows > 0 ? rows * kSecondaryHeight + (rows - 1) * gap : 0;
+  BOOL answer = !_answerButton.hidden;
+  BOOL reply = !_repliesButton.hidden;
+  CGFloat primaryHeight = column
+      ? (answer ? kAnswerColumnHeight + gap : 0) + kReplyColumnHeight
+      : kPrimaryRowHeight;
+  CGFloat total = primaryHeight + (rows > 0 ? gap + secondaryHeight : 0);
+  CGFloat y = CGRectGetMaxY(rect) - total;
+
+  if (column) {
+    _answerButton.frame = answer ? CGRectMake(x, y, width, kAnswerColumnHeight) : CGRectZero;
+    if (answer) y += kAnswerColumnHeight + gap;
+    CGFloat half = floorf((width - gap) / 2);
+    _repliesButton.frame = reply ? CGRectMake(x, y, half, kReplyColumnHeight) : CGRectZero;
+    _ignoreButton.frame = CGRectMake(x + width - half, y, half, kReplyColumnHeight);
+    y += kReplyColumnHeight;
+  } else {
+    CGFloat unit = floorf((width - 2 * gap) / 4);
+    _answerButton.frame = answer ? CGRectMake(x, y, 2 * unit, kPrimaryRowHeight) : CGRectZero;
+    _repliesButton.frame = reply ? CGRectMake(x + 2 * unit + gap, y, unit, kPrimaryRowHeight)
+                                 : CGRectZero;
+    _ignoreButton.frame = CGRectMake(x + width - unit, y, unit, kPrimaryRowHeight);
+    y += kPrimaryRowHeight;
+  }
+
+  CGFloat cell = floorf((width - (perRow - 1) * gap) / perRow);
+  for (NSUInteger i = 0; i < count; i++) {
+    UIButton *button = [secondary objectAtIndex:i];
+    button.frame = CGRectMake(x + (i % perRow) * (cell + gap),
+                              y + gap + (i / perRow) * (kSecondaryHeight + gap), cell,
+                              kSecondaryHeight);
+  }
+  return total;
+}
+
+// Stacks the details from the top of rect: headline, purpose and visitor language, status with
+// the return countdown, hint, the announcement on show, the visit queue, and the admin QR in
+// the bottom corner. A row that no longer fits is left out rather than drawn over the actions.
+- (void)layoutDetailsInRect:(CGRect)rect {
+  CGFloat x = CGRectGetMinX(rect);
+  CGFloat width = CGRectGetWidth(rect);
+  CGFloat maxY = CGRectGetMaxY(rect);
+  __block CGFloat y = CGRectGetMinY(rect);
+  CGRect (^row)(CGFloat) = ^CGRect(CGFloat height) {
+    if (width <= 0 || y + height > maxY) return CGRectZero;
+    CGRect frame = CGRectMake(x, y, width, height);
+    y += height + 4;
+    return frame;
+  };
+
+  _titleLabel.frame = row(ceilf(_titleLabel.font.lineHeight * 2) + 2);
+
+  // The purpose slot keeps its height even while empty, so nothing jumps when the visitor's
+  // purpose arrives after the ring.
+  if (_monitorOnly) {
+    _purposeBadge.frame = CGRectZero;
+    _langBadge.frame = CGRectZero;
+  } else {
+    CGRect line = row(26);
+    CGFloat purposeWidth = 0;
+    if (!_purposeBadge.hidden && !CGRectIsEmpty(line)) {
+      CGFloat fit = ceilf([_purposeBadge.text sizeWithFont:_purposeBadge.font].width);
+      CGFloat limit = _langBadge.hidden ? line.size.width : floorf(line.size.width * 0.62f);
+      purposeWidth = MIN(fit, limit);
+    }
+    _purposeBadge.frame = CGRectMake(line.origin.x, line.origin.y, purposeWidth,
+                                     line.size.height);
+    CGFloat langX = line.origin.x + (purposeWidth > 0 ? purposeWidth + 12 : 0);
+    _langBadge.frame = CGRectMake(langX, line.origin.y,
+                                  MAX(0, CGRectGetMaxX(line) - langX), line.size.height);
+  }
+
+  // The cancelled banner is set up by handleCallCancelled; any other status is a plain line.
+  if (!_cancelled) {
+    _statusLabel.backgroundColor = [UIColor clearColor];
+    _statusLabel.font = [UIFont systemFontOfSize:20];
+    _statusLabel.textAlignment = NSTextAlignmentLeft;
+    _statusLabel.layer.cornerRadius = 0;
+  }
+  _statusLabel.frame = row(_cancelled ? 44 : 28);
+  // The return countdown is its own full-width row that says what the number is.
+  _countdownButton.frame = _countdownButton.hidden ? CGRectZero : row(44);
+
+  // The hint keeps its slot while hidden for the same reason the purpose does.
+  _hintLabel.frame = row(44);
+  _noticeLabel.frame = _noticeLabel.hidden ? CGRectZero : row(40);
+
+  BOOL qr = [_adminHosts count] > 0;
+  CGFloat qrReserve = qr ? kAdminQrSide + 8 : 0;
+  if (_visitPanel.hidden) {
+    _visitPanel.frame = CGRectZero;
+  } else {
+    CGFloat content = _visitPanel.contentSize.height;
+    CGFloat room = maxY - y;
+    // The queue outranks the QR: it gives the QR its corner only while two rows still fit.
+    if (room - qrReserve >= 92) room -= qrReserve;
+    _visitPanel.frame = row(MAX(0, MIN(content, room)));
+    CGFloat panelWidth = CGRectGetWidth(_visitPanel.frame);
+    for (UIView *view in [_visitPanel subviews]) {
+      if (![view isKindOfClass:[UIButton class]] && ![view isKindOfClass:[UILabel class]])
+        continue;
+      CGRect frame = view.frame;
+      frame.size.width = panelWidth;
+      view.frame = frame;
+    }
+    _visitPanel.contentSize = CGSizeMake(panelWidth, content);
+  }
+
+  CGFloat side = MIN(kAdminQrSide, maxY - y);
+  BOOL showQr = qr && side >= 60 && width >= side;
+  _adminQrButton.hidden = !showQr;
+  _adminUrlLabel.hidden = !showQr;
+  if (showQr) {
+    _adminQrButton.frame = CGRectMake(x, maxY - side, side, side);
+    _adminUrlLabel.frame = CGRectMake(x + side + 10, maxY - side,
+                                      MAX(0, width - side - 10), side);
+  } else {
+    _adminQrButton.frame = CGRectZero;
+    _adminUrlLabel.frame = CGRectZero;
+  }
+}
+
+// The one place frames are decided. Landscape on a tablet-wide screen puts the video on the
+// left (64 % of the width) with details and actions in a right column; every other size stacks
+// a 16:9 video slot, the details, and the action zone, which is always pinned to the bottom.
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
-  [self layoutQrPicker:size];
+  if (!CGSizeEqualToSize(size, _laidOutSize)) {
+    // A popover points at a button frame that is about to move.
+    if (_laidOutSize.width > 0) [self dismissChoiceList];
+    _laidOutSize = size;
+  }
   _noticeDialog.frame = self.bounds;
-  BOOL portrait = size.height > size.width;
-  CGFloat margin = 20;
-  CGFloat controlHeight = 62;
-  CGFloat gap = 14;
 
-  _titleLabel.backgroundColor = [UIColor clearColor];
-  _titleLabel.layer.cornerRadius = 0;
-  _statusLabel.backgroundColor = _cancelled ? _statusLabel.backgroundColor
-                                            : [UIColor clearColor];
-  _hintLabel.backgroundColor = [UIColor clearColor];
-  _titleLabel.font = [UIFont boldSystemFontOfSize:portrait ? 26 : 30];
-  _titleLabel.numberOfLines = 2;
+  CGFloat top = [_navBar layoutInBounds:self.bounds];
+  CGFloat margin = size.width >= 600 ? 12 : 8;
+  CGFloat gap = 8;
+  CGRect body = CGRectMake(margin, top + margin, MAX(0, size.width - 2 * margin),
+                           MAX(0, size.height - top - 2 * margin));
+  BOOL sideBySide = size.width > size.height && size.width >= 700;
 
-  [self layoutAdminQr:size];
-  CGFloat headerRight = _adminQrButton.hidden ? size.width - margin
-                                              : CGRectGetMinX(_adminQrButton.frame) - 12;
-
-  // Header: notice chip, door name, then the fixed-height purpose slot.
-  CGFloat headerY = 16;
-  if (_noticeChip.hidden) {
-    _noticeChip.frame = CGRectZero;
+  CGRect videoSlot;
+  CGRect details;
+  if (sideBySide) {
+    CGFloat videoWidth = floorf(size.width * 0.64f);
+    CGFloat columnX = CGRectGetMinX(body) + videoWidth + margin;
+    CGRect column = CGRectMake(columnX, CGRectGetMinY(body),
+                               MAX(0, CGRectGetMaxX(body) - columnX), CGRectGetHeight(body));
+    videoSlot = CGRectMake(CGRectGetMinX(body), CGRectGetMinY(body), videoWidth,
+                           CGRectGetHeight(body));
+    CGFloat actions = [self layoutActionsInRect:column column:YES];
+    details = CGRectMake(columnX, CGRectGetMinY(column), CGRectGetWidth(column),
+                         MAX(0, CGRectGetHeight(column) - actions - gap));
   } else {
-    CGSize chipFit = [_noticeChip sizeThatFits:CGSizeMake(260, 34)];
-    CGFloat chipWidth = MIN(240, MAX(120, chipFit.width + 14));
-    _noticeChip.frame = CGRectMake(margin, headerY, chipWidth, 34);
-    headerY += 42;
+    CGFloat actions = [self layoutActionsInRect:body column:NO];
+    CGFloat room = MAX(0, CGRectGetHeight(body) - actions - gap);
+    // 16:9 when the details still get their minimum; half of what is left on a small screen.
+    CGFloat videoHeight = MIN(floorf(CGRectGetWidth(body) * 9 / 16), room - 150);
+    if (videoHeight < 80) videoHeight = floorf(room / 2);
+    videoSlot = CGRectMake(CGRectGetMinX(body), CGRectGetMinY(body), CGRectGetWidth(body),
+                           videoHeight);
+    details = CGRectMake(CGRectGetMinX(body), CGRectGetMaxY(videoSlot) + gap,
+                         CGRectGetWidth(body), MAX(0, room - videoHeight - gap));
   }
-  CGFloat countdownWidth = _countdownLabel.hidden ? 0 : 74;
-  _titleLabel.frame = CGRectMake(margin, headerY,
-                                 MAX(0, headerRight - margin - countdownWidth), 44);
-  if (countdownWidth > 0) {
-    _countdownLabel.frame = CGRectMake(CGRectGetMaxX(_titleLabel.frame) + 6, headerY,
-                                       countdownWidth, 44);
-    // A comfortable target: the number is small but cancelling must be easy.
-    _countdownButton.frame = CGRectInset(_countdownLabel.frame, -10, -6);
-  } else {
-    _countdownLabel.frame = CGRectZero;
-    _countdownButton.frame = CGRectZero;
-  }
-  headerY += 48;
-
-  // The purpose slot keeps its height even while empty, so the layout never
-  // jumps when the visitor's purpose arrives after the ring (spec §5.2).
-  CGFloat purposeSlotHeight = _monitorOnly ? 0 : 38;
-  if (purposeSlotHeight > 0) {
-    _purposeBadge.frame = CGRectMake(margin, headerY, MIN(320, size.width - 2 * margin), 34);
-    _langBadge.frame = CGRectMake(margin + MIN(320, size.width - 2 * margin) + 10, headerY,
-                                  80, 34);
-    headerY += purposeSlotHeight + 6;
-  } else {
-    _purposeBadge.frame = CGRectZero;
-    _langBadge.frame = CGRectZero;
-  }
-
-  if (!_visitPanel.hidden) {
-    CGFloat height = MIN(160, size.height * 0.25);
-    _visitPanel.frame = CGRectMake(margin, headerY, size.width - 2 * margin, height);
-    headerY += height + 8;
-  }
-  CGFloat contentTop = headerY;
-  CGFloat bottom = size.height - margin;
-  CGFloat controlY = bottom - controlHeight;
-  CGFloat statusHeight = _cancelled ? 52 : 28;
-
-  BOOL sideBySide = !portrait && size.width >= 700 && !_monitorOnly &&
-                    (_repliesVisible && [_replyButtons count] > 0);
-  CGFloat replyWidth = sideBySide ? MIN(320, size.width * 0.32) : 0;
-  CGFloat videoRight = size.width - margin - (sideBySide ? replyWidth + gap : 0);
-  CGRect videoSlot = CGRectMake(margin, contentTop, MAX(80, videoRight - margin),
-                                MAX(80, controlY - contentTop - gap - statusHeight - 8));
   [self layoutVideoInSlot:videoSlot];
-
-  _statusLabel.frame = CGRectMake(margin, CGRectGetMaxY(videoSlot) + 6,
-                                  MAX(0, videoRight - margin), statusHeight);
-  _hintLabel.frame = CGRectMake(margin, CGRectGetMaxY(_statusLabel.frame),
-                                MAX(0, videoRight - margin), 24);
-  _hintLabel.numberOfLines = 1;
-
-  // Quick replies: a column beside the video when there is room, otherwise a
-  // scrollable stack over the lower half. The control row never moves.
-  BOOL showReplies = _repliesVisible && [_replyButtons count] > 0;
-  if (!showReplies) {
-    _replyStack.frame = CGRectZero;
-    for (UIButton *button in _replyButtons) button.frame = CGRectZero;
-  } else if (sideBySide) {
-    CGFloat x = videoRight + gap;
-    CGFloat y = 0;
-    for (UIButton *button in _replyButtons) {
-      button.frame = CGRectMake(0, y, replyWidth, 54);
-      y += 54 + 10;
-    }
-    _replyStack.frame = CGRectMake(x, contentTop, replyWidth,
-                                   MAX(0, controlY - contentTop - gap));
-  } else {
-    CGFloat stackWidth = size.width - 2 * margin;
-    CGFloat y = 0;
-    for (UIButton *button in _replyButtons) {
-      button.frame = CGRectMake(0, y, stackWidth, 50);
-      y += 50 + 8;
-    }
-    CGFloat stackHeight = MIN(y, MAX(60, controlY - contentTop - gap));
-    _replyStack.frame = CGRectMake(margin, controlY - gap - stackHeight, stackWidth,
-                                   stackHeight);
-  }
-
-  [self layoutControlRow:CGRectMake(margin, controlY, size.width - 2 * margin,
-                                    controlHeight)];
+  [self layoutDetailsInRect:details];
 
   [self applyRegionInk];
 }

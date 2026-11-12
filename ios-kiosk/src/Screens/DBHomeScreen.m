@@ -7,6 +7,7 @@
 #import "../Core/DBDoorTileModel.h"
 #import "../Core/DBFrostedBlur.h"
 #import "../Core/DBFleetCounts.h"
+#import "../Core/DBHomeLayout.h"
 #import "../Core/DBNoticeModel.h"
 #import "../Core/DBPairingModel.h"
 #import "../Core/DBRefreshCoalescer.h"
@@ -14,6 +15,7 @@
 #import "../Core/DBTexts.h"
 #import "../Core/DBUiTheme.h"
 #import "../Media/DBSiren.h"
+#import "DBChrome.h"
 #import "DBNoticeDialog.h"
 #import "DBRouter.h"
 #import "DBWidgets.h"
@@ -66,77 +68,6 @@ static CGRect DBRectFromArray(NSArray *rect) {
 
 @end
 
-@interface DBRecentCallRowView : UIView
-- (void)setClock:(NSString *)clock door:(NSString *)door outcome:(NSString *)outcome
-          missed:(BOOL)missed palette:(DBUiPalette *)palette;
-@end
-
-@implementation DBRecentCallRowView {
-  UILabel *_clock;
-  UILabel *_door;
-  UILabel *_outcome;
-  UIColor *_separator;
-}
-
-- (id)initWithFrame:(CGRect)frame {
-  self = [super initWithFrame:frame];
-  if (self) {
-    self.backgroundColor = [UIColor clearColor];
-    _clock = [[UILabel alloc] init];
-    _door = [[UILabel alloc] init];
-    _outcome = [[UILabel alloc] init];
-    for (UILabel *label in [NSArray arrayWithObjects:_clock, _door, _outcome, nil]) {
-      label.backgroundColor = [UIColor clearColor];
-      label.adjustsFontSizeToFitWidth = YES;
-      label.minimumFontSize = 13;
-      [self addSubview:label];
-    }
-    _clock.font = [UIFont systemFontOfSize:17];
-    _door.font = [UIFont boldSystemFontOfSize:18];
-    _outcome.font = [UIFont systemFontOfSize:17];
-    _outcome.textAlignment = NSTextAlignmentRight;
-  }
-  return self;
-}
-
-- (void)setClock:(NSString *)clock door:(NSString *)door outcome:(NSString *)outcome
-          missed:(BOOL)missed palette:(DBUiPalette *)palette {
-  _clock.text = clock;
-  _door.text = door;
-  _outcome.text = outcome;
-  UIColor *ink = missed ? palette.danger : palette.ink;
-  _clock.textColor = missed ? palette.danger : palette.mutedInk;
-  _door.textColor = ink;
-  _outcome.textColor = ink;
-  _separator = [palette.ink colorWithAlphaComponent:0.12];
-  [self setNeedsDisplay];
-}
-
-- (void)layoutSubviews {
-  [super layoutSubviews];
-  CGFloat width = self.bounds.size.width;
-  CGFloat height = self.bounds.size.height;
-  CGFloat clockWidth = MIN(62, width * 0.18);
-  CGFloat outcomeWidth = MIN(92, width * 0.26);
-  CGFloat gap = 10;
-  _clock.frame = CGRectMake(0, 0, clockWidth, height - 1);
-  _outcome.frame = CGRectMake(width - outcomeWidth, 0, outcomeWidth, height - 1);
-  _door.frame = CGRectMake(clockWidth + gap, 0,
-                           MAX(0, width - clockWidth - outcomeWidth - gap * 2), height - 1);
-}
-
-- (void)drawRect:(CGRect)rect {
-  (void)rect;
-  [_separator setStroke];
-  CGContextRef context = UIGraphicsGetCurrentContext();
-  CGContextSetLineWidth(context, 0.5);
-  CGContextMoveToPoint(context, 0, self.bounds.size.height - 0.5);
-  CGContextAddLineToPoint(context, self.bounds.size.width, self.bounds.size.height - 0.5);
-  CGContextStrokePath(context);
-}
-
-@end
-
 static const NSTimeInterval kSnapshotIntervalS = 5.0;
 // Safe mode keeps the door picture, smaller and less often. It is already the
 // bounded low-resolution snapshot the safe-mode contract asks for, and a panel
@@ -144,9 +75,11 @@ static const NSTimeInterval kSnapshotIntervalS = 5.0;
 static const CGFloat kSnapshotMaxSide = 320;
 static const CGFloat kSafeModeSnapshotMaxSide = 160;
 static const NSInteger kSafeModeSnapshotEveryNTicks = 3;
-static const NSInteger kRecentCallLimit = 20;
+// The dashboard reads the call log only for its unread missed-call count.
+static const NSInteger kMissedScanLimit = 20;
 
-// One door tile: a five-second still, the door label, and the announcement chip.
+// One door tile: a five-second still, the door label, and the announcement mark. The caption
+// and the mark are plates over the picture, which is custom content, not stock chrome.
 @interface DBDoorTile : UIButton
 // Stable identity across status polls, so a tile is created once per door. The
 // door id is that identity: a door outlives the station serving it, and keying
@@ -159,14 +92,14 @@ static const NSInteger kRecentCallLimit = 20;
 @property(nonatomic) BOOL online;
 @property(nonatomic, readonly) UIImageView *still;
 @property(nonatomic, readonly) DBPillLabel *caption;
-@property(nonatomic, readonly) DBNoticeChip *noticeChip;
+@property(nonatomic, readonly) DBPillLabel *noticeChip;
 @property(nonatomic, readonly) UILabel *offlineLabel;
 @end
 
 @implementation DBDoorTile {
   UIImageView *_still;
   DBPillLabel *_caption;
-  DBNoticeChip *_noticeChip;
+  DBPillLabel *_noticeChip;
   UILabel *_offlineLabel;
 }
 
@@ -195,7 +128,8 @@ static const NSInteger kRecentCallLimit = 20;
     _caption.font = [UIFont boldSystemFontOfSize:22];
     _caption.userInteractionEnabled = NO;
     [self addSubview:_caption];
-    _noticeChip = [[DBNoticeChip alloc] initWithFrame:CGRectZero];
+    _noticeChip = [[DBPillLabel alloc] initWithFrame:CGRectZero];
+    _noticeChip.font = [UIFont boldSystemFontOfSize:16];
     _noticeChip.userInteractionEnabled = NO;
     _noticeChip.hidden = YES;
     [self addSubview:_noticeChip];
@@ -211,12 +145,12 @@ static const NSInteger kRecentCallLimit = 20;
   CGSize captionFit = [_caption sizeThatFits:CGSizeMake(size.width - 16, 32)];
   _caption.frame = CGRectMake(8, size.height - 40, MIN(size.width - 16, captionFit.width), 32);
   CGSize chipFit = [_noticeChip sizeThatFits:CGSizeMake(size.width - 16, 30)];
-  _noticeChip.frame = CGRectMake(8, 8, MIN(size.width - 16, chipFit.width + 14), 30);
+  _noticeChip.frame = CGRectMake(8, 8, MIN(size.width - 16, chipFit.width), 30);
 }
 
 @end
 
-@interface DBHomeScreen () <DBSosSliderDelegate>
+@interface DBHomeScreen () <DBSosSliderDelegate, UIActionSheetDelegate>
 @end
 
 @implementation DBHomeScreen {
@@ -241,7 +175,6 @@ static const NSInteger kRecentCallLimit = 20;
   CGSize _themeImageSize;
   BOOL _samplerBuilding;
   NSArray *_doorTileInfos;
-  NSArray *_recentRows;
   NSInteger _unreadMissed;
   NSInteger _tzOffsetMinutes;
   NSString *_pairingState;
@@ -262,38 +195,31 @@ static const NSInteger kRecentCallLimit = 20;
   NSInteger _previewPage;
   NSMutableArray *_previewPriorityDoors;
 
-  NSInteger _secretTaps;
-  NSDate *_secretFirst;
-
   dispatch_queue_t _refreshQueue;
   DBRefreshCoalescer *_refreshGate;
   BOOL _screenVisible;
   BOOL _callRefreshPending;
 
-  // UI
+  DBNavBar *_nav;
+  DBHomeTabs *_tabs;
+  UIBarButtonItem *_noticeItem;
+  UIBarButtonItem *_monitorItem;
+  UIBarButtonItem *_addDeviceItem;
+  UIActionSheet *_monitorSheet;
+  NSArray *_monitorSheetPeers;
   UIImageView *_themeBg;
   UIImage *_themeGlassImage;
   NSUInteger _themeGlassRadius;
-  UIView *_historyScrim;   // Readability plate under the call list.
-  UIView *_footerScrim;    // ...and under the QR block and version line.
+  UIView *_footerScrim;    // Readability plate under the QR block and version line.
   UILabel *_clockLabel;
   UILabel *_dateLabel;
   NSArray *_fleetCounters;   // Three DBFleetCounter, left to right.
-  UIButton *_membershipButton;
-  DBPillLabel *_missedBadge;
-  UIButton *_missedButton;
-  UIButton *_adminButton;
-  DBNoticeChip *_globalNoticeChip;
   UIButton *_pairBanner;
-  UILabel *_doorsCaption;
+  UIButton *_missedNotice;
+  UIButton *_doorsPager;
+  UILabel *_noDoorsLabel;
   NSMutableArray *_doorTiles;
-  UILabel *_recentCaption;
-  UIButton *_seeAllButton;
-  UIScrollView *_recentList;
-  NSMutableArray *_recentLabels;
-  UILabel *_recentEmpty;
   DBAdminQrView *_qr;
-  UILabel *_versionLabel;
   DBSosSlider *_sos;
   UIView *_nightTint;
   UIView *_replyBanner;
@@ -306,7 +232,6 @@ static const NSInteger kRecentCallLimit = 20;
   UILabel *_emergencyTitle;
   UILabel *_emergencyNote;
   UIButton *_emergencyCancel;
-  UIButton *_secretCorner;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -318,14 +243,11 @@ static const NSInteger kRecentCallLimit = 20;
     _texts = router.texts;
     _audio = [[DBSiren alloc] init];
     _doorTileInfos = [NSArray array];
-    _recentRows = [NSArray array];
     _doorTiles = [[NSMutableArray alloc] init];
     _previewPriorityDoors = [[NSMutableArray alloc] init];
-    _recentLabels = [[NSMutableArray alloc] init];
     _nodeId = @"";
     _brightness = 70;
     _cancelRequiresPin = YES;
-    _secretFirst = [NSDate distantPast];
     _refreshQueue = dispatch_queue_create("doorbell.home.refresh", DISPATCH_QUEUE_SERIAL);
     _refreshGate = [[DBRefreshCoalescer alloc] init];
     _pairingState = DBPairingStateUnknown;
@@ -338,16 +260,6 @@ static const NSInteger kRecentCallLimit = 20;
   return @"home";
 }
 
-- (UIButton *)flatButton:(CGFloat)size {
-  UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
-  button.titleLabel.font = [UIFont boldSystemFontOfSize:size];
-  button.titleLabel.adjustsFontSizeToFitWidth = NO;
-  button.layer.cornerRadius = 10;
-  button.clipsToBounds = YES;
-  button.contentEdgeInsets = UIEdgeInsetsMake(6, 14, 6, 14);
-  return button;
-}
-
 - (void)buildUi {
   _themeBg = [[UIImageView alloc] init];
   _themeBg.contentMode = UIViewContentModeScaleAspectFill;
@@ -355,26 +267,20 @@ static const NSInteger kRecentCallLimit = 20;
   _themeBg.clipsToBounds = YES;
   _themeBg.hidden = YES;
   [self addSubview:_themeBg];
-  // Two plates directly over the picture and under everything else. A busy
-  // wallpaper defeats per-region ink for a whole block of small text: the ink
-  // rule can pick a colour that wins on average and still lose over one bright
-  // patch. The door tiles already solve this by being cards, so the call list
-  // and the footer become cards too, at the same radius and tone.
-  _historyScrim = [self newScrimView];
+  // The footer's small text sits on a plate over the picture; the recent calls are stock
+  // grouped cells, which are their own card.
   _footerScrim = [self newScrimView];
 
   _clockLabel = [[DBReadableLabel alloc] init];
   _clockLabel.backgroundColor = [UIColor clearColor];
-  _clockLabel.font = [UIFont systemFontOfSize:96];
+  _clockLabel.adjustsFontSizeToFitWidth = YES;
   [self addSubview:_clockLabel];
 
   _dateLabel = [[DBReadableLabel alloc] init];
   _dateLabel.backgroundColor = [UIColor clearColor];
-  _dateLabel.font = [UIFont systemFontOfSize:28];
+  _dateLabel.adjustsFontSizeToFitWidth = YES;
   [self addSubview:_dateLabel];
 
-  // Three compact counters instead of one sentence: at a glance the owner wants
-  // how many devices there are and how many of each kind are answering.
   NSMutableArray *counters = [NSMutableArray array];
   DBFleetGlyph glyphs[3] = { DBFleetGlyphCluster, DBFleetGlyphDoorStation,
                              DBFleetGlyphIndoorPanel };
@@ -386,82 +292,63 @@ static const NSInteger kRecentCallLimit = 20;
     [counters addObject:counter];
   }
   _fleetCounters = counters;
-  _membershipButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  [_membershipButton addTarget:self action:@selector(onMembership)
-              forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_membershipButton];
 
-  _missedBadge = [[DBPillLabel alloc] initWithFrame:CGRectZero];
-  _missedBadge.font = [UIFont boldSystemFontOfSize:21];
-  _missedBadge.hidden = YES;
-  [self addSubview:_missedBadge];
-  _missedButton = [UIButton buttonWithType:UIButtonTypeCustom];
-  _missedButton.hidden = YES;
-  [_missedButton addTarget:self action:@selector(onHistory)
-          forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_missedButton];
-
-  _adminButton = [self flatButton:19];
-  [_adminButton addTarget:self action:@selector(onAdmin)
-         forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_adminButton];
-
-  _globalNoticeChip = [[DBNoticeChip alloc] initWithFrame:CGRectZero];
-  [_globalNoticeChip addTarget:self action:@selector(onGlobalNotice)
-              forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_globalNoticeChip];
-
-  _pairBanner = [self flatButton:19];
-  _pairBanner.backgroundColor = [UIColor colorWithRed:0.72 green:0.45 blue:0.10 alpha:1];
-  [_pairBanner setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+  _pairBanner = DBChromeButton(@"", 19);
+  if (DBChromeIsFlat()) {
+    // The flat system button is bare text, which a wallpaper can swallow; it gets a card.
+    _pairBanner.backgroundColor = [UIColor whiteColor];
+    _pairBanner.layer.cornerRadius = 8;
+  }
   _pairBanner.hidden = YES;
   [_pairBanner addTarget:self action:@selector(onPairBanner)
         forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_pairBanner];
 
-  _doorsCaption = [[DBReadableLabel alloc] init];
-  _doorsCaption.backgroundColor = [UIColor clearColor];
-  _doorsCaption.font = [UIFont systemFontOfSize:20];
-  _doorsCaption.userInteractionEnabled = YES;
-  [_doorsCaption addGestureRecognizer:[[UITapGestureRecognizer alloc]
-      initWithTarget:self action:@selector(onNextDoorPreviewPage)]];
-  [self addSubview:_doorsCaption];
-
-  _recentCaption = [[DBReadableLabel alloc] init];
-  _recentCaption.backgroundColor = [UIColor clearColor];
-  _recentCaption.font = [UIFont systemFontOfSize:20];
-  [self addSubview:_recentCaption];
-
-  _seeAllButton = [self flatButton:19];
-  _seeAllButton.contentEdgeInsets = UIEdgeInsetsMake(2, 10, 2, 10);
-  [_seeAllButton addTarget:self action:@selector(onHistory)
+  // Unread missed calls: one notice that opens the History tab, where they are listed.
+  _missedNotice = DBChromeButton(@"", 19);
+  _missedNotice.hidden = YES;
+  [_missedNotice addTarget:self action:@selector(onHistory)
           forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_seeAllButton];
+  [self addSubview:_missedNotice];
 
-  _recentList = [[UIScrollView alloc] init];
-  _recentList.alwaysBounceVertical = YES;
-  [self addSubview:_recentList];
+  // Shown only when the doors need more than one preview page.
+  _doorsPager = DBChromeButton(@"", 17);
+  _doorsPager.hidden = YES;
+  [_doorsPager addTarget:self action:@selector(onNextDoorPreviewPage)
+        forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_doorsPager];
+  if (DBChromeIsFlat()) {
+    for (UIButton *button in [NSArray arrayWithObjects:_missedNotice, _doorsPager, nil]) {
+      button.backgroundColor = [UIColor whiteColor];
+      button.layer.cornerRadius = 8;
+    }
+  }
 
-  _recentEmpty = [[UILabel alloc] init];
-  _recentEmpty.backgroundColor = [UIColor clearColor];
-  _recentEmpty.font = [UIFont systemFontOfSize:20];
-  [self addSubview:_recentEmpty];
+  _noDoorsLabel = [[DBReadableLabel alloc] init];
+  _noDoorsLabel.backgroundColor = [UIColor clearColor];
+  _noDoorsLabel.font = [UIFont systemFontOfSize:24];
+  _noDoorsLabel.textAlignment = NSTextAlignmentCenter;
+  _noDoorsLabel.numberOfLines = 0;
+  _noDoorsLabel.hidden = YES;
+  [self addSubview:_noDoorsLabel];
 
   _qr = [[DBAdminQrView alloc] initWithFrame:CGRectZero];
   [self addSubview:_qr];
 
-  // Kept only so nothing else has to change shape; the footer's version line
-  // is drawn by the QR block now.
-  _versionLabel = [[UILabel alloc] init];
-  _versionLabel.hidden = YES;
-  _versionLabel.backgroundColor = [UIColor clearColor];
-  _versionLabel.font = [UIFont systemFontOfSize:16];
-  _versionLabel.numberOfLines = 2;
-  [self addSubview:_versionLabel];
-
   _sos = [[DBSosSlider alloc] initWithFrame:CGRectZero];
   _sos.delegate = self;
   [self addSubview:_sos];
+
+  _nav = [[DBNavBar alloc] init];
+  [self addSubview:_nav.bar];
+  _tabs = [[DBHomeTabs alloc] initWithRouter:_router tab:DBHomeTabHome];
+  [self addSubview:_tabs.bar];
+  _noticeItem = DBChromeBarItem(@"", self, @selector(onGlobalNotice));
+  _monitorItem = DBChromeBarItem(@"", self, @selector(onMonitor));
+  _addDeviceItem = DBChromeSystemBarItem(UIBarButtonSystemItemAdd, self, @selector(onMembership));
+  UINavigationItem *item = [_nav setRootTitle:@"" backTitle:nil onBack:nil];
+  item.leftBarButtonItem = _noticeItem;
+  item.rightBarButtonItems = [NSArray arrayWithObjects:_addDeviceItem, _monitorItem, nil];
 
   _nightTint = [[UIView alloc] init];
   _nightTint.backgroundColor = [UIColor colorWithRed:0.55 green:0.0 blue:0.0 alpha:0.35];
@@ -472,11 +359,6 @@ static const NSInteger kRecentCallLimit = 20;
   [self buildReplyBanner];
   [self buildOfflineView];
   [self buildEmergencyView];
-
-  _secretCorner = [UIButton buttonWithType:UIButtonTypeCustom];
-  _secretCorner.hidden = YES;
-  _secretCorner.userInteractionEnabled = NO;
-  [self addSubview:_secretCorner];
 
   [self applyPalette];
 }
@@ -537,12 +419,10 @@ static const NSInteger kRecentCallLimit = 20;
   _emergencyNote.textAlignment = NSTextAlignmentCenter;
   _emergencyNote.numberOfLines = 0;
   [_emergencyView addSubview:_emergencyNote];
-  _emergencyCancel = [UIButton buttonWithType:UIButtonTypeCustom];
-  _emergencyCancel.titleLabel.font = [UIFont boldSystemFontOfSize:26];
+  _emergencyCancel = DBChromeFilledButton(26);
   [_emergencyCancel setTitleColor:[UIColor colorWithRed:0.55 green:0.05 blue:0.04 alpha:1]
                          forState:UIControlStateNormal];
   _emergencyCancel.backgroundColor = [UIColor whiteColor];
-  _emergencyCancel.layer.cornerRadius = 14;
   [_emergencyCancel addTarget:self action:@selector(onEmergencyCancel)
              forControlEvents:UIControlEventTouchUpInside];
   [_emergencyView addSubview:_emergencyCancel];
@@ -552,6 +432,7 @@ static const NSInteger kRecentCallLimit = 20;
 
 - (void)onScreenWillAppear {
   _screenVisible = YES;
+  [_tabs syncSelection];
   if (!_clockTimer) {
     _clockTimer = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self
                                                  selector:@selector(updateClock)
@@ -588,6 +469,8 @@ static const NSInteger kRecentCallLimit = 20;
   _snapshotTimer = nil;
   ++_snapshotGeneration;
   [_noticeDialog dismiss];
+  [_monitorSheet dismissWithClickedButtonIndex:_monitorSheet.cancelButtonIndex animated:NO];
+  _monitorSheet = nil;
 }
 
 - (void)dealloc {
@@ -638,7 +521,7 @@ static const NSInteger kRecentCallLimit = 20;
     NSDictionary *cfg = [core config];
     NSDictionary *status = [core status];
     NSDictionary *pairing = [core pairingInfo];
-    NSDictionary *log = [core callLogSince:0 limit:kRecentCallLimit];
+    NSDictionary *log = [core callLogSince:0 limit:kMissedScanLimit];
     NSDictionary *localTime = [core localTimeJson:0];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBHomeScreen *screen = weakSelf;
@@ -673,8 +556,6 @@ static const NSInteger kRecentCallLimit = 20;
     }
   }
   if (log) {
-    _recentRows = [DBCallHistoryModel pageRows:[DBCallHistoryModel rowsFromLog:log]
-                                      beforeMs:0 limit:kRecentCallLimit];
     _unreadMissed = [DBCallHistoryModel unreadMissedFromLog:log];
   }
   // Core computes this as emergency.cancel_requires_pin AND a password
@@ -687,7 +568,6 @@ static const NSInteger kRecentCallLimit = 20;
   [self applyTheme];
   [self applyStrings];
   [self rebuildDoorTiles];
-  [self rebuildRecentCalls];
   [self updateFooter];
   [self refreshSosVisibility];
   _offlineView.hidden = _core.isRunning;
@@ -737,13 +617,6 @@ static const NSInteger kRecentCallLimit = 20;
   [_palette setBackgroundSampler:_themeBg.hidden ? nil : _sampler];
   [self applyRegionInk];
 
-  _missedBadge.backgroundColor = _palette.danger;
-  _missedBadge.textColor = _palette.dangerInk;
-  _adminButton.backgroundColor = _palette.elevated;
-  [_adminButton setTitleColor:_palette.ink forState:UIControlStateNormal];
-  _seeAllButton.backgroundColor = _palette.elevated;
-  [_seeAllButton setTitleColor:_palette.ink forState:UIControlStateNormal];
-  [_globalNoticeChip applyPalette:_palette];
   [_qr applyPalette:_palette];
   [_sos applyPalette:_palette];
   [_sos applyConfig:_cfg texts:_texts];
@@ -753,9 +626,8 @@ static const NSInteger kRecentCallLimit = 20;
   [self applyScrimTone];
 }
 
-// A scrim plate: the surface colour at 70 %, so the picture still reads through
-// it while small text over it gets a stable ground. Card radius matches a door
-// tile, and it never takes touches away from the controls above it.
+// The footer plate: frosted wallpaper under a tint of the surface colour, so the address and
+// version line keep a stable ground. It never takes touches from the controls above it.
 - (UIView *)newScrimView {
   UIView *scrim = [[DBFrostedPlateView alloc] initWithFrame:CGRectZero];
   scrim.layer.cornerRadius = 12;
@@ -766,17 +638,13 @@ static const NSInteger kRecentCallLimit = 20;
   return scrim;
 }
 
-static const CGFloat kScrimAlpha = 0.70;
 static const CGFloat kFooterGlassAlpha = 0.65;
 
-// The plates exist only over a picture; on a flat ground they would be a
-// visible rectangle of very slightly different colour for no benefit.
+// The plate exists only over a picture; on a flat ground it would be a visible rectangle of
+// very slightly different colour for no benefit.
 - (void)applyScrimTone {
   BOOL overPicture = !_themeBg.hidden && _themeBg.image != nil;
-  UIColor *fallbackTone = [_palette.surface colorWithAlphaComponent:kScrimAlpha];
-  _historyScrim.backgroundColor = overPicture ? [UIColor clearColor] : fallbackTone;
   _footerScrim.backgroundColor = [UIColor clearColor];
-  _historyScrim.hidden = !overPicture;
   _footerScrim.hidden = !overPicture;
 }
 
@@ -883,7 +751,6 @@ static const CGFloat kFooterGlassAlpha = 0.65;
       [screen refreshBackgroundSampler];
       [screen applyPalette];
       [screen rebuildDoorTiles];
-      [screen rebuildRecentCalls];
     });
   });
 }
@@ -897,25 +764,26 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   _emergencyTitle.text = [_texts ts:@"emergency.title"];
   _emergencyNote.text = [_texts ts:@"emergency.notified"];
   [_emergencyCancel setTitle:[_texts ts:@"emergency.cancel"] forState:UIControlStateNormal];
-  [_adminButton setTitle:[_texts ts:@"dash.admin"] forState:UIControlStateNormal];
-  [_seeAllButton setTitle:[_texts ts:@"dash.see_all"] forState:UIControlStateNormal];
-  _doorsCaption.text = [_texts ts:@"dash.doors"];
-  _recentCaption.text = [_texts ts:@"dash.recent_calls"];
-  _recentEmpty.text = [_texts ts:@"history.empty"];
+  _noDoorsLabel.text = [_texts ts:@"dash.no_doors"];
+  [_missedNotice setTitle:[_texts t:@"history.unread_banner",
+      [NSString stringWithFormat:@"%ld", (long)_unreadMissed], nil]
+                 forState:UIControlStateNormal];
+  _missedNotice.hidden = _unreadMissed <= 0;
+  [_tabs applyTexts:_texts];
+  [_tabs setMissedCount:_unreadMissed];
+  NSString *deviceName = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:
+      @"devices.%@.name", _nodeId]];
+  if ([deviceName length] == 0) deviceName = _boot.name;
+  _nav.topItem.title = [deviceName length] > 0 ? deviceName : [_texts ts:@"app.name"];
+  [_monitorItem setTitle:[_texts ts:@"nav.monitor"]];
+  _monitorItem.enabled = [_doorTileInfos count] > 0;
+  _addDeviceItem.accessibilityLabel = [_texts ts:@"admin.add_device"];
 
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSDictionary *global = [DBNoticeModel effectiveNoticeForDoor:nil config:_cfg nowMs:nowMs];
-  [_globalNoticeChip setChipTitle:[_texts ts:@"dash.notice_global"] active:(global != nil)];
-
-  if (_unreadMissed > 0) {
-    _missedBadge.text = [_texts t:@"history.missed_badge",
-        [NSString stringWithFormat:@"%ld", (long)_unreadMissed], nil];
-    _missedBadge.hidden = NO;
-    _missedButton.hidden = NO;
-  } else {
-    _missedBadge.hidden = YES;
-    _missedButton.hidden = YES;
-  }
+  // An announcement in force shows as the bar's highlighted (Done) style.
+  [_noticeItem setTitle:[_texts ts:@"dash.notice_global"]];
+  _noticeItem.style = global != nil ? UIBarButtonItemStyleDone : UIBarButtonItemStyleBordered;
 }
 
 - (void)updateFooter {
@@ -1042,8 +910,9 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     if (!info.online) tile.still.image = nil;
     NSDictionary *notice = [DBNoticeModel effectiveNoticeForDoor:tile.doorId config:_cfg
                                                             nowMs:nowMs];
-    [tile.noticeChip applyPalette:_palette];
-    [tile.noticeChip setChipTitle:[_texts ts:@"notice.chip"] active:YES];
+    tile.noticeChip.text = [_texts ts:@"notice.chip"];
+    tile.noticeChip.backgroundColor = [UIColor colorWithWhite:0 alpha:0.55];
+    tile.noticeChip.textColor = [UIColor whiteColor];
     tile.noticeChip.hidden = (notice == nil);
   }
   // Keep the array in configuration order without recreating anything.
@@ -1081,13 +950,13 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   NSArray *visible = [self visibleDoorTiles];
   for (DBDoorTile *tile in _doorTiles) tile.hidden = ![visible containsObject:tile];
   NSInteger total = (NSInteger)[_doorTiles count];
-  if (total == 0) {
-    _doorsCaption.text = [_texts ts:@"dash.no_doors"];
-  } else if (total > (NSInteger)[visible count]) {
-    _doorsCaption.text = [NSString stringWithFormat:@"%@ · %ld/%ld ›",
-        [_texts ts:@"dash.doors"], (long)[visible count], (long)total];
-  } else {
-    _doorsCaption.text = [_texts ts:@"dash.doors"];
+  _noDoorsLabel.hidden = total > 0;
+  BOOL paged = total > (NSInteger)[visible count];
+  _doorsPager.hidden = !paged;
+  if (paged) {
+    [_doorsPager setTitle:[NSString stringWithFormat:@"%@  %ld/%ld",
+        [_texts ts:@"dash.doors"], (long)[visible count], (long)total]
+                 forState:UIControlStateNormal];
   }
   [self setNeedsLayout];
 }
@@ -1101,29 +970,6 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     [_previewPriorityDoors removeLastObject];
   _previewPage = 0;
   [self applyDoorPreviewSelection];
-}
-
-- (void)rebuildRecentCalls {
-  for (UIView *rowView in _recentLabels) [rowView removeFromSuperview];
-  [_recentLabels removeAllObjects];
-  for (NSDictionary *row in _recentRows) {
-    DBRecentCallRowView *rowView = [[DBRecentCallRowView alloc] init];
-    NSString *door = [DBConfigUtil evStr:row key:@"door"];
-    NSDictionary *doorEntry = [DBConfigUtil dig:_cfg
-        path:[NSString stringWithFormat:@"doors.%@", door]];
-    NSString *doorLabel = [DBConfigUtil labelOf:doorEntry lang:_boot.uiLang fallback:door];
-    NSString *outcome = [DBConfigUtil evStr:row key:@"outcome"];
-    NSString *outcomeKey = [NSString stringWithFormat:@"history.outcome_%@", outcome];
-    [rowView setClock:[DBCallHistoryModel
-                          clockForTs:[DBConfigUtil longLongVal:row path:@"ts" def:0]
-                       offsetMinutes:_tzOffsetMinutes]
-                   door:doorLabel outcome:[_texts ts:outcomeKey]
-                 missed:[DBCallHistoryModel rowIsMissed:row] palette:_palette];
-    [_recentList addSubview:rowView];
-    [_recentLabels addObject:rowView];
-  }
-  _recentEmpty.hidden = ([_recentLabels count] > 0);
-  [self setNeedsLayout];
 }
 
 #pragma mark - door stills
@@ -1220,6 +1066,46 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   [_router showMonitorPeer:sender.peer];
 }
 
+// One door opens its monitor at once; several are offered as a list, so every door is
+// reachable even when its tile is on another preview page.
+- (void)onMonitor {
+  NSMutableArray *peers = [NSMutableArray array];
+  NSMutableArray *titles = [NSMutableArray array];
+  for (DBDoorTile *tile in _doorTiles) {
+    if (tile.peer == nil) continue;
+    [peers addObject:tile.peer];
+    [titles addObject:tile.caption.text ?: tile.doorId ?: @""];
+  }
+  if ([peers count] == 0) return;
+  if ([peers count] == 1) {
+    [_router showMonitorPeer:[peers objectAtIndex:0]];
+    return;
+  }
+  UIActionSheet *sheet = [[UIActionSheet alloc] initWithTitle:[_texts ts:@"dash.doors"]
+                                                     delegate:self
+                                            cancelButtonTitle:nil
+                                       destructiveButtonTitle:nil
+                                            otherButtonTitles:nil];
+  for (NSString *title in titles) [sheet addButtonWithTitle:title];
+  sheet.cancelButtonIndex = [sheet addButtonWithTitle:[_texts ts:@"admin.cancel"]];
+  _monitorSheet = sheet;
+  _monitorSheetPeers = peers;
+  if (DBChromeIsPad())
+    [sheet showFromBarButtonItem:_monitorItem animated:NO];
+  else
+    [sheet showInView:self];
+}
+
+- (void)actionSheet:(UIActionSheet *)sheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+  if (sheet != _monitorSheet) return;
+  NSArray *peers = _monitorSheetPeers;
+  _monitorSheet = nil;
+  _monitorSheetPeers = nil;
+  if (buttonIndex < 0 || buttonIndex == sheet.cancelButtonIndex ||
+      buttonIndex >= (NSInteger)[peers count]) return;
+  [_router showMonitorPeer:[peers objectAtIndex:(NSUInteger)buttonIndex]];
+}
+
 - (void)onNextDoorPreviewPage {
   NSInteger total = (NSInteger)[_doorTiles count];
   NSInteger capacity = _safeMode ? 1 : 3;
@@ -1247,17 +1133,9 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   [_router showPairing];
 }
 
-- (void)onAdmin {
-  __weak DBHomeScreen *weakSelf = self;
-  [_router requestPinThen:^{
-    DBHomeScreen *screen = weakSelf;
-    if (screen) [screen.router showSettings];
-  }];
-}
-
 - (void)onHistory {
   // Opening the history marks the missed calls seen, which clears the badge.
-  [_router showHistory];
+  [_router selectHomeTab:DBHomeTabHistory];
 }
 
 - (void)onGlobalNotice {
@@ -1278,22 +1156,6 @@ static const CGFloat kFooterGlassAlpha = 0.65;
                preselectedDoor:nil palette:_palette onFinished:^(BOOL changed) {
     DBHomeScreen *screen = weakSelf;
     if (screen && changed) [screen refreshFromCore];
-  }];
-}
-
-- (void)onSecretCorner {
-  NSDate *now = [NSDate date];
-  if ([now timeIntervalSinceDate:_secretFirst] > 5) {
-    _secretFirst = now;
-    _secretTaps = 0;
-  }
-  _secretTaps++;
-  if (_secretTaps < 7) return;
-  _secretTaps = 0;
-  __weak DBHomeScreen *weakSelf = self;
-  [_router requestPinThen:^{
-    DBHomeScreen *screen = weakSelf;
-    if (screen) [screen.router showInfo];
   }];
 }
 
@@ -1441,7 +1303,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   [_palette setBackgroundSampler:_themeBg.hidden ? nil : _sampler];
   [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
   [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
-  [_palette applyInkToLabel:_doorsCaption region:DBUiRegionStatusLine];
+  [_palette applyInkToLabel:_noDoorsLabel region:DBUiRegionHint];
   // The counters are a status line drawn by hand, so they take the same ink
   // and the same halo decision the labels beside them take.
   for (DBFleetCounter *counter in _fleetCounters) {
@@ -1449,8 +1311,6 @@ static const CGFloat kFooterGlassAlpha = 0.65;
     counter.halo = [_palette needsShadowForRegion:DBUiRegionStatusLine frame:counter.frame];
     [counter setNeedsDisplay];
   }
-  [_palette applyInkToLabel:_recentCaption region:DBUiRegionStatusLine];
-  [_palette applyInkToLabel:_recentEmpty region:DBUiRegionHint];
   for (DBDoorTile *tile in _doorTiles) {
     // A tile caption sits on its own translucent pill over live video, so it
     // is measured against the tile, not the wallpaper behind it.
@@ -1548,155 +1408,60 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   [super layoutSubviews];
   CGSize size = self.bounds.size;
   BOOL portrait = size.height > size.width;
-  CGFloat pad = 20;
   _themeBg.frame = self.bounds;
   _nightTint.frame = self.bounds;
   _offlineView.frame = self.bounds;
   _emergencyView.frame = self.bounds;
   _noticeDialog.frame = self.bounds;
-  _secretCorner.frame = CGRectZero;
 
-  // Header: clock and date on the left, status controls on the right. The
-  // boxes are derived from the fonts, so a larger size moves what follows
-  // instead of overlapping it.
-  CGFloat clockHeight = ceilf((float)_clockLabel.font.lineHeight) + 4;
-  CGFloat dateHeight = ceilf((float)_dateLabel.font.lineHeight) + 2;
-  _clockLabel.frame = CGRectMake(pad, 10, size.width * 0.5, clockHeight);
-  _dateLabel.frame = CGRectMake(pad + 4, CGRectGetMaxY(_clockLabel.frame) - 4,
-                                size.width * 0.5, dateHeight);
-  CGFloat headerBottom = CGRectGetMaxY(_dateLabel.frame);
-
-  CGFloat rightX = size.width - pad;
-  CGSize adminFit = [_adminButton sizeThatFits:CGSizeMake(200, 40)];
-  CGFloat adminWidth = MAX(96, adminFit.width);
-  _adminButton.frame = CGRectMake(rightX - adminWidth, 18, adminWidth, 40);
-  rightX -= adminWidth + 10;
-
-  CGSize noticeFit = [_globalNoticeChip sizeThatFits:CGSizeMake(320, 40)];
-  CGFloat noticeWidth = MIN(300, MAX(140, noticeFit.width + 14));
-  _globalNoticeChip.frame = CGRectMake(rightX - noticeWidth, 18, noticeWidth, 40);
-  rightX -= noticeWidth + 10;
-
-  if (!_missedBadge.hidden) {
-    CGSize missedFit = [_missedBadge sizeThatFits:CGSizeMake(260, 36)];
-    CGFloat missedWidth = MIN(260, MAX(120, missedFit.width));
-    _missedBadge.frame = CGRectMake(rightX - missedWidth, 20, missedWidth, 36);
-    _missedButton.frame = _missedBadge.frame;
-    rightX -= missedWidth + 10;
-  }
-
-  // One row of counters, right aligned under the admin button. Each sizes to
-  // its own glyph and number, so a three-digit fleet does not clip.
-  CGFloat counterHeight = 34;
-  CGFloat counterTop = CGRectGetMaxY(_adminButton.frame) + 8;
-  CGFloat counterGap = 8;
-  CGFloat counterRight = size.width - pad;
-  for (NSInteger i = (NSInteger)[_fleetCounters count] - 1; i >= 0; i--) {
-    DBFleetCounter *counter = [_fleetCounters objectAtIndex:(NSUInteger)i];
-    CGFloat width = [counter widthThatFits];
-    counter.frame = CGRectMake(counterRight - width, counterTop, width, counterHeight);
-    counterRight -= width + counterGap;
-  }
-  CGFloat countersLeft = counterRight + counterGap;
-  _membershipButton.frame = CGRectMake(countersLeft, counterTop,
-                                       MAX(0, size.width - pad - countersLeft), counterHeight);
-
-  CGFloat bannerHeight = 0;
-  if (_pairBanner.hidden) {
-    _pairBanner.frame = CGRectZero;
-  } else {
-    CGFloat bannerWidth = MIN(size.width - 2 * pad, 560);
-    _pairBanner.frame = CGRectMake((size.width - bannerWidth) / 2, headerBottom + 6,
-                                   bannerWidth, 46);
-    bannerHeight = 54;
-  }
-
-  CGFloat contentTop = headerBottom + 28 + bannerHeight;
-  // The QR, the version line and the SOS slider are placed by one shared,
-  // host-tested split so they can never overlap in either orientation.
+  CGFloat navHeight = [_nav layoutInBounds:self.bounds];
+  CGFloat tabHeight = [_tabs layoutInBounds:self.bounds];
+  // The QR, the version line and the SOS slider are placed by one shared, host-tested split
+  // above the tab bar, so they can never overlap in either orientation.
+  CGFloat footerViewHeight = size.height - tabHeight;
   NSDictionary *footer = [DBUiTheme footerLayoutForViewWidth:size.width
-                                                  viewHeight:size.height
+                                                  viewHeight:footerViewHeight
                                                     portrait:portrait
                                                   sosVisible:!_sos.hidden];
   CGFloat footerHeight = (CGFloat)[[footer objectForKey:@"height"] doubleValue];
-  CGFloat contentHeight = MAX(120, size.height - contentTop - footerHeight);
+  DBHomeLayout layout = DBHomeLayoutMake(size, navHeight, tabHeight, footerHeight,
+                                         !_pairBanner.hidden, !_missedNotice.hidden,
+                                         !_doorsPager.hidden);
 
-  CGFloat tilesWidth, tilesHeight, listX, listY, listWidth, listHeight;
-  if (portrait) {
-    // Portrait stacks the tiles above the call list (spec §4.2 responsiveness).
-    tilesWidth = size.width - 2 * pad;
-    tilesHeight = MIN(contentHeight * 0.5, 220);
-    listX = pad;
-    listY = contentTop + tilesHeight + 44;
-    listWidth = tilesWidth;
-    listHeight = MAX(80, contentHeight - tilesHeight - 44);
-  } else {
-    tilesWidth = (size.width - 3 * pad) * 0.55;
-    tilesHeight = contentHeight;
-    listX = pad + tilesWidth + pad;
-    listY = contentTop;
-    listWidth = size.width - listX - pad;
-    listHeight = contentHeight;
+  _clockLabel.font = [UIFont systemFontOfSize:floorf((float)layout.clock.size.height * 0.9f)];
+  _dateLabel.font = [UIFont systemFontOfSize:floorf((float)layout.date.size.height * 0.75f)];
+  _clockLabel.frame = layout.clock;
+  _dateLabel.frame = layout.date;
+  _pairBanner.frame = layout.banner;
+  _missedNotice.frame = layout.missed;
+  _doorsPager.frame = layout.pager;
+  _noDoorsLabel.frame = CGRectInset(layout.tiles, 0, MAX(0, (layout.tiles.size.height - 80) / 2));
+
+  // Each counter sizes to its own glyph and number, right aligned in its band.
+  CGFloat counterGap = 8;
+  CGFloat counterRight = CGRectGetMaxX(layout.counters);
+  for (NSInteger i = (NSInteger)[_fleetCounters count] - 1; i >= 0; i--) {
+    DBFleetCounter *counter = [_fleetCounters objectAtIndex:(NSUInteger)i];
+    CGFloat width = [counter widthThatFits];
+    counter.frame = CGRectMake(counterRight - width, layout.counters.origin.y, width,
+                               layout.counters.size.height);
+    counterRight -= width + counterGap;
   }
 
-  _doorsCaption.frame = CGRectMake(pad, contentTop - 24, tilesWidth, 20);
   NSArray *visibleTiles = [self visibleDoorTiles];
   NSInteger count = (NSInteger)[visibleTiles count];
-  if (count > 0) {
-    NSInteger columns = (count == 1) ? 1 : 2;
-    NSInteger rows = (count + columns - 1) / columns;
-    CGFloat gap = 12;
-    CGFloat tileWidth = (tilesWidth - gap * (columns - 1)) / columns;
-    CGFloat fitHeight = (tilesHeight - gap * (rows - 1)) / MAX(1, rows);
-    CGFloat aspectHeight = tileWidth * 9.0 / 16.0;
-    CGFloat tileHeight = MIN(fitHeight, count == 1 ? MIN(300, aspectHeight) : aspectHeight);
-    for (NSInteger i = 0; i < count; i++) {
-      DBDoorTile *tile = [visibleTiles objectAtIndex:(NSUInteger)i];
-      tile.frame = CGRectMake(pad + (i % columns) * (tileWidth + gap),
-                              contentTop + (i / columns) * (tileHeight + gap),
-                              tileWidth, tileHeight);
-    }
+  for (NSInteger i = 0; i < count; i++) {
+    DBDoorTile *tile = [visibleTiles objectAtIndex:(NSUInteger)i];
+    tile.frame = DBHomeLayoutTileFrame(layout, i, count);
   }
 
-  CGSize seeAllFit = [_seeAllButton sizeThatFits:CGSizeMake(listWidth, 28)];
-  CGFloat seeAllWidth = MIN(listWidth * 0.6, MAX(104, seeAllFit.width + 8));
-  _recentCaption.frame = CGRectMake(listX, listY - 26, listWidth - seeAllWidth - 10, 24);
-  _seeAllButton.frame = CGRectMake(listX + listWidth - seeAllWidth, listY - 28,
-                                   seeAllWidth, 28);
-  // The plate covers the rows, not the heading: headings keep the region-ink
-  // rule over the picture, which is what the spec asks of them.
-  _historyScrim.frame = CGRectMake(listX, listY, listWidth, listHeight);
-  if ([_historyScrim isKindOfClass:[DBFrostedPlateView class]]) {
-    UIColor *tint = [_palette.surface colorWithAlphaComponent:kFooterGlassAlpha];
-    UIColor *border = [_palette.ink colorWithAlphaComponent:0.18];
-    [(DBFrostedPlateView *)_historyScrim setBackdrop:_themeGlassImage
-                                         sourceFrame:_historyScrim.frame
-                                          canvasSize:size tint:tint border:border];
-  }
-  CGFloat historyInsetH = 12;
-  CGFloat historyInsetV = 8;
-  _recentList.frame = CGRectMake(listX + historyInsetH, listY + historyInsetV,
-                                 listWidth - historyInsetH * 2,
-                                 MAX(0, listHeight - historyInsetV * 2));
-  CGFloat rowY = 0;
-  for (DBRecentCallRowView *rowView in _recentLabels) {
-    rowView.frame = CGRectMake(0, rowY, _recentList.bounds.size.width, 38);
-    rowY += 38;
-  }
-  _recentList.contentSize = CGSizeMake(_recentList.bounds.size.width, rowY);
-  _recentEmpty.frame = CGRectMake(listX + historyInsetH, listY + historyInsetV,
-                                  listWidth - historyInsetH * 2, 26);
-
-  // Footer: admin QR (always), version + battery, SOS slider.
-  // The address and the version line are now two stacked lines inside the QR
-  // block, so the block takes the width the version label used to occupy
-  // beside it.
+  // The address and the version line are two stacked lines inside the QR block, so the block
+  // takes the width of both rectangles.
   CGRect footerBlock = CGRectUnion(DBRectFromArray([footer objectForKey:@"qr"]),
                                    DBRectFromArray([footer objectForKey:@"version"]));
   _qr.frame = footerBlock;
   _sos.frame = DBRectFromArray([footer objectForKey:@"sos"]);
-  // One plate under the whole footer block. The SOS bar is its own red control
-  // and is deliberately left outside it.
+  // One plate under the footer block. The SOS bar is its own red control and stays outside it.
   CGFloat footerPad = 8;
   _footerScrim.frame = CGRectIsEmpty(footerBlock)
       ? CGRectZero : CGRectInset(footerBlock, -footerPad, -footerPad);
@@ -1709,7 +1474,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   }
 
   CGFloat replyWidth = MIN(size.width - 40, 560);
-  _replyBanner.frame = CGRectMake((size.width - replyWidth) / 2, 20, replyWidth, 96);
+  _replyBanner.frame = CGRectMake((size.width - replyWidth) / 2, navHeight + 12, replyWidth, 96);
   _replyCaption.frame = CGRectMake(20, 12, replyWidth - 40, 24);
   _replyText.frame = CGRectMake(20, 40, replyWidth - 40, 44);
 

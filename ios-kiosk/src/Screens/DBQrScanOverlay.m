@@ -5,6 +5,7 @@
 #import "../Core/DBTexts.h"
 #import "../Media/DBCameraFeeder.h"
 #import "../Support/DBAppDelegate.h"
+#import "DBChrome.h"
 
 static const NSTimeInterval kTickS = 0.25;
 // Core stops scanning by itself after two minutes; re-arm well before that while visible.
@@ -23,8 +24,7 @@ void DBH264Dbg(NSString *fmt, ...);
   UIView *_finder;
   UILabel *_hint;
   UILabel *_status;
-  UIButton *_cancel;
-  UIButton *_switchCamera;
+  DBNavBar *_nav;
   AVCaptureDevicePosition _originalPosition;
   NSTimer *_tick;
   NSDate *_openedAt;
@@ -82,34 +82,21 @@ void DBH264Dbg(NSString *fmt, ...);
     [self addSubview:_hint];
 
     _status = [self label:[UIFont systemFontOfSize:16]];
-    _status.textColor = [UIColor colorWithWhite:0.8 alpha:1];
     _status.text = [_texts ts:@"pair.scan_opening"];
     [self addSubview:_status];
 
-    _cancel = [UIButton buttonWithType:UIButtonTypeCustom];
-    _cancel.backgroundColor = [UIColor colorWithWhite:0.22 alpha:1];
-    _cancel.layer.cornerRadius = 10;
-    _cancel.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-    [_cancel setTitle:[_texts ts:@"pair.scan_cancel"] forState:UIControlStateNormal];
-    [_cancel setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    [_cancel addTarget:self action:@selector(onCancel)
-      forControlEvents:UIControlEventTouchUpInside];
-    _cancel.accessibilityIdentifier = @"qr_scan_cancel";
-    [self addSubview:_cancel];
-
+    _nav = [[DBNavBar alloc] init];
+    UINavigationItem *item = [_nav setRootTitle:[_texts ts:@"pair.scan_qr"] backTitle:nil
+                                         onBack:nil];
+    item.leftBarButtonItem =
+        DBChromeBarItem([_texts ts:@"pair.scan_cancel"], self, @selector(onCancel));
     // A wall-mounted panel cannot be turned around, and a phone held up to the front lens is
     // awkward, so the scanner opens on the back camera and can flip to the front one.
-    _switchCamera = [UIButton buttonWithType:UIButtonTypeCustom];
-    _switchCamera.backgroundColor = [UIColor colorWithWhite:0.22 alpha:1];
-    _switchCamera.layer.cornerRadius = 10;
-    _switchCamera.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-    [_switchCamera setTitle:[_texts ts:@"pair.scan_switch_camera"] forState:UIControlStateNormal];
-    [_switchCamera setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    [_switchCamera addTarget:self action:@selector(onSwitchCamera)
-            forControlEvents:UIControlEventTouchUpInside];
-    _switchCamera.accessibilityIdentifier = @"qr_scan_switch_camera";
-    _switchCamera.hidden = ![DBCameraFeeder canSwitchPosition];
-    [self addSubview:_switchCamera];
+    if ([DBCameraFeeder canSwitchPosition]) {
+      item.rightBarButtonItem = DBChromeBarItem([_texts ts:@"pair.scan_switch_camera"], self,
+                                                @selector(onSwitchCamera));
+    }
+    [self addSubview:_nav.bar];
   }
   return self;
 }
@@ -117,7 +104,10 @@ void DBH264Dbg(NSString *fmt, ...);
 - (UILabel *)label:(UIFont *)font {
   UILabel *label = [[UILabel alloc] init];
   label.font = font;
+  // Drawn over live video: white ink with a dark edge stays readable on any picture.
   label.textColor = [UIColor whiteColor];
+  label.shadowColor = [UIColor colorWithWhite:0 alpha:0.8];
+  label.shadowOffset = CGSizeMake(0, 1);
   label.backgroundColor = [UIColor clearColor];
   label.textAlignment = NSTextAlignmentCenter;
   label.numberOfLines = 0;
@@ -274,6 +264,7 @@ void DBH264Dbg(NSString *fmt, ...);
   [_core qrScanStop];
   [self releaseCamera];
   _finder.hidden = YES;
+  _nav.topItem.rightBarButtonItem = nil;
   _hint.text = [_texts ts:key];
   _status.text = @"";
   [self setNeedsLayout];
@@ -341,28 +332,33 @@ void DBH264Dbg(NSString *fmt, ...);
 
 - (void)layoutSubviews {
   [super layoutSubviews];
-  CGSize size = self.bounds.size;
+  CGRect bounds = self.bounds;
+  CGFloat top = [_nav layoutInBounds:bounds];
+  CGRect video = CGRectMake(0, top, bounds.size.width, bounds.size.height - top);
   CGFloat pad = 24;
-  CGFloat width = size.width - pad * 2;
-  _previewHost.frame = self.bounds;
+  CGFloat width = video.size.width - pad * 2;
+  _previewHost.frame = video;
   _preview.frame = _previewHost.bounds;
   [self applyPreviewOrientation];
-  CGFloat side = MIN(MIN(size.width, size.height) * 0.6, 420);
-  _finder.frame = CGRectMake((size.width - side) / 2, (size.height - side) / 2 - 20, side, side);
-  CGFloat hintHeight = [_hint sizeThatFits:CGSizeMake(width, 9999)].height;
-  CGFloat top = _failed ? (size.height - hintHeight) / 2 - 40 : 36;
-  _hint.frame = CGRectMake(pad, top, width, hintHeight);
-  CGFloat statusHeight = [_status sizeThatFits:CGSizeMake(width, 9999)].height;
-  _status.frame = CGRectMake(pad, CGRectGetMaxY(_finder.frame) + 16, width, statusHeight);
-  if (_switchCamera.hidden || _failed) {
-    _switchCamera.hidden = YES;
-    _cancel.frame = CGRectMake((size.width - 220) / 2, size.height - 84, 220, 56);
-  } else {
-    CGFloat buttonWidth = 220, gap = 16;
-    CGFloat left = (size.width - buttonWidth * 2 - gap) / 2;
-    _switchCamera.frame = CGRectMake(left, size.height - 84, buttonWidth, 56);
-    _cancel.frame = CGRectMake(left + buttonWidth + gap, size.height - 84, buttonWidth, 56);
+
+  CGFloat hintHeight = ceilf([_hint sizeThatFits:CGSizeMake(width, 9999)].height);
+  CGFloat statusHeight = ceilf([_status sizeThatFits:CGSizeMake(width, 9999)].height);
+  if (_failed) {
+    _hint.frame = CGRectMake(pad, CGRectGetMidY(video) - hintHeight / 2, width, hintHeight);
+    _status.frame = CGRectZero;
+    return;
   }
+  // The hint sits above the finder and the status under it; the finder takes what is left.
+  CGFloat gap = 12;
+  CGFloat room = video.size.height - hintHeight - statusHeight - gap * 4;
+  CGFloat side = MAX(120, MIN(MIN(video.size.width * 0.6, room), 420));
+  CGFloat block = hintHeight + gap + side + gap + statusHeight;
+  CGFloat y = CGRectGetMinY(video) + MAX(gap, floorf((video.size.height - block) / 2));
+  _hint.frame = CGRectMake(pad, y, width, hintHeight);
+  y += hintHeight + gap;
+  _finder.frame = CGRectMake(floorf((bounds.size.width - side) / 2), y, side, side);
+  y += side + gap;
+  _status.frame = CGRectMake(pad, y, width, statusHeight);
 }
 
 @end

@@ -4,43 +4,45 @@
 #import "../Core/DBCoreBridge.h"
 #import "../Core/DBNoticeModel.h"
 #import "../Core/DBTexts.h"
-#import "DBNumericKeypad.h"
+#import "DBChrome.h"
 #import "DBRouter.h"
-#import "DBWidgets.h"
+
+static NSString *const kSectionTarget = @"target";
+static NSString *const kSectionPresets = @"presets";
+static NSString *const kSectionText = @"text";
+static NSString *const kSectionExpiry = @"expiry";
+static NSString *const kSectionClear = @"clear";
+
+static const NSInteger kExpiryHoursRow = 4;
+static const CGFloat kSheetWidth = 540;
+static const CGFloat kSheetHeight = 620;
+
+@interface DBNoticeDialog () <UITableViewDataSource, UITableViewDelegate>
+@end
 
 @implementation DBNoticeDialog {
   __weak DBRouter *_router;
   DBCoreBridge *_core;
   DBTexts *_texts;
-  DBUiPalette *_palette;
   NSDictionary *_config;
   NSArray *_doorIds;
   NSDictionary *_doorLabels;
+  NSArray *_presets;        // [{id, text}]
+  NSArray *_sections;
+  NSArray *_expiryIds;
   NSString *_target;        // "" = global, otherwise a door id
   NSString *_expiryPreset;  // 1h | today | until_cleared | custom
   NSInteger _customHours;
   void (^_onFinished)(BOOL changed);
   BOOL _changed;
 
-  UIButton *_backdrop;
+  UIButton *_dim;
   UIView *_panel;
-  UILabel *_title;
-  UIScrollView *_scroll;
-  UILabel *_targetCaption;
-  NSMutableArray *_targetButtons;
-  UILabel *_presetCaption;
-  NSMutableArray *_presetButtons;
+  DBNavBar *_navBar;
+  UITableView *_table;
   UITextField *_textField;
-  UILabel *_expiryCaption;
-  NSMutableArray *_expiryButtons;
-  UILabel *_status;
-  UIButton *_publish;
-  UIButton *_clear;
-  UIButton *_cancel;
-  CGFloat _numberKeyboardHeight;
-  UIView *_keypadOverlay;
-  UILabel *_keypadTitle;
-  DBNumericKeypad *_keypad;
+  UIStepper *_hoursStepper;
+  CGFloat _keyboardHeight;
 }
 
 - (id)initWithRouter:(DBRouter *)router {
@@ -52,126 +54,56 @@
     _target = @"";
     _expiryPreset = @"until_cleared";
     _customHours = 3;
-    _targetButtons = [[NSMutableArray alloc] init];
-    _presetButtons = [[NSMutableArray alloc] init];
-    _expiryButtons = [[NSMutableArray alloc] init];
+    _expiryIds = [NSArray arrayWithObjects:@"1h", @"today", @"until_cleared", @"custom", nil];
+    _sections = [NSArray array];
     [self buildUi];
   }
   return self;
 }
 
-- (UIButton *)chipButton {
-  UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
-  button.titleLabel.font = [UIFont systemFontOfSize:17];
-  button.titleLabel.adjustsFontSizeToFitWidth = YES;
-  button.layer.cornerRadius = 8;
-  button.clipsToBounds = YES;
-  button.contentEdgeInsets = UIEdgeInsetsMake(6, 12, 6, 12);
-  return button;
+- (void)dealloc {
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+  _table.dataSource = nil;
+  _table.delegate = nil;
 }
 
 - (void)buildUi {
-  _backdrop = [UIButton buttonWithType:UIButtonTypeCustom];
-  _backdrop.backgroundColor = [UIColor colorWithWhite:0 alpha:0.72];
-  [_backdrop addTarget:self action:@selector(onCancel)
-      forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_backdrop];
+  _dim = [UIButton buttonWithType:UIButtonTypeCustom];
+  _dim.backgroundColor = [UIColor colorWithWhite:0 alpha:0.5];
+  [_dim addTarget:self action:@selector(onCancel) forControlEvents:UIControlEventTouchUpInside];
+  [self addSubview:_dim];
 
   _panel = [[UIView alloc] init];
-  _panel.layer.cornerRadius = 16;
+  _panel.backgroundColor = DBChromeScreenBackground();
   _panel.clipsToBounds = YES;
   [self addSubview:_panel];
 
-  _title = [[UILabel alloc] init];
-  _title.backgroundColor = [UIColor clearColor];
-  _title.font = [UIFont boldSystemFontOfSize:24];
-  [_panel addSubview:_title];
+  _navBar = [[DBNavBar alloc] init];
+  [_panel addSubview:_navBar.bar];
 
-  _scroll = [[UIScrollView alloc] init];
-  _scroll.alwaysBounceVertical = YES;
-  [_panel addSubview:_scroll];
-
-  _targetCaption = [[UILabel alloc] init];
-  _targetCaption.backgroundColor = [UIColor clearColor];
-  _targetCaption.font = [UIFont systemFontOfSize:15];
-  [_scroll addSubview:_targetCaption];
-
-  _presetCaption = [[UILabel alloc] init];
-  _presetCaption.backgroundColor = [UIColor clearColor];
-  _presetCaption.font = [UIFont systemFontOfSize:15];
-  [_scroll addSubview:_presetCaption];
+  _table = DBChromeGroupedTable(self, self);
+  [_panel addSubview:_table];
 
   _textField = [[UITextField alloc] init];
-  _textField.borderStyle = UITextBorderStyleRoundedRect;
-  _textField.font = [UIFont systemFontOfSize:19];
   _textField.clearButtonMode = UITextFieldViewModeWhileEditing;
   _textField.returnKeyType = UIReturnKeyDone;
   _textField.autocorrectionType = UITextAutocorrectionTypeNo;
-  [_textField addTarget:self action:@selector(onTextChanged)
-       forControlEvents:UIControlEventEditingChanged];
+  _textField.contentVerticalAlignment = UIControlContentVerticalAlignmentCenter;
+  _textField.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
   [_textField addTarget:self action:@selector(onTextDone)
        forControlEvents:UIControlEventEditingDidEndOnExit];
-  [_scroll addSubview:_textField];
 
-  _expiryCaption = [[UILabel alloc] init];
-  _expiryCaption.backgroundColor = [UIColor clearColor];
-  _expiryCaption.font = [UIFont systemFontOfSize:15];
-  [_scroll addSubview:_expiryCaption];
+  _hoursStepper = [[UIStepper alloc] init];
+  _hoursStepper.minimumValue = 1;
+  _hoursStepper.maximumValue = 168;
+  _hoursStepper.stepValue = 1;
+  [_hoursStepper addTarget:self action:@selector(onHoursChanged)
+          forControlEvents:UIControlEventValueChanged];
 
-  _status = [[UILabel alloc] init];
-  _status.backgroundColor = [UIColor clearColor];
-  _status.font = [UIFont systemFontOfSize:15];
-  _status.numberOfLines = 2;
-  [_panel addSubview:_status];
-
-  _publish = [self chipButton];
-  _publish.titleLabel.font = [UIFont boldSystemFontOfSize:19];
-  [_publish addTarget:self action:@selector(onPublish)
-     forControlEvents:UIControlEventTouchUpInside];
-  [_panel addSubview:_publish];
-
-  _clear = [self chipButton];
-  _clear.titleLabel.font = [UIFont boldSystemFontOfSize:19];
-  [_clear addTarget:self action:@selector(onClear) forControlEvents:UIControlEventTouchUpInside];
-  [_panel addSubview:_clear];
-
-  _cancel = [self chipButton];
-  _cancel.titleLabel.font = [UIFont boldSystemFontOfSize:19];
-  [_cancel addTarget:self action:@selector(onCancel) forControlEvents:UIControlEventTouchUpInside];
-  [_panel addSubview:_cancel];
-
-  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(numberKeyboardChanged:)
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
       name:UIKeyboardWillChangeFrameNotification object:nil];
-  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(numberKeyboardChanged:)
+  [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(keyboardChanged:)
       name:UIKeyboardWillHideNotification object:nil];
-  _keypadOverlay = [[UIView alloc] init];
-  _keypadOverlay.backgroundColor = [UIColor colorWithWhite:0 alpha:0.86];
-  _keypadOverlay.hidden = YES;
-  [self addSubview:_keypadOverlay];
-
-  _keypadTitle = [[UILabel alloc] init];
-  _keypadTitle.backgroundColor = [UIColor clearColor];
-  _keypadTitle.textColor = [UIColor whiteColor];
-  _keypadTitle.textAlignment = NSTextAlignmentCenter;
-  _keypadTitle.font = [UIFont boldSystemFontOfSize:22];
-  [_keypadOverlay addSubview:_keypadTitle];
-
-  _keypad = [[DBNumericKeypad alloc] initWithSubmitTitle:@""];
-  _keypad.maxLength = 3;
-  __weak DBNoticeDialog *weakSelf = self;
-  _keypad.onSubmit = ^(NSString *value) {
-    DBNoticeDialog *dialog = weakSelf;
-    if (!dialog) return;
-    NSInteger hours = [value integerValue];
-    dialog->_customHours = MAX(1, MIN(168, hours));
-    if (dialog) dialog->_keypadOverlay.hidden = YES;
-    [dialog updateExpirySelection];
-  };
-  _keypad.onCancel = ^{
-    DBNoticeDialog *dialog = weakSelf;
-    dialog->_keypadOverlay.hidden = YES;
-  };
-  [_keypadOverlay addSubview:_keypad];
 }
 
 - (void)presentInView:(UIView *)parent
@@ -181,26 +113,26 @@
       preselectedDoor:(NSString *)preselectedDoor
               palette:(DBUiPalette *)palette
            onFinished:(void (^)(BOOL changed))onFinished {
+  (void)palette;
   _config = config;
   _doorIds = doorIds ?: [NSArray array];
   _doorLabels = doorLabels ?: [NSDictionary dictionary];
-  _palette = palette;
   _onFinished = [onFinished copy];
   _changed = NO;
   _target = [preselectedDoor length] > 0 ? [preselectedDoor copy] : @"";
   _expiryPreset = @"until_cleared";
-  _status.text = @"";
+  _hoursStepper.value = (double)_customHours;
+  _presets = [DBNoticeModel presetsFromConfig:_config] ?: [NSArray array];
+  _sections = [_presets count] > 0
+      ? [NSArray arrayWithObjects:kSectionTarget, kSectionPresets, kSectionText, kSectionExpiry,
+                                  kSectionClear, nil]
+      : [NSArray arrayWithObjects:kSectionTarget, kSectionText, kSectionExpiry, kSectionClear,
+                                  nil];
 
-  long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
-  NSDictionary *existing = [DBNoticeModel effectiveNoticeForDoor:_target config:_config
-                                                            nowMs:nowMs];
-  _textField.text = existing ? [DBNoticeModel noticeText:existing] : @"";
-
-  [self applyPalette];
-  [self rebuildTargets];
-  [self rebuildPresets];
-  [self rebuildExpiry];
+  [self loadTextForTarget];
   [self applyStrings];
+  [_table reloadData];
+  [_table setContentOffset:CGPointZero animated:NO];
 
   self.frame = parent.bounds;
   self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
@@ -217,154 +149,177 @@
   if (finished) finished(_changed);
 }
 
-- (void)applyPalette {
-  _panel.backgroundColor = _palette ? _palette.surface
-                                    : [UIColor colorWithWhite:0.1 alpha:1];
-  UIColor *ink = _palette ? _palette.ink : [UIColor whiteColor];
-  UIColor *muted = _palette ? _palette.mutedInk : [UIColor colorWithWhite:0.65 alpha:1];
-  _title.textColor = ink;
-  _targetCaption.textColor = muted;
-  _presetCaption.textColor = muted;
-  _expiryCaption.textColor = muted;
-  _status.textColor = muted;
-  _publish.backgroundColor = _palette ? _palette.accent : [UIColor colorWithWhite:0.3 alpha:1];
-  [_publish setTitleColor:(_palette ? _palette.accentInk : [UIColor whiteColor])
-                 forState:UIControlStateNormal];
-  _clear.backgroundColor = _palette ? _palette.elevated : [UIColor colorWithWhite:0.2 alpha:1];
-  [_clear setTitleColor:ink forState:UIControlStateNormal];
-  _cancel.backgroundColor = _palette ? _palette.elevated : [UIColor colorWithWhite:0.2 alpha:1];
-  [_cancel setTitleColor:ink forState:UIControlStateNormal];
-}
-
 - (void)applyStrings {
-  _title.text = [_texts ts:@"notice.title"];
-  _targetCaption.text = [_texts ts:@"notice.target"];
-  _presetCaption.text = [_texts ts:@"notice.presets"];
-  _expiryCaption.text = [_texts ts:@"notice.expiry"];
+  UINavigationItem *item = [_navBar setRootTitle:[_texts ts:@"notice.title"] backTitle:nil
+                                          onBack:nil];
+  item.leftBarButtonItem = DBChromeBarItem([_texts ts:@"admin.cancel"], self,
+                                           @selector(onCancel));
+  item.rightBarButtonItem = DBChromeDoneBarItem([_texts ts:@"notice.publish"], self,
+                                                @selector(onPublish));
   _textField.placeholder = [_texts ts:@"notice.text"];
-  [_publish setTitle:[_texts ts:@"notice.publish"] forState:UIControlStateNormal];
-  [_clear setTitle:[_texts ts:@"notice.clear"] forState:UIControlStateNormal];
-  [_cancel setTitle:[_texts ts:@"admin.cancel"] forState:UIControlStateNormal];
 }
 
-- (void)styleChoice:(UIButton *)button selected:(BOOL)selected {
-  UIColor *ink = _palette ? _palette.ink : [UIColor whiteColor];
-  button.backgroundColor = selected
-      ? (_palette ? _palette.accent : [UIColor colorWithWhite:0.35 alpha:1])
-      : (_palette ? _palette.elevated : [UIColor colorWithWhite:0.2 alpha:1]);
-  [button setTitleColor:(selected ? (_palette ? _palette.accentInk : [UIColor whiteColor]) : ink)
-               forState:UIControlStateNormal];
-}
-
-- (void)rebuildTargets {
-  for (UIButton *button in _targetButtons) [button removeFromSuperview];
-  [_targetButtons removeAllObjects];
-
-  UIButton *global = [self chipButton];
-  [global setTitle:[_texts ts:@"notice.target_global"] forState:UIControlStateNormal];
-  global.accessibilityIdentifier = @"";
-  [global addTarget:self action:@selector(onTarget:) forControlEvents:UIControlEventTouchUpInside];
-  [_scroll addSubview:global];
-  [_targetButtons addObject:global];
-
-  for (NSString *door in _doorIds) {
-    UIButton *button = [self chipButton];
-    NSString *label = [_doorLabels objectForKey:door];
-    [button setTitle:[_texts t:@"notice.target_door", ([label length] ? label : door), nil]
-            forState:UIControlStateNormal];
-    button.accessibilityIdentifier = door;
-    [button addTarget:self action:@selector(onTarget:)
-     forControlEvents:UIControlEventTouchUpInside];
-    [_scroll addSubview:button];
-    [_targetButtons addObject:button];
-  }
-  [self updateTargetSelection];
-}
-
-- (void)updateTargetSelection {
-  for (UIButton *button in _targetButtons) {
-    NSString *identifier = button.accessibilityIdentifier ?: @"";
-    [self styleChoice:button selected:[identifier isEqualToString:_target]];
-  }
-}
-
-- (void)rebuildPresets {
-  for (UIButton *button in _presetButtons) [button removeFromSuperview];
-  [_presetButtons removeAllObjects];
-  for (NSDictionary *preset in [DBNoticeModel presetsFromConfig:_config]) {
-    UIButton *button = [self chipButton];
-    NSString *text = [preset objectForKey:@"text"];
-    [button setTitle:text forState:UIControlStateNormal];
-    button.titleLabel.lineBreakMode = NSLineBreakByTruncatingTail;
-    button.accessibilityIdentifier = text;
-    [button addTarget:self action:@selector(onPreset:)
-     forControlEvents:UIControlEventTouchUpInside];
-    [self styleChoice:button selected:NO];
-    [_scroll addSubview:button];
-    [_presetButtons addObject:button];
-  }
-  _presetCaption.hidden = ([_presetButtons count] == 0);
-}
-
-- (void)rebuildExpiry {
-  for (UIButton *button in _expiryButtons) [button removeFromSuperview];
-  [_expiryButtons removeAllObjects];
-  NSArray *presets = [NSArray arrayWithObjects:
-      [NSArray arrayWithObjects:@"1h", @"notice.expiry_1h", nil],
-      [NSArray arrayWithObjects:@"today", @"notice.expiry_today", nil],
-      [NSArray arrayWithObjects:@"until_cleared", @"notice.expiry_until_cleared", nil],
-      [NSArray arrayWithObjects:@"custom", @"notice.expiry_custom", nil], nil];
-  for (NSArray *entry in presets) {
-    UIButton *button = [self chipButton];
-    [button setTitle:[_texts ts:[entry objectAtIndex:1]] forState:UIControlStateNormal];
-    button.accessibilityIdentifier = [entry objectAtIndex:0];
-    [button addTarget:self action:@selector(onExpiry:)
-     forControlEvents:UIControlEventTouchUpInside];
-    [_scroll addSubview:button];
-    [_expiryButtons addObject:button];
-  }
-  [self updateExpirySelection];
-}
-
-- (void)updateExpirySelection {
-  for (UIButton *button in _expiryButtons)
-    [self styleChoice:button
-             selected:[(button.accessibilityIdentifier ?: @"") isEqualToString:_expiryPreset]];
-}
-
-#pragma mark - actions
-
-- (void)onTarget:(UIButton *)sender {
-  _target = [(sender.accessibilityIdentifier ?: @"") copy];
+- (void)loadTextForTarget {
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
   NSDictionary *existing = [DBNoticeModel effectiveNoticeForDoor:_target config:_config
                                                             nowMs:nowMs];
   _textField.text = existing ? [DBNoticeModel noticeText:existing] : @"";
-  _status.text = @"";
-  [self updateTargetSelection];
 }
 
-- (void)onPreset:(UIButton *)sender {
-  _textField.text = sender.accessibilityIdentifier ?: @"";
-  _status.text = @"";
+- (void)showMessage:(NSString *)key {
+  UIAlertView *alert = [[UIAlertView alloc] initWithTitle:[_texts ts:@"notice.title"]
+                                                  message:[_texts ts:key]
+                                                 delegate:nil
+                                        cancelButtonTitle:[_texts ts:@"editor.ok"]
+                                        otherButtonTitles:nil];
+  [alert show];
 }
 
-- (void)onExpiry:(UIButton *)sender {
-  _expiryPreset = [(sender.accessibilityIdentifier ?: @"until_cleared") copy];
-  [self updateExpirySelection];
-  if (![_expiryPreset isEqualToString:@"custom"]) return;
-  [_textField resignFirstResponder];
-  _keypadTitle.text = [_texts ts:@"notice.expiry_hours"];
-  [_keypad setSubmitTitle:[_texts ts:@"admin.save"]];
-  [_keypad clear];
-  _keypadOverlay.hidden = NO;
-  [_keypad beginEditing];
-  [self bringSubviewToFront:_keypadOverlay];
-  [self setNeedsLayout];
+#pragma mark - table
+
+- (NSString *)sectionIdAtIndex:(NSInteger)section {
+  if (section < 0 || section >= (NSInteger)[_sections count]) return @"";
+  return [_sections objectAtIndex:(NSUInteger)section];
 }
 
-- (void)onTextChanged {
-  _status.text = @"";
+- (NSString *)targetIdAtRow:(NSInteger)row {
+  if (row <= 0 || row > (NSInteger)[_doorIds count]) return @"";
+  return [_doorIds objectAtIndex:(NSUInteger)(row - 1)];
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+  (void)tableView;
+  return (NSInteger)[_sections count];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+  (void)tableView;
+  NSString *sid = [self sectionIdAtIndex:section];
+  if ([sid isEqualToString:kSectionTarget]) return (NSInteger)[_doorIds count] + 1;
+  if ([sid isEqualToString:kSectionPresets]) return (NSInteger)[_presets count];
+  if ([sid isEqualToString:kSectionExpiry]) return (NSInteger)[_expiryIds count] + 1;
+  return 1;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+  (void)tableView;
+  NSString *sid = [self sectionIdAtIndex:section];
+  if ([sid isEqualToString:kSectionTarget]) return [_texts ts:@"notice.target"];
+  if ([sid isEqualToString:kSectionPresets]) return [_texts ts:@"notice.presets"];
+  if ([sid isEqualToString:kSectionText]) return [_texts ts:@"notice.text"];
+  if ([sid isEqualToString:kSectionExpiry]) return [_texts ts:@"notice.expiry"];
+  return nil;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+  (void)tableView;
+  if ([[self sectionIdAtIndex:section] isEqualToString:kSectionText])
+    return [_texts ts:@"notice.limit"];
+  return nil;
+}
+
+- (void)configureCell:(UITableViewCell *)cell section:(NSString *)sid row:(NSInteger)row {
+  if ([sid isEqualToString:kSectionTarget]) {
+    NSString *identifier = [self targetIdAtRow:row];
+    if (row == 0) {
+      cell.textLabel.text = [_texts ts:@"notice.target_global"];
+    } else {
+      NSString *label = [_doorLabels objectForKey:identifier];
+      cell.textLabel.text =
+          [_texts t:@"notice.target_door", ([label length] ? label : identifier), nil];
+    }
+    cell.accessoryType = [identifier isEqualToString:_target]
+        ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+  } else if ([sid isEqualToString:kSectionPresets]) {
+    NSDictionary *preset = [_presets objectAtIndex:(NSUInteger)row];
+    cell.textLabel.text = [preset objectForKey:@"text"];
+  } else if ([sid isEqualToString:kSectionExpiry]) {
+    if (row == kExpiryHoursRow) {
+      cell.textLabel.text = [_texts ts:@"notice.expiry_hours"];
+      cell.detailTextLabel.text = [NSString stringWithFormat:@"%ld", (long)_customHours];
+      return;
+    }
+    NSString *identifier = [_expiryIds objectAtIndex:(NSUInteger)row];
+    cell.textLabel.text = [_texts ts:[@"notice.expiry_" stringByAppendingString:identifier]];
+    cell.accessoryType = [identifier isEqualToString:_expiryPreset]
+        ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
+  } else if ([sid isEqualToString:kSectionClear]) {
+    cell.textLabel.text = [_texts ts:@"notice.clear"];
+  }
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView
+         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+  NSString *sid = [self sectionIdAtIndex:indexPath.section];
+  BOOL hoursRow = [sid isEqualToString:kSectionExpiry] && indexPath.row == kExpiryHoursRow;
+  NSString *reuse = hoursRow ? @"hours" : sid;
+  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:reuse];
+  if (!cell) {
+    cell = [[UITableViewCell alloc]
+        initWithStyle:(hoursRow ? UITableViewCellStyleValue1 : UITableViewCellStyleDefault)
+        reuseIdentifier:reuse];
+    cell.textLabel.adjustsFontSizeToFitWidth = YES;
+    if ([sid isEqualToString:kSectionClear]) {
+      // The negative role is the one colour a cell label carries: system red where the OS has
+      // one, a matching red before iOS 7.
+      cell.textLabel.textAlignment = NSTextAlignmentCenter;
+      cell.textLabel.textColor = DBChromeIsFlat()
+          ? [UIColor colorWithRed:1.0f green:0.231f blue:0.188f alpha:1]
+          : [UIColor colorWithRed:0.8f green:0.1f blue:0.1f alpha:1];
+    }
+    if (hoursRow) {
+      cell.accessoryView = _hoursStepper;
+      cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    }
+    if ([sid isEqualToString:kSectionText]) cell.selectionStyle = UITableViewCellSelectionStyleNone;
+  }
+  if ([sid isEqualToString:kSectionText]) {
+    _textField.frame = CGRectInset(cell.contentView.bounds, 10, 0);
+    [cell.contentView addSubview:_textField];
+    return cell;
+  }
+  [self configureCell:cell section:sid row:indexPath.row];
+  return cell;
+}
+
+// Selection changes update the rows on screen in place: reloading the table would pull the
+// text field out of its cell and drop the keyboard in the middle of an edit.
+- (void)refreshVisibleRows {
+  for (UITableViewCell *cell in [_table visibleCells]) {
+    NSIndexPath *path = [_table indexPathForCell:cell];
+    if (!path) continue;
+    NSString *sid = [self sectionIdAtIndex:path.section];
+    if ([sid isEqualToString:kSectionText]) continue;
+    [self configureCell:cell section:sid row:path.row];
+    [cell setNeedsLayout];
+  }
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+  [tableView deselectRowAtIndexPath:indexPath animated:NO];
+  NSString *sid = [self sectionIdAtIndex:indexPath.section];
+  if ([sid isEqualToString:kSectionTarget]) {
+    _target = [[self targetIdAtRow:indexPath.row] copy];
+    [self loadTextForTarget];
+    [self refreshVisibleRows];
+  } else if ([sid isEqualToString:kSectionPresets]) {
+    NSDictionary *preset = [_presets objectAtIndex:(NSUInteger)indexPath.row];
+    _textField.text = [preset objectForKey:@"text"] ?: @"";
+  } else if ([sid isEqualToString:kSectionExpiry]) {
+    if (indexPath.row == kExpiryHoursRow) return;
+    _expiryPreset = [[_expiryIds objectAtIndex:(NSUInteger)indexPath.row] copy];
+    [self refreshVisibleRows];
+  } else if ([sid isEqualToString:kSectionClear]) {
+    [self onClear];
+  }
+}
+
+#pragma mark - actions
+
+- (void)onHoursChanged {
+  _customHours = MAX(1, MIN(168, (NSInteger)_hoursStepper.value));
+  _expiryPreset = @"custom";
+  [self refreshVisibleRows];
 }
 
 - (void)onTextDone {
@@ -387,8 +342,8 @@
 
 - (NSArray *)targetDoors {
   // Core addresses the cluster-wide announcement with "*" and stores it at
-  // notice.global; a door-specific one always overrides it, so 全体 must never
-  // be written by looping over the doors.
+  // notice.global; a door-specific one always overrides it, so the global
+  // target must never be written by looping over the doors.
   if ([_target length] > 0) return [NSArray arrayWithObject:_target];
   return [NSArray arrayWithObject:DBNoticeTargetGlobal];
 }
@@ -396,12 +351,12 @@
 - (void)onPublish {
   NSString *text = [DBNoticeModel clampNoticeText:_textField.text];
   if ([text length] == 0) {
-    _status.text = [_texts ts:@"notice.empty"];
+    [self showMessage:@"notice.empty"];
     return;
   }
   NSArray *doors = [self targetDoors];
   if ([doors count] == 0) {
-    _status.text = [_texts ts:@"notice.failed"];
+    [self showMessage:@"notice.failed"];
     return;
   }
   long long nowMs = (long long)([[NSDate date] timeIntervalSince1970] * 1000.0);
@@ -417,8 +372,8 @@
     if (!ok) allOk = NO;
   }
   _changed = _changed || allOk;
-  _status.text = [_texts ts:(allOk ? @"notice.saved" : @"notice.failed")];
   if (allOk) [self dismiss];
+  else [self showMessage:@"notice.failed"];
 }
 
 - (void)onClear {
@@ -430,8 +385,8 @@
     if (!ok) allOk = NO;
   }
   _changed = _changed || allOk;
-  _status.text = [_texts ts:(allOk ? @"notice.cleared" : @"notice.failed")];
   if (allOk) [self dismiss];
+  else [self showMessage:@"notice.failed"];
 }
 
 - (void)onCancel {
@@ -440,84 +395,43 @@
 
 #pragma mark - layout
 
-- (void)layoutRow:(NSArray *)buttons y:(CGFloat *)y width:(CGFloat)width {
-  CGFloat x = 0;
-  CGFloat rowHeight = 40;
-  for (UIButton *button in buttons) {
-    CGSize fit = [button sizeThatFits:CGSizeMake(width, rowHeight)];
-    CGFloat buttonWidth = MIN(width, MAX(90, fit.width));
-    if (x > 0 && x + buttonWidth > width) {
-      x = 0;
-      *y += rowHeight + 8;
-    }
-    button.frame = CGRectMake(x, *y, buttonWidth, rowHeight);
-    x += buttonWidth + 8;
-  }
-  if ([buttons count] > 0) *y += rowHeight + 14;
-}
-
-- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
-
-- (void)numberKeyboardChanged:(NSNotification *)note {
-  CGRect keyboard = [self convertRect:[[note.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey] CGRectValue] fromView:nil];
+- (void)keyboardChanged:(NSNotification *)note {
+  CGRect keyboard = [self convertRect:[[note.userInfo objectForKey:UIKeyboardFrameEndUserInfoKey]
+                                          CGRectValue]
+                             fromView:nil];
   CGRect overlap = CGRectIntersection(self.bounds, keyboard);
-  _numberKeyboardHeight = [note.name isEqualToString:UIKeyboardWillHideNotification] || CGRectIsNull(overlap)
-      ? 0 : CGRectGetHeight(overlap);
+  _keyboardHeight =
+      [note.name isEqualToString:UIKeyboardWillHideNotification] || CGRectIsNull(overlap)
+          ? 0 : CGRectGetHeight(overlap);
   [self setNeedsLayout];
+  [self layoutIfNeeded];
+  NSUInteger textSection = [_sections indexOfObject:kSectionText];
+  if (_keyboardHeight > 0 && [_textField isFirstResponder] && textSection != NSNotFound) {
+    [_table scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:0
+                                                      inSection:(NSInteger)textSection]
+                  atScrollPosition:UITableViewScrollPositionMiddle animated:NO];
+  }
 }
 
+// A form sheet centred in the space the keyboard leaves on an iPad; the whole of that space
+// on bounds too small to hold one.
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
-  _backdrop.frame = self.bounds;
-  CGFloat panelWidth = MIN(660, size.width - 48);
-  CGFloat panelHeight = MIN(size.height - 48, 520);
-  _panel.frame = CGRectMake((size.width - panelWidth) / 2, (size.height - panelHeight) / 2,
-                            panelWidth, panelHeight);
-  CGFloat pad = 20;
-  CGFloat contentWidth = panelWidth - 2 * pad;
-  _title.frame = CGRectMake(pad, 14, contentWidth, 32);
-
-  CGFloat buttonRow = 52;
-  CGFloat statusHeight = 36;
-  CGFloat scrollHeight = panelHeight - 58 - buttonRow - statusHeight - 12;
-  _scroll.frame = CGRectMake(pad, 54, contentWidth, MAX(80, scrollHeight));
-
-  CGFloat y = 0;
-  _targetCaption.frame = CGRectMake(0, y, contentWidth, 20);
-  y += 24;
-  [self layoutRow:_targetButtons y:&y width:contentWidth];
-
-  if (!_presetCaption.hidden) {
-    _presetCaption.frame = CGRectMake(0, y, contentWidth, 20);
-    y += 24;
-    [self layoutRow:_presetButtons y:&y width:contentWidth];
+  _dim.frame = self.bounds;
+  CGFloat available = MAX(120, size.height - _keyboardHeight);
+  CGFloat inset = 16;
+  BOOL sheet = size.width >= kSheetWidth + 2 * inset && size.height >= 600;
+  if (sheet) {
+    CGFloat height = MAX(160, MIN(kSheetHeight, available - 2 * inset));
+    _panel.frame = CGRectMake(floorf((size.width - kSheetWidth) / 2),
+                              MAX(0, floorf((available - height) / 2)), kSheetWidth, height);
   } else {
-    _presetCaption.frame = CGRectZero;
+    _panel.frame = CGRectMake(0, 0, size.width, available);
   }
-
-  _textField.frame = CGRectMake(0, y, contentWidth, 46);
-  y += 58;
-
-  _expiryCaption.frame = CGRectMake(0, y, contentWidth, 20);
-  y += 24;
-  [self layoutRow:_expiryButtons y:&y width:contentWidth];
-  _scroll.contentSize = CGSizeMake(contentWidth, y);
-
-  _status.frame = CGRectMake(pad, panelHeight - buttonRow - statusHeight - 6,
-                             contentWidth, statusHeight);
-  CGFloat buttonWidth = (contentWidth - 16) / 3;
-  CGFloat buttonY = panelHeight - buttonRow;
-  _publish.frame = CGRectMake(pad, buttonY, buttonWidth, 44);
-  _clear.frame = CGRectMake(pad + buttonWidth + 8, buttonY, buttonWidth, 44);
-  _cancel.frame = CGRectMake(pad + 2 * (buttonWidth + 8), buttonY, buttonWidth, 44);
-
-  _keypadOverlay.frame = self.bounds;
-  CGFloat keypadWidth = MIN(320, size.width - 80);
-  CGFloat keypadHeight = [DBNumericKeypad heightForWidth:keypadWidth];
-  CGFloat keypadY = MAX(60, (size.height - _numberKeyboardHeight - keypadHeight) / 2);
-  _keypadTitle.frame = CGRectMake(0, keypadY - 46, size.width, 34);
-  _keypad.frame = CGRectMake((size.width - keypadWidth) / 2, keypadY, keypadWidth, keypadHeight);
+  CGRect inner = _panel.bounds;
+  CGFloat top = [_navBar layoutInBounds:inner];
+  _table.frame = CGRectMake(0, top, inner.size.width, MAX(0, inner.size.height - top));
 }
 
 @end

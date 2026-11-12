@@ -6,6 +6,7 @@
 #import "../Core/DBTexts.h"
 #import "../Core/DBUiTheme.h"
 #import "../Media/DBQrCode.h"
+#import "DBChrome.h"
 #import "DBRouter.h"
 #import <arpa/inet.h>
 #import <errno.h>
@@ -59,24 +60,38 @@ static BOOL DBPortListening(int port, NSArray *hosts) {
   return NO;
 }
 
+static NSString *const kRowTitle = @"title";
+static NSString *const kRowValue = @"value";
+static NSString *const kRowAddress = @"address";
+static NSString *const kRowCheck = @"check";
+static NSString *const kSectionTitle = @"title";
+static NSString *const kSectionFooter = @"footer";
+static NSString *const kSectionRows = @"rows";
+
+static const CGFloat kColumnMax = 700;
+static const CGFloat kQrSide = 300;
+
+@interface DBInfoScreen () <UITableViewDataSource, UITableViewDelegate>
+@end
+
 @implementation DBInfoScreen {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
 
-  UIScrollView *_scroll;
-  UILabel *_title;
-  UILabel *_infoText;
-  UILabel *_addrText;
-  UISegmentedControl *_ipSeg;
-  UIButton *_cycleBtn;
+  DBNavBar *_nav;
+  UITableView *_table;
+  // The admin-page QR and its caption, hosted as the table's footer view.
+  UIView *_qrHost;
   UIImageView *_qr;
   UILabel *_qrUrl;
-  UIButton *_close;
-  UIButton *_refresh;
+  CGFloat _qrHostWidth;
 
+  NSArray *_sections;
   NSMutableArray *_v4;
   NSMutableArray *_v6;
-  NSInteger _choiceIdx;
+  // The address the admin QR points at; nil picks the first IPv4, then the first IPv6.
+  NSString *_chosenAddress;
+  NSString *_qrPayload;
   NSDictionary *_ports;
   NSInteger _portRetries;
 }
@@ -89,93 +104,51 @@ static BOOL DBPortListening(int port, NSArray *hosts) {
     _boot = router.boot;
     _v4 = [[NSMutableArray alloc] init];
     _v6 = [[NSMutableArray alloc] init];
+    _sections = @[];
     [self buildUi];
   }
   return self;
+}
+
+- (void)dealloc {
+  _table.dataSource = nil;
+  _table.delegate = nil;
 }
 
 - (NSString *)screenName {
   return @"info";
 }
 
-- (UIButton *)flatButton {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-  return b;
-}
-
 - (void)buildUi {
-  self.backgroundColor = [UIColor colorWithRed:0.07 green:0.08 blue:0.10 alpha:1];
+  DBTexts *texts = [_router texts];
+  self.backgroundColor = DBChromeScreenBackground();
+  DBChromeInstallBackdrop(self);
 
-  _scroll = [[UIScrollView alloc] init];
-  _scroll.alwaysBounceVertical = YES;
-  [self addSubview:_scroll];
+  _table = DBChromeGroupedTable(self, self);
+  DBChromeClearTableBackground(_table);
+  [self addSubview:_table];
 
-  _title = [[UILabel alloc] init];
-  _title.text = [[_router texts] ts:@"info.title"];
-  _title.font = [UIFont boldSystemFontOfSize:28];
-  _title.textColor = [UIColor whiteColor];
-  [_scroll addSubview:_title];
+  _nav = [[DBNavBar alloc] init];
+  __weak DBInfoScreen *weakSelf = self;
+  UINavigationItem *item = [_nav setRootTitle:[texts ts:@"info.title"]
+                                    backTitle:[texts ts:@"ui.back"]
+                                       onBack:^{ [weakSelf onClose]; }];
+  UIBarButtonItem *refresh =
+      DBChromeSystemBarItem(UIBarButtonSystemItemRefresh, self, @selector(reload));
+  refresh.accessibilityLabel = [texts ts:@"info.refresh"];
+  item.rightBarButtonItem = refresh;
+  [self addSubview:_nav.bar];
 
-  _infoText = [[UILabel alloc] init];
-  _infoText.numberOfLines = 0;
-  _infoText.font = [UIFont fontWithName:@"Courier" size:15] ?: [UIFont systemFontOfSize:15];
-  _infoText.textColor = [UIColor colorWithWhite:0.92 alpha:1];
-  [_scroll addSubview:_infoText];
-
-  _addrText = [[UILabel alloc] init];
-  _addrText.numberOfLines = 0;
-  _addrText.font = [UIFont fontWithName:@"Courier" size:14] ?: [UIFont systemFontOfSize:14];
-  _addrText.textColor = [UIColor colorWithRed:0.55 green:0.85 blue:1 alpha:1];
-  [_scroll addSubview:_addrText];
-
-  _ipSeg = [[UISegmentedControl alloc] initWithItems:@[ @"IPv4", @"IPv6" ]];
-  _ipSeg.selectedSegmentIndex = 0;
-  [_ipSeg addTarget:self action:@selector(onIpToggle)
-   forControlEvents:UIControlEventValueChanged];
-  [_scroll addSubview:_ipSeg];
-
-  _cycleBtn = [self flatButton];
-  _cycleBtn.titleLabel.font = [UIFont systemFontOfSize:16];
-  [_cycleBtn setTitleColor:[UIColor colorWithRed:0.35 green:0.72 blue:1 alpha:1]
-                  forState:UIControlStateNormal];
-  [_cycleBtn addTarget:self action:@selector(onCycle) forControlEvents:UIControlEventTouchUpInside];
-  [_scroll addSubview:_cycleBtn];
-
+  _qrHost = [[UIView alloc] init];
   _qr = [[UIImageView alloc] init];
   _qr.contentMode = UIViewContentModeCenter;
-  _qr.backgroundColor = [UIColor whiteColor];
-  _qr.layer.cornerRadius = 6;
-  _qr.clipsToBounds = YES;
-  [_scroll addSubview:_qr];
-
-  _qrUrl = [[UILabel alloc] init];
-  _qrUrl.numberOfLines = 0;
+  [_qrHost addSubview:_qr];
+  _qrUrl = DBChromeSectionFooterLabel();
   _qrUrl.textAlignment = NSTextAlignmentCenter;
-  _qrUrl.font = [UIFont fontWithName:@"Courier" size:15] ?: [UIFont systemFontOfSize:15];
-  _qrUrl.textColor = [UIColor colorWithWhite:0.85 alpha:1];
-  [_scroll addSubview:_qrUrl];
-
-  _refresh = [self flatButton];
-  [_refresh setTitle:[[_router texts] ts:@"info.refresh"] forState:UIControlStateNormal];
-  _refresh.titleLabel.font = [UIFont systemFontOfSize:18];
-  [_refresh setTitleColor:[UIColor colorWithRed:0.35 green:0.72 blue:1 alpha:1]
-                 forState:UIControlStateNormal];
-  [_refresh addTarget:self action:@selector(reload) forControlEvents:UIControlEventTouchUpInside];
-  [_scroll addSubview:_refresh];
-
-  _close = [self flatButton];
-  [_close setTitle:[[_router texts] ts:@"monitor.close"] forState:UIControlStateNormal];
-  _close.titleLabel.font = [UIFont boldSystemFontOfSize:18];
-  [_close setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  _close.backgroundColor = [UIColor colorWithRed:0.20 green:0.24 blue:0.30 alpha:1];
-  _close.layer.cornerRadius = 8;
-  [_close addTarget:self action:@selector(onClose) forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_close];
-
-  [self clearLabelBackgrounds:_scroll];
+  [_qrHost addSubview:_qrUrl];
 }
 
-
+#pragma mark - collection
 
 - (void)reload {
   DBCoreBridge *core = _core;
@@ -210,14 +183,35 @@ static BOOL DBPortListening(int port, NSArray *hosts) {
   });
 }
 
+static NSDictionary *DBInfoRow(NSString *title, NSString *value) {
+  return @{ kRowTitle : title ?: @"", kRowValue : value ?: @"" };
+}
+
+static NSDictionary *DBInfoSection(NSString *title, NSString *footer, NSArray *rows) {
+  return @{ kSectionTitle : title ?: @"", kSectionFooter : footer ?: @"", kSectionRows : rows };
+}
+
+- (NSString *)safeModeTextForStatus:(NSDictionary *)st {
+  DBTexts *texts = [_router texts];
+  NSString *state = [DBConfigUtil str:st path:@"runtime.safe_mode_state"];
+  if ([state length] == 0 || [state isEqualToString:@"off"])
+    return [texts ts:@"info.safe_mode_off"];
+  if ([state isEqualToString:@"heartbeat_stalled"]) return [texts ts:@"info.safe_mode_heartbeat"];
+  if ([state isEqualToString:@"crash_charged"]) return [texts ts:@"info.safe_mode_crash"];
+  if ([state isEqualToString:@"helper_latched"]) return [texts ts:@"info.safe_mode_helper"];
+  double remaining = [DBConfigUtil doubleVal:st path:@"runtime.safe_mode_remaining_s" def:600];
+  long minutes = (long)((remaining + 59) / 60);
+  if (minutes < 1) minutes = 1;
+  return [texts t:@"info.safe_mode_wait", [NSString stringWithFormat:@"%ld", minutes], nil];
+}
+
 - (void)applyCollectedStatus:(NSDictionary *)st debug:(NSDictionary *)dbg {
   [_v4 removeAllObjects];
   [_v6 removeAllObjects];
+  DBTexts *texts = [_router texts];
 
   NSDictionary *node = [st objectForKey:@"node"];
   if (![node isKindOfClass:[NSDictionary class]]) node = nil;
-
-
   id la = [node objectForKey:@"local_addrs"];
   if ([la isKindOfClass:[NSArray class]]) {
     for (id a in (NSArray *)la) {
@@ -230,90 +224,73 @@ static BOOL DBPortListening(int port, NSArray *hosts) {
     }
   }
 
-  NSMutableString *info = [NSMutableString string];
-  DBTexts *texts = [_router texts];
-  [info appendFormat:@"%@ : %@ (%@)\n", [texts ts:@"info.node"],
-                      [DBConfigUtil evStr:node key:@"name"],
-                      [DBConfigUtil evStr:node key:@"id"] ?: @"-"];
-  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.role"], _boot.role];
+  NSMutableArray *sections = [NSMutableArray array];
+
+  NSMutableArray *device = [NSMutableArray array];
+  [device addObject:DBInfoRow([texts ts:@"info.node"],
+      [NSString stringWithFormat:@"%@ (%@)", [DBConfigUtil evStr:node key:@"name"] ?: @"",
+                                 [DBConfigUtil evStr:node key:@"id"] ?: @"-"])];
+  [device addObject:DBInfoRow([texts ts:@"info.role"], _boot.role)];
   // Every screen shows core and app versions side by side (spec §5.1).
-  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.core_version"],
-                      [_core coreVersion] ?: @"-"];
-  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.app_version"],
-                      [DBUiTheme appVersion:[[NSBundle mainBundle]
-                          objectForInfoDictionaryKey:@"CFBundleShortVersionString"]
-                               withCoreVersion:[_core coreVersion]] ?: @"-"];
-  // The kiosk's local safe mode is no longer an invisible latch: the state and
-  // the remaining healthy window are shown here.
-  NSString *safeModeState = [DBConfigUtil str:st path:@"runtime.safe_mode_state"];
-  if ([safeModeState length] == 0 || [safeModeState isEqualToString:@"off"]) {
-    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
-                        [texts ts:@"info.safe_mode_off"]];
-  } else if ([safeModeState isEqualToString:@"heartbeat_stalled"]) {
-    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
-                        [texts ts:@"info.safe_mode_heartbeat"]];
-  } else if ([safeModeState isEqualToString:@"crash_charged"]) {
-    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
-                        [texts ts:@"info.safe_mode_crash"]];
-  } else if ([safeModeState isEqualToString:@"helper_latched"]) {
-    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
-                        [texts ts:@"info.safe_mode_helper"]];
-  } else {
-    double remaining = [DBConfigUtil doubleVal:st path:@"runtime.safe_mode_remaining_s"
-                                           def:600];
-    long minutes = (long)((remaining + 59) / 60);
-    if (minutes < 1) minutes = 1;
-    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.safe_mode"],
-                        [texts t:@"info.safe_mode_wait",
-                             [NSString stringWithFormat:@"%ld", minutes], nil]];
-  }
-  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.microphone"],
-                      [texts ts:_boot.micEnabled ? @"info.external_present" : @"info.absent"]];
-  [info appendFormat:@"%@ : %@\n", [texts ts:@"info.camera"],
-                      [texts ts:[[AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo] count] > 0
-                          ? @"info.builtin_present" : @"info.absent"]];
+  [device addObject:DBInfoRow([texts ts:@"info.core_version"], [_core coreVersion] ?: @"-")];
+  [device addObject:DBInfoRow([texts ts:@"info.app_version"],
+      [DBUiTheme appVersion:[[NSBundle mainBundle]
+                                objectForInfoDictionaryKey:@"CFBundleShortVersionString"]
+            withCoreVersion:[_core coreVersion]] ?: @"-")];
+  // The kiosk's local safe mode is not an invisible latch: the state and the remaining
+  // healthy window are shown here.
+  [device addObject:DBInfoRow([texts ts:@"info.safe_mode"], [self safeModeTextForStatus:st])];
+  [device addObject:DBInfoRow([texts ts:@"info.microphone"],
+      [texts ts:_boot.micEnabled ? @"info.external_present" : @"info.absent"])];
+  [device addObject:DBInfoRow([texts ts:@"info.camera"],
+      [texts ts:[[AVCaptureDevice devicesWithMediaType:AVMediaTypeVideo] count] > 0
+                    ? @"info.builtin_present" : @"info.absent"])];
+  [sections addObject:DBInfoSection([texts ts:@"info.device"], nil, device)];
 
-
-  NSDictionary *device = [_core deviceInfoNow];
-  if ([device isKindOfClass:[NSDictionary class]]) {
-    NSString *gw = [device objectForKey:@"gateway"];
-    NSDictionary *wifi = [device objectForKey:@"wifi"];
-    NSDictionary *bat = [device objectForKey:@"battery"];
-    [info appendFormat:@"\n── %@ ──\n", [texts ts:@"info.network"]];
-    [info appendFormat:@"gateway : %@\n", gw ?: [texts ts:@"info.unknown"]];
+  NSDictionary *deviceInfo = [_core deviceInfoNow];
+  if ([deviceInfo isKindOfClass:[NSDictionary class]]) {
+    NSMutableArray *network = [NSMutableArray array];
+    NSString *gw = [deviceInfo objectForKey:@"gateway"];
+    NSDictionary *wifi = [deviceInfo objectForKey:@"wifi"];
+    NSDictionary *bat = [deviceInfo objectForKey:@"battery"];
+    [network addObject:DBInfoRow(@"gateway", gw ?: [texts ts:@"info.unknown"])];
     if ([wifi isKindOfClass:[NSDictionary class]]) {
-      [info appendFormat:@"SSID    : %@\n", [wifi objectForKey:@"ssid"] ?: @"-"];
-      [info appendFormat:@"BSSID   : %@\n", [wifi objectForKey:@"bssid"] ?: @"-"];
+      [network addObject:DBInfoRow(@"SSID", [wifi objectForKey:@"ssid"] ?: @"-")];
+      [network addObject:DBInfoRow(@"BSSID", [wifi objectForKey:@"bssid"] ?: @"-")];
     }
     if ([bat isKindOfClass:[NSDictionary class]]) {
       id lvl = [bat objectForKey:@"level"];
       NSString *lvlStr =
           lvl ? [NSString stringWithFormat:@"%d%%", (int)([lvl floatValue] * 100)] : @"-";
-      [info appendFormat:@"%@ : %@  (%@)", [texts ts:@"info.battery"], lvlStr,
-                         [bat objectForKey:@"state"] ?: @"?"];
+      [network addObject:DBInfoRow([texts ts:@"info.battery"],
+          [NSString stringWithFormat:@"%@ (%@)", lvlStr, [bat objectForKey:@"state"] ?: @"?"])];
     }
+    [sections addObject:DBInfoSection([texts ts:@"info.network"], nil, network)];
   }
 
-
-  [info appendFormat:@"\n\n── %@ ──\n", [texts ts:@"info.ports"]];
+  NSMutableArray *ports = [NSMutableArray array];
   NSInteger httpPort = _boot.httpPort > 0 ? _boot.httpPort : 47180;
-  NSArray *probed = @[ @[ @"http ", @(httpPort) ], @[ @"https", @47443 ], @[ @"mesh ", @47172 ] ];
+  NSArray *probed = @[ @[ @"http", @(httpPort) ], @[ @"https", @47443 ], @[ @"mesh", @47172 ] ];
   for (NSArray *entry in probed) {
     NSNumber *open = [_ports objectForKey:[entry objectAtIndex:1]];
     NSString *state = open == nil ? @"…"
-        : ([open boolValue] ? @"LISTEN ✓" : [texts ts:@"info.port_closed"]);
-    [info appendFormat:@"%@ %@ : %@\n", [entry objectAtIndex:0], [entry objectAtIndex:1], state];
+        : ([open boolValue] ? @"LISTEN" : [texts ts:@"info.port_closed"]);
+    NSMutableDictionary *row = [DBInfoRow(
+        [NSString stringWithFormat:@"%@ %@", [entry objectAtIndex:0], [entry objectAtIndex:1]],
+        state) mutableCopy];
+    if ([open boolValue]) [row setObject:@YES forKey:kRowCheck];
+    [ports addObject:row];
   }
-  [info appendFormat:@"sip   %ld : %@", (long)_boot.directPort,
-                      [texts ts:@"info.sip_direct"]];
-
+  [ports addObject:DBInfoRow([NSString stringWithFormat:@"sip %ld", (long)_boot.directPort],
+                             [texts ts:@"info.sip_direct"])];
+  [sections addObject:DBInfoSection([texts ts:@"info.ports"], nil, ports)];
 
   NSDictionary *trig =
       [dbg isKindOfClass:[NSDictionary class]] ? [dbg objectForKey:@"triggers"] : nil;
   if ([trig isKindOfClass:[NSDictionary class]]) {
-    [info appendFormat:@"\n\n── %@ ──\n", [texts ts:@"info.triggers"]];
-    [info appendFormat:@"%@ : %@\n", [texts ts:@"info.total_press"],
-                       [trig objectForKey:@"total_press"] ?: @0];
+    NSMutableArray *triggers = [NSMutableArray array];
+    [triggers addObject:DBInfoRow([texts ts:@"info.total_press"],
+        [NSString stringWithFormat:@"%@", [trig objectForKey:@"total_press"] ?: @0])];
     NSDictionary *last = [trig objectForKey:@"last"];
     if ([last isKindOfClass:[NSDictionary class]]) {
       NSNumber *wallMs = [last objectForKey:@"wall_ms"];
@@ -324,159 +301,229 @@ static BOOL DBPortListening(int port, NSArray *hosts) {
         [fmt setDateFormat:@"MM-dd HH:mm:ss"];
         timeStr = [fmt stringFromDate:d];
       }
-      [info appendFormat:@"%@ : %@  door=%@", [texts ts:@"info.last_press"], timeStr,
-                         [last objectForKey:@"door"] ?: @"-"];
+      [triggers addObject:DBInfoRow([texts ts:@"info.last_press"],
+          [NSString stringWithFormat:@"%@  door=%@", timeStr,
+                                     [last objectForKey:@"door"] ?: @"-"])];
     } else {
-      [info appendFormat:@"%@ : %@", [texts ts:@"info.last_press"],
-                         [texts ts:@"info.no_press"]];
+      [triggers addObject:DBInfoRow([texts ts:@"info.last_press"], [texts ts:@"info.no_press"])];
+    }
+    [sections addObject:DBInfoSection([texts ts:@"info.triggers"], nil, triggers)];
+  }
+
+  // Tapping an address points the admin QR below at it.
+  NSString *chosen = [self chosenAddress];
+  NSMutableArray *addresses = [NSMutableArray array];
+  for (NSArray *family in @[ @[ @"IPv4", _v4 ], @[ @"IPv6", _v6 ] ]) {
+    for (NSString *address in [family objectAtIndex:1]) {
+      NSMutableDictionary *row = [DBInfoRow([family objectAtIndex:0], address) mutableCopy];
+      [row setObject:address forKey:kRowAddress];
+      if ([address isEqualToString:chosen]) [row setObject:@YES forKey:kRowCheck];
+      [addresses addObject:row];
     }
   }
-  _infoText.text = info;
+  [sections addObject:DBInfoSection([texts ts:@"info.addresses"],
+      [addresses count] == 0 ? [texts ts:@"info.addresses_loading"] : nil, addresses)];
 
-
-  NSMutableString *addr = [NSMutableString stringWithFormat:@"── %@ ──\n",
-                            [texts ts:@"info.addresses"]];
-  if ([_v4 count]) {
-    [addr appendString:@"IPv4:\n"];
-    for (NSString *s in _v4) [addr appendFormat:@"  %@\n", s];
-  }
-  if ([_v6 count]) {
-    [addr appendString:@"IPv6:\n"];
-    for (NSString *s in _v6) [addr appendFormat:@"  %@\n", s];
-  }
-  if (![_v4 count] && ![_v6 count]) [addr appendString:[texts ts:@"info.addresses_loading"]];
-  _addrText.text = addr;
-
-  [_ipSeg setEnabled:([_v4 count] > 0) forSegmentAtIndex:0];
-  [_ipSeg setEnabled:([_v6 count] > 0) forSegmentAtIndex:1];
-  if (_ipSeg.selectedSegmentIndex == 1 && ![_v6 count]) _ipSeg.selectedSegmentIndex = 0;
-  if (_ipSeg.selectedSegmentIndex == 0 && ![_v4 count] && [_v6 count]) _ipSeg.selectedSegmentIndex = 1;
-
+  _sections = sections;
+  [_table reloadData];
   [self updateQr];
-  [self setNeedsLayout];
 }
 
 + (BOOL)isV6:(NSString *)addr {
   return [addr rangeOfString:@":"].location != NSNotFound;
 }
-- (NSString *)preferredV6 {
 
-  for (NSString *s in _v6) {
-    unichar c = [s length] ? [s characterAtIndex:0] : 0;
-    if (c == '2' || c == '3') return s;
-  }
+- (NSString *)chosenAddress {
+  if (_chosenAddress &&
+      ([_v4 containsObject:_chosenAddress] || [_v6 containsObject:_chosenAddress]))
+    return _chosenAddress;
+  if ([_v4 count]) return [_v4 objectAtIndex:0];
   return [_v6 count] ? [_v6 objectAtIndex:0] : nil;
 }
 
-- (NSArray *)currentList {
-  return _ipSeg.selectedSegmentIndex == 1 ? _v6 : _v4;
-}
-
-- (void)onIpToggle {
-  _choiceIdx = 0;
-  [self updateQr];
-}
-
-- (void)onCycle {
-  NSArray *list = [self currentList];
-  if ([list count] > 1) _choiceIdx = (_choiceIdx + 1) % (NSInteger)[list count];
-  [self updateQr];
-}
-
 - (void)updateQr {
-  NSArray *list = [self currentList];
-  if (_choiceIdx >= (NSInteger)[list count]) _choiceIdx = 0;
-  NSString *addr = [list count] ? [list objectAtIndex:_choiceIdx] : nil;
+  DBTexts *texts = [_router texts];
+  NSString *addr = [self chosenAddress];
   NSString *url = nil;
   if (addr) {
-    if (_ipSeg.selectedSegmentIndex == 1)
-      url = [NSString stringWithFormat:@"https://[%@]:47443/admin/", addr];
-    else
-      url = [NSString stringWithFormat:@"https://%@:47443/admin/", addr];
+    url = [[self class] isV6:addr]
+        ? [NSString stringWithFormat:@"https://[%@]:47443/admin/", addr]
+        : [NSString stringWithFormat:@"https://%@:47443/admin/", addr];
   }
-  if ([list count] > 1) {
-    _cycleBtn.hidden = NO;
-    [_cycleBtn setTitle:[[_router texts] t:@"info.address_cycle",
-                         [NSNumber numberWithLong:(long)(_choiceIdx + 1)],
-                         [NSNumber numberWithUnsignedLong:(unsigned long)[list count]], nil]
-               forState:UIControlStateNormal];
-  } else {
-    _cycleBtn.hidden = YES;
-  }
-  if (url == nil) {
-    _qr.image = nil;
-    _qrUrl.text = [[_router texts] ts:@"info.no_address"];
-    return;
-  }
-  _qrUrl.text = [[[ _router texts] ts:@"info.scan_admin"] stringByAppendingFormat:@"\n%@", url];
-
-  _qr.image = nil;
+  BOOL changed = url == nil ? _qrPayload != nil : ![url isEqualToString:_qrPayload];
+  _qrPayload = [url copy];
+  if (changed) _qr.image = nil;
+  _qrUrl.text = url == nil
+      ? [texts ts:@"info.no_address"]
+      : [[texts ts:@"info.scan_admin"] stringByAppendingFormat:@"\n%@", url];
+  [self layoutQrHost];
+  if (!changed || url == nil) return;
   __weak DBInfoScreen *wself = self;
   NSString *want = [url copy];
+  // The image view shows the bitmap unscaled, so it is rendered no larger than the view.
+  CGFloat tableWidth = _table.bounds.size.width;
+  CGFloat side = tableWidth > 0 ? MAX(120, MIN(kQrSide, tableWidth - 40)) : kQrSide;
+  // Rasterizing a QR on the A4 main thread visibly stalls the UI.
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    UIImage *img = [DBQrCode imageForString:want targetPx:440];
+    UIImage *img = [DBQrCode imageForString:want targetPx:side];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBInfoScreen *s = wself;
-      if (!s) return;
-      if (s->_qrUrl.text && [s->_qrUrl.text rangeOfString:want].location != NSNotFound) {
-        s->_qr.image = img;
-        [s setNeedsLayout];
-      }
+      if (s && [s->_qrPayload isEqualToString:want]) s->_qr.image = img;
     });
   });
-  [self setNeedsLayout];
 }
 
 - (void)onClose {
   [_router closeInfoAnimated:YES];
 }
 
+#pragma mark - table
+
+- (NSDictionary *)rowAt:(NSIndexPath *)indexPath {
+  NSArray *rows = [[_sections objectAtIndex:(NSUInteger)indexPath.section]
+      objectForKey:kSectionRows];
+  return [rows objectAtIndex:(NSUInteger)indexPath.row];
+}
+
+// The width a cell's labels can use; the grouped inset differs by OS and idiom.
+- (CGFloat)cellTextWidth {
+  CGFloat width = _table.bounds.size.width;
+  if (DBChromeIsFlat()) return width - 30;
+  return width - (DBChromeIsPad() && width > 400 ? 110 : 40);
+}
+
+// A value that does not fit beside its label moves under it and wraps.
+- (BOOL)rowWraps:(NSDictionary *)row {
+  CGFloat title = [[row objectForKey:kRowTitle] sizeWithFont:[UIFont boldSystemFontOfSize:17]]
+      .width;
+  CGFloat value = [[row objectForKey:kRowValue] sizeWithFont:[UIFont systemFontOfSize:17]].width;
+  CGFloat accessory = [row objectForKey:kRowCheck] ? 30 : 0;
+  return title + value + 24 + accessory > [self cellTextWidth];
+}
+
+- (CGFloat)wrappedValueHeight:(NSDictionary *)row {
+  CGFloat accessory = [row objectForKey:kRowCheck] ? 30 : 0;
+  CGSize size = [[row objectForKey:kRowValue]
+           sizeWithFont:[UIFont systemFontOfSize:14]
+      constrainedToSize:CGSizeMake([self cellTextWidth] - accessory, 9999)
+          lineBreakMode:NSLineBreakByCharWrapping];
+  return ceilf(size.height);
+}
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+  (void)tableView;
+  return (NSInteger)[_sections count];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+  (void)tableView;
+  return (NSInteger)[[[_sections objectAtIndex:(NSUInteger)section] objectForKey:kSectionRows]
+      count];
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+  (void)tableView;
+  NSString *title = [[_sections objectAtIndex:(NSUInteger)section] objectForKey:kSectionTitle];
+  return [title length] > 0 ? title : nil;
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+  (void)tableView;
+  NSString *footer = [[_sections objectAtIndex:(NSUInteger)section] objectForKey:kSectionFooter];
+  return [footer length] > 0 ? footer : nil;
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+  (void)tableView;
+  NSDictionary *row = [self rowAt:indexPath];
+  if (![self rowWraps:row]) return 44;
+  return MAX(44, 10 + 22 + [self wrappedValueHeight:row] + 10);
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView
+         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+  NSDictionary *row = [self rowAt:indexPath];
+  BOOL wraps = [self rowWraps:row];
+  NSString *identifier = wraps ? @"wrapped" : @"value";
+  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+  if (!cell) {
+    cell = [[UITableViewCell alloc]
+          initWithStyle:wraps ? UITableViewCellStyleSubtitle : UITableViewCellStyleValue1
+        reuseIdentifier:identifier];
+    if (wraps) {
+      cell.detailTextLabel.numberOfLines = 0;
+      cell.detailTextLabel.lineBreakMode = NSLineBreakByCharWrapping;
+      cell.detailTextLabel.font = [UIFont systemFontOfSize:14];
+    }
+  }
+  cell.textLabel.text = [row objectForKey:kRowTitle];
+  cell.detailTextLabel.text = [row objectForKey:kRowValue];
+  cell.accessoryType = [row objectForKey:kRowCheck] ? UITableViewCellAccessoryCheckmark
+                                                    : UITableViewCellAccessoryNone;
+  cell.selectionStyle = [row objectForKey:kRowAddress] ? UITableViewCellSelectionStyleBlue
+                                                       : UITableViewCellSelectionStyleNone;
+  return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+  [tableView deselectRowAtIndexPath:indexPath animated:NO];
+  NSString *address = [[self rowAt:indexPath] objectForKey:kRowAddress];
+  if (!address || [address isEqualToString:[self chosenAddress]]) return;
+  _chosenAddress = [address copy];
+  NSMutableArray *sections = [NSMutableArray arrayWithArray:_sections];
+  NSMutableDictionary *section = [[sections lastObject] mutableCopy];
+  NSMutableArray *rows = [NSMutableArray array];
+  for (NSDictionary *row in [section objectForKey:kSectionRows]) {
+    NSMutableDictionary *copy = [row mutableCopy];
+    if ([[row objectForKey:kRowAddress] isEqualToString:address])
+      [copy setObject:@YES forKey:kRowCheck];
+    else
+      [copy removeObjectForKey:kRowCheck];
+    [rows addObject:copy];
+  }
+  [section setObject:rows forKey:kSectionRows];
+  [sections replaceObjectAtIndex:[sections count] - 1 withObject:section];
+  _sections = sections;
+  [_table reloadData];
+  [self updateQr];
+}
+
 #pragma mark - layout
+
+// Sizes the QR footer for the table width and hands it back to the table, which is how a
+// table learns that its footer height changed.
+- (void)layoutQrHost {
+  CGFloat width = _table.bounds.size.width;
+  if (width <= 0) return;
+  CGFloat side = MIN(kQrSide, width - 40);
+  CGFloat y = 8;
+  BOOL hasQr = _qrPayload != nil;
+  _qr.hidden = !hasQr;
+  if (hasQr) {
+    _qr.frame = CGRectMake(floorf((width - side) / 2), y, side, side);
+    y += side + 8;
+  }
+  CGFloat textHeight = ceilf([_qrUrl sizeThatFits:CGSizeMake(width - 40, 9999)].height);
+  _qrUrl.frame = CGRectMake(20, y, width - 40, textHeight);
+  y += textHeight + 24;
+  _qrHost.frame = CGRectMake(0, 0, width, y);
+  _table.tableFooterView = _qrHost;
+  _qrHostWidth = width;
+}
 
 - (void)layoutSubviews {
   [super layoutSubviews];
-  CGSize sz = self.bounds.size;
-  CGFloat pad = 20;
-  CGFloat w = sz.width - pad * 2;
-
-  _close.frame = CGRectMake(sz.width - 100, 24, 80, 40);
-  _scroll.frame = CGRectMake(0, 72, sz.width, sz.height - 72);
-
-  CGFloat y = 8;
-  _title.frame = CGRectMake(pad, y, w, 36);
-  y += 44;
-
-  CGSize infoSz = [_infoText sizeThatFits:CGSizeMake(w, 9999)];
-  _infoText.frame = CGRectMake(pad, y, w, infoSz.height);
-  y += infoSz.height + 14;
-
-  CGSize addrSz = [_addrText sizeThatFits:CGSizeMake(w, 9999)];
-  _addrText.frame = CGRectMake(pad, y, w, addrSz.height);
-  y += addrSz.height + 16;
-
-  _ipSeg.frame = CGRectMake(pad, y, MIN(w, 240), 34);
-  y += 44;
-
-  if (!_cycleBtn.hidden) {
-    _cycleBtn.frame = CGRectMake(pad, y, w, 34);
-    y += 40;
+  CGRect bounds = self.bounds;
+  CGFloat top = [_nav layoutInBounds:bounds];
+  CGFloat width = MIN(kColumnMax, bounds.size.width);
+  CGRect frame = CGRectMake(floorf((bounds.size.width - width) / 2), top, width,
+                            bounds.size.height - top);
+  if (!CGRectEqualToRect(_table.frame, frame)) {
+    _table.frame = frame;
+    // Row heights depend on the table width.
+    [_table reloadData];
   }
-
-  CGFloat qrDim = MIN(w, 460);
-  _qr.frame = CGRectMake((sz.width - qrDim) / 2, y, qrDim, qrDim);
-  y += qrDim + 10;
-
-  CGSize urlSz = [_qrUrl sizeThatFits:CGSizeMake(w, 9999)];
-  _qrUrl.frame = CGRectMake(pad, y, w, urlSz.height);
-  y += urlSz.height + 16;
-
-  _refresh.frame = CGRectMake(pad, y, 120, 40);
-  y += 60;
-
-  _scroll.contentSize = CGSizeMake(sz.width, y);
-
-  for (UIView *v in [_scroll subviews])
-    if ([v isKindOfClass:[UILabel class]]) v.backgroundColor = [UIColor clearColor];
+  if (_qrHostWidth != width) [self layoutQrHost];
 }
 
 @end

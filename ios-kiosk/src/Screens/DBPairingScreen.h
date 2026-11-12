@@ -2,8 +2,10 @@
 
 // Onboarding screen for an unpaired kiosk (spec §5.0). It renders the
 // core-authoritative pairing state (unpaired | joining | persist_error) and
-// never infers it from side effects. The iPad 1 has no camera, so the Add QR is
-// display-only and the Pairing-PIN entry uses a drawn keypad.
+// never infers it from side effects. A navigation bar titles one grouped table:
+// its header carries this device's confirmation code, identity, status, and Add
+// QR (display-only; the iPad 1 has no camera), and its sections carry the
+// Pairing-PIN join form, cluster creation, and the "set up later" exit.
 @class DBPairUri;
 
 @interface DBPairingScreen : DBScreen

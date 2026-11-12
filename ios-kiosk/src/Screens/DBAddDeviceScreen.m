@@ -6,75 +6,84 @@
 #import "../Core/DBPairingModel.h"
 #import "../Core/DBTexts.h"
 #import "../Media/DBQrCode.h"
+#import "DBChrome.h"
 #import "DBQrScanOverlay.h"
 #import "DBRouter.h"
 
-// A joined device leaves pending.devices[] immediately. Keep its row on screen
-// with the "追加しました ✓" confirmation for a moment so the operator sees the
-// result of their own tap.
+// A joined device leaves pending.devices[] immediately. Keep its row on screen with the
+// "added" confirmation for a moment so the operator sees the result of their own tap.
 static const NSTimeInterval kAddedRowLingerS = 6.0;
 
-static UIColor *DBAddBg(void) {
-  return [UIColor colorWithRed:0.055 green:0.086 blue:0.129 alpha:1];
-}
-static UIColor *DBAddPanel(void) {
-  return [UIColor colorWithRed:0.09 green:0.12 blue:0.17 alpha:1];
-}
-static UIColor *DBAddDim(void) { return [UIColor colorWithWhite:0.65 alpha:1]; }
-static UIColor *DBAddAccent(void) {
-  return [UIColor colorWithRed:0.13 green:0.45 blue:0.85 alpha:1];
-}
-static UIColor *DBAddOk(void) {
-  return [UIColor colorWithRed:0.35 green:0.80 blue:0.45 alpha:1];
-}
-static UIColor *DBAddError(void) {
-  return [UIColor colorWithRed:0.88 green:0.36 blue:0.30 alpha:1];
-}
+static const CGFloat kColumnMax = 700;
+static const CGFloat kQrSide = 240;
+static const CGFloat kAddButtonWidth = 84;
 
-@interface DBAddDeviceScreen () <UIAlertViewDelegate>
+typedef enum {
+  DBAddSectionOnboarding = 0,
+  DBAddSectionNearby,
+  DBAddSectionPin,
+  DBAddSectionQr,
+  DBAddSectionAddAll,
+  DBAddSectionSecurity,
+  DBAddSectionUnpair,
+} DBAddSection;
+
+typedef enum {
+  DBAddRowOpenOnboarding = 0,
+  DBAddRowDevice,
+  DBAddRowNoDevices,
+  DBAddRowPinAddress,
+  DBAddRowPinCode,
+  DBAddRowPinCountdown,
+  DBAddRowPinStart,
+  DBAddRowQrImage,
+  DBAddRowScan,
+  DBAddRowAddAllStatus,
+  DBAddRowAddAllStart,
+  DBAddRowAddAllStop,
+  DBAddRowSecurity,
+  DBAddRowUnpair,
+} DBAddRow;
+
+enum { DBAddAlertCode = 1, DBAddAlertAddAll, DBAddAlertUnpair };
+
+static NSString *const kSectionKind = @"kind";
+static NSString *const kSectionRows = @"rows";
+
+@interface DBAddDeviceScreen () <UIAlertViewDelegate, UIActionSheetDelegate,
+                                 UITableViewDataSource, UITableViewDelegate>
 @end
 
 @implementation DBAddDeviceScreen {
-  UIScrollView *_scroll;
-  UILabel *_title;
-  UILabel *_membership;
-  UIButton *_closeButton;
+  DBNavBar *_nav;
+  UITableView *_table;
+  // Membership line, or the "not in a cluster" notice, above the first section.
+  UIView *_headerHost;
+  UILabel *_headerLabel;
+  CGFloat _layoutWidth;
 
-  UILabel *_nearbyTitle;
-  UIView *_nearbyPanel;
-  UILabel *_nearbyEmpty;
-  NSMutableArray *_rowViews;     // UIView per rendered row.
-  NSString *_rowSignature;
+  // Sections on screen: dictionaries of a DBAddSection kind and its DBAddRow kinds.
+  NSArray *_model;
+  NSString *_modelSignature;
+  NSArray *_entries;             // the Nearby rows, in order
 
-  UIButton *_codeButton;
-  UIView *_codeCard;
-  UILabel *_codeAddressLabel;
-  UILabel *_codeAddress;
-  UILabel *_codeCodeLabel;
-  UILabel *_codeCode;
-  UILabel *_codeCountdown;
-  UILabel *_codeInstructions;
-  UIButton *_newCodeButton;
-
-  UIButton *_addAllButton;
-  UIButton *_scanButton;
-  UILabel *_scanUnavailable;
-  DBQrScanOverlay *_scanner;
-  UILabel *_addAllWarning;
-  UIButton *_addAllStop;
-
+  // Cells that hold a view of their own are built once and reused.
+  UITableViewCell *_pinCell;
+  UILabel *_pinLabel;
+  UITableViewCell *_qrCell;
   UIImageView *_qr;
   UILabel *_qrPlaceholder;
-  UILabel *_qrCaption;
 
-  UIButton *_unpairButton;
-  UILabel *_unpairConfirm;
-  UILabel *_errorLabel;
-  UILabel *_securityNotice;   // peer_rejected / cluster_key_changed, one line
+  DBQrScanOverlay *_scanner;
+  UIAlertView *_alert;
+  UIActionSheet *_sheet;
+  NSString *_sheetDeviceId;
+  NSInteger _sheetAddIndex;
   NSString *_codePromptId;    // device the open code prompt belongs to
 
-  UILabel *_unpairedNotice;
-  UIButton *_openOnboarding;
+  NSString *_mintError;
+  BOOL _minting;
+  NSString *_securityNotice;  // peer_rejected / cluster_key_changed
 
   DBCoreBridge *_core;
   DBTexts *_texts;
@@ -87,6 +96,7 @@ static UIColor *DBAddError(void) {
   NSMutableDictionary *_deviceNames;    // id -> display name (kept after joining)
   NSMutableDictionary *_addedAt;        // id -> NSNumber CFAbsoluteTime
   NSDictionary *_token;
+  NSString *_tokenHost;
   NSInteger _tokenExpiresS;
   NSInteger _tokenAttemptsLeft;
   CFAbsoluteTime _tokenReadAt;
@@ -108,15 +118,16 @@ static UIColor *DBAddError(void) {
     _router = router;
     _core = router.core;
     _texts = router.texts;
-    _rowViews = [[NSMutableArray alloc] init];
     _deviceStates = [[NSMutableDictionary alloc] init];
     _deviceErrors = [[NSMutableDictionary alloc] init];
     _deviceNames = [[NSMutableDictionary alloc] init];
     _addedAt = [[NSMutableDictionary alloc] init];
     _pending = @[];
+    _entries = @[];
+    _model = @[];
+    _modelSignature = @"";
     _state = DBPairingStateUnknown;
     _lastQr = @"";
-    _rowSignature = @"";
     [self buildUi];
   }
   return self;
@@ -124,6 +135,10 @@ static UIColor *DBAddError(void) {
 
 - (void)dealloc {
   [_poll invalidate];
+  _alert.delegate = nil;
+  _sheet.delegate = nil;
+  _table.dataSource = nil;
+  _table.delegate = nil;
 }
 
 - (NSString *)screenName {
@@ -132,176 +147,58 @@ static UIColor *DBAddError(void) {
 
 #pragma mark - construction
 
-- (UILabel *)labelWithFont:(UIFont *)font color:(UIColor *)color center:(BOOL)center {
-  UILabel *l = [[UILabel alloc] init];
-  l.numberOfLines = 0;
-  l.font = font;
-  l.textColor = color;
-  l.backgroundColor = [UIColor clearColor];
-  l.textAlignment = center ? NSTextAlignmentCenter : NSTextAlignmentLeft;
-  return l;
-}
-
-- (UIButton *)flatButtonWithTitle:(NSString *)title background:(UIColor *)bg {
-  UIButton *b = [UIButton buttonWithType:UIButtonTypeCustom];
-  [b setTitle:title forState:UIControlStateNormal];
-  b.titleLabel.font = [UIFont boldSystemFontOfSize:17];
-  [b setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-  [b setTitleColor:[UIColor colorWithWhite:1 alpha:0.4] forState:UIControlStateDisabled];
-  if (bg) {
-    b.backgroundColor = bg;
-    b.layer.cornerRadius = 10;
-  }
-  return b;
-}
-
 - (void)buildUi {
-  self.backgroundColor = DBAddBg();
+  self.backgroundColor = DBChromeScreenBackground();
+  DBChromeInstallBackdrop(self);
 
-  _scroll = [[UIScrollView alloc] init];
-  _scroll.alwaysBounceVertical = YES;
-  [self addSubview:_scroll];
+  _table = DBChromeGroupedTable(self, self);
+  DBChromeClearTableBackground(_table);
+  [self addSubview:_table];
 
-  _title = [self labelWithFont:[UIFont boldSystemFontOfSize:26]
-                         color:[UIColor whiteColor] center:YES];
-  _title.text = [_texts ts:@"pair.panel_title"];
-  [_scroll addSubview:_title];
+  _nav = [[DBNavBar alloc] init];
+  __weak DBAddDeviceScreen *weakSelf = self;
+  [_nav setRootTitle:[_texts ts:@"pair.panel_title"]
+           backTitle:[_texts ts:@"ui.back"]
+              onBack:^{ [weakSelf onClose]; }];
+  [self addSubview:_nav.bar];
 
-  _membership = [self labelWithFont:[UIFont systemFontOfSize:15] color:DBAddDim() center:YES];
-  [_scroll addSubview:_membership];
+  _headerHost = [[UIView alloc] init];
+  _headerLabel = DBChromeSectionFooterLabel();
+  _headerLabel.textAlignment = NSTextAlignmentCenter;
+  [_headerHost addSubview:_headerLabel];
 
-  _unpairedNotice = [self labelWithFont:[UIFont systemFontOfSize:16] color:DBAddDim() center:YES];
-  _unpairedNotice.text = [_texts ts:@"pair.title_unpaired"];
-  _unpairedNotice.hidden = YES;
-  [_scroll addSubview:_unpairedNotice];
+  _pinCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                    reuseIdentifier:nil];
+  _pinCell.selectionStyle = UITableViewCellSelectionStyleNone;
+  _pinLabel = [[UILabel alloc] initWithFrame:CGRectInset(_pinCell.contentView.bounds, 10, 4)];
+  _pinLabel.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  _pinLabel.backgroundColor = [UIColor clearColor];
+  _pinLabel.font = [UIFont boldSystemFontOfSize:40];
+  _pinLabel.textAlignment = NSTextAlignmentCenter;
+  _pinLabel.adjustsFontSizeToFitWidth = YES;
+  _pinLabel.accessibilityIdentifier = @"add_device_pin";
+  [_pinCell.contentView addSubview:_pinLabel];
 
-  _openOnboarding = [self flatButtonWithTitle:[_texts ts:@"pair.open_onboarding"]
-                                   background:DBAddAccent()];
-  [_openOnboarding addTarget:self action:@selector(onOpenOnboarding)
-            forControlEvents:UIControlEventTouchUpInside];
-  _openOnboarding.hidden = YES;
-  [_scroll addSubview:_openOnboarding];
-
-  _nearbyTitle = [self labelWithFont:[UIFont boldSystemFontOfSize:19]
-                               color:[UIColor whiteColor] center:NO];
-  _nearbyTitle.text = [_texts ts:@"pair.nearby_title"];
-  [_scroll addSubview:_nearbyTitle];
-
-  _nearbyPanel = [[UIView alloc] init];
-  _nearbyPanel.backgroundColor = DBAddPanel();
-  _nearbyPanel.layer.cornerRadius = 12;
-  [_scroll addSubview:_nearbyPanel];
-
-  // Never a blank div: the empty state says the search is still running.
-  _nearbyEmpty = [self labelWithFont:[UIFont systemFontOfSize:15] color:DBAddDim() center:YES];
-  _nearbyEmpty.text = [NSString stringWithFormat:@"%@\n%@", [_texts ts:@"pair.nearby_none"],
-                                                 [_texts ts:@"pair.searching"]];
-  [_nearbyPanel addSubview:_nearbyEmpty];
-
-  _codeButton = [self flatButtonWithTitle:[_texts ts:@"pair.add_with_code"]
-                               background:DBAddAccent()];
-  [_codeButton addTarget:self action:@selector(onStartCode)
-        forControlEvents:UIControlEventTouchUpInside];
-  [_scroll addSubview:_codeButton];
-
-  _codeCard = [[UIView alloc] init];
-  _codeCard.backgroundColor = DBAddPanel();
-  _codeCard.layer.cornerRadius = 12;
-  _codeCard.hidden = YES;
-  [_scroll addSubview:_codeCard];
-
-  _codeAddressLabel = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBAddDim() center:NO];
-  _codeAddressLabel.text = [_texts ts:@"pair.address_label"];
-  [_codeCard addSubview:_codeAddressLabel];
-  _codeAddress = [self labelWithFont:[UIFont boldSystemFontOfSize:24]
-                               color:[UIColor whiteColor] center:NO];
-  [_codeCard addSubview:_codeAddress];
-  _codeCodeLabel = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBAddDim() center:NO];
-  _codeCodeLabel.text = [_texts ts:@"pair.code_label"];
-  [_codeCard addSubview:_codeCodeLabel];
-  _codeCode = [self labelWithFont:[UIFont boldSystemFontOfSize:44]
-                            color:[UIColor whiteColor] center:NO];
-  [_codeCard addSubview:_codeCode];
-  _codeCountdown = [self labelWithFont:[UIFont systemFontOfSize:16] color:DBAddDim() center:NO];
-  [_codeCard addSubview:_codeCountdown];
-  _codeInstructions = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBAddDim() center:NO];
-  _codeInstructions.text = [_texts ts:@"pair.code_instructions"];
-  [_codeCard addSubview:_codeInstructions];
-  _newCodeButton = [self flatButtonWithTitle:[_texts ts:@"pair.new_code"]
-                                  background:DBAddAccent()];
-  [_newCodeButton addTarget:self action:@selector(onStartCode)
-           forControlEvents:UIControlEventTouchUpInside];
-  _newCodeButton.hidden = YES;
-  [_codeCard addSubview:_newCodeButton];
-
-  _scanButton = [self flatButtonWithTitle:[_texts ts:@"pair.scan_qr"]
-                               background:DBAddAccent()];
-  [_scanButton addTarget:self action:@selector(onScanQr)
-        forControlEvents:UIControlEventTouchUpInside];
-  _scanButton.accessibilityIdentifier = @"add_device_scan";
-  [_scroll addSubview:_scanButton];
-  _scanUnavailable = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBAddDim() center:YES];
-  _scanUnavailable.text = [_texts ts:@"pair.scan_no_camera"];
-  [_scroll addSubview:_scanUnavailable];
-
-  _addAllButton = [self flatButtonWithTitle:[_texts ts:@"pair.add_all"] background:nil];
-  [_addAllButton setTitleColor:[UIColor colorWithRed:0.85 green:0.55 blue:0.2 alpha:1]
-                      forState:UIControlStateNormal];
-  [_addAllButton addTarget:self action:@selector(onAddAll)
-          forControlEvents:UIControlEventTouchUpInside];
-  [_scroll addSubview:_addAllButton];
-
-  _addAllWarning = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBAddDim() center:YES];
-  _addAllWarning.text = [_texts ts:@"pair.add_all_warning"];
-  [_scroll addSubview:_addAllWarning];
-
-  _addAllStop = [self flatButtonWithTitle:[_texts ts:@"pair.add_all_stop"]
-                               background:[UIColor colorWithRed:0.55 green:0.20 blue:0.16
-                                                          alpha:1]];
-  [_addAllStop addTarget:self action:@selector(onStopAddAll)
-        forControlEvents:UIControlEventTouchUpInside];
-  _addAllStop.hidden = YES;
-  [_scroll addSubview:_addAllStop];
-
+  _qrCell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                   reuseIdentifier:nil];
+  _qrCell.selectionStyle = UITableViewCellSelectionStyleNone;
   _qr = [[UIImageView alloc] init];
-  _qr.contentMode = UIViewContentModeScaleAspectFit;
-  _qr.backgroundColor = [UIColor whiteColor];
-  [_scroll addSubview:_qr];
-  _qrPlaceholder = [self labelWithFont:[UIFont systemFontOfSize:14]
-                                 color:[UIColor colorWithWhite:0.35 alpha:1] center:YES];
+  _qr.contentMode = UIViewContentModeCenter;
+  _qr.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  _qr.frame = _qrCell.contentView.bounds;
+  [_qrCell.contentView addSubview:_qr];
+  // Never an empty cell: a caption holds the place until Core publishes pair_qr.
+  _qrPlaceholder = [[UILabel alloc] initWithFrame:CGRectInset(_qrCell.contentView.bounds, 10, 0)];
+  _qrPlaceholder.autoresizingMask =
+      UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+  _qrPlaceholder.backgroundColor = [UIColor clearColor];
+  _qrPlaceholder.font = [UIFont systemFontOfSize:15];
+  _qrPlaceholder.textAlignment = NSTextAlignmentCenter;
+  _qrPlaceholder.numberOfLines = 0;
   _qrPlaceholder.text = [_texts ts:@"pair.qr_pending"];
-  [_qr addSubview:_qrPlaceholder];
-  _qrCaption = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBAddDim() center:YES];
-  _qrCaption.text = [_texts ts:@"pair.qr_caption"];
-  [_scroll addSubview:_qrCaption];
+  [_qrCell.contentView addSubview:_qrPlaceholder];
 
-  _errorLabel = [self labelWithFont:[UIFont boldSystemFontOfSize:15] color:DBAddError() center:YES];
-  _errorLabel.text = @"";
-  [_scroll addSubview:_errorLabel];
-
-  _securityNotice = [self labelWithFont:[UIFont systemFontOfSize:15] color:DBAddDim() center:YES];
-  _securityNotice.hidden = YES;
-  [_scroll addSubview:_securityNotice];
-
-  _unpairButton = [self flatButtonWithTitle:[_texts ts:@"pair.clear_title"] background:nil];
-  [_unpairButton setTitleColor:DBAddError() forState:UIControlStateNormal];
-  _unpairButton.titleLabel.font = [UIFont systemFontOfSize:16];
-  [_unpairButton addTarget:self action:@selector(onUnpair)
-          forControlEvents:UIControlEventTouchUpInside];
-  [_scroll addSubview:_unpairButton];
-
-  _unpairConfirm = [self labelWithFont:[UIFont systemFontOfSize:14] color:DBAddDim() center:YES];
-  _unpairConfirm.text = @"";
-  [_scroll addSubview:_unpairConfirm];
-
-  _closeButton = [self flatButtonWithTitle:[_texts ts:@"monitor.close"]
-                                background:[UIColor colorWithRed:0.20 green:0.24 blue:0.30
-                                                           alpha:1]];
-  [_closeButton addTarget:self action:@selector(onClose)
-         forControlEvents:UIControlEventTouchUpInside];
-  [self addSubview:_closeButton];
-
-  [self clearLabelBackgrounds:_scroll];
+  [self applyContent];
 }
 
 #pragma mark - lifecycle
@@ -309,13 +206,25 @@ static UIColor *DBAddError(void) {
 - (void)onScreenWillAppear {
   _confirmingUnpair = NO;
   _confirmingAddAll = NO;
-  _unpairConfirm.text = @"";
-  _errorLabel.text = @"";
+  _mintError = nil;
   [self startPolling];
 }
 
 - (void)onScreenWillDisappear {
   [self stopPolling];
+  // A confirmation left open must not act after another screen took over.
+  _confirmingUnpair = NO;
+  _confirmingAddAll = NO;
+  _codePromptId = nil;
+  _sheetDeviceId = nil;
+  UIAlertView *alert = _alert;
+  _alert = nil;
+  alert.delegate = nil;
+  [alert dismissWithClickedButtonIndex:alert.cancelButtonIndex animated:NO];
+  UIActionSheet *sheet = _sheet;
+  _sheet = nil;
+  sheet.delegate = nil;
+  [sheet dismissWithClickedButtonIndex:sheet.cancelButtonIndex animated:NO];
   DBQrScanOverlay *scanner = _scanner;
   _scanner = nil;
   scanner.onFinished = nil;
@@ -399,9 +308,8 @@ static UIColor *DBAddError(void) {
   _tokenReadAt = CFAbsoluteTimeGetCurrent();
   NSString *host = [DBConfigUtil evStr:token key:@"host"];
   NSString *pin = [DBConfigUtil evStr:token key:@"pin"];
-  if ([host length] > 0) _codeAddress.text = host;
-  if ([pin length] > 0) _codeCode.text = pin;
-  _codeCard.hidden = NO;
+  if ([host length] > 0) _tokenHost = [host copy];
+  if ([pin length] > 0) _pinLabel.text = pin;
 }
 
 - (NSInteger)remainingTokenSeconds {
@@ -423,8 +331,9 @@ static UIColor *DBAddError(void) {
   _lastQr = [qr copy];
   NSString *payload = [qr copy];
   __weak DBAddDeviceScreen *weakSelf = self;
+  // Rasterizing a QR on the A4 main thread visibly stalls the UI.
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    UIImage *image = [DBQrCode imageForString:payload targetPx:360];
+    UIImage *image = [DBQrCode imageForString:payload targetPx:kQrSide];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBAddDeviceScreen *screen = weakSelf;
       if (!screen || ![screen->_lastQr isEqualToString:payload]) return;
@@ -434,10 +343,11 @@ static UIColor *DBAddError(void) {
   });
 }
 
-#pragma mark - rendering
+#pragma mark - model
 
-// Rows are rebuilt only when the visible set or a row state changes, so the
-// one-second countdown refresh cannot make the list flicker on an iPad 1.
+// The table is reloaded only when the visible set or a row state changes; the one-second
+// countdown refresh rewrites the visible cells in place, so the list cannot flicker on an
+// iPad 1 and an open confirmation keeps its anchor row.
 - (NSArray *)visibleEntries {
   NSMutableArray *entries = [NSMutableArray array];
   NSMutableSet *seen = [NSMutableSet set];
@@ -474,186 +384,408 @@ static UIColor *DBAddError(void) {
   return signature;
 }
 
-- (void)applyContent {
-  BOOL ready = [_state isEqualToString:@"ready"];
-  _unpairedNotice.hidden = ready;
-  _openOnboarding.hidden = ready;
-  _nearbyTitle.hidden = !ready;
-  _nearbyPanel.hidden = !ready;
-  _codeButton.hidden = !ready;
-  BOOL hasCamera = [DBQrScanOverlay cameraAvailable];
-  _scanButton.hidden = !ready || !hasCamera;
-  _scanUnavailable.hidden = !ready || hasCamera;
-  _codeCard.hidden = !ready || (_token == nil);
-  _addAllButton.hidden = !ready;
-  _addAllWarning.hidden = !ready;
-  _addAllStop.hidden = !ready || !_pairingModeActive;
-  _qr.hidden = !ready;
-  _qrCaption.hidden = !ready;
-  _unpairButton.hidden = !ready;
+- (BOOL)entryHasKeyConflict:(NSDictionary *)entry {
+  return [DBConfigUtil evBool:entry key:@"pk_conflict"];
+}
 
+// idle | adding | added | failed. A device that answers with a different identity key for a
+// known id is never invitable from here (spec v3) and reads as failed.
+- (NSString *)stateForEntry:(NSDictionary *)entry {
+  NSString *state = [_deviceStates objectForKey:[DBConfigUtil evStr:entry key:@"id"]] ?: @"idle";
+  if ([state isEqualToString:@"idle"] && [self entryHasKeyConflict:entry]) return @"failed";
+  return state;
+}
+
+- (NSString *)errorCodeForEntry:(NSDictionary *)entry {
+  NSString *state = [_deviceStates objectForKey:[DBConfigUtil evStr:entry key:@"id"]] ?: @"idle";
+  if (![state isEqualToString:@"added"] && ![state isEqualToString:@"adding"] &&
+      [self entryHasKeyConflict:entry])
+    return @"pk_conflict";
+  return [_deviceErrors objectForKey:[DBConfigUtil evStr:entry key:@"id"]];
+}
+
+static NSDictionary *DBAddSectionMake(DBAddSection kind, NSArray *rows) {
+  return @{ kSectionKind : @(kind), kSectionRows : rows };
+}
+
+- (NSArray *)buildModelWithEntries:(NSArray *)entries {
+  if (![_state isEqualToString:@"ready"])
+    return @[ DBAddSectionMake(DBAddSectionOnboarding, @[ @(DBAddRowOpenOnboarding) ]) ];
+
+  NSMutableArray *model = [NSMutableArray array];
+  NSMutableArray *nearby = [NSMutableArray array];
+  for (NSUInteger i = 0; i < [entries count]; i++) [nearby addObject:@(DBAddRowDevice)];
+  if ([nearby count] == 0) [nearby addObject:@(DBAddRowNoDevices)];
+  [model addObject:DBAddSectionMake(DBAddSectionNearby, nearby)];
+
+  NSMutableArray *pin = [NSMutableArray array];
+  if (_token != nil) {
+    [pin addObject:@(DBAddRowPinAddress)];
+    [pin addObject:@(DBAddRowPinCode)];
+    [pin addObject:@(DBAddRowPinCountdown)];
+  }
+  [pin addObject:@(DBAddRowPinStart)];
+  [model addObject:DBAddSectionMake(DBAddSectionPin, pin)];
+
+  NSMutableArray *qr = [NSMutableArray arrayWithObject:@(DBAddRowQrImage)];
+  if ([DBQrScanOverlay cameraAvailable]) [qr addObject:@(DBAddRowScan)];
+  [model addObject:DBAddSectionMake(DBAddSectionQr, qr)];
+
+  [model addObject:DBAddSectionMake(DBAddSectionAddAll,
+      _pairingModeActive ? @[ @(DBAddRowAddAllStatus), @(DBAddRowAddAllStop) ]
+                         : @[ @(DBAddRowAddAllStart) ])];
+
+  if ([_securityNotice length] > 0)
+    [model addObject:DBAddSectionMake(DBAddSectionSecurity, @[ @(DBAddRowSecurity) ])];
+
+  [model addObject:DBAddSectionMake(DBAddSectionUnpair, @[ @(DBAddRowUnpair) ])];
+  return model;
+}
+
+- (NSString *)headerText {
+  if (![_state isEqualToString:@"ready"]) return [_texts ts:@"pair.title_unpaired"];
   NSMutableArray *parts = [NSMutableArray array];
   [parts addObject:[_texts t:@"pair.membership",
                         [NSString stringWithFormat:@"%ld", (long)_memberCount], nil]];
   [parts addObject:[_texts t:@"pair.membership_connected",
                         [NSString stringWithFormat:@"%ld", (long)_connectedCount], nil]];
   if (_isFounder) [parts addObject:[_texts ts:@"pair.created_badge"]];
-  _membership.text = [parts componentsJoinedByString:@"  ·  "];
-
-  if (ready) {
-    NSArray *entries = [self visibleEntries];
-    NSString *signature = [self signatureForEntries:entries];
-    if (![signature isEqualToString:_rowSignature]) {
-      _rowSignature = [signature copy];
-      [self rebuildRows:entries];
-    }
-    _nearbyEmpty.hidden = ([entries count] > 0);
-    [self applyCodeCard];
-    [self applyAddAll];
-  }
-  [self setNeedsLayout];
+  return [parts componentsJoinedByString:@"  ·  "];
 }
 
-- (void)rebuildRows:(NSArray *)entries {
-  for (UIView *row in _rowViews) [row removeFromSuperview];
-  [_rowViews removeAllObjects];
+- (void)applyContent {
+  NSArray *entries = [_state isEqualToString:@"ready"] ? [self visibleEntries] : @[];
+  NSArray *model = [self buildModelWithEntries:entries];
+  NSMutableString *signature = [NSMutableString string];
+  for (NSDictionary *section in model)
+    [signature appendFormat:@"%@:%lu,", [section objectForKey:kSectionKind],
+                            (unsigned long)[[section objectForKey:kSectionRows] count]];
+  [signature appendFormat:@"/%@/", [self signatureForEntries:entries]];
+  for (NSDictionary *entry in entries)
+    [signature appendString:[self entryHasKeyConflict:entry] ? @"c" : @"-"];
+  [signature appendFormat:@"/%d/%@/%@", (int)_minting, _mintError ?: @"", _securityNotice ?: @""];
 
-  NSInteger index = 0;
-  for (NSDictionary *entry in entries) {
-    NSString *identifier = [DBConfigUtil evStr:entry key:@"id"];
-    NSString *state = [_deviceStates objectForKey:identifier] ?: @"idle";
-    UIView *row = [[UIView alloc] init];
-    row.backgroundColor = [UIColor clearColor];
-
-    UILabel *name = [self labelWithFont:[UIFont boldSystemFontOfSize:19]
-                                  color:[UIColor whiteColor] center:NO];
-    name.numberOfLines = 1;
-    name.text = [DBPairingModel displayNameForDevice:entry];
-    name.tag = 1;
-    [row addSubview:name];
-
-    NSMutableArray *metaParts = [NSMutableArray array];
-    NSString *role = [DBConfigUtil evStr:entry key:@"role"];
-    if ([role isEqualToString:@"door_station"])
-      [metaParts addObject:[_texts ts:@"pair.role_door_station"]];
-    else if ([role isEqualToString:@"indoor_panel"])
-      [metaParts addObject:[_texts ts:@"pair.role_indoor_panel"]];
-    NSString *model = [DBConfigUtil evStr:entry key:@"model"];
-    NSString *platform = [DBConfigUtil evStr:entry key:@"platform"];
-    if ([model length] > 0) [metaParts addObject:model];
-    if ([platform length] > 0) [metaParts addObject:platform];
-    NSInteger age = [DBConfigUtil intVal:entry path:@"age_s" def:-1];
-    if (age >= 0)
-      [metaParts addObject:[_texts t:@"pair.nearby_waiting_since",
-                                [NSString stringWithFormat:@"%ld", (long)age], nil]];
-    UILabel *meta = [self labelWithFont:[UIFont systemFontOfSize:13]
-                                  color:DBAddDim() center:NO];
-    meta.numberOfLines = 1;
-    meta.text = [metaParts componentsJoinedByString:@" · "];
-    meta.tag = 2;
-    [row addSubview:meta];
-
-    if ([state isEqualToString:@"added"]) {
-      UILabel *added = [self labelWithFont:[UIFont boldSystemFontOfSize:17]
-                                     color:DBAddOk() center:NO];
-      added.text = [NSString stringWithFormat:@"%@ ✓", [_texts ts:@"pair.added"]];
-      added.tag = 3;
-      [row addSubview:added];
-    } else if ([state isEqualToString:@"adding"]) {
-      UILabel *adding = [self labelWithFont:[UIFont boldSystemFontOfSize:17]
-                                      color:DBAddDim() center:NO];
-      adding.text = [_texts ts:@"pair.adding"];
-      adding.tag = 3;
-      [row addSubview:adding];
-      UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc]
-          initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleWhite];
-      spinner.tag = 6;
-      [spinner startAnimating];
-      [row addSubview:spinner];
-    } else {
-      UIButton *add = [self flatButtonWithTitle:[_texts ts:@"pair.add"]
-                                     background:DBAddAccent()];
-      add.tag = 4;
-      // Same id, different identity key: never invitable from here (spec v3).
-      if ([DBConfigUtil evBool:entry key:@"pk_conflict"]) {
-        add.enabled = NO;
-        add.alpha = 0.4f;
-        [_deviceErrors setObject:@"pk_conflict" forKey:identifier];
-        state = @"failed";
-      }
-      add.accessibilityIdentifier = identifier;
-      [add addTarget:self action:@selector(onAddDevice:)
-            forControlEvents:UIControlEventTouchUpInside];
-      [row addSubview:add];
-
-      UIButton *deny = [self flatButtonWithTitle:[_texts ts:@"pair.deny"] background:nil];
-      [deny setTitleColor:DBAddDim() forState:UIControlStateNormal];
-      deny.titleLabel.font = [UIFont systemFontOfSize:15];
-      deny.tag = 5;
-      deny.accessibilityIdentifier = identifier;
-      [deny addTarget:self action:@selector(onDenyDevice:)
-             forControlEvents:UIControlEventTouchUpInside];
-      [row addSubview:deny];
-    }
-
-    if ([state isEqualToString:@"failed"]) {
-      NSString *code = [_deviceErrors objectForKey:identifier];
-      UILabel *failure = [self labelWithFont:[UIFont systemFontOfSize:13]
-                                       color:DBAddError() center:NO];
-      failure.numberOfLines = 2;
-      failure.text = [NSString stringWithFormat:@"%@ — %@", [_texts ts:@"pair.add_failed"],
-                          [_texts ts:[DBPairingModel errorTextKeyForCode:code]]];
-      failure.tag = 7;
-      [row addSubview:failure];
-    }
-
-    row.tag = index++;
-    [_nearbyPanel addSubview:row];
-    [_rowViews addObject:row];
+  _entries = entries;
+  _model = model;
+  NSString *header = [self headerText];
+  if (![header isEqualToString:_headerLabel.text]) {
+    _headerLabel.text = header;
+    [self layoutHeader];
   }
-  [self clearLabelBackgrounds:_nearbyPanel];
-}
-
-- (void)applyCodeCard {
-  if (_token == nil) {
-    _codeCard.hidden = YES;
+  if (![signature isEqualToString:_modelSignature]) {
+    _modelSignature = [signature copy];
+    [_table reloadData];
     return;
   }
-  _codeCard.hidden = NO;
+  for (NSIndexPath *indexPath in [_table indexPathsForVisibleRows]) {
+    DBAddRow kind = [self rowKindAt:indexPath];
+    if (kind != DBAddRowDevice && kind != DBAddRowPinAddress && kind != DBAddRowPinCountdown &&
+        kind != DBAddRowPinStart && kind != DBAddRowAddAllStatus)
+      continue;
+    UITableViewCell *cell = [_table cellForRowAtIndexPath:indexPath];
+    if (cell) [self configureCell:cell kind:kind atIndexPath:indexPath];
+  }
+}
+
+#pragma mark - rows
+
+- (DBAddSection)sectionKindAt:(NSInteger)section {
+  return (DBAddSection)[[[_model objectAtIndex:(NSUInteger)section] objectForKey:kSectionKind]
+      intValue];
+}
+
+- (DBAddRow)rowKindAt:(NSIndexPath *)indexPath {
+  NSArray *rows = [[_model objectAtIndex:(NSUInteger)indexPath.section]
+      objectForKey:kSectionRows];
+  return (DBAddRow)[[rows objectAtIndex:(NSUInteger)indexPath.row] intValue];
+}
+
+- (NSDictionary *)entryAt:(NSIndexPath *)indexPath {
+  return (NSUInteger)indexPath.row < [_entries count]
+      ? [_entries objectAtIndex:(NSUInteger)indexPath.row] : nil;
+}
+
+// The width a cell's labels can use; the grouped inset differs by OS and idiom.
+- (CGFloat)cellTextWidth {
+  CGFloat width = _table.bounds.size.width;
+  if (DBChromeIsFlat()) return width - 30;
+  return width - (DBChromeIsPad() && width > 400 ? 110 : 40);
+}
+
+- (NSString *)detailForEntry:(NSDictionary *)entry {
+  NSString *state = [self stateForEntry:entry];
+  NSMutableArray *parts = [NSMutableArray array];
+  if ([state isEqualToString:@"added"]) [parts addObject:[_texts ts:@"pair.added"]];
+  if ([state isEqualToString:@"adding"]) [parts addObject:[_texts ts:@"pair.adding"]];
+  NSString *role = [DBConfigUtil evStr:entry key:@"role"];
+  if ([role isEqualToString:@"door_station"])
+    [parts addObject:[_texts ts:@"pair.role_door_station"]];
+  else if ([role isEqualToString:@"indoor_panel"])
+    [parts addObject:[_texts ts:@"pair.role_indoor_panel"]];
+  NSString *model = [DBConfigUtil evStr:entry key:@"model"];
+  NSString *platform = [DBConfigUtil evStr:entry key:@"platform"];
+  if ([model length] > 0) [parts addObject:model];
+  if ([platform length] > 0) [parts addObject:platform];
+  NSInteger age = [DBConfigUtil intVal:entry path:@"age_s" def:-1];
+  if (age >= 0)
+    [parts addObject:[_texts t:@"pair.nearby_waiting_since",
+                          [NSString stringWithFormat:@"%ld", (long)age], nil]];
+  NSString *detail = [parts componentsJoinedByString:@" · "];
+  if ([state isEqualToString:@"failed"]) {
+    NSString *failure = [NSString stringWithFormat:@"%@ — %@", [_texts ts:@"pair.add_failed"],
+        [_texts ts:[DBPairingModel errorTextKeyForCode:[self errorCodeForEntry:entry]]]];
+    detail = [detail length] > 0 ? [NSString stringWithFormat:@"%@\n%@", detail, failure]
+                                 : failure;
+  }
+  return detail;
+}
+
+- (BOOL)entryOffersAdd:(NSDictionary *)entry {
+  NSString *state = [self stateForEntry:entry];
+  return ![state isEqualToString:@"added"] && ![state isEqualToString:@"adding"] &&
+         ![self entryHasKeyConflict:entry];
+}
+
+- (NSString *)countdownText {
   NSInteger left = [self remainingTokenSeconds];
-  if (left <= 0 || _tokenAttemptsLeft <= 0) {
-    _codeCountdown.text = [_texts ts:@"pair.code_expired"];
-    _codeCountdown.textColor = DBAddError();
-    _newCodeButton.hidden = NO;
-    return;
-  }
-  NSString *countdown = [_texts t:@"pair.code_expires_in",
-                             [DBPairingModel countdownMinutesFromSeconds:left],
-                             [DBPairingModel countdownSecondsFromSeconds:left], nil];
-  NSString *attempts = [_texts t:@"pair.code_attempts_left",
-                            [NSString stringWithFormat:@"%ld", (long)_tokenAttemptsLeft], nil];
-  _codeCountdown.text = [NSString stringWithFormat:@"%@  ·  %@", countdown, attempts];
-  _codeCountdown.textColor = DBAddDim();
-  _newCodeButton.hidden = YES;
+  if (left <= 0 || _tokenAttemptsLeft <= 0) return [_texts ts:@"pair.code_expired"];
+  return [_texts t:@"pair.code_expires_in", [DBPairingModel countdownMinutesFromSeconds:left],
+                   [DBPairingModel countdownSecondsFromSeconds:left], nil];
 }
 
-- (void)applyAddAll {
-  if (_pairingModeActive) {
-    NSInteger left = [self remainingPairingModeSeconds];
-    [_addAllButton setTitle:[_texts t:@"pair.add_all_on",
-                                 [DBPairingModel countdownMinutesFromSeconds:left],
-                                 [DBPairingModel countdownSecondsFromSeconds:left],
-                                 [NSString stringWithFormat:@"%ld", (long)_pairingModeAdded],
-                                 nil]
-                   forState:UIControlStateNormal];
-    _addAllStop.hidden = NO;
-    _addAllWarning.hidden = NO;
-    return;
+- (NSString *)attemptsText {
+  if ([self remainingTokenSeconds] <= 0 || _tokenAttemptsLeft <= 0) return @"";
+  return [_texts t:@"pair.code_attempts_left",
+                   [NSString stringWithFormat:@"%ld", (long)_tokenAttemptsLeft], nil];
+}
+
+- (NSString *)addAllStatusText {
+  NSInteger left = [self remainingPairingModeSeconds];
+  return [_texts t:@"pair.add_all_on", [DBPairingModel countdownMinutesFromSeconds:left],
+                   [DBPairingModel countdownSecondsFromSeconds:left],
+                   [NSString stringWithFormat:@"%ld", (long)_pairingModeAdded], nil];
+}
+
+- (UIActivityIndicatorView *)spinner {
+  UIActivityIndicatorView *spinner = [[UIActivityIndicatorView alloc]
+      initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
+  [spinner startAnimating];
+  return spinner;
+}
+
+- (void)configureActionCell:(UITableViewCell *)cell title:(NSString *)title busy:(BOOL)busy {
+  cell.textLabel.text = title;
+  cell.textLabel.textAlignment = NSTextAlignmentCenter;
+  cell.textLabel.adjustsFontSizeToFitWidth = YES;
+  cell.textLabel.enabled = !busy;
+  cell.selectionStyle = busy ? UITableViewCellSelectionStyleNone
+                             : UITableViewCellSelectionStyleBlue;
+  if (busy && ![cell.accessoryView isKindOfClass:[UIActivityIndicatorView class]])
+    cell.accessoryView = [self spinner];
+  if (!busy) cell.accessoryView = nil;
+}
+
+- (void)configureCell:(UITableViewCell *)cell kind:(DBAddRow)kind
+          atIndexPath:(NSIndexPath *)indexPath {
+  switch (kind) {
+    case DBAddRowDevice: {
+      NSDictionary *entry = [self entryAt:indexPath];
+      NSString *state = [self stateForEntry:entry];
+      cell.textLabel.text = [DBPairingModel displayNameForDevice:entry];
+      cell.detailTextLabel.text = [self detailForEntry:entry];
+      cell.accessoryType = [state isEqualToString:@"added"] ? UITableViewCellAccessoryCheckmark
+                                                            : UITableViewCellAccessoryNone;
+      BOOL offersAdd = [self entryOffersAdd:entry];
+      cell.selectionStyle = ([state isEqualToString:@"idle"] || [state isEqualToString:@"failed"])
+          ? UITableViewCellSelectionStyleBlue : UITableViewCellSelectionStyleNone;
+      if ([state isEqualToString:@"adding"]) {
+        if (![cell.accessoryView isKindOfClass:[UIActivityIndicatorView class]])
+          cell.accessoryView = [self spinner];
+      } else if (offersAdd) {
+        UIButton *add = [cell.accessoryView isKindOfClass:[UIButton class]]
+            ? (UIButton *)cell.accessoryView : nil;
+        if (!add) {
+          add = DBChromeButton([_texts ts:@"pair.add"], 15);
+          add.frame = CGRectMake(0, 0, kAddButtonWidth, 34);
+          [add addTarget:self action:@selector(onAddDevice:)
+              forControlEvents:UIControlEventTouchUpInside];
+          cell.accessoryView = add;
+        }
+        add.tag = indexPath.row;
+      } else {
+        cell.accessoryView = nil;
+      }
+      break;
+    }
+    case DBAddRowNoDevices:
+      cell.textLabel.text = [_texts ts:@"pair.nearby_none"];
+      break;
+    case DBAddRowPinAddress:
+      cell.textLabel.text = [_texts ts:@"pair.address_label"];
+      cell.detailTextLabel.text = _tokenHost ?: @"";
+      cell.detailTextLabel.adjustsFontSizeToFitWidth = YES;
+      break;
+    case DBAddRowPinCountdown:
+      cell.textLabel.text = [self countdownText];
+      cell.textLabel.adjustsFontSizeToFitWidth = YES;
+      cell.detailTextLabel.text = [self attemptsText];
+      break;
+    case DBAddRowPinStart:
+      [self configureActionCell:cell
+                          title:[_texts ts:_token ? @"pair.new_code" : @"pair.add_with_code"]
+                           busy:_minting];
+      break;
+    case DBAddRowScan:
+      [self configureActionCell:cell title:[_texts ts:@"pair.scan_qr"] busy:NO];
+      cell.accessibilityIdentifier = @"add_device_scan";
+      break;
+    case DBAddRowAddAllStatus:
+      cell.textLabel.text = [self addAllStatusText];
+      cell.textLabel.adjustsFontSizeToFitWidth = YES;
+      break;
+    case DBAddRowAddAllStart:
+      [self configureActionCell:cell title:[_texts ts:@"pair.add_all"] busy:NO];
+      break;
+    case DBAddRowAddAllStop:
+      [self configureActionCell:cell title:[_texts ts:@"pair.add_all_stop"] busy:NO];
+      break;
+    case DBAddRowSecurity:
+      cell.textLabel.text = _securityNotice;
+      break;
+    case DBAddRowUnpair:
+      [self configureActionCell:cell title:[_texts ts:@"pair.clear_title"] busy:NO];
+      break;
+    case DBAddRowOpenOnboarding:
+      [self configureActionCell:cell title:[_texts ts:@"pair.open_onboarding"] busy:NO];
+      break;
+    case DBAddRowPinCode:
+    case DBAddRowQrImage:
+      break;
   }
-  _addAllStop.hidden = YES;
-  [_addAllButton setTitle:(_confirmingAddAll ? [_texts ts:@"pair.confirm_tap_again"]
-                                             : [_texts ts:@"pair.add_all"])
-                 forState:UIControlStateNormal];
+}
+
+#pragma mark - table
+
+- (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
+  (void)tableView;
+  return (NSInteger)[_model count];
+}
+
+- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
+  (void)tableView;
+  return (NSInteger)[[[_model objectAtIndex:(NSUInteger)section] objectForKey:kSectionRows]
+      count];
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+  (void)tableView;
+  switch ([self sectionKindAt:section]) {
+    case DBAddSectionNearby: return [_texts ts:@"pair.nearby_title"];
+    case DBAddSectionPin: return [_texts ts:@"pair.code_label"];
+    default: return nil;
+  }
+}
+
+- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
+  (void)tableView;
+  switch ([self sectionKindAt:section]) {
+    case DBAddSectionNearby:
+      return [_entries count] == 0 ? [_texts ts:@"pair.searching"] : nil;
+    case DBAddSectionPin: {
+      NSMutableArray *lines = [NSMutableArray array];
+      if (_token != nil) [lines addObject:[_texts ts:@"pair.code_instructions"]];
+      if ([_mintError length] > 0) [lines addObject:_mintError];
+      return [lines count] > 0 ? [lines componentsJoinedByString:@"\n"] : nil;
+    }
+    case DBAddSectionQr:
+      // The iPad 1 has no camera: say why the scan action is missing.
+      return [DBQrScanOverlay cameraAvailable]
+          ? [_texts ts:@"pair.qr_caption"]
+          : [NSString stringWithFormat:@"%@\n%@", [_texts ts:@"pair.qr_caption"],
+                                       [_texts ts:@"pair.scan_no_camera"]];
+    case DBAddSectionAddAll: return [_texts ts:@"pair.add_all_warning"];
+    case DBAddSectionUnpair: return [_texts ts:@"pair.clear_resets_device"];
+    default: return nil;
+  }
+}
+
+- (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
+  (void)tableView;
+  switch ([self rowKindAt:indexPath]) {
+    case DBAddRowDevice: {
+      NSDictionary *entry = [self entryAt:indexPath];
+      CGFloat width = [self cellTextWidth] - kAddButtonWidth - 10;
+      CGSize size = [[self detailForEntry:entry] sizeWithFont:[UIFont systemFontOfSize:14]
+                                            constrainedToSize:CGSizeMake(width, 9999)
+                                                lineBreakMode:NSLineBreakByWordWrapping];
+      return MAX(60, 10 + 22 + ceilf(size.height) + 10);
+    }
+    case DBAddRowSecurity: {
+      CGSize size = [_securityNotice sizeWithFont:[UIFont systemFontOfSize:16]
+                                constrainedToSize:CGSizeMake([self cellTextWidth], 9999)
+                                    lineBreakMode:NSLineBreakByWordWrapping];
+      return MAX(44, ceilf(size.height) + 24);
+    }
+    case DBAddRowPinCode: return 72;
+    case DBAddRowQrImage: return kQrSide + 16;
+    default: return 44;
+  }
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView
+         cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+  DBAddRow kind = [self rowKindAt:indexPath];
+  if (kind == DBAddRowPinCode) return _pinCell;
+  if (kind == DBAddRowQrImage) return _qrCell;
+
+  NSString *identifier = @"action";
+  UITableViewCellStyle style = UITableViewCellStyleDefault;
+  if (kind == DBAddRowDevice) {
+    identifier = @"device";
+    style = UITableViewCellStyleSubtitle;
+  } else if (kind == DBAddRowPinAddress || kind == DBAddRowPinCountdown) {
+    identifier = @"value";
+    style = UITableViewCellStyleValue1;
+  } else if (kind == DBAddRowNoDevices || kind == DBAddRowAddAllStatus ||
+             kind == DBAddRowSecurity) {
+    identifier = @"text";
+  } else if (kind == DBAddRowUnpair) {
+    identifier = @"destructive";
+  }
+  UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
+  if (!cell) {
+    cell = [[UITableViewCell alloc] initWithStyle:style reuseIdentifier:identifier];
+    if (kind == DBAddRowDevice) {
+      cell.detailTextLabel.numberOfLines = 0;
+      cell.detailTextLabel.font = [UIFont systemFontOfSize:14];
+    } else if ([identifier isEqualToString:@"text"]) {
+      cell.textLabel.numberOfLines = 0;
+      cell.textLabel.font = [UIFont systemFontOfSize:16];
+      cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    } else if ([identifier isEqualToString:@"value"]) {
+      cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    } else if ([identifier isEqualToString:@"destructive"]) {
+      // The one coloured row: leaving the cluster erases this device's setup.
+      cell.textLabel.textColor = [UIColor colorWithRed:0.80f green:0.11f blue:0.09f alpha:1];
+    }
+  }
+  cell.accessibilityIdentifier = nil;
+  [self configureCell:cell kind:kind atIndexPath:indexPath];
+  return cell;
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+  [tableView deselectRowAtIndexPath:indexPath animated:NO];
+  switch ([self rowKindAt:indexPath]) {
+    case DBAddRowDevice: [self onDeviceRow:indexPath]; break;
+    case DBAddRowPinStart: if (!_minting) [self onStartCode]; break;
+    case DBAddRowScan: [self onScanQr]; break;
+    case DBAddRowAddAllStart: [self onAddAll]; break;
+    case DBAddRowAddAllStop: [self onStopAddAll]; break;
+    case DBAddRowUnpair: [self onUnpair]; break;
+    case DBAddRowOpenOnboarding: [self onOpenOnboarding]; break;
+    default: break;
+  }
 }
 
 #pragma mark - events
@@ -662,7 +794,7 @@ static UIColor *DBAddError(void) {
   NSString *identifier = [DBConfigUtil evStr:ev key:@"id"];
   if ([identifier length] == 0) return;
   if ([DBConfigUtil evBool:ev key:@"ok"]) {
-    // Acknowledged, not joined: keep "追加中…" until device_joined confirms it.
+    // Acknowledged, not joined: keep the "adding" row until device_joined confirms it.
     [_deviceStates setObject:@"adding" forKey:identifier];
     [_deviceErrors removeObjectForKey:identifier];
   } else {
@@ -724,9 +856,7 @@ static UIColor *DBAddError(void) {
   NSString *reason = [DBConfigUtil evStr:ev key:@"reason"] ?: @"";
   NSString *identifier = [DBConfigUtil evStr:ev key:@"id"];
   NSString *why = [_texts ts:[DBPairingModel errorTextKeyForCode:reason]];
-  _securityNotice.text = [_texts t:@"pair.peer_rejected", why, nil];
-  _securityNotice.textColor = DBAddError();
-  _securityNotice.hidden = NO;
+  _securityNotice = [_texts t:@"pair.peer_rejected", why, nil];
   if ([identifier length] > 0 && [_deviceStates objectForKey:identifier] != nil) {
     [_deviceStates setObject:@"failed" forKey:identifier];
     [_deviceErrors setObject:reason forKey:identifier];
@@ -736,18 +866,63 @@ static UIColor *DBAddError(void) {
 
 - (void)handleClusterKeyChanged:(NSDictionary *)ev {
   (void)ev;
-  _securityNotice.text = [_texts ts:@"pair.cluster_key_changed"];
-  _securityNotice.textColor = DBAddDim();
-  _securityNotice.hidden = NO;
-  [self setNeedsLayout];
+  _securityNotice = [_texts ts:@"pair.cluster_key_changed"];
+  [self applyContent];
   [self reload];
 }
 
 #pragma mark - actions
 
+// A waiting device offers Add and Ignore; one that is being added or was added offers nothing.
+- (void)onDeviceRow:(NSIndexPath *)indexPath {
+  NSDictionary *entry = [self entryAt:indexPath];
+  NSString *identifier = [DBConfigUtil evStr:entry key:@"id"];
+  NSString *state = [self stateForEntry:entry];
+  if ([identifier length] == 0 || _sheet != nil) return;
+  if (![state isEqualToString:@"idle"] && ![state isEqualToString:@"failed"]) return;
+  BOOL conflict = [self entryHasKeyConflict:entry];
+  UIActionSheet *sheet = [[UIActionSheet alloc]
+               initWithTitle:conflict ? [_texts ts:@"pair.pk_conflict_warning"]
+                                      : [DBPairingModel displayNameForDevice:entry]
+                    delegate:self
+           cancelButtonTitle:nil
+      destructiveButtonTitle:nil
+           otherButtonTitles:nil];
+  _sheetAddIndex = conflict ? -1 : [sheet addButtonWithTitle:[_texts ts:@"pair.add"]];
+  sheet.destructiveButtonIndex = [sheet addButtonWithTitle:[_texts ts:@"pair.deny"]];
+  sheet.cancelButtonIndex = [sheet addButtonWithTitle:[_texts ts:@"admin.cancel"]];
+  _sheetDeviceId = [identifier copy];
+  _sheet = sheet;
+  [sheet showFromRect:[_table rectForRowAtIndexPath:indexPath] inView:_table animated:YES];
+}
+
+- (void)actionSheet:(UIActionSheet *)actionSheet clickedButtonAtIndex:(NSInteger)buttonIndex {
+  NSString *identifier = _sheetDeviceId;
+  _sheetDeviceId = nil;
+  _sheet = nil;
+  if ([identifier length] == 0 || buttonIndex < 0) return;
+  if (buttonIndex == _sheetAddIndex) {
+    [self promptToAddIdentifier:identifier];
+  } else if (buttonIndex == actionSheet.destructiveButtonIndex) {
+    [self denyIdentifier:identifier];
+  }
+}
+
 - (void)onAddDevice:(UIButton *)sender {
-  NSString *identifier = sender.accessibilityIdentifier;
-  if ([identifier length] == 0) return;
+  NSDictionary *entry = (NSUInteger)sender.tag < [_entries count]
+      ? [_entries objectAtIndex:(NSUInteger)sender.tag] : nil;
+  if (!entry || ![self entryOffersAdd:entry]) return;
+  [self promptToAddIdentifier:[DBConfigUtil evStr:entry key:@"id"]];
+}
+
+- (void)showAlert:(UIAlertView *)alert tag:(NSInteger)tag {
+  alert.tag = tag;
+  _alert = alert;
+  [alert show];
+}
+
+- (void)promptToAddIdentifier:(NSString *)identifier {
+  if ([identifier length] == 0 || _alert != nil) return;
   if (![DBCoreBridge supportsCodeInvite]) {
     [self inviteIdentifier:identifier code:nil];
     return;
@@ -763,7 +938,17 @@ static UIColor *DBAddError(void) {
   UITextField *field = [prompt textFieldAtIndex:0];
   field.keyboardType = UIKeyboardTypeNumberPad;
   field.placeholder = @"0000 0000";
-  [prompt show];
+  [self showAlert:prompt tag:DBAddAlertCode];
+}
+
+- (void)confirmWithTitle:(NSString *)title message:(NSString *)message
+                  action:(NSString *)action tag:(NSInteger)tag {
+  UIAlertView *alert = [[UIAlertView alloc] initWithTitle:title
+                                                  message:message
+                                                 delegate:self
+                                        cancelButtonTitle:[_texts ts:@"admin.cancel"]
+                                        otherButtonTitles:action, nil];
+  [self showAlert:alert tag:tag];
 }
 
 - (void)inviteIdentifier:(NSString *)identifier code:(NSString *)code {
@@ -775,6 +960,7 @@ static UIColor *DBAddError(void) {
 }
 
 - (BOOL)alertViewShouldEnableFirstOtherButton:(UIAlertView *)alertView {
+  if (alertView.tag != DBAddAlertCode) return YES;
   return [[self digitsOf:[[alertView textFieldAtIndex:0] text]] length] == 8;
 }
 
@@ -788,9 +974,22 @@ static UIColor *DBAddError(void) {
 }
 
 - (void)alertView:(UIAlertView *)alertView clickedButtonAtIndex:(NSInteger)buttonIndex {
+  if (alertView != _alert) return;
+  _alert = nil;
+  BOOL confirmed = buttonIndex != alertView.cancelButtonIndex;
+  if (alertView.tag == DBAddAlertAddAll) {
+    if (confirmed) [self onAddAll];
+    else _confirmingAddAll = NO;
+    return;
+  }
+  if (alertView.tag == DBAddAlertUnpair) {
+    if (confirmed) [self onUnpair];
+    else _confirmingUnpair = NO;
+    return;
+  }
   NSString *identifier = _codePromptId;
   _codePromptId = nil;
-  if (buttonIndex == alertView.cancelButtonIndex || [identifier length] == 0) return;
+  if (!confirmed || [identifier length] == 0) return;
   NSString *code = [self digitsOf:[[alertView textFieldAtIndex:0] text]];
   if ([code length] != 8) {
     [_deviceStates setObject:@"failed" forKey:identifier];
@@ -801,9 +1000,7 @@ static UIColor *DBAddError(void) {
   [self inviteIdentifier:identifier code:code];
 }
 
-- (void)onDenyDevice:(UIButton *)sender {
-  NSString *identifier = sender.accessibilityIdentifier;
-  if ([identifier length] == 0) return;
+- (void)denyIdentifier:(NSString *)identifier {
   [_deviceStates removeObjectForKey:identifier];
   [_deviceErrors removeObjectForKey:identifier];
   [_addedAt removeObjectForKey:identifier];
@@ -847,31 +1044,30 @@ static UIColor *DBAddError(void) {
 }
 
 - (void)onStartCode {
-  _errorLabel.text = @"";
-  _codeButton.enabled = NO;
+  _mintError = nil;
+  _minting = YES;
+  [self applyContent];
   DBCoreBridge *core = _core;
   __weak DBAddDeviceScreen *weakSelf = self;
   dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
-    // Minting the Pairing PIN must never open the 「まとめて追加」 window
-    // (spec §5.4): that window is opened only by its own button, with its
-    // warning. An older Core without the mint export leaves the card empty
-    // instead of silently opening the window.
+    // Minting the Pairing PIN must never open the bulk-add window (spec §5.4): that window
+    // is opened only by its own row, with its warning. An older Core without the mint export
+    // leaves the section empty and says why instead of silently opening the window.
     NSDictionary *token = [core mintJoinTokenWithSeconds:600];
     dispatch_async(dispatch_get_main_queue(), ^{
       DBAddDeviceScreen *screen = weakSelf;
       if (!screen) return;
-      screen->_codeButton.enabled = YES;
+      screen->_minting = NO;
       if ([token isKindOfClass:[NSDictionary class]] &&
           [DBConfigUtil evBool:token key:@"ok"]) {
         [screen adoptToken:token];
         if (screen->_tokenExpiresS <= 0) screen->_tokenExpiresS = 600;
         if (screen->_tokenAttemptsLeft <= 0) screen->_tokenAttemptsLeft = 3;
       } else if (![DBCoreBridge supportsJoinTokenMinting]) {
-        screen->_errorLabel.text = [screen->_texts ts:@"pair.mint_unsupported"];
+        screen->_mintError = [screen->_texts ts:@"pair.mint_unsupported"];
       } else {
         NSString *code = [DBConfigUtil evStr:token key:@"err"];
-        screen->_errorLabel.text =
-            [screen->_texts ts:[DBPairingModel errorTextKeyForCode:code]];
+        screen->_mintError = [screen->_texts ts:[DBPairingModel errorTextKeyForCode:code]];
       }
       [screen applyContent];
     });
@@ -881,8 +1077,12 @@ static UIColor *DBAddError(void) {
 - (void)onAddAll {
   if (_pairingModeActive) return;
   if (!_confirmingAddAll) {
+    if (_alert != nil) return;
     _confirmingAddAll = YES;
-    [self applyAddAll];
+    [self confirmWithTitle:[_texts ts:@"pair.add_all"]
+                   message:[_texts ts:@"pair.add_all_warning"]
+                    action:[_texts ts:@"editor.confirm"]
+                       tag:DBAddAlertAddAll];
     return;
   }
   _confirmingAddAll = NO;
@@ -890,7 +1090,7 @@ static UIColor *DBAddError(void) {
   _pairingModeLeftS = 600;
   _pairingModeAdded = 0;
   _pairingModeReadAt = CFAbsoluteTimeGetCurrent();
-  // 「まとめて追加」 is the only caller that opens the pairing window.
+  // Bulk add is the only caller that opens the pairing window.
   (void)[_core startPairingWithSeconds:600];
   [self applyContent];
 }
@@ -905,19 +1105,18 @@ static UIColor *DBAddError(void) {
 
 - (void)onUnpair {
   if (!_confirmingUnpair) {
+    if (_alert != nil) return;
     _confirmingUnpair = YES;
-    _unpairConfirm.text = [_texts ts:@"pair.clear_confirm"];
-    [_unpairButton setTitle:[_texts ts:@"pair.confirm_tap_again"]
-                   forState:UIControlStateNormal];
-    [self setNeedsLayout];
+    [self confirmWithTitle:[_texts ts:@"pair.clear_title"]
+                   message:[_texts ts:@"pair.clear_confirm"]
+                    action:[_texts ts:@"editor.remove_device"]
+                       tag:DBAddAlertUnpair];
     return;
   }
   _confirmingUnpair = NO;
-  _unpairConfirm.text = @"";
-  [_unpairButton setTitle:[_texts ts:@"pair.clear_title"] forState:UIControlStateNormal];
-  // 「クラスタから外す」 confirmed on the device itself is a factory reset of
-  // its cluster identity and its setup, exactly like a remote revocation
-  // (spec §5.4). The router owns the wipe and the return to first-run setup.
+  // Leaving the cluster, confirmed on the device itself, is a factory reset of its cluster
+  // identity and its setup, exactly like a remote revocation (spec §5.4). The router owns
+  // the wipe and the return to first-run setup.
   _state = @"unpaired";
   [self applyContent];
   [_router closeAddDeviceAnimated:NO];
@@ -935,148 +1134,30 @@ static UIColor *DBAddError(void) {
 
 #pragma mark - layout
 
+// Sizes the header for the table width and hands it back to the table, which is how a table
+// learns that its header height changed.
+- (void)layoutHeader {
+  CGFloat width = _table.bounds.size.width;
+  if (width <= 0) return;
+  CGFloat textHeight = ceilf([_headerLabel sizeThatFits:CGSizeMake(width - 40, 9999)].height);
+  _headerLabel.frame = CGRectMake(20, 14, width - 40, textHeight);
+  _headerHost.frame = CGRectMake(0, 0, width, textHeight + 18);
+  _table.tableHeaderView = _headerHost;
+}
+
 - (void)layoutSubviews {
   [super layoutSubviews];
-  CGSize size = self.bounds.size;
-  CGFloat pad = 24;
-  CGFloat width = size.width - pad * 2;
-  CGFloat closeHeight = 52;
-  _scroll.frame = CGRectMake(0, 12, size.width, size.height - 12 - closeHeight - 16);
-  _closeButton.frame = CGRectMake(pad, size.height - closeHeight - 10, width, closeHeight);
-
-  CGFloat y = 8;
-  _title.frame = CGRectMake(pad, y, width, 34);
-  y += 40;
-  CGFloat membershipHeight = [_membership sizeThatFits:CGSizeMake(width, 9999)].height;
-  _membership.frame = CGRectMake(pad, y, width, membershipHeight);
-  y += membershipHeight + 16;
-
-  if (!_unpairedNotice.hidden) {
-    CGFloat noticeHeight = [_unpairedNotice sizeThatFits:CGSizeMake(width, 9999)].height;
-    _unpairedNotice.frame = CGRectMake(pad, y, width, noticeHeight);
-    y += noticeHeight + 12;
-    _openOnboarding.frame = CGRectMake(pad, y, width, 48);
-    y += 60;
+  CGRect bounds = self.bounds;
+  CGFloat top = [_nav layoutInBounds:bounds];
+  CGFloat width = MIN(kColumnMax, bounds.size.width);
+  _table.frame = CGRectMake(floorf((bounds.size.width - width) / 2), top, width,
+                            bounds.size.height - top);
+  if (_layoutWidth != width) {
+    _layoutWidth = width;
+    [self layoutHeader];
+    // Row heights depend on the table width.
+    [_table reloadData];
   }
-
-  if (!_nearbyPanel.hidden) {
-    _nearbyTitle.frame = CGRectMake(pad, y, width, 24);
-    y += 30;
-    CGFloat rowY = 10;
-    CGFloat inner = width - 24;
-    for (UIView *row in _rowViews) {
-      UILabel *name = (UILabel *)[row viewWithTag:1];
-      UILabel *meta = (UILabel *)[row viewWithTag:2];
-      UILabel *status = (UILabel *)[row viewWithTag:3];
-      UIButton *add = (UIButton *)[row viewWithTag:4];
-      UIButton *deny = (UIButton *)[row viewWithTag:5];
-      UIActivityIndicatorView *spinner = (UIActivityIndicatorView *)[row viewWithTag:6];
-      UILabel *failure = (UILabel *)[row viewWithTag:7];
-      CGFloat actionWidth = 200;
-      CGFloat rowHeight = 62;
-      name.frame = CGRectMake(0, 6, inner - actionWidth - 10, 24);
-      meta.frame = CGRectMake(0, 32, inner - actionWidth - 10, 18);
-      if (add) {
-        add.frame = CGRectMake(inner - actionWidth, 8, 110, 44);
-        deny.frame = CGRectMake(inner - 82, 8, 82, 44);
-      }
-      if (status) {
-        status.frame = CGRectMake(inner - actionWidth + (spinner ? 26 : 0), 18,
-                                  actionWidth - (spinner ? 26 : 0), 24);
-        if (spinner) spinner.center = CGPointMake(inner - actionWidth + 10, 30);
-      }
-      if (failure) {
-        failure.frame = CGRectMake(0, rowHeight - 4, inner, 32);
-        rowHeight += 34;
-      }
-      row.frame = CGRectMake(12, rowY, inner, rowHeight);
-      rowY += rowHeight + 8;
-    }
-    CGFloat panelHeight = [_rowViews count] > 0 ? rowY + 4 : 84;
-    if ([_rowViews count] == 0)
-      _nearbyEmpty.frame = CGRectMake(12, 16, inner, 52);
-    _nearbyPanel.frame = CGRectMake(pad, y, width, panelHeight);
-    y += panelHeight + 16;
-
-    _codeButton.frame = CGRectMake(pad, y, width, 48);
-    y += 58;
-
-    if (!_codeCard.hidden) {
-      CGFloat cardInner = width - 32;
-      CGFloat cy = 16;
-      _codeAddressLabel.frame = CGRectMake(16, cy, cardInner, 18);
-      cy += 20;
-      _codeAddress.frame = CGRectMake(16, cy, cardInner, 30);
-      cy += 38;
-      _codeCodeLabel.frame = CGRectMake(16, cy, cardInner, 18);
-      cy += 20;
-      _codeCode.frame = CGRectMake(16, cy, cardInner, 50);
-      cy += 56;
-      _codeCountdown.frame = CGRectMake(16, cy, cardInner, 22);
-      cy += 28;
-      CGFloat instructionsHeight =
-          [_codeInstructions sizeThatFits:CGSizeMake(cardInner, 9999)].height;
-      _codeInstructions.frame = CGRectMake(16, cy, cardInner, instructionsHeight);
-      cy += instructionsHeight + 12;
-      if (!_newCodeButton.hidden) {
-        _newCodeButton.frame = CGRectMake(16, cy, cardInner, 44);
-        cy += 54;
-      }
-      _codeCard.frame = CGRectMake(pad, y, width, cy + 4);
-      y += cy + 20;
-    }
-
-    if (!_scanButton.hidden) {
-      _scanButton.frame = CGRectMake(pad, y, width, 48);
-      y += 58;
-    }
-    if (!_scanUnavailable.hidden) {
-      CGFloat unavailableHeight =
-          [_scanUnavailable sizeThatFits:CGSizeMake(width, 9999)].height;
-      _scanUnavailable.frame = CGRectMake(pad, y, width, unavailableHeight);
-      y += unavailableHeight + 14;
-    }
-
-    _addAllButton.frame = CGRectMake(pad, y, width, 44);
-    y += 50;
-    CGFloat warningHeight = [_addAllWarning sizeThatFits:CGSizeMake(width, 9999)].height;
-    _addAllWarning.frame = CGRectMake(pad, y, width, warningHeight);
-    y += warningHeight + 10;
-    if (!_addAllStop.hidden) {
-      _addAllStop.frame = CGRectMake(pad, y, width, 44);
-      y += 54;
-    }
-
-    CGFloat side = MIN(width * 0.5, 240);
-    _qr.frame = CGRectMake((size.width - side) / 2, y, side, side);
-    _qrPlaceholder.frame = CGRectMake(8, side / 2 - 20, side - 16, 40);
-    y += side + 8;
-    CGFloat captionHeight = [_qrCaption sizeThatFits:CGSizeMake(width, 9999)].height;
-    _qrCaption.frame = CGRectMake(pad, y, width, captionHeight);
-    y += captionHeight + 16;
-  }
-
-  CGFloat errorHeight = [_errorLabel.text length] > 0
-      ? [_errorLabel sizeThatFits:CGSizeMake(width, 9999)].height : 0;
-  _errorLabel.frame = CGRectMake(pad, y, width, errorHeight);
-  y += errorHeight > 0 ? errorHeight + 10 : 0;
-  if (!_securityNotice.hidden) {
-    CGFloat noticeHeight = [_securityNotice sizeThatFits:CGSizeMake(width, 9999)].height;
-    _securityNotice.frame = CGRectMake(pad, y, width, noticeHeight);
-    y += noticeHeight + 10;
-  }
-
-  if (!_unpairButton.hidden) {
-    _unpairButton.frame = CGRectMake(pad, y, width, 40);
-    y += 46;
-    if ([_unpairConfirm.text length] > 0) {
-      CGFloat confirmHeight = [_unpairConfirm sizeThatFits:CGSizeMake(width, 9999)].height;
-      _unpairConfirm.frame = CGRectMake(pad, y, width, confirmHeight);
-      y += confirmHeight + 10;
-    }
-  }
-
-  _scroll.contentSize = CGSizeMake(size.width, y + 20);
 }
 
 @end

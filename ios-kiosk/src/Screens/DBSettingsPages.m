@@ -13,7 +13,7 @@
 #import "DBEditor.h"
 #import "DBRouter.h"
 
-static NSArray *const kDBLangs(void) { return @[ @"ja", @"en", @"zh" ]; }
+static NSArray *kDBLangs(void) { return @[ @"ja", @"en", @"zh" ]; }
 
 static NSString *DBRandomHex(NSUInteger bytes) {
   NSMutableData *data = [NSMutableData dataWithLength:bytes];
@@ -2255,7 +2255,7 @@ static NSArray *DBPanelGrants(void) {
   if (color) {
     UIGraphicsBeginImageContextWithOptions(CGSizeMake(24, 24), NO, 0);
     [color setFill];
-    [[UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, 24, 24) cornerRadius:5] fill];
+    UIRectFill(CGRectMake(0, 0, 24, 24));
     field.image = UIGraphicsGetImageFromCurrentImageContext();
     UIGraphicsEndImageContext();
   }
@@ -2387,7 +2387,10 @@ static NSArray *DBPanelGrants(void) {
     [self toast:@"editor.core_too_old"];
     return;
   }
-  if (![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
+  // The library is shown in a popover, which only exists on the iPad idiom; modal
+  // presentation is not available to these screens.
+  if (UI_USER_INTERFACE_IDIOM() != UIUserInterfaceIdiomPad ||
+      ![UIImagePickerController isSourceTypeAvailable:UIImagePickerControllerSourceTypePhotoLibrary]) {
     [self toast:@"editor.no_photos"];
     return;
   }

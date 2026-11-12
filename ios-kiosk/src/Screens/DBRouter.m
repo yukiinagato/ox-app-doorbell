@@ -17,6 +17,7 @@ void DBH264Dbg(NSString *fmt, ...);
 #import "DBIncomingScreen.h"
 #import "DBInfoScreen.h"
 #import "DBAddDeviceScreen.h"
+#import "DBChrome.h"
 #import "DBPairingModel.h"
 #import "DBPairingScreen.h"
 #import "DBPinOverlay.h"
@@ -702,6 +703,22 @@ static BOOL DBCoreSipBackendCompiled(void) {
 
 - (void)closeSettingsAnimated:(BOOL)animated {
   if (_current == _settings) [self showHomeAnimated:animated];
+}
+
+- (void)selectHomeTab:(NSInteger)tab {
+  if (tab == DBHomeTabHome) {
+    [self showHomeAnimated:NO];
+  } else if (tab == DBHomeTabHistory) {
+    if (_current != _history) [self showHistory];
+  } else if (tab == DBHomeTabSettings) {
+    if (_current == _settings) return;
+    if (_current == _history && _historyFromSettings) {
+      [self closeHistoryAnimated:NO];
+      return;
+    }
+    __weak DBRouter *weakSelf = self;
+    [self requestPinThen:^{ [weakSelf showSettings]; }];
+  }
 }
 
 - (void)showHistory {
