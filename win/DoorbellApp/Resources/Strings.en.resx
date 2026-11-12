@@ -1875,6 +1875,7 @@ On</value></data>
   <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>Identity</value></data>
   <data name="settings_grp_idle_screen" xml:space="preserve"><value>Idle screen (all devices)</value></data>
+  <data name="settings_grp_ink" xml:space="preserve"><value>Text colour overrides</value></data>
   <data name="settings_grp_kiosk" xml:space="preserve"><value>Kiosk</value></data>
   <data name="settings_grp_maintenance" xml:space="preserve"><value>Maintenance</value></data>
   <data name="settings_grp_mqtt" xml:space="preserve"><value>MQTT broker</value></data>
@@ -1912,6 +1913,20 @@ On</value></data>
   <data name="settings_increase" xml:space="preserve"><value>Increase</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
   <data name="settings_inherit_confirm" xml:space="preserve"><value>This device's own value is removed and the cluster default applies again.</value></data>
+  <data name="settings_ink_clock" xml:space="preserve"><value>Text colour: clock</value></data>
+  <data name="settings_ink_clock_native" xml:space="preserve"><value>Chosen automatically from the background when not set</value></data>
+  <data name="settings_ink_date" xml:space="preserve"><value>Text colour: date</value></data>
+  <data name="settings_ink_date_native" xml:space="preserve"><value>Chosen automatically from the background when not set</value></data>
+  <data name="settings_ink_footer" xml:space="preserve"><value>Text colour: footer</value></data>
+  <data name="settings_ink_footer_native" xml:space="preserve"><value>Chosen automatically from the background when not set</value></data>
+  <data name="settings_ink_hint" xml:space="preserve"><value>Text colour: hint</value></data>
+  <data name="settings_ink_hint_native" xml:space="preserve"><value>Chosen automatically from the background when not set</value></data>
+  <data name="settings_ink_notice" xml:space="preserve"><value>Text colour: announcement</value></data>
+  <data name="settings_ink_notice_native" xml:space="preserve"><value>Chosen automatically from the background when not set</value></data>
+  <data name="settings_ink_status_line" xml:space="preserve"><value>Text colour: status line</value></data>
+  <data name="settings_ink_status_line_native" xml:space="preserve"><value>Chosen automatically from the background when not set</value></data>
+  <data name="settings_ink_tile_label" xml:space="preserve"><value>Text colour: tile label</value></data>
+  <data name="settings_ink_tile_label_native" xml:space="preserve"><value>Chosen automatically from the background when not set</value></data>
   <data name="settings_integrations" xml:space="preserve"><value>Integrations (Telegram, MQTT, Web Push)</value></data>
   <data name="settings_integrations_desc" xml:space="preserve"><value>Connections to external services</value></data>
   <data name="settings_invalid_value" xml:space="preserve"><value>Check the value and try again</value></data>
@@ -2078,6 +2093,8 @@ On</value></data>
   <data name="settings_pixel_shift" xml:space="preserve"><value>Burn-in protection shift</value></data>
   <data name="settings_playback_auto" xml:space="preserve"><value>Automatic</value></data>
   <data name="settings_playback_h264" xml:space="preserve"><value>H.264</value></data>
+  <data name="settings_playback_hls" xml:space="preserve"><value>HLS</value></data>
+  <data name="settings_playback_low_latency" xml:space="preserve"><value>Low latency</value></data>
   <data name="settings_playback_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
   <data name="settings_preset_text" xml:space="preserve"><value>Text</value></data>
   <data name="settings_purpose_shown" xml:space="preserve"><value>Offer it to visitors</value></data>
@@ -2094,6 +2111,7 @@ On</value></data>
   <data name="settings_remove_invalid" xml:space="preserve"><value>This device cannot be removed</value></data>
   <data name="settings_remove_persist" xml:space="preserve"><value>The removal could not be saved</value></data>
   <data name="settings_remove_role" xml:space="preserve"><value>Devices cannot be removed from this role</value></data>
+  <data name="settings_reply_audio" xml:space="preserve"><value>Recorded audio</value></data>
   <data name="settings_reply_ttl" xml:space="preserve"><value>Reply display time</value></data>
   <data name="settings_reply_ttl_desc" xml:space="preserve"><value>How long a quick reply stays on the door station</value></data>
   <data name="settings_requires_restart" xml:space="preserve"><value>Applies after a restart</value></data>

@@ -1873,6 +1873,7 @@ On</string>
     <string name="settings_grp_ha">Home Assistant</string>
     <string name="settings_grp_identity">Identity</string>
     <string name="settings_grp_idle_screen">Idle screen (all devices)</string>
+    <string name="settings_grp_ink">Text colour overrides</string>
     <string name="settings_grp_kiosk">Kiosk</string>
     <string name="settings_grp_maintenance">Maintenance</string>
     <string name="settings_grp_mqtt">MQTT broker</string>
@@ -1910,6 +1911,20 @@ On</string>
     <string name="settings_increase">Increase</string>
     <string name="settings_inherit">Use the cluster default</string>
     <string name="settings_inherit_confirm">This device\'s own value is removed and the cluster default applies again.</string>
+    <string name="settings_ink_clock">Text colour: clock</string>
+    <string name="settings_ink_clock_native">Chosen automatically from the background when not set</string>
+    <string name="settings_ink_date">Text colour: date</string>
+    <string name="settings_ink_date_native">Chosen automatically from the background when not set</string>
+    <string name="settings_ink_footer">Text colour: footer</string>
+    <string name="settings_ink_footer_native">Chosen automatically from the background when not set</string>
+    <string name="settings_ink_hint">Text colour: hint</string>
+    <string name="settings_ink_hint_native">Chosen automatically from the background when not set</string>
+    <string name="settings_ink_notice">Text colour: announcement</string>
+    <string name="settings_ink_notice_native">Chosen automatically from the background when not set</string>
+    <string name="settings_ink_status_line">Text colour: status line</string>
+    <string name="settings_ink_status_line_native">Chosen automatically from the background when not set</string>
+    <string name="settings_ink_tile_label">Text colour: tile label</string>
+    <string name="settings_ink_tile_label_native">Chosen automatically from the background when not set</string>
     <string name="settings_integrations">Integrations (Telegram, MQTT, Web Push)</string>
     <string name="settings_integrations_desc">Connections to external services</string>
     <string name="settings_invalid_value">Check the value and try again</string>
@@ -2076,6 +2091,8 @@ On</string>
     <string name="settings_pixel_shift">Burn-in protection shift</string>
     <string name="settings_playback_auto">Automatic</string>
     <string name="settings_playback_h264">H.264</string>
+    <string name="settings_playback_hls">HLS</string>
+    <string name="settings_playback_low_latency">Low latency</string>
     <string name="settings_playback_mjpeg">MJPEG</string>
     <string name="settings_preset_text">Text</string>
     <string name="settings_purpose_shown">Offer it to visitors</string>
@@ -2092,6 +2109,7 @@ On</string>
     <string name="settings_remove_invalid">This device cannot be removed</string>
     <string name="settings_remove_persist">The removal could not be saved</string>
     <string name="settings_remove_role">Devices cannot be removed from this role</string>
+    <string name="settings_reply_audio">Recorded audio</string>
     <string name="settings_reply_ttl">Reply display time</string>
     <string name="settings_reply_ttl_desc">How long a quick reply stays on the door station</string>
     <string name="settings_requires_restart">Applies after a restart</string>

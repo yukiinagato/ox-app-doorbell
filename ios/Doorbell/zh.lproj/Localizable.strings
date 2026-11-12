@@ -1864,6 +1864,7 @@
 "settings.grp_ha" = "Home Assistant";
 "settings.grp_identity" = "标识";
 "settings.grp_idle_screen" = "暗屏与待机显示（所有设备）";
+"settings.grp_ink" = "文字颜色覆盖";
 "settings.grp_kiosk" = "展台模式";
 "settings.grp_maintenance" = "维护";
 "settings.grp_mqtt" = "MQTT 代理";
@@ -1901,6 +1902,20 @@
 "settings.increase" = "增加";
 "settings.inherit" = "使用集群默认值";
 "settings.inherit_confirm" = "将删除本设备的单独设置，恢复为集群默认值。";
+"settings.ink_clock" = "文字颜色：时钟";
+"settings.ink_clock_native" = "未设置时根据背景自动选择";
+"settings.ink_date" = "文字颜色：日期";
+"settings.ink_date_native" = "未设置时根据背景自动选择";
+"settings.ink_footer" = "文字颜色：页脚";
+"settings.ink_footer_native" = "未设置时根据背景自动选择";
+"settings.ink_hint" = "文字颜色：提示语";
+"settings.ink_hint_native" = "未设置时根据背景自动选择";
+"settings.ink_notice" = "文字颜色：公告";
+"settings.ink_notice_native" = "未设置时根据背景自动选择";
+"settings.ink_status_line" = "文字颜色：状态栏";
+"settings.ink_status_line_native" = "未设置时根据背景自动选择";
+"settings.ink_tile_label" = "文字颜色：磁贴标题";
+"settings.ink_tile_label_native" = "未设置时根据背景自动选择";
 "settings.integrations" = "集成（Telegram、MQTT、Web Push）";
 "settings.integrations_desc" = "外部服务的连接设置";
 "settings.invalid_value" = "请检查输入内容";
@@ -2067,6 +2082,8 @@
 "settings.pixel_shift" = "防烧屏移动间隔";
 "settings.playback_auto" = "自动";
 "settings.playback_h264" = "H.264";
+"settings.playback_hls" = "HLS";
+"settings.playback_low_latency" = "低延迟";
 "settings.playback_mjpeg" = "MJPEG";
 "settings.preset_text" = "文本";
 "settings.purpose_shown" = "向访客显示";
@@ -2083,6 +2100,7 @@
 "settings.remove_invalid" = "无法移除此设备";
 "settings.remove_persist" = "无法保存移除操作";
 "settings.remove_role" = "此角色的设备无法移除设备";
+"settings.reply_audio" = "录制的音频";
 "settings.reply_ttl" = "回复显示时长";
 "settings.reply_ttl_desc" = "快捷回复在门口机上显示的秒数";
 "settings.requires_restart" = "重启后生效";

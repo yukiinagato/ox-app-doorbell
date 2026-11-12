@@ -1875,6 +1875,7 @@
   <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>标识</value></data>
   <data name="settings_grp_idle_screen" xml:space="preserve"><value>暗屏与待机显示（所有设备）</value></data>
+  <data name="settings_grp_ink" xml:space="preserve"><value>文字颜色覆盖</value></data>
   <data name="settings_grp_kiosk" xml:space="preserve"><value>展台模式</value></data>
   <data name="settings_grp_maintenance" xml:space="preserve"><value>维护</value></data>
   <data name="settings_grp_mqtt" xml:space="preserve"><value>MQTT 代理</value></data>
@@ -1912,6 +1913,20 @@
   <data name="settings_increase" xml:space="preserve"><value>增加</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>使用集群默认值</value></data>
   <data name="settings_inherit_confirm" xml:space="preserve"><value>将删除本设备的单独设置，恢复为集群默认值。</value></data>
+  <data name="settings_ink_clock" xml:space="preserve"><value>文字颜色：时钟</value></data>
+  <data name="settings_ink_clock_native" xml:space="preserve"><value>未设置时根据背景自动选择</value></data>
+  <data name="settings_ink_date" xml:space="preserve"><value>文字颜色：日期</value></data>
+  <data name="settings_ink_date_native" xml:space="preserve"><value>未设置时根据背景自动选择</value></data>
+  <data name="settings_ink_footer" xml:space="preserve"><value>文字颜色：页脚</value></data>
+  <data name="settings_ink_footer_native" xml:space="preserve"><value>未设置时根据背景自动选择</value></data>
+  <data name="settings_ink_hint" xml:space="preserve"><value>文字颜色：提示语</value></data>
+  <data name="settings_ink_hint_native" xml:space="preserve"><value>未设置时根据背景自动选择</value></data>
+  <data name="settings_ink_notice" xml:space="preserve"><value>文字颜色：公告</value></data>
+  <data name="settings_ink_notice_native" xml:space="preserve"><value>未设置时根据背景自动选择</value></data>
+  <data name="settings_ink_status_line" xml:space="preserve"><value>文字颜色：状态栏</value></data>
+  <data name="settings_ink_status_line_native" xml:space="preserve"><value>未设置时根据背景自动选择</value></data>
+  <data name="settings_ink_tile_label" xml:space="preserve"><value>文字颜色：磁贴标题</value></data>
+  <data name="settings_ink_tile_label_native" xml:space="preserve"><value>未设置时根据背景自动选择</value></data>
   <data name="settings_integrations" xml:space="preserve"><value>集成（Telegram、MQTT、Web Push）</value></data>
   <data name="settings_integrations_desc" xml:space="preserve"><value>外部服务的连接设置</value></data>
   <data name="settings_invalid_value" xml:space="preserve"><value>请检查输入内容</value></data>
@@ -2078,6 +2093,8 @@
   <data name="settings_pixel_shift" xml:space="preserve"><value>防烧屏移动间隔</value></data>
   <data name="settings_playback_auto" xml:space="preserve"><value>自动</value></data>
   <data name="settings_playback_h264" xml:space="preserve"><value>H.264</value></data>
+  <data name="settings_playback_hls" xml:space="preserve"><value>HLS</value></data>
+  <data name="settings_playback_low_latency" xml:space="preserve"><value>低延迟</value></data>
   <data name="settings_playback_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
   <data name="settings_preset_text" xml:space="preserve"><value>文本</value></data>
   <data name="settings_purpose_shown" xml:space="preserve"><value>向访客显示</value></data>
@@ -2094,6 +2111,7 @@
   <data name="settings_remove_invalid" xml:space="preserve"><value>无法移除此设备</value></data>
   <data name="settings_remove_persist" xml:space="preserve"><value>无法保存移除操作</value></data>
   <data name="settings_remove_role" xml:space="preserve"><value>此角色的设备无法移除设备</value></data>
+  <data name="settings_reply_audio" xml:space="preserve"><value>录制的音频</value></data>
   <data name="settings_reply_ttl" xml:space="preserve"><value>回复显示时长</value></data>
   <data name="settings_reply_ttl_desc" xml:space="preserve"><value>快捷回复在门口机上显示的秒数</value></data>
   <data name="settings_requires_restart" xml:space="preserve"><value>重启后生效</value></data>

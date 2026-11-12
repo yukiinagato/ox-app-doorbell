@@ -2811,6 +2811,15 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("} catch {", start[:start.index("Save-State $state")])
         self.assertLess(setup.index("Show-SshdDiagnostics\n        }"),
                         setup.index("# ---- 4. public key"))
+        # A restart left pending by the capability install is named as the cause.
+        self.assertIn("Component Based Servicing\\RebootPending", setup)
+        self.assertIn("RESTART THIS PC, then run this script again", setup)
+        # Nothing depends on an OpenSSH newer than the in-box 7.7: the key also goes to the
+        # user's own file when sshd_config has no administrators block, and the driver names
+        # powershell.exe itself instead of relying on the DefaultShell setting.
+        self.assertIn("administrators_authorized_keys' }).Count -gt 0", setup)
+        self.assertIn("$state.user_key_added = $wanted", setup)
+        self.assertIn("powershell.exe -NoProfile -NonInteractive -EncodedCommand", driver)
         # The port is a recorded, reversible change, and the driver honours it for ssh and scp.
         self.assertIn("[ValidateRange(1, 65535)][int]$Port = 22", setup)
         self.assertIn("$state.port_previous = $current", setup)
@@ -3072,6 +3081,11 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("public const int MaxServers = 4;", time_settings)
         self.assertNotIn("System.Windows", time_settings)
         self.assertIn('Info("time_status", "time_status")', catalog)
+        # One ink override row per region Core knows, no more and no fewer.
+        node = read("core/src/node/node.cpp")
+        regions = re.search(r"kInkRegions\[\] = \{([^}]*)\}", node).group(1)
+        self.assertEqual(sorted(re.findall(r'"display\.theme\.ink_override\.([a-z_]+)"', catalog)),
+                         sorted(re.findall(r'"([a-z_]+)"', regions)))
         # Theme and appearance overrides use the keys the shell and Core read.
         self.assertIn('"display.theme.backdrop.color"', catalog)
         self.assertIn('Local + ".theme.call_button_bg"', catalog)
@@ -3096,6 +3110,10 @@ class WindowsContracts(unittest.TestCase):
         # Labels are edited in every enabled visitor language, not only the shipped three.
         self.assertIn('SettingsStore.AsStringList(_store.Get("ui.languages"))', lists)
         self.assertIn("fields[lang] = field(LabelFieldTitle(lang),", lists)
+        # A quick reply can carry a recording per language, stored as the asset hash.
+        self.assertIn('var recordings = AssetList("audio/");', lists)
+        self.assertIn('if (chosen.Count != 0) data["audio"] = chosen;', lists)
+        self.assertIn('else data.Remove("audio");', lists)
         # The visitor language list can never be emptied.
         self.assertIn('if (item.Key == "ui.languages" && ordered.Count == 0)', rows)
 

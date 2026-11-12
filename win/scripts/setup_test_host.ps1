@@ -121,6 +121,12 @@ function Show-SshdDiagnostics {
     }
 }
 
+# Windows finishes installing a capability such as OpenSSH Server only after a restart when
+# this key exists; until then the sshd service times out on start.
+function Test-RebootPending {
+    return (Test-Path -LiteralPath 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Component Based Servicing\RebootPending')
+}
+
 function Read-ConfigLines([string]$path) {
     return @([System.IO.File]::ReadAllLines($path))
 }
@@ -173,6 +179,17 @@ function Get-KeyLines {
     return @()
 }
 
+# The profile folder of an account given as DOMAIN\name or name, or $null.
+function Get-UserProfilePath([string]$account) {
+    try {
+        $sid = (New-Object System.Security.Principal.NTAccount($account)).Translate(
+            [System.Security.Principal.SecurityIdentifier]).Value
+        $userProfile = Get-CimInstance -ClassName Win32_UserProfile -Filter "SID='$sid'" -ErrorAction Stop
+        if ($null -ne $userProfile -and (Test-Path -LiteralPath $userProfile.LocalPath)) { return $userProfile.LocalPath }
+    } catch { }
+    return $null
+}
+
 function Get-KeyBody([string]$line) {
     $parts = @($line.Trim() -split '\s+')
     if ($parts.Count -ge 2) { return $parts[0] + ' ' + $parts[1] }
@@ -202,6 +219,9 @@ function Install-TestHost {
         port_previous        = [string](Get-StateValue $previous 'port_previous' '')
         sshd_config_created  = [bool](Get-StateValue $previous 'sshd_config_created' $false)
         host_keys_generated  = [bool](Get-StateValue $previous 'host_keys_generated' $false)
+        user_keys_file       = [string](Get-StateValue $previous 'user_keys_file' '')
+        user_keys_file_created = [bool](Get-StateValue $previous 'user_keys_file_created' $false)
+        user_key_added       = [string](Get-StateValue $previous 'user_key_added' '')
     }
 
     Write-Host 'Doorbell test host setup'
@@ -332,6 +352,9 @@ function Install-TestHost {
             } else { Note 'sshd is already running' }
         } catch {
             Problem ("The sshd service did not start: " + $_.Exception.Message)
+            if (Test-RebootPending) {
+                Problem 'Windows has a restart pending (the OpenSSH Server install is not finished until then). RESTART THIS PC, then run this script again; nothing else needs fixing.'
+            }
             Show-SshdDiagnostics
         }
         Save-State $state
@@ -376,7 +399,39 @@ function Install-TestHost {
     Set-KeysFileAcl
     Note "$KeysFile is readable by Administrators and SYSTEM only (required by sshd)"
     Save-State $state
+    # The in-box OpenSSH 7.7 only reads that file through the "Match Group administrators"
+    # block of its default sshd_config. A config without the block (an older or edited one)
+    # reads the user's own authorized_keys instead, so the key goes there as well.
+    $usesAdminFile = (Test-Path -LiteralPath $SshdConfig) -and
+        (@(Read-ConfigLines $SshdConfig | Where-Object { $_ -match '^\s*AuthorizedKeysFile\s+.*administrators_authorized_keys' }).Count -gt 0)
+    if ((Test-Path -LiteralPath $SshdConfig) -and -not $usesAdminFile) {
+        $profilePath = Get-UserProfilePath $InteractiveUser
+        if ($null -eq $profilePath) {
+            Problem "sshd_config does not use administrators_authorized_keys and the profile folder of $InteractiveUser was not found; add the key to that user's .ssh\authorized_keys by hand"
+        } else {
+            $userSsh = Join-Path $profilePath '.ssh'
+            $userKeys = Join-Path $userSsh 'authorized_keys'
+            if (-not (Test-Path -LiteralPath $userSsh)) { New-Item -ItemType Directory -Path $userSsh | Out-Null }
+            $existing = @()
+            if (Test-Path -LiteralPath $userKeys) { $existing = @(Get-Content -LiteralPath $userKeys) }
+            if (@($existing | Where-Object { (Get-KeyBody $_) -eq $wanted }).Count -eq 0) {
+                if (-not (Test-Path -LiteralPath $userKeys)) { $state.user_keys_file_created = $true }
+                Add-Content -LiteralPath $userKeys -Value $PublicKey.Trim() -Encoding ascii
+                $state.user_keys_file = $userKeys
+                $state.user_key_added = $wanted
+                Changed "Added the test key to $userKeys (this sshd_config does not use administrators_authorized_keys)"
+            } else { Note "The test key is already in $userKeys" }
+            # StrictModes: only the user, Administrators and SYSTEM may reach the file.
+            & icacls.exe $userKeys /inheritance:r /grant '*S-1-5-32-544:F' /grant '*S-1-5-18:F' /grant "${InteractiveUser}:F" | Out-Null
+            if ($LASTEXITCODE -ne 0) { Problem "icacls failed on $userKeys" }
+        }
+        Save-State $state
+    } elseif (-not (Test-Path -LiteralPath $SshdConfig)) {
+        Note "sshd_config does not exist yet (sshd creates it on its first start); run this script again after sshd has started once so the key location can be checked"
+    }
 
+    # The driver always starts powershell.exe explicitly, so it also works on an OpenSSH that
+    # ignores this value; the setting only makes an interactive ssh session land in PowerShell.
     # ---- 5. default shell -----------------------------------------------------------------
     if (-not (Test-Path -LiteralPath $ShellKey)) {
         New-Item -Path $ShellKey -Force | Out-Null
@@ -504,6 +559,18 @@ function Uninstall-TestHost {
             Set-Content -LiteralPath $KeysFile -Value $kept -Encoding ascii
             Set-KeysFileAcl
             Changed "Removed the test key from $KeysFile"
+        }
+    }
+    $userKeys = [string](Get-StateValue $state 'user_keys_file' '')
+    $userAdded = [string](Get-StateValue $state 'user_key_added' '')
+    if ($userAdded -ne '' -and $userKeys -ne '' -and (Test-Path -LiteralPath $userKeys)) {
+        $keptUser = @(Get-Content -LiteralPath $userKeys | Where-Object { (Get-KeyBody $_) -ne $userAdded })
+        if ((Get-StateValue $state 'user_keys_file_created' $false) -and $keptUser.Count -eq 0) {
+            Remove-Item -LiteralPath $userKeys
+            Changed "Removed $userKeys (this script created it and no other key is in it)"
+        } else {
+            Set-Content -LiteralPath $userKeys -Value $keptUser -Encoding ascii
+            Changed "Removed the test key from $userKeys"
         }
     }
     if ((Get-StateValue $state 'firewall_rule_added' $false) -and

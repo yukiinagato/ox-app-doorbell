@@ -1864,6 +1864,7 @@
 "settings.grp_ha" = "Home Assistant";
 "settings.grp_identity" = "Identity";
 "settings.grp_idle_screen" = "Idle screen (all devices)";
+"settings.grp_ink" = "Text colour overrides";
 "settings.grp_kiosk" = "Kiosk";
 "settings.grp_maintenance" = "Maintenance";
 "settings.grp_mqtt" = "MQTT broker";
@@ -1901,6 +1902,20 @@
 "settings.increase" = "Increase";
 "settings.inherit" = "Use the cluster default";
 "settings.inherit_confirm" = "This device's own value is removed and the cluster default applies again.";
+"settings.ink_clock" = "Text colour: clock";
+"settings.ink_clock_native" = "Chosen automatically from the background when not set";
+"settings.ink_date" = "Text colour: date";
+"settings.ink_date_native" = "Chosen automatically from the background when not set";
+"settings.ink_footer" = "Text colour: footer";
+"settings.ink_footer_native" = "Chosen automatically from the background when not set";
+"settings.ink_hint" = "Text colour: hint";
+"settings.ink_hint_native" = "Chosen automatically from the background when not set";
+"settings.ink_notice" = "Text colour: announcement";
+"settings.ink_notice_native" = "Chosen automatically from the background when not set";
+"settings.ink_status_line" = "Text colour: status line";
+"settings.ink_status_line_native" = "Chosen automatically from the background when not set";
+"settings.ink_tile_label" = "Text colour: tile label";
+"settings.ink_tile_label_native" = "Chosen automatically from the background when not set";
 "settings.integrations" = "Integrations (Telegram, MQTT, Web Push)";
 "settings.integrations_desc" = "Connections to external services";
 "settings.invalid_value" = "Check the value and try again";
@@ -2067,6 +2082,8 @@
 "settings.pixel_shift" = "Burn-in protection shift";
 "settings.playback_auto" = "Automatic";
 "settings.playback_h264" = "H.264";
+"settings.playback_hls" = "HLS";
+"settings.playback_low_latency" = "Low latency";
 "settings.playback_mjpeg" = "MJPEG";
 "settings.preset_text" = "Text";
 "settings.purpose_shown" = "Offer it to visitors";
@@ -2083,6 +2100,7 @@
 "settings.remove_invalid" = "This device cannot be removed";
 "settings.remove_persist" = "The removal could not be saved";
 "settings.remove_role" = "Devices cannot be removed from this role";
+"settings.reply_audio" = "Recorded audio";
 "settings.reply_ttl" = "Reply display time";
 "settings.reply_ttl_desc" = "How long a quick reply stays on the door station";
 "settings.requires_restart" = "Applies after a restart";

@@ -2701,3 +2701,21 @@ settings.appearance_here: { ja: "この端末の外観", en: "Appearance on this
 settings.peer_identity_confirm: { ja: "「{device}」は役割または担当ドアが変わり、その端末のアプリが再起動します。続けますか？", en: "\"{device}\" gets a new role or door, and the app on that device restarts. Continue?", zh: "“{device}”的角色或负责门口将改变，该设备上的应用会重启。要继续吗？" }
 settings.telegram_template_en: { ja: "通知文 (英語)", en: "Message template (English)", zh: "通知模板（英语）" }
 settings.telegram_template_zh: { ja: "通知文 (中国語)", en: "Message template (Chinese)", zh: "通知模板（中文）" }
+settings.playback_low_latency: { ja: "低遅延", en: "Low latency", zh: "低延迟" }
+settings.playback_hls: { ja: "HLS", en: "HLS", zh: "HLS" }
+settings.reply_audio: { ja: "録音した音声", en: "Recorded audio", zh: "录制的音频" }
+settings.grp_ink: { ja: "文字色の上書き", en: "Text colour overrides", zh: "文字颜色覆盖" }
+settings.ink_clock: { ja: "文字色: 時計", en: "Text colour: clock", zh: "文字颜色：时钟" }
+settings.ink_clock_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
+settings.ink_date: { ja: "文字色: 日付", en: "Text colour: date", zh: "文字颜色：日期" }
+settings.ink_date_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
+settings.ink_status_line: { ja: "文字色: 状態表示", en: "Text colour: status line", zh: "文字颜色：状态栏" }
+settings.ink_status_line_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
+settings.ink_hint: { ja: "文字色: 案内文", en: "Text colour: hint", zh: "文字颜色：提示语" }
+settings.ink_hint_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
+settings.ink_tile_label: { ja: "文字色: タイルの見出し", en: "Text colour: tile label", zh: "文字颜色：磁贴标题" }
+settings.ink_tile_label_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
+settings.ink_footer: { ja: "文字色: フッター", en: "Text colour: footer", zh: "文字颜色：页脚" }
+settings.ink_footer_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
+settings.ink_notice: { ja: "文字色: お知らせ", en: "Text colour: announcement", zh: "文字颜色：公告" }
+settings.ink_notice_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }

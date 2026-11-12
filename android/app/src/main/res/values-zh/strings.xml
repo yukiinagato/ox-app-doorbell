@@ -1873,6 +1873,7 @@
     <string name="settings_grp_ha">Home Assistant</string>
     <string name="settings_grp_identity">标识</string>
     <string name="settings_grp_idle_screen">暗屏与待机显示（所有设备）</string>
+    <string name="settings_grp_ink">文字颜色覆盖</string>
     <string name="settings_grp_kiosk">展台模式</string>
     <string name="settings_grp_maintenance">维护</string>
     <string name="settings_grp_mqtt">MQTT 代理</string>
@@ -1910,6 +1911,20 @@
     <string name="settings_increase">增加</string>
     <string name="settings_inherit">使用集群默认值</string>
     <string name="settings_inherit_confirm">将删除本设备的单独设置，恢复为集群默认值。</string>
+    <string name="settings_ink_clock">文字颜色：时钟</string>
+    <string name="settings_ink_clock_native">未设置时根据背景自动选择</string>
+    <string name="settings_ink_date">文字颜色：日期</string>
+    <string name="settings_ink_date_native">未设置时根据背景自动选择</string>
+    <string name="settings_ink_footer">文字颜色：页脚</string>
+    <string name="settings_ink_footer_native">未设置时根据背景自动选择</string>
+    <string name="settings_ink_hint">文字颜色：提示语</string>
+    <string name="settings_ink_hint_native">未设置时根据背景自动选择</string>
+    <string name="settings_ink_notice">文字颜色：公告</string>
+    <string name="settings_ink_notice_native">未设置时根据背景自动选择</string>
+    <string name="settings_ink_status_line">文字颜色：状态栏</string>
+    <string name="settings_ink_status_line_native">未设置时根据背景自动选择</string>
+    <string name="settings_ink_tile_label">文字颜色：磁贴标题</string>
+    <string name="settings_ink_tile_label_native">未设置时根据背景自动选择</string>
     <string name="settings_integrations">集成（Telegram、MQTT、Web Push）</string>
     <string name="settings_integrations_desc">外部服务的连接设置</string>
     <string name="settings_invalid_value">请检查输入内容</string>
@@ -2076,6 +2091,8 @@
     <string name="settings_pixel_shift">防烧屏移动间隔</string>
     <string name="settings_playback_auto">自动</string>
     <string name="settings_playback_h264">H.264</string>
+    <string name="settings_playback_hls">HLS</string>
+    <string name="settings_playback_low_latency">低延迟</string>
     <string name="settings_playback_mjpeg">MJPEG</string>
     <string name="settings_preset_text">文本</string>
     <string name="settings_purpose_shown">向访客显示</string>
@@ -2092,6 +2109,7 @@
     <string name="settings_remove_invalid">无法移除此设备</string>
     <string name="settings_remove_persist">无法保存移除操作</string>
     <string name="settings_remove_role">此角色的设备无法移除设备</string>
+    <string name="settings_reply_audio">录制的音频</string>
     <string name="settings_reply_ttl">回复显示时长</string>
     <string name="settings_reply_ttl_desc">快捷回复在门口机上显示的秒数</string>
     <string name="settings_requires_restart">重启后生效</string>

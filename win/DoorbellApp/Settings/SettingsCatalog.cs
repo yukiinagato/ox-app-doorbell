@@ -323,6 +323,23 @@ namespace DoorbellApp.Settings
             Add(theme, Slider("glass_blur", "display.theme.glass.blur_radius", 0, 40, 1, 32,
                 SettingScope.AllDevices));
             Add(theme, Editor("bg_image", "bg_image", "display.theme.bg_image")).Scope = SettingScope.AllDevices;
+            // display.theme.ink_override.<region>: a fixed text colour for one of Core's seven
+            // regions instead of the automatic ink. Unset leaves the automatic choice.
+            var ink = Group(c, "settings.grp_ink");
+            Add(ink, Editor("ink_clock", "color", "display.theme.ink_override.clock")).Scope =
+                SettingScope.AllDevices;
+            Add(ink, Editor("ink_date", "color", "display.theme.ink_override.date")).Scope =
+                SettingScope.AllDevices;
+            Add(ink, Editor("ink_status_line", "color", "display.theme.ink_override.status_line")).Scope =
+                SettingScope.AllDevices;
+            Add(ink, Editor("ink_hint", "color", "display.theme.ink_override.hint")).Scope =
+                SettingScope.AllDevices;
+            Add(ink, Editor("ink_tile_label", "color", "display.theme.ink_override.tile_label")).Scope =
+                SettingScope.AllDevices;
+            Add(ink, Editor("ink_footer", "color", "display.theme.ink_override.footer")).Scope =
+                SettingScope.AllDevices;
+            Add(ink, Editor("ink_notice", "color", "display.theme.ink_override.notice")).Scope =
+                SettingScope.AllDevices;
             return c;
         }
 

@@ -293,6 +293,7 @@ namespace DoorbellApp.Settings
             });
             var fields = new Dictionary<string, TextBox>();
             var flags = new Dictionary<string, ModernWpf.Controls.ToggleSwitch>();
+            var audio = new Dictionary<string, ComboBox>();
             Func<string, string, TextBox> field = (labelText, value) =>
             {
                 form.Children.Add(new TextBlock
@@ -345,6 +346,40 @@ namespace DoorbellApp.Settings
                 {
                     flags["speak"] = flag("admin.qr_speak",
                         SettingsStore.AsBool(data.ContainsKey("speak") ? data["speak"] : null, true));
+                    // quick_replies.<id>.audio.<lang>: an uploaded recording, by asset hash,
+                    // played instead of generated speech in that language.
+                    var stored = data.ContainsKey("audio")
+                        ? data["audio"] as Dictionary<string, object> : null;
+                    var recordings = AssetList("audio/");
+                    foreach (string lang in LabelLanguages())
+                    {
+                        form.Children.Add(new TextBlock
+                        {
+                            Text = Texts.T("settings.reply_audio") + " · " + LabelFieldTitle(lang),
+                            FontSize = 14,
+                            Margin = new Thickness(0, 8, 0, 4),
+                        });
+                        var pick = new ComboBox { Style = (Style)FindResource("SettingsComboBox") };
+                        pick.Items.Add(new ComboBoxItem { Content = Texts.T("admin.audio_none"), Tag = "" });
+                        string current = stored == null ? "" : Str(stored, lang);
+                        pick.SelectedIndex = 0;
+                        foreach (var asset in recordings)
+                        {
+                            pick.Items.Add(new ComboBoxItem
+                                { Content = AssetLabel(asset.Key, asset.Value), Tag = asset.Key });
+                            if (asset.Key == current) pick.SelectedIndex = pick.Items.Count - 1;
+                        }
+                        if (current.Length != 0 && pick.SelectedIndex == 0)
+                        {
+                            // A recording that is not in the asset list here stays selectable,
+                            // so opening and saving the reply never drops it.
+                            pick.Items.Add(new ComboBoxItem
+                                { Content = current.Substring(0, Math.Min(12, current.Length)), Tag = current });
+                            pick.SelectedIndex = pick.Items.Count - 1;
+                        }
+                        audio[lang] = pick;
+                        form.Children.Add(pick);
+                    }
                 }
             }
             var error = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap,
@@ -366,7 +401,14 @@ namespace DoorbellApp.Settings
             actions.Children.Add(cancel);
             actions.Children.Add(save);
             form.Children.Add(actions);
-            dialog.Content = form;
+            // Labels and recordings in every enabled language can outgrow the screen.
+            dialog.MaxHeight = Math.Max(360, ActualHeight - 48);
+            dialog.Content = new ScrollViewer
+            {
+                Content = form,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                PanningMode = PanningMode.VerticalOnly,
+            };
             cancel.Click += (s, e) => dialog.DialogResult = false;
             save.Click += (s, e) =>
             {
@@ -399,6 +441,18 @@ namespace DoorbellApp.Settings
                     data["label"] = label;
                     if (fields.ContainsKey("icon")) data["icon"] = fields["icon"].Text.Trim();
                     foreach (var pair in flags) data[pair.Key] = pair.Value.IsOn;
+                    if (audio.Count != 0)
+                    {
+                        var chosen = new Dictionary<string, object>();
+                        foreach (var pair in audio)
+                        {
+                            var selected = pair.Value.SelectedItem as ComboBoxItem;
+                            string hash = selected == null ? "" : Convert.ToString(selected.Tag);
+                            if (hash.Length != 0) chosen[pair.Key] = hash;
+                        }
+                        if (chosen.Count != 0) data["audio"] = chosen;
+                        else data.Remove("audio");
+                    }
                 }
                 dialog.DialogResult = true;
             };

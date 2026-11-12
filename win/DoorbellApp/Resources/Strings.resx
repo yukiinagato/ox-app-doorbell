@@ -1875,6 +1875,7 @@ ON</value></data>
   <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>識別</value></data>
   <data name="settings_grp_idle_screen" xml:space="preserve"><value>待機中の画面（全端末）</value></data>
+  <data name="settings_grp_ink" xml:space="preserve"><value>文字色の上書き</value></data>
   <data name="settings_grp_kiosk" xml:space="preserve"><value>キオスク</value></data>
   <data name="settings_grp_maintenance" xml:space="preserve"><value>メンテナンス</value></data>
   <data name="settings_grp_mqtt" xml:space="preserve"><value>MQTT ブローカー</value></data>
@@ -1912,6 +1913,20 @@ ON</value></data>
   <data name="settings_increase" xml:space="preserve"><value>増やす</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>クラスタの既定に合わせる</value></data>
   <data name="settings_inherit_confirm" xml:space="preserve"><value>この端末だけの設定を消して、クラスタの既定に戻します。</value></data>
+  <data name="settings_ink_clock" xml:space="preserve"><value>文字色: 時計</value></data>
+  <data name="settings_ink_clock_native" xml:space="preserve"><value>未設定のときは背景に合わせて自動で決まります</value></data>
+  <data name="settings_ink_date" xml:space="preserve"><value>文字色: 日付</value></data>
+  <data name="settings_ink_date_native" xml:space="preserve"><value>未設定のときは背景に合わせて自動で決まります</value></data>
+  <data name="settings_ink_footer" xml:space="preserve"><value>文字色: フッター</value></data>
+  <data name="settings_ink_footer_native" xml:space="preserve"><value>未設定のときは背景に合わせて自動で決まります</value></data>
+  <data name="settings_ink_hint" xml:space="preserve"><value>文字色: 案内文</value></data>
+  <data name="settings_ink_hint_native" xml:space="preserve"><value>未設定のときは背景に合わせて自動で決まります</value></data>
+  <data name="settings_ink_notice" xml:space="preserve"><value>文字色: お知らせ</value></data>
+  <data name="settings_ink_notice_native" xml:space="preserve"><value>未設定のときは背景に合わせて自動で決まります</value></data>
+  <data name="settings_ink_status_line" xml:space="preserve"><value>文字色: 状態表示</value></data>
+  <data name="settings_ink_status_line_native" xml:space="preserve"><value>未設定のときは背景に合わせて自動で決まります</value></data>
+  <data name="settings_ink_tile_label" xml:space="preserve"><value>文字色: タイルの見出し</value></data>
+  <data name="settings_ink_tile_label_native" xml:space="preserve"><value>未設定のときは背景に合わせて自動で決まります</value></data>
   <data name="settings_integrations" xml:space="preserve"><value>連携 (Telegram・MQTT・Web Push)</value></data>
   <data name="settings_integrations_desc" xml:space="preserve"><value>外部サービスの接続設定</value></data>
   <data name="settings_invalid_value" xml:space="preserve"><value>入力内容を確認してください</value></data>
@@ -2078,6 +2093,8 @@ ON</value></data>
   <data name="settings_pixel_shift" xml:space="preserve"><value>焼き付き防止の移動間隔</value></data>
   <data name="settings_playback_auto" xml:space="preserve"><value>自動</value></data>
   <data name="settings_playback_h264" xml:space="preserve"><value>H.264</value></data>
+  <data name="settings_playback_hls" xml:space="preserve"><value>HLS</value></data>
+  <data name="settings_playback_low_latency" xml:space="preserve"><value>低遅延</value></data>
   <data name="settings_playback_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
   <data name="settings_preset_text" xml:space="preserve"><value>文面</value></data>
   <data name="settings_purpose_shown" xml:space="preserve"><value>訪客に表示する</value></data>
@@ -2094,6 +2111,7 @@ ON</value></data>
   <data name="settings_remove_invalid" xml:space="preserve"><value>この端末は削除できません</value></data>
   <data name="settings_remove_persist" xml:space="preserve"><value>削除を保存できませんでした</value></data>
   <data name="settings_remove_role" xml:space="preserve"><value>この役割の端末からは削除できません</value></data>
+  <data name="settings_reply_audio" xml:space="preserve"><value>録音した音声</value></data>
   <data name="settings_reply_ttl" xml:space="preserve"><value>返答の表示時間</value></data>
   <data name="settings_reply_ttl_desc" xml:space="preserve"><value>門口機にクイック返答を表示する秒数</value></data>
   <data name="settings_requires_restart" xml:space="preserve"><value>再起動して反映</value></data>

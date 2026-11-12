@@ -1873,6 +1873,7 @@ ON</string>
     <string name="settings_grp_ha">Home Assistant</string>
     <string name="settings_grp_identity">識別</string>
     <string name="settings_grp_idle_screen">待機中の画面（全端末）</string>
+    <string name="settings_grp_ink">文字色の上書き</string>
     <string name="settings_grp_kiosk">キオスク</string>
     <string name="settings_grp_maintenance">メンテナンス</string>
     <string name="settings_grp_mqtt">MQTT ブローカー</string>
@@ -1910,6 +1911,20 @@ ON</string>
     <string name="settings_increase">増やす</string>
     <string name="settings_inherit">クラスタの既定に合わせる</string>
     <string name="settings_inherit_confirm">この端末だけの設定を消して、クラスタの既定に戻します。</string>
+    <string name="settings_ink_clock">文字色: 時計</string>
+    <string name="settings_ink_clock_native">未設定のときは背景に合わせて自動で決まります</string>
+    <string name="settings_ink_date">文字色: 日付</string>
+    <string name="settings_ink_date_native">未設定のときは背景に合わせて自動で決まります</string>
+    <string name="settings_ink_footer">文字色: フッター</string>
+    <string name="settings_ink_footer_native">未設定のときは背景に合わせて自動で決まります</string>
+    <string name="settings_ink_hint">文字色: 案内文</string>
+    <string name="settings_ink_hint_native">未設定のときは背景に合わせて自動で決まります</string>
+    <string name="settings_ink_notice">文字色: お知らせ</string>
+    <string name="settings_ink_notice_native">未設定のときは背景に合わせて自動で決まります</string>
+    <string name="settings_ink_status_line">文字色: 状態表示</string>
+    <string name="settings_ink_status_line_native">未設定のときは背景に合わせて自動で決まります</string>
+    <string name="settings_ink_tile_label">文字色: タイルの見出し</string>
+    <string name="settings_ink_tile_label_native">未設定のときは背景に合わせて自動で決まります</string>
     <string name="settings_integrations">連携 (Telegram・MQTT・Web Push)</string>
     <string name="settings_integrations_desc">外部サービスの接続設定</string>
     <string name="settings_invalid_value">入力内容を確認してください</string>
@@ -2076,6 +2091,8 @@ ON</string>
     <string name="settings_pixel_shift">焼き付き防止の移動間隔</string>
     <string name="settings_playback_auto">自動</string>
     <string name="settings_playback_h264">H.264</string>
+    <string name="settings_playback_hls">HLS</string>
+    <string name="settings_playback_low_latency">低遅延</string>
     <string name="settings_playback_mjpeg">MJPEG</string>
     <string name="settings_preset_text">文面</string>
     <string name="settings_purpose_shown">訪客に表示する</string>
@@ -2092,6 +2109,7 @@ ON</string>
     <string name="settings_remove_invalid">この端末は削除できません</string>
     <string name="settings_remove_persist">削除を保存できませんでした</string>
     <string name="settings_remove_role">この役割の端末からは削除できません</string>
+    <string name="settings_reply_audio">録音した音声</string>
     <string name="settings_reply_ttl">返答の表示時間</string>
     <string name="settings_reply_ttl_desc">門口機にクイック返答を表示する秒数</string>
     <string name="settings_requires_restart">再起動して反映</string>
