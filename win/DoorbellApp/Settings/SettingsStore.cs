@@ -29,10 +29,26 @@ namespace DoorbellApp.Settings
 
         public SettingsContext Context { get; private set; }
 
+        /// <summary>
+        /// The device whose per-device keys ("{self}") are being edited: this device, unless the
+        /// operator opened another device's settings from the device list.
+        /// </summary>
+        public string Target { get; private set; }
+        public SettingsContext TargetContext { get; private set; }
+        public bool EditingOther { get { return Target != Context.NodeId; } }
+
         public SettingsStore(string nodeId, string role)
         {
             Context = new SettingsContext { NodeId = nodeId ?? "", Role = role ?? "" };
+            SetTarget(Context.NodeId, Context.Role);
             Reload();
+        }
+
+        public void SetTarget(string nodeId, string role)
+        {
+            Target = string.IsNullOrEmpty(nodeId) ? Context.NodeId : nodeId;
+            TargetContext = Target == Context.NodeId
+                ? Context : new SettingsContext { NodeId = Target, Role = role ?? "" };
         }
 
         public void Reload()
@@ -43,7 +59,7 @@ namespace DoorbellApp.Settings
 
         public string Resolve(string key)
         {
-            return key == null ? null : key.Replace("{self}", Context.NodeId);
+            return key == null ? null : key.Replace("{self}", Target);
         }
 
         public object Get(string key)

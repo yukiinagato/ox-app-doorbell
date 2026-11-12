@@ -90,6 +90,23 @@ namespace DoorbellApp.Settings
             Loaded += (s, e) => ApplyLayoutMode(true);
         }
 
+        /// <summary>The content column: the viewport less its side margins (the cap is MaxWidth).</summary>
+        private sealed class ContentWidth : System.Windows.Data.IValueConverter
+        {
+            public object Convert(object value, Type targetType, object parameter,
+                                  System.Globalization.CultureInfo culture)
+            {
+                double width = value is double ? (double)value : 0;
+                return Math.Max(0, width - 48);
+            }
+
+            public object ConvertBack(object value, Type targetType, object parameter,
+                                      System.Globalization.CultureInfo culture)
+            {
+                return DependencyProperty.UnsetValue;
+            }
+        }
+
         // ---- layout ---------------------------------------------------------------------------
 
         /// <summary>
@@ -151,7 +168,19 @@ namespace DoorbellApp.Settings
             page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             _header = BuildHeader();
             page.Children.Add(_header);
-            _content = new StackPanel { Margin = new Thickness(24, 4, 24, 24), MaxWidth = 980 };
+            // Left-aligned under the page title, as Fluent settings pages are.
+            _content = new StackPanel
+            {
+                Margin = new Thickness(24, 4, 24, 24),
+                MaxWidth = 980,
+                HorizontalAlignment = HorizontalAlignment.Left,
+            };
+            _content.SetBinding(WidthProperty, new System.Windows.Data.Binding("ViewportWidth")
+            {
+                RelativeSource = new System.Windows.Data.RelativeSource(
+                    System.Windows.Data.RelativeSourceMode.FindAncestor, typeof(ScrollViewer), 1),
+                Converter = new ContentWidth(),
+            });
             _contentScroll = new ScrollViewer
             {
                 Content = _content,
@@ -293,6 +322,7 @@ namespace DoorbellApp.Settings
             _title.Text = _query.Length > 0 ? Texts.T("settings.title")
                                             : Texts.T(Category(_categoryId).TitleKey);
             _content.Children.Clear();
+            if (_store.EditingOther) _content.Children.Add(TargetBanner());
             if (_query.Length > 0) RenderSearchResults();
             else RenderCategory(Category(_categoryId));
             _contentScroll.ScrollToTop();
@@ -366,7 +396,8 @@ namespace DoorbellApp.Settings
 
         private bool IsVisible(SettingItem item)
         {
-            return item.Visible == null || item.Visible(_store.Context);
+            if (_store.EditingOther && !EditableForAnotherDevice(item)) return false;
+            return item.Visible == null || item.Visible(_store.TargetContext);
         }
 
         private bool HasVisibleItems(SettingCategory category)

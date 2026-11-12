@@ -98,6 +98,8 @@ namespace DoorbellApp
                     return "ok " + (InCallView.Visibility == Visibility.Visible
                         ? InCallZoom.Scale : IncomingZoom.Scale).ToString(
                             "0.###", System.Globalization.CultureInfo.InvariantCulture);
+                case "picture":
+                    return ShowUiTestPicture(argument);
                 case "settings":
                     // Modal: answered before it opens, so the suite can drive the window.
                     Dispatcher.BeginInvoke(new Action(OpenSettings));
@@ -109,6 +111,53 @@ namespace DoorbellApp
                 default:
                     return "error: unknown command";
             }
+        }
+
+        /// <summary>
+        /// Puts a generated test card of the given size ("640x480") into the live picture of
+        /// the screen that is showing, so the stage, the aspect fit and the zoom clip can be
+        /// judged without a camera. The card has a border, a grid and four different corners.
+        /// </summary>
+        private string ShowUiTestPicture(string size)
+        {
+            string[] parts = (size ?? "").Split('x');
+            int width, height;
+            if (parts.Length != 2 || !int.TryParse(parts[0], out width) ||
+                !int.TryParse(parts[1], out height) || width < 16 || height < 16 ||
+                width > 1920 || height > 1920)
+                return "error: expected WIDTHxHEIGHT";
+            var pixels = new byte[width * height * 3];
+            int cell = Math.Max(8, Math.Min(width, height) / 8);
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    byte b = 0x50, g = 0x50, r = 0x50;
+                    bool edge = x < 6 || y < 6 || x >= width - 6 || y >= height - 6;
+                    bool line = x % cell < 2 || y % cell < 2;
+                    bool left = x < cell, top = y < cell, right = x >= width - cell, bottom = y >= height - cell;
+                    if (edge) { b = g = r = 0xFF; }
+                    else if (left && top) { b = 0x30; g = 0x30; r = 0xE0; }
+                    else if (right && top) { b = 0x30; g = 0xC0; r = 0x30; }
+                    else if (left && bottom) { b = 0xE0; g = 0x60; r = 0x30; }
+                    else if (right && bottom) { b = 0x30; g = 0xD0; r = 0xE0; }
+                    else if (line) { b = g = r = 0xA0; }
+                    int at = (y * width + x) * 3;
+                    pixels[at] = b; pixels[at + 1] = g; pixels[at + 2] = r;
+                }
+            var card = System.Windows.Media.Imaging.BitmapSource.Create(width, height, 96, 96,
+                System.Windows.Media.PixelFormats.Bgr24, null, pixels, width * 3);
+            card.Freeze();
+            if (InCallView.Visibility == Visibility.Visible)
+            {
+                PeerVideo.Source = card;
+                InCallZoom.Reset();
+                return "ok";
+            }
+            if (IncomingView.Visibility != Visibility.Visible) return "error: no live picture on screen";
+            IncomingNoVideo.Visibility = Visibility.Collapsed;
+            IncomingLive.Source = card;
+            IncomingZoom.Reset();
+            return "ok";
         }
 
         private static void WriteUiTestAck(string verb, string result)

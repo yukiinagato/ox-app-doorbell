@@ -269,6 +269,9 @@ namespace DoorbellApp
             DashboardSosColumn.Width = new GridLength(reserveWidth);
             DashboardFooter.Margin = new Thickness(0, 0, 0, reserveHeight);
             VisitorFooter.Margin = new Thickness(0, 12, reserveWidth, reserveHeight);
+            // The history page is opaque and full height; its list and detail stop above the
+            // trigger instead of running underneath it.
+            HistoryBody.Margin = new Thickness(24, 0, 24, sosVisible ? SosReservedHeight : 0);
         }
 
         /// <summary>
@@ -384,7 +387,6 @@ namespace DoorbellApp
             InkText(IncomingTitle, RegionStatusLine, 0);
             InkText(InCallTitle, RegionStatusLine, 0);
             InkText(IncomingHint, RegionHint, 0.25);
-            InkText(IncomingNoVideo, RegionHint, 0.25);
             foreach (TextBlock label in _tileLabels) InkText(label, RegionTileLabel, 0);
 
             if (App.Boot.Role == "door_station")
@@ -440,8 +442,10 @@ namespace DoorbellApp
         private BackgroundSample BackgroundUnder(FrameworkElement element, out bool decideLocally)
         {
             decideLocally = false;
+            // A screen that has never been shown has no visual tree yet (its templates are not
+            // applied), so the walk continues along the logical tree where the visual one ends.
             for (DependencyObject node = element; node != null && node != this;
-                 node = VisualTreeHelper.GetParent(node))
+                 node = VisualTreeHelper.GetParent(node) ?? LogicalTreeHelper.GetParent(node))
             {
                 var opaque = SurfaceColour(node);
                 if (opaque.HasValue)

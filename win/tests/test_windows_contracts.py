@@ -2773,6 +2773,20 @@ class WindowsContracts(unittest.TestCase):
         for handler in ("OnMouseWheel", "OnMouseLeftButtonDown", "OnMouseMove", "OnTouchDown"):
             self.assertIn("protected override void %s(" % handler, host)
         self.assertIn("if (e.ClickCount == 2)", host)
+        # The stage takes what the layout leaves and is the clip: neither the frame nor the
+        # grid inside the host is sized to the picture or held to a fixed box.
+        for host_name in ("IncomingZoom", "InCallZoom"):
+            node = by_name[host_name]
+            frame = parents[node]
+            self.assertTrue(frame.tag.endswith("}Border"))
+            self.assertTrue(parents[frame].get(ns).endswith("Stage"))
+            for element in (frame, node, list(node)[0]):
+                for attribute in ("HorizontalAlignment", "VerticalAlignment", "Width", "Height",
+                                  "MinWidth", "MinHeight", "MaxWidth", "MaxHeight"):
+                    with self.subTest(host=host_name, attribute=attribute):
+                        self.assertIsNone(element.get(attribute))
+        self.assertIn("zoomed picture is still clipped to its fitted rectangle",
+                      read("win/tests/ZoomPanMathTests.cs"))
         # A new door or call starts fitted.
         self.assertIn("IncomingZoom.Reset();", window)
         self.assertIn("InCallZoom.Reset();", window)
@@ -2884,6 +2898,11 @@ class WindowsContracts(unittest.TestCase):
                   for ident in re.findall(r'Category\("([a-z]+)"', catalog)}
         names |= {"SettingsAction_" + ident
                   for ident in re.findall(r'Action\("([a-z_0-9]+)"', catalog)}
+        # Purpose buttons carry "Purpose_" and the id of a purpose Core seeds.
+        self.assertIn('SetAutomationId(b, "Purpose_" + id);',
+                      read("win/DoorbellApp/MainWindow.Purposes.cs"))
+        names |= {"Purpose_" + ident for ident in
+                  re.findall(r'case "(p_[a-z]+)":', read("win/DoorbellApp/MainWindow.Purposes.cs"))}
         used = set(re.findall(r"(?:Assert-Element|Click-Id|Assert-Gone) '[^']+' '(\w+)'", suite))
         for group in re.findall(r"foreach \(\$id in @\(([^)]*)\)\)", suite):
             used |= set(re.findall(r"'(\w+)'", group))
@@ -3182,7 +3201,9 @@ class WindowsContracts(unittest.TestCase):
         for token, light, dark in re.findall(
                 r'\{ "(\w+)", "\w+", "(#[0-9A-Fa-f]+)", "(#[0-9A-Fa-f]+)" \}', appearance):
             brushes[token] = {"light": light, "dark": dark}
-        self.assertTrue({"Bg", "Card", "Fg", "Dim"} <= set(brushes))
+        self.assertTrue({"Bg", "Card", "Fg"} <= set(brushes))
+        # Secondary text is a fixed opaque colour, not the theme's translucent medium ink.
+        self.assertNotIn("Dim", brushes)
 
         def roles(name):
             block = appearance[appearance.index("Dictionary<string, string> %s =" % name):]
@@ -3196,12 +3217,12 @@ class WindowsContracts(unittest.TestCase):
             card = self._over(brushes["Card"][look], page)
             for surface_name, surface in (("page", page), ("card", card)):
                 # Roles drawn as text or as an outline.
-                for role in ("NegativeText", "Warn", "Ok"):
+                for role in ("NegativeText", "Warn", "Ok", "Dim"):
                     with self.subTest(look=look, role=role, on=surface_name):
                         self.assertGreaterEqual(
                             self._ratio(self._over(tables[look][role], surface), surface), 4.5)
                 # Primary and secondary ink from the Fluent theme.
-                for token, minimum in (("Fg", 7.0), ("Dim", 4.5)):
+                for token, minimum in (("Fg", 7.0),):
                     with self.subTest(look=look, token=token, on=surface_name):
                         self.assertGreaterEqual(
                             self._ratio(self._over(brushes[token][look], surface), surface),

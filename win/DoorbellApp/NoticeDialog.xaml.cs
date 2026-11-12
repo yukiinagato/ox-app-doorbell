@@ -35,6 +35,7 @@ namespace DoorbellApp
                             string existingText, List<string> presets)
         {
             InitializeComponent();
+            DoorbellApp.Ui.Fluent.DimOwnerWhileOpen(this);
             // Compact windows: the dialog never exceeds the work area; content scrolls instead
             // of clipping at large text sizes.
             var area = SystemParameters.WorkArea;

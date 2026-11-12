@@ -94,7 +94,30 @@ namespace DoorbellApp.Settings
                 var remove = CommandButton(Texts.T("admin.delete"));
                 DoorbellApp.Ui.Fluent.MakeDestructive(remove);
                 remove.Click += (s, e) => DeleteAsset(hash, AssetLabel(hash, data), users, parts);
-                panel.Children.Add(ItemLine(AssetLabel(hash, data), subtitle, new[] { remove }));
+                var buttons = new List<Button>();
+                bool audio = Str(data, "type").StartsWith("audio/", StringComparison.Ordinal);
+                if (audio)
+                {
+                    var listen = CommandButton(Texts.T("speech.preview"));
+                    listen.Click += (s, e) => PlayPreview(hash);
+                    var stop = CommandButton(Texts.T("editor.stop_playing"));
+                    stop.Click += (s, e) => StopPreview();
+                    buttons.Add(listen);
+                    buttons.Add(stop);
+                }
+                buttons.Add(remove);
+                var line = ItemLine(AssetLabel(hash, data), subtitle, buttons);
+                var picture = audio ? null : AssetThumbnail(hash);
+                if (picture == null)
+                {
+                    panel.Children.Add(line);
+                    continue;
+                }
+                var withPicture = new DockPanel();
+                DockPanel.SetDock(picture, Dock.Left);
+                withPicture.Children.Add(picture);
+                withPicture.Children.Add(line);
+                panel.Children.Add(withPicture);
             }
             if (assets.Count == 0) panel.Children.Add(EmptyLine("admin.assets_empty"));
             panel.Children.Add(FieldHint(Texts.T("settings.asset_limits")));
@@ -617,8 +640,8 @@ namespace DoorbellApp.Settings
                 int index = i;
                 var entry = strategies[i];
                 bool enabled = SettingsStore.AsBool(entry.ContainsKey("enabled") ? entry["enabled"] : null, true);
-                var up = CommandButton("↑");
-                var down = CommandButton("↓");
+                var up = MoveButton(true);
+                var down = MoveButton(false);
                 var toggle = CommandButton(Texts.T(enabled ? "settings.disable" : "settings.enable"));
                 var edit = CommandButton(Texts.T("admin.edit"));
                 AutomationLabel(up, Texts.T("settings.move_up"));
@@ -648,7 +671,18 @@ namespace DoorbellApp.Settings
                 panel.Children.Add(ItemLine((index + 1) + ". " + StrategyText(Str(entry, "id")), subtitle,
                                             new[] { up, down, toggle, edit }));
             }
-            panel.Children.Add(FieldHint(Texts.T("admin.playback_fallback_hint")));
+            // The hint ends with "maximum extra wait before MJPEG:"; the figure is the sum of the
+            // first-frame timeouts of the enabled strategies tried before it.
+            long wait = 0;
+            foreach (var entry in strategies)
+            {
+                if (!SettingsStore.AsBool(entry.ContainsKey("enabled") ? entry["enabled"] : null, true)) continue;
+                if (Str(entry, "id") == "mjpeg") break;
+                wait += (long)SettingsStore.AsNumber(
+                    entry.ContainsKey("startup_timeout_ms") ? entry["startup_timeout_ms"] : null, 0);
+            }
+            panel.Children.Add(FieldHint(Texts.T("admin.playback_fallback_hint") + " " +
+                wait.ToString(CultureInfo.CurrentCulture) + " ms"));
             panel.Children.Add(parts.Error);
             return panel;
         }

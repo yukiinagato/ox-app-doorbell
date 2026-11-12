@@ -1361,6 +1361,98 @@ core.seed.purpose.p_other: { ja: "その他", en: "Other", zh: "其他" }
 core.seed.notice.np_absent: { ja: "不在です。荷物は玄関前へお願いします", en: "Nobody is home. Please leave parcels at the front door", zh: "家中无人，包裹请放在门口" }
 core.seed.notice.np_back_door: { ja: "裏口へお回りください", en: "Please come round to the back door", zh: "请绕到后门" }
 core.seed.notice.np_construction: { ja: "工事中です。足元にご注意ください", en: "Building work in progress. Please watch your step", zh: "正在施工，请注意脚下" }
+# ---- Visitor flow (door-station wizard) ----
+# core.flow.* is the built-in wizard Core serves until an administrator writes a step of their own.
+core.flow.home_title: { ja: "ご用件をお選びください", en: "How can we help?", zh: "请选择来访目的" }
+core.flow.call: { ja: "呼び出す", en: "Call", zh: "呼叫" }
+core.flow.parcel_title: { ja: "置き配できますか？", en: "Can you leave it at the door?", zh: "可以放在门口吗？" }
+core.flow.parcel_body: { ja: "サイン不要のお荷物は玄関前に置いてください。", en: "If no signature is needed, please leave the parcel by the door.", zh: "无需签收的包裹请放在门口。" }
+core.flow.parcel_leave: { ja: "置き配する", en: "Leave it", zh: "放在门口" }
+core.flow.parcel_hand: { ja: "手渡し・サイン必要", en: "Hand over / signature", zh: "需当面签收" }
+core.flow.where_title: { ja: "置き場所", en: "Where to leave it", zh: "放置位置" }
+core.flow.where_body: { ja: "お荷物は玄関ドアの前に置いてください。\n\n置いたら下のボタンを押してください。", en: "Please leave the parcel in front of the door.\n\nThen press the button below.", zh: "请将包裹放在门前。\n\n放好后请按下方按钮。" }
+core.flow.where_done: { ja: "置きました", en: "I left it", zh: "已放好" }
+core.flow.left_message: { ja: "荷物が玄関前に置かれました", en: "A parcel was left at the door", zh: "包裹已放在门口" }
+core.flow.thanks_title: { ja: "ありがとうございました", en: "Thank you", zh: "谢谢" }
+core.flow.thanks_body: { ja: "住人にお知らせしました。", en: "The residents have been notified.", zh: "已通知住户。" }
+event.visitor_message: { ja: "{door}: {text} ({time})", en: "{door}: {text} ({time})", zh: "{door}：{text}（{time}）" }
+flow.back: { ja: "戻る", en: "Back", zh: "返回" }
+flow.done: { ja: "完了", en: "Done", zh: "完成" }
+flow.sent: { ja: "お知らせしました", en: "Message sent", zh: "已通知" }
+flow.message_title: { ja: "来訪者からのお知らせ", en: "Message from a visitor", zh: "访客留言" }
+flow_editor.title: { ja: "来訪者ウィザード", en: "Visitor wizard", zh: "访客向导" }
+flow_editor.enabled: { ja: "ウィザードを使う", en: "Use the wizard", zh: "启用向导" }
+flow_editor.enabled_hint: { ja: "オフにすると、従来の呼出画面に戻ります。", en: "Turn this off to return to the classic call screen.", zh: "关闭后恢复为原来的呼叫画面。" }
+flow_editor.default_note: { ja: "標準のウィザードを使用中です。編集するとこの家の設定として保存されます。", en: "The built-in wizard is in use. Editing it saves a copy as this home's own.", zh: "当前使用内置向导。编辑后将保存为本住宅的设置。" }
+flow_editor.customize: { ja: "標準をもとに編集", en: "Customize the built-in wizard", zh: "基于内置向导编辑" }
+flow_editor.reset_default: { ja: "標準に戻す", en: "Reset to the built-in wizard", zh: "恢复内置向导" }
+flow_editor.reset_default_confirm: { ja: "作成したステップをすべて削除し、標準のウィザードに戻します。", en: "This deletes every step you created and returns to the built-in wizard.", zh: "将删除您创建的所有步骤并恢复内置向导。" }
+flow_editor.start: { ja: "最初のページ", en: "Start page", zh: "起始页" }
+flow_editor.door_start: { ja: "このドアの最初のページ", en: "Start page for this door", zh: "此门的起始页" }
+flow_editor.door_start_inherit: { ja: "共通の最初のページを使う", en: "Use the shared start page", zh: "使用共用起始页" }
+flow_editor.idle_s: { ja: "無操作で最初に戻るまで（秒）", en: "Return to the start after inactivity (seconds)", zh: "无操作返回起始页（秒）" }
+flow_editor.require_call: { ja: "必ず呼び出しにたどり着けるようにする", en: "Always keep a way to ring", zh: "始终保留呼叫途径" }
+flow_editor.require_call_off_warning: { ja: "オフにすると、呼び出しのできないドアを作れます。来訪者が住人を呼べなくなることがあります。", en: "When this is off a door can have no way to ring. Visitors may be unable to reach anyone.", zh: "关闭后，门口机可能无法呼叫，访客可能联系不到住户。" }
+flow_editor.steps: { ja: "ステップ", en: "Steps", zh: "步骤" }
+flow_editor.add_step: { ja: "ステップを追加", en: "Add step", zh: "添加步骤" }
+flow_editor.duplicate_step: { ja: "複製", en: "Duplicate", zh: "复制" }
+flow_editor.delete_step: { ja: "ステップを削除", en: "Delete step", zh: "删除步骤" }
+flow_editor.step_in_use: { ja: "ほかのステップから参照されています: {steps}", en: "Other steps lead here: {steps}", zh: "其他步骤指向此处：{steps}" }
+flow_editor.kind_page: { ja: "ページ", en: "Page", zh: "页面" }
+flow_editor.kind_call: { ja: "呼び出し", en: "Call", zh: "呼叫" }
+flow_editor.kind_notify: { ja: "お知らせ（呼び出さない）", en: "Notify without ringing", zh: "通知（不呼叫）" }
+flow_editor.kind_end: { ja: "完了ページ", en: "End page", zh: "结束页" }
+flow_editor.field_title: { ja: "タイトル", en: "Title", zh: "标题" }
+flow_editor.field_body: { ja: "本文", en: "Body text", zh: "正文" }
+flow_editor.field_images: { ja: "画像", en: "Images", zh: "图片" }
+flow_editor.add_image: { ja: "画像を追加", en: "Add image", zh: "添加图片" }
+flow_editor.image_alt: { ja: "画像の説明（読み上げ用）", en: "Image description (for screen readers)", zh: "图片说明（用于朗读）" }
+flow_editor.image_above: { ja: "本文の上", en: "Above the text", zh: "正文上方" }
+flow_editor.image_below: { ja: "本文の下", en: "Below the text", zh: "正文下方" }
+flow_editor.field_options: { ja: "選択肢", en: "Options", zh: "选项" }
+flow_editor.add_option: { ja: "選択肢を追加", en: "Add option", zh: "添加选项" }
+flow_editor.option_label: { ja: "ラベル", en: "Label", zh: "标签" }
+flow_editor.option_icon: { ja: "アイコン（絵文字）", en: "Icon (emoji)", zh: "图标（表情符号）" }
+flow_editor.option_purpose: { ja: "用件のラベルとアイコンを使う", en: "Use a visit purpose's label and icon", zh: "使用来访目的的标签和图标" }
+flow_editor.option_purpose_none: { ja: "使わない（独自のラベル）", en: "None (own label)", zh: "不使用（自定义标签）" }
+flow_editor.option_primary: { ja: "大きな主ボタンにする", en: "Show as the large main button", zh: "显示为主按钮" }
+flow_editor.option_enabled: { ja: "表示する", en: "Shown", zh: "显示" }
+flow_editor.option_target: { ja: "押したときの移動先", en: "Goes to", zh: "点击后前往" }
+flow_editor.field_purpose: { ja: "用件", en: "Visit purpose", zh: "来访目的" }
+flow_editor.purpose_none: { ja: "用件なし", en: "No purpose", zh: "无目的" }
+flow_editor.field_on_unanswered: { ja: "応答がないときの移動先", en: "If nobody answers, go to", zh: "无人应答时前往" }
+flow_editor.on_unanswered_none: { ja: "最初のページに戻る", en: "Return to the start page", zh: "返回起始页" }
+flow_editor.field_message: { ja: "住人に届くメッセージ", en: "Message the residents receive", zh: "住户收到的消息" }
+flow_editor.field_to: { ja: "送信後に表示するページ", en: "Page shown afterwards", zh: "发送后显示的页面" }
+flow_editor.field_return_s: { ja: "最初に戻るまで（秒）", en: "Return to the start after (seconds)", zh: "返回起始页（秒）" }
+flow_editor.field_snapshot: { ja: "お知らせに添付する写真", en: "Photo attached to the message", zh: "通知附带的照片" }
+flow_editor.snapshot_none: { ja: "添付しない", en: "No photo", zh: "不附带" }
+flow_editor.snapshot_door_station: { ja: "門口機のカメラ", en: "The door station's own camera", zh: "门口机摄像头" }
+flow_editor.snapshot_camera: { ja: "外部カメラ: {name}", en: "External camera: {name}", zh: "外部摄像头：{name}" }
+flow_editor.snapshot_no_camera: { ja: "静止画 URL のある外部カメラがありません", en: "No external camera with a snapshot URL is configured", zh: "未配置带快照地址的外部摄像头" }
+flow_editor.templates: { ja: "テンプレート", en: "Templates", zh: "模板" }
+flow_editor.template_purposes: { ja: "現在の用件から作成", en: "Start from the current purposes", zh: "根据当前来访目的创建" }
+flow_editor.template_delivery: { ja: "宅配・置き配", en: "Delivery and leave-at-door", zh: "快递与放置门口" }
+flow_editor.template_confirm: { ja: "現在のステップをテンプレートで置き換えます。", en: "This replaces the current steps with the template.", zh: "将用模板替换当前步骤。" }
+flow_editor.preview: { ja: "試す", en: "Try it", zh: "试用" }
+visitor_flow.invalid: { ja: "ウィザードを保存できません ({detail})", en: "The wizard could not be saved ({detail})", zh: "无法保存向导（{detail}）" }
+visitor_flow.too_many_steps: { ja: "ステップは 32 個までです", en: "A wizard can have at most 32 steps", zh: "最多 32 个步骤" }
+visitor_flow.too_many_options: { ja: "1 ページの選択肢は 12 個までです", en: "A page can have at most 12 options", zh: "每页最多 12 个选项" }
+visitor_flow.no_options: { ja: "ページには選択肢が 1 つ以上必要です", en: "A page needs at least one option", zh: "页面至少需要一个选项" }
+visitor_flow.multiple_primary: { ja: "主ボタンは 1 ページに 1 つだけです", en: "A page can have only one main button", zh: "每页只能有一个主按钮" }
+visitor_flow.option_needs_label: { ja: "選択肢にはラベルか用件が必要です", en: "An option needs a label or a visit purpose", zh: "选项需要标签或来访目的" }
+visitor_flow.bad_text: { ja: "文字数が上限を超えています", en: "The text is too long", zh: "文字超出长度限制" }
+visitor_flow.unknown_purpose: { ja: "存在しない用件を参照しています", en: "A visit purpose used here no longer exists", zh: "引用的来访目的不存在" }
+visitor_flow.unknown_asset: { ja: "画像がアセットにありません", en: "An image is not in Assets", zh: "图片不在素材库中" }
+visitor_flow.unknown_target: { ja: "移動先のステップがありません", en: "A step this leads to does not exist", zh: "目标步骤不存在" }
+visitor_flow.bad_target_kind: { ja: "移動先の種類が合いません", en: "A step leads to the wrong kind of step", zh: "目标步骤类型不符" }
+visitor_flow.unknown_camera: { ja: "選んだカメラに静止画 URL がありません", en: "The chosen camera has no snapshot URL", zh: "所选摄像头没有快照地址" }
+visitor_flow.missing_start: { ja: "最初のページを選んでください", en: "Choose a start page", zh: "请选择起始页" }
+visitor_flow.cycle: { ja: "ページが循環しています", en: "The pages lead back to themselves", zh: "页面形成了循环" }
+visitor_flow.too_deep: { ja: "ページは 6 階層までです", en: "Pages can be at most 6 levels deep", zh: "页面最多 6 层" }
+visitor_flow.no_reachable_call: { ja: "最初のページから呼び出しにたどり着けません", en: "No option leads to a call from the start page", zh: "从起始页无法到达呼叫" }
+visitor_flow.crowded_page: { ja: "本文や画像のあるページは選択肢を 4 つ以内にすると見やすくなります", en: "A page with text or images reads best with four options or fewer", zh: "带正文或图片的页面建议不超过 4 个选项" }
+visitor_flow.no_call: { ja: "このウィザードには呼び出しがありません。来訪者は住人を呼び出せません。", en: "This wizard never rings. Visitors cannot call anyone.", zh: "此向导不包含呼叫，访客无法呼叫住户。" }
 # ---- Web: panel identities and security protocol v3 (2026-11 review) ----
 panels.tab: { ja: "パネル", en: "Panels", zh: "面板" }
 panels.title: { ja: "パネルの資格情報", en: "Panel credentials", zh: "面板凭据" }
@@ -2772,3 +2864,5 @@ settings.editing_device: { ja: "{name} の設定を編集中", en: "Editing the 
 settings.editing_device_hint: { ja: "その端末に保存される設定だけを表示しています。端末がオンラインになると反映されます。", en: "Only the settings stored for that device are shown. It applies them when it is online.", zh: "仅显示保存在该设备上的设置。设备在线后生效。" }
 settings.editing_device_done: { ja: "この端末に戻る", en: "Back to this device", zh: "返回本设备" }
 settings.asset_not_here: { ja: "この端末にはまだ同期されていません", en: "Not on this device yet", zh: "尚未同步到本设备" }
+settings.speech: { ja: "返信音声と音声キャッシュ", en: "Reply voice and audio cache", zh: "回复语音与音频缓存" }
+settings.caps_override: { ja: "機能の上書き (JSON)", en: "Capability override (JSON)", zh: "能力覆盖 (JSON)" }

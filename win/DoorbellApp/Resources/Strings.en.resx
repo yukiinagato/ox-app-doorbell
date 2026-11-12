@@ -855,11 +855,71 @@ Delete it?</value></data>
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} offline (last seen {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} back online</value></data>
   <data name="event_press" xml:space="preserve"><value>Visitor at {0} ({1})</value></data>
+  <data name="event_visitor_message" xml:space="preserve"><value>{0}: {1} ({2})</value></data>
   <data name="firewall_check_unavailable" xml:space="preserve"><value>Couldn't check Windows Firewall rules. Confirm that inbound communication is allowed for this app.</value></data>
   <data name="firewall_repair_failed" xml:space="preserve"><value>Couldn't add Windows Firewall rules. Approve the administrator prompt or ask your system administrator.</value></data>
   <data name="firewall_repaired" xml:space="preserve"><value>Added the required Windows Firewall rules. Try joining the Cluster again.</value></data>
   <data name="firewall_rules_missing" xml:space="preserve"><value>Windows Firewall may be blocking Cluster communication from other devices. Allow inbound communication for this app?</value></data>
   <data name="firewall_title" xml:space="preserve"><value>Windows Firewall</value></data>
+  <data name="flow_back" xml:space="preserve"><value>Back</value></data>
+  <data name="flow_done" xml:space="preserve"><value>Done</value></data>
+  <data name="flow_message_title" xml:space="preserve"><value>Message from a visitor</value></data>
+  <data name="flow_sent" xml:space="preserve"><value>Message sent</value></data>
+  <data name="flow_editor_add_image" xml:space="preserve"><value>Add image</value></data>
+  <data name="flow_editor_add_option" xml:space="preserve"><value>Add option</value></data>
+  <data name="flow_editor_add_step" xml:space="preserve"><value>Add step</value></data>
+  <data name="flow_editor_customize" xml:space="preserve"><value>Customize the built-in wizard</value></data>
+  <data name="flow_editor_default_note" xml:space="preserve"><value>The built-in wizard is in use. Editing it saves a copy as this home's own.</value></data>
+  <data name="flow_editor_delete_step" xml:space="preserve"><value>Delete step</value></data>
+  <data name="flow_editor_door_start" xml:space="preserve"><value>Start page for this door</value></data>
+  <data name="flow_editor_door_start_inherit" xml:space="preserve"><value>Use the shared start page</value></data>
+  <data name="flow_editor_duplicate_step" xml:space="preserve"><value>Duplicate</value></data>
+  <data name="flow_editor_enabled" xml:space="preserve"><value>Use the wizard</value></data>
+  <data name="flow_editor_enabled_hint" xml:space="preserve"><value>Turn this off to return to the classic call screen.</value></data>
+  <data name="flow_editor_field_body" xml:space="preserve"><value>Body text</value></data>
+  <data name="flow_editor_field_images" xml:space="preserve"><value>Images</value></data>
+  <data name="flow_editor_field_message" xml:space="preserve"><value>Message the residents receive</value></data>
+  <data name="flow_editor_field_on_unanswered" xml:space="preserve"><value>If nobody answers, go to</value></data>
+  <data name="flow_editor_field_options" xml:space="preserve"><value>Options</value></data>
+  <data name="flow_editor_field_purpose" xml:space="preserve"><value>Visit purpose</value></data>
+  <data name="flow_editor_field_return_s" xml:space="preserve"><value>Return to the start after (seconds)</value></data>
+  <data name="flow_editor_field_snapshot" xml:space="preserve"><value>Photo attached to the message</value></data>
+  <data name="flow_editor_field_title" xml:space="preserve"><value>Title</value></data>
+  <data name="flow_editor_field_to" xml:space="preserve"><value>Page shown afterwards</value></data>
+  <data name="flow_editor_idle_s" xml:space="preserve"><value>Return to the start after inactivity (seconds)</value></data>
+  <data name="flow_editor_image_above" xml:space="preserve"><value>Above the text</value></data>
+  <data name="flow_editor_image_alt" xml:space="preserve"><value>Image description (for screen readers)</value></data>
+  <data name="flow_editor_image_below" xml:space="preserve"><value>Below the text</value></data>
+  <data name="flow_editor_kind_call" xml:space="preserve"><value>Call</value></data>
+  <data name="flow_editor_kind_end" xml:space="preserve"><value>End page</value></data>
+  <data name="flow_editor_kind_notify" xml:space="preserve"><value>Notify without ringing</value></data>
+  <data name="flow_editor_kind_page" xml:space="preserve"><value>Page</value></data>
+  <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>Return to the start page</value></data>
+  <data name="flow_editor_option_enabled" xml:space="preserve"><value>Shown</value></data>
+  <data name="flow_editor_option_icon" xml:space="preserve"><value>Icon (emoji)</value></data>
+  <data name="flow_editor_option_label" xml:space="preserve"><value>Label</value></data>
+  <data name="flow_editor_option_primary" xml:space="preserve"><value>Show as the large main button</value></data>
+  <data name="flow_editor_option_purpose" xml:space="preserve"><value>Use a visit purpose's label and icon</value></data>
+  <data name="flow_editor_option_purpose_none" xml:space="preserve"><value>None (own label)</value></data>
+  <data name="flow_editor_option_target" xml:space="preserve"><value>Goes to</value></data>
+  <data name="flow_editor_preview" xml:space="preserve"><value>Try it</value></data>
+  <data name="flow_editor_purpose_none" xml:space="preserve"><value>No purpose</value></data>
+  <data name="flow_editor_require_call" xml:space="preserve"><value>Always keep a way to ring</value></data>
+  <data name="flow_editor_require_call_off_warning" xml:space="preserve"><value>When this is off a door can have no way to ring. Visitors may be unable to reach anyone.</value></data>
+  <data name="flow_editor_reset_default" xml:space="preserve"><value>Reset to the built-in wizard</value></data>
+  <data name="flow_editor_reset_default_confirm" xml:space="preserve"><value>This deletes every step you created and returns to the built-in wizard.</value></data>
+  <data name="flow_editor_snapshot_camera" xml:space="preserve"><value>External camera: {0}</value></data>
+  <data name="flow_editor_snapshot_door_station" xml:space="preserve"><value>The door station's own camera</value></data>
+  <data name="flow_editor_snapshot_no_camera" xml:space="preserve"><value>No external camera with a snapshot URL is configured</value></data>
+  <data name="flow_editor_snapshot_none" xml:space="preserve"><value>No photo</value></data>
+  <data name="flow_editor_start" xml:space="preserve"><value>Start page</value></data>
+  <data name="flow_editor_step_in_use" xml:space="preserve"><value>Other steps lead here: {0}</value></data>
+  <data name="flow_editor_steps" xml:space="preserve"><value>Steps</value></data>
+  <data name="flow_editor_template_confirm" xml:space="preserve"><value>This replaces the current steps with the template.</value></data>
+  <data name="flow_editor_template_delivery" xml:space="preserve"><value>Delivery and leave-at-door</value></data>
+  <data name="flow_editor_template_purposes" xml:space="preserve"><value>Start from the current purposes</value></data>
+  <data name="flow_editor_templates" xml:space="preserve"><value>Templates</value></data>
+  <data name="flow_editor_title" xml:space="preserve"><value>Visitor wizard</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>Answered by {0}</value></data>
   <data name="history_detail_answered_by" xml:space="preserve"><value>Answered on</value></data>
   <data name="history_detail_door" xml:space="preserve"><value>Door</value></data>
@@ -1761,6 +1821,7 @@ On</value></data>
   <data name="settings_cam_source" xml:space="preserve"><value>Video source</value></data>
   <data name="settings_cam_source_builtin" xml:space="preserve"><value>Built-in camera</value></data>
   <data name="settings_cam_source_desc" xml:space="preserve"><value>With an external camera selected, this door station uses its video</value></data>
+  <data name="settings_caps_override" xml:space="preserve"><value>Capability override (JSON)</value></data>
   <data name="settings_caps_override_invalid" xml:space="preserve"><value>Enter a JSON object, or leave it empty.</value></data>
   <data name="settings_caps_override_native" xml:space="preserve"><value>Replaces what the device reports it can do. Leave it empty to use what the device measured. For troubleshooting only.</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>About</value></data>
@@ -2289,6 +2350,7 @@ On</value></data>
   <data name="settings_sound_outdoor_call_alert" xml:space="preserve"><value>Call alert</value></data>
   <data name="settings_sound_school_chime" xml:space="preserve"><value>School chime</value></data>
   <data name="settings_sound_title_display" xml:space="preserve"><value>Startup tone</value></data>
+  <data name="settings_speech" xml:space="preserve"><value>Reply voice and audio cache</value></data>
   <data name="settings_speech_load" xml:space="preserve"><value>Show cache status</value></data>
   <data name="settings_speech_native" xml:space="preserve"><value>The voice that reads a reply aloud at the door, and the state of the generated audio.</value></data>
   <data name="settings_speech_state_system" xml:space="preserve"><value>System voice</value></data>
@@ -2611,6 +2673,24 @@ Sends in {0}s</value></data>
   <data name="video_connecting" xml:space="preserve"><value>Connecting to video…</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="visitor_restoring" xml:space="preserve"><value>Restoring call status…</value></data>
+  <data name="visitor_flow_bad_target_kind" xml:space="preserve"><value>A step leads to the wrong kind of step</value></data>
+  <data name="visitor_flow_bad_text" xml:space="preserve"><value>The text is too long</value></data>
+  <data name="visitor_flow_crowded_page" xml:space="preserve"><value>A page with text or images reads best with four options or fewer</value></data>
+  <data name="visitor_flow_cycle" xml:space="preserve"><value>The pages lead back to themselves</value></data>
+  <data name="visitor_flow_invalid" xml:space="preserve"><value>The wizard could not be saved ({0})</value></data>
+  <data name="visitor_flow_missing_start" xml:space="preserve"><value>Choose a start page</value></data>
+  <data name="visitor_flow_multiple_primary" xml:space="preserve"><value>A page can have only one main button</value></data>
+  <data name="visitor_flow_no_call" xml:space="preserve"><value>This wizard never rings. Visitors cannot call anyone.</value></data>
+  <data name="visitor_flow_no_options" xml:space="preserve"><value>A page needs at least one option</value></data>
+  <data name="visitor_flow_no_reachable_call" xml:space="preserve"><value>No option leads to a call from the start page</value></data>
+  <data name="visitor_flow_option_needs_label" xml:space="preserve"><value>An option needs a label or a visit purpose</value></data>
+  <data name="visitor_flow_too_deep" xml:space="preserve"><value>Pages can be at most 6 levels deep</value></data>
+  <data name="visitor_flow_too_many_options" xml:space="preserve"><value>A page can have at most 12 options</value></data>
+  <data name="visitor_flow_too_many_steps" xml:space="preserve"><value>A wizard can have at most 32 steps</value></data>
+  <data name="visitor_flow_unknown_asset" xml:space="preserve"><value>An image is not in Assets</value></data>
+  <data name="visitor_flow_unknown_camera" xml:space="preserve"><value>The chosen camera has no snapshot URL</value></data>
+  <data name="visitor_flow_unknown_purpose" xml:space="preserve"><value>A visit purpose used here no longer exists</value></data>
+  <data name="visitor_flow_unknown_target" xml:space="preserve"><value>A step this leads to does not exist</value></data>
   <data name="volume_call" xml:space="preserve"><value>Call</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>Cluster default {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>Volume on this device</value></data>

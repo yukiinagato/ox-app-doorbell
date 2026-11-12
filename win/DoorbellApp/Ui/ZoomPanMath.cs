@@ -6,10 +6,12 @@ namespace DoorbellApp.Ui
     /// The zoom and pan state of one live picture, with every rule that keeps the picture on
     /// screen. It has no WPF dependency so it is tested on the build host.
     ///
-    /// The picture is drawn letterboxed inside a viewport; <c>Content*</c> is the rectangle the
-    /// picture itself occupies at 1x. A viewport point p shows source point (p - Offset) / Scale.
-    /// On an axis where the zoomed picture is narrower than the viewport it stays centred; where
-    /// it is wider, it can be dragged only until its edge meets the viewport edge.
+    /// The viewport is the whole video stage and the picture is aspect-fitted inside it;
+    /// <c>Content*</c> is the rectangle the picture occupies at 1x. A viewport point p shows
+    /// source point (p - Offset) / Scale. The stage, not the fitted picture, is the clip: a
+    /// zoomed picture grows into the letterbox bars until it covers the stage. Each axis is
+    /// clamped on its own: where the zoomed picture is no larger than the stage it stays
+    /// centred; where it is larger, it can be dragged only until its edge meets the stage edge.
     /// </summary>
     internal sealed class ZoomPanMath
     {

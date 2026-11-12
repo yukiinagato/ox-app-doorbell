@@ -366,6 +366,11 @@ namespace DoorbellApp
         private void OnIgnoreClick(object sender, RoutedEventArgs e)
         {
             string key = _incomingDoor + ":" + _incomingCallId;
+            // Ignoring a visit this device already joined leaves it first, so the door station
+            // does not keep a participant that has stopped looking at it.
+            if (UsesConversation() &&
+                OwnConversationMember(ConversationDocument(SelectedConversationCall())) != null)
+                SendConversation("leave");
             _retiredVisits[key] = _incomingStageRevision;
             _visitQueue.Remove(key); _visitOrder.Remove(key);
             if (_visitQueue.Count == 0) { LeaveConversations(); CloseIncoming(true); }

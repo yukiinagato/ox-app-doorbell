@@ -135,12 +135,21 @@ namespace DoorbellApp
             var path = new System.Windows.Shapes.Path
             {
                 Data = (Geometry)geometry,
-                Stroke = stroke,
                 StrokeThickness = 2,
                 StrokeStartLineCap = PenLineCap.Round,
                 StrokeEndLineCap = PenLineCap.Round,
                 StrokeLineJoin = PenLineJoin.Round,
             };
+            // Without a colour of its own the icon is drawn in the text colour it inherits, so
+            // it follows the button it sits in through appearance changes and overrides.
+            if (stroke != null) path.Stroke = stroke;
+            else
+                path.SetBinding(System.Windows.Shapes.Shape.StrokeProperty,
+                    new System.Windows.Data.Binding
+                    {
+                        Path = new PropertyPath(System.Windows.Documents.TextElement.ForegroundProperty),
+                        RelativeSource = System.Windows.Data.RelativeSource.Self,
+                    });
             return new Viewbox
             {
                 Width = size,
@@ -158,8 +167,7 @@ namespace DoorbellApp
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            FrameworkElement glyph = TablerIcon(PurposeIconKey(id), 34,
-                                                (Brush)FindResource("Fg"));
+            FrameworkElement glyph = TablerIcon(PurposeIconKey(id), 34, null);
             if (glyph != null) panel.Children.Add(glyph);
             else if (!string.IsNullOrEmpty(icon))
                 panel.Children.Add(new TextBlock
@@ -177,7 +185,6 @@ namespace DoorbellApp
                 TextWrapping = TextWrapping.Wrap,
                 TextAlignment = TextAlignment.Center,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Foreground = (Brush)FindResource("Fg"),
             });
             var b = new Button
             {
@@ -191,6 +198,7 @@ namespace DoorbellApp
                 Tag = id,
             };
             b.Click += OnPurposeClick;
+            System.Windows.Automation.AutomationProperties.SetAutomationId(b, "Purpose_" + id);
             if (_semanticStyles != null)
                 _semanticApplier.Apply(b, _semanticStyles.Get("purpose.button"), false);
             return b;

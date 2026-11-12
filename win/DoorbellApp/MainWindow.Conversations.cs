@@ -55,11 +55,12 @@ namespace DoorbellApp
             {"expected_version", _heldConversationVersion ?? DictLong(ConversationDocument(SelectedConversationCall()), "version", 0)}, {"action", action} };
         private void SendConversation(string action)
         {
-            if (_sipMode.Length != 0) { App.Core.SipHangup(); _sipMode = ""; _inCall = false; }
             var request = ConversationRequest(action);
             _heldConversationVersion = null;
+            // Nothing is touched until a takeover is confirmed: cancelling keeps the live call.
             if (action == "takeover" && MessageBox.Show(this, Texts.T("conversation.takeover_confirm"),
                 Texts.T("conversation.takeover"), MessageBoxButton.OKCancel) != MessageBoxResult.OK) return;
+            if (_sipMode.Length != 0) { App.Core.SipHangup(); _sipMode = ""; _inCall = false; }
             var result = App.Core.Conversation(request);
             IncomingHint.Text = Texts.T(DictBool(result, "ok") ? "conversation.pending" : "conversation.failed");
             IncomingHint.Visibility = Visibility.Visible;
@@ -116,7 +117,13 @@ namespace DoorbellApp
         }
         private void SelectVisit(Dictionary<string, object> call)
         {
-            if (_inCall && !UsesConversation() || _sipMode == "answer") return;
+            if (_inCall && !UsesConversation() || _sipMode == "answer")
+            {
+                // Say why nothing happened instead of ignoring the tap.
+                IncomingHint.Text = Texts.T("ring.queue_finish_first");
+                IncomingHint.Visibility = Visibility.Visible;
+                return;
+            }
             // Only a call core runs as a conversation has a selection to record.
             if (UsesConversation()) App.Core.Conversation(new Dictionary<string, object> { {"action", "select"},
                 {"door", DictStr(call, "door")}, {"call_id", DictStr(call, "call_id")} });
@@ -149,15 +156,33 @@ namespace DoorbellApp
                 }
             }
             ConversationSummary.Text = string.Join("\n", summaries);
-            string signature = string.Join("|", _visitOrder) + SelectedConversationTarget();
+            // Each queue row says who is already speaking at that door, when someone is.
+            var rowTexts = new List<string>();
+            foreach (string key in _visitOrder)
+            {
+                var call = _visitQueue[key];
+                var visitRoom = ConversationDocument(call);
+                string owner = DictStr(visitRoom, "owner"), phase = DictStr(visitRoom, "phase");
+                string door = DoorLabel(DictStr(call, "door"));
+                if (owner.Length != 0 && owner != _nodeId && (phase == "connected" || phase == "held"))
+                    rowTexts.Add(Texts.T("ring.queue_in_call", LabelOf(
+                        CoreClient.Dig(_cfg, "devices." + owner) as Dictionary<string, object>,
+                        App.Boot.UiLang, owner), door));
+                else
+                    rowTexts.Add(Texts.T(DictStr(call, "call_id") == _incomingCallId ?
+                        "ring.queue_selected" : "ring.queue_waiting", door));
+            }
+            // One visit needs no list to choose from.
+            IncomingVisitQueue.Visibility = _visitOrder.Count > 1 ? Visibility.Visible : Visibility.Collapsed;
+            string signature = string.Join("|", _visitOrder) + SelectedConversationTarget() +
+                               string.Join("|", rowTexts);
             if (signature != _visitSignature)
             {
                 _visitSignature = signature; IncomingVisitQueue.Children.Clear();
-                foreach (string key in _visitOrder)
+                for (int i = 0; i < _visitOrder.Count; i++)
                 {
-                    var call = _visitQueue[key];
-                    var button = new Button { Content = Texts.T(DictStr(call, "call_id") == _incomingCallId ?
-                        "ring.queue_selected" : "ring.queue_waiting", DoorLabel(DictStr(call, "door"))), MinHeight = 48 };
+                    var call = _visitQueue[_visitOrder[i]];
+                    var button = new Button { Content = rowTexts[i], MinHeight = 48 };
                     button.Click += (sender, args) => SelectVisit(call);
                     IncomingVisitQueue.Children.Add(button);
                 }
@@ -194,7 +219,11 @@ namespace DoorbellApp
         }
         private void HandleConversation(UiEvent ev)
         {
-            if (ev.T == "conversation") _conversationEvents[ev.Str("call_id")] = ev.Data;
+            // Events can arrive out of order; only a newer room document replaces the cached one.
+            if (ev.T == "conversation" &&
+                (!_conversationEvents.TryGetValue(ev.Str("call_id"), out var cached) ||
+                 DictLong(ev.Data, "version", 0) >= DictLong(cached, "version", 0)))
+                _conversationEvents[ev.Str("call_id")] = ev.Data;
             if (App.Boot.Role == "door_station" && ev.Str("door") == App.Boot.Door && ev.Str("call_id") == _activeCallId)
             {
                 string phase = ev.Str("phase");
@@ -202,6 +231,8 @@ namespace DoorbellApp
                 string text = string.Join("\n", ConversationRows(ev.Data, "participants").Select(member => Texts.T(
                     DictStr(member, "state") == "waiting" ? "conversation.queued" : "conversation." + DictStr(member, "state"),
                     LabelOf(CoreClient.Dig(_cfg, "devices." + DictStr(member, "device")) as Dictionary<string, object>, App.Boot.UiLang, DictStr(member, "device")))));
+                // Before any resident has responded there is nobody to name.
+                if (text.Length == 0) text = Texts.T("conversation.waiting");
                 CallingText.Text = text;
                 InCallTitle.Text = text;
             }

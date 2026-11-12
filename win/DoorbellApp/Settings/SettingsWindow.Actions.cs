@@ -117,9 +117,19 @@ namespace DoorbellApp.Settings
                 case "safe_mode": return Texts.T(App.SafeMode ? "settings.on" : "settings.off");
                 case "app_version":
                 {
+                    // The release version and its build number, as the file properties carry them
+                    // (0.2.0.22 reads "0.2.0 (22)"): what a deployment is checked against.
                     var assembly = Assembly.GetEntryAssembly();
-                    var version = assembly == null ? null : assembly.GetName().Version;
-                    return version == null ? "" : version.ToString();
+                    if (assembly == null) return "";
+                    Version file;
+                    try
+                    {
+                        string text = FileVersionInfo.GetVersionInfo(assembly.Location).FileVersion;
+                        if (!Version.TryParse(text, out file)) file = assembly.GetName().Version;
+                    }
+                    catch (IOException) { file = assembly.GetName().Version; }
+                    catch (ArgumentException) { file = assembly.GetName().Version; }
+                    return file.ToString(3) + (file.Revision > 0 ? " (" + file.Revision + ")" : "");
                 }
                 case "core_version": return App.Core == null ? "" : App.Core.CoreVersion;
                 case "sip_backend": return App.Core == null ? "" : App.Core.SipBackend;

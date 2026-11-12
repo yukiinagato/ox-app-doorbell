@@ -24,6 +24,13 @@ namespace DoorbellApp
     // Call state: idle, calling, Core UI events, recovery and the incoming screen.
     public partial class MainWindow
     {
+        /// <summary>What the idle screen asks for: on a door station it depends on the call flow.</summary>
+        private string IdleHintText()
+        {
+            if (App.Boot.Role != "door_station") return Texts.T("idle.touch_to_call");
+            return ShowsHomePurposes() ? Texts.T("door.hint_purpose_first") : Texts.T("door.hint_call");
+        }
+
         private void ShowIdle(string hint = null)
         {
             StopPlayer(ref _callFeedback);
@@ -37,7 +44,7 @@ namespace DoorbellApp
             System.Threading.Interlocked.Increment(ref _callViewRevision);
             VisitorStatus.Text = hint ?? "";
             VisitorStatus.Visibility = string.IsNullOrEmpty(hint) ? Visibility.Collapsed : Visibility.Visible;
-            TouchHint.Text = Texts.T("idle.touch_to_call");
+            TouchHint.Text = IdleHintText();
             VisitorContentScroll.ScrollToTop();
             UpdateVisitorActionHeights(ActualWidth);
         }

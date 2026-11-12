@@ -22,8 +22,6 @@ namespace DoorbellApp
 
         private void ApplySosConfirmStrings()
         {
-            var negative = (Brush)FindResource("NegativeText");
-            SosButton.Content = IconLabel("IconAlertTriangle", Texts.T("sos.title"), 18, negative);
             System.Windows.Automation.AutomationProperties.SetName(SosButton,
                 Texts.T("sos.accessibility_start"));
             System.Windows.Automation.AutomationProperties.SetHelpText(SosButton,
@@ -47,6 +45,8 @@ namespace DoorbellApp
         /// </summary>
         private void ApplyOutlineStates()
         {
+            SosButton.Content = IconLabel("IconAlertTriangle", Texts.T("sos.title"), 18,
+                                          (Brush)FindResource("NegativeText"));
             Ui.Fluent.KeepOutlineStates(SosButton, "NegativeText");
             Ui.Fluent.KeepOutlineStates(SosConfirmSend, "NegativeText");
             Ui.Fluent.KeepOutlineStates(IgnoreButton, "NegativeText");

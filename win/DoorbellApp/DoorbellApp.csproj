@@ -15,7 +15,7 @@
     <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
     <PathMap>$(MSBuildProjectDirectory)=X:\src\win\DoorbellApp</PathMap>
     <Version>0.2.0</Version>
-    <FileVersion>0.2.0.22</FileVersion>
+    <FileVersion>0.2.0.23</FileVersion>
     <EnableDefaultEmbeddedResourceItems>true</EnableDefaultEmbeddedResourceItems>
   </PropertyGroup>
   <ItemGroup>

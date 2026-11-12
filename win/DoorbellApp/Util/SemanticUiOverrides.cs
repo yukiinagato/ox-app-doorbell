@@ -352,6 +352,9 @@ namespace DoorbellApp.Util
             public Brush Foreground, Background, Border;
             public ControlTemplate Template;
             public Brush ElementBackground, ElementBorder;
+            // True while this applier's colours are on the element. Without an override the
+            // element keeps its own values, which follow the appearance (DynamicResource).
+            public bool ColoursOverridden;
             public CornerRadius ElementRadius;
         }
         private readonly Dictionary<FrameworkElement, Baseline> _baselines =
@@ -410,9 +413,18 @@ namespace DoorbellApp.Util
                 if (outline != null &&
                     !SemanticColorSafety.HasContrast(outline, background, 3.0))
                     outline = null;
-                c.Foreground = foreground;
-                c.Background = background;
-                c.BorderBrush = outline ?? baseline.Border;
+                // Colours are written only for an override, and once more to take one away. An
+                // element nobody overrode keeps its theme-following values: writing the captured
+                // brushes back would freeze it in the appearance of the first pass.
+                bool overridesColour = style != null && (style.Foreground != null ||
+                    style.Background != null || style.Border != null || style.Accent != null);
+                if (overridesColour || baseline.ColoursOverridden)
+                {
+                    c.Foreground = foreground;
+                    c.Background = background;
+                    c.BorderBrush = outline ?? baseline.Border;
+                    baseline.ColoursOverridden = overridesColour;
+                }
                 c.Template = style != null && style.Radius.HasValue ?
                     RoundedTemplate(style.Radius.Value) : baseline.Template;
             }
@@ -425,8 +437,13 @@ namespace DoorbellApp.Util
                 if (outline != null &&
                     !SemanticColorSafety.HasContrast(outline, effectiveBackground, 3.0))
                     outline = null;
-                border.Background = background ?? baseline.ElementBackground;
-                border.BorderBrush = outline ?? baseline.ElementBorder;
+                bool overridesColour = background != null || outline != null;
+                if (overridesColour || baseline.ColoursOverridden)
+                {
+                    border.Background = background ?? baseline.ElementBackground;
+                    border.BorderBrush = outline ?? baseline.ElementBorder;
+                    baseline.ColoursOverridden = overridesColour;
+                }
                 border.CornerRadius = style != null && style.Radius.HasValue
                     ? new CornerRadius(style.Radius.Value) : baseline.ElementRadius;
             }

@@ -113,10 +113,11 @@ namespace DoorbellApp.Settings
             var row = new DockPanel { Margin = new Thickness(0, 10, 0, 0), MinHeight = 52 };
             var buttons = new StackPanel { Orientation = Orientation.Horizontal };
             DockPanel.SetDock(buttons, Dock.Right);
-            var up = CommandButton("↑");
-            var down = CommandButton("↓");
+            var up = MoveButton(true);
+            var down = MoveButton(false);
             var edit = CommandButton(Texts.T("admin.edit"));
             var remove = CommandButton(Texts.T("admin.delete"));
+            DoorbellApp.Ui.Fluent.MakeDestructive(remove);
             AutomationLabel(up, Texts.T("settings.move_up"));
             AutomationLabel(down, Texts.T("settings.move_down"));
             up.IsEnabled = index > 0;

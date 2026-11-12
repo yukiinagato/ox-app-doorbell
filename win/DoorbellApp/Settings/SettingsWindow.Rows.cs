@@ -10,8 +10,6 @@ using System.Windows.Media;
 using System.Windows.Threading;
 using DoorbellApp.Ui;
 using DoorbellApp.Util;
-using NumberBox = ModernWpf.Controls.NumberBox;
-using NumberBoxSpinButtonPlacementMode = ModernWpf.Controls.NumberBoxSpinButtonPlacementMode;
 
 namespace DoorbellApp.Settings
 {
@@ -142,9 +140,12 @@ namespace DoorbellApp.Settings
         private bool Write(SettingItem item, object value, RowParts parts)
         {
             parts.Error.Visibility = Visibility.Collapsed;
-            if (item.Handler == "identity" || item.Handler == "ui_lang" ||
-                item.Key.StartsWith(SettingsStore.BootPrefix, StringComparison.Ordinal) ||
-                item.Key.StartsWith(LocalPrefix, StringComparison.Ordinal))
+            // Another device's row is a plain write under its id: this machine's boot profile,
+            // language and identity are not involved.
+            if (!_store.EditingOther &&
+                (item.Handler == "identity" || item.Handler == "ui_lang" ||
+                 item.Key.StartsWith(SettingsStore.BootPrefix, StringComparison.Ordinal) ||
+                 item.Key.StartsWith(LocalPrefix, StringComparison.Ordinal)))
                 return WriteSpecial(item, value, parts);
             var sets = new List<KeyValuePair<string, object>>
             {
@@ -263,37 +264,48 @@ namespace DoorbellApp.Settings
             double stored = Clamp(SettingsStore.AsNumber(_store.Effective(item),
                                                          Convert.ToDouble(item.Default)), item);
             var panel = new StackPanel { Orientation = Orientation.Horizontal };
-            var box = new NumberBox
+            // A text box with a button on each side of the value, all at touch size. The Fluent
+            // NumberBox is not used: its inline spin buttons are 32 pixels and cannot be raised.
+            var box = new TextBox
             {
-                Minimum = item.Min,
-                Maximum = item.Max,
-                SmallChange = item.Step,
-                LargeChange = item.Step,
-                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Inline,
-                Value = stored,
-                FontSize = 16,
-                MinHeight = MinTouchTarget,
-                MinWidth = 180,
+                Style = (Style)FindResource("SettingsTextBox"),
+                Text = FormatStep(stored, item.Step),
+                Width = 96,
+                MaxLength = 9,
+                TextAlignment = TextAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            AutomationLabel(box, Texts.T(item.LabelKey));
             double committed = stored;
-            // ValueChanged also fires for the corrections made here, hence the guard.
-            bool adjusting = false;
-            box.ValueChanged += (s, e) =>
+            Action<double> commit = wanted =>
             {
-                if (adjusting) return;
-                double typed = box.Value;
-                // An emptied box reports NaN; it goes back to the stored value.
-                double next = double.IsNaN(typed) || double.IsInfinity(typed)
-                    ? committed : Clamp(Math.Round(typed / item.Step) * item.Step, item);
+                double next = Clamp(Math.Round(wanted / item.Step) * item.Step, item);
                 if (Math.Abs(next - committed) >= 1e-9 &&
                     Write(item, SettingsStore.NumberValue(next, item.Step), parts))
                     committed = next;
-                adjusting = true;
-                box.Value = committed;
-                adjusting = false;
+                box.Text = FormatStep(committed, item.Step);
             };
+            Action typed = () =>
+            {
+                double value;
+                // Anything that is not a number goes back to the stored value.
+                commit(double.TryParse(box.Text.Trim(), NumberStyles.Float, CultureInfo.CurrentCulture,
+                                       out value) ? value : committed);
+            };
+            box.LostKeyboardFocus += (s, e) => typed();
+            box.KeyDown += (s, e) =>
+            {
+                if (e.Key == Key.Enter) { typed(); e.Handled = true; }
+                else if (e.Key == Key.Up) { commit(committed + item.Step); e.Handled = true; }
+                else if (e.Key == Key.Down) { commit(committed - item.Step); e.Handled = true; }
+            };
+            var less = StepButton(false, Texts.T("settings.decrease"));
+            var more = StepButton(true, Texts.T("settings.increase"));
+            less.Click += (s, e) => commit(committed - item.Step);
+            more.Click += (s, e) => commit(committed + item.Step);
+            panel.Children.Add(less);
             panel.Children.Add(box);
+            panel.Children.Add(more);
             if (!string.IsNullOrEmpty(item.UnitKey))
                 panel.Children.Add(new TextBlock
                 {
@@ -305,6 +317,49 @@ namespace DoorbellApp.Settings
             return panel;
         }
 
+        private static string FormatStep(double value, double step)
+        {
+            bool whole = Math.Abs(step - Math.Round(step)) < 1e-9;
+            return value.ToString(whole ? "0" : "0.###", CultureInfo.CurrentCulture);
+        }
+
+        /// <summary>Moves a list entry one place; the arrow is turned for "down".</summary>
+        private Button MoveButton(bool up)
+        {
+            var icon = Fluent.Icon("IconArrowUp");
+            if (icon != null && !up)
+            {
+                icon.RenderTransformOrigin = new Point(0.5, 0.5);
+                icon.RenderTransform = new RotateTransform(180);
+            }
+            var button = CommandButton(null);
+            button.Content = icon;
+            return button;
+        }
+
+        /// <summary>The same chevron for both directions, turned upwards for "more".</summary>
+        private RepeatButton StepButton(bool up, string name)
+        {
+            var icon = Fluent.Icon("IconChevronDown");
+            if (icon != null && up)
+            {
+                icon.RenderTransformOrigin = new Point(0.5, 0.5);
+                icon.RenderTransform = new RotateTransform(180);
+            }
+            var button = new RepeatButton
+            {
+                Content = icon,
+                Width = MinTouchTarget,
+                Height = MinTouchTarget,
+                Padding = new Thickness(0),
+                Margin = new Thickness(4, 0, 4, 0),
+                VerticalAlignment = VerticalAlignment.Center,
+                Focusable = false,
+            };
+            AutomationLabel(button, name);
+            return button;
+        }
+
         private FrameworkElement BuildChoice(SettingItem item, RowParts parts)
         {
             if (item.Handler == "sound" || item.Handler == "media_source" ||
@@ -312,7 +367,8 @@ namespace DoorbellApp.Settings
                 item = WithConfiguredOptions(item);
             object stored = _store.Effective(item);
             if (item.Handler == "identity" && item.Id == "device_role") stored = _store.Context.Role;
-            if (item.Handler == "ui_lang" && App.Boot != null) stored = App.Boot.UiLang;
+            if (item.Handler == "ui_lang" && App.Boot != null && !_store.EditingOther)
+                stored = App.Boot.UiLang;
             int current = IndexOf(item.Options, stored);
             var combo = new ComboBox { Style = (Style)FindResource("SettingsComboBox") };
             if (ActualWidth >= 700) combo.HorizontalAlignment = HorizontalAlignment.Right;
@@ -340,7 +396,7 @@ namespace DoorbellApp.Settings
 
         private FrameworkElement BuildMulti(SettingItem item, RowParts parts)
         {
-            var chosen = new List<string>(SettingsStore.AsStringList(_store.Get(item.Key)));
+            var chosen = new List<string>(SettingsStore.AsStringList(_store.Effective(item)));
             var panel = new WrapPanel { MaxWidth = ActualWidth < 700 ? double.PositiveInfinity : 460 };
             foreach (var option in item.Options)
             {

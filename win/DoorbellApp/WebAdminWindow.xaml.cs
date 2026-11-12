@@ -24,6 +24,7 @@ namespace DoorbellApp
         public WebAdminWindow(int port)
         {
             InitializeComponent();
+            DoorbellApp.Ui.Fluent.DimOwnerWhileOpen(this);
             _port = port;
             _hosts = AdminLink.Hosts();
             Title = Texts.T("web_admin.title");

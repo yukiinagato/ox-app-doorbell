@@ -582,8 +582,7 @@ namespace DoorbellApp
             PairBannerText.Text = Texts.T("pair.not_set_up_banner");
             SaverHint.Text = Texts.T(App.Boot.Role == "door_station"
                 ? "display.saver_door_hint" : "display.saver_panel_hint");
-            if (App.Boot.Role == "door_station") TouchHint.Text = Texts.T(
-                ShowsHomePurposes() ? "door.hint_purpose_first" : "door.hint_call");
+            TouchHint.Text = IdleHintText();
             PairingOverlay.ApplyStrings();
             ApplyLayoutStrings();
         }

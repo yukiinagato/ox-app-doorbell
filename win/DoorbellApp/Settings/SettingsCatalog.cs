@@ -375,6 +375,12 @@ namespace DoorbellApp.Settings
             var c = Category("replies", "IconMessageReply");
             Add(Group(c, "admin.quick_replies"),
                 Describe(ListEditor("quick_replies", "quick_replies", "quick_replies")));
+            var speech = Add(Group(c, "speech.settings"), Editor("speech", "speech", "speech"));
+            speech.AlsoCovers = new[]
+            {
+                "speech.provider", "speech.voices", "speech.speaking_rate", "speech.auto_cache",
+                "speech.generator_node", "speech.google_key_ref",
+            };
             return c;
         }
 
@@ -404,7 +410,8 @@ namespace DoorbellApp.Settings
             Add(g, Describe(Stepper("sos_countdown", "emergency.trigger.countdown_s", 0, 10, 1, 3,
                 SettingScope.AllDevices, "settings.unit_seconds")));
             Add(g, Multi("sos_roles", "emergency.button_on_roles", SettingScope.AllDevices,
-                O("indoor_panel", "admin.role_indoor"), O("door_station", "admin.role_door")));
+                O("indoor_panel", "admin.role_indoor"), O("door_station", "admin.role_door")))
+                .Default = new[] { "indoor_panel" };
             Add(g, Describe(Toggle("sos_cancel_pin", "emergency.cancel_requires_pin", true,
                 SettingScope.AllDevices)));
             var alarm = Group(c, "settings.grp_sos_alarm");
@@ -538,6 +545,8 @@ namespace DoorbellApp.Settings
             var look = Group(c, "settings.grp_ui_elements");
             var elements = Add(look, Editor("ui_elements", "ui_elements", Local + ".ui.elements"));
             elements.Scope = SettingScope.ThisDevice;
+            var caps = Add(look, Editor("caps_override", "caps_override", Self + ".caps_override"));
+            caps.Scope = SettingScope.ThisDevice;
             var diagnostics = Group(c, "settings.grp_diagnostics");
             Add(diagnostics, Action("view_log", "view_log"));
             Add(diagnostics, Destructive(Describe(Action("raw_config", "raw_config"))));

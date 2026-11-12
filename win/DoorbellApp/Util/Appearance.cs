@@ -30,7 +30,6 @@ namespace DoorbellApp.Util
             { "Bg", "ApplicationPageBackgroundThemeBrush", "#FFFFFF", "#000000" },
             { "Card", "SystemControlBackgroundChromeMediumLowBrush", "#F2F2F2", "#2B2B2B" },
             { "Fg", "SystemControlForegroundBaseHighBrush", "#000000", "#FFFFFF" },
-            { "Dim", "SystemControlForegroundBaseMediumBrush", "#99000000", "#99FFFFFF" },
             { "Line", "SystemControlForegroundBaseLowBrush", "#33000000", "#33FFFFFF" },
             { "Accent", "SystemControlBackgroundAccentBrush", "#0063B1", "#0078D4" },
         };
@@ -49,9 +48,11 @@ namespace DoorbellApp.Util
         // the same thing on every platform, whatever the accent is. Two kinds live here:
         //   fills    Positive, Danger (= Negative), Notice: drawn under their white "On" ink,
         //            which must reach 4.5:1 on them;
-        //   text     NegativeText, Warn (= Warning), Ok: drawn as text or as an outline on the
-        //            page or a card, where they must reach 4.5:1 themselves. Negative has both,
-        //            because the red that carries white text is too dark to read on a dark card.
+        //   text     NegativeText, Warn (= Warning), Ok, Dim: drawn as text or as an outline on
+        //            the page or a card, where they must reach 4.5:1 themselves. Negative has
+        //            both, because the red that carries white text is too dark to read on a
+        //            dark card. Dim (secondary text) is fixed here and opaque: the theme's own
+        //            medium ink measured 3:1 on a light card on a real screen.
         // win/tests/test_windows_contracts.py computes every one of these ratios.
         private static readonly Dictionary<string, string> DarkRoles =
             new Dictionary<string, string>(StringComparer.Ordinal)
@@ -59,7 +60,7 @@ namespace DoorbellApp.Util
                 { "Warn", "#FFB454" }, { "Danger", "#C0392B" }, { "Ok", "#5DD39E" },
                 { "Notice", "#8A5A00" }, { "OnDanger", "#FFFFFF" }, { "Track", "#802A21" },
                 { "Positive", "#107C10" }, { "OnPositive", "#FFFFFF" },
-                { "NegativeText", "#FF99A4" },
+                { "NegativeText", "#FF99A4" }, { "Dim", "#C8C8C8" },
             };
 
         private static readonly Dictionary<string, string> LightRoles =
@@ -68,7 +69,7 @@ namespace DoorbellApp.Util
                 { "Warn", "#8A5A00" }, { "Danger", "#B3261E" }, { "Ok", "#0F7B0F" },
                 { "Notice", "#8A5A00" }, { "OnDanger", "#FFFFFF" }, { "Track", "#E4C9C6" },
                 { "Positive", "#1E7F55" }, { "OnPositive", "#FFFFFF" },
-                { "NegativeText", "#C42B1C" },
+                { "NegativeText", "#C42B1C" }, { "Dim", "#5E5E5E" },
             };
 
         private static DateTime _systemProbedAt = DateTime.MinValue;

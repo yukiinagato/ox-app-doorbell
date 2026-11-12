@@ -25,6 +25,52 @@ namespace DoorbellApp.Ui
         public static void StyleWindow(Window window)
         {
             WindowHelper.SetUseModernWindowStyle(window, true);
+            DimOwnerWhileOpen(window);
+        }
+
+        /// <summary>
+        /// Presents a modal dialog the way a Fluent content dialog is: on the raised surface
+        /// colour, with the owner dimmed while it is open, so it reads as a separate layer (on a
+        /// dark theme a page-coloured dialog is otherwise a thin line on black). The scrim is an
+        /// adorner over the owner's content and goes away when the dialog closes.
+        /// </summary>
+        public static void DimOwnerWhileOpen(Window dialog)
+        {
+            Scrim scrim = null;
+            System.Windows.Documents.AdornerLayer layer = null;
+            dialog.Loaded += (s, e) =>
+            {
+                var content = dialog.Owner == null ? null : dialog.Owner.Content as UIElement;
+                if (content == null) return;
+                dialog.SetResourceReference(Control.BackgroundProperty, "Card");
+                layer = System.Windows.Documents.AdornerLayer.GetAdornerLayer(content);
+                if (layer == null) return;
+                scrim = new Scrim(content);
+                layer.Add(scrim);
+            };
+            dialog.Closed += (s, e) =>
+            {
+                if (layer != null && scrim != null) layer.Remove(scrim);
+            };
+        }
+
+        private sealed class Scrim : System.Windows.Documents.Adorner
+        {
+            private static readonly Brush Fill = MakeFill();
+
+            public Scrim(UIElement adorned) : base(adorned) { IsHitTestVisible = false; }
+
+            private static Brush MakeFill()
+            {
+                var brush = new SolidColorBrush(Color.FromArgb(0x66, 0, 0, 0));
+                brush.Freeze();
+                return brush;
+            }
+
+            protected override void OnRender(DrawingContext drawingContext)
+            {
+                drawingContext.DrawRectangle(Fill, null, new Rect(AdornedElement.RenderSize));
+            }
         }
 
         /// <summary>The label a Fluent text box, password box or combo box shows above itself.</summary>
@@ -43,7 +89,15 @@ namespace DoorbellApp.Ui
         public static void MakeAccent(Button button)
         {
             var style = button.TryFindResource("AccentButtonStyle") as Style;
-            if (style != null) button.Style = style;
+            if (style == null) return;
+            button.Style = style;
+            // The accent style replaces whatever style gave the button its touch size.
+            if (button.MinHeight < TouchMin) button.MinHeight = TouchMin;
+            if (button.MinWidth < TouchMin) button.MinWidth = TouchMin;
+            if (button.ReadLocalValue(Control.PaddingProperty) == DependencyProperty.UnsetValue)
+                button.Padding = new Thickness(16, 6, 16, 6);
+            if (button.ReadLocalValue(Control.FontSizeProperty) == DependencyProperty.UnsetValue)
+                button.FontSize = 15;
         }
 
         /// <summary>
@@ -90,7 +144,12 @@ namespace DoorbellApp.Ui
                 IsOn = on,
                 OnContent = "",
                 OffContent = "",
+                // The switch reserves room for an On/Off caption this shell does not show; the
+                // control is cut to the knob so it lines up with the other row controls.
                 MinWidth = 0,
+                Width = 48,
+                ClipToBounds = true,
+                HorizontalAlignment = HorizontalAlignment.Right,
                 MinHeight = TouchMin,
                 VerticalAlignment = VerticalAlignment.Center,
             };

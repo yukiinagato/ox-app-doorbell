@@ -32,6 +32,7 @@ $ErrorActionPreference = 'Stop'
 
 Add-Type -AssemblyName UIAutomationClient
 Add-Type -AssemblyName UIAutomationTypes
+Add-Type -AssemblyName WindowsBase
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -Namespace DoorbellTest -Name Native -MemberDefinition @'
@@ -124,6 +125,15 @@ function Invoke-Click($element) {
     [DoorbellTest.Native]::mouse_event(0x0002, 0, 0, 0, [UIntPtr]::Zero)
     Start-Sleep -Milliseconds 40
     [DoorbellTest.Native]::mouse_event(0x0004, 0, 0, 0, [UIntPtr]::Zero)
+    Start-Sleep -Milliseconds 400
+}
+
+# Rests the pointer on an element without pressing, so a screenshot shows its hover state.
+function Invoke-Hover($element) {
+    $point = Get-Center $element
+    [void][DoorbellTest.Native]::SetCursorPos($point[0] - 3, $point[1])
+    Start-Sleep -Milliseconds 80
+    [void][DoorbellTest.Native]::SetCursorPos($point[0], $point[1])
     Start-Sleep -Milliseconds 400
 }
 
@@ -239,6 +249,12 @@ function Test-Calls([string]$look) {
         Add-Check 'incoming: Answer, Reply, Ignore order' $ordered ("{0},{1} {2},{3} {4},{5}" -f $a[0], $a[1], $r[0], $r[1], $i[0], $i[1])
     }
     Save-Shot ("incoming-" + $look)
+    # The outlined destructive action under the pointer: its label must stay readable.
+    if (Test-OnScreen $ignore) {
+        Invoke-Hover $ignore
+        Save-Shot ("incoming-hover-ignore-" + $look)
+        Invoke-Hover (Find-ById 'IncomingTitle')
+    }
 
     # Zoom with the mouse wheel over the picture: in, clamped at 4x, and back out to fitted.
     $zoom = Find-ById 'IncomingZoom'
@@ -259,6 +275,22 @@ function Test-Calls([string]$look) {
         [void](Assert-Element 'incoming after zoom' 'AnswerButton')
     }
 
+    # The stage with a picture in it: fitted at 1x, then zoomed. A 4:3 and a rotated 9:16
+    # test card; zoomed, the picture must grow past its fitted rectangle up to the stage edges.
+    if (Test-OnScreen $zoom) {
+        foreach ($card in @('640x480', '720x1280')) {
+            [void](Assert-Command ("picture " + $card))
+            Start-Sleep -Milliseconds 300
+            Save-Shot ("incoming-picture-{0}-{1}" -f $card, $look)
+            Invoke-Wheel $zoom 4
+            Save-Shot ("incoming-picture-{0}-zoomed-{1}" -f $card, $look)
+            Invoke-Wheel $zoom -40
+        }
+        $stage = $zoom.Current.BoundingRectangle
+        $window = (@(Get-AppWindows))[0].Current.BoundingRectangle
+        Add-Check 'stage: takes the space the layout leaves' (($stage.Width -ge $window.Width * 0.5) -and ($stage.Height -ge $window.Height * 0.5)) ("{0}x{1} of {2}x{3}" -f [int]$stage.Width, [int]$stage.Height, [int]$window.Width, [int]$window.Height)
+    }
+
     if (Click-Id 'incoming' 'QuickReplyToggle') {
         [void](Assert-Element 'quick replies' 'QuickReplySheetTitle')
         Save-Shot ("quick-replies-" + $look)
@@ -274,6 +306,15 @@ function Test-Calls([string]$look) {
     [void](Assert-Command 'incall')
     foreach ($id in @('InCallTitle', 'EndCallButton', 'InCallZoom')) { [void](Assert-Element 'in call' $id) }
     Save-Shot ("in-call-" + $look)
+    $callZoom = Find-ById 'InCallZoom'
+    if (Test-OnScreen $callZoom) {
+        [void](Assert-Command 'picture 1280x720')
+        Start-Sleep -Milliseconds 300
+        Save-Shot ("in-call-picture-" + $look)
+        Invoke-Wheel $callZoom 4
+        Save-Shot ("in-call-picture-zoomed-" + $look)
+        Invoke-Wheel $callZoom -40
+    }
     [void](Assert-Command 'home')
 }
 
@@ -296,6 +337,16 @@ function Test-Sos([string]$look) {
     }
     Save-Shot ("sos-confirm-" + $look)
     [void](Click-Id 'sos confirm' 'SosConfirmCancel')
+    if (Test-OnScreen (Find-ById 'SosConfirmTitle' 1500)) {
+        # Say what the pointer is over when the press did not close the card.
+        $pos = [System.Windows.Forms.Cursor]::Position
+        $under = $null
+        try { $under = [System.Windows.Automation.AutomationElement]::FromPoint((New-Object System.Windows.Point($pos.X, $pos.Y))) } catch { }
+        $what = if ($null -eq $under) { 'nothing' } else { "{0} '{1}' ({2})" -f $under.Current.AutomationId, $under.Current.Name, $under.Current.ClassName }
+        Add-Check 'sos confirm: Cancel closes on the first press' $false ("pointer at {0},{1} over {2}" -f $pos.X, $pos.Y, $what)
+        Save-Shot ("sos-cancel-stuck-" + $look)
+        [void](Click-Id 'sos confirm' 'SosConfirmCancel')
+    }
     Assert-Gone 'sos confirm' 'SosConfirmTitle'
     Add-Check 'sos confirm: cancel starts no countdown' (-not (Test-OnScreen (Find-ById 'SosCountdownCancel' 500)))
 }
@@ -350,6 +401,30 @@ function Test-BlankCapture([string]$file) {
             return $true
         } finally { $bitmap.Dispose() }
     } catch { return $false }
+}
+
+# An element that is on screen but drawn in one flat colour cannot be seen: its fill and its
+# label have ended up the same colour as what is behind it.
+function Assert-Drawn([string]$screen, [string]$id) {
+    $element = Find-ById $id 3000
+    if (-not (Test-OnScreen $element)) {
+        Add-Check ("{0}: {1} is drawn" -f $screen, $id) $false 'not on screen'
+        return
+    }
+    $rect = $element.Current.BoundingRectangle
+    $bitmap = New-Object System.Drawing.Bitmap([int]$rect.Width, [int]$rect.Height)
+    $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+    try {
+        $graphics.CopyFromScreen([int]$rect.X, [int]$rect.Y, 0, 0, $bitmap.Size)
+        $first = $bitmap.GetPixel(2, 2).ToArgb()
+        $different = 0
+        for ($x = 2; $x -lt $bitmap.Width - 2; $x += 3) {
+            for ($y = 2; $y -lt $bitmap.Height - 2; $y += 3) {
+                if ($bitmap.GetPixel($x, $y).ToArgb() -ne $first) { $different++ }
+            }
+        }
+        Add-Check ("{0}: {1} is drawn" -f $screen, $id) ($different -gt 20) ("{0} pixels differ from its corner" -f $different)
+    } finally { $graphics.Dispose(); $bitmap.Dispose() }
 }
 
 function Test-IndoorPanel {
@@ -420,10 +495,7 @@ function Test-IndoorPanel {
                 $id = $category.Current.AutomationId
                 Invoke-Click $category
                 Add-Check ("settings: {0} opens" -f $id) (Test-OnScreen (Find-ById 'SettingsTitle' 2000))
-                # Every category in light; in dark only the first, to keep the run short.
-                if ($look -eq 'light' -or $category -eq $categories[0]) {
-                    Save-Shot ("settings-{0}-{1}" -f ($id -replace '^SettingsCategory_', ''), $look)
-                }
+                Save-Shot ("settings-{0}-{1}" -f ($id -replace '^SettingsCategory_', ''), $look)
             }
             Test-RoleForm $look
             Test-LogViewer $look
@@ -445,6 +517,8 @@ function Test-DoorStation {
         foreach ($id in @('AdminEntryButton', 'HomeNav', 'NoticeGlobalButton')) {
             Add-Check ("visitor: no {0}" -f $id) (-not (Test-OnScreen (Find-ById $id 300)))
         }
+        # The purpose buttons and the call button can be seen in both appearances.
+        foreach ($id in @('Purpose_p_visit', 'Purpose_p_delivery', 'CallButton')) { Assert-Drawn 'visitor' $id }
         $call = Find-ById 'CallButton'
         if (Test-OnScreen $call) {
             $rect = $call.Current.BoundingRectangle

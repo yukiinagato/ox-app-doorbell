@@ -855,11 +855,71 @@
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} オフライン (最終応答 {1})</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} オンライン復帰</value></data>
   <data name="event_press" xml:space="preserve"><value>{0} に来客です ({1})</value></data>
+  <data name="event_visitor_message" xml:space="preserve"><value>{0}: {1} ({2})</value></data>
   <data name="firewall_check_unavailable" xml:space="preserve"><value>Windows ファイアウォールの通信規則を確認できませんでした。このアプリの受信通信が許可されていることを確認してください。</value></data>
   <data name="firewall_repair_failed" xml:space="preserve"><value>Windows ファイアウォール通信規則を追加できませんでした。管理者として許可するか、システム管理者に依頼してください。</value></data>
   <data name="firewall_repaired" xml:space="preserve"><value>必要な Windows ファイアウォール通信規則を追加しました。クラスタへの参加をもう一度お試しください。</value></data>
   <data name="firewall_rules_missing" xml:space="preserve"><value>Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?</value></data>
   <data name="firewall_title" xml:space="preserve"><value>Windows ファイアウォール</value></data>
+  <data name="flow_back" xml:space="preserve"><value>戻る</value></data>
+  <data name="flow_done" xml:space="preserve"><value>完了</value></data>
+  <data name="flow_message_title" xml:space="preserve"><value>来訪者からのお知らせ</value></data>
+  <data name="flow_sent" xml:space="preserve"><value>お知らせしました</value></data>
+  <data name="flow_editor_add_image" xml:space="preserve"><value>画像を追加</value></data>
+  <data name="flow_editor_add_option" xml:space="preserve"><value>選択肢を追加</value></data>
+  <data name="flow_editor_add_step" xml:space="preserve"><value>ステップを追加</value></data>
+  <data name="flow_editor_customize" xml:space="preserve"><value>標準をもとに編集</value></data>
+  <data name="flow_editor_default_note" xml:space="preserve"><value>標準のウィザードを使用中です。編集するとこの家の設定として保存されます。</value></data>
+  <data name="flow_editor_delete_step" xml:space="preserve"><value>ステップを削除</value></data>
+  <data name="flow_editor_door_start" xml:space="preserve"><value>このドアの最初のページ</value></data>
+  <data name="flow_editor_door_start_inherit" xml:space="preserve"><value>共通の最初のページを使う</value></data>
+  <data name="flow_editor_duplicate_step" xml:space="preserve"><value>複製</value></data>
+  <data name="flow_editor_enabled" xml:space="preserve"><value>ウィザードを使う</value></data>
+  <data name="flow_editor_enabled_hint" xml:space="preserve"><value>オフにすると、従来の呼出画面に戻ります。</value></data>
+  <data name="flow_editor_field_body" xml:space="preserve"><value>本文</value></data>
+  <data name="flow_editor_field_images" xml:space="preserve"><value>画像</value></data>
+  <data name="flow_editor_field_message" xml:space="preserve"><value>住人に届くメッセージ</value></data>
+  <data name="flow_editor_field_on_unanswered" xml:space="preserve"><value>応答がないときの移動先</value></data>
+  <data name="flow_editor_field_options" xml:space="preserve"><value>選択肢</value></data>
+  <data name="flow_editor_field_purpose" xml:space="preserve"><value>用件</value></data>
+  <data name="flow_editor_field_return_s" xml:space="preserve"><value>最初に戻るまで（秒）</value></data>
+  <data name="flow_editor_field_snapshot" xml:space="preserve"><value>お知らせに添付する写真</value></data>
+  <data name="flow_editor_field_title" xml:space="preserve"><value>タイトル</value></data>
+  <data name="flow_editor_field_to" xml:space="preserve"><value>送信後に表示するページ</value></data>
+  <data name="flow_editor_idle_s" xml:space="preserve"><value>無操作で最初に戻るまで（秒）</value></data>
+  <data name="flow_editor_image_above" xml:space="preserve"><value>本文の上</value></data>
+  <data name="flow_editor_image_alt" xml:space="preserve"><value>画像の説明（読み上げ用）</value></data>
+  <data name="flow_editor_image_below" xml:space="preserve"><value>本文の下</value></data>
+  <data name="flow_editor_kind_call" xml:space="preserve"><value>呼び出し</value></data>
+  <data name="flow_editor_kind_end" xml:space="preserve"><value>完了ページ</value></data>
+  <data name="flow_editor_kind_notify" xml:space="preserve"><value>お知らせ（呼び出さない）</value></data>
+  <data name="flow_editor_kind_page" xml:space="preserve"><value>ページ</value></data>
+  <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>最初のページに戻る</value></data>
+  <data name="flow_editor_option_enabled" xml:space="preserve"><value>表示する</value></data>
+  <data name="flow_editor_option_icon" xml:space="preserve"><value>アイコン（絵文字）</value></data>
+  <data name="flow_editor_option_label" xml:space="preserve"><value>ラベル</value></data>
+  <data name="flow_editor_option_primary" xml:space="preserve"><value>大きな主ボタンにする</value></data>
+  <data name="flow_editor_option_purpose" xml:space="preserve"><value>用件のラベルとアイコンを使う</value></data>
+  <data name="flow_editor_option_purpose_none" xml:space="preserve"><value>使わない（独自のラベル）</value></data>
+  <data name="flow_editor_option_target" xml:space="preserve"><value>押したときの移動先</value></data>
+  <data name="flow_editor_preview" xml:space="preserve"><value>試す</value></data>
+  <data name="flow_editor_purpose_none" xml:space="preserve"><value>用件なし</value></data>
+  <data name="flow_editor_require_call" xml:space="preserve"><value>必ず呼び出しにたどり着けるようにする</value></data>
+  <data name="flow_editor_require_call_off_warning" xml:space="preserve"><value>オフにすると、呼び出しのできないドアを作れます。来訪者が住人を呼べなくなることがあります。</value></data>
+  <data name="flow_editor_reset_default" xml:space="preserve"><value>標準に戻す</value></data>
+  <data name="flow_editor_reset_default_confirm" xml:space="preserve"><value>作成したステップをすべて削除し、標準のウィザードに戻します。</value></data>
+  <data name="flow_editor_snapshot_camera" xml:space="preserve"><value>外部カメラ: {0}</value></data>
+  <data name="flow_editor_snapshot_door_station" xml:space="preserve"><value>門口機のカメラ</value></data>
+  <data name="flow_editor_snapshot_no_camera" xml:space="preserve"><value>静止画 URL のある外部カメラがありません</value></data>
+  <data name="flow_editor_snapshot_none" xml:space="preserve"><value>添付しない</value></data>
+  <data name="flow_editor_start" xml:space="preserve"><value>最初のページ</value></data>
+  <data name="flow_editor_step_in_use" xml:space="preserve"><value>ほかのステップから参照されています: {0}</value></data>
+  <data name="flow_editor_steps" xml:space="preserve"><value>ステップ</value></data>
+  <data name="flow_editor_template_confirm" xml:space="preserve"><value>現在のステップをテンプレートで置き換えます。</value></data>
+  <data name="flow_editor_template_delivery" xml:space="preserve"><value>宅配・置き配</value></data>
+  <data name="flow_editor_template_purposes" xml:space="preserve"><value>現在の用件から作成</value></data>
+  <data name="flow_editor_templates" xml:space="preserve"><value>テンプレート</value></data>
+  <data name="flow_editor_title" xml:space="preserve"><value>来訪者ウィザード</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>{0} が応答</value></data>
   <data name="history_detail_answered_by" xml:space="preserve"><value>応答した端末</value></data>
   <data name="history_detail_door" xml:space="preserve"><value>ドア</value></data>
@@ -1761,6 +1821,7 @@ ON</value></data>
   <data name="settings_cam_source" xml:space="preserve"><value>映像の入力元</value></data>
   <data name="settings_cam_source_builtin" xml:space="preserve"><value>内蔵カメラ</value></data>
   <data name="settings_cam_source_desc" xml:space="preserve"><value>外部カメラを選ぶと、この門口機はその映像を使います</value></data>
+  <data name="settings_caps_override" xml:space="preserve"><value>機能の上書き (JSON)</value></data>
   <data name="settings_caps_override_invalid" xml:space="preserve"><value>JSON オブジェクトを入力するか、空欄にしてください。</value></data>
   <data name="settings_caps_override_native" xml:space="preserve"><value>端末が報告する機能を置き換えます。空欄にすると端末が測定した値を使います。障害調査専用です。</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>情報</value></data>
@@ -2289,6 +2350,7 @@ ON</value></data>
   <data name="settings_sound_outdoor_call_alert" xml:space="preserve"><value>呼び出し音</value></data>
   <data name="settings_sound_school_chime" xml:space="preserve"><value>学校のチャイム</value></data>
   <data name="settings_sound_title_display" xml:space="preserve"><value>起動音</value></data>
+  <data name="settings_speech" xml:space="preserve"><value>返信音声と音声キャッシュ</value></data>
   <data name="settings_speech_load" xml:space="preserve"><value>キャッシュ状態を表示</value></data>
   <data name="settings_speech_native" xml:space="preserve"><value>返信を門口で読み上げる声と、生成済み音声の状態です。</value></data>
   <data name="settings_speech_state_system" xml:space="preserve"><value>システム音声</value></data>
@@ -2611,6 +2673,24 @@ PIN: {1}</value></data>
   <data name="video_connecting" xml:space="preserve"><value>映像に接続しています…</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="visitor_restoring" xml:space="preserve"><value>通話状態を復元しています…</value></data>
+  <data name="visitor_flow_bad_target_kind" xml:space="preserve"><value>移動先の種類が合いません</value></data>
+  <data name="visitor_flow_bad_text" xml:space="preserve"><value>文字数が上限を超えています</value></data>
+  <data name="visitor_flow_crowded_page" xml:space="preserve"><value>本文や画像のあるページは選択肢を 4 つ以内にすると見やすくなります</value></data>
+  <data name="visitor_flow_cycle" xml:space="preserve"><value>ページが循環しています</value></data>
+  <data name="visitor_flow_invalid" xml:space="preserve"><value>ウィザードを保存できません ({0})</value></data>
+  <data name="visitor_flow_missing_start" xml:space="preserve"><value>最初のページを選んでください</value></data>
+  <data name="visitor_flow_multiple_primary" xml:space="preserve"><value>主ボタンは 1 ページに 1 つだけです</value></data>
+  <data name="visitor_flow_no_call" xml:space="preserve"><value>このウィザードには呼び出しがありません。来訪者は住人を呼び出せません。</value></data>
+  <data name="visitor_flow_no_options" xml:space="preserve"><value>ページには選択肢が 1 つ以上必要です</value></data>
+  <data name="visitor_flow_no_reachable_call" xml:space="preserve"><value>最初のページから呼び出しにたどり着けません</value></data>
+  <data name="visitor_flow_option_needs_label" xml:space="preserve"><value>選択肢にはラベルか用件が必要です</value></data>
+  <data name="visitor_flow_too_deep" xml:space="preserve"><value>ページは 6 階層までです</value></data>
+  <data name="visitor_flow_too_many_options" xml:space="preserve"><value>1 ページの選択肢は 12 個までです</value></data>
+  <data name="visitor_flow_too_many_steps" xml:space="preserve"><value>ステップは 32 個までです</value></data>
+  <data name="visitor_flow_unknown_asset" xml:space="preserve"><value>画像がアセットにありません</value></data>
+  <data name="visitor_flow_unknown_camera" xml:space="preserve"><value>選んだカメラに静止画 URL がありません</value></data>
+  <data name="visitor_flow_unknown_purpose" xml:space="preserve"><value>存在しない用件を参照しています</value></data>
+  <data name="visitor_flow_unknown_target" xml:space="preserve"><value>移動先のステップがありません</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼出</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>クラスタ既定 {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>この端末の音量</value></data>

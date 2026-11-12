@@ -43,6 +43,8 @@ namespace DoorbellApp.Settings
                 case "panels": return BuildPanels(item);
                 case "backup": return BuildBackup(item);
                 case "software_update": return BuildSoftwareUpdate(item);
+                case "speech": return BuildSpeech(item);
+                case "caps_override": return BuildCapsOverride(item);
                 default: return null;
             }
         }
@@ -564,10 +566,11 @@ namespace DoorbellApp.Settings
                 for (int i = 0; i < actions.Count; i++)
                 {
                     int index = i;
-                    var up = CommandButton("↑");
-                    var down = CommandButton("↓");
+                    var up = MoveButton(true);
+                    var down = MoveButton(false);
                     var edit = CommandButton(Texts.T("admin.edit"));
                     var remove = CommandButton(Texts.T("admin.delete"));
+                    DoorbellApp.Ui.Fluent.MakeDestructive(remove);
                     AutomationLabel(up, Texts.T("settings.move_up"));
                     AutomationLabel(down, Texts.T("settings.move_down"));
                     up.IsEnabled = index > 0;
@@ -854,6 +857,13 @@ namespace DoorbellApp.Settings
                 bits.Add(id.Length > 12 ? id.Substring(0, 12) + "…" : id);
                 if (self) bits.Insert(0, Texts.T("settings.this_device"));
                 var buttons = new List<Button>();
+                if (!self)
+                {
+                    var settings = CommandButton(Texts.T("settings.device_settings"));
+                    AutomationId(settings, "DeviceSettings_" + id);
+                    settings.Click += (s, e) => EditDeviceSettings(id, role);
+                    buttons.Add(settings);
+                }
                 var edit = CommandButton(Texts.T("admin.edit"));
                 edit.IsEnabled = !self;
                 if (self) AutomationLabel(edit, Texts.T("settings.device_self_hint"));

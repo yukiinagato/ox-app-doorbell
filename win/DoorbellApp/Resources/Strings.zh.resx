@@ -855,11 +855,71 @@
   <data name="event_offline" xml:space="preserve"><value>⚠ {0} 离线（最后在线：{1}）</value></data>
   <data name="event_online" xml:space="preserve"><value>{0} 恢复在线</value></data>
   <data name="event_press" xml:space="preserve"><value>{0} 有访客（{1}）</value></data>
+  <data name="event_visitor_message" xml:space="preserve"><value>{0}：{1}（{2}）</value></data>
   <data name="firewall_check_unavailable" xml:space="preserve"><value>无法检查 Windows 防火墙规则。请确认已允许此应用接收通信。</value></data>
   <data name="firewall_repair_failed" xml:space="preserve"><value>无法添加 Windows 防火墙通信规则。请在管理员提示中允许操作，或联系系统管理员。</value></data>
   <data name="firewall_repaired" xml:space="preserve"><value>已添加所需的 Windows 防火墙通信规则。请重新尝试加入集群。</value></data>
   <data name="firewall_rules_missing" xml:space="preserve"><value>Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？</value></data>
   <data name="firewall_title" xml:space="preserve"><value>Windows 防火墙</value></data>
+  <data name="flow_back" xml:space="preserve"><value>返回</value></data>
+  <data name="flow_done" xml:space="preserve"><value>完成</value></data>
+  <data name="flow_message_title" xml:space="preserve"><value>访客留言</value></data>
+  <data name="flow_sent" xml:space="preserve"><value>已通知</value></data>
+  <data name="flow_editor_add_image" xml:space="preserve"><value>添加图片</value></data>
+  <data name="flow_editor_add_option" xml:space="preserve"><value>添加选项</value></data>
+  <data name="flow_editor_add_step" xml:space="preserve"><value>添加步骤</value></data>
+  <data name="flow_editor_customize" xml:space="preserve"><value>基于内置向导编辑</value></data>
+  <data name="flow_editor_default_note" xml:space="preserve"><value>当前使用内置向导。编辑后将保存为本住宅的设置。</value></data>
+  <data name="flow_editor_delete_step" xml:space="preserve"><value>删除步骤</value></data>
+  <data name="flow_editor_door_start" xml:space="preserve"><value>此门的起始页</value></data>
+  <data name="flow_editor_door_start_inherit" xml:space="preserve"><value>使用共用起始页</value></data>
+  <data name="flow_editor_duplicate_step" xml:space="preserve"><value>复制</value></data>
+  <data name="flow_editor_enabled" xml:space="preserve"><value>启用向导</value></data>
+  <data name="flow_editor_enabled_hint" xml:space="preserve"><value>关闭后恢复为原来的呼叫画面。</value></data>
+  <data name="flow_editor_field_body" xml:space="preserve"><value>正文</value></data>
+  <data name="flow_editor_field_images" xml:space="preserve"><value>图片</value></data>
+  <data name="flow_editor_field_message" xml:space="preserve"><value>住户收到的消息</value></data>
+  <data name="flow_editor_field_on_unanswered" xml:space="preserve"><value>无人应答时前往</value></data>
+  <data name="flow_editor_field_options" xml:space="preserve"><value>选项</value></data>
+  <data name="flow_editor_field_purpose" xml:space="preserve"><value>来访目的</value></data>
+  <data name="flow_editor_field_return_s" xml:space="preserve"><value>返回起始页（秒）</value></data>
+  <data name="flow_editor_field_snapshot" xml:space="preserve"><value>通知附带的照片</value></data>
+  <data name="flow_editor_field_title" xml:space="preserve"><value>标题</value></data>
+  <data name="flow_editor_field_to" xml:space="preserve"><value>发送后显示的页面</value></data>
+  <data name="flow_editor_idle_s" xml:space="preserve"><value>无操作返回起始页（秒）</value></data>
+  <data name="flow_editor_image_above" xml:space="preserve"><value>正文上方</value></data>
+  <data name="flow_editor_image_alt" xml:space="preserve"><value>图片说明（用于朗读）</value></data>
+  <data name="flow_editor_image_below" xml:space="preserve"><value>正文下方</value></data>
+  <data name="flow_editor_kind_call" xml:space="preserve"><value>呼叫</value></data>
+  <data name="flow_editor_kind_end" xml:space="preserve"><value>结束页</value></data>
+  <data name="flow_editor_kind_notify" xml:space="preserve"><value>通知（不呼叫）</value></data>
+  <data name="flow_editor_kind_page" xml:space="preserve"><value>页面</value></data>
+  <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>返回起始页</value></data>
+  <data name="flow_editor_option_enabled" xml:space="preserve"><value>显示</value></data>
+  <data name="flow_editor_option_icon" xml:space="preserve"><value>图标（表情符号）</value></data>
+  <data name="flow_editor_option_label" xml:space="preserve"><value>标签</value></data>
+  <data name="flow_editor_option_primary" xml:space="preserve"><value>显示为主按钮</value></data>
+  <data name="flow_editor_option_purpose" xml:space="preserve"><value>使用来访目的的标签和图标</value></data>
+  <data name="flow_editor_option_purpose_none" xml:space="preserve"><value>不使用（自定义标签）</value></data>
+  <data name="flow_editor_option_target" xml:space="preserve"><value>点击后前往</value></data>
+  <data name="flow_editor_preview" xml:space="preserve"><value>试用</value></data>
+  <data name="flow_editor_purpose_none" xml:space="preserve"><value>无目的</value></data>
+  <data name="flow_editor_require_call" xml:space="preserve"><value>始终保留呼叫途径</value></data>
+  <data name="flow_editor_require_call_off_warning" xml:space="preserve"><value>关闭后，门口机可能无法呼叫，访客可能联系不到住户。</value></data>
+  <data name="flow_editor_reset_default" xml:space="preserve"><value>恢复内置向导</value></data>
+  <data name="flow_editor_reset_default_confirm" xml:space="preserve"><value>将删除您创建的所有步骤并恢复内置向导。</value></data>
+  <data name="flow_editor_snapshot_camera" xml:space="preserve"><value>外部摄像头：{0}</value></data>
+  <data name="flow_editor_snapshot_door_station" xml:space="preserve"><value>门口机摄像头</value></data>
+  <data name="flow_editor_snapshot_no_camera" xml:space="preserve"><value>未配置带快照地址的外部摄像头</value></data>
+  <data name="flow_editor_snapshot_none" xml:space="preserve"><value>不附带</value></data>
+  <data name="flow_editor_start" xml:space="preserve"><value>起始页</value></data>
+  <data name="flow_editor_step_in_use" xml:space="preserve"><value>其他步骤指向此处：{0}</value></data>
+  <data name="flow_editor_steps" xml:space="preserve"><value>步骤</value></data>
+  <data name="flow_editor_template_confirm" xml:space="preserve"><value>将用模板替换当前步骤。</value></data>
+  <data name="flow_editor_template_delivery" xml:space="preserve"><value>快递与放置门口</value></data>
+  <data name="flow_editor_template_purposes" xml:space="preserve"><value>根据当前来访目的创建</value></data>
+  <data name="flow_editor_templates" xml:space="preserve"><value>模板</value></data>
+  <data name="flow_editor_title" xml:space="preserve"><value>访客向导</value></data>
   <data name="history_answered_by" xml:space="preserve"><value>由 {0} 接听</value></data>
   <data name="history_detail_answered_by" xml:space="preserve"><value>接听设备</value></data>
   <data name="history_detail_door" xml:space="preserve"><value>门</value></data>
@@ -1761,6 +1821,7 @@
   <data name="settings_cam_source" xml:space="preserve"><value>视频来源</value></data>
   <data name="settings_cam_source_builtin" xml:space="preserve"><value>内置摄像头</value></data>
   <data name="settings_cam_source_desc" xml:space="preserve"><value>选择外部摄像头后，此门口机使用其视频</value></data>
+  <data name="settings_caps_override" xml:space="preserve"><value>能力覆盖 (JSON)</value></data>
   <data name="settings_caps_override_invalid" xml:space="preserve"><value>请输入 JSON 对象，或留空。</value></data>
   <data name="settings_caps_override_native" xml:space="preserve"><value>替换设备上报的能力。留空则使用设备实测的值。仅用于排查故障。</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>关于</value></data>
@@ -2289,6 +2350,7 @@
   <data name="settings_sound_outdoor_call_alert" xml:space="preserve"><value>呼叫提示音</value></data>
   <data name="settings_sound_school_chime" xml:space="preserve"><value>学校铃声</value></data>
   <data name="settings_sound_title_display" xml:space="preserve"><value>启动提示音</value></data>
+  <data name="settings_speech" xml:space="preserve"><value>回复语音与音频缓存</value></data>
   <data name="settings_speech_load" xml:space="preserve"><value>显示缓存状态</value></data>
   <data name="settings_speech_native" xml:space="preserve"><value>在门口朗读回复所用的声音，以及已生成音频的状态。</value></data>
   <data name="settings_speech_state_system" xml:space="preserve"><value>系统语音</value></data>
@@ -2611,6 +2673,24 @@ PIN：{1}</value></data>
   <data name="video_connecting" xml:space="preserve"><value>正在连接视频…</value></data>
   <data name="video_stats" xml:space="preserve"><value>{0} · {1} ms · ±{2} ms · {3} fps · drop {4}</value></data>
   <data name="visitor_restoring" xml:space="preserve"><value>正在恢复通话状态…</value></data>
+  <data name="visitor_flow_bad_target_kind" xml:space="preserve"><value>目标步骤类型不符</value></data>
+  <data name="visitor_flow_bad_text" xml:space="preserve"><value>文字超出长度限制</value></data>
+  <data name="visitor_flow_crowded_page" xml:space="preserve"><value>带正文或图片的页面建议不超过 4 个选项</value></data>
+  <data name="visitor_flow_cycle" xml:space="preserve"><value>页面形成了循环</value></data>
+  <data name="visitor_flow_invalid" xml:space="preserve"><value>无法保存向导（{0}）</value></data>
+  <data name="visitor_flow_missing_start" xml:space="preserve"><value>请选择起始页</value></data>
+  <data name="visitor_flow_multiple_primary" xml:space="preserve"><value>每页只能有一个主按钮</value></data>
+  <data name="visitor_flow_no_call" xml:space="preserve"><value>此向导不包含呼叫，访客无法呼叫住户。</value></data>
+  <data name="visitor_flow_no_options" xml:space="preserve"><value>页面至少需要一个选项</value></data>
+  <data name="visitor_flow_no_reachable_call" xml:space="preserve"><value>从起始页无法到达呼叫</value></data>
+  <data name="visitor_flow_option_needs_label" xml:space="preserve"><value>选项需要标签或来访目的</value></data>
+  <data name="visitor_flow_too_deep" xml:space="preserve"><value>页面最多 6 层</value></data>
+  <data name="visitor_flow_too_many_options" xml:space="preserve"><value>每页最多 12 个选项</value></data>
+  <data name="visitor_flow_too_many_steps" xml:space="preserve"><value>最多 32 个步骤</value></data>
+  <data name="visitor_flow_unknown_asset" xml:space="preserve"><value>图片不在素材库中</value></data>
+  <data name="visitor_flow_unknown_camera" xml:space="preserve"><value>所选摄像头没有快照地址</value></data>
+  <data name="visitor_flow_unknown_purpose" xml:space="preserve"><value>引用的来访目的不存在</value></data>
+  <data name="visitor_flow_unknown_target" xml:space="preserve"><value>目标步骤不存在</value></data>
   <data name="volume_call" xml:space="preserve"><value>呼叫</value></data>
   <data name="volume_cluster_default" xml:space="preserve"><value>集群默认 {0}</value></data>
   <data name="volume_device_title" xml:space="preserve"><value>此设备的音量</value></data>

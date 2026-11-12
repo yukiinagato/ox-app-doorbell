@@ -569,23 +569,26 @@
                 </StackPanel>
             </Grid>
             <Grid x:Name="IncomingStage" Grid.Row="1" Margin="24,4,24,0">
+                <!-- The stage is everything the header and the action zone leave; the picture is
+                     aspect-fitted in it and, when zoomed, clipped by the stage, not by itself. -->
                 <Border x:Name="IncomingVideoFrame" CornerRadius="4" Background="#000000"
-                        ClipToBounds="True" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        ClipToBounds="True">
                     <app:ZoomPanHost x:Name="IncomingZoom">
-                    <Grid x:Name="IncomingVideoArea" ClipToBounds="True" MinWidth="480" MinHeight="270">
+                    <Grid x:Name="IncomingVideoArea">
                         <MediaElement x:Name="IncomingH264" Stretch="Uniform" Visibility="Collapsed"
                                       LoadedBehavior="Manual" UnloadedBehavior="Manual"
                                       ScrubbingEnabled="False"/>
                         <Image x:Name="IncomingLive" Stretch="Uniform"/>
                         <!-- Core-decoded H.264 (H264LiveStreamer); shown once the first frame lands. -->
                         <Image x:Name="IncomingH264Image" Stretch="Uniform" Visibility="Collapsed"/>
-                        <TextBlock x:Name="IncomingNoVideo" FontSize="22"
-                                   Foreground="{DynamicResource Muted}" TextWrapping="Wrap"
-                                   TextAlignment="Center" Margin="16"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Grid>
                     </app:ZoomPanHost>
                 </Border>
+                <!-- Over the stage, not inside the zoom host: the message is not a picture. -->
+                <TextBlock x:Name="IncomingNoVideo" FontSize="22" IsHitTestVisible="False"
+                           Foreground="#B8C0C8" TextWrapping="Wrap"
+                           TextAlignment="Center" Margin="16"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
             </Grid>
             <!-- Fixed action zone. In live view (monitor only) it floats over the video on a
                  plate and hides after 4 s without input; a tap brings it back. -->
@@ -670,10 +673,10 @@
             </StackPanel>
             </ScrollViewer>
             <Grid x:Name="InCallStage" Grid.Row="1" Margin="24,4,24,0">
-                <Border CornerRadius="4" Background="#000000" ClipToBounds="True"
-                        HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border x:Name="InCallVideoFrame" CornerRadius="4" Background="#000000"
+                        ClipToBounds="True">
                     <app:ZoomPanHost x:Name="InCallZoom">
-                    <Grid ClipToBounds="True" MinWidth="480" MinHeight="270">
+                    <Grid>
                         <MediaElement x:Name="PeerH264" Stretch="Uniform" Visibility="Collapsed"
                                       LoadedBehavior="Manual" UnloadedBehavior="Manual"
                                       ScrubbingEnabled="False"/>
@@ -692,7 +695,10 @@
                            HorizontalAlignment="Center" Margin="0,8,0,0">
                     <Button x:Name="InCallMicButton" Style="{StaticResource ActionButton}"
                             MinHeight="56" Visibility="Collapsed" Click="OnMicClick"/>
+                    <!-- Hidden until an indoor panel's ringing call finds an unlock action for
+                         its door; a door station never offers it to the visitor. -->
                     <Button x:Name="InCallOpenDoorButton" Style="{StaticResource ActionButton}"
+                            Visibility="Collapsed"
                             MinHeight="56" Background="Transparent" Foreground="{DynamicResource Warning}"
                             BorderBrush="{DynamicResource Warning}" Click="OnOpenDoorClick"/>
                 </WrapPanel>

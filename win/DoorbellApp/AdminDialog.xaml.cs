@@ -30,6 +30,8 @@ namespace DoorbellApp
         public AdminDialog()
         {
             InitializeComponent();
+            DoorbellApp.Ui.Fluent.DimOwnerWhileOpen(this);
+            Title = DoorbellApp.Util.Texts.T("admin.title");
             _settingPassword = ClusterPasswordUnset();
             Prompt.Text = L10n.T(_settingPassword ? "admin.password_set_prompt"
                                                   : "admin.pin_prompt");

@@ -94,6 +94,48 @@ internal static class ZoomPanMathTests
         Check(Near(z.OffsetX, 800 - (175 + 450) * 4.0), "panned into the right letterbox bar");
         EdgesInside(z, "letterboxed 4x");
 
+        // The stage is the clip: zoomed, the picture shows more area than its fitted 1x
+        // rectangle, growing into the bars until it covers the stage.
+        z.Reset();
+        z.SetGeometryForAspect(800, 600, 480, 640);
+        z.SetScaleAt(1.5, 400, 300);
+        Check(z.ContentWidth * z.Scale > z.ContentWidth + 1 &&
+              Math.Min(z.ViewWidth, z.ContentWidth * z.Scale) *
+              Math.Min(z.ViewHeight, z.ContentHeight * z.Scale) >
+              z.ContentWidth * z.ContentHeight + 1,
+              "zoomed picture is still clipped to its fitted rectangle");
+        z.SetScaleAt(2, 400, 300);     // 900 wide: covers the 800 stage
+        Check(z.ContentWidth * z.Scale >= z.ViewWidth, "2x does not cover the stage");
+        EdgesInside(z, "covers the stage");
+
+        // 4:3, 16:9 and a rotated 9:16 source in a landscape and in a portrait stage: at every
+        // zoom and after any drag, each axis is either centred or shows no empty space.
+        double[][] stages = { new double[] { 1280, 720 }, new double[] { 720, 1280 } };
+        double[][] sources = { new double[] { 640, 480 }, new double[] { 1280, 720 },
+                               new double[] { 720, 1280 } };
+        foreach (double[] stage in stages)
+            foreach (double[] source in sources)
+            {
+                string name = stage[0] + "x" + stage[1] + " stage, " + source[0] + "x" + source[1];
+                z.Reset();
+                z.SetGeometryForAspect(stage[0], stage[1], source[0], source[1]);
+                double fit = Math.Min(stage[0] / source[0], stage[1] / source[1]);
+                Check(Near(z.ContentWidth, source[0] * fit) && Near(z.ContentHeight, source[1] * fit) &&
+                      (Near(z.ContentWidth, stage[0]) || Near(z.ContentHeight, stage[1])),
+                      name + ": not aspect-fitted");
+                Check(Near(z.ContentX * 2 + z.ContentWidth, stage[0]) &&
+                      Near(z.ContentY * 2 + z.ContentHeight, stage[1]), name + ": not centred at 1x");
+                foreach (double scale in new[] { 1.2, 2.0, 3.0, 4.0 })
+                {
+                    z.SetScaleAt(scale, stage[0] / 3, stage[1] / 4);
+                    EdgesInside(z, name + " at " + scale);
+                    z.PanBy(100000, -100000);
+                    EdgesInside(z, name + " dragged at " + scale);
+                    z.PanBy(-100000, 100000);
+                    EdgesInside(z, name + " dragged back at " + scale);
+                }
+            }
+
         // A resize while zoomed re-clamps instead of leaving a gap.
         z.SetGeometryForAspect(400, 300, 480, 640);
         EdgesInside(z, "after resize");

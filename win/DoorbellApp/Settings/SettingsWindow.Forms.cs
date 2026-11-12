@@ -29,6 +29,8 @@ namespace DoorbellApp.Settings
             public string Path;
             public FieldKind Kind;
             public string LabelKey;
+            /// <summary>A literal label, for one composed from several strings.</summary>
+            public string Label;
             public string HintKey;
             public List<SettingOption> Options;
             public bool Required;
@@ -265,7 +267,7 @@ namespace DoorbellApp.Settings
         private Func<Dictionary<string, object>, string> BuildField(StackPanel form, Field field,
                                                                    object value)
         {
-            string label = Texts.T(field.LabelKey);
+            string label = field.Label ?? Texts.T(field.LabelKey);
             Func<object, object> store = field.Store ?? (v => v);
             Func<Dictionary<string, object>, object, string> put = (draft, v) =>
             {
@@ -567,6 +569,7 @@ namespace DoorbellApp.Settings
                                                    VerticalAlignment = VerticalAlignment.Center });
                 times.Children.Add(end);
                 var remove = CommandButton(Texts.T("admin.delete"));
+                DoorbellApp.Ui.Fluent.MakeDestructive(remove);
                 remove.Margin = new Thickness(12, 0, 0, 0);
                 times.Children.Add(remove);
                 line.Children.Add(times);
