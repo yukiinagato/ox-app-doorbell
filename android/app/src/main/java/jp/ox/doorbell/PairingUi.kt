@@ -31,9 +31,9 @@ internal object PairingUi {
     val DIM: Int get() = ShellUi.opaque(tokens.muted)
     val FAINT: Int get() = ShellUi.opaque(tokens.muted)
     val ACCENT: Int get() = ShellUi.opaque(ShellUi.accentInk(tokens))
-    val OK: Int get() = ShellUi.opaque(tokens.positive)
-    val ERR: Int get() = ShellUi.opaque(tokens.danger)
-    val WARN: Int get() = ShellUi.opaque(tokens.warning)
+    val OK: Int get() = ShellUi.opaque(ShellUi.roleInk(tokens.positive, tokens))
+    val ERR: Int get() = ShellUi.opaque(ShellUi.roleInk(tokens.danger, tokens))
+    val WARN: Int get() = ShellUi.opaque(ShellUi.roleInk(tokens.warning, tokens))
 
     fun dp(context: Context, value: Int): Int =
         (value * context.resources.displayMetrics.density).toInt()

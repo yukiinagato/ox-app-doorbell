@@ -1712,6 +1712,7 @@ ON</value></data>
   <data name="settings_appearance_system" xml:space="preserve"><value>システムに合わせる</value></data>
   <data name="settings_asset_delete_in_use" xml:space="preserve"><value>{0} は {1} で使われています。削除しますか？</value></data>
   <data name="settings_asset_limits" xml:space="preserve"><value>JPEG・PNG・MP3・WAV、1 ファイル 3 MB まで</value></data>
+  <data name="settings_asset_not_here" xml:space="preserve"><value>この端末にはまだ同期されていません</value></data>
   <data name="settings_asset_used" xml:space="preserve"><value>使用中: {0}</value></data>
   <data name="settings_assets" xml:space="preserve"><value>素材 (画像・音声)</value></data>
   <data name="settings_assets_desc" xml:space="preserve"><value>ファイルのアップロードと配布</value></data>
@@ -1760,6 +1761,8 @@ ON</value></data>
   <data name="settings_cam_source" xml:space="preserve"><value>映像の入力元</value></data>
   <data name="settings_cam_source_builtin" xml:space="preserve"><value>内蔵カメラ</value></data>
   <data name="settings_cam_source_desc" xml:space="preserve"><value>外部カメラを選ぶと、この門口機はその映像を使います</value></data>
+  <data name="settings_caps_override_invalid" xml:space="preserve"><value>JSON オブジェクトを入力するか、空欄にしてください。</value></data>
+  <data name="settings_caps_override_native" xml:space="preserve"><value>端末が報告する機能を置き換えます。空欄にすると端末が測定した値を使います。障害調査専用です。</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>情報</value></data>
   <data name="settings_cat_advanced" xml:space="preserve"><value>詳細</value></data>
   <data name="settings_cat_backup" xml:space="preserve"><value>バックアップ</value></data>
@@ -1821,6 +1824,7 @@ ON</value></data>
   <data name="settings_device_name_length" xml:space="preserve"><value>名前は 1～64 文字で入力してください</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>役割</value></data>
   <data name="settings_device_self_hint" xml:space="preserve"><value>この端末は「端末」の項目で変更します</value></data>
+  <data name="settings_device_settings" xml:space="preserve"><value>端末の設定</value></data>
   <data name="settings_devices_manage" xml:space="preserve"><value>端末の管理と削除</value></data>
   <data name="settings_devices_manage_desc" xml:space="preserve"><value>他の端末の設定と削除は管理画面で行います</value></data>
   <data name="settings_devices_manage_native" xml:space="preserve"><value>ほかの端末の名前・役割・ドアの変更と削除。変更した端末は再起動して反映します</value></data>
@@ -1844,6 +1848,9 @@ ON</value></data>
   <data name="settings_dtmf_quick_reply" xml:space="preserve"><value>定型返信</value></data>
   <data name="settings_dtmf_reply" xml:space="preserve"><value>返信</value></data>
   <data name="settings_dtmf_type" xml:space="preserve"><value>動作</value></data>
+  <data name="settings_editing_device" xml:space="preserve"><value>{0} の設定を編集中</value></data>
+  <data name="settings_editing_device_done" xml:space="preserve"><value>この端末に戻る</value></data>
+  <data name="settings_editing_device_hint" xml:space="preserve"><value>その端末に保存される設定だけを表示しています。端末がオンラインになると反映されます。</value></data>
   <data name="settings_enable" xml:space="preserve"><value>有効にする</value></data>
   <data name="settings_err_admin_required" xml:space="preserve"><value>管理パスワードが必要です</value></data>
   <data name="settings_err_core_unavailable" xml:space="preserve"><value>コアが応答しません</value></data>
@@ -2282,6 +2289,10 @@ ON</value></data>
   <data name="settings_sound_outdoor_call_alert" xml:space="preserve"><value>呼び出し音</value></data>
   <data name="settings_sound_school_chime" xml:space="preserve"><value>学校のチャイム</value></data>
   <data name="settings_sound_title_display" xml:space="preserve"><value>起動音</value></data>
+  <data name="settings_speech_load" xml:space="preserve"><value>キャッシュ状態を表示</value></data>
+  <data name="settings_speech_native" xml:space="preserve"><value>返信を門口で読み上げる声と、生成済み音声の状態です。</value></data>
+  <data name="settings_speech_state_system" xml:space="preserve"><value>システム音声</value></data>
+  <data name="settings_speech_system_hint" xml:space="preserve"><value>返信は門口機のシステム音声で読み上げます。ここでの試聴はこの端末の音声を使うため、声が異なる場合があります。</value></data>
   <data name="settings_srtp_mandatory" xml:space="preserve"><value>必須</value></data>
   <data name="settings_srtp_optional" xml:space="preserve"><value>可能なら使う</value></data>
   <data name="settings_strategy_timeouts" xml:space="preserve"><value>初回 {0} ms・停止判定 {1} ms</value></data>

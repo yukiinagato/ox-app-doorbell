@@ -322,7 +322,7 @@ class HistoryActivity : ShellActivity(), DoorbellCore.Listener {
                                trailing = badge, icon = UiKit.outcomeIcon(outcome)) { select(row) }
         (line.getChildAt(0) as? ImageView)?.setColorFilter(ShellUi.opaque(roles.tint(outcome.role)))
         ((line.getChildAt(1) as? LinearLayout)?.getChildAt(0) as? android.widget.TextView)?.apply {
-            if (row.missed) setTextColor(ShellUi.opaque(palette.danger))
+            if (row.missed) setTextColor(ShellUi.opaque(ShellUi.roleInk(palette.danger, palette)))
             if (unread) setTypeface(typeface, android.graphics.Typeface.BOLD)
             maxLines = 2
         }

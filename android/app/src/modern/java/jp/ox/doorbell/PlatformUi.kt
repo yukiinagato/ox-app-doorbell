@@ -124,12 +124,9 @@ internal object PlatformUi {
         intArrayOf(checked, unchecked),
     )
 
-    /** A colour used as ink on the surface: Core's accent when it reads there, else primary. */
-    private fun inkOnSurface(context: Context, rgb: Int): Int {
-        val surface = rgb(context, R.attr.colorSurface)
-        return if (UiStylePolicy.contrast(rgb and 0xffffff, surface) >= 3.0) opaque(rgb)
-        else argb(context, R.attr.colorPrimary)
-    }
+    /** A role colour used as text or an outline on the surface: at least 4.5:1 there. */
+    private fun inkOnSurface(context: Context, rgb: Int): Int =
+        opaque(ColorRoles.asText(rgb, rgb(context, R.attr.colorSurface)))
 
     private fun dp(context: Context, value: Int): Int =
         (value * context.resources.displayMetrics.density + 0.5f).toInt()

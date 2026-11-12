@@ -1689,6 +1689,7 @@
 "settings.appearance" = "外观";
 "settings.appearance_auto_schedule" = "按时间切换";
 "settings.appearance_auto_system" = "跟随设备设置";
+"settings.appearance_cluster" = "外观（所有设备的默认值）";
 "settings.appearance_dark" = "深色";
 "settings.appearance_dark_from" = "深色开始时间";
 "settings.appearance_here" = "本设备的外观";
@@ -1700,6 +1701,7 @@
 "settings.appearance_system" = "跟随系统";
 "settings.asset_delete_in_use" = "%@ 正被 %@ 使用。要删除吗？";
 "settings.asset_limits" = "JPEG、PNG、MP3 或 WAV，每个最大 3 MB";
+"settings.asset_not_here" = "尚未同步到本设备";
 "settings.asset_used" = "使用中：%@";
 "settings.assets" = "素材（图片、音频）";
 "settings.assets_desc" = "上传与分发文件";
@@ -1748,6 +1750,8 @@
 "settings.cam_source" = "视频来源";
 "settings.cam_source_builtin" = "内置摄像头";
 "settings.cam_source_desc" = "选择外部摄像头后，此门口机使用其视频";
+"settings.caps_override_invalid" = "请输入 JSON 对象，或留空。";
+"settings.caps_override_native" = "替换设备上报的能力。留空则使用设备实测的值。仅用于排查故障。";
 "settings.cat_about" = "关于";
 "settings.cat_advanced" = "高级";
 "settings.cat_backup" = "备份";
@@ -1788,6 +1792,7 @@
 "settings.codec_h264" = "H.264";
 "settings.codec_mjpeg" = "MJPEG";
 "settings.color_pick" = "选择颜色…";
+"settings.colour_clear" = "恢复自动";
 "settings.configured" = "已设置";
 "settings.contrast_warning" = "可能不易阅读（%@:1）";
 "settings.core_version" = "核心版本";
@@ -1808,6 +1813,7 @@
 "settings.device_name_length" = "名称请输入 1 至 64 个字符";
 "settings.device_role" = "角色";
 "settings.device_self_hint" = "本设备请在“设备”中更改";
+"settings.device_settings" = "设备设置";
 "settings.devices_manage" = "管理和移除设备";
 "settings.devices_manage_desc" = "其他设备的设置与移除请在网页管理中进行";
 "settings.devices_manage_native" = "重命名、更改角色或门，或移除其他设备。更改的设备会重启以生效";
@@ -1831,6 +1837,9 @@
 "settings.dtmf_quick_reply" = "快捷回复";
 "settings.dtmf_reply" = "回复";
 "settings.dtmf_type" = "动作";
+"settings.editing_device" = "正在编辑 %@ 的设置";
+"settings.editing_device_done" = "返回本设备";
+"settings.editing_device_hint" = "仅显示保存在该设备上的设置。设备在线后生效。";
 "settings.enable" = "启用";
 "settings.err_admin_required" = "需要管理密码";
 "settings.err_core_unavailable" = "核心无响应";
@@ -2269,6 +2278,10 @@
 "settings.sound_outdoor_call_alert" = "呼叫提示音";
 "settings.sound_school_chime" = "学校铃声";
 "settings.sound_title_display" = "启动提示音";
+"settings.speech_load" = "显示缓存状态";
+"settings.speech_native" = "在门口朗读回复所用的声音，以及已生成音频的状态。";
+"settings.speech_state_system" = "系统语音";
+"settings.speech_system_hint" = "回复由门口机的系统语音朗读。在此试听使用本设备的语音，声音可能不同。";
 "settings.srtp_mandatory" = "必须";
 "settings.srtp_optional" = "可选";
 "settings.strategy_timeouts" = "首帧 %@ 毫秒 · 卡顿 %@ 毫秒";
@@ -2328,6 +2341,8 @@
 "settings.ui_font_scale" = "文字倍率（0.75–2）";
 "settings.ui_foreground" = "文字颜色";
 "settings.ui_lang" = "显示语言";
+"settings.ui_overrides" = "界面元素覆盖（本设备）";
+"settings.ui_overrides_note" = "留空则恢复默认。颜色格式为 #RRGGBB";
 "settings.ui_radius" = "圆角（0–64）";
 "settings.ui_scale" = "大小倍率（0.75–2）";
 "settings.unit_fps" = "%@ fps";
@@ -2361,6 +2376,7 @@
 "settings.visitor_layout_standard" = "標準";
 "settings.volume_call" = "铃声音量";
 "settings.volume_call_default" = "铃声音量";
+"settings.volume_defaults" = "音量默认值（所有设备）";
 "settings.volume_idle" = "常规音量";
 "settings.volume_idle_default" = "常规音量";
 "settings.volume_inherit" = "使用集群默认值";

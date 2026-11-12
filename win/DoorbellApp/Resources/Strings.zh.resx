@@ -1712,6 +1712,7 @@
   <data name="settings_appearance_system" xml:space="preserve"><value>跟随系统</value></data>
   <data name="settings_asset_delete_in_use" xml:space="preserve"><value>{0} 正被 {1} 使用。要删除吗？</value></data>
   <data name="settings_asset_limits" xml:space="preserve"><value>JPEG、PNG、MP3 或 WAV，每个最大 3 MB</value></data>
+  <data name="settings_asset_not_here" xml:space="preserve"><value>尚未同步到本设备</value></data>
   <data name="settings_asset_used" xml:space="preserve"><value>使用中：{0}</value></data>
   <data name="settings_assets" xml:space="preserve"><value>素材（图片、音频）</value></data>
   <data name="settings_assets_desc" xml:space="preserve"><value>上传与分发文件</value></data>
@@ -1760,6 +1761,8 @@
   <data name="settings_cam_source" xml:space="preserve"><value>视频来源</value></data>
   <data name="settings_cam_source_builtin" xml:space="preserve"><value>内置摄像头</value></data>
   <data name="settings_cam_source_desc" xml:space="preserve"><value>选择外部摄像头后，此门口机使用其视频</value></data>
+  <data name="settings_caps_override_invalid" xml:space="preserve"><value>请输入 JSON 对象，或留空。</value></data>
+  <data name="settings_caps_override_native" xml:space="preserve"><value>替换设备上报的能力。留空则使用设备实测的值。仅用于排查故障。</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>关于</value></data>
   <data name="settings_cat_advanced" xml:space="preserve"><value>高级</value></data>
   <data name="settings_cat_backup" xml:space="preserve"><value>备份</value></data>
@@ -1821,6 +1824,7 @@
   <data name="settings_device_name_length" xml:space="preserve"><value>名称请输入 1 至 64 个字符</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>角色</value></data>
   <data name="settings_device_self_hint" xml:space="preserve"><value>本设备请在“设备”中更改</value></data>
+  <data name="settings_device_settings" xml:space="preserve"><value>设备设置</value></data>
   <data name="settings_devices_manage" xml:space="preserve"><value>管理和移除设备</value></data>
   <data name="settings_devices_manage_desc" xml:space="preserve"><value>其他设备的设置与移除请在网页管理中进行</value></data>
   <data name="settings_devices_manage_native" xml:space="preserve"><value>重命名、更改角色或门，或移除其他设备。更改的设备会重启以生效</value></data>
@@ -1844,6 +1848,9 @@
   <data name="settings_dtmf_quick_reply" xml:space="preserve"><value>快捷回复</value></data>
   <data name="settings_dtmf_reply" xml:space="preserve"><value>回复</value></data>
   <data name="settings_dtmf_type" xml:space="preserve"><value>动作</value></data>
+  <data name="settings_editing_device" xml:space="preserve"><value>正在编辑 {0} 的设置</value></data>
+  <data name="settings_editing_device_done" xml:space="preserve"><value>返回本设备</value></data>
+  <data name="settings_editing_device_hint" xml:space="preserve"><value>仅显示保存在该设备上的设置。设备在线后生效。</value></data>
   <data name="settings_enable" xml:space="preserve"><value>启用</value></data>
   <data name="settings_err_admin_required" xml:space="preserve"><value>需要管理密码</value></data>
   <data name="settings_err_core_unavailable" xml:space="preserve"><value>核心无响应</value></data>
@@ -2282,6 +2289,10 @@
   <data name="settings_sound_outdoor_call_alert" xml:space="preserve"><value>呼叫提示音</value></data>
   <data name="settings_sound_school_chime" xml:space="preserve"><value>学校铃声</value></data>
   <data name="settings_sound_title_display" xml:space="preserve"><value>启动提示音</value></data>
+  <data name="settings_speech_load" xml:space="preserve"><value>显示缓存状态</value></data>
+  <data name="settings_speech_native" xml:space="preserve"><value>在门口朗读回复所用的声音，以及已生成音频的状态。</value></data>
+  <data name="settings_speech_state_system" xml:space="preserve"><value>系统语音</value></data>
+  <data name="settings_speech_system_hint" xml:space="preserve"><value>回复由门口机的系统语音朗读。在此试听使用本设备的语音，声音可能不同。</value></data>
   <data name="settings_srtp_mandatory" xml:space="preserve"><value>必须</value></data>
   <data name="settings_srtp_optional" xml:space="preserve"><value>可选</value></data>
   <data name="settings_strategy_timeouts" xml:space="preserve"><value>首帧 {0} 毫秒 · 卡顿 {1} 毫秒</value></data>

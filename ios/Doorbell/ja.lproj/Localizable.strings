@@ -1689,6 +1689,7 @@
 "settings.appearance" = "外観";
 "settings.appearance_auto_schedule" = "時刻で切り替える";
 "settings.appearance_auto_system" = "端末の設定に合わせる";
+"settings.appearance_cluster" = "外観（全端末の既定）";
 "settings.appearance_dark" = "ダーク";
 "settings.appearance_dark_from" = "ダークにする時刻";
 "settings.appearance_here" = "この端末の外観";
@@ -1700,6 +1701,7 @@
 "settings.appearance_system" = "システムに合わせる";
 "settings.asset_delete_in_use" = "%@ は %@ で使われています。削除しますか？";
 "settings.asset_limits" = "JPEG・PNG・MP3・WAV、1 ファイル 3 MB まで";
+"settings.asset_not_here" = "この端末にはまだ同期されていません";
 "settings.asset_used" = "使用中: %@";
 "settings.assets" = "素材 (画像・音声)";
 "settings.assets_desc" = "ファイルのアップロードと配布";
@@ -1748,6 +1750,8 @@
 "settings.cam_source" = "映像の入力元";
 "settings.cam_source_builtin" = "内蔵カメラ";
 "settings.cam_source_desc" = "外部カメラを選ぶと、この門口機はその映像を使います";
+"settings.caps_override_invalid" = "JSON オブジェクトを入力するか、空欄にしてください。";
+"settings.caps_override_native" = "端末が報告する機能を置き換えます。空欄にすると端末が測定した値を使います。障害調査専用です。";
 "settings.cat_about" = "情報";
 "settings.cat_advanced" = "詳細";
 "settings.cat_backup" = "バックアップ";
@@ -1788,6 +1792,7 @@
 "settings.codec_h264" = "H.264";
 "settings.codec_mjpeg" = "MJPEG";
 "settings.color_pick" = "色を選ぶ…";
+"settings.colour_clear" = "自動に戻す";
 "settings.configured" = "設定済み";
 "settings.contrast_warning" = "読みにくい可能性があります (%@:1)";
 "settings.core_version" = "コアのバージョン";
@@ -1808,6 +1813,7 @@
 "settings.device_name_length" = "名前は 1～64 文字で入力してください";
 "settings.device_role" = "役割";
 "settings.device_self_hint" = "この端末は「端末」の項目で変更します";
+"settings.device_settings" = "端末の設定";
 "settings.devices_manage" = "端末の管理と削除";
 "settings.devices_manage_desc" = "他の端末の設定と削除は管理画面で行います";
 "settings.devices_manage_native" = "ほかの端末の名前・役割・ドアの変更と削除。変更した端末は再起動して反映します";
@@ -1831,6 +1837,9 @@
 "settings.dtmf_quick_reply" = "定型返信";
 "settings.dtmf_reply" = "返信";
 "settings.dtmf_type" = "動作";
+"settings.editing_device" = "%@ の設定を編集中";
+"settings.editing_device_done" = "この端末に戻る";
+"settings.editing_device_hint" = "その端末に保存される設定だけを表示しています。端末がオンラインになると反映されます。";
 "settings.enable" = "有効にする";
 "settings.err_admin_required" = "管理パスワードが必要です";
 "settings.err_core_unavailable" = "コアが応答しません";
@@ -2269,6 +2278,10 @@
 "settings.sound_outdoor_call_alert" = "呼び出し音";
 "settings.sound_school_chime" = "学校のチャイム";
 "settings.sound_title_display" = "起動音";
+"settings.speech_load" = "キャッシュ状態を表示";
+"settings.speech_native" = "返信を門口で読み上げる声と、生成済み音声の状態です。";
+"settings.speech_state_system" = "システム音声";
+"settings.speech_system_hint" = "返信は門口機のシステム音声で読み上げます。ここでの試聴はこの端末の音声を使うため、声が異なる場合があります。";
 "settings.srtp_mandatory" = "必須";
 "settings.srtp_optional" = "可能なら使う";
 "settings.strategy_timeouts" = "初回 %@ ms・停止判定 %@ ms";
@@ -2328,6 +2341,8 @@
 "settings.ui_font_scale" = "文字の倍率 (0.75–2)";
 "settings.ui_foreground" = "文字色";
 "settings.ui_lang" = "表示言語";
+"settings.ui_overrides" = "UI 要素の上書き（この端末）";
+"settings.ui_overrides_note" = "空欄にすると既定に戻ります。色は #RRGGBB";
 "settings.ui_radius" = "角の丸み (0–64)";
 "settings.ui_scale" = "大きさの倍率 (0.75–2)";
 "settings.unit_fps" = "%@ fps";
@@ -2361,6 +2376,7 @@
 "settings.visitor_layout_standard" = "標準";
 "settings.volume_call" = "呼出音量";
 "settings.volume_call_default" = "呼出音量";
+"settings.volume_defaults" = "音量の既定値（全端末）";
 "settings.volume_idle" = "通常音量";
 "settings.volume_idle_default" = "通常音量";
 "settings.volume_inherit" = "クラスタの既定に合わせる";

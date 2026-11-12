@@ -1698,6 +1698,7 @@ On</string>
     <string name="settings_appearance">Appearance</string>
     <string name="settings_appearance_auto_schedule">Switch by time of day</string>
     <string name="settings_appearance_auto_system">Follow the device setting</string>
+    <string name="settings_appearance_cluster">Appearance (default for all devices)</string>
     <string name="settings_appearance_dark">Dark</string>
     <string name="settings_appearance_dark_from">Dark from</string>
     <string name="settings_appearance_here">Appearance on this device</string>
@@ -1709,6 +1710,7 @@ On</string>
     <string name="settings_appearance_system">Follow the system</string>
     <string name="settings_asset_delete_in_use">%1$s is used by %2$s. Delete it?</string>
     <string name="settings_asset_limits">JPEG, PNG, MP3 or WAV, up to 3 MB each</string>
+    <string name="settings_asset_not_here">Not on this device yet</string>
     <string name="settings_asset_used">Used by %1$s</string>
     <string name="settings_assets">Assets (images, audio)</string>
     <string name="settings_assets_desc">Uploading and distributing files</string>
@@ -1757,6 +1759,8 @@ On</string>
     <string name="settings_cam_source">Video source</string>
     <string name="settings_cam_source_builtin">Built-in camera</string>
     <string name="settings_cam_source_desc">With an external camera selected, this door station uses its video</string>
+    <string name="settings_caps_override_invalid">Enter a JSON object, or leave it empty.</string>
+    <string name="settings_caps_override_native">Replaces what the device reports it can do. Leave it empty to use what the device measured. For troubleshooting only.</string>
     <string name="settings_cat_about">About</string>
     <string name="settings_cat_advanced">Advanced</string>
     <string name="settings_cat_backup">Backup</string>
@@ -1797,6 +1801,7 @@ On</string>
     <string name="settings_codec_h264">H.264</string>
     <string name="settings_codec_mjpeg">MJPEG</string>
     <string name="settings_color_pick">Pick…</string>
+    <string name="settings_colour_clear">Use automatic</string>
     <string name="settings_configured">Configured</string>
     <string name="settings_contrast_warning">This may be hard to read (%1$s:1)</string>
     <string name="settings_core_version">Core version</string>
@@ -1817,6 +1822,7 @@ On</string>
     <string name="settings_device_name_length">Use a name of 1 to 64 characters</string>
     <string name="settings_device_role">Role</string>
     <string name="settings_device_self_hint">Change this device under Device</string>
+    <string name="settings_device_settings">Device settings</string>
     <string name="settings_devices_manage">Manage and remove devices</string>
     <string name="settings_devices_manage_desc">Other devices\' settings and removal are in the web admin</string>
     <string name="settings_devices_manage_native">Rename, change role or door, or remove other devices. A changed device restarts to apply it</string>
@@ -1840,6 +1846,9 @@ On</string>
     <string name="settings_dtmf_quick_reply">Quick reply</string>
     <string name="settings_dtmf_reply">Reply</string>
     <string name="settings_dtmf_type">Action</string>
+    <string name="settings_editing_device">Editing the settings of %1$s</string>
+    <string name="settings_editing_device_done">Back to this device</string>
+    <string name="settings_editing_device_hint">Only the settings stored for that device are shown. It applies them when it is online.</string>
     <string name="settings_enable">Enable</string>
     <string name="settings_err_admin_required">The admin password is required</string>
     <string name="settings_err_core_unavailable">The core is not responding</string>
@@ -2278,6 +2287,10 @@ On</string>
     <string name="settings_sound_outdoor_call_alert">Call alert</string>
     <string name="settings_sound_school_chime">School chime</string>
     <string name="settings_sound_title_display">Startup tone</string>
+    <string name="settings_speech_load">Show cache status</string>
+    <string name="settings_speech_native">The voice that reads a reply aloud at the door, and the state of the generated audio.</string>
+    <string name="settings_speech_state_system">System voice</string>
+    <string name="settings_speech_system_hint">Replies are read by the door station\'s system voice. Listening here uses this device\'s voice, which may sound different.</string>
     <string name="settings_srtp_mandatory">Mandatory</string>
     <string name="settings_srtp_optional">Optional</string>
     <string name="settings_strategy_timeouts">First frame %1$s ms · stall %2$s ms</string>
@@ -2337,6 +2350,8 @@ On</string>
     <string name="settings_ui_font_scale">Text scale (0.75–2)</string>
     <string name="settings_ui_foreground">Text colour</string>
     <string name="settings_ui_lang">Display language</string>
+    <string name="settings_ui_overrides">UI element overrides (this device)</string>
+    <string name="settings_ui_overrides_note">A blank field returns to the default. Colours are #RRGGBB</string>
     <string name="settings_ui_radius">Corner radius (0–64)</string>
     <string name="settings_ui_scale">Size scale (0.75–2)</string>
     <string name="settings_unit_fps">%1$s fps</string>
@@ -2370,6 +2385,7 @@ On</string>
     <string name="settings_visitor_layout_standard">Standard</string>
     <string name="settings_volume_call">Ring volume</string>
     <string name="settings_volume_call_default">Ring volume</string>
+    <string name="settings_volume_defaults">Volume defaults (all devices)</string>
     <string name="settings_volume_idle">General volume</string>
     <string name="settings_volume_idle_default">General volume</string>
     <string name="settings_volume_inherit">Use the cluster default</string>

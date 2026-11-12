@@ -1698,6 +1698,7 @@ ON</string>
     <string name="settings_appearance">外観</string>
     <string name="settings_appearance_auto_schedule">時刻で切り替える</string>
     <string name="settings_appearance_auto_system">端末の設定に合わせる</string>
+    <string name="settings_appearance_cluster">外観（全端末の既定）</string>
     <string name="settings_appearance_dark">ダーク</string>
     <string name="settings_appearance_dark_from">ダークにする時刻</string>
     <string name="settings_appearance_here">この端末の外観</string>
@@ -1709,6 +1710,7 @@ ON</string>
     <string name="settings_appearance_system">システムに合わせる</string>
     <string name="settings_asset_delete_in_use">%1$s は %2$s で使われています。削除しますか？</string>
     <string name="settings_asset_limits">JPEG・PNG・MP3・WAV、1 ファイル 3 MB まで</string>
+    <string name="settings_asset_not_here">この端末にはまだ同期されていません</string>
     <string name="settings_asset_used">使用中: %1$s</string>
     <string name="settings_assets">素材 (画像・音声)</string>
     <string name="settings_assets_desc">ファイルのアップロードと配布</string>
@@ -1757,6 +1759,8 @@ ON</string>
     <string name="settings_cam_source">映像の入力元</string>
     <string name="settings_cam_source_builtin">内蔵カメラ</string>
     <string name="settings_cam_source_desc">外部カメラを選ぶと、この門口機はその映像を使います</string>
+    <string name="settings_caps_override_invalid">JSON オブジェクトを入力するか、空欄にしてください。</string>
+    <string name="settings_caps_override_native">端末が報告する機能を置き換えます。空欄にすると端末が測定した値を使います。障害調査専用です。</string>
     <string name="settings_cat_about">情報</string>
     <string name="settings_cat_advanced">詳細</string>
     <string name="settings_cat_backup">バックアップ</string>
@@ -1797,6 +1801,7 @@ ON</string>
     <string name="settings_codec_h264">H.264</string>
     <string name="settings_codec_mjpeg">MJPEG</string>
     <string name="settings_color_pick">色を選ぶ…</string>
+    <string name="settings_colour_clear">自動に戻す</string>
     <string name="settings_configured">設定済み</string>
     <string name="settings_contrast_warning">読みにくい可能性があります (%1$s:1)</string>
     <string name="settings_core_version">コアのバージョン</string>
@@ -1817,6 +1822,7 @@ ON</string>
     <string name="settings_device_name_length">名前は 1～64 文字で入力してください</string>
     <string name="settings_device_role">役割</string>
     <string name="settings_device_self_hint">この端末は「端末」の項目で変更します</string>
+    <string name="settings_device_settings">端末の設定</string>
     <string name="settings_devices_manage">端末の管理と削除</string>
     <string name="settings_devices_manage_desc">他の端末の設定と削除は管理画面で行います</string>
     <string name="settings_devices_manage_native">ほかの端末の名前・役割・ドアの変更と削除。変更した端末は再起動して反映します</string>
@@ -1840,6 +1846,9 @@ ON</string>
     <string name="settings_dtmf_quick_reply">定型返信</string>
     <string name="settings_dtmf_reply">返信</string>
     <string name="settings_dtmf_type">動作</string>
+    <string name="settings_editing_device">%1$s の設定を編集中</string>
+    <string name="settings_editing_device_done">この端末に戻る</string>
+    <string name="settings_editing_device_hint">その端末に保存される設定だけを表示しています。端末がオンラインになると反映されます。</string>
     <string name="settings_enable">有効にする</string>
     <string name="settings_err_admin_required">管理パスワードが必要です</string>
     <string name="settings_err_core_unavailable">コアが応答しません</string>
@@ -2278,6 +2287,10 @@ ON</string>
     <string name="settings_sound_outdoor_call_alert">呼び出し音</string>
     <string name="settings_sound_school_chime">学校のチャイム</string>
     <string name="settings_sound_title_display">起動音</string>
+    <string name="settings_speech_load">キャッシュ状態を表示</string>
+    <string name="settings_speech_native">返信を門口で読み上げる声と、生成済み音声の状態です。</string>
+    <string name="settings_speech_state_system">システム音声</string>
+    <string name="settings_speech_system_hint">返信は門口機のシステム音声で読み上げます。ここでの試聴はこの端末の音声を使うため、声が異なる場合があります。</string>
     <string name="settings_srtp_mandatory">必須</string>
     <string name="settings_srtp_optional">可能なら使う</string>
     <string name="settings_strategy_timeouts">初回 %1$s ms・停止判定 %2$s ms</string>
@@ -2337,6 +2350,8 @@ ON</string>
     <string name="settings_ui_font_scale">文字の倍率 (0.75–2)</string>
     <string name="settings_ui_foreground">文字色</string>
     <string name="settings_ui_lang">表示言語</string>
+    <string name="settings_ui_overrides">UI 要素の上書き（この端末）</string>
+    <string name="settings_ui_overrides_note">空欄にすると既定に戻ります。色は #RRGGBB</string>
     <string name="settings_ui_radius">角の丸み (0–64)</string>
     <string name="settings_ui_scale">大きさの倍率 (0.75–2)</string>
     <string name="settings_unit_fps">%1$s fps</string>
@@ -2370,6 +2385,7 @@ ON</string>
     <string name="settings_visitor_layout_standard">標準</string>
     <string name="settings_volume_call">呼出音量</string>
     <string name="settings_volume_call_default">呼出音量</string>
+    <string name="settings_volume_defaults">音量の既定値（全端末）</string>
     <string name="settings_volume_idle">通常音量</string>
     <string name="settings_volume_idle_default">通常音量</string>
     <string name="settings_volume_inherit">クラスタの既定に合わせる</string>

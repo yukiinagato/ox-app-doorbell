@@ -63,6 +63,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
     internal var adminSession: AdminSession? = null
 
     private val native by lazy { NativeSettingsSections(this) }
+    private val parity by lazy { SettingsParitySections(this) }
 
     /** Pending file pickers / document creators, by request code. */
     private val resultHandlers = HashMap<Int, (Intent?) -> Unit>()
@@ -419,7 +420,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
     internal fun destructiveRow(title: String, note: String, onClick: () -> Unit): View =
         ShellUi.row(this, palette, title, note = note, enabled = !readOnly) { onClick() }.apply {
             ((getChildAt(0) as? LinearLayout)?.getChildAt(0) as? TextView)
-                ?.setTextColor(ShellUi.opaque(if (readOnly) palette.muted else palette.danger))
+                ?.setTextColor(ShellUi.opaque(if (readOnly) palette.muted else ShellUi.roleInk(palette.danger, palette)))
         }
 
     private fun renderCategory(category: SettingsCategory) {
@@ -427,15 +428,21 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             SettingsCategory.DEVICE -> {
                 sectionThisDevice()
                 specSection(category)
+                parity.doorStation()
+                parity.uiOverrides()
             }
             SettingsCategory.SOUND -> {
                 sectionVolume()
+                parity.volumeDefaults()
                 specSection(category)
                 native.soundLibrary()
             }
             SettingsCategory.DISPLAY -> {
                 specSection(category)
                 sectionAppearance()
+                parity.clusterAppearance()
+                parity.idleScreen()
+                parity.themeExtras()
                 native.wording()
             }
             SettingsCategory.CALLS -> {
@@ -470,6 +477,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
                 native.devices()
                 native.panels()
                 native.transfer()
+                parity.advanced()
                 sectionHistory()
             }
             SettingsCategory.ABOUT -> {
@@ -910,7 +918,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         PairingModel.upgradeRejoinReason(pairing)?.let { reason ->
             card.row(rowNote(texts.t("pair.upgrade_rejoin", R.string.pair_upgrade_rejoin) +
                 " · " + texts.t("pair.err_detail", R.string.pair_err_detail, reason)).apply {
-                setTextColor(ShellUi.opaque(palette.danger))
+                setTextColor(ShellUi.opaque(ShellUi.roleInk(palette.danger, palette)))
             })
         }
         val security = PairingModel.security(pairing)
@@ -1125,6 +1133,24 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             onCommit = { value ->
                 val json = SettingsModel.encodeInt(spec, value.toString())
                 if (json != null) write(key, json) { ok -> if (!ok) slider?.value = current }
+            },
+        )
+        return sliderBlock(title, note, readout, slider.view)
+    }
+
+    /** A slider over one integer leaf; writes once, when the finger lifts. */
+    internal fun intSliderRow(title: String, key: String, min: Int, max: Int, current: Int,
+                              note: String = ""): View {
+        val readout = ShellUi.label(this, current.coerceIn(min, max).toString(), TextRole.BODY,
+                                    palette.muted)
+        var slider: SliderHandle? = null
+        slider = PlatformUi.slider(
+            this, min, max, current, !readOnly,
+            onChange = { readout.text = it.toString() },
+            onCommit = { value ->
+                write(key, value.coerceIn(min, max).toString()) { ok ->
+                    if (!ok) slider?.value = current
+                }
             },
         )
         return sliderBlock(title, note, readout, slider.view)
@@ -1589,42 +1615,108 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
     }
 
     /**
-     * A colour field never rejects the operator's value; it saves and shows the advisory WCAG
-     * warning next to it when the contrast falls short (§5.2).
+     * A colour leaf, edited in a picker: a swatch, red/green/blue sliders and the hex value. The
+     * operator's colour is never rejected; the advisory WCAG warning is shown beside it when the
+     * contrast falls short (§5.2). [clearable] adds "use automatic", which deletes the leaf.
      */
-    private fun colourRow(title: String, key: String, current: String): View {
+    internal fun colourRow(title: String, key: String, current: String, note: String = "",
+                           clearable: Boolean = false): View {
         val warning = contrastWarning(current)
-        return ShellUi.row(this, palette, title, current, warning, enabled = !readOnly) {
-            val field = PlatformUi.field(this, "#RRGGBB", current)
-            val advice = ShellUi.label(this, warning, TextRole.SUPPORTING, palette.warning).apply {
-                setPadding(0, ShellUi.dp(this@SettingsActivity, 8), 0, 0)
-            }
-            val container = dialogField(field, advice)
-            field.input.addTextChangedListener(object : TextWatcher {
-                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun afterTextChanged(s: Editable?) {
-                    advice.text = contrastWarning(s?.toString().orEmpty())
-                }
-            })
-            ShellDialogBuilder(this)
-                .setTitle(title)
-                .setView(container)
-                .setPositiveButton(texts.t("admin.save", R.string.admin_save)) { _, _ ->
-                    val value = field.text.trim()
-                    if (UiContrast.parseRgb(value) == null) {
-                        toast(texts.t("admin.save_failed", R.string.admin_save_failed))
-                        return@setPositiveButton
-                    }
-                    write(key, JSONObject.quote(value)) { }
-                }
-                .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
-                .show()
+        // An image view over a sized drawable: a bare View under WRAP_CONTENT takes all the room.
+        val side = ShellUi.dp(this, 32)
+        val swatch = android.widget.ImageView(this).apply {
+            setImageDrawable(ShellUi.rounded(
+                this@SettingsActivity, UiContrast.parseRgb(current) ?: palette.surfaceAlt, 6,
+                palette.line,
+            ).apply { setSize(side, side) })
+            importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }
+        return ShellUi.row(
+            this, palette, title,
+            current.ifEmpty { texts.t("settings.value_unset", R.string.settings_value_unset) },
+            listOf(note, warning).filter { it.isNotEmpty() }.joinToString("\n"),
+            enabled = !readOnly, trailing = swatch,
+        ) { colourPicker(title, key, current, clearable) }
+    }
+
+    private fun colourPicker(title: String, key: String, current: String, clearable: Boolean) {
+        var rgb = UiContrast.parseRgb(current) ?: 0x808080
+        val field = PlatformUi.field(this, "#RRGGBB", if (current.isEmpty()) "" else current)
+        val preview = View(this)
+        val advice = ShellUi.label(this, "", TextRole.SUPPORTING, palette.warning)
+        val sliders = ArrayList<SliderHandle>()
+        var syncing = false
+        fun show(fromSliders: Boolean) {
+            preview.background = ShellUi.rounded(this, rgb, 12, palette.line)
+            advice.text = contrastWarning(String.format(Locale.US, "#%06X", rgb))
+            syncing = true
+            if (fromSliders) field.text = String.format(Locale.US, "#%06X", rgb)
+            else for ((index, slider) in sliders.withIndex())
+                slider.value = rgb ushr (16 - index * 8) and 0xff
+            syncing = false
+        }
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = ShellUi.dp(this@SettingsActivity, 24)
+            setPadding(pad, ShellUi.dp(this@SettingsActivity, 8), pad, 0)
+        }
+        box.addView(preview, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(this, 56)))
+        for ((index, name) in listOf("R", "G", "B").withIndex()) {
+            val shift = 16 - index * 8
+            val slider = PlatformUi.slider(
+                this, 0, 255, rgb ushr shift and 0xff, true,
+                onChange = { value ->
+                    if (!syncing) {
+                        rgb = (rgb and (0xff shl shift).inv()) or (value shl shift)
+                        show(fromSliders = true)
+                    }
+                },
+                onCommit = { },
+            )
+            sliders.add(slider)
+            val line = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+            line.addView(ShellUi.label(this, name, TextRole.LABEL),
+                         LinearLayout.LayoutParams(ShellUi.dp(this, 24),
+                                                   ViewGroup.LayoutParams.WRAP_CONTENT))
+            line.addView(slider.view, LinearLayout.LayoutParams(
+                0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            box.addView(line, ShellUi.matchWrap())
+        }
+        box.addView(field.view, ShellUi.matchWrap().apply {
+            topMargin = ShellUi.dp(this@SettingsActivity, 8)
+        })
+        box.addView(advice, ShellUi.matchWrap())
+        field.input.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: Editable?) {
+                if (syncing) return
+                UiContrast.parseRgb(s?.toString().orEmpty().trim())?.let {
+                    rgb = it
+                    show(fromSliders = false)
+                }
+            }
+        })
+        show(fromSliders = false)
+        val builder = ShellDialogBuilder(this)
+            .setTitle(title)
+            .setView(ScrollView(this).apply { addView(box) })
+            .setPositiveButton(texts.t("admin.save", R.string.admin_save)) { _, _ ->
+                write(key, JSONObject.quote(String.format(Locale.US, "#%06X", rgb))) { }
+            }
+            .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+        if (clearable) builder.setNeutralButton(label("settings.colour_clear")) { _, _ ->
+            deleteKey(key)
+        }
+        builder.show()
     }
 
     /** Advisory only: the value is still saved, exactly as the web admin now does. */
-    private fun contrastWarning(value: String): String {
+    internal fun contrastWarning(value: String): String {
         val rgb = UiContrast.parseRgb(value) ?: return ""
         val ink = palette.inkOver(rgb)
         val ratio = UiContrast.contrast(ink, rgb)

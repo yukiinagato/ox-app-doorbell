@@ -113,9 +113,11 @@ internal object ShellUi {
         }
 
     /** The accent as text on the ground, or the plain ink when the accent would not read there. */
-    fun accentInk(palette: Palette): Int =
-        if (UiStylePolicy.contrast(palette.accent, palette.ground) >= 4.5) palette.accent
-        else palette.ink
+    fun accentInk(palette: Palette): Int = ColorRoles.asText(palette.accent, palette.ground)
+
+    /** Any role colour as text or an outline on the ground: at least 4.5:1 in either appearance. */
+    fun roleInk(roleRgb: Int, palette: Palette): Int =
+        ColorRoles.asText(ColorRoles.asText(roleRgb, palette.surfaceAlt), palette.ground)
 
     /** A status chip in semantic colours. */
     fun pill(

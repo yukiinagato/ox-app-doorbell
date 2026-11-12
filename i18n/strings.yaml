@@ -2756,3 +2756,19 @@ settings.raw_absent: { ja: "このキーは設定されていません", en: "Th
 settings.role_tv_fixed: { ja: "Apple TV は常に室内機として動作します", en: "An Apple TV always runs as an indoor panel", zh: "Apple TV 始终作为室内机运行" }
 editor.export_file: { ja: "設定をファイルに書き出す…", en: "Export settings to a file…", zh: "将设置导出到文件…" }
 editor.import_file: { ja: "ファイルから設定を読み込む…", en: "Import settings from a file…", zh: "从文件导入设置…" }
+settings.appearance_cluster: { ja: "外観（全端末の既定）", en: "Appearance (default for all devices)", zh: "外观（所有设备的默认值）" }
+settings.volume_defaults: { ja: "音量の既定値（全端末）", en: "Volume defaults (all devices)", zh: "音量默认值（所有设备）" }
+settings.ui_overrides: { ja: "UI 要素の上書き（この端末）", en: "UI element overrides (this device)", zh: "界面元素覆盖（本设备）" }
+settings.ui_overrides_note: { ja: "空欄にすると既定に戻ります。色は #RRGGBB", en: "A blank field returns to the default. Colours are #RRGGBB", zh: "留空则恢复默认。颜色格式为 #RRGGBB" }
+settings.colour_clear: { ja: "自動に戻す", en: "Use automatic", zh: "恢复自动" }
+settings.speech_native: { ja: "返信を門口で読み上げる声と、生成済み音声の状態です。", en: "The voice that reads a reply aloud at the door, and the state of the generated audio.", zh: "在门口朗读回复所用的声音，以及已生成音频的状态。" }
+settings.speech_system_hint: { ja: "返信は門口機のシステム音声で読み上げます。ここでの試聴はこの端末の音声を使うため、声が異なる場合があります。", en: "Replies are read by the door station's system voice. Listening here uses this device's voice, which may sound different.", zh: "回复由门口机的系统语音朗读。在此试听使用本设备的语音，声音可能不同。" }
+settings.speech_load: { ja: "キャッシュ状態を表示", en: "Show cache status", zh: "显示缓存状态" }
+settings.speech_state_system: { ja: "システム音声", en: "System voice", zh: "系统语音" }
+settings.caps_override_native: { ja: "端末が報告する機能を置き換えます。空欄にすると端末が測定した値を使います。障害調査専用です。", en: "Replaces what the device reports it can do. Leave it empty to use what the device measured. For troubleshooting only.", zh: "替换设备上报的能力。留空则使用设备实测的值。仅用于排查故障。" }
+settings.caps_override_invalid: { ja: "JSON オブジェクトを入力するか、空欄にしてください。", en: "Enter a JSON object, or leave it empty.", zh: "请输入 JSON 对象，或留空。" }
+settings.device_settings: { ja: "端末の設定", en: "Device settings", zh: "设备设置" }
+settings.editing_device: { ja: "{name} の設定を編集中", en: "Editing the settings of {name}", zh: "正在编辑 {name} 的设置" }
+settings.editing_device_hint: { ja: "その端末に保存される設定だけを表示しています。端末がオンラインになると反映されます。", en: "Only the settings stored for that device are shown. It applies them when it is online.", zh: "仅显示保存在该设备上的设置。设备在线后生效。" }
+settings.editing_device_done: { ja: "この端末に戻る", en: "Back to this device", zh: "返回本设备" }
+settings.asset_not_here: { ja: "この端末にはまだ同期されていません", en: "Not on this device yet", zh: "尚未同步到本设备" }

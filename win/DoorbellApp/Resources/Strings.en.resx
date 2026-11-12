@@ -1712,6 +1712,7 @@ On</value></data>
   <data name="settings_appearance_system" xml:space="preserve"><value>Follow the system</value></data>
   <data name="settings_asset_delete_in_use" xml:space="preserve"><value>{0} is used by {1}. Delete it?</value></data>
   <data name="settings_asset_limits" xml:space="preserve"><value>JPEG, PNG, MP3 or WAV, up to 3 MB each</value></data>
+  <data name="settings_asset_not_here" xml:space="preserve"><value>Not on this device yet</value></data>
   <data name="settings_asset_used" xml:space="preserve"><value>Used by {0}</value></data>
   <data name="settings_assets" xml:space="preserve"><value>Assets (images, audio)</value></data>
   <data name="settings_assets_desc" xml:space="preserve"><value>Uploading and distributing files</value></data>
@@ -1760,6 +1761,8 @@ On</value></data>
   <data name="settings_cam_source" xml:space="preserve"><value>Video source</value></data>
   <data name="settings_cam_source_builtin" xml:space="preserve"><value>Built-in camera</value></data>
   <data name="settings_cam_source_desc" xml:space="preserve"><value>With an external camera selected, this door station uses its video</value></data>
+  <data name="settings_caps_override_invalid" xml:space="preserve"><value>Enter a JSON object, or leave it empty.</value></data>
+  <data name="settings_caps_override_native" xml:space="preserve"><value>Replaces what the device reports it can do. Leave it empty to use what the device measured. For troubleshooting only.</value></data>
   <data name="settings_cat_about" xml:space="preserve"><value>About</value></data>
   <data name="settings_cat_advanced" xml:space="preserve"><value>Advanced</value></data>
   <data name="settings_cat_backup" xml:space="preserve"><value>Backup</value></data>
@@ -1821,6 +1824,7 @@ On</value></data>
   <data name="settings_device_name_length" xml:space="preserve"><value>Use a name of 1 to 64 characters</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>Role</value></data>
   <data name="settings_device_self_hint" xml:space="preserve"><value>Change this device under Device</value></data>
+  <data name="settings_device_settings" xml:space="preserve"><value>Device settings</value></data>
   <data name="settings_devices_manage" xml:space="preserve"><value>Manage and remove devices</value></data>
   <data name="settings_devices_manage_desc" xml:space="preserve"><value>Other devices' settings and removal are in the web admin</value></data>
   <data name="settings_devices_manage_native" xml:space="preserve"><value>Rename, change role or door, or remove other devices. A changed device restarts to apply it</value></data>
@@ -1844,6 +1848,9 @@ On</value></data>
   <data name="settings_dtmf_quick_reply" xml:space="preserve"><value>Quick reply</value></data>
   <data name="settings_dtmf_reply" xml:space="preserve"><value>Reply</value></data>
   <data name="settings_dtmf_type" xml:space="preserve"><value>Action</value></data>
+  <data name="settings_editing_device" xml:space="preserve"><value>Editing the settings of {0}</value></data>
+  <data name="settings_editing_device_done" xml:space="preserve"><value>Back to this device</value></data>
+  <data name="settings_editing_device_hint" xml:space="preserve"><value>Only the settings stored for that device are shown. It applies them when it is online.</value></data>
   <data name="settings_enable" xml:space="preserve"><value>Enable</value></data>
   <data name="settings_err_admin_required" xml:space="preserve"><value>The admin password is required</value></data>
   <data name="settings_err_core_unavailable" xml:space="preserve"><value>The core is not responding</value></data>
@@ -2282,6 +2289,10 @@ On</value></data>
   <data name="settings_sound_outdoor_call_alert" xml:space="preserve"><value>Call alert</value></data>
   <data name="settings_sound_school_chime" xml:space="preserve"><value>School chime</value></data>
   <data name="settings_sound_title_display" xml:space="preserve"><value>Startup tone</value></data>
+  <data name="settings_speech_load" xml:space="preserve"><value>Show cache status</value></data>
+  <data name="settings_speech_native" xml:space="preserve"><value>The voice that reads a reply aloud at the door, and the state of the generated audio.</value></data>
+  <data name="settings_speech_state_system" xml:space="preserve"><value>System voice</value></data>
+  <data name="settings_speech_system_hint" xml:space="preserve"><value>Replies are read by the door station's system voice. Listening here uses this device's voice, which may sound different.</value></data>
   <data name="settings_srtp_mandatory" xml:space="preserve"><value>Mandatory</value></data>
   <data name="settings_srtp_optional" xml:space="preserve"><value>Optional</value></data>
   <data name="settings_strategy_timeouts" xml:space="preserve"><value>First frame {0} ms · stall {1} ms</value></data>

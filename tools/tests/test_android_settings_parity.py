@@ -40,6 +40,37 @@ KNOWN_GAPS = {
 }
 
 
+# Keys the Admin builds at run time (per device, per region, per level), which no literal scan
+# can find. Listed once here, by the path under the device's local subtree or the cluster root.
+DYNAMIC_KEYS = [
+    "local.camera.codec", "local.camera.resolution", "local.camera.mjpeg_fps",
+    "local.camera.mjpeg_quality", "local.camera.h264_resolution", "local.camera.h264_fps",
+    "local.camera.h264_bitrate_kbps", "local.camera.device_hint", "local.camera.source_ref",
+    "local.motion.enabled", "local.motion.sensitivity", "local.motion.min_interval_s",
+    "local.visitor_layout", "local.video.playback", "local.video.rotation",
+    "local.display.appearance", "local.theme.call_button_bg", "local.ui.elements",
+    "local.audio.volume", "local.capabilities",
+    "audio.volume.call", "audio.volume.sos", "audio.volume.idle",
+    "display.appearance", "display.appearance_schedule.dark_from",
+    "display.appearance_schedule.light_from",
+    "display.screensaver.enabled", "display.screensaver.mode", "display.screensaver.schedule",
+    "display.screensaver.from", "display.screensaver.to", "display.screensaver.after_s",
+    "display.screensaver.brightness",
+    "display.theme.backdrop.enabled", "display.theme.backdrop.opacity",
+    "display.theme.backdrop.color", "display.theme.ink_override", "display.theme.bg_color",
+    "display.theme.bg_image",
+    "speech.provider", "speech.voice", "speech.rate",
+    "video_playback.global.strategies",
+]
+
+# Dynamic keys with no Android row yet.
+DYNAMIC_GAPS = {
+    "local.capabilities",
+    "speech.provider", "speech.voice", "speech.rate",
+    "video_playback.global.strategies",
+}
+
+
 def i18n_ids():
     ids = set()
     for line in STRINGS.read_text(encoding="utf-8").splitlines():
@@ -76,7 +107,11 @@ def covered(key, sources):
     if (head + ".") in sources and ('"%s"' % leaf) in sources:
         return True
     # val root = "integrations.mqtt" ... "$root.host"
-    return ('"%s"' % head) in sources and ('.%s"' % leaf) in sources
+    if ('"%s"' % head) in sources and ('.%s"' % leaf) in sources:
+        return True
+    # "$local.camera.codec": the path below the device's local subtree.
+    below = key.split(".", 1)[1] if key.startswith("local.") else key
+    return ("." + below + '"') in sources or ("." + below + ".") in sources
 
 
 class AndroidSettingsParity(unittest.TestCase):
@@ -98,6 +133,14 @@ class AndroidSettingsParity(unittest.TestCase):
         stale = sorted(
             gap for gap in KNOWN_GAPS if gap not in keys or covered(gap, sources))
         self.assertEqual([], stale, "Remove closed or vanished gaps from KNOWN_GAPS: %s" % stale)
+
+    def test_dynamic_admin_keys_have_rows_or_are_listed_gaps(self):
+        sources = android_sources()
+        missing = sorted(
+            key for key in DYNAMIC_KEYS if not covered(key, sources) and key not in DYNAMIC_GAPS)
+        self.assertEqual([], missing, "Dynamic Admin keys with no Android row: %s" % missing)
+        stale = sorted(gap for gap in DYNAMIC_GAPS if covered(gap, sources))
+        self.assertEqual([], stale, "Remove closed gaps from DYNAMIC_GAPS: %s" % stale)
 
 
 if __name__ == "__main__":

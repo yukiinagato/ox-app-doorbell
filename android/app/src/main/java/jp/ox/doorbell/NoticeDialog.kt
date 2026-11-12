@@ -181,7 +181,7 @@ internal object NoticeDialog {
         }, ShellUi.matchWrap())
         paintExpiry()
 
-        val status = ShellUi.label(activity, "", TextRole.SUPPORTING, palette.danger).apply {
+        val status = ShellUi.label(activity, "", TextRole.SUPPORTING, ShellUi.roleInk(palette.danger, palette)).apply {
             visibility = View.GONE
             setPadding(0, ShellUi.dp(activity, 8), 0, 0)
         }
@@ -218,7 +218,7 @@ internal object NoticeDialog {
         val ui = Handler(Looper.getMainLooper())
         fun report(view: TextView, message: String, isError: Boolean) {
             view.text = message
-            view.setTextColor(ShellUi.opaque(if (isError) palette.danger else palette.okInk))
+            view.setTextColor(ShellUi.opaque(if (isError) ShellUi.roleInk(palette.danger, palette) else ShellUi.roleInk(palette.positive, palette)))
             view.visibility = View.VISIBLE
         }
 

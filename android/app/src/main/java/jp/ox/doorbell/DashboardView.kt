@@ -371,7 +371,7 @@ internal class DashboardView(
         val missedRow = ShellUi.row(activity, palette, "", icon = R.drawable.ic_tabler_phone_off) {
             HistoryActivity.launch(activity)
         }
-        (missedRow.getChildAt(0) as? ImageView)?.setColorFilter(ShellUi.opaque(palette.danger))
+        (missedRow.getChildAt(0) as? ImageView)?.setColorFilter(ShellUi.opaque(ShellUi.roleInk(palette.danger, palette)))
         missedText = (missedRow.getChildAt(1) as? LinearLayout)?.getChildAt(0) as? TextView
         missedRow.addView(ImageView(activity).apply {
             setImageResource(R.drawable.ic_tabler_chevron_right)

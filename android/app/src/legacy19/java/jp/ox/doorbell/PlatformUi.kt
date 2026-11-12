@@ -127,9 +127,8 @@ internal object PlatformUi {
             }
             ButtonKind.TEXT -> {
                 background?.clearColorFilter()
-                view.setTextColor(opaque(fillRgb?.takeIf {
-                    UiStylePolicy.contrast(it, tokens.ground) >= 3.0
-                } ?: tokens.ink))
+                view.setTextColor(opaque(fillRgb?.let { ColorRoles.asText(it, tokens.ground) }
+                                         ?: tokens.ink))
             }
         }
     }

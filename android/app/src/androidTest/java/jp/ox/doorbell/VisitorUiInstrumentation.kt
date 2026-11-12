@@ -251,6 +251,113 @@ class VisitorUiInstrumentation : Instrumentation() {
                     check(gateway.cancels == 1)
                     capture("no-answer")
                 }
+                case("T35-05 hidden maintenance entry") {
+                    prepare("purpose_first")
+                    val corner = activity.findViewById<View>(R.id.secret_corner)
+                    // Six taps do nothing visible; the visitor screen offers no other way in.
+                    ui { repeat(6) { corner.performClick() } }
+                    settle(10)
+                    check(activity.hasWindowFocus()) { "Fewer than seven taps opened something" }
+                    // The seventh, inside the five-second window, opens the admin password gate.
+                    ui { corner.performClick() }
+                    val deadline = SystemClock.uptimeMillis() + 5000
+                    while (activity.hasWindowFocus() && SystemClock.uptimeMillis() < deadline)
+                        Thread.sleep(50)
+                    check(!activity.hasWindowFocus()) { "Seven taps did not open the admin gate" }
+                    capture("admin-gate")
+                    // The first Back may only close the keyboard the password field raised.
+                    val closed = SystemClock.uptimeMillis() + 8000
+                    while (!activity.hasWindowFocus() && SystemClock.uptimeMillis() < closed) {
+                        uiAutomation.performGlobalAction(
+                            android.accessibilityservice.AccessibilityService.GLOBAL_ACTION_BACK)
+                        Thread.sleep(700)
+                    }
+                    check(activity.hasWindowFocus()) { "The admin gate did not close on Back" }
+                }
+                case("T35-06 live picture zoom gestures") {
+                    val layer = arrayOfNulls<View>(1)
+                    val box = arrayOfNulls<android.widget.FrameLayout>(1)
+                    val zoom = arrayOfNulls<VideoZoom>(1)
+                    ui {
+                        val frame = android.widget.FrameLayout(activity)
+                        val picture = View(activity)
+                        frame.addView(picture, ViewGroup.LayoutParams(600, 400))
+                        (activity.findViewById<View>(R.id.root_view) as ViewGroup)
+                            .addView(frame, ViewGroup.LayoutParams(600, 400))
+                        layer[0] = picture
+                        box[0] = frame
+                        zoom[0] = VideoZoom(picture, frame)
+                    }
+                    val picture = layer[0]!!
+                    val surface = box[0]!!
+                    fun touch(action: Int, at: Long, vararg points: Pair<Float, Float>) {
+                        val properties = Array(points.size) { index ->
+                            MotionEvent.PointerProperties().apply {
+                                id = index
+                                toolType = MotionEvent.TOOL_TYPE_FINGER
+                            }
+                        }
+                        val coords = Array(points.size) { index ->
+                            MotionEvent.PointerCoords().apply {
+                                x = points[index].first
+                                y = points[index].second
+                                pressure = 1f
+                                size = 1f
+                            }
+                        }
+                        val event = MotionEvent.obtain(
+                            0L, at, action, points.size, properties, coords, 0, 0, 1f, 1f, 0, 0,
+                            android.view.InputDevice.SOURCE_TOUCHSCREEN, 0,
+                        )
+                        surface.dispatchTouchEvent(event)
+                        event.recycle()
+                    }
+                    val second = MotionEvent.ACTION_POINTER_DOWN or
+                        (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+                    val secondUp = MotionEvent.ACTION_POINTER_UP or
+                        (1 shl MotionEvent.ACTION_POINTER_INDEX_SHIFT)
+                    // Pinch out: two fingers move apart about the centre.
+                    ui {
+                        var at = SystemClock.uptimeMillis()
+                        touch(MotionEvent.ACTION_DOWN, at, 280f to 200f)
+                        touch(second, at + 10, 280f to 200f, 320f to 200f)
+                        for (step in 1..12) {
+                            at += 20
+                            touch(MotionEvent.ACTION_MOVE, at, (280f - step * 15) to 200f,
+                                  (320f + step * 15) to 200f)
+                        }
+                        touch(secondUp, at + 20, 100f to 200f, 500f to 200f)
+                        touch(MotionEvent.ACTION_UP, at + 40, 100f to 200f)
+                    }
+                    ui {
+                        check(picture.scaleX > 1.5f && picture.scaleX <= 4f) {
+                            "Pinch did not zoom: scale=${picture.scaleX}"
+                        }
+                        check(picture.scaleX == picture.scaleY)
+                    }
+                    // Drag far past the edge: the picture stops where its edge meets the box.
+                    ui {
+                        var at = SystemClock.uptimeMillis() + 1000
+                        touch(MotionEvent.ACTION_DOWN, at, 300f to 200f)
+                        for (step in 1..20) {
+                            at += 20
+                            touch(MotionEvent.ACTION_MOVE, at, (300f + step * 100) to 200f)
+                        }
+                        touch(MotionEvent.ACTION_UP, at + 20, 2300f to 200f)
+                    }
+                    ui {
+                        val limit = 600 * (picture.scaleX - 1f) / 2f
+                        check(picture.translationX > 0f && picture.translationX <= limit + 0.5f) {
+                            "Pan left the picture's edge: ${picture.translationX} > $limit"
+                        }
+                    }
+                    // A door or call change resets to fit.
+                    ui {
+                        zoom[0]!!.reset()
+                        check(picture.scaleX == 1f && picture.translationX == 0f)
+                        (surface.parent as ViewGroup).removeView(surface)
+                    }
+                }
             }
             check(!app.core.isCreated) { "Fixture started Core unexpectedly" }
         } catch (t: Throwable) { failure = t }

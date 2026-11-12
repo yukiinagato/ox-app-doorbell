@@ -25,7 +25,7 @@ internal object ShellAppearance {
     var dark = true
         private set
 
-    /** Core's accent as (fill, ink), or null while Core publishes none. */
+    /** The administrator's accent as (fill, ink), or null to keep the platform's primary. */
     var accent: Pair<Int, Int>? = null
         private set
 
@@ -68,9 +68,15 @@ internal object ShellAppearance {
             status == null && config == null -> dark
             else -> Appearance.resolve(config, nodeId, systemDark(), minuteOfDay).dark
         }
-        val theme = display.theme
-        update(activity, next, if (theme?.callButtonBg != null)
-            CoreDisplays.callButton(theme, 0) else null, accentKnown = status != null)
+        // Only a call-button colour the administrator chose may become the primary role; the
+        // accent Core computes from the wallpaper stays on the door station's Call button.
+        val chosen = UiContrast.parseRgb(
+            SettingsModel.dig(config, "devices.$nodeId.local.theme.call_button_bg")?.toString(),
+        ) ?: UiContrast.parseRgb(
+            SettingsModel.dig(config, "display.theme.call_button_bg")?.toString(),
+        )
+        update(activity, next, ColorRoles.primary(chosen, PlatformUi.tokens(activity).ground),
+               accentKnown = config != null)
         return PlatformUi.tokens(activity)
     }
 

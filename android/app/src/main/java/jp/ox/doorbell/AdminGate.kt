@@ -296,7 +296,7 @@ internal object AdminGate {
         }
 
     private fun errorLabel(activity: Activity): TextView =
-        ShellUi.label(activity, "", TextRole.SUPPORTING, PlatformUi.tokens(activity).danger).apply {
+        ShellUi.label(activity, "", TextRole.SUPPORTING, PlatformUi.tokens(activity).let { ShellUi.roleInk(it.danger, it) }).apply {
             gravity = Gravity.START
             setPadding(0, ShellUi.dp(activity, 4), 0, 0)
             visibility = View.GONE
