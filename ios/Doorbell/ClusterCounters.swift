@@ -119,12 +119,12 @@ final class ClusterCounterView: UIStackView {
         spacing = 5
         alignment = .center
         self.title.text = title
-        self.title.font = .systemFont(ofSize: 11, weight: .semibold)
+        self.title.font = SystemStyle.font(.caption2, weight: .semibold)
         self.title.numberOfLines = 1
         self.title.adjustsFontSizeToFitWidth = true
         self.title.minimumScaleFactor = 0.75
         self.title.textColor = UIColor(white: 0.08, alpha: 1)
-        value.font = .monospacedDigitSystemFont(ofSize: 18, weight: .bold)
+        value.font = SystemStyle.font(.headline)
         value.textColor = UIColor(white: 0.08, alpha: 1)
         let labels = UIStackView(arrangedSubviews: [self.title, value])
         labels.axis = .vertical

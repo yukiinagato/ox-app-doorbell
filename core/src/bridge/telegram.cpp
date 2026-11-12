@@ -518,6 +518,10 @@ void TelegramBridge::onAction(const EventRecord& ev, const std::string& params_j
     claimAndSend(ev, p.get());
     return;
   }
+  if (ev.type == "visitor_message") {
+    sendVisitorMessage(ev, p.get());
+    return;
+  }
 
   const std::string text = eventText(ev);
   if (text.empty()) return;
@@ -535,6 +539,43 @@ void TelegramBridge::onAction(const EventRecord& ev, const std::string& params_j
 }
 
 
+
+// A message a visitor left without ringing: the configured text, the purpose headline, and the
+// snapshot the notify step attached when the rule asks for one. There is no call to claim or
+// reply to, so it is a plain message.
+void TelegramBridge::sendVisitorMessage(const EventRecord& ev, const cJSON* params) {
+  auto payload = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+  if (!payload) return;
+  std::string message = labelIn(json::get(payload.get(), "text"), notifyLang());
+  if (message.empty()) return;
+  auto chats = resolveChats(json::get(params, "households"));
+  if (chats.empty()) {
+    DB_LOGW(kTag, "visitor_message: skipped because households have no telegram_chat_ids");
+    return;
+  }
+  std::string text = tr("event.visitor_message", {{"door", doorLabel(ev.door)},
+                                                    {"text", message},
+                                                    {"time", hhmm(ev.wall_ms)}});
+  const std::string head = purposeHeadline(ev);
+  if (!head.empty()) text = head + "\n" + text;
+  auto enqueueAll = [this, chats, text](const Bytes& jpeg) {
+    for (const auto& chat : chats) {
+      auto item = json::obj();
+      json::set(item.get(), jpeg.empty() ? "text" : "caption", text);
+      enqueue(jpeg.empty() ? "message" : "photo", chat, json::dump(item.get()), jpeg);
+    }
+    pump();
+  };
+  const std::string hash = json::getString(json::get(payload.get(), "snapshot"), "sha256");
+  if (json::getBool(params, "with_snapshot") && !hash.empty() && hooks_.fetch_blob) {
+    std::weak_ptr<char> w = alive_;
+    hooks_.fetch_blob(hash, [w, enqueueAll](Bytes jpeg) {
+      if (!w.expired()) enqueueAll(jpeg);
+    });
+  } else {
+    enqueueAll(Bytes());
+  }
+}
 
 void TelegramBridge::claimAndSend(const EventRecord& ev, const cJSON* params) {
   if (!hooks_.get_event || !hooks_.merge_notify || !hooks_.hlc_tick) return;

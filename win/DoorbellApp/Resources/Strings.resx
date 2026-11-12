@@ -862,6 +862,7 @@
   <data name="firewall_rules_missing" xml:space="preserve"><value>Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?</value></data>
   <data name="firewall_title" xml:space="preserve"><value>Windows ファイアウォール</value></data>
   <data name="flow_back" xml:space="preserve"><value>戻る</value></data>
+  <data name="flow_call_failed" xml:space="preserve"><value>呼び出せませんでした。もう一度お試しください。</value></data>
   <data name="flow_done" xml:space="preserve"><value>完了</value></data>
   <data name="flow_message_title" xml:space="preserve"><value>来訪者からのお知らせ</value></data>
   <data name="flow_sent" xml:space="preserve"><value>お知らせしました</value></data>

@@ -233,30 +233,24 @@ struct SettingsCatalog {
                 return .local("identity.name")
             },
         ]
+        // The role is shown here and changed in its own form: a change restarts the app, so
+        // nothing is written until that form is confirmed. An Apple TV is always an indoor panel.
+        identity.append(SettingItem("device_role", t("settings.device_role"),
+                                    .info(t(isDoor ? "admin.role_door" : "admin.role_indoor"))))
+        if isDoor {
+            identity.append(SettingItem("device_door", t("settings.device_door"),
+                                        .info(ctx.door)))
+        }
         if !ctx.isTV {
-            identity.append(SettingItem("device_role", t("settings.device_role"),
-                .segmented(value: ctx.role, options: [
-                    SettingOption(value: "indoor_panel", title: t("admin.role_indoor")),
-                    SettingOption(value: "door_station", title: t("admin.role_door"))])) { _ in
-                return .local("identity.role")
-            })
-            if isDoor {
-                identity.append(SettingItem("device_door", t("settings.device_door"),
-                                            detail: ctx.door,
-                                            .text(value: ctx.door, placeholder: "door-front",
-                                                  numeric: false)) { value in
-                    guard let text = value.stringValue, SettingValidation.doorId(text) else {
-                        return .invalid("prefs.invalid_door_id")
-                    }
-                    return .local("identity.door")
-                })
-            }
+            identity.append(SettingItem("change_role", t("settings.change_role"),
+                                        .shell("change_role")))
         }
         let languages = (ConfigUtil.dig(cfg, "ui.languages") as? [Any])?
             .compactMap { $0 as? String } ?? ["ja", "en", "zh"]
         let lang = deviceKey("local.ui_lang").flatMap { ConfigUtil.str(cfg, $0) } ?? ctx.uiLang
         var sections = [
-            SettingSection(t("prefs.identity"), footer: ctx.isTV ? "" : t("settings.role_restart_notice"),
+            SettingSection(t("prefs.identity"),
+                           footer: t(ctx.isTV ? "settings.role_tv_fixed" : "settings.role_restart"),
                            identity),
             SettingSection(t("admin.language"), [
                 SettingItem("device_lang", t("settings.ui_lang"),
@@ -265,6 +259,19 @@ struct SettingsCatalog {
                             }, searchable: false), commit: set(deviceKey("local.ui_lang"))),
             ]),
         ]
+        if !ctx.isTV {
+            // The same replicated key the web Admin edits; the root helper reads it on the
+            // devices that have one.
+            let helper = str(deviceKey("local.recovery.helper_mode") ?? "", "auto")
+            sections.append(SettingSection([
+                SettingItem("device_helper_mode", t("settings.helper_mode"),
+                            .segmented(value: helper, options: [
+                                SettingOption(value: "off", title: t("admin.helper_off")),
+                                SettingOption(value: "auto", title: t("admin.helper_auto")),
+                                SettingOption(value: "on", title: t("admin.helper_on"))]),
+                            commit: set(deviceKey("local.recovery.helper_mode"))),
+            ]))
+        }
         var video: [SettingItem] = [
             SettingItem("device_playback", t("settings.video_playback"),
                         .segmented(value: str(deviceKey("local.video.playback") ?? "", "low_latency"),
@@ -627,6 +634,7 @@ struct SettingsCatalog {
                                      step: 5, unit: t("prefs.unit_seconds")),
                             commit: setInt("reply.display_ttl_s", 5, 300)),
             ]),
+            callReturnSection(),
             SettingSection(t("prefs.visitor_languages"), footer: t("prefs.visitor_languages_footer"), [
                 SettingItem("visitor_languages", t("prefs.visitor_languages"),
                             detail: offered.map(Texts.langDisplayName).joined(separator: ", "),
@@ -830,6 +838,33 @@ struct SettingsCatalog {
 
     // MARK: SOS
 
+    /// Seconds the call screen counts down before an indoor panel goes back to its home screen:
+    /// the cluster default, and this device's own value, which wins while it is set. Going back
+    /// to the default deletes the device leaf rather than copying the cluster value into it.
+    private func callReturnSection() -> SettingSection {
+        let cluster = int("call.indoor.return_s", 60)
+        let deviceKey = self.deviceKey("local.call.return_s")
+        let override = deviceKey.flatMap { ConfigUtil.dig(cfg, $0) as? NSNumber }?.intValue
+        var items = [
+            SettingItem("call_return", t("settings.call_return"),
+                        .stepper(value: cluster, minimum: 5, maximum: 600, step: 5,
+                                 unit: t("prefs.unit_seconds")),
+                        commit: setInt("call.indoor.return_s", 5, 600)),
+            SettingItem("call_return_here", t("settings.call_return_here"),
+                        detail: override == nil ? t("settings.inherit") : "",
+                        .stepper(value: override ?? cluster, minimum: 5, maximum: 600, step: 5,
+                                 unit: t("prefs.unit_seconds")),
+                        commit: setInt(deviceKey, 5, 600)),
+        ]
+        if override != nil, let key = deviceKey {
+            items.append(SettingItem("call_return_inherit", t("settings.inherit"),
+                                     .action(destructive: false)) { _ in
+                .write([.delete(key)])
+            })
+        }
+        return SettingSection(t("settings.grp_call_return"), items)
+    }
+
     private func sosPage() -> SettingsPage {
         let roles = (ConfigUtil.dig(cfg, "emergency.button_on_roles") as? [Any])?
             .compactMap { $0 as? String } ?? ["indoor_panel"]
@@ -858,6 +893,10 @@ struct SettingsCatalog {
             SettingSection(t("prefs.sos_alarm"), [
                 soundItem("sos_sound", t("prefs.sos_sound"), key: "emergency.alarm_sound",
                           fallback: "siren1", builtIn: ["siren1"], allowNone: false),
+                SettingItem("sos_alarm_volume", t("sos.alarm_volume"),
+                            .slider(value: int("emergency.alarm_volume", 100), minimum: 0,
+                                    maximum: 100, step: 5),
+                            commit: setInt("emergency.alarm_volume", 0, 100)),
             ]),
             SettingSection(t("prefs.sos_sip"), footer: t("prefs.sos_sip_footer"), [
                 SettingItem("sos_sip_enabled", t("prefs.sos_sip_enabled"),
@@ -989,10 +1028,35 @@ struct SettingsCatalog {
                 SettingItem("telegram", t("settings.telegram"),
                             detail: configured("integrations.telegram.bot_token_ref"), .page(telegramPage)),
                 SettingItem("web_push", t("settings.web_push"),
-                            .info(configured("integrations.web_push.sender_url"))),
+                            detail: configured("integrations.web_push.sender_url"),
+                            .page(webPushPage)),
                 SettingItem("mqtt", t("editor.mqtt"), detail: configured("integrations.mqtt.host"),
                             .page(mqttPage)),
                 SettingItem("integrations", t("editor.secrets"), .page(secretsPage)),
+            ]),
+        ])
+    }
+
+    /// Web Push: the sender, the VAPID identity, and the two secrets, which go to this device's
+    /// secure store and reach configuration only as references.
+    private func webPushPage() -> SettingsPage {
+        let base = "integrations.web_push"
+        return SettingsPage(id: "web_push", title: t("settings.web_push"), sections: [
+            SettingSection([
+                textItem("web_push_sender_url", t("settings.web_push_sender_url"),
+                         key: "\(base).sender_url", placeholder: "https://", limit: 512),
+                textItem("web_push_public_key", t("settings.web_push_public_key"),
+                         key: "\(base).vapid_public_key", limit: 512),
+                textItem("web_push_subject", t("settings.web_push_subject"),
+                         key: "\(base).vapid_subject", placeholder: "mailto:", limit: 255),
+            ]),
+            SettingSection(footer: t("settings.web_push_private_key_native"), [
+                secretItem("web_push_private_key", t("settings.web_push_private_key"),
+                           key: "\(base).vapid_private_key_ref", base: "webpush.vapid"),
+            ]),
+            SettingSection(footer: t("settings.web_push_sender_bearer_native"), [
+                secretItem("web_push_sender_bearer", t("settings.web_push_sender_bearer"),
+                           key: "\(base).sender_secret_ref", base: "webpush.sender"),
             ]),
         ])
     }
@@ -1137,8 +1201,10 @@ struct SettingsCatalog {
                             .list(mediaSourceList)),
                 SettingItem("households", t("prefs.households"), detail: countSummary("households"),
                             .list(householdList)),
+            ] + (ctx.isTV ? [] : [
+                // File and clipboard transfer need a share sheet and a pasteboard; tvOS has neither.
                 SettingItem("import_export", t("prefs.import_export"), .page(transferPage)),
-            ]),
+            ])),
         ])
     }
 
@@ -1153,8 +1219,10 @@ struct SettingsCatalog {
                 SettingItem("about_core", "Core", .info(ctx.coreVersion)),
                 SettingItem("about_sip", "SIP", .info(ctx.sipBackend)),
             ]),
-            SettingSection([
+            // Apple TV has no diagnostics page; what it would show is the section above.
+            SettingSection((ctx.isTV ? [] : [
                 SettingItem("device_info", t("settings.section_info"), .shell("device_info")),
+            ]) + [
                 SettingItem("web_admin", t("settings.section_web"), .shell("web_admin")),
             ]),
         ])
@@ -1991,8 +2059,10 @@ extension SettingsCatalog {
     }
 
     func transferPage() -> SettingsPage {
-        var items = [SettingItem("config_export", t("editor.export_clipboard"), .action(destructive: false)) { _ in
+        var items = [SettingItem("config_export", t("editor.export_file"), .action(destructive: false)) { _ in
             .local("config.export") }]
+        items.append(SettingItem("config_import_file", t("editor.import_file"),
+                                 .action(destructive: true)) { _ in .local("config.import_file") })
         items.append(SettingItem("config_import", t("editor.import_clipboard"), .action(destructive: true)) { _ in
             .local("config.import") })
         return SettingsPage(id: "import_export", title: t("editor.config_transfer"),

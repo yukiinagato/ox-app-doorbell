@@ -329,7 +329,8 @@ void HaBridge::publishDiscovery() {
       // Keeps the press-only object_id so existing entity ids and HomeKit links survive.
       json::set(o.get(), "object_id", "doorbell_" + sid);
       cJSON* types = json::addArr(o.get(), "event_types");
-      for (const char* t : {"press", "answered", "missed", "replied", "cancelled"})
+      for (const char* t : {"press", "answered", "missed", "replied", "cancelled",
+                            "visitor_message"})
         json::push(types, json::Doc(cJSON_CreateString(t)));
       json::set(o.get(), "device_class", "doorbell");
       json::set(o.get(), "state_topic", door_base + "/event");
@@ -678,6 +679,27 @@ void HaBridge::onEvent(const EventRecord& ev) {
     }
     pub(base_ + "/" + ev.door + "/event", json::dump(o.get()), false);
     publishSnapshot(ev.door);
+  } else if (ev.type == "visitor_message") {
+    if (ev.door.empty()) return;
+    // A message left without ringing is its own event type, so an automation on "press" does
+    // not fire for it.
+    auto p = json::parse(ev.payload_json.empty() ? "{}" : ev.payload_json);
+    auto extra = json::obj();
+    if (p) {
+      for (const char* field : {"message_id", "step", "purpose", "visitor_lang"}) {
+        const std::string value = json::getString(p.get(), field);
+        if (!value.empty()) json::set(extra.get(), field, value);
+      }
+      const cJSON* text = json::get(p.get(), "text");
+      const std::string japanese = json::getString(text, "ja");
+      const std::string shown = !japanese.empty() ? japanese
+          : (text && cJSON_IsString(text->child) ? std::string(text->child->valuestring)
+                                                 : std::string());
+      if (!shown.empty()) json::set(extra.get(), "text", shown);
+      json::setBool(extra.get(), "has_snapshot",
+                    !json::getString(json::get(p.get(), "snapshot"), "sha256").empty());
+    }
+    event_of("visitor_message", extra.get());
   } else if (ev.type == "call_answered") {
     if (ev.door.empty()) return;
     event_of("answered", nullptr);

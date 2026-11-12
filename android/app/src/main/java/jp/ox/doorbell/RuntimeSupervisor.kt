@@ -298,7 +298,7 @@ class RuntimeSupervisor(private val app: App) {
         if (ok) {
             retryAttempt = 0
             val backend = app.core.backend()
-            if (backend.optString("sip") != "pjsip" || backend.optInt("platform_abi") != 2) {
+            if (!app.core.backendAccepted(backend)) {
                 app.core.destroy()
                 setCoreReady(false, "invalid_native_backend")
                 statusStore.update("runtime", JSONObject()

@@ -140,18 +140,63 @@ final class SettingsCatalogTests: XCTestCase {
 
     // MARK: Target differences
 
-    func testTvHasNoRoleChoiceAndNoSip() {
+    func testTvShowsItsFixedRoleAndHasNoRoleFormAndNoSip() {
         let tv = catalog(isTV: true)
-        XCTAssertNil(item(tv, ["device"], "device_role"))
+        XCTAssertNotNil(item(tv, ["device"], "device_role"), "the role is shown read-only")
+        XCTAssertNil(item(tv, ["device"], "change_role"), "an Apple TV is always an indoor panel")
         XCTAssertFalse(tv.categories().contains { $0.id == "sip" })
-        XCTAssertNotNil(item(catalog(), ["device"], "device_role"))
+        guard case .shell("change_role")? = item(catalog(), ["device"], "change_role")?.control
+        else { return XCTFail("the role is changed in its own form") }
+        XCTAssertNil(item(catalog(), ["device"], "device_role")?.commit,
+                     "the role row itself writes nothing")
     }
 
-    func testDoorStationGetsCameraAndValidatesItsDoorId() {
+    func testDoorStationGetsCameraAndTheRoleFormValidatesItsDoorId() {
         let door = catalog(role: "door_station")
         XCTAssertNotNil(door.page(path: ["device", "camera"]))
-        XCTAssertTrue(isInvalid(item(door, ["device"], "device_door")?.commit?(.string("bad id"))))
+        XCTAssertNotNil(item(door, ["device"], "change_role"),
+                        "a door station can change back to an indoor panel")
         XCTAssertNil(catalog().page(path: ["device", "camera"]))
+
+        var plan = RoleChangePlan(role: "door_station", door: "", newDoor: "bad id")
+        XCTAssertFalse(plan.isValid)
+        plan.newDoor = " door-front "
+        XCTAssertTrue(plan.isValid)
+        XCTAssertEqual(plan.resolvedDoor, "door-front")
+        plan.door = "gate"
+        XCTAssertEqual(plan.resolvedDoor, "gate", "a picked door wins over the new-door field")
+        plan.role = "indoor_panel"
+        XCTAssertTrue(plan.isValid)
+        XCTAssertEqual(plan.resolvedDoor, "", "an indoor panel serves no door")
+        XCTAssertTrue(plan.changes(role: "door_station", door: "gate"))
+        XCTAssertFalse(plan.changes(role: "indoor_panel", door: ""))
+        XCTAssertFalse(RoleChangePlan(role: "monitor", door: "", newDoor: "").isValid)
+    }
+
+    func testTheRoleFormOffersUnservedDoorsAndWaitsForCallsAndSos() {
+        let config: [String: Any] = [
+            "doors": ["front": ["order": 1], "back": ["order": 2], "gate": ["order": 3]],
+            "devices": ["other": ["role": "door_station", "door": "gate", "name": "Gate unit"]],
+        ]
+        let status: [String: Any] = ["peers": [
+            ["id": "p1", "role": "door_station", "door": "front", "status": "alive"],
+        ]]
+        XCTAssertEqual(RoleChangePlan.offeredDoors(config: config, status: status, ownDoor: ""),
+                       ["back", "gate"], "a door a live station serves is not offered")
+        XCTAssertEqual(RoleChangePlan.offeredDoors(config: config, status: status,
+                                                   ownDoor: "front"),
+                       ["front", "back", "gate"], "this device's own door always is")
+        let plan = RoleChangePlan(role: "door_station", door: "gate", newDoor: "")
+        XCTAssertEqual(plan.conflictingDevice(config: config, nodeId: "self", lang: "en"),
+                       "Gate unit")
+        XCTAssertNil(plan.conflictingDevice(config: config, nodeId: "other", lang: "en"))
+
+        XCTAssertFalse(RoleChangePlan.isBusy(status: [:], pairing: .ready))
+        XCTAssertTrue(RoleChangePlan.isBusy(status: ["active_calls": [["call_id": "c"]]],
+                                            pairing: .ready))
+        XCTAssertTrue(RoleChangePlan.isBusy(status: ["emergency": ["active": true]],
+                                            pairing: .ready))
+        XCTAssertTrue(RoleChangePlan.isBusy(status: [:], pairing: .joining))
     }
 
     func testBlurRadiusIsSystemManagedWithoutAnOwnRenderer() {

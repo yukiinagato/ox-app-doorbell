@@ -39,7 +39,7 @@ final class HomeViewController: UIViewController {
     func apply(skin: DoorbellSkin) {
         #if os(iOS)
         guard let bar = navigationController?.navigationBar else { return }
-        let ink = skin.ink("status_line")
+        let ink = skin.decorated ? skin.ink("status_line") : SystemStyle.label
         if #available(iOS 13.0, *) {
             let appearance = UINavigationBarAppearance()
             appearance.configureWithTransparentBackground()

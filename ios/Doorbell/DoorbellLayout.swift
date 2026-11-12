@@ -196,8 +196,14 @@ final class CallActionButton: UIButton {
         didSet { disc.alpha = isHighlighted ? 0.6 : 1 }
     }
 
+    /// False for a filled semantic action (Answer, End), which keeps its full-strength fill and
+    /// ink while it is unavailable.
+    var dimsWhenDisabled = true {
+        didSet { alpha = isEnabled || !dimsWhenDisabled ? 1 : 0.4 }
+    }
+
     override var isEnabled: Bool {
-        didSet { alpha = isEnabled ? 1 : 0.4 }
+        didSet { alpha = isEnabled || !dimsWhenDisabled ? 1 : 0.4 }
     }
 
     #if os(tvOS)

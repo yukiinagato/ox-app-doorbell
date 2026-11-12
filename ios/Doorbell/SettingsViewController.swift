@@ -30,8 +30,6 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
     private var toastTimer: Timer?
     private let preview = SirenPlayer()
     private var pendingName: String
-    private var pendingRole: String
-    private var pendingDoor: String
     private var currentPassword = ""
     private var newPassword = ""
     /// Uploads, secrets, panels and import/export: the native editors' shell actions.
@@ -43,8 +41,6 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         self.texts = texts
         self.writer = ConfigWriter(core: core, httpPort: boot.httpPort)
         pendingName = boot.name
-        pendingRole = boot.role
-        pendingDoor = boot.door
         super.init(nibName: nil, bundle: nil)
         modalPresentationStyle = .fullScreen
     }
@@ -176,7 +172,7 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
     func catalog() -> SettingsCatalog {
         let status = core.status()
         var ctx = SettingsContext(config: core.config(), status: status, nodeId: nodeId(),
-                                  name: pendingName, role: pendingRole, door: pendingDoor,
+                                  name: pendingName, role: boot.role, door: boot.door,
                                   uiLang: boot.uiLang, isTV: SettingsStyle.isTV)
         ctx.supportsPasswordChange = core.supportsAdminPasswordChange
         ctx.sipBackend = core.sipBackend
@@ -219,7 +215,30 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
 
     func commit(_ item: SettingItem, _ value: SettingValue, from: UIViewController) {
         guard let commit = item.commit else { return }
-        perform(commit(value), item: item, value: value, from: from, completion: nil)
+        let effect = commit(value)
+        // A destructive action names itself and waits for a second, explicit yes. Key rotation
+        // brings its own confirmation, which also says what it costs.
+        if case .action(let destructive) = item.control, destructive,
+           !SettingsViewController.confirmsItself(effect) {
+            let alert = UIAlertController(title: item.title,
+                                          message: item.detail.isEmpty ? nil : item.detail,
+                                          preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+            alert.addAction(UIAlertAction(title: item.title, style: .destructive) {
+                [weak self, weak from] _ in
+                guard let self = self else { return }
+                self.perform(effect, item: item, value: value, from: from ?? self,
+                             completion: nil)
+            })
+            present(alert, animated: true)
+            return
+        }
+        perform(effect, item: item, value: value, from: from, completion: nil)
+    }
+
+    private static func confirmsItself(_ effect: SettingEffect) -> Bool {
+        if case .local("cluster.rotate") = effect { return true }
+        return false
     }
 
     func perform(_ effect: SettingEffect, item: SettingItem?, value: SettingValue?,
@@ -248,19 +267,9 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
     @discardableResult
     private func performLocal(_ id: String, value: SettingValue?, from: UIViewController) -> Bool {
         switch id {
-        case "identity.name", "identity.role", "identity.door":
+        case "identity.name":
             guard let text = value?.stringValue else { return false }
-            if id == "identity.name" { pendingName = text }
-            if id == "identity.role" { pendingRole = text }
-            if id == "identity.door" { pendingDoor = text }
-            guard let updated = BootConfig.persistSetup(name: pendingName, role: pendingRole,
-                                                        door: pendingDoor) else {
-                setStatus(texts.t("settings.save_failed"))
-                return false
-            }
-            boot = updated
-            setStatus(texts.t(id == "identity.role" ? "settings.role_restart_notice" : "settings.saved"))
-            refreshAll()
+            confirmRename(text, from: from)
             return true
         case "password.current":
             currentPassword = value?.stringValue ?? ""
@@ -291,6 +300,41 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         default:
             return editorActions.perform(id, value: value, from: from)
         }
+    }
+
+    /// The name lives in boot.json and reaches the cluster when Core starts, so saving it
+    /// restarts the app, exactly as a rename made from another device does.
+    private func confirmRename(_ name: String, from: UIViewController) {
+        guard name != boot.name else { return }
+        let alert = UIAlertController(title: texts.t("settings.device_name"),
+                                      message: texts.t("settings.identity_restart_confirm"),
+                                      preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel) {
+            [weak self] _ in self?.refreshAll()
+        })
+        alert.addAction(UIAlertAction(title: texts.t("editor.confirm"), style: .default) {
+            [weak self] _ in
+            guard let self = self else { return }
+            guard !RoleChangePlan.isBusy(status: self.core.status(),
+                                         pairing: PairingSnapshot.load(self.core).state) else {
+                self.setStatus(self.texts.t("settings.role_busy"))
+                return
+            }
+            guard let updated = BootConfig.persistSetup(name: name, role: self.boot.role,
+                                                        door: self.boot.door) else {
+                self.setStatus(self.texts.t("settings.save_failed"))
+                return
+            }
+            self.boot = updated
+            self.pendingName = updated.name
+            #if os(tvOS)
+            self.setStatus(self.texts.t("settings.saved"))
+            self.refreshAll()
+            #else
+            NotificationCenter.default.post(name: .doorbellIdentityChanged, object: nil)
+            #endif
+        })
+        (from.presentedViewController == nil ? from : self).present(alert, animated: true)
     }
 
     /// Rotation drops every device that is offline for longer than the seven-day grace period, so
@@ -381,6 +425,10 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
             return
         }
         switch id {
+        #if os(iOS)
+        case "change_role":
+            show(RoleChangeController(core: core, boot: boot, texts: texts), from: from)
+        #endif
         case "history":
             if let tabs = tabBarController as? PanelTabBarController {
                 tabs.show(.history)
@@ -459,6 +507,7 @@ final class SettingsEditorActions: NSObject {
     private weak var host: SettingsViewController?
     private var session: LoopbackAdminSession?
     private var pickerKey = ""
+    private var pickingConfig = false
     #if os(iOS)
     private var recorder: AVAudioRecorder?
     #endif
@@ -519,6 +568,9 @@ final class SettingsEditorActions: NSObject {
             return true
         case "config.import":
             importConfig(from: from)
+            return true
+        case "config.import_file":
+            importConfigFile(from: from)
             return true
         #endif
         default:
@@ -824,6 +876,15 @@ extension SettingsEditorActions: UIImagePickerControllerDelegate, UINavigationCo
 
     func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
         guard let url = urls.first, let host = host else { return }
+        if pickingConfig {
+            pickingConfig = false
+            guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+                status("editor.clipboard_not_config")
+                return
+            }
+            importConfig(text: text, from: host)
+            return
+        }
         let ext = url.pathExtension.lowercased()
         let type = ext == "mp3" ? "audio/mpeg" : (ext == "wav" ? "audio/wav" : "")
         guard !type.isEmpty, let data = try? Data(contentsOf: url) else {
@@ -847,12 +908,43 @@ extension SettingsEditorActions: UIImagePickerControllerDelegate, UINavigationCo
             status("settings.save_failed")
             return
         }
-        UIPasteboard.general.string = json
-        host?.setStatus(host?.texts.t("editor.exported", "\(data.count / 1024 + 1)") ?? "")
+        // A file through the share sheet: it can be saved, sent, or copied from there.
+        let url = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("doorbell-config.json")
+        guard let host = host, (try? data.write(to: url, options: .atomic)) != nil else {
+            UIPasteboard.general.string = json
+            self.host?.setStatus(self.host?.texts.t("editor.exported", "\(data.count / 1024 + 1)") ?? "")
+            return
+        }
+        let share = UIActivityViewController(activityItems: [url], applicationActivities: nil)
+        share.popoverPresentationController?.sourceView = host.view
+        share.popoverPresentationController?.sourceRect = CGRect(
+            x: host.view.bounds.midX, y: host.view.bounds.midY, width: 1, height: 1)
+        host.present(share, animated: true)
+    }
+
+    fileprivate func importConfigFile(from: UIViewController) {
+        guard #available(iOS 11.0, *) else {
+            importConfig(text: UIPasteboard.general.string ?? "", from: from)
+            return
+        }
+        pickingConfig = true
+        let picker = UIDocumentPickerViewController(documentTypes: ["public.json", "public.text"],
+                                                    in: .import)
+        picker.delegate = self
+        from.present(picker, animated: true)
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        pickingConfig = false
     }
 
     fileprivate func importConfig(from: UIViewController) {
-        guard let text = UIPasteboard.general.string, let data = text.data(using: .utf8),
+        importConfig(text: UIPasteboard.general.string ?? "", from: from)
+    }
+
+    private func importConfig(text: String, from: UIViewController) {
+        guard !text.isEmpty, let data = text.data(using: .utf8),
               let parsed = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
             status("editor.clipboard_not_config")
             return

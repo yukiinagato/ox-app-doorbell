@@ -12,9 +12,11 @@ from typing import Any, Mapping
 try:
     from .event_trace import (ClientProfile, ConformanceError, assert_expected,
                               effective_call_flow, eligible_profiles, fleet_declares, run_trace)
+    from .visitor_flow import run_visitor_flow_suite
 except ImportError:  # Direct script execution keeps the tool usable without installation.
     from event_trace import (ClientProfile, ConformanceError, assert_expected,
                              effective_call_flow, eligible_profiles, fleet_declares, run_trace)
+    from visitor_flow import run_visitor_flow_suite
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -110,7 +112,15 @@ def main() -> int:
     parser.add_argument("--source-contracts", type=pathlib.Path,
                         default=FIXTURES / "platform-source-contracts.json")
     parser.add_argument("--skip-source-contracts", action="store_true")
+    parser.add_argument("--visitor-flow", type=pathlib.Path,
+                        default=FIXTURES / "visitor-flow-v1.json")
     args = parser.parse_args()
+    try:
+        flow_checks = run_visitor_flow_suite(args.visitor_flow)
+    except (ConformanceError, OSError, json.JSONDecodeError) as error:
+        print(f"visitor flow conformance: FAIL: {error}", file=sys.stderr)
+        return 1
+    print(f"visitor flow conformance: ok ({flow_checks} checks)")
     try:
         trace_checks = run_golden_suite(args.fixtures)
         source_checks = 0 if args.skip_source_contracts else run_source_contracts(

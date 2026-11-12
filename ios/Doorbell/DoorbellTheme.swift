@@ -268,6 +268,12 @@ struct DoorbellSkin {
         }
         let ground = self.ground(in: rect)
         let decision = self.decision(region, on: ground)
+        if case .palette = ground, decision.source != .admin {
+            // No wallpaper behind the text: it is ordinary text on the system background.
+            label.textColor = quiet ? SystemStyle.secondaryLabel : SystemStyle.label
+            (label as? HaloLabel)?.outlineColor = nil
+            return
+        }
         DoorbellTheme.applyInk(quiet ? muted(decision, on: ground) : decision.ink, over: ground,
                                to: label)
         logSample(region, rect: rect, ground: ground, decision: decision)
@@ -493,16 +499,14 @@ final class ThemeBackgroundView: UIImageView {
                palette: DoorbellPalette, httpPort: Int, host: UIView,
                hideImage: Bool = false) -> DoorbellSkin {
         imageSuppressed = hideImage
-        let color = ThemeBackgroundView.value("bg_color", display: display, config: config,
-                                              nodeId: nodeId)
-        let key = (color ?? "") + "/" + palette.appearance.rawValue
+        // Only a wallpaper picture decorates a home surface. Without one the page ground is the
+        // system background, so light is light and dark is dark; the legacy `bg_color` is not
+        // painted as a page ground.
+        let color: String? = nil
+        let key = palette.appearance.rawValue
         if key != paintedColor {
             paintedColor = key
-            if let color = color, let rgb = ConfigUtil.parseHexColor(color) {
-                host.backgroundColor = UIColor(red: rgb.r, green: rgb.g, blue: rgb.b, alpha: 1)
-            } else {
-                host.backgroundColor = palette.background
-            }
+            host.backgroundColor = SystemStyle.groupedBackground
         }
         setBackdrop(BackdropStyle.resolve(display: display, config: config, nodeId: nodeId))
         let hash = hideImage ? "" : (ThemeBackgroundView.value("bg_image", display: display, config: config,
@@ -605,12 +609,9 @@ final class ThemeBackgroundView: UIImageView {
             }
             display?["theme"] = theme
         }
-        var background = host.backgroundColor ?? palette.background
+        var background = palette.background
         if drawsImage, let sampled = sample(in: nil) {
             background = sampled.average
-        } else if let published = DoorbellTheme.publishedBackground(display: display),
-                  DoorbellTheme.publishedBackgroundIsGround(display: display) {
-            background = published
         }
         return DoorbellSkin(palette: palette, display: display, background: background,
                             decorated: decorated || drawsImage, config: config, nodeId: nodeId,

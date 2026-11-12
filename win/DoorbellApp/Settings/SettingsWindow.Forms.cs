@@ -125,17 +125,8 @@ namespace DoorbellApp.Settings
                 FontFamily = FontFamily,
             };
             DoorbellApp.Ui.Fluent.StyleWindow(dialog);
-            var outer = new DockPanel { Margin = new Thickness(24) };
-            var heading = new TextBlock
-            {
-                Text = title,
-                FontSize = 22,
-                FontWeight = FontWeights.SemiBold,
-                TextWrapping = TextWrapping.Wrap,
-                Margin = new Thickness(0, 0, 0, 12),
-            };
-            DockPanel.SetDock(heading, Dock.Top);
-            outer.Children.Add(heading);
+            // The title bar carries the title; it is not repeated as a heading.
+            var outer = new DockPanel { Margin = new Thickness(24, 8, 24, 24) };
             actions = new StackPanel
             {
                 Orientation = Orientation.Horizontal,

@@ -597,6 +597,21 @@ DB_API char* db_core_press_v2(db_core* c, const char* door_id, const char* purpo
   return dupString(c->node->pressV2(door_id ? door_id : "", purpose ? purpose : ""));
 }
 
+DB_API char* db_core_visitor_flow_json(db_core* c, const char* door_id) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->visitorFlowJson(door_id ? door_id : ""));
+}
+
+DB_API char* db_core_visitor_flow_template_json(db_core* c, const char* name) {
+  if (!c || !c->node) return nullptr;
+  return dupString(c->node->visitorFlowTemplateJson(name && *name ? name : "default"));
+}
+
+DB_API char* db_core_visitor_notify_json(db_core* c, const char* door_id, const char* step_id) {
+  if (!c || !c->node || !step_id || !*step_id) return nullptr;
+  return dupString(c->node->visitorNotifyJson(door_id ? door_id : "", step_id));
+}
+
 DB_API int db_core_select_purpose_v2(db_core* c, const char* door_id, const char* call_id,
                                      const char* purpose) {
   if (!c || !c->node || !call_id || !*call_id || !purpose || !*purpose) return -1;

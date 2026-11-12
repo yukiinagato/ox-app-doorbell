@@ -144,6 +144,7 @@
 		F90000000000000000000071 /* DoorbellClock.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000031 /* DoorbellClock.swift */; };
 		FB0000000000000000000072 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
 		DEB9A3612E2F3F95486207AD /* DoorbellLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */; };
+		FB0000000000000000000104 /* RoleChangeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000104 /* RoleChangeController.swift */; };
 		FB0000000000000000000103 /* HomeTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000103 /* HomeTabs.swift */; };
 		FB0000000000000000000102 /* ZoomableVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000102 /* ZoomableVideoView.swift */; };
 		FB0000000000000000000101 /* SystemStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000101 /* SystemStyle.swift */; };
@@ -152,6 +153,7 @@
 		E064C8AD47D8C3986393B292 /* SettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E84E39C4B00251F5A31125 /* SettingsModel.swift */; };
 		FB0000000000000000000092 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
 		D4748C3C60EF7B9432F4BA35 /* DoorbellLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */; };
+		FB0000000000000000000204 /* RoleChangeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000104 /* RoleChangeController.swift */; };
 		FB0000000000000000000203 /* HomeTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000103 /* HomeTabs.swift */; };
 		FB0000000000000000000202 /* ZoomableVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000102 /* ZoomableVideoView.swift */; };
 		FB0000000000000000000201 /* SystemStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000101 /* SystemStyle.swift */; };
@@ -160,6 +162,7 @@
 		E1EAB6AE8BDBA9407E73535C /* SettingsModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = E5E84E39C4B00251F5A31125 /* SettingsModel.swift */; };
 		F90000000000000000000072 /* ConfigWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000032 /* ConfigWriter.swift */; };
 		DEE168A331E0F68CF19FACFE /* DoorbellLayout.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */; };
+		F90000000000000000000104 /* RoleChangeController.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000104 /* RoleChangeController.swift */; };
 		F90000000000000000000103 /* HomeTabs.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000103 /* HomeTabs.swift */; };
 		F90000000000000000000102 /* ZoomableVideoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000102 /* ZoomableVideoView.swift */; };
 		F90000000000000000000101 /* SystemStyle.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000101 /* SystemStyle.swift */; };
@@ -187,10 +190,18 @@
 		FB000000000000000000007A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
 		FB000000000000000000009A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
 		F9000000000000000000007A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
+		A70000000000000000000010 /* GestureUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7000000000000000000000F /* GestureUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
 		AC0000000000000000000009 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = CB0000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = CA0000000000000000000001;
+			remoteInfo = Doorbell;
+		};
+		A70000000000000000000009 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = CB0000000000000000000001 /* Project object */;
 			proxyType = 1;
@@ -266,6 +277,7 @@
 		FA0000000000000000000031 /* DoorbellClock.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorbellClock.swift; sourceTree = "<group>"; };
 		FA0000000000000000000032 /* ConfigWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConfigWriter.swift; sourceTree = "<group>"; };
 		DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DoorbellLayout.swift; sourceTree = "<group>"; };
+		FA0000000000000000000104 /* RoleChangeController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RoleChangeController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000103 /* HomeTabs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeTabs.swift; sourceTree = "<group>"; };
 		FA0000000000000000000102 /* ZoomableVideoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ZoomableVideoView.swift; sourceTree = "<group>"; };
 		FA0000000000000000000101 /* SystemStyle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SystemStyle.swift; sourceTree = "<group>"; };
@@ -279,10 +291,19 @@
 		FA0000000000000000000038 /* AdminQrView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminQrView.swift; sourceTree = "<group>"; };
 		FA0000000000000000000039 /* DashboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DashboardView.swift; sourceTree = "<group>"; };
 		FA000000000000000000003A /* VisitorScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorScreenView.swift; sourceTree = "<group>"; };
+		A70000000000000000000002 /* DoorbellUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoorbellUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		A7000000000000000000000F /* GestureUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AC0000000000000000000007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A70000000000000000000007 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -319,6 +340,7 @@
 				AB0000000000000000000002 /* Doorbell */,
 				AB0000000000000000000003 /* DoorbellTV */,
 				AC0000000000000000000005 /* DoorbellTests */,
+				A70000000000000000000005 /* DoorbellUITests */,
 				AB0000000000000000000005 /* Audio */,
 				AB0000000000000000000004 /* Products */,
 			);
@@ -334,6 +356,7 @@
 				FA0000000000000000000031 /* DoorbellClock.swift */,
 				FA0000000000000000000032 /* ConfigWriter.swift */,
 				DEAAAA9922B3C79972DCC6E7 /* DoorbellLayout.swift */,
+				FA0000000000000000000104 /* RoleChangeController.swift */,
 				FA0000000000000000000103 /* HomeTabs.swift */,
 				FA0000000000000000000102 /* ZoomableVideoView.swift */,
 				FA0000000000000000000101 /* SystemStyle.swift */,
@@ -395,6 +418,14 @@
 			path = DoorbellTV;
 			sourceTree = "<group>";
 		};
+		A70000000000000000000005 /* DoorbellUITests */ = {
+			isa = PBXGroup;
+			children = (
+				A7000000000000000000000F /* GestureUITests.swift */,
+			);
+			path = DoorbellUITests;
+			sourceTree = "<group>";
+		};
 		AC0000000000000000000005 /* DoorbellTests */ = {
 			isa = PBXGroup;
 			children = (
@@ -420,6 +451,7 @@
 				FA0000000000000000000017 /* DoorbellTV.app */,
 				FA0000000000000000000021 /* DoorbellIOS9.app */,
 				AC0000000000000000000002 /* DoorbellTests.xctest */,
+				A70000000000000000000002 /* DoorbellUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -512,6 +544,23 @@
 			productReference = AC0000000000000000000002 /* DoorbellTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
 		};
+		A70000000000000000000001 /* DoorbellUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A7000000000000000000000C /* Build configuration list for PBXNativeTarget "DoorbellUITests" */;
+			buildPhases = (
+				A70000000000000000000006 /* Sources */,
+				A70000000000000000000007 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A70000000000000000000008 /* PBXTargetDependency */,
+			);
+			name = DoorbellUITests;
+			productName = DoorbellUITests;
+			productReference = A70000000000000000000002 /* DoorbellUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -531,6 +580,10 @@
 						CreatedOnToolsVersion = 15.0;
 					};
 					AC0000000000000000000001 = {
+						CreatedOnToolsVersion = 15.0;
+						TestTargetID = CA0000000000000000000001;
+					};
+					A70000000000000000000001 = {
 						CreatedOnToolsVersion = 15.0;
 						TestTargetID = CA0000000000000000000001;
 					};
@@ -555,6 +608,7 @@
 				CA0000000000000000000002 /* DoorbellTV */,
 				C90000000000000000000001 /* DoorbellIOS9 */,
 				AC0000000000000000000001 /* DoorbellTests */,
+				A70000000000000000000001 /* DoorbellUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -686,6 +740,14 @@
 /* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		A70000000000000000000006 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A70000000000000000000010 /* GestureUITests.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		AC0000000000000000000006 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -712,6 +774,7 @@
 				FB0000000000000000000071 /* DoorbellClock.swift in Sources */,
 				FB0000000000000000000072 /* ConfigWriter.swift in Sources */,
 				DEB9A3612E2F3F95486207AD /* DoorbellLayout.swift in Sources */,
+				FB0000000000000000000104 /* RoleChangeController.swift in Sources */,
 				FB0000000000000000000103 /* HomeTabs.swift in Sources */,
 				FB0000000000000000000102 /* ZoomableVideoView.swift in Sources */,
 				FB0000000000000000000101 /* SystemStyle.swift in Sources */,
@@ -768,6 +831,7 @@
 				FB0000000000000000000091 /* DoorbellClock.swift in Sources */,
 				FB0000000000000000000092 /* ConfigWriter.swift in Sources */,
 				D4748C3C60EF7B9432F4BA35 /* DoorbellLayout.swift in Sources */,
+				FB0000000000000000000204 /* RoleChangeController.swift in Sources */,
 				FB0000000000000000000203 /* HomeTabs.swift in Sources */,
 				FB0000000000000000000202 /* ZoomableVideoView.swift in Sources */,
 				FB0000000000000000000201 /* SystemStyle.swift in Sources */,
@@ -818,6 +882,7 @@
 				F90000000000000000000071 /* DoorbellClock.swift in Sources */,
 				F90000000000000000000072 /* ConfigWriter.swift in Sources */,
 				DEE168A331E0F68CF19FACFE /* DoorbellLayout.swift in Sources */,
+				F90000000000000000000104 /* RoleChangeController.swift in Sources */,
 				F90000000000000000000103 /* HomeTabs.swift in Sources */,
 				F90000000000000000000102 /* ZoomableVideoView.swift in Sources */,
 				F90000000000000000000101 /* SystemStyle.swift in Sources */,
@@ -872,6 +937,11 @@
 			isa = PBXTargetDependency;
 			target = CA0000000000000000000001 /* Doorbell */;
 			targetProxy = AC0000000000000000000009 /* PBXContainerItemProxy */;
+		};
+		A70000000000000000000008 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = CA0000000000000000000001 /* Doorbell */;
+			targetProxy = A70000000000000000000009 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -1155,6 +1225,34 @@
 			};
 			name = Release;
 		};
+		A7000000000000000000000A /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Doorbell;
+			};
+			name = Debug;
+		};
+		A7000000000000000000000B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 13.0;
+				PRODUCT_BUNDLE_IDENTIFIER = jp.ox.doorbell.uitests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Doorbell;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -1199,6 +1297,15 @@
 			buildConfigurations = (
 				AC000000000000000000000A /* Debug */,
 				AC000000000000000000000B /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A7000000000000000000000C /* Build configuration list for PBXNativeTarget "DoorbellUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A7000000000000000000000A /* Debug */,
+				A7000000000000000000000B /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

@@ -855,6 +855,7 @@
 "firewall.rules_missing" = "Windows Firewall may be blocking Cluster communication from other devices. Allow inbound communication for this app?";
 "firewall.title" = "Windows Firewall";
 "flow.back" = "Back";
+"flow.call_failed" = "The call could not be placed. Please try again.";
 "flow.done" = "Done";
 "flow.message_title" = "Message from a visitor";
 "flow.sent" = "Message sent";

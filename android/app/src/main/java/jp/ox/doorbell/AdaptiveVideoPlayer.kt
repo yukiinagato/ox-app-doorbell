@@ -19,6 +19,8 @@ internal class AdaptiveVideoPlayer(
     private val texture: TextureView,
     private val image: ImageView,
     private val noVideo: TextView,
+    /** The shown frame's width and height after rotation, whenever either changes (UI thread). */
+    private val onPicture: (Int, Int) -> Unit = { _, _ -> },
 ) {
     private var h264: H264LivePlayer? = null
     private var mjpeg: MjpegStreamer? = null
@@ -30,6 +32,8 @@ internal class AdaptiveVideoPlayer(
     private var videoWidth = 0
     private var videoHeight = 0
     private var rotation = 0
+    private var pictureWidth = 0
+    private var pictureHeight = 0
     private var activeCodec = ""
     private var generation = 0
     private var h264Attempt = 0
@@ -38,6 +42,15 @@ internal class AdaptiveVideoPlayer(
     private val stats = VideoStatsCounter()
     private val firstFrameDeadline = Runnable { failH264(h264Attempt, "H.264 first-frame timeout") }
     private val h264Retry = Runnable { startH264() }
+
+    init {
+        // A rotation or a pane change resizes the stage; the H.264 fit follows it.
+        texture.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop,
+                                            oldRight, oldBottom ->
+            if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop)
+                applyTextureTransform()
+        }
+    }
 
     /** The live-view counters behind the incoming screen's debug line. */
     fun stats(): VideoStats = stats.snapshot(System.currentTimeMillis())
@@ -93,6 +106,8 @@ internal class AdaptiveVideoPlayer(
         image.setImageDrawable(null)
         currentBitmap?.recycle()
         currentBitmap = null
+        pictureWidth = 0
+        pictureHeight = 0
     }
 
     fun onMemoryPressure() {
@@ -136,6 +151,7 @@ internal class AdaptiveVideoPlayer(
                     if (stopped || attempt != h264Attempt) return@post
                     ui.removeCallbacks(firstFrameDeadline)
                     h264Visible = true
+                    applyTextureTransform()
                     texture.alpha = 1f
                     image.visibility = View.GONE
                     noVideo.visibility = View.GONE
@@ -235,38 +251,38 @@ internal class AdaptiveVideoPlayer(
         }, "doorbell-video-meta").apply { isDaemon = true }.start()
     }
 
+    /** Fit the H.264 frame inside the stage-sized texture view instead of stretching it. */
     private fun applyTextureTransform() {
         texture.rotation = rotation.toFloat()
-        if ((rotation == 90 || rotation == 270) && texture.width > 0 && texture.height > 0 &&
-            videoWidth > 0 && videoHeight > 0) {
-            val base = kotlin.math.min(texture.width.toFloat() / videoWidth,
-                                       texture.height.toFloat() / videoHeight)
-            val rotated = kotlin.math.min(texture.width.toFloat() / videoHeight,
-                                          texture.height.toFloat() / videoWidth)
-            val ratio = if (base > 0f) rotated / base else 1f
-            texture.scaleX = ratio
-            texture.scaleY = ratio
-        } else {
-            texture.scaleX = 1f
-            texture.scaleY = 1f
-        }
+        val stage = VideoBox(texture.width.toFloat(), texture.height.toFloat())
+        val (x, y) = VideoZoomMath.stretchedViewScale(stage, videoWidth, videoHeight, rotation)
+        texture.scaleX = x
+        texture.scaleY = y
+        if (h264Visible) reportPicture(videoWidth, videoHeight, rotation)
     }
 
     private fun applyImageRotation(bitmap: Bitmap, degrees: Int) {
         val normalized = ((degrees % 360) + 360) % 360
         image.rotation = normalized.toFloat()
-        if ((normalized == 90 || normalized == 270) && image.width > 0 && image.height > 0) {
-            val base = kotlin.math.min(image.width.toFloat() / bitmap.width,
-                                       image.height.toFloat() / bitmap.height)
-            val rotated = kotlin.math.min(image.width.toFloat() / bitmap.height,
-                                          image.height.toFloat() / bitmap.width)
-            val ratio = if (base > 0f) rotated / base else 1f
-            image.scaleX = ratio
-            image.scaleY = ratio
-        } else {
-            image.scaleX = 1f
-            image.scaleY = 1f
-        }
+        // fitCenter has already fitted the unrotated bitmap; a quarter turn needs the other fit.
+        val stage = VideoBox(image.width.toFloat(), image.height.toFloat())
+        val upright = VideoZoomMath.fit(stage, bitmap.width, bitmap.height)
+        val turned = VideoZoomMath.fit(stage, bitmap.width, bitmap.height, normalized)
+        val quarter = normalized == 90 || normalized == 270
+        val ratio = if (quarter && upright.width > 0f) turned.height / upright.width else 1f
+        image.scaleX = ratio
+        image.scaleY = ratio
+        if (!h264Visible) reportPicture(bitmap.width, bitmap.height, normalized)
+    }
+
+    private fun reportPicture(width: Int, height: Int, degrees: Int) {
+        val quarter = degrees == 90 || degrees == 270
+        val shownWidth = if (quarter) height else width
+        val shownHeight = if (quarter) width else height
+        if (shownWidth == pictureWidth && shownHeight == pictureHeight) return
+        pictureWidth = shownWidth
+        pictureHeight = shownHeight
+        onPicture(shownWidth, shownHeight)
     }
 
     companion object {

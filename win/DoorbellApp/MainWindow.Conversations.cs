@@ -17,6 +17,12 @@ namespace DoorbellApp
         private readonly Dictionary<string, int> _retiredVisits = new Dictionary<string, int>();
         private readonly Dictionary<string, Dictionary<string, object>> _conversationEvents = new Dictionary<string, Dictionary<string, object>>();
         private bool _selectingVisit;
+        // The request Core has accepted but not yet confirmed; its buttons stay disabled until
+        // the matching result or a newer room document arrives (Core answers within 5 s).
+        private string _pendingConversationRequest = "";
+        private long _pendingConversationVersion;
+        private DateTime _pendingConversationSince;
+        private static readonly TimeSpan PendingConversationLimit = TimeSpan.FromSeconds(6);
         private string _visitSignature = "", _conversationSignature = "", _heldConversationTarget;
         private long? _heldConversationVersion;
         private static Dictionary<string, object> ConversationObject(Dictionary<string, object> value, string key) =>
@@ -64,6 +70,33 @@ namespace DoorbellApp
             var result = App.Core.Conversation(request);
             IncomingHint.Text = Texts.T(DictBool(result, "ok") ? "conversation.pending" : "conversation.failed");
             IncomingHint.Visibility = Visibility.Visible;
+            if (DictBool(result, "ok") && DictStr(result, "request_id").Length != 0)
+            {
+                _pendingConversationRequest = DictStr(result, "request_id");
+                _pendingConversationVersion = DictLong(request, "expected_version", 0);
+                _pendingConversationSince = DateTime.UtcNow;
+                ApplyConversationPending();
+            }
+        }
+        private bool ConversationPending()
+        {
+            if (_pendingConversationRequest.Length == 0) return false;
+            if (DateTime.UtcNow - _pendingConversationSince < PendingConversationLimit) return true;
+            _pendingConversationRequest = "";
+            return false;
+        }
+        private void ApplyConversationPending()
+        {
+            bool pending = ConversationPending();
+            foreach (UIElement child in ConversationActions.Children) child.IsEnabled = !pending;
+            if (pending) AnswerButton.IsEnabled = false;
+        }
+        /// <summary>Core's own name for a participant, or this device's label for it.</summary>
+        private string ConversationMemberName(Dictionary<string, object> member)
+        {
+            string name = DictStr(member, "name"), device = DictStr(member, "device");
+            return name.Length != 0 ? name : LabelOf(
+                CoreClient.Dig(_cfg, "devices." + device) as Dictionary<string, object>, App.Boot.UiLang, device);
         }
         /// <summary>
         /// Leaving the call screen for good (Ignore on the last visit, the return countdown,
@@ -149,8 +182,8 @@ namespace DoorbellApp
                 }
                 foreach (var member in ConversationRows(ConversationDocument(call), "participants"))
                 {
-                    string device = DictStr(member, "device"), state = DictStr(member, "state");
-                    string name = LabelOf(CoreClient.Dig(_cfg, "devices." + device) as Dictionary<string, object>, App.Boot.UiLang, device);
+                    string state = DictStr(member, "state");
+                    string name = ConversationMemberName(member);
                     summaries.Add(DoorLabel(DictStr(call, "door")) + " · " + Texts.T(
                         state == "waiting" ? "conversation.queued" : "conversation." + state, name));
                 }
@@ -203,7 +236,9 @@ namespace DoorbellApp
                 MonitorButton.Visibility = Visibility.Collapsed;
                 if (ownState == "held" || ownState == "dialing" || _inCall) StopReturnCountdown();
             }
-            if (roomSignature == _conversationSignature) return;
+            // A newer room document also settles the request that was waiting for it.
+            if (DictLong(room, "version", 0) > _pendingConversationVersion) _pendingConversationRequest = "";
+            if (roomSignature == _conversationSignature) { ApplyConversationPending(); return; }
             _conversationSignature = roomSignature; ConversationActions.Children.Clear();
             if (!enabled) return;
             var actions = ownState == "connected" && localMedia ? new[] { "hold" } :
@@ -216,6 +251,7 @@ namespace DoorbellApp
                 button.Click += (sender, args) => { if (ConversationTargetMatches()) SendConversation(action); };
                 ConversationActions.Children.Add(button);
             }
+            ApplyConversationPending();
         }
         private void HandleConversation(UiEvent ev)
         {
@@ -230,14 +266,21 @@ namespace DoorbellApp
                 if ((phase == "connected" || phase == "held") && !_inCall) { _inCall = true; ShowInCall(null); }
                 string text = string.Join("\n", ConversationRows(ev.Data, "participants").Select(member => Texts.T(
                     DictStr(member, "state") == "waiting" ? "conversation.queued" : "conversation." + DictStr(member, "state"),
-                    LabelOf(CoreClient.Dig(_cfg, "devices." + DictStr(member, "device")) as Dictionary<string, object>, App.Boot.UiLang, DictStr(member, "device")))));
+                    ConversationMemberName(member))));
                 // Before any resident has responded there is nobody to name.
                 if (text.Length == 0) text = Texts.T("conversation.waiting");
                 CallingText.Text = text;
                 InCallTitle.Text = text;
             }
-            if (ev.T == "conversation_result" && !DictBool(ev.Data, "ok"))
-            { IncomingHint.Text = Texts.T("conversation.failed"); IncomingHint.Visibility = Visibility.Visible; }
+            if (ev.T == "conversation_result")
+            {
+                // Only the result of the request this screen is waiting for speaks for it.
+                bool mine = _pendingConversationRequest.Length == 0 ||
+                            ev.Str("request_id") == _pendingConversationRequest;
+                if (mine) _pendingConversationRequest = "";
+                if (mine && !DictBool(ev.Data, "ok"))
+                { IncomingHint.Text = Texts.T("conversation.failed"); IncomingHint.Visibility = Visibility.Visible; }
+            }
             RefreshConversations();
         }
     }

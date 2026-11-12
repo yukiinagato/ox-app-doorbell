@@ -852,7 +852,8 @@ one bulk-add window may auto-add.
 
 - ID = `(origin_node, origin_seq)`, idempotent. Types include `press | purpose_selected |
   call_answered | call_ended | call_cancelled | motion | reply | offline | online |
-  config_changed | emergency | emergency_cancel | delivery_result | visitor_lang`.
+  config_changed | emergency | emergency_cancel | delivery_result | visitor_lang |
+  visitor_message`.
 - `call_answered` and `call_ended` carry schema version, `door`, `call_id`, and `stage_revision`.
   A manual-answer client claims only its answer-mode SIP dialog after connection; Core persists one
   deterministic `dialog_owner`. A losing simultaneous dialog hangs up without ending the winner,
@@ -1113,6 +1114,125 @@ For a live indoor-panel `call_answered` or scoped `reply`, the elected Telegram 
 The native iOS, iOS 5 compatibility, Android and Windows door stations follow these paths. The Web panel first selects a destination door, then uses the selected flow to order purpose selection and ringing. Switching the setting updates the home screen without starting a call. Existing calls keep their identity and deadline. The stored values stay unchanged; the admin menu displays localized names and an explanation of the selected flow.
 
 Administrator credential changes commit their CRDT entries and local credential metadata in one SQLite transaction. Failed persistence leaves both the previous password and its sessions in effect. New browser mutation routes require a session-bound random `X-Doorbell-CSRF` header and an exact trusted `Origin`; missing, null, wildcard and untrusted origins are rejected. `GET /api/session` returns the token with `Cache-Control: no-store` without renewing activity. Direct HTTP origins on the listener port for current local IP addresses and loopback are trusted. For a DNS name or reverse proxy, configure `web.allowed_origins` as an array of at most 32 exact `http://host[:port]` or `https://host[:port]` origins, with no path, wildcard or credentials. Neither `Host` nor forwarded headers grant trust. Invalid entries fail closed.
+
+## Visitor flow (door-station wizard)
+
+`visitor_flow` describes what a visitor sees and can press before a call: a pool of steps and an
+entry point. A door station renders the *resolved* document Core publishes
+(`db_core_visitor_flow_json`, `GET /api/panel/visitor-flow`, the `visitor_flow` member of panel
+state) and never reads this configuration itself.
+
+```jsonc
+"visitor_flow": {
+  "enabled": true,            // bool leaf; absent means on. false restores the classic screen
+  "start": "s_home",          // string leaf: the entry page
+  "idle_s": 45,               // int leaf 15..300: back to the entry page after inactivity
+  "require_call": true,       // bool leaf, default true: every entry page must reach a call
+  "steps": {                  // each step is ONE whole value at visitor_flow.steps.<id>
+    "s_home": { "kind": "page",
+      "title": { "ja": "ご用件をお選びください", "en": "How can we help?" },
+      "options": [
+        { "id": "o_call", "label": { "ja": "呼び出す", "en": "Call" }, "style": "primary", "to": "c_any" },
+        { "id": "o_delivery", "purpose": "p_delivery", "to": "s_parcel" } ] },
+    "s_parcel": { "kind": "page",
+      "title": { "ja": "置き配できますか？", "en": "Can you leave it at the door?" },
+      "body":  { "ja": "…", "en": "Plain text.\n\nA blank line starts a paragraph." },
+      "images": [ { "asset": "<sha256>", "alt": { "en": "Photo of the drop spot" }, "place": "above" } ],
+      "options": [
+        { "id": "o_leave", "icon": "📦", "label": { "en": "Leave it" }, "style": "primary", "to": "n_left" },
+        { "id": "o_hand", "label": { "en": "Hand over / signature" }, "to": "c_delivery" } ] },
+    "c_any":      { "kind": "call" },
+    "c_delivery": { "kind": "call", "purpose": "p_delivery", "on_unanswered": "s_parcel" },
+    "n_left":     { "kind": "notify", "purpose": "p_delivery",
+                    "message": { "ja": "荷物が玄関前に置かれました", "en": "A parcel was left at the door" },
+                    "snapshot": { "source": "media_source", "id": "porch_camera" },
+                    "to": "e_thanks" },
+    "e_thanks":   { "kind": "end", "title": { "en": "Thank you" }, "return_s": 8 }
+  }
+},
+"doors": { "d_back": { "visitor_flow": { "start": "s_back" } } }   // string leaf per door
+```
+
+Step kinds:
+
+- `page`: `title`, `body`, `images` (at most 2) and `options` (1..12). An option has `id`, a
+  `label` by language or a `purpose` (it then inherits that purpose's label and icon), optional
+  `icon`, `style` (`primary` or `normal`, at most one primary per page), `enabled`, and `to`, the
+  step it leads to. An option has no other members, so it cannot open settings, Admin, a URL or
+  text input.
+- `call`: rings through the existing press path with the optional `purpose`, so every rule, chime
+  target, Telegram message and quick reply behaves as before. `on_unanswered` names the page shown
+  when the call times out; without it the door returns to the entry page with the no-answer notice.
+- `notify`: sends `message` to the household without ringing, then shows the `end` step named by
+  `to`. `snapshot` chooses the picture attached to the message: `{"source":"media_source","id":…}`
+  names a `media_sources` entry that has a `snapshot` stream (an external camera that can see where
+  a parcel is left); `{"source":"door_station"}` is the door station's own camera, an explicit
+  fallback; absent means text only.
+- `end`: a closing page with one Done control, returning to the entry page after `return_s`
+  (3..60, default 8).
+
+Text is plain: a newline is a line break and a blank line starts a paragraph. There is no markup.
+Limits per language: title 60 characters, body 600 characters and 8 paragraphs, option label 40,
+notify message 200, image description 120. Step and option ids are 1..32 characters of
+`A-Z a-z 0-9 _ -` and may not start with `__` (Core uses that prefix for steps it synthesizes).
+
+**Writing.** Clients write the scalar leaves and one whole step per key. Core refuses a write of
+the `visitor_flow` or `visitor_flow.steps` container and of any key below a step: a leaf entry
+masks one member of an object entry regardless of age, and a half-merged step must not exist.
+Concurrent edits to different steps merge; concurrent edits to one step are last-writer-wins on
+the whole step. One edit is one batch, because the graph is checked on the configuration the batch
+would leave: at most 32 steps; every target exists; `start` and each door's start are pages; a
+notify leads to an end; `on_unanswered` leads to a page; pages do not loop and nest at most 6
+deep; referenced purposes, image assets and snapshot cameras exist. Errors are
+`visitor_flow.<code>` optionally followed by `: <step>[.<option>]`. A page with text or images
+and more than four options is accepted with warning `visitor_flow.crowded_page`.
+
+`visitor_flow.require_call` (default true) rejects a flow whose entry page, or any door's entry
+page, cannot reach a `call`. Set it to false to allow a notify-only door; the write then succeeds
+with warning `visitor_flow.no_call`.
+
+**Defaults.** While no step has ever been written, Core serves a built-in wizard and nothing is
+stored: an entry page with the primary Call option and one option per enabled purpose. When a
+delivery purpose is enabled (`p_delivery`, or any purpose with the 📦 icon) its option leads to
+"Can you leave it at the door?", then either instructions, a `notify` and a closing page, or a
+call for that purpose whose `on_unanswered` returns to the question. Without one, the wizard is
+the entry page alone. The built-in wizard follows purpose edits. `GET /api/visitor-flow/template`
+and `db_core_visitor_flow_template_json` return it (`default`), the entry page alone (`purposes`)
+or the delivery wizard (`delivery`) in configuration shape, for an editor to write as ordinary
+steps; deleting `visitor_flow` returns to the built-in wizard. An installation that chose
+`ui.call_flow: "ring_then_purpose"` keeps that path until it writes a step or sets
+`visitor_flow.enabled: true`. Explicit steps supersede `ui.call_flow`.
+
+**Resolution.** Replicated data is never refused; it is repaired when resolved, so a visitor is
+never stranded. Options that are disabled, or tied to a disabled or deleted purpose, are removed.
+An option whose target is missing rings directly. A step kind this Core does not know becomes a
+direct call. A notify whose closing page is missing gets a built-in one. A page loop is cut by
+turning the closing option into a direct call. A page with nothing left to press, and (while
+`require_call` is true) an entry page that cannot reach a call, gain a Call option. A flow with
+no usable entry page becomes one page with the Call button. Each repair is listed in the resolved
+document's `issues`. A door whose native shell does not advertise `visitor_flow_v1` (with manifest
+elements `purpose.button`, `call.primary`, `cancel.call`) receives no flow and keeps its purpose
+screen.
+
+**Notify.** `db_core_visitor_notify_json(door, step)`, `POST /api/panel/visitor-notify` (the
+`call.initiate` grant, like `/api/panel/press`) and `POST /api/visitor-notify` accept a step id
+only; the text is read from the flow, so a visitor or panel client cannot inject content. Core
+appends a `visitor_message` event rather than a `press`: nothing rings, no call exists, and nodes
+that do not know the event ignore it. Per door, the same step within 60 seconds returns the first
+`message_id`; otherwise one message per 30 seconds and six per 10 minutes are accepted, and a
+throttled request returns `{"ok":true,"throttled":true}` so the door shows the same closing page.
+Rules match it with `when.type: "visitor_message"` and the usual `doors` and `purposes` filters.
+`trigger_rules.r_visitor_message_default` is seeded: a `device_alert` on indoor panels and a
+Telegram message to all households, with the snapshot when the step has one.
+
+The snapshot is taken by the node that accepted the notify. For a media source it requests
+`streams.snapshot.url` through the platform HTTP transport; the source's `secret_ref` resolves in
+that node's secure storage to an `Authorization` header (`{"username","password"}`,
+`{"bearer_token"}` or `user:password`). The address and the credential never enter an event, a
+log or a resolved document. The message is published when the picture arrives or after four
+seconds without it. The JPEG is stored as a content-addressed file served at `/asset/<sha256>`;
+it is not an `assets` ledger entry, other nodes fetch it by hash on demand, and it is kept for
+about seven days.
 
 ### Local configuration revisions and conditional commits
 

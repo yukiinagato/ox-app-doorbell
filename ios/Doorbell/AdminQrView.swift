@@ -39,14 +39,22 @@ final class AdminQrView: UIView {
         captionLabel.numberOfLines = 1
         captionLabel.isHidden = !compact || !showsCaption
 
+        #if os(tvOS)
+        urlLabel.font = SystemStyle.font(.caption1)
+        #else
         urlLabel.font = .monospacedDigitSystemFont(ofSize: compact ? 11 : 13, weight: .regular)
+        #endif
         urlLabel.numberOfLines = compact && showsCaption ? 2 : 1
         urlLabel.adjustsFontSizeToFitWidth = true
         urlLabel.minimumScaleFactor = 0.6
         urlLabel.accessibilityIdentifier = "admin_qr_url"
 
+        #if os(tvOS)
+        detailLabel.font = SystemStyle.font(.caption2)
+        #else
         detailLabel.font = .monospacedDigitSystemFont(ofSize: compact ? 10 : 13,
                                                      weight: .regular)
+        #endif
         detailLabel.numberOfLines = compact && showsCaption ? 2 : 1
         detailLabel.adjustsFontSizeToFitWidth = true
         detailLabel.minimumScaleFactor = 0.6

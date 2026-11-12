@@ -860,6 +860,7 @@
     <string name="firewall_rules_missing">Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?</string>
     <string name="firewall_title">Windows ファイアウォール</string>
     <string name="flow_back">戻る</string>
+    <string name="flow_call_failed">呼び出せませんでした。もう一度お試しください。</string>
     <string name="flow_done">完了</string>
     <string name="flow_message_title">来訪者からのお知らせ</string>
     <string name="flow_sent">お知らせしました</string>

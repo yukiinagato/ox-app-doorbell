@@ -83,6 +83,30 @@ final class TVMainViewController: UIViewController {
         updateClock()
     }
 
+    private var debugScreenShown = false
+
+    /// Verification captures on a simulator that takes no remote input: with
+    /// `debug_screenshots` in the boot profile, the `debug_screen` default names one screen to
+    /// put up after launch. Every one of them is a screen the remote can reach.
+    override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        guard boot.debugScreenshots, !debugScreenShown,
+              let name = UserDefaults.standard.string(forKey: "debug_screen") else { return }
+        debugScreenShown = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+            guard let self = self, self.presentedViewController == nil else { return }
+            switch name {
+            case "history": self.tabs?.show(.history)
+            case "settings": self.tabs?.show(.settings)
+            case "monitor": self.openMonitor()
+            case "notice": self.openNotice(door: "")
+            case "sos": self.sosSlider.sendActions(for: .primaryActionTriggered)
+            case "sos_active": self.showEmergency(visual: true)
+            default: break
+            }
+        }
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         styleApplier.apply(config: cfg, nodeId: nodeId, semanticId: "sos.cancel",

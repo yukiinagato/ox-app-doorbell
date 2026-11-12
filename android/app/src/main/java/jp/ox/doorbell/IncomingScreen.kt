@@ -38,6 +38,10 @@ internal class IncomingScreen(private val activity: Activity) {
     private val unlock: Button = activity.findViewById(R.id.unlock_button)
     private val mic: Button = activity.findViewById(R.id.mic_button)
 
+    private val replyRow = LinearLayout(activity).apply {
+        orientation = LinearLayout.HORIZONTAL
+        isBaselineAligned = false
+    }
     private val sideColumn = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
     private val detailsScroll = ScrollView(activity).apply { isFillViewport = false }
     private val overlayTop = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
@@ -149,22 +153,36 @@ internal class IncomingScreen(private val activity: Activity) {
     }
 
     /**
-     * Primary row Answer/End (largest) · Reply · Ignore; secondary row Monitor · Unlock · Mic.
-     * At large text, or in the narrow right column, the primary row stacks vertically.
+     * Primary actions Answer/End (largest) · Reply · Ignore; secondary row Monitor · Unlock · Mic.
+     * Where one row would squeeze the labels, Answer takes its own row above Reply and Ignore;
+     * at large text in a narrow zone all three stack.
      */
     private fun layoutRows(side: Boolean) {
         val stack = window.largeText && (side || window.sizeClass == SizeClass.COMPACT)
-        primaryRow.removeAllViews()
-        primaryRow.orientation = if (stack) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+        val oneRow = !stack && ScreenLayouts.incomingPrimaryInOneRow(window)
         val gap = ShellUi.dp(activity, UiTokens.SPACE_S)
-        for ((index, pair) in listOf(answer to 2f, reply to 1f, ignore to 1f).withIndex()) {
-            val (view, weight) = pair
-            val params = if (stack) LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-            ).apply { if (index > 0) topMargin = gap }
-            else LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, weight)
-                .apply { if (index > 0) leftMargin = gap }
-            primaryRow.addView(view, params)
+        primaryRow.removeAllViews()
+        replyRow.removeAllViews()
+        primaryRow.orientation = if (oneRow) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+        fun inRow(index: Int, weight: Float) = LinearLayout.LayoutParams(
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, weight).apply { if (index > 0) leftMargin = gap }
+        fun stacked(index: Int) = LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { if (index > 0) topMargin = gap }
+        when {
+            oneRow -> {
+                primaryRow.addView(answer, inRow(0, 2f))
+                primaryRow.addView(reply, inRow(1, 1f))
+                primaryRow.addView(ignore, inRow(2, 1f))
+            }
+            stack -> for ((index, view) in listOf(answer, reply, ignore).withIndex())
+                primaryRow.addView(view, stacked(index))
+            else -> {
+                primaryRow.addView(answer, stacked(0))
+                replyRow.addView(reply, inRow(0, 1f))
+                replyRow.addView(ignore, inRow(1, 1f))
+                primaryRow.addView(replyRow, stacked(1))
+            }
         }
         secondaryRow.removeAllViews()
         for ((index, view) in listOf(monitor, unlock, mic).withIndex()) {

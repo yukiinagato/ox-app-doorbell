@@ -303,8 +303,9 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
         let width = contentWidth
         switch Section(rawValue: indexPath.section) {
         case .doors?:
-            return DashboardView.tileSize(contentWidth: width,
-                                          columns: DashboardView.columnCount(forWidth: width),
+            // Fewer doors than columns: the tiles share the whole row instead of leaving it empty.
+            let columns = min(DashboardView.columnCount(forWidth: width), max(1, shownDoors.count))
+            return DashboardView.tileSize(contentWidth: width, columns: columns,
                                           spacing: layout.minimumInteritemSpacing)
         case .actions?:
             let count = CGFloat(max(1, quickActions.count))
@@ -393,6 +394,8 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
         pairingButton.tintColor = SystemStyle.warning
         offlineDoorButton.tintColor = SystemStyle.label
         doorPageButton.tintColor = SystemStyle.label
+        statusCard.showsMaterial = skin.decorated
+        footerCard.showsMaterial = skin.decorated
         statusCard.refresh()
         footerCard.refresh()
         adminQr.refreshColors()
@@ -406,9 +409,16 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
     /// The reading is handed in by the screen that owns the clock. Asking Core for a second one
     /// meant two synchronous Core calls per tick on the main thread.
     func updateClock(_ reading: DoorbellClock.Reading) {
+        let first = (clockLabel.text ?? "").isEmpty
         clockLabel.text = reading.hhmmss
         let date = DoorbellClock.longDate(reading, lang: boot.uiLang)
-        if dateLabel.text != date { dateLabel.text = date }
+        if dateLabel.text != date {
+            dateLabel.text = date
+            invalidateHeader()
+        } else if first {
+            // The header was measured before the first reading arrived.
+            invalidateHeader()
+        }
     }
 
     /// While missed calls are unread, one row says so and leads to the History tab; the count

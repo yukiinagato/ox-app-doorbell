@@ -187,6 +187,8 @@ final class MonitorViewController: UIViewController {
             closeButton.bottomAnchor.constraint(equalTo: guide.bottomAnchor),
         ])
         #endif
+        // Stacked, the door list keeps the height of its rows and the stage takes the rest.
+        doorListHeight = doorList.heightAnchor.constraint(equalToConstant: 160)
         sideConstraints = [
             videoBackdrop.topAnchor.constraint(equalTo: navBar.bottomAnchor),
             videoBackdrop.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -197,8 +199,7 @@ final class MonitorViewController: UIViewController {
         stackedConstraints = [
             videoBackdrop.topAnchor.constraint(equalTo: navBar.bottomAnchor),
             videoBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            videoBackdrop.heightAnchor.constraint(equalTo: videoBackdrop.widthAnchor,
-                                                  multiplier: 9.0 / 16.0),
+            doorListHeight,
             doorList.topAnchor.constraint(equalTo: videoBackdrop.bottomAnchor),
             doorList.leadingAnchor.constraint(equalTo: view.leadingAnchor),
         ]
@@ -212,6 +213,7 @@ final class MonitorViewController: UIViewController {
         applyArrangement(for: view.bounds.size)
     }
 
+    private var doorListHeight = NSLayoutConstraint()
     private var sideConstraints: [NSLayoutConstraint] = []
     private var stackedConstraints: [NSLayoutConstraint] = []
     private var immersiveConstraints: [NSLayoutConstraint] = []
@@ -228,6 +230,8 @@ final class MonitorViewController: UIViewController {
         } else {
             NSLayoutConstraint.activate(side ? sideConstraints : stackedConstraints)
         }
+        doorListHeight.constant = min(max(120, size.height * 0.35),
+                                      CGFloat(max(1, peers.count)) * 52 + 96)
         navBar.alpha = controlsHidden ? 0 : 1
         doorList.alpha = controlsHidden ? 0 : 1
         navBar.isUserInteractionEnabled = !controlsHidden
@@ -277,6 +281,7 @@ final class MonitorViewController: UIViewController {
     private func rebuildDevices() {
         peers = Array(confirmedDoorPeers().prefix(8))
         doorList.reloadData()
+        applyArrangement(for: view.bounds.size)
         if videoPlayer == nil { emptyLabel.isHidden = false }
         // Restarting here on every peers_changed is what produced the retry storm: no video
         // frame meant "start again", and starting again is what kept the door too busy to send
@@ -313,6 +318,9 @@ final class MonitorViewController: UIViewController {
         let h264 = ConfigUtil.str(peer, "stream_mp4") ?? ""
         videoPlayer = AdaptiveH264MjpegPlayer(h264Host: h264View, mjpegView: video,
                                               noVideoLabel: emptyLabel)
+        videoPlayer?.onVideoSize = { [weak self] size in
+            if size.width > 0, size.height > 0 { self?.videoZoom.pictureSize = size }
+        }
         videoPlayer?.start(h264URLString: h264, mjpegURL: mjpeg, h264Enabled: !safeMode)
         if monitoringAudio { core.sipHangup() }
         monitoringAudio = false

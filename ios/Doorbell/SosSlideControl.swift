@@ -411,8 +411,16 @@ final class SosTriggerButton: UIButton {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         accessibilityIdentifier = "sos_trigger"
+        #if os(tvOS)
+        // A remote lands on it by focus: a roomier target, and the focus state drawn by hand
+        // because this is not a system-styled button.
+        titleLabel?.font = SystemStyle.font(.headline)
+        widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
+        heightAnchor.constraint(greaterThanOrEqualToConstant: 66).isActive = true
+        #else
         setImage(TablerIcon.image("TablerAlertTriangle"), for: .normal)
         titleLabel?.font = SystemStyle.font(.subheadline, weight: .semibold)
+        #endif
         SystemStyle.followContentSize(titleLabel)
         layer.cornerRadius = 10
         layer.borderWidth = 1.5
@@ -441,6 +449,20 @@ final class SosTriggerButton: UIButton {
         tintColor = SystemStyle.negative
         layer.borderColor = SystemStyle.negative.cgColor
     }
+
+    #if os(tvOS)
+    override func didUpdateFocus(in context: UIFocusUpdateContext,
+                                 with coordinator: UIFocusAnimationCoordinator) {
+        super.didUpdateFocus(in: context, with: coordinator)
+        let focused = context.nextFocusedView === self
+        coordinator.addCoordinatedAnimations({ [weak self] in
+            guard let self = self else { return }
+            self.transform = focused ? CGAffineTransform(scaleX: 1.08, y: 1.08) : .identity
+            self.backgroundColor = focused ? SystemStyle.negative : .clear
+            self.setTitleColor(focused ? .white : SystemStyle.negative, for: .normal)
+        }, completion: nil)
+    }
+    #endif
 
     var isConfirming: Bool { return surface != nil }
 

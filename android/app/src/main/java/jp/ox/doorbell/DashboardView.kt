@@ -266,7 +266,9 @@ internal class DashboardView(
         clock.refreshIfStale()
         val now = clock.cached()
         palette = ShellAppearance.resolve(activity, status, config, now.minuteOfDay())
-        roles = UiRoles.from(palette, CoreDisplays.callButton(coreDisplay.theme, palette.ground))
+        // The palette already carries an administrator-chosen primary; the accent Core computes
+        // from the wallpaper belongs to the door station's Call button only.
+        roles = UiRoles.from(palette)
         applyPalette()
         applyThemeBackdrop()
         updateClock(now)

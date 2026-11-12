@@ -862,6 +862,7 @@
   <data name="firewall_rules_missing" xml:space="preserve"><value>Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？</value></data>
   <data name="firewall_title" xml:space="preserve"><value>Windows 防火墙</value></data>
   <data name="flow_back" xml:space="preserve"><value>返回</value></data>
+  <data name="flow_call_failed" xml:space="preserve"><value>呼叫失败，请重试。</value></data>
   <data name="flow_done" xml:space="preserve"><value>完成</value></data>
   <data name="flow_message_title" xml:space="preserve"><value>访客留言</value></data>
   <data name="flow_sent" xml:space="preserve"><value>已通知</value></data>

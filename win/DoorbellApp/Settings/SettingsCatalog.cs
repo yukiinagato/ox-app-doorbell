@@ -406,7 +406,7 @@ namespace DoorbellApp.Settings
             var c = Category("sos", "IconShieldLock");
             var g = Group(c, "settings.grp_sos_trigger");
             Add(g, Choice("sos_mode", "emergency.trigger.mode", "slide", SettingScope.AllDevices,
-                O("slide", "settings.sos_slide"), O("hold", "settings.sos_hold")));
+                O("slide", "settings.sos_slide")));
             Add(g, Describe(Stepper("sos_countdown", "emergency.trigger.countdown_s", 0, 10, 1, 3,
                 SettingScope.AllDevices, "settings.unit_seconds")));
             Add(g, Multi("sos_roles", "emergency.button_on_roles", SettingScope.AllDevices,

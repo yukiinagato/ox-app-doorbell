@@ -21,9 +21,9 @@
 
 // PJSIP pjlib C ABI. The JNI bridge is not part of the doorbell_core target, so it only
 // declares the JVM registration entry point instead of depending on PJSIP include paths.
+#if defined(DB_ANDROID_REAL_PJSIP)
 extern "C" void pj_jni_set_jvm(void* jvm);
-
-#ifndef DB_ANDROID_REAL_PJSIP
+#elif !defined(DB_ANDROID_SIP_STUB)
 #error "Android product APKs must link the real PJSIP backend"
 #endif
 
@@ -422,7 +422,9 @@ extern "C" JNIEXPORT jint JNI_OnLoad(JavaVM* vm, void*) {
   // PJSIP's Android GUID generator uses Java UUID for SIP tags and call IDs. Its own
   // JNI_OnLoad is disabled because this shared library has one, so register the JVM here.
   // Without this call, the first incoming INVITE can abort while creating an empty tag.
+#if defined(DB_ANDROID_REAL_PJSIP)
   pj_jni_set_jvm(vm);
+#endif
   return JNI_VERSION_1_6;
 }
 
@@ -502,8 +504,12 @@ Java_jp_ox_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jstring
 
 extern "C" JNIEXPORT jstring JNICALL
 Java_jp_ox_doorbell_DoorbellCore_nativeBackendJson(JNIEnv* env, jobject) {
+#if defined(DB_ANDROID_SIP_STUB)
+  const std::string json = "{\"platform_abi\":2,\"sip\":\"stub\",\"pjsip_tier\":\"none\"}";
+#else
   const std::string json = std::string("{\"platform_abi\":2,\"sip\":\"pjsip\",\"pjsip_tier\":\"") +
                            DB_ANDROID_PJSIP_TIER_NAME + "\"}";
+#endif
   return env->NewStringUTF(json.c_str());
 }
 

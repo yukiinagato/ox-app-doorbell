@@ -1379,6 +1379,7 @@ event.visitor_message: { ja: "{door}: {text} ({time})", en: "{door}: {text} ({ti
 flow.back: { ja: "戻る", en: "Back", zh: "返回" }
 flow.done: { ja: "完了", en: "Done", zh: "完成" }
 flow.sent: { ja: "お知らせしました", en: "Message sent", zh: "已通知" }
+flow.call_failed: { ja: "呼び出せませんでした。もう一度お試しください。", en: "The call could not be placed. Please try again.", zh: "呼叫失败，请重试。" }
 flow.message_title: { ja: "来訪者からのお知らせ", en: "Message from a visitor", zh: "访客留言" }
 flow_editor.title: { ja: "来訪者ウィザード", en: "Visitor wizard", zh: "访客向导" }
 flow_editor.enabled: { ja: "ウィザードを使う", en: "Use the wizard", zh: "启用向导" }

@@ -53,12 +53,22 @@ val doorbellTier = providers.gradleProperty("doorbellTier").orElse("modern").get
 require(doorbellTier == "modern" || doorbellTier == "legacy19") {
   "doorbellTier must be 'modern' or 'legacy19' (was '$doorbellTier')"
 }
+// Debug-only emulator lane: -PdoorbellTier=legacy19 -PdoorbellLegacyAbi=arm64-v8a builds the
+// legacy19 UI for arm64 so it runs on an arm64-only emulator image. There is no API 19 PJSIP
+// artifact for arm64, so this lane links the SIP stub, reports itself as having no SIP, and is
+// refused for release tasks below. It is for looking at screens, never for a device.
+val doorbellLegacyAbi = providers.gradleProperty("doorbellLegacyAbi").orNull
+require(doorbellLegacyAbi == null ||
+        (doorbellTier == "legacy19" && doorbellLegacyAbi == "arm64-v8a")) {
+  "doorbellLegacyAbi supports only 'arm64-v8a' together with -PdoorbellTier=legacy19"
+}
+val doorbellSipStub = doorbellLegacyAbi != null
 val doorbellNdk = if (doorbellTier == "legacy19") "25.2.9519653" else "27.1.12297006"
 
 // One build number per release; each flavour gets its own versionCode derived from it, so a
 // legacy19 and a modern APK of the same release never share a code (and both stay above the
 // single shared code 27 used through 0.3.26).
-val doorbellBuildNumber = 45
+val doorbellBuildNumber = 46
 fun flavorVersionCode(flavorDigit: Int): Int = doorbellBuildNumber * 10 + flavorDigit
 
 // Release signing comes from Gradle properties or the environment, never from the repository:
@@ -93,8 +103,9 @@ android {
     targetSdk = 35
     testInstrumentationRunner = "jp.ox.doorbell.VisitorUiInstrumentation"
     versionCode = flavorVersionCode(0)
-    versionName = "0.4.2+${doorbellGitRevision.take(7)}"
+    versionName = "0.4.3+${doorbellGitRevision.take(7)}"
     buildConfigField("String", "DOORBELL_SOURCE_ID", "\"$doorbellSourceIdentity\"")
+    buildConfigField("boolean", "DOORBELL_SIP_STUB", doorbellSipStub.toString())
 
     externalNativeBuild {
       cmake {
@@ -121,9 +132,12 @@ android {
       minSdk = 19
       versionCode = flavorVersionCode(1)
       versionNameSuffix = "-legacy19"
-      ndk { abiFilters += listOf("armeabi-v7a") }
+      ndk { abiFilters += listOf(doorbellLegacyAbi ?: "armeabi-v7a") }
       externalNativeBuild {
-        cmake { arguments += "-DDB_ANDROID_PJSIP_TIER=api19" }
+        cmake {
+          arguments += "-DDB_ANDROID_PJSIP_TIER=api19"
+          if (doorbellSipStub) arguments += "-DDB_ANDROID_SIP_STUB=ON"
+        }
       }
       resValue("string", "android_build_tier", "legacy19")
     }
@@ -207,6 +221,12 @@ androidComponents {
 gradle.taskGraph.whenReady {
   val packagesRelease = allTasks.any {
     it.project == project && it.name.startsWith("package") && it.name.endsWith("Release")
+  }
+  val buildsRelease = allTasks.any { it.project == project && it.name.contains("Release") }
+  if (buildsRelease && doorbellSipStub) {
+    throw GradleException(
+      "doorbellLegacyAbi is a debug-only emulator lane that links the SIP stub; " +
+        "release tasks are refused.")
   }
   if (packagesRelease && !releaseSigningConfigured) {
     throw GradleException(

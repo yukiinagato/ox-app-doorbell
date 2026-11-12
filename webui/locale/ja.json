@@ -855,6 +855,7 @@
  "firewall.rules_missing": "Windows ファイアウォールが、ほかの端末からこの端末へのクラスタ通信を遮断している可能性があります。このアプリの受信通信を許可しますか?",
  "firewall.title": "Windows ファイアウォール",
  "flow.back": "戻る",
+ "flow.call_failed": "呼び出せませんでした。もう一度お試しください。",
  "flow.done": "完了",
  "flow.message_title": "来訪者からのお知らせ",
  "flow.sent": "お知らせしました",

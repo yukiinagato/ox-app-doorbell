@@ -680,7 +680,7 @@ surface を推測できません。
 
 - ID = `(origin_node, origin_seq)` 冪等。型には `press | purpose_selected | call_answered |
   call_ended | call_cancelled | motion | reply | offline | online | config_changed | emergency |
-  emergency_cancel | delivery_result | visitor_lang` がある。
+  emergency_cancel | delivery_result | visitor_lang | visitor_message` がある。
 - `call_answered`/`call_ended` は schema version、`door`、`call_id`、`stage_revision` を持つ。
   手動応答 client は answer-mode SIP dialog の接続後だけ exact tuple を claim し、Core は決定的な
   `dialog_owner` を 1 つ保存します。同時応答の loser は winner を ended にせず hangup し、monitor は
@@ -881,6 +881,115 @@ App は無料枠を保証しません。サービス側でクォータを設定�
 iOS、iOS 5 互換版、Android、Windows のネイティブ門口機がこの経路に従います。Web パネルは最初に宛先のドアを選び、その後に設定された順序で用件選択と呼出を行います。設定の切替はホーム表示のみを更新し、呼出は発生しません。進行中の呼出の識別子と期限は維持されます。保存する値は変更せず、管理メニューには翻訳された名称と選択中のフローの説明を表示します。
 
 管理者資格情報の変更では、CRDT エントリーとローカル資格情報メタデータを単一の SQLite トランザクションで確定します。永続化に失敗した場合、以前のパスワードとセッションを維持します。新しいブラウザー更新 API は、セッション固有のランダムな `X-Doorbell-CSRF` ヘッダーと完全一致する信頼済み `Origin` を必須とします。欠落、null、ワイルドカード、未信頼の Origin は拒否します。`GET /api/session` は操作期限を延長せず、`Cache-Control: no-store` でトークンを返します。現在のローカル IP とループバックのリスナーポート上の HTTP Origin は信頼します。DNS 名やリバースプロキシは、`web.allowed_origins` にパス、ワイルドカード、資格情報を含まない `http://host[:port]` または `https://host[:port]` の完全一致文字列を最大 32 件設定します。`Host` や転送ヘッダーでは信頼を付与しません。不正な項目は拒否します。
+
+## 来訪者フロー（門口機ウィザード）
+
+`visitor_flow` は、呼び出しの前に来訪者が見る画面と押せる項目を、ステップの集まりと開始位置で記述する。
+門口機は Core が公開する「解決済み」ドキュメント（`db_core_visitor_flow_json`、
+`GET /api/panel/visitor-flow`、パネル状態の `visitor_flow`）を描画し、この設定を直接読まない。
+
+```jsonc
+"visitor_flow": {
+  "enabled": true,            // bool リーフ。未設定は有効。false で従来の画面に戻る
+  "start": "s_home",          // 文字列リーフ: 最初のページ
+  "idle_s": 45,               // 整数リーフ 15..300: 無操作で最初のページに戻るまでの秒数
+  "require_call": true,       // bool リーフ、既定 true: 最初のページから必ず呼び出しに到達できること
+  "steps": {                  // 各ステップは visitor_flow.steps.<id> に「値まるごと 1 つ」で書く
+    "s_home": { "kind": "page",
+      "title": { "ja": "ご用件をお選びください", "en": "How can we help?" },
+      "options": [
+        { "id": "o_call", "label": { "ja": "呼び出す", "en": "Call" }, "style": "primary", "to": "c_any" },
+        { "id": "o_delivery", "purpose": "p_delivery", "to": "s_parcel" } ] },
+    "s_parcel": { "kind": "page",
+      "title": { "ja": "置き配できますか？", "en": "Can you leave it at the door?" },
+      "body":  { "ja": "プレーンテキスト。\n\n空行で段落が変わる。", "en": "…" },
+      "images": [ { "asset": "<sha256>", "alt": { "ja": "置き場所の写真" }, "place": "above" } ],
+      "options": [
+        { "id": "o_leave", "icon": "📦", "label": { "ja": "置き配する" }, "style": "primary", "to": "n_left" },
+        { "id": "o_hand", "label": { "ja": "手渡し・サイン必要" }, "to": "c_delivery" } ] },
+    "c_any":      { "kind": "call" },
+    "c_delivery": { "kind": "call", "purpose": "p_delivery", "on_unanswered": "s_parcel" },
+    "n_left":     { "kind": "notify", "purpose": "p_delivery",
+                    "message": { "ja": "荷物が玄関前に置かれました", "en": "A parcel was left at the door" },
+                    "snapshot": { "source": "media_source", "id": "porch_camera" },
+                    "to": "e_thanks" },
+    "e_thanks":   { "kind": "end", "title": { "ja": "ありがとうございました" }, "return_s": 8 }
+  }
+},
+"doors": { "d_back": { "visitor_flow": { "start": "s_back" } } }   // ドアごとの文字列リーフ
+```
+
+ステップの種類:
+
+- `page`: `title`、`body`、`images`（最大 2 枚）、`options`（1..12）。選択肢は `id`、言語別の `label`
+  または `purpose`（その用件のラベルとアイコンを継承）、任意の `icon`、`style`（`primary` か `normal`、
+  1 ページに primary は 1 つまで）、`enabled`、移動先ステップ `to` を持つ。これ以外のメンバーは持てないため、
+  選択肢から設定、Admin、URL、文字入力を開くことはできない。
+- `call`: 任意の `purpose` を付けて既存の呼び出し経路で鳴らす。ルール、チャイム対象、Telegram、
+  クイック返信は従来どおり動作する。`on_unanswered` は応答がなくタイムアウトしたときに表示するページ。
+  未指定なら応答なしの表示とともに最初のページへ戻る。
+- `notify`: 呼び出さずに `message` を家族へ届け、`to` の `end` ステップを表示する。`snapshot` は
+  添付する写真の取得元: `{"source":"media_source","id":…}` は `snapshot` ストリームを持つ
+  `media_sources` の項目（荷物の置き場所が見える外部カメラ）、`{"source":"door_station"}` は
+  門口機自身のカメラ（明示的に選ぶ代替）、未指定は文字のみ。
+- `end`: 「完了」だけがある終了ページ。`return_s`（3..60、既定 8）秒後に最初のページへ戻る。
+
+本文はプレーンテキストで、改行は改行、空行は段落の区切り。マークアップはない。言語ごとの上限は
+タイトル 60 文字、本文 600 文字かつ 8 段落、選択肢ラベル 40、notify のメッセージ 200、画像の説明 120。
+ステップと選択肢の ID は `A-Z a-z 0-9 _ -` の 1..32 文字で、`__` では始められない
+（Core が合成するステップ用の接頭辞）。
+
+**書き込み。** クライアントはスカラーのリーフと、キーごとにステップまるごと 1 つを書く。Core は
+`visitor_flow` と `visitor_flow.steps` のコンテナ書き込み、およびステップより下のキーへの書き込みを拒否する。
+リーフのエントリは古さに関係なくオブジェクトのメンバーを覆い隠すため、半分だけ統合されたステップを
+作らないためである。別々のステップへの同時編集は統合され、同じステップへの同時編集はステップ全体の
+後勝ちになる。1 回の編集は 1 つのバッチで保存する。グラフはバッチ適用後の設定に対して検査される:
+ステップは最大 32、すべての移動先が存在、`start` と各ドアの開始位置はページ、notify は end へ、
+`on_unanswered` はページへ、ページは循環せず深さは 6 まで、参照する用件・画像アセット・スナップショット用
+カメラが存在すること。エラーは `visitor_flow.<code>` に任意で `: <step>[.<option>]` が続く。
+本文や画像があり選択肢が 4 つを超えるページは、警告 `visitor_flow.crowded_page` 付きで受理される。
+
+`visitor_flow.require_call`（既定 true）は、最初のページまたはいずれかのドアの開始ページから `call` に
+到達できないフローを拒否する。false にすると通知専用のドアを作れ、書き込みは警告
+`visitor_flow.no_call` 付きで成功する。
+
+**既定値。** ステップが一度も書かれていない間、Core は標準のウィザードを提供し、設定には何も保存しない:
+主ボタンの「呼び出す」と、有効な用件ごとの選択肢を持つ最初のページである。宅配の用件
+（`p_delivery`、または 📦 アイコンの用件）が有効なら、その選択肢は「置き配できますか？」へ進み、
+置き場所の案内 → `notify` → 終了ページ、または `on_unanswered` で質問に戻るその用件の呼び出しに分かれる。
+なければ最初のページだけになる。標準のウィザードは用件の編集に追従する。
+`GET /api/visitor-flow/template` と `db_core_visitor_flow_template_json` は、標準（`default`）、
+最初のページのみ（`purposes`）、宅配ウィザード（`delivery`）を設定の形で返し、エディタはそれを通常の
+ステップとして書き込む。`visitor_flow` を削除すると標準のウィザードに戻る。
+`ui.call_flow: "ring_then_purpose"` を選んでいる環境は、ステップを書くか
+`visitor_flow.enabled: true` を設定するまでその経路を維持する。明示的なステップは `ui.call_flow` より優先される。
+
+**解決。** 複製されたデータは拒否せず、解決時に修復するため、来訪者が行き止まりになることはない。
+無効な選択肢、無効または削除された用件に結び付いた選択肢は取り除く。移動先のない選択肢は直接呼び出す。
+この Core が知らない種類のステップは直接の呼び出しになる。終了ページのない notify には標準の終了ページを
+与える。ページの循環は、輪を閉じる選択肢を直接の呼び出しに変えて断つ。押せるものがなくなったページと、
+（`require_call` が true の間）呼び出しに到達できない最初のページには「呼び出す」を追加する。
+使える最初のページがないフローは、呼び出しボタンだけの 1 ページになる。修復は解決済みドキュメントの
+`issues` に列挙される。ネイティブシェルが `visitor_flow_v1`（およびマニフェスト要素 `purpose.button`、
+`call.primary`、`cancel.call`）を広告していないドアにはフローを公開せず、従来の用件画面のままとなる。
+
+**通知。** `db_core_visitor_notify_json(door, step)`、`POST /api/panel/visitor-notify`
+（`/api/panel/press` と同じ `call.initiate` 権限）、`POST /api/visitor-notify` はステップ ID だけを受け取る。
+文面はフローから読むため、来訪者やパネルクライアントは内容を差し込めない。Core は `press` ではなく
+`visitor_message` イベントを追記する。何も鳴らず、通話も存在せず、このイベントを知らないノードは無視する。
+ドアごとに、同じステップは 60 秒以内なら最初の `message_id` を返す。それ以外は 30 秒に 1 件、10 分に 6 件まで
+受理し、制限された要求には `{"ok":true,"throttled":true}` を返して門口機は同じ終了ページを表示する。
+ルールは `when.type: "visitor_message"` と通常の `doors`・`purposes` フィルタで一致させる。
+`trigger_rules.r_visitor_message_default` が seed される: 室内機への `device_alert` と、全世帯への
+Telegram メッセージ（ステップに写真があれば添付）。
+
+スナップショットは通知を受理したノードが取得する。メディアソースの場合はプラットフォームの HTTP 転送で
+`streams.snapshot.url` を要求し、ソースの `secret_ref` はそのノードの安全な保管領域で
+`Authorization` ヘッダ（`{"username","password"}`、`{"bearer_token"}`、`user:password`）に解決される。
+アドレスと資格情報はイベント、ログ、解決済みドキュメントに入らない。メッセージは写真が届いたとき、
+または 4 秒経っても届かないときに公開される。JPEG は内容アドレスのファイルとして保存され
+`/asset/<sha256>` で配信される。`assets` 台帳の項目ではなく、他のノードは必要時にハッシュで取得し、
+約 7 日間保持される。
 
 ### ローカル設定リビジョンと条件付きコミット
 

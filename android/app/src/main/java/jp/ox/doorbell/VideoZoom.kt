@@ -3,10 +3,12 @@
 // and both renderers (the H.264 TextureView and the MJPEG/still ImageView) sit in one layer, so
 // one transform covers them all on both flavors.
 //
-// The transform is applied to that layer only, so overlays on the video box (admin QR, debug
-// line, sent-reply text) keep their size. The texture view's own rotation transform is left to
-// the player. The call actions live outside the video box, so a gesture can neither press nor
-// block them.
+// The layer is as large as the stage (the video box) and the box clips it, so a zoomed picture
+// grows into the letterbox bars until it covers the stage. The transform is applied to that layer
+// only, so overlays on the video box (admin QR, debug line, sent-reply text) keep their size.
+// Fitting and rotating the frame inside the layer is left to the player, which reports the
+// frame's size here. The call actions live outside the video box, so a gesture can neither press
+// nor block them.
 package jp.ox.doorbell
 
 import android.annotation.SuppressLint
@@ -17,12 +19,16 @@ import android.view.View
 
 internal class VideoZoom(private val layer: View, touchSurface: View) {
     private var state = ZoomState()
+    private var sourceWidth = 0
+    private var sourceHeight = 0
+    private val stage: VideoBox get() = VideoBox(layer.width.toFloat(), layer.height.toFloat())
+    private val picture: VideoBox get() = VideoZoomMath.fit(stage, sourceWidth, sourceHeight)
 
     private val scaleDetector = ScaleGestureDetector(layer.context,
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
                 apply(VideoZoomMath.pinch(state, detector.scaleFactor, detector.focusX,
-                                          detector.focusY, layer.width, layer.height))
+                                          detector.focusY, stage, picture))
                 return true
             }
         })
@@ -32,12 +38,12 @@ internal class VideoZoom(private val layer: View, touchSurface: View) {
             override fun onScroll(e1: MotionEvent?, e2: MotionEvent, distanceX: Float,
                                   distanceY: Float): Boolean {
                 if (!state.zoomed) return false
-                apply(VideoZoomMath.pan(state, -distanceX, -distanceY, layer.width, layer.height))
+                apply(VideoZoomMath.pan(state, -distanceX, -distanceY, stage, picture))
                 return true
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                apply(VideoZoomMath.doubleTap(state, e.x, e.y, layer.width, layer.height))
+                apply(VideoZoomMath.doubleTap(state, e.x, e.y, stage, picture))
                 return true
             }
         })
@@ -48,8 +54,19 @@ internal class VideoZoom(private val layer: View, touchSurface: View) {
         layer.addOnLayoutChangeListener { _, left, top, right, bottom, oldLeft, oldTop,
                                           oldRight, oldBottom ->
             if (right - left != oldRight - oldLeft || bottom - top != oldBottom - oldTop)
-                apply(VideoZoomMath.clamp(state, layer.width, layer.height))
+                apply(VideoZoomMath.clamp(state, stage, picture))
         }
+    }
+
+    /**
+     * The frame as it is shown, after rotation: [width] x [height] in any unit. Until it is
+     * known the picture is taken to fill the stage.
+     */
+    fun setPicture(width: Int, height: Int) {
+        if (width == sourceWidth && height == sourceHeight) return
+        sourceWidth = width
+        sourceHeight = height
+        apply(VideoZoomMath.clamp(state, stage, picture))
     }
 
     @SuppressLint("ClickableViewAccessibility") // Gestures only; there is nothing to click.

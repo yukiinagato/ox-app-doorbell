@@ -179,8 +179,7 @@ class IncomingActivity : ShellActivity() {
             if (SosSlideState.visibleForRole(cfg, app.boot.role)) android.view.View.VISIBLE
             else android.view.View.GONE
         applyAppearance()
-        roles = UiRoles.from(palette, CoreDisplays.callButton(
-            CoreDisplays.parse(st?.optJSONObject("display")).theme, palette.ground))
+        roles = UiRoles.from(palette)
         screen = IncomingScreen(this)
         updateDoorSwitcher()
         screen.arrange(roles, liveView = callId.isEmpty())
@@ -809,9 +808,9 @@ class IncomingActivity : ShellActivity() {
         val live = findViewById<ImageView>(R.id.live_view)
         val noVideo = findViewById<TextView>(R.id.no_video_text)
         videoPlayer?.stop()
-        videoPlayer = AdaptiveVideoPlayer(app, ui, texture, live, noVideo).also {
-            it.start(h264Url, mjpegUrl)
-        }
+        videoPlayer = AdaptiveVideoPlayer(app, ui, texture, live, noVideo) { width, height ->
+            videoZoom?.setPicture(width, height)
+        }.also { it.start(h264Url, mjpegUrl) }
         // fitCenter letterboxes inside the video box, so a portrait door camera stays portrait
         // and is never cropped or stretched to the panel's own shape.
         live.scaleType = ImageView.ScaleType.FIT_CENTER

@@ -658,7 +658,7 @@ remote/offline Web surface。
 
 - ID = `(origin_node, origin_seq)` 冪等。類型包含 `press | purpose_selected | call_answered |
   call_ended | call_cancelled | motion | reply | offline | online | config_changed | emergency |
-  emergency_cancel | delivery_result | visitor_lang`。
+  emergency_cancel | delivery_result | visitor_lang | visitor_message`。
 - `call_answered`/`call_ended` 帶 schema version、`door`、`call_id`、`stage_revision`。手動接聽
   client 只在 answer-mode SIP dialog 接通後 claim exact tuple，Core 保存一個決定性的
   `dialog_owner`。同時接聽的 loser hangup 時不能結束 winner，monitor 不 claim ownership。
@@ -827,6 +827,101 @@ App 不保證免費額度，請在供應商設定配額。詳見
 iOS、iOS 5 兼容版、Android 和 Windows 原生门口机遵循上述流程。Web 面板先选择目标门，再按所选模式安排目的选择与呼叫的顺序。切换设置只更新首页，不会发起呼叫；已有呼叫保留其标识和截止时间。配置存储值不变，管理菜单显示翻译后的名称和所选流程说明。
 
 管理员凭据变更将 CRDT 条目和本地凭据元数据放在同一 SQLite 事务中提交。持久化失败时保留原密码及其会话。新的浏览器写接口必须携带会话绑定的随机 `X-Doorbell-CSRF` 请求头，并通过精确可信 `Origin` 检查；缺失、null、通配符和不可信来源均拒绝。`GET /api/session` 使用 `Cache-Control: no-store` 返回令牌，不延长活动期限。当前本机 IP 及回环地址在监听端口上的直接 HTTP 来源可信。DNS 名或反向代理需要在 `web.allowed_origins` 数组配置最多 32 个精确的 `http://host[:port]` 或 `https://host[:port]` 来源，不含路径、通配符或凭据。`Host` 和转发请求头不能授予信任；非法条目拒绝匹配。
+
+## 访客流程（门口机向导）
+
+`visitor_flow` 描述访客在呼叫前看到的画面和可按的选项：一组步骤和一个入口。门口机渲染 Core 发布的
+“已解析”文档（`db_core_visitor_flow_json`、`GET /api/panel/visitor-flow`、面板状态中的
+`visitor_flow`），不直接读取此配置。
+
+```jsonc
+"visitor_flow": {
+  "enabled": true,            // 布尔叶子；缺省为开启。false 恢复原有画面
+  "start": "s_home",          // 字符串叶子：起始页
+  "idle_s": 45,               // 整数叶子 15..300：无操作后返回起始页的秒数
+  "require_call": true,       // 布尔叶子，默认 true：每个起始页都必须能到达呼叫
+  "steps": {                  // 每个步骤作为一个完整的值写入 visitor_flow.steps.<id>
+    "s_home": { "kind": "page",
+      "title": { "ja": "ご用件をお選びください", "zh": "请选择来访目的" },
+      "options": [
+        { "id": "o_call", "label": { "ja": "呼び出す", "zh": "呼叫" }, "style": "primary", "to": "c_any" },
+        { "id": "o_delivery", "purpose": "p_delivery", "to": "s_parcel" } ] },
+    "s_parcel": { "kind": "page",
+      "title": { "zh": "可以放在门口吗？" },
+      "body":  { "zh": "纯文本。\n\n空行开始新段落。" },
+      "images": [ { "asset": "<sha256>", "alt": { "zh": "放置位置照片" }, "place": "above" } ],
+      "options": [
+        { "id": "o_leave", "icon": "📦", "label": { "zh": "放在门口" }, "style": "primary", "to": "n_left" },
+        { "id": "o_hand", "label": { "zh": "需当面签收" }, "to": "c_delivery" } ] },
+    "c_any":      { "kind": "call" },
+    "c_delivery": { "kind": "call", "purpose": "p_delivery", "on_unanswered": "s_parcel" },
+    "n_left":     { "kind": "notify", "purpose": "p_delivery",
+                    "message": { "ja": "荷物が玄関前に置かれました", "zh": "包裹已放在门口" },
+                    "snapshot": { "source": "media_source", "id": "porch_camera" },
+                    "to": "e_thanks" },
+    "e_thanks":   { "kind": "end", "title": { "zh": "谢谢" }, "return_s": 8 }
+  }
+},
+"doors": { "d_back": { "visitor_flow": { "start": "s_back" } } }   // 每个门一个字符串叶子
+```
+
+步骤类型：
+
+- `page`：`title`、`body`、`images`（最多 2 张）和 `options`（1..12）。选项包含 `id`、按语言的 `label`
+  或 `purpose`（继承该来访目的的标签和图标）、可选的 `icon`、`style`（`primary` 或 `normal`，每页最多
+  一个 primary）、`enabled`，以及目标步骤 `to`。选项没有其他成员，因此无法打开设置、Admin、URL 或文字输入。
+- `call`：带可选 `purpose` 走现有的呼叫路径，规则、铃声目标、Telegram 和快捷回复的行为不变。
+  `on_unanswered` 指定呼叫超时无人应答时显示的页面；未指定则带“无人应答”提示返回起始页。
+- `notify`：不呼叫，把 `message` 发送给住户，然后显示 `to` 指定的 `end` 步骤。`snapshot` 选择附带的照片：
+  `{"source":"media_source","id":…}` 指向带 `snapshot` 流的 `media_sources` 条目（能看到包裹放置位置的
+  外部摄像头）；`{"source":"door_station"}` 是门口机自身的摄像头（需明确选择的备选）；缺省为仅文字。
+- `end`：只有“完成”控件的结束页，`return_s`（3..60，默认 8）秒后返回起始页。
+
+文本为纯文本：换行即换行，空行开始新段落，没有标记语法。每种语言的上限：标题 60 字符，正文 600 字符且
+8 段，选项标签 40，notify 消息 200，图片说明 120。步骤和选项 ID 为 1..32 个 `A-Z a-z 0-9 _ -` 字符，
+不能以 `__` 开头（Core 合成步骤使用该前缀）。
+
+**写入。** 客户端写入标量叶子，并且每个键写入一个完整步骤。Core 拒绝写入 `visitor_flow` 或
+`visitor_flow.steps` 容器，以及步骤之下的任何键：叶子条目会不分新旧地遮盖对象条目的成员，不能出现合并了
+一半的步骤。对不同步骤的并发编辑会合并；对同一步骤的并发编辑按整个步骤后写者胜出。一次编辑用一个批次
+保存，因为图结构是针对批次生效后的配置检查的：最多 32 个步骤；所有目标存在；`start` 和每个门的入口是
+页面；notify 指向 end；`on_unanswered` 指向页面；页面不成环且最多 6 层；引用的来访目的、图片素材和快照
+摄像头存在。错误为 `visitor_flow.<code>`，其后可带 `: <step>[.<option>]`。带正文或图片且选项超过 4 个的
+页面会被接受，并返回警告 `visitor_flow.crowded_page`。
+
+`visitor_flow.require_call`（默认 true）拒绝起始页或任一门的起始页无法到达 `call` 的流程。设为 false 可允许
+只通知不呼叫的门口机，写入成功并返回警告 `visitor_flow.no_call`。
+
+**默认值。** 在从未写入任何步骤之前，Core 提供内置向导，且不向配置写入任何内容：起始页包含主按钮“呼叫”
+和每个已启用来访目的的选项。若启用了快递目的（`p_delivery`，或图标为 📦 的目的），其选项进入“可以放在
+门口吗？”，随后分为放置说明 → `notify` → 结束页，或带该目的的呼叫（其 `on_unanswered` 返回该问题）。
+没有快递目的时，向导只有起始页。内置向导随来访目的的编辑而变化。`GET /api/visitor-flow/template` 和
+`db_core_visitor_flow_template_json` 以配置的形式返回内置向导（`default`）、仅起始页（`purposes`）或
+快递向导（`delivery`），供编辑器作为普通步骤写入；删除 `visitor_flow` 即恢复内置向导。
+选择了 `ui.call_flow: "ring_then_purpose"` 的安装在写入步骤或设置 `visitor_flow.enabled: true`
+之前保持原路径。显式步骤优先于 `ui.call_flow`。
+
+**解析。** 复制来的数据不会被拒绝，而是在解析时修复，访客不会被困住。被禁用的选项、关联到已禁用或已删除
+来访目的的选项会被移除。目标缺失的选项直接呼叫。本 Core 不认识的步骤类型变为直接呼叫。缺少结束页的
+notify 使用内置结束页。页面成环时，把闭环的选项改为直接呼叫。没有可按选项的页面，以及（`require_call`
+为 true 时）无法到达呼叫的起始页，会增加“呼叫”选项。没有可用起始页的流程变为只有呼叫按钮的一页。
+每项修复都列在已解析文档的 `issues` 中。原生外壳未声明 `visitor_flow_v1`（以及清单元素
+`purpose.button`、`call.primary`、`cancel.call`）的门不会收到流程，继续使用原来的来访目的画面。
+
+**通知。** `db_core_visitor_notify_json(door, step)`、`POST /api/panel/visitor-notify`（与
+`/api/panel/press` 相同的 `call.initiate` 权限）和 `POST /api/visitor-notify` 只接受步骤 ID；
+文字从流程中读取，访客或面板客户端无法注入内容。Core 追加 `visitor_message` 事件而不是 `press`：
+不响铃，不存在通话，不认识该事件的节点会忽略它。每个门：同一步骤在 60 秒内返回第一次的 `message_id`；
+其他情况每 30 秒接受 1 条、每 10 分钟接受 6 条，被限流的请求返回 `{"ok":true,"throttled":true}`，
+门口机显示同样的结束页。规则用 `when.type: "visitor_message"` 及常规的 `doors`、`purposes` 过滤器匹配。
+系统会 seed `trigger_rules.r_visitor_message_default`：室内机的 `device_alert`，以及发给所有住户的
+Telegram 消息（步骤带照片时附带）。
+
+快照由接受通知的节点获取。对媒体源，它通过平台 HTTP 传输请求 `streams.snapshot.url`；该源的
+`secret_ref` 在该节点的安全存储中解析为 `Authorization` 请求头（`{"username","password"}`、
+`{"bearer_token"}` 或 `user:password`）。地址和凭据不会进入事件、日志或已解析文档。消息在照片到达时，
+或 4 秒仍未到达时发布。JPEG 作为内容寻址文件保存并通过 `/asset/<sha256>` 提供；它不是 `assets` 台账条目，
+其他节点按需通过哈希获取，保留约 7 天。
 
 ### 本地配置版本与条件提交
 

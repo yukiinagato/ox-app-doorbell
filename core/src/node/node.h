@@ -99,6 +99,13 @@ class Node {
   void setTtsCb(TtsCb cb);
 
   void setHttpsFn(HttpsFn fn);
+  // Fetches one still from an external camera for a visitor message. The default goes through
+  // the platform HTTPS transport; a test substitutes its own camera. headers_json may carry an
+  // Authorization header and must never be logged. done may run on any thread.
+  using CameraFetchFn = std::function<void(
+      const std::string& url, const std::string& headers_json,
+      std::function<void(int status, Bytes body)> done)>;
+  void setCameraFetchFn(CameraFetchFn fn);
 
 
   // Device information may block briefly and is called from the reachability worker.
@@ -157,6 +164,13 @@ class Node {
 
 
 
+  // The resolved visitor flow for one door (empty selects the local door), as a shell renders
+  // it; {"enabled":false,"reason":...} when the door has none or its shell cannot show one.
+  std::string visitorFlowJson(const std::string& door_id);
+  // A configuration-shaped flow an editor can write: "default", "purposes" or "delivery".
+  std::string visitorFlowTemplateJson(const std::string& name);
+  // Send the message of one notify step without ringing. The step id is the only input.
+  std::string visitorNotifyJson(const std::string& door_id, const std::string& step_id);
   // Replicate a visitor-language change. Empty door selects the local assigned door.
   void setVisitorLang(const std::string& door_id, const std::string& lang);
 
@@ -361,6 +375,9 @@ class Node {
   Runloop& loop();
 
   struct Impl;
+
+  // Built-in catalog text (ja/en/zh), the same strings the default visitor flow is made from.
+  static std::string builtinCatalogText(const std::string& key, const std::string& lang);
 
  private:
   std::string node_id_;

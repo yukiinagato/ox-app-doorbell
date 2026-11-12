@@ -18,36 +18,67 @@ enum VideoZoom {
         return current > minimumScale + 0.01 ? minimumScale : doubleTapScale
     }
 
-    /// The part of the unzoomed picture that fills the viewport at `scale`, centred on `point`
-    /// and moved back inside the picture so a zoom near a corner never shows anything beyond its
-    /// edges. All values are in the picture's own (1x) coordinates.
-    static func visibleRect(scale: CGFloat, around point: CGPoint, in bounds: CGSize) -> CGRect {
-        let scale = clampedScale(scale)
-        let size = CGSize(width: bounds.width / scale, height: bounds.height / scale)
-        let x = min(max(0, point.x - size.width / 2), max(0, bounds.width - size.width))
-        let y = min(max(0, point.y - size.height / 2), max(0, bounds.height - size.height))
-        return CGRect(origin: CGPoint(x: x, y: y), size: size)
+    /// The picture aspect-fitted in the stage: it fills the width or the height, whichever is
+    /// reached first, and is never stretched or cropped. An unknown picture size fills the stage.
+    static func fittedSize(picture: CGSize, stage: CGSize) -> CGSize {
+        guard picture.width > 0, picture.height > 0, stage.width > 0, stage.height > 0 else {
+            return stage
+        }
+        let scale = min(stage.width / picture.width, stage.height / picture.height)
+        return CGSize(width: picture.width * scale, height: picture.height * scale)
     }
 
-    /// A pan offset limited to the picture: at `scale` the zoomed content is `bounds * scale`,
-    /// and the viewport may not leave it.
-    static func clampedOffset(_ offset: CGPoint, scale: CGFloat, bounds: CGSize) -> CGPoint {
+    /// Where the zoomed picture may sit in the stage, per axis. The clip rectangle is the whole
+    /// stage: a picture larger than the stage on an axis may not show empty space there, so its
+    /// edges stay at or beyond the stage edges; a picture that is not larger stays centred.
+    /// `origin` is the picture's top-left corner in stage coordinates.
+    static func clampedOrigin(_ origin: CGPoint, zoomed: CGSize, stage: CGSize) -> CGPoint {
+        func axis(_ value: CGFloat, _ size: CGFloat, _ limit: CGFloat) -> CGFloat {
+            guard size > limit else { return (limit - size) / 2 }
+            return min(0, max(limit - size, value))
+        }
+        return CGPoint(x: axis(origin.x, zoomed.width, stage.width),
+                       y: axis(origin.y, zoomed.height, stage.height))
+    }
+
+    /// How much of the stage the zoomed picture covers: it grows into the letterbox bars until
+    /// it covers the stage, so this can exceed the fitted 1x rectangle.
+    static func visibleSize(zoomed: CGSize, stage: CGSize) -> CGSize {
+        return CGSize(width: min(zoomed.width, stage.width),
+                      height: min(zoomed.height, stage.height))
+    }
+
+    /// The part of the fitted picture a double tap brings into the stage at `scale`, centred on
+    /// `point` and kept inside the picture. All values are in the fitted picture's own (1x)
+    /// coordinates.
+    static func visibleRect(scale: CGFloat, around point: CGPoint, picture: CGSize,
+                            stage: CGSize) -> CGRect {
         let scale = clampedScale(scale)
-        let maxX = max(0, bounds.width * (scale - 1))
-        let maxY = max(0, bounds.height * (scale - 1))
-        return CGPoint(x: min(maxX, max(0, offset.x)), y: min(maxY, max(0, offset.y)))
+        let size = CGSize(width: min(picture.width, stage.width / scale),
+                          height: min(picture.height, stage.height / scale))
+        let x = min(max(0, point.x - size.width / 2), max(0, picture.width - size.width))
+        let y = min(max(0, point.y - size.height / 2), max(0, picture.height - size.height))
+        return CGRect(origin: CGPoint(x: x, y: y), size: size)
     }
 }
 
-/// Hosts a live picture so it can be pinched from 1x to 4x, dragged while zoomed, and toggled
-/// between fit and 2x with a double tap. Both renderers (the MJPEG image view and the H.264
-/// sample-buffer layer's host) go into `contentView`. The scroll view owns the pan limits, so the
-/// picture can never be dragged past its edges, and its recognizers only claim pinches, drags of
-/// a zoomed picture and double taps: single taps and the call controls beside the picture are
-/// untouched. tvOS has no touch input and keeps a plain container.
+/// The stage of a live picture. The stage takes whatever space its screen gives it; the picture
+/// is aspect-fitted and centred in it at 1x, can be pinched up to 4x, dragged while zoomed, and
+/// toggled between fit and 2x with a double tap. The clip rectangle is the whole stage, so a
+/// zoomed picture grows into the letterbox bars until it covers the stage. Both renderers (the
+/// MJPEG image view and the H.264 sample-buffer layer's host) go into `contentView`, which is
+/// the fitted picture. The scroll view owns the pan limits, and its recognizers only claim
+/// pinches, drags of a zoomed picture and double taps: single taps and the call controls beside
+/// the picture are untouched. tvOS has no touch input and keeps the fitted picture alone.
 final class ZoomableVideoView: UIView, UIScrollViewDelegate {
 
     let contentView = UIView()
+    /// The picture's own size after rotation, in any unit; only its aspect matters. Zero until
+    /// the first frame says, and the picture then fills the stage.
+    var pictureSize: CGSize = .zero {
+        didSet { if pictureSize != oldValue { fitPicture(keepingZoom: true) } }
+    }
+    private var fittedStage: CGSize = .zero
     #if os(iOS)
     private let scroll = UIScrollView()
     /// Exposed so a screen with its own single-tap recognizer can wait for this one to fail.
@@ -57,9 +88,7 @@ final class ZoomableVideoView: UIView, UIScrollViewDelegate {
     override init(frame: CGRect) {
         super.init(frame: frame)
         clipsToBounds = true
-        contentView.translatesAutoresizingMaskIntoConstraints = false
         #if os(iOS)
-        scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.delegate = self
         scroll.minimumZoomScale = VideoZoom.minimumScale
         scroll.maximumZoomScale = VideoZoom.maximumScale
@@ -70,46 +99,32 @@ final class ZoomableVideoView: UIView, UIScrollViewDelegate {
         scroll.scrollsToTop = false
         scroll.delaysContentTouches = false
         if #available(iOS 11.0, *) { scroll.contentInsetAdjustmentBehavior = .never }
+        scroll.frame = bounds
+        scroll.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         addSubview(scroll)
         scroll.addSubview(contentView)
-        NSLayoutConstraint.activate([
-            scroll.topAnchor.constraint(equalTo: topAnchor),
-            scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
-            scroll.leadingAnchor.constraint(equalTo: leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: trailingAnchor),
-            contentView.topAnchor.constraint(equalTo: scroll.topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: scroll.bottomAnchor),
-            contentView.leadingAnchor.constraint(equalTo: scroll.leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: scroll.trailingAnchor),
-            contentView.widthAnchor.constraint(equalTo: scroll.widthAnchor),
-            contentView.heightAnchor.constraint(equalTo: scroll.heightAnchor),
-        ])
         doubleTap.numberOfTapsRequired = 2
         doubleTap.addTarget(self, action: #selector(onDoubleTap(_:)))
         scroll.addGestureRecognizer(doubleTap)
+        // The zoom level is the picture's accessibility value, so assistive technology and UI
+        // tests can read what a pinch or a double tap did.
+        isAccessibilityElement = true
+        accessibilityIdentifier = "live_picture"
+        accessibilityTraits = .image
+        publishZoom()
         #else
         addSubview(contentView)
-        NSLayoutConstraint.activate([
-            contentView.topAnchor.constraint(equalTo: topAnchor),
-            contentView.bottomAnchor.constraint(equalTo: bottomAnchor),
-            contentView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            contentView.trailingAnchor.constraint(equalTo: trailingAnchor),
-        ])
         #endif
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    /// Adds one renderer, filling the picture area.
+    /// Adds one renderer, filling the fitted picture.
     func host(_ view: UIView) {
-        view.translatesAutoresizingMaskIntoConstraints = false
+        view.translatesAutoresizingMaskIntoConstraints = true
+        view.frame = contentView.bounds
+        view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         contentView.addSubview(view)
-        NSLayoutConstraint.activate([
-            view.topAnchor.constraint(equalTo: contentView.topAnchor),
-            view.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            view.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            view.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-        ])
     }
 
     var zoomScale: CGFloat {
@@ -122,39 +137,87 @@ final class ZoomableVideoView: UIView, UIScrollViewDelegate {
 
     /// Back to the fitted picture. Called whenever the door or the call on screen changes.
     func resetZoom() {
+        fitPicture(keepingZoom: false)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if bounds.size != fittedStage { fitPicture(keepingZoom: true) }
+    }
+
+    /// Sizes the picture to the stage at 1x and puts the zoom back on top of it. A rotation, a
+    /// resized stage or a new picture aspect all come through here.
+    private func fitPicture(keepingZoom: Bool) {
+        fittedStage = bounds.size
+        let fitted = VideoZoom.fittedSize(picture: pictureSize, stage: bounds.size)
         #if os(iOS)
-        scroll.setZoomScale(VideoZoom.minimumScale, animated: false)
-        scroll.contentOffset = .zero
+        let zoom = keepingZoom ? scroll.zoomScale : VideoZoom.minimumScale
+        scroll.zoomScale = VideoZoom.minimumScale
+        contentView.frame = CGRect(origin: .zero, size: fitted)
+        scroll.contentSize = fitted
+        if zoom != VideoZoom.minimumScale { scroll.zoomScale = VideoZoom.clampedScale(zoom) }
+        centrePicture()
+        if !keepingZoom { scroll.contentOffset = restingOffset() }
+        publishZoom()
+        #else
+        contentView.frame = CGRect(x: (bounds.width - fitted.width) / 2,
+                                   y: (bounds.height - fitted.height) / 2,
+                                   width: fitted.width, height: fitted.height)
         #endif
     }
 
     #if os(iOS)
-    /// A rotation or a new video aspect changes the viewport under a zoomed picture; the offset
-    /// is brought back inside it.
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        let clamped = VideoZoom.clampedOffset(scroll.contentOffset, scale: scroll.zoomScale,
-                                              bounds: scroll.bounds.size)
-        if clamped != scroll.contentOffset { scroll.contentOffset = clamped }
+    /// An axis on which the zoomed picture is smaller than the stage is centred with an inset;
+    /// an axis on which it is larger has none, so the scroll view stops the pan at its edges.
+    private func centrePicture() {
+        let zoomed = scroll.contentSize
+        let inset = UIEdgeInsets(top: max(0, (bounds.height - zoomed.height) / 2),
+                                 left: max(0, (bounds.width - zoomed.width) / 2),
+                                 bottom: max(0, (bounds.height - zoomed.height) / 2),
+                                 right: max(0, (bounds.width - zoomed.width) / 2))
+        if scroll.contentInset != inset { scroll.contentInset = inset }
+        let origin = VideoZoom.clampedOrigin(
+            CGPoint(x: -scroll.contentOffset.x, y: -scroll.contentOffset.y),
+            zoomed: zoomed, stage: bounds.size)
+        let offset = CGPoint(x: -origin.x, y: -origin.y)
+        if offset != scroll.contentOffset { scroll.contentOffset = offset }
+    }
+
+    private func restingOffset() -> CGPoint {
+        let origin = VideoZoom.clampedOrigin(.zero, zoomed: scroll.contentSize, stage: bounds.size)
+        return CGPoint(x: -origin.x, y: -origin.y)
     }
 
     func viewForZooming(in scrollView: UIScrollView) -> UIView? { return contentView }
+
+    func scrollViewDidZoom(_ scrollView: UIScrollView) {
+        centrePicture()
+        publishZoom()
+    }
+
+    private func publishZoom() {
+        accessibilityValue = String(format: "%.1fx", Double(scroll.zoomScale))
+    }
 
     @objc private func onDoubleTap(_ recognizer: UITapGestureRecognizer) {
         let target = VideoZoom.doubleTapTarget(from: scroll.zoomScale)
         let rect = VideoZoom.visibleRect(scale: target,
                                          around: recognizer.location(in: contentView),
-                                         in: scroll.bounds.size)
+                                         picture: contentView.bounds.size, stage: bounds.size)
         scroll.zoom(to: rect, animated: !Motion.reduced)
     }
 
     #if DEBUG
-    func setZoomForTesting(_ scale: CGFloat, offset: CGPoint) {
+    func setZoomForTesting(_ scale: CGFloat, origin: CGPoint) {
         scroll.setZoomScale(VideoZoom.clampedScale(scale), animated: false)
-        scroll.contentOffset = VideoZoom.clampedOffset(offset, scale: scroll.zoomScale,
-                                                       bounds: scroll.bounds.size)
+        scroll.contentOffset = CGPoint(x: -origin.x, y: -origin.y)
+        centrePicture()
     }
-    var contentOffsetForTesting: CGPoint { return scroll.contentOffset }
+    /// The zoomed picture's frame in stage coordinates.
+    var pictureFrameForTesting: CGRect {
+        return CGRect(origin: CGPoint(x: -scroll.contentOffset.x, y: -scroll.contentOffset.y),
+                      size: scroll.contentSize)
+    }
     #endif
     #endif
 }

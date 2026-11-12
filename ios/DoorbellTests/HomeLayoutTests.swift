@@ -24,48 +24,115 @@ final class HomeLayoutTests: XCTestCase {
         XCTAssertEqual(VideoZoom.doubleTapTarget(from: 3.7), 1)
     }
 
-    func testAZoomNearACornerNeverShowsBeyondThePicture() {
-        let bounds = CGSize(width: 400, height: 300)
-        let centre = VideoZoom.visibleRect(scale: 2, around: CGPoint(x: 200, y: 150), in: bounds)
-        XCTAssertEqual(centre, CGRect(x: 100, y: 75, width: 200, height: 150))
-        for point in [CGPoint(x: 0, y: 0), CGPoint(x: 400, y: 300), CGPoint(x: -50, y: 900),
-                      CGPoint(x: 399, y: 1)] {
+    func testThePictureIsAspectFittedInTheStage() {
+        // 16:9, 4:3 and a rotated 9:16 source, in a portrait and a landscape stage.
+        let portrait = CGSize(width: 400, height: 600), landscape = CGSize(width: 800, height: 400)
+        XCTAssertEqual(VideoZoom.fittedSize(picture: CGSize(width: 1280, height: 720),
+                                            stage: portrait), CGSize(width: 400, height: 225))
+        XCTAssertEqual(VideoZoom.fittedSize(picture: CGSize(width: 640, height: 480),
+                                            stage: portrait), CGSize(width: 400, height: 300))
+        XCTAssertEqual(VideoZoom.fittedSize(picture: CGSize(width: 720, height: 1280),
+                                            stage: portrait), CGSize(width: 337.5, height: 600))
+        XCTAssertEqual(VideoZoom.fittedSize(picture: CGSize(width: 1280, height: 720),
+                                            stage: landscape).height, 400, accuracy: 0.001)
+        XCTAssertEqual(VideoZoom.fittedSize(picture: CGSize(width: 720, height: 1280),
+                                            stage: landscape), CGSize(width: 225, height: 400))
+        XCTAssertEqual(VideoZoom.fittedSize(picture: .zero, stage: portrait), portrait,
+                       "an unknown picture fills the stage until the first frame says otherwise")
+    }
+
+    func testAZoomedPictureGrowsIntoTheLetterboxBars() {
+        let stage = CGSize(width: 400, height: 600)
+        let fitted = VideoZoom.fittedSize(picture: CGSize(width: 1280, height: 720), stage: stage)
+        let zoomed = CGSize(width: fitted.width * 2, height: fitted.height * 2)
+        let visible = VideoZoom.visibleSize(zoomed: zoomed, stage: stage)
+        XCTAssertEqual(visible, CGSize(width: 400, height: 450))
+        XCTAssertGreaterThan(visible.width * visible.height, fitted.width * fitted.height,
+                             "the clip rectangle is the stage, not the fitted 1x rectangle")
+        let covering = VideoZoom.visibleSize(zoomed: CGSize(width: fitted.width * 4,
+                                                            height: fitted.height * 4),
+                                             stage: stage)
+        XCTAssertEqual(covering, stage, "at 4x this picture covers the whole stage")
+    }
+
+    func testPanIsClampedPerAxisAgainstTheStage() {
+        let stage = CGSize(width: 400, height: 600)
+        // Wider than the stage, shorter than it: free to pan sideways, centred vertically.
+        let zoomed = CGSize(width: 800, height: 450)
+        XCTAssertEqual(VideoZoom.clampedOrigin(.zero, zoomed: zoomed, stage: stage),
+                       CGPoint(x: 0, y: 75))
+        XCTAssertEqual(VideoZoom.clampedOrigin(CGPoint(x: 120, y: -300), zoomed: zoomed,
+                                               stage: stage), CGPoint(x: 0, y: 75),
+                       "the leading edge may not come inside the stage")
+        XCTAssertEqual(VideoZoom.clampedOrigin(CGPoint(x: -9999, y: 0), zoomed: zoomed,
+                                               stage: stage), CGPoint(x: -400, y: 75),
+                       "nor the trailing edge")
+        XCTAssertEqual(VideoZoom.clampedOrigin(CGPoint(x: -150, y: 0), zoomed: zoomed,
+                                               stage: stage), CGPoint(x: -150, y: 75))
+        // Larger on both axes: both clamp, neither is centred.
+        let large = CGSize(width: 1600, height: 900)
+        XCTAssertEqual(VideoZoom.clampedOrigin(CGPoint(x: -100, y: -100), zoomed: large,
+                                               stage: stage), CGPoint(x: -100, y: -100))
+        XCTAssertEqual(VideoZoom.clampedOrigin(CGPoint(x: 50, y: -1000), zoomed: large,
+                                               stage: stage), CGPoint(x: 0, y: -300))
+        // Not larger on either axis: centred on both.
+        XCTAssertEqual(VideoZoom.clampedOrigin(CGPoint(x: 33, y: 44),
+                                               zoomed: CGSize(width: 400, height: 225),
+                                               stage: stage), CGPoint(x: 0, y: 187.5))
+    }
+
+    func testADoubleTapNearACornerStaysInsideThePicture() {
+        let stage = CGSize(width: 400, height: 600), picture = CGSize(width: 400, height: 225)
+        for point in [CGPoint(x: 0, y: 0), CGPoint(x: 400, y: 225), CGPoint(x: -50, y: 900)] {
             for scale in [CGFloat(1), 2, 4, 10] {
-                let rect = VideoZoom.visibleRect(scale: scale, around: point, in: bounds)
+                let rect = VideoZoom.visibleRect(scale: scale, around: point, picture: picture,
+                                                 stage: stage)
                 XCTAssertGreaterThanOrEqual(rect.minX, 0)
                 XCTAssertGreaterThanOrEqual(rect.minY, 0)
-                XCTAssertLessThanOrEqual(rect.maxX, bounds.width + 0.001)
-                XCTAssertLessThanOrEqual(rect.maxY, bounds.height + 0.001)
+                XCTAssertLessThanOrEqual(rect.maxX, picture.width + 0.001)
+                XCTAssertLessThanOrEqual(rect.maxY, picture.height + 0.001)
             }
+        }
+        XCTAssertEqual(VideoZoom.visibleRect(scale: 2, around: CGPoint(x: 200, y: 112.5),
+                                             picture: picture, stage: stage),
+                       CGRect(x: 100, y: 0, width: 200, height: 225),
+                       "a short picture is shown whole on the axis the stage has room for")
+    }
+
+    /// The scroll view rounds offsets to the pixel grid, so frames are compared to half a point.
+    private func assertFrame(_ frame: CGRect, _ expected: CGRect, _ message: String = "",
+                             file: StaticString = #filePath, line: UInt = #line) {
+        for (got, want) in [(frame.minX, expected.minX), (frame.minY, expected.minY),
+                            (frame.width, expected.width), (frame.height, expected.height)] {
+            XCTAssertEqual(got, want, accuracy: 0.5, message, file: file, line: line)
         }
     }
 
-    func testPanOffsetStopsAtThePictureEdges() {
-        let bounds = CGSize(width: 400, height: 300)
-        XCTAssertEqual(VideoZoom.clampedOffset(CGPoint(x: 50, y: 50), scale: 1, bounds: bounds),
-                       .zero, "a fitted picture cannot be dragged")
-        XCTAssertEqual(VideoZoom.clampedOffset(CGPoint(x: -20, y: -20), scale: 2, bounds: bounds),
-                       .zero)
-        XCTAssertEqual(VideoZoom.clampedOffset(CGPoint(x: 9999, y: 9999), scale: 2,
-                                               bounds: bounds), CGPoint(x: 400, y: 300))
-        XCTAssertEqual(VideoZoom.clampedOffset(CGPoint(x: 120, y: 80), scale: 4, bounds: bounds),
-                       CGPoint(x: 120, y: 80))
-    }
-
-    func testTheZoomViewClampsAndResets() {
-        let view = ZoomableVideoView(frame: CGRect(x: 0, y: 0, width: 400, height: 300))
-        let picture = UIView()
-        view.host(picture)
+    func testTheZoomViewFitsClampsAndResets() {
+        let view = ZoomableVideoView(frame: CGRect(x: 0, y: 0, width: 400, height: 600))
+        view.host(UIView())
+        view.pictureSize = CGSize(width: 1280, height: 720)
         view.layoutIfNeeded()
         XCTAssertEqual(view.zoomScale, 1)
-        view.setZoomForTesting(9, offset: CGPoint(x: 5000, y: 5000))
+        assertFrame(view.pictureFrameForTesting,
+                    CGRect(x: 0, y: 187.5, width: 400, height: 225), "fitted and centred at 1x")
+
+        view.setZoomForTesting(2, origin: CGPoint(x: 500, y: 500))
+        assertFrame(view.pictureFrameForTesting, CGRect(x: 0, y: 75, width: 800, height: 450),
+                    "wider than the stage: clamped; shorter: centred, into the bars")
+        view.setZoomForTesting(9, origin: CGPoint(x: -5000, y: -5000))
         XCTAssertEqual(view.zoomScale, 4, accuracy: 0.001)
-        XCTAssertLessThanOrEqual(view.contentOffsetForTesting.x, 1200.5)
-        XCTAssertLessThanOrEqual(view.contentOffsetForTesting.y, 900.5)
+        assertFrame(view.pictureFrameForTesting,
+                    CGRect(x: -1200, y: -300, width: 1600, height: 900),
+                    "covering the stage, the far edges stop at the stage edges")
+
+        view.pictureSize = CGSize(width: 720, height: 1280)
+        XCTAssertEqual(view.zoomScale, 4, accuracy: 0.001, "a new aspect keeps the zoom")
         view.resetZoom()
         XCTAssertEqual(view.zoomScale, 1, accuracy: 0.001)
-        XCTAssertEqual(view.contentOffsetForTesting, .zero)
-        XCTAssertFalse(view.doubleTap.cancelsTouchesInView && view.doubleTap.numberOfTapsRequired == 1,
+        assertFrame(view.pictureFrameForTesting,
+                    CGRect(x: 31.25, y: 0, width: 337.5, height: 600))
+        XCTAssertEqual(view.doubleTap.numberOfTapsRequired, 2,
                        "only a double tap is claimed; single taps reach the screen")
     }
 

@@ -72,10 +72,14 @@ enum ConfigUtil {
         return bool(entry, "enabled", true)
     }
 
+    /// The label in `lang`, then the Japanese one, then the entry's own `name` (a device record
+    /// has a name and no label), and only then the fallback, which is usually a raw id.
     static func labelOf(_ entry: [String: Any]?, _ lang: String, _ fallback: String) -> String {
-        guard let label = entry?["label"] as? [String: Any] else { return fallback }
-        if let s = label[lang] as? String, !s.isEmpty { return s }
-        if let s = label["ja"] as? String, !s.isEmpty { return s }
+        if let label = entry?["label"] as? [String: Any] {
+            if let s = label[lang] as? String, !s.isEmpty { return s }
+            if let s = label["ja"] as? String, !s.isEmpty { return s }
+        }
+        if let name = entry?["name"] as? String, !name.isEmpty { return name }
         return fallback
     }
 

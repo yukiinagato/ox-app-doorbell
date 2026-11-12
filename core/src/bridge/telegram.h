@@ -42,6 +42,9 @@ class TelegramBridge {
     std::function<std::string()> hlc_tick;
     // Fetch a node snapshot and complete on Runloop.
     std::function<void(const std::string& node_id, std::function<void(Bytes)> cb)> fetch_snapshot;
+    // Fetch a content-addressed blob (a visitor-message snapshot) by SHA-256; empty when no
+    // reachable node holds it.
+    std::function<void(const std::string& sha256, std::function<void(Bytes)> cb)> fetch_blob;
     // Resolve localized core text.
     std::function<std::string(const std::string& key, const std::string& lang,
                               const std::vector<std::pair<std::string, std::string>>& args)>
@@ -109,6 +112,7 @@ class TelegramBridge {
 
 
   void claimAndSend(const EventRecord& ev, const cJSON* params);
+  void sendVisitorMessage(const EventRecord& ev, const cJSON* params);
   void enqueuePress(const EventRecord& ev, const std::vector<std::string>& chats,
                     bool with_snapshot, const std::string& call_id,
                     const CallSource& source);

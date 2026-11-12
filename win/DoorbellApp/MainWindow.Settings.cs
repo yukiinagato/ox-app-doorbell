@@ -14,8 +14,18 @@ namespace DoorbellApp
                                  as System.Collections.Generic.Dictionary<string, object>, "id");
             // Without this device's id the per-device keys would resolve to "devices..".
             if (string.IsNullOrEmpty(nodeId)) return;
+            // Settings are the administrator's: they open in this device's language, not in the
+            // language a visitor last chose at the door, which comes back when they close.
+            bool visitorLanguage = App.Boot.Role == "door_station" && DoorbellApp.Util.Texts.Lang != App.Boot.UiLang;
+            if (visitorLanguage) DoorbellApp.Util.Texts.SetLang(App.Boot.UiLang);
             var settings = new SettingsWindow(this, nodeId, App.Boot.Role);
             settings.ShowDialog();
+            if (App.Boot.Role == "door_station" && DoorbellApp.Util.Texts.Lang != _visitorLang)
+            {
+                DoorbellApp.Util.Texts.SetLang(_visitorLang);
+                ApplyStrings();
+                BuildPurposeButtons();
+            }
             RequestHomeRefresh(HomeRefresh.All);
             if (!_adminUnlocked) App.Core?.AdminLock();
         }

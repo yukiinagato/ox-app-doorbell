@@ -71,6 +71,18 @@ class UiLayoutTest {
     }
 
     @Test
+    fun answerSharesARowOnlyWhereReplyAndIgnoreKeepTheirLabels() {
+        // The right column of a 1280 dp tablet is 448 dp: Answer takes its own row.
+        assertEquals(448, ScreenLayouts.incomingActionWidthDp(w(1280, 800)))
+        assertFalse(ScreenLayouts.incomingPrimaryInOneRow(w(1280, 800)))
+        // A phone in portrait is narrower still.
+        assertFalse(ScreenLayouts.incomingPrimaryInOneRow(w(400, 800)))
+        // A portrait tablet has the whole width for the row.
+        assertEquals(800, ScreenLayouts.incomingActionWidthDp(w(800, 1280)))
+        assertTrue(ScreenLayouts.incomingPrimaryInOneRow(w(800, 1280)))
+    }
+
+    @Test
     fun sheetsAndPanesFollowTheSizeClass() {
         assertFalse(ScreenLayouts.replySheetAtSide(w(400)))
         assertTrue(ScreenLayouts.replySheetAtSide(w(600)))

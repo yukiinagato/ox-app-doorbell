@@ -116,6 +116,13 @@ typedef struct db_platform_v2 {
  *   watermark moves. The shell refreshes the history list and the idle-screen missed badge.
  * {"t":"device_alert","kind":"call_missed","door":"d_front","call_id":"…","unread_missed":N,
  *   "visual":true,"sticky":false,"ttl_s":30,"channels":[…]} when a rule matches a missed call.
+ * {"t":"device_alert","kind":"visitor_message","door":"d_front","message_id":"…","step":"n_left",
+ *   "purpose":"p_delivery","text":{"ja":"…","en":"…"},"visitor_lang":"ja",
+ *   "snapshot":{"sha256":"…","url":"/asset/<sha256>","path":"<local path>|null"},
+ *   "visual":true,"sticky":false,"ttl_s":60,"channels":[…]} when a rule matches a message a
+ *   visitor left without ringing. snapshot is absent for a text-only message.
+ * {"t":"visitor_flow_changed","door":"d_front","revision":"…","enabled":true} when the resolved
+ *   visitor flow for this shell's door changed; re-read db_core_visitor_flow_json.
  * {"t":"display",...,"theme":{"bg_color":"#101418","bg_image":"<sha256>|null",
  *   "bg_image_path":"<local path>|null","glass":{"blur_radius":32,"source":"…"}}} for the
  *   idle-screen theme. A shell advertises `frosted_glass_radius_v1` only when it applies that
@@ -178,6 +185,55 @@ DB_API int db_core_report_call_answered_v2(db_core* c, const char* door_id,
 DB_API int db_core_report_call_ended_v2(db_core* c, const char* door_id,
                                         const char* call_id, int stage_revision,
                                         const char* reason);
+/* ---- Visitor flow (door-station wizard) ----
+ * A shell that renders the flow advertises feature "visitor_flow_v1" and manifest elements
+ * purpose.button, call.primary and cancel.call; otherwise core publishes no flow for its door and
+ * the shell keeps its purpose screen. Shells never read visitor_flow from raw configuration.
+ *
+ * db_core_visitor_flow_json returns the resolved document for one door (NULL or empty selects
+ * this shell's door):
+ *   {"schema_version":1,"enabled":true,"door":"d_front","source":"config|default|fallback",
+ *    "revision":"<16 hex>","start":"s_home","idle_s":45,"require_call":true,
+ *    "steps":{"s_home":{"kind":"page","title":{"ja":"…","en":"…"},"body":{…},
+ *               "images":[{"asset":"<sha256>","url":"/asset/<sha256>","path":"<local>"|null,
+ *                          "alt":{…},"place":"above|below"}],
+ *               "options":[{"id":"o_call","semantic_id":"call.primary|purpose.button",
+ *                           "label":{…},"icon":"","style":"primary|normal","to":"c_any",
+ *                           "purpose":"p_x"}]},
+ *             "c_any":{"kind":"call","purpose":"p_x","on_unanswered":"s_parcel"},
+ *             "n_left":{"kind":"notify","to":"e_thanks","purpose":"p_delivery"},
+ *             "e_thanks":{"kind":"end","title":{…},"body":{…},"images":[],"return_s":8}},
+ *    "issues":[{"step":"s_home","code":"dangling_target"}]}
+ * or {"schema_version":1,"enabled":false,"door":"…","revision":"…",
+ *     "reason":"disabled|legacy_call_flow|unsupported_shell"}.
+ * Text maps hold one entry for every language in ui.languages, already filled in; options a
+ * visitor must not see are already removed; every target names a step in the document. The
+ * shell keeps a stack of page ids and makes two terminal calls: a "call" step is
+ * db_core_press_v2(door, purpose or ""), a "notify" step is db_core_visitor_notify_json. A step
+ * kind the shell does not know, or a target it cannot find, is a direct db_core_press_v2(door, "").
+ * image.path is null until the asset is cached; show alt meanwhile and re-read the document on
+ * {"t":"visitor_flow_changed","door":"d_front","revision":"…","enabled":bool}, which core emits
+ * whenever the document for this shell's door differs from the one last reported.
+ *
+ * db_core_visitor_flow_template_json returns {"ok":true,"flow":{enabled,start,idle_s,
+ * require_call,steps}} in configuration shape for a settings editor to write as ordinary keys.
+ * name is "default" (what core serves while no step was ever written), "purposes" or "delivery";
+ * NULL means "default". An unknown name returns {"ok":false,"err":"unknown_template"}.
+ *
+ * db_core_visitor_notify_json sends the resident-facing message of one notify step without
+ * ringing. The step id is the only input; the text comes from the flow. Returns
+ *   {"ok":true,"throttled":false,"message_id":"<32 hex>"}      accepted
+ *   {"ok":true,"throttled":false,"message_id":"…","duplicate":true}  same step again within 60 s
+ *   {"ok":true,"throttled":true}                                 rate limited: show the same page
+ *   {"ok":false,"err":"unknown_door|flow_disabled|unknown_step|event_persistence_failed"}
+ * On ok the shell goes to the step's "to" page whatever "throttled" says. On ok:false it rings
+ * instead with db_core_press_v2(door, purpose of the step or ""), so a visitor is never left
+ * without a result. NULL is returned only for a null core or step id. Not gated by the
+ * administrator window. All three results are owned; release with db_free. */
+DB_API char* db_core_visitor_flow_json(db_core* c, const char* door_id);
+DB_API char* db_core_visitor_flow_template_json(db_core* c, const char* name);
+DB_API char* db_core_visitor_notify_json(db_core* c, const char* door_id, const char* step_id);
+
 /* Result v3 distinguishes a durable accepted write, a precisely queued persistence retry, and
  * a rejected operation. The v2 symbols retain their original 0/-2 behavior. Query the API
  * version to select this result contract; older libraries require the v2 fallback. */

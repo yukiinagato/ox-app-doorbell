@@ -322,6 +322,11 @@ final class MainViewController: UIViewController {
             let textHeight = button.titleLabel?.sizeThatFits(CGSize(width: width, height: .greatestFiniteMagnitude)).height ?? 0
             height = max(height, ceil(textHeight + 28))
         }
+        // However large the text, the action keeps to its zone: on a short landscape screen an
+        // uncapped two-line button left the status above it no room at all.
+        if view.bounds.height > 0 {
+            height = min(height, max(TouchTarget.visitor, floor(view.bounds.height * 0.45)))
+        }
         for constraint in visitorActionHeights where constraint.constant != height {
             constraint.constant = height
         }
@@ -1898,6 +1903,9 @@ final class MainViewController: UIViewController {
                 guard let self = self else { return }
                 self.peerVideo.image = img
                 let r = ((rotation % 360) + 360) % 360
+                // The stage fits the picture as it is shown: rotated a quarter turn, its sides swap.
+                self.peerZoom.pictureSize = (r == 90 || r == 270)
+                    ? CGSize(width: img.size.height, height: img.size.width) : img.size
                 var scale: CGFloat = 1
                 if (r == 90 || r == 270), self.peerVideo.bounds.width > 0,
                    self.peerVideo.bounds.height > 0, img.size.width > 0, img.size.height > 0 {
@@ -2012,6 +2020,7 @@ final class MainViewController: UIViewController {
                 self.peerDisplayedFrameIdentity = identity
                 self.peerLastValidFrameAt = self.peerFrameMonotonicTime
                 self.peerVideo.image = img
+                self.peerZoom.pictureSize = img.size
             }
         }
 #if DEBUG

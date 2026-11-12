@@ -474,8 +474,18 @@ final class MaterialCardView: UIView {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
-    /// Repaints the solid fallback fill; a no-op where the material is drawn.
+    /// False where there is no wallpaper behind the card: it is then an ordinary grouped cell
+    /// on the system background rather than a material, which would vanish against it.
+    var showsMaterial = true {
+        didSet {
+            guard showsMaterial != oldValue else { return }
+            effectView.effect = showsMaterial ? SystemStyle.materialEffect() : nil
+            refresh()
+        }
+    }
+
+    /// Repaints the solid fill; a no-op while the material is drawn.
     func refresh() {
-        if effectView.effect == nil { effectView.backgroundColor = SystemStyle.cellBackground }
+        effectView.backgroundColor = effectView.effect == nil ? SystemStyle.cellBackground : nil
     }
 }

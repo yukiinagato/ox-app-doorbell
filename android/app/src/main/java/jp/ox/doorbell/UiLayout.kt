@@ -74,6 +74,9 @@ internal data class WindowSpec(
 }
 
 internal object ScreenLayouts {
+    /** Answer at twice the width of Reply and Ignore, each of those at 140 dp or more. */
+    const val PRIMARY_ROW_MIN_DP = 560
+
 
     /** Visitor purpose grid: 2 compact, 3 medium, 4 expanded; one column less at large text. */
     fun purposeColumns(window: WindowSpec): Int {
@@ -110,6 +113,18 @@ internal object ScreenLayouts {
     /** Share of the width the video gets when side by side: 60 %, 65 % on very wide windows. */
     fun incomingVideoFraction(window: WindowSpec): Float =
         if (window.widthDp >= 1200) 0.65f else 0.6f
+
+    /** Width the action zone gets: the right column when side by side, else the window. */
+    fun incomingActionWidthDp(window: WindowSpec): Int =
+        if (!incomingSideBySide(window)) window.widthDp
+        else (window.widthDp * (1f - incomingVideoFraction(window))).toInt()
+
+    /**
+     * Answer, Reply and Ignore share one row only where Reply and Ignore keep room for an icon
+     * and a two-word label; below that Answer takes a row of its own above the other two.
+     */
+    fun incomingPrimaryInOneRow(window: WindowSpec): Boolean =
+        incomingActionWidthDp(window) >= PRIMARY_ROW_MIN_DP
 
     /** Fixed action zone placement: right edge only when the screen is side by side. */
     fun actionEdge(sideBySide: Boolean): ActionEdge =

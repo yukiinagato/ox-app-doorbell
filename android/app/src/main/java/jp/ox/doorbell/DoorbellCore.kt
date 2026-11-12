@@ -25,13 +25,22 @@ class DoorbellCore(context: Context) {
 
     val isCreated: Boolean get() = handle != 0L
 
+    /**
+     * ABI v2 with the real SIP backend. The stub passes only in the debug-only emulator lane
+     * that was built to link it, which also reports itself as having no SIP.
+     */
+    fun backendAccepted(backend: JSONObject): Boolean {
+        if (backend.optInt("platform_abi") != 2) return false
+        val expected = if (BuildConfig.DEBUG && BuildConfig.DOORBELL_SIP_STUB) "stub" else "pjsip"
+        return backend.optString("sip") == expected
+    }
+
     /** Create and start Core after verifying the ABI and real SIP backend. */
     @Synchronized
     fun start(dataDir: String, bootJson: String): Boolean {
         if (handle != 0L) return true
         val backend = backend()
-        if (backend.optInt("platform_abi") != 2 || backend.optString("sip") != "pjsip")
-            return false
+        if (!backendAccepted(backend)) return false
         handle = nativeCreate(dataDir, bootJson)
         if (handle == 0L) return false
         val createdHandle = handle

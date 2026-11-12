@@ -105,6 +105,7 @@ final class IncomingViewController: UIViewController {
     private let ignoreButton = CallActionButton(type: .custom)
     private let quickReplyButton = CallActionButton(type: .custom)
     private let actionZone = ActionZoneView()
+    private let bottomStack = UIStackView()
     private let detailScroll = UIScrollView()
     private lazy var noticeChip = NoticeChipView(texts: texts)
     private lazy var adminQr = AdminQrView(core: core, boot: boot, texts: texts, compact: true)
@@ -115,7 +116,6 @@ final class IncomingViewController: UIViewController {
     private var debugCollapsed = false
     private var monitorOn = false
     private var replyExpanded = false
-    private var videoAspect: NSLayoutConstraint?
     private var lastDeviceInfoRefresh: CFTimeInterval = 0
     private var styleObserver: NSObjectProtocol?
 
@@ -398,7 +398,8 @@ final class IncomingViewController: UIViewController {
         monitorButton.isHidden = true
         if !state.isEmpty {
             let key = state == "waiting" ? "conversation.queued" : "conversation." + state
-            statusLabel.text = texts.t(key, ConfigUtil.labelOf(ConfigUtil.dig(cfg, "doors.\(door)") as? [String: Any], boot.uiLang, door))
+            setStatus(texts.t(key, ConfigUtil.labelOf(
+                ConfigUtil.dig(cfg, "doors.\(door)") as? [String: Any], boot.uiLang, door)))
         }
         if state == "connected" || state == "held" || state == "dialing" { returnCountdown.pauseForCall() }
     }
@@ -535,16 +536,17 @@ final class IncomingViewController: UIViewController {
         // The return countdown reads as the title's own "(60)" suffix but is a control: it is a
         // button so it carries a real tap target and an accessibility label, and it keeps its
         // natural width beside a title that is allowed to shrink.
-        returnButton.titleLabel?.font = SystemStyle.digits(size: 22, weight: .semibold)
+        // The return countdown is a sentence and a control: it says when the panel goes back to
+        // its home screen, and a tap keeps the call screen up.
+        returnButton.titleLabel?.font = SystemStyle.font(.footnote)
+        returnButton.titleLabel?.numberOfLines = 0
+        returnButton.titleLabel?.textAlignment = .center
+        SystemStyle.followContentSize(returnButton.titleLabel)
         returnButton.isHidden = true
         returnButton.accessibilityIdentifier = "ring_return_countdown"
-        returnButton.accessibilityLabel = texts.t("ring.return_countdown_a11y")
         returnButton.addTarget(self, action: #selector(onCancelReturnCountdown),
                                for: .primaryActionTriggered)
-        returnButton.setContentCompressionResistancePriority(.required, for: .horizontal)
-        returnButton.setContentHuggingPriority(.required, for: .horizontal)
         returnButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
-        returnButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 60).isActive = true
         titleLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         for badge in [purposeBadge, langBadge] {
@@ -559,10 +561,8 @@ final class IncomingViewController: UIViewController {
         // tap opens the same editor the home screen uses, with this door already selected.
         noticeChip.onTap = { [weak self] in self?.openNoticeDialog() }
 
-        let titleRow = UIStackView(arrangedSubviews: [titleLabel, returnButton])
+        let titleRow = UIStackView(arrangedSubviews: [titleLabel])
         titleRow.axis = .horizontal
-        titleRow.spacing = Space.xs
-        titleRow.alignment = .firstBaseline
 
         // The purpose the visitor chose keeps its own slot under the door name. The slot holds its
         // height even when it is empty, so a purpose arriving after the ring never shifts the
@@ -617,8 +617,12 @@ final class IncomingViewController: UIViewController {
         actionZone.setActions(primary: [answerButton, quickReplyButton, ignoreButton],
                               secondary: [monitorButton, unlockButton, micButton])
         actionZone.accessibilityIdentifier = "incoming_actions"
-        actionZone.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(actionZone)
+        bottomStack.axis = .vertical
+        bottomStack.spacing = Space.xs
+        bottomStack.addArrangedSubview(returnButton)
+        bottomStack.addArrangedSubview(actionZone)
+        bottomStack.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(bottomStack)
 
         // Muted single line with the player's live counters. It never covers the video, and the
         // choice to hide it is remembered on this device.
@@ -687,6 +691,7 @@ final class IncomingViewController: UIViewController {
             videoBackdrop.topAnchor.constraint(equalTo: view.topAnchor),
             videoBackdrop.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             videoBackdrop.heightAnchor.constraint(greaterThanOrEqualToConstant: 120),
+            videoZoom.widthAnchor.constraint(equalTo: videoBackdrop.widthAnchor),
 
             details.topAnchor.constraint(equalTo: detailScroll.topAnchor),
             details.bottomAnchor.constraint(equalTo: detailScroll.bottomAnchor),
@@ -695,11 +700,11 @@ final class IncomingViewController: UIViewController {
             details.widthAnchor.constraint(equalTo: detailScroll.widthAnchor),
 
             detailScroll.trailingAnchor.constraint(equalTo: margins.trailingAnchor),
-            detailScroll.bottomAnchor.constraint(equalTo: actionZone.topAnchor,
-                                                 constant: -Space.m),
-            actionZone.leadingAnchor.constraint(equalTo: detailScroll.leadingAnchor),
-            actionZone.trailingAnchor.constraint(equalTo: detailScroll.trailingAnchor),
-            actionZone.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -Space.m),
+            detailScroll.bottomAnchor.constraint(equalTo: bottomStack.topAnchor,
+                                                 constant: -Space.xs),
+            bottomStack.leadingAnchor.constraint(equalTo: detailScroll.leadingAnchor),
+            bottomStack.trailingAnchor.constraint(equalTo: detailScroll.trailingAnchor),
+            bottomStack.bottomAnchor.constraint(equalTo: g.bottomAnchor, constant: -Space.m),
         ])
         actionZone.setContentCompressionResistancePriority(.required, for: .vertical)
         // Side by side: the picture takes the leading two thirds at full height.
@@ -710,17 +715,17 @@ final class IncomingViewController: UIViewController {
             detailScroll.leadingAnchor.constraint(equalTo: videoBackdrop.trailingAnchor,
                                                   constant: Space.l),
         ]
-        // Stacked: the picture on top at its own aspect, never more than half the screen.
-        let stackedHeight = videoBackdrop.heightAnchor.constraint(equalTo: view.heightAnchor,
-                                                                  multiplier: 0.42)
-        stackedHeight.priority = UILayoutPriority(750)
+        // Stacked: the stage takes every point the details and the action zone leave. The
+        // details keep their own height, and scroll once they would take more than their share.
+        let detailHeight = detailScroll.heightAnchor.constraint(equalTo: details.heightAnchor)
+        detailHeight.priority = UILayoutPriority(750)
         portraitCs = [
             videoBackdrop.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            stackedHeight,
-            videoBackdrop.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor,
-                                                  multiplier: 0.5),
-            detailScroll.topAnchor.constraint(equalTo: videoBackdrop.bottomAnchor,
-                                              constant: Space.m),
+            videoBackdrop.bottomAnchor.constraint(equalTo: detailScroll.topAnchor,
+                                                  constant: -Space.m),
+            detailHeight,
+            detailScroll.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor,
+                                                 multiplier: 0.4),
             detailScroll.leadingAnchor.constraint(equalTo: margins.leadingAnchor),
         ]
         applyOrientationConstraints()
@@ -741,7 +746,6 @@ final class IncomingViewController: UIViewController {
         let side = LayoutClass.sideBySide(s)
         NSLayoutConstraint.deactivate(side ? portraitCs : landscapeCs)
         NSLayoutConstraint.activate(side ? landscapeCs : portraitCs)
-        videoAspect?.isActive = !side
     }
 
     override func viewWillTransition(to size: CGSize,
@@ -755,7 +759,16 @@ final class IncomingViewController: UIViewController {
                                               weight: prominent ? .semibold : .regular)
         b.setTitleColor(SystemStyle.label, for: .normal)
         b.backgroundColor = prominent ? ColorRole.positive : SystemStyle.fill
+        // Answer and End keep their full-strength fill and ink even while unavailable.
+        b.dimsWhenDisabled = !prominent
         b.glyphColor = prominent ? .white : SystemStyle.label
+    }
+
+    /// The line under the badges says what is happening to the call. It is absent while there is
+    /// nothing to say: the prompt to choose a reply is the title of the reply sheet, not a status.
+    private func setStatus(_ text: String) {
+        statusLabel.text = text
+        statusLabel.isHidden = text.isEmpty
     }
 
     private func applyContent() {
@@ -763,7 +776,7 @@ final class IncomingViewController: UIViewController {
         let label = ConfigUtil.labelOf(doorEntry, boot.uiLang, door)
         titleLabel.text = texts.t("ring.incoming", label)
         noVideoLabel.text = texts.t("ring.no_video")
-        statusLabel.text = texts.t("reply.choose")
+        setStatus("")
         updateToggleTitles()
         updateUnlockVisibility()
         updateNoticeChip()
@@ -827,8 +840,13 @@ final class IncomingViewController: UIViewController {
         answerButton.isHidden = !sipCapable || !hasMicrophone
         monitorButton.isHidden = !sipCapable || inCall
         micButton.isHidden = !sipCapable || !hasMicrophone || !inCall
-        quickReplyButton.isHidden = inCall
-        ignoreButton.isHidden = inCall
+        // Reply and Ignore leave the screen during a call but keep their places, so End stays
+        // exactly where Answer was.
+        for button in [quickReplyButton, ignoreButton] {
+            button.alpha = inCall ? 0 : 1
+            button.isUserInteractionEnabled = !inCall
+            button.isAccessibilityElement = !inCall
+        }
         actionZone.refreshRows()
     }
 
@@ -858,7 +876,11 @@ final class IncomingViewController: UIViewController {
 
     private func updateDoorStationAdminEntry(status: [String: Any]?) {
         let peer = ConfigUtil.findDoorPeer(status, door: door)
-        adminQr.setTargetURL(ConfigUtil.peerAdminURL(peer))
+        let adminUrl = ConfigUtil.peerAdminURL(peer)
+        // The door station's admin code is a convenience. With no address there is nothing to
+        // scan, and on a short screen the call itself needs the room.
+        adminQr.isHidden = (adminUrl ?? "").isEmpty || view.bounds.height < 600
+        adminQr.setTargetURL(adminUrl)
         // The caption describes the device the code opens: the door station, not this panel.
         adminQr.setDetailText(DoorbellTheme.peerVersionLine(peer: peer, texts: texts))
     }
@@ -969,18 +991,12 @@ final class IncomingViewController: UIViewController {
         player.start(h264URLString: incomingStreamMp4Url, mjpegURL: url, h264Enabled: !safeMode)
     }
 
-    /// The video box takes the door camera's own aspect when it is stacked above the details, so
-    /// a portrait stream is shown portrait and is never cropped or stretched. Beside the details
-    /// the box fills its column and the picture is letterboxed inside it.
+    /// The stage is not sized to the picture. The picture's own aspect goes to the zoom view,
+    /// which fits it in the stage, so a portrait stream is shown portrait and nothing is cropped
+    /// or stretched.
     private func applyVideoAspect(_ size: CGSize) {
         guard size.width > 0, size.height > 0 else { return }
-        if let existing = videoAspect { existing.isActive = false }
-        let constraint = videoBackdrop.heightAnchor.constraint(equalTo: videoBackdrop.widthAnchor,
-                                                                multiplier: size.height / size.width)
-        constraint.priority = UILayoutPriority(900)
-        constraint.isActive = !LayoutClass.sideBySide(view.bounds.size)
-        videoAspect = constraint
-        view.setNeedsLayout()
+        videoZoom.pictureSize = size
     }
 
     /// A call arrived, or the screen went back to ringing: the return starts over.
@@ -1019,7 +1035,8 @@ final class IncomingViewController: UIViewController {
             returnButton.isHidden = true
         case .seconds(let left):
             returnButton.isHidden = false
-            returnButton.setTitle("(\(left))", for: .normal)
+            returnButton.setTitle(texts.t("ring.return_countdown_action", "\(left)"),
+                                  for: .normal)
         }
     }
 
@@ -1106,7 +1123,7 @@ final class IncomingViewController: UIViewController {
     }
 
     private func placeAnswerCall(host: String) {
-        statusLabel.text = texts.t("calling.title")
+        setStatus(texts.t("calling.title"))
         sipMode = "answer"
         callLifecycle.reset()
         core.sipCall(target: "sip:\(host):\(directPort)", mode: "answer",
@@ -1211,11 +1228,16 @@ final class IncomingViewController: UIViewController {
         refreshDebugLine()
     }
 
+    /// The counters line exists only while a stream is actually being decoded, or when
+    /// boot.json asks for diagnostics; otherwise it is a row of zeros that tells nobody anything.
     private func refreshDebugLine() {
-        guard !debugCollapsed, let stats = videoPlayer?.statsSnapshot() else {
+        guard !debugCollapsed, let stats = videoPlayer?.statsSnapshot(),
+              stats.fps > 0 || boot.debugTimings else {
             debugLine.text = ""
+            debugLine.isHidden = !boot.debugTimings
             return
         }
+        debugLine.isHidden = false
         debugLine.text = "\(stats.codec) · \(stats.latencyMs) ms · ±\(stats.jitterMs) ms"
             + " · \(stats.fps) fps · drop \(stats.dropped)"
     }
@@ -1276,7 +1298,7 @@ final class IncomingViewController: UIViewController {
                     answerButton.isEnabled = peerHost != nil
                     updateToggleTitles()
                     updateUnlockVisibility()
-                    statusLabel.text = texts.t("reply.choose")
+                    setStatus("")
                     restartReturnCountdown()
                     return
                 }
@@ -1297,7 +1319,7 @@ final class IncomingViewController: UIViewController {
                 if queue.items.contains(where: { $0.door != door || $0.callId != callId }) {
                     selectedIsLive = false
                     answerButton.isEnabled = false
-                    statusLabel.text = texts.t("reply.sent", ConfigUtil.evStr(ev, "text"))
+                    setStatus(texts.t("reply.sent", ConfigUtil.evStr(ev, "text")))
                 } else { close() }
             }
         case "event":
@@ -1341,8 +1363,8 @@ final class IncomingViewController: UIViewController {
                     selectedIsLive = false
                     answerButton.isEnabled = false
                     let ownerEntry = ConfigUtil.dig(cfg, "devices.\(owner)") as? [String: Any]
-                    statusLabel.text = texts.t("ring.queue_answered_elsewhere",
-                        ConfigUtil.labelOf(ownerEntry, boot.uiLang, owner))
+                    setStatus(texts.t("ring.queue_answered_elsewhere",
+                        ConfigUtil.labelOf(ownerEntry, boot.uiLang, owner)))
                     reconcileQueue()
                 }
             } else if type == "call_ended", eventStageRevision >= stageRevision {
@@ -1352,7 +1374,7 @@ final class IncomingViewController: UIViewController {
                 // The visitor gave up, but a resident may still be walking towards the panel and
                 // the live view is what they are coming for. The page stays until the return
                 // countdown ends or somebody leaves it by hand.
-                statusLabel.text = texts.t("ring.cancelled")
+                setStatus(texts.t("ring.cancelled"))
             }
         case "visitor_lang":
             let d = ConfigUtil.evStr(ev, "door")
@@ -1405,7 +1427,7 @@ final class IncomingViewController: UIViewController {
         answerButton.isEnabled = true
         updateToggleTitles()
         updateUnlockVisibility()
-        statusLabel.text = texts.t("incall.title")
+        setStatus(texts.t("incall.title"))
         hintLabel.isHidden = true
         let stream = ConfigUtil.evStr(ev, "peer_stream")
         if !stream.isEmpty && stream != incomingStreamUrl {

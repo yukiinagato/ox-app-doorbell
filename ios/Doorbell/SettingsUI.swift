@@ -1176,7 +1176,9 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
         if let enabled = row.enabled { cell.detailTextLabel?.text = host.texts.t(enabled ? "settings.on" : "settings.off") }
         #endif
         cell.accessoryType = row.edit == nil ? .none : .disclosureIndicator
-        if row.edit == nil { cell.selectionStyle = .none }
+        let actionable = row.edit != nil ||
+            (SettingsStyle.isTV && (row.toggle != nil || model.delete != nil || model.reorder != nil))
+        if !actionable { cell.selectionStyle = .none }
         return cell
     }
 
@@ -1204,9 +1206,78 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
             return
         }
         let row = rows[indexPath.row]
+        #if os(tvOS)
+        // The remote has no swipe, drag or switch: everything a row can do is one menu.
+        if row.toggle != nil || model.delete != nil || model.reorder != nil {
+            presentRowMenu(row, at: indexPath)
+            return
+        }
+        #endif
         guard row.edit != nil else { return }
         host.show(SettingsPageController(host: host, path: path + [row.id]), from: self)
     }
+
+    /// Deleting a row is confirmed by name first.
+    private func confirmDelete(_ row: SettingsListRow) {
+        guard let host = host, let delete = model.delete else { return }
+        let alert = UIAlertController(title: host.texts.t("admin.confirm_delete", row.title),
+                                      message: nil, preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: host.texts.t("admin.cancel"), style: .cancel) {
+            [weak self] _ in self?.tableView.reloadData()
+        })
+        alert.addAction(UIAlertAction(title: host.texts.t("editor.delete"), style: .destructive) {
+            [weak self] _ in
+            guard let self = self else { return }
+            self.host?.perform(delete(row.id), item: nil, value: nil, from: self, completion: nil)
+        })
+        present(alert, animated: true)
+    }
+
+    #if os(tvOS)
+    private func presentRowMenu(_ row: SettingsListRow, at indexPath: IndexPath) {
+        guard let host = host else { return }
+        let menu = UIAlertController(title: row.title, message: nil, preferredStyle: .actionSheet)
+        if row.edit != nil {
+            menu.addAction(UIAlertAction(title: host.texts.t("editor.edit"), style: .default) {
+                [weak self] _ in
+                guard let self = self else { return }
+                host.show(SettingsPageController(host: host, path: self.path + [row.id]),
+                          from: self)
+            })
+        }
+        if let enabled = row.enabled, let toggle = row.toggle {
+            menu.addAction(UIAlertAction(
+                title: host.texts.t(enabled ? "settings.off" : "settings.on"), style: .default) {
+                [weak self] _ in
+                guard let self = self else { return }
+                host.perform(toggle(!enabled), item: nil, value: nil, from: self, completion: nil)
+            })
+        }
+        if let reorder = model.reorder, filter.isEmpty {
+            let ids = model.rows.map { $0.id }
+            for (key, delta) in [("admin.move_up", -1), ("admin.move_down", 1)] {
+                guard let index = ids.firstIndex(of: row.id),
+                      ids.indices.contains(index + delta) else { continue }
+                menu.addAction(UIAlertAction(title: host.texts.t(key), style: .default) {
+                    [weak self] _ in
+                    guard let self = self else { return }
+                    var moved = ids
+                    moved.swapAt(index, index + delta)
+                    host.perform(reorder(moved), item: nil, value: nil, from: self,
+                                 completion: nil)
+                })
+            }
+        }
+        if model.delete != nil {
+            menu.addAction(UIAlertAction(title: host.texts.t("editor.delete"),
+                                         style: .destructive) { [weak self] _ in
+                self?.confirmDelete(row)
+            })
+        }
+        menu.addAction(UIAlertAction(title: host.texts.t("admin.cancel"), style: .cancel))
+        present(menu, animated: true)
+    }
+    #endif
 
     override func tableView(_ tableView: UITableView, canEditRowAt indexPath: IndexPath) -> Bool {
         return indexPath.section == 0 && (model.delete != nil || model.reorder != nil)
@@ -1219,9 +1290,8 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
 
     override func tableView(_ tableView: UITableView, commit editingStyle: UITableViewCell.EditingStyle,
                             forRowAt indexPath: IndexPath) {
-        guard editingStyle == .delete, let delete = model.delete else { return }
-        host?.perform(delete(rows[indexPath.row].id), item: nil, value: nil, from: self,
-                      completion: nil)
+        guard editingStyle == .delete, model.delete != nil else { return }
+        confirmDelete(rows[indexPath.row])
     }
 
     override func tableView(_ tableView: UITableView, canMoveRowAt indexPath: IndexPath) -> Bool {

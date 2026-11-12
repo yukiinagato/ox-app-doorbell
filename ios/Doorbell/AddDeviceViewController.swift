@@ -358,7 +358,11 @@ final class AddDeviceViewController: PairingTableScreen {
     /// with the eight-digit code that device shows on its own screen.
     private func add(_ id: String) {
         guard !id.isEmpty else { return }
-        let alert = UIAlertController(title: texts.t("pair.confirm_code_title"),
+        // The prompt names the device it is about. The nearby list reorders as devices come and
+        // go, and the code must be read off the same device that was tapped.
+        let name = deviceRows[id]?.title ?? ""
+        let alert = UIAlertController(title: name.isEmpty ? texts.t("pair.confirm_code_title")
+                                                          : name,
                                       message: texts.t("pair.confirm_code_prompt"),
                                       preferredStyle: .alert)
         alert.addTextField { field in

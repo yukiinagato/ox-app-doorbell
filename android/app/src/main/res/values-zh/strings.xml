@@ -860,6 +860,7 @@
     <string name="firewall_rules_missing">Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？</string>
     <string name="firewall_title">Windows 防火墙</string>
     <string name="flow_back">返回</string>
+    <string name="flow_call_failed">呼叫失败，请重试。</string>
     <string name="flow_done">完成</string>
     <string name="flow_message_title">访客留言</string>
     <string name="flow_sent">已通知</string>

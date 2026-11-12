@@ -7,6 +7,7 @@
 #include "node/operation_dispatcher.h"
 #include "node/media_relay_bounds.h"
 #include "node/admin_password.h"
+#include "node/visitor_flow.h"
 
 #include <algorithm>
 #include <cstdio>
@@ -1820,6 +1821,9 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
   if (!callReturnValid(key, value, error)) return false;
   if (!secretContractValid(key, value, error)) return false;
   if (!visitPurposeValid(key, value, error)) return false;
+  // Replicated or imported flow data is repaired when it is resolved, never refused here: a
+  // step written by a newer core must not make every later commit on this node fail.
+  if (enforce_write_scope && !visitor_flow::writeKeyValid(key, value, error)) return false;
   if (!sipDtmfActionsValid(key, value, error)) return false;
   const std::string wake_suffix = ".motion.wake_screen";
   if (key.size() >= wake_suffix.size() &&
@@ -2387,6 +2391,7 @@ struct Node::Impl {
 #include "node/media_relay_service.inc"
 #include "node/panel_session_revocation.inc"
 #include "node/conversation_service.inc"
+#include "node/visitor_flow_service.inc"
 
   bool uiNotify(const std::string& event_json) {
 
@@ -3961,6 +3966,8 @@ struct Node::Impl {
     cJSON_ArrayForEach(it, ledger) {
       if (it->string && isSha256HexStr(it->string)) keep.insert(it->string);
     }
+    const std::set<std::string> ledger_and_refs = keep;
+    for (const auto& hash : keptVisitorSnapshots()) keep.insert(hash);
     const int64_t now_mono = clock->monoMs();
     for (const std::string& name : listDir(assets_dir)) {
       if (!isSha256HexStr(name)) continue;
@@ -3978,7 +3985,7 @@ struct Node::Impl {
       }
     }
 
-    for (const std::string& hash : keep) {
+    for (const std::string& hash : ledger_and_refs) {
       if (assetCached(hash) || asset_fetching.count(hash)) continue;
       asset_fetching.insert(hash);
       std::weak_ptr<char> w = alive;
@@ -4003,6 +4010,7 @@ struct Node::Impl {
         uiNotify(json::dump(o.get()));
 
         evalDisplay();
+        evalVisitorFlow();
       });
     }
   }
@@ -4874,7 +4882,8 @@ struct Node::Impl {
                                "emergency", "quick_replies", "ui", "visit_purposes",
                                "notice.presets", "trigger_rules.r_sos_default_on",
                                "trigger_rules.r_sos_default_off",
-                               "trigger_rules.r_missed_call_default"}) {
+                               "trigger_rules.r_missed_call_default",
+                               "trigger_rules.r_visitor_message_default"}) {
       const size_t n = std::strlen(prefix);
       if (key.compare(0, n, prefix) == 0 && (key.size() == n || key[n] == '.')) return true;
     }
@@ -6315,7 +6324,7 @@ struct Node::Impl {
       json::setBool(features.get(), feature, true);
     for (const char* feature : {"platform_v2", "call_flow_v2", "call_cancel_v2",
                                 "call_lifecycle_v2", "device_alert_v1", "runtime_recovery_v1",
-                                "helper_policy_v1"})
+                                "helper_policy_v1", "visitor_flow_v1"})
       json::setBool(features.get(), feature, measuredFeature(feature));
     json::setBool(features.get(), "ui_manifest_v1",
                   measuredFeature("ui_manifest_v1") && uiManifestSupports());
@@ -6572,6 +6581,7 @@ struct Node::Impl {
     if (next == effective_caps_json) return;
     effective_caps_json = next;
     if (mesh) mesh->setCaps(effective_caps_json);
+    evalVisitorFlow();
     scheduleSnapshotRefresh();
   }
 
@@ -6843,6 +6853,7 @@ struct Node::Impl {
     }
     scheduleBridgeReapply();
     if (started) evalDisplay();
+    evalVisitorFlow();
     schedulePrefetch();
     if (values_changed) {
       auto event = json::obj();
@@ -7215,6 +7226,15 @@ struct Node::Impl {
                        const std::vector<std::pair<std::string, std::string>>& args) {
         return textOnLoop(key, lang, args);
       };
+      th.fetch_blob = [this](const std::string& hash, std::function<void(Bytes)> cb) {
+        if (mesh) {
+          mesh->fetchBlob(hash, std::move(cb));
+        } else {
+          Bytes local;
+          if (isSha256HexStr(hash)) readFileBytes(assetFilePath(hash), local);
+          loop->post([cb, local] { cb(local); });
+        }
+      };
       tg.reset(new TelegramBridge(*loop, store, std::move(th)));
     }
 
@@ -7523,6 +7543,30 @@ struct Node::Impl {
         if (!config->lastMutationCommitted()) return false;
       }
       if (!store.metaSet("seed_missed_call_rule_v1", "1")) return false;
+    }
+
+    // A message a visitor leaves without ringing reaches the household the same two ways a
+    // missed call does: the indoor panels and Telegram. An ordinary rule, so it can be disabled
+    // or retargeted; the marker keeps a deletion deleted.
+    if (!store.metaGet("seed_visitor_message_rule_v1")) {
+      bool has_message_rule = false;
+      cJSON* rule = nullptr;
+      cJSON_ArrayForEach(rule, json::get(cfg.get(), "trigger_rules")) {
+        if (json::getString(json::get(rule, "when"), "type") == "visitor_message")
+          has_message_rule = true;
+      }
+      if (!has_message_rule) {
+        const std::string message =
+            "{\"enabled\":true,\"when\":{\"type\":\"visitor_message\"},"
+            "\"actions\":[{\"type\":\"device_alert\",\"targets\":{\"roles\":"
+            "[\"indoor_panel\"],\"web_profiles\":\"all\"},"
+            "\"channels\":[\"in_app\",\"system_notification\"],"
+            "\"presentation\":{\"visual\":true,\"sticky\":false,\"ttl_s\":60}},"
+            "{\"type\":\"telegram\",\"households\":\"all\",\"with_snapshot\":true}]}";
+        config->seed({{"trigger_rules.r_visitor_message_default", message, false}});
+        if (!config->lastMutationCommitted()) return false;
+      }
+      if (!store.metaSet("seed_visitor_message_rule_v1", "1")) return false;
     }
 
     // The boot identity is the operational source of truth used by the shell and mesh. Keep the
@@ -8512,6 +8556,13 @@ struct Node::Impl {
           if (!reason.empty()) json::set(o.get(), "reason", reason);
           if (!text.empty()) json::set(o.get(), "text", text);
         }
+      } else if (ev.type == "visitor_message") {
+        auto alert = visitorMessageAlert(ev);
+        for (const char* field : {"message_id", "step", "purpose", "text", "visitor_lang",
+                                  "snapshot"}) {
+          if (const cJSON* value = json::get(alert.get(), field))
+            json::setItem(o.get(), field, json::Doc(cJSON_Duplicate(value, 1)));
+        }
       }
       uiNotify(json::dump(o.get()));
     }
@@ -8571,6 +8622,8 @@ struct Node::Impl {
         } else if (missedCallEvent(ev)) {
           if (selfFeature("device_alert_v1")) missedCallNotifyUi(ev, p.get());
           deliverWebPush(ev, p.get());
+        } else if (ev.type == "visitor_message") {
+          if (selfFeature("device_alert_v1")) visitorMessageNotifyUi(ev, p.get());
         }
       } else if (a.type == "sip_call") {
 
@@ -10688,6 +10741,20 @@ struct Node::Impl {
     LwwMap edit_preview(node_id, edit_preview_clock);
     edit_preview.load(config->all()); edit_preview.mutate(mutations);
     auto edit_candidate = json::parse(edit_preview.materializeJson());
+    // The flow is a graph across several keys, so it is judged on the configuration this batch
+    // would leave behind rather than key by key.
+    const bool flow_touched = std::any_of(mutations.begin(), mutations.end(),
+        [](const LwwMutation& mutation) {
+          auto written = mutation.deleted ? json::Doc() : json::parse(mutation.value_json);
+          return visitor_flow::touchesFlow(mutation.key, written.get());
+        });
+    if (flow_touched && edit_candidate) {
+      std::string flow_error;
+      std::swap(cfg, edit_candidate);
+      const bool flow_valid = visitorFlowCandidateValid(&flow_error, &warnings);
+      std::swap(cfg, edit_candidate);
+      if (!flow_valid) return fail(flow_error.c_str(), 400);
+    }
     std::vector<LwwMutation> journal;
     const auto journal_error = appendConfigEdits(config->all(), mutations, edit_candidate.get(),
                                                  node_id, resolves, &journal);
@@ -11924,6 +11991,23 @@ struct Node::Impl {
       return HttpResp::json(json::dump(o.get()));
     });
 
+    // The visitor flow for one door as its shell renders it, the templates an editor can
+    // materialize, and the notify terminal call. Same session gate as /api/press.
+    httpd->route("GET", "/api/visitor-flow", [this](const HttpReq& req) {
+      return HttpResp::json(json::dump(visitorFlowDoc(req.param("door"), false).get()));
+    });
+    httpd->route("GET", "/api/visitor-flow/template", [this](const HttpReq& req) {
+      const std::string name = req.param("name").empty() ? "default" : req.param("name");
+      const std::string body = visitorFlowTemplateJson(name);
+      return HttpResp::json(body, body.find("\"ok\":true") == std::string::npos ? 404 : 200);
+    });
+    httpd->route("POST", "/api/visitor-notify", [this](const HttpReq& req) {
+      auto b = json::parse(req.body);
+      const std::string result = doVisitorNotify(b ? json::getString(b.get(), "door") : "",
+                                                 b ? json::getString(b.get(), "step") : "");
+      return HttpResp::json(result, visitorNotifyStatus(result));
+    });
+
     httpd->route("POST", "/api/call/purpose", [this](const HttpReq& req) {
       auto b = json::parse(req.body);
       if (!b) return HttpResp::json("{\"ok\":false,\"err\":\"bad json\"}", 400);
@@ -12213,6 +12297,11 @@ struct Node::Impl {
         auto active = active_calls.find(it->string);
         const std::string flow = effectiveCallFlow(it->string);
         json::set(e, "call_flow", flow);
+        {
+          auto door_flow = visitorFlowDoc(it->string, false);
+          if (json::getBool(door_flow.get(), "enabled"))
+            json::set(e, "visitor_flow_start", json::getString(door_flow.get(), "start"));
+        }
         if (active != active_calls.end()) {
           json::set(e, "call_id", active->second.call_id);
           const auto room = conversations.find(active->second.call_id);
@@ -12403,6 +12492,14 @@ struct Node::Impl {
                       cJSON_IsObject(elements)
                           ? json::Doc(cJSON_Duplicate(elements, 1)) : json::obj());
       }
+      {
+        // One step pool serves every door; only the entry point differs, and each doors[] entry
+        // above already carries its own.
+        const std::string flow_door =
+            !req.param("door").empty() && panelRequestAllowed(req, req.param("door"), "view")
+                ? req.param("door") : opts.door;
+        json::setItem(o.get(), "visitor_flow", visitorFlowDoc(flow_door, false));
+      }
       json::set(o.get(), "server_ts", hlc->correctedWallMs());
       return HttpResp::json(json::dump(o.get()));
     });
@@ -12508,6 +12605,22 @@ struct Node::Impl {
         json::set(o.get(), "expires_at_ms", active->second.expires_wall_ms);
       }
       return HttpResp::json(json::dump(o.get()));
+    });
+
+    httpd->route("GET", "/api/panel/visitor-flow", [this](const HttpReq& req) {
+      const std::string door = req.param("door").empty() ? opts.door : req.param("door");
+      if (!panelRequestAllowed(req, door, "view")) return mediaFailure(403, "permission_denied");
+      return HttpResp::json(json::dump(visitorFlowDoc(door, false).get()));
+    });
+
+    httpd->route("POST", "/api/panel/visitor-notify", [this](const HttpReq& req) {
+      if (!panelRequestAllowed(req, (req.param("door").empty() ? opts.door : req.param("door")), "call.initiate", true))
+        return mediaFailure(403, "permission_denied");
+      const std::string door = req.param("door");
+      if (door.empty() || !cfgAt("doors." + door))
+        return HttpResp::json("{\"ok\":false,\"err\":\"unknown door\"}", 400);
+      const std::string result = doVisitorNotify(door, req.param("step"));
+      return HttpResp::json(result, visitorNotifyStatus(result));
     });
 
     httpd->route("POST", "/api/panel/purpose", [this](const HttpReq& req) {
@@ -13424,6 +13537,34 @@ void Node::setUiEventCb(UiEventCb cb) {
 void Node::setTtsCb(TtsCb cb) {
   std::lock_guard<std::mutex> lk(impl_->cb_mu);
   impl_->tts_cb = std::move(cb);
+}
+
+void Node::setCameraFetchFn(CameraFetchFn fn) {
+  std::lock_guard<std::mutex> lk(impl_->cb_mu);
+  impl_->camera_fetch_fn = std::move(fn);
+}
+
+std::string Node::builtinCatalogText(const std::string& key, const std::string& lang) {
+  const char* text = builtinText(key, lang);
+  return text ? text : key;
+}
+
+std::string Node::visitorFlowJson(const std::string& door_id) {
+  std::string out;
+  impl_->loop->callSync([&] { out = json::dump(impl_->visitorFlowDoc(door_id, true).get()); });
+  return out;
+}
+
+std::string Node::visitorFlowTemplateJson(const std::string& name) {
+  std::string out;
+  impl_->loop->callSync([&] { out = impl_->visitorFlowTemplateJson(name); });
+  return out;
+}
+
+std::string Node::visitorNotifyJson(const std::string& door_id, const std::string& step_id) {
+  std::string out;
+  impl_->loop->callSync([&] { out = impl_->doVisitorNotify(door_id, step_id); });
+  return out;
 }
 
 void Node::setHttpsFn(HttpsFn fn) {

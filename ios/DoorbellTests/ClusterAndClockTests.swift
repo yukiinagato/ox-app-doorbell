@@ -181,10 +181,17 @@ final class ClusterAndClockTests: XCTestCase {
         XCTAssertEqual(DoorTileView.normalizedRotation(45), 0)
     }
 
+    /// The admin link comes from the door station's own address and Core's HTTPS admin port. The
+    /// peer's `stream` is a loopback proxy on this device and must never supply the origin.
     func testIncomingAdminLinkUsesTheSelectedDoorStationsOrigin() {
-        let peer: [String: Any] = ["id": "station-a", "role": "door_station",
-                                   "door": "front", "stream": "http://10.0.0.9:47180/stream.mjpeg"]
-        XCTAssertEqual(ConfigUtil.peerAdminURL(peer), "http://10.0.0.9:47180/admin/")
+        let peer: [String: Any] = ["id": "station-a", "role": "door_station", "door": "front",
+                                   "addrs": ["10.0.0.9:47172"],
+                                   "stream": "http://127.0.0.1:47180/media/station-a/stream.mjpeg"]
+        XCTAssertEqual(ConfigUtil.peerAdminURL(peer), "https://10.0.0.9:47443/admin/")
+        XCTAssertEqual(ConfigUtil.peerAdminURL(["addrs": ["[fd00::9]:47172"]]),
+                       "https://[fd00::9]:47443/admin/")
+        XCTAssertNil(ConfigUtil.peerAdminURL(["stream": "http://10.0.0.9:47180/stream.mjpeg"]),
+                     "a stream URL alone names no door station")
         XCTAssertNil(ConfigUtil.peerAdminURL(["stream": "file:///etc/passwd"]))
         XCTAssertNil(ConfigUtil.peerAdminURL(nil))
     }

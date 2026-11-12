@@ -51,8 +51,13 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
             return false
         }
         guard let device = IOSAvailability.videoCaptureDevice() else {
+            #if targetEnvironment(simulator)
+            startSimulatorPattern(coreGeneration: coreGeneration, generation: generation)
+            return true
+            #else
             reportRuntime(active: false, state: "no_device")
             return false
+            #endif
         }
         guard let input = try? AVCaptureDeviceInput(device: device) else {
             reportRuntime(active: false, state: "input_failed")
@@ -115,7 +120,55 @@ final class CameraFeeder: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate
         return true
     }
 
+    #if targetEnvironment(simulator)
+    private var patternTimer: DispatchSourceTimer?
+    private var patternFrame = 0
+
+    /// The simulator has no camera. So that a simulated door station can be looked at from a
+    /// simulated panel, it sends a moving test pattern through the same frame path instead.
+    /// This is compiled for the simulator only and is in no device build.
+    private func startSimulatorPattern(coreGeneration: UInt64, generation: UInt64) {
+        let width = 480, height = 640
+        runtimeLock.lock()
+        acceptingFrames = true
+        lastStartAt = CACurrentMediaTime()
+        runtimeLock.unlock()
+        var frame = [UInt8](repeating: 128, count: width * height * 3 / 2)
+        let timer = DispatchSource.makeTimerSource(queue: queue)
+        timer.schedule(deadline: .now() + 0.2, repeating: 0.2)
+        timer.setEventHandler { [weak self] in
+            guard let self = self, self.isAcceptingFrames() else { return }
+            self.patternFrame += 1
+            let shift = self.patternFrame * 6
+            for y in 0..<height {
+                let row = y * width
+                for x in 0..<width {
+                    let band = ((x + shift) / 60 + y / 80) % 2 == 0
+                    frame[row + x] = band ? UInt8(70 + (y * 120 / height)) : 200
+                }
+            }
+            self.runtimeLock.lock()
+            self.lastFrameAt = CACurrentMediaTime()
+            self.runtimeLock.unlock()
+            self.reportRuntime(active: true, state: "active", generation: generation)
+            frame.withUnsafeBufferPointer { pointer in
+                guard let base = pointer.baseAddress else { return }
+                self.core.onCameraFrame(base, format: 1, width: Int32(width),
+                                        height: Int32(height), stride: Int32(width),
+                                        tsMs: Int64(Date().timeIntervalSince1970 * 1000),
+                                        coreGeneration: coreGeneration)
+            }
+        }
+        patternTimer = timer
+        timer.resume()
+    }
+    #endif
+
     func stop() {
+        #if targetEnvironment(simulator)
+        patternTimer?.cancel()
+        patternTimer = nil
+        #endif
         runtimeLock.lock()
         acceptingFrames = false
         sessionGeneration &+= 1

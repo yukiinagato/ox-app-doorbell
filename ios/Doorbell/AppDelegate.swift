@@ -33,6 +33,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     private var appStarted = false
     private var resetObserver: NSObjectProtocol?
     private var openPairingObserver: NSObjectProtocol?
+    private var identityObserver: NSObjectProtocol?
     private let pairingTexts = Texts()
     private var pairingGate: PairingViewController?
     private var pairingDeferred = false
@@ -96,6 +97,17 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             ) { [weak self] _ in
                 self?.pairingDeferred = false
                 self?.presentPairingGate()
+            }
+        }
+        if identityObserver == nil {
+            // The settings wrote a new name, role or door to boot.json: restart Core on it and
+            // rebuild the interface, the same path a replicated identity edit takes.
+            identityObserver = NotificationCenter.default.addObserver(
+                forName: .doorbellIdentityChanged, object: nil, queue: .main
+            ) { [weak self] _ in
+                guard let self = self else { return }
+                self.boot = BootConfig.load()
+                self.scheduleIdentityRestart()
             }
         }
         emergencyNotifications.configure(application: application, delegate: self)

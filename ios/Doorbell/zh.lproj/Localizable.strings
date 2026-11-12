@@ -855,6 +855,7 @@
 "firewall.rules_missing" = "Windows 防火墙可能正在阻止其他设备连接到此设备。是否允许此应用接收集群通信？";
 "firewall.title" = "Windows 防火墙";
 "flow.back" = "返回";
+"flow.call_failed" = "呼叫失败，请重试。";
 "flow.done" = "完成";
 "flow.message_title" = "访客留言";
 "flow.sent" = "已通知";

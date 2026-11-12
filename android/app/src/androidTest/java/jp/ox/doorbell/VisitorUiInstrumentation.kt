@@ -286,7 +286,8 @@ class VisitorUiInstrumentation : Instrumentation() {
                             .addView(frame, ViewGroup.LayoutParams(600, 400))
                         layer[0] = picture
                         box[0] = frame
-                        zoom[0] = VideoZoom(picture, frame)
+                        // A 3:1 picture in the 600 x 400 stage: 600 x 200 at 1x.
+                        zoom[0] = VideoZoom(picture, frame).also { it.setPicture(600, 200) }
                     }
                     val picture = layer[0]!!
                     val surface = box[0]!!
@@ -335,20 +336,25 @@ class VisitorUiInstrumentation : Instrumentation() {
                         }
                         check(picture.scaleX == picture.scaleY)
                     }
-                    // Drag far past the edge: the picture stops where its edge meets the box.
+                    // Drag far past both edges: on each axis the picture stops where its edge
+                    // meets the stage, and stays centred while it is not larger than the stage.
                     ui {
                         var at = SystemClock.uptimeMillis() + 1000
                         touch(MotionEvent.ACTION_DOWN, at, 300f to 200f)
                         for (step in 1..20) {
                             at += 20
-                            touch(MotionEvent.ACTION_MOVE, at, (300f + step * 100) to 200f)
+                            touch(MotionEvent.ACTION_MOVE, at, (300f + step * 100) to (200f + step * 100))
                         }
-                        touch(MotionEvent.ACTION_UP, at + 20, 2300f to 200f)
+                        touch(MotionEvent.ACTION_UP, at + 20, 2300f to 2200f)
                     }
                     ui {
-                        val limit = 600 * (picture.scaleX - 1f) / 2f
-                        check(picture.translationX > 0f && picture.translationX <= limit + 0.5f) {
-                            "Pan left the picture's edge: ${picture.translationX} > $limit"
+                        val limitX = (600 * picture.scaleX - 600) / 2f
+                        val limitY = maxOf(0f, (200 * picture.scaleX - 400) / 2f)
+                        check(picture.translationX > 0f && picture.translationX <= limitX + 0.5f) {
+                            "Pan left the picture's edge: ${picture.translationX} > $limitX"
+                        }
+                        check(kotlin.math.abs(picture.translationY - limitY) <= 0.5f) {
+                            "Vertical pan is ${picture.translationY}, expected $limitY"
                         }
                     }
                     // A door or call change resets to fit.

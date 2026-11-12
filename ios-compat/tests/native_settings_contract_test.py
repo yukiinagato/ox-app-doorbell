@@ -196,12 +196,18 @@ assert main.count("dialog.onUnlocked = { [weak self] in self?.showSettings() }")
 assert "NoticeChipView" in incoming, "the announcement is a compact chip"
 assert "purposeSlot.heightAnchor.constraint(equalToConstant:" in incoming, \
     "the purpose slot keeps its height so the layout never jumps"
-assert "applyVideoAspect" in incoming and "videoBackdrop.heightAnchor.constraint(equalTo:" in incoming
+assert "applyVideoAspect" in incoming and "videoZoom.pictureSize = size" in incoming, \
+    "the stage is not sized to the picture; the picture is fitted inside it"
+assert "multiplier: 9.0 / 16.0" not in incoming + source("ios/Doorbell/MonitorViewController.swift"), \
+    "no stage is locked to 16:9"
 # Every live picture zooms: pinch 1x-4x, drag while zoomed, double tap for fit/2x, reset when the
 # door or call changes. One view owns it for both renderers.
 zoom = source("ios/Doorbell/ZoomableVideoView.swift")
 monitor = source("ios/Doorbell/MonitorViewController.swift")
 assert "static let maximumScale: CGFloat = 4" in zoom and "doubleTapScale: CGFloat = 2" in zoom
+assert "static func clampedOrigin(_ origin: CGPoint, zoomed: CGSize, stage: CGSize)" in zoom, \
+    "pan is clamped per axis against the stage, which is the clip rectangle"
+assert "static func fittedSize(picture: CGSize, stage: CGSize)" in zoom
 for shell, name in ((incoming, "incoming"), (monitor, "monitor"), (main, "in-call")):
     assert "ZoomableVideoView()" in shell and "resetZoom()" in shell, name
 assert "videoZoom.host(liveView)" in incoming and "videoZoom.host(h264View)" in incoming
