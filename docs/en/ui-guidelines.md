@@ -120,12 +120,21 @@ switch live on rotation or window resize.
 
 - Video fills the available area; overlay controls auto-hide after 4 s and
   reappear on tap.
+- The video stage is the largest rectangle the screen can give the picture
+  while every other control stays visible (title, status, the fixed action
+  zone). It is not sized to the picture: the stage takes all remaining width
+  and height, and the picture is fitted inside it at its own aspect ratio so
+  that it fills the stage's width or its height, whichever is reached first,
+  centred, never stretched or cropped at 1x.
 - Every live picture (live view, incoming call, in call) can be zoomed and
   moved by touch on every platform: pinch to zoom from 1x up to at least 4x,
-  drag to pan while zoomed, double-tap to toggle between fit and 2x. The
-  picture never pans past its own edges, and zoom resets when the door or the
-  call changes. Pointer platforms also zoom with the wheel and pan by dragging.
-  Zoom gestures never trigger or block the call actions.
+  drag to pan while zoomed, double-tap to toggle between fit and 2x. The clip
+  rectangle is the whole stage, not the fitted picture: a zoomed picture grows
+  into the letterbox bars until it covers the stage. Panning is clamped per
+  axis: where the zoomed picture is larger than the stage it may not reveal
+  empty space, and where it is still smaller it stays centred. Zoom resets when
+  the door or the call changes. Pointer platforms also zoom with the wheel and
+  pan by dragging. Zoom gestures never trigger or block the call actions.
 - Door switcher as a horizontal strip (compact) or side list (expanded).
 
 ### History
