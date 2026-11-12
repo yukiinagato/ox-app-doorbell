@@ -300,11 +300,22 @@
 
   var ZOOM_MAX = 4, ZOOM_DOUBLE_TAP = 2;
 
+  // A door station may deliver the raw sensor frame and report how far it has to be turned
+  // (/video-meta {"rotation":90|180|270}). Anything else counts as upright.
+  function normalizeRotation(value) {
+    var turns = Math.round(Number(value) / 90);
+    return isFinite(turns) ? ((turns % 4) + 4) % 4 * 90 : 0;
+  }
+  function quarterTurned(rotation) { var r = normalizeRotation(rotation); return r === 90 || r === 270; }
+
   // The picture aspect-fitted inside the stage: it fills the width or the height, whichever is
-  // reached first, and is never stretched. An unknown picture size counts as filling the stage.
-  function fitRect(stageW, stageH, pictureW, pictureH) {
+  // reached first, and is never stretched. pictureW and pictureH are the delivered frame; with a
+  // rotation of 90 or 270 the upright picture has them swapped, and the result is the upright
+  // size on screen. An unknown picture size counts as filling the stage.
+  function fitRect(stageW, stageH, pictureW, pictureH, rotation) {
     stageW = Math.max(0, Number(stageW) || 0); stageH = Math.max(0, Number(stageH) || 0);
     pictureW = Number(pictureW); pictureH = Number(pictureH);
+    if (quarterTurned(rotation)) { var swap = pictureW; pictureW = pictureH; pictureH = swap; }
     if (!(pictureW > 0) || !(pictureH > 0) || !stageW || !stageH) return { w: stageW, h: stageH };
     var scale = Math.min(stageW / pictureW, stageH / pictureH);
     return { w: pictureW * scale, h: pictureH * scale };
@@ -369,12 +380,13 @@
   // the picture only, so the page keeps scrolling at 1x and the action buttons are untouched.
   function attachZoom(box, layers) {
     var view = { scale: 1, x: 0, y: 0 }, noop = function () {};
-    if (!box || !box.addEventListener) return { reset: noop, refit: noop, view: function () { return view; } };
+    if (!box || !box.addEventListener) return { reset: noop, refit: noop, setRotation: noop, rotation: function () { return 0; },
+                                                 view: function () { return view; } };
     var touches = null, drag = null, lastTap = null, pointers = {}, pointerCount = 0, pinch = null;
     function size() {
       var r = box.getBoundingClientRect ? box.getBoundingClientRect() : null;
       var w = r ? r.width : box.clientWidth || 0, h = r ? r.height : box.clientHeight || 0;
-      var natural = pictureSize(), fit = fitRect(w, h, natural.w, natural.h);
+      var natural = pictureSize(), fit = fitRect(w, h, natural.w, natural.h, rotation);
       return { w: w, h: h, fw: fit.w, fh: fit.h, left: r ? r.left : 0, top: r ? r.top : 0 };
     }
     // The picture actually on screen: the visible layer that has decoded a frame.
@@ -383,24 +395,43 @@
         var el = layers[i];
         if (!el || (el.style && el.style.display === "none")) continue;
         var w = el.videoWidth || el.naturalWidth || 0, h = el.videoHeight || el.naturalHeight || 0;
-        if (w > 0 && h > 0) return { w: w, h: h };
+        if (w > 0 && h > 0) return { w: w, h: h };  // The delivered frame; fitRect turns it.
       }
       return { w: 0, h: 0 };
     }
-    // Browsers without object-fit (old Safari) would stretch a layer that fills the stage, so
-    // there each layer is given the fitted rectangle itself, centred.
-    var needsFit = !(box.style && "objectFit" in box.style);
+    // A layer normally fills the stage and object-fit does the fitting. Two cases need the
+    // layer's own box set instead, centred in the stage: a quarter turn (the box is laid out
+    // sideways so that, once turned, the upright picture is fitted to the stage) and browsers
+    // without object-fit (old Safari), which would stretch the frame.
+    var needsFit = !(box.style && "objectFit" in box.style), rotation = 0, boxed = false;
     function fitLayers() {
-      if (!needsFit) return;
+      var quarter = quarterTurned(rotation);
+      if (!needsFit && !quarter) {
+        if (boxed) for (var c = 0; c < layers.length; c++) if (layers[c] && layers[c].style)
+          layers[c].style.width = layers[c].style.height = layers[c].style.left = layers[c].style.top = "";
+        boxed = false;
+        return;
+      }
+      boxed = true;
       var r = box.getBoundingClientRect ? box.getBoundingClientRect() : null;
       var w = r ? r.width : box.clientWidth || 0, h = r ? r.height : box.clientHeight || 0;
       for (var i = 0; i < layers.length; i++) {
         var el = layers[i];
         if (!el || !el.style) continue;
-        var fit = fitRect(w, h, el.videoWidth || el.naturalWidth, el.videoHeight || el.naturalHeight);
-        el.style.width = Math.round(fit.w) + "px"; el.style.height = Math.round(fit.h) + "px";
-        el.style.left = Math.round((w - fit.w) / 2) + "px"; el.style.top = Math.round((h - fit.h) / 2) + "px";
+        var bw = quarter ? h : w, bh = quarter ? w : h;
+        if (needsFit) {
+          var fit = fitRect(w, h, el.videoWidth || el.naturalWidth, el.videoHeight || el.naturalHeight, rotation);
+          bw = quarter ? fit.h : fit.w; bh = quarter ? fit.w : fit.h;
+        }
+        el.style.width = Math.round(bw) + "px"; el.style.height = Math.round(bh) + "px";
+        el.style.left = Math.round((w - bw) / 2) + "px"; el.style.top = Math.round((h - bh) / 2) + "px";
       }
+    }
+    function setRotation(value) {
+      var next = normalizeRotation(value);
+      if (next === rotation) return;
+      rotation = next;
+      refit();
     }
     function local(clientX, clientY, s) {
       return { x: clientX - s.left - s.w / 2, y: clientY - s.top - s.h / 2 };
@@ -408,6 +439,8 @@
     function paint() {
       var zoomed = view.scale > 1.001;
       var value = zoomed ? "translate(" + view.x + "px," + view.y + "px) scale(" + view.scale + ")" : "";
+      // The turn is applied first (rightmost), so zoom and pan act on the upright picture.
+      if (rotation) value += (value ? " " : "") + "rotate(" + rotation + "deg)";
       for (var i = 0; i < layers.length; i++) if (layers[i] && layers[i].style) {
         layers[i].style.webkitTransform = value;
         layers[i].style.transform = value;
@@ -583,7 +616,26 @@
     box.addEventListener("dblclick", onDoubleClick, false);
     if (root.addEventListener) root.addEventListener("resize", refit, false);
     fitLayers();
-    return { reset: reset, refit: refit, view: function () { return view; } };
+    return { reset: reset, refit: refit, setRotation: setRotation,
+             rotation: function () { return rotation; }, view: function () { return view; } };
+  }
+
+  // The rotation a door's station reports, through the same authorised media route the panel
+  // already uses for its picture (/video-meta locally, /media/peer/<node>/video-meta for a peer).
+  // metaUrl is DoorbellPlayback.peerMediaUrl(door, "meta", location); no URL means upright.
+  function loadRotation(metaUrl, request, done) {
+    if (!metaUrl || !request) { done(0); return; }
+    request("GET", metaUrl, null, function (status, body) {
+      done(status === 200 && body ? normalizeRotation(body.rotation) : 0);
+    });
+  }
+
+  // A still tile is a fixed 16:9 box, so a turned picture is laid out by class (panel.css).
+  function setTileRotation(element, rotation) {
+    if (!element) return;
+    var turn = normalizeRotation(rotation);
+    element.className = String(element.className || "").replace(/(^|\s)rot(90|180|270)(?!\S)/g, "") +
+      (turn ? " rot" + turn : "");
   }
 
   // Door tile state chip: ringing, in_call, offline or idle.
@@ -665,5 +717,7 @@
            wallpaper: wallpaper, applyHomeTheme: applyHomeTheme, scrimmedRoles: scrimmedRoles,
            icon: icon, iconMarkup: iconMarkup, setLabel: setLabel,
            ZOOM_MAX: ZOOM_MAX, clampZoom: clampZoom, zoomAt: zoomAt, panBy: panBy,
-           toggleZoom: toggleZoom, fitRect: fitRect, visibleSize: visibleSize, attachZoom: attachZoom };
+           toggleZoom: toggleZoom, fitRect: fitRect, visibleSize: visibleSize, attachZoom: attachZoom,
+           normalizeRotation: normalizeRotation, loadRotation: loadRotation,
+           setTileRotation: setTileRotation };
 });

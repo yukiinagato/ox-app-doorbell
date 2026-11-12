@@ -260,6 +260,15 @@
       last.className = "tileLast";
       foot.appendChild(labelEl); foot.appendChild(chip); foot.appendChild(last);
       card.appendChild(foot);
+      // The still is the raw sensor frame: turn it as the station reports.
+      C.loadRotation(DoorbellPlayback.peerMediaUrl(d, "meta", window.location), R.panelRequest,
+        (function (image, video, doorId) {
+          return function (rotation) {
+            doorRotation[doorId] = rotation;
+            C.setTileRotation(image, rotation); C.setTileRotation(video, rotation);
+            if (activeCalling && activeCalling.id === doorId) callZoom.setRotation(rotation);
+          };
+        })(img, v, d.id));
       var fallback = live || snapshotUrl(d.id, +new Date());
       tilePlayback[d.id] = "loading";
       gridStreams[d.id] = DoorbellPlayback.start({ profile: d.playback_profile,
@@ -272,7 +281,7 @@
     }
   }
   // A video area never shows an empty black box: it names the door and says what is happening.
-  var tilePlayback = {}, lastDoors = null;
+  var tilePlayback = {}, lastDoors = null, doorRotation = {};
   function makePlaceholder(label) {
     var ph = document.createElement("div");
     ph.className = "videoPh connecting";
@@ -645,6 +654,7 @@
       if (callingDoorKey !== streamKey || !callStream) {
         stopCallStream();
         callZoom.reset();
+        callZoom.setRotation(doorRotation[calling.id] || 0);
         C.setText($("callPhDoor"), calling.label || calling.id);
         callPlayback = "loading";
         paintPlaceholder($("callPh"), C.doorTileState(calling), "loading");

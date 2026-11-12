@@ -399,6 +399,83 @@ same(C.visibleSize({ scale: 2 }, 400, 300, 168.75, 300), { w: 337.5, h: 300 });
   C.attachZoom(oldBox, [oldLayer]);
   same([oldLayer.style.width, oldLayer.style.height, oldLayer.style.left, oldLayer.style.top], ["300px", "225px", "50px", "0px"]);
 }
+// Rotation: a station may deliver the raw sensor frame and report 0/90/180/270. The picture is
+// turned before it is fitted, so a quarter-turned landscape frame fills the stage height.
+{
+  for (const [input, expected] of [[0, 0], [90, 90], [180, 180], [270, 270], [360, 0], [-90, 270], [450, 90],
+    ["270", 270], [91, 90], [null, 0], [undefined, 0], ["sideways", 0]])
+    assert.strictEqual(C.normalizeRotation(input), expected, "rotation " + input);
+  // A 640x360 frame in a 400x300 stage.
+  same(C.fitRect(400, 300, 640, 360, 0), { w: 400, h: 225 });
+  same(C.fitRect(400, 300, 640, 360, 180), { w: 400, h: 225 }, "a half turn keeps the shape");
+  same(C.fitRect(400, 300, 640, 360, 90), { w: 168.75, h: 300 }, "a quarter turn is upright portrait: it fills the height");
+  same(C.fitRect(400, 300, 640, 360, 270), { w: 168.75, h: 300 });
+  same(C.fitRect(300, 500, 640, 360, 270), { w: 281.25, h: 500 }, "in a portrait stage the turned picture nearly fills it");
+  for (const rotation of [0, 90, 180, 270]) {
+    const handlers = {}, layerHandlers = {};
+    const layer = { style: {}, naturalWidth: 640, naturalHeight: 360, addEventListener: (name, fn) => { layerHandlers[name] = fn; } };
+    const box = { style: { objectFit: "" }, className: "stage", addEventListener: (name, fn) => { handlers[name] = fn; },
+      getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 300 }) };
+    const zoom = C.attachZoom(box, [layer]);
+    zoom.setRotation(rotation);
+    assert.strictEqual(zoom.rotation(), rotation);
+    const quarter = rotation === 90 || rotation === 270;
+    assert.strictEqual(layer.style.transform || "", rotation ? "rotate(" + rotation + "deg)" : "", "turned at 1x: " + rotation);
+    assert.strictEqual(layer.style.webkitTransform || "", layer.style.transform || "");
+    if (quarter) {
+      // The layer is laid out sideways (stage height wide, stage width tall), centred, so that
+      // once turned it covers the stage and object-fit fits the upright picture.
+      same([layer.style.width, layer.style.height, layer.style.left, layer.style.top], ["300px", "400px", "50px", "-50px"]);
+    } else {
+      assert(!layer.style.width && !layer.style.left, "0 and 180 keep the layer filling the stage");
+    }
+    const event = extra => Object.assign({ preventDefault() {} }, extra);
+    handlers.dblclick(event({ clientX: 200, clientY: 150 }));
+    assert.strictEqual(layer.style.transform, "translate(0px,0px) scale(2)" + (rotation ? " rotate(" + rotation + "deg)" : ""),
+      "zoom and pan act on the upright picture");
+    handlers.touchstart(event({ touches: [{ clientX: 100, clientY: 100 }] }));
+    handlers.touchmove(event({ touches: [{ clientX: 1000, clientY: 1000 }] }));
+    // Upright fit is 400x225 (0, 180) or 168.75x300 (90, 270): at 2x the turned picture is
+    // still narrower than the stage, so it only pans vertically.
+    same(zoom.view(), quarter ? { scale: 2, x: 0, y: 150 } : { scale: 2, x: 200, y: 75 }, "clamp for rotation " + rotation);
+    handlers.touchend(event({ touches: [], changedTouches: [{ clientX: 1000, clientY: 1000 }] }));
+    zoom.reset();
+    assert.strictEqual(layer.style.transform, rotation ? "rotate(" + rotation + "deg)" : "", "reset keeps the turn");
+    zoom.setRotation(0);
+    assert.strictEqual(layer.style.transform, "");
+    assert(!layer.style.width && !layer.style.left, "back to filling the stage");
+  }
+  // Without object-fit the layer gets the raw frame's fitted box: 300x168.75 on its side.
+  const oldLayer = { style: {}, naturalWidth: 640, naturalHeight: 360, addEventListener() {} };
+  const oldBox = { style: {}, className: "stage", addEventListener() {},
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 300 }) };
+  C.attachZoom(oldBox, [oldLayer]).setRotation(270);
+  same([oldLayer.style.width, oldLayer.style.height, oldLayer.style.left, oldLayer.style.top], ["300px", "169px", "50px", "66px"]);
+  // The rotation comes from the station's video-meta through the panel's own media route.
+  const asked = [];
+  let got = null;
+  C.loadRotation("/media/peer/n1/video-meta", (method, url, body, done) => { asked.push(method + " " + url); done(200, { rotation: 270 }); }, r => { got = r; });
+  assert.deepStrictEqual(asked, ["GET /media/peer/n1/video-meta"]);
+  assert.strictEqual(got, 270);
+  C.loadRotation("/video-meta", (m, u, b, done) => done(403, null), r => { got = r; });
+  assert.strictEqual(got, 0, "a refused or missing answer means upright");
+  C.loadRotation("", () => { throw new Error("no request without a media URL"); }, r => { got = r; });
+  assert.strictEqual(got, 0);
+  // Still tiles are fixed 16:9 boxes, turned by class.
+  const tile = { className: "" };
+  C.setTileRotation(tile, 270); assert.strictEqual(tile.className, " rot270");
+  C.setTileRotation(tile, 90); assert.strictEqual(tile.className, " rot90");
+  C.setTileRotation(tile, 0); assert.strictEqual(tile.className, "");
+  for (const turn of [90, 180, 270])
+    assert(new RegExp("\\.ratio > \\.rot" + turn + "[ ,][^}]*\\{[^}]*rotate\\(" + turn + "deg\\)").test(css) ||
+      css.includes(".ratio > .rot" + turn + " { -webkit-transform:rotate(" + turn + "deg); transform:rotate(" + turn + "deg); }"));
+  assert(css.includes(".ratio > .rot90, .ratio > .rot270 { width:56.25%; height:177.7778%; left:21.875%; top:-38.8889%; }"),
+    "a quarter-turned still is laid out sideways inside the 16:9 tile");
+  assert(monitor.includes('C.loadRotation(DoorbellPlayback.peerMediaUrl(d, "meta", window.location), R.panelRequest,') &&
+    monitor.includes("callZoom.setRotation(doorRotation[calling.id] || 0)") && call.includes("liveZoom.setRotation(rotation)"),
+    "both pages turn their live pictures as the station reports");
+}
+
 // The stage takes the space the layout leaves: no fixed aspect ratio on the live picture.
 assert(call.includes('<div id="videoBox" class="stage"') && monitor.includes('<div class="stage" id="callPicture">'));
 assert(/#videoBox \{ flex:1 1 0; min-height:140px;/.test(css) && /#callView \.callMedia \.stage \{ flex:1 1 auto;/.test(css) &&

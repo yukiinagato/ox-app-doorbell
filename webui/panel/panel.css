@@ -120,6 +120,12 @@ button.quiet { background:transparent; color:#9aa7b5; color:var(--muted); }
 .ratio > img, .ratio > video { position:absolute; left:0; top:0; width:100%; height:100%; max-width:none;
                                object-fit:contain; -webkit-transform-origin:50% 50%; transform-origin:50% 50%; }
 .ratio img, .stage img { -webkit-user-drag:none; -webkit-user-select:none; user-select:none; }
+/* A station that delivers the raw sensor frame reports its rotation. In the 16:9 tile a quarter
+ * turn lays the element out sideways (as wide as the box is tall) and turns it upright. */
+.ratio > .rot180 { -webkit-transform:rotate(180deg); transform:rotate(180deg); }
+.ratio > .rot90, .ratio > .rot270 { width:56.25%; height:177.7778%; left:21.875%; top:-38.8889%; }
+.ratio > .rot90 { -webkit-transform:rotate(90deg); transform:rotate(90deg); }
+.ratio > .rot270 { -webkit-transform:rotate(270deg); transform:rotate(270deg); }
 
 /* A live picture's stage. It takes the space the layout leaves, has no aspect ratio of its own
  * and is the clip rectangle; the picture is aspect-fitted inside it (object-fit, or sized by

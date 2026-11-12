@@ -462,6 +462,16 @@ els.tabs.onkeydown = event => {
   tabs[(at + step + tabs.length) % tabs.length].focus();
 };
 
+// The live picture is the raw sensor frame: turn it as the door's station reports.
+function loadDoorRotation(d) {
+  if (!DoorbellPanelRuntime.panelRequest) return;
+  const revision = selectionRevision;
+  DoorbellPanelCommon.loadRotation(DoorbellPlayback.peerMediaUrl ? DoorbellPlayback.peerMediaUrl(d, "meta", window.location) : "",
+    DoorbellPanelRuntime.panelRequest, rotation => {
+      if (revision === selectionRevision && selected && selected.id === d.id) liveZoom.setRotation(rotation);
+    });
+}
+
 function playbackKey(d) {
   return [d && d.id, d && d.stream_mjpeg, d && d.stream_mp4,
           JSON.stringify((d && d.playback_profile) || {})].join("|");
@@ -471,8 +481,9 @@ function selectDoor(d, forcePlaybackRefresh) {
   if (conference && !forcePlaybackRefresh) conference.select(d);
   if (session && !forcePlaybackRefresh) return;  // Do not switch doors during an active call.
   selectionRevision++;
-  if (!selected || selected.id !== d.id) liveZoom.reset();
+  if (!selected || selected.id !== d.id) { liveZoom.reset(); liveZoom.setRotation(0); }
   selected = d;
+  loadDoorRotation(d);
   renderTabs();
   if (playback) { playback.stop(); playback = null; }
   const mp4 = DoorbellPlayback.proxyMp4Url(d.id, K, d.stream_mp4, window.location);
