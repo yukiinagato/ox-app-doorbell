@@ -100,6 +100,12 @@ CFLAGS=(-std=c99 -Wall -Wextra -Werror -O2 -I"$MINISIP")
   "$REPO_ROOT/ios-kiosk/src/Core/DBUiTheme.m" \
   "$REPO_ROOT/ios-compat/tests/home_layout_test.m" \
   -framework Foundation -framework CoreGraphics -o "$OUT/home_layout_test"
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBVideoStage.m" \
+  "$REPO_ROOT/ios-compat/tests/video_stage_test.m" \
+  -framework Foundation -framework CoreGraphics -o "$OUT/video_stage_test"
+"$OUT/video_stage_test"
 "$OUT/home_layout_test"
 python3 "$REPO_ROOT/ios-compat/tests/run_door_visitor_actions_host.py" \
   --out "$OUT/door-visitor-actions"

@@ -16,6 +16,7 @@
 #import "../Core/DBNoticeModel.h"
 #import "../Core/DBPurposeModel.h"
 #import "../Core/DBUiTheme.h"
+#import "../Core/DBVideoStage.h"
 #import "../Support/DBAppDelegate.h"
 #import "DBChrome.h"
 #import "DBNoticeDialog.h"
@@ -1742,16 +1743,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     [s setNeedsLayout];
     [s layoutIfNeeded];
     CGFloat angle = (CGFloat)rotation * (CGFloat)3.14159265358979323846 / 180.0f;
-    CGFloat scale = 1.0f;
-    if ((rotation == 90 || rotation == 270) && s->_liveView.bounds.size.width > 0 &&
-        s->_liveView.bounds.size.height > 0) {
-      scale = MIN(s->_liveView.bounds.size.width / s->_liveView.bounds.size.height,
-                  s->_liveView.bounds.size.height / s->_liveView.bounds.size.width);
-    }
-    [UIView animateWithDuration:0.2 animations:^{
-      s->_liveView.transform = CGAffineTransformScale(CGAffineTransformMakeRotation(angle),
-                                                       scale, scale);
-    }];
+    // The layout above already gave the live view the unrotated picture's bounds, so the
+    // turn needs no scale and leaves no letterbox inside the zoomed content.
+    s->_liveView.transform = CGAffineTransformMakeRotation(angle);
   }];
 }
 
@@ -2367,14 +2361,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 #pragma mark - layout
 
-// The door camera's aspect drives the picture inside its slot: a portrait stream is shown
-// portrait, letterboxed, never cropped or stretched. The image's own size wins; before the
-// first frame the reported sensor rotation decides.
-- (CGSize)videoContentSize {
+// The source frame as the sensor delivers it, before its rotation is applied: the image's own
+// size wins, and 4:3 stands in until the first frame.
+- (CGSize)videoSourceSize {
   UIImage *frame = _liveView.image;
   if (frame != nil && frame.size.width > 0 && frame.size.height > 0) return frame.size;
-  BOOL rotatedPortrait = (_videoRotation == 90 || _videoRotation == 270);
-  return rotatedPortrait ? CGSizeMake(3, 4) : CGSizeMake(4, 3);
+  return CGSizeMake(4, 3);
 }
 
 #pragma mark - video zoom
@@ -2384,14 +2376,22 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   return _zoomContent;
 }
 
-// Keeps the picture centred in the slot while it is smaller than the slot on an axis. Once it
-// is larger, the scroll view's own content bounds stop a pan at the picture's edges.
+// The scroll view is the stage and the clip rectangle. While the zoomed picture is shorter
+// than the stage on an axis it is held centred by the content inset, so it grows into the
+// letterbox bars; once it is longer the inset is zero and the scroll view's own content bounds
+// stop a pan at the picture's edges, so nothing beyond the picture is ever revealed.
 - (void)centreZoomContent {
-  CGSize slot = _videoScroll.bounds.size;
-  CGSize content = _videoScroll.contentSize;
-  _zoomContent.center = CGPointMake(content.width / 2 + MAX(0, (slot.width - content.width) / 2),
-                                    content.height / 2 +
-                                        MAX(0, (slot.height - content.height) / 2));
+  CGSize stage = _videoScroll.bounds.size;
+  CGSize zoomed = _videoScroll.contentSize;
+  DBVideoStageAxis x = DBVideoStageAxisMake(stage.width, zoomed.width);
+  DBVideoStageAxis y = DBVideoStageAxisMake(stage.height, zoomed.height);
+  UIEdgeInsets inset = UIEdgeInsetsMake(y.inset, x.inset, y.inset, x.inset);
+  if (!UIEdgeInsetsEqualToEdgeInsets(_videoScroll.contentInset, inset))
+    _videoScroll.contentInset = inset;
+  CGPoint offset = _videoScroll.contentOffset;
+  CGPoint clamped = CGPointMake(DBVideoStageClampOffset(x, offset.x),
+                                DBVideoStageClampOffset(y, offset.y));
+  if (!CGPointEqualToPoint(offset, clamped)) _videoScroll.contentOffset = clamped;
 }
 
 - (void)scrollViewDidZoom:(UIScrollView *)scrollView {
@@ -2401,7 +2401,6 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)resetVideoZoom {
   if (_videoScroll.zoomScale != 1) [_videoScroll setZoomScale:1 animated:NO];
-  _videoScroll.contentOffset = CGPointZero;
   [self centreZoomContent];
 }
 
@@ -2422,8 +2421,21 @@ static BOOL DBSameString(NSString *a, NSString *b) {
                   animated:animated];
 }
 
+// What the stacked layout keeps for the details under the stage: headline, purpose, status,
+// hint, plus the rows that are on show.
+- (CGFloat)detailsMinimumHeight {
+  CGFloat height = 150;
+  if (!_countdownButton.hidden) height += 52;
+  if (!_noticeLabel.hidden) height += 44;
+  if (!_visitPanel.hidden) height += MIN(_visitPanel.contentSize.height, 96) + 4;
+  return height;
+}
+
 - (void)layoutVideoInSlot:(CGRect)slot {
-  CGRect frame = DBAspectFitRect(slot, [self videoContentSize]);
+  // Rotation is applied before fitting, so a quarter-turned sensor yields a portrait picture
+  // that fills the stage's height instead of a landscape box with the picture shrunk inside.
+  CGSize picture = DBVideoStageFitSize(slot.size, [self videoSourceSize], _videoRotation);
+  CGRect frame = CGRectMake(0, 0, picture.width, picture.height);
   // A new slot or picture size starts again from 1x, which is also the only scale at which the
   // zooming view's frame may be assigned. An unchanged layout pass leaves a zoomed picture alone.
   BOOL resized = !CGSizeEqualToSize(slot.size, _zoomSlotSize) ||
@@ -2435,10 +2447,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     if (_videoScroll.zoomScale != 1) [_videoScroll setZoomScale:1 animated:NO];
     _zoomContent.frame = CGRectMake(0, 0, frame.size.width, frame.size.height);
     _videoScroll.contentSize = frame.size;
-    _videoScroll.contentOffset = CGPointZero;
     // The sensor rotation is a transform on the live view, and a frame assigned under a
-    // non-identity transform is undefined, so the picture is placed by bounds and centre.
-    _liveView.bounds = CGRectMake(0, 0, frame.size.width, frame.size.height);
+    // non-identity transform is undefined, so the picture is placed by bounds and centre. Its
+    // bounds are the unrotated picture: a quarter turn then lands exactly on the fitted rect.
+    CGSize unrotated = DBVideoStageUprightSize(frame.size, _videoRotation);
+    _liveView.bounds = CGRectMake(0, 0, unrotated.width, unrotated.height);
     _liveView.center = CGPointMake(frame.size.width / 2, frame.size.height / 2);
     [self centreZoomContent];
   }
@@ -2599,7 +2612,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 // The one place frames are decided. Landscape on a tablet-wide screen puts the video on the
 // left (64 % of the width) with details and actions in a right column; every other size stacks
-// a 16:9 video slot, the details, and the action zone, which is always pinned to the bottom.
+// the video stage (all the height the details leave), the details, and the action zone, which is always pinned to the bottom.
 - (void)layoutSubviews {
   [super layoutSubviews];
   CGSize size = self.bounds.size;
@@ -2632,8 +2645,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   } else {
     CGFloat actions = [self layoutActionsInRect:body column:NO];
     CGFloat room = MAX(0, CGRectGetHeight(body) - actions - gap);
-    // 16:9 when the details still get their minimum; half of what is left on a small screen.
-    CGFloat videoHeight = MIN(floorf(CGRectGetWidth(body) * 9 / 16), room - 150);
+    // The stage takes everything the details do not need; half of what is left on a small
+    // screen. It has no aspect ratio of its own.
+    CGFloat videoHeight = room - [self detailsMinimumHeight];
     if (videoHeight < 80) videoHeight = floorf(room / 2);
     videoSlot = CGRectMake(CGRectGetMinX(body), CGRectGetMinY(body), CGRectGetWidth(body),
                            videoHeight);

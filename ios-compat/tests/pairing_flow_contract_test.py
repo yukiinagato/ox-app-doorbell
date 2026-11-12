@@ -391,6 +391,20 @@ class ReadabilityContracts(unittest.TestCase):
         self.assertIn("DBUiRegionHint", door)
         self.assertIn("DBUiRegionTileLabel", home)
 
+    def test_the_live_picture_is_fitted_in_a_stage_that_is_also_the_zoom_clip(self):
+        incoming = read("ios-kiosk/src/Screens/DBIncomingScreen.m")
+        # Rotation before fitting, per-axis inset and clamp from the host-tested
+        # geometry, and no aspect-locked stage or scaled-down quarter turn.
+        self.assertIn("DBVideoStageFitSize(slot.size, [self videoSourceSize], _videoRotation)",
+                      incoming)
+        self.assertIn("DBVideoStageAxisMake(stage.width, zoomed.width)", incoming)
+        self.assertIn("DBVideoStageClampOffset(x, offset.x)", incoming)
+        self.assertIn("_videoScroll.contentInset = inset;", incoming)
+        self.assertIn("s->_liveView.transform = CGAffineTransformMakeRotation(angle);", incoming)
+        self.assertNotIn("* 9 / 16", incoming)
+        self.assertNotIn("CGAffineTransformScale", incoming)
+        self.assertIn("_videoScroll.maximumZoomScale = 4;", incoming)
+
     def test_the_footer_and_the_sos_slider_share_one_computed_band(self):
         theme = read("ios-kiosk/src/Core/DBUiTheme.m")
         home = read("ios-kiosk/src/Screens/DBHomeScreen.m")
