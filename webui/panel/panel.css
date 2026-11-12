@@ -119,8 +119,18 @@ button.quiet { background:transparent; color:#9aa7b5; color:var(--muted); }
 .ratio:before { content:""; display:block; padding-top:56.25%; }
 .ratio > img, .ratio > video { position:absolute; left:0; top:0; width:100%; height:100%; max-width:none;
                                object-fit:contain; -webkit-transform-origin:50% 50%; transform-origin:50% 50%; }
-.ratio.is-zoomed { cursor:grab; }
-.ratio img { -webkit-user-drag:none; -webkit-user-select:none; user-select:none; }
+.ratio img, .stage img { -webkit-user-drag:none; -webkit-user-select:none; user-select:none; }
+
+/* A live picture's stage. It takes the space the layout leaves, has no aspect ratio of its own
+ * and is the clip rectangle; the picture is aspect-fitted inside it (object-fit, or sized by
+ * DoorbellPanelCommon.attachZoom where object-fit is missing). Where the layout cannot give it a
+ * height (iOS 5), it falls back to a 16:9 box. */
+.stage { position:relative; width:100%; overflow:hidden; background:#0b0d10; background:var(--media); }
+.stage:before { content:""; display:block; padding-top:56.25%; }
+.stage > img, .stage > video { position:absolute; left:0; top:0; width:100%; height:100%; max-width:none;
+                               object-fit:contain; -webkit-transform-origin:50% 50%; transform-origin:50% 50%; }
+.stage.is-zoomed { cursor:grab; }
+@supports (display:grid) { .stage:before { display:none; } }
 
 .videoPh { position:absolute; left:0; top:0; right:0; bottom:0; z-index:1; padding:12px; text-align:center;
            background:#1a2027; background:var(--surface-2); color:#e8edf2; color:var(--on-surface);
@@ -434,8 +444,10 @@ body #dashHeader .dbSosTrigger { float:left; margin:6px 16px 0 0; }
 @supports (display:grid) {
   .callFrame { display:flex; flex-direction:column; min-height:100%;
                padding:env(safe-area-inset-top) env(safe-area-inset-right) 0 env(safe-area-inset-left); }
-  #callView .callMedia { max-width:none; margin:0; flex:none; }
-  #callView .callSide { flex:1 1 auto; display:flex; flex-direction:column; padding:16px 16px 0; }
+  .callFrame { height:100%; }
+  #callView .callMedia { max-width:none; margin:0; flex:1 1 0; min-height:140px; display:flex; }
+  #callView .callMedia .stage { flex:1 1 auto; min-height:0; }
+  #callView .callSide { flex:none; display:flex; flex-direction:column; padding:16px 16px 0; }
   #callView .msg { font-size:clamp(1.75rem, 1.1rem + 3vw, 3rem); }
   #callBadges { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
   #callBadges .chip { margin:0; }
@@ -459,9 +471,8 @@ body #dashHeader .dbSosTrigger { float:left; margin:6px 16px 0 0; }
   /* Landscape and expanded: video left (at least 60%), details and actions in the right column. */
   @media (min-width: 900px), (orientation: landscape) and (min-width: 600px) {
     .callFrame { display:grid; grid-template-columns:minmax(0, 62fr) minmax(300px, 38fr); height:100%; text-align:left; }
-    #callView .callMedia { display:flex; align-items:center; justify-content:center; padding:16px; min-height:0; }
-    #callView .callMedia .ratio { max-width:calc((100vh - 32px) * 16 / 9); max-width:calc((100dvh - 32px) * 16 / 9);
-                                  border-radius:var(--radius); }
+    #callView .callMedia { padding:16px; min-height:0; }
+    #callView .callMedia .stage { border-radius:var(--radius); }
     #callView .callSide { padding:24px 24px 0 8px; min-height:0; overflow:auto; }
     #callBadges { justify-content:flex-start; }
   }
@@ -491,9 +502,9 @@ body.callPage #offlineBand { background:var(--warning); color:var(--on-warning);
 #doorTabs button.sel { border-color:var(--accent-text); box-shadow:inset 0 0 0 1px var(--accent-text); font-weight:600; }
 #doorTabs button.is-ringing .st { color:var(--accent-text); font-weight:600; }
 #doorTabs button.is-in_call .st { color:var(--positive-text); font-weight:600; }
-body.callPage main { flex:1 1 auto; min-height:0; overflow:auto; padding:0 16px 12px; }
-#videoBox { border-radius:var(--radius); margin:0 auto;
-            max-width:calc((100vh - 340px) * 16 / 9); max-width:calc((100dvh - 340px) * 16 / 9); min-width:min(100%, 240px); }
+body.callPage main { flex:1 1 auto; min-height:0; overflow:auto; padding:0 16px 12px; display:flex; flex-direction:column; }
+#conversationSummary, #conversationActions { flex:none; }
+#videoBox { flex:1 1 0; min-height:140px; border-radius:var(--radius); }
 #videoBox #selfPreview { position:absolute; left:auto; top:auto; right:10px; bottom:10px; z-index:2; width:28%; max-width:160px;
                          height:auto; border-radius:8px; border:1px solid var(--line); display:none; }
 #conversationSummary { white-space:pre-line; padding:12px 0 0; color:var(--muted); }
@@ -542,8 +553,7 @@ body #controls .dbSosTrigger { grid-area:sos; margin:0; align-self:end; }
   #doorTabs button { max-width:none; width:100%; flex:none; display:flex; align-items:center; justify-content:space-between; gap:12px; }
   #doorTabs button span:first-child { flex:1 1 auto; min-width:0; }
   #doorTabs button .st { flex:none; }
-  body.callPage main { grid-area:main; display:flex; flex-direction:column; justify-content:center; padding:16px; }
-  #videoBox { max-width:calc((100vh - 32px) * 16 / 9); max-width:calc((100dvh - 32px) * 16 / 9); flex:none; }
+  body.callPage main { grid-area:main; padding:16px; }
   #controls { grid-area:controls; border-top:0; padding:8px 20px calc(16px + env(safe-area-inset-bottom)) 8px; }
 }
 

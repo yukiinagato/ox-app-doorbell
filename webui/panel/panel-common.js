@@ -300,15 +300,30 @@
 
   var ZOOM_MAX = 4, ZOOM_DOUBLE_TAP = 2;
 
-  // Scale limited to 1..ZOOM_MAX and the offset limited so the scaled picture always covers its
-  // box: at scale s a box of width w may move by at most w * (s - 1) / 2 either way.
-  function clampZoom(view, width, height) {
+  // The picture aspect-fitted inside the stage: it fills the width or the height, whichever is
+  // reached first, and is never stretched. An unknown picture size counts as filling the stage.
+  function fitRect(stageW, stageH, pictureW, pictureH) {
+    stageW = Math.max(0, Number(stageW) || 0); stageH = Math.max(0, Number(stageH) || 0);
+    pictureW = Number(pictureW); pictureH = Number(pictureH);
+    if (!(pictureW > 0) || !(pictureH > 0) || !stageW || !stageH) return { w: stageW, h: stageH };
+    var scale = Math.min(stageW / pictureW, stageH / pictureH);
+    return { w: pictureW * scale, h: pictureH * scale };
+  }
+
+  // Scale limited to 1..ZOOM_MAX and the offset clamped per axis against the stage, which is the
+  // clip rectangle: where the zoomed picture is larger than the stage its edges may not come
+  // inside the stage edges; where it is not, it stays centred. fitW and fitH are the picture's
+  // size at 1x (fitRect); left out, the picture is taken to fill the stage.
+  function clampZoom(view, stageW, stageH, fitW, fitH) {
     view = view || {};
+    stageW = Number(stageW) || 0; stageH = Number(stageH) || 0;
+    fitW = fitW === undefined ? stageW : Number(fitW) || 0;
+    fitH = fitH === undefined ? stageH : Number(fitH) || 0;
     var scale = Number(view.scale);
     if (!isFinite(scale) || scale < 1) scale = 1;
     if (scale > ZOOM_MAX) scale = ZOOM_MAX;
-    var maxX = Math.max(0, (Number(width) || 0) * (scale - 1) / 2);
-    var maxY = Math.max(0, (Number(height) || 0) * (scale - 1) / 2);
+    var maxX = Math.max(0, (fitW * scale - stageW) / 2);
+    var maxY = Math.max(0, (fitH * scale - stageH) / 2);
     var x = Number(view.x), y = Number(view.y);
     if (!isFinite(x)) x = 0;
     if (!isFinite(y)) y = 0;
@@ -316,41 +331,76 @@
              y: Math.max(-maxY, Math.min(maxY, y)) || 0 };
   }
 
-  // Zooms by factor while the picture point under (px, py) stays put. px and py are measured
-  // from the centre of the box.
-  function zoomAt(view, factor, px, py, width, height) {
-    var from = clampZoom(view, width, height);
-    var to = clampZoom({ scale: from.scale * (Number(factor) || 1) }, width, height).scale;
+  // Zooms by factor while the picture point under (px, py) stays put where the clamp allows it.
+  // px and py are measured from the centre of the stage.
+  function zoomAt(view, factor, px, py, stageW, stageH, fitW, fitH) {
+    var from = clampZoom(view, stageW, stageH, fitW, fitH);
+    var to = clampZoom({ scale: from.scale * (Number(factor) || 1) }, stageW, stageH, fitW, fitH).scale;
     var ratio = to / from.scale;
     px = Number(px) || 0; py = Number(py) || 0;
     return clampZoom({ scale: to, x: px - (px - from.x) * ratio, y: py - (py - from.y) * ratio },
-                     width, height);
+                     stageW, stageH, fitW, fitH);
   }
 
-  function panBy(view, dx, dy, width, height) {
-    var from = clampZoom(view, width, height);
+  function panBy(view, dx, dy, stageW, stageH, fitW, fitH) {
+    var from = clampZoom(view, stageW, stageH, fitW, fitH);
     return clampZoom({ scale: from.scale, x: from.x + (Number(dx) || 0), y: from.y + (Number(dy) || 0) },
-                     width, height);
+                     stageW, stageH, fitW, fitH);
   }
 
   // Double tap: fit <-> 2x around the tapped point.
-  function toggleZoom(view, px, py, width, height) {
-    var from = clampZoom(view, width, height);
+  function toggleZoom(view, px, py, stageW, stageH, fitW, fitH) {
+    var from = clampZoom(view, stageW, stageH, fitW, fitH);
     if (from.scale > 1.01) return { scale: 1, x: 0, y: 0 };
-    return zoomAt(from, ZOOM_DOUBLE_TAP, px, py, width, height);
+    return zoomAt(from, ZOOM_DOUBLE_TAP, px, py, stageW, stageH, fitW, fitH);
   }
 
-  // Pinch, drag, double tap, wheel and mouse drag on a live picture. box clips (overflow hidden);
-  // layers are the <img>/<video> elements that receive the transform. Gestures are handled on
+  // The part of the stage the zoomed picture covers, per axis. At 1x this is the fitted
+  // rectangle; zoomed, it grows into the letterbox bars until it covers the stage.
+  function visibleSize(view, stageW, stageH, fitW, fitH) {
+    var v = clampZoom(view, stageW, stageH, fitW, fitH);
+    return { w: Math.min(Number(stageW) || 0, fitW * v.scale), h: Math.min(Number(stageH) || 0, fitH * v.scale) };
+  }
+
+  // Pinch, drag, double tap, wheel and mouse drag on a live picture. box is the stage: it takes
+  // whatever space the layout leaves and clips (overflow hidden). layers are the <img>/<video>
+  // elements; each fills the stage with the picture aspect-fitted inside it and receives the
+  // transform, so a zoomed picture grows into the letterbox bars until it covers the stage. Gestures are handled on
   // the picture only, so the page keeps scrolling at 1x and the action buttons are untouched.
   function attachZoom(box, layers) {
     var view = { scale: 1, x: 0, y: 0 }, noop = function () {};
-    if (!box || !box.addEventListener) return { reset: noop, view: function () { return view; } };
+    if (!box || !box.addEventListener) return { reset: noop, refit: noop, view: function () { return view; } };
     var touches = null, drag = null, lastTap = null, pointers = {}, pointerCount = 0, pinch = null;
     function size() {
       var r = box.getBoundingClientRect ? box.getBoundingClientRect() : null;
-      return { w: r ? r.width : box.clientWidth || 0, h: r ? r.height : box.clientHeight || 0,
-               left: r ? r.left : 0, top: r ? r.top : 0 };
+      var w = r ? r.width : box.clientWidth || 0, h = r ? r.height : box.clientHeight || 0;
+      var natural = pictureSize(), fit = fitRect(w, h, natural.w, natural.h);
+      return { w: w, h: h, fw: fit.w, fh: fit.h, left: r ? r.left : 0, top: r ? r.top : 0 };
+    }
+    // The picture actually on screen: the visible layer that has decoded a frame.
+    function pictureSize() {
+      for (var i = 0; i < layers.length; i++) {
+        var el = layers[i];
+        if (!el || (el.style && el.style.display === "none")) continue;
+        var w = el.videoWidth || el.naturalWidth || 0, h = el.videoHeight || el.naturalHeight || 0;
+        if (w > 0 && h > 0) return { w: w, h: h };
+      }
+      return { w: 0, h: 0 };
+    }
+    // Browsers without object-fit (old Safari) would stretch a layer that fills the stage, so
+    // there each layer is given the fitted rectangle itself, centred.
+    var needsFit = !(box.style && "objectFit" in box.style);
+    function fitLayers() {
+      if (!needsFit) return;
+      var r = box.getBoundingClientRect ? box.getBoundingClientRect() : null;
+      var w = r ? r.width : box.clientWidth || 0, h = r ? r.height : box.clientHeight || 0;
+      for (var i = 0; i < layers.length; i++) {
+        var el = layers[i];
+        if (!el || !el.style) continue;
+        var fit = fitRect(w, h, el.videoWidth || el.naturalWidth, el.videoHeight || el.naturalHeight);
+        el.style.width = Math.round(fit.w) + "px"; el.style.height = Math.round(fit.h) + "px";
+        el.style.left = Math.round((w - fit.w) / 2) + "px"; el.style.top = Math.round((h - fit.h) / 2) + "px";
+      }
     }
     function local(clientX, clientY, s) {
       return { x: clientX - s.left - s.w / 2, y: clientY - s.top - s.h / 2 };
@@ -367,7 +417,14 @@
       box.className = box.className.replace(/(^|\s)is-zoomed(?!\S)/g, "") + (zoomed ? " is-zoomed" : "");
     }
     function set(next) { view = next; paint(); }
-    function reset() { touches = drag = pinch = lastTap = null; set({ scale: 1, x: 0, y: 0 }); }
+    function reset() { touches = drag = pinch = lastTap = null; fitLayers(); set({ scale: 1, x: 0, y: 0 }); }
+    // A new frame size (first frame, another stream, a rotated source) refits and reclamps.
+    function refit() { fitLayers(); var s = size(); set(clampZoom(view, s.w, s.h, s.fw, s.fh)); }
+    for (var li = 0; li < layers.length; li++) if (layers[li] && layers[li].addEventListener) {
+      layers[li].addEventListener("load", refit, false);
+      layers[li].addEventListener("loadedmetadata", refit, false);
+      layers[li].addEventListener("resize", refit, false);
+    }
     function stop(event) { if (event.cancelable !== false && event.preventDefault) event.preventDefault(); }
     function tap(clientX, clientY) {
       var now = new Date().getTime(), s = size();
@@ -375,7 +432,7 @@
           Math.abs(clientY - lastTap.y) < 30) {
         var p = local(clientX, clientY, s);
         lastTap = null;
-        set(toggleZoom(view, p.x, p.y, s.w, s.h));
+        set(toggleZoom(view, p.x, p.y, s.w, s.h, s.fw, s.fh));
         return true;
       }
       lastTap = { at: now, x: clientX, y: clientY };
@@ -387,8 +444,8 @@
     }
     function pinchMove(a, b) {
       var next = pinchStart(a, b), s = size(), p = local(next.cx, next.cy, s);
-      var moved = panBy(view, next.cx - pinch.cx, next.cy - pinch.cy, s.w, s.h);
-      set(zoomAt(moved, next.distance / pinch.distance, p.x, p.y, s.w, s.h));
+      var moved = panBy(view, next.cx - pinch.cx, next.cy - pinch.cy, s.w, s.h, s.fw, s.fh);
+      set(zoomAt(moved, next.distance / pinch.distance, p.x, p.y, s.w, s.h, s.fw, s.fh));
       pinch = next;
     }
 
@@ -414,7 +471,7 @@
       } else if (list.length === 1 && drag) {
         stop(event);
         s = size();
-        set(panBy(view, list[0].clientX - drag.x, list[0].clientY - drag.y, s.w, s.h));
+        set(panBy(view, list[0].clientX - drag.x, list[0].clientY - drag.y, s.w, s.h, s.fw, s.fh));
         drag = { x: list[0].clientX, y: list[0].clientY };
         if (touches) touches.moved = true;
       } else if (list.length === 1 && touches &&
@@ -464,7 +521,7 @@
       } else if (drag && drag.id === event.pointerId) {
         stop(event);
         s = size();
-        set(panBy(view, event.clientX - drag.x, event.clientY - drag.y, s.w, s.h));
+        set(panBy(view, event.clientX - drag.x, event.clientY - drag.y, s.w, s.h, s.fw, s.fh));
         drag.x = event.clientX; drag.y = event.clientY;
       }
     }
@@ -484,7 +541,7 @@
     function onMouseMove(event) {
       if (!drag || !drag.mouse) return;
       var s = size();
-      set(panBy(view, event.clientX - drag.x, event.clientY - drag.y, s.w, s.h));
+      set(panBy(view, event.clientX - drag.x, event.clientY - drag.y, s.w, s.h, s.fw, s.fh));
       drag.x = event.clientX; drag.y = event.clientY;
     }
     function onMouseUp() { if (drag && drag.mouse) drag = null; }
@@ -492,7 +549,7 @@
       var s = size(), p = local(event.clientX, event.clientY, s);
       var delta = event.deltaY !== undefined ? event.deltaY : -(event.wheelDelta || 0);
       if (!delta) return;
-      var next = zoomAt(view, delta < 0 ? 1.2 : 1 / 1.2, p.x, p.y, s.w, s.h);
+      var next = zoomAt(view, delta < 0 ? 1.2 : 1 / 1.2, p.x, p.y, s.w, s.h, s.fw, s.fh);
       // At the limit the wheel is left to the page so scrolling is never trapped.
       if (next.scale === view.scale) return;
       stop(event);
@@ -501,7 +558,7 @@
     function onDoubleClick(event) {
       var s = size(), p = local(event.clientX, event.clientY, s);
       stop(event);
-      set(toggleZoom(view, p.x, p.y, s.w, s.h));
+      set(toggleZoom(view, p.x, p.y, s.w, s.h, s.fw, s.fh));
     }
 
     var active = { passive: false };
@@ -524,11 +581,9 @@
     }
     box.addEventListener("wheel", onWheel, active);
     box.addEventListener("dblclick", onDoubleClick, false);
-    if (root.addEventListener) root.addEventListener("resize", function () {
-      var s = size();
-      set(clampZoom(view, s.w, s.h));
-    }, false);
-    return { reset: reset, view: function () { return view; } };
+    if (root.addEventListener) root.addEventListener("resize", refit, false);
+    fitLayers();
+    return { reset: reset, refit: refit, view: function () { return view; } };
   }
 
   // Door tile state chip: ringing, in_call, offline or idle.
@@ -610,5 +665,5 @@
            wallpaper: wallpaper, applyHomeTheme: applyHomeTheme, scrimmedRoles: scrimmedRoles,
            icon: icon, iconMarkup: iconMarkup, setLabel: setLabel,
            ZOOM_MAX: ZOOM_MAX, clampZoom: clampZoom, zoomAt: zoomAt, panBy: panBy,
-           toggleZoom: toggleZoom, attachZoom: attachZoom };
+           toggleZoom: toggleZoom, fitRect: fitRect, visibleSize: visibleSize, attachZoom: attachZoom };
 });

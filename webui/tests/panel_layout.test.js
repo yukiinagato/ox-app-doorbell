@@ -301,71 +301,110 @@ assert(C.iconMarkup("phone").includes("/panel/icons/tabler-sprite.svg#i-phone"))
 // Helper results come from another realm, so they are compared by value.
 const same = (actual, expected, message) =>
   assert.deepStrictEqual(JSON.parse(JSON.stringify(actual)), expected, message);
-// Live picture zoom: 1x..4x, never past the picture's edges, double tap toggles fit and 2x.
+// Live picture zoom. The stage is the clip rectangle and takes whatever the layout leaves; the
+// picture is aspect-fitted inside it; pan is clamped per axis against the stage.
 assert.strictEqual(C.ZOOM_MAX >= 4, true);
-same(C.clampZoom({ scale: 0.3, x: 50, y: -50 }, 400, 225), { scale: 1, x: 0, y: 0 });
-same(C.clampZoom({ scale: 9, x: 9999, y: -9999 }, 400, 200), { scale: 4, x: 600, y: -300 });
-same(C.clampZoom({ scale: NaN, x: NaN }, 400, 200), { scale: 1, x: 0, y: 0 });
-same(C.clampZoom({ scale: 2, x: 150, y: 0 }, 400, 200), { scale: 2, x: 150, y: 0 });
+same(C.fitRect(400, 300, 1600, 900), { w: 400, h: 225 }, "16:9 in a 4:3 stage fills the width");
+same(C.fitRect(400, 300, 640, 480), { w: 400, h: 300 }, "4:3 in a 4:3 stage fills it");
+same(C.fitRect(400, 300, 360, 640), { w: 168.75, h: 300 }, "a portrait picture fills the height");
+same(C.fitRect(400, 300, 0, 0), { w: 400, h: 300 }, "an unknown picture counts as filling the stage");
+same(C.clampZoom({ scale: 0.3, x: 50, y: -50 }, 400, 300, 400, 225), { scale: 1, x: 0, y: 0 });
+same(C.clampZoom({ scale: NaN, x: NaN }, 400, 300, 400, 225), { scale: 1, x: 0, y: 0 });
+// 16:9 picture (400x225 at 1x) in a 400x300 stage.
+same(C.clampZoom({ scale: 1.2, x: 999, y: 999 }, 400, 300, 400, 225), { scale: 1.2, x: 40, y: 0 },
+  "wider than the stage: pans to its edge; still shorter than the stage: stays centred");
+same(C.clampZoom({ scale: 2, x: -999, y: 999 }, 400, 300, 400, 225), { scale: 2, x: -200, y: 75 },
+  "larger than the stage on both axes: neither edge comes inside the stage");
+same(C.clampZoom({ scale: 9, x: 9999, y: -9999 }, 400, 300, 400, 225), { scale: 4, x: 600, y: -300 });
+// Portrait picture (168.75x300 at 1x) in the same stage.
+same(C.clampZoom({ scale: 2, x: 500, y: 500 }, 400, 300, 168.75, 300), { scale: 2, x: 0, y: 150 },
+  "at 2x it is still narrower than the stage, so it stays centred horizontally");
+same(C.clampZoom({ scale: 4, x: 500, y: 500 }, 400, 300, 168.75, 300), { scale: 4, x: 137.5, y: 450 });
 same(C.clampZoom({ scale: 2, x: 250, y: 120 }, 400, 200), { scale: 2, x: 200, y: 100 },
-  "at 2x a 400x200 box may move 200 and 100 at most");
+  "without a picture size the picture fills the stage");
+// Zoomed, the picture grows into the letterbox bars: more of the stage is used than at 1x.
+same(C.visibleSize({ scale: 1 }, 400, 300, 400, 225), { w: 400, h: 225 });
+same(C.visibleSize({ scale: 1.2 }, 400, 300, 400, 225), { w: 400, h: 270 }, "taller than the fitted 1x rectangle");
+same(C.visibleSize({ scale: 2 }, 400, 300, 400, 225), { w: 400, h: 300 }, "the whole stage, not the fitted rectangle");
+same(C.visibleSize({ scale: 2 }, 400, 300, 168.75, 300), { w: 337.5, h: 300 });
 {
-  // Zooming keeps the point under the fingers in place: picture point = (p - offset) / scale.
-  const before = { scale: 1.5, x: 20, y: -10 }, px = 60, py = 30;
-  const after = C.zoomAt(before, 2, px, py, 400, 200);
+  // Zooming keeps the point under the fingers in place while the clamp allows it.
+  const before = { scale: 2, x: 20, y: -10 }, px = 60, py = 30;
+  const after = C.zoomAt(before, 1.5, px, py, 400, 300, 400, 225);
   assert.strictEqual(after.scale, 3);
   assert(Math.abs((px - before.x) / before.scale - (px - after.x) / after.scale) < 1e-9);
   assert(Math.abs((py - before.y) / before.scale - (py - after.y) / after.scale) < 1e-9);
-  assert.strictEqual(C.zoomAt({ scale: 3 }, 10, 0, 0, 400, 200).scale, 4, "pinch stops at the maximum");
-  same(C.zoomAt({ scale: 1.2, x: 30, y: 10 }, 0.1, 100, 50, 400, 200), { scale: 1, x: 0, y: 0 },
+  assert.strictEqual(C.zoomAt({ scale: 3 }, 10, 0, 0, 400, 300, 400, 225).scale, 4, "pinch stops at the maximum");
+  same(C.zoomAt({ scale: 1.2, x: 30, y: 0 }, 0.1, 100, 50, 400, 300, 400, 225), { scale: 1, x: 0, y: 0 },
     "pinching out returns to the fitted picture");
-  const corner = JSON.parse(JSON.stringify(C.zoomAt({ scale: 1 }, 4, 200, 100, 400, 200)));
-  same(corner, { scale: 4, x: -600, y: -300 }, "zooming into a corner stops at the edge");
-  same(C.panBy(corner, -500, -500, 400, 200), corner, "panning never passes the edge");
-  same(C.panBy({ scale: 1 }, 40, 40, 400, 200), { scale: 1, x: 0, y: 0 }, "a fitted picture does not pan");
-  same(C.panBy({ scale: 2, x: 0, y: 0 }, 30, -20, 400, 200), { scale: 2, x: 30, y: -20 });
-  same(C.toggleZoom({ scale: 1 }, 0, 0, 400, 200), { scale: 2, x: 0, y: 0 });
-  same(C.toggleZoom({ scale: 1 }, 100, 50, 400, 200), { scale: 2, x: -100, y: -50 });
-  same(C.toggleZoom({ scale: 2.5, x: 40, y: 0 }, 10, 10, 400, 200), { scale: 1, x: 0, y: 0 });
+  const corner = JSON.parse(JSON.stringify(C.zoomAt({ scale: 1 }, 4, 200, 150, 400, 300, 400, 225)));
+  same(corner, { scale: 4, x: -600, y: -300 }, "zooming into a corner stops at the stage edge");
+  same(C.panBy(corner, -500, -500, 400, 300, 400, 225), corner, "panning never reveals empty space");
+  same(C.panBy({ scale: 1 }, 40, 40, 400, 300, 400, 225), { scale: 1, x: 0, y: 0 }, "a fitted picture does not pan");
+  same(C.panBy({ scale: 1.2 }, 30, 30, 400, 300, 400, 225), { scale: 1.2, x: 30, y: 0 }, "pan only on the axis that overflows");
+  same(C.toggleZoom({ scale: 1 }, 0, 0, 400, 300, 400, 225), { scale: 2, x: 0, y: 0 });
+  same(C.toggleZoom({ scale: 1 }, 100, 50, 400, 300, 400, 225), { scale: 2, x: -100, y: -50 });
+  same(C.toggleZoom({ scale: 2.5, x: 40, y: 0 }, 10, 10, 400, 300, 400, 225), { scale: 1, x: 0, y: 0 });
 }
 {
-  // The gesture helper: wheel and double click zoom, drag pans, reset returns to 1x, and
-  // touch-action is taken from the page only while the picture is zoomed.
-  const handlers = {}, layer = { style: {} };
-  const box = { style: {}, className: "ratio", addEventListener: (name, fn) => { handlers[name] = fn; },
-    getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 200 }) };
+  // The gesture helper against a 400x300 stage showing a 16:9 picture (fitted 400x225).
+  const handlers = {}, layerHandlers = {};
+  const layer = { style: {}, naturalWidth: 1280, naturalHeight: 720, addEventListener: (name, fn) => { layerHandlers[name] = fn; } };
+  const box = { style: { objectFit: "" }, className: "stage", addEventListener: (name, fn) => { handlers[name] = fn; },
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 300 }) };
   const zoom = C.attachZoom(box, [layer]);
   let prevented = 0;
   const event = extra => Object.assign({ preventDefault() { prevented++; } }, extra);
-  handlers.wheel(event({ clientX: 200, clientY: 100, deltaY: 100 }));
+  handlers.wheel(event({ clientX: 200, clientY: 150, deltaY: 100 }));
   assert.strictEqual(prevented, 0, "a wheel that cannot zoom further is left to page scrolling");
   assert.strictEqual(box.style.touchAction || "", "", "a fitted picture leaves touches to the page");
-  handlers.wheel(event({ clientX: 200, clientY: 100, deltaY: -100 }));
+  handlers.wheel(event({ clientX: 200, clientY: 150, deltaY: -100 }));
   assert.strictEqual(prevented, 1);
   assert(zoom.view().scale > 1 && box.style.touchAction === "none" && /is-zoomed/.test(box.className));
   assert(/scale\(1\.2\)/.test(layer.style.transform) && layer.style.webkitTransform === layer.style.transform);
-  handlers.dblclick(event({ clientX: 200, clientY: 100 }));
+  assert.strictEqual(layer.style.width, undefined, "with object-fit the layer keeps filling the stage");
+  handlers.touchstart(event({ touches: [{ clientX: 100, clientY: 100 }] }));
+  handlers.touchmove(event({ touches: [{ clientX: 1000, clientY: 1000 }] }));
+  same(zoom.view(), { scale: 1.2, x: 40, y: 0 }, "at 1.2x only the horizontal axis overflows the stage");
+  handlers.touchend(event({ touches: [], changedTouches: [{ clientX: 1000, clientY: 1000 }] }));
+  handlers.dblclick(event({ clientX: 200, clientY: 150 }));
   assert.strictEqual(zoom.view().scale, 1, "double click on a zoomed picture fits it again");
-  handlers.dblclick(event({ clientX: 300, clientY: 150 }));
+  handlers.dblclick(event({ clientX: 300, clientY: 200 }));
   same(zoom.view(), { scale: 2, x: -100, y: -50 });
   handlers.touchstart(event({ touches: [{ clientX: 100, clientY: 100 }] }));
   handlers.touchmove(event({ touches: [{ clientX: 1000, clientY: 1000 }] }));
-  same(zoom.view(), { scale: 2, x: 200, y: 100 }, "a drag stops at the picture's edge");
+  same(zoom.view(), { scale: 2, x: 200, y: 75 }, "a drag stops where the picture edge meets the stage edge");
   handlers.touchend(event({ touches: [], changedTouches: [{ clientX: 1000, clientY: 1000 }] }));
-  handlers.touchstart(event({ touches: [{ clientX: 150, clientY: 100 }, { clientX: 250, clientY: 100 }] }));
-  handlers.touchmove(event({ touches: [{ clientX: 0, clientY: 100 }, { clientX: 400, clientY: 100 }] }));
+  // A new frame size (a portrait source) reclamps against the same stage.
+  layer.naturalWidth = 360; layer.naturalHeight = 640;
+  layerHandlers.load();
+  same(zoom.view(), { scale: 2, x: 0, y: 75 }, "the portrait picture is narrower than the stage at 2x: centred");
+  handlers.touchstart(event({ touches: [{ clientX: 150, clientY: 150 }, { clientX: 250, clientY: 150 }] }));
+  handlers.touchmove(event({ touches: [{ clientX: 0, clientY: 150 }, { clientX: 400, clientY: 150 }] }));
   assert.strictEqual(zoom.view().scale, 4, "a pinch stops at 4x");
   zoom.reset();
   same(zoom.view(), { scale: 1, x: 0, y: 0 });
   assert.strictEqual(layer.style.transform, "");
   assert.strictEqual(box.style.touchAction, "");
-  assert.strictEqual(box.className, "ratio");
+  assert.strictEqual(box.className, "stage");
   const before = prevented;
   handlers.touchstart(event({ touches: [{ clientX: 100, clientY: 100 }] }));
   handlers.touchmove(event({ touches: [{ clientX: 100, clientY: 40 }] }));
   assert.strictEqual(prevented, before, "one finger on a fitted picture still scrolls the page");
-  assert.strictEqual(C.attachZoom(null, []).view().scale, 1, "a missing picture box is tolerated");
+  assert.strictEqual(C.attachZoom(null, []).view().scale, 1, "a missing stage is tolerated");
+  // Without object-fit (old Safari) the layer is given the fitted rectangle, centred in the stage.
+  const oldLayer = { style: {}, naturalWidth: 640, naturalHeight: 480, addEventListener() {} };
+  const oldBox = { style: {}, className: "stage", addEventListener() {},
+    getBoundingClientRect: () => ({ left: 0, top: 0, width: 400, height: 225 }) };
+  C.attachZoom(oldBox, [oldLayer]);
+  same([oldLayer.style.width, oldLayer.style.height, oldLayer.style.left, oldLayer.style.top], ["300px", "225px", "50px", "0px"]);
 }
+// The stage takes the space the layout leaves: no fixed aspect ratio on the live picture.
+assert(call.includes('<div id="videoBox" class="stage"') && monitor.includes('<div class="stage" id="callPicture">'));
+assert(/#videoBox \{ flex:1 1 0; min-height:140px;/.test(css) && /#callView \.callMedia \.stage \{ flex:1 1 auto;/.test(css) &&
+  !/#videoBox[^{]*\{[^}]*(max-width:calc|aspect-ratio)/.test(css) && !/\.callMedia \.(stage|ratio)[^{]*\{[^}]*max-width:calc/.test(css),
+  "the live stage is not sized to a 16:9 picture");
+assert(/\.stage > img, \.stage > video \{[^}]*object-fit:contain/.test(css));
 for (const [name, source] of [["monitor.html", monitor], ["call.html", call]])
   assert(source.includes("attachZoom(") && /[zZ]oom\.reset\(\)/.test(source), name + " zooms its live picture and resets it");
 console.log("panel layout helpers and screen contracts: PASS");
