@@ -56,7 +56,11 @@ switch live on rotation or window resize.
 - Color: use the platform's system colors for backgrounds, text, separators,
   and controls. Core's `accent` becomes the platform accent (Material primary,
   UIKit tint, Fluent accent, CSS `accent-color`). `positive` (answer/connected)
-  and `negative` (hang up/SOS/errors) stay fixed semantic roles. Administrator
+  and `negative` (hang up/SOS/errors) stay fixed semantic roles. Each role has
+  a light and a dark variant: when a role colour is used as text or an outline
+  (a destructive "Delete" on a neutral button, the SOS trigger), it must reach
+  4.5:1 against the surface it sits on in both appearances, so the dark
+  appearance uses a lighter red than the one used as a fill. Administrator
   overrides addressed to a semantic ID still win on that element, and measured
   low-contrast warnings stay visible in Admin.
 - Appearance: follow `display.appearance.effective` from Core; when Core says

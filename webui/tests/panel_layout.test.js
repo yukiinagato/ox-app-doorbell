@@ -216,6 +216,65 @@ assert(call.includes("applyColorRoles(st.display.theme, document, { ink: false }
   "the call screen takes Core's accent only");
 assert(call.includes("unlock.show_button === true &&\n    unlock.permitted !== false"), "Unlock follows Core's availability");
 
+// Contrast (ui-guidelines, Tokens > Color): a role color used as text or as an outline reaches
+// 4.5:1 on every surface it sits on, in light and in dark, and so does text on a role fill. The
+// plain fallbacks iOS 5 uses are the dark palette, so the dark figures cover it.
+{
+  const tokensIn = block => {
+    const found = {};
+    for (const m of block.matchAll(/--([a-z0-9-]+):(#[0-9a-fA-F]{6})\b/g)) found[m[1]] = m[2].toLowerCase();
+    return found;
+  };
+  const lightTokens = tokensIn(css.slice(css.indexOf(":root {"), css.indexOf("@media (prefers-color-scheme: dark)")));
+  const mediaDark = tokensIn(css.slice(css.indexOf("@media (prefers-color-scheme: dark)"), css.indexOf(':root[data-theme="dark"]')));
+  const forcedDark = tokensIn(css.slice(css.indexOf(':root[data-theme="dark"]'), css.indexOf(':root[data-theme="light"]')));
+  assert.deepStrictEqual(mediaDark, forcedDark, "system dark and Core-fixed dark are the same palette");
+  const darkTokens = Object.assign({}, lightTokens, forcedDark);
+  const channels = hex => [1, 3, 5].map(i => parseInt(hex.substr(i, 2), 16));
+  const luminance = hex => {
+    const [r, g, b] = channels(hex).map(c => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); });
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a, b) => (Math.max(luminance(a), luminance(b)) + 0.05) / (Math.min(luminance(a), luminance(b)) + 0.05);
+  const surfaces = ["surface", "surface-2", "surface-3"];
+  // Text and outline roles (the outlined SOS trigger and missed-call text use negative-text).
+  const onSurfaces = ["on-surface", "muted", "negative-text", "positive-text", "accent-text"];
+  const fills = [["on-accent", "accent"], ["on-positive", "positive"], ["on-negative", "negative"],
+    ["on-warning", "warning"], ["negative", "on-negative"]];
+  for (const [name, palette] of [["light", lightTokens], ["dark", darkTokens]]) {
+    for (const ink of onSurfaces) for (const surface of surfaces) {
+      const ratio = contrast(palette[ink], palette[surface]);
+      assert(ratio >= 4.5, name + ": --" + ink + " on --" + surface + " is " + ratio.toFixed(2) + ":1");
+    }
+    for (const [ink, fill] of fills) {
+      const ratio = contrast(palette[ink], palette[fill]);
+      assert(ratio >= 4.5, name + ": --" + ink + " on --" + fill + " is " + ratio.toFixed(2) + ":1");
+    }
+    assert(contrast(palette.focus, palette.surface) >= 3, name + ": the focus ring is visible");
+  }
+  // iOS 5 fallbacks: each plain color written before a var() is the dark value of that token.
+  // The SOS overlay keeps its own darker red, which only raises the contrast of white text on it.
+  const expand = hex => (hex.length === 4 ? "#" + hex.slice(1).replace(/./g, "$&$&") : hex).toLowerCase();
+  let checked = 0;
+  for (const m of css.matchAll(/([a-z-]+):([^;{}]*?)(#[0-9a-fA-F]{3,6})\b([^;{}]*?);\s*\1:[^;{}]*?var\(--([a-z0-9-]+)\)/g)) {
+    const token = m[5], plain = expand(m[3]);
+    if (!darkTokens[token]) continue;
+    checked++;
+    if (token === "negative" && plain === "#8f1010") {
+      assert(contrast(plain, "#ffffff") >= contrast(darkTokens.negative, "#ffffff"));
+      continue;
+    }
+    assert.strictEqual(plain, darkTokens[token], "plain fallback for --" + token + " in: " + m[0].slice(0, 80));
+  }
+  assert(checked > 100, "the fallback scan found the legacy rules");
+  // Under Core's wallpaper roles, role text collapses to the ink Core's contrast rule picked.
+  const coreRoles = css.slice(css.indexOf(":root[data-core-roles]"), css.indexOf("/* ================================================================ Base"));
+  for (const role of ["--muted", "--negative-text", "--positive-text", "--accent-text"])
+    assert(coreRoles.includes(role + ":var(--on-surface)"), role + " follows Core's ink on a wallpaper");
+  // The SOS trigger is outlined in the text-contrast variant of the negative role, never the fill.
+  assert(/body \.dbSosTrigger \{ background:transparent; color:#ff8e8e; color:var\(--negative-text\);\s*border-color:#ff8e8e; border-color:var\(--negative-text\); \}/.test(css));
+}
+
 // Appearance: Core's fixed appearance wins; follow_system leaves it to the system setting.
 assert.strictEqual(C.appearanceTheme({ appearance: { effective: "dark", follow_system: false } }), "dark");
 assert.strictEqual(C.appearanceTheme({ appearance: { effective: "light", follow_system: false } }), "light");
