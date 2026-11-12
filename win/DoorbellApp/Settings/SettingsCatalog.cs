@@ -582,6 +582,10 @@ namespace DoorbellApp.Settings
                 SettingScope.AllDevices)));
             Add(tg, Describe(Text("telegram_template", "integrations.telegram.text_template.ja", "",
                 SettingScope.AllDevices)));
+            Add(tg, Text("telegram_template_en", "integrations.telegram.text_template.en", "",
+                SettingScope.AllDevices));
+            Add(tg, Text("telegram_template_zh", "integrations.telegram.text_template.zh", "",
+                SettingScope.AllDevices));
             Add(tg, Describe(Action("telegram_test", "telegram_test")));
             // Web Push: the non-secret fields replicate; each key stays in a device's own
             // secure store and configuration carries only the secret:<name> reference.

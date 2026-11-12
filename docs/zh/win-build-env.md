@@ -113,6 +113,12 @@ powershell -ExecutionPolicy Bypass -File .\setup_test_host.ps1
 设置；`-Uninstall` 只撤销它自己做过的更改。对应的私钥是 Mac 上的
 `~/.ssh/doorbell_win_test_ed25519`。
 
+如果 `sshd` 无法启动，脚本会给出它判断的原因（端口被其他程序占用、缺少主机密钥、`sshd.exe -t`
+的输出、OpenSSH 和服务控制管理器最近的事件），继续完成不依赖该服务的步骤，并以非零状态退出；
+排除原因后再运行一次即可。端口 22 被占用时，用 `-Port <空闲端口>` 运行（它会把 `Port` 写入
+`%ProgramData%\ssh\sshd_config`，`-Uninstall` 时恢复），并给 `run_remote_tests.sh` 加上
+`--port <n>`。
+
 **每次运行，在 Mac 上。** 保持测试账户已登录且屏幕未锁定，然后执行：
 
 ```sh

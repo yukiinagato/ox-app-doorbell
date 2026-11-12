@@ -594,7 +594,11 @@
   <data name="editor_answer_auto" xml:space="preserve"><value>立即接听</value></data>
   <data name="editor_answer_mode" xml:space="preserve"><value>来电时</value></data>
   <data name="editor_answer_ring" xml:space="preserve"><value>响铃等待</value></data>
+  <data name="editor_asset_delete_confirm" xml:space="preserve"><value>该文件将从所有设备删除，且无法恢复</value></data>
+  <data name="editor_asset_hash" xml:space="preserve"><value>哈希</value></data>
+  <data name="editor_assets_cached_here" xml:space="preserve"><value>已保存在此设备</value></data>
   <data name="editor_assets_hint" xml:space="preserve"><value>点按“编辑”可删除，正在使用的文件也会被删除</value></data>
+  <data name="editor_assets_upload_hint" xml:space="preserve"><value>照片可从 iPad 照片图库添加，声音可用麦克风录制。支持 JPEG、PNG、MP3、WAV，每个不超过 3 MB</value></data>
   <data name="editor_automatic" xml:space="preserve"><value>自动</value></data>
   <data name="editor_back" xml:space="preserve"><value>返回</value></data>
   <data name="editor_background_image" xml:space="preserve"><value>背景图片</value></data>
@@ -605,6 +609,11 @@
   <data name="editor_buildings" xml:space="preserve"><value>建筑</value></data>
   <data name="editor_camera_credential" xml:space="preserve"><value>摄像头登录信息</value></data>
   <data name="editor_camera_name" xml:space="preserve"><value>摄像头 ID（字母、数字、_ 和 -）</value></data>
+  <data name="editor_caps_clear" xml:space="preserve"><value>清除所有覆盖</value></data>
+  <data name="editor_caps_clear_confirm" xml:space="preserve"><value>该设备将恢复为仅使用测量得到的功能</value></data>
+  <data name="editor_caps_hardware_hint" xml:space="preserve"><value>可以关闭已测得的功能，但无法开启设备不具备的功能</value></data>
+  <data name="editor_caps_measured" xml:space="preserve"><value>按测量值</value></data>
+  <data name="editor_caps_operational_hint" xml:space="preserve"><value>仅在现场确认后才覆盖这些项目，例如外网可达性或固定电源</value></data>
   <data name="editor_change_password" xml:space="preserve"><value>更改密码</value></data>
   <data name="editor_channel_in_app" xml:space="preserve"><value>屏幕显示</value></data>
   <data name="editor_channel_system_notification" xml:space="preserve"><value>系统通知</value></data>
@@ -616,6 +625,7 @@
   <data name="editor_clipboard_not_config" xml:space="preserve"><value>剪贴板中没有设置</value></data>
   <data name="editor_command" xml:space="preserve"><value>命令</value></data>
   <data name="editor_config_transfer" xml:space="preserve"><value>导出与导入设置</value></data>
+  <data name="editor_config_transfer_clipboard" xml:space="preserve"><value>此设备无法选择文件，因此使用剪贴板</value></data>
   <data name="editor_config_transfer_hint" xml:space="preserve"><value>不包含密码、密钥以及图片或声音文件</value></data>
   <data name="editor_confirm" xml:space="preserve"><value>继续</value></data>
   <data name="editor_core_too_old" xml:space="preserve"><value>本设备的 Core 不支持此操作</value></data>
@@ -630,11 +640,16 @@
   <data name="editor_day_tue" xml:space="preserve"><value>二</value></data>
   <data name="editor_day_wed" xml:space="preserve"><value>三</value></data>
   <data name="editor_delete" xml:space="preserve"><value>删除</value></data>
+  <data name="editor_delete_confirm" xml:space="preserve"><value>删除后无法恢复</value></data>
+  <data name="editor_device_health" xml:space="preserve"><value>状态</value></data>
+  <data name="editor_device_id" xml:space="preserve"><value>设备 ID</value></data>
+  <data name="editor_device_state" xml:space="preserve"><value>连接</value></data>
   <data name="editor_direct_port" xml:space="preserve"><value>直接通话端口</value></data>
   <data name="editor_disable" xml:space="preserve"><value>停用</value></data>
   <data name="editor_discovery_prefix" xml:space="preserve"><value>Discovery 前缀</value></data>
   <data name="editor_done" xml:space="preserve"><value>完成</value></data>
   <data name="editor_door" xml:space="preserve"><value>门</value></data>
+  <data name="editor_door_bound_warning" xml:space="preserve"><value>{0} 也已分配到这扇门</value></data>
   <data name="editor_doors" xml:space="preserve"><value>门</value></data>
   <data name="editor_dtmf_actions" xml:space="preserve"><value>电话按键操作</value></data>
   <data name="editor_dtmf_code" xml:space="preserve"><value>按键（例如 *1）</value></data>
@@ -665,13 +680,17 @@
   <data name="editor_ink_hint" xml:space="preserve"><value>“自动”会根据背景选择更易读的颜色</value></data>
   <data name="editor_ink_overrides" xml:space="preserve"><value>文字颜色</value></data>
   <data name="editor_label" xml:space="preserve"><value>显示名称</value></data>
+  <data name="editor_legacy_panel" xml:space="preserve"><value>旧版面板令牌</value></data>
+  <data name="editor_legacy_panel_hint" xml:space="preserve"><value>轮换后旧令牌立即失效，新令牌只显示一次</value></data>
   <data name="editor_list_edit_hint" xml:space="preserve"><value>点按“编辑”可排序或删除</value></data>
   <data name="editor_loading" xml:space="preserve"><value>正在加载…</value></data>
+  <data name="editor_logs_hint" xml:space="preserve"><value>仅供查看，按时间从新到旧排列</value></data>
   <data name="editor_media_hint" xml:space="preserve"><value>不要把摄像头登录信息写在 URL 中，请保存为“摄像头登录信息”</value></data>
   <data name="editor_media_url_hint" xml:space="preserve"><value>H.264 仅支持 RTSP（TCP、Baseline）</value></data>
   <data name="editor_mqtt" xml:space="preserve"><value>MQTT 与 Home Assistant</value></data>
   <data name="editor_mqtt_password" xml:space="preserve"><value>MQTT 密码</value></data>
   <data name="editor_name" xml:space="preserve"><value>名称</value></data>
+  <data name="editor_name_length" xml:space="preserve"><value>名称须为 1 至 64 个字符</value></data>
   <data name="editor_never_suppress" xml:space="preserve"><value>静音时段也通知</value></data>
   <data name="editor_never_suppress_hint" xml:space="preserve"><value>开启后，静音时段也会执行此动作</value></data>
   <data name="editor_never_suppress_short" xml:space="preserve"><value>始终</value></data>
@@ -690,7 +709,9 @@
   <data name="editor_ok" xml:space="preserve"><value>确定</value></data>
   <data name="editor_on" xml:space="preserve"><value>开</value></data>
   <data name="editor_online" xml:space="preserve"><value>在线</value></data>
+  <data name="editor_pair_delete_confirm" xml:space="preserve"><value>将删除此组合的覆盖设置，恢复为全局策略</value></data>
   <data name="editor_panel_link_once" xml:space="preserve"><value>此链接仅显示这一次。请在要使用的设备上扫描二维码</value></data>
+  <data name="editor_panel_revoke_confirm" xml:space="preserve"><value>此 Web 面板将立即失效，且无法恢复</value></data>
   <data name="editor_panels_hint" xml:space="preserve"><value>为每个网页面板设定可用的门和操作。链接只在签发时显示一次</value></data>
   <data name="editor_password_changed" xml:space="preserve"><value>密码已更改</value></data>
   <data name="editor_password_for_session" xml:space="preserve"><value>管理密码</value></data>
@@ -706,6 +727,13 @@
   <data name="editor_purposes" xml:space="preserve"><value>来访目的</value></data>
   <data name="editor_purposes_edit" xml:space="preserve"><value>编辑来访目的</value></data>
   <data name="editor_quiet_hint" xml:space="preserve"><value>时间按集群时区判断</value></data>
+  <data name="editor_raw_config" xml:space="preserve"><value>原始配置</value></data>
+  <data name="editor_raw_delete_confirm" xml:space="preserve"><value>将从所有设备的配置中删除此键，并恢复默认值</value></data>
+  <data name="editor_raw_hint" xml:space="preserve"><value>可按键或值搜索。值为 JSON。点 + 可写入任意键</value></data>
+  <data name="editor_raw_key_invalid" xml:space="preserve"><value>请按 a.b.c 的格式输入键</value></data>
+  <data name="editor_raw_more" xml:space="preserve"><value>显示前 {0} 项（共 {1} 项）。请搜索以缩小范围</value></data>
+  <data name="editor_raw_secret_refused" xml:space="preserve"><value>引用键只能写入 secret:&lt;名称&gt;。密码和密钥请在各自的设置页面中登记</value></data>
+  <data name="editor_raw_write_confirm" xml:space="preserve"><value>将不经校验直接写入所有设备的配置</value></data>
   <data name="editor_record_hint" xml:space="preserve"><value>录制的声音可设为铃声或 SOS 声音</value></data>
   <data name="editor_record_sound" xml:space="preserve"><value>用麦克风录音</value></data>
   <data name="editor_recording" xml:space="preserve"><value>录音中（最长 60 秒）</value></data>
@@ -717,8 +745,12 @@
   <data name="editor_remove_device" xml:space="preserve"><value>从集群中移除</value></data>
   <data name="editor_remove_image" xml:space="preserve"><value>不使用图片</value></data>
   <data name="editor_repeat_password" xml:space="preserve"><value>再次输入新密码</value></data>
+  <data name="editor_reply_delete_confirm" xml:space="preserve"><value>该回复将从室内机和访客画面中消失，且无法恢复</value></data>
   <data name="editor_reset" xml:space="preserve"><value>恢复默认</value></data>
+  <data name="editor_role_fixed" xml:space="preserve"><value>此设备的角色是固定的</value></data>
   <data name="editor_role_on_device" xml:space="preserve"><value>设备角色需在该设备上更改</value></data>
+  <data name="editor_role_restart_confirm" xml:space="preserve"><value>{0} 的应用将重新启动，进行中的通话会中断。要更改吗？</value></data>
+  <data name="editor_role_restart_hint" xml:space="preserve"><value>更改角色或所属门后，该设备的应用会重新启动</value></data>
   <data name="editor_schedule" xml:space="preserve"><value>时间安排</value></data>
   <data name="editor_search" xml:space="preserve"><value>搜索</value></data>
   <data name="editor_secret_hint" xml:space="preserve"><value>密码和密钥保存在本设备的安全存储中，配置里只写入引用</value></data>
@@ -727,6 +759,7 @@
   <data name="editor_secret_unset" xml:space="preserve"><value>未设置</value></data>
   <data name="editor_secrets" xml:space="preserve"><value>密码与密钥</value></data>
   <data name="editor_server" xml:space="preserve"><value>服务器</value></data>
+  <data name="editor_show_older" xml:space="preserve"><value>显示更早的记录</value></data>
   <data name="editor_sip_extensions" xml:space="preserve"><value>分机号（逗号分隔）</value></data>
   <data name="editor_sip_password" xml:space="preserve"><value>SIP 密码</value></data>
   <data name="editor_sip_user" xml:space="preserve"><value>用户（分机）</value></data>
@@ -734,15 +767,19 @@
   <data name="editor_sounds" xml:space="preserve"><value>声音</value></data>
   <data name="editor_speak" xml:space="preserve"><value>朗读</value></data>
   <data name="editor_speak_on" xml:space="preserve"><value>朗读</value></data>
+  <data name="editor_srtp" xml:space="preserve"><value>SRTP</value></data>
   <data name="editor_srtp_hint" xml:space="preserve"><value>选择“始终加密”后，iOS 5 设备无法直接通话</value></data>
   <data name="editor_srtp_mandatory" xml:space="preserve"><value>始终加密</value></data>
   <data name="editor_srtp_optional" xml:space="preserve"><value>尽可能加密</value></data>
   <data name="editor_sticky" xml:space="preserve"><value>保持到关闭</value></data>
+  <data name="editor_stop_playing" xml:space="preserve"><value>停止</value></data>
   <data name="editor_stop_recording" xml:space="preserve"><value>停止录音</value></data>
   <data name="editor_streams" xml:space="preserve"><value>视频流 URL</value></data>
   <data name="editor_suppress" xml:space="preserve"><value>静音的通知</value></data>
   <data name="editor_target_roles" xml:space="preserve"><value>通知的设备</value></data>
+  <data name="editor_telegram_disable_confirm" xml:space="preserve"><value>Telegram 通知和回复接收将停止</value></data>
   <data name="editor_test_message" xml:space="preserve"><value>发送测试消息</value></data>
+  <data name="editor_theme_reset_confirm" xml:space="preserve"><value>仅针对此设备的背景和颜色设置将全部清除，恢复为所有设备的设置</value></data>
   <data name="editor_this_device" xml:space="preserve"><value>本设备</value></data>
   <data name="editor_this_door" xml:space="preserve"><value>呼叫的门</value></data>
   <data name="editor_tls_hint" xml:space="preserve"><value>使用 TLS 时需要证书的 SHA-256</value></data>
@@ -751,11 +788,23 @@
   <data name="editor_transport" xml:space="preserve"><value>传输方式</value></data>
   <data name="editor_ttl" xml:space="preserve"><value>显示秒数（0 表示不限）</value></data>
   <data name="editor_type" xml:space="preserve"><value>类型</value></data>
+  <data name="editor_tz_offset_hint" xml:space="preserve"><value>仅在未设置时区时用于消息时间</value></data>
+  <data name="editor_ui_element_hint" xml:space="preserve"><value>留空则使用设备自身的默认值。范围以设备公布的为准</value></data>
+  <data name="editor_ui_element_reset_confirm" xml:space="preserve"><value>将删除此元素的所有覆盖设置</value></data>
+  <data name="editor_ui_prop_accent" xml:space="preserve"><value>强调色</value></data>
+  <data name="editor_ui_prop_background" xml:space="preserve"><value>背景颜色</value></data>
+  <data name="editor_ui_prop_border" xml:space="preserve"><value>边框颜色</value></data>
+  <data name="editor_ui_prop_font_scale" xml:space="preserve"><value>文字缩放</value></data>
+  <data name="editor_ui_prop_foreground" xml:space="preserve"><value>文字颜色</value></data>
+  <data name="editor_ui_prop_radius" xml:space="preserve"><value>圆角</value></data>
+  <data name="editor_ui_prop_scale" xml:space="preserve"><value>缩放</value></data>
   <data name="editor_unreachable" xml:space="preserve"><value>无法连接本设备的管理服务</value></data>
   <data name="editor_uploading" xml:space="preserve"><value>正在添加…</value></data>
   <data name="editor_use_cluster_theme" xml:space="preserve"><value>改用所有设备的设置</value></data>
   <data name="editor_user" xml:space="preserve"><value>用户名</value></data>
   <data name="editor_visual" xml:space="preserve"><value>屏幕提示</value></data>
+  <data name="editor_web_push_subscriptions" xml:space="preserve"><value>订阅数</value></data>
+  <data name="editor_web_push_warning" xml:space="preserve"><value>警告</value></data>
   <data name="editor_weekdays" xml:space="preserve"><value>星期</value></data>
   <data name="editor_weekdays_hint" xml:space="preserve"><value>不选星期表示每天。时间段可以跨越午夜</value></data>
   <data name="editor_when" xml:space="preserve"><value>触发条件</value></data>
@@ -770,6 +819,7 @@
   <data name="editor_with_snapshot" xml:space="preserve"><value>附带照片</value></data>
   <data name="editor_wording" xml:space="preserve"><value>文案覆盖</value></data>
   <data name="editor_wording_hint" xml:space="preserve"><value>可按键名或文案搜索</value></data>
+  <data name="editor_wording_reset_confirm" xml:space="preserve"><value>所有语言都会恢复为内置文案</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>紧急模式已触发</value></data>
   <data name="emergency_button" xml:space="preserve"><value>紧急</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>解除警报</value></data>
@@ -2021,6 +2071,7 @@
   <data name="settings_password_shared" xml:space="preserve"><value>此设备与网页管理使用同一密码</value></data>
   <data name="settings_peer_alerts" xml:space="preserve"><value>无法连接的设备</value></data>
   <data name="settings_peer_alerts_desc" xml:space="preserve"><value>旧版本的设备，以及未收到密钥更新的设备</value></data>
+  <data name="settings_peer_identity_confirm" xml:space="preserve"><value>“{0}”的角色或负责门口将改变，该设备上的应用会重启。要继续吗？</value></data>
   <data name="settings_peers_legacy" xml:space="preserve"><value>旧版本：{0}</value></data>
   <data name="settings_peers_ok" xml:space="preserve"><value>无</value></data>
   <data name="settings_peers_rekey_required" xml:space="preserve"><value>需要重新配对：{0}</value></data>
@@ -2194,6 +2245,8 @@
   <data name="settings_telegram_poll_desc" xml:space="preserve"><value>允许从通知按钮发送快捷回复</value></data>
   <data name="settings_telegram_template" xml:space="preserve"><value>通知模板（日语）</value></data>
   <data name="settings_telegram_template_desc" xml:space="preserve"><value>{0} 和 {1} 会被替换；留空使用默认文字</value></data>
+  <data name="settings_telegram_template_en" xml:space="preserve"><value>通知模板（英语）</value></data>
+  <data name="settings_telegram_template_zh" xml:space="preserve"><value>通知模板（中文）</value></data>
   <data name="settings_telegram_test" xml:space="preserve"><value>测试发送</value></data>
   <data name="settings_telegram_test_action" xml:space="preserve"><value>发送</value></data>
   <data name="settings_telegram_test_desc" xml:space="preserve"><value>通过当选的发送设备发送一条消息</value></data>

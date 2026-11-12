@@ -900,6 +900,12 @@ namespace DoorbellApp.Settings
                                   ? Texts.T("admin.door_required") : null))
                 return;
             bool door_station = Str(draft, "role") == "door_station";
+            // A role or door edit restarts the app on that device (it applies the replicated
+            // identity), so it is confirmed by name first. A rename alone is not.
+            bool identityChanged = Str(draft, "role") != Str(data, "role") ||
+                (door_station && Str(draft, "door") != Str(data, "door"));
+            if (identityChanged && !Confirm(Texts.T("settings.peer_identity_confirm",
+                    Str(draft, "name").Length > 0 ? Str(draft, "name") : id), true)) return;
             var sets = new List<KeyValuePair<string, object>>
             {
                 new KeyValuePair<string, object>("devices." + id + ".name", Str(draft, "name")),

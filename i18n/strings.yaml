@@ -2567,6 +2567,56 @@ editor.password_too_short: { ja: "8 文字以上にしてください", en: "Use
 editor.password_mismatch: { ja: "2 回の入力が違います", en: "The two entries differ", zh: "两次输入不一致" }
 editor.password_changed: { ja: "パスワードを変更しました", en: "Password changed", zh: "密码已更改" }
 editor.password_hint: { ja: "Web 管理とすべての端末で同じパスワードを使います", en: "The same password is used by the web admin and every device", zh: "网页管理和所有设备使用同一密码" }
+editor.device_id: { ja: "端末 ID", en: "Device ID", zh: "设备 ID" }
+editor.device_health: { ja: "状態", en: "Health", zh: "状态" }
+editor.device_state: { ja: "接続", en: "Connection", zh: "连接" }
+editor.name_length: { ja: "名前は 1〜64 文字で入力してください", en: "Enter a name of 1 to 64 characters", zh: "名称须为 1 至 64 个字符" }
+editor.role_restart_hint: { ja: "役割や担当ドアを変えると、その端末のアプリが再起動します", en: "Changing the role or the door restarts the app on that device", zh: "更改角色或所属门后，该设备的应用会重新启动" }
+editor.role_restart_confirm: { ja: "{device} のアプリが再起動し、通話中の場合は切断されます。変更しますか？", en: "The app on {device} restarts, and a call in progress on it ends. Change it?", zh: "{device} 的应用将重新启动，进行中的通话会中断。要更改吗？" }
+editor.door_bound_warning: { ja: "このドアには {device} も割り当てられています", en: "{device} is also assigned to this door", zh: "{device} 也已分配到这扇门" }
+editor.role_fixed: { ja: "この端末の役割は固定されています", en: "This device's role is fixed", zh: "此设备的角色是固定的" }
+editor.delete_confirm: { ja: "削除すると元に戻せません", en: "This cannot be undone", zh: "删除后无法恢复" }
+editor.reply_delete_confirm: { ja: "この返信は室内機と来訪者画面から消えます。元に戻せません", en: "The reply disappears from indoor panels and the visitor screen. This cannot be undone", zh: "该回复将从室内机和访客画面中消失，且无法恢复" }
+editor.wording_reset_confirm: { ja: "すべての言語で元の文言に戻ります", en: "The built-in wording returns in every language", zh: "所有语言都会恢复为内置文案" }
+editor.panel_revoke_confirm: { ja: "この Web パネルはすぐに使えなくなります。元に戻せません", en: "This Web panel stops working at once. This cannot be undone", zh: "此 Web 面板将立即失效，且无法恢复" }
+editor.telegram_disable_confirm: { ja: "Telegram への通知と返信の受信が止まります", en: "Telegram notifications and replies stop", zh: "Telegram 通知和回复接收将停止" }
+editor.theme_reset_confirm: { ja: "この端末だけの背景・色の設定がすべて消え、全端末の設定に戻ります", en: "Every background and colour set only for this device is removed; it follows the setting for all devices again", zh: "仅针对此设备的背景和颜色设置将全部清除，恢复为所有设备的设置" }
+editor.asset_delete_confirm: { ja: "このファイルはすべての端末から削除されます。元に戻せません", en: "The file is removed from every device. This cannot be undone", zh: "该文件将从所有设备删除，且无法恢复" }
+editor.asset_hash: { ja: "ハッシュ", en: "Hash", zh: "哈希" }
+editor.assets_cached_here: { ja: "この端末に保存済み", en: "Stored on this device", zh: "已保存在此设备" }
+editor.assets_upload_hint: { ja: "写真は iPad の写真ライブラリから、音声はマイク録音で追加できます。JPEG・PNG・MP3・WAV、各 3 MB まで", en: "Add a photo from the iPad photo library or a sound with the microphone. JPEG, PNG, MP3 or WAV, up to 3 MB each", zh: "照片可从 iPad 照片图库添加，声音可用麦克风录制。支持 JPEG、PNG、MP3、WAV，每个不超过 3 MB" }
+editor.stop_playing: { ja: "停止", en: "Stop", zh: "停止" }
+editor.srtp: { ja: "SRTP", en: "SRTP", zh: "SRTP" }
+editor.tz_offset_hint: { ja: "タイムゾーンが未設定のときだけ、メッセージの時刻に使われます", en: "Used for message times only while no time zone is set", zh: "仅在未设置时区时用于消息时间" }
+editor.legacy_panel: { ja: "旧パネルトークン", en: "Legacy panel token", zh: "旧版面板令牌" }
+editor.legacy_panel_hint: { ja: "更新すると古いトークンはすぐに無効になります。新しいトークンは一度だけ表示されます", en: "Rotating invalidates the old token at once. The new token is shown only once", zh: "轮换后旧令牌立即失效，新令牌只显示一次" }
+editor.web_push_subscriptions: { ja: "登録数", en: "Subscriptions", zh: "订阅数" }
+editor.web_push_warning: { ja: "警告", en: "Warning", zh: "警告" }
+editor.pair_delete_confirm: { ja: "この組合せの上書きを削除し、全体設定に戻します", en: "The override for this pair is removed and it follows the global policy again", zh: "将删除此组合的覆盖设置，恢复为全局策略" }
+editor.caps_measured: { ja: "測定値に従う", en: "As measured", zh: "按测量值" }
+editor.caps_operational_hint: { ja: "外部への到達性や電源など、現場で確認した事実だけを上書きしてください", en: "Override these only with facts checked on site, such as outside reachability or fixed power", zh: "仅在现场确认后才覆盖这些项目，例如外网可达性或固定电源" }
+editor.caps_hardware_hint: { ja: "測定された機能を無効にできます。端末にない機能を有効にすることはできません", en: "A measured feature can be turned off. A feature the device lacks cannot be turned on", zh: "可以关闭已测得的功能，但无法开启设备不具备的功能" }
+editor.caps_clear: { ja: "上書きをすべて解除", en: "Remove every override", zh: "清除所有覆盖" }
+editor.caps_clear_confirm: { ja: "この端末は測定された機能だけを使うようになります", en: "The device goes back to its measured capabilities", zh: "该设备将恢复为仅使用测量得到的功能" }
+editor.ui_prop_scale: { ja: "大きさ", en: "Scale", zh: "缩放" }
+editor.ui_prop_font_scale: { ja: "文字の大きさ", en: "Text scale", zh: "文字缩放" }
+editor.ui_prop_foreground: { ja: "文字色", en: "Text colour", zh: "文字颜色" }
+editor.ui_prop_background: { ja: "背景色", en: "Background colour", zh: "背景颜色" }
+editor.ui_prop_accent: { ja: "強調色", en: "Accent colour", zh: "强调色" }
+editor.ui_prop_border: { ja: "枠線の色", en: "Border colour", zh: "边框颜色" }
+editor.ui_prop_radius: { ja: "角の丸み", en: "Corner radius", zh: "圆角" }
+editor.ui_element_hint: { ja: "空欄にすると端末の既定値に戻ります。範囲は端末が公開した値です", en: "Leave a value empty to use the device's own default. The ranges are the ones the device published", zh: "留空则使用设备自身的默认值。范围以设备公布的为准" }
+editor.ui_element_reset_confirm: { ja: "この要素の上書きをすべて削除します", en: "Every override of this element is removed", zh: "将删除此元素的所有覆盖设置" }
+editor.raw_config: { ja: "設定の生データ", en: "Raw configuration", zh: "原始配置" }
+editor.raw_hint: { ja: "キーまたは値で検索できます。値は JSON です。＋ で任意のキーを書き込みます", en: "Search by key or value. Values are JSON. Use + to write any key", zh: "可按键或值搜索。值为 JSON。点 + 可写入任意键" }
+editor.raw_more: { ja: "先頭の {shown} 件を表示しています（全 {total} 件）。検索で絞り込んでください", en: "Showing {shown} of {total}. Search to narrow the list", zh: "显示前 {shown} 项（共 {total} 项）。请搜索以缩小范围" }
+editor.raw_key_invalid: { ja: "キーは「a.b.c」の形式で入力してください", en: "Enter the key as a.b.c", zh: "请按 a.b.c 的格式输入键" }
+editor.raw_write_confirm: { ja: "検証なしで全端末の設定に書き込みます", en: "This is written to every device's configuration without validation", zh: "将不经校验直接写入所有设备的配置" }
+editor.raw_delete_confirm: { ja: "このキーを全端末の設定から削除します。既定値に戻ります", en: "The key is removed from every device's configuration and its default applies", zh: "将从所有设备的配置中删除此键，并恢复默认值" }
+editor.raw_secret_refused: { ja: "参照キーには secret:<名前> だけを書けます。パスワードや鍵は各設定画面で登録してください", en: "A reference key takes only secret:<name>. Enter passwords and keys on their own settings pages", zh: "引用键只能写入 secret:<名称>。密码和密钥请在各自的设置页面中登记" }
+editor.show_older: { ja: "さらに表示", en: "Show older entries", zh: "显示更早的记录" }
+editor.logs_hint: { ja: "表示のみです。新しい順に並びます", en: "Read-only, newest first", zh: "仅供查看，按时间从新到旧排列" }
+editor.config_transfer_clipboard: { ja: "この端末ではファイルの選択ができないため、クリップボードを使います", en: "This device has no file picker, so the clipboard is used", zh: "此设备无法选择文件，因此使用剪贴板" }
 
 ring.queue_selected: { ja: "{door} · 選択中", en: "{door} · Selected", zh: "{door} · 当前选中" }
 ring.queue_waiting: { ja: "{door} · 応答待ち", en: "{door} · Waiting", zh: "{door} · 等待接听" }
@@ -2648,3 +2698,6 @@ settings.backdrop_color_native: { ja: "背景画像の上に重ねる色。既�
 settings.call_button_color: { ja: "呼出ボタンの色（この端末）", en: "Call button colour (this device)", zh: "呼叫按钮颜色（本设备）" }
 settings.call_button_color_native: { ja: "未設定のときは背景に合わせて自動で決まります", en: "Chosen automatically from the background when not set", zh: "未设置时根据背景自动选择" }
 settings.appearance_here: { ja: "この端末の外観", en: "Appearance on this device", zh: "本设备的外观" }
+settings.peer_identity_confirm: { ja: "「{device}」は役割または担当ドアが変わり、その端末のアプリが再起動します。続けますか？", en: "\"{device}\" gets a new role or door, and the app on that device restarts. Continue?", zh: "“{device}”的角色或负责门口将改变，该设备上的应用会重启。要继续吗？" }
+settings.telegram_template_en: { ja: "通知文 (英語)", en: "Message template (English)", zh: "通知模板（英语）" }
+settings.telegram_template_zh: { ja: "通知文 (中国語)", en: "Message template (Chinese)", zh: "通知模板（中文）" }

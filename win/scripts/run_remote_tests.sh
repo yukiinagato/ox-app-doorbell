@@ -4,10 +4,13 @@
 #
 #   win/scripts/run_remote_tests.sh <host> [user] [--run <id> | --zip <bundle.zip>]
 #                                   [--roles "indoor_panel door_station"] [--out <dir>]
+#                                   [--port <ssh port>]
 #
 #   --run <id>   GitHub Actions run whose "doorbell-win-test-bundle" artifact to test.
 #                Default: the newest successful build run of the current branch.
 #   --zip <file> A local zip of the bundle (the directory holding app\DoorbellApp.exe).
+#   --port <n>   SSH port of the test PC when setup_test_host.ps1 was run with -Port.
+#                Default 22, or $DOORBELL_WIN_TEST_PORT.
 #
 # The app under test is an isolated instance: a throwaway data directory, an unpaired
 # boot.json with no seed peers, ports away from the defaults, and two firewall rules that
@@ -15,19 +18,21 @@
 # at the start of every run and removed at the end, also when the run fails.
 set -eu
 
-usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+usage() { sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
 [ $# -ge 1 ] || usage
 HOST="$1"; shift
 USER_NAME="${USER:-}"
 case "${1:-}" in ""|--*) ;; *) USER_NAME="$1"; shift ;; esac
 RUN_ID=""; ZIP=""; ROLES="indoor_panel door_station"; OUT=""
+PORT="${DOORBELL_WIN_TEST_PORT:-22}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --run) RUN_ID="$2"; shift 2 ;;
     --zip) ZIP="$2"; shift 2 ;;
     --roles) ROLES="$2"; shift 2 ;;
     --out) OUT="$2"; shift 2 ;;
+    --port) PORT="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -43,7 +48,11 @@ REMOTE_RUN_SCP="C:/DoorbellTest/runs/$STAMP"
 [ -n "$OUT" ] || OUT="$ROOT/build-redesign-win/remote-tests/$STAMP"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/doorbell-win-remote.XXXXXX")"
 TARGET="$USER_NAME@$HOST"
-SSH_OPTS="-i $KEY -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new"
+case "$PORT" in ''|*[!0-9]*) echo "invalid --port: $PORT" >&2; exit 2 ;; esac
+COMMON_OPTS="-i $KEY -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new"
+# ssh and scp spell the port option differently (-p / -P).
+SSH_OPTS="-p $PORT $COMMON_OPTS"
+SCP_OPTS="-P $PORT $COMMON_OPTS"
 
 # The remote default shell is Windows PowerShell (setup_test_host.ps1 sets it). The command is
 # sent base64-encoded so no quoting has to survive two shells.
@@ -89,9 +98,9 @@ fi
 echo "== preparing $HOST"
 remote "if (-not (Test-Path '$REMOTE_ROOT\\run-job.ps1')) { throw 'This PC is not prepared: run setup_test_host.ps1 on it once.' }; New-Item -ItemType Directory -Force -Path '$REMOTE_RUN' | Out-Null; 'ok'"
 # shellcheck disable=SC2086
-scp $SSH_OPTS -q "$ZIP" "$TARGET:$REMOTE_RUN_SCP/bundle.zip"
+scp $SCP_OPTS -q "$ZIP" "$TARGET:$REMOTE_RUN_SCP/bundle.zip"
 # shellcheck disable=SC2086
-scp $SSH_OPTS -q "$ROOT/win/scripts/ui_smoke.ps1" "$TARGET:$REMOTE_RUN_SCP/ui_smoke.ps1"
+scp $SCP_OPTS -q "$ROOT/win/scripts/ui_smoke.ps1" "$TARGET:$REMOTE_RUN_SCP/ui_smoke.ps1"
 
 # ---- 3. unpack, block discovery, write the job ------------------------------------------------
 ROLE_LIST="$(printf "'%s'," $ROLES | sed 's/,$//')"
@@ -135,7 +144,7 @@ Copy-Item '$REMOTE_ROOT\\jobs\\job.log' '$REMOTE_RUN\\out\\job.log' -ErrorAction
 # ---- 5. results ------------------------------------------------------------------------------
 mkdir -p "$OUT"
 # shellcheck disable=SC2086
-scp $SSH_OPTS -q -r "$TARGET:$REMOTE_RUN_SCP/out/." "$OUT/" || echo "no results could be copied back" >&2
+scp $SCP_OPTS -q -r "$TARGET:$REMOTE_RUN_SCP/out/." "$OUT/" || echo "no results could be copied back" >&2
 rm -rf "$OUT"/data-*          # the throwaway data directories are not results
 echo "== results in $OUT"
 FAILED=0

@@ -125,6 +125,13 @@ prints every change, is safe to run again, changes no password or other security
 `-Uninstall` reverts exactly what it did. The matching private key on the Mac is
 `~/.ssh/doorbell_win_test_ed25519`.
 
+If `sshd` cannot start, the script says why it thinks so (another program on the port, missing
+host keys, the output of `sshd.exe -t`, the last OpenSSH and Service Control Manager events),
+still does the steps that do not need the service, and exits non-zero; run it again after fixing
+the cause. When port 22 is taken, run it with `-Port <free port>` (it writes `Port` into
+`%ProgramData%\ssh\sshd_config`, reverted by `-Uninstall`) and pass `--port <n>` to
+`run_remote_tests.sh`.
+
 **Every run, from the Mac.** Keep the test account logged on with the screen unlocked, then:
 
 ```sh

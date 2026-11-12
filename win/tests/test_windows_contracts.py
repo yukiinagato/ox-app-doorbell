@@ -2802,6 +2802,27 @@ class WindowsContracts(unittest.TestCase):
         for forbidden in ("Set-ExecutionPolicy", "net user", "Set-LocalUser", "Disable-NetFirewallRule",
                           "Set-NetFirewallProfile", "Set-MpPreference"):
             self.assertNotIn(forbidden, setup)
+        # A service that will not start is diagnosed, not fatal: the remaining steps run and
+        # the script ends non-zero with the reasons.
+        for token in ("Get-ForeignListeners $Port", "@('-A')", "@('-t')", "Show-SshdDiagnostics",
+                      "'OpenSSH/Operational'", "SETUP IS NOT COMPLETE", "exit 1"):
+            self.assertIn(token, setup)
+        start = setup[setup.index("Start-Service -Name sshd"):]
+        self.assertIn("} catch {", start[:start.index("Save-State $state")])
+        self.assertLess(setup.index("Show-SshdDiagnostics\n        }"),
+                        setup.index("# ---- 4. public key"))
+        # The port is a recorded, reversible change, and the driver honours it for ssh and scp.
+        self.assertIn("[ValidateRange(1, 65535)][int]$Port = 22", setup)
+        self.assertIn("$state.port_previous = $current", setup)
+        self.assertIn("Set-ConfiguredPort $SshdConfig $before", setup)
+        self.assertIn("New-Object System.Text.UTF8Encoding($false)", setup)
+        self.assertIn('SSH_OPTS="-p $PORT $COMMON_OPTS"', driver)
+        self.assertIn('SCP_OPTS="-P $PORT $COMMON_OPTS"', driver)
+        self.assertNotIn("scp $SSH_OPTS", driver)
+        # ASCII only: Windows PowerShell 5.1 reads a script without a byte-order mark in the
+        # system code page, which on a Japanese system is not UTF-8.
+        for script_text in (setup, suite):
+            self.assertTrue(all(ord(ch) < 128 for ch in script_text))
         # The owner is told about the temporary discovery block, by the names the driver uses.
         for rule in ("DoorbellTest block discovery (in)", "DoorbellTest block discovery (out)"):
             self.assertIn(rule, setup)
@@ -3001,6 +3022,12 @@ class WindowsContracts(unittest.TestCase):
                         corner.index('if (App.Boot.Role == "door_station") OpenSettings();'))
         self.assertIn("if (dlg.ShowDialog() != true) return;", corner)
         self.assertIn("AdminEntryButton.Visibility = door ? Visibility.Collapsed", shell)
+        # Changing another device's role or door restarts that device: confirmed first.
+        editors = read("win/DoorbellApp/Settings/SettingsWindow.Editors.cs")
+        peer = editors[editors.index("private void EditPeer("):
+                       editors.index("private void RemovePeer(")]
+        self.assertLess(peer.index('Texts.T("settings.peer_identity_confirm"'),
+                        peer.index("_store.Commit(sets, deletes)"))
         # A UI test instance never relaunches itself into the installed data directory.
         self.assertEqual(app.count("if (!watchdog && !UiTest)"), 2)
 

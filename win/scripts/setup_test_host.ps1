@@ -41,6 +41,11 @@
   The account whose desktop session shows the app under test. Defaults to the user logged on
   at the console. It must be a member of Administrators for the key above to apply to it.
 
+.PARAMETER Port
+  TCP port sshd listens on. Leave it at 22 unless another program already uses 22 on this PC.
+  Any other value is written as "Port" into %ProgramData%\ssh\sshd_config (recorded, and
+  reverted by -Uninstall) and must be passed to run_remote_tests.sh with --port.
+
 .PARAMETER Uninstall
   Reverts everything recorded in setup-state.json.
 #>
@@ -49,6 +54,7 @@ param(
     [string]$PublicKey = 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIIFMXGYzf6RfmbjrjRYNtC1NKxfYM02tlsYeEISOoHph doorbell-win-test',
     [string]$WorkDir = 'C:\DoorbellTest',
     [string]$InteractiveUser = '',
+    [ValidateRange(1, 65535)][int]$Port = 22,
     [switch]$Uninstall
 )
 
@@ -62,10 +68,82 @@ $KeysFile = Join-Path $env:ProgramData 'ssh\administrators_authorized_keys'
 $ShellKey = 'HKLM:\SOFTWARE\OpenSSH'
 $StateFile = Join-Path $WorkDir 'setup-state.json'
 $PowerShellExe = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$SshDataDir = Join-Path $env:ProgramData 'ssh'
+$SshdConfig = Join-Path $SshDataDir 'sshd_config'
+$OpenSshDir = Join-Path $env:SystemRoot 'System32\OpenSSH'
 $script:Changes = New-Object System.Collections.Generic.List[string]
+$script:Problems = New-Object System.Collections.Generic.List[string]
 
 function Note([string]$text) { Write-Host ('  = ' + $text) }
 function Changed([string]$text) { $script:Changes.Add($text); Write-Host ('  + ' + $text) -ForegroundColor Green }
+
+function Problem([string]$text) { $script:Problems.Add($text); Write-Host ('  ! ' + $text) -ForegroundColor Red }
+
+# Runs a console program and prints what it says, indented; returns its exit code.
+function Invoke-Tool([string]$exe, [string[]]$arguments) {
+    if (-not (Test-Path -LiteralPath $exe)) { Write-Host "      (not found: $exe)"; return -1 }
+    $old = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $output = & $exe @arguments 2>&1
+        $code = $LASTEXITCODE
+    } finally { $ErrorActionPreference = $old }
+    foreach ($line in @($output)) { Write-Host ('      ' + [string]$line) }
+    return $code
+}
+
+# Processes other than sshd that already listen on the port.
+function Get-ForeignListeners([int]$port) {
+    $found = @()
+    $listeners = @(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue)
+    foreach ($listener in $listeners) {
+        $process = Get-Process -Id $listener.OwningProcess -ErrorAction SilentlyContinue
+        $name = '(unknown)'
+        if ($null -ne $process) { $name = $process.ProcessName }
+        if ($name -ne 'sshd') { $found += ("{0} (pid {1}, address {2})" -f $name, $listener.OwningProcess, $listener.LocalAddress) }
+    }
+    return @($found | Select-Object -Unique)
+}
+
+function Show-SshdDiagnostics {
+    Write-Host '    Last OpenSSH/Operational events:'
+    $events = @(Get-WinEvent -LogName 'OpenSSH/Operational' -MaxEvents 10 -ErrorAction SilentlyContinue)
+    if ($events.Count -eq 0) { Write-Host '      (none)' }
+    foreach ($event in $events) {
+        Write-Host ("      {0:yyyy-MM-dd HH:mm:ss} [{1}] {2}" -f $event.TimeCreated, $event.LevelDisplayName, (([string]$event.Message) -replace '\s+', ' '))
+    }
+    Write-Host '    Last Service Control Manager events about sshd:'
+    $scm = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Service Control Manager' } -MaxEvents 200 -ErrorAction SilentlyContinue |
+        Where-Object { ([string]$_.Message) -match 'sshd|OpenSSH' } | Select-Object -First 5)
+    if ($scm.Count -eq 0) { Write-Host '      (none)' }
+    foreach ($event in $scm) {
+        Write-Host ("      {0:yyyy-MM-dd HH:mm:ss} id {1}: {2}" -f $event.TimeCreated, $event.Id, (([string]$event.Message) -replace '\s+', ' '))
+    }
+}
+
+function Read-ConfigLines([string]$path) {
+    return @([System.IO.File]::ReadAllLines($path))
+}
+
+function Write-ConfigLines([string]$path, [string[]]$lines) {
+    # No byte-order mark: sshd refuses a config file that starts with one.
+    [System.IO.File]::WriteAllLines($path, $lines, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+# The uncommented "Port" value in sshd_config, or '' when the file sets none.
+function Get-ConfiguredPort([string[]]$lines) {
+    foreach ($line in $lines) {
+        if ($line -match '^\s*Port\s+(\d+)\s*$') { return $Matches[1] }
+    }
+    return ''
+}
+
+function Set-ConfiguredPort([string]$path, [string]$value) {
+    $lines = @(Read-ConfigLines $path)
+    $kept = @($lines | Where-Object { $_ -notmatch '^\s*Port\s+\d+\s*$' })
+    if ($value -ne '') { $kept = @("Port $value") + $kept }
+    Write-ConfigLines $path $kept
+}
 
 function Read-State {
     if (Test-Path -LiteralPath $StateFile) {
@@ -119,6 +197,11 @@ function Install-TestHost {
         work_dir_created     = [bool](Get-StateValue $previous 'work_dir_created' $false)
         task_registered      = [bool](Get-StateValue $previous 'task_registered' $false)
         interactive_user     = [string](Get-StateValue $previous 'interactive_user' '')
+        port                 = [int](Get-StateValue $previous 'port' 22)
+        port_changed         = [bool](Get-StateValue $previous 'port_changed' $false)
+        port_previous        = [string](Get-StateValue $previous 'port_previous' '')
+        sshd_config_created  = [bool](Get-StateValue $previous 'sshd_config_created' $false)
+        host_keys_generated  = [bool](Get-StateValue $previous 'host_keys_generated' $false)
     }
 
     Write-Host 'Doorbell test host setup'
@@ -164,30 +247,110 @@ function Install-TestHost {
     Save-State $state
 
     # ---- 2. sshd service ------------------------------------------------------------------
-    $service = Get-Service -Name sshd
-    if (-not $state.sshd_recorded) {
-        $state.sshd_previous_start = [string]$service.StartType
-        $state.sshd_was_running = ($service.Status -eq 'Running')
-        $state.sshd_recorded = $true
+    # A failure here is reported with its evidence and the script goes on: the key, the
+    # default shell and the task do not depend on the service, and a second run after the
+    # cause is fixed then only has the service left to do.
+    $sshdExe = Join-Path $OpenSshDir 'sshd.exe'
+    $keygenExe = Join-Path $OpenSshDir 'ssh-keygen.exe'
+    $service = Get-Service -Name sshd -ErrorAction SilentlyContinue
+    $configChanged = $false
+    if ($null -eq $service) {
+        Problem 'The sshd service does not exist although the OpenSSH Server capability is installed. A restart of Windows may be pending.'
+    } else {
+        if (-not $state.sshd_recorded) {
+            $state.sshd_previous_start = [string]$service.StartType
+            $state.sshd_was_running = ($service.Status -eq 'Running')
+            $state.sshd_recorded = $true
+        }
+        if ($service.StartType -ne 'Automatic') {
+            Set-Service -Name sshd -StartupType Automatic
+            Changed "sshd start type: $($service.StartType) -> Automatic"
+        } else { Note 'sshd already starts automatically' }
+        Save-State $state
+
+        # Port: only written when it is not the default, or when an earlier run changed it.
+        if ($Port -ne 22 -or $state.port_changed) {
+            if (-not (Test-Path -LiteralPath $SshDataDir)) { New-Item -ItemType Directory -Path $SshDataDir | Out-Null }
+            if (-not (Test-Path -LiteralPath $SshdConfig)) {
+                $template = Join-Path $OpenSshDir 'sshd_config_default'
+                if (Test-Path -LiteralPath $template) {
+                    Copy-Item -LiteralPath $template -Destination $SshdConfig
+                    $state.sshd_config_created = $true
+                    Changed "Created $SshdConfig from the default template"
+                } else {
+                    Problem "$SshdConfig does not exist and there is no default template to copy; the port was not set"
+                }
+            }
+            if (Test-Path -LiteralPath $SshdConfig) {
+                $current = Get-ConfiguredPort (Read-ConfigLines $SshdConfig)
+                if (-not $state.port_changed) { $state.port_previous = $current }
+                if ($current -ne [string]$Port) {
+                    Set-ConfiguredPort $SshdConfig ([string]$Port)
+                    $state.port_changed = $true
+                    $configChanged = $true
+                    $shown = $current
+                    if ($shown -eq '') { $shown = '22 (default)' }
+                    Changed "sshd_config Port: $shown -> $Port"
+                } else { Note "sshd_config already sets Port $Port" }
+            }
+        }
+        $state.port = $Port
+        Save-State $state
+
+        $foreign = @(Get-ForeignListeners $Port)
+        if ($foreign.Count -gt 0) {
+            Problem ("TCP port $Port is already in use by: " + ($foreign -join '; ') + ". sshd cannot listen there. Run this script again with -Port <free port>, for example -Port 2222.")
+        }
+
+        $hostKeys = @(Get-ChildItem -LiteralPath $SshDataDir -Filter 'ssh_host_*_key' -ErrorAction SilentlyContinue)
+        if ($hostKeys.Count -eq 0) {
+            Write-Host '    No SSH host keys yet; running ssh-keygen -A:'
+            $code = Invoke-Tool $keygenExe @('-A')
+            $hostKeys = @(Get-ChildItem -LiteralPath $SshDataDir -Filter 'ssh_host_*_key' -ErrorAction SilentlyContinue)
+            if ($code -eq 0 -and $hostKeys.Count -gt 0) {
+                $state.host_keys_generated = $true
+                Changed "Generated SSH host keys in $SshDataDir"
+            } else {
+                Problem "ssh-keygen -A did not create host keys (exit code $code)"
+            }
+            Save-State $state
+        } else { Note 'SSH host keys exist' }
+
+        Write-Host '    Configuration check (sshd.exe -t):'
+        $check = Invoke-Tool $sshdExe @('-t')
+        if ($check -eq 0) { Note 'sshd accepts its configuration' }
+        else { Problem "sshd.exe -t reported a configuration problem (exit code $check); see its output above" }
+
+        $service = Get-Service -Name sshd
+        try {
+            if ($service.Status -ne 'Running') {
+                Start-Service -Name sshd
+                Changed 'Started the sshd service'
+            } elseif ($configChanged) {
+                Restart-Service -Name sshd -Force
+                Changed 'Restarted the sshd service for the new port'
+            } else { Note 'sshd is already running' }
+        } catch {
+            Problem ("The sshd service did not start: " + $_.Exception.Message)
+            Show-SshdDiagnostics
+        }
+        Save-State $state
     }
-    if ($service.StartType -ne 'Automatic') {
-        Set-Service -Name sshd -StartupType Automatic
-        Changed "sshd start type: $($service.StartType) -> Automatic"
-    } else { Note 'sshd already starts automatically' }
-    if ((Get-Service -Name sshd).Status -ne 'Running') {
-        Start-Service -Name sshd
-        Changed 'Started the sshd service'
-    } else { Note 'sshd is already running' }
-    Save-State $state
 
     # ---- 3. firewall ----------------------------------------------------------------------
     if ($null -eq (Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue)) {
         New-NetFirewallRule -DisplayName $FirewallRule -Direction Inbound -Action Allow `
-            -Protocol TCP -LocalPort 22 -Profile Private -RemoteAddress LocalSubnet `
+            -Protocol TCP -LocalPort $Port -Profile Private -RemoteAddress LocalSubnet `
             -Description 'Doorbell UI tests: SSH from the local subnet. Added by setup_test_host.ps1.' | Out-Null
         $state.firewall_rule_added = $true
-        Changed "Added firewall rule '$FirewallRule' (TCP 22 in, Private profile, local subnet)"
-    } else { Note "Firewall rule '$FirewallRule' already exists" }
+        Changed "Added firewall rule '$FirewallRule' (TCP $Port in, Private profile, local subnet)"
+    } else {
+        $rulePort = [string](Get-NetFirewallRule -DisplayName $FirewallRule | Get-NetFirewallPortFilter).LocalPort
+        if ($rulePort -ne [string]$Port) {
+            Set-NetFirewallRule -DisplayName $FirewallRule -LocalPort $Port
+            Changed "Firewall rule '$FirewallRule' port: $rulePort -> $Port"
+        } else { Note "Firewall rule '$FirewallRule' already exists" }
+    }
     $builtIn = Get-NetFirewallRule -Name 'OpenSSH-Server-In-TCP' -ErrorAction SilentlyContinue
     if ($null -ne $builtIn) {
         Note "Windows' own rule 'OpenSSH-Server-In-TCP' exists (enabled: $($builtIn.Enabled), profile: $($builtIn.Profile)); left as it is"
@@ -284,9 +447,18 @@ Set-Content -LiteralPath $exit -Value $code -Encoding ascii
         Select-Object -First 1 -ExpandProperty IPAddress)
     $hostText = if ($address.Count -gt 0) { $address[0] } else { '<this PC>' }
     $userText = ($InteractiveUser -split '\\')[-1]
-    Write-Host "    win/scripts/run_remote_tests.sh $hostText $userText"
+    $portText = ''
+    if ($Port -ne 22) { $portText = " --port $Port" }
+    Write-Host "    win/scripts/run_remote_tests.sh $hostText $userText$portText"
     Write-Host 'Keep this user logged on with the screen unlocked while tests run.'
     Write-Host "To undo everything: .\setup_test_host.ps1 -Uninstall"
+    if ($script:Problems.Count -gt 0) {
+        Write-Host ''
+        Write-Host ("SETUP IS NOT COMPLETE: {0} problem(s). The steps that could be done were done." -f $script:Problems.Count) -ForegroundColor Red
+        foreach ($problem in $script:Problems) { Write-Host ('  ! ' + $problem) -ForegroundColor Red }
+        Write-Host 'Fix the cause, then run this script again; it only does what is still missing.'
+        exit 1
+    }
 }
 
 function Uninstall-TestHost {
@@ -338,6 +510,27 @@ function Uninstall-TestHost {
         $null -ne (Get-NetFirewallRule -DisplayName $FirewallRule -ErrorAction SilentlyContinue)) {
         Remove-NetFirewallRule -DisplayName $FirewallRule
         Changed "Removed firewall rule '$FirewallRule'"
+    }
+    if ((Get-StateValue $state 'port_changed' $false) -and (Test-Path -LiteralPath $SshdConfig)) {
+        if (Get-StateValue $state 'sshd_config_created' $false) {
+            Remove-Item -LiteralPath $SshdConfig
+            Changed "Removed $SshdConfig (this script created it)"
+        } else {
+            $before = [string](Get-StateValue $state 'port_previous' '')
+            Set-ConfiguredPort $SshdConfig $before
+            if ($before -eq '') { Changed 'Removed the Port line from sshd_config (there was none before)' }
+            else { Changed "sshd_config Port restored to $before" }
+        }
+        $running = Get-Service -Name sshd -ErrorAction SilentlyContinue
+        if ($null -ne $running -and $running.Status -eq 'Running' -and (Get-StateValue $state 'sshd_was_running' $false)) {
+            Write-Host '  (restarting sshd ends any SSH session that is running this script)'
+            Restart-Service -Name sshd -Force
+        }
+    }
+    if ((Get-StateValue $state 'host_keys_generated' $false) -and (Get-StateValue $state 'capability_installed' $false)) {
+        $keys = @(Get-ChildItem -LiteralPath $SshDataDir -Filter 'ssh_host_*' -ErrorAction SilentlyContinue)
+        foreach ($key in $keys) { Remove-Item -LiteralPath $key.FullName -Force }
+        if ($keys.Count -gt 0) { Changed "Removed the SSH host keys this script generated in $SshDataDir" }
     }
     if (Get-StateValue $state 'sshd_recorded' $false) {
         $service = Get-Service -Name sshd -ErrorAction SilentlyContinue

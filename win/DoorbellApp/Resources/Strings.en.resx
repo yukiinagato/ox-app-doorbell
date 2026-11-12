@@ -594,7 +594,11 @@ Delete it?</value></data>
   <data name="editor_answer_auto" xml:space="preserve"><value>Answer at once</value></data>
   <data name="editor_answer_mode" xml:space="preserve"><value>On an incoming call</value></data>
   <data name="editor_answer_ring" xml:space="preserve"><value>Ring and wait</value></data>
+  <data name="editor_asset_delete_confirm" xml:space="preserve"><value>The file is removed from every device. This cannot be undone</value></data>
+  <data name="editor_asset_hash" xml:space="preserve"><value>Hash</value></data>
+  <data name="editor_assets_cached_here" xml:space="preserve"><value>Stored on this device</value></data>
   <data name="editor_assets_hint" xml:space="preserve"><value>Tap Edit to delete. Files in use are removed too</value></data>
+  <data name="editor_assets_upload_hint" xml:space="preserve"><value>Add a photo from the iPad photo library or a sound with the microphone. JPEG, PNG, MP3 or WAV, up to 3 MB each</value></data>
   <data name="editor_automatic" xml:space="preserve"><value>Automatic</value></data>
   <data name="editor_back" xml:space="preserve"><value>Back</value></data>
   <data name="editor_background_image" xml:space="preserve"><value>Background image</value></data>
@@ -605,6 +609,11 @@ Delete it?</value></data>
   <data name="editor_buildings" xml:space="preserve"><value>Buildings</value></data>
   <data name="editor_camera_credential" xml:space="preserve"><value>Camera login</value></data>
   <data name="editor_camera_name" xml:space="preserve"><value>Camera ID (letters, digits, _ and -)</value></data>
+  <data name="editor_caps_clear" xml:space="preserve"><value>Remove every override</value></data>
+  <data name="editor_caps_clear_confirm" xml:space="preserve"><value>The device goes back to its measured capabilities</value></data>
+  <data name="editor_caps_hardware_hint" xml:space="preserve"><value>A measured feature can be turned off. A feature the device lacks cannot be turned on</value></data>
+  <data name="editor_caps_measured" xml:space="preserve"><value>As measured</value></data>
+  <data name="editor_caps_operational_hint" xml:space="preserve"><value>Override these only with facts checked on site, such as outside reachability or fixed power</value></data>
   <data name="editor_change_password" xml:space="preserve"><value>Change the password</value></data>
   <data name="editor_channel_in_app" xml:space="preserve"><value>On screen</value></data>
   <data name="editor_channel_system_notification" xml:space="preserve"><value>System notification</value></data>
@@ -616,6 +625,7 @@ Delete it?</value></data>
   <data name="editor_clipboard_not_config" xml:space="preserve"><value>The clipboard holds no settings</value></data>
   <data name="editor_command" xml:space="preserve"><value>Command</value></data>
   <data name="editor_config_transfer" xml:space="preserve"><value>Export and import settings</value></data>
+  <data name="editor_config_transfer_clipboard" xml:space="preserve"><value>This device has no file picker, so the clipboard is used</value></data>
   <data name="editor_config_transfer_hint" xml:space="preserve"><value>Passwords, keys and image or sound files are not included</value></data>
   <data name="editor_confirm" xml:space="preserve"><value>Continue</value></data>
   <data name="editor_core_too_old" xml:space="preserve"><value>This device's Core does not support this</value></data>
@@ -630,11 +640,16 @@ Delete it?</value></data>
   <data name="editor_day_tue" xml:space="preserve"><value>Tue</value></data>
   <data name="editor_day_wed" xml:space="preserve"><value>Wed</value></data>
   <data name="editor_delete" xml:space="preserve"><value>Delete</value></data>
+  <data name="editor_delete_confirm" xml:space="preserve"><value>This cannot be undone</value></data>
+  <data name="editor_device_health" xml:space="preserve"><value>Health</value></data>
+  <data name="editor_device_id" xml:space="preserve"><value>Device ID</value></data>
+  <data name="editor_device_state" xml:space="preserve"><value>Connection</value></data>
   <data name="editor_direct_port" xml:space="preserve"><value>Direct call port</value></data>
   <data name="editor_disable" xml:space="preserve"><value>Turn off</value></data>
   <data name="editor_discovery_prefix" xml:space="preserve"><value>Discovery prefix</value></data>
   <data name="editor_done" xml:space="preserve"><value>Done</value></data>
   <data name="editor_door" xml:space="preserve"><value>Door</value></data>
+  <data name="editor_door_bound_warning" xml:space="preserve"><value>{0} is also assigned to this door</value></data>
   <data name="editor_doors" xml:space="preserve"><value>Doors</value></data>
   <data name="editor_dtmf_actions" xml:space="preserve"><value>Phone keypad actions</value></data>
   <data name="editor_dtmf_code" xml:space="preserve"><value>Keys to press (for example *1)</value></data>
@@ -665,13 +680,17 @@ Delete it?</value></data>
   <data name="editor_ink_hint" xml:space="preserve"><value>Automatic picks the more readable colour for the background</value></data>
   <data name="editor_ink_overrides" xml:space="preserve"><value>Text colours</value></data>
   <data name="editor_label" xml:space="preserve"><value>Label</value></data>
+  <data name="editor_legacy_panel" xml:space="preserve"><value>Legacy panel token</value></data>
+  <data name="editor_legacy_panel_hint" xml:space="preserve"><value>Rotating invalidates the old token at once. The new token is shown only once</value></data>
   <data name="editor_list_edit_hint" xml:space="preserve"><value>Tap Edit to reorder or delete</value></data>
   <data name="editor_loading" xml:space="preserve"><value>Loading…</value></data>
+  <data name="editor_logs_hint" xml:space="preserve"><value>Read-only, newest first</value></data>
   <data name="editor_media_hint" xml:space="preserve"><value>Never put the camera's login in the URL; store it as the camera login</value></data>
   <data name="editor_media_url_hint" xml:space="preserve"><value>H.264 must be RTSP over TCP, Baseline profile</value></data>
   <data name="editor_mqtt" xml:space="preserve"><value>MQTT and Home Assistant</value></data>
   <data name="editor_mqtt_password" xml:space="preserve"><value>MQTT password</value></data>
   <data name="editor_name" xml:space="preserve"><value>Name</value></data>
+  <data name="editor_name_length" xml:space="preserve"><value>Enter a name of 1 to 64 characters</value></data>
   <data name="editor_never_suppress" xml:space="preserve"><value>Notify during quiet hours</value></data>
   <data name="editor_never_suppress_hint" xml:space="preserve"><value>When on, this action also runs during quiet hours</value></data>
   <data name="editor_never_suppress_short" xml:space="preserve"><value>always</value></data>
@@ -690,7 +709,9 @@ Delete it?</value></data>
   <data name="editor_ok" xml:space="preserve"><value>OK</value></data>
   <data name="editor_on" xml:space="preserve"><value>On</value></data>
   <data name="editor_online" xml:space="preserve"><value>Online</value></data>
+  <data name="editor_pair_delete_confirm" xml:space="preserve"><value>The override for this pair is removed and it follows the global policy again</value></data>
   <data name="editor_panel_link_once" xml:space="preserve"><value>This link is shown only now. Scan the QR code on the device that will use it</value></data>
+  <data name="editor_panel_revoke_confirm" xml:space="preserve"><value>This Web panel stops working at once. This cannot be undone</value></data>
   <data name="editor_panels_hint" xml:space="preserve"><value>Each Web panel gets its own doors and actions. Its link is shown once, when it is issued</value></data>
   <data name="editor_password_changed" xml:space="preserve"><value>Password changed</value></data>
   <data name="editor_password_for_session" xml:space="preserve"><value>Admin password</value></data>
@@ -706,6 +727,13 @@ Delete it?</value></data>
   <data name="editor_purposes" xml:space="preserve"><value>Visit purposes</value></data>
   <data name="editor_purposes_edit" xml:space="preserve"><value>Edit visit purposes</value></data>
   <data name="editor_quiet_hint" xml:space="preserve"><value>Times use the cluster time zone</value></data>
+  <data name="editor_raw_config" xml:space="preserve"><value>Raw configuration</value></data>
+  <data name="editor_raw_delete_confirm" xml:space="preserve"><value>The key is removed from every device's configuration and its default applies</value></data>
+  <data name="editor_raw_hint" xml:space="preserve"><value>Search by key or value. Values are JSON. Use + to write any key</value></data>
+  <data name="editor_raw_key_invalid" xml:space="preserve"><value>Enter the key as a.b.c</value></data>
+  <data name="editor_raw_more" xml:space="preserve"><value>Showing {0} of {1}. Search to narrow the list</value></data>
+  <data name="editor_raw_secret_refused" xml:space="preserve"><value>A reference key takes only secret:&lt;name&gt;. Enter passwords and keys on their own settings pages</value></data>
+  <data name="editor_raw_write_confirm" xml:space="preserve"><value>This is written to every device's configuration without validation</value></data>
   <data name="editor_record_hint" xml:space="preserve"><value>A recording can be chosen as the ringtone or the SOS sound</value></data>
   <data name="editor_record_sound" xml:space="preserve"><value>Record with the microphone</value></data>
   <data name="editor_recording" xml:space="preserve"><value>Recording (up to 60 seconds)</value></data>
@@ -717,8 +745,12 @@ Delete it?</value></data>
   <data name="editor_remove_device" xml:space="preserve"><value>Remove from the cluster</value></data>
   <data name="editor_remove_image" xml:space="preserve"><value>Remove the image</value></data>
   <data name="editor_repeat_password" xml:space="preserve"><value>New password again</value></data>
+  <data name="editor_reply_delete_confirm" xml:space="preserve"><value>The reply disappears from indoor panels and the visitor screen. This cannot be undone</value></data>
   <data name="editor_reset" xml:space="preserve"><value>Reset to default</value></data>
+  <data name="editor_role_fixed" xml:space="preserve"><value>This device's role is fixed</value></data>
   <data name="editor_role_on_device" xml:space="preserve"><value>A device's role is changed on that device</value></data>
+  <data name="editor_role_restart_confirm" xml:space="preserve"><value>The app on {0} restarts, and a call in progress on it ends. Change it?</value></data>
+  <data name="editor_role_restart_hint" xml:space="preserve"><value>Changing the role or the door restarts the app on that device</value></data>
   <data name="editor_schedule" xml:space="preserve"><value>Schedule</value></data>
   <data name="editor_search" xml:space="preserve"><value>Search</value></data>
   <data name="editor_secret_hint" xml:space="preserve"><value>Passwords and keys go to this device's secure store; the configuration only holds a reference</value></data>
@@ -727,6 +759,7 @@ Delete it?</value></data>
   <data name="editor_secret_unset" xml:space="preserve"><value>Not set</value></data>
   <data name="editor_secrets" xml:space="preserve"><value>Passwords and keys</value></data>
   <data name="editor_server" xml:space="preserve"><value>Server</value></data>
+  <data name="editor_show_older" xml:space="preserve"><value>Show older entries</value></data>
   <data name="editor_sip_extensions" xml:space="preserve"><value>Extensions (comma-separated)</value></data>
   <data name="editor_sip_password" xml:space="preserve"><value>SIP password</value></data>
   <data name="editor_sip_user" xml:space="preserve"><value>User (extension)</value></data>
@@ -734,15 +767,19 @@ Delete it?</value></data>
   <data name="editor_sounds" xml:space="preserve"><value>Sounds</value></data>
   <data name="editor_speak" xml:space="preserve"><value>Speak aloud</value></data>
   <data name="editor_speak_on" xml:space="preserve"><value>Spoken</value></data>
+  <data name="editor_srtp" xml:space="preserve"><value>SRTP</value></data>
   <data name="editor_srtp_hint" xml:space="preserve"><value>With Always encrypt, iOS 5 devices cannot take direct calls</value></data>
   <data name="editor_srtp_mandatory" xml:space="preserve"><value>Always encrypt</value></data>
   <data name="editor_srtp_optional" xml:space="preserve"><value>Encrypt when possible</value></data>
   <data name="editor_sticky" xml:space="preserve"><value>Keep until dismissed</value></data>
+  <data name="editor_stop_playing" xml:space="preserve"><value>Stop</value></data>
   <data name="editor_stop_recording" xml:space="preserve"><value>Stop recording</value></data>
   <data name="editor_streams" xml:space="preserve"><value>Stream URLs</value></data>
   <data name="editor_suppress" xml:space="preserve"><value>Silence</value></data>
   <data name="editor_target_roles" xml:space="preserve"><value>Notify devices</value></data>
+  <data name="editor_telegram_disable_confirm" xml:space="preserve"><value>Telegram notifications and replies stop</value></data>
   <data name="editor_test_message" xml:space="preserve"><value>Send a test message</value></data>
+  <data name="editor_theme_reset_confirm" xml:space="preserve"><value>Every background and colour set only for this device is removed; it follows the setting for all devices again</value></data>
   <data name="editor_this_device" xml:space="preserve"><value>This device</value></data>
   <data name="editor_this_door" xml:space="preserve"><value>The calling door</value></data>
   <data name="editor_tls_hint" xml:space="preserve"><value>TLS needs the certificate's SHA-256</value></data>
@@ -751,11 +788,23 @@ Delete it?</value></data>
   <data name="editor_transport" xml:space="preserve"><value>Transport</value></data>
   <data name="editor_ttl" xml:space="preserve"><value>Seconds shown (0 for no limit)</value></data>
   <data name="editor_type" xml:space="preserve"><value>Type</value></data>
+  <data name="editor_tz_offset_hint" xml:space="preserve"><value>Used for message times only while no time zone is set</value></data>
+  <data name="editor_ui_element_hint" xml:space="preserve"><value>Leave a value empty to use the device's own default. The ranges are the ones the device published</value></data>
+  <data name="editor_ui_element_reset_confirm" xml:space="preserve"><value>Every override of this element is removed</value></data>
+  <data name="editor_ui_prop_accent" xml:space="preserve"><value>Accent colour</value></data>
+  <data name="editor_ui_prop_background" xml:space="preserve"><value>Background colour</value></data>
+  <data name="editor_ui_prop_border" xml:space="preserve"><value>Border colour</value></data>
+  <data name="editor_ui_prop_font_scale" xml:space="preserve"><value>Text scale</value></data>
+  <data name="editor_ui_prop_foreground" xml:space="preserve"><value>Text colour</value></data>
+  <data name="editor_ui_prop_radius" xml:space="preserve"><value>Corner radius</value></data>
+  <data name="editor_ui_prop_scale" xml:space="preserve"><value>Scale</value></data>
   <data name="editor_unreachable" xml:space="preserve"><value>Could not reach this device's administration service</value></data>
   <data name="editor_uploading" xml:space="preserve"><value>Adding…</value></data>
   <data name="editor_use_cluster_theme" xml:space="preserve"><value>Use the setting for all devices</value></data>
   <data name="editor_user" xml:space="preserve"><value>User name</value></data>
   <data name="editor_visual" xml:space="preserve"><value>Show on screen</value></data>
+  <data name="editor_web_push_subscriptions" xml:space="preserve"><value>Subscriptions</value></data>
+  <data name="editor_web_push_warning" xml:space="preserve"><value>Warning</value></data>
   <data name="editor_weekdays" xml:space="preserve"><value>Days</value></data>
   <data name="editor_weekdays_hint" xml:space="preserve"><value>No days selected means every day. A window may run past midnight</value></data>
   <data name="editor_when" xml:space="preserve"><value>When</value></data>
@@ -770,6 +819,7 @@ Delete it?</value></data>
   <data name="editor_with_snapshot" xml:space="preserve"><value>Attach a photo</value></data>
   <data name="editor_wording" xml:space="preserve"><value>Wording overrides</value></data>
   <data name="editor_wording_hint" xml:space="preserve"><value>Search by key or by wording</value></data>
+  <data name="editor_wording_reset_confirm" xml:space="preserve"><value>The built-in wording returns in every language</value></data>
   <data name="emergency_active_detail" xml:space="preserve"><value>Emergency mode is active</value></data>
   <data name="emergency_button" xml:space="preserve"><value>SOS</value></data>
   <data name="emergency_cancel" xml:space="preserve"><value>Cancel alarm</value></data>
@@ -2021,6 +2071,7 @@ On</value></data>
   <data name="settings_password_shared" xml:space="preserve"><value>The same password is used here and in the web admin</value></data>
   <data name="settings_peer_alerts" xml:space="preserve"><value>Devices that cannot connect</value></data>
   <data name="settings_peer_alerts_desc" xml:space="preserve"><value>Devices on an old version, and devices that missed a key change</value></data>
+  <data name="settings_peer_identity_confirm" xml:space="preserve"><value>&quot;{0}&quot; gets a new role or door, and the app on that device restarts. Continue?</value></data>
   <data name="settings_peers_legacy" xml:space="preserve"><value>Old version: {0}</value></data>
   <data name="settings_peers_ok" xml:space="preserve"><value>None</value></data>
   <data name="settings_peers_rekey_required" xml:space="preserve"><value>Need pairing again: {0}</value></data>
@@ -2194,6 +2245,8 @@ On</value></data>
   <data name="settings_telegram_poll_desc" xml:space="preserve"><value>Lets residents send a quick reply from the alert's buttons</value></data>
   <data name="settings_telegram_template" xml:space="preserve"><value>Message template (Japanese)</value></data>
   <data name="settings_telegram_template_desc" xml:space="preserve"><value>{0} and {1} are filled in; empty uses the default</value></data>
+  <data name="settings_telegram_template_en" xml:space="preserve"><value>Message template (English)</value></data>
+  <data name="settings_telegram_template_zh" xml:space="preserve"><value>Message template (Chinese)</value></data>
   <data name="settings_telegram_test" xml:space="preserve"><value>Test message</value></data>
   <data name="settings_telegram_test_action" xml:space="preserve"><value>Send</value></data>
   <data name="settings_telegram_test_desc" xml:space="preserve"><value>Sends one message through the elected sender</value></data>
