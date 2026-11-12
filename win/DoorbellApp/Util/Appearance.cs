@@ -66,6 +66,12 @@ namespace DoorbellApp.Util
         private static DateTime _systemProbedAt = DateTime.MinValue;
         private static int _systemAppsUseLightTheme = -1;
         private static bool _applied;
+
+        /// <summary>
+        /// A fixed appearance for automated screenshots; null (always, outside UI test mode)
+        /// follows Core. Only MainWindow.UiTest.cs sets it.
+        /// </summary>
+        internal static string TestOverride;
         private static Color? _accent;
 
         /// <summary>The appearance in force right now, "light" or "dark".</summary>
@@ -116,6 +122,7 @@ namespace DoorbellApp.Util
                 ConfiguredMode = Resolve(config, nodeId);
                 effective = Effective(ConfiguredMode, config, localTime);
             }
+            if (TestOverride == Light || TestOverride == Dark) effective = TestOverride;
             Color? accent = CoreAccent(display);
             if (_applied && effective == Current && accent == _accent) return false;
             Current = effective;

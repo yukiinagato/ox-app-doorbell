@@ -130,6 +130,7 @@ namespace DoorbellApp.Settings
                     MinHeight = 48,
                 };
                 AutomationLabel(item, label);
+                AutomationId(item, "SettingsCategory_" + category.Id);
                 _navigation.MenuItems.Add(item);
             }
             // ItemInvoked rather than SelectionChanged: tapping the category that is already
@@ -168,6 +169,8 @@ namespace DoorbellApp.Settings
             };
             Grid.SetRow(_status, 2);
             page.Children.Add(_status);
+            AutomationId(_navigation, "SettingsNavigation");
+            AutomationId(_title, "SettingsTitle");
             _navigation.Content = page;
             Content = _navigation;
             SyncNavigation();
@@ -197,6 +200,7 @@ namespace DoorbellApp.Settings
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            AutomationId(_search, "SettingsSearch");
             Fluent.Placeholder(_search, Texts.T("settings.search"));
             AutomationLabel(_search, Texts.T("settings.search"));
             _search.TextChanged += (s, e) =>
@@ -213,6 +217,7 @@ namespace DoorbellApp.Settings
                 Margin = new Thickness(12, 0, 0, 0),
                 VerticalAlignment = VerticalAlignment.Center,
             };
+            AutomationId(close, "SettingsClose");
             close.Click += (s, e) => Close();
             Grid.SetColumn(close, 2);
             bar.Children.Add(close);
@@ -405,6 +410,12 @@ namespace DoorbellApp.Settings
                 stack.Children.Add(rows[i]);
             }
             return card;
+        }
+
+        /// <summary>A stable id for UI automation; it never changes with the language.</summary>
+        private static void AutomationId(DependencyObject element, string id)
+        {
+            System.Windows.Automation.AutomationProperties.SetAutomationId(element, id);
         }
 
         private static void AutomationLabel(UIElement element, string name)

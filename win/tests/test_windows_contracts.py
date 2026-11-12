@@ -259,7 +259,13 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("ShowIncoming(ev)", chime_block)
         self.assertIn("_incomingCallId", window)
         # Unlock goes through core's own action, which works from the monitor page too.
-        self.assertIn("App.Core.OpenDoor(CurrentCallDoor())", window)
+        # A ringing or connected call unlocks through the call-scoped action, so a stale press
+        # cannot open the door for a newer visit.
+        unlock = window[window.index("string targetDoor = CurrentCallDoor(), "
+                                     "targetCall = _incomingCallId;"):
+                        window.index("private string CurrentCallDoor()")]
+        self.assertIn("App.Core.OpenDoor(targetDoor)", unlock)
+        self.assertIn("App.Core.OpenDoorForCall(targetDoor, targetCall, targetRevision)", unlock)
         self.assertIn("db_core_open_door", read("win/DoorbellApp/Core/CoreInterop.cs"))
 
     def test_originated_call_timeout_uses_core_snapshot(self):
@@ -660,7 +666,11 @@ class WindowsContracts(unittest.TestCase):
         self.assertNotIn("ReportCallAnswered", monitor)
         self.assertIn('ev.Str("dialog_owner")', window)
         self.assertIn("owner != _nodeId", window)
-        self.assertIn("_lifecycleEnded = true", window)
+        # The end is reported once, and only by the shell whose answer core accepted
+        # (CallLifecycleState, covered by win/scripts/test_call_lifecycle_state.sh).
+        self.assertIn("!_callLifecycle.MayReportEnd", window)
+        self.assertIn("_callLifecycle.RecordEnd(result);", window)
+        self.assertIn("_callLifecycle.ConfirmOwner(false);", window)
         recovery = window[window.index("private void RecoverCall"):
                           window.index("private static Dictionary<string, object> FindDoorPeer")]
         startup_recovery = window[window.index("private void RecoverActiveCall"):
@@ -1206,7 +1216,11 @@ class WindowsContracts(unittest.TestCase):
         self.assertNotIn("LocalTime", clock)
         corrected = window[window.index("private DateTime CorrectedNow()"):
                            window.index("private DateTime InZone(long wallMs)")]
-        self.assertIn("SystemUtcMs() + _clockOffsetMs", corrected)
+        # The base is core's wall clock; what advances it is the monotonic counter, so a
+        # system clock step between syncs cannot move the displayed time.
+        self.assertIn("Stopwatch.GetTimestamp() - _clockBaseTimestamp", corrected)
+        self.assertIn("InZone(_clockBaseWallMs + elapsedMs)", corrected)
+        self.assertNotIn("DateTime.UtcNow", corrected)
         self.assertNotIn("App.Core", corrected)
 
         # The base is re-read on its own thirty-second timer, off the UI thread, and again

@@ -169,6 +169,13 @@ jobs:
           DB_BUILD_ID: ci-stub-${{ github.run_id }}-${{ github.run_attempt }}
         run: |
           win\build.cmd
+      - name: Upload unsigned test bundle
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: doorbell-win-test-bundle
+          path: win/dist/ci-stub-${{ github.run_id }}-${{ github.run_attempt }}/
+          retention-days: 7
 
   android:
     needs: changes

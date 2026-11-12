@@ -32,7 +32,7 @@ class QuickReplyV2Contract(unittest.TestCase):
                 "door: door, callId: callId,",
             "ios-kiosk/src/Screens/DBIncomingScreen.m":
                 "door:_door callID:_callID",
-            "win/DoorbellApp/MainWindow.xaml.cs":
+            "win/DoorbellApp/MainWindow.CallControls.cs":
                 "_incomingCallId, _incomingStageRevision",
         }
         for relative, scoped_call in expectations.items():

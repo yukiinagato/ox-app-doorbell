@@ -399,6 +399,7 @@ namespace DoorbellApp
                     _foregroundGuard.Start();
                 }
                 CoreClient.AdminPrompt = PromptAdminForWrite;
+                StartUiTestHooks();
                 Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch;
                 KioskHooks.KeepDisplayOn();
                 // The first paint does not wait out the coalescing window, but still reads

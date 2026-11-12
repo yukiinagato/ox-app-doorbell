@@ -24,6 +24,8 @@ namespace DoorbellApp
         public static string DataDir { get; private set; }
         public static BootConfig Boot { get; private set; }
         public static bool SafeMode { get; private set; }
+        /// <summary>Automated UI test run on a throwaway data directory (Util/UiTestMode).</summary>
+        public static bool UiTest { get; private set; }
         /// <summary>True when the watchdog service launched this process.</summary>
         public static bool Supervised { get; private set; }
         internal static WatchdogChannel Watchdog { get; private set; }
@@ -47,7 +49,18 @@ namespace DoorbellApp
             SafeMode = e.Args.Contains("--safe-mode");
             int waitForPid = WaitForPidArgument(e.Args);
 
-            DataDir = ResolveDataDir();
+            // A UI test run never opens, creates or migrates the installed data directory.
+            string testDataDir = UiTestMode.ResolveDataDir(e.Args,
+                Environment.GetEnvironmentVariable(UiTestMode.EnvironmentFlag),
+                Path.Combine(Environment.GetFolderPath(
+                    Environment.SpecialFolder.CommonApplicationData), "Doorbell", "data"));
+            if (testDataDir != null)
+            {
+                Directory.CreateDirectory(testDataDir);
+                DataDir = testDataDir;
+                UiTest = true;
+            }
+            else DataDir = ResolveDataDir();
             Boot = BootConfig.Load(Path.Combine(DataDir, "boot.json"));
             L10n.SetLanguage(Boot.UiLang);
             if (!AcquireSingleInstance(waitForPid))
@@ -101,7 +114,8 @@ namespace DoorbellApp
             var w = new MainWindow();
             MainWindow = w;
             w.Show();
-            Dispatcher.BeginInvoke(new Action(CheckWindowsFirewall));
+            // A test run is driven unattended; it must not stop at the firewall consent prompt.
+            if (!UiTest) Dispatcher.BeginInvoke(new Action(CheckWindowsFirewall));
             _uiRunning = true;
             PublishRuntimeHealth();
             _runtimeStatusTimer = new DispatcherTimer(
