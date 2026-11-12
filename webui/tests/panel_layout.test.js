@@ -25,6 +25,10 @@ assert.deepStrictEqual(JSON.parse(JSON.stringify(C.colorRoles(theme))), { surfac
   muted: "#555555", accent: "#0055aa", on_accent: "#ffffff" },
   "overrides win, invalid colors fall back, and nothing else is invented");
 assert.deepStrictEqual(JSON.parse(JSON.stringify(C.colorRoles({ call_button_bg: "url(x)" }))), {});
+// What Core actually publishes: automatic ink is a token, the accent a color.
+assert.deepStrictEqual(JSON.parse(JSON.stringify(C.colorRoles({ auto_background: { color: "#101418" },
+  auto_ink: { status_line: "light", hint: "light" }, ink_override: {}, call_button_bg: "#FFD166", call_button_ink: "dark" }))),
+  { surface: "#101418", on_surface: "#ffffff", accent: "#ffd166", on_accent: "#101418" });
 assert.deepStrictEqual(JSON.parse(JSON.stringify(C.colorRoles(null))), {});
 const props = {};
 const doc = { documentElement: { style: { setProperty: (k, v) => { props[k] = v; } } } };
@@ -32,6 +36,47 @@ assert.deepStrictEqual(Array.from(C.applyColorRoles(theme, doc)).sort(),
   ["accent", "muted", "on_accent", "on_surface", "surface"]);
 assert.strictEqual(props["--on-surface"], "#000000");
 assert.strictEqual(props["--surface"], "#f0f0f0");
+
+// Core's surface and ink belong to the wallpaper: without one only the accent is applied, and a
+// wallpaper that goes away takes its ink with it.
+{
+  const set = {}, attrs = {};
+  const page = { documentElement: { style: { setProperty: (k, v) => { set[k] = v; }, removeProperty: k => { delete set[k]; } },
+    setAttribute: (k, v) => { attrs[k] = v; }, removeAttribute: k => { delete attrs[k]; } },
+    body: { style: {}, className: "monitorPage", attrs: {}, getAttribute(k) { return this.attrs[k] || null; },
+      setAttribute(k, v) { this.attrs[k] = v; } } };
+  const hash = "ab".repeat(32);
+  assert.strictEqual(C.wallpaper(theme), null);
+  assert.strictEqual(C.wallpaper({ bg_image: "../etc/passwd" }), null, "only an asset hash is ever fetched");
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(C.wallpaper({ bg_image: hash, backdrop: { enabled: true, color: "#102030", opacity: 40 } }))),
+    { url: "/asset/" + hash, scrim: "rgba(16,32,48,0.4)", color: "#102030", opacity: 0.4 });
+  // Ink is chosen for what is actually shown: a light wallpaper under Core's default 62% black
+  // scrim is dark, so text is light even though Core's bare-wallpaper ink says dark.
+  const bright = { bg_image: hash, auto_background: { color: "#4D8556" }, auto_ink: { status_line: "dark", hint: "dark" },
+    ink_override: {}, backdrop: { enabled: true, color: "#000000", opacity: 62 } };
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(C.scrimmedRoles(bright))), { surface: "#1d3321", on_surface: "#ffffff" });
+  assert.strictEqual(C.scrimmedRoles(Object.assign({}, bright, { backdrop: { enabled: false } })).on_surface, "#101418");
+  assert.strictEqual(C.scrimmedRoles(Object.assign({}, bright, { ink_override: { status_line: "#FFEE00" } })).on_surface, "#ffee00",
+    "an administrator's ink still wins");
+  assert.strictEqual(C.wallpaper({ bg_image: hash, backdrop: { enabled: false, opacity: 80 } }).scrim, "rgba(0,0,0,0)");
+  assert.strictEqual(C.wallpaper({ bg_image: hash }).scrim, "rgba(0,0,0,0.62)", "Core's default scrim");
+  C.applyHomeTheme(theme, page);
+  assert.deepStrictEqual(Object.keys(set).sort(), ["--accent", "--on-accent"]);
+  assert.strictEqual(page.body.style.backgroundImage, "");
+  assert.strictEqual(page.body.className, "monitorPage");
+  C.applyHomeTheme(Object.assign({ bg_image: hash }, theme), page);
+  assert.strictEqual(set["--surface"], "#5b5b5b", "the surface role is the wallpaper color under the scrim");
+  assert.strictEqual(set["--on-surface"], "#000000");
+  assert.strictEqual(attrs["data-core-roles"], "1");
+  assert.strictEqual(page.body.style.backgroundImage,
+    "linear-gradient(rgba(0,0,0,0.62),rgba(0,0,0,0.62)), url(/asset/" + hash + ")");
+  assert.strictEqual(page.body.className, "monitorPage has-wallpaper");
+  C.applyHomeTheme(theme, page);
+  assert.deepStrictEqual(Object.keys(set).sort(), ["--accent", "--on-accent"]);
+  assert.strictEqual("data-core-roles" in attrs, false);
+  assert.strictEqual(page.body.className, "monitorPage");
+  assert.deepStrictEqual(Array.from(C.applyColorRoles(theme, page, { ink: false })).sort(), ["accent", "on_accent"]);
+}
 
 assert.strictEqual(C.doorTileState({ calling: true, call_state: "ringing" }), "ringing");
 assert.strictEqual(C.doorTileState({ call_state: "purpose_pending" }), "ringing");
@@ -163,6 +208,13 @@ assert(/body \.dbSosTrigger \{ background:transparent;/.test(css) && !/dbSosHint
   assert(rt.includes('trigger.setAttribute("data-semantic-id", "sos.trigger")') && rt.includes("if (confirmCancel.focus)"),
     "the compact control keeps its semantic id and Cancel takes the default focus");
 }
+
+for (const page of [door, monitor])
+  assert(page.includes("C.applyHomeTheme(state.display.theme)") && page.includes("C.applyAppearance(state.display)"),
+    "home surfaces follow Core's appearance and draw its wallpaper");
+assert(call.includes("applyColorRoles(st.display.theme, document, { ink: false })"),
+  "the call screen takes Core's accent only");
+assert(call.includes("unlock.show_button === true &&\n    unlock.permitted !== false"), "Unlock follows Core's availability");
 
 // Appearance: Core's fixed appearance wins; follow_system leaves it to the system setting.
 assert.strictEqual(C.appearanceTheme({ appearance: { effective: "dark", follow_system: false } }), "dark");

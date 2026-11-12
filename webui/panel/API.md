@@ -68,6 +68,25 @@ This is the polling state endpoint:
   explicit result from `POST /api/panel/recovery`. It is not a new ring request.
 - `emergency` is authoritative when present. Only rolling-upgrade clients may reconstruct missing
   emergency state from recent `emergency` and `emergency_cancel` events.
+- `emergency.trigger.countdown_s` is `emergency.trigger.countdown_s` from configuration (whole
+  seconds 0..10, default 3). After the SOS confirmation the page runs that cancellable countdown
+  and starts the SOS operation only at zero; 0 sends immediately. A page that does not receive
+  the field uses 3.
+- `doors[].online` is true while the station serving the door is this node or a mesh peer that
+  is not dead; a door with no station is `false`.
+- `doors[].unlock` is `{configured, show_button, permitted}`: whether an unlock action exists,
+  whether the control is shown (the administrator's `doors.<id>.unlock.show_button`, otherwise
+  shown exactly when an action exists), and whether this panel's grant allows `door.open`. The
+  command itself is never published. `POST /api/doors/<id>/open` still enforces the grant.
+- `display` is the contract native shells read from `status.display`: `appearance`
+  (`configured`, `effective` light or dark, `follow_system`, `schedule`), brightness and
+  screensaver fields, and `theme` with `bg_color`, `bg_image` (an asset SHA-256 or null),
+  `auto_background`, `auto_ink` and `call_button_ink` (the tokens `light` or `dark`),
+  `ink_override`, `call_button_bg`, `backdrop` (`enabled`, `color`, `opacity` 0..100) and
+  `glass`. The node-local `bg_image_path` is omitted; a browser fetches the wallpaper from
+  `GET /asset/<bg_image>`. The pages follow `appearance` unless `follow_system` is true, use
+  `call_button_bg` as the accent, and draw the wallpaper under the backdrop scrim on the visitor
+  and dashboard pages only.
 - `active_page` is an optional hint: `door`, `monitor`, or `call`. Replicated active SOS takes
   precedence while `web_active_page_alerts` is enabled; a positive matching `device_alert` or Push
   can also take precedence when it is disabled. Ignore unknown values.

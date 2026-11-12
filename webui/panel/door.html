@@ -563,7 +563,7 @@
       }
     }
     if (state.display) C.applyAppearance(state.display);
-    if (state.display && state.display.theme) C.applyColorRoles(state.display.theme);
+    if (state.display && state.display.theme) C.applyHomeTheme(state.display.theme);
     var pending = currentCall && !currentCall.preflight && !currentCall.inCall && !currentCall.terminal;
     $("callingView").className = pending ? "pending" : "";
     DoorbellPanelRuntime.applySemanticUi(state, { page: "door" });

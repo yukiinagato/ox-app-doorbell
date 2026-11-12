@@ -3425,6 +3425,43 @@ struct Node::Impl {
     return out;
   }
 
+  // What a web panel may know about a door's unlock control: whether an action exists, whether
+  // the control is shown, and whether this panel's grant allows it. The command itself stays in
+  // configuration.
+  json::Doc panelDoorUnlockDoc(const std::string& door, bool permitted) {
+    auto full = doorUnlockDoc(door);
+    auto out = json::obj();
+    json::setBool(out.get(), "configured", json::getBool(full.get(), "configured", false));
+    json::setBool(out.get(), "show_button", json::getBool(full.get(), "show_button", false));
+    json::setBool(out.get(), "permitted", permitted);
+    return out;
+  }
+
+  // True while the station that serves a door is this node or a mesh peer that is not dead.
+  bool doorStationOnline(const std::string& station) {
+    if (station.empty()) return false;
+    if (station == node_id) return true;
+    if (!mesh) return false;
+    for (const auto& peer : mesh->peers())
+      if (peer.id == station) return peer.status != "dead";
+    return false;
+  }
+
+  // The display contract native shells read from status.display, without this node's local
+  // file path: a browser fetches the wallpaper by hash from /asset/<sha256>.
+  json::Doc panelDisplayDoc() {
+    auto display = displayDoc(displayState());
+    if (cJSON* theme = json::get(display.get(), "theme"))
+      cJSON_DeleteItemFromObject(theme, "bg_image_path");
+    return display;
+  }
+
+  // emergency.trigger.countdown_s as the shells use it: whole seconds 0..10, default 3.
+  int64_t emergencyCountdownSeconds() {
+    const cJSON* value = cfgAt("emergency.trigger.countdown_s");
+    return wholeNumberInRange(value, 0, 10) ? static_cast<int64_t>(value->valuedouble) : 3;
+  }
+
   // Trigger the configured unlock action for one door. Returns false when nothing is configured,
   // so the caller can explain instead of reporting a success that did nothing.
   bool openDoorOnLoop(const std::string& door_arg) {
@@ -12226,6 +12263,9 @@ struct Node::Impl {
 
 
         std::string station = doorStation(it->string);
+        json::setBool(e, "online", doorStationOnline(station));
+        json::setItem(e, "unlock", panelDoorUnlockDoc(
+            it->string, panelRequestAllowed(req, it->string, "door.open")));
         if (!station.empty()) {
           json::set(e, "source_node_id", station);
           json::setItem(e, "playback_profile", playbackProfileDoc(node_id, station));
@@ -12266,6 +12306,8 @@ struct Node::Impl {
       cJSON* emergency = json::addObj(o.get(), "emergency");
       json::setBool(emergency, "active", emergency_active);
       json::set(emergency, "hlc", emergency_hlc);
+      json::set(json::addObj(emergency, "trigger"), "countdown_s", emergencyCountdownSeconds());
+      json::setItem(o.get(), "display", panelDisplayDoc());
       json::setBool(emergency, "web_active_page_alerts",
                     json::getBool(json::get(cfg.get(), "emergency"),
                                   "web_active_page_alerts", true));

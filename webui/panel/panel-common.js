@@ -127,6 +127,12 @@
     return /^#[0-9a-fA-F]{6}$/.test(String(value || "")) ? String(value).toLowerCase() : "";
   }
 
+  // Core publishes automatic ink as a token ("light" or "dark"); an administrator's override is
+  // a color.
+  function inkColor(value) {
+    return value === "light" ? "#ffffff" : value === "dark" ? "#101418" : hexColor(value);
+  }
+
   // Semantic color roles from Core's theme regions (display.theme). Only validated colors are
   // returned; a role Core does not provide keeps the page default. Per-element semantic UI
   // overrides are applied separately and still win.
@@ -136,28 +142,104 @@
         override = theme.ink_override || {};
     var surface = hexColor(bg && bg.color);
     if (surface) roles.surface = surface;
-    var onSurface = hexColor(override.status_line) || hexColor(ink.status_line);
+    var onSurface = inkColor(override.status_line) || inkColor(ink.status_line);
     if (onSurface) roles.on_surface = onSurface;
+    // An explicit hint color becomes the muted role; an ink token leaves it to the stylesheet,
+    // which derives muted text from the surface and ink.
     var muted = hexColor(override.hint) || hexColor(ink.hint);
     if (muted) roles.muted = muted;
     var accent = hexColor(theme.call_button_bg);
     if (accent) roles.accent = accent;
-    var onAccent = hexColor(theme.call_button_ink);
+    var onAccent = inkColor(theme.call_button_ink);
     if (onAccent) roles.on_accent = onAccent;
     return roles;
   }
 
-  function applyColorRoles(theme, doc) {
+  // options.ink === false keeps the system surface and text colors and applies the accent only:
+  // Core's surface and ink belong to the wallpaper and are used on the home surfaces that draw it.
+  var INK_ROLES = { surface: true, on_surface: true, muted: true };
+  function applyColorRoles(theme, doc, options) {
     doc = doc || root.document;
     var el = doc && doc.documentElement, roles = colorRoles(theme), applied = [];
+    var ink = !options || options.ink !== false;
     if (!el || !el.style || !el.style.setProperty) return applied;
     for (var name in roles) if (Object.prototype.hasOwnProperty.call(roles, name)) {
+      if (!ink && INK_ROLES[name]) continue;
       el.style.setProperty("--" + name.replace(/_/g, "-"), roles[name]);
       applied.push(name);
     }
+    if (!ink && el.style.removeProperty)
+      for (var dropped in INK_ROLES) el.style.removeProperty("--" + dropped.replace(/_/g, "-"));
     // Secondary surfaces are then derived from Core's surface and ink (panel.css).
-    if (el.setAttribute && roles.surface && roles.on_surface) el.setAttribute("data-core-roles", "1");
+    if (el.setAttribute) {
+      if (ink && roles.surface && roles.on_surface) el.setAttribute("data-core-roles", "1");
+      else if (el.removeAttribute) el.removeAttribute("data-core-roles");
+    }
     return applied;
+  }
+
+  // The wallpaper of a home surface: display.theme.bg_image (an asset hash served at
+  // /asset/<sha256>) under Core's backdrop scrim. Returns null when there is none to draw.
+  function wallpaper(theme) {
+    theme = theme && typeof theme === "object" ? theme : {};
+    var hash = String(theme.bg_image || "");
+    if (!/^[0-9a-f]{64}$/.test(hash)) return null;
+    var backdrop = theme.backdrop && typeof theme.backdrop === "object" ? theme.backdrop : {};
+    var color = hexColor(backdrop.color) || "#000000", opacity = Number(backdrop.opacity);
+    if (!(opacity >= 0 && opacity <= 100)) opacity = 62;
+    if (backdrop.enabled === false) opacity = 0;
+    var scrim = "rgba(" + parseInt(color.substr(1, 2), 16) + "," + parseInt(color.substr(3, 2), 16) + "," +
+      parseInt(color.substr(5, 2), 16) + "," + (Math.round(opacity) / 100) + ")";
+    return { url: "/asset/" + hash, scrim: scrim, color: color, opacity: Math.round(opacity) / 100 };
+  }
+
+  function channel(hex, at) { return parseInt(hex.substr(at, 2), 16); }
+  function luminance(hex) {
+    var sum = 0, weights = [0.2126, 0.7152, 0.0722];
+    for (var i = 0; i < 3; i++) {
+      var c = channel(hex, 1 + i * 2) / 255;
+      sum += weights[i] * (c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+    }
+    return sum;
+  }
+  // What the page actually shows behind its text: Core's sampled wallpaper color under the
+  // backdrop scrim, and the ink that reads on it. Core's automatic ink is chosen for the bare
+  // wallpaper, so under a scrim it is re-derived the same way (dark ink from luminance 0.1791 up);
+  // an administrator's explicit ink color still wins.
+  function scrimmedRoles(theme) {
+    var paper = wallpaper(theme), roles = colorRoles(theme);
+    if (!paper || !roles.surface) return roles;
+    var mixed = "#";
+    for (var i = 0; i < 3; i++) {
+      var value = Math.round(channel(roles.surface, 1 + i * 2) * (1 - paper.opacity) +
+                             channel(paper.color, 1 + i * 2) * paper.opacity);
+      mixed += (value < 16 ? "0" : "") + value.toString(16);
+    }
+    roles.surface = mixed;
+    var override = (theme.ink_override && hexColor(theme.ink_override.status_line)) || "";
+    roles.on_surface = override || (luminance(mixed) >= 0.1791 ? "#101418" : "#ffffff");
+    return roles;
+  }
+
+  // Draws (or removes) the wallpaper behind a home page and applies Core's colors to match:
+  // surface and ink with a wallpaper, the accent alone without one.
+  function applyHomeTheme(theme, doc) {
+    doc = doc || root.document;
+    var body = doc && doc.body, paper = wallpaper(theme), root_el = doc && doc.documentElement;
+    applyColorRoles(theme, doc, { ink: !!paper });
+    if (paper && root_el && root_el.style && root_el.style.setProperty) {
+      var shown = scrimmedRoles(theme);
+      if (shown.surface) root_el.style.setProperty("--surface", shown.surface);
+      if (shown.on_surface) root_el.style.setProperty("--on-surface", shown.on_surface);
+    }
+    if (!body || !body.style) return paper;
+    var image = paper ? "linear-gradient(" + paper.scrim + "," + paper.scrim + "), url(" + paper.url + ")" : "";
+    if (body.getAttribute && body.getAttribute("data-wallpaper") === image) return paper;
+    body.style.backgroundImage = image;
+    if (body.setAttribute) body.setAttribute("data-wallpaper", image);
+    if (body.className !== undefined)
+      body.className = String(body.className).replace(/(^|\s)has-wallpaper(?!\S)/g, "") + (paper ? " has-wallpaper" : "");
+    return paper;
   }
 
   // "light" or "dark" when Core fixes the appearance (display.appearance with follow_system
@@ -525,6 +607,7 @@
            doorTileState: doorTileState, groupByDay: groupByDay, tileGrid: tileGrid,
            videoPlaceholder: videoPlaceholder, mediaHasFrame: mediaHasFrame,
            appearanceTheme: appearanceTheme, applyAppearance: applyAppearance,
+           wallpaper: wallpaper, applyHomeTheme: applyHomeTheme, scrimmedRoles: scrimmedRoles,
            icon: icon, iconMarkup: iconMarkup, setLabel: setLabel,
            ZOOM_MAX: ZOOM_MAX, clampZoom: clampZoom, zoomAt: zoomAt, panBy: panBy,
            toggleZoom: toggleZoom, attachZoom: attachZoom };

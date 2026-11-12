@@ -99,6 +99,13 @@ assert.strictEqual(R.sosSlideProgress(10, 100, 0), 0, "an unmeasured track never
 assert.strictEqual(R.sosSlideArmed(0.89), false);
 assert.strictEqual(R.sosSlideArmed(0.9), true);
 assert.strictEqual(R.sosSlideArmed(NaN), false);
+assert.strictEqual(R.sosCountdownSeconds({ emergency: { trigger: { countdown_s: 0 } } }), 0);
+assert.strictEqual(R.sosCountdownSeconds({ emergency: { trigger: { countdown_s: 10 } } }), 10);
+assert.strictEqual(R.sosCountdownSeconds({ emergency: { trigger: { countdown_s: 11 } } }), 3);
+assert.strictEqual(R.sosCountdownSeconds({ emergency: { trigger: { countdown_s: 2.5 } } }), 3);
+assert.strictEqual(R.sosCountdownSeconds({ emergency: { trigger: { countdown_s: "0" } } }), 3);
+assert.strictEqual(R.sosCountdownSeconds({ emergency: { active: false } }), 3, "an older Core keeps the default");
+assert.strictEqual(R.sosCountdownSeconds(null), 3);
 
 // A failed semantic-UI report is retried with backoff; only a 2xx acknowledgement is deduplicated.
 let uiReportSends = 0, uiReportRetry = null;

@@ -1009,3 +1009,116 @@ TEST_CASE("panel API: call-frame / peer-frame.jpg / call-info web call contract"
 
   node.stop();
 }
+
+TEST_CASE("panel state carries display, door liveness, unlock availability and the SOS countdown") {
+  std::mt19937 rng(static_cast<uint32_t>(::getpid()) ^ 0x7e11u);
+  int mesh_port = panelFreePort(rng);
+  int http_port = panelFreePort(rng);
+  REQUIRE(mesh_port > 0);
+  REQUIRE(http_port > 0);
+
+  NodeOptions o;
+  o.data_dir = ":memory:";
+  o.name = "panel-parity";
+  o.role = "door_station";
+  o.door = "d_front";
+  o.listen_addr = "127.0.0.1:" + std::to_string(mesh_port);
+  o.psk.fill(0x77);
+  o.enable_beacon = false;
+  o.http_port = http_port;
+  Node node(o);
+  installPanelSecret(node);
+  REQUIRE(node.start());
+  node.setConfigKey("doors.d_front", "{\"label\":{\"ja\":\"front\"}}");
+  // A door whose station is not this node and is not on the mesh.
+  node.setConfigKey("doors.d_gone", "{\"label\":{\"ja\":\"gone\"}}");
+  node.setConfigKey("devices.ffffffffffffffffffffffffffffffff.door", "\"d_gone\"");
+  node.setConfigKey("panel.token_refs", "[\"secret:panel.test\"]");
+  panel_auth = kPanelCredential;
+  const std::string url = std::string("/api/panel/state?k=") + kPanelCredential;
+
+  auto door_named = [](const cJSON* state, const char* id) -> const cJSON* {
+    const cJSON* door = nullptr;
+    cJSON_ArrayForEach(door, json::get(state, "doors")) {
+      if (json::getString(door, "id") == id) return door;
+    }
+    return nullptr;
+  };
+
+  const std::string raw = panelReq(http_port, "GET", url);
+  auto state = panelBodyJson(raw);
+  REQUIRE(state);
+
+  // Defaults: the same display contract as status.display, minus this node's file path.
+  const cJSON* display = json::get(state.get(), "display");
+  REQUIRE(cJSON_IsObject(display));
+  const cJSON* appearance = json::get(display, "appearance");
+  REQUIRE(cJSON_IsObject(appearance));
+  CHECK(json::getString(appearance, "configured") == "auto_system");
+  CHECK(json::getBool(appearance, "follow_system", false));
+  const std::string effective = json::getString(appearance, "effective");
+  CHECK((effective == "light" || effective == "dark"));
+  const cJSON* theme = json::get(display, "theme");
+  REQUIRE(cJSON_IsObject(theme));
+  CHECK(json::getString(theme, "call_button_bg").size() == 7);
+  const std::string button_ink = json::getString(theme, "call_button_ink");
+  CHECK((button_ink == "light" || button_ink == "dark"));
+  CHECK(cJSON_IsObject(json::get(theme, "auto_background")));
+  CHECK(cJSON_IsObject(json::get(theme, "backdrop")));
+  CHECK(cJSON_IsNull(json::get(theme, "bg_image")));
+  CHECK(json::get(theme, "bg_image_path") == nullptr);
+  CHECK(raw.find("bg_image_path") == std::string::npos);
+
+  // The local station is alive; a station nobody has heard from is not.
+  const cJSON* front = door_named(state.get(), "d_front");
+  REQUIRE(front);
+  CHECK(json::getBool(front, "online", false));
+  const cJSON* gone = door_named(state.get(), "d_gone");
+  REQUIRE(gone);
+  CHECK(cJSON_IsFalse(json::get(gone, "online")));
+
+  // No unlock action yet: nothing to show, and the command is never published.
+  const cJSON* unlock = json::get(front, "unlock");
+  REQUIRE(cJSON_IsObject(unlock));
+  CHECK(cJSON_IsFalse(json::get(unlock, "configured")));
+  CHECK(cJSON_IsFalse(json::get(unlock, "show_button")));
+  CHECK(cJSON_IsBool(json::get(unlock, "permitted")));
+  CHECK(json::get(unlock, "command") == nullptr);
+
+  const cJSON* trigger = json::get(json::get(state.get(), "emergency"), "trigger");
+  REQUIRE(cJSON_IsObject(trigger));
+  CHECK(json::getInt(trigger, "countdown_s", -1) == 3);
+
+  // Configuration changes show up on the next poll.
+  node.setConfigKey("doors.d_front.unlock", "{\"command\":\"front_lock\"}");
+  node.setConfigKey("emergency.trigger.countdown_s", "0");
+  node.setConfigKey("display.appearance", "\"dark\"");
+  node.setConfigKey("display.theme.call_button_bg", "\"#0055AA\"");
+  const std::string changed_raw = panelReq(http_port, "GET", url);
+  auto changed = panelBodyJson(changed_raw);
+  REQUIRE(changed);
+  const cJSON* changed_unlock = json::get(door_named(changed.get(), "d_front"), "unlock");
+  CHECK(cJSON_IsTrue(json::get(changed_unlock, "configured")));
+  CHECK(cJSON_IsTrue(json::get(changed_unlock, "show_button")));
+  CHECK(changed_raw.find("front_lock") == std::string::npos);
+  CHECK(json::getInt(json::get(json::get(changed.get(), "emergency"), "trigger"), "countdown_s", -1) == 0);
+  const cJSON* dark = json::get(json::get(changed.get(), "display"), "appearance");
+  CHECK(json::getString(dark, "effective") == "dark");
+  CHECK(cJSON_IsFalse(json::get(dark, "follow_system")));
+  CHECK(json::getString(json::get(json::get(changed.get(), "display"), "theme"), "call_button_bg") ==
+        "#0055AA");
+
+  // The administrator can hide the control on a door that has an action.
+  node.setConfigKey("doors.d_front.unlock", "{\"command\":\"front_lock\",\"show_button\":false}");
+  auto hidden = panelBodyJson(panelReq(http_port, "GET", url));
+  REQUIRE(hidden);
+  const cJSON* hidden_unlock = json::get(door_named(hidden.get(), "d_front"), "unlock");
+  CHECK(cJSON_IsTrue(json::get(hidden_unlock, "configured")));
+  CHECK(cJSON_IsFalse(json::get(hidden_unlock, "show_button")));
+
+  // The endpoint's own authorisation is unchanged.
+  panel_auth.clear();
+  CHECK(panelReq(http_port, "GET", "/api/panel/state").find("403") != std::string::npos);
+
+  node.stop();
+}

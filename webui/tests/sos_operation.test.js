@@ -80,7 +80,15 @@ function fixture(page, storage = new Map()) {
   return { overlay, requests, timers, advance, events, notices, document,
     // The two deliberate steps: tap the compact control (opens the dialog), then confirm there.
     open() { overlay.trigger().fire("click", { detail: 1 }); return overlay.confirm.isOpen(); },
-    begin() { this.open(); assert.strictEqual(overlay.confirm.send(), true); },
+    // Confirming starts the cancellable countdown (3 s unless Core says otherwise); the
+    // operation starts only when it reaches zero.
+    begin() {
+      this.open(); assert.strictEqual(overlay.confirm.send(), true);
+      const seconds = overlay.countdown.seconds();
+      assert.strictEqual(overlay.countdown.running(), seconds > 0);
+      for (let i = 0; i < seconds; i++) { assert.strictEqual(requests.length, 0, "nothing is sent before zero"); advance(1000); }
+      assert.strictEqual(overlay.countdown.running(), false);
+    },
     find(cls) { return document.getElementsByClassName(cls)[0]; },
     session() { assert.strictEqual(requests.at(-1).url, "/api/panel/session"); requests.at(-1).respond(200, { ok: true, csrf_token: csrf }); },
     prepare() {
@@ -212,6 +220,8 @@ test("assistive button activation shares one intent, and authoritative clear per
   const f = fixture(); f.overlay.trigger().fire("click", { detail: 0 });
   assert.strictEqual(f.requests.length, 0, "activating the SOS control only opens the confirmation");
   f.find("dbSosSend").fire("click", { detail: 0 });
+  assert.strictEqual(f.requests.length, 0, "the countdown runs first");
+  f.advance(1000); f.advance(1000); f.advance(1000);
   assert.strictEqual(f.requests.length, 1); f.session(); f.prepare();
   f.requests.at(-1).respond(202, record("dispatched"));
   f.overlay.update({ emergency: { active: true } });
@@ -219,6 +229,7 @@ test("assistive button activation shares one intent, and authoritative clear per
   f.overlay.update({ emergency: { active: false } });
   assert.strictEqual(f.overlay.operationState().phase, "idle");
   f.overlay.trigger().fire("click", { detail: 0 }); f.find("dbSosSend").fire("click", { detail: 0 });
+  f.advance(1000); f.advance(1000); f.advance(1000);
   assert.strictEqual(f.requests.at(-1).url, "/api/operations/prepare");
 });
 test("SOS takes a tap and then a full slide; a touch, a hold or an early release sends nothing", () => {
@@ -246,7 +257,9 @@ test("SOS takes a tap and then a full slide; a touch, a hold or an early release
   assert.strictEqual(thumb.style.left, "240px");
   track.fire("touchend", { touches: [], changedTouches: [{ clientX: 260 }] });
   assert.strictEqual(confirm.isOpen(), false);
-  assert.strictEqual(f.requests.length, 1, "a slide to the end sends once");
+  assert.strictEqual(f.overlay.countdown.running(), true, "a slide to the end starts the countdown");
+  f.advance(1000); f.advance(1000); f.advance(1000);
+  assert.strictEqual(f.requests.length, 1, "the countdown sends once at zero");
   assert.strictEqual(f.requests[0].url, "/api/panel/session");
 });
 test("the SOS confirmation closes by itself after 10 s, on Cancel, and when an SOS becomes active", () => {
@@ -275,6 +288,39 @@ test("page reload recovers the persisted handle by query without another SOS", (
   assert.strictEqual(restored.requests.at(-1).method, "GET");
   assert(restored.requests.at(-1).url.includes(id));
   assert.strictEqual(restored.requests.filter(r => r.url === "/api/operations/prepare").length, 0);
+});
+test("the countdown shows one Cancel (sos.cancel), sends only at zero, and follows Core's setting", () => {
+  const f = fixture(), countdown = f.overlay.countdown;
+  f.overlay.update({ emergency: { active: false, trigger: { countdown_s: 5 } } });
+  assert.strictEqual(countdown.seconds(), 5);
+  f.open(); f.overlay.confirm.send();
+  const box = f.find("dbSosCountdown"), cancel = f.find("dbSosCountdownCancel");
+  assert.strictEqual(box.style.display, "block");
+  assert.strictEqual(cancel.attributes["data-semantic-id"], "sos.cancel");
+  assert.strictEqual(box.getElementsByTagName("button").length, 1, "one action: Cancel");
+  assert.strictEqual(f.open(), false, "the confirmation cannot reopen during the countdown");
+  f.advance(1000); f.advance(1000);
+  assert.strictEqual(countdown.remaining(), 3);
+  cancel.fire("click");
+  assert.strictEqual(countdown.running(), false);
+  assert.strictEqual(box.style.display, "none");
+  f.advance(10000);
+  assert.strictEqual(f.requests.length, 0, "a cancelled countdown never sends");
+  assert.strictEqual(f.timers.size, 0);
+  f.open(); f.overlay.confirm.send(); f.advance(1000);
+  f.overlay.update({ emergency: { active: true, trigger: { countdown_s: 5 } } });
+  assert.strictEqual(countdown.running(), false, "an SOS raised elsewhere ends the countdown");
+  f.advance(10000);
+  assert.strictEqual(f.requests.length, 0);
+  const now = fixture();
+  now.overlay.update({ emergency: { active: false, trigger: { countdown_s: 0 } } });
+  now.open(); now.overlay.confirm.send();
+  assert.strictEqual(now.overlay.countdown.running(), false);
+  assert.strictEqual(now.requests.length, 1, "a countdown of 0 sends immediately");
+  const closing = fixture();
+  closing.open(); closing.overlay.confirm.send(); closing.events.pagehide();
+  closing.advance(5000);
+  assert.strictEqual(closing.requests.length, 0, "leaving the page cancels the countdown");
 });
 let failures = 0;
 for (const [name, run] of cases) { try { run(); console.log(name + ": PASS"); } catch (error) { failures++; console.error(name + ": FAIL\n" + error.stack); } }

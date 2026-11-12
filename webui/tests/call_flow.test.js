@@ -56,4 +56,17 @@ assert.strictEqual(projected.call_id, "call-a");
 assert.strictEqual(C.projectDoor({ id: "front", recovery_required: "true" }, {}).recovery_required,
                    false, "non-boolean recovery flags must not claim a recovery lifecycle");
 
+// Unlock availability and station liveness travel with panel state.
+{
+  const F = require("../panel/call-flow.js");
+  const shown = F.projectDoor({ id: "d", online: true, unlock: { configured: true, show_button: true, permitted: true } }, {});
+  assert.deepStrictEqual(shown.unlock, { configured: true, show_button: true, permitted: true });
+  assert.strictEqual(shown.online, true);
+  assert.strictEqual(F.projectDoor({ id: "d", unlock: { configured: true, show_button: true, permitted: false } }, {}).unlock.permitted, false);
+  assert.strictEqual(F.projectDoor({ id: "d", unlock: { show_button: "yes" } }, {}).unlock.show_button, false);
+  assert.strictEqual(F.projectDoor({ id: "d" }, {}).unlock, undefined, "an older Core shows no Unlock");
+  assert.strictEqual(F.projectDoor({ id: "d", online: false }, { online: true }).online, false);
+  assert.strictEqual(F.projectDoor({ id: "d", online: true }, { online: false }).online, false);
+  assert.strictEqual(F.projectDoor({ id: "d" }, {}).online, true);
+}
 console.log("call flow tests: ok");

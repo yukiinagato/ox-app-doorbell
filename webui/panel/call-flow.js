@@ -71,7 +71,7 @@
     stateDoor = stateDoor || {}; callInfoDoor = callInfoDoor || {};
     var result = { id: stateDoor.id || "", label: stateDoor.label || "",
       extension: callInfoDoor.extension || "", station: callInfoDoor.station || "",
-      online: callInfoDoor.online !== false,
+      online: callInfoDoor.online !== false && stateDoor.online !== false,
       source_node_id: callInfoDoor.source_node_id || stateDoor.source_node_id || "",
       stream_mjpeg: callInfoDoor.stream_mjpeg || stateDoor.stream_mjpeg || "",
       stream_mp4: callInfoDoor.stream_mp4 || stateDoor.stream_mp4 || "",
@@ -83,6 +83,12 @@
       recovery_required: stateDoor.recovery_required === true };
     if (stateDoor.conversation_supported !== undefined) result.conversation_supported = stateDoor.conversation_supported === true;
     if (stateDoor.conversation) result.conversation = stateDoor.conversation;
+    // Unlock availability comes with panel state: shown only when Core says the control is
+    // visible for this door and this panel's grant permits it.
+    var unlock = stateDoor.unlock || callInfoDoor.unlock;
+    if (unlock && typeof unlock === "object")
+      result.unlock = { configured: unlock.configured === true, show_button: unlock.show_button === true,
+                        permitted: unlock.permitted !== false };
     return result;
   }
   return { flowMode: flowMode, form: form, pressForm: pressForm, cancelForm: cancelForm,

@@ -391,6 +391,24 @@ SIP 通話確立時の `{"t":"state","state":"in_call"}` に相手解決結果�
 
 ### GET /api/panel/state の追加欄
 
+- `emergency.trigger.countdown_s` — 設定 `emergency.trigger.countdown_s` (0〜10 の整数秒、既定 3)。
+  SOS の確認後、ページはこの秒数の取り消し可能なカウントダウンを行い、0 になった時点で初めて
+  SOS 操作を開始する。0 の場合は即時送信。欄が無い場合は 3 として扱う。
+- `doors[].online` — その door を担当する門口機が自ノード、または dead でない mesh ピアの間 true。
+  門口機が無い door は `false`。
+- `doors[].unlock` — `{configured, show_button, permitted}`。解錠アクションの有無、ボタンを表示するか
+  (管理者の `doors.<id>.unlock.show_button`、未設定ならアクションがある場合のみ表示)、このパネルの
+  権限で `door.open` が許可されるか。コマンド名は公開しない。`POST /api/doors/<id>/open` は従来どおり
+  権限を検査する。
+- `display` — ネイティブシェルが `status.display` から読むものと同じ契約。`appearance`
+  (`configured`、`effective` は light / dark、`follow_system`、`schedule`)、輝度・スクリーンセーバー欄、
+  `theme` (`bg_color`、`bg_image` はアセットの SHA-256 または null、`auto_background`、`auto_ink` と
+  `call_button_ink` は `light` / `dark` のトークン、`ink_override`、`call_button_bg`、`backdrop`
+  (`enabled`、`color`、`opacity` 0〜100)、`glass`)。ノード内のパス `bg_image_path` は含めない。
+  ブラウザは壁紙を `GET /asset/<bg_image>` から取得する。ページは `follow_system` が true でない限り
+  `appearance` に従い、`call_button_bg` をアクセント色に使い、壁紙は門口ページとダッシュボードにのみ
+  backdrop のスクリムを重ねて描画する。
+
 - `doors[].visitor_lang` — その door で訪客が選択中の言語 ("en" 等)。主言語 (ja) の間は
   キー自体が無い。門口ページは言語バーの現在値に、monitor は言語バッジに使う。
 - `events[]` の press 行に `purpose` (visit_purposes のキー) と `visitor_lang` (該当時のみ)。

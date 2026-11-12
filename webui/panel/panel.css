@@ -9,6 +9,8 @@
  * palette, the one verified on that hardware), 2009 flexbox (-webkit-box) or inline-block for
  * layout, and -webkit- prefixes. Modern layout lives inside the @supports blocks.
  *
+ * Core's accent is a fill color (--accent with --on-accent); links, selected tabs and outlines use
+ * --accent-text, which stays readable on the page surface whatever accent Core picks.
  * Color roles are custom properties. Core's theme overrides them at runtime
  * (DoorbellPanelCommon.applyColorRoles); an administrator's per-element semantic override is an
  * inline style and still wins. html[data-theme] is set when Core fixes the appearance; otherwise
@@ -20,7 +22,7 @@
   --on-surface:#14181d; --muted:#586370; --accent:#0b62d6; --on-accent:#ffffff;
   --positive:#1a7f43; --on-positive:#ffffff; --negative:#b3261e; --on-negative:#ffffff;
   --warning:#ffb454; --on-warning:#2a1a00;
-  --positive-text:#17703b; --negative-text:#b3261e; --focus:#0b57d0; --scrim:rgba(15,20,25,.45);
+  --positive-text:#17703b; --negative-text:#b3261e; --accent-text:#0b57d0; --focus:#0b57d0; --scrim:rgba(15,20,25,.45);
   --media:#0b0d10; --shadow:0 1px 2px rgba(15,20,25,.08), 0 4px 16px rgba(15,20,25,.06);
   --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px; --s7:48px;
   --tap:44px; --tap-visitor:72px; --radius:12px; --radius-sheet:20px;
@@ -31,7 +33,7 @@
   :root:not([data-theme="light"]) {
     --surface:#101418; --surface-2:#1a2027; --surface-3:#27313b; --line:#343f4b;
     --on-surface:#e8edf2; --muted:#9aa7b5; --accent:#4da3ff; --on-accent:#04121f;
-    --positive-text:#6fd59a; --negative-text:#ff8e8e; --focus:#ffd166; --scrim:rgba(0,0,0,.6);
+    --positive-text:#6fd59a; --negative-text:#ff8e8e; --accent-text:#6db3ff; --focus:#ffd166; --scrim:rgba(0,0,0,.6);
     --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.3);
   }
 }
@@ -39,7 +41,7 @@
   color-scheme:dark;
   --surface:#101418; --surface-2:#1a2027; --surface-3:#27313b; --line:#343f4b;
   --on-surface:#e8edf2; --muted:#9aa7b5; --accent:#4da3ff; --on-accent:#04121f;
-  --positive-text:#6fd59a; --negative-text:#ff8e8e; --focus:#ffd166; --scrim:rgba(0,0,0,.6);
+  --positive-text:#6fd59a; --negative-text:#ff8e8e; --accent-text:#6db3ff; --focus:#ffd166; --scrim:rgba(0,0,0,.6);
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 6px 20px rgba(0,0,0,.3);
 }
 :root[data-theme="light"] { color-scheme:light; }
@@ -49,6 +51,8 @@
     --surface-2:color-mix(in srgb, var(--surface) 93%, var(--on-surface));
     --surface-3:color-mix(in srgb, var(--surface) 86%, var(--on-surface));
     --line:color-mix(in srgb, var(--surface) 78%, var(--on-surface));
+    --muted:color-mix(in srgb, var(--on-surface) 72%, var(--surface));
+    --negative-text:var(--on-surface); --positive-text:var(--on-surface); --accent-text:var(--on-surface);
   }
 }
 
@@ -125,7 +129,7 @@ button.quiet { background:transparent; color:#9aa7b5; color:var(--muted); }
 .videoPh .phDoor { display:block; font-weight:600; font-size:1.15em; overflow-wrap:anywhere; }
 .videoPh .phText { display:block; color:#9aa7b5; color:var(--muted); font-size:.9em; }
 .videoPh .phSpin { display:none; width:28px; height:28px; margin:0 auto 8px; border-radius:50%;
-                   border:3px solid #343f4b; border:3px solid var(--line); border-top-color:#4da3ff; border-top-color:var(--accent);
+                   border:3px solid #343f4b; border:3px solid var(--line); border-top-color:#4da3ff; border-top-color:var(--accent-text);
                    -webkit-animation:dbSpin 1s linear infinite; animation:dbSpin 1s linear infinite; }
 .videoPh.connecting .phSpin { display:block; }
 @-webkit-keyframes dbSpin { to { -webkit-transform:rotate(360deg); } }
@@ -144,7 +148,7 @@ button.quiet { background:transparent; color:#9aa7b5; color:var(--muted); }
               box-shadow:0 -8px 32px rgba(0,0,0,.3); }
 .sheetHead { display:-webkit-box; -webkit-box-align:center; padding:8px 0; }
 .sheetHead h2 { -webkit-box-flex:1; font-size:18px; font-size:1.125rem; }
-.sheetHead button { background:transparent; border-color:transparent; color:#4da3ff; color:var(--accent); font-weight:600; }
+.sheetHead button { background:transparent; border-color:transparent; color:#4da3ff; color:var(--accent-text); font-weight:600; }
 #replyActions button { display:block; width:100%; margin:8px 0 0; min-height:56px; text-align:left;
                        font-size:18px; font-size:1.125rem; padding:12px 16px; border-radius:12px; }
 @supports (display:grid) {
@@ -180,7 +184,7 @@ body.doorPage .band { max-height:30%; overflow:auto; font-size:18px; font-size:1
                      padding:8px 14px; margin-left:8px; font-size:18px; font-size:1.125rem;
                      background:transparent; }
 .langSwitch button[aria-pressed="true"] { background:#27313b; background:var(--surface-3); border-color:#4da3ff;
-                     border-color:var(--accent); font-weight:bold; }
+                     border-color:var(--accent-text); font-weight:bold; }
 #main { -webkit-box-flex:1; min-height:0; width:100%; text-align:center; padding:12px 16px 16px;
         overflow:auto; -webkit-overflow-scrolling:touch; }
 #hint { font-size:22px; font-size:1.375rem; line-height:1.35; padding:8px 0 12px; }
@@ -265,6 +269,16 @@ body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:aut
   }
 }
 
+/* Home surfaces (visitor, dashboard) draw Core's wallpaper under its backdrop scrim; chrome that
+ * sat on the page surface lets it show through and content stays on cards. */
+body.has-wallpaper { background-size:cover; background-position:center; background-repeat:no-repeat;
+                     background-attachment:fixed; }
+body.has-wallpaper #dashHeader, body.has-wallpaper #visitorActions { background:transparent; }
+@supports (backdrop-filter:blur(8px)) or (-webkit-backdrop-filter:blur(8px)) {
+  body.has-wallpaper #dashHeader, body.has-wallpaper #visitorActions {
+    -webkit-backdrop-filter:blur(16px); backdrop-filter:blur(16px); }
+}
+
 /* ================================================================ Dashboard (monitor.html) */
 body.monitorPage { padding-bottom:84px; }
 #dashHeader { padding:12px 16px; background:#101418; background:var(--surface);
@@ -282,7 +296,7 @@ body.monitorPage { padding-bottom:84px; }
             border-top:1px solid #343f4b; border-top:1px solid var(--line); }
 #dashTabs button[role=tab] { -webkit-box-flex:1; display:block; min-height:56px; margin:0 3px; background:transparent;
             border-color:transparent; color:#9aa7b5; color:var(--muted); font-size:15px; font-size:.9375rem; border-radius:12px; }
-#dashTabs button[aria-selected="true"] { color:#4da3ff; color:var(--accent); font-weight:600; }
+#dashTabs button[aria-selected="true"] { color:#4da3ff; color:var(--accent-text); font-weight:600; }
 #dashBody { padding:16px; }
 #dashBody[data-pane="doors"] #historyPane, #dashBody[data-pane="history"] #doorsPane { display:none; }
 .paneEmpty { color:#9aa7b5; color:var(--muted); padding:24px 8px; text-align:center; }
@@ -296,14 +310,14 @@ body.monitorPage { padding-bottom:84px; }
 .tileFoot .chip { float:right; }
 .tileLast { clear:both; padding-top:4px; font-size:14px; font-size:.875rem; color:#9aa7b5; color:var(--muted); }
 .tileLast:empty { display:none; }
-.snapCard.is-ringing { border-color:#4da3ff; border-color:var(--accent); box-shadow:0 0 0 3px #4da3ff; box-shadow:0 0 0 3px var(--accent); }
+.snapCard.is-ringing { border-color:#4da3ff; border-color:var(--accent-text); box-shadow:0 0 0 3px #4da3ff; box-shadow:0 0 0 3px var(--accent-text); }
 .snapCard.is-offline .tileMedia img, .snapCard.is-offline .tileMedia video { opacity:.4; }
 
 #evCard { padding:8px 16px 12px; background:#1a2027; background:var(--surface-2);
           border:1px solid #343f4b; border:1px solid var(--line); border-radius:12px; }
 #evHead { display:-webkit-box; -webkit-box-align:center; min-height:52px; }
 #evHead h2 { -webkit-box-flex:1; font-size:20px; font-size:1.25rem; }
-#markSeen { display:none; background:transparent; border-color:transparent; color:#4da3ff; color:var(--accent); font-weight:600; padding:10px 8px; }
+#markSeen { display:none; background:transparent; border-color:transparent; color:#4da3ff; color:var(--accent-text); font-weight:600; padding:10px 8px; }
 .hday { font-size:13px; font-size:.8125rem; letter-spacing:.04em; text-transform:uppercase; color:#9aa7b5; color:var(--muted);
         font-weight:600; margin:16px 0 4px; }
 .hday:first-child { margin-top:4px; }
@@ -460,7 +474,7 @@ body.callPage { height:100%; }
 #callHeader { display:flex; align-items:center; gap:8px; padding:8px 16px; min-height:56px; flex:none; }
 #callHeader h1 { flex:1 1 auto; min-width:0; font-size:1.25rem; overflow-wrap:anywhere; }
 #backLink { display:inline-flex; align-items:center; min-height:44px; min-height:var(--tap); padding:0 10px 0 4px; border-radius:10px;
-            color:var(--accent); text-decoration:none; font-weight:600; flex:none; }
+            color:var(--accent-text); text-decoration:none; font-weight:600; flex:none; }
 #backLink .ic { transform:rotate(180deg); margin-right:2px; }
 #notices { flex:none; }
 body.callPage .band { text-align:left; padding:8px 16px; font-size:.9375rem; }
@@ -474,8 +488,8 @@ body.callPage #offlineBand { background:var(--warning); color:var(--on-warning);
 #doorTabs button span { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #doorTabs button .st { font-size:.8125rem; color:var(--muted); }
 #doorTabs button .st:empty { display:none; }
-#doorTabs button.sel { border-color:var(--accent); box-shadow:inset 0 0 0 1px var(--accent); font-weight:600; }
-#doorTabs button.is-ringing .st { color:var(--accent); font-weight:600; }
+#doorTabs button.sel { border-color:var(--accent-text); box-shadow:inset 0 0 0 1px var(--accent-text); font-weight:600; }
+#doorTabs button.is-ringing .st { color:var(--accent-text); font-weight:600; }
 #doorTabs button.is-in_call .st { color:var(--positive-text); font-weight:600; }
 body.callPage main { flex:1 1 auto; min-height:0; overflow:auto; padding:0 16px 12px; }
 #videoBox { border-radius:var(--radius); margin:0 auto;
@@ -535,6 +549,8 @@ body #controls .dbSosTrigger { grid-area:sos; margin:0; align-self:end; }
 
 /* ================================================================ SOS (runtime.js overlay) */
 .dbEmergencyOverlay { background:#8f1010; background:var(--negative); color:#fff; color:var(--on-negative); }
+body .dbSosCountdown { background:#8f1010; background:var(--negative); color:#fff; color:var(--on-negative); }
+body .dbSosCountdown button { background:#fff; background:var(--on-negative); color:#8f1010; color:var(--negative); }
 body .dbSosTrigger { background:transparent; color:#ff8e8e; color:var(--negative-text);
                      border-color:#ff8e8e; border-color:var(--negative-text); }
 .dbSosTrigger .ic { margin-right:.3em; }
@@ -550,6 +566,7 @@ body .dbSosThumb { background:#b3261e; background:var(--negative); color:#fff; c
   .dbEmergencyOverlay h2 { font-size:clamp(2rem, 1rem + 5vw, 4rem) !important; overflow-wrap:anywhere; }
   .dbEmergencyOverlay p { font-size:clamp(1.1rem, .9rem + 1vw, 1.6rem) !important; }
   body .dbSosConfirm { padding-bottom:calc(16px + env(safe-area-inset-bottom)); box-shadow:var(--shadow); }
+  .dbSosCountdown p { font-size:clamp(1.5rem, 1rem + 3vw, 2.75rem) !important; }
   body .dbSosOperation { bottom:calc(118px + env(safe-area-inset-bottom)); right:calc(18px + env(safe-area-inset-right)); }
 }
 

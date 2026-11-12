@@ -594,7 +594,8 @@ function renderSecondaryActions() {
   }
   els.mic.setAttribute("aria-pressed", micMuted ? "true" : "false");
   const unlock = selected && selected.unlock;
-  els.unlock.hidden = !((ringing || session) && unlock && unlock.show_button === true);
+  els.unlock.hidden = !((ringing || session) && unlock && unlock.show_button === true &&
+    unlock.permitted !== false);
   renderPlaceholder();
 }
 
@@ -1295,6 +1296,8 @@ function applyState(st, request) {
   if (!st || typeof st !== "object" || !Array.isArray(st.doors)) throw new Error("invalid state");
   emergencyOverlay.update(st);
   if (st.display) DoorbellPanelCommon.applyAppearance(st.display);
+  // The call screen is not a home surface: it takes Core's accent, not its wallpaper ink.
+  if (st.display && st.display.theme) DoorbellPanelCommon.applyColorRoles(st.display.theme, document, { ink: false });
   latestPanelState = st;
   const refreshed = refreshDoors(st);
   if (conference) conference.update(Object.assign({}, st, { doors: doors }));

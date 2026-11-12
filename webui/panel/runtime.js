@@ -410,6 +410,13 @@
     return isFinite(moved) ? Math.max(0, Math.min(1, moved)) : 0;
   }
   function sosSlideArmed(progress) { return Number(progress) >= SOS_SLIDE_ARM; }
+  // emergency.trigger.countdown_s from panel state: whole seconds 0..10. Anything else, or a
+  // Core that does not publish it yet, falls back to the configured default of 3.
+  function sosCountdownSeconds(state) {
+    var trigger = state && isObj(state.emergency) ? state.emergency.trigger : null;
+    var value = isObj(trigger) ? trigger.countdown_s : undefined;
+    return typeof value === "number" && value >= 0 && value <= 10 && Math.floor(value) === value ? value : 3;
+  }
 
   function orderedHlc(value) {
     value = typeof value === "string" ? value : "";
@@ -807,6 +814,8 @@
     var confirmBox = null, confirmScrim = null, confirmTitle = null, confirmText = null;
     var slideTrack = null, slideThumb = null, slideLabel = null, confirmCancel = null, confirmSend = null;
     var confirmTimer = null, confirmOpen = false, slide = null, confirmReturnFocus = null;
+    var countdownBox = null, countdownText = null, countdownCancel = null;
+    var countdownSeconds = 3, countdownLeft = 0, countdownTimer = null;
     var current = { known: false, active: false, source: "none" };
     var expiryTimer = null, expiryKey = "", expired = {}, alarm = null;
     var operationBox = null, operationText = null, operationReason = null, operationHelp = null;
@@ -847,6 +856,12 @@
         "font-weight:bold;}" +
         "@media (min-width:900px){.dbSosConfirm{left:50%;right:auto;bottom:auto;top:30%;width:440px;" +
         "margin-left:-220px;border-radius:20px;}}" +
+        ".dbSosCountdown{display:none;position:fixed;left:0;top:0;width:100%;height:100%;" +
+        "z-index:2147483644;background:#8f1010;color:#fff;text-align:center;}" +
+        ".dbSosCountdown .dbSosCountdownInner{position:absolute;left:5%;right:5%;top:22%;}" +
+        ".dbSosCountdown p{font-size:32px;font-weight:bold;line-height:1.3;margin:0 0 32px;}" +
+        ".dbSosCountdown button{min-width:240px;min-height:88px;padding:16px 32px;font-size:28px;" +
+        "font-weight:bold;border:0;border-radius:18px;background:#fff;color:#8f1010;}" +
         ".dbSosOperation{display:none;position:fixed;right:18px;bottom:118px;z-index:2147483647;" +
         "width:320px;max-width:90%;max-height:60%;overflow:auto;padding:16px;box-sizing:border-box;" +
         "border:2px solid #8f1010;border-radius:12px;background:#fff;color:#20242a;text-align:left;}" +
@@ -919,6 +934,24 @@
       confirmBox.appendChild(confirmSend);
       doc.body.appendChild(confirmScrim);
       doc.body.appendChild(confirmBox);
+
+      // The cancellable countdown after the slide: one large Cancel, nothing is sent before zero.
+      countdownBox = doc.createElement("div");
+      countdownBox.className = "dbSosCountdown";
+      countdownBox.setAttribute("role", "alertdialog");
+      countdownBox.setAttribute("aria-modal", "true");
+      var countdownInner = doc.createElement("div");
+      countdownInner.className = "dbSosCountdownInner";
+      countdownText = doc.createElement("p");
+      countdownText.setAttribute("aria-live", "assertive");
+      countdownCancel = doc.createElement("button");
+      countdownCancel.type = "button";
+      countdownCancel.className = "dbSosCountdownCancel";
+      countdownCancel.setAttribute("data-semantic-id", "sos.cancel");
+      countdownInner.appendChild(countdownText);
+      countdownInner.appendChild(countdownCancel);
+      countdownBox.appendChild(countdownInner);
+      doc.body.appendChild(countdownBox);
       operationBox = doc.createElement("div");
       operationBox.className = "dbSosOperation";
       operationBox.setAttribute("role", "status");
@@ -1010,7 +1043,7 @@
         }
       }
       if (trigger) trigger.disabled = current.active || !!(operation && operation.state().busy);
-      if (current.active) closeConfirm();
+      if (current.active) { closeConfirm(); stopCountdown(); }
       if (current.active && !isExpired) startAlarm(presentation); else stopAlarm();
       if (shouldExpire && !expiryTimer) {
         expiryKey = presentation.key;
@@ -1032,6 +1065,8 @@
       return current;
     }
     function update(state) {
+      if (state && isObj(state.emergency) && state.emergency.trigger !== undefined)
+        countdownSeconds = sosCountdownSeconds(state);
       var next = emergencyState(state);
       // A poll from an older/lagging node may not know SOS state yet. Unknown must not erase a
       // push alarm; only explicit active:false or emergency_cancel may clear the safety overlay.
@@ -1075,7 +1110,7 @@
       while (element.firstChild) element.removeChild(element.firstChild);
       element.appendChild(doc.createTextNode(value));
     }
-    function translate(key) { return options.translate ? options.translate(key) : key; }
+    function translate(key, values) { return options.translate ? options.translate(key, values) : key; }
     function renderOperation(result) {
       var notifyResult = !!result;
       if (!result && operation) result = operation.state();
@@ -1109,8 +1144,41 @@
     if (operationAction && operationAction.addEventListener)
       operationAction.addEventListener("click", function () { operation.start(); }, false);
     if (root.addEventListener) root.addEventListener("pagehide", function () {
-      closeConfirm(); operation.retire();
+      closeConfirm(); stopCountdown(); operation.retire();
     }, false);
+
+    function renderCountdown() {
+      text(countdownText, translate("sos.countdown", { n: countdownLeft }));
+      text(countdownCancel, translate("sos.cancel_countdown"));
+    }
+    function countdownRunning() { return countdownLeft > 0; }
+    function stopCountdown() {
+      if (countdownTimer !== null && root.clearTimeout) root.clearTimeout(countdownTimer);
+      countdownTimer = null; countdownLeft = 0;
+      if (countdownBox) countdownBox.style.display = "none";
+    }
+    function tickCountdown() {
+      countdownTimer = null;
+      if (!countdownRunning()) return;
+      countdownLeft--;
+      if (countdownLeft > 0) {
+        renderCountdown();
+        countdownTimer = root.setTimeout(tickCountdown, 1000);
+        return;
+      }
+      stopCountdown();
+      postEmergency();
+    }
+    // Zero seconds, or no timer to count with, sends at once.
+    function startCountdown() {
+      if (current.active || countdownRunning()) return;
+      if (!(countdownSeconds > 0) || !countdownBox || !root.setTimeout) { postEmergency(); return; }
+      countdownLeft = countdownSeconds;
+      renderCountdown();
+      countdownBox.style.display = "block";
+      if (countdownCancel.focus) { try { countdownCancel.focus(); } catch (e) {} }
+      countdownTimer = root.setTimeout(tickCountdown, 1000);
+    }
 
     function renderConfirmText() {
       text(confirmTitle, translate("sos.confirm_title"));
@@ -1137,7 +1205,7 @@
     }
     function openConfirm() {
       if (!confirmBox || confirmOpen || current.active || (trigger && trigger.disabled) ||
-          operation.state().busy) return false;
+          operation.state().busy || countdownRunning()) return false;
       confirmOpen = true; slide = null;
       renderConfirmText();
       confirmReturnFocus = trigger;
@@ -1160,7 +1228,7 @@
     function sendConfirmed() {
       if (!confirmOpen) return false;
       closeConfirm();
-      postEmergency();
+      startCountdown();
       return true;
     }
     function pointX(ev) {
@@ -1209,6 +1277,10 @@
     listen(confirmCancel, ["click"], function () { closeConfirm(); });
     listen(confirmSend, ["click"], function () { sendConfirmed(); });
     listen(confirmScrim, ["click"], function () { closeConfirm(); });
+    listen(countdownCancel, ["click"], function () {
+      stopCountdown();
+      if (trigger && trigger.focus) { try { trigger.focus(); } catch (e) {} }
+    });
     listen(confirmBox, ["keydown"], function (ev) {
       armConfirmTimeout();
       if (ev && (ev.key === "Escape" || ev.keyCode === 27)) closeConfirm();
@@ -1225,8 +1297,14 @@
              confirm: { open: openConfirm, close: closeConfirm, send: sendConfirmed,
                         isOpen: function () { return confirmOpen; },
                         slideStart: slideStart, slideMove: slideMove, slideEnd: slideEnd },
+             countdown: { running: countdownRunning, remaining: function () { return countdownLeft; },
+                          cancel: stopCountdown, seconds: function () { return countdownSeconds; } },
              operationState: operation.state,
-             refreshText: function () { renderOperation(); if (confirmOpen) renderConfirmText(); } };
+             refreshText: function () {
+               renderOperation();
+               if (confirmOpen) renderConfirmText();
+               if (countdownRunning()) renderCountdown();
+             } };
   }
 
   function base64Key(s) {
@@ -1427,5 +1505,6 @@
            semanticUiModel: semanticUiModel,
            applySemanticUi: applySemanticUi,
            sosSlideProgress: sosSlideProgress, sosSlideArmed: sosSlideArmed,
+           sosCountdownSeconds: sosCountdownSeconds,
            SOS_CONFIRM_TIMEOUT_MS: SOS_CONFIRM_TIMEOUT_MS };
 });

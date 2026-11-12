@@ -726,7 +726,7 @@
     }
     emergencyOverlay.update(state);
     if (state.display) C.applyAppearance(state.display);
-    if (state.display && state.display.theme) C.applyColorRoles(state.display.theme);
+    if (state.display && state.display.theme) C.applyHomeTheme(state.display.theme);
     var serverMs = Number(state.server_ts);
     if (serverMs > 1e12) clockSkewMs = serverMs - new Date().getTime();
     renderClock();
