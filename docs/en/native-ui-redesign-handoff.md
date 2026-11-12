@@ -174,3 +174,22 @@ WP2 to WP8).
   have no ja/zh translations.
 - The checkpoint commit `a85b088` (concurrent incoming calls and conversations) was
   never built as a whole before the redesign went on top of it.
+
+## Door-station first screen (owner feedback, 2026-11-13, not fixed)
+
+The owner finds the arrangement of the visitor home screen poor, on the kiosk in
+particular: the language control sits alone at the top left, the clock and date float
+mid-left over the wallpaper, the Call button is pushed into the bottom-right corner
+with its hint detached above it, and the version line sits under it. Nothing reads as
+one composition and the primary action is not where the eye lands. Redo the layout
+on every shell together with the visitor-flow start page, which replaces this screen:
+title and purpose/first-step options centred as one block, the primary Call option
+largest and central, language switch in the top bar at the trailing edge, clock
+secondary in the top bar, SOS at the leading edge of the bottom zone, no version line
+on the visitor screen. Check it on a real door station before calling it done.
+
+Kiosk 0.7.2 (86) is installed on the three iPad mini 1 devices (10.10.38.169, .49,
+.154) with `"mic":true`; the previous app and boot.json are at
+`/var/tmp/Doorbell.app.pre-redesign` and `/var/tmp/boot.json.pre-redesign` on each.
+The iPad 1 still runs 0.7.1 (85). The microphone fix (permission request, TCC
+entitlements, hardware default) has not been confirmed in a real call.
