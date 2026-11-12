@@ -128,7 +128,13 @@ function Install-TestHost {
         $InteractiveUser = (Get-CimInstance -ClassName Win32_ComputerSystem).UserName
     }
     if ([string]::IsNullOrWhiteSpace($InteractiveUser)) {
-        throw 'Nobody is logged on at the console. Log on as the test user or pass -InteractiveUser.'
+        # A Remote Desktop logon is not a console logon; the account running this script is
+        # then the interactive user whose desktop the UI tests will use.
+        $InteractiveUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        Write-Host "No console logon found; using the account running this script: $InteractiveUser"
+    }
+    if ([string]::IsNullOrWhiteSpace($InteractiveUser)) {
+        throw 'Could not determine the interactive user. Pass -InteractiveUser.'
     }
     $state.interactive_user = $InteractiveUser
     if (-not (Test-Path -LiteralPath $WorkDir)) {
