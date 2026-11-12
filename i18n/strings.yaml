@@ -2514,3 +2514,25 @@ editor.password_too_short: { ja: "8 文字以上にしてください", en: "Use
 editor.password_mismatch: { ja: "2 回の入力が違います", en: "The two entries differ", zh: "两次输入不一致" }
 editor.password_changed: { ja: "パスワードを変更しました", en: "Password changed", zh: "密码已更改" }
 editor.password_hint: { ja: "Web 管理とすべての端末で同じパスワードを使います", en: "The same password is used by the web admin and every device", zh: "网页管理和所有设备使用同一密码" }
+
+ring.queue_selected: { ja: "{door} · 選択中", en: "{door} · Selected", zh: "{door} · 当前选中" }
+ring.queue_waiting: { ja: "{door} · 応答待ち", en: "{door} · Waiting", zh: "{door} · 等待接听" }
+ring.queue_in_call: { ja: "{device} が {door} と通話中", en: "{device} is speaking with {door}", zh: "{device} 正在与 {door} 通话" }
+ring.queue_finish_first: { ja: "現在の通話またはモニターを終了してから選択してください", en: "End the current call or monitor session before selecting another visitor", zh: "请先结束当前通话或监听，再选择其他来访" }
+ring.queue_answered_elsewhere: { ja: "{device} が応答しました", en: "{device} has answered", zh: "{device} 已接听" }
+
+conversation.respond: { en: "Respond and queue", ja: "応答して待機", zh: "响应并排队" }
+conversation.answer: { en: "Answer", ja: "応答", zh: "接听" }
+conversation.join: { en: "Join conversation", ja: "通話に参加", zh: "加入通话" }
+conversation.takeover: { en: "Take over", ja: "通話を引き継ぐ", zh: "抢答接管" }
+conversation.hold: { en: "Hold", ja: "保留", zh: "保持" }
+conversation.resume: { en: "Resume", ja: "再開", zh: "恢复通话" }
+conversation.leave: { en: "Leave conversation", ja: "通話から退出", zh: "退出通话" }
+conversation.waiting: { en: "Waiting for a resident", ja: "住人の応答待ち", zh: "等待住户响应" }
+conversation.dialing: { en: "Connecting to {device}", ja: "{device} に接続中", zh: "正在连接 {device}" }
+conversation.connected: { en: "Speaking with {device}", ja: "{device} と通話中", zh: "正在与 {device} 通话" }
+conversation.held: { en: "On hold · {device}", ja: "保留中 · {device}", zh: "通话保持中 · {device}" }
+conversation.queued: { en: "{device} has responded · Waiting", ja: "{device} が応答済み · 待機中", zh: "{device} 已响应 · 正在排队" }
+conversation.pending: { en: "Waiting for confirmation", ja: "確認待ち", zh: "等待确认" }
+conversation.failed: { en: "The request could not be completed. Refresh and try again.", ja: "要求を完了できませんでした。更新後に再試行してください。", zh: "请求未完成，请刷新状态后重试。" }
+conversation.takeover_confirm: { en: "Take over this door and disconnect its current participants?", ja: "この玄関の通話を引き継ぎ、現在の参加者を切断しますか？", zh: "接管此门口通话并断开当前参与者？" }

@@ -1015,7 +1015,7 @@ static BOOL DBCoreSipBackendCompiled(void) {
   NSString *callID = [DBConfigUtil evStr:chime key:@"call_id"];
   [self persistTargetedIndoorCall:chime];
   if ([[entry objectForKey:@"previous_call_id"] isEqual:callID] &&
-      _current == _incoming && ![_incoming isActiveMonitor]) {
+      _current == _incoming && ![_incoming isActiveMonitor] && [_incoming isVisitSelected:chime]) {
     [_home playChime:chime];
     [_incoming refreshPurpose:[DBConfigUtil evStr:chime key:@"purpose"]
                          lang:[DBConfigUtil evStr:chime key:@"visitor_lang"]
@@ -1065,6 +1065,18 @@ static BOOL DBCoreSipBackendCompiled(void) {
 
 - (void)onCoreEvent:(NSDictionary *)ev {
   NSString *t = [DBConfigUtil evStr:ev key:@"t"];
+  if ([t isEqual:@"conversation"] || [t isEqual:@"conversation_result"] || [t isEqual:@"conversation_media"]) {
+    [_incoming handleConversationEvent:ev];
+    return;
+  }
+  if ([t isEqual:@"event"] && _current == _incoming && [_incoming handleVisitEvent:ev]) {
+    NSString *kind = [ev objectForKey:@"type"];
+    if ([kind isEqual:@"call_answered"]) [_callEvents recordAnsweredEvent:ev];
+    else if ([kind isEqual:@"call_ended"]) [_callEvents recordEndedEvent:ev];
+    else if ([kind isEqual:@"call_cancelled"]) [_callEvents recordCancellationEvent:ev];
+    [_home appendEvent:ev];
+    return;
+  }
 
   if ([t isEqualToString:@"call_recovery_required"]) {
     [self resolveCallRecoveryEvent:ev];

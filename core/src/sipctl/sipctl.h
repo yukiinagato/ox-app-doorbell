@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -80,6 +81,7 @@ class SipCtl {
     std::function<void(SipRegState, const std::string& reason)> on_reg_state;
     std::function<void(SipCallState, const std::string& remote)> on_call_state;
     std::function<void(char digit)> on_dtmf;
+    std::function<void(const std::string& mode, SipCallState)> on_room_state;
   };
 
   SipCtl(Runloop& loop, Callbacks cbs);
@@ -102,6 +104,16 @@ class SipCtl {
   bool callOwned(const std::string& owner, const std::string& target,
                  const std::string& mode = "");
   bool hangupOwned(const std::string& owner);
+  struct RoomPolicy {
+    std::string room;
+    bool host = false;
+    bool held = false;
+  };
+  // Policies are exact signed admission generations, never generic monitor/answer modes.
+  void setRoomPolicies(const std::map<std::string, RoomPolicy>& policies);
+  bool callRoom(const std::string& mode, const std::string& target);
+  void setRoomFocus(const std::string& mode);
+  size_t roomCount() const;
   void answer();  // Manual answer for configurations without auto-answer.
   bool sendDtmf(const std::string& digits);  // RFC2833 digits on the active primary call
 

@@ -477,6 +477,11 @@
                             </Border>
                         </StackPanel>
                     </Grid>
+                    <TextBlock x:Name="ConversationSummary" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                    <ScrollViewer MaxHeight="132" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="IncomingVisitQueue"/>
+                    </ScrollViewer>
+                    <WrapPanel x:Name="ConversationActions"/>
                     <TextBlock x:Name="IncomingHint" FontSize="16" Foreground="{DynamicResource Dim}"
                                Margin="0,4,0,0" Visibility="Collapsed"/>
                 </StackPanel>
@@ -509,7 +514,7 @@
                                 Background="{DynamicResource Positive}"
                                 Foreground="{DynamicResource OnPositive}"
                                 BorderBrush="{DynamicResource Positive}"
-                                MinHeight="88" FontSize="20" Click="OnAnswerClick"/>
+                                MinHeight="88" FontSize="20" PreviewMouseDown="OnConversationActionDown" Click="OnAnswerClick"/>
                         <Button x:Name="QuickReplyToggle" Style="{StaticResource ActionButton}"
                                 Click="OnQuickReplyToggleClick"/>
                         <Button x:Name="IgnoreButton" Style="{StaticResource ActionButton}"
@@ -523,7 +528,7 @@
                                 MinHeight="56" Click="OnMonitorClick"/>
                         <Button x:Name="OpenDoorButton" Style="{StaticResource ActionButton}"
                                 MinHeight="56" Foreground="{DynamicResource Warning}"
-                                BorderBrush="{DynamicResource Warning}" Click="OnOpenDoorClick"/>
+                                BorderBrush="{DynamicResource Warning}" PreviewMouseDown="OnConversationActionDown" Click="OnOpenDoorClick"/>
                         <Button x:Name="MicButton" Style="{StaticResource ActionButton}"
                                 MinHeight="56" Visibility="Collapsed" Click="OnMicClick"/>
                     </WrapPanel>

@@ -15,6 +15,7 @@ static void DBSipOnState(ms_state st, void *user);
 @implementation DBSipSession {
 @public
   DBAudioIO *_audioForCb;
+  volatile BOOL _audioHeld;
 @private
   NSString *_host;
   int _port;
@@ -53,10 +54,17 @@ static void DBSipOnState(ms_state st, void *user);
   pthread_mutex_destroy(&_dtmfLock);
 }
 
+- (void)setAudioHeld:(BOOL)held {
+  if (_audioHeld == held) return;
+  _audioHeld = held;
+  if (held) [_audioForCb stop];
+  else if (_thread != nil && !_stop) [_audioForCb start];
+}
+
 - (void)start {
   if (_thread != nil) return;
   _stop = NO;
-  if (![_audioForCb start]) {
+  if (!_audioHeld && ![_audioForCb start]) {
     [self performSelectorOnMainThread:@selector(deliverState:)
                            withObject:[NSNumber numberWithInt:DBMiniSipEnded]
                         waitUntilDone:NO];
@@ -89,7 +97,8 @@ static void DBSipOnState(ms_state st, void *user);
     cbs.user = (__bridge void *)self;
 
     const char *modeC = [_mode length] > 0 ? [_mode UTF8String] : "";
-    _session = ms_call([_host UTF8String], _port, modeC, &cbs);
+    _session = ms_call_authenticated([_host UTF8String], _port, modeC,
+                                     [self.peerAuthentication UTF8String], &cbs);
     if (_session == NULL) {
       [self performSelectorOnMainThread:@selector(deliverState:)
                              withObject:[NSNumber numberWithInt:DBMiniSipEnded]
@@ -105,8 +114,7 @@ static void DBSipOnState(ms_state st, void *user);
         if (now >= nextStatsLog) {
           unsigned long tx = 0, rx = 0;
           ms_get_stats(_session, &tx, &rx);
-          NSLog(@"[doorbell][sip] mode=%@ RTP tx=%lu rx=%lu remote=%s",
-                _mode, tx, rx, ms_get_remote_rtp(_session));
+          NSLog(@"[doorbell][sip] RTP tx=%lu rx=%lu", tx, rx);
           nextStatsLog = now + 2.0;
         }
       }
@@ -123,7 +131,7 @@ static void DBSipOnState(ms_state st, void *user);
 
     unsigned long finalTx = 0, finalRx = 0;
     ms_get_stats(_session, &finalTx, &finalRx);
-    NSLog(@"[doorbell][sip] mode=%@ ended RTP tx=%lu rx=%lu", _mode, finalTx, finalRx);
+    NSLog(@"[doorbell][sip] ended RTP tx=%lu rx=%lu", finalTx, finalRx);
     ms_hangup(_session);
     ms_free(_session);
     _session = NULL;
@@ -132,7 +140,9 @@ static void DBSipOnState(ms_state st, void *user);
 }
 
 - (void)deliverState:(NSNumber *)state {
-  if (_delegate) [_delegate miniSipStateChanged:(DBMiniSipState)[state intValue]];
+  if ([_delegate respondsToSelector:@selector(miniSipSession:stateChanged:)])
+    [_delegate miniSipSession:self stateChanged:(DBMiniSipState)[state intValue]];
+  else if (_delegate) [_delegate miniSipStateChanged:(DBMiniSipState)[state intValue]];
 }
 
 @end
@@ -140,11 +150,13 @@ static void DBSipOnState(ms_state st, void *user);
 
 static void DBSipRxAudio(const int16_t *pcm, int n, void *user) {
   DBSipSession *me = (__bridge DBSipSession *)user;
+  if (me->_audioHeld) return;
   [me->_audioForCb enqueueRx:(const short *)pcm count:n];
 }
 
 static int DBSipPullTx(int16_t *pcm, int n, void *user) {
   DBSipSession *me = (__bridge DBSipSession *)user;
+  if (me->_audioHeld) return 0;
   return [me->_audioForCb dequeueTx:(short *)pcm max:n];
 }
 

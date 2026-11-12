@@ -218,6 +218,7 @@ class App : Application(), DoorbellCore.Listener {
         // IncomingActivity stays independent from the main activity listener, so it receives
         // the local SIP and reply lifecycle explicitly.
         when (eventType) {
+            "conversation", "conversation_result", "conversation_media" -> incomingActivity?.onConversationEvent(ev)
             "state" -> {
                 val state = ev.optString("state")
                 handleManualSipLifecycle(state)

@@ -110,7 +110,8 @@ int ms_send_invite(ms_session *s) {
   int n;
   const char *door_ip = inet_ntoa(s->door_sip.sin_addr);
   int door_port = ntohs(s->door_sip.sin_port);
-  char modehdr[64];
+  char modehdr[288];
+  char authhdr[288];
 
   sdplen = ms_build_offer(s);
   if (sdplen < 0) return -1;
@@ -126,6 +127,8 @@ int ms_send_invite(ms_session *s) {
     snprintf(modehdr, sizeof(modehdr), "X-Doorbell-Mode: %s\r\n", s->mode);
   }
 
+  authhdr[0] = '\0';
+  if (s->auth[0] != '\0') snprintf(authhdr, sizeof(authhdr), "X-Doorbell-Auth: %s\r\n", s->auth);
   n = snprintf(
       buf, sizeof(buf),
       "INVITE sip:door@%s:%d SIP/2.0\r\n"
@@ -136,7 +139,7 @@ int ms_send_invite(ms_session *s) {
       "Call-ID: %s\r\n"
       "CSeq: %u INVITE\r\n"
       "Contact: <sip:doorbell@%s:%d>\r\n"
-      "%s"
+      "%s%s"
       "User-Agent: doorbell-minisip/1.0\r\n"
       "Content-Type: application/sdp\r\n"
       "Content-Length: %d\r\n"
@@ -144,7 +147,7 @@ int ms_send_invite(ms_session *s) {
       "%s",
       door_ip, door_port, s->local_ip, s->local_sip_port, s->via_branch,
       s->local_ip, s->local_sip_port, s->from_tag, door_ip, door_port,
-      s->call_id, s->cseq, s->local_ip, s->local_sip_port, modehdr, sdplen,
+      s->call_id, s->cseq, s->local_ip, s->local_sip_port, modehdr, authhdr, sdplen,
       s->last_sdp);
   if (n < 0 || n >= (int)sizeof(buf)) return -1;
   return send_sip(s, buf, n);

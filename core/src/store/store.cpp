@@ -1471,6 +1471,20 @@ std::vector<EventRecord> Store::recentEvents(size_t limit) {
   return out;
 }
 
+std::vector<EventRecord> Store::latestConversationStates() {
+  std::lock_guard<std::recursive_mutex> lock(mu_);
+  std::vector<EventRecord> out;
+  Stmt st(db_,
+      "SELECT e.origin,e.seq,e.type,e.door,e.device,e.hlc,e.wall_ms,e.payload_json,e.notify_json"
+      " FROM events e JOIN event_origin_state s ON s.origin=e.origin"
+      " WHERE e.type='conversation_state' AND e.seq<=s.frontier AND NOT EXISTS("
+      " SELECT 1 FROM events n WHERE n.origin=e.origin AND n.door=e.door"
+      " AND n.type=e.type AND n.seq>e.seq AND n.seq<=s.frontier) ORDER BY e.hlc LIMIT 256");
+  if (!st.ok()) return out;
+  while (st.step() == SQLITE_ROW) out.push_back(rowToEvent(st));
+  return out;
+}
+
 std::optional<EventRecord> Store::latestEventOfTypes(const std::string& t1,
                                                     const std::string& t2) {
   std::lock_guard<std::recursive_mutex> lk(mu_);

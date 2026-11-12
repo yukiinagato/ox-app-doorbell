@@ -32,6 +32,40 @@ private struct ModernCallRevisionTest {
         require(remaining(nil, at: 107) == nil, "missing duration never falls back to wall time")
         require(remaining(Double.nan, at: 108) == nil, "non-finite duration cannot reach a timer")
         require(remaining(12_345, at: 111) == 0, "elapsed cached duration reaches zero")
+        var queue = ResidentCallQueue()
+        let first = ResidentCallQueue.Item(door: "front", callId: "a", revision: 0,
+            purpose: "", language: "en", state: "ringing", owner: "")
+        let second = ResidentCallQueue.Item(door: "side", callId: "b", revision: 0,
+            purpose: "delivery", language: "ja", state: "ringing", owner: "")
+        queue.admit(first)
+        queue.admit(second)
+        require(queue.selected == first, "a new visitor cannot steal selection")
+        queue.admit(second)
+        require(queue.items.count == 2, "repeated notifications do not duplicate a visitor")
+        var answered = first
+        answered.state = "in_call"
+        answered.owner = "living-room"
+        queue.admit(answered)
+        queue.admit(first)
+        require(queue.items.first?.state == "in_call", "a delayed chime cannot demote an established call")
+
+        require(queue.select(door: "side", callId: "b") == second, "explicit selection changes the target")
+        var newer = second
+        newer.revision = 2
+        queue.admit(newer)
+        queue.retire(door: "side", callId: "b", revision: 1)
+        require(queue.items.count == 2, "a stale terminal event cannot remove a newer revision")
+        queue.retire(door: "side", callId: "b", revision: 2)
+        require(queue.items == [answered], "an exact terminal event removes only its visitor")
+        queue.admit(newer)
+        require(queue.items == [answered], "a delayed snapshot cannot resurrect a terminated visitor")
+        require(queue.selected?.callId == "b", "termination cannot retarget controls to a waiting visitor")
+        require(queue.select(door: "side", callId: "b") == nil, "a removed visitor cannot be selected")
+        var replacement = second
+        replacement = ResidentCallQueue.Item(door: "side", callId: "new-b", revision: 0,
+            purpose: "", language: "en", state: "ringing", owner: "")
+        queue.admit(replacement)
+        require(queue.selected?.callId == "b", "a same-door new call does not reuse selection")
         var lifecycle = CallRevisionLifecycle(stageRevision: 0)
         lifecycle.beginAnswer()
         require(lifecycle.observeWinningRevision(1) == .answerSuperseded,

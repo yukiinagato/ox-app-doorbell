@@ -27,6 +27,7 @@ namespace DoorbellApp
         private void OnClockTick()
         {
             UpdateClock();
+            RefreshConversations();
             if (!_screensaverOn && !_emergencyActive && _screensaverAfterS > 0 &&
                 !PairingOverlay.IsActive &&
                 IdleView.Visibility == Visibility.Visible &&

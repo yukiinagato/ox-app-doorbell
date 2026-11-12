@@ -3015,3 +3015,70 @@ TEST_CASE("pairing: a v2 member rebuilding the cluster keeps its household histo
   REQUIRE(probe.open(dir + "/doorbell.db"));
   CHECK(probe.eventHeads().count(foreign));
 }
+
+TEST_CASE("calls: resident admission and independent door ownership remain scoped") {
+  NFleet f;
+  auto& front = f.add("A:1", "front", "door_station", "d_front", true);
+  auto& side = f.add("B:1", "side", "door_station", "d_side", false);
+  auto& living = f.add("C:1", "living", "indoor_panel", "", false);
+  auto& kitchen = f.add("D:1", "kitchen", "indoor_panel", "", false);
+  for (auto& n : f.nodes) REQUIRE(n->node->start());
+  f.run(1000);
+  front.node->setConfigKey("trigger_rules.resident_scope", std::string(
+      R"({"enabled":true,"when":{"type":"button","doors":["d_front","d_side"]},)" ) +
+      R"("actions":[{"type":"chime","devices":[")" + living.node->nodeId() + R"("]}]})");
+  f.run(500);
+  const std::string a = front.node->pressV2("d_front", "");
+  const std::string b = side.node->pressV2("d_side", "");
+  REQUIRE_FALSE(a.empty());
+  REQUIRE_FALSE(b.empty());
+  f.run(500);
+  auto admitted = [](Node& node, const std::string& id) {
+    auto status = json::parse(node.statusJson());
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, json::get(status.get(), "active_calls")) {
+      if (json::getString(item, "call_id") == id)
+        return json::getBool(item, "notification_eligible", false);
+    }
+    return false;
+  };
+  CHECK(living.node->openDoorForCall("d_front", a, 0) == -3);
+  CHECK(living.node->openDoorForCall("d_side", a, 0) == -5);
+  CHECK(living.node->openDoorForCall("d_front", b, 0) == -5);
+  CHECK(living.node->openDoorForCall("d_front", a, 1) == -5);
+  living.node->setConfigKey("doors.d_front.unlock.command", R"("front_gate")");
+  living.node->setConfigKey("doors.d_side.unlock.command", R"("side_gate")");
+  f.run(100);
+  const auto beforeUnlock = living.uiCount("event", "dtmf_action");
+  REQUIRE(living.node->openDoorForCall("d_front", a, 0) == 0);
+  CHECK(living.uiCount("event", "dtmf_action") == beforeUnlock + 1);
+  CHECK(living.node->openDoorForCall("d_side", a, 0) == -5);
+  CHECK(living.uiCount("event", "dtmf_action") == beforeUnlock + 1);
+  for (const auto& event : living.ui) {
+    const auto payload = json::parse(event);
+    if (json::getString(payload.get(), "type") == "dtmf_action")
+      CHECK(json::getString(payload.get(), "door") == "d_front");
+  }
+  CHECK(admitted(*living.node, a));
+  CHECK(admitted(*living.node, b));
+  CHECK_FALSE(admitted(*kitchen.node, a));
+  CHECK_FALSE(admitted(*kitchen.node, b));
+  REQUIRE(living.node->reportCallAnsweredV2("d_front", a, 0));
+  REQUIRE(kitchen.node->reportCallAnsweredV2("d_side", b, 0));
+  f.run(500);
+  for (auto& n : f.nodes) {
+    auto status = json::parse(n->node->statusJson());
+    int count = 0;
+    const cJSON* item = nullptr;
+    cJSON_ArrayForEach(item, json::get(status.get(), "active_calls")) {
+      CHECK(json::getString(item, "state") == "in_call");
+      const auto id = json::getString(item, "call_id");
+      CHECK(json::getString(item, "dialog_owner") ==
+          (id == a ? living.node->nodeId() : kitchen.node->nodeId()));
+      ++count;
+    }
+    CHECK(count == 2);
+  }
+  CHECK_FALSE(kitchen.node->reportCallEndedV2("d_front", a, 0, "wrong_owner"));
+  for (auto& n : f.nodes) n->node->stop();
+}

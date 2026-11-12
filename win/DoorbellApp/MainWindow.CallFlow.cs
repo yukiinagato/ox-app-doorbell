@@ -149,6 +149,11 @@ namespace DoorbellApp
             HandlePairingEvent(ev);
             switch (ev.T)
             {
+                case "conversation":
+                case "conversation_result":
+                case "conversation_media":
+                    HandleConversation(ev);
+                    break;
                 case "state":
                     var stv = ev.Str("state");
                     if (stv == "calling") { if (App.Boot.Role == "door_station") ShowCalling(); }
@@ -166,6 +171,7 @@ namespace DoorbellApp
                     if (App.Boot.Role == "door_station") OnActivity();
                     break;
                 case "event":
+                    RetireVisit(ev);
                     string eventType = ev.Str("type");
                     bool purposeApplied = false;
                     // press is replicated to every node. It updates call identity only; the
@@ -193,7 +199,7 @@ namespace DoorbellApp
                         _effects = PlayConfigured(_effects,
                             SoundValue("update_sound", "indoor_update"), false, null,
                             _volumeIdle);
-                    if (eventType == "call_answered")
+                    if (eventType == "call_answered" && !UsesConversation())
                     {
                         StopPlayer(ref _callFeedback);
                         int answeredStage = Math.Max(0,
@@ -555,6 +561,7 @@ namespace DoorbellApp
         /// <summary>Targeted chime (or an explicit local monitor action) opens the incoming view.</summary>
         private void ShowIncoming(UiEvent ev, bool monitorOnly = false)
         {
+            if (AdmitIncomingVisit(ev, monitorOnly)) return;
             if (_emergencyActive || _inCall) return;
             string door = ev.Str("door");
             string callId = ev.Str("call_id");
@@ -631,6 +638,7 @@ namespace DoorbellApp
             RefreshVideoStats();
             _incomingTimeout.Stop();
             if (!monitorOnly) _incomingTimeout.Start();  // Proactive monitoring remains until closed.
+            RefreshConversations();
         }
     }
 }

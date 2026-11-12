@@ -19,13 +19,18 @@ typedef enum {
   DBMiniSipListening = 4
 } DBMiniSipState;
 
+@class DBSipSession;
 @protocol DBMiniSipDelegate <NSObject>
 - (void)miniSipStateChanged:(DBMiniSipState)state;
+@optional
+- (void)miniSipSession:(DBSipSession *)session stateChanged:(DBMiniSipState)state;
 @end
 
 @interface DBSipSession : NSObject <DBCallSession>
 
 @property(nonatomic, weak) id<DBMiniSipDelegate> delegate;
+@property(nonatomic, copy) NSString *peerAuthentication;
+- (void)setAudioHeld:(BOOL)held;
 
 
 

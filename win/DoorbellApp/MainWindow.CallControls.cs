@@ -1,3 +1,4 @@
+using System.Linq;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -196,6 +197,7 @@ namespace DoorbellApp
 
         private void OnReturnTick()
         {
+            if (_visitQueue.Count > 1) return;
             _returnSecondsLeft--;
             if (_returnSecondsLeft > 0)
             {
@@ -285,6 +287,13 @@ namespace DoorbellApp
 
         private void OnAnswerClick(object sender, RoutedEventArgs e)
         {
+            if (!ConversationTargetMatches()) return;
+            if (UsesConversation())
+            {
+                var me = OwnConversationMember(ConversationDocument(SelectedConversationCall()));
+                SendConversation(me == null || DictStr(me, "state") == "waiting" ? "answer" : "leave");
+                return;
+            }
             if (_inCall)
             {
                 App.Core.SipHangup();
@@ -356,7 +365,14 @@ namespace DoorbellApp
             OpenDoorButton.IsEnabled = true;
         }
 
-        private void OnIgnoreClick(object sender, RoutedEventArgs e) => CloseIncoming(true);
+        private void OnIgnoreClick(object sender, RoutedEventArgs e)
+        {
+            string key = _incomingDoor + ":" + _incomingCallId;
+            _retiredVisits[key] = _incomingStageRevision;
+            _visitQueue.Remove(key); _visitOrder.Remove(key);
+            if (_visitQueue.Count == 0) CloseIncoming(true);
+            else { AnswerButton.IsEnabled = false; RefreshConversations(); }
+        }
 
         private void OnOpenDoorClick(object sender, RoutedEventArgs e)
         {
@@ -364,7 +380,11 @@ namespace DoorbellApp
             // control works from the monitor page too. -3 means nothing is configured and -4 that
             // the configured command failed: the shell says which, rather than reporting a
             // success that did nothing.
-            int result = App.Core.OpenDoor(CurrentCallDoor());
+            if (!ConversationTargetMatches()) return;
+            string targetDoor = CurrentCallDoor(), targetCall = _incomingCallId;
+            int targetRevision = _incomingStageRevision;
+            int result = string.IsNullOrEmpty(targetCall) ? App.Core.OpenDoor(targetDoor) :
+                App.Core.OpenDoorForCall(targetDoor, targetCall, targetRevision);
             if (result == -3)
             {
                 ShowCallMessage(Texts.T("unlock.not_configured"));
@@ -470,7 +490,13 @@ namespace DoorbellApp
         private void OnEndCallClick(object sender, RoutedEventArgs e)
         {
             if (!AllowVisitorAction(Ui.VisitorActionKind.End)) return;
-            App.Core.SipHangup();
+            var call = ConversationCalls().FirstOrDefault(item => DictStr(item, "door") == App.Boot.Door &&
+                DictStr(item, "call_id") == _activeCallId);
+            if (ConversationDocument(call) != null)
+                App.Core.Conversation(new Dictionary<string, object> { {"action", "end"},
+                    {"door", App.Boot.Door}, {"call_id", _activeCallId},
+                    {"stage_revision", DictInt(call, "stage_revision", 0)} });
+            else App.Core.SipHangup();
             ReportLifecycleEndedIfNeeded();
             OnSipIdle();
         }

@@ -687,6 +687,24 @@ namespace DoorbellApp.Core
         /// -3 when nothing is configured and -4 when the configured command failed, both of which
         /// the shell must say out loud.
         /// </summary>
+        public Dictionary<string, object> Conversation(Dictionary<string, object> request)
+        {
+            lock (_nativeLock)
+            {
+                if (_core == IntPtr.Zero) return null;
+                var serializer = new JavaScriptSerializer();
+                var json = CoreInterop.TakeUtf8(CoreInterop.db_core_conversation_request_json_v1(
+                    _core, serializer.Serialize(request)));
+                return json == null ? null : serializer.Deserialize<Dictionary<string, object>>(json);
+            }
+        }
+
+        public int OpenDoorForCall(string door, string callId, int revision)
+        {
+            lock (_nativeLock)
+                return _core == IntPtr.Zero ? -1 : CoreInterop.db_core_open_door_for_call_v2(_core, door, callId, revision);
+        }
+
         public int OpenDoor(string door)
         {
             if (string.IsNullOrEmpty(door)) return -1;

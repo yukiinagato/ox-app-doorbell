@@ -442,6 +442,21 @@
   <data name="cluster_devices_a11y" xml:space="preserve"><value>クラスタの端末 {0} 台</value></data>
   <data name="cluster_door_stations_a11y" xml:space="preserve"><value>門口機 {0}/{1} 台オンライン</value></data>
   <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>室内機 {0}/{1} 台オンライン</value></data>
+  <data name="conversation_answer" xml:space="preserve"><value>応答</value></data>
+  <data name="conversation_connected" xml:space="preserve"><value>{0} と通話中</value></data>
+  <data name="conversation_dialing" xml:space="preserve"><value>{0} に接続中</value></data>
+  <data name="conversation_failed" xml:space="preserve"><value>要求を完了できませんでした。更新後に再試行してください。</value></data>
+  <data name="conversation_held" xml:space="preserve"><value>保留中 · {0}</value></data>
+  <data name="conversation_hold" xml:space="preserve"><value>保留</value></data>
+  <data name="conversation_join" xml:space="preserve"><value>通話に参加</value></data>
+  <data name="conversation_leave" xml:space="preserve"><value>通話から退出</value></data>
+  <data name="conversation_pending" xml:space="preserve"><value>確認待ち</value></data>
+  <data name="conversation_queued" xml:space="preserve"><value>{0} が応答済み · 待機中</value></data>
+  <data name="conversation_respond" xml:space="preserve"><value>応答して待機</value></data>
+  <data name="conversation_resume" xml:space="preserve"><value>再開</value></data>
+  <data name="conversation_takeover" xml:space="preserve"><value>通話を引き継ぐ</value></data>
+  <data name="conversation_takeover_confirm" xml:space="preserve"><value>この玄関の通話を引き継ぎ、現在の参加者を切断しますか？</value></data>
+  <data name="conversation_waiting" xml:space="preserve"><value>住人の応答待ち</value></data>
   <data name="dash_address_count" xml:space="preserve"><value>{0} アドレス</value></data>
   <data name="dash_admin" xml:space="preserve"><value>管理</value></data>
   <data name="dash_chip_offline" xml:space="preserve"><value>{0} 台オフライン</value></data>
@@ -1522,6 +1537,11 @@ ON</value></data>
   <data name="ring_open_sent" xml:space="preserve"><value>開錠信号を送信しました</value></data>
   <data name="ring_open_unconfigured" xml:space="preserve"><value>この門口機には開錠の動作が設定されていません</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>用件: {0}</value></data>
+  <data name="ring_queue_answered_elsewhere" xml:space="preserve"><value>{0} が応答しました</value></data>
+  <data name="ring_queue_finish_first" xml:space="preserve"><value>現在の通話またはモニターを終了してから選択してください</value></data>
+  <data name="ring_queue_in_call" xml:space="preserve"><value>{0} が {1} と通話中</value></data>
+  <data name="ring_queue_selected" xml:space="preserve"><value>{0} · 選択中</value></data>
+  <data name="ring_queue_waiting" xml:space="preserve"><value>{0} · 応答待ち</value></data>
   <data name="ring_quick_replies" xml:space="preserve"><value>クイック返信</value></data>
   <data name="ring_quick_reply" xml:space="preserve"><value>クイック返信</value></data>
   <data name="ring_return_countdown_a11y" xml:space="preserve"><value>自動で戻るまでの秒数（タップで解除）</value></data>

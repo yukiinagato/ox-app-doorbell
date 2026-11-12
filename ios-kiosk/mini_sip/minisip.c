@@ -104,7 +104,7 @@ static void copy_header(ms_session *s, const char *msg, int len, const char *nam
 static void handle_uas_invite(ms_session *s, const char *msg, int len) {
   const char *body;
   char callid[128];
-  char mode[32];
+  char mode[256];
   int rc;
 
   if (!ms_hdr(msg, len, "call-id", "i", callid, sizeof(callid))) {
@@ -281,6 +281,13 @@ void ms_handle_sip(ms_session *s, const char *msg, int len) {
 
 ms_session *ms_call(const char *host, int port, const char *mode,
                     const ms_callbacks *cbs) {
+  return ms_call_authenticated(host, port, mode, NULL, cbs);
+}
+
+ms_session *ms_call_authenticated(const char *host, int port, const char *mode,
+                                  const char *auth, const ms_callbacks *cbs) {
+  if ((mode && (strlen(mode) >= 256 || strpbrk(mode, "\r\n"))) ||
+      (auth && (strlen(auth) > 256 || strpbrk(auth, "\r\n")))) return NULL;
   ms_session *s;
   int p;
 
@@ -346,6 +353,7 @@ ms_session *ms_call(const char *host, int port, const char *mode,
   }
   s->tx_seq = (uint16_t)(rand() & 0xffff);
   s->tx_ts = (uint32_t)rand();
+  if (auth) snprintf(s->auth, sizeof(s->auth), "%s", auth);
   if (mode) {
     strncpy(s->mode, mode, sizeof(s->mode) - 1);
     s->mode[sizeof(s->mode) - 1] = '\0';

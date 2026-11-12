@@ -152,6 +152,35 @@ struct SipCtl::Impl {
   }
 
 
+  struct RoomDialog {
+    std::string mode;
+    int slot = PJSUA_INVALID_ID;
+    bool confirmed = false;
+    bool media = false;
+    bool announced = false;
+  };
+  mutable std::mutex room_mu;
+  std::map<std::string, SipCtl::RoomPolicy> room_policies;
+  std::map<int, RoomDialog> room_dialogs;
+  std::string room_focus;
+  std::set<std::pair<int, int>> room_edges;
+  bool isRoom(int cid) {
+    std::lock_guard<std::mutex> lock(room_mu);
+    return room_dialogs.count(cid) != 0;
+  }
+  void routeRooms();
+  void postRoom(int cid, bool confirmed, bool media, int slot, bool ended);
+  bool acceptRoom(int cid, const std::string& mode) {
+    std::lock_guard<std::mutex> lock(room_mu);
+    const auto policy = room_policies.find(mode);
+    if (policy == room_policies.end() || !policy->second.host) return false;
+    for (const auto& dialog : room_dialogs) if (dialog.second.mode == mode) return false;
+    RoomDialog dialog;
+    dialog.mode = mode;
+    room_dialogs.emplace(cid, std::move(dialog));
+    return true;
+  }
+
   std::mutex src_mu;
   std::set<std::string> allowed_sources;
   SipCtl::InboundClassifier classify_inbound;
@@ -377,6 +406,12 @@ void SipCtl::Impl::s_on_call_state(pjsua_call_id call_id, pjsip_event*) {
   if (pjsua_call_get_info(call_id, &ci) != PJ_SUCCESS) return;
   std::string remote(ci.remote_info.ptr, static_cast<size_t>(ci.remote_info.slen));
 
+  if (im->isRoom(call_id)) {
+    im->postRoom(call_id, ci.state == PJSIP_INV_STATE_CONFIRMED,
+                 ci.media_status == PJSUA_CALL_MEDIA_ACTIVE, ci.conf_slot,
+                 ci.state == PJSIP_INV_STATE_DISCONNECTED);
+    return;
+  }
   if (im->call_id.load() != call_id) {
     if (ci.state == PJSIP_INV_STATE_DISCONNECTED) {
       std::string peer;
@@ -425,6 +460,24 @@ void SipCtl::Impl::s_on_incoming_call(pjsua_acc_id, pjsua_call_id call_id,
     pjsua_call_answer(call_id, PJSIP_SC_FORBIDDEN, nullptr, nullptr);
     return;
   }
+  if (mode.rfind("room:", 0) == 0) {
+    if (path != SipInboundPath::Peer || !im->acceptRoom(call_id, mode)) {
+      pjsua_call_answer(call_id, PJSIP_SC_FORBIDDEN, nullptr, nullptr);
+      return;
+    }
+    pjsua_call_answer(call_id, PJSIP_SC_OK, nullptr, nullptr);
+    return;
+  }
+  bool room_active = false;
+  {
+    std::lock_guard<std::mutex> lock(im->room_mu);
+    for (const auto& entry : im->room_dialogs) {
+      const auto policy = im->room_policies.find(entry.second.mode);
+      if (policy != im->room_policies.end() &&
+          (policy->second.host || (!policy->second.held && entry.second.mode == im->room_focus))) room_active = true;
+    }
+  }
+  if (room_active) { pjsua_call_answer(call_id, PJSIP_SC_BUSY_HERE, nullptr, nullptr); return; }
   const bool busy = im->call_id.load() != PJSUA_INVALID_ID;
   bool want_monitor = (mode == "monitor") || (mode.empty() && busy);
 
@@ -515,6 +568,11 @@ void SipCtl::Impl::s_on_call_media_state(pjsua_call_id call_id) {
   if (!im) return;
   pjsua_call_info ci;
   if (pjsua_call_get_info(call_id, &ci) != PJ_SUCCESS) return;
+  if (im->isRoom(call_id)) {
+    im->postRoom(call_id, ci.state == PJSIP_INV_STATE_CONFIRMED,
+                 ci.media_status == PJSUA_CALL_MEDIA_ACTIVE, ci.conf_slot, false);
+    return;
+  }
   if (ci.media_status != PJSUA_CALL_MEDIA_ACTIVE) return;
   const pjsua_conf_port_id slot = ci.conf_slot;
   if (slot == PJSUA_INVALID_ID) return;
@@ -585,6 +643,7 @@ void SipCtl::Impl::startOnLoop(const SipSettings& s) {
   // No pjsua worker: its loop polls every 10 ms for ever, idle or not. We pump the events
   // ourselves at a rate that follows the work. See the note at the top of sipctl.h.
   cfg.thread_cnt = 0;
+  cfg.max_calls = std::min<unsigned>(PJSUA_MAX_CALLS, 16);
   cfg.cb.on_reg_state2 = &Impl::s_on_reg_state2;
   cfg.cb.on_call_state = &Impl::s_on_call_state;
   cfg.cb.on_incoming_call = &Impl::s_on_incoming_call;
@@ -755,6 +814,13 @@ void SipCtl::Impl::stopOnLoop() {
   call_id.store(PJSUA_INVALID_ID);
   call_owner.clear();
   clearMonitors();
+  {
+    std::lock_guard<std::mutex> lock(room_mu);
+    room_dialogs.clear();
+    room_policies.clear();
+    room_focus.clear();
+    room_edges.clear();
+  }
   running = false;
   reg_state = SipRegState::Idle;
   call_state = SipCallState::Idle;
@@ -790,6 +856,14 @@ bool SipCtl::callOwned(const std::string& owner, const std::string& target,
   if (!im->running || im->acc == PJSUA_INVALID_ID) {
     DB_LOGW(kTag, "call(" + target + "): SIP is not started; ignoring call");
     return false;
+  }
+  {
+    std::lock_guard<std::mutex> lock(im->room_mu);
+    for (const auto& entry : im->room_dialogs) {
+      const auto policy = im->room_policies.find(entry.second.mode);
+      if (policy != im->room_policies.end() &&
+          (policy->second.host || (!policy->second.held && entry.second.mode == im->room_focus))) return false;
+    }
   }
   if (im->call_id.load() != PJSUA_INVALID_ID) {
     DB_LOGW(kTag, "call(" + target + "): another call is active; ignoring call");
@@ -846,6 +920,130 @@ bool SipCtl::callOwned(const std::string& owner, const std::string& target,
   return true;
 }
 
+void SipCtl::Impl::routeRooms() {
+  std::set<std::pair<int, int>> desired;
+  std::map<int, std::pair<RoomPolicy, std::string>> active;
+  {
+    std::lock_guard<std::mutex> lock(room_mu);
+    for (const auto& entry : room_dialogs) {
+      const auto& dialog = entry.second;
+      const auto policy = room_policies.find(dialog.mode);
+      if (!dialog.confirmed || !dialog.media || dialog.slot == PJSUA_INVALID_ID ||
+          policy == room_policies.end() || policy->second.held) continue;
+      if (!policy->second.host && dialog.mode != room_focus) continue;
+      active[dialog.slot] = {policy->second, dialog.mode};
+    }
+  }
+  for (const auto& source : active) {
+    desired.emplace(0, source.first);
+    desired.emplace(source.first, 0);
+    if (source.second.first.host) for (const auto& target : active)
+      if (source.first != target.first && target.second.first.host &&
+          source.second.first.room == target.second.first.room)
+        desired.emplace(source.first, target.first);
+  }
+  // Disconnect before connecting: focus changes and takeover cannot briefly mix two doors.
+  for (const auto& edge : room_edges)
+    if (!desired.count(edge)) pjsua_conf_disconnect(edge.first, edge.second);
+  for (const auto& edge : desired)
+    if (!room_edges.count(edge)) pjsua_conf_connect(edge.first, edge.second);
+  room_edges = std::move(desired);
+}
+
+void SipCtl::Impl::postRoom(int cid, bool confirmed, bool media, int slot, bool ended) {
+  if (stopping.load()) return;
+  auto lifetime = alive;
+  const int generation = gen.load();
+  loop.post([this, lifetime, generation, cid, confirmed, media, slot, ended] {
+    if (!lifetime->load() || generation != gen.load() || stopping.load()) return;
+    std::string mode;
+    bool connected = false;
+    {
+      std::lock_guard<std::mutex> lock(room_mu);
+      auto dialog = room_dialogs.find(cid);
+      if (dialog == room_dialogs.end()) return;
+      mode = dialog->second.mode;
+      if (ended) room_dialogs.erase(dialog);
+      else {
+        dialog->second.confirmed = confirmed || dialog->second.confirmed;
+        dialog->second.media = media;
+        dialog->second.slot = slot;
+        connected = dialog->second.confirmed && media && !dialog->second.announced;
+        if (connected) dialog->second.announced = true;
+      }
+    }
+    routeRooms();
+    if (cbs.on_room_state && (ended || connected))
+      cbs.on_room_state(mode, ended ? SipCallState::Ended : SipCallState::InCall);
+  });
+}
+
+void SipCtl::setRoomPolicies(const std::map<std::string, RoomPolicy>& policies) {
+  auto* im = impl_.get();
+  if (!im->running) return;
+  ensurePjThread();
+  std::vector<int> retired;
+  {
+    std::lock_guard<std::mutex> lock(im->room_mu);
+    im->room_policies = policies;
+    for (const auto& entry : im->room_dialogs)
+      if (!policies.count(entry.second.mode)) retired.push_back(entry.first);
+  }
+  im->routeRooms();
+  for (int cid : retired) pjsua_call_hangup(cid, 0, nullptr, nullptr);
+}
+
+bool SipCtl::callRoom(const std::string& mode, const std::string& target) {
+  auto* im = impl_.get();
+  if (!im->running || mode.rfind("room:", 0) != 0 || target.rfind("sip:", 0) != 0) return false;
+  {
+    std::lock_guard<std::mutex> lock(im->room_mu);
+    const auto policy = im->room_policies.find(mode);
+    if (policy == im->room_policies.end() || policy->second.host) return false;
+    for (const auto& entry : im->room_dialogs) if (entry.second.mode == mode) return true;
+  }
+  ensurePjThread();
+  const auto auth = im->outboundAuth(mode);
+  if (auth.empty()) return false;
+  pjsua_msg_data data;
+  pjsua_msg_data_init(&data);
+  pjsip_generic_string_hdr mode_header, auth_header;
+  pj_str_t mode_name = pj_str(const_cast<char*>("X-Doorbell-Mode"));
+  pj_str_t auth_name = pj_str(const_cast<char*>("X-Doorbell-Auth"));
+  pj_str_t mode_value = pstr(mode), auth_value = pstr(auth);
+  pjsip_generic_string_hdr_init2(&mode_header, &mode_name, &mode_value);
+  pjsip_generic_string_hdr_init2(&auth_header, &auth_name, &auth_value);
+  pj_list_push_back(&data.hdr_list, &mode_header);
+  pj_list_push_back(&data.hdr_list, &auth_header);
+  pj_str_t destination = pstr(target);
+  pjsua_call_id cid = PJSUA_INVALID_ID;
+  if (pjsua_call_make_call(im->acc, &destination, nullptr, nullptr, &data, &cid) != PJ_SUCCESS)
+    return false;
+  {
+    std::lock_guard<std::mutex> lock(im->room_mu);
+    Impl::RoomDialog dialog;
+    dialog.mode = mode;
+    im->room_dialogs.emplace(cid, std::move(dialog));
+  }
+  return true;
+}
+
+void SipCtl::setRoomFocus(const std::string& mode) {
+  auto* im = impl_.get();
+  if (!im->running) return;
+  ensurePjThread();
+  {
+    std::lock_guard<std::mutex> lock(im->room_mu);
+    im->room_focus = mode;
+  }
+  im->routeRooms();
+}
+
+size_t SipCtl::roomCount() const {
+  std::lock_guard<std::mutex> lock(impl_->room_mu);
+  return impl_->room_dialogs.size();
+}
+
 void SipCtl::setInboundPolicy(InboundClassifier classify, AuthSigner sign) {
   Impl* im = impl_.get();
   std::lock_guard<std::mutex> lk(im->src_mu);
@@ -868,7 +1066,14 @@ void SipCtl::hangup() {
   Impl* im = impl_.get();
   if (!im->running) return;
   ensurePjThread();
-  pjsua_call_hangup_all();
+  std::vector<int> calls;
+  const int primary = im->call_id.load();
+  if (primary != PJSUA_INVALID_ID) calls.push_back(primary);
+  {
+    std::lock_guard<std::mutex> lock(im->mon_mu);
+    for (const auto& monitor : im->monitors) calls.push_back(monitor.first);
+  }
+  for (int cid : calls) pjsua_call_hangup(cid, 0, nullptr, nullptr);
 }
 
 bool SipCtl::hangupOwned(const std::string& owner) {

@@ -181,3 +181,116 @@ presentation projection of Core state, not a second call-owner state machine.
 Keep its ordering/selection reducer testable with actual call identities; UIKit
 owns layout. AppDelegate retains targeted-chime routing. Other resident shells
 adopt the same semantics under their own T36 subreports and target gates.
+
+## Implementation checkpoint: 2026-11-07
+
+The first implementation increment adds a modern UIKit waiting list and preserves
+selection when subsequent targeted chimes arrive, including while a dialog is
+connected. The presentation router retains multiple requests behind a covering
+screen. Waiting rows use text only. Selecting another visitor requires the
+current SIP session to finish; hold, takeover and conference joining are not yet
+implemented or advertised. The resident screen also lists replicated active
+conversation owners, and the door screen identifies the answering resident when
+Core has supplied an owner for its exact call.
+
+Runtime `active_calls[].notification_eligible` is a process-local admission
+receipt for this node and the exact stage revision. It is set by targeted chime
+delivery, not by observing a replicated press. It permits reconciling a screen
+against admissions already delivered during this Core process. It does not
+recover missed notifications after restart or disconnection and does not claim
+that the queue is complete. `dialog_owner` remains the conversation owner.
+
+`db_core_open_door_for_call_v2` serializes exact door, call identity and revision
+validation with unlock dispatch. It returns -5 for a missing/stale call and never
+falls back to another call or door. Modern UIKit call controls use this scoped
+entry point; monitoring screens retain their explicit door-only unlock contract.
+
+Host tests cover stable selection, duplicate admission, explicit selection,
+stale terminal events and a new call at the same door. A four-node Core test
+covers two independent conversations, replicated ownership, targeted admission
+and rejection of a different owner's end request. These tests use the SIP stub;
+they provide no evidence of real conference audio or hardware qualification.
+
+Remaining increments must implement authoritative response/queue/hold presence,
+identity-scoped SIP admission, explicit takeover arbitration, conference media
+and participant lifecycles, then integrate Android, Windows, Web and iOS 5
+interfaces. They must also qualify queue bounds, foreground recovery, accessibility
+and real device audio before the complete feature can be advertised.
+
+Validation for this increment: Core build and the four `calls:*` tests passed
+(123 assertions); the focused four-node test passed 42 assertions. The complete
+iOS compatibility host suite, Android modern and API 19 debug assembly/unit
+tests/lint, modern iOS arm64 simulator Debug compilation with an explicit SIP
+stub, and iOS 5 Core/app builds passed. The complete 605-case Core run did not
+finish: a stack sample found it waiting in `OperationFleet` destruction under
+`Httpd::stop`/`mg_stop`; it was terminated, so no full-suite pass is claimed.
+No Windows/tvOS build, simulator layout inspection, device deployment, takeover,
+hold or conference audio qualification was performed.
+
+## Experimental protocol checkpoint: 2026-11-07
+
+Work stopped at the user's request to conserve the remaining usage allowance.
+The second increment is a **work in progress**, not a completed release. The
+`DB_ENABLE_CONVERSATION_V1` CMake option defaults to `OFF`; normal application
+builds must keep it off until the remaining integration work is qualified.
+Explicit experimental host builds enable it with
+`-DDB_ENABLE_CONVERSATION_V1=ON`.
+
+Implemented source includes door-authoritative version checks for response,
+answer, takeover, join, hold, resume and leave; replicated participant snapshots;
+exact signed SIP admission generations; isolated PJSIP room routing; MiniSIP
+client authentication/hold adapters; scoped unlock bindings; and initial queue
+and action integrations in modern iOS, Android, Windows, Web and iOS 5. Browser
+participants use independent panel identities and bounded authority leases.
+The legacy iOS 5 door listener is not a conference mixer: that endpoint must
+continue to advertise no room-host capability.
+
+Verified before this checkpoint:
+
+- Four pure conversation cases passed 60 assertions.
+- The real PJSIP/MiniSIP RTP probe passed joining, holding, resuming, leg
+  revocation, room isolation and admission-identity checks.
+- The four-process production mesh/SIP test passed response, answer, joining,
+  holding, resuming, takeover, competing takeover and participant departure.
+- New Web controller checks and the existing Web call-flow/tab/state tests
+  passed. Initial iOS and iOS 5 builds and Android modern assembly/unit/lint
+  checks passed; later integration edits still require the final build sweep.
+- Windows managed sources were type-checked against .NET 4.8 reference
+  assemblies using generated XAML field declarations. This is not a WPF build
+  or runtime/layout test. A pre-existing public/internal watchdog accessibility
+  mismatch was fixed to permit the managed check.
+
+The restart variant exposed a SIP shutdown callback race that could incorrectly
+end the persisted room during authority shutdown. Shutdown callbacks now stop
+at both the SIP and Node boundaries. The final cluster rerun passed authority
+restart, resident restart and explicit recovery with fresh SIP generations.
+The cluster fixture waits for the authority route to become live before issuing
+a recovery request. Recovery UI/admission still needs completion and qualification.
+
+Remaining work includes finalizing recovery presentation and admission after a
+resident restart, reconciling stale room revisions and metadata bounds, visitor
+end-call wiring on every shell, browser lease/revocation and media failure
+coverage, Windows queue/lifecycle interactions, legacy queue routing, full
+platform verification and real layout/device/audio qualification. Do not
+interpret current source or experimental controls as proof those cases pass.
+
+Useful continuation commands/artifacts:
+
+- `tools/test_conversation_cluster.py` runs the production cluster fixture using
+  `build/conversation-host-pjsip/doorbell_conversation_node_probe` as authority
+  and `build/doorbell_conversation_node_probe` as MiniSIP-backed residents.
+  Both builds must explicitly enable the experimental option.
+- `build/conversation-host-pjsip/doorbell_conversation_audio_probe` checks real RTP.
+- `node webui/tests/conversations.test.js` checks the browser controller.
+- Diagnostic logs are under `/tmp/doorbell-conversation-*`; isolated cluster
+  test data is under `/tmp/doorbell-conversation-cluster-v1` and contains only
+  generated test identities. No device was deployed and nothing was pushed.
+
+Final checkpoint checks: the eight `conversation:*`/`calls:*` tests passed
+183 assertions; real RTP and four-process restart/recovery checks passed.
+The latest modern iOS arm64 simulator Debug build and Android modern Kotlin
+compilation/unit tests passed. Generated translations, English-source and diff
+checks passed. Windows source-contract tests still report four failures and
+have not been reconciled against the baseline; only managed type checking is
+claimed. The full Core suite and final legacy/Windows/tvOS/UI/device sweeps
+remain outstanding. No changes were committed or deployed.

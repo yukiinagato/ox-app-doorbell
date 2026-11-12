@@ -480,6 +480,12 @@ final class CoreBridge {
         }
     }
 
+    func conversation(_ request: [String: Any]) -> [String: Any]? {
+        guard let data = try? JSONSerialization.data(withJSONObject: request),
+              let body = String(data: data, encoding: .utf8) else { return nil }
+        return withCore { takeJson(db_core_conversation_request_json_v1($0, body)) } ?? nil
+    }
+
     func sipHangup(coreGeneration: UInt64? = nil) {
         withCore(generation: coreGeneration) { c in db_core_sip_hangup(c) }
     }
@@ -850,6 +856,12 @@ final class CoreBridge {
         return withCore { c -> Int32 in
             guard !door.isEmpty else { return -1 }
             return db_core_open_door(c, door)
+        } ?? -1
+    }
+
+    func openDoor(door: String, callId: String, stageRevision: Int) -> Int32 {
+        return withCore { c -> Int32 in
+            db_core_open_door_for_call_v2(c, door, callId, Int32(stageRevision))
         } ?? -1
     }
 

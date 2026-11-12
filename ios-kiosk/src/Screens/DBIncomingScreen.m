@@ -55,6 +55,17 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 @end
 
 @implementation DBIncomingScreen {
+  NSMutableDictionary *_visits;
+  NSMutableArray *_visitOrder;
+  NSMutableDictionary *_retiredVisits;
+  NSMutableDictionary *_roomEvents;
+  UIScrollView *_visitPanel;
+  NSMutableArray *_visitButtons;
+  NSString *_visitSignature;
+  BOOL _selectingVisit;
+  NSString *_touchVisit;
+  NSNumber *_touchRoomVersion;
+  NSDictionary *_pendingTakeoverRequest;
   DBCoreBridge *_core;
   DBBootConfig *_boot;
   DBTexts *_texts;
@@ -168,6 +179,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 - (id)initWithRouter:(DBRouter *)router {
   self = [super initWithFrame:[UIScreen mainScreen].bounds];
   if (self) {
+    _visits = [[NSMutableDictionary alloc] init];
+    _visitOrder = [[NSMutableArray alloc] init];
+    _retiredVisits = [[NSMutableDictionary alloc] init];
+    _roomEvents = [[NSMutableDictionary alloc] init];
+    _visitButtons = [[NSMutableArray alloc] init];
     _router = router;
     _h264Backoff = [[DBBackoffPolicy alloc] init];
     _core = router.core;
@@ -283,6 +299,9 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _replyStack = [[UIView alloc] init];
   [self addSubview:_replyStack];
 
+  _visitPanel = [[UIScrollView alloc] init];
+  _visitPanel.hidden = YES;
+  [self addSubview:_visitPanel];
   _answerButton = [self makeButton:YES];
   [_answerButton addTarget:self action:@selector(onAnswer) forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_answerButton];
@@ -296,6 +315,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   [_openButton addTarget:self action:@selector(onOpenDoor)
         forControlEvents:UIControlEventTouchUpInside];
   [self addSubview:_openButton];
+  for (UIButton *button in @[_answerButton, _openButton])
+    [button addTarget:self action:@selector(captureVisit) forControlEvents:UIControlEventTouchDown];
 
   _ignoreButton = [self makeButton:NO];
   [_ignoreButton addTarget:self action:@selector(onIgnore)
@@ -415,6 +436,19 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 - (void)prepareWithDoor:(NSString *)door purpose:(NSString *)purpose lang:(NSString *)lang
                  callID:(NSString *)callID stageRevision:(NSInteger)stageRevision
             expiresAtMs:(long long)expiresAtMs {
+  if ([callID length] > 0 && [door length] > 0) {
+    NSString *key = [NSString stringWithFormat:@"%@:%@", door, callID];
+    NSInteger retired = [_retiredVisits objectForKey:key] ? [[_retiredVisits objectForKey:key] integerValue] : -1;
+    if (stageRevision <= retired) return;
+    NSDictionary *visit = @{ @"door":door, @"call_id":callID, @"purpose":purpose ?: @"",
+        @"visitor_lang":lang ?: @"", @"stage_revision":@(stageRevision), @"expires_at_ms":@(expiresAtMs) };
+    if (![_visits objectForKey:key]) [_visitOrder addObject:key];
+    NSDictionary *old = [_visits objectForKey:key];
+    if (!old || stageRevision >= [[old objectForKey:@"stage_revision"] integerValue]) [_visits setObject:visit forKey:key];
+    if (!_selectingVisit && self.superview && [_callID length] > 0 &&
+        (![_callID isEqual:callID] || ![_door isEqual:door])) { [self refreshVisits]; return; }
+  }
+
   (void)expiresAtMs;
   ++_snapshotGen; _snapshotDeferred = NO; _fastStartupUntil = 0;
   ++_sipActionGen;
@@ -865,6 +899,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onReturnTick:(NSTimer *)timer {
+  if ([_visitOrder count] > 1) return;
   (void)timer;
   BOOL expired = [_returnCountdown tick];
   [self updateCountdownLabel];
@@ -1598,6 +1633,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 - (void)updateVideoStats:(NSTimer *)timer {
   (void)timer;
+  [self refreshVisits];
   DBVideoStats stats = DBVideoStatsMake(NO, 0, 0, 0);
   if ([_activeVideoTransport isEqualToString:@"H.264 LOW-LAT"] && _lowLatency)
     stats = [_lowLatency videoStats];
@@ -1777,6 +1813,13 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onScreenWillDisappear {
+  for (NSDictionary *call in [self visitSnapshots]) {
+    NSDictionary *room = [self roomFor:call];
+    if (![self ownRoomMember:room]) continue;
+    [_core conversation:@{ @"action":@"leave", @"door":[call objectForKey:@"door"],
+        @"call_id":[call objectForKey:@"call_id"], @"stage_revision":[call objectForKey:@"stage_revision"],
+        @"expected_version":[room objectForKey:@"version"] }];
+  }
   ++_sipActionGen;
   [self stopReturnTimer];
   [_returnCountdown reset];
@@ -1846,6 +1889,12 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 
 - (void)onAnswer {
+  if (![self visitTargetMatches]) return;
+  if ([self usesConversation]) {
+    NSDictionary *member = [self ownRoomMember:[self roomFor:[self selectedVisitSnapshot]]];
+    [self sendConversation:!member || [[member objectForKey:@"state"] isEqual:@"waiting"] ? @"answer" : @"leave"];
+    return;
+  }
   if (_peerHost == nil) return;
   if (_inCall) {
     [_router sipHangup];
@@ -1903,6 +1952,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)beginMonitorAudio {
+  if ([self usesConversation]) return;
   if (_monitorOnly) [self onMonitor];
 }
 
@@ -1916,7 +1966,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   // db_core_open_door publishes the configured unlock action; -3 means nothing
   // is configured anywhere and -4 that a configured command failed. Each must
   // explain itself, because a silent no-op reads as a broken lock (spec §5.2).
-  int status = [_core openDoor:_door];
+  if (![self visitTargetMatches]) return;
+  int status = [_callID length] > 0 ? [_core openDoor:_door callID:_callID revision:_stageRevision] : [_core openDoor:_door];
   if (status == 0) _hintLabel.text = [_texts ts:@"ring.unlock_sent"];
   else if (status == -3) _hintLabel.text = [_texts ts:@"unlock.not_configured"];
   else _hintLabel.text = [_texts ts:@"ring.unlock_failed"];
@@ -1924,7 +1975,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onIgnore {
-  [self closeSelf];
+  NSString *key = [NSString stringWithFormat:@"%@:%@", _door, _callID];
+  [_retiredVisits setObject:@(_stageRevision) forKey:key];
+  [_visits removeObjectForKey:key]; [_visitOrder removeObject:key];
+  if ([_visitOrder count] == 0) [self closeSelf];
+  else { _answerButton.enabled = NO; [self refreshVisits]; }
 }
 
 - (void)onReply:(UIButton *)sender {
@@ -2000,6 +2055,174 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     [self updateBadges];
     [self buildReplyButtons];
   }
+}
+
+- (NSArray *)visitSnapshots {
+  NSArray *calls = [[_core lastStatus] objectForKey:@"active_calls"];
+  return [calls isKindOfClass:[NSArray class]] ? calls : @[];
+}
+- (NSDictionary *)selectedVisitSnapshot {
+  for (NSDictionary *call in [self visitSnapshots]) if ([[call objectForKey:@"door"] isEqual:_door] &&
+      [[call objectForKey:@"call_id"] isEqual:_callID]) return call;
+  return nil;
+}
+- (BOOL)usesConversation { return [[[self selectedVisitSnapshot] objectForKey:@"conversation_supported"] boolValue]; }
+- (NSDictionary *)roomFor:(NSDictionary *)call {
+  NSDictionary *snapshot = [call objectForKey:@"conversation"];
+  NSDictionary *event = [_roomEvents objectForKey:[call objectForKey:@"call_id"] ?: @""];
+  return [[event objectForKey:@"version"] longLongValue] > [[snapshot objectForKey:@"version"] longLongValue] ? event : snapshot;
+}
+- (NSDictionary *)ownRoomMember:(NSDictionary *)room {
+  for (NSDictionary *member in [room objectForKey:@"participants"])
+    if ([[member objectForKey:@"device"] isEqual:_nodeId]) return member;
+  return nil;
+}
+- (BOOL)isVisitSelected:(NSDictionary *)event {
+  return [[event objectForKey:@"door"] isEqual:_door] && [[event objectForKey:@"call_id"] isEqual:_callID];
+}
+- (void)captureVisit {
+  _touchVisit = [NSString stringWithFormat:@"%@:%@:%ld", _door, _callID, (long)_stageRevision];
+  _touchRoomVersion = [[self roomFor:[self selectedVisitSnapshot]] objectForKey:@"version"] ?: @0;
+}
+- (BOOL)visitTargetMatches {
+  NSString *target = _touchVisit;
+  _touchVisit = nil;
+  return !target || [target isEqual:[NSString stringWithFormat:@"%@:%@:%ld", _door, _callID, (long)_stageRevision]];
+}
+- (void)sendConversation:(NSString *)action {
+  if ([_sipMode length] > 0) { [_router sipHangup]; _sipMode = @""; _inCall = NO; }
+  NSDictionary *request = @{ @"action":action, @"door":_door ?: @"", @"call_id":_callID ?: @"",
+      @"stage_revision":@(_stageRevision), @"expected_version":_touchRoomVersion ?:
+        ([[self roomFor:[self selectedVisitSnapshot]] objectForKey:@"version"] ?: @0) };
+  _touchRoomVersion = nil;
+  if ([action isEqual:@"takeover"]) {
+    _pendingTakeoverRequest = request;
+    UIAlertView *alert = [[UIAlertView alloc] initWithTitle:[_texts ts:@"conversation.takeover"]
+        message:[_texts ts:@"conversation.takeover_confirm"] delegate:(id)self
+        cancelButtonTitle:[_texts ts:@"admin.cancel"] otherButtonTitles:[_texts ts:@"conversation.takeover"], nil];
+    [alert show];
+    return;
+  }
+  NSDictionary *result = [_core conversation:request];
+  _hintLabel.text = [_texts ts:[[result objectForKey:@"ok"] boolValue] ? @"conversation.pending" : @"conversation.failed"];
+  _hintLabel.hidden = NO;
+}
+- (void)alertView:(UIAlertView *)alert clickedButtonAtIndex:(NSInteger)index {
+  NSDictionary *request = _pendingTakeoverRequest;
+  _pendingTakeoverRequest = nil;
+  if (index == alert.cancelButtonIndex || !request) return;
+  NSDictionary *result = [_core conversation:request];
+  _hintLabel.text = [_texts ts:[[result objectForKey:@"ok"] boolValue] ? @"conversation.pending" : @"conversation.failed"];
+  _hintLabel.hidden = NO;
+}
+- (void)onVisitButton:(UIButton *)button {
+  NSDictionary *entry = button.tag >= 0 && button.tag < (NSInteger)[_visitButtons count]
+      ? [_visitButtons objectAtIndex:button.tag] : nil;
+  NSString *action = [entry objectForKey:@"action"];
+  if (action) { if ([self visitTargetMatches]) [self sendConversation:action]; return; }
+  NSDictionary *visit = [_visits objectForKey:[entry objectForKey:@"key"]];
+  if (!visit || (_inCall && ![self usesConversation])) return;
+  [_core conversation:@{ @"action":@"select", @"door":[visit objectForKey:@"door"],
+                          @"call_id":[visit objectForKey:@"call_id"] }];
+  _selectingVisit = YES;
+  [self prepareWithDoor:[visit objectForKey:@"door"] purpose:[visit objectForKey:@"purpose"]
+      lang:[visit objectForKey:@"visitor_lang"] callID:[visit objectForKey:@"call_id"]
+      stageRevision:[[visit objectForKey:@"stage_revision"] integerValue]
+      expiresAtMs:[[visit objectForKey:@"expires_at_ms"] longLongValue]];
+  _selectingVisit = NO;
+  [self refreshVisits];
+}
+- (BOOL)handleVisitEvent:(NSDictionary *)event {
+  NSString *key = [NSString stringWithFormat:@"%@:%@", [event objectForKey:@"door"], [event objectForKey:@"call_id"]];
+  NSDictionary *visit = [_visits objectForKey:key];
+  if (!visit) return NO;
+  NSString *type = [event objectForKey:@"type"];
+  if ([type isEqual:@"call_cancelled"] || [type isEqual:@"call_ended"] || [type isEqual:@"reply"]) {
+    NSNumber *revision = [event objectForKey:@"stage_revision"];
+    if (revision && [revision integerValue] >= [[visit objectForKey:@"stage_revision"] integerValue]) {
+      [_retiredVisits setObject:revision forKey:key]; [_visits removeObjectForKey:key]; [_visitOrder removeObject:key];
+      if ([self isVisitSelected:event]) { _answerButton.enabled = NO; _inCall = NO; }
+    }
+  }
+  [self refreshVisits];
+  return [type isEqual:@"call_answered"] || [type isEqual:@"call_cancelled"] || [type isEqual:@"call_ended"] || [type isEqual:@"reply"];
+}
+- (void)handleConversationEvent:(NSDictionary *)event {
+  NSString *callID = [event objectForKey:@"call_id"];
+  if ([callID length] > 0 && [[event objectForKey:@"t"] isEqual:@"conversation"] &&
+      [[event objectForKey:@"version"] longLongValue] > [[[_roomEvents objectForKey:callID] objectForKey:@"version"] longLongValue])
+    [_roomEvents setObject:event forKey:callID];
+  [self refreshVisits];
+}
+- (void)refreshVisits {
+  if (!_visitPanel) return;
+  for (NSDictionary *call in [self visitSnapshots]) if ([[call objectForKey:@"notification_eligible"] boolValue]) {
+    NSString *key = [NSString stringWithFormat:@"%@:%@", [call objectForKey:@"door"], [call objectForKey:@"call_id"]];
+    NSNumber *retired = [_retiredVisits objectForKey:key];
+    if (retired && [[call objectForKey:@"stage_revision"] integerValue] <= [retired integerValue]) continue;
+    if (![_visits objectForKey:key]) [_visitOrder addObject:key];
+    [_visits setObject:call forKey:key];
+  }
+  NSDictionary *selected = [self selectedVisitSnapshot];
+  NSDictionary *room = [self roomFor:selected];
+  NSDictionary *me = [self ownRoomMember:room];
+  NSString *state = [me objectForKey:@"state"] ?: @"";
+  BOOL supported = [self usesConversation];
+  BOOL media = [[selected objectForKey:@"conversation_local_media"] boolValue];
+  if (supported) {
+    _inCall = [state isEqual:@"connected"] && media;
+    [_answerButton setTitle:[_texts ts:!me || [state isEqual:@"waiting"] ? @"conversation.answer" : @"conversation.leave"] forState:UIControlStateNormal];
+    _answerButton.enabled = me || [[room objectForKey:@"owner"] length] == 0;
+    _monitorButton.hidden = YES;
+    _openButton.enabled = YES;
+    if ([state length] > 0 && ![state isEqual:@"waiting"]) [_returnCountdown pauseForAnsweredCall];
+  }
+  NSString *signature = [NSString stringWithFormat:@"%@:%@:%@:%@:%d:%d", _visitOrder, _door, _callID,
+      [room objectForKey:@"version"], supported, media];
+  if ([_visitSignature isEqual:signature]) return;
+  _visitSignature = signature;
+  for (UIView *view in [_visitPanel subviews]) [view removeFromSuperview];
+  [_visitButtons removeAllObjects];
+  CGFloat y = 0, width = MAX(200, self.bounds.size.width - 40);
+  for (NSString *key in _visitOrder) {
+    NSDictionary *call = [_visits objectForKey:key];
+    NSString *door = [call objectForKey:@"door"];
+    NSString *name = [DBConfigUtil labelOf:[DBConfigUtil dig:_cfg path:[@"doors." stringByAppendingString:door]] lang:_boot.uiLang fallback:door];
+    UIButton *button = [self makeButton:NO];
+    button.tag = [_visitButtons count];
+    [_visitButtons addObject:@{ @"key":key }];
+    [button setTitle:[_texts t:[self isVisitSelected:call] ? @"ring.queue_selected" : @"ring.queue_waiting", name, nil] forState:UIControlStateNormal];
+    [button addTarget:self action:@selector(onVisitButton:) forControlEvents:UIControlEventTouchUpInside];
+    button.frame = CGRectMake(0, y, width, 44); y += 48; [_visitPanel addSubview:button];
+  }
+  NSMutableArray *actions = [NSMutableArray array];
+  if (supported) {
+    if ([state isEqual:@"connected"] && media) [actions addObject:@"hold"];
+    else if ([state isEqual:@"held"] || ([state isEqual:@"connected"] && !media)) [actions addObject:@"resume"];
+    else if (!me && [[room objectForKey:@"owner"] length] > 0) [actions addObjectsFromArray:@[@"join", @"takeover"]];
+    else if (!me) [actions addObject:@"respond"];
+  }
+  for (NSString *action in actions) {
+    UIButton *button = [self makeButton:NO]; button.tag = [_visitButtons count];
+    [_visitButtons addObject:@{ @"action":action }];
+    [button setTitle:[_texts ts:[@"conversation." stringByAppendingString:action]] forState:UIControlStateNormal];
+    [button addTarget:self action:@selector(captureVisit) forControlEvents:UIControlEventTouchDown];
+    [button addTarget:self action:@selector(onVisitButton:) forControlEvents:UIControlEventTouchUpInside];
+    button.frame = CGRectMake(0, y, width, 44); y += 48; [_visitPanel addSubview:button];
+  }
+  for (NSDictionary *call in [self visitSnapshots]) for (NSDictionary *member in [[self roomFor:call] objectForKey:@"participants"]) {
+    NSString *device = [member objectForKey:@"device"];
+    NSString *name = [DBConfigUtil labelOf:[DBConfigUtil dig:_cfg path:[@"devices." stringByAppendingString:device]] lang:_boot.uiLang fallback:device];
+    NSString *phase = [member objectForKey:@"state"];
+    UILabel *label = [[UILabel alloc] initWithFrame:CGRectMake(0, y, width, 44)];
+    label.numberOfLines = 2; label.textColor = [UIColor whiteColor]; label.backgroundColor = [UIColor clearColor];
+    label.text = [NSString stringWithFormat:@"%@ · %@", [call objectForKey:@"door"],
+        [_texts t:[phase isEqual:@"waiting"] ? @"conversation.queued" : [@"conversation." stringByAppendingString:phase], name, nil]];
+    [_visitPanel addSubview:label]; y += 48;
+  }
+  _visitPanel.contentSize = CGSizeMake(width, y);
+  _visitPanel.hidden = y == 0;
+  [self setNeedsLayout];
 }
 
 #pragma mark - layout
@@ -2129,6 +2352,11 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     _langBadge.frame = CGRectZero;
   }
 
+  if (!_visitPanel.hidden) {
+    CGFloat height = MIN(160, size.height * 0.25);
+    _visitPanel.frame = CGRectMake(margin, headerY, size.width - 2 * margin, height);
+    headerY += height + 8;
+  }
   CGFloat contentTop = headerY;
   CGFloat bottom = size.height - margin;
   CGFloat controlY = bottom - controlHeight;

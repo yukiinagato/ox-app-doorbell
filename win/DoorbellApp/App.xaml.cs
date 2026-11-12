@@ -26,7 +26,7 @@ namespace DoorbellApp
         public static bool SafeMode { get; private set; }
         /// <summary>True when the watchdog service launched this process.</summary>
         public static bool Supervised { get; private set; }
-        public static WatchdogChannel Watchdog { get; private set; }
+        internal static WatchdogChannel Watchdog { get; private set; }
         private CameraProbe _cameraProbe;
         private RuntimeProcessState _runtimeProcess;
         private DispatcherTimer _runtimeStatusTimer;

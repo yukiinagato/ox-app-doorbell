@@ -181,6 +181,18 @@ DB_API int db_core_report_call_ended_v2(db_core* c, const char* door_id,
 /* Result v3 distinguishes a durable accepted write, a precisely queued persistence retry, and
  * a rejected operation. The v2 symbols retain their original 0/-2 behavior. Query the API
  * version to select this result contract; older libraries require the v2 fallback. */
+/* Asynchronous door-authoritative conversation action. JSON binds door/call_id/stage_revision,
+ * action, expected_version and optional request_id. Pending is not connected: observe the exact
+ * conversation event/status. Actions: respond, answer, takeover, join, hold, resume, leave, select.
+ * Only media establishment produces connected. The result is owned (db_free). */
+DB_API char* db_core_conversation_request_json_v1(db_core* c, const char* request_json);
+/* A shell with its own measured SIP transport may service conversation_transport events.
+ * It must enforce the exact mode and held flag, sign through db_core_sip_peer_auth, and report
+ * only that leg's established/ended callbacks. This never enables door-side mixing on a stub. */
+DB_API void db_core_conversation_external_transport_v1(db_core* c, int available);
+DB_API void db_core_conversation_external_media_v1(db_core* c, const char* mode, int connected);
+
+
 DB_API int db_core_call_lifecycle_api_version(void);
 DB_API db_call_lifecycle_result db_core_report_call_answered_result_v3(
     db_core* c, const char* door_id, const char* call_id, int stage_revision);
@@ -440,6 +452,12 @@ DB_API int db_core_clear_door_notice(db_core* c, const char* door);
  * can be hidden before it is ever pressed. show_button defaults to configured and an
  * administrator may force either answer through doors.<id>.unlock.show_button. */
 DB_API int db_core_open_door(db_core* c, const char* door);
+
+/* Call-screen unlock. Core validates the exact live identity on its run loop before dispatch.
+ * Returns the legacy unlock result codes, or -5 for a stale/missing call or revision.
+ * Never falls back to another door or a newer call at the same door. */
+DB_API int db_core_open_door_for_call_v2(db_core* c, const char* door,
+                                       const char* call_id, int stage_revision);
 
 /* Durable operation JSON v2. Call on a worker (bounded at four seconds), never a UI or Core
  * callback thread. Prepare accepts {schema_version:2,action,door?,parameters:{},request_id?}.

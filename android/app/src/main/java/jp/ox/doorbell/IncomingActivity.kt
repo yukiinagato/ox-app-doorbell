@@ -22,6 +22,15 @@ import org.json.JSONObject
 class IncomingActivity : Activity() {
 
     private val ui = Handler(Looper.getMainLooper())
+    private val visits = ResidentCallQueue()
+    private val roomEvents = mutableMapOf<String, JSONObject>()
+    private var queueLayout: LinearLayout? = null
+    private var roomLayout: LinearLayout? = null
+    private var occupancy: TextView? = null
+    private var queueSignature = ""
+    private var roomSignature = ""
+    private var touchedTarget: Triple<String, String, Int>? = null
+    private var touchedVersion: Long? = null
     private lateinit var app: App
     private lateinit var texts: Texts
     private var door = ""
@@ -63,6 +72,7 @@ class IncomingActivity : Activity() {
     private val debugTick = object : Runnable {
         override fun run() {
             updateDebugLine()
+            refreshVisits()
             ui.postDelayed(this, DEBUG_INTERVAL_MS)
         }
     }
@@ -75,7 +85,7 @@ class IncomingActivity : Activity() {
         override fun run() {
             val snapshot = returnCountdown.tick()
             renderDoorTitle()
-            if (snapshot.shouldReturnHome) {
+            if (snapshot.shouldReturnHome && visits.items.none { it.key != ResidentCallQueue.Key(door, callId) }) {
                 finish()
                 return
             }
@@ -149,9 +159,16 @@ class IncomingActivity : Activity() {
             texts.t("ring.no_video", R.string.ring_no_video)
         updateBadges(cfg)
 
+        visits.admit(ResidentCallQueue.Item(ResidentCallQueue.Key(door, callId), stageRevision,
+            purpose, visitorLang, expiresAtMs))
+        installVisitViews()
         val close = findViewById<Button>(R.id.close_button)
         close.text = texts.t("ring.ignore", R.string.ring_ignore)
-        close.setOnClickListener { finish() }
+        close.setOnClickListener {
+            if (!sameTouchedTarget()) return@setOnClickListener
+            visits.retire(ResidentCallQueue.Key(door, callId), stageRevision)
+            if (visits.items.isEmpty()) finish() else refreshVisits()
+        }
 
         sosSlider = SosSlideView(this, ui)
         sosSlider.enabledProvider = { app.coreOk }
@@ -232,18 +249,13 @@ class IncomingActivity : Activity() {
         val newCallId = intent?.getStringExtra(EXTRA_CALL_ID).orEmpty()
         val newStage = intent?.getIntExtra(EXTRA_STAGE_REVISION, 0) ?: 0
         val newExpiry = intent?.getLongExtra(EXTRA_EXPIRES_AT_MS, 0L) ?: 0L
-        if (callId.isNotEmpty() && newCallId.isNotEmpty() && newCallId != callId) {
-            if (inCall || answerRequested) return
-            switchIncomingDoor(newDoor, p.orEmpty(), l.orEmpty(), newCallId, newStage, newExpiry)
+        if (newCallId.isNotEmpty() && (newCallId != callId || newDoor != door)) {
+            visits.admit(ResidentCallQueue.Item(ResidentCallQueue.Key(newDoor, newCallId), newStage,
+                p.orEmpty(), l.orEmpty(), newExpiry))
+            refreshVisits()
             return
         }
         if (newCallId == callId && newStage < stageRevision) return
-        if (newDoor != door) {
-            // A new door can replace ringing or monitoring, but never an established call.
-            if (inCall || answerRequested) return
-            switchIncomingDoor(newDoor, p.orEmpty(), l.orEmpty(), newCallId, newStage, newExpiry)
-            return
-        }
         if (newCallId.isNotEmpty()) callId = newCallId
         if (newStage > stageRevision) {
             val update = revisionLifecycle.observeWinningRevision(newStage)
@@ -317,6 +329,162 @@ class IncomingActivity : Activity() {
         screen.arrange(roles, liveView = callId.isEmpty())
         applySemanticUi(cfg, st)
         scheduleAutoClose()
+        ui.post(debugTick)
+        refreshVisits()
+    }
+
+    private fun activeCalls(): List<JSONObject> {
+        val calls = app.core.status()?.optJSONArray("active_calls") ?: return emptyList()
+        return (0 until calls.length()).mapNotNull { calls.optJSONObject(it) }
+    }
+    private fun selectedCall(): JSONObject? = activeCalls().firstOrNull {
+        it.optString("door") == door && it.optString("call_id") == callId
+    }
+    private fun usesConversation() = selectedCall()?.optBoolean("conversation_supported") == true
+    private fun roomFor(call: JSONObject?): JSONObject? {
+        val snapshot = call?.optJSONObject("conversation")
+        val event = roomEvents[call?.optString("call_id").orEmpty()]
+        return if ((event?.optLong("version") ?: 0L) > (snapshot?.optLong("version") ?: 0L)) event else snapshot
+    }
+    private fun ownMember(room: JSONObject?): JSONObject? {
+        val id = app.core.status()?.optJSONObject("node")?.optString("id").orEmpty()
+        val members = room?.optJSONArray("participants") ?: return null
+        return (0 until members.length()).mapNotNull { members.optJSONObject(it) }
+            .firstOrNull { it.optString("device") == id }
+    }
+    private fun sameTouchedTarget(): Boolean {
+        val touched = touchedTarget
+        touchedTarget = null
+        return touched == null || touched == Triple(door, callId, stageRevision)
+    }
+    private fun bindTarget(button: Button) {
+        button.setOnTouchListener { _, event ->
+            if (event.actionMasked == android.view.MotionEvent.ACTION_DOWN) {
+                touchedTarget = Triple(door, callId, stageRevision)
+                touchedVersion = roomFor(selectedCall())?.optLong("version") ?: 0L
+            }
+            false
+        }
+    }
+    private fun installVisitViews() {
+        val details = findViewById<LinearLayout>(R.id.details_box)
+        occupancy = TextView(this).also { it.setTextColor(android.graphics.Color.WHITE); details.addView(it) }
+        queueLayout = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
+        val scroll = android.widget.ScrollView(this)
+        scroll.addView(queueLayout)
+        details.addView(scroll, LinearLayout.LayoutParams(-1, dp(132)))
+        roomLayout = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL; details.addView(it) }
+        for (id in listOf(R.id.answer_button, R.id.unlock_button, R.id.close_button)) bindTarget(findViewById(id))
+    }
+    private fun sendConversation(action: String) {
+        if (sipCalling) { app.core.sipHangup(); sipCalling = false; inCall = false; answerRequested = false }
+        val request = JSONObject().put("action", action).put("door", door).put("call_id", callId)
+            .put("stage_revision", stageRevision)
+            .put("expected_version", touchedVersion ?: (roomFor(selectedCall())?.optLong("version") ?: 0L))
+        touchedVersion = null
+        val perform = {
+            val result = app.core.conversation(request)
+            findViewById<TextView>(R.id.status_text).text = if (result?.optBoolean("ok") == true)
+                texts.t("conversation.pending", R.string.conversation_pending)
+            else texts.t("conversation.failed", R.string.conversation_failed)
+        }
+        if (action == "takeover") android.app.AlertDialog.Builder(this)
+            .setMessage(texts.t("conversation.takeover_confirm", R.string.conversation_takeover_confirm))
+            .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+            .setPositiveButton(texts.t("conversation.takeover", R.string.conversation_takeover)) { _, _ -> perform() }.show()
+        else perform()
+    }
+    fun onConversationEvent(event: JSONObject) {
+        runOnUiThread {
+            val id = event.optString("call_id")
+            if (event.optString("t") == "conversation" && event.optLong("version") > (roomEvents[id]?.optLong("version") ?: 0L))
+                roomEvents[id] = event
+            if (event.optString("t") == "conversation_result" && !event.optBoolean("ok"))
+                findViewById<TextView>(R.id.status_text).text = texts.t("conversation.failed", R.string.conversation_failed)
+            refreshVisits()
+        }
+    }
+    private fun refreshVisits() {
+        if (queueLayout == null || isFinishing) return
+        cachedStatus = app.core.status()
+        val calls = activeCalls()
+        for (call in calls) if (call.optBoolean("notification_eligible")) {
+            visits.admit(ResidentCallQueue.Item(ResidentCallQueue.Key(call.optString("door"), call.optString("call_id")),
+                call.optInt("stage_revision"), call.optString("purpose"), call.optString("visitor_lang"), call.optLong("expires_at_ms")))
+        }
+        val summaries = mutableListOf<String>()
+        for (call in calls) {
+            val members = roomFor(call)?.optJSONArray("participants") ?: continue
+            for (index in 0 until members.length()) {
+                val member = members.optJSONObject(index) ?: continue
+                val device = member.optString("device")
+                val name = labelOf(app.core.dig(cachedConfig, "devices.$device") as? JSONObject, app.boot.uiLang, device)
+                val state = member.optString("state")
+                val key = if (state == "waiting") "queued" else state
+                val resource = resources.getIdentifier("conversation_$key", "string", packageName)
+                if (resource != 0) summaries.add(doorLabel(call.optString("door")) + " · " + texts.t("conversation.$key", resource, name))
+            }
+        }
+        occupancy?.text = summaries.joinToString("\n")
+        val signature = visits.items.toString() + door + callId
+        if (signature != queueSignature) {
+            queueSignature = signature
+            queueLayout?.removeAllViews()
+            for (visit in visits.items) {
+                val button = Button(this)
+                button.text = texts.t(if (visit.key == ResidentCallQueue.Key(door, callId)) "ring.queue_selected" else "ring.queue_waiting",
+                    if (visit.key == ResidentCallQueue.Key(door, callId)) R.string.ring_queue_selected else R.string.ring_queue_waiting,
+                    doorLabel(visit.key.door))
+                button.minHeight = dp(48)
+                button.setOnClickListener {
+                    if (!usesConversation() && (inCall || answerRequested)) return@setOnClickListener
+                    if (usesConversation()) app.core.conversation(JSONObject().put("action", "select")
+                        .put("door", visit.key.door).put("call_id", visit.key.callId))
+                    val selected = visits.select(visit.key) ?: return@setOnClickListener
+                    switchIncomingDoor(selected.key.door, selected.purpose, selected.language,
+                        selected.key.callId, selected.revision, selected.expiry)
+                }
+                queueLayout?.addView(button)
+            }
+        }
+        val call = selectedCall()
+        val room = roomFor(call)
+        val me = ownMember(room)
+        val state = me?.optString("state").orEmpty()
+        val enabled = call?.optBoolean("conversation_supported") == true
+        val localMedia = call?.optBoolean("conversation_local_media") == true
+        val roomKey = "$enabled:$localMedia:$state:${room?.optString("owner")}:${room?.optLong("version")}:$callId"
+        if (enabled) {
+            inCall = state == "connected" && localMedia
+            if (state == "connected" || state == "held" || state == "dialing") ui.removeCallbacks(returnTick)
+            findViewById<Button>(R.id.monitor_button).visibility = View.GONE
+            findViewById<Button>(R.id.answer_button).apply {
+                text = if (me == null || state == "waiting") texts.t("conversation.answer", R.string.conversation_answer)
+                    else texts.t("conversation.leave", R.string.conversation_leave)
+                isEnabled = me != null || room?.optString("owner").isNullOrEmpty()
+            }
+        }
+        if (roomKey != roomSignature) {
+            roomSignature = roomKey
+            roomLayout?.removeAllViews()
+            if (enabled) {
+                val actions = when {
+                    state == "connected" && localMedia -> listOf("hold")
+                    state == "held" || state == "connected" && !localMedia -> listOf("resume")
+                    me == null && !room?.optString("owner").isNullOrEmpty() -> listOf("join", "takeover")
+                    me == null -> listOf("respond")
+                    else -> emptyList()
+                }
+                for (action in actions) {
+                    val button = Button(this)
+                    val resource = resources.getIdentifier("conversation_$action", "string", packageName)
+                    button.text = texts.t("conversation.$action", resource)
+                    bindTarget(button)
+                    button.setOnClickListener { if (sameTouchedTarget()) sendConversation(action) }
+                    roomLayout?.addView(button)
+                }
+            }
+        }
     }
 
     /** Live view: chips for every door with a station, so the resident can switch cameras. */
@@ -355,6 +523,13 @@ class IncomingActivity : Activity() {
     }
 
     override fun onDestroy() {
+        for (call in activeCalls()) {
+            val room = roomFor(call) ?: continue
+            if (ownMember(room) == null) continue
+            app.core.conversation(JSONObject().put("action", "leave").put("door", call.optString("door"))
+                .put("call_id", call.optString("call_id")).put("stage_revision", call.optInt("stage_revision"))
+                .put("expected_version", room.optLong("version")))
+        }
         if (app.incomingActivity === this) app.incomingActivity = null
         ui.removeCallbacks(debugTick)
         ui.removeCallbacks(returnTick)
@@ -380,6 +555,8 @@ class IncomingActivity : Activity() {
     /** Show cancellation briefly before closing the visitor monitor. */
     fun onCallCancelled(cancelledDoor: String, cancelledCallId: String, cancelledStage: Int) {
         runOnUiThread {
+            visits.retire(ResidentCallQueue.Key(cancelledDoor, cancelledCallId), cancelledStage)
+            refreshVisits()
             if (!matchesCall(cancelledDoor, cancelledCallId, cancelledStage)) return@runOnUiThread
             if (isFinishing || inCall || answerRequested) return@runOnUiThread
             findViewById<TextView>(R.id.status_text).text =
@@ -446,6 +623,7 @@ class IncomingActivity : Activity() {
             if (!matchesCall(answeredDoor, answeredCallId, answeredStage)) return@runOnUiThread
             if (isFinishing) return@runOnUiThread
             stageRevision = maxOf(stageRevision, answeredStage)
+            if (usesConversation()) { refreshVisits(); return@runOnUiThread }
             if (!answerRequested && !inCall) finish()
         }
     }
@@ -466,7 +644,12 @@ class IncomingActivity : Activity() {
 
     fun onCallEnded(endedDoor: String, endedCallId: String, endedStage: Int) {
         runOnUiThread {
-            if (matchesCall(endedDoor, endedCallId, endedStage) && !isFinishing) finish()
+            visits.retire(ResidentCallQueue.Key(endedDoor, endedCallId), endedStage)
+            refreshVisits()
+            if (matchesCall(endedDoor, endedCallId, endedStage) && !isFinishing && visits.items.isEmpty()) {
+                inCall = false
+                findViewById<Button>(R.id.answer_button).isEnabled = false
+            }
         }
     }
 
@@ -639,6 +822,7 @@ class IncomingActivity : Activity() {
      * door roughly twice a second until the door station fell over.
      */
     private fun startAudio() {
+        if (usesConversation()) return
         ui.removeCallbacks(monitorRetry)
         if (!monitorOn || sipCalling) return
         val host = peerHost ?: return
@@ -698,6 +882,12 @@ class IncomingActivity : Activity() {
 
     /** Replace the monitor leg with one answer leg; pressing again ends an established call. */
     private fun onAnswerClick(btn: Button) {
+        if (!sameTouchedTarget()) return
+        if (usesConversation()) {
+            val me = ownMember(roomFor(selectedCall()))
+            sendConversation(if (me == null || me.optString("state") == "waiting") "answer" else "leave")
+            return
+        }
         val host = peerHost ?: return
         if (inCall) {
             app.core.sipHangup()
@@ -931,8 +1121,13 @@ class IncomingActivity : Activity() {
      * out loud rather than reported as a silent success.
      */
     private fun onUnlockClick() {
+        if (!sameTouchedTarget()) return
+        val targetDoor = door
+        val targetCall = callId
+        val targetRevision = stageRevision
         Thread({
-            val result = app.core.openDoor(door)
+            val result = if (targetCall.isEmpty()) app.core.openDoor(targetDoor)
+                else app.core.openDoorForCall(targetDoor, targetCall, targetRevision)
             ui.post {
                 if (isFinishing) return@post
                 toast(

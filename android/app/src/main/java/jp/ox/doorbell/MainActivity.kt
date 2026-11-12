@@ -1265,6 +1265,23 @@ class MainActivity : Activity(), DoorbellCore.Listener {
 
     private fun handleUiEvent(ev: JSONObject) {
         when (ev.optString("t")) {
+            "conversation" -> if (app.boot.role == "door_station" && ev.optString("door") == app.boot.door &&
+                ev.optString("call_id") == uiCallId) {
+                val phase = ev.optString("phase")
+                if (phase == "connected" || phase == "held") showEstablished()
+                val members = ev.optJSONArray("participants")
+                val lines = mutableListOf<String>()
+                if (members != null) for (i in 0 until members.length()) {
+                    val member = members.optJSONObject(i) ?: continue
+                    val id = member.optString("device")
+                    val device = app.core.dig(app.core.config(), "devices.$id") as? JSONObject
+                    val name = device?.optJSONObject("label")?.optString(app.boot.uiLang)?.ifEmpty { id } ?: id
+                    val key = if (member.optString("state") == "waiting") "queued" else member.optString("state")
+                    val resource = resources.getIdentifier("conversation_$key", "string", packageName)
+                    if (resource != 0) lines.add(texts.t("conversation.$key", resource, name))
+                }
+                callingText.text = lines.joinToString("\n").ifEmpty { texts.t("conversation.waiting", R.string.conversation_waiting) }
+            }
             "runtime" -> {
                 if (ev.optString("state") == "ready") {
                     // Core only publishes pairing state once its runtime is up, so the

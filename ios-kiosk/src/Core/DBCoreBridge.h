@@ -98,6 +98,10 @@ NSString *DBLocalMediaHeaderLine(NSURL *url);
 // other negatives for bad arguments. The shell must say which instead of
 // reporting a silent success.
 - (int)openDoor:(NSString *)door;
+- (int)openDoor:(NSString *)door callID:(NSString *)callID revision:(NSInteger)revision;
+- (NSDictionary *)conversation:(NSDictionary *)request;
+- (NSString *)conversationAuth:(NSString *)mode;
+- (void)conversationMedia:(NSString *)mode connected:(BOOL)connected;
 // Call history. sinceMs of zero reads the whole retained history.
 - (NSDictionary *)callLogSince:(long long)sinceMs limit:(NSInteger)limit;
 - (BOOL)markCallLogSeenUpTo:(NSString *)hlc;

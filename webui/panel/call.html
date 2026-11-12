@@ -56,6 +56,8 @@
 <div id="connectionBand" role="status"></div>
 <header><h1 id="title" tabindex="-1" data-semantic-id="ring.title"></h1><span id="regState"></span></header>
 <div id="doorTabs" role="group" aria-labelledby="title"></div>
+<div id="conversationSummary" role="status" style="white-space:pre-line;padding:8px 16px"></div>
+<div id="conversationActions" style="display:flex;flex-wrap:wrap;gap:8px;padding:0 16px"></div>
 <main>
   <div id="videoBox">
     <img id="liveImg" alt="">
@@ -88,6 +90,7 @@
 <script src="/panel/playback.js"></script>
 <script src="/panel/panel-common.js"></script>
 <script src="/panel/call-flow.js"></script>
+<script src="/panel/conversations.js"></script>
 <script src="/panel/runtime.js"></script>
 <script src="/panel/video-session.js"></script>
 <script>
@@ -472,6 +475,7 @@ function playbackKey(d) {
 }
 
 function selectDoor(d, forcePlaybackRefresh) {
+  if (conference && !forcePlaybackRefresh) conference.select(d);
   if (session && !forcePlaybackRefresh) return;  // Do not switch doors during an active call.
   selectionRevision++;
   selected = d;
@@ -610,6 +614,10 @@ els.unlock.onclick = sendUnlock;
 els.mic.onclick = toggleMic;
 
 function updateCallButton() {
+  updateLegacyCallButton();
+  if (conference) renderConference();
+}
+function updateLegacyCallButton() {
   renderSecondaryActions();
   if (session) {
     els.call.setAttribute("data-semantic-id", "call.end");
@@ -782,6 +790,14 @@ function initUa() {
 }
 
 function startCall() {
+  if (conference && selected && selected.conversation_supported) {
+    const mine = conference.member(selected);
+    const request = conferenceCallPress || conference.request(selected, !mine || mine.state === "waiting" ? "answer" : "leave");
+    conferenceCallPress = null;
+    if (request.door !== selected.id || request.call_id !== selected.call_id) return;
+    conference.action(selected, request.action, request).then(ok => { if (!ok) showConferenceError(); }).catch(showConferenceError);
+    return;
+  }
   if (!ua || !selected || !selected.extension) return;
   if (!panelCsrf) { loadPanelSession(); return; }
   const answering = selected.calling || selected.call_state === "ringing" ||
@@ -1023,6 +1039,7 @@ els.call.onclick = () => {
 
 window.addEventListener("pagehide", () => {
   pageActive = false;
+  if (conference) conference.close();
   pageRevision++;
   retireReads();
   configurationReceived = false;
@@ -1255,6 +1272,7 @@ function applyState(st, request) {
   emergencyOverlay.update(st);
   latestPanelState = st;
   const refreshed = refreshDoors(st);
+  if (conference) conference.update(Object.assign({}, st, { doors: doors }));
   ensureLanguage(languageForState(st, selected && selected.id || INITIAL_DOOR));
   const callSnapshotCurrent = !activeLifecycle || (refreshed &&
     refreshed.id === activeLifecycle.door && refreshed.call_id === activeLifecycle.callId &&
@@ -1363,6 +1381,92 @@ function loadPanelSession() {
     updateCallButton();
   });
 }
+
+function showConferenceError() { setStatus(t("conversation.failed"), true); }
+function conferencePost(path, body, closing) {
+  return fetch(path, { method: "POST", credentials: "same-origin", keepalive: !!closing,
+    headers: { "Content-Type": "application/json", "X-Doorbell-CSRF": panelCsrf },
+    body: JSON.stringify(body) }).then(response => response.json());
+}
+const conference = typeof DoorbellConversations === "undefined" ? null : DoorbellConversations.create({
+  send: (body, closing) => conferencePost("/api/panel/conversation", body, closing),
+  authorize: body => conferencePost("/api/panel/conversation-media", body),
+  error: showConferenceError,
+  changed: () => renderConference(),
+  media: (door, grant, callbacks) => {
+    if (!ua || !registered || !door.extension) throw new Error("media unavailable");
+    const call = ua.call("sip:" + door.extension + "@" + (webrtc.server || location.hostname), {
+      mediaConstraints: { audio: true, video: false },
+      extraHeaders: ["X-Doorbell-Mode: " + grant.mode, "X-Doorbell-Auth: " + grant.auth]
+    });
+    let held = true, remote = null;
+    call.on("ended", callbacks.ended); call.on("failed", callbacks.ended);
+    const tracks = () => {
+      const connection = call.connection;
+      if (!connection) return;
+      for (const sender of connection.getSenders()) if (sender.track) sender.track.enabled = !held;
+      if (!held && remote) els.audio.srcObject = remote;
+      else if (els.audio.srcObject === remote) els.audio.srcObject = null;
+    };
+    call.on("confirmed", tracks);
+    if (call.connection) call.connection.addEventListener("track", event => {
+      remote = event.streams && event.streams[0] || null;
+      tracks();
+    });
+    return { setHeld: value => { held = value; tracks(); }, close: () => {
+      try { call.terminate(); } catch (_) {}
+      if (els.audio.srcObject === remote) els.audio.srcObject = null;
+    } };
+  }
+});
+let conferenceActionSignature = "";
+let conferenceCallPress = null;
+if (conference) els.call.addEventListener("pointerdown", () => {
+  if (!selected || !selected.conversation_supported) return;
+  const mine = conference.member(selected);
+  conferenceCallPress = conference.request(selected, !mine || mine.state === "waiting" ? "answer" : "leave");
+});
+function renderConference() {
+  if (!conference) return;
+  const summary = document.getElementById("conversationSummary");
+  const actions = document.getElementById("conversationActions");
+  const lines = [];
+  for (const door of latestPanelState && latestPanelState.doors || []) {
+    for (const member of door.conversation && door.conversation.participants || []) {
+      const key = member.state === "waiting" ? "queued" : member.state;
+      lines.push(door.label + " · " + t("conversation." + key, { device: member.name || member.device }));
+    }
+  }
+  summary.textContent = lines.join("\n");
+  if (!selected || !selected.conversation_supported) {
+    actions.textContent = ""; conferenceActionSignature = ""; return;
+  }
+  const mine = conference.member(selected);
+  const state = mine && mine.state || "";
+  const owner = selected.conversation && selected.conversation.owner || "";
+  els.call.textContent = t(!mine || state === "waiting" ? "conversation.answer" : "conversation.leave");
+  els.call.disabled = !registered || !panelCsrf || conference.pending(selected) || (!mine && !!owner);
+  const verbs = state === "connected" && conference.active(selected) ? ["hold"] :
+    state === "held" || state === "connected" ? ["resume"] : !mine && owner ? ["join", "takeover"] : !mine ? ["respond"] : [];
+  const signature = selected.id + ":" + selected.call_id + ":" + verbs.join(",");
+  if (signature === conferenceActionSignature) return;
+  conferenceActionSignature = signature; actions.textContent = "";
+  for (const verb of verbs) {
+    const button = document.createElement("button");
+    button.type = "button"; button.style.minHeight = "48px"; button.textContent = t("conversation." + verb);
+    let frozen = null, target = null;
+    button.onpointerdown = () => { target = selected; frozen = conference.request(selected, verb); };
+    button.onclick = () => {
+      const door = target || selected, request = frozen || conference.request(door, verb);
+      target = null; frozen = null;
+      if (!selected || selected.id !== request.door || selected.call_id !== request.call_id) return;
+      if (verb === "takeover" && !window.confirm(t("conversation.takeover_confirm"))) return;
+      conference.action(door, verb, request).then(ok => { if (!ok) showConferenceError(); }).catch(showConferenceError);
+    };
+    actions.appendChild(button);
+  }
+}
+if (conference) setInterval(() => conference.heartbeat(), 3000);
 start();
 </script>
 </body>

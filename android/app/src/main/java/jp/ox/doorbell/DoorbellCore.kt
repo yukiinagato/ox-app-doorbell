@@ -165,6 +165,12 @@ class DoorbellCore(context: Context) {
      * action was queued, [DoorUnlocks.NOT_CONFIGURED] when nothing is configured anywhere, and
      * [DoorUnlocks.EXECUTION_FAILED] when a configured command could not be executed.
      */
+    fun conversation(request: JSONObject): JSONObject? =
+        if (handle != 0L) parse(nativeConversation(handle, request.toString())) else null
+
+    fun openDoorForCall(door: String, callId: String, revision: Int): Int =
+        if (handle != 0L) nativeOpenDoorForCall(handle, door, callId, revision) else -1
+
     fun openDoor(door: String): Int =
         if (handle != 0L && door.isNotEmpty()) nativeOpenDoor(handle, door) else -1
 
@@ -494,6 +500,8 @@ class DoorbellCore(context: Context) {
 
     // ---------- native ----------
 
+    private external fun nativeConversation(handle: Long, request: String): String?
+    private external fun nativeOpenDoorForCall(handle: Long, door: String, callId: String, revision: Int): Int
     private external fun nativeCreate(dataDir: String, bootJson: String): Long
     private external fun nativeBackendJson(): String
     private external fun nativeStart(handle: Long): Int

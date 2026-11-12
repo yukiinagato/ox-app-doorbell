@@ -141,6 +141,7 @@
     json::setBool(output, "legacy_shared", principal.legacy_shared);
     if (principal.legacy_shared) return;
     json::set(output, "panel_id", principal.panel_id);
+    json::set(output, "conversation_actor", "web_" + node_id + "_" + principal.panel_id);
     json::set(output, "credential_generation", principal.credential_generation);
     json::set(output, "grant_version", principal.grant_version);
     auto* capabilities = json::addObj(output, "capabilities");

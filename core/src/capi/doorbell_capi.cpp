@@ -626,6 +626,18 @@ DB_API int db_core_report_call_ended_v2(db_core* c, const char* door_id,
                                     reason && *reason ? reason : "sip_ended") ? 0 : -2;
 }
 
+DB_API void db_core_conversation_external_transport_v1(db_core* c, int available) {
+  if (c && c->node) c->node->setConversationExternalTransport(available != 0);
+}
+DB_API void db_core_conversation_external_media_v1(db_core* c, const char* mode, int connected) {
+  if (c && c->node && mode) c->node->reportConversationExternalMedia(mode, connected != 0);
+}
+
+DB_API char* db_core_conversation_request_json_v1(db_core* c, const char* request_json) {
+  if (!c || !c->node || !request_json) return nullptr;
+  return dupString(c->node->conversationRequestJson(request_json));
+}
+
 DB_API int db_core_call_lifecycle_api_version(void) {
   return DB_CALL_LIFECYCLE_RESULT_API_VERSION;
 }
@@ -833,6 +845,12 @@ DB_API int db_core_open_door(db_core* c, const char* door) {
   if (!cJSON_IsObject(entry)) return -2;
   if (!json::getBool(json::get(entry, "unlock"), "configured", false)) return -3;
   return c->node->openDoor(door) ? 0 : -4;
+}
+
+DB_API int db_core_open_door_for_call_v2(db_core* c, const char* door,
+                                         const char* call_id, int stage_revision) {
+  if (!c || !c->node || !door || !call_id) return -1;
+  return c->node->openDoorForCall(door, call_id, stage_revision);
 }
 
 DB_API char* db_core_operation_prepare_json_v2(db_core* c, const char* request_json) {

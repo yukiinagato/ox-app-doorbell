@@ -59,6 +59,10 @@ std::string SipCtl::callMode() const {
 }
 bool SipCtl::hangupOwned(const std::string&) { return false; }
 void SipCtl::hangup() {}
+void SipCtl::setRoomPolicies(const std::map<std::string, RoomPolicy>&) {}
+bool SipCtl::callRoom(const std::string&, const std::string&) { return false; }
+void SipCtl::setRoomFocus(const std::string&) {}
+size_t SipCtl::roomCount() const { return 0; }
 void SipCtl::answer() {}
 bool SipCtl::sendDtmf(const std::string&) { return false; }
 void SipCtl::setInboundPolicy(InboundClassifier, AuthSigner) {}

@@ -1086,6 +1086,27 @@ Java_jp_ox_doorbell_DoorbellCore_nativeMintJoinTokenJson(JNIEnv* env, jobject, j
   return out;
 }
 
+extern "C" JNIEXPORT jstring JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeConversation(JNIEnv* env, jobject, jlong h, jstring request) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return nullptr;
+  char* result = db_core_conversation_request_json_v1(b->core, toUtf8(env, request).c_str());
+  jstring out = toJString(env, b, result);
+  db_free(result);
+  return out;
+}
+
+extern "C" JNIEXPORT jint JNICALL
+Java_jp_ox_doorbell_DoorbellCore_nativeOpenDoorForCall(JNIEnv* env, jobject, jlong h,
+    jstring door, jstring call_id, jint revision) {
+  BridgeLease lease(h);
+  Bridge* b = lease.get();
+  if (!b || !b->core) return -1;
+  return db_core_open_door_for_call_v2(b->core, toUtf8(env, door).c_str(),
+      toUtf8(env, call_id).c_str(), revision);
+}
+
 // Trigger the configured unlock action for one door. Zero means queued; -3 means nothing is
 // configured anywhere, which the shell says out loud instead of reporting a silent success.
 extern "C" JNIEXPORT jint JNICALL

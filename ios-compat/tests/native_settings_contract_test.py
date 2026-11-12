@@ -191,7 +191,8 @@ assert 'color: button.titleColor(for: .normal)' in incoming, \
 assert "incoming.debug_line_hidden" in incoming, "the debug line's state is remembered"
 assert "AdminQrView(core: core, boot: boot, texts: texts, compact: true)" in incoming
 assert "DoorUnlock.showsButton(status: core.status(), config: cfg,\n" in incoming
-assert "core.openDoor(door)" in incoming, "unlock uses Core's own open-door action"
+assert "core.openDoor(door: door, callId: callId, stageRevision: stageRevision)" in incoming, \
+    "incoming unlock binds the door, call identity and revision through Core"
 assert "door.unlock_not_configured" in incoming, "an unconfigured unlock must explain itself"
 
 # --- the theme background reaches every panel, not only the door station ----

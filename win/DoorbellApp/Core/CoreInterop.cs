@@ -436,6 +436,15 @@ namespace DoorbellApp.Core
             [MarshalAs(UnmanagedType.LPUTF8Str)] string door);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern IntPtr db_core_conversation_request_json_v1(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string request);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
+        public static extern int db_core_open_door_for_call_v2(IntPtr core,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string door,
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string callId, int revision);
+
+        [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]
         public static extern IntPtr db_core_call_log_json(IntPtr core, long sinceMs, int limit);
 
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl)]

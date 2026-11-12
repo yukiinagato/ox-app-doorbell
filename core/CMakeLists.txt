@@ -173,7 +173,11 @@ if(DB_PJSIP_OK)
 else()
   list(REMOVE_ITEM DB_CORE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/src/sipctl/sipctl.cpp)
 endif()
+option(DB_ENABLE_CONVERSATION_V1 "Enable experimental multi-resident conversation protocol" OFF)
 add_library(doorbell_core STATIC ${DB_CORE_SRC} ${WEBUI_GEN})
+if(DB_ENABLE_CONVERSATION_V1)
+  target_compile_definitions(doorbell_core PRIVATE DB_ENABLE_CONVERSATION_V1=1)
+endif()
 target_include_directories(doorbell_core PUBLIC include src)
 target_link_libraries(doorbell_core PUBLIC db_third_party)
 # Direct CMake builds must identify their source just like the platform build scripts.
@@ -282,6 +286,20 @@ if(DB_BUILD_TESTS)
   enable_testing()
   add_executable(doorbell_qa_v2_fixture tests/integration/qa_v2_fixture.cpp)
   target_link_libraries(doorbell_qa_v2_fixture PRIVATE doorbell_core)
+  add_executable(doorbell_conversation_node_probe
+    tests/integration/conversation_node_probe.cpp
+    ../ios-kiosk/mini_sip/minisip.c ../ios-kiosk/mini_sip/sip.c
+    ../ios-kiosk/mini_sip/rtp.c ../ios-kiosk/mini_sip/sdp.c ../ios-kiosk/mini_sip/g711.c)
+  target_include_directories(doorbell_conversation_node_probe PRIVATE ../ios-kiosk/mini_sip)
+  target_link_libraries(doorbell_conversation_node_probe PRIVATE doorbell_core)
+  if(DB_PJSIP_OK)
+    add_executable(doorbell_conversation_audio_probe
+      tests/integration/conversation_audio_probe.cpp
+      ../ios-kiosk/mini_sip/minisip.c ../ios-kiosk/mini_sip/sip.c
+      ../ios-kiosk/mini_sip/rtp.c ../ios-kiosk/mini_sip/sdp.c ../ios-kiosk/mini_sip/g711.c)
+    target_include_directories(doorbell_conversation_audio_probe PRIVATE ../ios-kiosk/mini_sip)
+    target_link_libraries(doorbell_conversation_audio_probe PRIVATE doorbell_core)
+  endif()
   add_executable(doorbell_video_decode_probe tests/integration/video_track_decode_probe.cpp)
   target_link_libraries(doorbell_video_decode_probe PRIVATE doorbell_core)
   file(GLOB DB_TEST_SRC CONFIGURE_DEPENDS tests/*.cpp)

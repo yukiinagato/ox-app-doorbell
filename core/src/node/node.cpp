@@ -37,6 +37,7 @@
 #include "stb_image.h"
 #include "sipctl/sipctl.h"
 #include "sipctl/sip_auth.h"
+#include "call/conversation.h"
 #include "tls/tls.h"
 #ifdef _WIN32
 #include "media/camera_win.h"
@@ -2071,6 +2072,7 @@ struct Node::Impl {
     uint64_t timeout_timer = 0;
     unsigned timeout_retry_step = 0;
     bool local_sip_established = false;
+    int notified_revision = -1;
     uint64_t recovery_timer = 0;
     int64_t recovery_deadline_mono = 0;
     bool recovery_notified = false;
@@ -2322,6 +2324,7 @@ struct Node::Impl {
     std::mutex mu;
     std::set<std::string> peers;
     std::set<std::string> registrar;
+    std::map<std::string, std::string> rooms;
     std::string registrar_host;
   };
   // Shared so a resolver thread that outlives this node writes into memory it still owns.
@@ -2383,6 +2386,7 @@ struct Node::Impl {
 #include "node/panel_identity_service.inc"
 #include "node/media_relay_service.inc"
 #include "node/panel_session_revocation.inc"
+#include "node/conversation_service.inc"
 
   bool uiNotify(const std::string& event_json) {
 
@@ -3302,6 +3306,9 @@ struct Node::Impl {
     auto doc = json::parse(runtime_status_json);
     if (!doc || !cJSON_IsObject(doc.get())) doc = json::obj();
     if (power.known) json::setItem(doc.get(), "power", powerDoc());
+    auto* conversation = json::addObj(doc.get(), "conversation");
+    json::set(conversation, "schema_version", int64_t{1});
+    json::setBool(conversation, "enabled", conversationProtocolEnabled() && sipBackendAvailable());
     return json::dump(doc.get());
   }
 
@@ -4002,6 +4009,8 @@ struct Node::Impl {
     if (!door.empty()) json::set(o.get(), "door", door);
     auto call = active_calls.find(door);
     if (call != active_calls.end()) {
+      // Admission is local to this resident and exact revision; replicated calls alone never ring.
+      call->second.notified_revision = call->second.stage_revision;
       if (capture_cutoff_ms > 0) reserveStandby(door, call->second.call_id);
       json::set(o.get(), "call_id", call->second.call_id);
       json::set(o.get(), "stage_revision", static_cast<int64_t>(call->second.stage_revision));
@@ -5310,6 +5319,13 @@ struct Node::Impl {
     std::string peer;
     const bool valid = !auth.empty() && sip_peer_auth.verify(auth, mode, clock->wallMs(), &peer);
     std::lock_guard<std::mutex> lk(sip_admission->mu);
+    if (mode.rfind("room:", 0) == 0) {
+      const auto ticket = sip_admission->rooms.find(mode);
+      if (!valid || ticket == sip_admission->rooms.end() || ticket->second != peer)
+        return SipInboundPath::Rejected;
+      return sip_admission->peers.count(source) || sip_admission->registrar.count(source)
+          ? SipInboundPath::Peer : SipInboundPath::Rejected;
+    }
     return classifySipInbound(source, valid, sip_admission->peers, sip_admission->registrar);
   }
 
@@ -7185,6 +7201,9 @@ struct Node::Impl {
         onSipCall(st, remote);
       };
       scb.on_dtmf = [this](char d) { onSipDtmf(d); };
+      scb.on_room_state = [this](const std::string& mode, SipCallState state) {
+        onConversationMedia(mode, state);
+      };
       sipctl.reset(new SipCtl(*loop, std::move(scb)));
       sipctl->setInboundPolicy(
           [this](const std::string& source, const std::string& auth, const std::string& mode) {
@@ -7288,10 +7307,12 @@ struct Node::Impl {
     startNetMonitor();
     restoreActiveCalls(/*notify=*/false);
     restoreTerminalCalls();
+    restoreConversations(true);
     events->replayRecovered();
     restoreEmergency();
     notifyPendingRecoveries();
     snapshot_timer = loop->postEvery(2'000, [this] {
+      maintainConversations();
       refreshSnapshots();
       syncTelegramSecret();
       probeTelegramEndpoint();
@@ -7745,6 +7766,8 @@ struct Node::Impl {
   }
 
   bool callRecoveryTakeoverAuthority(const ActiveCall& call) const {
+    const auto room = conversations.find(call.call_id);
+    if (room != conversations.end() && !room->second.participants.empty()) return false;
     if (!mesh || call.state != "in_call" || call.dialog_owner.empty()) return false;
     const std::string owner_node = dialogOwnerNode(call.dialog_owner);
     if (owner_node.empty() || owner_node == node_id) return false;
@@ -7989,7 +8012,10 @@ struct Node::Impl {
     finishPendingLifecycle(it->second.call_id);
     cancelWebDialogLease(it->second.call_id);
     if (sip_call_id == it->second.call_id) sip_call_id.clear();
+    conversations.erase(it->second.call_id);
+    requested_conversations.erase(it->second.call_id);
     active_calls.erase(it);
+    syncConversationMedia();
     door_calling_until.erase(door);
   }
 
@@ -8307,6 +8333,7 @@ struct Node::Impl {
     bool emergency_transition = true;
     bool emergency_winner = true;
     if (is_local && mesh) mesh->broadcastEvent(ev);
+    if (ev.type == "conversation_state") { applyConversationEvent(ev); return; }
     if (ev.type == "press") {
       const std::string id = eventCallId(ev);
       auto projection = store.callProjection(id);
@@ -8601,6 +8628,10 @@ struct Node::Impl {
     if (!c) return;
     std::string cmd = json::getString(c.get(), "cmd");
     if (cmd.rfind("media_", 0) == 0) return;
+    if (cmd.rfind("conversation_", 0) == 0) {
+      if (cmd_json.size() <= 4096) onConversationCommand(from, c.get());
+      return;
+    }
     if (cmd == "standby_video_v1") {
       onStandbyCommand(from, c.get()); return;
     }
@@ -9664,6 +9695,17 @@ struct Node::Impl {
       if (!call.dialog_owner.empty()) json::set(item, "dialog_owner", call.dialog_owner);
       json::set(item, "stage_revision", static_cast<int64_t>(call.stage_revision));
       json::set(item, "state", call.state);
+      json::setBool(item, "conversation_supported", conversationSupported(call.door) &&
+                    (call.state != "in_call" || conversations.count(call.call_id)));
+      const auto room = conversations.find(call.call_id);
+      if (room != conversations.end()) {
+        json::setItem(item, "conversation", conversationPresentation(room->second));
+        json::setBool(item, "conversation_local_media", conversationLocalMedia(room->second));
+      }
+      json::setBool(item, "notification_eligible", opts.role == "indoor_panel" &&
+                    call.notified_revision == call.stage_revision &&
+                    (call.state == "in_call" || call.expires_wall_ms > call_snapshot_now));
+      json::set(item, "visitor_lang", visitorLangFor(call.door));
       json::set(item, "call_flow", effectiveCallFlow(call.door));
       json::set(item, "expires_at_ms", call.expires_wall_ms);
       json::set(item, "server_now_ms", call_snapshot_now);
@@ -12136,6 +12178,12 @@ struct Node::Impl {
         json::set(e, "call_flow", flow);
         if (active != active_calls.end()) {
           json::set(e, "call_id", active->second.call_id);
+          const auto room = conversations.find(active->second.call_id);
+          if (room != conversations.end()) json::setItem(e, "conversation", conversationPresentation(room->second));
+          json::setBool(e, "conversation_supported", !principal.legacy_shared &&
+              panelPrincipalAllowed(principal, active->second.door, "call.answer") &&
+              conversationHostSupported(active->second.door) &&
+              (active->second.state != "in_call" || conversations.count(active->second.call_id)));
           json::set(e, "call_state",
                     active->second.state == "in_call"
                         ? "in_call"
@@ -12483,6 +12531,42 @@ struct Node::Impl {
       if (!doCancelCall(req.param("door"), req.param("call_id"), "visitor"))
         return HttpResp::json("{\"ok\":false,\"err\":\"stale call\"}", 409);
       return HttpResp::json("{\"ok\":true}");
+    });
+
+    httpd->route("POST", "/api/panel/conversation", [this](const HttpReq& req) {
+      auto body = json::parse(req.body);
+      const auto door = json::getString(body.get(), "door");
+      PanelPrincipal principal;
+      if (!body || !panelRequestPrincipal(req, &principal) || principal.legacy_shared ||
+          !panelRequestAllowed(req, door, "call.answer", true, false)) return mediaFailure(403, "permission_denied");
+      json::set(body.get(), "panel_id", principal.panel_id);
+      json::set(body.get(), "credential_generation", principal.credential_generation);
+      json::set(body.get(), "grant_version", principal.grant_version);
+      return HttpResp::json(conversationRequestOnLoop(json::dump(body.get()),
+          "web_" + node_id + "_" + principal.panel_id), 202);
+    });
+    httpd->route("POST", "/api/panel/conversation-media", [this](const HttpReq& req) {
+      auto body = json::parse(req.body);
+      const auto door = json::getString(body.get(), "door");
+      const auto id = json::getString(body.get(), "call_id");
+      PanelPrincipal principal;
+      if (!body || !panelRequestPrincipal(req, &principal) || principal.legacy_shared ||
+          !panelRequestAllowed(req, door, "call.answer", true, false)) return mediaFailure(403, "permission_denied");
+      const auto active = active_calls.find(door);
+      const auto room = conversations.find(id);
+      if (active == active_calls.end() || active->second.call_id != id || room == conversations.end() ||
+          room->second.stage_revision != json::getInt(body.get(), "stage_revision", -1)) return mediaFailure(409, "stale_call");
+      const auto actor = "web_" + node_id + "_" + principal.panel_id;
+      const auto member = room->second.participants.find(actor);
+      if (member == room->second.participants.end() || member->second.state == "waiting") return mediaFailure(409, "admission_required");
+      const auto mode = conversationMode(room->second, member->second);
+      auto out = json::obj();
+      json::setBool(out.get(), "ok", true);
+      json::set(out.get(), "mode", mode);
+      json::set(out.get(), "auth", sip_peer_auth.sign(mode, clock->wallMs()));
+      auto response = HttpResp::json(json::dump(out.get()));
+      response.headers["Cache-Control"] = "no-store";
+      return response;
     });
 
     httpd->route("POST", "/api/panel/call-lifecycle", [this](const HttpReq& req) {
@@ -13716,6 +13800,51 @@ bool Node::openDoor(const std::string& door) {
   bool ok = false;
   impl_->loop->callSync([&] { ok = impl_->openDoorOnLoop(door); });
   return ok;
+}
+
+int Node::openDoorForCall(const std::string& door, const std::string& call_id, int revision) {
+  if (door.empty() || call_id.empty() || revision < 0) return -1;
+  int result = -5;
+  impl_->loop->callSync([&] {
+    const auto it = impl_->active_calls.find(door);
+    if (it == impl_->active_calls.end() || it->second.call_id != call_id ||
+        it->second.stage_revision != revision ||
+        (it->second.state != "in_call" &&
+         (it->second.state != "ringing" ||
+          it->second.expires_wall_ms <= impl_->hlc->correctedWallMs()))) return;
+    if (!impl_->doorExists(door)) { result = -2; return; }
+    if (impl_->unlockCommandFor(door).empty()) { result = -3; return; }
+    result = impl_->openDoorOnLoop(door) ? 0 : -4;
+  });
+  return result;
+}
+
+void Node::setConversationExternalTransport(bool available) {
+  impl_->loop->callSync([&] {
+    impl_->conversation_external_transport = available && impl_->opts.role == "indoor_panel";
+    impl_->syncConversationMedia();
+    impl_->refreshSnapshots();
+  });
+}
+
+void Node::reportConversationExternalMedia(const std::string& mode, bool connected) {
+  impl_->loop->post([this, mode, connected] {
+    if (!impl_->conversation_external_transport) return;
+    for (const auto& entry : impl_->conversations) {
+      const auto member = entry.second.participants.find(impl_->node_id);
+      if (member != entry.second.participants.end() && impl_->requested_conversations.count(entry.first) &&
+          impl_->conversationMode(entry.second, member->second) == mode) {
+        impl_->onConversationMedia(mode, connected ? SipCallState::InCall : SipCallState::Ended);
+        return;
+      }
+    }
+  });
+}
+
+std::string Node::conversationRequestJson(const std::string& request) {
+  std::string result = R"({"ok":false,"error":"not_started"})";
+  impl_->loop->callSync([&] { result = impl_->conversationRequestOnLoop(request); });
+  return result;
 }
 
 std::string Node::lastWriteWarningsJson() {

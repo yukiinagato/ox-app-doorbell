@@ -52,6 +52,10 @@ typedef struct ms_session ms_session;
  * returned session starts in CALLING and is driven by repeated ms_poll calls. */
 ms_session *ms_call(const char *host, int port, const char *mode,
                     const ms_callbacks *cbs);
+/* Sends an exact signed admission mode and peer authentication header. Neither accepts CR/LF.
+ * Authentication is copied and reused only for this INVITE transaction's retransmissions. */
+ms_session *ms_call_authenticated(const char *host, int port, const char *mode,
+                                  const char *auth, const ms_callbacks *cbs);
 
 /* Starts a direct-call UAS on the UDP port, normally 47190. It automatically
  * answers PCMU INVITEs and supports one call per listener. Free and recreate

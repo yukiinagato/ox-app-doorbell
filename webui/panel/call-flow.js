@@ -69,7 +69,7 @@
   }
   function projectDoor(stateDoor, callInfoDoor) {
     stateDoor = stateDoor || {}; callInfoDoor = callInfoDoor || {};
-    return { id: stateDoor.id || "", label: stateDoor.label || "",
+    var result = { id: stateDoor.id || "", label: stateDoor.label || "",
       extension: callInfoDoor.extension || "", station: callInfoDoor.station || "",
       online: callInfoDoor.online !== false,
       source_node_id: callInfoDoor.source_node_id || stateDoor.source_node_id || "",
@@ -81,6 +81,9 @@
       visitor_lang: stateDoor.visitor_lang || "", dialog_owner: stateDoor.dialog_owner || "",
       expires_at_ms: Number(stateDoor.expires_at_ms) || 0,
       recovery_required: stateDoor.recovery_required === true };
+    if (stateDoor.conversation_supported !== undefined) result.conversation_supported = stateDoor.conversation_supported === true;
+    if (stateDoor.conversation) result.conversation = stateDoor.conversation;
+    return result;
   }
   return { flowMode: flowMode, form: form, pressForm: pressForm, cancelForm: cancelForm,
            purposeForm: purposeForm, recoveryForm: recoveryForm, lifecycleForm: lifecycleForm,

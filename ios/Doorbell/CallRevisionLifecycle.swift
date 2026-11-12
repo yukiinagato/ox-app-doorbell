@@ -411,3 +411,49 @@ struct MonitorRetryPolicy: Equatable {
         hasGivenUp = false
     }
 }
+
+struct ResidentCallQueue {
+    struct Item: Equatable {
+        let door: String
+        let callId: String
+        var revision: Int
+        var purpose: String
+        var language: String
+        var state: String
+        var owner: String
+    }
+
+    private(set) var items: [Item] = []
+    private(set) var selected: Item?
+    private var retiredRevisions: [String: [String: Int]] = [:]
+
+    mutating func admit(_ item: Item) {
+        guard !item.door.isEmpty, !item.callId.isEmpty, item.revision >= 0,
+              item.revision > (retiredRevisions[item.door]?[item.callId] ?? -1) else { return }
+        if let index = items.firstIndex(where: { $0.door == item.door && $0.callId == item.callId }) {
+            guard item.revision >= items[index].revision else { return }
+            if item.revision == items[index].revision && items[index].state == "in_call" &&
+                item.state == "ringing" { return }
+            items[index] = item
+        } else {
+            items.append(item)
+        }
+        if selected == nil || (selected?.door == item.door && selected?.callId == item.callId) {
+            selected = item
+        }
+    }
+
+    mutating func select(door: String, callId: String) -> Item? {
+        guard let item = items.first(where: { $0.door == door && $0.callId == callId }) else { return nil }
+        selected = item
+        return item
+    }
+
+    mutating func retire(door: String, callId: String, revision: Int) {
+        guard !door.isEmpty, !callId.isEmpty, revision >= 0 else { return }
+        retiredRevisions[door, default: [:]][callId] = max(
+            retiredRevisions[door]?[callId] ?? -1, revision)
+        items.removeAll { $0.door == door && $0.callId == callId && revision >= $0.revision }
+        // Keep the displayed target after termination; another visitor requires explicit selection.
+    }
+}

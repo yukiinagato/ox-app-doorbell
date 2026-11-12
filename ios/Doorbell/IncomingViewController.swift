@@ -58,6 +58,20 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     private var revisionLifecycle: CallRevisionLifecycle
     private var lastChimeRevision: Int
 
+    private var queue = ResidentCallQueue()
+    private let queueStack = UIStackView()
+    private let occupancyLabel = UILabel()
+    private let conversationControls = UIStackView()
+    private var conversationButtons: [String: UIButton] = [:]
+    private var conversationDocuments: [String: [String: Any]] = [:]
+    private var touchedConversationVersion: Int64?
+    private let queueScroll = UIScrollView()
+    private var actionTarget: String?
+    private var selectedIsLive = true
+    private var endingDialog = false
+    private var renderedQueue: [ResidentCallQueue.Item] = []
+    private var renderedSelection = ""
+
     private var cfg: [String: Any]?
     private var videoPlayer: AdaptiveH264MjpegPlayer?
     private var incomingStreamUrl = ""
@@ -144,14 +158,17 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         texts.setConfig(cfg)
         texts.setLang(boot.uiLang)
         directPort = ConfigUtil.int(cfg, "sip.direct_port", 47190)
+        queue.admit(ResidentCallQueue.Item(door: door, callId: callId, revision: stageRevision,
+            purpose: purpose, language: visitorLang, state: "ringing", owner: ""))
         buildUi()
         applyContent()
+        reconcileQueue()
 
         let peer = ConfigUtil.findDoorPeer(core.status(), door: door)
         peerHost = ConfigUtil.peerHost(peer)
         incomingStreamUrl = peer.flatMap { ConfigUtil.str($0, "stream") } ?? ""
         incomingStreamMp4Url = peer.flatMap { ConfigUtil.str($0, "stream_mp4") } ?? ""
-        answerButton.isEnabled = peerHost != nil
+        answerButton.isEnabled = peerHost != nil && selectedIsLive
         startVideo(url: incomingStreamUrl)
 
         core.addHandler(IncomingViewController.handlerKey) { [weak self] ev in
@@ -161,6 +178,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             [weak self] _ in
             self?.refreshDebugLine()
             self?.syncMicFromStatus()
+            self?.reconcileQueue()
             self?.tickReturnCountdown()
         }
         returnCountdown = IncomingReturnCountdown(
@@ -190,6 +208,17 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     private func tearDownCall() {
         guard !tornDown else { return }
         tornDown = true
+        if let calls = core.status()?["active_calls"] as? [[String: Any]] {
+            for call in calls {
+                guard let room = roomDocument(call),
+                      let members = room["participants"] as? [[String: Any]],
+                      members.contains(where: { ConfigUtil.evStr($0, "device") == nodeId }) else { continue }
+                _ = core.conversation(["door": ConfigUtil.evStr(call, "door"),
+                    "call_id": ConfigUtil.evStr(call, "call_id"),
+                    "stage_revision": ConfigUtil.int(call, "stage_revision", 0),
+                    "expected_version": ConfigUtil.int(room, "version", 0), "action": "leave"])
+            }
+        }
         core.removeHandler(IncomingViewController.handlerKey)
         debugTimer?.invalidate()
         debugTimer = nil
@@ -225,15 +254,15 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         self.visitorLang = visitorLang
         self.callId = callId
         self.stageRevision = revisionLifecycle.stageRevision
+        queue.admit(ResidentCallQueue.Item(door: door, callId: callId, revision: self.stageRevision,
+            purpose: purpose, language: visitorLang, state: inCall ? "in_call" : "ringing", owner: ""))
+        renderQueue()
         if update == .answerSuperseded { demoteSupersededAnswer() }
         cfg = core.config()
         applyContent()
         if !inCall { restartReturnCountdown() }
     }
 
-    /// Switch all media and SIP targets when another door rings while this view is visible.
-    /// A different call cannot displace an established dialog; a winning newer revision of the
-    /// same call can demote its stale answer leg.
     func receive(door newDoor: String, purpose: String, visitorLang: String, callId newCallId: String,
                  stageRevision newStageRevision: Int = 0) {
         let targetDoor = newDoor.isEmpty ? door : newDoor
@@ -245,13 +274,38 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             self.purpose = purpose
             self.visitorLang = visitorLang
             self.stageRevision = max(self.stageRevision, normalizedRevision)
+            queue.admit(ResidentCallQueue.Item(door: door, callId: callId, revision: self.stageRevision,
+                purpose: purpose, language: visitorLang, state: inCall ? "in_call" : "ringing", owner: ""))
+            renderQueue()
             if update == .answerSuperseded { demoteSupersededAnswer() }
             cfg = core.config()
             applyContent()
-            if !inCall { restartReturnCountdown() }
+            if !inCall {
+                selectedIsLive = true
+                answerButton.isEnabled = peerHost != nil
+                restartReturnCountdown()
+            }
             return
         }
-        guard !inCall else { return }
+        queue.admit(ResidentCallQueue.Item(door: targetDoor, callId: newCallId,
+            revision: max(0, newStageRevision), purpose: purpose, language: visitorLang,
+            state: "ringing", owner: ""))
+        renderQueue()
+    }
+
+    private func selectCall(_ item: ResidentCallQueue.Item) {
+        guard (!inCall || usesConversation), !endingDialog, sipMode.isEmpty, answerDelayTimer == nil,
+              let selected = queue.select(door: item.door, callId: item.callId) else { return }
+        if usesConversation {
+            _ = core.conversation(["action": "select", "door": selected.door, "call_id": selected.callId])
+            inCall = false
+        }
+        let targetDoor = selected.door
+        let purpose = selected.purpose
+        let visitorLang = selected.language
+        let newCallId = selected.callId
+        let newStageRevision = selected.revision
+        selectedIsLive = selected.state == "ringing"
         answerDelayTimer?.invalidate()
         answerDelayTimer = nil
         if !sipMode.isEmpty { core.sipHangup(coreGeneration: coreGeneration) }
@@ -274,11 +328,183 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         peerHost = ConfigUtil.peerHost(peer)
         incomingStreamUrl = peer.flatMap { ConfigUtil.str($0, "stream") } ?? ""
         incomingStreamMp4Url = peer.flatMap { ConfigUtil.str($0, "stream_mp4") } ?? ""
-        answerButton.isEnabled = peerHost != nil
+        answerButton.isEnabled = peerHost != nil && selectedIsLive
         startVideo(url: incomingStreamUrl)
         restartReturnCountdown()
+        reconcileQueue()
     }
 
+    private var selectedSnapshot: [String: Any]? {
+        let calls = core.status()?["active_calls"] as? [[String: Any]] ?? []
+        return calls.first { ConfigUtil.evStr($0, "door") == door && ConfigUtil.evStr($0, "call_id") == callId }
+    }
+
+    private var usesConversation: Bool {
+        #if os(tvOS)
+        return false
+        #else
+        return selectedSnapshot.map { ConfigUtil.evBool($0, "conversation_supported") } ?? false
+        #endif
+    }
+
+    private func roomDocument(_ call: [String: Any]) -> [String: Any]? {
+        let snapshot = call["conversation"] as? [String: Any]
+        let event = conversationDocuments[ConfigUtil.evStr(call, "call_id")]
+        if let event = event, ConfigUtil.int(event, "version", 0) > ConfigUtil.int(snapshot, "version", 0) { return event }
+        return snapshot
+    }
+
+    private func conversationRequest(_ action: String, version: Int64? = nil) -> [String: Any] {
+        let room = selectedSnapshot.flatMap { roomDocument($0) }
+        return ["action": action, "door": door, "call_id": callId, "stage_revision": stageRevision,
+                "expected_version": version ?? Int64(ConfigUtil.int(room, "version", 0))]
+    }
+
+    private func sendConversation(_ request: [String: Any]) {
+        if !sipMode.isEmpty { core.sipHangup(coreGeneration: coreGeneration); sipMode = ""; inCall = false }
+        let result = core.conversation(request)
+        hintLabel.text = texts.t(ConfigUtil.evBool(result ?? [:], "ok") ? "conversation.pending" : "conversation.failed")
+        hintLabel.isHidden = false
+    }
+
+    @objc private func onConversationAction(_ sender: UIButton) {
+        let version = touchedConversationVersion
+        touchedConversationVersion = nil
+        guard actionStillTargetsSelection(), let action = sender.accessibilityIdentifier else { return }
+        let request = conversationRequest(action, version: version)
+        if action == "takeover" {
+            let alert = UIAlertController(title: texts.t("conversation.takeover"),
+                message: texts.t("conversation.takeover_confirm"), preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: texts.t("admin.cancel"), style: .cancel))
+            alert.addAction(UIAlertAction(title: texts.t("conversation.takeover"), style: .destructive) { [weak self] _ in
+                self?.sendConversation(request)
+            })
+            present(alert, animated: !Motion.reduced)
+        } else { sendConversation(request) }
+    }
+
+    private func refreshConversationControls() {
+        conversationControls.isHidden = !usesConversation
+        guard usesConversation, let call = selectedSnapshot else { return }
+        let room = roomDocument(call)
+        let members = room?["participants"] as? [[String: Any]] ?? []
+        let me = members.first { ConfigUtil.evStr($0, "device") == nodeId }
+        let state = ConfigUtil.evStr(me ?? [:], "state")
+        let localMedia = ConfigUtil.evBool(call, "conversation_local_media")
+        inCall = state == "connected" && localMedia
+        selectedIsLive = true
+        answerButton.setTitle(texts.t(me == nil || state == "waiting" ? "conversation.answer" : "conversation.leave"), for: .normal)
+        answerButton.isEnabled = me != nil || ConfigUtil.evStr(room ?? [:], "owner").isEmpty
+        for (action, button) in conversationButtons {
+            button.isHidden = !(action == "respond" && me == nil ||
+                (action == "join" || action == "takeover") && me == nil && !ConfigUtil.evStr(room ?? [:], "owner").isEmpty ||
+                action == "hold" && state == "connected" && localMedia ||
+                action == "resume" && (state == "held" || state == "connected" && !localMedia))
+        }
+        monitorButton.isHidden = true
+        if !state.isEmpty {
+            let key = state == "waiting" ? "conversation.queued" : "conversation." + state
+            statusLabel.text = texts.t(key, ConfigUtil.labelOf(ConfigUtil.dig(cfg, "doors.\(door)") as? [String: Any], boot.uiLang, door))
+        }
+        if state == "connected" || state == "held" || state == "dialing" { returnCountdown.pauseForCall() }
+    }
+
+    private func reconcileQueue() {
+        guard let status = core.status(),
+              let calls = status["active_calls"] as? [[String: Any]] else { return }
+        occupancyLabel.text = calls.flatMap { call -> [String] in
+            let callDoor = ConfigUtil.evStr(call, "door")
+            let doorEntry = ConfigUtil.dig(cfg, "doors.\(callDoor)") as? [String: Any]
+            let doorName = ConfigUtil.labelOf(doorEntry, boot.uiLang, callDoor)
+            if let room = roomDocument(call), let members = room["participants"] as? [[String: Any]] {
+                return members.map { member in
+                    let owner = ConfigUtil.evStr(member, "device")
+                    let entry = ConfigUtil.dig(cfg, "devices.\(owner)") as? [String: Any]
+                    let name = ConfigUtil.labelOf(entry, boot.uiLang, owner)
+                    let state = ConfigUtil.evStr(member, "state")
+                    return doorName + " · " + texts.t(state == "waiting" ? "conversation.queued" : "conversation." + state, name)
+                }
+            }
+            guard ConfigUtil.evStr(call, "state") == "in_call" else { return [] }
+            let owner = ConfigUtil.evStr(call, "dialog_owner")
+            let entry = ConfigUtil.dig(cfg, "devices.\(owner)") as? [String: Any]
+            return [texts.t("ring.queue_in_call", ConfigUtil.labelOf(entry, boot.uiLang, owner), doorName)]
+        }.joined(separator: "\n")
+        occupancyLabel.isHidden = occupancyLabel.text?.isEmpty != false
+        for call in calls where ConfigUtil.evBool(call, "notification_eligible") {
+            let item = ResidentCallQueue.Item(door: ConfigUtil.evStr(call, "door"),
+                callId: ConfigUtil.evStr(call, "call_id"),
+                revision: ConfigUtil.int(call, "stage_revision", -1),
+                purpose: ConfigUtil.evStr(call, "purpose"),
+                language: ConfigUtil.evStr(call, "visitor_lang"),
+                state: roomDocument(call).map { ConfigUtil.evStr($0, "phase") } ?? ConfigUtil.evStr(call, "state"),
+                owner: roomDocument(call).map { ConfigUtil.evStr($0, "owner") } ?? ConfigUtil.evStr(call, "dialog_owner"))
+            queue.admit(item)
+            if item.door == door && item.callId == callId && item.revision >= stageRevision &&
+               item.state == "in_call" && item.owner != nodeId && !inCall {
+                selectedIsLive = false
+                answerButton.isEnabled = false
+            }
+        }
+        renderQueue()
+        refreshConversationControls()
+    }
+
+    private func renderQueue() {
+        guard isViewLoaded else { return }
+        let selection = door + ":" + callId
+        guard renderedQueue != queue.items || renderedSelection != selection else { return }
+        renderedQueue = queue.items
+        renderedSelection = selection
+        for child in queueStack.arrangedSubviews {
+            queueStack.removeArrangedSubview(child)
+            child.removeFromSuperview()
+        }
+        queueScroll.isHidden = queue.items.count < 2 && queue.items.allSatisfy { $0.callId == callId }
+        for item in queue.items {
+            let entry = ConfigUtil.dig(cfg, "doors.\(item.door)") as? [String: Any]
+            let name = ConfigUtil.labelOf(entry, boot.uiLang, item.door)
+            let button = UIButton(type: .system)
+            let current = item.door == door && item.callId == callId
+            let title: String
+            if item.state != "ringing", !item.owner.isEmpty {
+                let ownerEntry = ConfigUtil.dig(cfg, "devices.\(item.owner)") as? [String: Any]
+                let ownerName = ConfigUtil.labelOf(ownerEntry, boot.uiLang, item.owner)
+                title = item.state == "in_call" ? texts.t("ring.queue_in_call", ownerName, name)
+                    : name + " · " + texts.t("conversation." + item.state, ownerName)
+            } else {
+                title = texts.t(current ? "ring.queue_selected" : "ring.queue_waiting", name)
+            }
+            button.setTitle(title, for: .normal)
+            button.contentHorizontalAlignment = .leading
+            button.titleLabel?.numberOfLines = 0
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+            button.accessibilityIdentifier = item.door + ":" + item.callId
+            button.addTarget(self, action: #selector(onQueueSelection(_:)), for: .touchUpInside)
+            queueStack.addArrangedSubview(button)
+        }
+    }
+
+    @objc private func onQueueSelection(_ sender: UIButton) {
+        guard let item = queue.items.first(where: { $0.door + ":" + $0.callId == sender.accessibilityIdentifier }),
+              item.door != door || item.callId != callId else { return }
+        guard (!inCall || usesConversation), !endingDialog, sipMode.isEmpty, answerDelayTimer == nil else {
+            hintLabel.text = texts.t("ring.queue_finish_first")
+            hintLabel.isHidden = false
+            return
+        }
+        selectCall(item)
+    }
+
+    @objc private func captureActionTarget() {
+        actionTarget = door + ":" + callId + ":" + String(stageRevision)
+        touchedConversationVersion = Int64(ConfigUtil.int(selectedSnapshot.flatMap { roomDocument($0) }, "version", 0))
+    }
+
+    private func actionStillTargetsSelection() -> Bool {
+        defer { actionTarget = nil }
+        return actionTarget == nil || actionTarget == door + ":" + callId + ":" + String(stageRevision)
+    }
 
     private func buildUi() {
         // The household's theme background reaches this screen too, so a call does not drop the
@@ -439,7 +665,39 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         debugCollapsed = UserDefaults.standard.bool(forKey: IncomingViewController.debugHiddenKey)
         debugLine.heightAnchor.constraint(greaterThanOrEqualToConstant: 16).isActive = true
 
-        let rightCol = UIStackView(arrangedSubviews: [purposeSlot, statusLabel, replyStack,
+        queueStack.axis = .vertical
+        queueStack.spacing = 4
+        queueStack.translatesAutoresizingMaskIntoConstraints = false
+        queueScroll.addSubview(queueStack)
+        NSLayoutConstraint.activate([
+            queueStack.leadingAnchor.constraint(equalTo: queueScroll.leadingAnchor),
+            queueStack.trailingAnchor.constraint(equalTo: queueScroll.trailingAnchor),
+            queueStack.topAnchor.constraint(equalTo: queueScroll.topAnchor),
+            queueStack.bottomAnchor.constraint(equalTo: queueScroll.bottomAnchor),
+            queueStack.widthAnchor.constraint(equalTo: queueScroll.widthAnchor),
+            queueScroll.heightAnchor.constraint(equalToConstant: 132)
+        ])
+        for button in [answerButton, unlockButton, quickReplyButton, monitorButton, ignoreButton] {
+            button.addTarget(self, action: #selector(captureActionTarget), for: .touchDown)
+        }
+        occupancyLabel.numberOfLines = 0
+        occupancyLabel.textColor = .white
+        occupancyLabel.font = .preferredFont(forTextStyle: .caption1)
+        occupancyLabel.isHidden = true
+        conversationControls.axis = .vertical
+        conversationControls.spacing = 4
+        conversationControls.isHidden = true
+        for action in ["respond", "join", "takeover", "hold", "resume"] {
+            let button = UIButton(type: .system)
+            button.setTitle(texts.t("conversation." + action), for: .normal)
+            button.accessibilityIdentifier = action
+            button.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true
+            button.addTarget(self, action: #selector(captureActionTarget), for: .touchDown)
+            button.addTarget(self, action: #selector(onConversationAction(_:)), for: .touchUpInside)
+            conversationButtons[action] = button
+            conversationControls.addArrangedSubview(button)
+        }
+        let rightCol = UIStackView(arrangedSubviews: [purposeSlot, statusLabel, occupancyLabel, queueScroll, conversationControls, replyStack,
                                                       hintLabel, UIView(), actionRows, debugLine,
                                                       adminQr])
         rightCol.axis = .vertical
@@ -819,6 +1077,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     }
 
     private func tickReturnCountdown() {
+        guard queue.items.filter({ $0.door != door || $0.callId != callId }).isEmpty else { return }
         guard returnCountdown.tick() else {
             updateReturnCountdown()
             return
@@ -871,14 +1130,36 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
 
 
     @objc private func onAnswer() {
+        if usesConversation {
+            guard actionStillTargetsSelection() else { return }
+            let room = selectedSnapshot.flatMap { roomDocument($0) }
+            let members = room?["participants"] as? [[String: Any]] ?? []
+            let me = members.first { ConfigUtil.evStr($0, "device") == nodeId }
+            let action = me == nil || ConfigUtil.evStr(me ?? [:], "state") == "waiting" ? "answer" : "leave"
+            sendConversation(conversationRequest(action, version: touchedConversationVersion))
+            touchedConversationVersion = nil
+            return
+        }
+        guard actionStillTargetsSelection(), !endingDialog, selectedIsLive || inCall else { return }
         guard let host = peerHost else { return }
         if inCall {
+            endingDialog = true
             reportEndedIfNeeded()
             core.sipHangup(coreGeneration: coreGeneration)
             sipMode = ""
             inCall = false
             resumeReturnCountdown()
             updateToggleTitles()
+            return
+        }
+        guard let calls = core.status()?["active_calls"] as? [[String: Any]],
+              calls.contains(where: { ConfigUtil.evStr($0, "door") == door &&
+                  ConfigUtil.evStr($0, "call_id") == callId &&
+                  ConfigUtil.int($0, "stage_revision", -1) == stageRevision &&
+                  ConfigUtil.evStr($0, "state") == "ringing" }) else {
+            selectedIsLive = false
+            answerButton.isEnabled = false
+            reconcileQueue()
             return
         }
         revisionLifecycle.beginAnswer()
@@ -889,9 +1170,15 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             monitorOn = false
             core.sipHangup(coreGeneration: coreGeneration)
             answerDelayTimer?.invalidate()
+            let expectedDoor = door
+            let expectedCall = callId
+            let expectedRevision = stageRevision
             answerDelayTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.4,
                                                     repeats: false) { [weak self] _ in
-                self?.placeAnswerCall(host: host)
+                guard let self = self, self.door == expectedDoor, self.callId == expectedCall,
+                      self.stageRevision == expectedRevision, self.selectedIsLive else { return }
+                self.answerDelayTimer = nil
+                self.placeAnswerCall(host: host)
             }
             return
         }
@@ -899,6 +1186,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     }
 
     private func placeAnswerCall(host: String) {
+        statusLabel.text = texts.t("calling.title")
         sipMode = "answer"
         callLifecycle.reset()
         core.sipCall(target: "sip:\(host):\(directPort)", mode: "answer",
@@ -907,6 +1195,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
 
     /// Monitoring is a stateful toggle: pressing it again stops playing the door's audio.
     @objc private func onMonitor() {
+        guard actionStillTargetsSelection(), !endingDialog else { return }
         guard let host = peerHost else { return }
         if monitorOn && sipMode == "monitor" {
             core.sipHangup(coreGeneration: coreGeneration)
@@ -926,7 +1215,14 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
         updateToggleTitles()
     }
 
-    @objc private func onIgnore() { close() }
+    @objc private func onIgnore() {
+        guard actionStillTargetsSelection(), !inCall, sipMode.isEmpty else { return }
+        queue.retire(door: door, callId: callId, revision: stageRevision)
+        selectedIsLive = false
+        answerButton.isEnabled = false
+        renderQueue()
+        if queue.items.isEmpty { close() }
+    }
 
     /// Microphone mute during an established dialog. Core does not publish the entry point yet;
     /// until it does, the control says so rather than pretending to have muted anything.
@@ -966,6 +1262,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     /// Quick replies open as a bottom sheet (compact) or a popover (wider windows). The call
     /// screen stays underneath and alive, and one tap sends.
     @objc private func onToggleReplies() {
+        guard actionStillTargetsSelection() else { return }
         guard !inCall, presentedViewController == nil,
               let replies = ConfigUtil.dig(cfg, "quick_replies") as? [String: Any],
               !replies.isEmpty else { return }
@@ -974,9 +1271,15 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             ActionSheetController.Choice(id: id, title: ConfigUtil.labelOf(
                 replies[id] as? [String: Any], lang, id))
         }
+        let expectedDoor = door
+        let expectedCall = callId
+        let expectedRevision = stageRevision
         let sheet = ActionSheetController(title: texts.t("ring.quick_reply"), choices: choices,
                                           palette: palette, source: quickReplyButton) {
-            [weak self] choice in self?.sendQuickReply(id: choice.id, title: choice.title)
+            [weak self] choice in
+            guard let self = self, self.door == expectedDoor, self.callId == expectedCall,
+                  self.stageRevision == expectedRevision else { return }
+            self.sendQuickReply(id: choice.id, title: choice.title)
         }
         present(sheet, animated: !Motion.reduced)
     }
@@ -1000,7 +1303,8 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     /// The existing open-door action. Core answers -3 when nothing is configured anywhere and -4
     /// when a configured command failed to run; each is explained rather than silently ignored.
     @objc private func onUnlock() {
-        switch core.openDoor(door) {
+        guard actionStillTargetsSelection() else { return }
+        switch core.openDoor(door: door, callId: callId, stageRevision: stageRevision) {
         case 0: hintLabel.text = texts.t("ring.unlock_sent")
         case -3: hintLabel.text = texts.t("door.unlock_not_configured")
         default: hintLabel.text = texts.t("ring.unlock_failed")
@@ -1026,11 +1330,25 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
     private func onUiEvent(_ ev: [String: Any]) {
         if let coreGeneration, core.runningGeneration != coreGeneration { return }
         switch ConfigUtil.evStr(ev, "t") {
+        case "conversation":
+            let id = ConfigUtil.evStr(ev, "call_id")
+            if ConfigUtil.int(ev, "version", 0) > ConfigUtil.int(conversationDocuments[id], "version", 0) {
+                conversationDocuments[id] = ev
+            }
+            reconcileQueue()
+        case "conversation_media":
+            reconcileQueue()
+        case "conversation_result":
+            if !ConfigUtil.evBool(ev, "ok") {
+                hintLabel.text = texts.t("conversation.failed")
+                hintLabel.isHidden = false
+            }
         case "state":
             let st = ConfigUtil.evStr(ev, "state")
             if st == "in_call" {
                 onSipInCall(ev)
             } else if st == "idle" {
+                endingDialog = false
                 if revisionLifecycle.consumeSupersededIdle() {
                     inCall = false
                     sipMode = ""
@@ -1055,10 +1373,26 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             }
         case "reply":
             let d = ConfigUtil.evStr(ev, "door")
-            if !inCall && (d.isEmpty || d == door) { close() }
+            if !inCall && (d.isEmpty || d == door) {
+                if queue.items.contains(where: { $0.door != door || $0.callId != callId }) {
+                    selectedIsLive = false
+                    answerButton.isEnabled = false
+                    statusLabel.text = texts.t("reply.sent", ConfigUtil.evStr(ev, "text"))
+                } else { close() }
+            }
         case "event":
             let type = ConfigUtil.evStr(ev, "type")
             let d = ConfigUtil.evStr(ev, "door")
+            let retiredId = ConfigUtil.evStr(ev, "call_id")
+            let retiredRevision = ConfigUtil.int(ev, "stage_revision", -1)
+            if ["call_ended", "call_cancelled", "reply"].contains(type) {
+                queue.retire(door: d, callId: retiredId, revision: retiredRevision)
+                if d == door && retiredId == callId && retiredRevision >= stageRevision {
+                    selectedIsLive = false
+                    if !inCall { answerButton.isEnabled = false }
+                }
+                renderQueue()
+            }
             guard d.isEmpty || d == door else { break }
             let eventCallId = ConfigUtil.evStr(ev, "call_id")
             guard eventCallId.isEmpty || eventCallId == callId else { break }
@@ -1070,6 +1404,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
                         callId: eventCallId.isEmpty ? callId : eventCallId,
                         stageRevision: ConfigUtil.int(ev, "stage_revision", stageRevision))
             } else if type == "call_answered", eventStageRevision >= stageRevision {
+                if usesConversation { reconcileQueue(); break }
                 let reportedOwner = ConfigUtil.evStr(ev, "dialog_owner")
                 let owner = reportedOwner.isEmpty ? ConfigUtil.evStr(ev, "device") : reportedOwner
                 if !owner.isEmpty, !nodeId.isEmpty, owner == nodeId {
@@ -1081,8 +1416,14 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
                     _ = callLifecycle.confirmAnswer(ownerIsLocal: false)
                     inCall = false
                     sipMode = ""
+                    endingDialog = true
                     core.sipHangup(coreGeneration: coreGeneration)
-                    close()
+                    selectedIsLive = false
+                    answerButton.isEnabled = false
+                    let ownerEntry = ConfigUtil.dig(cfg, "devices.\(owner)") as? [String: Any]
+                    statusLabel.text = texts.t("ring.queue_answered_elsewhere",
+                        ConfigUtil.labelOf(ownerEntry, boot.uiLang, owner))
+                    reconcileQueue()
                 }
             } else if type == "call_ended", eventStageRevision >= stageRevision {
                 reportEndedIfNeeded()
@@ -1117,6 +1458,7 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
 
     private func onSipInCall(_ ev: [String: Any]) {
         guard sipMode == "answer" else { return }
+        guard !endingDialog else { return }
         inCall = true
         monitorOn = false
         micMuted = false
@@ -1129,8 +1471,13 @@ final class IncomingViewController: UIViewController, UIGestureRecognizerDelegat
             if callLifecycle.recordAnswer(result) {
                 inCall = false
                 sipMode = ""
+                endingDialog = true
                 core.sipHangup(coreGeneration: coreGeneration)
-                close()
+                selectedIsLive = false
+                answerButton.isEnabled = false
+                reconcileQueue()
+                if queue.items.count <= 1 { close() }
+                return
             }
         }
         returnCountdown.pauseForCall()
@@ -1196,12 +1543,10 @@ final class IncomingCallRouter {
     private let blocked: () -> Bool
     private let makeScreen: (IncomingCallRequest) -> IncomingViewController?
     private var gate = CallChimeRevisionGate()
-    private var pending: IncomingCallRequest?
+    private var pending: [IncomingCallRequest] = []
     private var retryScheduled = false
-    private var attempts = 0
 
     static let retryInterval: TimeInterval = 0.25
-    static let retryLimit = 40
 
     init(root: @escaping RootProvider, blocked: @escaping () -> Bool,
          makeScreen: @escaping (IncomingCallRequest) -> IncomingViewController?) {
@@ -1223,20 +1568,28 @@ final class IncomingCallRouter {
             guard !request.callId.isEmpty,
                   gate.wouldAccept(callId: request.callId,
                                    stageRevision: request.stageRevision) else { return }
-            if pending?.callId != request.callId { attempts = 0 }
-            pending = request
+            if let index = pending.firstIndex(where: { $0.door == request.door && $0.callId == request.callId }) {
+                guard request.stageRevision >= pending[index].stageRevision else { return }
+                pending[index] = request
+            } else {
+                pending.append(request)
+            }
             route()
             return
         }
         let type = ConfigUtil.evStr(ev, "type")
         if kind == "event", type == "call_cancelled" || type == "call_ended",
-           ConfigUtil.evStr(ev, "call_id") == pending?.callId {
-            pending = nil
+           !ConfigUtil.evStr(ev, "door").isEmpty {
+            pending.removeAll {
+                $0.door == ConfigUtil.evStr(ev, "door") &&
+                $0.callId == ConfigUtil.evStr(ev, "call_id") &&
+                ConfigUtil.int(ev, "stage_revision", -1) >= $0.stageRevision
+            }
         }
     }
 
     private func route() {
-        guard let request = pending, let base = root() else { return }
+        guard let request = pending.first, let base = root() else { return }
         var chain: [UIViewController] = [base]
         while let next = chain.last?.presentedViewController { chain.append(next) }
 
@@ -1262,19 +1615,13 @@ final class IncomingCallRouter {
 
     private func shown(_ request: IncomingCallRequest) {
         _ = gate.accept(callId: request.callId, stageRevision: request.stageRevision)
-        if pending?.callId == request.callId { pending = nil }
-        attempts = 0
+        pending.removeAll { $0.door == request.door && $0.callId == request.callId &&
+                            $0.stageRevision <= request.stageRevision }
+        if !pending.isEmpty { retryLater() }
     }
 
     private func retryLater() {
         guard !retryScheduled else { return }
-        attempts += 1
-        guard attempts <= IncomingCallRouter.retryLimit else {
-            ShellLog.note("incoming route gave up call_id=\(pending?.callId ?? "")")
-            pending = nil
-            attempts = 0
-            return
-        }
         retryScheduled = true
         DispatchQueue.main.asyncAfter(deadline: .now() + IncomingCallRouter.retryInterval) {
             [weak self] in

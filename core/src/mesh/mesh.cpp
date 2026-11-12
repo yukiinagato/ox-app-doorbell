@@ -710,7 +710,7 @@ bool projectMeshRuntimeJson(const std::string& runtime_json, std::string* projec
   for (const char* key : {"process_recovery", "recovery_helper", "kiosk", "recovery",
                           "windows", "ios_compat", "safe_mode", "runtime", "camera",
                           "avc_encode", "avc_decode", "avc_commissioning", "media_source",
-                          "media_playback", "sip"}) {
+                          "media_playback", "sip", "conversation"}) {
     const cJSON* section = json::get(source.get(), key);
     if (!cJSON_IsObject(section)) continue;
     auto clean = runtimeHealthObject(section);

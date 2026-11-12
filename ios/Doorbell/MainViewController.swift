@@ -1641,6 +1641,21 @@ final class MainViewController: UIViewController {
 
     private func onUiEvent(_ ev: [String: Any]) {
         switch ConfigUtil.evStr(ev, "t") {
+        case "conversation":
+            guard boot.role == "door_station", ConfigUtil.evStr(ev, "door") == boot.door,
+                  ConfigUtil.evStr(ev, "call_id") == activeCallId else { break }
+            let members = ev["participants"] as? [[String: Any]] ?? []
+            let message = members.map { member -> String in
+                let id = ConfigUtil.evStr(member, "device")
+                let entry = ConfigUtil.dig(cfg, "devices.\(id)") as? [String: Any]
+                let state = ConfigUtil.evStr(member, "state")
+                return texts.t(state == "waiting" ? "conversation.queued" : "conversation." + state,
+                    ConfigUtil.labelOf(entry, boot.uiLang, id))
+            }.joined(separator: "\n")
+            if ConfigUtil.evStr(ev, "phase") == "connected" || ConfigUtil.evStr(ev, "phase") == "held" {
+                if !inCall { onSipInCall([:]) }
+                inCallTitle.text = message
+            } else { callingDetail.text = message.isEmpty ? texts.t("conversation.waiting") : message }
         case "state":
             let st = ConfigUtil.evStr(ev, "state")
             if st == "calling" {
@@ -1701,6 +1716,18 @@ final class MainViewController: UIViewController {
             if type == "press", !activeCallId.isEmpty, eventCall == activeCallId {
                 if !callingView.isHidden { showCalling() }
             }
+            if type == "call_answered", boot.role == "door_station",
+               !activeCallId.isEmpty, eventCall == activeCallId,
+               ConfigUtil.evStr(ev, "door") == boot.door {
+                let owner = ConfigUtil.evStr(ev, "dialog_owner")
+                if !owner.isEmpty {
+                    let entry = ConfigUtil.dig(cfg, "devices.\(owner)") as? [String: Any]
+                    let message = texts.t("ring.queue_answered_elsewhere",
+                        ConfigUtil.labelOf(entry, boot.uiLang, owner))
+                    callingDetail.text = message
+                    inCallTitle.text = message
+                }
+            }
             if (type == "call_cancelled" || type == "call_ended") &&
                 (activeCallId.isEmpty || eventCall.isEmpty || eventCall == activeCallId) {
                 showIdle(hint: type == "call_cancelled" ? texts.t("ring.cancelled") : nil)
@@ -1759,7 +1786,17 @@ final class MainViewController: UIViewController {
         let stream = ConfigUtil.evStr(ev, "peer_stream")
         peerPollTimer?.invalidate()
         peerPollTimer = nil
+        inCallTitle.text = texts.t("incall.title")
         showInCall(streamUrl: stream.isEmpty ? nil : stream)
+        if let calls = core.status()?["active_calls"] as? [[String: Any]],
+           let call = calls.first(where: { ConfigUtil.evStr($0, "door") == boot.door &&
+                                          ConfigUtil.evStr($0, "call_id") == activeCallId }),
+           !ConfigUtil.evStr(call, "dialog_owner").isEmpty {
+            let owner = ConfigUtil.evStr(call, "dialog_owner")
+            let entry = ConfigUtil.dig(core.config(), "devices.\(owner)") as? [String: Any]
+            inCallTitle.text = texts.t("ring.queue_answered_elsewhere",
+                ConfigUtil.labelOf(entry, boot.uiLang, owner))
+        }
         if stream.isEmpty && !safeMode {
             peerPollBusy = false
             peerPollTimer = IOSAvailability.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in
@@ -1850,7 +1887,13 @@ final class MainViewController: UIViewController {
 
     @objc private func onEndCallClick() {
         guard consumeVisitorAction(endCallButton), inCall, !inCallView.isHidden else { return }
-        core.sipHangup()
+        let calls = core.status()?["active_calls"] as? [[String: Any]] ?? []
+        if let call = calls.first(where: { ConfigUtil.evStr($0, "door") == boot.door &&
+                                          ConfigUtil.evStr($0, "call_id") == activeCallId }),
+           call["conversation"] != nil {
+            _ = core.conversation(["action": "end", "door": boot.door, "call_id": activeCallId,
+                "stage_revision": ConfigUtil.int(call, "stage_revision", 0)])
+        } else { core.sipHangup() }
         onSipIdle()
     }
 

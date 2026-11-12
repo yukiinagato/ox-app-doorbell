@@ -1,5 +1,6 @@
 #import "DBCoreBridge.h"
 #import "DBCallTiming.h"
+#import "../Media/DBConversationTransport.h"
 #import <UIKit/UIKit.h>
 #import <AudioToolbox/AudioToolbox.h>
 #import <Security/Security.h>
@@ -420,6 +421,7 @@ static void DBUiEventCb(void *user, const char *event_json) {
   db_core *_core;
   NSUInteger _lifecycleGeneration;
   NSMutableDictionary *_handlers;
+  DBConversationTransport *_conversationTransport;
   NSString *_deviceInfoCache;
   NSString *_powerStateCache;
   NSDictionary *_powerState;
@@ -546,6 +548,10 @@ static void DBUiEventCb(void *user, const char *event_json) {
     _core = NULL;
     return NO;
   }
+  if (strcmp(db_core_sip_backend(), "stub") == 0) {
+    _conversationTransport = [[DBConversationTransport alloc] initWithCore:self];
+    db_core_conversation_external_transport_v1(_core, 1);
+  }
   typedef const char *(*DBLocalTokenFn)(db_core *);
   DBLocalTokenFn tokenFn = (DBLocalTokenFn)DBCoreSymbol("db_core_local_token");
   const char *token = tokenFn ? tokenFn(_core) : NULL;
@@ -608,6 +614,8 @@ static BOOL DBLoopbackPortAccepts(int port) {
 }
 
 - (void)stop {
+  [_conversationTransport stop];
+  _conversationTransport = nil;
   @synchronized(self) { ++_lifecycleGeneration; }
   if (_diTimer) {
     [_diTimer invalidate];
@@ -636,7 +644,7 @@ static BOOL DBLoopbackPortAccepts(int port) {
 }
 
 - (void)dispatchEvent:(NSDictionary *)ev {
-
+  [_conversationTransport handleEvent:ev];
   NSArray *all = [_handlers allValues];
   for (DBUiEventHandler h in all) h(ev);
 }
@@ -803,6 +811,39 @@ static BOOL DBLoopbackPortAccepts(int port) {
   });
   if (!committed) NSLog(@"[doorbell] SOS state was not durably committed");
   return committed;
+}
+
+- (NSDictionary *)conversation:(NSDictionary *)request {
+  NSData *data = [NSJSONSerialization dataWithJSONObject:request options:0 error:NULL];
+  if (!data) return nil;
+  NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+  __block NSDictionary *result = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) result = [self takeJson:db_core_conversation_request_json_v1(self->_core, [json UTF8String])];
+  });
+  return result;
+}
+- (NSString *)conversationAuth:(NSString *)mode {
+  __block NSString *result = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (!self->_core) return;
+    char *auth = db_core_sip_peer_auth(self->_core, [mode UTF8String]);
+    if (auth) { result = [NSString stringWithUTF8String:auth]; db_free(auth); }
+  });
+  return result;
+}
+- (void)conversationMedia:(NSString *)mode connected:(BOOL)connected {
+  NSString *identity = [mode copy];
+  dispatch_async(_coreQueue, ^{
+    if (self->_core) db_core_conversation_external_media_v1(self->_core, [identity UTF8String], connected ? 1 : 0);
+  });
+}
+- (int)openDoor:(NSString *)door callID:(NSString *)callID revision:(NSInteger)revision {
+  __block int result = -1;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) result = db_core_open_door_for_call_v2(self->_core, [door UTF8String], [callID UTF8String], (int)revision);
+  });
+  return result;
 }
 
 - (void)coreSipCall:(NSString *)target mode:(NSString *)mode {

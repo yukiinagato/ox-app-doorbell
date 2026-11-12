@@ -442,6 +442,21 @@
   <data name="cluster_devices_a11y" xml:space="preserve"><value>集群设备 {0} 台</value></data>
   <data name="cluster_door_stations_a11y" xml:space="preserve"><value>门口机 {0}/{1} 台在线</value></data>
   <data name="cluster_indoor_panels_a11y" xml:space="preserve"><value>室内机 {0}/{1} 台在线</value></data>
+  <data name="conversation_answer" xml:space="preserve"><value>接听</value></data>
+  <data name="conversation_connected" xml:space="preserve"><value>正在与 {0} 通话</value></data>
+  <data name="conversation_dialing" xml:space="preserve"><value>正在连接 {0}</value></data>
+  <data name="conversation_failed" xml:space="preserve"><value>请求未完成，请刷新状态后重试。</value></data>
+  <data name="conversation_held" xml:space="preserve"><value>通话保持中 · {0}</value></data>
+  <data name="conversation_hold" xml:space="preserve"><value>保持</value></data>
+  <data name="conversation_join" xml:space="preserve"><value>加入通话</value></data>
+  <data name="conversation_leave" xml:space="preserve"><value>退出通话</value></data>
+  <data name="conversation_pending" xml:space="preserve"><value>等待确认</value></data>
+  <data name="conversation_queued" xml:space="preserve"><value>{0} 已响应 · 正在排队</value></data>
+  <data name="conversation_respond" xml:space="preserve"><value>响应并排队</value></data>
+  <data name="conversation_resume" xml:space="preserve"><value>恢复通话</value></data>
+  <data name="conversation_takeover" xml:space="preserve"><value>抢答接管</value></data>
+  <data name="conversation_takeover_confirm" xml:space="preserve"><value>接管此门口通话并断开当前参与者？</value></data>
+  <data name="conversation_waiting" xml:space="preserve"><value>等待住户响应</value></data>
   <data name="dash_address_count" xml:space="preserve"><value>{0} 个地址</value></data>
   <data name="dash_admin" xml:space="preserve"><value>管理</value></data>
   <data name="dash_chip_offline" xml:space="preserve"><value>{0} 台离线</value></data>
@@ -1522,6 +1537,11 @@
   <data name="ring_open_sent" xml:space="preserve"><value>已发送开锁信号</value></data>
   <data name="ring_open_unconfigured" xml:space="preserve"><value>此门口机未配置开锁动作</value></data>
   <data name="ring_purpose_badge" xml:space="preserve"><value>来访目的：{0}</value></data>
+  <data name="ring_queue_answered_elsewhere" xml:space="preserve"><value>{0} 已接听</value></data>
+  <data name="ring_queue_finish_first" xml:space="preserve"><value>请先结束当前通话或监听，再选择其他来访</value></data>
+  <data name="ring_queue_in_call" xml:space="preserve"><value>{0} 正在与 {1} 通话</value></data>
+  <data name="ring_queue_selected" xml:space="preserve"><value>{0} · 当前选中</value></data>
+  <data name="ring_queue_waiting" xml:space="preserve"><value>{0} · 等待接听</value></data>
   <data name="ring_quick_replies" xml:space="preserve"><value>快捷回复</value></data>
   <data name="ring_quick_reply" xml:space="preserve"><value>快捷回复</value></data>
   <data name="ring_return_countdown_a11y" xml:space="preserve"><value>自动返回主页的秒数（点按可取消）</value></data>

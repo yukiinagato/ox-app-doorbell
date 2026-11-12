@@ -24,7 +24,7 @@ typedef enum {
 #define MS_FRAME MS_SAMPLES_PER_FRAME
 #define MS_PT_PCMU 0
 #define MS_PT_TE_DEFAULT 101
-#define MS_SIP_BUF 2048
+#define MS_SIP_BUF 4096
 #define MS_CALL_TIMEOUT_MS 32000
 #define MS_T1_MS 500
 #define MS_T2_MS 4000
@@ -60,7 +60,8 @@ struct ms_session {
   char invite_branch[64]; /* INVITE transaction branch. */
   char via_branch[64];    /* Latest outgoing request branch. */
   unsigned cseq;          /* INVITE CSeq; BYE uses the next value. */
-  char mode[16];
+  char mode[256];
+  char auth[257];
   char door_contact[256]; /* Contact from 200 OK for in-dialog routing. */
   char last_sdp[1024];    /* Stable INVITE SDP reused by retransmissions. */
 

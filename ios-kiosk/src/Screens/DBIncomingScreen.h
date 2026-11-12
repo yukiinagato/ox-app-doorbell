@@ -22,6 +22,9 @@
 - (BOOL)isIncomingForDoor:(NSString *)door;
 // Replaces an explicit door_host placeholder when confirmed peer metadata arrives.
 - (void)refreshFromCore;
+- (BOOL)isVisitSelected:(NSDictionary *)event;
+- (BOOL)handleVisitEvent:(NSDictionary *)event;
+- (void)handleConversationEvent:(NSDictionary *)event;
 // Starts listen-only audio from either the normal UI or router.
 - (void)beginMonitorAudio;
 

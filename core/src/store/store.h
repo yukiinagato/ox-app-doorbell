@@ -127,6 +127,7 @@ class Store {
   // Runtime queries expose only records at or below each origin's applied frontier. eventGet and
   // eventsSince intentionally retain access to buffered gaps for anti-entropy.
   std::vector<EventRecord> recentEvents(size_t limit);
+  std::vector<EventRecord> latestConversationStates();
 
   size_t countEventsOfType(const std::string& type);
 

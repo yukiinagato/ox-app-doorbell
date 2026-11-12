@@ -276,7 +276,11 @@ class Node {
   bool clearDoorNotice(const std::string& door);
   // Trigger the configured unlock action for one door. False when the door is unknown or no
   // explicit unlock action is configured for this door, so the caller can explain the failure.
+  std::string conversationRequestJson(const std::string& request);
+  void setConversationExternalTransport(bool available);
+  void reportConversationExternalMedia(const std::string& mode, bool connected);
   bool openDoor(const std::string& door);
+  int openDoorForCall(const std::string& door, const std::string& call_id, int revision);
 
   // Configuration writes with the same validation and result shape the HTTP endpoints use, so a
   // native shell does not have to talk to its own loopback HTTP server. The returned JSON is
