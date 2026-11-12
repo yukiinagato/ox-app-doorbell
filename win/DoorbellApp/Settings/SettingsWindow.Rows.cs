@@ -364,6 +364,14 @@ namespace DoorbellApp.Settings
                         if (next.Contains(o.Value.ToString())) ordered.Add(o.Value.ToString());
                     foreach (string extra in next)
                         if (!ordered.Contains(extra)) ordered.Add(extra);
+                    // A door station with no visitor language has nothing to show.
+                    if (item.Key == "ui.languages" && ordered.Count == 0)
+                    {
+                        parts.Error.Text = Texts.T("settings.err_languages_empty");
+                        parts.Error.Visibility = Visibility.Visible;
+                        chip.IsChecked = true;
+                        return;
+                    }
                     if (Write(item, ordered, parts))
                     {
                         chosen.Clear();

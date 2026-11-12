@@ -205,6 +205,9 @@ namespace DoorbellApp.Settings
             };
         }
 
+        private static readonly System.Text.RegularExpressions.Regex UnlockCommandPattern =
+            new System.Text.RegularExpressions.Regex("^[A-Za-z0-9_-]{1,32}$");
+
         private RecordSpec DoorSpec()
         {
             return new RecordSpec
@@ -220,7 +223,37 @@ namespace DoorbellApp.Settings
                     label.MaxLength = 64;
                     var building = Fld("building", FieldKind.Choice, "admin.building_assign");
                     building.Options = BuildingOptions();
-                    return new List<Field> { label, building };
+                    // doors.<id>.unlock: the command this door's lock answers to, and whether
+                    // the unlock control shows (left to Core, always, or never).
+                    var command = Fld("unlock.command", FieldKind.Text, "unlock.command");
+                    command.HintKey = "unlock.binding_hint";
+                    command.MaxLength = 32;
+                    command.Store = v => string.IsNullOrWhiteSpace(v as string)
+                        ? null : ((string)v).Trim();
+                    var show = Fld("unlock.show_button", FieldKind.Choice, "unlock.title");
+                    show.Required = true;
+                    show.Options = new List<SettingOption>
+                    {
+                        new SettingOption("auto", "unlock.auto"),
+                        new SettingOption("show", "unlock.show"),
+                        new SettingOption("hide", "unlock.hide"),
+                    };
+                    show.Load = v => v is bool ? ((bool)v ? "show" : "hide") : "auto";
+                    show.Store = v => (v as string) == "show" ? (object)true
+                        : (v as string) == "hide" ? (object)false : null;
+                    return new List<Field> { label, building, command, show };
+                },
+                Validate = (id, draft) =>
+                {
+                    var unlock = draft.ContainsKey("unlock")
+                        ? draft["unlock"] as Dictionary<string, object> : null;
+                    if (unlock == null) return null;
+                    string command = Str(unlock, "command");
+                    if (command.Length != 0 && !UnlockCommandPattern.IsMatch(command))
+                        return Texts.T("unlock.command_invalid");
+                    // Nothing left to say about unlocking: the key goes away entirely.
+                    if (unlock.Count == 0) draft.Remove("unlock");
+                    return null;
                 },
                 Title = (id, d) => LabelText(d.ContainsKey("label") ? d["label"] : null, id),
                 Subtitle = (id, d) =>

@@ -131,6 +131,7 @@ namespace DoorbellApp.Settings
             switch (item.Handler)
             {
                 case "volume_reset":
+                    if (!Confirm(Texts.T("settings.reset_confirm"))) break;
                     if (Report(_store.Delete(item.Key + ".call", item.Key + ".sos", item.Key + ".idle"),
                                parts))
                         Refresh();

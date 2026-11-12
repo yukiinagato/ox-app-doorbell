@@ -56,6 +56,7 @@ ring.monitoring: { ja: "玄関の音声を再生中", en: "Live door audio is on
 # The number beside the incoming-call title: how long until this panel returns to its home
 # page. Tapping it stops the return, so it is announced as the control it is.
 ring.return_countdown_a11y: { ja: "自動で戻るまでの秒数（タップで解除）", en: "Seconds until this panel returns home (tap to stop)", zh: "自动返回主页的秒数（点按可取消）" }
+ring.return_countdown_action: { ja: "あと {sec} 秒でホームに戻ります（タップで解除）", en: "Returning home in {sec}s (tap to stay)", zh: "{sec} 秒后返回主页（点按取消）" }
 ring.cancelled: { ja: "訪客が呼び出しを取り消しました", en: "The visitor cancelled the call", zh: "访客已取消呼叫" }
 ring.unlock: { ja: "解錠", en: "Unlock", zh: "开锁" }
 ring.unlock_sent: { ja: "解錠信号を送信しました", en: "Unlock signal sent", zh: "已发送开锁信号" }
@@ -382,6 +383,9 @@ panel.extension: { ja: "内線 {extension}", en: "Extension {extension}", zh: "�
 panel.no_extension: { ja: "内線なし", en: "No extension", zh: "无分机" }
 panel.webrtc_required: { ja: "通話には Asterisk の WebRTC 設定 (integrations.webrtc.ws_url) が必要です — deploy/asterisk/webrtc.md を参照してください", en: "Calling requires Asterisk WebRTC configuration (integrations.webrtc.ws_url) — see deploy/asterisk/webrtc.md", zh: "通话需要配置 Asterisk WebRTC (integrations.webrtc.ws_url) — 请参阅 deploy/asterisk/webrtc.md" }
 panel.extension_unconfigured: { ja: "この玄関には内線 (sip.accounts) が設定されていません", en: "This door has no extension configured in sip.accounts", zh: "此门口尚未在 sip.accounts 中配置分机" }
+panel.calling_unavailable: { ja: "この画面ではまだ通話を利用できません。映像は引き続き確認できます。", en: "Calling isn't set up on this screen yet. You can still watch the door.", zh: "此画面尚未开通通话功能，仍可查看门口画面。" }
+panel.door_call_unavailable: { ja: "この玄関にはここから発信できません。", en: "This door can't be called from this screen.", zh: "无法从此画面呼叫这个门口。" }
+panel.admin_note: { ja: "管理者向け: {detail}", en: "For the administrator: {detail}", zh: "管理员提示：{detail}" }
 panel.lifecycle_identity_missing: { ja: "呼出の識別情報がないため、安全に応答できません", en: "This call cannot be answered safely because its lifecycle identity is unavailable", zh: "呼叫缺少生命周期标识，无法安全接听" }
 panel.dialog_identity_missing: { ja: "安全なブラウザ通話識別子を作成できなかったため、通話を開始しませんでした", en: "A secure browser dialog identity is unavailable; the call was not started", zh: "无法创建安全的浏览器通话标识，通话未开始" }
 panel.registered: { ja: "内線 {extension} 登録済み", en: "Extension {extension} registered", zh: "分机 {extension} 已注册" }
@@ -578,6 +582,53 @@ admin.drop_here: { ja: "ここにファイルをドラッグ＆ドロップ／�
 admin.global: { ja: "全体", en: "Global", zh: "全局" }
 admin.list_or_all: { ja: "カンマ区切り、または all", en: "Comma-separated values or all", zh: "逗号分隔，或填写 all" }
 admin.local_addrs: { ja: "本機アドレス", en: "Local addresses", zh: "本机地址" }
+admin.services: { ja: "サービス", en: "Services", zh: "服务" }
+admin.svc_connected: { ja: "接続済み", en: "Connected", zh: "已连接" }
+admin.svc_disconnected: { ja: "未接続", en: "Disconnected", zh: "未连接" }
+admin.svc_active: { ja: "稼働中", en: "Active", zh: "运行中" }
+admin.svc_inactive: { ja: "停止中", en: "Inactive", zh: "未运行" }
+admin.svc_idle: { ja: "待機中", en: "Idle", zh: "空闲" }
+admin.svc_registering: { ja: "登録中", en: "Registering", zh: "注册中" }
+admin.svc_registered: { ja: "登録済み", en: "Registered", zh: "已注册" }
+admin.svc_failed: { ja: "失敗", en: "Failed", zh: "失败" }
+admin.peer_suspect: { ja: "応答なし", en: "Not responding", zh: "无响应" }
+admin.duty_mqtt_bridge: { ja: "MQTT ブリッジ", en: "MQTT bridge", zh: "MQTT 桥接" }
+admin.duty_telegram: { ja: "Telegram 通知", en: "Telegram", zh: "Telegram 通知" }
+admin.duty_web_push: { ja: "Web Push 配信", en: "Web Push", zh: "Web Push 推送" }
+admin.duty_none: { ja: "担当なし", en: "No duty", zh: "无职责" }
+admin.live_view: { ja: "ライブ映像", en: "Live view", zh: "实时画面" }
+admin.copy_value: { ja: "{value} をコピー", en: "Copy {value}", zh: "复制 {value}" }
+admin.refresh: { ja: "更新", en: "Refresh", zh: "刷新" }
+admin.move_up: { ja: "上へ移動", en: "Move up", zh: "上移" }
+admin.move_down: { ja: "下へ移動", en: "Move down", zh: "下移" }
+admin.danger_zone: { ja: "危険な操作", en: "Danger zone", zh: "危险操作" }
+admin.ui_style_modern: { ja: "モダン", en: "Modern", zh: "现代" }
+admin.ui_style_retro: { ja: "レトロ（90 年代）", en: "Retro (90s)", zh: "复古（90 年代）" }
+admin.menu: { ja: "メニュー", en: "Menu", zh: "菜单" }
+admin.event_answered: { ja: "応答", en: "Answered", zh: "已接听" }
+admin.event_missed: { ja: "不在着信", en: "Missed", zh: "未接" }
+admin.event_offline: { ja: "オフライン", en: "Went offline", zh: "离线" }
+admin.event_online: { ja: "オンライン復帰", en: "Back online", zh: "恢复在线" }
+admin.event_config_changed: { ja: "設定変更", en: "Settings changed", zh: "配置已更改" }
+admin.event_cluster_key_changed: { ja: "クラスター鍵の更新", en: "Cluster key changed", zh: "集群密钥已更新" }
+admin.event_peer_rejected: { ja: "端末の接続拒否", en: "Device rejected", zh: "设备被拒绝" }
+admin.empty_events: { ja: "イベントはまだありません", en: "No events yet", zh: "暂无事件" }
+admin.empty_events_hint: { ja: "呼出、動体検知、端末の状態変化がここに表示されます", en: "Calls, motion and device changes appear here as they happen", zh: "呼叫、移动侦测和设备状态变化会显示在这里" }
+admin.empty_events_filtered: { ja: "この種別のイベントはありません", en: "No events of this type", zh: "没有此类型的事件" }
+admin.empty_buildings: { ja: "建物はまだありません", en: "No buildings yet", zh: "尚未添加建筑" }
+admin.empty_buildings_hint: { ja: "建物を追加すると、ドアをまとめて管理できます", en: "Add a building to group its doors", zh: "添加建筑后可将门口归组管理" }
+admin.empty_doors: { ja: "ドアはまだありません", en: "No doors yet", zh: "尚未添加门口" }
+admin.empty_doors_hint: { ja: "ドアを追加し、門口機を割り当ててください", en: "Add a door, then assign a door station to it", zh: "添加门口，然后为其分配门口机" }
+admin.empty_devices: { ja: "端末はまだありません", en: "No devices yet", zh: "尚无设备" }
+admin.empty_devices_hint: { ja: "端末をペアリングすると、ここに表示されます", en: "Pair a device and it appears here", zh: "配对设备后会显示在这里" }
+admin.empty_rules: { ja: "呼出ルールはまだありません", en: "No call rules yet", zh: "尚无呼叫规则" }
+admin.empty_rules_hint: { ja: "ボタンが押されたとき、動きを検知したとき、端末がオフラインになったときの通知先を決めます", en: "A rule decides who is notified when the button is pressed, motion is seen, or a device goes offline", zh: "规则决定在按下按钮、检测到移动或设备离线时通知谁" }
+admin.empty_quick_replies: { ja: "クイック返信はまだありません", en: "No quick replies yet", zh: "尚无快捷回复" }
+admin.empty_quick_replies_hint: { ja: "クイック返信を使うと、ワンタップで来客に返事できます", en: "Quick replies answer a visitor with one tap", zh: "快捷回复可一键答复访客" }
+admin.empty_purposes: { ja: "用件はまだありません", en: "No visit purposes yet", zh: "尚无来访目的" }
+admin.empty_purposes_hint: { ja: "用件は、門口機で来客が選ぶ項目です", en: "Purposes are the choices a visitor sees on the door station", zh: "来访目的是访客在门口机上看到的选项" }
+admin.empty_households: { ja: "通知先はまだありません", en: "No recipients yet", zh: "尚无通知对象" }
+admin.empty_households_hint: { ja: "通知先は、呼出ルールから Telegram メッセージや SIP 着信を受け取ります", en: "Recipients receive Telegram messages and SIP calls from call rules", zh: "通知对象会收到呼叫规则发出的 Telegram 消息和 SIP 来电" }
 admin.sos_dry_run: { ja: "SOS ドライラン表示", en: "SOS dry-run preview", zh: "SOS 试运行预览" }
 admin.sos_dry_run_ok: { ja: "現在の状態スナップショットでは配信警告はありません。", en: "No delivery warning detected by the current status snapshot.", zh: "当前状态快照未检测到投递警告。" }
 admin.sos_local_recipients: { ja: "ローカル受信先", en: "Local recipients", zh: "本地接收方" }
@@ -915,6 +966,8 @@ dash.tile_watch: { ja: "見る", en: "View", zh: "查看" }
 dash.last_answer: { ja: "最終応答 {when}", en: "Last answered {when}", zh: "上次接听：{when}" }
 history.page_limit: { ja: "これより前は Web 管理でご覧ください", en: "Older calls are in the web admin", zh: "更早的记录请在网页管理中查看" }
 sos.abort: { ja: "取り消す", en: "Cancel", zh: "取消" }
+sos.confirm_title: { ja: "SOS を送信しますか？", en: "Send an SOS?", zh: "要发送 SOS 吗？" }
+sos.send: { ja: "SOS を送信", en: "Send SOS", zh: "发送 SOS" }
 notice.chip: { ja: "お知らせ", en: "Announcement", zh: "公告" }
 notice.for_this_door: { ja: "この門口機にお知らせ", en: "Announcement for this door", zh: "为此门口机发布公告" }
 notice.dialog_title: { ja: "門口機にお知らせを表示", en: "Show an announcement at the door", zh: "在门口机显示公告" }
@@ -2536,3 +2589,56 @@ conversation.queued: { en: "{device} has responded · Waiting", ja: "{device} �
 conversation.pending: { en: "Waiting for confirmation", ja: "確認待ち", zh: "等待确认" }
 conversation.failed: { en: "The request could not be completed. Refresh and try again.", ja: "要求を完了できませんでした。更新後に再試行してください。", zh: "请求未完成，请刷新状态后重试。" }
 conversation.takeover_confirm: { en: "Take over this door and disconnect its current participants?", ja: "この玄関の通話を引き継ぎ、現在の参加者を切断しますか？", zh: "接管此门口通话并断开当前参与者？" }
+password.show: { ja: "パスワードを表示", en: "Show password", zh: "显示密码" }
+password.hide: { ja: "パスワードを隠す", en: "Hide password", zh: "隐藏密码" }
+pair.key_delete: { ja: "1 文字削除", en: "Delete one digit", zh: "删除一位" }
+sos.slide_clear: { ja: "スライドで解除", en: "Slide to clear", zh: "滑动解除" }
+sos.clear_confirm_title: { ja: "警報を解除しますか？", en: "Clear the alarm?", zh: "要解除警报吗？" }
+sos.tap_to_clear: { ja: "タップして解除の確認へ", en: "Tap to confirm clearing", zh: "点击后确认解除" }
+sos.slide_to_clear: { ja: "スライドして解除", en: "Slide to clear", zh: "滑动解除" }
+# Modern iOS/tvOS shell: History detail and the Settings tab gate.
+history.detail_time: { ja: "日時", en: "Time", zh: "时间" }
+history.detail_duration: { ja: "通話時間", en: "Duration", zh: "通话时长" }
+settings.locked_hint: { ja: "設定を開くには管理パスワードが必要です", en: "Settings need the admin password", zh: "打开设置需要管理密码" }
+settings.unlock: { ja: "ロックを解除", en: "Unlock", zh: "解锁" }
+settings.change_role: { ja: "役割を変更", en: "Change role", zh: "更改角色" }
+settings.change_role_action: { ja: "変更…", en: "Change…", zh: "更改…" }
+settings.role_new_door: { ja: "新しいドア", en: "New door", zh: "新门口" }
+settings.role_new_door_id: { ja: "新しいドアの ID", en: "ID of the new door", zh: "新门口的 ID" }
+settings.role_indoor_note: { ja: "室内機はドアを担当しません。ドアの割り当ては解除されます。", en: "An indoor panel serves no door. The door assignment is cleared.", zh: "室内机不负责门口，门口分配将被清除。" }
+settings.role_door_in_use: { ja: "このドアは別の門口機「{device}」に割り当てられています。", en: "This door is already assigned to the door station \"{device}\".", zh: "此门口已分配给门口机“{device}”。" }
+settings.role_restart_confirm: { ja: "役割を変更するとアプリがすぐに再起動します。門口機にはカメラとマイクが必要です。続けますか？", en: "Changing the role restarts the app now. A door station needs a camera and a microphone. Continue?", zh: "更改角色后应用会立即重启。门口机需要摄像头和麦克风。要继续吗？" }
+settings.role_busy: { ja: "通話中、SOS 発報中、ペアリング中は役割を変更できません。", en: "The role cannot be changed during a call, an SOS or pairing.", zh: "通话、SOS 或配对进行期间不能更改角色。" }
+settings.role_unchanged: { ja: "変更はありません。", en: "Nothing was changed.", zh: "没有更改。" }
+settings.grp_call_return: { ja: "着信画面からの自動復帰", en: "Returning from the call screen", zh: "来电画面自动返回" }
+settings.call_return: { ja: "ホームに戻るまでの秒数（全端末の既定）", en: "Seconds before returning home (default for all devices)", zh: "返回首页前的秒数（所有设备的默认值）" }
+settings.call_return_here: { ja: "この端末での秒数", en: "Seconds on this device", zh: "本设备的秒数" }
+settings.web_push_sender_url: { ja: "HTTPS 送信 URL", en: "HTTPS sender URL", zh: "HTTPS 发送 URL" }
+settings.web_push_public_key: { ja: "VAPID 公開鍵", en: "VAPID public key", zh: "VAPID 公钥" }
+settings.web_push_subject: { ja: "VAPID subject", en: "VAPID subject", zh: "VAPID 主题" }
+settings.web_push_private_key: { ja: "VAPID 秘密鍵", en: "VAPID private key", zh: "VAPID 私钥" }
+settings.web_push_private_key_native: { ja: "この端末の安全な保管領域に保存されます。Web Push を担当する各端末で登録してください", en: "Stored in this device's secure store. Enter it on every device that may deliver Web Push", zh: "保存在本设备的安全存储中。请在每台可能负责 Web Push 的设备上录入" }
+settings.web_push_sender_bearer: { ja: "送信サーバー Bearer token", en: "Sender bearer token", zh: "发送服务器 Bearer 令牌" }
+settings.web_push_sender_bearer_native: { ja: "送信サーバーが認証を求める場合だけ登録します", en: "Only needed when the sender requires authentication", zh: "仅在发送服务器要求认证时录入" }
+settings.grp_idle_screen: { ja: "待機中の画面（全端末）", en: "Idle screen (all devices)", zh: "暗屏与待机显示（所有设备）" }
+settings.saver_enabled: { ja: "待機画面を有効にする", en: "Enable the idle screen", zh: "启用暗屏" }
+settings.saver_mode: { ja: "表示内容", en: "What it shows", zh: "显示内容" }
+settings.saver_schedule: { ja: "有効な時間帯", en: "When it applies", zh: "启用时间段" }
+settings.saver_from: { ja: "開始（毎日の時間帯）", en: "From (daily window)", zh: "开始（每天时间段）" }
+settings.saver_to: { ja: "終了（毎日の時間帯）", en: "Until (daily window)", zh: "结束（每天时间段）" }
+settings.saver_after: { ja: "操作がない時間", en: "Idle delay", zh: "无操作等待时间" }
+settings.saver_brightness: { ja: "待機中の明るさ", en: "Idle brightness", zh: "暗屏亮度" }
+settings.door_restart_confirm: { ja: "担当ドアを変更するとアプリがすぐに再起動します。続けますか？", en: "Changing the assigned door restarts the app now. Continue?", zh: "更改负责的门口后应用会立即重启。要继续吗？" }
+settings.role_door_kept_note: { ja: "管理者が編集したドアはドア一覧に残り、オフラインと表示されます。", en: "A door an administrator edited stays in the door list and shows as offline.", zh: "管理员编辑过的门口会保留在门口列表中，并显示为离线。" }
+settings.appearance_schedule_times: { ja: "外観を切り替える時刻", en: "Appearance schedule", zh: "外观切换时间" }
+settings.device_name_length: { ja: "名前は 1～64 文字で入力してください", en: "Use a name of 1 to 64 characters", zh: "名称请输入 1 至 64 个字符" }
+settings.inherit_confirm: { ja: "この端末だけの設定を消して、クラスタの既定に戻します。", en: "This device's own value is removed and the cluster default applies again.", zh: "将删除本设备的单独设置，恢复为集群默认值。" }
+settings.call_return_device: { ja: "着信画面から戻るまで（この端末）", en: "Return from the call screen (this device)", zh: "从来电界面返回（本设备）" }
+settings.languages_required: { ja: "訪客言語は 1 つ以上必要です", en: "At least one visitor language is required", zh: "至少需要一种访客语言" }
+settings.page_sip: { ja: "SIP", en: "SIP", zh: "SIP" }
+settings.page_ui_elements: { ja: "ボタンなどの表示調整", en: "Button and element overrides", zh: "按钮等元素的显示调整" }
+settings.page_raw_config: { ja: "設定の内容（JSON）", en: "Raw configuration", zh: "原始配置（JSON）" }
+settings.page_logs: { ja: "ログとイベント", en: "Logs and events", zh: "日志与事件" }
+settings.page_other_devices: { ja: "ほかの端末の設定", en: "Other devices' settings", zh: "其他设备的设置" }
+settings.reset_confirm: { ja: "この設定を消して既定に戻しますか？", en: "Remove this setting and go back to the default?", zh: "要清除此设置并恢复默认吗？" }
+settings.err_languages_empty: { ja: "言語を 1 つ以上選んでください", en: "Keep at least one language", zh: "请至少保留一种语言" }

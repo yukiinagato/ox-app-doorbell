@@ -22,6 +22,8 @@ namespace DoorbellApp.Settings
             public double Order;
         }
 
+        private const int MaxNoticePresets = 8;
+
         private FrameworkElement BuildListEditor(SettingItem item)
         {
             var parts = new RowParts();
@@ -61,6 +63,13 @@ namespace DoorbellApp.Settings
             panel.Children.Add(parts.Error);
             add.Click += (s, e) =>
             {
+                // Core and the Admin keep at most eight announcement presets.
+                if (item.Handler == "notice_presets" && entries.Count >= MaxNoticePresets)
+                {
+                    parts.Error.Text = Texts.T("notice.presets_full");
+                    parts.Error.Visibility = Visibility.Visible;
+                    return;
+                }
                 var created = EditEntry(item, null);
                 if (created == null) return;
                 double order = entries.Count == 0 ? 1 : entries[entries.Count - 1].Order + 1;

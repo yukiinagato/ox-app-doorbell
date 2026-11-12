@@ -1654,6 +1654,7 @@ On</value></data>
   <data name="settings_appearance_light_from" xml:space="preserve"><value>Light from</value></data>
   <data name="settings_appearance_range" xml:space="preserve"><value>Dark {0} → light {1}</value></data>
   <data name="settings_appearance_schedule" xml:space="preserve"><value>Switch by time of day</value></data>
+  <data name="settings_appearance_schedule_times" xml:space="preserve"><value>Appearance schedule</value></data>
   <data name="settings_appearance_system" xml:space="preserve"><value>Follow the system</value></data>
   <data name="settings_asset_delete_in_use" xml:space="preserve"><value>{0} is used by {1}. Delete it?</value></data>
   <data name="settings_asset_limits" xml:space="preserve"><value>JPEG, PNG, MP3 or WAV, up to 3 MB each</value></data>
@@ -1685,6 +1686,7 @@ On</value></data>
   <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>Choose purpose, then ring</value></data>
   <data name="settings_call_flow_ring_then_purpose" xml:space="preserve"><value>Ring, then choose purpose</value></data>
   <data name="settings_call_return" xml:space="preserve"><value>Seconds before returning home (default for all devices)</value></data>
+  <data name="settings_call_return_device" xml:space="preserve"><value>Return from the call screen (this device)</value></data>
   <data name="settings_call_return_here" xml:space="preserve"><value>Seconds on this device</value></data>
   <data name="settings_call_sound" xml:space="preserve"><value>Door-station call sound</value></data>
   <data name="settings_call_sound_loop" xml:space="preserve"><value>Repeat the call sound</value></data>
@@ -1756,6 +1758,7 @@ On</value></data>
   <data name="settings_device_door_desc" xml:space="preserve"><value>Starts with a letter or digit; letters, digits, _ and - only</value></data>
   <data name="settings_device_door_hint" xml:space="preserve"><value>Required for a door station</value></data>
   <data name="settings_device_name" xml:space="preserve"><value>Device name</value></data>
+  <data name="settings_device_name_length" xml:space="preserve"><value>Use a name of 1 to 64 characters</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>Role</value></data>
   <data name="settings_device_self_hint" xml:space="preserve"><value>Change this device under Device</value></data>
   <data name="settings_devices_manage" xml:space="preserve"><value>Manage and remove devices</value></data>
@@ -1764,6 +1767,7 @@ On</value></data>
   <data name="settings_disable" xml:space="preserve"><value>Disable</value></data>
   <data name="settings_door" xml:space="preserve"><value>Assigned door</value></data>
   <data name="settings_door_id" xml:space="preserve"><value>Door ID (letters, digits, _ or -)</value></data>
+  <data name="settings_door_restart_confirm" xml:space="preserve"><value>Changing the assigned door restarts the app now. Continue?</value></data>
   <data name="settings_doors" xml:space="preserve"><value>Doors</value></data>
   <data name="settings_doors_manage" xml:space="preserve"><value>Doors and buildings</value></data>
   <data name="settings_doors_manage_desc" xml:space="preserve"><value>Door names and buildings are set in the web admin</value></data>
@@ -1784,6 +1788,7 @@ On</value></data>
   <data name="settings_err_admin_required" xml:space="preserve"><value>The admin password is required</value></data>
   <data name="settings_err_core_unavailable" xml:space="preserve"><value>The core is not responding</value></data>
   <data name="settings_err_door_id" xml:space="preserve"><value>The door ID is not valid</value></data>
+  <data name="settings_err_languages_empty" xml:space="preserve"><value>Keep at least one language</value></data>
   <data name="settings_err_required" xml:space="preserve"><value>This field is required</value></data>
   <data name="settings_err_time_format" xml:space="preserve"><value>Use HH:MM, for example 22:00</value></data>
   <data name="settings_exit_kiosk" xml:space="preserve"><value>Exit kiosk</value></data>
@@ -1814,6 +1819,7 @@ On</value></data>
   <data name="settings_grp_cluster" xml:space="preserve"><value>Cluster</value></data>
   <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>Identity</value></data>
+  <data name="settings_grp_idle_screen" xml:space="preserve"><value>Idle screen (all devices)</value></data>
   <data name="settings_grp_kiosk" xml:space="preserve"><value>Kiosk</value></data>
   <data name="settings_grp_maintenance" xml:space="preserve"><value>Maintenance</value></data>
   <data name="settings_grp_mqtt" xml:space="preserve"><value>MQTT broker</value></data>
@@ -1850,6 +1856,7 @@ On</value></data>
   <data name="settings_import_export_native" xml:space="preserve"><value>Export the configuration to a JSON file, and import one after reviewing the changes</value></data>
   <data name="settings_increase" xml:space="preserve"><value>Increase</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>Use the cluster default</value></data>
+  <data name="settings_inherit_confirm" xml:space="preserve"><value>This device's own value is removed and the cluster default applies again.</value></data>
   <data name="settings_integrations" xml:space="preserve"><value>Integrations (Telegram, MQTT, Web Push)</value></data>
   <data name="settings_integrations_desc" xml:space="preserve"><value>Connections to external services</value></data>
   <data name="settings_invalid_value" xml:space="preserve"><value>Check the value and try again</value></data>
@@ -1911,6 +1918,7 @@ On</value></data>
   <data name="settings_lang_revert" xml:space="preserve"><value>Return to the default language after</value></data>
   <data name="settings_languages" xml:space="preserve"><value>Visitor languages</value></data>
   <data name="settings_languages_desc" xml:space="preserve"><value>The first language is the default</value></data>
+  <data name="settings_languages_required" xml:space="preserve"><value>At least one visitor language is required</value></data>
   <data name="settings_launch_sound" xml:space="preserve"><value>Startup sound</value></data>
   <data name="settings_light_from" xml:space="preserve"><value>Light from</value></data>
   <data name="settings_list_empty" xml:space="preserve"><value>No entries</value></data>
@@ -1979,6 +1987,11 @@ On</value></data>
   <data name="settings_open_in_admin" xml:space="preserve"><value>Open in Admin</value></data>
   <data name="settings_open_logs" xml:space="preserve"><value>Log folder</value></data>
   <data name="settings_open_logs_action" xml:space="preserve"><value>Open</value></data>
+  <data name="settings_page_logs" xml:space="preserve"><value>Logs and events</value></data>
+  <data name="settings_page_other_devices" xml:space="preserve"><value>Other devices' settings</value></data>
+  <data name="settings_page_raw_config" xml:space="preserve"><value>Raw configuration</value></data>
+  <data name="settings_page_sip" xml:space="preserve"><value>SIP</value></data>
+  <data name="settings_page_ui_elements" xml:space="preserve"><value>Button and element overrides</value></data>
   <data name="settings_pairing_joining" xml:space="preserve"><value>Joining</value></data>
   <data name="settings_pairing_persist_error" xml:space="preserve"><value>Key not saved</value></data>
   <data name="settings_pairing_ready" xml:space="preserve"><value>In the cluster</value></data>
@@ -2032,6 +2045,7 @@ On</value></data>
   <data name="settings_res_320x240" xml:space="preserve"><value>320×240</value></data>
   <data name="settings_res_640x360" xml:space="preserve"><value>640×360</value></data>
   <data name="settings_res_640x480" xml:space="preserve"><value>640×480</value></data>
+  <data name="settings_reset_confirm" xml:space="preserve"><value>Remove this setting and go back to the default?</value></data>
   <data name="settings_restart_app" xml:space="preserve"><value>Restart the app</value></data>
   <data name="settings_restart_app_action" xml:space="preserve"><value>Restart</value></data>
   <data name="settings_restart_app_desc" xml:space="preserve"><value>Do this when no call is in progress</value></data>
@@ -2042,6 +2056,7 @@ On</value></data>
   <data name="settings_role_busy" xml:space="preserve"><value>The role cannot be changed during a call, an SOS or pairing.</value></data>
   <data name="settings_role_door" xml:space="preserve"><value>Door station</value></data>
   <data name="settings_role_door_in_use" xml:space="preserve"><value>This door is already assigned to the door station &quot;{0}&quot;.</value></data>
+  <data name="settings_role_door_kept_note" xml:space="preserve"><value>A door an administrator edited stays in the door list and shows as offline.</value></data>
   <data name="settings_role_door_station" xml:space="preserve"><value>Door station</value></data>
   <data name="settings_role_indoor" xml:space="preserve"><value>Indoor panel</value></data>
   <data name="settings_role_indoor_note" xml:space="preserve"><value>An indoor panel serves no door. The door assignment is cleared.</value></data>
@@ -2073,6 +2088,13 @@ On</value></data>
   <data name="settings_save_failed_reason" xml:space="preserve"><value>Not saved: {0}</value></data>
   <data name="settings_saved" xml:space="preserve"><value>Saved</value></data>
   <data name="settings_saved_with_warning" xml:space="preserve"><value>Saved. Note: {0}</value></data>
+  <data name="settings_saver_after" xml:space="preserve"><value>Idle delay</value></data>
+  <data name="settings_saver_brightness" xml:space="preserve"><value>Idle brightness</value></data>
+  <data name="settings_saver_enabled" xml:space="preserve"><value>Enable the idle screen</value></data>
+  <data name="settings_saver_from" xml:space="preserve"><value>From (daily window)</value></data>
+  <data name="settings_saver_mode" xml:space="preserve"><value>What it shows</value></data>
+  <data name="settings_saver_schedule" xml:space="preserve"><value>When it applies</value></data>
+  <data name="settings_saver_to" xml:space="preserve"><value>Until (daily window)</value></data>
   <data name="settings_scope_all" xml:space="preserve"><value>All devices</value></data>
   <data name="settings_scope_device" xml:space="preserve"><value>This device only</value></data>
   <data name="settings_screensaver" xml:space="preserve"><value>Screensaver</value></data>

@@ -1654,6 +1654,7 @@
   <data name="settings_appearance_light_from" xml:space="preserve"><value>浅色开始时间</value></data>
   <data name="settings_appearance_range" xml:space="preserve"><value>深色 {0} → 浅色 {1}</value></data>
   <data name="settings_appearance_schedule" xml:space="preserve"><value>按时段切换</value></data>
+  <data name="settings_appearance_schedule_times" xml:space="preserve"><value>外观切换时间</value></data>
   <data name="settings_appearance_system" xml:space="preserve"><value>跟随系统</value></data>
   <data name="settings_asset_delete_in_use" xml:space="preserve"><value>{0} 正被 {1} 使用。要删除吗？</value></data>
   <data name="settings_asset_limits" xml:space="preserve"><value>JPEG、PNG、MP3 或 WAV，每个最大 3 MB</value></data>
@@ -1685,6 +1686,7 @@
   <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>先选目的，再呼叫</value></data>
   <data name="settings_call_flow_ring_then_purpose" xml:space="preserve"><value>先呼叫，再选目的</value></data>
   <data name="settings_call_return" xml:space="preserve"><value>返回首页前的秒数（所有设备的默认值）</value></data>
+  <data name="settings_call_return_device" xml:space="preserve"><value>从来电界面返回（本设备）</value></data>
   <data name="settings_call_return_here" xml:space="preserve"><value>本设备的秒数</value></data>
   <data name="settings_call_sound" xml:space="preserve"><value>门口机呼叫提示音</value></data>
   <data name="settings_call_sound_loop" xml:space="preserve"><value>重复呼叫提示音</value></data>
@@ -1756,6 +1758,7 @@
   <data name="settings_device_door_desc" xml:space="preserve"><value>以字母或数字开头，仅限字母、数字、_ 和 -</value></data>
   <data name="settings_device_door_hint" xml:space="preserve"><value>门口机必须设置</value></data>
   <data name="settings_device_name" xml:space="preserve"><value>设备名称</value></data>
+  <data name="settings_device_name_length" xml:space="preserve"><value>名称请输入 1 至 64 个字符</value></data>
   <data name="settings_device_role" xml:space="preserve"><value>角色</value></data>
   <data name="settings_device_self_hint" xml:space="preserve"><value>本设备请在“设备”中更改</value></data>
   <data name="settings_devices_manage" xml:space="preserve"><value>管理和移除设备</value></data>
@@ -1764,6 +1767,7 @@
   <data name="settings_disable" xml:space="preserve"><value>停用</value></data>
   <data name="settings_door" xml:space="preserve"><value>负责的门口</value></data>
   <data name="settings_door_id" xml:space="preserve"><value>门 ID（字母、数字、_ 或 -）</value></data>
+  <data name="settings_door_restart_confirm" xml:space="preserve"><value>更改负责的门口后应用会立即重启。要继续吗？</value></data>
   <data name="settings_doors" xml:space="preserve"><value>门口</value></data>
   <data name="settings_doors_manage" xml:space="preserve"><value>门与建筑</value></data>
   <data name="settings_doors_manage_desc" xml:space="preserve"><value>门名称与建筑分配请在网页管理中设置</value></data>
@@ -1784,6 +1788,7 @@
   <data name="settings_err_admin_required" xml:space="preserve"><value>需要管理密码</value></data>
   <data name="settings_err_core_unavailable" xml:space="preserve"><value>核心无响应</value></data>
   <data name="settings_err_door_id" xml:space="preserve"><value>门 ID 格式不正确</value></data>
+  <data name="settings_err_languages_empty" xml:space="preserve"><value>请至少保留一种语言</value></data>
   <data name="settings_err_required" xml:space="preserve"><value>此项为必填</value></data>
   <data name="settings_err_time_format" xml:space="preserve"><value>请使用 HH:MM 格式，例如 22:00</value></data>
   <data name="settings_exit_kiosk" xml:space="preserve"><value>退出信息亭模式</value></data>
@@ -1814,6 +1819,7 @@
   <data name="settings_grp_cluster" xml:space="preserve"><value>集群</value></data>
   <data name="settings_grp_ha" xml:space="preserve"><value>Home Assistant</value></data>
   <data name="settings_grp_identity" xml:space="preserve"><value>标识</value></data>
+  <data name="settings_grp_idle_screen" xml:space="preserve"><value>暗屏与待机显示（所有设备）</value></data>
   <data name="settings_grp_kiosk" xml:space="preserve"><value>展台模式</value></data>
   <data name="settings_grp_maintenance" xml:space="preserve"><value>维护</value></data>
   <data name="settings_grp_mqtt" xml:space="preserve"><value>MQTT 代理</value></data>
@@ -1850,6 +1856,7 @@
   <data name="settings_import_export_native" xml:space="preserve"><value>将配置导出为 JSON 文件，并在确认更改后导入</value></data>
   <data name="settings_increase" xml:space="preserve"><value>增加</value></data>
   <data name="settings_inherit" xml:space="preserve"><value>使用集群默认值</value></data>
+  <data name="settings_inherit_confirm" xml:space="preserve"><value>将删除本设备的单独设置，恢复为集群默认值。</value></data>
   <data name="settings_integrations" xml:space="preserve"><value>集成（Telegram、MQTT、Web Push）</value></data>
   <data name="settings_integrations_desc" xml:space="preserve"><value>外部服务的连接设置</value></data>
   <data name="settings_invalid_value" xml:space="preserve"><value>请检查输入内容</value></data>
@@ -1911,6 +1918,7 @@
   <data name="settings_lang_revert" xml:space="preserve"><value>恢复默认语言的等待时间</value></data>
   <data name="settings_languages" xml:space="preserve"><value>访客可选语言</value></data>
   <data name="settings_languages_desc" xml:space="preserve"><value>第一个语言为默认语言</value></data>
+  <data name="settings_languages_required" xml:space="preserve"><value>至少需要一种访客语言</value></data>
   <data name="settings_launch_sound" xml:space="preserve"><value>启动音</value></data>
   <data name="settings_light_from" xml:space="preserve"><value>浅色开始时间</value></data>
   <data name="settings_list_empty" xml:space="preserve"><value>没有条目</value></data>
@@ -1979,6 +1987,11 @@
   <data name="settings_open_in_admin" xml:space="preserve"><value>在管理页面打开</value></data>
   <data name="settings_open_logs" xml:space="preserve"><value>日志文件夹</value></data>
   <data name="settings_open_logs_action" xml:space="preserve"><value>打开</value></data>
+  <data name="settings_page_logs" xml:space="preserve"><value>日志与事件</value></data>
+  <data name="settings_page_other_devices" xml:space="preserve"><value>其他设备的设置</value></data>
+  <data name="settings_page_raw_config" xml:space="preserve"><value>原始配置（JSON）</value></data>
+  <data name="settings_page_sip" xml:space="preserve"><value>SIP</value></data>
+  <data name="settings_page_ui_elements" xml:space="preserve"><value>按钮等元素的显示调整</value></data>
   <data name="settings_pairing_joining" xml:space="preserve"><value>正在加入</value></data>
   <data name="settings_pairing_persist_error" xml:space="preserve"><value>密钥保存失败</value></data>
   <data name="settings_pairing_ready" xml:space="preserve"><value>已加入集群</value></data>
@@ -2032,6 +2045,7 @@
   <data name="settings_res_320x240" xml:space="preserve"><value>320×240</value></data>
   <data name="settings_res_640x360" xml:space="preserve"><value>640×360</value></data>
   <data name="settings_res_640x480" xml:space="preserve"><value>640×480</value></data>
+  <data name="settings_reset_confirm" xml:space="preserve"><value>要清除此设置并恢复默认吗？</value></data>
   <data name="settings_restart_app" xml:space="preserve"><value>重启应用</value></data>
   <data name="settings_restart_app_action" xml:space="preserve"><value>重启</value></data>
   <data name="settings_restart_app_desc" xml:space="preserve"><value>请在没有通话时进行</value></data>
@@ -2042,6 +2056,7 @@
   <data name="settings_role_busy" xml:space="preserve"><value>通话、SOS 或配对进行期间不能更改角色。</value></data>
   <data name="settings_role_door" xml:space="preserve"><value>门口机</value></data>
   <data name="settings_role_door_in_use" xml:space="preserve"><value>此门口已分配给门口机“{0}”。</value></data>
+  <data name="settings_role_door_kept_note" xml:space="preserve"><value>管理员编辑过的门口会保留在门口列表中，并显示为离线。</value></data>
   <data name="settings_role_door_station" xml:space="preserve"><value>门口机</value></data>
   <data name="settings_role_indoor" xml:space="preserve"><value>室内机</value></data>
   <data name="settings_role_indoor_note" xml:space="preserve"><value>室内机不负责门口，门口分配将被清除。</value></data>
@@ -2073,6 +2088,13 @@
   <data name="settings_save_failed_reason" xml:space="preserve"><value>未能保存：{0}</value></data>
   <data name="settings_saved" xml:space="preserve"><value>已保存</value></data>
   <data name="settings_saved_with_warning" xml:space="preserve"><value>已保存。注意：{0}</value></data>
+  <data name="settings_saver_after" xml:space="preserve"><value>无操作等待时间</value></data>
+  <data name="settings_saver_brightness" xml:space="preserve"><value>暗屏亮度</value></data>
+  <data name="settings_saver_enabled" xml:space="preserve"><value>启用暗屏</value></data>
+  <data name="settings_saver_from" xml:space="preserve"><value>开始（每天时间段）</value></data>
+  <data name="settings_saver_mode" xml:space="preserve"><value>显示内容</value></data>
+  <data name="settings_saver_schedule" xml:space="preserve"><value>启用时间段</value></data>
+  <data name="settings_saver_to" xml:space="preserve"><value>结束（每天时间段）</value></data>
   <data name="settings_scope_all" xml:space="preserve"><value>所有设备</value></data>
   <data name="settings_scope_device" xml:space="preserve"><value>仅本设备</value></data>
   <data name="settings_screensaver" xml:space="preserve"><value>屏幕保护</value></data>

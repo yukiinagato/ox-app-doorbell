@@ -817,7 +817,8 @@ class WindowsContracts(unittest.TestCase):
         # The device-side keys an administrator edits are native controls.
         for key in ('Self + ".name"', 'Local + ".audio.volume.call"', '"ui.ringtone"',
                     '"ui.call_flow"', '"ui.languages"', 'Local + ".display.brightness"',
-                    'Local + ".display.screensaver_after_s"',
+                    'Local + ".display.screensaver.after_s"', '"display.screensaver.mode"',
+                    '"display.screensaver.schedule"',
                     '"display.night.enabled"', '"quick_replies"', '"visit_purposes"',
                     '"notice.presets"', '"emergency.trigger.mode"', '"sip.server"',
                     '"time.zone"', 'Local + ".camera.codec"', '"boot:kiosk"'):
@@ -2948,6 +2949,18 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('num("screensaver_after_s", 120)', node)
         self.assertNotIn('".screen_brightness"', catalog)
         self.assertNotIn('Local + ".screensaver_after_s"', catalog)
+        # The idle screen is the display.screensaver object, with the leaves Core reads.
+        for leaf in ("enabled", "schedule", "from", "to", "after_s", "brightness", "mode"):
+            self.assertIn('"display.screensaver.%s"' % leaf, catalog)
+        self.assertIn('{"enabled", "schedule", "from", "to", "after_s", "brightness", "mode"}',
+                      node)
+        # Door unlock: the command Core runs and its three-way visibility.
+        editors = read("win/DoorbellApp/Settings/SettingsWindow.Editors.cs")
+        self.assertIn('const std::string command_suffix = ".unlock.command";', node)
+        self.assertIn('Fld("unlock.command", FieldKind.Text, "unlock.command")', editors)
+        self.assertIn('Fld("unlock.show_button", FieldKind.Choice, "unlock.title")', editors)
+        self.assertIn('if (unlock.Count == 0) draft.Remove("unlock");', editors)
+        self.assertIn('"^[A-Za-z0-9_-]{1,32}$"', editors)
         # SIP answer mode: Core reports and accepts auto / ring.
         self.assertIn('sipSettings().auto_answer ? "auto" : "ring"', node)
         answer = catalog[catalog.index('Choice("sip_answer_mode"'):]
@@ -3012,6 +3025,23 @@ class WindowsContracts(unittest.TestCase):
         # The other shells have the same hook.
         self.assertIn("applyReplicatedIdentity",
                       read("android/app/src/main/java/jp/ox/doorbell/App.kt"))
+
+    def test_settings_guard_resets_and_limits(self):
+        actions = read("win/DoorbellApp/Settings/SettingsWindow.Actions.cs")
+        admin = read("win/DoorbellApp/Settings/SettingsWindow.Admin.cs")
+        lists = read("win/DoorbellApp/Settings/SettingsWindow.Lists.cs")
+        rows = read("win/DoorbellApp/Settings/SettingsWindow.Rows.cs")
+        # Resets ask first: per-device volumes, the background picture, a wording override.
+        reset = actions[actions.index('case "volume_reset":'):]
+        self.assertLess(reset.index('Confirm(Texts.T("settings.reset_confirm"))'),
+                        reset.index("_store.Delete("))
+        self.assertEqual(admin.count('if (!Confirm(Texts.T("settings.reset_confirm"))) return;'), 2)
+        # Announcement presets stop at eight, like Core and the Admin.
+        self.assertIn("private const int MaxNoticePresets = 8;", lists)
+        self.assertIn('item.Handler == "notice_presets" && entries.Count >= MaxNoticePresets',
+                      lists)
+        # The visitor language list can never be emptied.
+        self.assertIn('if (item.Key == "ui.languages" && ordered.Count == 0)', rows)
 
 
 if __name__ == "__main__":

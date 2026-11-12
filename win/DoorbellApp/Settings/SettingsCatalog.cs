@@ -252,11 +252,31 @@ namespace DoorbellApp.Settings
             // Core reads the per-device display override from devices.<self>.local.display.*.
             Add(here, Slider("brightness_here", Local + ".display.brightness", 0, 100, 1, 70,
                 SettingScope.ThisDevice, "settings.unit_percent"));
-            Add(here, Choice("screensaver", Local + ".display.screensaver_after_s", 120,
+            // This device's own idle delay: a leaf of its display.screensaver override.
+            Add(here, Choice("screensaver", Local + ".display.screensaver.after_s", 120,
                 SettingScope.ThisDevice, O(0, "settings.off"), O(60, "settings.min_1"),
                 O(120, "settings.min_2"), O(300, "settings.min_5"), O(600, "settings.min_10"),
                 O(1800, "settings.min_30")));
             Add(here, Describe(Toggle("video_stats", "local:video_stats", true, SettingScope.Local)));
+            // display.screensaver: the idle screen every device follows unless it overrides a
+            // leaf under devices.<id>.local.display.screensaver.
+            var idle = Group(c, "settings.grp_idle_screen");
+            Add(idle, Toggle("saver_enabled", "display.screensaver.enabled", true,
+                SettingScope.AllDevices));
+            Add(idle, Choice("saver_mode", "display.screensaver.mode", "dim", SettingScope.AllDevices,
+                O("dim", "display.saver_mode_dim"), O("minimal", "display.saver_mode_minimal"),
+                O("clock", "display.saver_mode_clock")));
+            Add(idle, Choice("saver_schedule", "display.screensaver.schedule", "always",
+                SettingScope.AllDevices, O("always", "display.saver_schedule_always"),
+                O("daily", "display.saver_schedule_daily")));
+            Add(idle, TimeOfDay("saver_from", "display.screensaver.from", "22:00",
+                SettingScope.AllDevices));
+            Add(idle, TimeOfDay("saver_to", "display.screensaver.to", "06:00",
+                SettingScope.AllDevices));
+            Add(idle, Stepper("saver_after", "display.screensaver.after_s", 5, 86400, 5, 120,
+                SettingScope.AllDevices, "settings.unit_seconds"));
+            Add(idle, Slider("saver_brightness", "display.screensaver.brightness", 1, 100, 1, 10,
+                SettingScope.AllDevices, "settings.unit_percent"));
             var look = Group(c, "settings.grp_appearance");
             Add(look, Choice("appearance", "display.appearance", "dark", SettingScope.AllDevices,
                 O("auto_system", "settings.appearance_system"),

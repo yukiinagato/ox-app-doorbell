@@ -284,6 +284,7 @@ namespace DoorbellApp.Settings
             };
             clear.Click += (s, e) =>
             {
+                if (!Confirm(Texts.T("settings.reset_confirm"))) return;
                 if (Report(_store.Delete(item.Key), parts)) Refresh();
             };
             return panel;
@@ -369,6 +370,7 @@ namespace DoorbellApp.Settings
                         var reset = CommandButton(Texts.T("settings.texts_reset"));
                         reset.Click += (s, e) =>
                         {
+                            if (!Confirm(Texts.T("settings.reset_confirm"))) return;
                             var sets = new List<KeyValuePair<string, object>>();
                             foreach (string lang in OverrideLangs)
                                 if (overrides[lang].Remove(k))
