@@ -443,7 +443,7 @@ namespace DoorbellApp.Settings
         {
             if (_status == null) return;
             _statusText.Text = text;
-            _status.SetResourceReference(Border.BorderBrushProperty, error ? "Negative" : "Ok");
+            _status.SetResourceReference(Border.BorderBrushProperty, error ? "NegativeText" : "Ok");
             _status.Visibility = Visibility.Visible;
             _statusTimer.Stop();
             if (!error) _statusTimer.Start();

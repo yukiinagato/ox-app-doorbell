@@ -1707,11 +1707,15 @@ class WindowsContracts(unittest.TestCase):
         self.assertEqual(trigger.get("Style"), "{StaticResource SosTriggerButton}")
         self.assertEqual(trigger.get("Click"), "OnSosTriggerClick")
         self.assertIsNone(trigger.get("Background"))
+        self.assertIn('<Setter Property="Background" Value="Transparent"/>',
+                      app[app.index('<Style x:Key="SosTriggerButton"'):][:700])
         style = app[app.index('<Style x:Key="SosTriggerButton"'):]
         style = style[:style.index("</Style>")]
         self.assertIn('BasedOn="{StaticResource DefaultButtonStyle}"', style)
-        self.assertIn('<Setter Property="BorderBrush" Value="{DynamicResource Negative}"/>', style)
-        self.assertNotIn('Property="Background"', style)
+        self.assertIn('<Setter Property="BorderBrush" Value="{DynamicResource NegativeText}"/>',
+                      style)
+        self.assertIn('<Setter Property="Foreground" Value="{DynamicResource NegativeText}"/>',
+                      style)
 
     def test_sos_takes_a_tap_then_a_slide_and_never_a_hold(self):
         flow = read("win/DoorbellApp/MainWindow.SosConfirm.cs")
@@ -2281,7 +2285,10 @@ class WindowsContracts(unittest.TestCase):
         self.assertEqual(primary, ["AnswerButton", "QuickReplyToggle", "IgnoreButton"])
         self.assertEqual(secondary, ["MonitorButton", "OpenDoorButton", "MicButton"])
         self.assertEqual(by_name["AnswerButton"].get("Background"), "{DynamicResource Positive}")
-        self.assertEqual(by_name["IgnoreButton"].get("Foreground"), "{DynamicResource Negative}")
+        # Ignore is outlined: the negative text colour on no fill, never the fill colour as text.
+        self.assertEqual(by_name["IgnoreButton"].get("Foreground"),
+                         "{DynamicResource NegativeText}")
+        self.assertEqual(by_name["IgnoreButton"].get("Background"), "Transparent")
         # In call, End is first in the zone (where Answer was) and uses the negative role.
         in_call = [c.get(ns) for c in by_name["InCallActionZone"]]
         self.assertEqual(in_call[0], "EndCallButton")
@@ -2334,8 +2341,8 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('Destructive(Describe(Action("rotate_cluster_key", "rotate_cluster_key")))', catalog)
         self.assertIn('Destructive(Describe(Action("restart_app", "restart_app")))', catalog)
         self.assertIn("while (at > 0 && group.Items[at - 1].Destructive) at--;", catalog)
-        self.assertIn('button.SetResourceReference(Control.ForegroundProperty, "Negative");', actions)
-        self.assertIn('if (item.Destructive) label.SetResourceReference(TextBlock.ForegroundProperty, "Negative");', rows)
+        self.assertIn("DoorbellApp.Ui.Fluent.MakeDestructive(button);", actions)
+        self.assertIn('if (item.Destructive) label.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");', rows)
         self.assertIn('Confirm(Texts.T("settings.rotate_cluster_key_confirm"), true)', actions)
         self.assertIn("MessageBoxResult.No) == MessageBoxResult.Yes", actions)
 
@@ -2374,7 +2381,7 @@ class WindowsContracts(unittest.TestCase):
         view = read("win/DoorbellApp/Pairing/PairingOnboardingView.xaml.cs")
         self.assertIn("SizeChanged += (sender, args) => ApplySizeClass(args.NewSize.Width);", view)
         self.assertIn("Grid.SetRow(PairingSidePanel, expanded ? 0 : 1);", view)
-        self.assertIn('SetStatusTone(persistError ? "Negative" : (upgradeRejoin ? "Warning" : null));', view)
+        self.assertIn('SetStatusTone(persistError ? "NegativeText" : (upgradeRejoin ? "Warning" : null));', view)
 
     def test_per_monitor_dpi_with_windows7_fallback(self):
         manifest = read("win/DoorbellApp/app.manifest")
@@ -2923,9 +2930,7 @@ class WindowsContracts(unittest.TestCase):
     }
     # Admin settings with no Windows row yet. Remove an entry when its row is added: the
     # test fails on a stale entry as well as on an unlisted gap.
-    ADMIN_SETTINGS_NOT_YET_NATIVE_ON_WINDOWS = {
-        "video_playback.pairs.": "per-pair playback overrides have no native editor yet",
-    }
+    ADMIN_SETTINGS_NOT_YET_NATIVE_ON_WINDOWS = {}
     ADMIN_CONFIG_ROOTS = ("display", "ui", "sip", "emergency", "call", "time", "notice",
                           "integrations", "audio", "media", "video_playback", "quiet_hours",
                           "devices", "doors", "rules", "quick_replies", "visit_purposes",
@@ -3093,6 +3098,128 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn('Local + ".display.appearance"', catalog)
         self.assertIn('"devices." + nodeId + ".local.display.appearance"', appearance)
 
+    def test_advanced_settings_cover_overrides_log_and_raw_config(self):
+        advanced = read("win/DoorbellApp/Settings/SettingsWindow.Advanced.cs")
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        contracts = read("win/DoorbellApp/Core/RuntimeContracts.cs")
+        semantic = read("win/DoorbellApp/Util/SemanticUiOverrides.cs")
+        admin = read("win/DoorbellApp/Settings/SettingsWindow.Admin.cs")
+        # Per-element overrides: exactly the ids the UI manifest publishes, the key the shell
+        # reads them from, and the same numeric limits the applier enforces.
+        manifest = set(re.findall(r'AddElement\(elements, "([a-z_.]+)",', contracts))
+        listed = advanced[advanced.index("UiElementIds ="):]
+        listed = set(re.findall(r'"([a-z_.]+)"', listed[:listed.index("};")]))
+        self.assertEqual(listed, manifest)
+        self.assertIn('Key = "devices.{self}.local.ui.elements"', advanced)
+        self.assertIn("WholeMap = true", advanced)
+        self.assertIn('devices." + deviceId + ".local.ui.elements', semantic)
+        self.assertIn("Number(pair.Value, 0.75, 2.0, out number)", semantic)
+        self.assertIn("scale.Min = font.Min = 0.75;", advanced)
+        self.assertIn("scale.Max = font.Max = 2.0;", advanced)
+        self.assertIn('Editor("ui_elements", "ui_elements", Local + ".ui.elements")', catalog)
+        # The raw key editor writes only through the store, behind a confirmation, and JSON
+        # null is refused rather than treated as a silent delete.
+        raw = advanced[advanced.index("private void ShowRawConfig("):]
+        self.assertLess(raw.index('Confirm(Texts.T("settings.raw_write_confirm", name), true)'),
+                        raw.index("_store.Set(name, parsed)"))
+        self.assertLess(raw.index('Confirm(Texts.T("settings.raw_delete_confirm", name), true)'),
+                        raw.index("_store.Delete(name)"))
+        self.assertIn("if (parsed == null)", raw)
+        self.assertNotIn("App.Core.SetConfigJson", advanced)
+        self.assertIn('Destructive(Describe(Action("raw_config", "raw_config")))', catalog)
+        # The log viewer only reads, and shares the file with the writer.
+        log = advanced[advanced.index("internal static string TailOf("):
+                       advanced.index("private void ShowLogViewer()")]
+        self.assertIn("FileAccess.Read", log)
+        self.assertIn("FileShare.ReadWrite | FileShare.Delete", log)
+        # Per-pair playback: a pair profile is written whole under video_playback.pairs.
+        self.assertIn('"video_playback.pairs." + _playbackViewer + "." + _playbackSource', admin)
+        self.assertIn('new Dictionary<string, object> { { "strategies", array } }', admin)
+
+    @staticmethod
+    def _luminance(color):
+        def channel(value):
+            value /= 255.0
+            return value / 12.92 if value <= 0.04045 else ((value + 0.055) / 1.055) ** 2.4
+        return (0.2126 * channel(color[0]) + 0.7152 * channel(color[1]) +
+                0.0722 * channel(color[2]))
+
+    @classmethod
+    def _ratio(cls, first, second):
+        a, b = cls._luminance(first), cls._luminance(second)
+        return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+    @staticmethod
+    def _over(color, surface):
+        """A #RRGGBB or #AARRGGBB colour composited over an opaque surface."""
+        text = color.lstrip("#")
+        alpha = int(text[:2], 16) / 255.0 if len(text) == 8 else 1.0
+        rgb = [int(text[-6:][i:i + 2], 16) for i in (0, 2, 4)]
+        return tuple(round(c * alpha + s * (1 - alpha)) for c, s in zip(rgb, surface))
+
+    def test_every_role_used_as_text_reads_on_the_theme_surfaces(self):
+        """Roles as text or outline reach 4.5:1 on the page and the card, light and dark.
+
+        A fill only has to carry its own white ink. The same colour as text has to read by
+        itself: #C0392B is fine under white text and unreadable as a label on a dark card.
+        """
+        appearance = read("win/DoorbellApp/Util/Appearance.cs")
+        brushes = dict()
+        for token, light, dark in re.findall(
+                r'\{ "(\w+)", "\w+", "(#[0-9A-Fa-f]+)", "(#[0-9A-Fa-f]+)" \}', appearance):
+            brushes[token] = {"light": light, "dark": dark}
+        self.assertTrue({"Bg", "Card", "Fg", "Dim"} <= set(brushes))
+
+        def roles(name):
+            block = appearance[appearance.index("Dictionary<string, string> %s =" % name):]
+            block = block[:block.index("};")]
+            return dict(re.findall(r'\{ "(\w+)", "(#[0-9A-Fa-f]{6})" \}', block))
+
+        tables = {"dark": roles("DarkRoles"), "light": roles("LightRoles")}
+        white = (255, 255, 255)
+        for look in ("light", "dark"):
+            page = self._over(brushes["Bg"][look], (0, 0, 0))
+            card = self._over(brushes["Card"][look], page)
+            for surface_name, surface in (("page", page), ("card", card)):
+                # Roles drawn as text or as an outline.
+                for role in ("NegativeText", "Warn", "Ok"):
+                    with self.subTest(look=look, role=role, on=surface_name):
+                        self.assertGreaterEqual(
+                            self._ratio(self._over(tables[look][role], surface), surface), 4.5)
+                # Primary and secondary ink from the Fluent theme.
+                for token, minimum in (("Fg", 7.0), ("Dim", 4.5)):
+                    with self.subTest(look=look, token=token, on=surface_name):
+                        self.assertGreaterEqual(
+                            self._ratio(self._over(brushes[token][look], surface), surface),
+                            minimum)
+            # Fills carry their white ink.
+            for fill in ("Positive", "Danger", "Notice"):
+                with self.subTest(look=look, fill=fill):
+                    self.assertGreaterEqual(
+                        self._ratio(white, self._over(tables[look][fill], page)), 4.5)
+        # The complaint this guards against: the dark negative fill is not a text colour.
+        self.assertLess(self._ratio(self._over(tables["dark"]["Danger"], (43, 43, 43)),
+                                    (43, 43, 43)), 4.5)
+        # So nothing draws the negative fill, or the raw accent, as text or as an outline.
+        text_use = re.compile(
+            r'(?:Foreground|Stroke)="\{DynamicResource (?:Negative|Danger|Accent)\}"|'
+            r'ForegroundProperty, "(?:Negative|Danger|Accent)"\)')
+        for path in sorted((WIN / "DoorbellApp").rglob("*")):
+            if path.suffix not in (".cs", ".xaml") or "obj" in path.parts:
+                continue
+            with self.subTest(path=path.name):
+                self.assertIsNone(text_use.search(path.read_text(encoding="utf-8")))
+        # The accent as text is derived, not assumed: it is moved until it reads on the card.
+        self.assertIn("RoleContrast.EnsureReadable(", appearance)
+        self.assertIn('Set(resources, "AccentText",', appearance)
+        fluent = read("win/DoorbellApp/Ui/Fluent.cs")
+        destructive = fluent[fluent.index("public static void MakeDestructive("):]
+        destructive = destructive[:destructive.index("}")]
+        self.assertIn("button.Background = Brushes.Transparent;", destructive)
+        self.assertIn('"NegativeText"', destructive)
+        script = read("win/scripts/test_role_contrast.sh")
+        self.assertIn("win/tests/RoleContrastTests.cs", script)
+
     def test_settings_guard_resets_and_limits(self):
         actions = read("win/DoorbellApp/Settings/SettingsWindow.Actions.cs")
         admin = read("win/DoorbellApp/Settings/SettingsWindow.Admin.cs")
@@ -3102,7 +3229,7 @@ class WindowsContracts(unittest.TestCase):
         reset = actions[actions.index('case "volume_reset":'):]
         self.assertLess(reset.index('Confirm(Texts.T("settings.reset_confirm"))'),
                         reset.index("_store.Delete("))
-        self.assertEqual(admin.count('if (!Confirm(Texts.T("settings.reset_confirm"))) return;'), 2)
+        self.assertEqual(admin.count('if (!Confirm(Texts.T("settings.reset_confirm"))) return;'), 3)
         # Announcement presets stop at eight, like Core and the Admin.
         self.assertIn("private const int MaxNoticePresets = 8;", lists)
         self.assertIn('item.Handler == "notice_presets" && entries.Count >= MaxNoticePresets',

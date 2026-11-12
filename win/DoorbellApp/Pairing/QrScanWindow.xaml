@@ -27,7 +27,7 @@
                            Foreground="{DynamicResource Fg}"/>
                 <TextBlock x:Name="StatusText" FontSize="22" FontWeight="Bold"
                            TextAlignment="Center" Margin="0,10,0,0"
-                           Foreground="{DynamicResource Accent}" Visibility="Collapsed"/>
+                           Foreground="{DynamicResource AccentText}" Visibility="Collapsed"/>
                 <TextBlock x:Name="StatusDetail" FontSize="12" TextAlignment="Center"
                            Margin="0,4,0,0" Foreground="{DynamicResource Dim}"
                            Visibility="Collapsed"/>

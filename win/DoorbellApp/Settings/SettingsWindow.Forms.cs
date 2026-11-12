@@ -145,7 +145,7 @@ namespace DoorbellApp.Settings
             error = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap,
                                     Visibility = Visibility.Collapsed,
                                     Margin = new Thickness(0, 8, 0, 0) };
-            error.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
+            error.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");
             DockPanel.SetDock(error, Dock.Bottom);
             outer.Children.Add(error);
             form = new StackPanel();

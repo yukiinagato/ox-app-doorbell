@@ -54,7 +54,7 @@ namespace DoorbellApp.Settings
                 FontSize = 17,
                 TextWrapping = TextWrapping.Wrap,
             };
-            if (item.Destructive) label.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
+            if (item.Destructive) label.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");
             text.Children.Add(label);
             string detail = Detail(item);
             if (detail.Length > 0)
@@ -92,7 +92,7 @@ namespace DoorbellApp.Settings
                 Visibility = Visibility.Collapsed,
                 Margin = new Thickness(0, 6, 0, 0),
             };
-            parts.Error.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
+            parts.Error.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");
             Grid.SetRow(parts.Error, 2);
             Grid.SetColumnSpan(parts.Error, 2);
             root.Children.Add(parts.Error);

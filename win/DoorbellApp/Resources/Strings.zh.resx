@@ -664,6 +664,7 @@
   <data name="editor_enabled" xml:space="preserve"><value>启用</value></data>
   <data name="editor_entity_language" xml:space="preserve"><value>实体名称语言</value></data>
   <data name="editor_export_clipboard" xml:space="preserve"><value>将设置复制到剪贴板</value></data>
+  <data name="editor_export_file" xml:space="preserve"><value>将设置导出到文件…</value></data>
   <data name="editor_exported" xml:space="preserve"><value>已复制 {0} KB 的设置</value></data>
   <data name="editor_extension" xml:space="preserve"><value>分机号</value></data>
   <data name="editor_from" xml:space="preserve"><value>开始</value></data>
@@ -675,6 +676,7 @@
   <data name="editor_import_blocked" xml:space="preserve"><value>无法导入。请检查是否缺少密码或文件</value></data>
   <data name="editor_import_clipboard" xml:space="preserve"><value>从剪贴板导入设置</value></data>
   <data name="editor_import_confirm" xml:space="preserve"><value>将更改 {0} 项。要导入吗？</value></data>
+  <data name="editor_import_file" xml:space="preserve"><value>从文件导入设置…</value></data>
   <data name="editor_inherited" xml:space="preserve"><value>与全部设备相同</value></data>
   <data name="editor_ink" xml:space="preserve"><value>文字颜色</value></data>
   <data name="editor_ink_hint" xml:space="preserve"><value>“自动”会根据背景选择更易读的颜色</value></data>
@@ -2162,6 +2164,7 @@
   <data name="settings_role_restart" xml:space="preserve"><value>更改角色会重启应用</value></data>
   <data name="settings_role_restart_confirm" xml:space="preserve"><value>更改角色后应用会立即重启。门口机需要摄像头和麦克风。要继续吗？</value></data>
   <data name="settings_role_restart_notice" xml:space="preserve"><value>更改角色后，下次打开应用时生效</value></data>
+  <data name="settings_role_tv_fixed" xml:space="preserve"><value>Apple TV 始终作为室内机运行</value></data>
   <data name="settings_role_unchanged" xml:space="preserve"><value>没有更改。</value></data>
   <data name="settings_rotate_cluster_key" xml:space="preserve"><value>更换集群密钥</value></data>
   <data name="settings_rotate_cluster_key_action" xml:space="preserve"><value>更换</value></data>

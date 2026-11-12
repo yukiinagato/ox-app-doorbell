@@ -662,6 +662,7 @@
     <string name="editor_enabled">启用</string>
     <string name="editor_entity_language">实体名称语言</string>
     <string name="editor_export_clipboard">将设置复制到剪贴板</string>
+    <string name="editor_export_file">将设置导出到文件…</string>
     <string name="editor_exported">已复制 %1$s KB 的设置</string>
     <string name="editor_extension">分机号</string>
     <string name="editor_from">开始</string>
@@ -673,6 +674,7 @@
     <string name="editor_import_blocked">无法导入。请检查是否缺少密码或文件</string>
     <string name="editor_import_clipboard">从剪贴板导入设置</string>
     <string name="editor_import_confirm">将更改 %1$s 项。要导入吗？</string>
+    <string name="editor_import_file">从文件导入设置…</string>
     <string name="editor_inherited">与全部设备相同</string>
     <string name="editor_ink">文字颜色</string>
     <string name="editor_ink_hint">“自动”会根据背景选择更易读的颜色</string>
@@ -2160,6 +2162,7 @@
     <string name="settings_role_restart">更改角色会重启应用</string>
     <string name="settings_role_restart_confirm">更改角色后应用会立即重启。门口机需要摄像头和麦克风。要继续吗？</string>
     <string name="settings_role_restart_notice">更改角色后，下次打开应用时生效</string>
+    <string name="settings_role_tv_fixed">Apple TV 始终作为室内机运行</string>
     <string name="settings_role_unchanged">没有更改。</string>
     <string name="settings_rotate_cluster_key">更换集群密钥</string>
     <string name="settings_rotate_cluster_key_action">更换</string>

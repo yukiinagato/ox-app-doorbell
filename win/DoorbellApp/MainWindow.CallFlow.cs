@@ -624,7 +624,7 @@ namespace DoorbellApp
             InCallOpenDoorButton.Visibility = OpenDoorButton.Visibility;
             IgnoreButton.Content = IconStack(monitorOnly ? "IconX" : "IconBellOff",
                 monitorOnly ? Texts.T("monitor.close") : Texts.T("ring.ignore"),
-                (Brush)FindResource("Negative"));
+                (Brush)FindResource("NegativeText"));
 
             StartIncomingVideo();
 

@@ -13,7 +13,7 @@
              box rather than a digits-only buffer (spec 5.5). -->
         <PasswordBox x:Name="PasswordEntry" FontSize="30" Margin="0,14,0,0" MinHeight="52"
                      MaxLength="128" HorizontalContentAlignment="Center"/>
-        <TextBlock x:Name="ErrorText" FontSize="14" Foreground="{DynamicResource Negative}" Margin="0,4,0,8"
+        <TextBlock x:Name="ErrorText" FontSize="14" Foreground="{DynamicResource NegativeText}" Margin="0,4,0,8"
                    HorizontalAlignment="Center" MinHeight="18" TextWrapping="Wrap"/>
         <UniformGrid Columns="3" Rows="4">
             <UniformGrid.Resources>

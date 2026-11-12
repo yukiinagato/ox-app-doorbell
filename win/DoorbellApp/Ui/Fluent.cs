@@ -46,6 +46,17 @@ namespace DoorbellApp.Ui
             if (style != null) button.Style = style;
         }
 
+        /// <summary>
+        /// A destructive command: outlined, in the negative text colour, with no fill, so its
+        /// label is read against the card behind it and reaches 4.5:1 in both appearances.
+        /// </summary>
+        public static void MakeDestructive(Button button)
+        {
+            button.Background = Brushes.Transparent;
+            button.SetResourceReference(Control.ForegroundProperty, "NegativeText");
+            button.SetResourceReference(Control.BorderBrushProperty, "NegativeText");
+        }
+
         /// <summary>A switch without the library's own On/Off caption; the row label says it.</summary>
         public static ToggleSwitch Switch(bool on)
         {

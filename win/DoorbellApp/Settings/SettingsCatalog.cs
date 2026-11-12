@@ -19,7 +19,7 @@ namespace DoorbellApp.Settings
             {
                 Device(), Sound(), Display(), Calls(), Replies(), Purposes(), Notices(),
                 Emergency(), Rules(), Camera(), Sip(), Integrations(), Time(), Pairing(),
-                Places(), Wording(), Backup(), Kiosk(), About(),
+                Places(), Wording(), Backup(), Kiosk(), Advanced(), About(),
             };
             return all;
         }
@@ -529,6 +529,18 @@ namespace DoorbellApp.Settings
             Add(security, Destructive(Describe(Action("rebuild_cluster", "rebuild_cluster"))));
             Add(Group(c, "admin.devices"), Editor("devices_manage", "devices"));
             Add(Group(c, "panels.title"), Editor("panels_manage", "panels"));
+            return c;
+        }
+
+        private static SettingCategory Advanced()
+        {
+            var c = Category("advanced", "IconAdjustments");
+            var look = Group(c, "settings.grp_ui_elements");
+            var elements = Add(look, Editor("ui_elements", "ui_elements", Local + ".ui.elements"));
+            elements.Scope = SettingScope.ThisDevice;
+            var diagnostics = Group(c, "settings.grp_diagnostics");
+            Add(diagnostics, Action("view_log", "view_log"));
+            Add(diagnostics, Destructive(Describe(Action("raw_config", "raw_config"))));
             return c;
         }
 

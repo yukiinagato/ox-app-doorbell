@@ -48,6 +48,7 @@ $script:Checks = New-Object System.Collections.Generic.List[object]
 $script:Shots = New-Object System.Collections.Generic.List[string]
 $script:Process = $null
 $script:AckLines = 0
+$script:BlankReported = $false
 
 New-Item -ItemType Directory -Path $OutDir -Force | Out-Null
 $DataDir = Join-Path $OutDir ('data-' + $Role)
@@ -75,7 +76,7 @@ function Find-ById([string]$id, [int]$timeoutMs = 5000) {
     $condition = New-Object System.Windows.Automation.PropertyCondition($AE::AutomationIdProperty, $id)
     $deadline = [DateTime]::UtcNow.AddMilliseconds($timeoutMs)
     do {
-        foreach ($window in Get-AppWindows) {
+        foreach ($window in @(Get-AppWindows)) {
             $found = $window.FindFirst($Tree::Subtree, $condition)
             if ($null -ne $found) { return $found }
         }
@@ -158,7 +159,7 @@ function Send-Command([string]$command, [int]$timeoutMs = 8000) {
     Set-Content -LiteralPath $CommandFile -Value $command -Encoding ascii
     $deadline = [DateTime]::UtcNow.AddMilliseconds($timeoutMs)
     do {
-        $lines = Get-AckLines
+        $lines = @(Get-AckLines)
         if ($lines.Count -gt $script:AckLines) {
             $line = $lines[$lines.Count - 1]
             $script:AckLines = $lines.Count
@@ -180,7 +181,7 @@ function Assert-Command([string]$command) {
 
 function Save-Shot([string]$name) {
     try {
-        $windows = Get-AppWindows
+        $windows = @(Get-AppWindows)
         if ($windows.Count -eq 0) { throw 'no window' }
         # The union of the app's windows, so a dialog is captured together with what is under it.
         $left = [double]::MaxValue; $top = [double]::MaxValue; $right = 0.0; $bottom = 0.0
@@ -202,6 +203,10 @@ function Save-Shot([string]$name) {
         $bitmap.Save($file, [System.Drawing.Imaging.ImageFormat]::Png)
         $graphics.Dispose(); $bitmap.Dispose()
         $script:Shots.Add((Split-Path -Leaf $file))
+        if (-not $script:BlankReported -and (Test-BlankCapture $file)) {
+            $script:BlankReported = $true
+            Add-Check 'desktop: the screen is being drawn' $false ("the capture " + (Split-Path -Leaf $file) + " is one flat colour; is the Remote Desktop session disconnected or the screen locked?")
+        }
     } catch {
         Add-Check ("screenshot: {0}" -f $name) $false $_.Exception.Message
     }
@@ -223,7 +228,9 @@ function Focus-App {
 function Test-Calls([string]$look) {
     [void](Assert-Command 'incoming')
     foreach ($id in @('IncomingTitle', 'AnswerButton', 'QuickReplyToggle', 'IgnoreButton',
-                      'OpenDoorButton', 'IncomingZoom')) { [void](Assert-Element 'incoming' $id) }
+                      'IncomingZoom')) { [void](Assert-Element 'incoming' $id) }
+    # Unlock is shown only where a door has an unlock action; this isolated instance has none.
+    Add-Check 'incoming: no Unlock without an unlock action' (-not (Test-OnScreen (Find-ById 'OpenDoorButton' 300)))
     # The fixed order of the primary actions: Answer, Reply, Ignore (left to right or top down).
     $answer = Find-ById 'AnswerButton'; $reply = Find-ById 'QuickReplyToggle'; $ignore = Find-ById 'IgnoreButton'
     if ((Test-OnScreen $answer) -and (Test-OnScreen $reply) -and (Test-OnScreen $ignore)) {
@@ -309,6 +316,42 @@ function Test-RoleForm([string]$look) {
     Add-Check 'role form: cancel keeps the app running' (-not $script:Process.HasExited)
 }
 
+# Advanced > App log: read-only, so the suite opens it, checks it shows something, and closes.
+function Test-LogViewer([string]$look) {
+    if (-not (Click-Id 'settings' 'SettingsCategory_advanced')) { return }
+    if (-not (Click-Id 'log viewer' 'SettingsAction_view_log')) { return }
+    $text = Assert-Element 'log viewer' 'LogViewerText'
+    Save-Shot ("log-viewer-" + $look)
+    [void](Click-Id 'log viewer' 'LogViewerClose')
+    Assert-Gone 'log viewer' 'LogViewerText'
+}
+
+# An unpaired instance offers onboarding again whenever its banner is tapped; a pass always
+# starts from the home screen.
+function Close-Onboarding {
+    if (Test-OnScreen (Find-ById 'PairingOverlay' 300)) { [void](Send-Command 'skip-pairing') }
+    Start-Sleep -Milliseconds 300
+}
+
+# True when the capture is one flat colour: the desktop is not being drawn (for example a
+# Remote Desktop session that was disconnected), so no screenshot would mean anything.
+function Test-BlankCapture([string]$file) {
+    try {
+        $bitmap = New-Object System.Drawing.Bitmap($file)
+        try {
+            $first = $bitmap.GetPixel(0, 0).ToArgb()
+            for ($x = 1; $x -lt 24; $x++) {
+                for ($y = 1; $y -lt 16; $y++) {
+                    $px = [int](($bitmap.Width - 1) * $x / 24)
+                    $py = [int](($bitmap.Height - 1) * $y / 16)
+                    if ($bitmap.GetPixel($px, $py).ToArgb() -ne $first) { return $false }
+                }
+            }
+            return $true
+        } finally { $bitmap.Dispose() }
+    } catch { return $false }
+}
+
 function Test-IndoorPanel {
     # A fresh, unpaired instance opens on pairing onboarding.
     $pairing = Find-ById 'PairingOverlay' 8000
@@ -326,6 +369,7 @@ function Test-IndoorPanel {
 
     foreach ($look in @('light', 'dark')) {
         Set-Look $look
+        Close-Onboarding
         foreach ($id in @('HomeNav', 'NavHome', 'NavHistory', 'AdminEntryButton', 'DashClock', 'DashDate',
                           'NoticeGlobalButton', 'DoorsSectionTitle', 'NavHistoryLabel', 'AdminUrlText')) {
             [void](Assert-Element 'dashboard' $id)
@@ -382,6 +426,7 @@ function Test-IndoorPanel {
                 }
             }
             Test-RoleForm $look
+            Test-LogViewer $look
             [void](Click-Id 'settings' 'SettingsClose')
             Assert-Gone 'settings' 'SettingsNavigation'
         }
@@ -394,6 +439,7 @@ function Test-DoorStation {
     if (Test-OnScreen $pairing) { [void](Assert-Command 'skip-pairing') }
     foreach ($look in @('light', 'dark')) {
         Set-Look $look
+        Close-Onboarding
         foreach ($id in @('CallButton', 'ClockText', 'TouchHint')) { [void](Assert-Element 'visitor' $id) }
         # A door station shows no route to settings or to the dashboard.
         foreach ($id in @('AdminEntryButton', 'HomeNav', 'NoticeGlobalButton')) {
@@ -442,10 +488,10 @@ try {
     $ready = $false
     while ([DateTime]::UtcNow -lt $deadline -and -not $script:Process.HasExited) {
         $script:Process.Refresh()
-        if ($script:Process.MainWindowHandle -ne [IntPtr]::Zero -and (Get-AckLines).Count -gt 0) { $ready = $true; break }
+        if ($script:Process.MainWindowHandle -ne [IntPtr]::Zero -and @(Get-AckLines).Count -gt 0) { $ready = $true; break }
         Start-Sleep -Milliseconds 300
     }
-    $script:AckLines = (Get-AckLines).Count
+    $script:AckLines = @(Get-AckLines).Count
     $exitText = if ($script:Process.HasExited) { 'exited with code ' + $script:Process.ExitCode } else { '' }
     Add-Check 'app: main window and test hooks are up' $ready $exitText
     if ($ready) {

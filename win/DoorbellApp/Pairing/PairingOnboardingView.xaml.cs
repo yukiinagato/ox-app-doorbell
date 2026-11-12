@@ -214,7 +214,7 @@ namespace DoorbellApp.Pairing
 
             bool upgradeRejoin = !persistError && snapshot.UpgradeRejoinRequired && !ready &&
                                  !joiningState;
-            SetStatusTone(persistError ? "Negative" : (upgradeRejoin ? "Warning" : null));
+            SetStatusTone(persistError ? "NegativeText" : (upgradeRejoin ? "Warning" : null));
 
             if (persistError)
             {

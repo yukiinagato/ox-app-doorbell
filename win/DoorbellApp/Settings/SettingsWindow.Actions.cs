@@ -146,8 +146,7 @@ namespace DoorbellApp.Settings
             AutomationId(button, "SettingsAction_" + item.Id);
             if (item.Destructive)
             {
-                button.SetResourceReference(Control.ForegroundProperty, "Negative");
-                button.SetResourceReference(Control.BorderBrushProperty, "Negative");
+                DoorbellApp.Ui.Fluent.MakeDestructive(button);
             }
             button.Click += (s, e) => RunAction(item, parts);
             return button;
@@ -165,6 +164,12 @@ namespace DoorbellApp.Settings
                     break;
                 case "change_role":
                     ShowRoleForm(parts);
+                    break;
+                case "view_log":
+                    ShowLogViewer();
+                    break;
+                case "raw_config":
+                    ShowRawConfig(parts);
                     break;
                 case "notice_edit":
                     _main.OpenNoticeDialogFromSettings();

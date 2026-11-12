@@ -25,6 +25,7 @@ namespace DoorbellApp.Settings
                 case "secret": return BuildSecretRow(item);
                 case "buildings": return BuildRecords(item, BuildingSpec());
                 case "doors": return BuildRecords(item, DoorSpec());
+                case "ui_elements": return BuildRecords(item, UiElementSpec());
                 case "households": return BuildRecords(item, HouseholdSpec());
                 case "media_sources": return BuildRecords(item, MediaSourceSpec());
                 case "dtmf": return BuildRecords(item, DtmfSpec());
@@ -97,7 +98,7 @@ namespace DoorbellApp.Settings
             var save = CommandButton(Texts.T("admin.save"));
             var clear = CommandButton(Texts.T("settings.secret_clear"));
             clear.Margin = new Thickness(6, 0, 0, 0);
-            clear.SetResourceReference(ForegroundProperty, "Negative");
+            DoorbellApp.Ui.Fluent.MakeDestructive(clear);
             clear.IsEnabled = !string.IsNullOrEmpty(reference);
             save.Margin = new Thickness(8, 0, 0, 0);
             buttons.Children.Add(save);
@@ -859,7 +860,7 @@ namespace DoorbellApp.Settings
                 edit.Click += (s, e) => EditPeer(id, data, parts);
                 buttons.Add(edit);
                 var remove = CommandButton(Texts.T("admin.remove_device"));
-                remove.SetResourceReference(ForegroundProperty, "Negative");
+                DoorbellApp.Ui.Fluent.MakeDestructive(remove);
                 remove.IsEnabled = !self;
                 remove.Click += (s, e) => RemovePeer(id, name.Length > 0 ? name : id, parts);
                 buttons.Add(remove);

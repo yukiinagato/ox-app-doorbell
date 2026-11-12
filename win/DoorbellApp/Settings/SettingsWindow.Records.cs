@@ -82,7 +82,7 @@ namespace DoorbellApp.Settings
             if (spec.Extra != null) buttons.AddRange(spec.Extra(id, data));
             var edit = CommandButton(Texts.T("admin.edit"));
             var remove = CommandButton(Texts.T("admin.delete"));
-            remove.SetResourceReference(ForegroundProperty, "Negative");
+            DoorbellApp.Ui.Fluent.MakeDestructive(remove);
             buttons.Add(edit);
             buttons.Add(remove);
             edit.Click += (s, e) =>
@@ -186,7 +186,7 @@ namespace DoorbellApp.Settings
             parts.Error = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap,
                                           Visibility = Visibility.Collapsed,
                                           Margin = new Thickness(0, 8, 0, 0) };
-            parts.Error.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
+            parts.Error.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");
             return panel;
         }
 

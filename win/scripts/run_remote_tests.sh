@@ -57,7 +57,7 @@ SCP_OPTS="-P $PORT $COMMON_OPTS"
 # The remote default shell is Windows PowerShell (setup_test_host.ps1 sets it). The command is
 # sent base64-encoded so no quoting has to survive two shells.
 remote() {
-  encoded="$(printf '%s' "\$ProgressPreference='SilentlyContinue'; \$ErrorActionPreference='Stop'; $1" |
+  encoded="$(printf '%s' "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; \$ProgressPreference='SilentlyContinue'; \$ErrorActionPreference='Stop'; $1" |
     iconv -f UTF-8 -t UTF-16LE | base64 | tr -d '\n')"
   # shellcheck disable=SC2086
   ssh $SSH_OPTS "$TARGET" "powershell.exe -NoProfile -NonInteractive -EncodedCommand $encoded"
@@ -126,6 +126,16 @@ Set-Content -LiteralPath '$REMOTE_ROOT\\jobs\\job.ps1' -Value \$job -Encoding UT
 Remove-Item -LiteralPath '$REMOTE_ROOT\\jobs\\job.exit','$REMOTE_ROOT\\jobs\\job.log' -ErrorAction SilentlyContinue
 'bundle unpacked, discovery blocked for ' + \$exe.FullName
 "
+
+# The suite needs a desktop that is being drawn. A Remote Desktop session that was
+# disconnected keeps running but renders nothing, so every screenshot would be black.
+# quser prints the state as "Disc"; \u5207\u65AD is the same word on a Japanese system.
+SESSION="$(remote "\$u='$USER_NAME'; \$line = @(& quser.exe 2>\$null | Select-String -SimpleMatch \$u | Select-Object -First 1); if (\$line.Count -eq 0) { 'none' } elseif ([string]\$line[0] -match '\\sDisc\\s|\\s\\u5207\\u65AD\\s') { 'disconnected' } else { 'active' }" | tr -d '\r' | tail -1)"
+case "$SESSION" in
+  active) ;;
+  disconnected) echo "ERROR: $USER_NAME's desktop session on $HOST is disconnected (Remote Desktop closed). Reconnect and keep the window open, then run again." >&2; exit 3 ;;
+  *) echo "ERROR: $USER_NAME is not logged on at $HOST, so there is no desktop to run the app in. Log on (console or Remote Desktop) and run again." >&2; exit 3 ;;
+esac
 
 # ---- 4. run in the desktop session and wait ---------------------------------------------------
 echo "== running the UI smoke suite in the desktop session ($ROLES)"

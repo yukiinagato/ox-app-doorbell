@@ -249,7 +249,7 @@ namespace DoorbellApp
             _quickRepliesOpen = false;
             ApplyQuickReplyVisibility();
             QuickReplyToggle.Visibility = Visibility.Collapsed;
-            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("Negative"));
+            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("NegativeText"));
             IncomingHint.Text = message ?? "";
             IncomingHint.Visibility = string.IsNullOrEmpty(message) ?
                 Visibility.Collapsed : Visibility.Visible;
@@ -279,7 +279,7 @@ namespace DoorbellApp
             AnswerButton.Visibility = Visibility.Visible;
             MonitorButton.Visibility = Visibility.Visible;
             IgnoreButton.Visibility = Visibility.Visible;
-            IgnoreButton.Content = IconStack("IconBellOff", Texts.T("ring.ignore"), (Brush)FindResource("Negative"));
+            IgnoreButton.Content = IconStack("IconBellOff", Texts.T("ring.ignore"), (Brush)FindResource("NegativeText"));
             OpenDoorButton.IsEnabled = false;
         }
 
@@ -573,7 +573,7 @@ namespace DoorbellApp
             QuickReplyToggle.Visibility = Visibility.Collapsed;
             MonitorButton.Visibility = Visibility.Visible;
             IgnoreButton.Visibility = Visibility.Visible;
-            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("Negative"));
+            IgnoreButton.Content = IconStack("IconX", Texts.T("monitor.close"), (Brush)FindResource("NegativeText"));
             IncomingTitle.Text = Texts.T("monitor.title", DoorLabel(_incomingDoor));
             IncomingHint.Visibility = Visibility.Collapsed;
             AnswerButton.Content = IconStack("IconPhone", Texts.T("ring.answer"),

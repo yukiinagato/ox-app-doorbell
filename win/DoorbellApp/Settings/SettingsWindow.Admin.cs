@@ -92,7 +92,7 @@ namespace DoorbellApp.Settings
                                   (users.Count == 0 ? Texts.T("admin.asset_unused")
                                                     : Texts.T("settings.asset_used", string.Join(", ", users)));
                 var remove = CommandButton(Texts.T("admin.delete"));
-                remove.SetResourceReference(ForegroundProperty, "Negative");
+                DoorbellApp.Ui.Fluent.MakeDestructive(remove);
                 remove.Click += (s, e) => DeleteAsset(hash, AssetLabel(hash, data), users, parts);
                 panel.Children.Add(ItemLine(AssetLabel(hash, data), subtitle, new[] { remove }));
             }
@@ -496,10 +496,28 @@ namespace DoorbellApp.Settings
 
         private static readonly string[] Strategies = { "h264_low_latency", "h264_hls", "mjpeg" };
 
+        // The receiver/source pair whose playback policy is being edited; both empty = global.
+        private string _playbackViewer = "", _playbackSource = "";
+
+        private string PlaybackProfileKey
+        {
+            get
+            {
+                return _playbackViewer.Length != 0 && _playbackSource.Length != 0
+                    ? "video_playback.pairs." + _playbackViewer + "." + _playbackSource
+                    : "video_playback.global";
+            }
+        }
+
+        /// <summary>
+        /// The strategies of the selected profile. A pair without its own profile starts from
+        /// the global one, which is what Core uses for it until a pair profile is written.
+        /// </summary>
         private List<Dictionary<string, object>> ReadStrategies()
         {
             var list = new List<Dictionary<string, object>>();
-            var raw = _store.Get("video_playback.global.strategies") as IEnumerable;
+            var raw = _store.Get(PlaybackProfileKey + ".strategies") as IEnumerable;
+            if (raw == null) raw = _store.Get("video_playback.global.strategies") as IEnumerable;
             if (raw != null && !(raw is string))
                 foreach (object entry in raw)
                 {
@@ -524,6 +542,57 @@ namespace DoorbellApp.Settings
         {
             var parts = new RowParts();
             var panel = EditorPanel(item, parts, out var head);
+            // video_playback.pairs.<indoor>.<door>: a profile for one receiver and one source
+            // that replaces the global one for that pair.
+            bool pair = PlaybackProfileKey != "video_playback.global";
+            bool pairHasProfile = pair && _store.Get(PlaybackProfileKey + ".strategies") != null;
+            panel.Children.Add(FieldLabel(Texts.T("admin.playback_pair_override")));
+            var pickers = new WrapPanel();
+            Func<string, List<SettingOption>, string, Action<string>, ComboBox> picker =
+                (label, options, current, choose) =>
+            {
+                var box = new ComboBox
+                {
+                    Style = (Style)FindResource("SettingsComboBox"),
+                    Margin = new Thickness(0, 0, 8, 8),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                };
+                AutomationLabel(box, label);
+                box.Items.Add(new ComboBoxItem { Content = label + ": " + Texts.T("settings.playback_all_pairs"), Tag = "" });
+                box.SelectedIndex = 0;
+                foreach (var option in options)
+                {
+                    string id = Convert.ToString(option.Value);
+                    box.Items.Add(new ComboBoxItem { Content = label + ": " + option.Text, Tag = id });
+                    if (id == current) box.SelectedIndex = box.Items.Count - 1;
+                }
+                box.SelectionChanged += (s, e) =>
+                {
+                    var chosen = box.SelectedItem as ComboBoxItem;
+                    choose(chosen == null ? "" : Convert.ToString(chosen.Tag));
+                    Refresh();
+                };
+                return box;
+            };
+            pickers.Children.Add(picker(Texts.T("admin.role_indoor"), DeviceOptions("indoor_panel"),
+                                        _playbackViewer, value => _playbackViewer = value));
+            pickers.Children.Add(picker(Texts.T("admin.role_door"), DeviceOptions("door_station"),
+                                        _playbackSource, value => _playbackSource = value));
+            panel.Children.Add(pickers);
+            if (pair && !pairHasProfile)
+                panel.Children.Add(FieldHint(Texts.T("settings.playback_pair_inherits")));
+            if (pairHasProfile)
+            {
+                var reset = CommandButton(Texts.T("settings.playback_pair_reset"));
+                reset.HorizontalAlignment = HorizontalAlignment.Left;
+                reset.Margin = new Thickness(0, 0, 0, 8);
+                reset.Click += (s, e) =>
+                {
+                    if (!Confirm(Texts.T("settings.reset_confirm"))) return;
+                    if (Report(_store.Delete(PlaybackProfileKey), parts)) Refresh();
+                };
+                panel.Children.Add(reset);
+            }
             var strategies = ReadStrategies();
             Func<bool> save = () =>
             {
@@ -537,6 +606,10 @@ namespace DoorbellApp.Settings
                 }
                 var array = new List<object>();
                 foreach (var entry in strategies) array.Add(entry);
+                // A pair profile is written whole; the global one keeps its other fields.
+                if (PlaybackProfileKey != "video_playback.global")
+                    return Report(_store.Set(PlaybackProfileKey,
+                        new Dictionary<string, object> { { "strategies", array } }), parts);
                 return Report(_store.Set("video_playback.global.strategies", array), parts);
             };
             for (int i = 0; i < strategies.Count; i++)
@@ -688,7 +761,7 @@ namespace DoorbellApp.Settings
                 var edit = CommandButton(Texts.T("admin.edit"));
                 var rotate = CommandButton(Texts.T("admin.rotate"));
                 var revoke = CommandButton(Texts.T("panels.revoke"));
-                revoke.SetResourceReference(ForegroundProperty, "Negative");
+                DoorbellApp.Ui.Fluent.MakeDestructive(revoke);
                 edit.Click += (s, e) =>
                 {
                     var data = new Dictionary<string, object>
@@ -1016,7 +1089,7 @@ namespace DoorbellApp.Settings
                     }
                 if (items.Count == 0) continue;
                 var title = FieldLabel(Texts.T(section[1]));
-                title.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
+                title.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");
                 form.Children.Add(title);
                 form.Children.Add(FieldHint(string.Join("\n", items)));
             }

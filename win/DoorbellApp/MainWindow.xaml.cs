@@ -389,6 +389,10 @@ namespace DoorbellApp
             };
 
             PairingOverlay.DismissRequested += OnPairingDismissed;
+            // The banner is drawn over the window; the screens move down by its height while
+            // it shows, so it covers nothing.
+            PairBanner.IsVisibleChanged += (s, e) =>
+                ScreenHost.Margin = new Thickness(0, PairBanner.IsVisible ? PairBanner.Height : 0, 0, 0);
             _pairingPoll.Interval = TimeSpan.FromSeconds(2);
             _pairingPoll.Tick += (s, e) => RequestHomeRefresh(HomeRefresh.Pairing);
 
@@ -546,7 +550,7 @@ namespace DoorbellApp
                 (Brush)FindResource("Warning"));
             InCallOpenDoorButton.Content = IconStack("IconLockOpen", Texts.T("ring.open_door"),
                 (Brush)FindResource("Warning"));
-            IgnoreButton.Content = IconStack("IconBellOff", Texts.T("ring.ignore"), (Brush)FindResource("Negative"));
+            IgnoreButton.Content = IconStack("IconBellOff", Texts.T("ring.ignore"), (Brush)FindResource("NegativeText"));
             IncomingNoVideo.Text = Texts.T("ring.no_video");
             InCallTitle.Text = Texts.T("incall.title");
             EndCallButton.Content = Texts.T("incall.end_call");

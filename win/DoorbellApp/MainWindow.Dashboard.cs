@@ -330,7 +330,7 @@ namespace DoorbellApp
                 HorizontalAlignment = HorizontalAlignment.Right,
                 VerticalAlignment = VerticalAlignment.Center,
             };
-            watch.SetResourceReference(TextBlock.ForegroundProperty, "Accent");
+            watch.SetResourceReference(TextBlock.ForegroundProperty, "AccentText");
             caption.Children.Add(labels);
             caption.Children.Add(watch);
 
@@ -530,7 +530,7 @@ namespace DoorbellApp
                 Text = ClockOf(DictLong(row, "ts", 0)),
                 FontSize = detailed ? 16 : 14,
                 VerticalAlignment = VerticalAlignment.Center,
-                Foreground = (Brush)FindResource(missed ? "Negative" : "Dim"),
+                Foreground = (Brush)FindResource(missed ? "NegativeText" : "Dim"),
             };
             Grid.SetColumn(time, 0);
             grid.Children.Add(time);

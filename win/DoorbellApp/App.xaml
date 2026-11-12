@@ -26,6 +26,8 @@
         <SolidColorBrush x:Key="Dim" Color="#99FFFFFF"/>
         <SolidColorBrush x:Key="Accent" Color="#0078D4"/>
         <SolidColorBrush x:Key="OnAccent" Color="#FFFFFF"/>
+        <!-- The accent as text or as an outline: readable on the card in both appearances. -->
+        <SolidColorBrush x:Key="AccentText" Color="#60CDFF"/>
         <SolidColorBrush x:Key="Line" Color="#33FFFFFF"/>
         <!-- Card material over the wallpaper (Ui/Frost) and its hairline, pill and row tints. -->
         <SolidColorBrush x:Key="Plate" Color="#A62B2B2B"/>
@@ -34,13 +36,16 @@
         <SolidColorBrush x:Key="Row" Color="#14FFFFFF"/>
         <!-- Fixed semantic roles (ui-guidelines section 3). They do not come from the Fluent
              theme; Appearance swaps the light and dark variants. -->
-        <SolidColorBrush x:Key="Positive" Color="#1E8E4B"/>
+        <SolidColorBrush x:Key="Positive" Color="#107C10"/>
         <SolidColorBrush x:Key="OnPositive" Color="#FFFFFF"/>
         <SolidColorBrush x:Key="Danger" Color="#C0392B"/>
         <SolidColorBrush x:Key="OnDanger" Color="#FFFFFF"/>
+        <!-- Negative as text or as an outline. The fill above is too dark to read on a dark
+             card; destructive labels, error text and the SOS trigger use this one. -->
+        <SolidColorBrush x:Key="NegativeText" Color="#FF99A4"/>
         <SolidColorBrush x:Key="Warn" Color="#FFB454"/>
         <SolidColorBrush x:Key="Ok" Color="#5DD39E"/>
-        <SolidColorBrush x:Key="Notice" Color="#B7791F"/>
+        <SolidColorBrush x:Key="Notice" Color="#8A5A00"/>
         <SolidColorBrush x:Key="Track" Color="#802A21"/>
         <SolidColorBrush x:Key="Surface" Color="#2B2B2B"/>
         <SolidColorBrush x:Key="OnSurface" Color="#FFFFFF"/>
@@ -169,10 +174,12 @@
         </Style>
 
         <!-- SOS trigger and the keyboard "Send SOS": a secondary button with a negative outline
-             and no fill, so it never competes with a screen's primary action. -->
+             and no fill, so it never competes with a screen's primary action. The label sits on
+             the page or card behind it, which is what NegativeText is measured against. -->
         <Style x:Key="SosTriggerButton" TargetType="Button" BasedOn="{StaticResource DefaultButtonStyle}">
-            <Setter Property="Foreground" Value="{DynamicResource Negative}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource Negative}"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="{DynamicResource NegativeText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource NegativeText}"/>
             <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="FontSize" Value="16"/>
             <Setter Property="FontWeight" Value="SemiBold"/>

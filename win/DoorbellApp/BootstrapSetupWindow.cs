@@ -79,7 +79,7 @@ namespace DoorbellApp
             root.Children.Add(_doorRow);
 
             _error.Text = L10n.T("setup.invalid_door");
-            _error.SetResourceReference(TextBlock.ForegroundProperty, "Negative");
+            _error.SetResourceReference(TextBlock.ForegroundProperty, "NegativeText");
             _error.TextWrapping = TextWrapping.Wrap;
             _error.Visibility = Visibility.Collapsed;
             _error.Margin = new Thickness(0, 0, 0, 12);

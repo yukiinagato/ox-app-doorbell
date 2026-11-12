@@ -662,6 +662,7 @@
     <string name="editor_enabled">有効</string>
     <string name="editor_entity_language">エンティティ名の言語</string>
     <string name="editor_export_clipboard">クリップボードに書き出す</string>
+    <string name="editor_export_file">設定をファイルに書き出す…</string>
     <string name="editor_exported">%1$s KB の設定をコピーしました</string>
     <string name="editor_extension">内線番号</string>
     <string name="editor_from">開始</string>
@@ -673,6 +674,7 @@
     <string name="editor_import_blocked">読み込めません。足りないパスワードや画像がないか確認してください</string>
     <string name="editor_import_clipboard">クリップボードから読み込む</string>
     <string name="editor_import_confirm">%1$s 項目が変わります。読み込みますか？</string>
+    <string name="editor_import_file">ファイルから設定を読み込む…</string>
     <string name="editor_inherited">全体の設定</string>
     <string name="editor_ink">文字色</string>
     <string name="editor_ink_hint">「自動」は背景に合わせて読みやすい色を選びます</string>
@@ -2160,6 +2162,7 @@ ON</string>
     <string name="settings_role_restart">役割を変えると再起動します</string>
     <string name="settings_role_restart_confirm">役割を変更するとアプリがすぐに再起動します。門口機にはカメラとマイクが必要です。続けますか？</string>
     <string name="settings_role_restart_notice">役割を変えると、アプリを開き直したときに切り替わります</string>
+    <string name="settings_role_tv_fixed">Apple TV は常に室内機として動作します</string>
     <string name="settings_role_unchanged">変更はありません。</string>
     <string name="settings_rotate_cluster_key">クラスタ鍵を更新</string>
     <string name="settings_rotate_cluster_key_action">更新</string>

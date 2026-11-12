@@ -2753,3 +2753,6 @@ settings.raw_write_confirm: { ja: "「{key}」を書き換えますか？ すべ
 settings.raw_delete_confirm: { ja: "「{key}」を削除しますか？ すべての端末に反映されます。", en: "Delete \"{key}\"? It applies to every device.", zh: "要删除“{key}”吗？会同步到所有设备。" }
 settings.raw_invalid_json: { ja: "値が正しい JSON ではありません", en: "The value is not valid JSON", zh: "值不是有效的 JSON" }
 settings.raw_absent: { ja: "このキーは設定されていません", en: "This key is not set", zh: "此键未设置" }
+settings.role_tv_fixed: { ja: "Apple TV は常に室内機として動作します", en: "An Apple TV always runs as an indoor panel", zh: "Apple TV 始终作为室内机运行" }
+editor.export_file: { ja: "設定をファイルに書き出す…", en: "Export settings to a file…", zh: "将设置导出到文件…" }
+editor.import_file: { ja: "ファイルから設定を読み込む…", en: "Import settings from a file…", zh: "从文件导入设置…" }

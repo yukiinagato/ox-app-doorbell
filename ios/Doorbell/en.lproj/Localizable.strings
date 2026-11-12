@@ -657,6 +657,7 @@
 "editor.enabled" = "Enabled";
 "editor.entity_language" = "Entity name language";
 "editor.export_clipboard" = "Copy settings to the clipboard";
+"editor.export_file" = "Export settings to a file…";
 "editor.exported" = "Copied %@ KB of settings";
 "editor.extension" = "Extension";
 "editor.from" = "From";
@@ -668,6 +669,7 @@
 "editor.import_blocked" = "Cannot import. Check for missing passwords or files";
 "editor.import_clipboard" = "Import settings from the clipboard";
 "editor.import_confirm" = "%@ values will change. Import?";
+"editor.import_file" = "Import settings from a file…";
 "editor.inherited" = "Same as all devices";
 "editor.ink" = "Text colour";
 "editor.ink_hint" = "Automatic picks the more readable colour for the background";
@@ -2151,6 +2153,7 @@
 "settings.role_restart" = "Changing the role restarts the app";
 "settings.role_restart_confirm" = "Changing the role restarts the app now. A door station needs a camera and a microphone. Continue?";
 "settings.role_restart_notice" = "A new role takes effect the next time the app is opened";
+"settings.role_tv_fixed" = "An Apple TV always runs as an indoor panel";
 "settings.role_unchanged" = "Nothing was changed.";
 "settings.rotate_cluster_key" = "Change the cluster key";
 "settings.rotate_cluster_key_action" = "Change";

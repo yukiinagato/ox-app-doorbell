@@ -46,21 +46,29 @@ namespace DoorbellApp.Util
         };
 
         // Fixed role colours. They are not part of the Fluent theme: positive and negative mean
-        // the same thing on every platform, whatever the accent is.
+        // the same thing on every platform, whatever the accent is. Two kinds live here:
+        //   fills    Positive, Danger (= Negative), Notice: drawn under their white "On" ink,
+        //            which must reach 4.5:1 on them;
+        //   text     NegativeText, Warn (= Warning), Ok: drawn as text or as an outline on the
+        //            page or a card, where they must reach 4.5:1 themselves. Negative has both,
+        //            because the red that carries white text is too dark to read on a dark card.
+        // win/tests/test_windows_contracts.py computes every one of these ratios.
         private static readonly Dictionary<string, string> DarkRoles =
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 { "Warn", "#FFB454" }, { "Danger", "#C0392B" }, { "Ok", "#5DD39E" },
-                { "Notice", "#B7791F" }, { "OnDanger", "#FFFFFF" }, { "Track", "#802A21" },
-                { "Positive", "#1E8E4B" }, { "OnPositive", "#FFFFFF" },
+                { "Notice", "#8A5A00" }, { "OnDanger", "#FFFFFF" }, { "Track", "#802A21" },
+                { "Positive", "#107C10" }, { "OnPositive", "#FFFFFF" },
+                { "NegativeText", "#FF99A4" },
             };
 
         private static readonly Dictionary<string, string> LightRoles =
             new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                { "Warn", "#8A5A00" }, { "Danger", "#B3261E" }, { "Ok", "#1E7F55" },
+                { "Warn", "#8A5A00" }, { "Danger", "#B3261E" }, { "Ok", "#0F7B0F" },
                 { "Notice", "#8A5A00" }, { "OnDanger", "#FFFFFF" }, { "Track", "#E4C9C6" },
                 { "Positive", "#1E7F55" }, { "OnPositive", "#FFFFFF" },
+                { "NegativeText", "#C42B1C" },
             };
 
         private static DateTime _systemProbedAt = DateTime.MinValue;
@@ -189,6 +197,13 @@ namespace DoorbellApp.Util
             Color ink = ((SolidColorBrush)resources["Fg"]).Color;
             Color accent = ((SolidColorBrush)resources["Accent"]).Color;
             Set(resources, "OnAccent", ThemeContrast.BetterInk(accent));
+            // The accent as text (a link, a code, a selected glyph): the same hue, moved until
+            // it reads on the card, which is the least favourable surface it is drawn on.
+            int readable = RoleContrast.EnsureReadable(
+                RoleContrast.Rgb(accent.R, accent.G, accent.B),
+                RoleContrast.Rgb(card.R, card.G, card.B), RoleContrast.TextMinimum);
+            Set(resources, "AccentText", Color.FromRgb((byte)((readable >> 16) & 0xFF),
+                (byte)((readable >> 8) & 0xFF), (byte)(readable & 0xFF)));
             // The card material over the wallpaper (Ui/Frost) and its tints, from the same theme.
             Set(resources, "Plate", Color.FromArgb(0xA6, card.R, card.G, card.B));
             Set(resources, "Pill", Color.FromArgb(0xCC, card.R, card.G, card.B));

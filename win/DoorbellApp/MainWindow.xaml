@@ -53,6 +53,10 @@
              Colour and opacity come from display.theme.backdrop. -->
         <Border x:Name="ThemeBackdrop" Visibility="Collapsed" IsHitTestVisible="False"/>
 
+        <!-- Every screen sits in this host. While the "not set up" banner shows, the host
+             starts below it (MainWindow.Navigation.cs), so the banner never covers a clock, a
+             title or a control. The SOS and emergency overlays stay outside and above it. -->
+        <Grid x:Name="ScreenHost">
         <Grid x:Name="IdleView" PreviewMouseLeftButtonDown="OnIdlePreviewDown">
             <Grid.RenderTransform>
                 <TranslateTransform x:Name="IdleShift"/>
@@ -109,7 +113,7 @@
                 <Border x:Name="VisitorNoticeCard" Grid.Row="1"
                         Visibility="Collapsed" Margin="0,16,0,0" CornerRadius="4"
                         Padding="16,12" Background="{DynamicResource Surface}"
-                        BorderBrush="{DynamicResource Notice}" BorderThickness="1,1,1,4"
+                        BorderBrush="{DynamicResource Warning}" BorderThickness="1,1,1,4"
                         VerticalAlignment="Top">
                     <TextBlock x:Name="VisitorNoticeText" FontSize="22" TextWrapping="Wrap"
                                Foreground="{DynamicResource OnSurface}"/>
@@ -450,7 +454,7 @@
                     <TextBlock x:Name="CallingDetail" FontSize="22" TextWrapping="Wrap" Margin="0,12,0,0"
                                TextAlignment="Center" Foreground="{DynamicResource Dim}"/>
                     <Ellipse x:Name="Pulse" Width="100" Height="100" Margin="0,24"
-                             Stroke="{DynamicResource Accent}" StrokeThickness="6" HorizontalAlignment="Center"/>
+                             Stroke="{DynamicResource AccentText}" StrokeThickness="6" HorizontalAlignment="Center"/>
                     <StackPanel x:Name="CallingPurposeSection" Visibility="Collapsed" Margin="0,0,0,24">
                         <TextBlock x:Name="CallingPurposeHint" FontSize="20" TextWrapping="Wrap"
                                    Foreground="{DynamicResource Dim}" TextAlignment="Center" Margin="0,0,0,8"/>
@@ -568,7 +572,7 @@
                 <Border x:Name="IncomingVideoFrame" CornerRadius="4" Background="#000000"
                         ClipToBounds="True" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <app:ZoomPanHost x:Name="IncomingZoom">
-                    <Grid x:Name="IncomingVideoArea" ClipToBounds="True">
+                    <Grid x:Name="IncomingVideoArea" ClipToBounds="True" MinWidth="480" MinHeight="270">
                         <MediaElement x:Name="IncomingH264" Stretch="Uniform" Visibility="Collapsed"
                                       LoadedBehavior="Manual" UnloadedBehavior="Manual"
                                       ScrubbingEnabled="False"/>
@@ -598,8 +602,9 @@
                         <Button x:Name="QuickReplyToggle" Style="{StaticResource ActionButton}"
                                 Click="OnQuickReplyToggleClick"/>
                         <Button x:Name="IgnoreButton" Style="{StaticResource ActionButton}"
-                                Foreground="{DynamicResource Negative}"
-                                BorderBrush="{DynamicResource Negative}"
+                                Background="Transparent"
+                                Foreground="{DynamicResource NegativeText}"
+                                BorderBrush="{DynamicResource NegativeText}"
                                 Click="OnIgnoreClick"/>
                     </UniformGrid>
                     <WrapPanel x:Name="IncomingSecondaryRow" Orientation="Horizontal"
@@ -607,7 +612,7 @@
                         <Button x:Name="MonitorButton" Style="{StaticResource ActionButton}"
                                 MinHeight="56" Click="OnMonitorClick"/>
                         <Button x:Name="OpenDoorButton" Style="{StaticResource ActionButton}"
-                                MinHeight="56" Foreground="{DynamicResource Warning}"
+                                MinHeight="56" Background="Transparent" Foreground="{DynamicResource Warning}"
                                 BorderBrush="{DynamicResource Warning}" PreviewMouseDown="OnConversationActionDown" Click="OnOpenDoorClick"/>
                         <Button x:Name="MicButton" Style="{StaticResource ActionButton}"
                                 MinHeight="56" Visibility="Collapsed" Click="OnMicClick"/>
@@ -668,7 +673,7 @@
                 <Border CornerRadius="4" Background="#000000" ClipToBounds="True"
                         HorizontalAlignment="Center" VerticalAlignment="Center">
                     <app:ZoomPanHost x:Name="InCallZoom">
-                    <Grid ClipToBounds="True">
+                    <Grid ClipToBounds="True" MinWidth="480" MinHeight="270">
                         <MediaElement x:Name="PeerH264" Stretch="Uniform" Visibility="Collapsed"
                                       LoadedBehavior="Manual" UnloadedBehavior="Manual"
                                       ScrubbingEnabled="False"/>
@@ -688,7 +693,7 @@
                     <Button x:Name="InCallMicButton" Style="{StaticResource ActionButton}"
                             MinHeight="56" Visibility="Collapsed" Click="OnMicClick"/>
                     <Button x:Name="InCallOpenDoorButton" Style="{StaticResource ActionButton}"
-                            MinHeight="56" Foreground="{DynamicResource Warning}"
+                            MinHeight="56" Background="Transparent" Foreground="{DynamicResource Warning}"
                             BorderBrush="{DynamicResource Warning}" Click="OnOpenDoorClick"/>
                 </WrapPanel>
             </StackPanel>
@@ -763,6 +768,7 @@
                             Click="OnMonitorPickerClose"/>
                 </StackPanel>
             </Border>
+        </Grid>
         </Grid>
 
         <Canvas x:Name="ScreensaverView" Visibility="Collapsed" Background="#000000">
@@ -893,6 +899,7 @@
 
         <!-- Persistent "not set up" banner; tapping it reopens onboarding (spec 5.0). -->
         <Border x:Name="PairBanner" Visibility="Collapsed" Background="{DynamicResource Notice}"
+                Height="48"
                 Padding="16,12" VerticalAlignment="Top" Cursor="Hand"
                 MouseLeftButtonDown="OnPairBannerClick">
             <TextBlock x:Name="PairBannerText" FontSize="20" FontWeight="Bold"
