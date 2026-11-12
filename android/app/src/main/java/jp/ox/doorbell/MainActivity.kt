@@ -366,6 +366,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                 appVersionName(),
                 power?.optInt("battery_pct", -1) ?: -1,
                 power?.optBoolean("charging", false) ?: false,
+                texts.t("power.charging", R.string.power_charging),
             ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
         }
         val renderKey = "${if (ready) 1 else 0}:$membershipText"
@@ -386,13 +387,15 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         ""
     }
 
-    /** Everything behind the admin password: information, adding devices, setup, kiosk exit. */
+    /**
+     * Everything behind the admin password: settings (which holds the Change role form, so a door
+     * station can become an indoor panel), information, adding devices, kiosk exit.
+     */
     private fun showMaintenanceMenu() {
         val labels = arrayOf<CharSequence>(
             texts.t("settings.title", R.string.settings_title),
             texts.t("admin.menu_info", R.string.admin_menu_info),
             texts.t("admin.menu_add_device", R.string.admin_menu_add_device),
-            texts.t("admin.menu_boot_setup", R.string.admin_menu_boot_setup),
             texts.t("admin.menu_exit_kiosk", R.string.admin_menu_exit_kiosk),
         )
         ShellDialogBuilder(this)
@@ -402,8 +405,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
                     0 -> SettingsActivity.open(this, app, texts)
                     1 -> DeviceInfoActivity.launch(this)
                     2 -> openAddDevice()
-                    3 -> startActivity(BootSetupActivity.reentryIntent(this))
-                    4 -> exitKiosk()
+                    3 -> exitKiosk()
                 }
             }
             .setNegativeButton(texts.t("admin.menu_close", R.string.admin_menu_close), null)

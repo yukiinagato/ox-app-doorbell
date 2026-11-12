@@ -93,8 +93,11 @@ class NativeSettingsModelTest {
             "quiet_hours":{"default":{"windows":[{"from":"23:00","to":"07:00","days":["sat"]}],
             "suppress":["chime"],"extra":1}}}""")
         val state = QuietHoursModel.read(cfg)
-        assertEquals(listOf(QuietHoursModel.Window("23:00", "07:00")), state.windows)
-        val ops = QuietHoursModel.ops(state.copy(windows = listOf(QuietHoursModel.Window("21:30", "24:00"))),
+        assertEquals(listOf(QuietHoursModel.Window("23:00", "07:00", listOf("sat"))), state.windows)
+        // An edit of the times carries the window's own day filter with it.
+        val edited = state.windows[0].copy(from = "21:30", to = "24:00")
+            .also { it.source = state.windows[0].source }
+        val ops = QuietHoursModel.ops(state.copy(windows = listOf(edited)),
                                       cfg.getJSONObject("quiet_hours").getJSONObject("default"), cfg)!!
         val set = ops[0] as ConfigOp.Set
         assertEquals(QuietHoursModel.KEY, set.key)
@@ -106,6 +109,38 @@ class NativeSettingsModelTest {
         assertEquals("sat", window.getJSONArray("days").getString(0))
         assertEquals(ConfigOp.Delete(QuietHoursModel.LEGACY_KEY), ops[1])
         assertNull(QuietHoursModel.ops(state.copy(windows = listOf(QuietHoursModel.Window("25:00", "07:00"))), null, cfg))
+    }
+
+    @Test
+    fun quietHoursKeepEachWindowsDaysThroughEditsAndDeletes() {
+        val cfg = JSONObject("""{"quiet_hours":{"default":{"windows":[
+            {"from":"22:00","to":"06:00","days":["sat","sun"],"note":"weekend"},
+            {"from":"13:00","to":"14:00"}]}}}""")
+        val original = cfg.getJSONObject("quiet_hours").getJSONObject("default")
+        val state = QuietHoursModel.read(cfg)
+        assertEquals(listOf("sat", "sun"), state.windows[0].days)
+        assertNull(state.windows[1].days)
+        fun windows(next: QuietHoursModel.State) = JSONObject(
+            (QuietHoursModel.ops(next, original, cfg)!![0] as ConfigOp.Set).valueJson,
+        ).getJSONArray("windows")
+        // Deleting the first window must not hand its day filter to the one that moves up.
+        val afterDelete = windows(state.copy(windows = state.windows.drop(1)))
+        assertEquals(1, afterDelete.length())
+        assertEquals("13:00", afterDelete.getJSONObject(0).getString("from"))
+        assertFalse(afterDelete.getJSONObject(0).has("days"))
+        assertFalse(afterDelete.getJSONObject(0).has("note"))
+        // Editing the days writes the edited days and keeps the window's other stored fields.
+        val edited = QuietHoursModel.Window("22:00", "06:00", listOf("fri")).also {
+            it.source = state.windows[0].source
+        }
+        val afterEdit = windows(state.copy(windows = listOf(edited, state.windows[1])))
+        assertEquals("[\"fri\"]", afterEdit.getJSONObject(0).getJSONArray("days").toString())
+        assertEquals("weekend", afterEdit.getJSONObject(0).getString("note"))
+        // Every day selected clears the filter.
+        val everyDay = QuietHoursModel.Window("22:00", "06:00", null).also {
+            it.source = state.windows[0].source
+        }
+        assertFalse(windows(state.copy(windows = listOf(everyDay))).getJSONObject(0).has("days"))
     }
 
     // ---------- trigger rules ----------

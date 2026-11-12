@@ -554,15 +554,15 @@ class BatchTwoModelTest {
         val battery = { value: Int -> "$value%" }
         assertEquals(
             "ipad1-monitor · core v0.4.0 · app v0.3.0 · 82%",
-            ShellUi.versionLine("ipad1-monitor", "v0.4.0", "v0.3.0", 82, false, battery),
+            ShellUi.versionLine("ipad1-monitor", "v0.4.0", "v0.3.0", 82, false, batteryText = battery),
         )
         assertEquals(
-            "ipad1-monitor · core v0.4.0 · app v0.3.0 · ⚡ 82%",
-            ShellUi.versionLine("ipad1-monitor", "v0.4.0", "v0.3.0", 82, true, battery),
+            "ipad1-monitor · core v0.4.0 · app v0.3.0 · 82% Charging",
+            ShellUi.versionLine("ipad1-monitor", "v0.4.0", "v0.3.0", 82, true, "Charging", battery),
         )
         assertEquals(
             "wall-panel · core v0.4.0 · app v0.3.0",
-            ShellUi.versionLine("wall-panel", "v0.4.0", "v0.3.0", -1, false, battery),
+            ShellUi.versionLine("wall-panel", "v0.4.0", "v0.3.0", -1, false, batteryText = battery),
         )
     }
 

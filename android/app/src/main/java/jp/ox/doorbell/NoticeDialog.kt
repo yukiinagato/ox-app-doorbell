@@ -174,7 +174,11 @@ internal object NoticeDialog {
                 },
             )
         }
-        root.addView(expiryRow, ShellUi.matchWrap())
+        // Three chips can be wider than a side sheet; the row scrolls rather than clipping one.
+        root.addView(android.widget.HorizontalScrollView(activity).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(expiryRow)
+        }, ShellUi.matchWrap())
         paintExpiry()
 
         val status = ShellUi.label(activity, "", TextRole.SUPPORTING, palette.danger).apply {

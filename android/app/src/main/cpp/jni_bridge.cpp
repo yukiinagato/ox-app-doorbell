@@ -488,9 +488,16 @@ Java_jp_ox_doorbell_DoorbellCore_nativeCreate(JNIEnv* env, jobject thiz, jstring
 
   const std::string dir = toUtf8(env, data_dir);
   const std::string boot = toUtf8(env, boot_json);
+  // Core resolves boot.json's secret:mesh.psk through secure_get while it is being created, and
+  // the platform callbacks serve only a registered bridge. Registering after creation made that
+  // lookup fail, so a paired device came back unpaired after every process restart.
+  const jlong handle = registerBridge(owned_bridge);
   b->core = db_core_create_v2(&b->plat, dir.c_str(), boot.c_str());
-  if (!b->core) return 0;
-  return registerBridge(std::move(owned_bridge));
+  if (!b->core) {
+    retireBridge(handle);
+    return 0;
+  }
+  return handle;
 }
 
 extern "C" JNIEXPORT jstring JNICALL

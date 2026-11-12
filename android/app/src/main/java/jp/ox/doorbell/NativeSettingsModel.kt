@@ -161,7 +161,14 @@ internal object QuietHoursModel {
     val ACTION_TYPES = listOf("chime", "sip_call", "telegram", "ha_event", "device_alert",
                               "auto_reply")
 
-    data class Window(val from: String, val to: String)
+    /**
+     * One window. [days] null means every day. [source] is the stored object the window was read
+     * from, so fields this editor does not show travel with their own window when another one
+     * is deleted or edited; it takes no part in equality.
+     */
+    data class Window(val from: String, val to: String, val days: List<String>? = null) {
+        var source: JSONObject? = null
+    }
 
     data class State(
         val windows: List<Window>,
@@ -175,7 +182,10 @@ internal object QuietHoursModel {
         val array = def?.optJSONArray("windows")
         if (array != null) for (i in 0 until array.length()) {
             val w = array.optJSONObject(i) ?: continue
-            windows.add(Window(w.optString("from"), w.optString("to")))
+            val days = w.optJSONArray("days")?.let { list ->
+                (0 until list.length()).map { list.optString(it) }.filter { it.isNotEmpty() }
+            }
+            windows.add(Window(w.optString("from"), w.optString("to"), days).also { it.source = w })
         }
         return State(windows, strings(def?.optJSONArray("suppress"), listOf("chime")),
                      strings(def?.optJSONArray("never_suppress"), emptyList()))
@@ -185,13 +195,14 @@ internal object QuietHoursModel {
     fun ops(state: State, original: JSONObject?, config: JSONObject?): List<ConfigOp>? {
         val out = JSONObject(original?.toString() ?: "{}")
         val windows = JSONArray()
-        val previous = original?.optJSONArray("windows")
-        state.windows.forEachIndexed { index, w ->
+        for (w in state.windows) {
             val from = SettingsModel.normalizeTime(w.from) ?: return null
             val to = if (w.to == "24:00") "24:00" else SettingsModel.normalizeTime(w.to) ?: return null
-            // Keep any "days" filter the web admin set on the same window.
-            val base = previous?.optJSONObject(index)?.let { JSONObject(it.toString()) } ?: JSONObject()
-            windows.put(base.put("from", from).put("to", to))
+            // Each window keeps its own stored fields; the day filter is what the state says.
+            val base = w.source?.let { JSONObject(it.toString()) } ?: JSONObject()
+            base.put("from", from).put("to", to)
+            if (w.days == null) base.remove("days") else base.put("days", JSONArray(w.days))
+            windows.put(base)
         }
         out.put("windows", windows)
         out.put("suppress", JSONArray(state.suppress))

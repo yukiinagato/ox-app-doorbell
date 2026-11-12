@@ -401,10 +401,12 @@ internal class DashboardView(
             ShellUi.dp(activity, 72), ShellUi.dp(activity, 72),
         ))
         footer.addView(footerText, LinearLayout.LayoutParams(
-            0, ViewGroup.LayoutParams.MATCH_PARENT, 1f,
+            0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
         ).apply { leftMargin = ShellUi.dp(activity, 10) })
+        // At least the QR's height, and taller when large text wraps the version line.
+        footer.minimumHeight = ShellUi.dp(activity, 88)
         column.addView(footer, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ShellUi.dp(activity, 88),
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
         ).apply { leftMargin = pad; rightMargin = pad; topMargin = ShellUi.dp(activity, 8) })
 
         sosSlider.enabledProvider = { app.coreOk }
@@ -767,6 +769,7 @@ internal class DashboardView(
             appVersion(),
             power?.optInt("battery_pct", -1) ?: -1,
             power?.optBoolean("charging", false) ?: false,
+            texts.t("power.charging", R.string.power_charging),
         ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
         if (line != versionLine) {
             versionLine = line

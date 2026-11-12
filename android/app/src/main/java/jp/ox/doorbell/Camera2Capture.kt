@@ -91,14 +91,21 @@ internal class Camera2Capture(
                 Log.w(TAG, "acquireLatestImage failed: $e")
                 null
             } ?: return@setOnImageAvailableListener
-            try {
-                val buffer = nv21
-                if (buffer != null && toNv21(image, buffer)) {
-                    onFrame(buffer, width, height, System.currentTimeMillis())
-                    firstFrame.countDown()
+            // stop() runs on another thread and closes the reader, which closes every Image it
+            // handed out and unmaps their planes. Reading a plane after that throws, or faults in
+            // native code, so the copy and the close exclude each other.
+            synchronized(frameLock) {
+                try {
+                    val buffer = nv21
+                    if (!stopping && buffer != null && toNv21(image, buffer)) {
+                        onFrame(buffer, width, height, System.currentTimeMillis())
+                        firstFrame.countDown()
+                    }
+                } catch (e: IllegalStateException) {
+                    Log.w(TAG, "frame dropped: $e")
+                } finally {
+                    try { image.close() } catch (e: Exception) { Log.d(TAG, "image close: $e") }
                 }
-            } finally {
-                image.close()
             }
         }, h)
 
@@ -152,14 +159,20 @@ internal class Camera2Capture(
         return true
     }
 
+    /** Held while a frame is copied and while the reader is closed; see the frame callback. */
+    private val frameLock = Any()
+
     fun stop() {
         stopping = true
         try { session?.close() } catch (e: Exception) { Log.d(TAG, "session close: $e") }
         session = null
         try { device?.close() } catch (e: Exception) { Log.d(TAG, "device close: $e") }
         device = null
-        try { reader?.close() } catch (e: Exception) { Log.d(TAG, "reader close: $e") }
-        reader = null
+        synchronized(frameLock) {
+            try { reader?.close() } catch (e: Exception) { Log.d(TAG, "reader close: $e") }
+            reader = null
+            nv21 = null
+        }
         thread?.quitSafely()
         thread = null
         handler = null

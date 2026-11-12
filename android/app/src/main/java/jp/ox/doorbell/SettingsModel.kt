@@ -141,10 +141,12 @@ internal object SettingsModel {
         )
         SettingsCategory.DISPLAY -> listOf(
             SettingSpec.Choice("devices.$NODE.local.video.playback", "settings.video_playback",
-                               listOf("auto", "h264", "mjpeg"), "auto", "settings.playback_"),
+                               // The values Core reads; it ignores anything else.
+                               listOf("low_latency", "hls", "mjpeg"), "low_latency",
+                               "settings.playback_"),
             SettingSpec.Choice("devices.$NODE.local.video.rotation", "settings.video_rotation",
-                               listOf("0", "90", "180", "270"), "0", "settings.rotation_",
-                               numeric = true),
+                               listOf("auto", "0", "90", "180", "270"), "auto",
+                               "settings.rotation_", numeric = true),
             SettingSpec.IntRange("display.brightness", "settings.item_brightness", 0, 100, 70,
                                  slider = true),
             SettingSpec.Toggle("display.night.enabled", "settings.item_night", true),
@@ -178,6 +180,10 @@ internal object SettingsModel {
         )
         SettingsCategory.EMERGENCY -> listOf(
             SettingSpec.IntRange("emergency.trigger.countdown_s", "sos.countdown_s", 0, 10, 3,
+                                 slider = true),
+            SettingSpec.Choice("emergency.trigger.mode", "sos.trigger_mode",
+                               listOf("slide", "hold"), "slide", "sos.mode_"),
+            SettingSpec.IntRange("emergency.alarm_volume", "sos.alarm_volume", 0, 100, 100,
                                  slider = true),
             SettingSpec.MultiChoice("emergency.button_on_roles", "sos.button_on_roles", ROLES,
                                     listOf("indoor_panel"), "settings.role_", minSelected = 0),

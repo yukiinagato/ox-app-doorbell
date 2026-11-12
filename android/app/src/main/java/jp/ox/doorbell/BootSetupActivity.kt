@@ -26,8 +26,7 @@ class BootSetupActivity : ShellActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         app = application as App
-        // The maintenance menu reopens this screen deliberately, even once setup is complete.
-        if (!app.bootSetupRequired && !intent.getBooleanExtra(EXTRA_REENTRY, false)) {
+        if (!app.bootSetupRequired) {
             finish()
             return
         }
@@ -116,13 +115,7 @@ class BootSetupActivity : ShellActivity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     companion object {
-        private const val EXTRA_REENTRY = "reentry"
         private const val ROLE_DOOR = "door_station"
         private const val ROLE_INDOOR = "indoor_panel"
-
-        /** Open the identity gate again from the maintenance menu. */
-        fun reentryIntent(activity: Activity): android.content.Intent =
-            android.content.Intent(activity, BootSetupActivity::class.java)
-                .putExtra(EXTRA_REENTRY, true)
     }
 }

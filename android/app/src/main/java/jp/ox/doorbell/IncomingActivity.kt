@@ -362,12 +362,17 @@ class IncomingActivity : ShellActivity() {
         }
     }
     private fun installVisitViews() {
-        val details = findViewById<LinearLayout>(R.id.details_box)
+        // The queue and the conversation controls stack under the door name. The details row is
+        // horizontal, so adding them there squeezed the door name and status to zero width.
+        val details = findViewById<TextView>(R.id.door_label).parent as LinearLayout
         occupancy = ShellUi.label(this, "", TextRole.SUPPORTING).also { details.addView(it) }
         queueLayout = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL }
         val scroll = android.widget.ScrollView(this)
         scroll.addView(queueLayout)
-        details.addView(scroll, LinearLayout.LayoutParams(-1, dp(132)))
+        details.addView(scroll, LinearLayout.LayoutParams(
+            android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+            android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
         roomLayout = LinearLayout(this).also { it.orientation = LinearLayout.VERTICAL; details.addView(it) }
         for (id in listOf(R.id.answer_button, R.id.unlock_button, R.id.close_button)) bindTarget(findViewById(id))
     }

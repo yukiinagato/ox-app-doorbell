@@ -509,18 +509,18 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             this, palette,
             texts.t("settings.device_name", R.string.settings_device_name),
             app.boot.name,
-        ) { startActivity(BootSetupActivity.reentryIntent(this)) })
+            texts.t("settings.restart_required", R.string.settings_restart_required),
+        ) { renameThisDevice() })
+        val door = if (app.boot.role == RoleChangeModel.DOOR_STATION)
+            " · " + doorLabel(app.boot.door) else ""
         card.row(ShellUi.row(
             this, palette,
-            texts.t("settings.role", R.string.settings_role),
-            roleLabel(app.boot.role),
-            texts.t("settings.restart_required", R.string.settings_restart_required),
-        ) { startActivity(BootSetupActivity.reentryIntent(this)) })
-        if (app.boot.role == "door_station") card.row(ShellUi.row(
-            this, palette,
-            texts.t("settings.door", R.string.settings_door),
-            doorLabel(app.boot.door),
-        ) { startActivity(BootSetupActivity.reentryIntent(this)) })
+            label("settings.change_role"),
+            roleLabel(app.boot.role) + door,
+            label("settings.role_restart"),
+            trailing = ShellUi.label(this, label("settings.change_role_action"), TextRole.LABEL,
+                                     ShellUi.accentInk(palette)),
+        ) { changeRole(nodeId, app.boot.role, app.boot.door, self = true) })
 
         if (app.boot.kiosk) card.row(ShellUi.row(
             this, palette,
@@ -529,6 +529,184 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             app.runtime.kioskController.leaveForMaintenance(this)
             finish()
         })
+    }
+
+    private fun roleChangeBlocked(): Boolean = RoleChangeModel.blocked(
+        status, app.callFlow.current() != null, app.incomingActivity != null,
+    )
+
+    /** The device name is part of the local identity, so saving it restarts Core as a role does. */
+    private fun renameThisDevice() {
+        if (roleChangeBlocked()) {
+            toast(label("settings.role_busy"))
+            return
+        }
+        val field = PlatformUi.field(
+            this, texts.t("settings.device_name", R.string.settings_device_name), app.boot.name,
+        )
+        ShellDialogBuilder(this)
+            .setTitle(texts.t("settings.device_name", R.string.settings_device_name))
+            .setView(dialogField(field))
+            .setPositiveButton(texts.t("admin.save", R.string.admin_save)) { _, _ ->
+                val name = field.text.trim()
+                when {
+                    name.isEmpty() || name.length > 64 -> toast(label("settings.invalid_value"))
+                    name == app.boot.name -> toast(label("settings.role_unchanged"))
+                    !app.completeBootSetup(name, app.boot.role, app.boot.door) ->
+                        toast(texts.t("admin.save_failed", R.string.admin_save_failed))
+                    else -> finish()
+                }
+            }
+            .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+            .show()
+    }
+
+    /**
+     * The "Change role" form. Nothing is written until the confirmation: this device persists
+     * boot.json and restarts through the identity path; another device gets its role and door in
+     * one batch and applies them itself.
+     */
+    internal fun changeRole(deviceId: String, currentRole: String, currentDoor: String,
+                            self: Boolean, deviceName: String = "") {
+        if (readOnly && !self) {
+            toast(texts.t("settings.offline", R.string.settings_offline))
+            return
+        }
+        if (self && roleChangeBlocked()) {
+            toast(label("settings.role_busy"))
+            return
+        }
+        var role = if (currentRole == RoleChangeModel.INDOOR_PANEL) RoleChangeModel.INDOOR_PANEL
+                   else RoleChangeModel.DOOR_STATION
+        val existing = if (currentDoor == "null") "" else currentDoor
+        val pad = ShellUi.dp(this, 24)
+        val box = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, ShellUi.dp(this@SettingsActivity, 8), pad, 0)
+        }
+        // Doors nobody else serves come first; the device's own door stays selectable.
+        val doors = (RoleChangeModel.freeDoors(config, deviceId) + listOf(existing))
+            .filter { it.isNotEmpty() }.distinct()
+        val doorBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        doorBox.addView(ShellUi.label(this, texts.t("settings.door", R.string.settings_door),
+                                      TextRole.LABEL).apply {
+            setPadding(0, ShellUi.dp(this@SettingsActivity, 16), 0, 0)
+        })
+        val group = android.widget.RadioGroup(this)
+        val ids = ArrayList<Int>()
+        for (door in doors) group.addView(PlatformUi.radio(this).apply {
+            id = View.generateViewId()
+            ids.add(id)
+            text = doorLabel(door).let { if (it == door) door else "$it ($door)" }
+            minHeight = ShellUi.dp(this@SettingsActivity, UiTokens.TOUCH_MIN_DP)
+        })
+        val newDoor = PlatformUi.radio(this).apply {
+            id = View.generateViewId()
+            text = label("settings.role_new_door")
+            minHeight = ShellUi.dp(this@SettingsActivity, UiTokens.TOUCH_MIN_DP)
+        }
+        group.addView(newDoor)
+        val suggestion = if (self && BootConfig.validDoor(app.boot.suggestedDoor) &&
+            app.boot.suggestedDoor !in doors) app.boot.suggestedDoor
+            else "door-" + java.lang.Long.toHexString(System.nanoTime()).takeLast(8)
+        val newId = PlatformUi.field(this, label("settings.role_new_door_id"), suggestion)
+        val selected = doors.indexOf(existing)
+        group.check(if (selected >= 0) ids[selected] else if (doors.isNotEmpty() && existing.isEmpty())
+            ids[0] else newDoor.id)
+        newId.view.visibility = if (group.checkedRadioButtonId == newDoor.id) View.VISIBLE else View.GONE
+        group.setOnCheckedChangeListener { _, checked ->
+            newId.view.visibility = if (checked == newDoor.id) View.VISIBLE else View.GONE
+        }
+        doorBox.addView(group, ShellUi.matchWrap())
+        doorBox.addView(newId.view, ShellUi.matchWrap())
+        doorBox.addView(ShellUi.label(this, label("setup.door_hint"), TextRole.LABEL))
+        val indoorNote = ShellUi.label(
+            this, label("settings.role_indoor_note") + "\n" + label("settings.role_door_kept_note"),
+            TextRole.SUPPORTING,
+        ).apply { setPadding(0, ShellUi.dp(this@SettingsActivity, 16), 0, 0) }
+        fun showRole() {
+            doorBox.visibility = if (role == RoleChangeModel.DOOR_STATION) View.VISIBLE else View.GONE
+            indoorNote.visibility = if (role == RoleChangeModel.INDOOR_PANEL) View.VISIBLE else View.GONE
+        }
+        val roles = PlatformUi.segmented(this, listOf(
+            RoleChangeModel.DOOR_STATION to roleLabel(RoleChangeModel.DOOR_STATION),
+            RoleChangeModel.INDOOR_PANEL to roleLabel(RoleChangeModel.INDOOR_PANEL),
+        ), onPick = { picked ->
+            role = picked
+            showRole()
+        })
+        roles.select(role)
+        box.addView(roles.view, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        box.addView(doorBox, ShellUi.matchWrap())
+        box.addView(indoorNote, ShellUi.matchWrap())
+        showRole()
+
+        val dialog = ShellDialogBuilder(this)
+            .setTitle(label("settings.change_role"))
+            .setView(ScrollView(this).apply { addView(box) })
+            .setPositiveButton(label("settings.change_role"), null)
+            .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(android.content.DialogInterface.BUTTON_POSITIVE).setOnClickListener {
+                val checked = group.checkedRadioButtonId
+                val door = if (checked == newDoor.id) newId.text.trim()
+                           else doors.getOrNull(ids.indexOf(checked)).orEmpty()
+                when (RoleChangeModel.validate(role, door)) {
+                    RoleChangeModel.Problem.DOOR -> {
+                        newId.setError(label("setup.invalid_door"))
+                        group.check(newDoor.id)
+                        return@setOnClickListener
+                    }
+                    RoleChangeModel.Problem.ROLE -> {
+                        toast(label("settings.invalid_value"))
+                        return@setOnClickListener
+                    }
+                    RoleChangeModel.Problem.NONE -> Unit
+                }
+                if (RoleChangeModel.unchanged(currentRole, existing, role, door)) {
+                    toast(label("settings.role_unchanged"))
+                    dialog.dismiss()
+                    return@setOnClickListener
+                }
+                dialog.dismiss()
+                confirmRoleChange(deviceId, role, door, self, deviceName)
+            }
+        }
+        dialog.show()
+    }
+
+    /** States the consequence, then applies: boot.json first for this device, a batch otherwise. */
+    private fun confirmRoleChange(deviceId: String, role: String, door: String, self: Boolean,
+                                  deviceName: String) {
+        val owner = if (role == RoleChangeModel.DOOR_STATION)
+            RoleChangeModel.otherOwner(config, deviceId, door) else ""
+        val message = buildString {
+            append(if (self) label("settings.role_restart_confirm")
+                   else label("editor.role_restart_confirm", deviceName))
+            if (owner.isNotEmpty()) append("\n\n").append(label("settings.role_door_in_use", owner))
+        }
+        ShellDialogBuilder(this)
+            .setTitle(label("settings.change_role"))
+            .setMessage(message)
+            .setPositiveButton(label("settings.change_role")) { _, _ ->
+                if (!self) {
+                    writeOps(RoleChangeModel.ops(deviceId, role, door))
+                    return@setPositiveButton
+                }
+                if (roleChangeBlocked()) {
+                    toast(label("settings.role_busy"))
+                    return@setPositiveButton
+                }
+                // completeBootSetup persists boot.json, restarts Core with the new identity and
+                // relaunches the home screen for the new role.
+                if (app.completeBootSetup(app.boot.name, role, RoleChangeModel.doorFor(role, door)))
+                    finish()
+                else toast(texts.t("admin.save_failed", R.string.admin_save_failed))
+            }
+            .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
+            .show()
     }
 
     /** Appearance, background, and the dashboard preview rate (Display category). */
@@ -710,6 +888,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
                     peer.optString("app_version").ifEmpty { appVersion() },
                     battery,
                     power?.optBoolean("charging", false) ?: false,
+                    texts.t("power.charging", R.string.power_charging),
                 ) { texts.t("power.percent", R.string.power_percent, it.toString()) }
                 card.row(ShellUi.row(this, palette, name, detail))
             }
@@ -851,6 +1030,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
                 appVersion(),
                 power?.optInt("battery_pct", -1) ?: -1,
                 power?.optBoolean("charging", false) ?: false,
+                texts.t("power.charging", R.string.power_charging),
             ) { texts.t("power.percent", R.string.power_percent, it.toString()) },
         ))
         card.row(ShellUi.row(
@@ -897,7 +1077,8 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         option.isEmpty() -> label(noneKey)
         option.startsWith("asset:") -> label("settings.sound_custom")
         prefix == "lang." -> Texts.langDisplayName(option)
-        prefix == "settings.rotation_" -> "$option°"
+        prefix == "settings.rotation_" ->
+            if (option == "auto") label("admin.rotation_auto") else "$option°"
         else -> label(prefix + option).let { if (it == prefix + option) option else it }
     }
 
@@ -1262,7 +1443,9 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
             .setTitle(title)
             .setItems(options.map { label(it) as CharSequence }.toTypedArray()) { _, which ->
                 val chosen = options[which]
-                write(key, if (asNumber) chosen else JSONObject.quote(chosen)) { }
+                // A numeric choice may still carry a word ("auto"), which is stored as a string.
+                write(key, if (asNumber && chosen.toIntOrNull() != null) chosen
+                           else JSONObject.quote(chosen)) { }
             }
             .setNegativeButton(texts.t("admin.cancel", R.string.admin_cancel), null)
             .show()

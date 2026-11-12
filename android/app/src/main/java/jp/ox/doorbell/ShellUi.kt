@@ -253,7 +253,8 @@ internal object ShellUi {
 
     /**
      * The `name · core vX · app vY · battery` line shown on every screen (§5.1). The battery part
-     * disappears on a device that reports none, and charging is marked with a small glyph.
+     * disappears on a device that reports none; while charging it carries [chargingLabel] in
+     * words rather than a glyph.
      */
     fun versionLine(
         name: String,
@@ -261,6 +262,7 @@ internal object ShellUi {
         appVersion: String,
         batteryPercent: Int,
         charging: Boolean,
+        chargingLabel: String = "",
         batteryText: (Int) -> String,
     ): String {
         val parts = ArrayList<String>(4)
@@ -268,7 +270,8 @@ internal object ShellUi {
         parts.add("core $coreVersion")
         parts.add("app $appVersion")
         if (batteryPercent in 0..100)
-            parts.add(if (charging) "⚡ " + batteryText(batteryPercent)
+            parts.add(if (charging && chargingLabel.isNotEmpty())
+                          batteryText(batteryPercent) + " " + chargingLabel
                       else batteryText(batteryPercent))
         return parts.joinToString(" · ")
     }

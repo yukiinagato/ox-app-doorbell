@@ -1200,14 +1200,20 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
             a.writeOps(ops)
         }
         state.windows.forEachIndexed { index, w ->
-            add(card, item("${w.from}–${w.to}", "") {
-                val json = original?.optJSONArray("windows")?.optJSONObject(index)
-                    ?: JSONObject().put("from", w.from).put("to", w.to)
+            val dayText = w.days?.joinToString(" ") { L("day.$it") }.orEmpty()
+            add(card, item("${w.from}–${w.to}", dayText) {
+                val json = JSONObject().put("from", w.from).put("to", w.to)
+                if (w.days != null) json.put("days", JSONArray(w.days))
                 editWindow(json, onDelete = {
                     save(state.copy(windows = state.windows.filterIndexed { i, _ -> i != index }))
                 }) { changed ->
+                    val days = changed.optJSONArray("days")?.let { list ->
+                        (0 until list.length()).map { list.optString(it) }
+                    }
                     save(state.copy(windows = state.windows.mapIndexed { i, old ->
-                        if (i == index) QuietHoursModel.Window(changed.optString("from"), changed.optString("to")) else old
+                        if (i == index) QuietHoursModel.Window(
+                            changed.optString("from"), changed.optString("to"), days,
+                        ).also { it.source = old.source } else old
                     }))
                 }
             })
@@ -1428,11 +1434,13 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
             add(card, item(name, detail, id) {
                 val options = ArrayList<Pair<String, String>>()
                 options.add("rename" to L("nset.rename"))
+                options.add("role" to L("settings.change_role"))
                 if (d.optString("role") == "door_station") options.add("door" to L("admin.door_assign"))
                 if (!self) options.add("remove" to L("admin.remove_device"))
                 choose(name, options) { pick ->
                     when (pick) {
                         "rename" -> renameDevice(id, name)
+                        "role" -> a.changeRole(id, d.optString("role"), d.optString("door"), self, name)
                         "door" -> choose(L("admin.door_assign"), doorOptions()) {
                             a.write("devices.$id.door", JSONObject.quote(it)) { }
                         }

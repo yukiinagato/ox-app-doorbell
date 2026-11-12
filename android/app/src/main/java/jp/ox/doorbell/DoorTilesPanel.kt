@@ -132,6 +132,7 @@ internal class DoorTilesPanel(
             offlineDoorsButton = PlatformUi.button(activity, ButtonKind.TONAL)
                 .also { button ->
                     button.setOnClickListener { host.showOfflineDoors() }
+                    PlatformUi.setButtonIcon(button, R.drawable.ic_tabler_video_off)
                     button.visibility = View.GONE
                     column.addView(button, ShellUi.matchWrap())
                 }
@@ -378,7 +379,7 @@ internal class DoorTilesPanel(
         button.visibility = if (offline.isEmpty()) View.GONE else View.VISIBLE
         if (offline.isNotEmpty()) {
             button.text = "${texts.t("dashboard.offline_doors", R.string.dashboard_offline_doors)}" +
-                " · ${offline.size} ›"
+                " · ${offline.size}"
         }
     }
 
