@@ -4375,7 +4375,7 @@ if (typeof document !== "undefined") (function () {
       }
       return "<div class='frow'>" + lab + "<select data-f='" + esc(f.id) + "'>" + ao +
              "</select> <button class='btn2' data-audioplay='" + esc(f.id) + "'>" +
-             esc(t("admin.audio_play")) + "</button></div>";
+             icon("player-play") + " " + esc(t("admin.audio_play")) + "</button></div>";
     }
     if (f.type === "icon") {
       var ib = "";
@@ -4815,8 +4815,8 @@ if (typeof document !== "undefined") (function () {
   }
   function reorderButtonHtml(attrs, up) {
     var label = esc(t(up ? "admin.move_up" : "admin.move_down"));
-    return "<button type='button' class='btn2 reorder" + (up ? " up" : "") + "' " + attrs +
-           " aria-label='" + label + "' title='" + label + "'>" + icon("chevron-down") + "</button>";
+    return "<button type='button' class='btn2 reorder" + (up ? "" : " down") + "' " + attrs +
+           " aria-label='" + label + "' title='" + label + "'>" + icon("arrow-up") + "</button>";
   }
   function removeButtonHtml(attrs) {
     var label = esc(t("admin.delete"));
@@ -5251,7 +5251,7 @@ if (typeof document !== "undefined") (function () {
       h += "<tr><td class='dim'>" + esc(b) + "</td><td>" + esc(lb.ja || "") + "</td><td>" +
            esc(lb.en || "") + "</td><td>" + esc(lb.zh || "") + "</td><td class='ops'>" +
            "<button class='btn2' data-act='editB' data-id='" + esc(b) + "'>" +
-           esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='delB' data-id='" +
+           icon("pencil") + " " + esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='delB' data-id='" +
            esc(b) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     }
     if (!Object.keys(bs).length)
@@ -5290,7 +5290,7 @@ if (typeof document !== "undefined") (function () {
            (unlockModel.configured ? "" : "<div class='dim fhint'>" +
              esc(t("unlock.not_configured")) + "</div>") +
            "</td><td class='ops'><button class='btn2' data-act='editD' data-id='" + esc(d) +
-           "'>" + esc(t("admin.edit")) +
+           "'>" + icon("pencil") + " " + esc(t("admin.edit")) +
            "</button> <button class='btn2' data-act='notice' data-id='" + esc(d) + "'>" +
            esc(t("notice.title")) + "</button>" +
            " <button class='btn2' data-act='unlock' data-id='" + esc(d) + "'>" +
@@ -5779,7 +5779,7 @@ if (typeof document !== "undefined") (function () {
            esc(stTxt) + "</span></td><td class='dim mono'>" + esc(volumeSummary(nid)) +
            "</td><td>" + healthHtml +
            "</td><td class='ops'><button class='btn2' data-act='edit' data-id='" +
-           esc(nid) + "'>" + esc(t("admin.edit")) + "</button> " +
+           esc(nid) + "'>" + icon("pencil") + " " + esc(t("admin.edit")) + "</button> " +
            "<button class='btn2' data-act='vol' data-id='" + esc(nid) + "'>" +
            esc(t("volume.title")) + "</button> " +
            "<button class='btn2' data-act='ui' data-id='" + esc(nid) + "'>" +
@@ -5987,7 +5987,7 @@ if (typeof document !== "undefined") (function () {
                   (ro[ri].v === (a.sound || "ding1") ? " selected" : "") + ">" +
                   esc(ro[ri].label) + "</option>";
       params += "</select> <button class='btn2' data-ringplay='" + idx + "'>" +
-                esc(t("admin.audio_play")) + "</button>";
+                icon("player-play") + " " + esc(t("admin.audio_play")) + "</button>";
     } else if (a.type === "device_alert") {
       var targets = a.targets && typeof a.targets === "object" ? a.targets : {};
       var groups = Object.prototype.hasOwnProperty.call(targets, "web_subscription_groups") ?
@@ -6107,7 +6107,7 @@ if (typeof document !== "undefined") (function () {
       esc(t("admin.sos_capable_recipients")) + ") · Web Push: " +
       (preview.web_push_recipients === null ? "?" : preview.web_push_recipients) + "</div>";
     for (var i = 0; i < warnings.length; i++)
-      h += "<div class='warn' style='font-weight:600;margin-top:6px'>" + icon("info-circle") + " " +
+      h += "<div class='warn' style='font-weight:600;margin-top:6px'>" + icon("alert-triangle") + " " +
            esc(sosWarningText(warnings[i])) + "</div>";
     if (!warnings.length)
       h += "<div class='ok' style='margin-top:6px'>" +
@@ -6440,7 +6440,7 @@ if (typeof document !== "undefined") (function () {
             "</div>";
     if (flowSupport.warning || flowSupport.unknown_fleet) {
       var unsupported = flowSupport.unsupported.map(deviceName).join(", ") || t("admin.call_flow_unknown");
-      h += "<div class='warn' role='alert' style='font-weight:600;margin-top:8px'>" + icon("info-circle") + " " +
+      h += "<div class='warn' role='alert' style='font-weight:600;margin-top:8px'>" + icon("alert-triangle") + " " +
            esc(t("admin.call_flow_mixed_warning")) +
            " " + esc(unsupported) + "</div>";
     } else if (configuredFlow === "ring_then_purpose") {
@@ -6497,10 +6497,10 @@ if (typeof document !== "undefined") (function () {
              (sosPreview.web_push_recipients === null ? "?" : sosPreview.web_push_recipients) +
              "</div>";
         for (var wi = 0; wi < sosWarnings.length; wi++)
-          h += "<div class='warn fhint'>" + icon("info-circle") + " " + esc(sosWarningText(sosWarnings[wi])) + "</div>";
+          h += "<div class='warn fhint'>" + icon("alert-triangle") + " " + esc(sosWarningText(sosWarnings[wi])) + "</div>";
       }
       h += "</div><div class='ops' style='margin-top:8px'><button class='btn2' data-act='edit' data-id='" +
-           esc(id) + "'>" + esc(t("admin.edit")) +
+           esc(id) + "'>" + icon("pencil") + " " + esc(t("admin.edit")) +
            "</button> <button class='btn2 danger' data-act='del' data-id='" + esc(id) + "'>" +
            esc(t("admin.delete")) + "</button></div></div>";
     }
@@ -6636,7 +6636,7 @@ if (typeof document !== "undefined") (function () {
       if (st !== 200 || !status) { root.textContent = t("speech.unavailable"); return; }
       var google = status.provider === "google", replies = cfgObj("quick_replies");
       var h = "<div class='chead'><h2>" + esc(t("speech.settings")) + "</h2>" +
-        "<button class='btn small' data-tts='settings'>" + esc(t("admin.edit")) + "</button></div>" +
+        "<button class='btn small' data-tts='settings'>" + icon("pencil") + " " + esc(t("admin.edit")) + "</button></div>" +
         "<p>" + esc(t(google ? "speech.cloud_hint" : "speech.system_hint")) + "</p>";
       if (google) {
         h += "<p class='dim'>" + esc(t("speech.generator") + ": " + deviceName(status.generator_node)) + "</p>";
@@ -6661,7 +6661,7 @@ if (typeof document !== "undefined") (function () {
         h += "<tr><td>" + esc(label) + "</td><td>" + esc(langName(row.lang)) + "</td><td>" +
           esc(t(({ready:"speech.state_ready", syncing:"speech.state_syncing", generating:"speech.state_generating", failed:"speech.state_failed", pending:"speech.state_pending", system:"speech.state_system"})[row.state] || "speech.state_pending")) + (row.error ? " · " + esc(row.error) : "") + "</td><td>";
         if (row.state === "ready" || row.state === "system")
-          h += "<button class='btn2' data-tts-play='" + index + "'>" + esc(t("speech.preview")) + "</button>";
+          h += "<button class='btn2' data-tts-play='" + index + "'>" + icon("player-play") + " " + esc(t("speech.preview")) + "</button>";
         h += "</td></tr>";
       });
       root.innerHTML = h + "</tbody></table>";
@@ -6711,7 +6711,7 @@ if (typeof document !== "undefined") (function () {
         if (!au[lg]) continue;
         chips += "<span class='chip'>" + esc(lg + ": " + assetLabel(au[lg])) +
                  " <button class='btn2' data-act='play' data-id='" + esc(au[lg]) +
-                 "' aria-label='" + esc(t("admin.audio_play")) + "'>" + icon("volume") + "</button></span>";
+                 "' aria-label='" + esc(t("admin.audio_play")) + "'>" + icon("player-play") + "</button></span>";
       }
       h += "<tr><td class='dim'>" + (i + 1) + "</td><td>" + esc(L.labelOf(q, LANG, id)) +
            "</td><td>" + (q.speak !== false ? icon("volume") : "—") + "</td><td>" +
@@ -6719,7 +6719,7 @@ if (typeof document !== "undefined") (function () {
            reorderButtonHtml("data-act='up' data-id='" + esc(id) + "'", true) +
            reorderButtonHtml("data-act='down' data-id='" + esc(id) + "'", false) +
            "<button class='btn2' data-act='edit' data-id='" + esc(id) + "'>" +
-           esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
+           icon("pencil") + " " + esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
            esc(id) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     });
     if (!ids.length)
@@ -6790,7 +6790,7 @@ if (typeof document !== "undefined") (function () {
            ")</span></td><td class='dim'>" + esc((hh.telegram_chat_ids || []).join(", ")) +
            "</td><td class='dim'>" + esc((hh.sip_extensions || []).join(", ")) +
            "</td><td class='ops'><button class='btn2' data-act='edit' data-id='" + esc(id) + "'>" +
-           esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
+           icon("pencil") + " " + esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
            esc(id) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     }
     if (!Object.keys(hs).length)
@@ -6949,7 +6949,7 @@ if (typeof document !== "undefined") (function () {
            esc(p.last_activity_ms ? fmtTime(p.last_activity_ms) : t("panels.never")) + "</td><td class='ops'>";
       if (!p.revoked) {
         h += "<button class='btn2' data-act='edit' data-id='" + esc(p.panel_id) + "'>" +
-             esc(t("admin.edit")) + "</button> <button class='btn2' data-act='rotate' data-id='" +
+             icon("pencil") + " " + esc(t("admin.edit")) + "</button> <button class='btn2' data-act='rotate' data-id='" +
              esc(p.panel_id) + "'>" + esc(t("admin.rotate")) + "</button> " +
              "<button class='btn2 danger' data-act='revoke' data-id='" + esc(p.panel_id) + "'>" +
              esc(t("panels.revoke")) + "</button>";
@@ -7392,7 +7392,7 @@ if (typeof document !== "undefined") (function () {
            "<output data-vol-out='" + esc(prefix + "-" + level) + "' class='mono' " +
            "style='min-width:3.5em;text-align:right'>" + esc(value) + "</output>" +
            "<button class='btn2 small' data-vol-preview='" + esc(prefix + "-" + level) +
-           "' data-vol-sound='" + esc(level) + "'>" + esc(t("volume.preview")) + "</button></div>" +
+           "' data-vol-sound='" + esc(level) + "'>" + icon("player-play") + " " + esc(t("volume.preview")) + "</button></div>" +
            (inheritedFrom ? "<div class='dim fhint'>" +
              esc(fmt(t("volume.cluster_default"), { value: inheritedFrom[level] })) + "</div>" : "") +
            "</div>";
@@ -7803,7 +7803,7 @@ if (typeof document !== "undefined") (function () {
         esc(option.label) + "</option>";
     });
     h += "</select><button class='btn2 small' id='sosSoundPlay'>" +
-         esc(t("admin.audio_play")) + "</button></div></div>" +
+         icon("player-play") + " " + esc(t("admin.audio_play")) + "</button></div></div>" +
          "<div class='frow'><label class='flab'>" + esc(t("sos.alarm_volume")) + "</label>" +
          "<div style='display:flex;gap:10px;align-items:center'>" +
          "<input type='range' min='0' max='100' step='1' id='sosVolume' value='" +
@@ -8759,7 +8759,7 @@ if (typeof document !== "undefined") (function () {
            reorderButtonHtml("data-act='up' data-id='" + esc(id) + "'", true) +
            reorderButtonHtml("data-act='down' data-id='" + esc(id) + "'", false) +
            "<button class='btn2' data-act='edit' data-id='" + esc(id) + "'>" +
-           esc(t("admin.edit")) + "</button> " +
+           icon("pencil") + " " + esc(t("admin.edit")) + "</button> " +
            "<button class='btn2 danger' data-act='del' data-id='" + esc(id) + "'>" +
            esc(t("admin.delete")) + "</button></td></tr>";
     });
@@ -9444,7 +9444,7 @@ if (typeof document !== "undefined") (function () {
         out += "<option value='" + esc(opts[i].v) + "'" +
                (opts[i].v === value ? " selected" : "") + ">" + esc(opts[i].label) + "</option>";
       return out + "</select> <button class='btn2' data-soundpreview='" + id + "'>" +
-             esc(t("admin.audio_play")) + "</button>";
+             icon("player-play") + " " + esc(t("admin.audio_play")) + "</button>";
     }
     var h = "<div class='card'><h2>" + esc(t("admin.sound_manager")) +
       "</h2><div class='grid2'>" +
