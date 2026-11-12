@@ -136,6 +136,9 @@ namespace DoorbellApp
         private void UpdateQuickReplySheet()
         {
             QuickReplySheet.Visibility = QuickReplyPanel.Visibility;
+            // The announcement chip sits in the corner the sheet's Close button uses.
+            NoticeChip.Visibility = QuickReplySheet.Visibility == Visibility.Visible
+                ? Visibility.Collapsed : Visibility.Visible;
             if (QuickReplySheet.Visibility == Visibility.Visible)
             {
                 LayOutQuickReplySheet(ActualWidth > 0 ? ActualWidth : SystemParameters.PrimaryScreenWidth);

@@ -1700,6 +1700,7 @@
   <data name="settings_appearance" xml:space="preserve"><value>外观</value></data>
   <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>按时间切换</value></data>
   <data name="settings_appearance_auto_system" xml:space="preserve"><value>跟随设备设置</value></data>
+  <data name="settings_appearance_cluster" xml:space="preserve"><value>外观（所有设备的默认值）</value></data>
   <data name="settings_appearance_dark" xml:space="preserve"><value>深色</value></data>
   <data name="settings_appearance_dark_from" xml:space="preserve"><value>深色开始时间</value></data>
   <data name="settings_appearance_here" xml:space="preserve"><value>本设备的外观</value></data>
@@ -1799,6 +1800,7 @@
   <data name="settings_codec_h264" xml:space="preserve"><value>H.264</value></data>
   <data name="settings_codec_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
   <data name="settings_color_pick" xml:space="preserve"><value>选择颜色…</value></data>
+  <data name="settings_colour_clear" xml:space="preserve"><value>恢复自动</value></data>
   <data name="settings_configured" xml:space="preserve"><value>已设置</value></data>
   <data name="settings_contrast_warning" xml:space="preserve"><value>可能不易阅读（{0}:1）</value></data>
   <data name="settings_core_version" xml:space="preserve"><value>核心版本</value></data>
@@ -2339,6 +2341,8 @@
   <data name="settings_ui_font_scale" xml:space="preserve"><value>文字倍率（0.75–2）</value></data>
   <data name="settings_ui_foreground" xml:space="preserve"><value>文字颜色</value></data>
   <data name="settings_ui_lang" xml:space="preserve"><value>显示语言</value></data>
+  <data name="settings_ui_overrides" xml:space="preserve"><value>界面元素覆盖（本设备）</value></data>
+  <data name="settings_ui_overrides_note" xml:space="preserve"><value>留空则恢复默认。颜色格式为 #RRGGBB</value></data>
   <data name="settings_ui_radius" xml:space="preserve"><value>圆角（0–64）</value></data>
   <data name="settings_ui_scale" xml:space="preserve"><value>大小倍率（0.75–2）</value></data>
   <data name="settings_unit_fps" xml:space="preserve"><value>{0} fps</value></data>
@@ -2372,6 +2376,7 @@
   <data name="settings_visitor_layout_standard" xml:space="preserve"><value>標準</value></data>
   <data name="settings_volume_call" xml:space="preserve"><value>铃声音量</value></data>
   <data name="settings_volume_call_default" xml:space="preserve"><value>铃声音量</value></data>
+  <data name="settings_volume_defaults" xml:space="preserve"><value>音量默认值（所有设备）</value></data>
   <data name="settings_volume_idle" xml:space="preserve"><value>常规音量</value></data>
   <data name="settings_volume_idle_default" xml:space="preserve"><value>常规音量</value></data>
   <data name="settings_volume_inherit" xml:space="preserve"><value>使用集群默认值</value></data>

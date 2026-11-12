@@ -87,7 +87,12 @@ namespace DoorbellApp
                 case "home":
                     if (IncomingView.Visibility == Visibility.Visible) CloseIncoming(false);
                     if (InCallView.Visibility == Visibility.Visible) CloseInCall();
-                    return "ok";
+                    // A call the hooks presented never went through the SIP idle path that
+                    // normally brings the home screen back.
+                    _inCall = false;
+                    HideCallOverlay();
+                    ShowIdle();
+                    return IdleView.Visibility == Visibility.Visible ? "ok" : "error: not home";
                 case "zoom-scale":
                     // What the suite reads back after sending mouse-wheel input to the picture.
                     return "ok " + (InCallView.Visibility == Visibility.Visible

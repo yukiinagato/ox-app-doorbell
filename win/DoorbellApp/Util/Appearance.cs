@@ -131,7 +131,7 @@ namespace DoorbellApp.Util
                 effective = Effective(ConfiguredMode, config, localTime);
             }
             if (TestOverride == Light || TestOverride == Dark) effective = TestOverride;
-            Color? accent = CoreAccent(display);
+            Color? accent = HouseholdAccent(config, nodeId, display, effective == Light);
             if (_applied && effective == Current && accent == _accent) return false;
             Current = effective;
             ApplyTheme(accent);
@@ -139,19 +139,35 @@ namespace DoorbellApp.Util
         }
 
         /// <summary>
-        /// Core's accent for this household: the automatic accent it derived from the theme
-        /// background. Null (the Windows accent) when core publishes none, or when it says it
-        /// never read the configured background image and the value describes something else.
+        /// The accent Fluent controls take. Core's automatic accent is not used: only a
+        /// call-button colour an administrator set (this device's, then the cluster's) that
+        /// differs from the automatic one and stands out from the page. Null means the Windows
+        /// accent, which ModernWpf falls back to by itself. The door-station Call button is
+        /// painted separately from Core's call-button colours (ThemeContrast.CallButton).
         /// </summary>
-        private static Color? CoreAccent(Dictionary<string, object> display)
+        private static Color? HouseholdAccent(Dictionary<string, object> config, string nodeId,
+                                              Dictionary<string, object> display, bool light)
         {
-            if (display == null || !ThemeContrast.CoreSampledBackground(display)) return null;
-            object value = CoreClient.Dig(display, "theme.auto_accent.call_button");
+            object chosen = null;
+            if (!string.IsNullOrEmpty(nodeId))
+                chosen = CoreClient.Dig(config, "devices." + nodeId + ".local.theme.call_button_bg");
+            if (chosen == null) chosen = CoreClient.Dig(config, "display.theme.call_button_bg");
             Color parsed;
-            if (value != null && ThemeContrast.TryParse(value.ToString(), out parsed) &&
-                parsed.A == 255) return parsed;
-            return null;
+            if (chosen == null || !ThemeContrast.TryParse(chosen.ToString(), out parsed)) return null;
+            int? automatic = null;
+            object auto = CoreClient.Dig(display, "theme.auto_accent.call_button");
+            Color computed;
+            if (auto != null && ThemeContrast.TryParse(auto.ToString(), out computed))
+                automatic = RoleContrast.Rgb(computed.R, computed.G, computed.B);
+            Color page = Parse(ThemeBrushes[0, light ? 2 : 3]);
+            int? accent = RoleContrast.ChooseAccent(
+                RoleContrast.Rgb(parsed.R, parsed.G, parsed.B), automatic,
+                RoleContrast.Rgb(page.R, page.G, page.B));
+            return accent.HasValue ? (Color?)parsed : null;
         }
+
+        /// <summary>Raised after the theme or accent changed and the tokens were re-pointed.</summary>
+        public static event Action Changed;
 
         private static void ApplyTheme(Color? accent)
         {
@@ -181,6 +197,8 @@ namespace DoorbellApp.Util
                 {
                     var current = Application.Current == null ? null : Application.Current.Resources;
                     if (current != null) PointTokens(current, Current == Light);
+                    var changed = Changed;
+                    if (changed != null) changed();
                 }), System.Windows.Threading.DispatcherPriority.Background);
         }
 

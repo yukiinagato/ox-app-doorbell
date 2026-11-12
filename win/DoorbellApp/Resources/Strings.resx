@@ -1700,6 +1700,7 @@ ON</value></data>
   <data name="settings_appearance" xml:space="preserve"><value>外観</value></data>
   <data name="settings_appearance_auto_schedule" xml:space="preserve"><value>時刻で切り替える</value></data>
   <data name="settings_appearance_auto_system" xml:space="preserve"><value>端末の設定に合わせる</value></data>
+  <data name="settings_appearance_cluster" xml:space="preserve"><value>外観（全端末の既定）</value></data>
   <data name="settings_appearance_dark" xml:space="preserve"><value>ダーク</value></data>
   <data name="settings_appearance_dark_from" xml:space="preserve"><value>ダークにする時刻</value></data>
   <data name="settings_appearance_here" xml:space="preserve"><value>この端末の外観</value></data>
@@ -1799,6 +1800,7 @@ ON</value></data>
   <data name="settings_codec_h264" xml:space="preserve"><value>H.264</value></data>
   <data name="settings_codec_mjpeg" xml:space="preserve"><value>MJPEG</value></data>
   <data name="settings_color_pick" xml:space="preserve"><value>色を選ぶ…</value></data>
+  <data name="settings_colour_clear" xml:space="preserve"><value>自動に戻す</value></data>
   <data name="settings_configured" xml:space="preserve"><value>設定済み</value></data>
   <data name="settings_contrast_warning" xml:space="preserve"><value>読みにくい可能性があります ({0}:1)</value></data>
   <data name="settings_core_version" xml:space="preserve"><value>コアのバージョン</value></data>
@@ -2339,6 +2341,8 @@ ON</value></data>
   <data name="settings_ui_font_scale" xml:space="preserve"><value>文字の倍率 (0.75–2)</value></data>
   <data name="settings_ui_foreground" xml:space="preserve"><value>文字色</value></data>
   <data name="settings_ui_lang" xml:space="preserve"><value>表示言語</value></data>
+  <data name="settings_ui_overrides" xml:space="preserve"><value>UI 要素の上書き（この端末）</value></data>
+  <data name="settings_ui_overrides_note" xml:space="preserve"><value>空欄にすると既定に戻ります。色は #RRGGBB</value></data>
   <data name="settings_ui_radius" xml:space="preserve"><value>角の丸み (0–64)</value></data>
   <data name="settings_ui_scale" xml:space="preserve"><value>大きさの倍率 (0.75–2)</value></data>
   <data name="settings_unit_fps" xml:space="preserve"><value>{0} fps</value></data>
@@ -2372,6 +2376,7 @@ ON</value></data>
   <data name="settings_visitor_layout_standard" xml:space="preserve"><value>標準</value></data>
   <data name="settings_volume_call" xml:space="preserve"><value>呼出音量</value></data>
   <data name="settings_volume_call_default" xml:space="preserve"><value>呼出音量</value></data>
+  <data name="settings_volume_defaults" xml:space="preserve"><value>音量の既定値（全端末）</value></data>
   <data name="settings_volume_idle" xml:space="preserve"><value>通常音量</value></data>
   <data name="settings_volume_idle_default" xml:space="preserve"><value>通常音量</value></data>
   <data name="settings_volume_inherit" xml:space="preserve"><value>クラスタの既定に合わせる</value></data>

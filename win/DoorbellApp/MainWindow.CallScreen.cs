@@ -21,8 +21,7 @@ namespace DoorbellApp
             _noticeChipDoor = door ?? "";
             CallOverlay.Visibility = Visibility.Visible;
             NoticePopover.Visibility = Visibility.Collapsed;
-            VideoStatsCard.Visibility = _showVideoStats ?
-                Visibility.Visible : Visibility.Collapsed;
+            ShowVideoStatsCard();
             RefreshAdminLink();
             RefreshCallNoticeChip();
         }
@@ -38,8 +37,7 @@ namespace DoorbellApp
         private void OnVideoStatsClick(object sender, MouseButtonEventArgs e)
         {
             _showVideoStats = !_showVideoStats;
-            VideoStatsCard.Visibility = _showVideoStats ?
-                Visibility.Visible : Visibility.Collapsed;
+            ShowVideoStatsCard();
             SaveVideoStatsPreference();
         }
 
@@ -59,6 +57,7 @@ namespace DoorbellApp
             if (streamer == null && !h264Active && !nativeActive)
             {
                 VideoStatsText.Text = "";
+                ShowVideoStatsCard();
                 return;
             }
             VideoStats stats = nativeActive ? native.Stats() :
@@ -73,6 +72,14 @@ namespace DoorbellApp
                 stats.Fps.ToString("0.0") : "—";
             string dropped = stats == null ? "0" : stats.Dropped.ToString();
             VideoStatsText.Text = Texts.T("video.stats", codec, latency, jitter, fps, dropped);
+            ShowVideoStatsCard();
+        }
+
+        /// <summary>The statistics line shows only when enabled and when there is one to show.</summary>
+        private void ShowVideoStatsCard()
+        {
+            VideoStatsCard.Visibility = _showVideoStats && VideoStatsText.Text.Length != 0
+                ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ApplyMonitorLabel()

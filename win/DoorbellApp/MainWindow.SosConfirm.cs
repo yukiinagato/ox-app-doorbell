@@ -28,6 +28,7 @@ namespace DoorbellApp
                 Texts.T("sos.accessibility_start"));
             System.Windows.Automation.AutomationProperties.SetHelpText(SosButton,
                 Texts.T("sos.accessibility_hint"));
+            ApplyOutlineStates();
             SosConfirmTitle.Text = Texts.T("sos.confirm_title");
             SosConfirmBody.Text = Texts.T("sos.hint");
             SosConfirmSend.Content = Texts.T("sos.send");
@@ -38,6 +39,19 @@ namespace DoorbellApp
             EmergencyClearBack.Content = Texts.T("sos.abort");
             System.Windows.Automation.AutomationProperties.SetName(EmergencyClearSlide,
                 Texts.T("sos.slide_to_clear"));
+        }
+
+        /// <summary>
+        /// The outlined buttons declared in XAML keep their role colour while hovered or
+        /// pressed; redone whenever the appearance changes, because the brushes are per theme.
+        /// </summary>
+        private void ApplyOutlineStates()
+        {
+            Ui.Fluent.KeepOutlineStates(SosButton, "NegativeText");
+            Ui.Fluent.KeepOutlineStates(SosConfirmSend, "NegativeText");
+            Ui.Fluent.KeepOutlineStates(IgnoreButton, "NegativeText");
+            Ui.Fluent.KeepOutlineStates(OpenDoorButton, "Warning");
+            Ui.Fluent.KeepOutlineStates(InCallOpenDoorButton, "Warning");
         }
 
         /// <summary>SOS can be started: configured for this device, and not already under way.</summary>

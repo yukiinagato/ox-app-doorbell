@@ -42,6 +42,22 @@ namespace DoorbellApp.Util
             return Rgb(mix(16), mix(8), mix(0));
         }
 
+        /// <summary>Opacity of the hover and pressed tint behind an outlined button's label.</summary>
+        public const double OutlineStateTint = 0.04;
+
+        /// <summary>
+        /// The household accent, or null for the Windows accent. Core's automatically computed
+        /// accent never becomes the app accent (on a default cluster it is a brown); only a
+        /// call-button colour an administrator chose does, and only when it differs from the
+        /// automatic value and stands out at least 3:1 from the page.
+        /// </summary>
+        public static int? ChooseAccent(int? chosen, int? automatic, int page)
+        {
+            if (!chosen.HasValue) return null;
+            if (automatic.HasValue && chosen.Value == automatic.Value) return null;
+            return Ratio(chosen.Value, page) >= OutlineMinimum ? chosen : null;
+        }
+
         /// <summary>
         /// The colour itself when it already reads against the surface; otherwise the same hue
         /// moved towards white on a dark surface, or towards black on a light one, in small

@@ -55,6 +55,31 @@ namespace DoorbellApp.Ui
             button.Background = Brushes.Transparent;
             button.SetResourceReference(Control.ForegroundProperty, "NegativeText");
             button.SetResourceReference(Control.BorderBrushProperty, "NegativeText");
+            KeepOutlineStates(button, "NegativeText");
+        }
+
+        /// <summary>
+        /// Keeps an outlined button readable while hovered or pressed. The Fluent template
+        /// swaps in its own grey fill and ink for those states; these per-button resources
+        /// replace them with a faint tint of the text ink and the button's own role colour, so
+        /// the label stays at 4.5:1. Call it again after the appearance changes: the brushes
+        /// are taken from the current theme.
+        /// </summary>
+        public static void KeepOutlineStates(Button button, string inkKey)
+        {
+            var ink = button.TryFindResource(inkKey) as Brush;
+            var text = button.TryFindResource("Fg") as SolidColorBrush;
+            if (ink == null || text == null) return;
+            var tint = new SolidColorBrush(Color.FromArgb(
+                (byte)System.Math.Round(255 * DoorbellApp.Util.RoleContrast.OutlineStateTint),
+                text.Color.R, text.Color.G, text.Color.B));
+            tint.Freeze();
+            foreach (string state in new[] { "PointerOver", "Pressed" })
+            {
+                button.Resources["ButtonBackground" + state] = tint;
+                button.Resources["ButtonForeground" + state] = ink;
+                button.Resources["ButtonBorderBrush" + state] = ink;
+            }
         }
 
         /// <summary>A switch without the library's own On/Off caption; the row label says it.</summary>

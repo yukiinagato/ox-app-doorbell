@@ -40,6 +40,19 @@ internal static class RoleContrastTests
         int lifted = RoleContrast.EnsureReadable(0x0078D4, 0x2B2B2B, 4.5);
         Check((lifted & 0xFF) >= ((lifted >> 16) & 0xFF), "the lifted blue is still blue-dominant");
 
+        // The household accent: only a colour an administrator chose, never Core's automatic
+        // one, and only when it stands out from the page.
+        Check(RoleContrast.ChooseAccent(null, 0x8A5A00, 0x000000) == null, "no chosen colour");
+        Check(RoleContrast.ChooseAccent(0x8A5A00, 0x8A5A00, 0x000000) == null,
+              "the automatic accent became the app accent");
+        Check(RoleContrast.ChooseAccent(0x0A84FF, 0x8A5A00, 0x000000) == 0x0A84FF, "a chosen colour");
+        Check(RoleContrast.ChooseAccent(0x0A84FF, null, 0xFFFFFF) == 0x0A84FF,
+              "a chosen colour without an automatic value");
+        Check(RoleContrast.ChooseAccent(0x111111, 0x8A5A00, 0x000000) == null,
+              "a colour that vanishes into the page");
+        Check(RoleContrast.ChooseAccent(0xF8F8F8, 0x8A5A00, 0xFFFFFF) == null,
+              "a colour that vanishes into a light page");
+
         Console.WriteLine("Windows role contrast tests: " + _assertions + " assertions passed");
         return 0;
     }

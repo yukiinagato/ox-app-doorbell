@@ -388,6 +388,8 @@ namespace DoorbellApp
                 System.Threading.Interlocked.Increment(ref _callViewRevision);
             };
 
+            Appearance.Changed += ApplyOutlineStates;
+            Closed += (s, e) => Appearance.Changed -= ApplyOutlineStates;
             PairingOverlay.DismissRequested += OnPairingDismissed;
             // The banner is drawn over the window; the screens move down by its height while
             // it shows, so it covers nothing.

@@ -2621,8 +2621,22 @@ class WindowsContracts(unittest.TestCase):
                                  appearance.index("private static void PointTokens(")]
         self.assertIn("ModernWpf.ThemeManager.Current.ApplicationTheme = light", apply_theme)
         self.assertIn("ModernWpf.ThemeManager.Current.AccentColor = accent;", apply_theme)
-        self.assertIn('CoreClient.Dig(display, "theme.auto_accent.call_button")', appearance)
-        self.assertIn("!ThemeContrast.CoreSampledBackground(display)", appearance)
+        # Core's automatic accent never becomes the app accent (it is a brown on a default
+        # cluster): only an administrator's call-button colour that differs from it does, and
+        # the Windows accent applies otherwise. The automatic value is read only to compare.
+        accent = appearance[appearance.index("private static Color? HouseholdAccent("):
+                            appearance.index("public static event Action Changed;")]
+        self.assertIn('".local.theme.call_button_bg"', accent)
+        self.assertIn('"display.theme.call_button_bg"', accent)
+        self.assertIn('CoreClient.Dig(display, "theme.auto_accent.call_button")', accent)
+        self.assertIn("RoleContrast.ChooseAccent(", accent)
+        self.assertIn("return accent.HasValue ? (Color?)parsed : null;", accent)
+        rule = read("win/DoorbellApp/Util/RoleContrast.cs")
+        choose = rule[rule.index("public static int? ChooseAccent("):]
+        choose = choose[:choose.index("\n        }\n")]
+        self.assertIn("if (automatic.HasValue && chosen.Value == automatic.Value) return null;",
+                      choose)
+        self.assertIn("Ratio(chosen.Value, page) >= OutlineMinimum", choose)
         for path in sorted((WIN / "DoorbellApp").rglob("*.cs")):
             if path.name == "Appearance.cs":
                 continue
@@ -3197,6 +3211,16 @@ class WindowsContracts(unittest.TestCase):
                 with self.subTest(look=look, fill=fill):
                     self.assertGreaterEqual(
                         self._ratio(white, self._over(tables[look][fill], page)), 4.5)
+            # Outlined buttons while hovered or pressed: the label over a 4 % ink tint on
+            # the card still reads.
+            rule = read("win/DoorbellApp/Util/RoleContrast.cs")
+            tint = float(re.search(r"OutlineStateTint = ([0-9.]+);", rule).group(1))
+            ink = self._over(brushes["Fg"][look], card)
+            hovered = tuple(round(i * tint + c * (1 - tint)) for i, c in zip(ink, card))
+            for role in ("NegativeText", "Warn"):
+                with self.subTest(look=look, role=role, on="hovered outline"):
+                    self.assertGreaterEqual(
+                        self._ratio(self._over(tables[look][role], hovered), hovered), 4.5)
         # The complaint this guards against: the dark negative fill is not a text colour.
         self.assertLess(self._ratio(self._over(tables["dark"]["Danger"], (43, 43, 43)),
                                     (43, 43, 43)), 4.5)
