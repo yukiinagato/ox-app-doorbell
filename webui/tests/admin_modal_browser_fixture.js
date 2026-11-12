@@ -62,8 +62,9 @@ const server = http.createServer((req,res) => {
     html=html.replace('<script src="/panel/playback.js">',setup+'<script src="/panel/playback.js">').replace('src="app.js"','src="app.js?phase='+phase+'"').replace('</body>',controls+'</body>');
     res.writeHead(200,{"Content-Type":"text/html","Cache-Control":"no-store"});res.end(html);return;
   }
-  const file=path.resolve(root,"webui",url.pathname.replace(/^\//,""));
+  let file=path.resolve(root,"webui",url.pathname.replace(/^\//,""));
+  if(url.pathname==="/layout.css")file=path.join(root,"webui/admin/layout.css");
   if(!file.startsWith(path.join(root,"webui")+path.sep)||!fs.existsSync(file)){res.writeHead(404);res.end();return;}
-  res.writeHead(200,{"Content-Type":"application/javascript"});res.end(fs.readFileSync(file));
+  res.writeHead(200,{"Content-Type":file.endsWith(".css")?"text/css":"application/javascript"});res.end(fs.readFileSync(file));
 });
 server.listen(18764,"127.0.0.1",()=>console.log("Admin draft fixture: http://127.0.0.1:18764/"));

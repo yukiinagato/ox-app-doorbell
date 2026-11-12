@@ -67,7 +67,7 @@ const server=http.createServer((req,res)=>{
   if(url.pathname==='/tests'){
     res.writeHead(200,{'Content-Type':'text/html','Cache-Control':'no-store'});res.end('<!doctype html><html lang="en"><title>T30 production import tests</title><button id="run">Run import tests</button><pre id="result"></pre><iframe id="subject" title="Production administration page" style="width:1100px;height:760px"></iframe><script>'+cases+'\ndocument.getElementById("run").onclick=async function(){this.disabled=true;const result={scope:"actual production DOM with controlled XHR; not Core HTTP end-to-end",source_sha256:'+JSON.stringify(sha(app))+',cases_sha256:'+JSON.stringify(sha(cases))+',recorded_at:new Date().toISOString(),user_agent:navigator.userAgent,results:await runAdminImportTests()};document.getElementById("result").textContent=JSON.stringify(result,null,2);await fetch("/results",{method:"POST",body:JSON.stringify(result)});this.disabled=false;};</script></html>');return;
   }
-  let file=path.resolve(root,'webui',url.pathname.replace(/^\//,''));if(url.pathname==='/style.css')file=path.join(root,'webui/admin/style.css');
+  let file=path.resolve(root,'webui',url.pathname.replace(/^\//,''));if(url.pathname==='/layout.css')file=path.join(root,'webui/admin/layout.css');
   if(!file.startsWith(path.join(root,'webui')+path.sep)||!fs.existsSync(file)){res.writeHead(404);res.end();return;}
   res.writeHead(200,{'Content-Type':file.endsWith('.css')?'text/css':'application/javascript'});res.end(fs.readFileSync(file));
 });server.listen(18770,'127.0.0.1',()=>console.log('T30 controlled fixture: http://127.0.0.1:18770/tests'));

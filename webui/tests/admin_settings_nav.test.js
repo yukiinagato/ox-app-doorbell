@@ -30,7 +30,12 @@ for (const tab of tabs) assert.strictEqual(L.settingsRoute(L.settingsHash(tab)).
 
 assert.strictEqual(L.settingsView(1280, ""), "split");
 assert.strictEqual(L.settingsView(L.SETTINGS_SPLIT_MIN_PX, "system"), "split");
-assert.strictEqual(L.settingsView(L.SETTINGS_SPLIT_MIN_PX - 1, ""), "list");
+// Three size classes: expanded sidebar, medium icon rail, compact list/detail drill-down.
+assert.strictEqual(L.SETTINGS_SPLIT_MIN_PX, 900);
+assert.strictEqual(L.SETTINGS_RAIL_MIN_PX, 600);
+assert.strictEqual(L.settingsView(L.SETTINGS_SPLIT_MIN_PX - 1, ""), "rail");
+assert.strictEqual(L.settingsView(L.SETTINGS_RAIL_MIN_PX, "system"), "rail");
+assert.strictEqual(L.settingsView(L.SETTINGS_RAIL_MIN_PX - 1, ""), "list");
 assert.strictEqual(L.settingsView(375, "system"), "detail");
 
 const items = [{ tab: "theme", label: "Theme and display", group: "Appearance" },
@@ -71,6 +76,22 @@ assert(html.includes('<link rel="stylesheet" href="layout.css">'));
 assert(css.includes("(max-width: 899.98px)") && css.includes("prefers-reduced-motion") &&
        css.includes("prefers-color-scheme: light") && css.includes("safe-area-inset-bottom"));
 assert(/--tap:44px/.test(css), "touch targets are 44 px");
+assert(css.includes("(min-width: 600px) and (max-width: 899.98px)") && css.includes("(max-width: 599.98px)"),
+  "medium rail and compact drill-down have their own layouts");
+assert(css.includes(':root:not([data-theme="dark"])') && css.includes(':root[data-theme="light"]'),
+  "an appearance fixed by Core overrides the system colour scheme");
+assert(css.includes('[data-ui="retro"]'), "the retro theme still restyles the page");
+assert(css.includes("accent-color:var(--acc)"), "native controls take the accent");
+assert(css.includes("table.stacked") && source.includes('classList.add("stacked")'),
+  "tables that do not fit become stacked rows");
+// Shell contract: native dialog editor, drawer toggle, sticky header action, preferences.
+assert(/<dialog id="modal" class="hidden"/.test(html), "the editor is a native dialog, hidden until opened");
+for (const id of ["navToggle", "navScrim", "navBack", "detailTitle", "primaryAction", "langSel", "uiSel",
+                  "navSearch", "peerCards", "bridgeInfo", "localAddrs", "liveGrid", "adminEmergencyCancel"])
+  assert(html.includes('id="' + id + '"'), "shell element #" + id);
+assert(source.includes('typeof el.showModal === "function"'), "browsers without dialog keep the overlay");
+assert(!/style="/.test(html.slice(html.indexOf("<!-- END generated icon sprite -->"))),
+  "page markup carries no inline styles");
 for (const page of ["door", "monitor", "call"]) {
   const p = fs.readFileSync(path.join(__dirname, "../panel/" + page + ".html"), "utf8");
   assert(p.includes('<link rel="stylesheet" href="/panel/panel.css">'), page + " loads panel.css");

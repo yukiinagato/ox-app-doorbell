@@ -9,243 +9,20 @@
 
   (function () {
     try {
+      var root = document.documentElement;
       var u = localStorage.getItem("db_admin_ui");
-      if (u) document.documentElement.setAttribute("data-ui", u);
+      if (u) root.setAttribute("data-ui", u);
+      var theme = localStorage.getItem("db_admin_theme");
+      if (theme === "light" || theme === "dark") root.setAttribute("data-theme", theme);
     } catch (e) {}
   })();
 </script>
 <style>
-  :root { --bg:#101418; --card:#1a2027; --fg:#e8edf2; --dim:#8a97a5; --acc:#4da3ff; --warn:#ffb454; --err:#ff6b6b; --ok:#5dd39e;
-          --line:#2a333d; --line2:#242d36; --field:#0c1014; --chip:#243040; --card2:#141a21; --on-acc:#04121f; }
-  * { box-sizing:border-box; margin:0; }
-  body { background:var(--bg); color:var(--fg); font-family:"Hiragino Sans","Yu Gothic UI",system-ui,sans-serif; font-size:15px; }
-  header { display:flex; align-items:center; gap:12px; padding:10px 16px; background:var(--card); border-bottom:1px solid var(--line); }
-  header h1 { font-size:17px; font-weight:600; }
-  header .node { color:var(--dim); font-size:12px; margin-left:auto; }
-  nav { display:flex; gap:4px; padding:8px 12px; flex-wrap:wrap; }
-  nav button { background:none; border:1px solid var(--line); color:var(--fg); padding:7px 14px; border-radius:8px; cursor:pointer; font-size:14px; display:inline-flex; align-items:center; gap:6px; }
-  nav button.on { background:var(--acc); border-color:var(--acc); color:var(--on-acc); font-weight:600; }
-  .ic { width:1.05em; height:1.05em; vertical-align:-0.16em; fill:none;
-        stroke:currentColor; flex:none; }
-  .btn .ic, .btn2 .ic { vertical-align:-0.16em; }
-  main { padding:12px 16px 40px; max-width:960px; margin:0 auto; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; margin-bottom:12px; }
-  .card h2 { font-size:15px; font-weight:600; margin-bottom:8px; }
-  .chead { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; }
-  .chead h2 { margin-bottom:0; }
-  table { width:100%; border-collapse:collapse; font-size:13px; }
-  th,td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--line2); }
-  th { color:var(--dim); font-weight:500; }
-  .ok { color:var(--ok); } .warn { color:var(--warn); } .err { color:var(--err); } .dim { color:var(--dim); }
-  .tag { display:inline-block; padding:1px 8px; border-radius:99px; font-size:11px; border:1px solid var(--line); }
-  .chip { display:inline-block; padding:2px 10px; margin:2px 4px 2px 0; border-radius:99px; font-size:12px; background:var(--chip); }
-  textarea { width:100%; min-height:300px; background:var(--field); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:10px; font:12px/1.5 ui-monospace,Menlo,monospace; }
-  input,select { background:var(--field); color:var(--fg); border:1px solid var(--line); border-radius:8px; padding:9px 12px; font-size:15px; }
-  .dropzone { border:2px dashed var(--line); border-radius:10px; padding:18px; text-align:center; color:var(--dim); margin:8px 0; cursor:pointer; user-select:none; transition:border-color .12s, background .12s; }
-  .dropzone.drag { border-color:var(--acc); background:rgba(90,200,250,0.08); color:var(--fg); }
-  input[type=password],input[type=text],input[type=number],input[type=time] { width:100%; }
-  input[type=checkbox],input[type=radio] { width:auto; }
-  .btn { background:var(--acc); color:var(--on-acc); border:none; border-radius:8px; padding:9px 18px; font-size:14px; font-weight:600; cursor:pointer; }
-  .btn.small { padding:6px 14px; font-size:13px; }
-  .btn.ghost { background:none; color:var(--fg); border:1px solid var(--line); }
-  .btn2 { background:none; color:var(--acc); border:1px solid var(--line); border-radius:7px; padding:4px 10px; font-size:12px; cursor:pointer; }
-  .btn2.danger { color:var(--err); }
-  .ops { white-space:nowrap; }
-  tr.offline td { opacity:.45; }
-  .card.rule.offline { opacity:.55; }
-  .frow { margin-bottom:10px; }
-  .flab { display:block; font-size:12px; color:var(--dim); margin-bottom:4px; }
-  .fhint { font-size:11px; margin-top:3px; }
-  .frow-check { padding:4px 0; }
-  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:0 14px; }
-  .mcwrap { display:inline-flex; flex-wrap:wrap; gap:2px 10px; }
-  .mc { display:inline-flex; align-items:center; gap:4px; font-size:13px; cursor:pointer; padding:2px 0; }
-  .arow { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:6px 0; border-bottom:1px dashed var(--line2); }
-  .arow input[type=time] { width:auto; padding:5px 8px; }
-  .arow input[type=text] { width:auto; padding:5px 8px; }
-  .arow select { padding:5px 8px; }
-  .mono { font-family:ui-monospace,Menlo,monospace; font-size:13px; word-break:break-all; }
-  .pin { font-size:52px; font-weight:700; letter-spacing:10px; text-align:center; margin:14px 0 6px; color:var(--acc); }
-  #login { max-width:340px; margin:14vh auto; }
-  #login h2 { margin-bottom:14px; font-size:16px; }
-  #login .row { margin-bottom:10px; }
+  /* Structural rules the page needs before layout.css arrives: nothing flashes unhidden and an
+     open editor always covers the page. Everything else lives in layout.css. */
   .hidden { display:none !important; }
-  #msg { position:fixed; bottom:14px; left:50%; transform:translateX(-50%); background:var(--chip); padding:8px 18px; border-radius:8px; font-size:13px; opacity:0; transition:opacity .2s; z-index:30; }
-  #modal { position:fixed; inset:0; background:rgba(4,8,12,.62); z-index:20; overflow:auto; padding:5vh 12px; }
-  .mbox { max-width:640px; margin:0 auto; }
-  .mbtns { display:flex; gap:8px; margin-top:14px; }
-
-  .scrollx { overflow-x:auto; }
-  .bounded-table { table-layout:fixed; }
-  .bounded-table th,.bounded-table td { min-width:0; vertical-align:top; }
-  .breakable,.peer-address { overflow-wrap:anywhere; word-break:break-word; }
-  .peer-address { display:block; line-height:1.35; }
-  .event-detail { white-space:pre-wrap; overflow-wrap:anywhere; word-break:break-word; }
-  .live-card { min-width:0; }
-  .live-frame { position:relative; width:100%; aspect-ratio:4/3; overflow:hidden;
-                border-radius:6px; background:#000; transition:aspect-ratio .12s ease; }
-  .live-frame>img,.live-frame>video { position:absolute; left:50%; top:50%; width:100%; height:100%;
-                object-fit:contain; background:#000; transform:translate(-50%,-50%); transform-origin:center; }
-  .agrid { display:grid; grid-template-columns:repeat(auto-fill,minmax(210px,1fr)); gap:10px; }
-  .acard { background:var(--card2); border:1px solid var(--line); border-radius:9px; padding:9px; }
-  .athumb { width:100%; height:92px; border-radius:6px; background:var(--field) center/cover no-repeat;
-            display:block; }
-  .acard audio { width:100%; margin-top:6px; }
-  .acard .lbl { font-size:13px; margin:6px 0 2px; word-break:break-all; }
-  .refs { font-size:11px; line-height:1.5; }
-  .prog { height:6px; background:var(--field); border-radius:4px; overflow:hidden; margin-top:8px;
-          display:none; }
-  .prog > div { height:100%; width:0; background:var(--acc); }
-  input[type=file] { background:none; border:none; padding:0; font-size:13px; }
-  input[type=color] { width:56px; height:36px; padding:2px; vertical-align:middle; }
-  .swatches { display:inline-block; vertical-align:middle; margin-left:8px; }
-  .sw { width:24px; height:24px; border-radius:6px; border:1px solid var(--line); padding:0;
-        cursor:pointer; margin-right:4px; vertical-align:middle; }
-
-  .tprev { position:relative; width:300px; height:210px; border-radius:12px; overflow:hidden;
-           border:1px solid var(--line); background:#101418 center/cover no-repeat; color:#fff;
-           text-shadow:0 1px 3px rgba(0,0,0,.75); text-align:center; }
-  /* The darkening layer sits over the background and under everything drawn on it, exactly
-     where a shell composites it. */
-  .tprev .tbackdrop { position:absolute; inset:0; pointer-events:none; }
-  .tprev .inner { position:absolute; inset:0; display:flex; flex-direction:column;
-                  align-items:center; justify-content:center; gap:9px; }
-  .tprev .pclock { font-size:28px; font-weight:700; letter-spacing:1px; }
-  .tprev .pcall { width:66%; padding:13px 0; border:2px solid var(--acc); border-radius:12px;
-                  background:rgba(16,20,24,.5); font-size:15px; font-weight:700; }
-  .tprev .pprow { display:flex; gap:6px; }
-  .tprev .pp { width:32px; height:32px; border-radius:8px; background:rgba(16,20,24,.5);
-               border:1px solid rgba(255,255,255,.28); font-size:15px; line-height:30px; }
-  .i18ntbl th { white-space:nowrap; }
-  .i18ntbl td { vertical-align:top; }
-  .i18ntbl textarea { min-height:0; height:36px; resize:vertical; padding:7px 8px;
-                      font:13px/1.4 "Hiragino Sans","Yu Gothic UI",system-ui,sans-serif; }
-  .i18ntbl .k { font-family:ui-monospace,Menlo,monospace; font-size:12px; white-space:nowrap;
-                padding-top:14px; }
-  .spin { display:inline-block; width:11px; height:11px; margin-right:7px; border-radius:50%;
-          border:2px solid var(--line); border-top-color:var(--acc); vertical-align:-1px;
-          animation:spin 0.9s linear infinite; }
-  @keyframes spin { to { transform:rotate(360deg); } }
-  .pairrow { display:flex; justify-content:space-between; align-items:center; gap:10px;
-             padding:9px; border:1px solid var(--line); border-radius:8px; margin-bottom:6px; }
-  .pairwho { min-width:0; word-break:break-word; }
-  .pairaddr { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
-  .qrbox { margin-top:12px; text-align:center; }
-  .qrbox canvas { image-rendering:pixelated; border-radius:6px; background:#fff; padding:0;
-                  max-width:280px; }
-  .qrph { display:flex; align-items:center; justify-content:center; width:100%; max-width:280px;
-          height:240px; margin:0 auto; border:1px dashed var(--line); border-radius:6px; }
-  .pairscan { position:fixed; inset:0; background:#04080c; z-index:40; display:flex;
-              align-items:center; justify-content:center; }
-  .pairscan video { width:100%; height:100%; object-fit:cover; }
-  .pairscanframe { position:absolute; width:min(64vw,64vh); height:min(64vw,64vh);
-                   border:3px solid var(--acc); border-radius:14px; pointer-events:none; }
-  .pairscanbar { position:absolute; left:0; right:0; bottom:0; padding:14px 16px;
-                 background:rgba(4,8,12,.78); display:flex; align-items:center; gap:12px;
-                 justify-content:space-between; color:#e8edf2; font-size:13px; }
-  [data-ui="retro"] .pairrow { border-color:#808080; }
-  [data-ui="retro"] .qrph { border-color:#808080; }
-  .iconpick { margin-top:6px; }
-  .iconpick button { font-size:17px; padding:3px 8px; margin:0 4px 4px 0; }
-
-
-  [data-ui="retro"] body {
-    background:#008080;
-    color:#000;
-    font-family:"MS Sans Serif","Tahoma","Segoe UI",system-ui,sans-serif;
-    font-size:13px;
-
-    -webkit-font-smoothing:none;
-    -moz-osx-font-smoothing:unset;
-    font-smooth:never;
-    text-rendering:optimizeSpeed;
-  }
-
-  [data-ui="retro"] * { border-radius:0 !important; }
-
-  [data-ui="retro"] .card,
-  [data-ui="retro"] nav button,
-  [data-ui="retro"] .btn,
-  [data-ui="retro"] .btn2,
-  [data-ui="retro"] .tag,
-  [data-ui="retro"] .chip,
-  [data-ui="retro"] .acard,
-  [data-ui="retro"] .sw,
-  [data-ui="retro"] .mbox {
-    background:#c0c0c0; color:#000; border:none;
-    box-shadow: inset -1px -1px 0 #000, inset 1px 1px 0 #dfdfdf,
-                inset -2px -2px 0 #808080, inset 2px 2px 0 #fff;
-  }
-
-  [data-ui="retro"] .card,
-  [data-ui="retro"] .mbox,
-  [data-ui="retro"] .acard {
-    box-shadow: inset -1px -1px 0 #000, inset 1px 1px 0 #dfdfdf,
-                inset -2px -2px 0 #808080, inset 2px 2px 0 #fff,
-                4px 4px 0 0 rgba(0,0,0,.5);
-    padding:12px;
-  }
-
-  [data-ui="retro"] input,
-  [data-ui="retro"] select,
-  [data-ui="retro"] textarea,
-  [data-ui="retro"] .dropzone,
-  [data-ui="retro"] .athumb,
-  [data-ui="retro"] .prog,
-  [data-ui="retro"] pre.mono {
-    background:#fff; color:#000; border:none;
-    box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #fff,
-                inset 2px 2px 0 #000, inset -2px -2px 0 #dfdfdf;
-  }
-  [data-ui="retro"] input[type=file] { background:none; box-shadow:none; }
-  [data-ui="retro"] input[type=checkbox],
-  [data-ui="retro"] input[type=radio] { box-shadow:none; }
-
-  [data-ui="retro"] header {
-    background:#000080; color:#fff; border-bottom:2px solid #000;
-    box-shadow: 0 2px 0 0 rgba(0,0,0,.5);
-  }
-  [data-ui="retro"] header h1 { color:#fff; }
-  [data-ui="retro"] header .tag { background:#000080; color:#fff; box-shadow:none; border:1px solid #fff; }
-  [data-ui="retro"] header .node { color:#c0d0ff; }
-
-  [data-ui="retro"] nav { gap:2px; padding:6px 10px; }
-  [data-ui="retro"] nav button { color:#000; padding:5px 12px; font-size:13px; }
-  [data-ui="retro"] nav button.on {
-    background:#c0c0c0; color:#000; font-weight:700;
-    box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #fff,
-                inset 2px 2px 0 #000, inset -2px -2px 0 #dfdfdf;
-  }
-
-  [data-ui="retro"] .btn:active,
-  [data-ui="retro"] .btn2:active,
-  [data-ui="retro"] nav button:active {
-    box-shadow: inset 1px 1px 0 #808080, inset -1px -1px 0 #fff,
-                inset 2px 2px 0 #000, inset -2px -2px 0 #dfdfdf;
-  }
-  [data-ui="retro"] .btn { color:#000; font-weight:700; padding:7px 16px; }
-  [data-ui="retro"] .btn2 { color:#000; padding:4px 10px; }
-
-  [data-ui="retro"] .ok   { color:#006000; }
-  [data-ui="retro"] .warn { color:#8a5000; }
-  [data-ui="retro"] .err  { color:#a00000; }
-  [data-ui="retro"] .dim  { color:#404040; }
-  [data-ui="retro"] .btn2.danger { color:#a00000; }
-
-  [data-ui="retro"] th, [data-ui="retro"] td { border-bottom:1px solid #808080; }
-  [data-ui="retro"] th { color:#000080; font-weight:700; }
-  [data-ui="retro"] main { color:#000; }
-  [data-ui="retro"] .card h2 { color:#000080; font-weight:700; }
-
-  [data-ui="retro"] #modal { background:rgba(0,0,64,.35); }
-  [data-ui="retro"] #msg {
-    background:#c0c0c0; color:#000;
-    box-shadow: inset -1px -1px 0 #000, inset 1px 1px 0 #fff, 4px 4px 0 0 rgba(0,0,0,.5);
-  }
-  [data-ui="retro"] .pin { color:#000080; }
-  [data-ui="retro"] .dropzone.drag { background:#e8e8ff; }
-
-  [data-ui="retro"] a { color:#000080; }
+  html { background:#111315; }
+  #modal { position:fixed; top:0; right:0; bottom:0; left:0; z-index:20; overflow:auto; }
 </style>
 <link rel="stylesheet" href="layout.css">
 </head>
@@ -254,76 +31,94 @@
 <!-- BEGIN generated icon sprite (tools/gen_icons.py); do not edit by hand -->
 <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true"><symbol id="i-adjustments" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 10a2 2 0 1 0 4 0a2 2 0 0 0 -4 0 M6 4v4 M6 12v8 M10 16a2 2 0 1 0 4 0a2 2 0 0 0 -4 0 M12 4v10 M12 18v2 M16 7a2 2 0 1 0 4 0a2 2 0 0 0 -4 0 M18 4v1 M18 9v11"/></symbol><symbol id="i-backspace" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6a1 1 0 0 1 1 1v10a1 1 0 0 1 -1 1h-11l-5 -5a1.5 1.5 0 0 1 0 -2l5 -5z M12 10l4 4 M16 10l-4 4"/></symbol><symbol id="i-battery-charging" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 7h1a2 2 0 0 1 2 2v.5a.5 .5 0 0 0 .5 .5a.5 .5 0 0 1 .5 .5v3a.5 .5 0 0 1 -.5 .5a.5 .5 0 0 0 -.5 .5v.5a2 2 0 0 1 -2 2h-2 M8 7h-2a2 2 0 0 0 -2 2v6a2 2 0 0 0 2 2h1 M12 8l-2 4h3l-2 4"/></symbol><symbol id="i-battery" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h11a2 2 0 0 1 2 2v.5a.5 .5 0 0 0 .5 .5a.5 .5 0 0 1 .5 .5v3a.5 .5 0 0 1 -.5 .5a.5 .5 0 0 0 -.5 .5v.5a2 2 0 0 1 -2 2h-11a2 2 0 0 1 -2 -2v-6a2 2 0 0 1 2 -2"/></symbol><symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 5a2 2 0 1 1 4 0a7 7 0 0 1 4 6v3a4 4 0 0 0 2 3h-16a4 4 0 0 0 2 -3v-3a7 7 0 0 1 4 -6 M9 17v1a3 3 0 0 0 6 0v-1"/></symbol><symbol id="i-brush" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21v-4a4 4 0 1 1 4 4h-4 M21 3a16 16 0 0 0 -12.8 10.2 M21 3a16 16 0 0 1 -10.2 12.8 M10.6 9a9 9 0 0 1 4.4 4.4"/></symbol><symbol id="i-building-community" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l5 5v7h-5v-4m0 4h-5v-7l5 -5m1 1v-6a1 1 0 0 1 1 -1h10a1 1 0 0 1 1 1v17h-8 M13 7l0 .01 M17 7l0 .01 M17 11l0 .01 M17 15l0 .01"/></symbol><symbol id="i-calendar-time" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.795 21h-6.795a2 2 0 0 1 -2 -2v-12a2 2 0 0 1 2 -2h12a2 2 0 0 1 2 2v4 M14 18a4 4 0 1 0 8 0a4 4 0 1 0 -8 0 M15 3v4 M7 3v4 M3 11h16 M18 16.496v1.504l1 1"/></symbol><symbol id="i-camera-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.297 4.289a.997 .997 0 0 1 .703 -.289h6a1 1 0 0 1 1 1a2 2 0 0 0 2 2h1a2 2 0 0 1 2 2v8m-1.187 2.828c-.249 .11 -.524 .172 -.813 .172h-14a2 2 0 0 1 -2 -2v-9a2 2 0 0 1 2 -2h1c.298 0 .58 -.065 .834 -.181 M10.422 10.448a3 3 0 1 0 4.15 4.098 M3 3l18 18"/></symbol><symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l5 5l10 -10"/></symbol><symbol id="i-chevron-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6l6 -6"/></symbol><symbol id="i-chevron-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6l-6 6"/></symbol><symbol id="i-chevrons-right" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 7l5 5l-5 5 M13 7l5 5l-5 5"/></symbol><symbol id="i-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0 M12 7v5l3 3"/></symbol><symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666 M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c.75 0 1.158 .385 1.5 1"/></symbol><symbol id="i-device-tablet" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4a1 1 0 0 1 1 -1h12a1 1 0 0 1 1 1v16a1 1 0 0 1 -1 1h-12a1 1 0 0 1 -1 -1v-16 M11 17a1 1 0 1 0 2 0a1 1 0 0 0 -2 0"/></symbol><symbol id="i-door" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 12v.01 M3 21h18 M6 21v-16a2 2 0 0 1 2 -2h8a2 2 0 0 1 2 2v16"/></symbol><symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2 M7 11l5 5l5 -5 M12 4l0 12"/></symbol><symbol id="i-eye-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.585 10.587a2 2 0 0 0 2.829 2.828 M16.681 16.673a8.717 8.717 0 0 1 -4.681 1.327c-3.6 0 -6.6 -2 -9 -6c1.272 -2.12 2.712 -3.678 4.32 -4.674m2.86 -1.146a9.055 9.055 0 0 1 1.82 -.18c3.6 0 6.6 2 9 6c-.666 1.11 -1.379 2.067 -2.138 2.87 M3 3l18 18"/></symbol><symbol id="i-eye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 12a2 2 0 1 0 4 0a2 2 0 0 0 -4 0 M21 12c-2.4 4 -5.4 6 -9 6c-3.6 0 -6.6 -2 -9 -6c2.4 -4 5.4 -6 9 -6c3.6 0 6.6 2 9 6"/></symbol><symbol id="i-home" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12l-2 0l9 -9l9 9l-2 0 M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2 -2v-7 M9 21v-6a2 2 0 0 1 2 -2h2a2 2 0 0 1 2 2v6"/></symbol><symbol id="i-info-circle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0 M12 9h.01 M11 12h1v4h1"/></symbol><symbol id="i-link" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6 -6 M11 6l.463 -.536a5 5 0 0 1 7.071 7.072l-.534 .464 M13 18l-.397 .534a5.068 5.068 0 0 1 -7.127 0a4.972 4.972 0 0 1 0 -7.071l.524 -.463"/></symbol><symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l11 0 M9 12l11 0 M9 18l11 0 M5 6l0 .01 M5 12l0 .01 M5 18l0 .01"/></symbol><symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5h14a2 2 0 0 1 2 2v10a2 2 0 0 1 -2 2h-14a2 2 0 0 1 -2 -2v-10a2 2 0 0 1 2 -2z M3 7l9 6l9 -6"/></symbol><symbol id="i-message-reply" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 4a3 3 0 0 1 3 3v8a3 3 0 0 1 -3 3h-5l-5 3v-3h-2a3 3 0 0 1 -3 -3v-8a3 3 0 0 1 3 -3h12 M11 8l-3 3l3 3 M16 11h-8"/></symbol><symbol id="i-microphone-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18 M9 5a3 3 0 0 1 6 0v5a3 3 0 0 1 -.13 .874m-2 2a3 3 0 0 1 -3.87 -2.872v-1 M5 10a7 7 0 0 0 10.846 5.85m2 -2a6.967 6.967 0 0 0 1.152 -3.85 M8 21l8 0 M12 17l0 4"/></symbol><symbol id="i-microphone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5a3 3 0 0 1 3 -3a3 3 0 0 1 3 3v5a3 3 0 0 1 -3 3a3 3 0 0 1 -3 -3l0 -5 M5 10a7 7 0 0 0 14 0 M8 21l8 0 M12 17l0 4"/></symbol><symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 20l7 -7 M13 20v-6a1 1 0 0 1 1 -1h6v-7a2 2 0 0 0 -2 -2h-12a2 2 0 0 0 -2 2v12a2 2 0 0 0 2 2h7"/></symbol><symbol id="i-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4.5v9l-8 4.5l-8 -4.5v-9l8 -4.5 M12 12l8 -4.5 M12 12v9 M12 12l-8 -4.5 M16 5.25l-8 4.5"/></symbol><symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21a9 9 0 0 1 0 -18c4.97 0 9 3.582 9 8c0 1.06 -.474 2.078 -1.318 2.828c-.844 .75 -1.989 1.172 -3.182 1.172h-2.5a2 2 0 0 0 -1 3.75a1.3 1.3 0 0 1 -1 2.25 M7.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M11.5 7.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M15.5 10.5a1 1 0 1 0 2 0a1 1 0 1 0 -2 0"/></symbol><symbol id="i-phone-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l18 -18 M5.831 14.161a15.946 15.946 0 0 1 -2.831 -8.161a2 2 0 0 1 2 -2h4l2 5l-2.5 1.5c.108 .22 .223 .435 .345 .645m1.751 2.277c.843 .84 1.822 1.544 2.904 2.078l1.5 -2.5l5 2v4a2 2 0 0 1 -2 2a15.963 15.963 0 0 1 -10.344 -4.657"/></symbol><symbol id="i-phone" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h4l2 5l-2.5 1.5a11 11 0 0 0 5 5l1.5 -2.5l5 2v4a2 2 0 0 1 -2 2a16 16 0 0 1 -15 -15a2 2 0 0 1 2 -2"/></symbol><symbol id="i-photo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 8h.01 M3 6a3 3 0 0 1 3 -3h12a3 3 0 0 1 3 3v12a3 3 0 0 1 -3 3h-12a3 3 0 0 1 -3 -3v-12 M3 16l5 -5c.928 -.893 2.072 -.893 3 0l5 5 M14 14l1 -1c.928 -.893 2.072 -.893 3 0l3 3"/></symbol><symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5l0 14 M5 12l14 0"/></symbol><symbol id="i-reload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19.933 13.041a8 8 0 1 1 -9.925 -8.788c3.899 -1 7.935 1.007 9.425 4.747 M20 4v5h-5"/></symbol><symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37c1 .608 2.296 .07 2.572 -1.065 M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0"/></symbol><symbol id="i-shield-lock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a12 12 0 0 0 8.5 3a12 12 0 0 1 -8.5 15a12 12 0 0 1 -8.5 -15a12 12 0 0 0 8.5 -3 M11 11a1 1 0 1 0 2 0a1 1 0 1 0 -2 0 M12 12l0 2.5"/></symbol><symbol id="i-topology-star-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0 M18 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0 M10 5a2 2 0 1 0 -4 0a2 2 0 0 0 4 0 M6 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0 M18 19a2 2 0 1 0 -4 0a2 2 0 0 0 4 0 M14 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0 M22 12a2 2 0 1 0 -4 0a2 2 0 0 0 4 0 M6 12h4 M14 12h4 M15 7l-2 3 M9 7l2 3 M11 14l-2 3 M13 14l2 3"/></symbol><symbol id="i-trash" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l16 0 M10 11l0 6 M14 11l0 6 M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12 M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></symbol><symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2 -2v-2 M7 9l5 -5l5 5 M12 4l0 12"/></symbol><symbol id="i-users" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 7a4 4 0 1 0 8 0a4 4 0 1 0 -8 0 M3 21v-2a4 4 0 0 1 4 -4h4a4 4 0 0 1 4 4v2 M16 3.13a4 4 0 0 1 0 7.75 M21 21v-2a4 4 0 0 0 -3 -3.85"/></symbol><symbol id="i-video-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l18 18 M15 11v-1l4.553 -2.276a1 1 0 0 1 1.447 .894v6.764a1 1 0 0 1 -.675 .946 M10 6h3a2 2 0 0 1 2 2v3m0 4v1a2 2 0 0 1 -2 2h-8a2 2 0 0 1 -2 -2v-8a2 2 0 0 1 2 -2h1"/></symbol><symbol id="i-volume" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 8a5 5 0 0 1 0 8 M17.7 5a9 9 0 0 1 0 14 M6 15h-2a1 1 0 0 1 -1 -1v-4a1 1 0 0 1 1 -1h2l3.5 -4.5a.8 .8 0 0 1 1.5 .5v14a.8 .8 0 0 1 -1.5 .5l-3.5 -4.5"/></symbol><symbol id="i-world" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 18 0a9 9 0 0 0 -18 0 M3.6 9h16.8 M3.6 15h16.8 M11.5 3a17 17 0 0 0 0 18 M12.5 3a17 17 0 0 1 0 18"/></symbol><symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6l-12 12 M6 6l12 12"/></symbol></svg>
 <!-- END generated icon sprite -->
-<div id="login" class="card hidden">
-  <h2 data-i18n="admin.login"></h2>
-  <div class="row"><input id="pw" type="password" data-i18n-ph="admin.password"></div>
-  <button class="btn" id="loginBtn" data-i18n="admin.login"></button>
-  <div id="loginErr" class="err" style="margin-top:8px"></div>
+<div id="login" class="hidden">
+  <div class="card loginbox">
+    <div class="brand"><span class="brandmark"><svg class="ic" aria-hidden="true"><use href="#i-bell"/></svg></span><span data-i18n="app.name"></span><span class="tag" data-i18n="admin.title"></span></div>
+    <h2 data-i18n="admin.login"></h2>
+    <div class="frow"><label class="flab" for="pw" data-i18n="admin.password"></label>
+      <input id="pw" type="password" autocomplete="current-password"></div>
+    <div id="loginErr" class="err" role="alert"></div>
+    <button type="button" class="btn" id="loginBtn" data-i18n="admin.login"></button>
+  </div>
 </div>
 
 <div id="app" class="hidden">
   <header>
+    <button type="button" id="navToggle" class="iconbtn" aria-controls="settingsNav" aria-expanded="false" data-i18n-aria="admin.menu" data-i18n-title="admin.menu"><svg class="ic" aria-hidden="true"><use href="#i-list"/></svg></button>
+    <span class="brandmark"><svg class="ic" aria-hidden="true"><use href="#i-bell"/></svg></span>
     <h1 data-i18n="app.name"></h1><span class="tag" data-i18n="admin.title"></span>
     <span class="node" id="nodeInfo"></span>
-    <select id="langSel" data-i18n-title="admin.language" style="margin-left:12px; padding:5px 8px; font-size:13px">
-      <option value="ja" data-i18n="language.name_ja"></option>
-      <option value="en" data-i18n="language.name_en"></option>
-      <option value="zh" data-i18n="language.name_zh"></option>
-    </select>
-    <select id="uiSel" data-i18n-title="admin.ui_style" style="margin-left:6px; padding:5px 8px; font-size:13px">
-      <option value="modern">Modern</option>
-      <option value="retro">Retro (90s)</option>
-    </select>
   </header>
   <div id="settingsShell">
+  <div id="navScrim"></div>
   <nav id="settingsNav" data-i18n-aria="settings.categories">
     <div class="navsearch"><input type="search" id="navSearch" autocomplete="off" data-i18n-ph="settings.search" data-i18n-aria="settings.search"></div>
     <div class="navgroup" data-group="overview" role="group" aria-labelledby="navg-overview"><div class="navgrouphead" id="navg-overview" data-i18n="settings.group_overview"></div>
-      <button type="button" data-tab="dash" class="on" aria-current="page"><span class="navic"><svg class="ic"><use href="#i-home"/></svg></span><span data-i18n="admin.dashboard"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="events"><span class="navic"><svg class="ic"><use href="#i-clock"/></svg></span><span data-i18n="admin.events"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="dash" class="on" aria-current="page" data-i18n-title="admin.dashboard"><span class="navic"><svg class="ic"><use href="#i-home"/></svg></span><span data-i18n="admin.dashboard"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="events" data-i18n-title="admin.events"><span class="navic"><svg class="ic"><use href="#i-clock"/></svg></span><span data-i18n="admin.events"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
     </div>
     <div class="navgroup" data-group="site" role="group" aria-labelledby="navg-site"><div class="navgrouphead" id="navg-site" data-i18n="settings.group_site"></div>
-      <button type="button" data-tab="doors"><span class="navic"><svg class="ic"><use href="#i-building-community"/></svg></span><span data-i18n="admin.doors"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="devices"><span class="navic"><svg class="ic"><use href="#i-device-tablet"/></svg></span><span data-i18n="admin.devices"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="panels"><span class="navic"><svg class="ic"><use href="#i-shield-lock"/></svg></span><span data-i18n="panels.tab"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="pair"><span class="navic"><svg class="ic"><use href="#i-plus"/></svg></span><span data-i18n="pair.tab"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="doors" data-i18n-title="admin.doors"><span class="navic"><svg class="ic"><use href="#i-building-community"/></svg></span><span data-i18n="admin.doors"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="devices" data-i18n-title="admin.devices"><span class="navic"><svg class="ic"><use href="#i-device-tablet"/></svg></span><span data-i18n="admin.devices"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="panels" data-i18n-title="panels.tab"><span class="navic"><svg class="ic"><use href="#i-shield-lock"/></svg></span><span data-i18n="panels.tab"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="pair" data-i18n-title="pair.tab"><span class="navic"><svg class="ic"><use href="#i-plus"/></svg></span><span data-i18n="pair.tab"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
     </div>
     <div class="navgroup" data-group="calls" role="group" aria-labelledby="navg-calls"><div class="navgrouphead" id="navg-calls" data-i18n="settings.group_calls"></div>
-      <button type="button" data-tab="rules"><span class="navic"><svg class="ic"><use href="#i-adjustments"/></svg></span><span data-i18n="admin.rules"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="qr"><span class="navic"><svg class="ic"><use href="#i-message-reply"/></svg></span><span data-i18n="admin.quick_replies"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="purposes"><span class="navic"><svg class="ic"><use href="#i-list"/></svg></span><span data-i18n="admin.purposes"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="households"><span class="navic"><svg class="ic"><use href="#i-users"/></svg></span><span data-i18n="admin.households"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="rules" data-i18n-title="admin.rules"><span class="navic"><svg class="ic"><use href="#i-adjustments"/></svg></span><span data-i18n="admin.rules"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="qr" data-i18n-title="admin.quick_replies"><span class="navic"><svg class="ic"><use href="#i-message-reply"/></svg></span><span data-i18n="admin.quick_replies"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="purposes" data-i18n-title="admin.purposes"><span class="navic"><svg class="ic"><use href="#i-list"/></svg></span><span data-i18n="admin.purposes"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="households" data-i18n-title="admin.households"><span class="navic"><svg class="ic"><use href="#i-users"/></svg></span><span data-i18n="admin.households"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
     </div>
     <div class="navgroup" data-group="appearance" role="group" aria-labelledby="navg-appearance"><div class="navgrouphead" id="navg-appearance" data-i18n="settings.group_appearance"></div>
-      <button type="button" data-tab="texts"><span class="navic"><svg class="ic"><use href="#i-note"/></svg></span><span data-i18n="admin.texts"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="theme"><span class="navic"><svg class="ic"><use href="#i-brush"/></svg></span><span data-i18n="admin.theme"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="assets"><span class="navic"><svg class="ic"><use href="#i-photo"/></svg></span><span data-i18n="admin.assets"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="texts" data-i18n-title="admin.texts"><span class="navic"><svg class="ic"><use href="#i-note"/></svg></span><span data-i18n="admin.texts"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="theme" data-i18n-title="admin.theme"><span class="navic"><svg class="ic"><use href="#i-brush"/></svg></span><span data-i18n="admin.theme"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="assets" data-i18n-title="admin.assets"><span class="navic"><svg class="ic"><use href="#i-photo"/></svg></span><span data-i18n="admin.assets"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
     </div>
     <div class="navgroup" data-group="system" role="group" aria-labelledby="navg-system"><div class="navgrouphead" id="navg-system" data-i18n="settings.group_system"></div>
-      <button type="button" data-tab="integrations"><span class="navic"><svg class="ic"><use href="#i-link"/></svg></span><span data-i18n="admin.integrations"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
-      <button type="button" data-tab="system"><span class="navic"><svg class="ic"><use href="#i-settings"/></svg></span><span data-i18n="admin.system"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="integrations" data-i18n-title="admin.integrations"><span class="navic"><svg class="ic"><use href="#i-link"/></svg></span><span data-i18n="admin.integrations"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
+      <button type="button" data-tab="system" data-i18n-title="admin.system"><span class="navic"><svg class="ic"><use href="#i-settings"/></svg></span><span data-i18n="admin.system"></span><svg class="ic chev" aria-hidden="true"><use href="#i-chevron-right"/></svg></button>
     </div>
     <div id="navEmpty" class="dim hidden" data-i18n="settings.no_match"></div>
+    <div class="navfoot">
+      <div class="frow"><label class="flab" for="langSel" data-i18n="admin.language"></label>
+        <select id="langSel">
+          <option value="ja" data-i18n="language.name_ja"></option>
+          <option value="en" data-i18n="language.name_en"></option>
+          <option value="zh" data-i18n="language.name_zh"></option>
+        </select></div>
+      <div class="frow"><label class="flab" for="uiSel" data-i18n="admin.ui_style"></label>
+        <select id="uiSel">
+          <option value="modern" data-i18n="admin.ui_style_modern"></option>
+          <option value="retro" data-i18n="admin.ui_style_retro"></option>
+        </select></div>
+    </div>
   </nav>
   <main id="settingsDetail">
     <div id="detailBar">
       <button type="button" id="navBack" class="btn ghost"><svg class="ic back" aria-hidden="true"><use href="#i-chevron-right"/></svg><span data-i18n="settings.back"></span></button>
       <h2 id="detailTitle" tabindex="-1"></h2>
+      <div id="detailActions"><button type="button" class="btn hidden" id="primaryAction"></button></div>
     </div>
     <section id="tab-dash">
-      <div id="adminEmergency" class="card hidden" role="alert" style="background:#8f1010;border-color:#ff8f85">
-        <div class="chead"><h2 style="font-size:24px;color:#fff" data-i18n="admin.sos_active"></h2>
-          <button class="btn" id="adminEmergencyCancel" style="background:#fff;color:#7b0808" data-i18n="emergency.cancel"></button>
+      <div id="adminEmergency" class="card alertcard hidden" role="alert">
+        <div class="chead"><h2 data-i18n="admin.sos_active"></h2>
+          <button type="button" class="btn" id="adminEmergencyCancel" data-i18n="emergency.cancel"></button>
         </div>
-        <div style="color:#fff" data-i18n="admin.sos_clear_audit"></div>
+        <p data-i18n="admin.sos_clear_audit"></p>
       </div>
-      <div class="card"><div class="dim" id="bridgeInfo" style="margin-bottom:8px"></div>
-        <div class="dim mono" id="localAddrs" style="margin-bottom:8px; font-size:12px"></div>
-        <table id="peersTbl" class="bounded-table">
-        <colgroup><col style="width:10%"><col style="width:11%"><col style="width:7%"><col style="width:11%"><col style="width:14%"><col style="width:9%"><col style="width:17%"><col style="width:9%"><col style="width:12%"></colgroup>
-        <thead><tr><th data-i18n="info.node"></th><th data-i18n="info.role"></th><th data-i18n="admin.status"></th><th data-i18n="admin.duty"></th><th data-i18n="info.version"></th><th data-i18n="power.title"></th><th data-i18n="admin.addresses"></th><th data-i18n="security.membership"></th><th data-i18n="security.fingerprint"></th></tr></thead>
-        <tbody></tbody></table></div>
+      <div class="card">
+        <h2 data-i18n="admin.services"></h2>
+        <div id="bridgeInfo" class="statusrow"></div>
+      </div>
       <div id="liveGrid"></div>
+      <div class="card">
+        <h2 data-i18n="admin.devices"></h2>
+        <div id="peerCards" class="peergrid"></div>
+      </div>
+      <div class="card hidden" id="localAddrCard">
+        <h2 data-i18n="admin.local_addrs"></h2>
+        <ul id="localAddrs" class="addrlist"></ul>
+      </div>
     </section>
     <section id="tab-doors" class="hidden"></section>
     <section id="tab-devices" class="hidden"></section>
@@ -342,8 +137,8 @@
   </main>
   </div>
 </div>
-<div id="modal" class="hidden" role="dialog" aria-modal="true"></div>
-<div id="msg"></div>
+<dialog id="modal" class="hidden" aria-modal="true"></dialog>
+<div id="msg" role="status" aria-live="polite"></div>
 <script src="/panel/playback.js"></script>
 <script src="app.js"></script>
 </body>

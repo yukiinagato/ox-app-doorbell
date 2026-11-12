@@ -54,7 +54,7 @@ const server=http.createServer((req,res)=>{
     html=html.replace('<script src="/panel/playback.js">',setup+'<script src="/panel/playback.js">').replace('</body>',controls+'</body>');
     res.writeHead(200,{"Content-Type":"text/html","Cache-Control":"no-store"});res.end(html);return;
   }
-  let file=path.resolve(root,"webui",url.pathname.replace(/^\//,""));if(url.pathname==="/style.css")file=path.join(root,"webui/admin/style.css");
+  let file=path.resolve(root,"webui",url.pathname.replace(/^\//,""));if(url.pathname==="/layout.css")file=path.join(root,"webui/admin/layout.css");
   if(!file.startsWith(path.join(root,"webui")+path.sep)||!fs.existsSync(file)){res.writeHead(404);res.end();return;}
   res.writeHead(200,{"Content-Type":file.endsWith("css")?"text/css":"application/javascript"});res.end(fs.readFileSync(file));
 });

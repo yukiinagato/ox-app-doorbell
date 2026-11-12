@@ -11,7 +11,7 @@ var AdminLogic = (function () {
     { id: "appearance", label: "settings.group_appearance", tabs: ["texts", "theme", "assets"] },
     { id: "system", label: "settings.group_system", tabs: ["integrations", "system"] }
   ];
-  var SETTINGS_SPLIT_MIN_PX = 900;
+  var SETTINGS_SPLIT_MIN_PX = 900, SETTINGS_RAIL_MIN_PX = 600;
 
   function settingsTabs() {
     var out = [];
@@ -31,9 +31,11 @@ var AdminLogic = (function () {
     return settingsTabs().indexOf(tab) >= 0 ? "#/" + tab : "#/";
   }
 
-  // Wide screens always show both panes; narrow screens show the list until a category is open.
+  // Expanded widths show the sidebar and the detail side by side, medium widths keep an icon rail
+  // beside the detail, and compact widths show the category list until a category is open.
   function settingsView(widthPx, routedTab) {
     if (Number(widthPx) >= SETTINGS_SPLIT_MIN_PX) return "split";
+    if (Number(widthPx) >= SETTINGS_RAIL_MIN_PX) return "rail";
     return routedTab ? "detail" : "list";
   }
 
@@ -3107,6 +3109,7 @@ var AdminLogic = (function () {
     peerLabel: peerLabel,
     SETTINGS_GROUPS: SETTINGS_GROUPS,
     SETTINGS_SPLIT_MIN_PX: SETTINGS_SPLIT_MIN_PX,
+    SETTINGS_RAIL_MIN_PX: SETTINGS_RAIL_MIN_PX,
     settingsTabs: settingsTabs,
     settingsRoute: settingsRoute,
     settingsHash: settingsHash,
@@ -3130,6 +3133,7 @@ if (typeof document !== "undefined") (function () {
   function lsGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
   function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
   var LANG = qs("lang") || lsGet("db_admin_lang") || "ja";
+  if (/^[a-z]{2}$/.test(LANG)) document.documentElement.setAttribute("lang", LANG);
 
   var I18N = {};
   function t(k, def) { return I18N[k] || def || k; }
@@ -3137,7 +3141,7 @@ if (typeof document !== "undefined") (function () {
     return s.replace(/\{(\w+)\}/g, function (m, n) { return vars[n] !== undefined ? vars[n] : m; });
   }
 
-  function icon(n) { return "<svg class='ic'><use href='#i-" + n + "'/></svg>"; }
+  function icon(n) { return "<svg class='ic' aria-hidden='true'><use href='#i-" + n + "'/></svg>"; }
 
   function membershipText(state) {
     return ({ member: t("security.membership_member"),
@@ -3153,7 +3157,10 @@ if (typeof document !== "undefined") (function () {
       if (!btn) return;
       var orig = btn.getAttribute("data-orig") || btn.innerHTML;
       btn.setAttribute("data-orig", orig);
-      btn.textContent = ok ? t("admin.copied") : t("admin.copy_failed");
+      if (btn.classList && btn.classList.contains("iconbtn")) {
+        btn.innerHTML = icon(ok ? "check" : "x");
+        msg(ok ? t("admin.copied") : t("admin.copy_failed"));
+      } else btn.textContent = ok ? t("admin.copied") : t("admin.copy_failed");
       setTimeout(function () { btn.innerHTML = orig; }, 1200);
     }
     if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -3174,8 +3181,27 @@ if (typeof document !== "undefined") (function () {
   function $all(s, root) {
     return Array.prototype.slice.call((root || document).querySelectorAll(s));
   }
-  function show(el, on) { el.classList[on ? "remove" : "add"]("hidden"); }
+  // The editor is a native dialog where the browser has one: showModal() gives it the top layer,
+  // a focus trap and an inert page behind it. Elsewhere the same element is a plain overlay.
+  function modalIsNative(el) { return !!el && typeof el.showModal === "function"; }
+  function show(el, on) {
+    el.classList[on ? "remove" : "add"]("hidden");
+    if (el.id !== "modal" || !modalIsNative(el)) return;
+    try {
+      if (on && !el.open) el.showModal();
+      else if (!on && el.open) el.close();
+    } catch (e) {}
+    rehomeToast();
+  }
+  // A toast raised while the dialog is open has to live inside it, or the top layer covers it.
+  function rehomeToast() {
+    var m = $("#msg"), modal = $("#modal");
+    if (!m || !document.body || !document.body.appendChild) return;
+    var host = modalIsNative(modal) && modal.open ? modal : document.body;
+    if (m.parentNode !== host) host.appendChild(m);
+  }
   function msg(s) {
+    rehomeToast();
     var m = $("#msg");
     m.textContent = s;
     m.style.opacity = 1;
@@ -3464,6 +3490,15 @@ if (typeof document !== "undefined") (function () {
         features: { call_flow_v2: true }, addrs: [],
         power: { battery_pct: 82, charging: true, mains: true } }]
   };
+  // ?appearance=system|light|dark lets the mock stand in for each appearance Core can report.
+  (function () {
+    var forced = qs("appearance"), appearance = MOCK_STATUS.display.appearance;
+    if (forced === "system") appearance.follow_system = true;
+    else if (forced === "light" || forced === "dark") {
+      appearance.effective = forced; appearance.follow_system = false;
+    }
+    if (qs("accent") === "none") delete MOCK_STATUS.display.theme.call_button_bg;
+  })();
   var MOCK_EVENTS = [
     { type: "press", door: "d_front", device: MOCK_ID1, wall_ms: Date.now() - 60000, payload: "{}" },
     { type: "reply", door: "d_front", device: MOCK_ID2, wall_ms: Date.now() - 50000,
@@ -4168,7 +4203,8 @@ if (typeof document !== "undefined") (function () {
       var main = $("main"); if (!main) return;
       banner = document.createElement("section"); banner.id = "configConflicts";
       banner.className = "card hidden"; banner.setAttribute("role", "status");
-      main.insertBefore(banner, main.firstChild);
+      var bar = $("#detailBar");
+      main.insertBefore(banner, bar && bar.parentNode === main ? bar.nextSibling : main.firstChild);
     }
     var conflicts = S.editConflicts || [], journal = S.editJournal;
     var full = journal && (journal.capacity_available === false ||
@@ -4271,7 +4307,7 @@ if (typeof document !== "undefined") (function () {
     if (generation === undefined && AUTH.runtime) generation = AUTH.generation;
     var runtime = AUTH.runtime && AUTH.runtime.generation === generation ? AUTH.runtime : null;
     return api("GET", "/api/status", null, function (st, j) {
-      if (generationCurrent(generation) && st === 200 && j) S.status = j;
+      if (generationCurrent(generation) && st === 200 && j) { S.status = j; applyCoreAppearance(); }
       if (cb) cb(st, j);
     }, { authenticated: generation !== undefined, generation: generation, context: runtime,
           timeout_ms: 10000 });
@@ -4338,7 +4374,7 @@ if (typeof document !== "undefined") (function () {
               ">" + esc(aop.label) + "</option>";
       }
       return "<div class='frow'>" + lab + "<select data-f='" + esc(f.id) + "'>" + ao +
-             "</select> <button class='btn2' data-audioplay='" + esc(f.id) + "'>▶ " +
+             "</select> <button class='btn2' data-audioplay='" + esc(f.id) + "'>" +
              esc(t("admin.audio_play")) + "</button></div>";
     }
     if (f.type === "icon") {
@@ -4391,16 +4427,26 @@ if (typeof document !== "undefined") (function () {
     var state = { id: ++modalRevision, root: m, phase: "editing", attempt: 0,
                   pageEpoch: AUTH.pageEpoch, suspended: false, disabledFields: [], editor: configEditor() };
     activeModal = state;
+    var toast = $("#msg");
+    if (toast && toast.parentNode === m && document.body.appendChild) document.body.appendChild(toast);
     m.innerHTML =
-      "<div class='mbox card'><h2>" + esc(title) + "</h2><div class='mbody'>" + bodyHtml +
+      "<div class='mbox card'><h2 id='mTitle'>" + esc(title) + "</h2><div class='mbody'>" + bodyHtml +
       "</div><div id='mSaveState' class='dim fhint' role='status'></div><div class='mbtns'>" +
       "<button class='btn' id='mSave'>" + esc(t("admin.save")) + "</button>" +
       "<button class='btn ghost' id='mCancel'>" + esc(t("admin.cancel")) +
       "</button></div></div>";
+    m.setAttribute("aria-labelledby", "mTitle");
     show(m, true);
     $("#mCancel").onclick = function () {
       if (activeModal !== state || state.phase === "submitting") return;
       activeModal = null; show(m, false);
+    };
+    // Escape on a native dialog is the Cancel button, with the same guard against discarding a
+    // draft while its save is in flight.
+    m.oncancel = function (event) {
+      if (event && event.preventDefault) event.preventDefault();
+      var cancel = $("#mCancel");
+      if (cancel && cancel.onclick) cancel.onclick();
     };
     $("#mSave").onclick = function () {
       if (activeModal !== state || state.phase === "submitting" || state.suspended) return;
@@ -4706,10 +4752,112 @@ if (typeof document !== "undefined") (function () {
            p(d.getHours()) + ":" + p(d.getMinutes()) + ":" + p(d.getSeconds());
   }
 
-  function addressLinesHtml(addresses) {
-    return (addresses || []).map(function (address) {
-      return "<span class='peer-address'>" + esc(address) + "</span>";
-    }).join("");
+  // One address per row with its own copy button; bindCopyButtons wires them after insertion.
+  function addressListHtml(addresses) {
+    if (!addresses || !addresses.length) return "<span class='dim'>—</span>";
+    return "<ul class='addrlist'>" + addresses.map(function (address) {
+      var label = esc(fmt(t("admin.copy_value"), { value: address }));
+      return "<li><span class='mono'>" + esc(address) + "</span><button type='button' class='iconbtn' " +
+             "data-copy='" + esc(address) + "' aria-label='" + label + "' title='" + label + "'>" +
+             icon("copy") + "</button></li>";
+    }).join("") + "</ul>";
+  }
+  function bindCopyButtons(root) {
+    $all("[data-copy]", root).forEach(function (button) {
+      button.onclick = function () { copyText(button.getAttribute("data-copy"), button); };
+    });
+  }
+
+  // Replaces a container's markup only when it changed, so a status poll that brings nothing new
+  // leaves focus, selection and scroll position alone.
+  function setMarkup(el, html) {
+    if (!el || el._markup === html) return false;
+    el.innerHTML = html;
+    el._markup = html;
+    return true;
+  }
+
+  function roleLabel(role) {
+    if (role === "indoor_panel") return t("admin.role_indoor");
+    if (role === "door_station") return t("admin.role_door");
+    return role || "";
+  }
+  function peerStatusModel(status) {
+    if (status === "alive") return { cls: "ok", text: t("admin.online") };
+    if (status === "suspect") return { cls: "warn", text: t("admin.peer_suspect") };
+    return { cls: "err", text: t("admin.offline") };
+  }
+  function dutyLabel(duty) {
+    if (duty === "telegram") return t("admin.duty_telegram");
+    if (duty === "mqtt_bridge") return t("admin.duty_mqtt_bridge");
+    if (duty === "web_push") return t("admin.duty_web_push");
+    return duty;
+  }
+  // Core reports bridge and SIP registration states as fixed words; anything newer than this
+  // table is shown as reported rather than hidden.
+  function serviceStateModel(state) {
+    if (state === "connected") return { cls: "ok", text: t("admin.svc_connected") };
+    if (state === "disconnected") return { cls: "err", text: t("admin.svc_disconnected") };
+    if (state === "active") return { cls: "ok", text: t("admin.svc_active") };
+    if (state === "inactive") return { cls: "dim", text: t("admin.svc_inactive") };
+    if (state === "idle") return { cls: "dim", text: t("admin.svc_idle") };
+    if (state === "registering") return { cls: "warn", text: t("admin.svc_registering") };
+    if (state === "registered") return { cls: "ok", text: t("admin.svc_registered") };
+    if (state === "failed") return { cls: "err", text: t("admin.svc_failed") };
+    return { cls: "dim", text: state ? String(state) : t("info.unknown") };
+  }
+  function statusChipHtml(label, model) {
+    return "<div class='statuschip'><span class='lbl'>" + esc(label) + "</span><span class='status " +
+           esc(model.cls) + "'>" + esc(model.text) + "</span></div>";
+  }
+  function eventTypeLabel(type) {
+    return I18N["admin.event_" + type] || I18N["panel.event_" + type] || String(type || "");
+  }
+  function reorderButtonHtml(attrs, up) {
+    var label = esc(t(up ? "admin.move_up" : "admin.move_down"));
+    return "<button type='button' class='btn2 reorder" + (up ? " up" : "") + "' " + attrs +
+           " aria-label='" + label + "' title='" + label + "'>" + icon("chevron-down") + "</button>";
+  }
+  function removeButtonHtml(attrs) {
+    var label = esc(t("admin.delete"));
+    return "<button type='button' class='btn2 danger reorder' " + attrs + " aria-label='" + label +
+           "' title='" + label + "'>" + icon("x") + "</button>";
+  }
+  function emptyRowHtml(columns, title, hint, actionHtml) {
+    return "<tr><td colspan='" + columns + "'>" + emptyStateHtml(title, hint, actionHtml) + "</td></tr>";
+  }
+  function emptyStateHtml(title, hint, actionHtml) {
+    return "<div class='empty'><div class='emptytitle'>" + esc(title) + "</div>" +
+           (hint ? "<div class='dim fhint'>" + esc(hint) + "</div>" : "") + (actionHtml || "") + "</div>";
+  }
+
+  function peerCardHtml(p, duties) {
+    var state = peerStatusModel(p.status);
+    var power = L.powerModel(p.power);
+    var powerHtml = !power.known ? "<span class='dim'>" + esc(t("power.unknown")) + "</span>" :
+      (!power.hasBattery ? "<span class='dim'>" + esc(t("power.no_battery")) + "</span>" :
+        "<span class='" + (power.pct <= 15 && !power.charging ? "err" : "") + "'>" +
+        esc(power.text) + "</span>" +
+        (power.charging ? " <span class='tag ok'>" + esc(t("power.charging")) + "</span>" : ""));
+    var membership = L.membershipState(p), fingerprint = L.fingerprintText(p.tls_sha256);
+    var memberCls = membership === "member" ? "ok" : (membership === "unknown" ? "dim" : "err");
+    var dutyHtml = duties.length ? duties.map(function (duty) {
+      return "<span class='chip'>" + esc(dutyLabel(duty)) + "</span>";
+    }).join("") : "<span class='dim'>" + esc(t("admin.duty_none")) + "</span>";
+    return "<div class='peer'><div class='peerhead'><span class='peericon'>" +
+      icon(p.role === "door_station" ? "door" : "device-tablet") + "</span>" +
+      "<div class='peerwho'><div class='peername'>" + esc(L.peerLabel(p)) +
+      (p.self ? " <span class='tag'>" + esc(t("settings.section_device")) + "</span>" : "") +
+      "</div><div class='peersub'>" + esc(roleLabel(p.role)) + "</div></div>" +
+      "<span class='status " + state.cls + "'>" + esc(state.text) + "</span></div><dl>" +
+      "<dt>" + esc(t("admin.duty")) + "</dt><dd>" + dutyHtml + "</dd>" +
+      "<dt>" + esc(t("info.version")) + "</dt><dd>" + (p.sw ? esc(p.sw) : "<span class='dim'>—</span>") + "</dd>" +
+      "<dt>" + esc(t("power.title")) + "</dt><dd>" + powerHtml + "</dd>" +
+      "<dt>" + esc(t("admin.addresses")) + "</dt><dd>" + addressListHtml(p.addrs) + "</dd>" +
+      "<dt>" + esc(t("security.membership")) + "</dt><dd class='" + memberCls + "'>" +
+      esc(membershipText(membership)) + "</dd>" +
+      "<dt>" + esc(t("security.fingerprint")) + "</dt><dd class='mono'>" +
+      (fingerprint ? esc(fingerprint) : "<span class='dim'>—</span>") + "</dd></dl></div>";
   }
 
   function normalizedRotation(value) {
@@ -4786,47 +4934,33 @@ if (typeof document !== "undefined") (function () {
         } else msg(t("admin.sos_clear_failed"));
       });
     };
-    var rows = "";
     var peers = j.peers || [];
+    var cards = "";
     for (var i = 0; i < peers.length; i++) {
       var p = peers[i];
-      var stCls = p.status === "alive" ? "ok" : (p.status === "suspect" ? "warn" : "err");
       var duties = [];
       if (j.leaders && p.id) for (var d in j.leaders) if (j.leaders[d] === p.id) duties.push(d);
-      var power = L.powerModel(p.power);
-      var powerCell = !power.known ? "<span class='dim'>" + esc(t("power.unknown")) + "</span>" :
-        (!power.hasBattery ? "<span class='dim'>" + esc(t("power.no_battery")) + "</span>" :
-          "<span class='" + (power.pct <= 15 && !power.charging ? "err" : "") + "'>" +
-          esc(power.text) + "</span>" +
-          (power.charging ? " <span class='tag ok'>" + esc(t("power.charging")) + "</span>" : ""));
-      var membership = L.membershipState(p), fingerprint = L.fingerprintText(p.tls_sha256);
-      var memberCls = membership === "member" ? "ok" : (membership === "unknown" ? "dim" : "err");
-      rows += "<tr><td>" + esc(L.peerLabel(p)) +
-              (p.self ? " <span class='tag'>self</span>" : "") + "</td><td>" +
-              esc(p.role || "") + "</td><td class='" + stCls + "'>" + esc(p.status) +
-              "</td><td class='breakable'>" + esc(duties.join(",")) + "</td><td class='breakable'>" + esc(p.sw || "") +
-              "</td><td class='breakable'>" + powerCell +
-              "</td><td class='dim'>" + addressLinesHtml(p.addrs) +
-              "</td><td class='" + memberCls + "'>" + esc(membershipText(membership)) +
-              "</td><td class='mono breakable' style='font-size:11px'>" +
-              (fingerprint ? esc(fingerprint) : "<span class='dim'>—</span>") + "</td></tr>";
+      cards += peerCardHtml(p, duties);
     }
-    $("#peersTbl tbody").innerHTML = rows;
+    var peerRoot = $("#peerCards");
+    if (setMarkup(peerRoot, cards || emptyStateHtml(t("admin.empty_devices"),
+                                                    t("admin.empty_devices_hint"))))
+      bindCopyButtons(peerRoot);
+
     var br = j.bridge || {};
-    $("#bridgeInfo").textContent =
-      "MQTT: " + (br.mqtt || "-") + " / Telegram: " + (br.telegram || "-") +
-      (j.sip ? " / SIP: " + j.sip.state : "");
+    var mqttState = serviceStateModel(br.mqtt);
+    // A broker that was never configured is not a fault.
+    if (br.mqtt === "disconnected" && !(cfgObj("integrations").mqtt || {}).host) mqttState.cls = "dim";
+    setMarkup($("#bridgeInfo"), statusChipHtml("MQTT", mqttState) +
+      statusChipHtml("Telegram", serviceStateModel(br.telegram)) +
+      (j.sip ? statusChipHtml("SIP", serviceStateModel(j.sip.state)) : ""));
 
     var la = (j.node && j.node.local_addrs) || [];
     var laEl = $("#localAddrs");
     if (laEl) {
-      if (la.length) {
-          laEl.innerHTML = icon("info-circle") + " " + t("admin.local_addrs") + ": " +
-          addressLinesHtml(la);
-      } else { laEl.textContent = ""; }
+      if ($("#localAddrCard")) show($("#localAddrCard"), la.length > 0);
+      if (setMarkup(laEl, la.length ? addressListHtml(la) : "")) bindCopyButtons(laEl);
     }
-
-
 
     var grid = $("#liveGrid"), want = {};
     for (var li = 0; li < peers.length; li++) {
@@ -4842,22 +4976,22 @@ if (typeof document !== "undefined") (function () {
       pp = proxied;
       if (pp.stream) want[pp.id] = pp;
     }
-    var cards = $all("[data-node]", grid);
-    for (var ci = 0; ci < cards.length; ci++) {
-      var id = cards[ci].getAttribute("data-node");
+    var liveCards = $all("[data-node]", grid);
+    for (var ci = 0; ci < liveCards.length; ci++) {
+      var id = liveCards[ci].getAttribute("data-node");
       if (!want[id]) {
         stopLiveStream(id);
-        grid.removeChild(cards[ci]);
+        grid.removeChild(liveCards[ci]);
       } else {
         var wantedMp4 = DoorbellPlayback.proxyMp4Url(want[id].door || "", "",
                                                       want[id].stream_mp4, window.location);
         var wantedKey = want[id].stream + "|" + wantedMp4 + "|" +
                         JSON.stringify(want[id].playback_profile || {});
-        if (cards[ci].getAttribute("data-playback-key") === wantedKey) {
+        if (liveCards[ci].getAttribute("data-playback-key") === wantedKey) {
           delete want[id];
         } else {
           stopLiveStream(id);
-          grid.removeChild(cards[ci]);
+          grid.removeChild(liveCards[ci]);
         }
       }
     }
@@ -4869,8 +5003,7 @@ if (typeof document !== "undefined") (function () {
                                                         window.location);
       card.setAttribute("data-playback-key", p2.stream + "|" + sameOriginMp4 + "|" +
                         JSON.stringify(p2.playback_profile || {}));
-      card.innerHTML = "<div class='dim' style='margin-bottom:6px'>" +
-        esc(p2.door_label || p2.name || nid.slice(0, 8)) + "</div>";
+      card.innerHTML = "<h2>" + esc(p2.door_label || p2.name || nid.slice(0, 8)) + "</h2>";
       var frame = document.createElement("div");
       frame.className = "live-frame";
       var v = document.createElement("video");
@@ -4879,7 +5012,7 @@ if (typeof document !== "undefined") (function () {
       v.setAttribute("muted", "");
       v.setAttribute("playsinline", "");
       var img = document.createElement("img");
-      img.alt = "live";
+      img.alt = t("admin.live_view");
       frame.appendChild(img);
       frame.appendChild(v);
       card.appendChild(frame);
@@ -5110,7 +5243,7 @@ if (typeof document !== "undefined") (function () {
     var el = $("#tab-doors");
     var bs = cfgObj("buildings"), ds = cfgObj("doors");
     var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.buildings")) +
-            "</h2><button class='btn small' data-act='addB'>+ " +
+            "</h2><button class='btn small' data-act='addB'>" + icon("plus") + " " +
             esc(t("admin.add_building")) + "</button></div><table><thead><tr>" +
             "<th>ID</th><th>ja</th><th>en</th><th>zh</th><th></th></tr></thead><tbody>";
     for (var b in bs) {
@@ -5121,14 +5254,19 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='delB' data-id='" +
            esc(b) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     }
+    if (!Object.keys(bs).length)
+      h += emptyRowHtml(5, t("admin.empty_buildings"), t("admin.empty_buildings_hint"));
     h += "</tbody></table></div>";
     h += "<div class='card'><div class='chead'><h2>" + esc(t("admin.door_list")) +
-         "</h2><button class='btn small' data-act='addD'>+ " +
+         "</h2><button class='btn small' data-act='addD'>" + icon("plus") + " " +
          esc(t("admin.add_door")) + "</button></div><table><thead><tr>" +
          "<th>ID</th><th>" + esc(t("admin.label_ja")) + "</th><th>" +
          esc(t("admin.building_assign")) + "</th><th>" + esc(t("notice.title")) +
          "</th><th>" + esc(t("unlock.title")) + "</th><th></th></tr></thead><tbody>";
-    L.doorRows(S.cfg, S.status).forEach(function (row) {
+    var doorRowList = L.doorRows(S.cfg, S.status);
+    if (!doorRowList.length)
+      h += emptyRowHtml(6, t("admin.empty_doors"), t("admin.empty_doors_hint"));
+    doorRowList.forEach(function (row) {
       var d = row.id;
       var noticeModel = L.effectiveNoticeModel(d, S.cfg, new Date().getTime());
       var unlockModel = L.doorUnlockModel(d, S.cfg, S.status);
@@ -5168,18 +5306,18 @@ if (typeof document !== "undefined") (function () {
     // Announcement presets: the same list the indoor dialog and the editor below render.
     var presets = L.noticePresetList(S.cfg);
     h += "<div class='card'><div class='chead'><h2>" + esc(t("notice.presets_title")) +
-         "</h2><button class='btn small' data-act='addPreset'>+ " +
+         "</h2><button class='btn small' data-act='addPreset'>" + icon("plus") + " " +
          esc(t("notice.preset_add")) + "</button></div><div id='noticePresetRows'>";
     for (var pi = 0; pi < presets.length; pi++)
       h += "<div class='frow' data-preset-row><input type='text' data-preset-text value='" +
-           esc(presets[pi].text) + "' maxlength='400' style='flex:1'" +
-           " data-preset-id='" + esc(presets[pi].id) + "'>" +
+           esc(presets[pi].text) + "' maxlength='400' aria-label='" + esc(t("notice.presets_title")) +
+           "' data-preset-id='" + esc(presets[pi].id) + "'>" +
            " <button class='btn2 danger' data-act='delPreset' data-id='" + esc(presets[pi].id) +
            "'>" + esc(t("admin.delete")) + "</button></div>";
     if (!presets.length)
       h += "<div class='dim fhint'>" + esc(t("notice.none")) + "</div>";
-    h += "</div><button class='btn small' data-act='savePresets' style='margin-top:8px'>" +
-         esc(t("admin.save")) + "</button></div>";
+    h += "</div><div class='actions'><button class='btn small' data-act='savePresets'>" +
+         esc(t("admin.save")) + "</button></div></div>";
 
     el.innerHTML = h;
     bindActs(el, {
@@ -5474,8 +5612,8 @@ if (typeof document !== "undefined") (function () {
     for (var i = 0; i < p.strategies.length; i++) {
       var s = p.strategies[i];
       h += "<tr draggable='true' data-pb-row data-id='" + esc(s.id) + "'>" +
-           "<td class='ops'><button class='btn2 small' data-pb-up>↑</button> " +
-           "<button class='btn2 small' data-pb-down>↓</button></td>" +
+           "<td class='ops'>" + reorderButtonHtml("data-pb-up", true) +
+           reorderButtonHtml("data-pb-down", false) + "</td>" +
            "<td><label><input type='checkbox' data-pb-enabled" +
            (s.enabled ? " checked" : "") + "> " + esc(pbLabel(s.id)) +
            (s.id === "h264_hls" ? " <span class='dim'>(iPad1 App)</span>" : "") +
@@ -5614,8 +5752,8 @@ if (typeof document !== "undefined") (function () {
       var d = ds[nid] || {};
       var p = peerOf(nid);
       var alive = p && p.status === "alive";
-      var stCls = alive ? "ok" : (p && p.status === "suspect" ? "warn" : "err");
-      var stTxt = p ? p.status : t("admin.offline");
+      var peerState = peerStatusModel(p ? p.status : "");
+      var stCls = peerState.cls, stTxt = peerState.text;
       var runtime = nid === selfId ? (S.status.runtime || {}) : ((p && p.runtime) || {});
       var health = L.runtimeHealthRows(runtime), healthHtml = "";
       var healthLabels = {
@@ -5633,12 +5771,12 @@ if (typeof document !== "undefined") (function () {
       if (!healthHtml) healthHtml = "<span class='warn'>" +
         esc(t("admin.runtime_unreported")) + "</span>";
       h += "<tr class='" + (alive ? "" : "offline") + "'><td>" + esc(d.name || "") +
-           (p && p.self ? " <span class='tag'>self</span>" : "") + "</td><td class='dim'>" +
+           (p && p.self ? " <span class='tag'>" + esc(t("settings.section_device")) + "</span>" : "") + "</td><td class='dim'>" +
            esc(nid.slice(0, 8)) + "</td><td>" +
            esc(d.role === "indoor_panel" ? t("admin.role_indoor") :
                (d.role ? t("admin.role_door") : "")) + "</td><td>" +
-           esc(d.door ? doorLabel(d.door) : "—") + "</td><td class='" + stCls + "'>" +
-           esc(stTxt) + "</td><td class='dim mono'>" + esc(volumeSummary(nid)) +
+           esc(d.door ? doorLabel(d.door) : "—") + "</td><td><span class='status " + stCls + "'>" +
+           esc(stTxt) + "</span></td><td class='dim mono'>" + esc(volumeSummary(nid)) +
            "</td><td>" + healthHtml +
            "</td><td class='ops'><button class='btn2' data-act='edit' data-id='" +
            esc(nid) + "'>" + esc(t("admin.edit")) + "</button> " +
@@ -5652,6 +5790,10 @@ if (typeof document !== "undefined") (function () {
            (nid !== selfId ? " <button class='btn2 danger' data-act='remove' data-id='" +
              esc(nid) + "'>" + esc(t("admin.remove_device")) + "</button>" : "") + "</td></tr>";
     });
+    if (!ids.length)
+      h += emptyRowHtml(8, t("admin.empty_devices"), t("admin.empty_devices_hint"),
+                        "<button class='btn' data-act='pair'>" + icon("plus") + " " +
+                        esc(t("pair.tab")) + "</button>");
     h += "</tbody></table></div>";
 
     var vp = cfgObj("video_playback"), globalProfile = L.normalizePlaybackProfile(vp.global);
@@ -5665,8 +5807,8 @@ if (typeof document !== "undefined") (function () {
     h += "<div class='card'><h2>" + esc(t("admin.video_playback_policy")) +
          "</h2><h3>" + esc(t("admin.global")) + "</h3>" +
          playbackRowsHtml(globalProfile, "pbGlobalRows") +
-         "<button class='btn small' id='pbGlobalSave'>" + esc(t("admin.save")) +
-         "</button><hr style='border:0;border-top:1px solid var(--line);margin:18px 0'>" +
+         "<div class='ops' style='margin-top:12px'><button class='btn small' id='pbGlobalSave'>" +
+         esc(t("admin.save")) + "</button></div><hr>" +
          "<h3>" + esc(t("admin.playback_pair_override")) +
          "</h3><div style='display:flex;gap:8px;flex-wrap:wrap'>" +
          "<select id='pbReceiver'><option value=''>" + esc(t("admin.choose_indoor")) + "</option>";
@@ -5682,10 +5824,11 @@ if (typeof document !== "undefined") (function () {
       h += "<div style='margin-top:12px'><div class='dim fhint'>" +
            esc(t(pair ? "admin.pair_override_active" : "admin.pair_override_inherited")) + "</div>" +
            playbackRowsHtml(pair || globalProfile, "pbPairRows") +
-           "<button class='btn small' id='pbPairSave'>" + esc(t("admin.save_pair_override")) +
+           "<div class='ops' style='margin-top:12px'><button class='btn small' id='pbPairSave'>" +
+           esc(t("admin.save_pair_override")) +
            "</button> " + (pair ? "<button class='btn2 danger small' id='pbPairDelete'>" +
            esc(t("admin.delete_pair_override")) + "</button>" : "") +
-           "</div>";
+           "</div></div>";
     }
     h += "</div>";
     el.innerHTML = h;
@@ -5696,6 +5839,7 @@ if (typeof document !== "undefined") (function () {
                       else msg(t("admin.save_failed", j && j.err || "NG"));
                     });
                   }, edit: function (id) { editDevice(id); },
+                  pair: function () { settingsNav.open("pair"); },
                   vol: function (id) { editDeviceVolume(id); },
                   ui: function (id) { editDeviceUi(id, "native"); },
                   webui: function (id) { editDeviceUi(id, "web"); } });
@@ -5735,7 +5879,7 @@ if (typeof document !== "undefined") (function () {
       var hs = a.households === "all" ? t("admin.all") :
                (a.households instanceof Array ? a.households : []).map(householdLabel).join(",");
       return t("admin.act_telegram") + " → " + (hs || "?") +
-             (a.with_snapshot ? " 📷" : "");
+             (a.with_snapshot ? " · " + t("admin.with_snapshot") : "");
     }
     if (a.type === "chime") return t("admin.act_chime") + " (" + (a.sound || "ding1") + ")";
     if (a.type === "device_alert") {
@@ -5751,8 +5895,10 @@ if (typeof document !== "undefined") (function () {
     var parts = [];
     for (var i = 0; i < ws.length; i++) {
       var w = ws[i];
-      var days = (w.days || DAYS).map(dayLabel).join("");
-      parts.push(days + " " + (w.from || "") + "-" + (w.to || ""));
+      var labels = (w.days || DAYS).map(dayLabel);
+      // Single-character day names (ja, zh) read as one word; longer ones need a separator.
+      var spaced = labels.some(function (label) { return label.length > 1; });
+      parts.push(labels.join(spaced ? " " : "") + " " + (w.from || "") + "–" + (w.to || ""));
     }
     return parts.join(" / ") || t("admin.always");
   }
@@ -5840,7 +5986,7 @@ if (typeof document !== "undefined") (function () {
         params += "<option value='" + esc(ro[ri].v) + "'" +
                   (ro[ri].v === (a.sound || "ding1") ? " selected" : "") + ">" +
                   esc(ro[ri].label) + "</option>";
-      params += "</select> <button class='btn2' data-ringplay='" + idx + "'>▶ " +
+      params += "</select> <button class='btn2' data-ringplay='" + idx + "'>" +
                 esc(t("admin.audio_play")) + "</button>";
     } else if (a.type === "device_alert") {
       var targets = a.targets && typeof a.targets === "object" ? a.targets : {};
@@ -5899,7 +6045,7 @@ if (typeof document !== "undefined") (function () {
                 esc(p.accent) + "'></div></div>";
     }
     return "<div class='arow' data-arow='" + idx + "'>" + sel + " " + params +
-           " <button class='btn2 danger' data-ra='del' data-idx='" + idx + "'>×</button></div>";
+           " " + removeButtonHtml("data-ra='del' data-idx='" + idx + "'") + "</div>";
   }
 
   function windowRowHtml(idx, w) {
@@ -5911,7 +6057,7 @@ if (typeof document !== "undefined") (function () {
            esc(dayLabel(DAYS[i])) + "</label>";
     h += " <input type='time' data-rw='from' data-idx='" + idx + "' value='" + esc(w.from || "") +
          "'> – <input type='time' data-rw='to' data-idx='" + idx + "' value='" + esc(w.to || "") +
-         "'> <button class='btn2 danger' data-rw='del' data-idx='" + idx + "'>×</button></div>";
+         "'> " + removeButtonHtml("data-rw='del' data-idx='" + idx + "'") + "</div>";
     return h;
   }
 
@@ -5961,7 +6107,7 @@ if (typeof document !== "undefined") (function () {
       esc(t("admin.sos_capable_recipients")) + ") · Web Push: " +
       (preview.web_push_recipients === null ? "?" : preview.web_push_recipients) + "</div>";
     for (var i = 0; i < warnings.length; i++)
-      h += "<div class='warn' style='font-weight:600;margin-top:6px'>⚠ " +
+      h += "<div class='warn' style='font-weight:600;margin-top:6px'>" + icon("info-circle") + " " +
            esc(sosWarningText(warnings[i])) + "</div>";
     if (!warnings.length)
       h += "<div class='ok' style='margin-top:6px'>" +
@@ -6039,14 +6185,14 @@ if (typeof document !== "undefined") (function () {
       if (!st.always) {
         h += "<div id='rWins'>";
         for (var i = 0; i < st.windows.length; i++) h += windowRowHtml(i, st.windows[i]);
-        h += "</div><button class='btn2' id='rAddWin'>+ " +
+        h += "</div><button class='btn2' id='rAddWin'>" + icon("plus") + " " +
              esc(t("admin.add_window")) + "</button>";
       }
 
       h += "<div class='frow'><label class='flab'>" + esc(t("admin.actions")) +
            "</label></div><div id='rActs'>";
       for (var j = 0; j < st.actions.length; j++) h += actionRowHtml(j, st.actions[j]);
-      h += "</div><button class='btn2' id='rAddAct'>+ " +
+      h += "</div><button class='btn2' id='rAddAct'>" + icon("plus") + " " +
            esc(t("admin.add_action")) + "</button>";
       h += sosPreviewHtml(L.mergeRuleEditor(cur, st));
       return h;
@@ -6288,14 +6434,13 @@ if (typeof document !== "undefined") (function () {
             "<option value='ring_then_purpose'" +
             (configuredFlow === "ring_then_purpose" ? " selected" : "") +
             ">" + esc(t("admin.call_flow_ring_then_purpose_label")) +
-            "</option></select><button class='btn small' id='callFlowSave'>" +
-            esc(t("admin.save")) + "</button></div><div class='dim fhint' id='callFlowHint'>" +
+            "</option></select></div><div class='dim fhint' id='callFlowHint'>" +
             esc(t(configuredFlow === "ring_then_purpose" ?
                 "admin.call_flow_ring_then_purpose" : "admin.call_flow_purpose_first")) +
             "</div>";
     if (flowSupport.warning || flowSupport.unknown_fleet) {
       var unsupported = flowSupport.unsupported.map(deviceName).join(", ") || t("admin.call_flow_unknown");
-      h += "<div class='warn' role='alert' style='font-weight:600;margin-top:8px'>⚠ " +
+      h += "<div class='warn' role='alert' style='font-weight:600;margin-top:8px'>" + icon("info-circle") + " " +
            esc(t("admin.call_flow_mixed_warning")) +
            " " + esc(unsupported) + "</div>";
     } else if (configuredFlow === "ring_then_purpose") {
@@ -6303,7 +6448,8 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.call_flow_supported")) +
            "</div>";
     }
-    h += "</div>";
+    h += "<div class='actions'><button class='btn small' id='callFlowSave'>" +
+         esc(t("admin.save")) + "</button></div></div>";
 
     var callReturn = L.callReturnSeconds(S.cfg, "");
     h += "<div class='card'><h2>" + esc(t("call.return_title")) + "</h2>" +
@@ -6311,11 +6457,16 @@ if (typeof document !== "undefined") (function () {
          "</div><div class='frow'><label class='flab'>" + esc(t("call.return_s")) + "</label>" +
          "<input type='number' id='callReturn' min='" + L.CALL_RETURN_MIN + "' max='" +
          L.CALL_RETURN_MAX + "' value='" + esc(callReturn.seconds) + "'></div>" +
-         "<button class='btn small' id='callReturnSave'>" + esc(t("admin.save")) +
-         "</button></div>";
+         "<div class='actions'><button class='btn small' id='callReturnSave'>" + esc(t("admin.save")) +
+         "</button></div></div>";
 
-    h += "<div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
-            esc(t("admin.add_rule")) + "</button></div>";
+    var addRuleHtml = "<button class='btn' data-act='add'>" + icon("plus") + " " +
+                      esc(t("admin.add_rule")) + "</button>";
+    h = "<div class='pagebar'>" + addRuleHtml.replace("data-act='add'", "data-act='add' data-primary") +
+        "</div>" + h;
+    if (!Object.keys(rs).length)
+      h += "<div class='card'>" + emptyStateHtml(t("admin.empty_rules"), t("admin.empty_rules_hint"),
+                                                 addRuleHtml) + "</div>";
     for (var id in rs) {
       var r = rs[id];
       var when = r.when || {};
@@ -6346,7 +6497,7 @@ if (typeof document !== "undefined") (function () {
              (sosPreview.web_push_recipients === null ? "?" : sosPreview.web_push_recipients) +
              "</div>";
         for (var wi = 0; wi < sosWarnings.length; wi++)
-          h += "<div class='warn fhint'>⚠ " + esc(sosWarningText(sosWarnings[wi])) + "</div>";
+          h += "<div class='warn fhint'>" + icon("info-circle") + " " + esc(sosWarningText(sosWarnings[wi])) + "</div>";
       }
       h += "</div><div class='ops' style='margin-top:8px'><button class='btn2' data-act='edit' data-id='" +
            esc(id) + "'>" + esc(t("admin.edit")) +
@@ -6510,7 +6661,7 @@ if (typeof document !== "undefined") (function () {
         h += "<tr><td>" + esc(label) + "</td><td>" + esc(langName(row.lang)) + "</td><td>" +
           esc(t(({ready:"speech.state_ready", syncing:"speech.state_syncing", generating:"speech.state_generating", failed:"speech.state_failed", pending:"speech.state_pending", system:"speech.state_system"})[row.state] || "speech.state_pending")) + (row.error ? " · " + esc(row.error) : "") + "</td><td>";
         if (row.state === "ready" || row.state === "system")
-          h += "<button class='btn2' data-tts-play='" + index + "'>▶ " + esc(t("speech.preview")) + "</button>";
+          h += "<button class='btn2' data-tts-play='" + index + "'>" + esc(t("speech.preview")) + "</button>";
         h += "</td></tr>";
       });
       root.innerHTML = h + "</tbody></table>";
@@ -6547,8 +6698,10 @@ if (typeof document !== "undefined") (function () {
     var el = $("#tab-qr");
     var qrs = cfgObj("quick_replies");
     var ids = sortedQrIds();
-    var h = "<div class='card'><div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
-            esc(t("admin.add_reply")) + "</button></div><table><thead><tr><th>#</th><th>" +
+    var addReplyHtml = "<button class='btn' data-act='add'>" + icon("plus") + " " +
+                       esc(t("admin.add_reply")) + "</button>";
+    var h = "<div class='card'><h2>" + esc(t("admin.quick_replies")) +
+            "</h2><table><thead><tr><th>#</th><th>" +
             esc(t("admin.label_ja")) + "</th><th>" + esc(t("admin.qr_speak")) +
 
             "</th><th>" + esc(t("admin.audio")) + "</th><th></th></tr></thead><tbody>";
@@ -6558,19 +6711,24 @@ if (typeof document !== "undefined") (function () {
         if (!au[lg]) continue;
         chips += "<span class='chip'>" + esc(lg + ": " + assetLabel(au[lg])) +
                  " <button class='btn2' data-act='play' data-id='" + esc(au[lg]) +
-                 "'>▶</button></span>";
+                 "' aria-label='" + esc(t("admin.audio_play")) + "'>" + icon("volume") + "</button></span>";
       }
       h += "<tr><td class='dim'>" + (i + 1) + "</td><td>" + esc(L.labelOf(q, LANG, id)) +
-           "</td><td>" + (q.speak !== false ? "🔊" : "—") + "</td><td>" +
+           "</td><td>" + (q.speak !== false ? icon("volume") : "—") + "</td><td>" +
            (chips || "<span class='dim'>TTS</span>") + "</td><td class='ops'>" +
-           "<button class='btn2' data-act='up' data-id='" + esc(id) + "'>↑</button>" +
-           "<button class='btn2' data-act='down' data-id='" + esc(id) + "'>↓</button> " +
+           reorderButtonHtml("data-act='up' data-id='" + esc(id) + "'", true) +
+           reorderButtonHtml("data-act='down' data-id='" + esc(id) + "'", false) +
            "<button class='btn2' data-act='edit' data-id='" + esc(id) + "'>" +
            esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
            esc(id) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     });
+    if (!ids.length)
+      h += emptyRowHtml(5, t("admin.empty_quick_replies"), t("admin.empty_quick_replies_hint"),
+                        addReplyHtml);
     h += "</tbody></table></div>";
-    el.innerHTML = "<div class='card' id='speechPanel'></div>" + h;
+    el.innerHTML = "<div class='pagebar'>" +
+      addReplyHtml.replace("data-act='add'", "data-act='add' data-primary") + "</div>" + h +
+      "<div class='card' id='speechPanel'></div>";
     renderSpeechPanel(el.querySelector("#speechPanel"));
     function move(id, dir) {
       var order = sortedQrIds();
@@ -6619,8 +6777,11 @@ if (typeof document !== "undefined") (function () {
   function renderHouseholds() {
     var el = $("#tab-households");
     var hs = cfgObj("households");
-    var h = "<div class='card'><div class='chead'><h2></h2><button class='btn small' data-act='add'>+ " +
-            esc(t("admin.add_household")) + "</button></div><table><thead><tr><th>" +
+    var addHouseholdHtml = "<button class='btn' data-act='add'>" + icon("plus") + " " +
+                           esc(t("admin.add_household")) + "</button>";
+    var h = "<div class='pagebar'>" +
+            addHouseholdHtml.replace("data-act='add'", "data-act='add' data-primary") +
+            "</div><div class='card'><table><thead><tr><th>" +
             esc(t("admin.households")) + "</th><th>Telegram</th><th>SIP</th><th></th></tr>" +
             "</thead><tbody>";
     for (var id in hs) {
@@ -6632,6 +6793,9 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.edit")) + "</button> <button class='btn2 danger' data-act='del' data-id='" +
            esc(id) + "'>" + esc(t("admin.delete")) + "</button></td></tr>";
     }
+    if (!Object.keys(hs).length)
+      h += emptyRowHtml(4, t("admin.empty_households"), t("admin.empty_households_hint"),
+                        addHouseholdHtml);
     h += "</tbody></table></div>";
     el.innerHTML = h;
     bindActs(el, {
@@ -6884,9 +7048,10 @@ if (typeof document !== "undefined") (function () {
          "<div class='frow'><label class='flab'>" + esc(t("admin.pass")) +
          "</label><input id='mqPass' type='password' placeholder='" +
          esc(t("admin.secret_unchanged")) + "'></div></div>" +
-         "<button class='btn small' id='mqSave'>" + esc(t("admin.save")) + "</button>" +
+         "<div class='actions'><button class='btn small' id='mqSave'>" + esc(t("admin.save")) +
+         "</button>" +
          (mqtt.pass_ref ? " <button class='btn2' id='mqProvision' disabled>" +
-          esc(t("admin.provision_this_node")) + "</button>" : "") + "</div>";
+          esc(t("admin.provision_this_node")) + "</button>" : "") + "</div></div>";
 
     // Telegram
     h += "<div class='card'><h2>Telegram</h2>" +
@@ -6896,14 +7061,13 @@ if (typeof document !== "undefined") (function () {
          "<div class='frow frow-check'><label><input type='checkbox' id='tgPoll'" +
          (tg.poll_updates ? " checked" : "") + "> " + esc(t("admin.poll_updates")) +
          "</label></div>" +
-         "<button class='btn small' id='tgSave'>" + esc(t("admin.save")) + "</button> " +
+         "<div class='frow'><label class='flab' for='tgTestChat'>" + esc(t("admin.test_send")) +
+         "</label><input id='tgTestChat' placeholder='" + esc(t("admin.telegram_test_chat")) +
+         "'> <button class='btn2' id='tgTest'>" + esc(t("admin.test_send")) + "</button></div>" +
+         "<div class='actions'><button class='btn small' id='tgSave'>" + esc(t("admin.save")) +
+         "</button> " +
          (tg.bot_token_ref ? "<button class='btn2' id='tgProvision' disabled>" +
-          esc(t("admin.provision_this_node")) + "</button> " : "") +
-         "<span style='display:inline-block; width:16px'></span>" +
-         "<input id='tgTestChat' placeholder='" + esc(t("admin.telegram_test_chat")) +
-         "' style='width:200px'> " +
-         "<button class='btn2' id='tgTest'>" + esc(t("admin.test_send")) +
-         "</button></div>";
+          esc(t("admin.provision_this_node")) + "</button> " : "") + "</div></div>";
 
     h += "<div class='card'><h2>" + esc(t("admin.web_push_backend")) + "</h2>" +
          "<div class='grid2'>" +
@@ -6929,7 +7093,7 @@ if (typeof document !== "undefined") (function () {
          (push.sender_secret_ref ? esc(t("admin.secret_configured")) : "") + "'> " +
          (push.sender_secret_ref ? "<button class='btn2' id='wpBearerProvision' disabled>" +
           esc(t("admin.provision_this_node")) + "</button>" : "") + "</div>" +
-         "<div class='dim' id='wpStatus'>" + esc(t("admin.web_push_status")) + ": " +
+         "<div class='dim fhint' id='wpStatus'>" + esc(t("admin.web_push_status")) + ": " +
          esc(t(pushStatus.configured ? "admin.enabled" : "admin.disabled")) + " · " +
          esc(t("admin.web_push_local_secret")) + ": " +
          esc(t(pushStatus.local_secret_ready ? "admin.ready" : "admin.not_ready")) + " · " +
@@ -6937,8 +7101,8 @@ if (typeof document !== "undefined") (function () {
          esc(t(pushStatus.delivery_backend ? "admin.ready" : "admin.not_ready")) + " · " +
          esc(t("admin.leader")) + ": " + esc(pushStatus.leader || "—") +
          (pushStatus.warning_code ? " · " + esc(pushStatus.warning_code) : "") + "</div>" +
-         "<button class='btn small' id='wpSave' style='margin-top:8px'>" +
-         esc(t("admin.save")) + "</button></div>";
+         "<div class='actions'><button class='btn small' id='wpSave'>" +
+         esc(t("admin.save")) + "</button></div></div>";
 
     // SIP
     h += "<div class='card'><h2>SIP</h2><div class='grid2'>" +
@@ -6953,8 +7117,7 @@ if (typeof document !== "undefined") (function () {
            ">" + tr + "</option>";
     });
     h += "</select></div></div>" +
-         "<h3 class='dim' style='margin:10px 0 4px'>" +
-         esc(t("admin.sip_accounts")) + "</h3>" +
+         "<h3>" + esc(t("admin.sip_accounts")) + "</h3>" +
          "<table><thead><tr><th>" + esc(t("admin.devices")) + "</th><th>" +
          esc(t("admin.user")) + "</th><th>" + esc(t("admin.pass")) +
          "</th></tr></thead><tbody>";
@@ -6976,8 +7139,8 @@ if (typeof document !== "undefined") (function () {
             "</button>" : "") :
            "<span class='dim'>" + esc(t("admin.secret_on_target_only")) + "</span>") + "</td></tr>";
     });
-    h += "</tbody></table><button class='btn small' id='sipSave' style='margin-top:8px'>" +
-         esc(t("admin.save")) + "</button></div>";
+    h += "</tbody></table><div class='actions'><button class='btn small' id='sipSave'>" +
+         esc(t("admin.save")) + "</button></div></div>";
 
 
     h += "<div class='card'><h2>" + esc(t("admin.quiet_hours")) + " / TZ</h2>" +
@@ -6985,13 +7148,13 @@ if (typeof document !== "undefined") (function () {
          "</label><input id='tzMin' type='number' value='" +
          esc(integ.tz_offset_min !== undefined ? integ.tz_offset_min : 540) + "'></div>" +
          "<div class='frow'><label class='flab'>" + esc(t("admin.windows")) +
-         "</label><div id='qhWins'>";
+         "</label><div id='qhWins' style='flex:0 0 100%'>";
     (qh.windows || []).forEach(function (w, i) {
       h += "<div class='arow' data-qhrow='" + i + "'><input type='time' data-qh='from' value='" +
            esc(w.from || "") + "'> – <input type='time' data-qh='to' value='" + esc(w.to || "") +
-           "'> <button class='btn2 danger' data-qh='del'>×</button></div>";
+           "'> " + removeButtonHtml("data-qh='del'") + "</div>";
     });
-    h += "</div><button class='btn2' id='qhAdd'>+ " + esc(t("admin.add_window")) +
+    h += "</div><button class='btn2' id='qhAdd'>" + icon("plus") + " " + esc(t("admin.add_window")) +
          "</button></div>";
     var ACT_TYPES = [["sip_call", t("admin.act_sip")],
                      ["telegram", t("admin.act_telegram")],
@@ -7011,8 +7174,8 @@ if (typeof document !== "undefined") (function () {
            ((qh.never_suppress || []).indexOf(a[0]) >= 0 ? " checked" : "") + "> " + esc(a[1]) +
            "</label>";
     });
-    h += "</div></div><button class='btn small' id='qhSave'>" + esc(t("admin.save")) +
-         "</button></div>";
+    h += "</div></div><div class='actions'><button class='btn small' id='qhSave'>" +
+         esc(t("admin.save")) + "</button></div></div>";
 
     el.innerHTML = h;
 
@@ -7117,7 +7280,7 @@ if (typeof document !== "undefined") (function () {
       row.setAttribute("data-qhrow", "x");
       row.innerHTML = "<input type='time' data-qh='from' value='23:00'> – " +
                       "<input type='time' data-qh='to' value='07:00'> " +
-                      "<button class='btn2 danger' data-qh='del'>×</button>";
+                      removeButtonHtml("data-qh='del'");
       $("#qhWins").appendChild(row);
       row.querySelector("[data-qh='del']").onclick = function () {
         row.parentNode.removeChild(row);
@@ -7152,14 +7315,29 @@ if (typeof document !== "undefined") (function () {
 
 
   var evFilter = "";
+  // An event payload is a small JSON object; it reads better as "name: value" pairs than as raw
+  // JSON. Anything that is not a flat object is shown as it was recorded.
+  function eventDetailText(payload) {
+    if (!payload || payload === "{}") return "";
+    var parsed;
+    try { parsed = JSON.parse(payload); } catch (e) { return String(payload); }
+    if (!isObj(parsed)) return String(payload);
+    var parts = [];
+    for (var key in parsed) if (Object.prototype.hasOwnProperty.call(parsed, key)) {
+      var value = parsed[key];
+      parts.push(key + ": " + (value !== null && typeof value === "object" ? JSON.stringify(value) : String(value)));
+    }
+    return parts.join("\n");
+  }
   function renderEvents() {
     var el = $("#tab-events");
     var types = ["", "press", "motion", "reply", "answered", "missed", "offline", "online",
                  "config_changed", "dtmf_action", "cluster_key_changed", "peer_rejected"];
-    var h = "<div class='card'><div class='chead'><h2></h2><select id='evFilter'>";
+    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.events")) +
+            "</h2><select id='evFilter' aria-label='" + esc(t("admin.filter_type")) + "'>";
     types.forEach(function (ty) {
       h += "<option value='" + ty + "'" + (evFilter === ty ? " selected" : "") + ">" +
-           (ty || esc(t("admin.filter_type"))) + "</option>";
+           esc(ty ? eventTypeLabel(ty) : t("admin.filter_type")) + "</option>";
     });
     h += "</select></div><table class='bounded-table'><colgroup><col style='width:14%'>" +
          "<col style='width:15%'><col style='width:17%'><col style='width:54%'></colgroup>" +
@@ -7167,14 +7345,19 @@ if (typeof document !== "undefined") (function () {
          "</th><th>" + esc(t("panel.event_type")) + "</th><th>" +
          esc(t("admin.door_or_device")) + "</th><th>" + esc(t("admin.details")) +
          "</th></tr></thead><tbody>";
-    var evs = S.events || [];
+    var evs = S.events || [], shown = 0;
     for (var i = 0; i < evs.length; i++) {
       var e = evs[i];
       if (evFilter && e.type !== evFilter) continue;
-      h += "<tr><td class='dim'>" + fmtTime(e.wall_ms) + "</td><td>" + esc(e.type) + "</td><td>" +
+      shown++;
+      h += "<tr><td class='dim'>" + fmtTime(e.wall_ms) + "</td><td>" + esc(eventTypeLabel(e.type)) +
+           "</td><td>" +
            esc(e.door ? doorLabel(e.door) : deviceName(e.device)) + "</td><td class='dim event-detail'>" +
-           esc(e.payload || "") + "</td></tr>";
+           esc(eventDetailText(e.payload)) + "</td></tr>";
     }
+    if (!shown)
+      h += evFilter ? emptyRowHtml(4, t("admin.empty_events_filtered"), "") :
+                      emptyRowHtml(4, t("admin.empty_events"), t("admin.empty_events_hint"));
     h += "</tbody></table></div>";
     el.innerHTML = h;
     $("#evFilter").onchange = function () {
@@ -7558,12 +7741,12 @@ if (typeof document !== "undefined") (function () {
          "<input type='number' id='timeInterval' min='3600' max='604800' step='3600' value='" +
          esc(timeNtp.interval_s === undefined ? 86400 : timeNtp.interval_s) + "'>" +
          "<div class='dim fhint'>" + esc(t("time.interval_hint")) + "</div></div>" +
-         "<div style='display:flex;gap:8px;flex-wrap:wrap;margin-top:8px'>" +
+         "<h3>" + esc(t("time.status")) + "</h3>" +
+         "<div id='timeStatusBlock' class='fhint'>" + timeStatusHtml() + "</div>" +
+         "<div class='actions'>" +
          "<button class='btn small' id='timeSave'>" + esc(t("admin.save")) + "</button>" +
          "<button class='btn2 small' id='timeSyncNow'>" + esc(t("time.sync_now")) +
-         "</button></div>" +
-         "<h3 style='margin-top:14px'>" + esc(t("time.status")) + "</h3>" +
-         "<div id='timeStatusBlock' class='fhint'>" + timeStatusHtml() + "</div></div>";
+         "</button></div></div>";
 
     h += "<div class='card'><h2>" + esc(t("settings.change_password")) + "</h2>" +
          "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("settings.password_shared")) +
@@ -7576,15 +7759,16 @@ if (typeof document !== "undefined") (function () {
          "</div></div>" +
          "<div class='frow'><label class='flab' for='pwConfirm'>" + esc(t("settings.password_confirm")) +
          "</label><input type='password' id='pwConfirm' autocomplete='new-password'></div>" +
-         "<div class='fhint' id='pwErr' role='alert' style='color:var(--negative,#e5484d)'></div>" +
-         "<button class='btn small' id='pwSave'>" + esc(t("admin.save")) + "</button></div>";
+         "<div class='err fhint' id='pwErr' role='alert'></div>" +
+         "<div class='actions'><button class='btn small' id='pwSave'>" + esc(t("admin.save")) +
+         "</button></div></div>";
 
     var clusterVolumes = L.effectiveVolumes(S.cfg, "");
     h += "<div class='card'><h2>" + esc(t("volume.title")) + "</h2>" +
          "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("volume.hint")) + "</div>" +
          volumeRowsHtml("sysvol", clusterVolumes, null) +
-         "<button class='btn small' id='volSave' style='margin-top:8px'>" +
-         esc(t("admin.save")) + "</button></div>";
+         "<div class='actions'><button class='btn small' id='volSave'>" +
+         esc(t("admin.save")) + "</button></div></div>";
 
     var emergencyCfg = cfgObj("emergency");
     var trigger = isObj(emergencyCfg.trigger) ? emergencyCfg.trigger : {};
@@ -7618,7 +7802,7 @@ if (typeof document !== "undefined") (function () {
         ((emergencyCfg.alarm_sound || "siren1") === option.v ? " selected" : "") + ">" +
         esc(option.label) + "</option>";
     });
-    h += "</select><button class='btn2 small' id='sosSoundPlay'>▶ " +
+    h += "</select><button class='btn2 small' id='sosSoundPlay'>" +
          esc(t("admin.audio_play")) + "</button></div></div>" +
          "<div class='frow'><label class='flab'>" + esc(t("sos.alarm_volume")) + "</label>" +
          "<div style='display:flex;gap:10px;align-items:center'>" +
@@ -7628,8 +7812,8 @@ if (typeof document !== "undefined") (function () {
          "<output id='sosVolumeOut' class='mono' style='min-width:3.5em;text-align:right'>" +
          esc(emergencyCfg.alarm_volume === undefined ? 100 : emergencyCfg.alarm_volume) +
          "</output></div></div>" +
-         "<button class='btn small' id='sosSave' style='margin-top:8px'>" +
-         esc(t("admin.save")) + "</button></div>";
+         "<div class='actions'><button class='btn small' id='sosSave'>" +
+         esc(t("admin.save")) + "</button></div></div>";
 
     var webSosEnabled = emergencyCfg.web_active_page_alerts !== false;
     h += "<div class='card'><h2>" +
@@ -7639,8 +7823,8 @@ if (typeof document !== "undefined") (function () {
          esc(t("admin.web_sos_enabled")) +
          "</label><div class='warn fhint'>" +
          esc(t("admin.web_sos_warning")) +
-         "</div><button class='btn small' id='webSosSave' style='margin-top:8px'>" +
-         esc(t("admin.save")) + "</button></div>";
+         "</div><div class='actions'><button class='btn small' id='webSosSave'>" +
+         esc(t("admin.save")) + "</button></div></div>";
 
     h += "<div class='card' id='sysImportWorkflow'>" + configImportHtml() + "</div>";
 
@@ -7655,12 +7839,13 @@ if (typeof document !== "undefined") (function () {
          "<div class='dim fhint'>" + esc(t("security.fingerprint_hint")) + "</div></div>" +
          "<div class='frow'><label class='flab'>" + esc(t("security.membership")) + "</label>" +
          "<div>" + esc(membershipText(selfMembership)) + "</div></div>" +
+         "<div class='dangerzone'><h3>" + esc(t("admin.danger_zone")) + "</h3>" +
          "<div class='frow'><button class='btn2 danger' id='pskRotate'>" + icon("reload") + " " +
          esc(t("security.rotate_key")) + "</button>" +
          "<div class='dim fhint'>" + esc(t("security.rotate_key_hint")) + "</div></div>" +
          "<div class='frow'><button class='btn2 danger' id='clusterRebuild'>" +
          esc(t("security.rebuild")) + "</button>" +
-         "<div class='dim fhint'>" + esc(t("security.rebuild_hint")) + "</div></div></div>";
+         "<div class='dim fhint'>" + esc(t("security.rebuild_hint")) + "</div></div></div></div>";
 
     h += "<div class='card'><h2>" + esc(t("admin.panel_token")) + "</h2>" +
          "<div class='mono' id='panelTok'>" + esc(tok || "—") + "</div>";
@@ -7668,10 +7853,11 @@ if (typeof document !== "undefined") (function () {
       h += "<div class='dim fhint'><a href='" + esc(base + "/panel/door#k=" + tok) +
            "' target='_blank'>/panel/door#k=…</a> · <a href='" +
            esc(base + "/panel/monitor#k=" + tok) + "' target='_blank'>/panel/monitor#k=…</a></div>";
-    h += "<button class='btn2' id='tokRotate' style='margin-top:8px'>" +
-         esc(t("admin.rotate")) + "</button>";
+    h += "<div class='ops' style='margin:12px 0'><button class='btn2 danger' id='tokRotate'>" +
+         icon("reload") + " " + esc(t("admin.rotate")) + "</button></div>";
     if (panelRefs.length) {
-      h += "<div class='frow' style='margin-top:10px'><select id='panelProvisionRef'>";
+      h += "<div class='frow'><select id='panelProvisionRef' aria-label='" +
+           esc(t("admin.panel_token")) + "'>";
       panelRefs.forEach(function (ref) {
         h += "<option value='" + esc(ref) + "'>" + esc(ref) + "</option>";
       });
@@ -7687,18 +7873,21 @@ if (typeof document !== "undefined") (function () {
          "</button></div>";
 
     h += "<div class='card'><h2>" + esc(t("admin.raw_config")) + "</h2>" +
-         "<textarea id='cfgView' readonly></textarea>" +
-         "<div style='display:flex; gap:8px; margin-top:10px'>" +
-         "<input id='cfgKey' type='text' placeholder='doors.d_front.label' style='flex:1'>" +
+         "<textarea id='cfgView' readonly aria-label='" + esc(t("admin.raw_config")) +
+         "' style='min-height:300px'></textarea>" +
+         "<div style='display:flex; gap:8px; margin-top:12px'>" +
+         "<input id='cfgKey' type='text' placeholder='doors.d_front.label' aria-label='" +
+         esc(t("admin.key")) + "' style='flex:1 1 12rem'>" +
          "<input id='cfgVal' type='text' placeholder='" +
-         esc(t("admin.config_value_placeholder")) + "' style='flex:2'>" +
+         esc(t("admin.config_value_placeholder")) + "' aria-label='" +
+         esc(t("admin.config_value_placeholder")) + "' style='flex:2 1 16rem'>" +
          "<button class='btn' id='cfgSet'>" + esc(t("admin.write")) + "</button></div></div>";
 
     h += "<div class='card'><h2>" + esc(t("admin.logs")) + "</h2>" +
-         "<button class='btn2' id='logBtn'>" + icon("reload") + "</button> " +
-         "<button class='btn2' id='logCopy'>" + icon("copy") + " " + esc(t("admin.copy")) + "</button>" +
-         "<pre id='logOut' class='mono' " +
-         "style='white-space:pre-wrap; font-size:11px; margin-top:8px'></pre></div>";
+         "<div class='ops'><button class='btn2' id='logBtn'>" + icon("reload") + " " +
+         esc(t("admin.refresh")) + "</button> " +
+         "<button class='btn2' id='logCopy'>" + icon("copy") + " " + esc(t("admin.copy")) + "</button></div>" +
+         "<pre id='logOut' class='mono' style='white-space:pre-wrap; margin-top:12px'></pre></div>";
     el.innerHTML = h;
 
     function securityAction(path, confirmKey, doneKey) {
@@ -7714,7 +7903,8 @@ if (typeof document !== "undefined") (function () {
       }, { timeout_ms: 15000 });
     }
     $("#pskRotate").onclick = function () {
-      if (!window.confirm(t("security.rotate_key_confirm"))) return;
+      if (!window.confirm(t("security.rotate_key_confirm") + "\n\n" + t("security.rotate_key_hint")))
+        return;
       api("POST", "/api/pairing/rotate", {}, function (st, j) {
         if (st === 200 && j && j.ok === true) {
           msg(j.psk_id ? fmt(t("security.rotate_key_done_id"), { id: String(j.psk_id) }) :
@@ -7946,7 +8136,7 @@ if (typeof document !== "undefined") (function () {
     var parts = [];
     if (m.self.name) parts.push(m.self.name);
     if (m.self.model) parts.push(m.self.model);
-    if (m.self.role) parts.push(m.self.role);
+    if (m.self.role) parts.push(roleLabel(m.self.role));
     if (m.self.addr) parts.push(m.self.addr);
     return parts.join(" · ");
   }
@@ -8035,7 +8225,7 @@ if (typeof document !== "undefined") (function () {
     if (r.state === "adding") {
       right = "<span class='dim'><span class='spin'></span>" + esc(t("pair.adding")) + "</span>";
     } else if (r.state === "added") {
-      right = "<span class='ok'>" + esc(t("pair.added")) + " ✓</span>";
+      right = "<span class='ok'>" + esc(t("pair.added")) + " " + icon("check") + "</span>";
     } else if (r.state === "failed") {
       right = pairCodeInputHtml(r) + "<button class='btn small' data-pair='add' data-id='" + esc(r.id) + "'>" +
               esc(t("pair.add")) + "</button>";
@@ -8048,7 +8238,8 @@ if (typeof document !== "undefined") (function () {
               "<button class='btn2 small' data-pair='deny' data-id='" + esc(r.id) + "'>" +
               esc(t("pair.deny")) + "</button>";
     }
-    if (r.detail) meta.push(esc(r.detail));
+    // The model's detail line leads with the role id; show its translated name instead.
+    if (r.detail) meta.push(esc(String(r.detail).replace(/^(indoor_panel|door_station)(?= · |$)/, roleLabel)));
     if (!r.gone) meta.push(esc(fmt(t("pair.nearby_waiting_since"), { s: r.age_s })));
     if (r.pkConflict) note = "<div class='warn fhint' role='alert'>" + esc(t("pair.pk_conflict_warning")) +
       "</div>" + note;
@@ -8152,7 +8343,7 @@ if (typeof document !== "undefined") (function () {
             (m.isFounder ? " <span class='tag'>" + esc(t("pair.created_badge")) + "</span>" : "") +
             "</div>";
     if (PAIR.created)
-      h += "<div class='ok' style='margin-top:10px'>" + esc(t("pair.created")) + " ✓</div>" +
+      h += "<div class='ok' style='margin-top:10px'>" + esc(t("pair.created")) + " " + icon("check") + "</div>" +
            "<div class='dim fhint'>" + esc(t("pair.created_next")) + "</div>";
     h += "</div>";
 
@@ -8164,7 +8355,7 @@ if (typeof document !== "undefined") (function () {
     h += "</div>";
 
     h += pairCodeCardHtml(m) + pairAddAllCardHtml(m) + pairScanCardHtml() + pairSecurityHtml(m);
-    h += "<div class='card'><h2>" + esc(t("pair.clear_title")) + "</h2>" +
+    h += "<div class='card danger'><h2>" + esc(t("pair.clear_title")) + "</h2>" +
          "<div class='dim fhint' style='margin-bottom:10px'>" + esc(t("pair.clear_confirm")) +
          "</div><button class='btn2 small danger' data-pair='unpair'>" +
          esc(t("pair.clear_title")) + "</button></div>";
@@ -8544,10 +8735,12 @@ if (typeof document !== "undefined") (function () {
     var el = $("#tab-purposes");
     var ps = cfgObj("visit_purposes"), ids = sortedPurposeIds();
     var ui = cfgObj("ui");
-    var h = "<div class='card'><div class='chead'><h2>" + esc(t("admin.purposes")) +
-            "</h2><button class='btn small' data-act='add'>+ " +
-            esc(t("admin.add")) + "</button></div>" +
-            "<div class='dim fhint' style='margin-bottom:8px'>" +
+    var addPurposeHtml = "<button class='btn' data-act='add'>" + icon("plus") + " " +
+                         esc(t("admin.add")) + "</button>";
+    var h = "<div class='pagebar'>" +
+            addPurposeHtml.replace("data-act='add'", "data-act='add' data-primary") +
+            "</div><div class='card'><h2>" + esc(t("admin.purposes")) + "</h2>" +
+            "<div class='dim fhint'>" +
             esc(t("admin.purpose_hint")) + "</div>" +
             "<table><thead><tr><th>#</th><th></th><th>ja</th><th>en</th><th>zh</th>" +
             "<th>ID</th><th>" + esc(t("purpose.enabled")) +
@@ -8563,13 +8756,15 @@ if (typeof document !== "undefined") (function () {
            esc(id) + "'" + (enabled ? " checked" : "") + "> " +
            esc(enabled ? t("purpose.enabled") : t("purpose.disabled")) + "</label></td>" +
            "<td class='ops'>" +
-           "<button class='btn2' data-act='up' data-id='" + esc(id) + "'>↑</button>" +
-           "<button class='btn2' data-act='down' data-id='" + esc(id) + "'>↓</button> " +
+           reorderButtonHtml("data-act='up' data-id='" + esc(id) + "'", true) +
+           reorderButtonHtml("data-act='down' data-id='" + esc(id) + "'", false) +
            "<button class='btn2' data-act='edit' data-id='" + esc(id) + "'>" +
            esc(t("admin.edit")) + "</button> " +
            "<button class='btn2 danger' data-act='del' data-id='" + esc(id) + "'>" +
            esc(t("admin.delete")) + "</button></td></tr>";
     });
+    if (!ids.length)
+      h += emptyRowHtml(8, t("admin.empty_purposes"), t("admin.empty_purposes_hint"), addPurposeHtml);
     h += "</tbody></table></div>";
 
 
@@ -8586,9 +8781,9 @@ if (typeof document !== "undefined") (function () {
          esc(t("admin.visitor_language_revert")) +
          " (visitor_lang_revert_s)</label><input id='uiRevert' type='number' value='" +
          esc(ui.visitor_lang_revert_s !== undefined ? ui.visitor_lang_revert_s : 60) +
-         "' style='width:120px'></div>" +
-         "<button class='btn small' id='uiSave'>" + esc(t("admin.save")) +
-         "</button></div>";
+         "'></div>" +
+         "<div class='actions'><button class='btn small' id='uiSave'>" + esc(t("admin.save")) +
+         "</button></div></div>";
     el.innerHTML = h;
 
     function move(id, dir) {
@@ -8693,9 +8888,9 @@ if (typeof document !== "undefined") (function () {
       });
       h += "</tr>";
     });
-    h += "</tbody></table></div><button class='btn small' id='txSave' style='margin-top:10px'>" +
-         esc(t("admin.save")) + "</button> <span class='dim fhint' id='txCount'></span>" +
-         "</div>";
+    h += "</tbody></table></div><div class='actions'><button class='btn small' id='txSave'>" +
+         esc(t("admin.save")) + "</button> <span class='dim' id='txCount'></span>" +
+         "</div></div>";
     el.innerHTML = h;
 
     $("#txAll").onchange = function () {
@@ -8808,14 +9003,14 @@ if (typeof document !== "undefined") (function () {
     h += "<div class='frow'><label class='flab'>" +
          esc(t("admin.theme_bg_color")) + "</label>";
     if (scope)
-      h += "<label class='mc'><input type='checkbox' id='thColorOn'" +
-           (colorOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) + "</label><br>";
+      h += "<label class='mc ovr'><input type='checkbox' id='thColorOn'" +
+           (colorOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) + "</label>";
     h += "<input type='color' id='thColor' value='" + esc(eff.bg_color) + "'>" +
-         "<span class='mono' id='thColorTxt' style='margin-left:8px'>" + esc(eff.bg_color) +
-         "</span><span class='swatches'>";
+         "<span class='mono' id='thColorTxt'>" + esc(eff.bg_color) +
+         "</span><span class='swatches' style='flex:0 0 100%'>";
     THEME_PRESETS.forEach(function (c) {
       h += "<button class='sw' data-sw='" + esc(c) + "' style='background:" + esc(c) +
-           "' title='" + esc(c) + "'></button>";
+           "' title='" + esc(c) + "' aria-label='" + esc(c) + "'></button>";
     });
     h += "</span></div>";
 
@@ -8823,8 +9018,8 @@ if (typeof document !== "undefined") (function () {
     h += "<div class='frow'><label class='flab'>" +
          esc(t("admin.theme_bg_image")) + "</label>";
     if (scope)
-      h += "<label class='mc'><input type='checkbox' id='thImageOn'" +
-           (imageOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) + "</label><br>";
+      h += "<label class='mc ovr'><input type='checkbox' id='thImageOn'" +
+           (imageOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) + "</label>";
     h += "<select id='thImage'>";
     assetOptions("image", t("admin.theme_no_image")).forEach(function (o) {
       h += "<option value='" + esc(o.v) + "'" + (o.v === eff.bg_image ? " selected" : "") +
@@ -8839,18 +9034,20 @@ if (typeof document !== "undefined") (function () {
       backdrop.overridden.opacity;
     h += "<div class='frow'><label class='flab'>" + esc(t("theme.backdrop")) + "</label>";
     if (scope)
-      h += "<label class='mc'><input type='checkbox' id='thBackdropOn'" +
+      h += "<label class='mc ovr'><input type='checkbox' id='thBackdropOn'" +
            (backdropOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) +
-           "</label><br>";
-    h += "<label class='mc'><input type='checkbox' id='thBackdropEnabled'" +
+           "</label>";
+    h += "<label class='mc ovr'><input type='checkbox' id='thBackdropEnabled'" +
          (backdrop.enabled ? " checked" : "") + "> " + esc(t("theme.backdrop_enabled")) +
-         "</label><br>" +
-         "<input type='color' id='thBackdropColor' value='" + esc(backdrop.color) + "'>" +
-         "<span class='mono' id='thBackdropColorTxt' style='margin-left:8px'>" +
-         esc(backdrop.color) + "</span><br>" +
+         "</label>" +
+         "<input type='color' id='thBackdropColor' aria-label='" + esc(t("theme.backdrop")) +
+         "' value='" + esc(backdrop.color) + "'>" +
+         "<span class='mono' id='thBackdropColorTxt'>" + esc(backdrop.color) + "</span>" +
+         "<div style='display:flex;gap:10px;align-items:center;flex:0 0 100%'>" +
          "<input type='range' id='thBackdropOpacity' min='0' max='100' step='1' value='" +
-         esc(backdrop.opacity) + "' style='vertical-align:middle;max-width:220px'> " +
-         "<span class='mono' id='thBackdropOpacityTxt'>" + esc(backdrop.opacity) + "%</span>" +
+         esc(backdrop.opacity) + "' aria-label='" + esc(t("theme.backdrop")) + "'> " +
+         "<span class='mono' id='thBackdropOpacityTxt' style='min-width:3.5em;text-align:right'>" +
+         esc(backdrop.opacity) + "%</span></div>" +
          "<div class='dim fhint'>" + esc(t("theme.backdrop_hint")) + " " +
          esc(backdropSourceLabel(backdrop.source)) + "</div></div>";
 
@@ -8861,12 +9058,14 @@ if (typeof document !== "undefined") (function () {
          "</label>";
     if (glassSupport === "adjustable") {
       if (scope)
-        h += "<label class='mc'><input type='checkbox' id='thGlassOn'" +
+        h += "<label class='mc ovr'><input type='checkbox' id='thGlassOn'" +
              (glassOn ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) +
-             "</label><br>";
-      h += "<input type='range' id='thGlassRadius' min='0' max='40' step='1' value='" +
-           esc(glass.radius) + "' style='vertical-align:middle;max-width:220px'> " +
-           "<span class='mono' id='thGlassRadiusTxt'>" + esc(glass.radius) + "</span>" +
+             "</label>";
+      h += "<div style='display:flex;gap:10px;align-items:center;flex:0 0 100%'>" +
+           "<input type='range' id='thGlassRadius' min='0' max='40' step='1' value='" +
+           esc(glass.radius) + "' aria-label='" + esc(t("theme.glass_blur_radius")) + "'> " +
+           "<span class='mono' id='thGlassRadiusTxt' style='min-width:3.5em;text-align:right'>" +
+           esc(glass.radius) + "</span></div>" +
            "<div class='dim fhint'>" + esc(t("theme.glass_blur_hint")) + " " +
            esc(backdropSourceLabel(glass.source)) + "</div>";
     } else {
@@ -8916,9 +9115,9 @@ if (typeof document !== "undefined") (function () {
     var saver = L.screensaverModel(S.cfg, scope);
     h += "<fieldset class='frow'><legend>" + esc(t("display.saver_title")) + "</legend>";
     if (scope)
-      h += "<label class='mc'><input type='checkbox' id='thSaverOverride'" +
-           (saver.overridden ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) + "</label><br>";
-    h += "<label class='mc'><input type='checkbox' id='thSaverEnabled'" +
+      h += "<label class='mc ovr'><input type='checkbox' id='thSaverOverride'" +
+           (saver.overridden ? " checked" : "") + "> " + esc(t("admin.theme_override_here")) + "</label>";
+    h += "<label class='mc ovr'><input type='checkbox' id='thSaverEnabled'" +
          (saver.enabled ? " checked" : "") + "> " + esc(t("display.saver_enabled")) + "</label>" +
          "<div class='frow'><label class='flab' for='thSaverMode'>" + esc(t("display.saver_content")) +
          "</label><select id='thSaverMode'>";
@@ -8952,7 +9151,7 @@ if (typeof document !== "undefined") (function () {
          (L.colorOk(buttonOverride) ? " checked" : "") + "> " + esc(t("theme.custom")) +
          "</label> <input type='color' id='thBtnColor' value='" +
          esc(L.colorOk(buttonOverride) ? buttonOverride : autoModel.callButton) + "'>" +
-         "<span class='mono' id='thBtnTxt' style='margin-left:8px'></span>" +
+         "<span class='mono' id='thBtnTxt'></span>" +
          "<div class='" + (autoModel.unsampled ? "warn" : "dim") + " fhint'>" +
          esc(autoModel.unsampled
                ? fmt(t("theme.background_unsampled"),
@@ -8976,11 +9175,12 @@ if (typeof document !== "undefined") (function () {
     }
     h += "</tbody></table></div></div>";
 
-    h += "<button class='btn small' id='thSave'>" + esc(t("admin.save")) + "</button>";
+    h += "<div class='actions'><button class='btn small' id='thSave'>" + esc(t("admin.save")) +
+         "</button>";
     if (scope)
-      h += " <button class='btn2 danger' id='thReset'>" +
+      h += "<span class='spacer'></span><button class='btn2 danger' id='thReset'>" +
            esc(t("admin.theme_reset_override")) + "</button>";
-    h += "</div>";
+    h += "</div></div>";
     el.innerHTML = h;
 
 
@@ -9243,7 +9443,7 @@ if (typeof document !== "undefined") (function () {
       for (var i = 0; i < opts.length; i++)
         out += "<option value='" + esc(opts[i].v) + "'" +
                (opts[i].v === value ? " selected" : "") + ">" + esc(opts[i].label) + "</option>";
-      return out + "</select> <button class='btn2' data-soundpreview='" + id + "'>▶ " +
+      return out + "</select> <button class='btn2' data-soundpreview='" + id + "'>" +
              esc(t("admin.audio_play")) + "</button>";
     }
     var h = "<div class='card'><h2>" + esc(t("admin.sound_manager")) +
@@ -9265,8 +9465,9 @@ if (typeof document !== "undefined") (function () {
       "<div class='frow'><label class='flab'>" + esc(t("admin.update_sound")) + "</label>" +
       selectHtml("updateSound", uiCfg.update_sound === undefined ? "indoor_update" : uiCfg.update_sound,
                  soundOptions(true)) + "</div></div>" +
-      "<button class='btn small' id='soundSettingsSave'>" + esc(t("admin.save")) + "</button>" +
-      "<div class='dim fhint'>" + esc(t("admin.sound_manager_hint")) + "</div></div>";
+      "<div class='dim fhint'>" + esc(t("admin.sound_manager_hint")) + "</div>" +
+      "<div class='actions'><button class='btn small' id='soundSettingsSave'>" + esc(t("admin.save")) +
+      "</button></div></div>";
 
 
     h += "<div class='card'><h2>" + esc(t("admin.assets_upload")) + "</h2>" +
@@ -9292,7 +9493,7 @@ if (typeof document !== "undefined") (function () {
          "<div class='dim fhint'>" + esc(t("admin.asset_prefetch_hint")) + "</div>" +
          "</div>";
     if (!ids.length) {
-      h += "<div class='dim'>" + esc(t("admin.assets_empty")) + "</div></div>";
+      h += emptyStateHtml(t("admin.assets_empty"), t("admin.asset_file_hint")) + "</div>";
     } else {
       h += "<div class='scrollx'><table><thead><tr><th>" + esc(t("admin.asset_label")) +
            "</th><th>" + esc(t("admin.asset_type")) + "</th><th>" +
@@ -9323,7 +9524,7 @@ if (typeof document !== "undefined") (function () {
         else
           h += "<audio controls preload='none' src='/asset/" + esc(hh) + "'></audio>";
         h += "<div class='lbl'>" + esc(a.label || hh.slice(0, 12)) + "</div>" +
-             "<div class='dim' style='font-size:11px'>" + esc(a.type || "") + " · " +
+             "<div class='dim fhint' style='margin:0'>" + esc(a.type || "") + " · " +
              esc(L.fmtBytes(a.size)) + "</div></div>";
       });
       h += "</div></div>";
@@ -9454,6 +9655,58 @@ if (typeof document !== "undefined") (function () {
       return field.type !== "password" && field.type !== "file" && !field.readOnly &&
         !field.hasAttribute("data-sensitive") && field.id !== "cfgVal" && field.id !== "sysImport";
     }).map(function (field) { return { element: field, value: field.value, checked: field.checked }; });
+    syncPrimaryAction();
+  }
+
+  // The sticky page header carries the page's primary action. A renderer marks its own button
+  // with data-primary; the header button mirrors that label and forwards the click, so the
+  // renderer keeps owning the handler. Without a marked button the header shows the title alone.
+  function syncPrimaryAction() {
+    var proxy = $("#primaryAction"), root = $("#tab-" + S.tab);
+    if (!proxy || !root || !root.querySelector) return;
+    var source = root.querySelector("[data-primary]");
+    if (!source || !source.classList) { show(proxy, false); return; }
+    if (proxy._markup !== source.innerHTML) {
+      proxy.innerHTML = source.innerHTML;
+      proxy._markup = source.innerHTML;
+    }
+    proxy.disabled = !!source.disabled;
+    proxy.onclick = function () {
+      var live = root.querySelector("[data-primary]");
+      if (live && live.click) live.click();
+    };
+    var bar = source.parentNode;
+    if (bar && bar.classList && bar.classList.contains("pagebar")) bar.classList.add("hoisted");
+    show(proxy, true);
+  }
+
+  // Core decides the household look: a fixed appearance overrides the system light/dark setting,
+  // and the accent becomes the page accent where it stays legible on this page's own surfaces.
+  function applyCoreAppearance() {
+    var root = document.documentElement;
+    var display = (S.status && S.status.display) || {};
+    var appearance = display.appearance || {};
+    var fixed = appearance.follow_system === false &&
+      (appearance.effective === "dark" || appearance.effective === "light") ? appearance.effective : "";
+    if ((root.getAttribute("data-theme") || "") !== fixed) {
+      if (fixed) root.setAttribute("data-theme", fixed); else root.removeAttribute("data-theme");
+      lsSet("db_admin_theme", fixed);
+    }
+    if (!root.style || !root.style.setProperty || !window.getComputedStyle) return;
+    var names = ["--acc", "--on-acc", "--acc-text", "--sel"];
+    names.forEach(function (name) { root.style.removeProperty(name); });
+    var theme = display.theme || {};
+    var accent = theme.call_button_bg;
+    if (root.getAttribute("data-ui") === "retro" || !L.colorOk(accent)) return;
+    var surface = window.getComputedStyle(root).getPropertyValue("--card").replace(/\s+/g, "");
+    if (!L.colorOk(surface) || L.contrast(accent, surface) < 2) return;
+    var ink = theme.call_button_ink === "dark" || theme.call_button_ink === "light" ?
+      theme.call_button_ink : L.autoInk(accent);
+    root.style.setProperty("--acc", accent);
+    root.style.setProperty("--on-acc", ink === "dark" ? "#101418" : "#ffffff");
+    root.style.setProperty("--sel", "rgba(" + parseInt(accent.slice(1, 3), 16) + "," +
+      parseInt(accent.slice(3, 5), 16) + "," + parseInt(accent.slice(5, 7), 16) + ",.16)");
+    if (L.contrast(accent, surface) >= 4.5) root.style.setProperty("--acc-text", accent);
   }
 
   function switchTab(name, afterRender) {
@@ -9466,6 +9719,7 @@ if (typeof document !== "undefined") (function () {
     });
     settingsNav.titleFor(name);
     for (var k in TABS) show($("#tab-" + k), k === name);
+    syncPrimaryAction();
     // A second activation of Pair (including a click on its already-selected nav item) is a
     // new visit. Retire the previous visit's poll/scan state before issuing its replacement.
     if (was === "pair") pairTabLeave();
@@ -9476,19 +9730,33 @@ if (typeof document !== "undefined") (function () {
   }
 
   /* ---- Settings navigation ----
-   * >= L.SETTINGS_SPLIT_MIN_PX: two panes (category list + detail). Narrower: a drill-down list
-   * with a back button. The URL fragment (#/<category>) is the state, so categories can be
-   * deep-linked, and browser Back/Forward move between list and detail. */
+   * >= L.SETTINGS_SPLIT_MIN_PX: two panes (category list + detail). From L.SETTINGS_RAIL_MIN_PX:
+   * an icon rail beside the detail that the header menu button opens as a drawer. Narrower: a
+   * drill-down list with a back button. The URL fragment (#/<category>) is the state, so
+   * categories can be deep-linked, and browser Back/Forward move between list and detail. */
   var settingsNav = (function () {
     var app = $("#app"), depth = 0;
     var split = window.matchMedia ?
       window.matchMedia("(min-width: " + L.SETTINGS_SPLIT_MIN_PX + "px)") : null;
-    function width() { return split ? (split.matches ? L.SETTINGS_SPLIT_MIN_PX : 0) : window.innerWidth; }
+    var rail = window.matchMedia ?
+      window.matchMedia("(min-width: " + L.SETTINGS_RAIL_MIN_PX + "px)") : null;
+    var toggle = $("#navToggle"), scrim = $("#navScrim");
+    function width() {
+      if (!split || !rail) return window.innerWidth;
+      return split.matches ? L.SETTINGS_SPLIT_MIN_PX : (rail.matches ? L.SETTINGS_RAIL_MIN_PX : 0);
+    }
     function routed() { return L.settingsRoute(window.location.hash).tab; }
+    function drawerOpen() { return !!app && app.getAttribute("data-nav") === "open"; }
+    function setDrawer(open) {
+      if (!app) return;
+      app.setAttribute("data-nav", open ? "open" : "closed");
+      if (toggle) toggle.setAttribute("aria-expanded", open ? "true" : "false");
+    }
     function applyView() {
       if (!app) return;
       var view = L.settingsView(width(), routed());
       app.setAttribute("data-view", view);
+      if (view !== "rail") setDrawer(false);
     }
     function labelOf(tab) {
       var b = $("nav button[data-tab='" + tab + "'] span[data-i18n]");
@@ -9510,6 +9778,7 @@ if (typeof document !== "undefined") (function () {
       options = options || {};
       setHash(L.settingsHash(tab), options.replace);
       if (S.tab !== tab || options.force) switchTab(tab);
+      setDrawer(false);
       applyView();
       if (app && app.getAttribute("data-view") === "detail") {
         var title = $("#detailTitle");
@@ -9555,6 +9824,18 @@ if (typeof document !== "undefined") (function () {
     });
     var back = $("#navBack");
     if (back) back.onclick = showList;
+    if (toggle) toggle.onclick = function () {
+      setDrawer(!drawerOpen());
+      var first = drawerOpen() ? $("#navSearch") : null;
+      if (first && first.focus) first.focus();
+    };
+    if (scrim) scrim.onclick = function () { setDrawer(false); };
+    window.addEventListener("keydown", function (e) {
+      if (e && e.key === "Escape" && drawerOpen()) {
+        setDrawer(false);
+        if (toggle && toggle.focus) toggle.focus();
+      }
+    });
     var search = $("#navSearch");
     if (search) {
       search.addEventListener("input", filter);
@@ -9567,8 +9848,10 @@ if (typeof document !== "undefined") (function () {
     }
     window.addEventListener("popstate", function () { depth = Math.max(0, depth - 1); onRoute(); });
     window.addEventListener("hashchange", onRoute);
-    if (split && split.addEventListener) split.addEventListener("change", applyView);
-    else if (split && split.addListener) split.addListener(applyView);
+    [split, rail].forEach(function (query) {
+      if (query && query.addEventListener) query.addEventListener("change", applyView);
+      else if (query && query.addListener) query.addListener(applyView);
+    });
     applyView();
     return { open: open, initialTab: function () { return routed(); }, titleFor: titleFor,
              applyView: applyView, filter: filter };
@@ -9650,6 +9933,7 @@ if (typeof document !== "undefined") (function () {
       if (v === "modern") document.documentElement.removeAttribute("data-ui");
       else document.documentElement.setAttribute("data-ui", v);
       lsSet("db_admin_ui", v);
+      applyCoreAppearance();
     };
   })();
 
@@ -9767,13 +10051,15 @@ if (typeof document !== "undefined") (function () {
   /* ---- Presentation enhancement ----
    * Renderers build markup as strings; this pass runs after every DOM change in the app and the
    * modal and only adds accessibility and layout hints. It never changes values or behavior:
-   * - a settings checkbox (label.frow-check) is announced and drawn as a switch (role=switch);
+   * - a settings checkbox (.frow-check) is announced and drawn as a switch (role=switch);
    * - a .flab label is bound to the control that follows it, and help text is described-by;
-   * - table cells get data-label from their column header, so narrow screens show cards;
+   * - table cells get data-label from their column header, and a table that does not fit is
+   *   marked to show stacked rows instead of columns;
    * - native constraint validation shows its message inline next to the control. */
   var enhanceSerial = 0;
   function enhanceControls(root) {
-    $all("label.frow-check > input[type=checkbox]", root).forEach(function (box) {
+    $all("label.frow-check > input[type=checkbox], .frow-check > label > input[type=checkbox]",
+         root).forEach(function (box) {
       if (box.getAttribute("role") !== "switch") box.setAttribute("role", "switch");
     });
     $all(".frow > label.flab", root).forEach(function (label) {
@@ -9797,6 +10083,7 @@ if (typeof document !== "undefined") (function () {
       var heads = $all("thead th", table).map(function (th) { return th.textContent.trim(); });
       if (!heads.length) return;
       table.classList.add("stack");
+      table._columns = heads.length;
       $all("tbody tr", table).forEach(function (tr) {
         var col = 0;
         Array.prototype.forEach.call(tr.children, function (td) {
@@ -9805,6 +10092,22 @@ if (typeof document !== "undefined") (function () {
           col += Number(td.getAttribute("colspan") || 1);
         });
       });
+    });
+    fitTables(root);
+  }
+  // A table stacks when the window is too narrow for its column count, or when it would still
+  // overflow its container as a table (long translations, enlarged text).
+  function fitTables(root) {
+    var width = window.innerWidth || 0;
+    $all("table.stack", root).forEach(function (table) {
+      var narrow = width > 0 && width < (table._columns >= 6 ? 1180 : 720);
+      table.classList.remove("stacked");
+      var holder = table.parentNode, room = 0;
+      if (!narrow && holder && window.getComputedStyle) {
+        var style = window.getComputedStyle(holder);
+        room = holder.clientWidth - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0);
+      }
+      if (narrow || (room > 0 && table.offsetWidth > room + 1)) table.classList.add("stacked");
     });
   }
   function showValidity(field) {
@@ -9836,6 +10139,7 @@ if (typeof document !== "undefined") (function () {
       (window.requestAnimationFrame || setTimeout)(function () {
         pending = false;
         enhanceControls(document);
+        syncPrimaryAction();
       });
     }
     if (window.MutationObserver) {
@@ -9851,6 +10155,10 @@ if (typeof document !== "undefined") (function () {
     }, true);
     document.addEventListener("change", function (e) { showValidity(e.target); }, true);
     document.addEventListener("invalid", function (e) { showValidity(e.target); }, true);
+    window.addEventListener("resize", schedule);
+    // Text-size changes resize the content without resizing the window.
+    var detail = $("#settingsDetail");
+    if (window.ResizeObserver && detail) new window.ResizeObserver(schedule).observe(detail);
     schedule();
   })();
 
