@@ -1194,6 +1194,10 @@ static const CGFloat kFooterGlassAlpha = 0.65;
 - (void)onSosButton {
   if (_emergencyActive) return;
   [_sosPanel presentInView:self below:_emergencyView];
+  // The hidden alarm overlay sits low in the stack, so "below it" was under the door
+  // tiles. The panel belongs above everything except a showing alarm.
+  [self bringSubviewToFront:_sosPanel];
+  if (_emergencyView.superview == self && !_emergencyView.hidden) [self bringSubviewToFront:_emergencyView];
 }
 
 - (void)sosSliderDidArm:(DBSosSlider *)slider {
