@@ -39,6 +39,33 @@ namespace DoorbellApp.Settings
             switch (handler)
             {
                 case "node_id": return _store.Context.NodeId;
+                case "time_status":
+                {
+                    var time = App.Core == null ? null
+                        : CoreClient.Dig(App.Core.Status(), "time") as Dictionary<string, object>;
+                    if (time == null) return Texts.T("settings.not_set");
+                    object source, last, offset, server;
+                    time.TryGetValue("source", out source);
+                    time.TryGetValue("last_sync_ms", out last);
+                    time.TryGetValue("offset_ms", out offset);
+                    time.TryGetValue("server", out server);
+                    bool ntp = Convert.ToString(source) == "ntp";
+                    long lastMs;
+                    long.TryParse(Convert.ToString(last, System.Globalization.CultureInfo.InvariantCulture),
+                                  out lastMs);
+                    var parts = new List<string>
+                    {
+                        Texts.T(ntp ? "time.source_ntp" : "time.source_system"),
+                        Texts.T("time.last_sync") + " " + (lastMs > 0
+                            ? new DateTime(1970, 1, 1, 0, 0, 0, DateTimeKind.Utc)
+                                .AddMilliseconds(lastMs).ToLocalTime().ToString("yyyy-MM-dd HH:mm")
+                            : Texts.T("time.never")),
+                    };
+                    if (ntp) parts.Add(Texts.T("time.offset") + " " + Convert.ToString(offset) + " ms");
+                    if (!string.IsNullOrEmpty(Convert.ToString(server)))
+                        parts.Add(Texts.T("time.server") + " " + Convert.ToString(server));
+                    return string.Join(" · ", parts);
+                }
                 case "role":
                     return Texts.T(App.Boot != null && App.Boot.Role == "door_station"
                         ? "admin.role_door" : "admin.role_indoor");

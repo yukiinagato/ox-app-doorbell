@@ -1605,7 +1605,7 @@
   <data name="ring_unlock_failed" xml:space="preserve"><value>开锁操作未能执行</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>已发送开锁信号</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>此门口机尚未配置开锁操作</value></data>
-  <data name="ring_video_zoom_hint" xml:space="preserve"><value>双指缩放，双击复位</value></data>
+  <data name="ring_video_zoom_hint" xml:space="preserve"><value>双指缩放，拖动移动，双击放大或复位</value></data>
   <data name="security_failed" xml:space="preserve"><value>操作未完成：{0}</value></data>
   <data name="security_fingerprint" xml:space="preserve"><value>证书指纹</value></data>
   <data name="security_fingerprint_hint" xml:space="preserve"><value>只有当浏览器显示的指纹与此一致时，才信任此连接。</value></data>
@@ -1650,6 +1650,7 @@
   <data name="settings_appearance_auto_system" xml:space="preserve"><value>跟随设备设置</value></data>
   <data name="settings_appearance_dark" xml:space="preserve"><value>深色</value></data>
   <data name="settings_appearance_dark_from" xml:space="preserve"><value>深色开始时间</value></data>
+  <data name="settings_appearance_here" xml:space="preserve"><value>本设备的外观</value></data>
   <data name="settings_appearance_light" xml:space="preserve"><value>浅色</value></data>
   <data name="settings_appearance_light_from" xml:space="preserve"><value>浅色开始时间</value></data>
   <data name="settings_appearance_range" xml:space="preserve"><value>深色 {0} → 浅色 {1}</value></data>
@@ -1664,6 +1665,8 @@
   <data name="settings_assets_native" xml:space="preserve"><value>已上传的图片与声音。删除正在使用的素材会恢复默认</value></data>
   <data name="settings_back" xml:space="preserve"><value>设置</value></data>
   <data name="settings_backdrop" xml:space="preserve"><value>背景暗化层</value></data>
+  <data name="settings_backdrop_color" xml:space="preserve"><value>暗化层颜色</value></data>
+  <data name="settings_backdrop_color_native" xml:space="preserve"><value>叠加在背景图上的颜色，默认为黑色</value></data>
   <data name="settings_backdrop_opacity" xml:space="preserve"><value>暗化强度</value></data>
   <data name="settings_background_color" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_background_image" xml:space="preserve"><value>背景图片</value></data>
@@ -1682,6 +1685,8 @@
   <data name="settings_buildings_manage" xml:space="preserve"><value>建筑</value></data>
   <data name="settings_buildings_manage_native" xml:space="preserve"><value>对门进行分组的建筑</value></data>
   <data name="settings_button_sound" xml:space="preserve"><value>按键音</value></data>
+  <data name="settings_call_button_color" xml:space="preserve"><value>呼叫按钮颜色（本设备）</value></data>
+  <data name="settings_call_button_color_native" xml:space="preserve"><value>未设置时根据背景自动选择</value></data>
   <data name="settings_call_flow" xml:space="preserve"><value>访客呼叫流程</value></data>
   <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>先选目的，再呼叫</value></data>
   <data name="settings_call_flow_ring_then_purpose" xml:space="preserve"><value>先呼叫，再选目的</value></data>
@@ -2209,6 +2214,7 @@
   <data name="settings_theme_image" xml:space="preserve"><value>背景图片</value></data>
   <data name="settings_theme_image_none" xml:space="preserve"><value>不使用图片</value></data>
   <data name="settings_this_device" xml:space="preserve"><value>本机</value></data>
+  <data name="settings_time_status" xml:space="preserve"><value>同步状态</value></data>
   <data name="settings_time_sync" xml:space="preserve"><value>立即同步</value></data>
   <data name="settings_time_sync_action" xml:space="preserve"><value>同步</value></data>
   <data name="settings_time_sync_failed" xml:space="preserve"><value>时间同步失败</value></data>

@@ -1605,7 +1605,7 @@ On</value></data>
   <data name="ring_unlock_failed" xml:space="preserve"><value>The unlock action could not be run</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>Unlock signal sent</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>No unlock action is configured for this door</value></data>
-  <data name="ring_video_zoom_hint" xml:space="preserve"><value>Pinch to zoom; double-tap to reset</value></data>
+  <data name="ring_video_zoom_hint" xml:space="preserve"><value>Pinch to zoom, drag to move; double-tap to zoom in or back out</value></data>
   <data name="security_failed" xml:space="preserve"><value>Couldn't complete the action: {0}</value></data>
   <data name="security_fingerprint" xml:space="preserve"><value>Certificate fingerprint</value></data>
   <data name="security_fingerprint_hint" xml:space="preserve"><value>Trust this connection only if the fingerprint your browser shows matches this one.</value></data>
@@ -1650,6 +1650,7 @@ On</value></data>
   <data name="settings_appearance_auto_system" xml:space="preserve"><value>Follow the device setting</value></data>
   <data name="settings_appearance_dark" xml:space="preserve"><value>Dark</value></data>
   <data name="settings_appearance_dark_from" xml:space="preserve"><value>Dark from</value></data>
+  <data name="settings_appearance_here" xml:space="preserve"><value>Appearance on this device</value></data>
   <data name="settings_appearance_light" xml:space="preserve"><value>Light</value></data>
   <data name="settings_appearance_light_from" xml:space="preserve"><value>Light from</value></data>
   <data name="settings_appearance_range" xml:space="preserve"><value>Dark {0} → light {1}</value></data>
@@ -1664,6 +1665,8 @@ On</value></data>
   <data name="settings_assets_native" xml:space="preserve"><value>Uploaded images and sounds. Removing one in use falls back to the default</value></data>
   <data name="settings_back" xml:space="preserve"><value>Settings</value></data>
   <data name="settings_backdrop" xml:space="preserve"><value>Dimming layer</value></data>
+  <data name="settings_backdrop_color" xml:space="preserve"><value>Dimming layer colour</value></data>
+  <data name="settings_backdrop_color_native" xml:space="preserve"><value>The colour laid over the background picture; black by default</value></data>
   <data name="settings_backdrop_opacity" xml:space="preserve"><value>Dimming strength</value></data>
   <data name="settings_background_color" xml:space="preserve"><value>Background colour</value></data>
   <data name="settings_background_image" xml:space="preserve"><value>Background image</value></data>
@@ -1682,6 +1685,8 @@ On</value></data>
   <data name="settings_buildings_manage" xml:space="preserve"><value>Buildings</value></data>
   <data name="settings_buildings_manage_native" xml:space="preserve"><value>Buildings that group doors</value></data>
   <data name="settings_button_sound" xml:space="preserve"><value>Button sound</value></data>
+  <data name="settings_call_button_color" xml:space="preserve"><value>Call button colour (this device)</value></data>
+  <data name="settings_call_button_color_native" xml:space="preserve"><value>Chosen automatically from the background when not set</value></data>
   <data name="settings_call_flow" xml:space="preserve"><value>Visitor call flow</value></data>
   <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>Choose purpose, then ring</value></data>
   <data name="settings_call_flow_ring_then_purpose" xml:space="preserve"><value>Ring, then choose purpose</value></data>
@@ -2209,6 +2214,7 @@ On</value></data>
   <data name="settings_theme_image" xml:space="preserve"><value>Background image</value></data>
   <data name="settings_theme_image_none" xml:space="preserve"><value>No image</value></data>
   <data name="settings_this_device" xml:space="preserve"><value>This device</value></data>
+  <data name="settings_time_status" xml:space="preserve"><value>Sync status</value></data>
   <data name="settings_time_sync" xml:space="preserve"><value>Sync now</value></data>
   <data name="settings_time_sync_action" xml:space="preserve"><value>Sync</value></data>
   <data name="settings_time_sync_failed" xml:space="preserve"><value>Time sync failed</value></data>

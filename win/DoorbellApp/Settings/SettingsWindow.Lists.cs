@@ -24,6 +24,31 @@ namespace DoorbellApp.Settings
 
         private const int MaxNoticePresets = 8;
 
+        /// <summary>
+        /// The languages a label is edited in: the three the catalog ships, then every other
+        /// visitor language enabled in ui.languages, so a door station never shows an untranslated
+        /// purpose or reply in a language it offers.
+        /// </summary>
+        private List<string> LabelLanguages()
+        {
+            var langs = new List<string> { "ja", "en", "zh" };
+            foreach (string lang in SettingsStore.AsStringList(_store.Get("ui.languages")))
+                if (lang.Length != 0 && !langs.Contains(lang)) langs.Add(lang);
+            return langs;
+        }
+
+        private static string LabelFieldTitle(string lang)
+        {
+            if (lang == "ja") return Texts.T("admin.label_ja");
+            if (lang == "en") return Texts.T("admin.label_en");
+            if (lang == "zh") return Texts.T("admin.label_zh");
+            // The language's own name where the catalog has one, otherwise its code.
+            string nameKey = "language.name_" + lang;
+            string name = Texts.T(nameKey);
+            return Texts.T("prefs.label") + " (" +
+                   (string.IsNullOrEmpty(name) || name == nameKey ? lang : name) + ")";
+        }
+
         private FrameworkElement BuildListEditor(SettingItem item)
         {
             var parts = new RowParts();
@@ -268,11 +293,11 @@ namespace DoorbellApp.Settings
             });
             var fields = new Dictionary<string, TextBox>();
             var flags = new Dictionary<string, ModernWpf.Controls.ToggleSwitch>();
-            Func<string, string, TextBox> field = (labelKey, value) =>
+            Func<string, string, TextBox> field = (labelText, value) =>
             {
                 form.Children.Add(new TextBlock
                 {
-                    Text = Texts.T(labelKey),
+                    Text = labelText,
                     FontSize = 14,
                     Margin = new Thickness(0, 8, 0, 4),
                 });
@@ -303,16 +328,16 @@ namespace DoorbellApp.Settings
 
             if (item.Handler == "notice_presets")
             {
-                fields["text"] = field("settings.preset_text", Str(data, "text"));
+                fields["text"] = field(Texts.T("settings.preset_text"), Str(data, "text"));
             }
             else
             {
                 var label = data.ContainsKey("label") ? data["label"] as Dictionary<string, object> : null;
-                foreach (string lang in new[] { "ja", "en", "zh" })
-                    fields[lang] = field("admin.label_" + lang, label == null ? "" : Str(label, lang));
+                foreach (string lang in LabelLanguages())
+                    fields[lang] = field(LabelFieldTitle(lang), label == null ? "" : Str(label, lang));
                 if (item.Handler == "visit_purposes")
                 {
-                    fields["icon"] = field("admin.purpose_icon", Str(data, "icon"));
+                    fields["icon"] = field(Texts.T("admin.purpose_icon"), Str(data, "icon"));
                     flags["enabled"] = flag("admin.enabled",
                         SettingsStore.AsBool(data.ContainsKey("enabled") ? data["enabled"] : null, true));
                 }
@@ -360,7 +385,7 @@ namespace DoorbellApp.Settings
                 else
                 {
                     var label = new Dictionary<string, object>();
-                    foreach (string lang in new[] { "ja", "en", "zh" })
+                    foreach (string lang in LabelLanguages())
                     {
                         string text = fields[lang].Text.Trim();
                         if (text.Length > 0) label[lang] = text;

@@ -307,7 +307,8 @@ namespace DoorbellApp.Settings
 
         private FrameworkElement BuildChoice(SettingItem item, RowParts parts)
         {
-            if (item.Handler == "sound" || item.Handler == "media_source")
+            if (item.Handler == "sound" || item.Handler == "media_source" ||
+                item.Handler == "time_zone")
                 item = WithConfiguredOptions(item);
             object stored = _store.Effective(item);
             if (item.Handler == "identity" && item.Id == "device_role") stored = _store.Context.Role;
@@ -415,7 +416,20 @@ namespace DoorbellApp.Settings
                     box.Text = committed;
                     return;
                 }
-                if (item.Handler == "string_list")
+                if (item.Key == "time.ntp.servers")
+                {
+                    // Refused here, with the reason, instead of Core rejecting the write.
+                    var servers = TimeSettings.ParseNtpServers(next);
+                    if (servers == null)
+                    {
+                        parts.Error.Text = Texts.T("time.invalid_servers");
+                        parts.Error.Visibility = Visibility.Visible;
+                        box.Text = committed;
+                        return;
+                    }
+                    value = new List<object>(servers);
+                }
+                else if (item.Handler == "string_list")
                 {
                     var list = new List<object>();
                     foreach (string piece in next.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries))

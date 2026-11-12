@@ -1594,7 +1594,7 @@
 "ring.unlock_failed" = "The unlock action could not be run";
 "ring.unlock_sent" = "Unlock signal sent";
 "ring.unlock_unconfigured" = "No unlock action is configured for this door";
-"ring.video_zoom_hint" = "Pinch to zoom; double-tap to reset";
+"ring.video_zoom_hint" = "Pinch to zoom, drag to move; double-tap to zoom in or back out";
 "security.failed" = "Couldn't complete the action: %@";
 "security.fingerprint" = "Certificate fingerprint";
 "security.fingerprint_hint" = "Trust this connection only if the fingerprint your browser shows matches this one.";
@@ -1639,6 +1639,7 @@
 "settings.appearance_auto_system" = "Follow the device setting";
 "settings.appearance_dark" = "Dark";
 "settings.appearance_dark_from" = "Dark from";
+"settings.appearance_here" = "Appearance on this device";
 "settings.appearance_light" = "Light";
 "settings.appearance_light_from" = "Light from";
 "settings.appearance_range" = "Dark %@ → light %@";
@@ -1653,6 +1654,8 @@
 "settings.assets_native" = "Uploaded images and sounds. Removing one in use falls back to the default";
 "settings.back" = "Settings";
 "settings.backdrop" = "Dimming layer";
+"settings.backdrop_color" = "Dimming layer colour";
+"settings.backdrop_color_native" = "The colour laid over the background picture; black by default";
 "settings.backdrop_opacity" = "Dimming strength";
 "settings.background_color" = "Background colour";
 "settings.background_image" = "Background image";
@@ -1671,6 +1674,8 @@
 "settings.buildings_manage" = "Buildings";
 "settings.buildings_manage_native" = "Buildings that group doors";
 "settings.button_sound" = "Button sound";
+"settings.call_button_color" = "Call button colour (this device)";
+"settings.call_button_color_native" = "Chosen automatically from the background when not set";
 "settings.call_flow" = "Visitor call flow";
 "settings.call_flow_purpose_first" = "Choose purpose, then ring";
 "settings.call_flow_ring_then_purpose" = "Ring, then choose purpose";
@@ -2198,6 +2203,7 @@
 "settings.theme_image" = "Background image";
 "settings.theme_image_none" = "No image";
 "settings.this_device" = "This device";
+"settings.time_status" = "Sync status";
 "settings.time_sync" = "Sync now";
 "settings.time_sync_action" = "Sync";
 "settings.time_sync_failed" = "Time sync failed";

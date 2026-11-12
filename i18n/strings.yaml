@@ -44,7 +44,7 @@ offline.reconnect: { ja: "再接続まで {sec} 秒", en: "Reconnecting in {sec}
 ring.incoming: { ja: "{door} で呼び出し中", en: "Visitor at {door}", zh: "{door} 有访客" }
 ring.answer: { ja: "応答", en: "Answer", zh: "接听" }
 ring.ignore: { ja: "無視", en: "Ignore", zh: "忽略" }
-ring.video_zoom_hint: { ja: "ピンチで拡大、ダブルタップで元に戻します", en: "Pinch to zoom; double-tap to reset", zh: "双指缩放，双击复位" }
+ring.video_zoom_hint: { ja: "ピンチで拡大、ドラッグで移動、ダブルタップで拡大または元に戻します", en: "Pinch to zoom, drag to move; double-tap to zoom in or back out", zh: "双指缩放，拖动移动，双击放大或复位" }
 dashboard.offline_doors: { ja: "オフラインの門口機", en: "Offline door stations", zh: "离线门口机" }
 dashboard.offline_doors_title: { ja: "オフラインの門口機", en: "Offline door stations", zh: "离线门口机" }
 dashboard.offline_doors_empty: { ja: "オフラインの門口機はありません", en: "No offline door stations", zh: "没有离线门口机" }

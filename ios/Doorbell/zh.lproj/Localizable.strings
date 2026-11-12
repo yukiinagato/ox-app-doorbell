@@ -1594,7 +1594,7 @@
 "ring.unlock_failed" = "开锁操作未能执行";
 "ring.unlock_sent" = "已发送开锁信号";
 "ring.unlock_unconfigured" = "此门口机尚未配置开锁操作";
-"ring.video_zoom_hint" = "双指缩放，双击复位";
+"ring.video_zoom_hint" = "双指缩放，拖动移动，双击放大或复位";
 "security.failed" = "操作未完成：%@";
 "security.fingerprint" = "证书指纹";
 "security.fingerprint_hint" = "只有当浏览器显示的指纹与此一致时，才信任此连接。";
@@ -1639,6 +1639,7 @@
 "settings.appearance_auto_system" = "跟随设备设置";
 "settings.appearance_dark" = "深色";
 "settings.appearance_dark_from" = "深色开始时间";
+"settings.appearance_here" = "本设备的外观";
 "settings.appearance_light" = "浅色";
 "settings.appearance_light_from" = "浅色开始时间";
 "settings.appearance_range" = "深色 %@ → 浅色 %@";
@@ -1653,6 +1654,8 @@
 "settings.assets_native" = "已上传的图片与声音。删除正在使用的素材会恢复默认";
 "settings.back" = "设置";
 "settings.backdrop" = "背景暗化层";
+"settings.backdrop_color" = "暗化层颜色";
+"settings.backdrop_color_native" = "叠加在背景图上的颜色，默认为黑色";
 "settings.backdrop_opacity" = "暗化强度";
 "settings.background_color" = "背景色";
 "settings.background_image" = "背景图片";
@@ -1671,6 +1674,8 @@
 "settings.buildings_manage" = "建筑";
 "settings.buildings_manage_native" = "对门进行分组的建筑";
 "settings.button_sound" = "按键音";
+"settings.call_button_color" = "呼叫按钮颜色（本设备）";
+"settings.call_button_color_native" = "未设置时根据背景自动选择";
 "settings.call_flow" = "访客呼叫流程";
 "settings.call_flow_purpose_first" = "先选目的，再呼叫";
 "settings.call_flow_ring_then_purpose" = "先呼叫，再选目的";
@@ -2198,6 +2203,7 @@
 "settings.theme_image" = "背景图片";
 "settings.theme_image_none" = "不使用图片";
 "settings.this_device" = "本机";
+"settings.time_status" = "同步状态";
 "settings.time_sync" = "立即同步";
 "settings.time_sync_action" = "同步";
 "settings.time_sync_failed" = "时间同步失败";

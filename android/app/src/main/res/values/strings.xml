@@ -1603,7 +1603,7 @@ On</string>
     <string name="ring_unlock_failed">The unlock action could not be run</string>
     <string name="ring_unlock_sent">Unlock signal sent</string>
     <string name="ring_unlock_unconfigured">No unlock action is configured for this door</string>
-    <string name="ring_video_zoom_hint">Pinch to zoom; double-tap to reset</string>
+    <string name="ring_video_zoom_hint">Pinch to zoom, drag to move; double-tap to zoom in or back out</string>
     <string name="security_failed">Couldn\'t complete the action: %1$s</string>
     <string name="security_fingerprint">Certificate fingerprint</string>
     <string name="security_fingerprint_hint">Trust this connection only if the fingerprint your browser shows matches this one.</string>

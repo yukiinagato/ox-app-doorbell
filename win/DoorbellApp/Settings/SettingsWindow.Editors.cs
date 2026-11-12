@@ -56,6 +56,11 @@ namespace DoorbellApp.Settings
                     copy.Options.Add(new SettingOption("asset:" + asset.Key, null,
                         "♪ " + AssetLabel(asset.Key, asset.Value)));
             }
+            else if (item.Handler == "time_zone")
+            {
+                foreach (string zone in TimeSettings.Zones)
+                    copy.Options.Add(new SettingOption(zone, null, zone.Replace('_', ' ')));
+            }
             else if (item.Handler == "media_source")
             {
                 foreach (var pair in ReadRecords("media_sources"))

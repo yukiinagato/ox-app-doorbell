@@ -3026,6 +3026,32 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("applyReplicatedIdentity",
                       read("android/app/src/main/java/jp/ox/doorbell/App.kt"))
 
+    def test_time_and_theme_settings_match_core(self):
+        catalog = read("win/DoorbellApp/Settings/SettingsCatalog.cs")
+        time_settings = read("win/DoorbellApp/Settings/TimeSettings.cs")
+        rows = read("win/DoorbellApp/Settings/SettingsWindow.Rows.cs")
+        contrast = read("win/DoorbellApp/Util/ThemeContrast.cs")
+        appearance = read("win/DoorbellApp/Util/Appearance.cs")
+        # The zone list is exactly Core's table, in its order: Core rejects anything else.
+        core_zones = re.findall(r'^\s*\{"([A-Za-z_/]+)",', read("core/src/util/tz.cpp"), re.M)
+        table = time_settings[time_settings.index("public static readonly string[] Zones ="):]
+        table = table[:table.index("};")]
+        self.assertGreater(len(core_zones), 90)
+        self.assertEqual(re.findall(r'"([A-Za-z_/]+)"', table), core_zones)
+        self.assertIn('.Handler = "time_zone";', catalog)
+        self.assertNotIn("settings.tz_tokyo", catalog)
+        # NTP servers are validated before the write, by the rule the Admin uses.
+        self.assertIn("TimeSettings.ParseNtpServers(next)", rows)
+        self.assertIn("public const int MaxServers = 4;", time_settings)
+        self.assertNotIn("System.Windows", time_settings)
+        self.assertIn('Info("time_status", "time_status")', catalog)
+        # Theme and appearance overrides use the keys the shell and Core read.
+        self.assertIn('"display.theme.backdrop.color"', catalog)
+        self.assertIn('Local + ".theme.call_button_bg"', catalog)
+        self.assertIn('"devices." + nodeId + ".local.theme.call_button_bg"', contrast)
+        self.assertIn('Local + ".display.appearance"', catalog)
+        self.assertIn('"devices." + nodeId + ".local.display.appearance"', appearance)
+
     def test_settings_guard_resets_and_limits(self):
         actions = read("win/DoorbellApp/Settings/SettingsWindow.Actions.cs")
         admin = read("win/DoorbellApp/Settings/SettingsWindow.Admin.cs")
@@ -3040,6 +3066,9 @@ class WindowsContracts(unittest.TestCase):
         self.assertIn("private const int MaxNoticePresets = 8;", lists)
         self.assertIn('item.Handler == "notice_presets" && entries.Count >= MaxNoticePresets',
                       lists)
+        # Labels are edited in every enabled visitor language, not only the shipped three.
+        self.assertIn('SettingsStore.AsStringList(_store.Get("ui.languages"))', lists)
+        self.assertIn("fields[lang] = field(LabelFieldTitle(lang),", lists)
         # The visitor language list can never be emptied.
         self.assertIn('if (item.Key == "ui.languages" && ordered.Count == 0)', rows)
 

@@ -1603,7 +1603,7 @@ ON</string>
     <string name="ring_unlock_failed">開錠の操作を実行できませんでした</string>
     <string name="ring_unlock_sent">解錠信号を送信しました</string>
     <string name="ring_unlock_unconfigured">この門口機には開錠の操作が設定されていません</string>
-    <string name="ring_video_zoom_hint">ピンチで拡大、ダブルタップで元に戻します</string>
+    <string name="ring_video_zoom_hint">ピンチで拡大、ドラッグで移動、ダブルタップで拡大または元に戻します</string>
     <string name="security_failed">操作できませんでした: %1$s</string>
     <string name="security_fingerprint">証明書の指紋</string>
     <string name="security_fingerprint_hint">ブラウザーの警告に表示される指紋がこれと一致する場合だけ、この接続を信頼してください。</string>

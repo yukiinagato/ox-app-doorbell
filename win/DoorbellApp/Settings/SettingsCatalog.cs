@@ -257,6 +257,15 @@ namespace DoorbellApp.Settings
                 SettingScope.ThisDevice, O(0, "settings.off"), O(60, "settings.min_1"),
                 O(120, "settings.min_2"), O(300, "settings.min_5"), O(600, "settings.min_10"),
                 O(1800, "settings.min_30")));
+            // Per-device overrides Core and the shell read before the cluster values.
+            Add(here, Choice("appearance_here", Local + ".display.appearance", null,
+                SettingScope.ThisDevice, O("auto_system", "settings.appearance_auto_system"),
+                O("auto_schedule", "settings.appearance_auto_schedule"),
+                O("light", "settings.appearance_light"), O("dark", "settings.appearance_dark")));
+            var callButton = Add(here,
+                Editor("call_button_color", "color", Local + ".theme.call_button_bg"));
+            callButton.Scope = SettingScope.ThisDevice;
+            callButton.Visible = ctx => ctx.IsDoorStation;
             Add(here, Describe(Toggle("video_stats", "local:video_stats", true, SettingScope.Local)));
             // display.screensaver: the idle screen every device follows unless it overrides a
             // leaf under devices.<id>.local.display.screensaver.
@@ -307,6 +316,10 @@ namespace DoorbellApp.Settings
                 SettingScope.AllDevices));
             Add(theme, Slider("backdrop_opacity", "display.theme.backdrop.opacity", 0, 100, 1, 62,
                 SettingScope.AllDevices, "settings.unit_percent"));
+            var backdropColor = Add(theme,
+                Editor("backdrop_color", "color", "display.theme.backdrop.color"));
+            backdropColor.Default = "#000000";
+            backdropColor.Scope = SettingScope.AllDevices;
             Add(theme, Slider("glass_blur", "display.theme.glass.blur_radius", 0, 40, 1, 32,
                 SettingScope.AllDevices));
             Add(theme, Editor("bg_image", "bg_image", "display.theme.bg_image")).Scope = SettingScope.AllDevices;
@@ -471,12 +484,10 @@ namespace DoorbellApp.Settings
         {
             var c = Category("time", "IconClock");
             var g = Group(c, "settings.grp_time");
-            Add(g, Choice("time_zone", "time.zone", "Asia/Tokyo", SettingScope.AllDevices,
-                O("Asia/Tokyo", "settings.tz_tokyo"), O("Asia/Shanghai", "settings.tz_shanghai"),
-                O("Asia/Seoul", "settings.tz_seoul"), O("Asia/Singapore", "settings.tz_singapore"),
-                O("Europe/London", "settings.tz_london"), O("Europe/Berlin", "settings.tz_berlin"),
-                O("America/New_York", "settings.tz_new_york"),
-                O("America/Los_Angeles", "settings.tz_los_angeles"), O("UTC", "settings.tz_utc")));
+            // Every zone Core can resolve (TimeSettings.Zones), filled in when the row is built.
+            Add(g, Choice("time_zone", "time.zone", "Asia/Tokyo", SettingScope.AllDevices))
+                .Handler = "time_zone";
+            Add(g, Info("time_status", "time_status"));
             Add(g, Describe(Toggle("ntp_enabled", "time.ntp.enabled", false, SettingScope.AllDevices)));
             Add(g, Describe(Text("ntp_servers", "time.ntp.servers", "", SettingScope.AllDevices)))
                 .Handler = "string_list";

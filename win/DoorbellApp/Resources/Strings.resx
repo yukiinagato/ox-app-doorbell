@@ -1605,7 +1605,7 @@ ON</value></data>
   <data name="ring_unlock_failed" xml:space="preserve"><value>開錠の操作を実行できませんでした</value></data>
   <data name="ring_unlock_sent" xml:space="preserve"><value>解錠信号を送信しました</value></data>
   <data name="ring_unlock_unconfigured" xml:space="preserve"><value>この門口機には開錠の操作が設定されていません</value></data>
-  <data name="ring_video_zoom_hint" xml:space="preserve"><value>ピンチで拡大、ダブルタップで元に戻します</value></data>
+  <data name="ring_video_zoom_hint" xml:space="preserve"><value>ピンチで拡大、ドラッグで移動、ダブルタップで拡大または元に戻します</value></data>
   <data name="security_failed" xml:space="preserve"><value>操作できませんでした: {0}</value></data>
   <data name="security_fingerprint" xml:space="preserve"><value>証明書の指紋</value></data>
   <data name="security_fingerprint_hint" xml:space="preserve"><value>ブラウザーの警告に表示される指紋がこれと一致する場合だけ、この接続を信頼してください。</value></data>
@@ -1650,6 +1650,7 @@ ON</value></data>
   <data name="settings_appearance_auto_system" xml:space="preserve"><value>端末の設定に合わせる</value></data>
   <data name="settings_appearance_dark" xml:space="preserve"><value>ダーク</value></data>
   <data name="settings_appearance_dark_from" xml:space="preserve"><value>ダークにする時刻</value></data>
+  <data name="settings_appearance_here" xml:space="preserve"><value>この端末の外観</value></data>
   <data name="settings_appearance_light" xml:space="preserve"><value>ライト</value></data>
   <data name="settings_appearance_light_from" xml:space="preserve"><value>ライトにする時刻</value></data>
   <data name="settings_appearance_range" xml:space="preserve"><value>ダーク {0} → ライト {1}</value></data>
@@ -1664,6 +1665,8 @@ ON</value></data>
   <data name="settings_assets_native" xml:space="preserve"><value>登録済みの画像と音声。使われている素材を削除すると既定に戻ります</value></data>
   <data name="settings_back" xml:space="preserve"><value>設定</value></data>
   <data name="settings_backdrop" xml:space="preserve"><value>背景を暗くする層</value></data>
+  <data name="settings_backdrop_color" xml:space="preserve"><value>暗くする層の色</value></data>
+  <data name="settings_backdrop_color_native" xml:space="preserve"><value>背景画像の上に重ねる色。既定は黒</value></data>
   <data name="settings_backdrop_opacity" xml:space="preserve"><value>暗くする強さ</value></data>
   <data name="settings_background_color" xml:space="preserve"><value>背景色</value></data>
   <data name="settings_background_image" xml:space="preserve"><value>背景画像</value></data>
@@ -1682,6 +1685,8 @@ ON</value></data>
   <data name="settings_buildings_manage" xml:space="preserve"><value>建物</value></data>
   <data name="settings_buildings_manage_native" xml:space="preserve"><value>ドアをまとめる建物</value></data>
   <data name="settings_button_sound" xml:space="preserve"><value>ボタン音</value></data>
+  <data name="settings_call_button_color" xml:space="preserve"><value>呼出ボタンの色（この端末）</value></data>
+  <data name="settings_call_button_color_native" xml:space="preserve"><value>未設定のときは背景に合わせて自動で決まります</value></data>
   <data name="settings_call_flow" xml:space="preserve"><value>来訪者の呼出手順</value></data>
   <data name="settings_call_flow_purpose_first" xml:space="preserve"><value>用件を選んで呼び出す</value></data>
   <data name="settings_call_flow_ring_then_purpose" xml:space="preserve"><value>呼び出してから用件を選ぶ</value></data>
@@ -2209,6 +2214,7 @@ ON</value></data>
   <data name="settings_theme_image" xml:space="preserve"><value>背景画像</value></data>
   <data name="settings_theme_image_none" xml:space="preserve"><value>画像を使わない</value></data>
   <data name="settings_this_device" xml:space="preserve"><value>この端末</value></data>
+  <data name="settings_time_status" xml:space="preserve"><value>同期の状態</value></data>
   <data name="settings_time_sync" xml:space="preserve"><value>今すぐ同期</value></data>
   <data name="settings_time_sync_action" xml:space="preserve"><value>同期</value></data>
   <data name="settings_time_sync_failed" xml:space="preserve"><value>時刻を同期できませんでした</value></data>
