@@ -1,6 +1,4 @@
 #import "DBBootConfig.h"
-#include <sys/sysctl.h>
-#include <string.h>
 #import <sys/sysctl.h>
 
 
@@ -38,13 +36,6 @@ static BOOL DBValidPskHex(NSString *value) {
   NSCharacterSet *invalid = [[NSCharacterSet characterSetWithCharactersInString:
       @"0123456789abcdefABCDEF"] invertedSet];
   return [value rangeOfCharacterFromSet:invalid].location == NSNotFound;
-}
-
-static BOOL DBDeviceHasMicrophone(void) {
-  char machine[64] = {0};
-  size_t size = sizeof(machine) - 1;
-  if (sysctlbyname("hw.machine", machine, &size, NULL, 0) != 0) return YES;
-  return strcmp(machine, "iPad1,1") != 0;
 }
 
 @implementation DBBootConfig
@@ -334,9 +325,9 @@ static BOOL DBDeviceHasMicrophone(void) {
 
     // The original iPad has a built-in microphone. Preserve the historical
     // indoor default, but make a door profile usable when `mic` is omitted.
-    // Without an explicit setting the microphone follows the hardware: every supported
-    // device except the first iPad has one, and both roles need it for two-way talk.
-    if (!hasMicSetting) c.micEnabled = DBDeviceHasMicrophone();
+    // Every supported device has a built-in microphone (the first iPad included), and
+    // both roles need it for two-way talk.
+    if (!hasMicSetting) c.micEnabled = YES;
   }
   c.suggestedDoor = DBValidDoor(c.door) ? c.door : DBSuggestedDoor();
   if (![self isValidRole:c.role] ||
