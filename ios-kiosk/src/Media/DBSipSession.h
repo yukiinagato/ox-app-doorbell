@@ -26,6 +26,10 @@ typedef enum {
 - (void)miniSipSession:(DBSipSession *)session stateChanged:(DBMiniSipState)state;
 @end
 
+// When set, a "monitor" session keeps the microphone open so the resident can speak to
+// the door; the mode sent to the peer stays "monitor" (no call is answered).
+extern BOOL DBSipMonitorTalk;
+
 @interface DBSipSession : NSObject <DBCallSession>
 
 @property(nonatomic, weak) id<DBMiniSipDelegate> delegate;

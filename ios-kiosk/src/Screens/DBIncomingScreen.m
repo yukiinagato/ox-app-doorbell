@@ -1,3 +1,5 @@
+#import "../Media/DBSipSession.h"
+#import "../Media/DBAudioIO.h"
 #import "DBIncomingScreen.h"
 
 #import "../Core/DBBootConfig.h"
@@ -553,7 +555,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _answerButton.enabled = NO;
   _monitorButton.enabled = NO;
   _monitorAudioOn = NO;
-  _micMuted = NO;
+  _micMuted = _monitorOnly;
+  DBSipMonitorTalk = NO;
   // The page now closes itself on this countdown instead of the old fixed
   // auto-close, so a visitor cancelling no longer takes the live view away.
   [_returnCountdown startWithSeconds:[DBCallReturnCountdown defaultSeconds]];
@@ -636,7 +639,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _answerButton.enabled = NO;
   _monitorButton.enabled = ([_peerHost length] > 0);
   _monitorAudioOn = NO;
-  _micMuted = NO;
+  _micMuted = _monitorOnly;
+  DBSipMonitorTalk = NO;
   [self dismissChoiceList];
   [_returnCountdown reset];
   [self stopReturnTimer];
@@ -685,6 +689,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   BOOL supersedesAnswer = !_monitorOnly && stageRevision > _stageRevision &&
       (_answerPending || _inCall || [_sipMode isEqualToString:@"answer"]);
   if (supersedesAnswer) {
+    DBAudioTrace([NSString stringWithFormat:@"incoming supersedesAnswer mode=%@ inCall=%d", _sipMode, _inCall]);
     ++_sipActionGen;
     _answerPending = NO;
     _awaitingSupersededIdle = YES;
@@ -867,7 +872,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   _videoScroll.accessibilityHint = [_texts ts:@"ring.video_zoom_hint"];
   _answerButton.hidden = _monitorOnly;
   _repliesButton.hidden = _monitorOnly;
-  _micButton.hidden = _monitorOnly;
+  _micButton.hidden = NO;
   _langBadge.hidden = _monitorOnly;
   [self refreshUnlockVisibility];
   [self refreshNotice];
@@ -1014,6 +1019,22 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onMic {
+  DBAudioTrace([NSString stringWithFormat:@"incoming onMic mode=%@ inCall=%d", _sipMode, _inCall]);
+  // Live view: the resident decides whether the door hears them. Off by default; turning it
+  // on restarts the listen session with the microphone open, without answering a call.
+  if (_monitorOnly || [_sipMode isEqualToString:@"monitor"] || [_sipMode length] == 0) {
+    if (_peerHost == nil) return;
+    BOOL talk = !DBSipMonitorTalk;
+    DBSipMonitorTalk = talk;
+    _micMuted = !talk;
+    _sipMode = @"monitor";
+    _monitorAudioOn = YES;
+    [self startSip:@"monitor"];
+    _hintLabel.text = [_texts ts:(talk ? @"ring.mic_on" : @"ring.monitoring")];
+    _hintLabel.hidden = NO;
+    [self applyContent];
+    return;
+  }
   BOOL muted = !_micMuted;
   if ([DBCoreBridge supportsMicMute]) {
     // Core mutes the capture path in place and reports status.call.mic_muted,
@@ -1928,6 +1949,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)closeSelf {
+  DBAudioTrace([NSString stringWithFormat:@"incoming closeSelf mode=%@ inCall=%d", _sipMode, _inCall]);
   [_router closeIncomingAnimated:YES];
 }
 
@@ -2028,6 +2050,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 
 
 - (void)onAnswer {
+  DBAudioTrace([NSString stringWithFormat:@"incoming onAnswer mode=%@ inCall=%d", _sipMode, _inCall]);
   if (![self visitTargetMatches]) return;
   if ([self usesConversation]) {
     NSDictionary *member = [self ownRoomMember:[self roomFor:[self selectedVisitSnapshot]]];
@@ -2070,6 +2093,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onMonitor {
+  DBAudioTrace([NSString stringWithFormat:@"incoming onMonitor mode=%@ inCall=%d", _sipMode, _inCall]);
   if (_peerHost == nil) return;
   // Monitor is a stateful on/off toggle for door audio; the answered call is
   // never torn down by it.
@@ -2077,6 +2101,8 @@ static BOOL DBSameString(NSString *a, NSString *b) {
     [_router sipHangup];
     _sipMode = @"";
     _monitorAudioOn = NO;
+    DBSipMonitorTalk = NO;
+    _micMuted = YES;
     _hintLabel.hidden = YES;
     [self applyContent];
     return;
@@ -2119,6 +2145,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)onIgnore {
+  DBAudioTrace([NSString stringWithFormat:@"incoming onIgnore mode=%@ inCall=%d", _sipMode, _inCall]);
   NSString *key = [NSString stringWithFormat:@"%@:%@", _door, _callID];
   NSUInteger before = [_visitOrder count];
   [_retiredVisits setObject:@(_stageRevision) forKey:key];
@@ -2143,6 +2170,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
 }
 
 - (void)sipStateChanged:(DBMiniSipState)state {
+  DBAudioTrace([NSString stringWithFormat:@"incoming sipState=%d mode=%@ inCall=%d", (int)state, _sipMode, _inCall]);
   if (!self.superview) return;
   if (state == DBMiniSipInCall) {
     if (![_sipMode isEqualToString:@"answer"]) return;
@@ -2237,6 +2265,7 @@ static BOOL DBSameString(NSString *a, NSString *b) {
   return !target || [target isEqual:[NSString stringWithFormat:@"%@:%@:%ld", _door, _callID, (long)_stageRevision]];
 }
 - (void)sendConversation:(NSString *)action {
+  DBAudioTrace([NSString stringWithFormat:@"incoming sendConversation %@ mode=%@ inCall=%d", action, _sipMode, _inCall]);
   if ([_sipMode length] > 0) { [_router sipHangup]; _sipMode = @""; _inCall = NO; }
   NSDictionary *request = @{ @"action":action, @"door":_door ?: @"", @"call_id":_callID ?: @"",
       @"stage_revision":@(_stageRevision), @"expected_version":_touchRoomVersion ?:

@@ -1,3 +1,4 @@
+#import "../Media/DBAudioIO.h"
 #import "DBRouter.h"
 
 void DBH264Dbg(NSString *fmt, ...);
@@ -815,6 +816,7 @@ static BOOL DBCoreSipBackendCompiled(void) {
 }
 
 - (void)sipHangup {
+  DBAudioTrace(@"router sipHangup");
 #ifdef DB_IOS_COMPAT_CORE_PJSIP
   [_core coreSipHangup];
 #else
@@ -1004,6 +1006,7 @@ static BOOL DBCoreSipBackendCompiled(void) {
   else if (state == DBMiniSipCalling) runtimeState = @"calling";
   else if ([mode isEqualToString:@"bind_failed"]) runtimeState = @"bind_failed_retrying";
   else if (state == DBMiniSipEnded) runtimeState = @"restarting_listener";
+  DBAudioTrace([NSString stringWithFormat:@"router listener state=%@ mode=%@", runtimeState, mode]);
   [self publishSipRuntimeState:runtimeState mode:mode];
   if ([_boot.role isEqualToString:@"door_station"])
     [self.door miniSipListenerStateChanged:state mode:mode];

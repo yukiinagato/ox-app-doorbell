@@ -37,6 +37,24 @@ static int DBRingRead(DBRing *r, short *dst, int n) {
   return got;
 }
 
+// Call-audio diagnostics readable over SSH on devices that keep no syslog file.
+void DBAudioTrace(NSString *line) {
+  static NSString *path = nil;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    NSString *dir = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) lastObject];
+    path = [dir stringByAppendingPathComponent:@"audio-dbg.log"];
+    NSDictionary *attrs = [[NSFileManager defaultManager] attributesOfItemAtPath:path error:NULL];
+    if (attrs == nil || [attrs fileSize] > 200000) [[NSData data] writeToFile:path atomically:YES];
+  });
+  NSString *stamped = [NSString stringWithFormat:@"%.0f %@\n", [[NSDate date] timeIntervalSince1970], line];
+  NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
+  if (handle == nil) return;
+  [handle seekToEndOfFile];
+  [handle writeData:[stamped dataUsingEncoding:NSUTF8StringEncoding]];
+  [handle closeFile];
+}
+
 @implementation DBAudioIO {
   AudioUnit _unit;
   BOOL _running;
@@ -147,6 +165,8 @@ static AudioStreamBasicDescription DBFormat8k(void) {
   if (sessionStatus != noErr || activeStatus != noErr) {
     NSLog(@"[doorbell] audio: session start failed category=%ld active=%ld",
           (long)sessionStatus, (long)activeStatus);
+    DBAudioTrace([NSString stringWithFormat:@"session start failed category=%ld active=%ld mic=%d",
+        (long)sessionStatus, (long)activeStatus, _micEnabled]);
     return NO;
   }
 
@@ -194,13 +214,17 @@ static AudioStreamBasicDescription DBFormat8k(void) {
                          kAudioUnitScope_Global, inputBus, &input, sizeof(input));
   }
 
-  if (AudioUnitInitialize(_unit) != noErr) {
+  OSStatus initStatus = AudioUnitInitialize(_unit);
+  if (initStatus != noErr) {
+    DBAudioTrace([NSString stringWithFormat:@"unit initialize failed %ld mic=%d", (long)initStatus, _micEnabled]);
     AudioComponentInstanceDispose(_unit);
     _unit = NULL;
     AudioSessionSetActive(false);
     return NO;
   }
-  if (AudioOutputUnitStart(_unit) != noErr) {
+  OSStatus startStatus = AudioOutputUnitStart(_unit);
+  if (startStatus != noErr) {
+    DBAudioTrace([NSString stringWithFormat:@"unit start failed %ld mic=%d", (long)startStatus, _micEnabled]);
     AudioUnitUninitialize(_unit);
     AudioComponentInstanceDispose(_unit);
     _unit = NULL;
@@ -211,6 +235,11 @@ static AudioStreamBasicDescription DBFormat8k(void) {
   UInt32 volumeSize = sizeof(outputVolume);
   AudioSessionGetProperty(kAudioSessionProperty_CurrentHardwareOutputVolume, &volumeSize, &outputVolume);
   NSLog(@"[doorbell] audio started mic=%d output_volume=%.2f", _micEnabled, outputVolume);
+  UInt32 inputAvailable = 0;
+  UInt32 inputSize = sizeof(inputAvailable);
+  AudioSessionGetProperty(kAudioSessionProperty_AudioInputAvailable, &inputSize, &inputAvailable);
+  DBAudioTrace([NSString stringWithFormat:@"started mic=%d output_volume=%.2f input_available=%u",
+      _micEnabled, outputVolume, (unsigned)inputAvailable]);
   _running = YES;
   return YES;
 }
@@ -247,6 +276,9 @@ static AudioStreamBasicDescription DBFormat8k(void) {
     NSLog(@"[doorbell] audio PCM rx=%u tx=%u render=%u input=%u peaks=%d/%d input_status=%ld",
         (unsigned)_receivedFrames, (unsigned)_sentFrames, (unsigned)_renderedFrames,
         (unsigned)_inputFrames, _receivePeak, _sendPeak, (long)_inputStatus);
+    DBAudioTrace([NSString stringWithFormat:@"pcm rx=%u tx=%u render=%u input=%u peaks=%d/%d input_status=%ld",
+        (unsigned)_receivedFrames, (unsigned)_sentFrames, (unsigned)_renderedFrames,
+        (unsigned)_inputFrames, _receivePeak, _sendPeak, (long)_inputStatus]);
     _receivePeak = 0; _sendPeak = 0; _nextStatsAt = now + 2;
   }
   return got;

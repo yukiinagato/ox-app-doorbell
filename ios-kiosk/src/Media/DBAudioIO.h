@@ -3,6 +3,9 @@
 
 // iOS 5 RemoteIO bridge for 8 kHz mono SIP audio. The render callbacks exchange samples through
 // bounded single-producer/single-consumer rings and never allocate or take Objective-C locks.
+// Appends one line to Documents/audio-dbg.log (call diagnostics readable over SSH).
+void DBAudioTrace(NSString *line);
+
 @interface DBAudioIO : NSObject
 
 @property(nonatomic, assign) BOOL micEnabled;

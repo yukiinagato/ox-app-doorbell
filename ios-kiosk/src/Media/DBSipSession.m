@@ -12,6 +12,8 @@ static void DBSipRxAudio(const int16_t *pcm, int n, void *user);
 static int DBSipPullTx(int16_t *pcm, int n, void *user);
 static void DBSipOnState(ms_state st, void *user);
 
+BOOL DBSipMonitorTalk = NO;
+
 @implementation DBSipSession {
 @public
   DBAudioIO *_audioForCb;
@@ -38,7 +40,7 @@ static void DBSipOnState(ms_state st, void *user);
     _mode = [mode copy];
     // Monitor is receive-only. Keeping the recording path closed prevents old
     // iOS versions from reverting output to the receiver and avoids echo.
-    _micEnabled = micEnabled && ![mode isEqualToString:@"monitor"];
+    _micEnabled = micEnabled && (![mode isEqualToString:@"monitor"] || DBSipMonitorTalk);
     _pendingDtmf = [[NSMutableString alloc] init];
     pthread_mutex_init(&_dtmfLock, NULL);
     _audioForCb = [[DBAudioIO alloc] init];
