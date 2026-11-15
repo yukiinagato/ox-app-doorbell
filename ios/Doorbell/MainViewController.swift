@@ -188,9 +188,7 @@ final class MainViewController: UIViewController {
     private let inCallTitle = UILabel()
     private let endCallButton = UIButton(type: .system)
     private var visitorActionHeights: [NSLayoutConstraint] = []
-    private let replyBanner = UIView()
-    private let replyCaption = UILabel()
-    private let replyText = UILabel()
+    private let replyBanner = ReplyOverlayView()
     private let offlineView = UIView()
     private let offlineTitle = UILabel()
     private let offlineBody = UILabel()
@@ -298,6 +296,7 @@ final class MainViewController: UIViewController {
         super.viewDidLayoutSubviews()
         applySemanticStyles()
         updateVisitorActionMetrics()
+        if !langBar.isHidden { styleLangBar() }
     }
 
     override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
@@ -806,36 +805,32 @@ final class MainViewController: UIViewController {
     }
 
     private func buildReplyBanner() {
-        replyBanner.backgroundColor = UIColor(red: 0.11, green: 0.30, blue: 0.16, alpha: 0.97)
-        replyBanner.layer.cornerRadius = 16
         replyBanner.isHidden = true
         replyBanner.translatesAutoresizingMaskIntoConstraints = false
+        replyBanner.margin = UIDevice.current.userInterfaceIdiom == .pad ? 24 : 16
+        replyBanner.accessibilityLabel = texts.t("monitor.close")
+        replyBanner.onDismiss = { [weak self] in self?.dismissReply() }
         view.addSubview(replyBanner)
-
-        replyCaption.font = .systemFont(ofSize: 18)
-        replyCaption.textColor = UIColor(white: 1, alpha: 0.7)
-        replyText.font = .systemFont(ofSize: 34, weight: .bold)
-        replyText.textColor = .white
-        replyText.numberOfLines = 0
-        replyText.textAlignment = .center
-
-        let stack = UIStackView(arrangedSubviews: [replyCaption, replyText])
-        stack.axis = .vertical
-        stack.spacing = 8
-        stack.alignment = .center
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        replyBanner.addSubview(stack)
-
-        let g = IOSAvailability.safeAreaLayoutGuide(for: view)
         NSLayoutConstraint.activate([
-            replyBanner.topAnchor.constraint(equalTo: g.topAnchor, constant: 20),
-            replyBanner.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            replyBanner.widthAnchor.constraint(lessThanOrEqualTo: g.widthAnchor, constant: -40),
-            stack.topAnchor.constraint(equalTo: replyBanner.topAnchor, constant: 16),
-            stack.bottomAnchor.constraint(equalTo: replyBanner.bottomAnchor, constant: -16),
-            stack.leadingAnchor.constraint(equalTo: replyBanner.leadingAnchor, constant: 28),
-            stack.trailingAnchor.constraint(equalTo: replyBanner.trailingAnchor, constant: -28),
+            replyBanner.topAnchor.constraint(equalTo: view.topAnchor),
+            replyBanner.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            replyBanner.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            replyBanner.trailingAnchor.constraint(equalTo: view.trailingAnchor),
         ])
+    }
+
+    private func dismissReply() {
+        replyTimer?.invalidate()
+        replyBanner.isHidden = true
+    }
+
+    private func presentReply(text: String, ttl: TimeInterval) {
+        replyBanner.show(text: text, ttl: ttl)
+        view.bringSubviewToFront(replyBanner)
+        replyTimer?.invalidate()
+        replyTimer = IOSAvailability.scheduledTimer(withTimeInterval: ttl, repeats: false) { [weak self] _ in
+            self?.dismissReply()
+        }
     }
 
     private func buildOfflineView() {
@@ -933,7 +928,10 @@ final class MainViewController: UIViewController {
         callingText.text = callTitleOverride ?? texts.t("calling.title")
         callingDetail.text = texts.t("calling.wait_hint")
         cancelButton.setTitle(texts.t("calling.cancel"), for: .normal)
-        replyCaption.text = texts.t("reply.banner")
+        replyBanner.caption.text = texts.t("reply.banner")
+        replyBanner.hintFirst = texts.t("reply.exit_hint")
+        replyBanner.hintConfirm = texts.t("reply.exit_confirm")
+        replyBanner.accessibilityLabel = texts.t("monitor.close")
         offlineTitle.text = texts.t("offline.title")
         offlineBody.text = texts.t("offline.body")
         sosSlider.refreshStrings()
@@ -1342,7 +1340,20 @@ final class MainViewController: UIViewController {
             langBar.setTitleTextAttributes([.font: font], for: .normal)
         }
         langBar.isHidden = false
+        styleLangBar()
         updateLangBarSelection()
+    }
+
+    /// The control draws its own plate; a separate backing view would have its own radius and
+    /// inset. Before iOS 13 the stock outline has a 4 pt radius, from iOS 13 about 9 pt; the
+    /// capsule of iOS 26 is left to the system.
+    private func styleLangBar() {
+        if #available(iOS 26.0, *) { return }
+        let radius: CGFloat
+        if #available(iOS 13.0, *) { radius = 9 } else { radius = 4 }
+        langBar.backgroundColor = SystemStyle.fill
+        langBar.layer.cornerRadius = radius
+        langBar.layer.masksToBounds = true
     }
 
     private func updateLangBarSelection() {
@@ -1728,6 +1739,7 @@ final class MainViewController: UIViewController {
 #endif
 
     private func showCalling(title: String? = nil) {
+        dismissReply()
         exitScreensaver()
         if let t = title { callTitleOverride = t }
         callingText.text = callTitleOverride ?? texts.t("calling.title")
@@ -1800,14 +1812,9 @@ final class MainViewController: UIViewController {
                     self?.core.speak(text: spoken, lang: lang)
                 }
             }
-            replyText.text = ConfigUtil.evStr(ev, "text")
-            replyBanner.isHidden = false
             var ttl = ConfigUtil.double(ev, "ttl_s", 30)
             if ttl <= 0 { ttl = 30 }
-            replyTimer?.invalidate()
-            replyTimer = IOSAvailability.scheduledTimer(withTimeInterval: ttl, repeats: false) { [weak self] _ in
-                self?.replyBanner.isHidden = true
-            }
+            presentReply(text: ConfigUtil.evStr(ev, "text"), ttl: ttl)
             invalidateCallTimer()
             showIdle()
         case "wake_screen":
@@ -1920,6 +1927,7 @@ final class MainViewController: UIViewController {
     }
 
     private func onSipIdle() {
+        dismissReply()
         visitorActionRevision &+= 1
         inCall = false
         closeInCall()
@@ -1929,6 +1937,7 @@ final class MainViewController: UIViewController {
     private var inCallStreamer: MjpegClient?
 
     private func showInCall(streamUrl: String?) {
+        dismissReply()
         retirePeerFrameRequest()
         exitScreensaver()
         // A new call is a new picture: the zoom starts over.
@@ -2430,9 +2439,14 @@ final class MainViewController: UIViewController {
         onActivity()
         let door = ConfigUtil.doorsWithCamera(config: cfg, status: core.status()).first
             ?? ((ConfigUtil.dig(cfg, "doors") as? [String: Any])?.keys.sorted().first ?? "front")
+        if name.hasPrefix("reply:") {
+            presentReply(text: String(name.dropFirst("reply:".count)), ttl: 600)
+            return
+        }
         switch name {
         case "dismiss":
             presentedViewController?.dismiss(animated: false)
+            replyBanner.isHidden = true
             hideEmergency()
             if boot.role == "door_station" { inCall = false; closeInCall(); showIdle() }
         case "home": tabs?.show(.home)
