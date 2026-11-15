@@ -1384,37 +1384,37 @@ static const CGFloat kDBQrSide = 96;
   if ([self volumeBeingDragged]) return;
   NSMutableArray *sections = [NSMutableArray array];
   [sections addObject:[self section:@"settings.section_device" rows:[self deviceRows]
-                               icon:@"device-tablet"]];
+                               icon:@"f7:gear_alt_fill"]];
   NSMutableArray *sound = [NSMutableArray arrayWithArray:[self volumeRows]];
   NSArray *soundRows = [self soundRows];
   if ([sound count] > 0 && [soundRows count] > 0) DBGroupStart([soundRows objectAtIndex:0]);
   [sound addObjectsFromArray:soundRows];
-  [sections addObject:[self section:@"prefs.sounds" rows:sound icon:@"volume"]];
-  [sections addObject:[self section:@"prefs.display" rows:[self displayRows] icon:@"palette"]];
-  [sections addObject:[self section:@"prefs.calls" rows:[self callRows] icon:@"phone"]];
+  [sections addObject:[self section:@"prefs.sounds" rows:sound icon:@"f7:speaker_2_fill"]];
+  [sections addObject:[self section:@"prefs.display" rows:[self displayRows] icon:@"f7:paintbrush_fill"]];
+  [sections addObject:[self section:@"prefs.calls" rows:[self callRows] icon:@"f7:phone_fill"]];
   [sections addObject:[self section:@"settings.section_doors" rows:[self doorRows]
-                               icon:@"door"]];
+                               icon:@"f7:videocam_fill"]];
   NSArray *purposes = [self purposeRows];
   if ([purposes count] > 0)
     [sections addObject:[self section:@"settings.section_purposes" rows:purposes
-                                 icon:@"message-reply"]];
-  [sections addObject:[self section:@"prefs.sos" rows:[self sosRows] icon:@"shield-lock"]];
+                                 icon:@"f7:bubble_left_fill"]];
+  [sections addObject:[self section:@"prefs.sos" rows:[self sosRows] icon:@"f7:lock_shield_fill"]];
   NSArray *air = [self airSensorRows];
   if ([air count] > 0)
-    [sections addObject:[self section:kAirSectionId rows:air icon:@"link"]];
+    [sections addObject:[self section:kAirSectionId rows:air icon:@"f7:link"]];
   [sections addObject:[self section:@"settings.section_time" rows:[self timeRows]
-                               icon:@"clock"]];
+                               icon:@"f7:clock_fill"]];
   [sections addObject:[self section:@"settings.section_rules" rows:[self ruleRows]
-                               icon:@"bell"]];
+                               icon:@"f7:bell_fill"]];
   [sections addObject:[self section:@"settings.section_cluster" rows:[self clusterRows]
-                               icon:@"topology-star-3"]];
+                               icon:@"f7:rectangle_3_offgrid_fill"]];
   [sections addObject:[self section:@"settings.section_history"
                                rows:[NSArray arrayWithObject:
                                         DBRow([_texts ts:@"history.title"], @"",
                                               @"history", nil)]
-                               icon:@"list"]];
+                               icon:@"f7:list_bullet"]];
   [sections addObject:[self section:@"settings.section_info" rows:[self infoRows]
-                               icon:@"info-circle"]];
+                               icon:@"f7:info_circle_fill"]];
   _sections = sections;
   _selectedSection = 0;
   for (NSUInteger i = 0; i < [sections count]; i++)
@@ -2494,26 +2494,17 @@ static const CGFloat kDBQrSide = 96;
   if (tiles == nil) {
     tiles = [NSMutableDictionary dictionary];
     palette = @{
-      @"device-tablet": @[ @142, @142, @147 ], @"volume": @[ @255, @45, @85 ],
-      @"palette": @[ @0, @122, @255 ], @"phone": @[ @52, @199, @89 ],
-      @"door": @[ @255, @149, @0 ], @"message-reply": @[ @50, @173, @230 ],
-      @"shield-lock": @[ @255, @59, @48 ], @"link": @[ @175, @82, @222 ],
-      @"clock": @[ @88, @86, @214 ], @"bell": @[ @162, @132, @94 ],
-      @"topology-star-3": @[ @48, @176, @199 ], @"list": @[ @99, @99, @102 ],
-      @"info-circle": @[ @142, @142, @147 ] };
+      @"f7:gear_alt_fill": @[ @142, @142, @147 ], @"f7:speaker_2_fill": @[ @255, @45, @85 ],
+      @"f7:paintbrush_fill": @[ @0, @122, @255 ], @"f7:phone_fill": @[ @52, @199, @89 ],
+      @"f7:videocam_fill": @[ @255, @149, @0 ], @"f7:bubble_left_fill": @[ @50, @173, @230 ],
+      @"f7:lock_shield_fill": @[ @255, @59, @48 ], @"f7:link": @[ @175, @82, @222 ],
+      @"f7:clock_fill": @[ @88, @86, @214 ], @"f7:bell_fill": @[ @162, @132, @94 ],
+      @"f7:rectangle_3_offgrid_fill": @[ @48, @176, @199 ], @"f7:list_bullet": @[ @99, @99, @102 ],
+      @"f7:info_circle_fill": @[ @142, @142, @147 ] };
   }
   UIImage *tile = [tiles objectForKey:icon ?: @""];
   if (tile != nil) return tile;
-  static NSDictionary *symbols;
-  if (symbols == nil)
-    symbols = @{
-      @"device-tablet": @"f7:gear_alt_fill", @"volume": @"f7:speaker_2_fill",
-      @"palette": @"f7:paintbrush_fill", @"phone": @"f7:phone_fill",
-      @"door": @"f7:videocam_fill", @"message-reply": @"f7:bubble_left_fill",
-      @"shield-lock": @"f7:lock_shield_fill", @"link": @"f7:link", @"clock": @"f7:clock_fill",
-      @"bell": @"f7:bell_fill", @"topology-star-3": @"f7:rectangle_3_offgrid_fill",
-      @"list": @"f7:list_bullet", @"info-circle": @"f7:info_circle_fill" };
-  UIImage *glyph = [DBIconAsset tintedImageNamed:[symbols objectForKey:icon] ?: icon
+  UIImage *glyph = [DBIconAsset tintedImageNamed:icon
                                            color:[UIColor whiteColor]
                                             size:CGSizeMake(18, 18)];
   if (glyph == nil) return nil;

@@ -139,7 +139,7 @@ typedef enum {
   DBFleetGlyphIndoorPanel,
 } DBFleetGlyph;
 
-// The Tabler icon each counter asks DBIconAsset for.
+// The Framework7 icon each counter asks DBIconAsset for.
 NSString *DBFleetGlyphIconName(DBFleetGlyph glyph);
 
 // One cluster counter: a Tabler icon and a number, drawn straight onto the

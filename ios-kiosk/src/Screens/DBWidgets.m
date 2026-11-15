@@ -601,10 +601,10 @@ static const NSInteger kProxyEdge = 64;
 
 NSString *DBFleetGlyphIconName(DBFleetGlyph glyph) {
   switch (glyph) {
-    case DBFleetGlyphDoorStation: return @"door";
-    case DBFleetGlyphIndoorPanel: return @"device-tablet";
+    case DBFleetGlyphDoorStation: return @"f7:videocam_fill";
+    case DBFleetGlyphIndoorPanel: return @"f7:tv_fill";
     case DBFleetGlyphCluster:
-    default: return @"topology-star-3";
+    default: return @"f7:rectangle_3_offgrid_fill";
   }
 }
 
@@ -1090,7 +1090,7 @@ static UIColor *DBSosTrackColor(void) {
   _thumb.frame = CGRectMake(x, inset, knob, knob);
   _thumb.layer.cornerRadius = knob / 2;
   _thumbChevron.frame = _thumb.bounds;
-  _thumbChevron.image = [DBIconAsset tintedImageNamed:@"chevrons-right" color:_dangerInk
+  _thumbChevron.image = [DBIconAsset tintedImageNamed:@"f7:chevron_right_2" color:_dangerInk
                                                  size:CGSizeMake(26, 26)];
   _fill.frame = CGRectMake(0, 0, x + knob / 2, size.height);
 

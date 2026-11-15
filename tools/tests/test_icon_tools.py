@@ -96,9 +96,27 @@ class GenIconsTest(unittest.TestCase):
                                     "Tabler" + gen_icons.camel(name) + ".imageset")
             self.assertTrue(os.path.exists(os.path.join(imageset, "icon.pdf")))
             self.assertTrue(os.path.exists(os.path.join(imageset, "Contents.json")))
+    def test_the_kiosk_gets_framework7_only(self):
+        names = gen_icons.f7_names()
+        self.assertTrue(os.path.exists(os.path.join(gen_icons.F7_DIR, "LICENSE")))
+        for required in ("house_fill", "bell_fill", "videocam_fill", "chevron_right_2"):
+            self.assertIn(required, names)
+        for name in names:
             for suffix in ("", "@2x"):
-                self.assertTrue(os.path.exists(os.path.join(
-                    ROOT, "ios-kiosk/resources/icons", "tabler_" + flat + suffix + ".png")))
+                self.assertTrue(os.path.exists(gen_icons.f7_png_path(name, suffix)), name)
+        leftovers = [f for f in os.listdir(os.path.join(ROOT, "ios-kiosk/resources/icons"))
+                     if f.startswith("tabler_")]
+        self.assertEqual(leftovers, [])
+
+    def test_framework7_glyphs_are_filled_with_holes_cut_out(self):
+        try:
+            from PIL import Image  # noqa: F401
+        except ImportError:
+            self.skipTest("Pillow is not installed")
+        image = gen_icons.render_f7_png(gen_icons.read_f7("info_circle_fill"), 60)
+        alpha = image.split()[3]
+        self.assertGreater(alpha.getpixel((30, 8)), 200, "the disc is filled")
+        self.assertLess(alpha.getpixel((30, 20)), 60, "the glyph strokes are cut out of it")
 
     def test_android_drawables_reference_no_theme_attribute(self):
         """A generated drawable resolves on its own or it does not link.

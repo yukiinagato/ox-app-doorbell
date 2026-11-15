@@ -1174,7 +1174,9 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 - (NSString *)doorLabel {
   NSDictionary *entry = [DBConfigUtil dig:_cfg
       path:[NSString stringWithFormat:@"doors.%@", _boot.door]];
-  NSString *label = [DBConfigUtil labelOf:entry lang:_visitorLang fallback:_boot.door];
+  // The configured door label for this station's door, else the device's own name; never the
+  // opaque door id.
+  NSString *label = [DBConfigUtil labelOf:entry lang:_visitorLang fallback:@""];
   return [label length] ? label : _boot.name;
 }
 
