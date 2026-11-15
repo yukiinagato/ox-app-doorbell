@@ -115,6 +115,13 @@ final class TVMainViewController: UIViewController {
         case "history": tabs?.show(.history)
         case "settings": tabs?.show(.settings)
         case "qr": tabs?.show(.home); homeScreen.qrTapped()
+        case "history_row":
+            tabs?.show(.history)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
+                self?.tabs?.history.debugSelectRow(0)
+            }
+        case "show_sos": UserDefaults.standard.set(true, forKey: TVHomeViewController.showSosKey)
+        case "hide_sos": UserDefaults.standard.set(false, forKey: TVHomeViewController.showSosKey)
         case "monitor": openMonitor()
         case "notice": openNotice(door: "")
         case "sos": sosSlider.sendActions(for: .primaryActionTriggered)

@@ -143,7 +143,16 @@ extension CallHistory {
         let title = CallHistory.title(config: config, row: row, lang: lang)
         cell.textLabel?.text = title.isEmpty ? outcomeText(texts, row.outcome) : title
         cell.textLabel?.font = SystemStyle.font(.body, weight: unread ? .semibold : nil)
+        #if os(tvOS)
+        // The duration rides with the time on the right so the subtitle never wraps onto a
+        // second line for it.
+        var parts = [outcomeText(texts, row.outcome)]
+        let by = answeredByLabel(config, row.answeredBy)
+        if !by.isEmpty { parts.append(by) }
+        cell.detailTextLabel?.text = parts.joined(separator: " · ")
+        #else
         cell.detailTextLabel?.text = subtitle(texts, config: config, row: row, lang: lang)
+        #endif
         cell.detailTextLabel?.font = SystemStyle.font(.subheadline)
         cell.detailTextLabel?.textColor = row.outcome == "missed" ? SystemStyle.negative
             : SystemStyle.secondaryLabel
@@ -151,9 +160,19 @@ extension CallHistory {
         cell.imageView?.image = AppIcon.image(icon.name)
         cell.imageView?.tintColor = icon.color
         let time = (cell.accessoryView as? UILabel) ?? UILabel()
-        time.font = SystemStyle.digits(size: 15, weight: .regular)
-        time.textColor = SystemStyle.secondaryLabel
+        #if os(tvOS)
+        time.font = SystemStyle.font(.callout)
+        let duration = durationText(texts, row.durationMs).split(separator: " ").last.map(String.init) ?? ""
         time.text = DoorbellClock.timeOfDay(core, wallMs: row.tsMs)
+            + (duration.isEmpty ? "" : "\n" + duration)
+        time.numberOfLines = 0
+        time.textAlignment = .right
+        #else
+        time.font = SystemStyle.digits(size: 15, weight: .regular)
+        time.text = DoorbellClock.timeOfDay(core, wallMs: row.tsMs)
+        #endif
+        time.textColor = SystemStyle.secondaryLabel
+        time.frame = CGRect(x: 0, y: 0, width: 240, height: 0)
         time.sizeToFit()
         cell.accessoryView = time
         cell.accessibilityIdentifier = "history_row_\(row.id)"
@@ -252,6 +271,9 @@ final class CallHistoryViewController: UIViewController, UISplitViewControllerDe
     }
 
     func refresh() { list?.reload(reset: true) }
+
+    /// Capture hook: selects a row as a remote's Select would, so the detail pane can be shown.
+    func debugSelectRow(_ index: Int) { list?.debugSelectRow(index) }
 }
 
 final class CallHistoryListController: UITableViewController {
@@ -372,6 +394,14 @@ final class CallHistoryListController: UITableViewController {
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
         core.removeHandler(logObserverKey)
+    }
+
+    func debugSelectRow(_ index: Int) {
+        let path = IndexPath(row: index, section: 0)
+        guard tableView.numberOfSections > 0,
+              tableView.numberOfRows(inSection: 0) > index else { return }
+        tableView.selectRow(at: path, animated: false, scrollPosition: .none)
+        tableView(tableView, didSelectRowAt: path)
     }
 
     @objc private func closeSelf() { onClose?() }

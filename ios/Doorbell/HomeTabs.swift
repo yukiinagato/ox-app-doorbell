@@ -74,6 +74,11 @@ final class HomeViewController: UIViewController {
 final class SettingsGateViewController: UIViewController {
 
     private let texts: Texts
+    #if os(tvOS)
+    private static let maxStack: CGFloat = 900
+    #else
+    private static let maxStack: CGFloat = 420
+    #endif
     var onUnlockRequested: (() -> Void)?
     private(set) var settings: SettingsViewController?
     private let unlockButton: UIButton
@@ -102,6 +107,11 @@ final class SettingsGateViewController: UIViewController {
         let hint = SystemStyle.label(.body, color: SystemStyle.secondaryLabel)
         hint.text = texts.t("settings.locked_hint")
         hint.textAlignment = .center
+        #if os(tvOS)
+        unlockButton.titleLabel?.font = SystemStyle.font(.headline, weight: .semibold)
+        unlockButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 420).isActive = true
+        unlockButton.heightAnchor.constraint(greaterThanOrEqualToConstant: 90).isActive = true
+        #endif
         unlockButton.accessibilityIdentifier = "settings_unlock"
         unlockButton.addTarget(self, action: #selector(requestUnlock),
                                for: .primaryActionTriggered)
@@ -119,7 +129,7 @@ final class SettingsGateViewController: UIViewController {
             stack.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             stack.leadingAnchor.constraint(greaterThanOrEqualTo: margins.leadingAnchor),
             stack.trailingAnchor.constraint(lessThanOrEqualTo: margins.trailingAnchor),
-            stack.widthAnchor.constraint(lessThanOrEqualToConstant: 420),
+            stack.widthAnchor.constraint(lessThanOrEqualToConstant: SettingsGateViewController.maxStack),
             unlockButton.heightAnchor.constraint(greaterThanOrEqualToConstant: TouchTarget.minimum),
         ])
     }
