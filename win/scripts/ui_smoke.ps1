@@ -523,12 +523,12 @@ function Get-FlowOptions {
 # Notify steps are answered locally while the sample is loaded, so no household is messaged.
 function Test-VisitorFlow([string]$look) {
     [void](Assert-Command 'flow-sample')
-    foreach ($id in @('FlowTitle', 'FlowOption_o_call', 'FlowOption_o_p_visit', 'FlowOption_o_p_delivery', 'ClockText')) {
+    foreach ($id in @('FlowTitle', 'FlowOption_o_p_visit', 'FlowOption_o_p_delivery', 'ClockText')) {
         [void](Assert-Element 'flow start' $id)
     }
     Add-Check 'flow start: no separate Call button above the options' (-not (Test-OnScreen (Find-ById 'CallButton' 300)))
     Add-Check 'flow start: no Back on the start page' (-not (Test-OnScreen (Find-ById 'FlowBackButton' 300)))
-    foreach ($id in @('FlowOption_o_call', 'FlowOption_o_p_visit', 'FlowOption_o_p_delivery')) { Assert-Drawn 'flow start' $id }
+    foreach ($id in @('FlowOption_o_p_visit', 'FlowOption_o_p_delivery')) { Assert-Drawn 'flow start' $id }
     foreach ($option in @(Get-FlowOptions)) {
         $rect = $option.Current.BoundingRectangle
         Add-Check ("flow start: {0} is at least 72 px tall" -f $option.Current.AutomationId) ($rect.Height -ge 72) ("{0} px" -f [int]$rect.Height)
@@ -542,7 +542,7 @@ function Test-VisitorFlow([string]$look) {
         Save-Shot ("flow-parcel-" + $look)
         # Back returns to the start page, and the same branch is walked again to its end.
         if (Click-Id 'flow parcel page' 'FlowBackButton') {
-            [void](Assert-Element 'flow back at start' 'FlowOption_o_call')
+            [void](Assert-Element 'flow back at start' 'FlowOption_o_p_visit')
             Assert-Gone 'flow back at start' 'FlowBackButton'
         }
         if (Click-Id 'flow back at start' 'FlowOption_o_p_delivery') {
@@ -552,7 +552,7 @@ function Test-VisitorFlow([string]$look) {
                 Assert-Gone 'flow end page' 'FlowOption_o_leave'
                 Save-Shot ("flow-end-" + $look)
                 [void](Click-Id 'flow end page' 'FlowDoneButton')
-                [void](Assert-Element 'flow done returns to start' 'FlowOption_o_call')
+                [void](Assert-Element 'flow done returns to start' 'FlowOption_o_p_visit')
             }
         }
     }

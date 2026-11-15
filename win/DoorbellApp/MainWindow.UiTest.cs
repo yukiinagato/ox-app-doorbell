@@ -144,7 +144,6 @@ namespace DoorbellApp
             "'revision':'uitest-flow-1','start':'s_home','idle_s':45,'require_call':true,'steps':{" +
             "'s_home':{'kind':'page','title':{'ja':'How can we help?','en':'How can we help?','zh':'How can we help?'}," +
             "'images':[],'options':[" +
-            "{'id':'o_call','semantic_id':'call.primary','label':{'ja':'Call','en':'Call','zh':'Call'},'icon':'','style':'primary','to':'c_any'}," +
             "{'id':'o_p_visit','semantic_id':'purpose.button','label':{'ja':'Visit','en':'Visit','zh':'Visit'},'icon':'','style':'normal','to':'c_visit','purpose':'p_visit'}," +
             "{'id':'o_p_delivery','semantic_id':'purpose.button','label':{'ja':'Delivery','en':'Delivery','zh':'Delivery'},'icon':'','style':'normal','to':'s_parcel','purpose':'p_delivery'}]}," +
             "'s_parcel':{'kind':'page','title':{'ja':'Can you leave it at the door?','en':'Can you leave it at the door?','zh':'Can you leave it at the door?'}," +
@@ -154,7 +153,7 @@ namespace DoorbellApp
             "'images':[],'options':[" +
             "{'id':'o_leave','semantic_id':'call.primary','label':{'ja':'Leave it','en':'Leave it','zh':'Leave it'},'icon':'','style':'primary','to':'n_left'}," +
             "{'id':'o_hand','semantic_id':'purpose.button','label':{'ja':'Hand over','en':'Hand over','zh':'Hand over'},'icon':'','style':'normal','to':'c_delivery'}]}," +
-            "'c_any':{'kind':'call'},'c_visit':{'kind':'call','purpose':'p_visit'}," +
+            "'c_visit':{'kind':'call','purpose':'p_visit'}," +
             "'c_delivery':{'kind':'call','purpose':'p_delivery','on_unanswered':'s_parcel'}," +
             "'n_left':{'kind':'notify','purpose':'p_delivery','to':'e_thanks'}," +
             "'e_thanks':{'kind':'end','title':{'ja':'Thank you','en':'Thank you','zh':'Thank you'}," +

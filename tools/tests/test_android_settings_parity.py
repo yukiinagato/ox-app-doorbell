@@ -93,8 +93,8 @@ def admin_keys():
 
 
 def android_sources():
-    return "\n".join(
-        path.read_text(encoding="utf-8") for path in sorted(ANDROID.glob("*Settings*.kt")))
+    paths = sorted(ANDROID.glob("*Settings*.kt")) + sorted(ANDROID.glob("VisitorFlowEdit*.kt"))
+    return "\n".join(path.read_text(encoding="utf-8") for path in paths)
 
 
 def covered(key, sources):
