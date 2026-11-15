@@ -1950,16 +1950,16 @@ bool airQualityConfigValid(const std::string& key, const cJSON* value, std::stri
 }
 
 // A refused visitor-flow write also reports the numbers behind the code as "detail".
-void addFlowErrorDetail(cJSON* out, const char* error) {
+void addFlowErrorDetail(cJSON* out, const char* error, const std::string& detail) {
   if (std::string(error).rfind("visitor_flow.", 0) != 0) return;
-  const std::string& detail = visitor_flow::lastErrorDetail();
   if (detail.empty()) return;
   if (auto parsed = json::parse(detail)) json::setItem(out, "detail", std::move(parsed));
 }
 
 bool configWriteValid(const std::string& key, const cJSON* value, std::string* error,
                       std::vector<ConfigWarning>* warnings = nullptr,
-                      bool enforce_write_scope = true, bool replicated = false) {
+                      bool enforce_write_scope = true, bool replicated = false,
+                      std::string* flow_detail = nullptr) {
   if (configEditReserved(key)) { *error = "reserved_config_key"; return false; }
   if (!operationConfigValid(key, value, error)) return false;
   if (!callReturnValid(key, value, error)) return false;
@@ -1967,7 +1967,7 @@ bool configWriteValid(const std::string& key, const cJSON* value, std::string* e
   if (!visitPurposeValid(key, value, error)) return false;
   // Replicated or imported flow data is repaired when it is resolved, never refused here: a
   // step written by a newer core must not make every later commit on this node fail.
-  if (enforce_write_scope && !replicated && !visitor_flow::writeKeyValid(key, value, error))
+  if (enforce_write_scope && !replicated && !visitor_flow::writeKeyValid(key, value, error, flow_detail))
     return false;
   if (!sipDtmfActionsValid(key, value, error)) return false;
   const std::string wake_suffix = ".motion.wake_screen";
@@ -6541,8 +6541,9 @@ struct Node::Impl {
 
   bool configWriteValidEffective(const std::string& key, const cJSON* value,
                                  std::string* error,
-                                 std::vector<ConfigWarning>* warnings = nullptr) {
-    if (!configWriteValid(key, value, error, warnings)) return false;
+                                 std::vector<ConfigWarning>* warnings = nullptr,
+                                 std::string* flow_detail = nullptr) {
+    if (!configWriteValid(key, value, error, warnings, true, false, flow_detail)) return false;
     if (!sipDtmfRepliesExist(key, value,
                              [this](const std::string& id) {
                                return cfgAt("quick_replies." + id) != nullptr;
@@ -10595,7 +10596,7 @@ struct Node::Impl {
       json::set(result.get(), "request_id", genTokenHex(16));
       json::set(result.get(), "error_code", code);
       json::set(result.get(), "err", code);
-      addFlowErrorDetail(result.get(), code);
+      addFlowErrorDetail(result.get(), code, "");
       json::set(result.get(), "retry_mode", "none");
       json::set(result.get(), "revision", configurationRevisionOnLoop());
       return json::dump(result.get());
@@ -10811,12 +10812,13 @@ struct Node::Impl {
 
   std::string setConfigJsonOnLoop(const std::string& key, const std::string& value_json,
                                   int* status_out) {
+    std::string flow_detail;
     auto fail = [&](const char* error, int status) {
       if (status_out) *status_out = status;
       auto out = json::obj();
       json::setBool(out.get(), "ok", false);
       json::set(out.get(), "err", error);
-      addFlowErrorDetail(out.get(), error);
+      addFlowErrorDetail(out.get(), error, flow_detail);
       return json::dump(out.get());
     };
     if (key.empty() || key.size() > 512 || key.front() == '.' || key.back() == '.' ||
@@ -10826,7 +10828,7 @@ struct Node::Impl {
     if (!parsed) parsed = json::Doc(cJSON_CreateString(value_json.c_str()));
     std::string error;
     std::vector<ConfigWarning> warnings;
-    if (!configWriteValidEffective(key, parsed.get(), &error, &warnings))
+    if (!configWriteValidEffective(key, parsed.get(), &error, &warnings, &flow_detail))
       return fail(error.c_str(), 400);
     auto ops = json::arr(); auto* op = json::pushObj(ops.get());
     json::set(op, "op", "set"); json::set(op, "key", key);
@@ -10846,12 +10848,13 @@ struct Node::Impl {
   // takes, so the same document works for both callers.
   std::string configBatchJsonOnLoop(const std::string& ops_json, int* status_out,
                                    const cJSON* resolves = nullptr) {
+    std::string flow_detail;
     auto fail = [&](const char* error, int status) {
       if (status_out) *status_out = status;
       auto out = json::obj();
       json::setBool(out.get(), "ok", false);
       json::set(out.get(), "err", error);
-      addFlowErrorDetail(out.get(), error);
+      addFlowErrorDetail(out.get(), error, flow_detail);
       return json::dump(out.get());
     };
     auto body = json::parse(ops_json);
@@ -10883,7 +10886,7 @@ struct Node::Impl {
         const cJSON* value = json::get(op, "value");
         if (!value) return fail("set without value", 400);
         std::string error;
-        if (!configWriteValidEffective(key, value, &error, &warnings))
+        if (!configWriteValidEffective(key, value, &error, &warnings, &flow_detail))
           return fail(error.c_str(), 400);
         mutation.value_json = json::dump(value);
       }
@@ -10911,7 +10914,7 @@ struct Node::Impl {
     if (flow_touched && edit_candidate) {
       std::string flow_error;
       std::swap(cfg, edit_candidate);
-      const bool flow_valid = visitorFlowCandidateValid(&flow_error, &warnings);
+      const bool flow_valid = visitorFlowCandidateValid(&flow_error, &warnings, &flow_detail);
       std::swap(cfg, edit_candidate);
       if (!flow_valid) return fail(flow_error.c_str(), 400);
     }

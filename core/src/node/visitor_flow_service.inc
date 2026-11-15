@@ -91,9 +91,10 @@
     return json::dump(out.get());
   }
 
-  bool visitorFlowCandidateValid(std::string* error, std::vector<ConfigWarning>* warnings) {
+  bool visitorFlowCandidateValid(std::string* error, std::vector<ConfigWarning>* warnings,
+                                 std::string* detail = nullptr) {
     std::vector<visitor_flow::Warning> found;
-    if (!visitor_flow::candidateValid(cfg.get(), visitorFlowEnv().text, error, &found))
+    if (!visitor_flow::candidateValid(cfg.get(), visitorFlowEnv().text, error, &found, detail))
       return false;
     if (warnings) {
       for (const auto& item : found) {

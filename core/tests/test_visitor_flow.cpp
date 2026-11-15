@@ -59,10 +59,10 @@ const cJSON* fixtureCase(const cJSON* suite, const std::string& name) {
   return nullptr;
 }
 
-std::string validate(const cJSON* config) {
+std::string validate(const cJSON* config, std::string* detail = nullptr) {
   std::string error;
   std::vector<visitor_flow::Warning> warnings;
-  return visitor_flow::candidateValid(config, catalog(), &error, &warnings) ? "ok" : error;
+  return visitor_flow::candidateValid(config, catalog(), &error, &warnings, detail) ? "ok" : error;
 }
 
 std::string writeKey(const std::string& key, const std::string& value_json) {
@@ -479,11 +479,11 @@ TEST_CASE("visitor flow: every refusal has its own code, location and detail") {
   for (const Row& row : rows) {
     auto value = json::parse(row.value);
     REQUIRE(value);
-    std::string error;
+    std::string error, detail;
     INFO(row.code << " " << row.key);
-    CHECK_FALSE(visitor_flow::writeKeyValid(row.key, value.get(), &error));
+    CHECK_FALSE(visitor_flow::writeKeyValid(row.key, value.get(), &error, &detail));
     CHECK(error == "visitor_flow." + row.code + (row.location.empty() ? "" : ": " + row.location));
-    CHECK(visitor_flow::lastErrorDetail() == row.detail);
+    CHECK(detail == row.detail);
   }
 
   auto suite = loadFixture();
@@ -493,8 +493,9 @@ TEST_CASE("visitor flow: every refusal has its own code, location and detail") {
   auto refused = [&](const std::function<void(cJSON*)>& change, const std::string& detail) {
     json::Doc config(cJSON_Duplicate(json::get(item, "config"), 1));
     change(config.get());
-    const std::string error = validate(config.get());
-    CHECK(visitor_flow::lastErrorDetail() == detail);
+    std::string reported;
+    const std::string error = validate(config.get(), &reported);
+    CHECK(reported == detail);
     return error;
   };
   CHECK(refused([&](cJSON* c) {

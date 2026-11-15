@@ -14,18 +14,22 @@ const char* const kBuiltinLanguages[] = {"ja", "en", "zh"};
 
 using Numbers = std::vector<std::pair<std::string, int64_t>>;
 
-// Set by every refusal on the calling thread; empty when the refusal carries no detail.
-thread_local std::string g_errorDetail;
+// Where a refusal is reported: the code and location, plus the optional numbers behind it.
+struct Failure {
+  std::string* message;
+  std::string* detail;
+};
 
-bool fail(std::string* error, const std::string& code, const std::string& where = "",
+bool fail(const Failure& error, const std::string& code, const std::string& where = "",
           const Numbers& numbers = {}, const std::string& lang = "") {
-  *error = "visitor_flow." + code + (where.empty() ? "" : ": " + where);
-  g_errorDetail.clear();
+  *error.message = "visitor_flow." + code + (where.empty() ? "" : ": " + where);
+  if (!error.detail) return false;
+  error.detail->clear();
   if (!numbers.empty() || !lang.empty()) {
     auto detail = json::obj();
     if (!lang.empty()) json::set(detail.get(), "lang", lang);
     for (const auto& number : numbers) json::set(detail.get(), number.first.c_str(), number.second);
-    g_errorDetail = json::dump(detail.get());
+    *error.detail = json::dump(detail.get());
   }
   return false;
 }
@@ -98,7 +102,7 @@ size_t paragraphs(const std::string& text) {
 // {lang: text}. Plain text only: no control characters other than the newline a body may use.
 // where is the location of the field, for example "s_home.title".
 bool textMapCheck(const cJSON* value, const std::string& where, size_t max_chars,
-                  size_t max_paragraphs, bool required, std::string* error) {
+                  size_t max_paragraphs, bool required, const Failure& error) {
   if (!cJSON_IsObject(value)) return fail(error, "bad_text", where);
   const int entries = cJSON_GetArraySize(value);
   if (entries > 8) return fail(error, "too_many_languages", where, {{"limit", 8}, {"value", entries}});
@@ -133,7 +137,7 @@ bool textMapCheck(const cJSON* value, const std::string& where, size_t max_chars
   return true;
 }
 
-bool imagesCheck(const cJSON* images, const std::string& id, std::string* error) {
+bool imagesCheck(const cJSON* images, const std::string& id, const Failure& error) {
   if (!cJSON_IsArray(images)) return fail(error, "bad_images", id);
   const int count = cJSON_GetArraySize(images);
   if (count > kMaxImages)
@@ -161,7 +165,7 @@ bool optionalTargetValid(const cJSON* step, const char* field) {
 }
 
 // A required jump target: absent or empty is missing_target, anything else malformed is bad_target.
-bool targetCheck(const cJSON* owner, const char* field, const std::string& where, std::string* error) {
+bool targetCheck(const cJSON* owner, const char* field, const std::string& where, const Failure& error) {
   const cJSON* target = json::get(owner, field);
   if (!target || (cJSON_IsString(target) && !*target->valuestring))
     return fail(error, "missing_target", where);
@@ -169,7 +173,7 @@ bool targetCheck(const cJSON* owner, const char* field, const std::string& where
   return true;
 }
 
-bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error) {
+bool stepShapeValid(const std::string& id, const cJSON* step, const Failure& error) {
   if (!idValid(id)) return fail(error, "bad_step_id", id);
   if (!cJSON_IsObject(step)) return fail(error, "bad_step", id);
   const std::string kind = json::getString(step, "kind");
@@ -267,7 +271,7 @@ bool stepShapeValid(const std::string& id, const cJSON* step, std::string* error
   return fail(error, "unknown_kind", id);
 }
 
-bool doorFlowValid(const cJSON* door_flow, std::string* error) {
+bool doorFlowValid(const cJSON* door_flow, const Failure& error) {
   if (!door_flow || cJSON_IsNull(door_flow)) return true;
   if (!cJSON_IsObject(door_flow) || !hasOnly(door_flow, {"start"}))
     return fail(error, "bad_door_flow");
@@ -634,7 +638,6 @@ json::Doc disabledDocument(const std::string& door, const std::string& reason) {
   return out;
 }
 
-const std::string& lastErrorDetail() { return g_errorDetail; }
 
 bool touchesFlow(const std::string& key, const cJSON* value) {
   if (key == "visitor_flow" || key.rfind("visitor_flow.", 0) == 0) return true;
@@ -653,7 +656,9 @@ bool touchesFlow(const std::string& key, const cJSON* value) {
   return key.find('.', 6) == std::string::npos && json::get(value, "visitor_flow") != nullptr;
 }
 
-bool writeKeyValid(const std::string& key, const cJSON* value, std::string* error) {
+bool writeKeyValid(const std::string& key, const cJSON* value, std::string* message,
+                   std::string* detail) {
+  const Failure error{message, detail};
   if (key.rfind("doors.", 0) == 0) {
     const std::string rest = key.substr(6);
     const size_t dot = rest.find('.');
@@ -692,8 +697,9 @@ bool writeKeyValid(const std::string& key, const cJSON* value, std::string* erro
   return stepShapeValid(id, value, error);
 }
 
-bool candidateValid(const cJSON* config, const TextFn& text, std::string* error,
-                    std::vector<Warning>* warnings) {
+bool candidateValid(const cJSON* config, const TextFn& text, std::string* message,
+                    std::vector<Warning>* warnings, std::string* detail) {
+  const Failure error{message, detail};
   std::string source, reason;
   auto raw = effectiveRaw(config, text, &source, &reason);
   if (!raw) return true;
