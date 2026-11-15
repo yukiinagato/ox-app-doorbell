@@ -11,7 +11,8 @@
 // and diagnostics line is one centred caption at the very bottom. Shorter phone landscapes keep a two-column split with the action zone in a
 // column at the right edge.
 typedef struct {
-  CGRect topBar;
+  CGRect topBar;  // Zero on the single column: the door name replaces the stock bar's title.
+  CGRect title;   // The door name, at the leading edge of the top row; zero on the legacy split.
   // The zone between the navigation bar and the action zone. The call-status plate is placed
   // in it; language, clock, date, notice, and purposes are stacked inside it.
   CGRect content;

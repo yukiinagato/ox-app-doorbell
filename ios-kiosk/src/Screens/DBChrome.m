@@ -264,7 +264,7 @@ UIBarButtonItem *DBChromeFlexibleSpace(void) {
     _bar = [[UITabBar alloc] initWithFrame:CGRectMake(0, 0, 320, DBChromeTabBarHeight())];
     _bar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
     // The tab bar masks each image by its alpha, so the vendored icons need no tinting.
-    NSArray *icons = [NSArray arrayWithObjects:@"home", @"clock", @"settings", nil];
+    NSArray *icons = [NSArray arrayWithObjects:@"f7:house_fill", @"f7:clock_fill", @"f7:gear_alt_fill", nil];
     NSMutableArray *items = [NSMutableArray array];
     for (NSUInteger i = 0; i < [icons count]; i++) {
       UITabBarItem *item = [[UITabBarItem alloc]

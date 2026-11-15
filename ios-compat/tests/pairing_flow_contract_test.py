@@ -447,7 +447,7 @@ class ReadabilityContracts(unittest.TestCase):
         emergency = door[door.index("- (void)handleEmergencyEvent:"):]
         self.assertIn("if (active) [_sosPanel dismiss];", emergency[:1400])
         self.assertIn("[_sosPanel dismiss];\n  [_sos reset];", home)
-        self.assertIn('tintedImageNamed:@"alert-triangle"', panel)
+        self.assertIn('tintedImageNamed:@"f7:exclamationmark_triangle_fill"', panel)
         self.assertIn("kSosPanelIdleCloseS = 10.0", panel)
         self.assertIn("[_panel addSubview:_slider];", panel)
         self.assertIn("[_forward sosSliderDidFire:slider];", panel)

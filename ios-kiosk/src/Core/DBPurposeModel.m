@@ -61,10 +61,14 @@ static NSArray *DBSortedPurposeIds(NSDictionary *map) {
 + (NSString *)iconNameForPurpose:(NSString *)purposeId {
   if (![purposeId isKindOfClass:[NSString class]] || [purposeId length] == 0) return nil;
   NSDictionary *icons = [NSDictionary dictionaryWithObjectsAndKeys:
-      @"home", @"p_visit",
-      @"package", @"p_delivery",
-      @"mail", @"p_mail", nil];
-  return [icons objectForKey:purposeId];
+      @"f7:house_fill", @"p_visit",
+      @"f7:cube_box_fill", @"p_delivery",
+      @"f7:envelope_fill", @"p_mail",
+      @"f7:bag_fill", @"p_sales",
+      @"f7:hammer_fill", @"p_work",
+      @"f7:ellipsis_circle_fill", @"p_other", nil];
+  // Every purpose has an icon; one the owner invented gets the generic person.
+  return [icons objectForKey:purposeId] ?: @"f7:person_fill";
 }
 
 + (NSString *)displayIconForConfiguredIcon:(NSString *)icon {

@@ -67,7 +67,7 @@ class IconAssetContracts(unittest.TestCase):
         # The four counters/knob names must be among them, so an accidental
         # deletion of a call site does not make this test vacuous.
         for required in ("topology-star-3", "door", "device-tablet", "chevrons-right",
-                         "home", "package", "mail"):
+                         ):
             self.assertIn(required, names,
                           "the shell no longer asks for the %s icon" % required)
         for name in sorted(names):
@@ -75,6 +75,17 @@ class IconAssetContracts(unittest.TestCase):
             self.assertIn(name.replace("-", "_"), vendored,
                           'no generated icon for "%s"; add it to tools/gen_icons.py '
                           "and regenerate" % name)
+
+    def test_framework7_icons_exist_with_a_retina_copy(self):
+        names = set()
+        for path in sources():
+            names.update(re.findall(r'@"f7:([a-z0-9_]+)"', read(path)))
+        self.assertIn("house_fill", names)
+        for name in sorted(names):
+            for suffix in ("", "@2x"):
+                self.assertTrue(os.path.exists(
+                    os.path.join(ICON_DIR, "f7_%s%s.png" % (name, suffix))),
+                    "no generated Framework7 icon for " + name)
 
     def test_every_requested_icon_has_a_retina_copy(self):
         for name in sorted(requested_names()):

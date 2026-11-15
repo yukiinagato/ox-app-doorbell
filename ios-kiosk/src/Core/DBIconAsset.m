@@ -16,8 +16,14 @@
 // tools/gen_icons.py writes tabler_<name>.png with hyphens folded to
 // underscores, so callers can use Tabler's own hyphenated names.
 + (NSString *)pathForName:(NSString *)name suffix:(NSString *)suffix {
+  // "f7:<name>" is a Framework7 icon (f7_<name>.png); every other name is Tabler's.
+  NSString *family = @"tabler";
+  if ([name hasPrefix:@"f7:"]) {
+    family = @"f7";
+    name = [name substringFromIndex:3];
+  }
   NSString *file = [name stringByReplacingOccurrencesOfString:@"-" withString:@"_"];
-  NSString *base = [NSString stringWithFormat:@"tabler_%@%@", file, suffix];
+  NSString *base = [NSString stringWithFormat:@"%@_%@%@", family, file, suffix];
   NSString *path = [[NSBundle mainBundle] pathForResource:base ofType:@"png"];
   if (path == nil)
     path = [[NSBundle mainBundle] pathForResource:base ofType:@"png" inDirectory:@"icons"];

@@ -115,7 +115,8 @@ typedef enum {
 @end
 
 // The purpose icon on a button that carries an administrator override.
-static const CGFloat kPurposeIconSide = 24;
+static const CGFloat kPurposeIconSide = 28;
+static const NSInteger kPurposeIconTag = 7401;
 // The narrowest language segment a visitor can still hit and read.
 static const CGFloat kLanguageSegmentMinimum = 64;
 
@@ -223,6 +224,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   UIButton *_noticeExpand;
   BOOL _noticeExpanded;
   UILabel *_versionLabel;
+  UILabel *_titleLabel;       // The door name, leading edge of the top row.
+  UIView *_timeScrim;         // Seats the small time under a subtle band over any wallpaper.
   UIImageView *_themeBg;
   NSString *_themeHash;
   CGSize _themeImageSize;
@@ -337,6 +340,18 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 
   // Clock, date, hint, and version are direct children of the screen: the background sampler
   // is keyed to the screen's size, so only a direct child gets ink measured behind its frame.
+  _timeScrim = [[UIView alloc] init];
+  _timeScrim.backgroundColor = [UIColor colorWithWhite:0 alpha:0.35f];
+  _timeScrim.layer.cornerRadius = 8;
+  [self addSubview:_timeScrim];
+
+  _titleLabel = [self wallpaperLabelWithFont:[UIFont boldSystemFontOfSize:28]];
+  _titleLabel.textAlignment = NSTextAlignmentLeft;
+  _titleLabel.adjustsFontSizeToFitWidth = YES;
+  _titleLabel.minimumFontSize = 16;
+  _titleLabel.accessibilityIdentifier = @"door_title";
+  [self addSubview:_titleLabel];
+
   _clockLabel = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:72]];
   _clockLabel.adjustsFontSizeToFitWidth = YES;
   _clockLabel.minimumFontSize = 14;
@@ -359,7 +374,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 
   _versionLabel = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:16]];
   _versionLabel.adjustsFontSizeToFitWidth = YES;
-  _versionLabel.minimumFontSize = 12;
+  _versionLabel.minimumFontSize = 11;
+  _versionLabel.lineBreakMode = NSLineBreakByTruncatingMiddle;
   [self addSubview:_versionLabel];
 
   _nav = [[DBNavBar alloc] init];
@@ -533,6 +549,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _noticeCard.hidden = !notice;
   _clockLabel.hidden = !idle || covered;
   _dateLabel.hidden = !idle || covered;
+  _timeScrim.hidden = CGRectIsEmpty(_titleLabel.frame);
   [_air setSuppressed:!idle || covered || CGRectIsEmpty(_air.label.frame)];
   _purposeScroll.hidden = !idle;
   _touchHint.hidden = !idle;
@@ -751,6 +768,9 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   if (_palette == nil) return;
   [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
   [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
+  _titleLabel.textColor = [UIColor whiteColor];  // The name and the time sit on a dark band.
+  _clockLabel.textColor = [UIColor whiteColor];
+  _dateLabel.textColor = [UIColor whiteColor];
   [_air applyPalette:_palette region:DBUiRegionDate];
   [_palette applyInkToLabel:_touchHint region:DBUiRegionHint];
   [_palette applyInkToLabel:_versionLabel region:DBUiRegionStatusLine];
@@ -1171,6 +1191,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 
 - (void)applyStrings {
   _nav.topItem.title = [self doorLabel];
+  _titleLabel.text = [self doorLabel];
   _touchHint.text = [_texts ts:[self showsHomePurposes] ? @"door.hint_purpose_first" : @"door.hint_call"];
   [_callButton setTitle:[_texts ts:[self showsHomePurposes] ? @"door.call_direct" : @"idle.call"]
               forState:UIControlStateNormal];
@@ -1293,9 +1314,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
         ? [DBIconAsset tintedImageNamed:iconName color:ink
                                    size:CGSizeMake(kPurposeIconSide, kPurposeIconSide)]
         : [DBIconAsset imageNamed:iconName];
-    NSString *glyph = asset != nil ? @"" : [DBPurposeModel displayIconForConfiguredIcon:
-        [entry objectForKey:@"icon"]];
-    NSString *title = [glyph length] ? [NSString stringWithFormat:@"%@ %@", glyph, label] : label;
+    // Emoji never reach a card: a missing asset leaves the label alone.
+    NSString *title = label;
     UIButton *button = _purposeButtonsFilled ? [self filledButton] : DBChromeButton(title, 22);
     [button setTitle:title forState:UIControlStateNormal];
     button.titleLabel.adjustsFontSizeToFitWidth = NO;
@@ -1304,8 +1324,13 @@ static const CGFloat kLanguageSegmentMinimum = 64;
     button.titleLabel.textAlignment = NSTextAlignmentCenter;
     button.contentEdgeInsets = UIEdgeInsetsMake(4, 8, 4, 8);
     if (asset != nil) {
-      [button setImage:asset forState:UIControlStateNormal];
-      button.titleEdgeInsets = UIEdgeInsetsMake(0, 8, 0, 0);
+      // The icon rides above the label as its own view, so every card lines up the same way.
+      UIImageView *icon = [[UIImageView alloc] initWithImage:asset];
+      icon.tag = kPurposeIconTag;
+      if (!_purposeButtonsFilled && [asset respondsToSelector:@selector(imageWithRenderingMode:)])
+        icon.image = [asset imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate];
+      [button addSubview:icon];
+      button.titleEdgeInsets = UIEdgeInsetsMake(kPurposeIconSide + 6, 0, 0, 0);
     }
     button.tag = i;
     button.hidden = !shown;
@@ -1725,6 +1750,18 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   [self showIdleWithHint:nil];
 }
 
+- (void)debugShowState:(NSString *)state {
+  if ([state isEqualToString:@"calling"]) {
+    [self showCallingWithTitle:nil];
+  } else if ([state isEqualToString:@"connected"]) {
+    [self showInCall];
+  } else if ([state isEqualToString:@"reply"]) {
+    [self handleReplyEvent:@{ @"text" : @"少々お待ちください。すぐに参ります。", @"ttl_s" : @300 }];
+  } else if ([state isEqualToString:@"noanswer"]) {
+    [self showIdleWithHint:[_texts ts:@"calling.no_answer"]];
+  }
+}
+
 - (void)hideReplyBanner {
   _replyShown = NO;
   [_replyAudio stop];
@@ -1949,13 +1986,18 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   CGFloat margin = layout.margin;
   CGFloat gap = layout.gap;
 
+  BOOL columnLayout = !CGRectIsEmpty(layout.title);
+  _nav.bar.hidden = columnLayout;
   _nav.bar.frame = layout.topBar;
+  _titleLabel.hidden = !columnLayout;
+  _titleLabel.frame = layout.title;
+  _titleLabel.font = [UIFont boldSystemFontOfSize:compact ? 22 : 28];
   _infoButton.frame = CGRectMake(size.width - 64, 0, 64, 64);
   _callButton.frame = layout.action;
   _cancelButton.frame = layout.action;
   _touchHint.frame = layout.status;
   _touchHint.font = [UIFont systemFontOfSize:compact ? 17 : 24];
-  _versionLabel.font = [UIFont systemFontOfSize:13];
+  _versionLabel.font = [UIFont systemFontOfSize:12];
   _versionLabel.frame = layout.version;
   _sosButton.frame = layout.sos;
 
@@ -1968,9 +2010,16 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _languagePlate.frame = layout.language;
   [self applyFlowVisibility];
 
-  _clockLabel.font = [UIFont systemFontOfSize:22];
+  _clockLabel.font = [UIFont boldSystemFontOfSize:18];
+  _clockLabel.textAlignment = NSTextAlignmentCenter;
   _clockLabel.frame = layout.clock;
-  _dateLabel.font = [UIFont systemFontOfSize:15];
+  _dateLabel.font = [UIFont systemFontOfSize:12];
+  _dateLabel.textAlignment = NSTextAlignmentCenter;
+  // One subtle band seats the door name and the time over any wallpaper.
+  CGRect band = CGRectIsEmpty(layout.clock)
+      ? layout.title : CGRectUnion(layout.title, CGRectUnion(layout.clock, layout.date));
+  _timeScrim.frame = CGRectIsEmpty(layout.title) ? CGRectZero : CGRectInset(band, -10, -2);
+  _timeScrim.hidden = CGRectIsEmpty(layout.title);
   _dateLabel.frame = layout.date;
   [_air layoutInFrame:layout.air fontSize:compact ? 14 : 16 centered:NO];
   [self applyFlowVisibility];
@@ -2024,18 +2073,27 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   CGFloat rowHeight = 0;
   for (UIButton *button in _purposeButtons) {
     button.titleLabel.font = purposeFont;
-    CGFloat iconWidth = [button imageForState:UIControlStateNormal] != nil
-        ? kPurposeIconSide + 8 : 0;
     CGSize textSize = [button.currentTitle sizeWithFont:purposeFont
-        constrainedToSize:CGSizeMake(MAX(44, cellWidth - 16 - iconWidth), 1000)
+        constrainedToSize:CGSizeMake(MAX(44, cellWidth - 16), 1000)
         lineBreakMode:NSLineBreakByWordWrapping];
-    rowHeight = MAX(rowHeight, MIN(textSize.height, purposeFont.lineHeight * 2) + 24);
+    rowHeight = MAX(rowHeight, MIN(textSize.height, purposeFont.lineHeight * 2) + 24 +
+                    ([button viewWithTag:kPurposeIconTag] != nil ? kPurposeIconSide + 6 : 0));
   }
   for (NSInteger i = 0; i < purposeCount; i++) {
     UIButton *button = [_purposeButtons objectAtIndex:(NSUInteger)i];
     CGRect frame = CGRectOffset(DBDoorVisitorPurposeFrame(layout, i, rowHeight), 0, y);
     button.frame = frame;
     button.hidden = !showsPurposes;
+    UIView *icon = [button viewWithTag:kPurposeIconTag];
+    if (icon != nil) {
+      CGSize text = [button.currentTitle sizeWithFont:purposeFont
+          constrainedToSize:CGSizeMake(MAX(44, frame.size.width - 16), 1000)
+          lineBreakMode:NSLineBreakByWordWrapping];
+      CGFloat block = kPurposeIconSide + 6 + MIN(text.height, purposeFont.lineHeight * 2);
+      icon.frame = CGRectMake(floor((frame.size.width - kPurposeIconSide) / 2),
+                              floor((frame.size.height - block) / 2), kPurposeIconSide,
+                              kPurposeIconSide);
+    }
     id plate = [_purposePlates objectAtIndex:(NSUInteger)i];
     if ([plate isKindOfClass:[UIView class]]) {
       [(UIView *)plate setFrame:frame];
@@ -2050,10 +2108,18 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   // The call button carries the largest text on the screen. A long label shrinks until it
   // fits the fixed rectangle instead of moving it.
   NSDictionary *activeCancelStyle = _flowState == DBDoorFlowInCall ? endStyle : cancelStyle;
-  CGSize actionText = CGSizeMake(layout.action.size.width - 24, layout.action.size.height - 16);
+  CGSize actionText = CGSizeMake(layout.action.size.width - 24 - (compact ? 40 : 52),
+                                 layout.action.size.height - 16);
   _callButton.titleLabel.font = DBDoorFittingFont(_callButton.currentTitle ?: @"",
       (compact ? 24 : 40) * DBDoorStyleNumber(callStyle, @"font_scale", 1, 0.75, 2),
       16, YES, actionText);
+  // The bell leads the call label, in the ink of the button's own title.
+  CGFloat bell = compact ? 28 : 40;
+  UIColor *callInk = [_callButton titleColorForState:UIControlStateNormal] ?: [UIColor blackColor];
+  [_callButton setImage:[DBIconAsset tintedImageNamed:@"f7:bell_fill" color:callInk
+                                                  size:CGSizeMake(bell, bell)]
+               forState:UIControlStateNormal];
+  _callButton.titleEdgeInsets = UIEdgeInsetsMake(0, 12, 0, 0);
   _cancelButton.titleLabel.font = DBDoorFittingFont(_cancelButton.currentTitle ?: @"",
       (compact ? 24 : 40) * DBDoorStyleNumber(activeCancelStyle, @"font_scale", 1, 0.75, 2),
       16, YES, actionText);

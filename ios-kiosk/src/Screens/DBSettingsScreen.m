@@ -2434,8 +2434,8 @@ static const CGFloat kDBQrSide = 96;
   NSString *action = row.action;
   if ([action isEqualToString:@"toggle"] || [action isEqualToString:@"role_toggle"])
     return kDBSwitchAccessoryWidth;
-  if ([action isEqualToString:@"stepper"]) return kDBStepperAccessoryWidth;
-  if ([self isVolumeRow:row]) return [self volumeSliderWidth] + 20;
+  if ([action isEqualToString:@"stepper"]) return kDBStepperAccessoryWidth + 12;
+  if ([self isVolumeRow:row]) return [self volumeSliderWidth] + 32;
   CGFloat segment = [self segmentWidthForRow:row];
   if (segment > 0) return segment + 20;
   return [self opensElsewhere:row] ? kDBIndicatorAccessoryWidth : 0;
@@ -2504,7 +2504,17 @@ static const CGFloat kDBQrSide = 96;
   }
   UIImage *tile = [tiles objectForKey:icon ?: @""];
   if (tile != nil) return tile;
-  UIImage *glyph = [DBIconAsset tintedImageNamed:icon color:[UIColor whiteColor]
+  static NSDictionary *symbols;
+  if (symbols == nil)
+    symbols = @{
+      @"device-tablet": @"f7:gear_alt_fill", @"volume": @"f7:speaker_2_fill",
+      @"palette": @"f7:paintbrush_fill", @"phone": @"f7:phone_fill",
+      @"door": @"f7:videocam_fill", @"message-reply": @"f7:bubble_left_fill",
+      @"shield-lock": @"f7:lock_shield_fill", @"link": @"f7:link", @"clock": @"f7:clock_fill",
+      @"bell": @"f7:bell_fill", @"topology-star-3": @"f7:rectangle_3_offgrid_fill",
+      @"list": @"f7:list_bullet", @"info-circle": @"f7:info_circle_fill" };
+  UIImage *glyph = [DBIconAsset tintedImageNamed:[symbols objectForKey:icon] ?: icon
+                                           color:[UIColor whiteColor]
                                             size:CGSizeMake(18, 18)];
   if (glyph == nil) return nil;
   NSArray *rgb = [palette objectForKey:icon] ?: @[ @142, @142, @147 ];
@@ -2558,7 +2568,16 @@ static const CGFloat kDBQrSide = 96;
     // would pull the slider out of this one when it is reused.
     UITableViewCell *former = [self cellContaining:control];
     if (former != nil && former != cell) former.accessoryView = nil;
-    cell.accessoryView = control;
+    // Steppers and sliders keep 12 pt between the value text and the control.
+    if ([row.action isEqualToString:@"stepper"] || [self isVolumeRow:row]) {
+      UIView *seat = [[UIView alloc] initWithFrame:CGRectMake(0, 0,
+          control.bounds.size.width + 12, control.bounds.size.height)];
+      control.frame = CGRectMake(12, 0, control.bounds.size.width, control.bounds.size.height);
+      [seat addSubview:control];
+      cell.accessoryView = seat;
+    } else {
+      cell.accessoryView = control;
+    }
   } else if ([self opensElsewhere:row]) {
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   }

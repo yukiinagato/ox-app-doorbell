@@ -689,6 +689,12 @@ static BOOL DBCoreSipBackendCompiled(void) {
     DBAddDeviceScreen *panel = _addDevice;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.8 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{ [panel openScannerForDebug]; });
+  } else if ([screen hasPrefix:@"visitor:"]) {
+    [self transitionTo:self.door animated:NO];
+    DBDoorScreen *door = self.door;
+    NSString *state = [screen substringFromIndex:8];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ [door debugShowState:state]; });
   } else if ([screen isEqualToString:@"visitor"]) {
     [self transitionTo:self.door animated:NO];
   } else if ([screen isEqualToString:@"incoming"]) {

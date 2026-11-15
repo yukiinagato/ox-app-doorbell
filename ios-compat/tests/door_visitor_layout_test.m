@@ -122,7 +122,7 @@ static void checkColumn(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL 
   CGFloat margin = pad ? 32 : 16;
   CGRect frames[] = {layout.topBar, layout.language, layout.clock, layout.date, layout.air,
                      layout.notice, layout.purposes, layout.status, layout.action, layout.sos,
-                     layout.version};
+                     layout.version, layout.title};
   NSUInteger count = sizeof(frames) / sizeof(frames[0]);
   for (NSUInteger a = 0; a < count; a++) {
     if (empty(frames[a])) continue;
@@ -135,11 +135,17 @@ static void checkColumn(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL 
   // One centred caption line at the very bottom, below everything else.
   CHECK(!empty(layout.version) && layout.version.size.height >= 14 &&
         fabs(CGRectGetMidX(layout.version) - size.width / 2) <= 1 &&
-        CGRectGetMaxY(layout.version) <= size.height - 8 + 0.01);
+        CGRectGetMaxY(layout.version) <= size.height - 12 + 0.01);
   CHECK(CGRectGetMaxY(layout.action) <= CGRectGetMinY(layout.version));
   CHECK(CGRectGetMaxY(layout.purposes) <= CGRectGetMinY(layout.version));
-  CHECK(!empty(layout.topBar) && layout.topBar.origin.y == 0 &&
-        layout.topBar.size.width == size.width);
+  // The door name leads the top row; the stock bar is gone.
+  CHECK(empty(layout.topBar) && !empty(layout.title) && layout.title.size.height >= 44);
+  CHECK(CGRectGetMinX(layout.title) == CGRectGetMinX(layout.status));
+  CHECK(layout.title.origin.y >= 20 && layout.title.origin.y == layout.language.origin.y + 0 ||
+        empty(layout.language));
+  if (language) CHECK(CGRectGetMaxX(layout.title) <= CGRectGetMinX(layout.language));
+  if (pad) CHECK(!empty(layout.clock) && CGRectGetMaxX(layout.clock) <= CGRectGetMinX(layout.language) ||
+                 !language);
   CHECK(!empty(layout.status) && !empty(layout.action));
   CHECK(empty(layout.sos) == !sos);
   CHECK(empty(layout.language) == !language);
@@ -152,7 +158,6 @@ static void checkColumn(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL 
   CHECK(fabs(CGRectGetMidX(layout.purposes) - size.width / 2) <= 1);
   if (notice) CHECK(fabs(CGRectGetMidX(layout.notice) - size.width / 2) <= 1);
   if (language) CHECK(CGRectGetMaxX(layout.language) == CGRectGetMaxX(layout.status));
-  if (!empty(layout.clock)) CHECK(CGRectGetMinX(layout.clock) == CGRectGetMinX(layout.status));
   // Hint directly above the call button; the stage reaches down to the hint and no further.
   CHECK(CGRectGetMaxY(layout.status) <= CGRectGetMinY(layout.action));
   CHECK(CGRectGetMinY(layout.action) - CGRectGetMaxY(layout.status) <= layout.gap + 0.01);
@@ -161,7 +166,7 @@ static void checkColumn(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL 
   CHECK(CGRectEqualToRect(layout.headline, layout.content));
   CHECK(within(layout.status, layout.content));
   CHECK(CGRectGetMaxY(layout.content) <= CGRectGetMinY(layout.action));
-  CGRect above[] = {layout.topBar, layout.language, layout.clock, layout.date, layout.air};
+  CGRect above[] = {layout.title, layout.language, layout.clock, layout.date, layout.air};
   for (NSUInteger a = 0; a < sizeof(above) / sizeof(above[0]); a++)
     CHECK(!overlap(layout.content, above[a]));
   if (notice) CHECK(within(layout.notice, layout.content));

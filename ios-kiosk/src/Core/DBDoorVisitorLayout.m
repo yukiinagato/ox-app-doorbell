@@ -124,18 +124,24 @@ static DBDoorVisitorLayout DBDoorVisitorLayoutBuild(CGSize size, BOOL showsSOS,
   layout.compact = compact;
   layout.sideBySide = size.width > size.height;
   layout.purposeCount = purposeCount;
-  layout.topBar = CGRectMake(0, 0, size.width, 44);
+  // The stock navigation bar is not used here: the door name is the page title in the top row.
+  layout.topBar = CGRectZero;
 
-  CGFloat y = 44 + (compact ? 8 : 16);
+  CGFloat y = compact ? 20 : 28;
   CGFloat languageWidth = showsLanguage
-      ? floor(compact ? columnWidth * 0.6 : MIN(360, columnWidth * 0.6)) : 0;
+      ? floor(compact ? columnWidth * 0.55 : MIN(264, columnWidth * 0.42)) : 0;
   if (showsLanguage)
     layout.language = CGRectMake(columnX + columnWidth - languageWidth, y, languageWidth, 44);
-  CGFloat timeWidth = columnWidth - (showsLanguage ? languageWidth + gap : 0);
-  if (timeWidth >= 96) {
-    layout.clock = CGRectMake(columnX, y, timeWidth, 26);
-    layout.date = CGRectMake(columnX, y + 26, timeWidth, 18);
+  // The time sits small beside the language control; phones have no room for it.
+  CGFloat timeWidth = compact ? 0 : 120;
+  CGFloat trailing = columnX + columnWidth - (showsLanguage ? languageWidth + gap : 0);
+  if (timeWidth > 0) {
+    layout.clock = CGRectMake(trailing - timeWidth, y, timeWidth, 26);
+    layout.date = CGRectMake(trailing - timeWidth, y + 26, timeWidth, 18);
   }
+  CGFloat titleRight = timeWidth > 0 ? CGRectGetMinX(layout.clock) - gap
+      : (showsLanguage ? CGRectGetMinX(layout.language) - gap : columnX + columnWidth);
+  layout.title = CGRectMake(columnX, y, MAX(0, titleRight - columnX), 44);
   y += 44;
   if (showsAir && layout.clock.size.width > 0) {
     CGFloat airHeight = compact ? 20 : 24;
@@ -150,7 +156,7 @@ static DBDoorVisitorLayout DBDoorVisitorLayoutBuild(CGSize size, BOOL showsSOS,
     y += noticeHeight + gap;
   }
   // One quiet caption line sits at the very bottom, inside the bottom margin.
-  layout.version = CGRectMake(columnX, size.height - 8 - 16, columnWidth, 16);
+  layout.version = CGRectMake(columnX, size.height - 12 - 16, columnWidth, 16);
   CGFloat bottom = CGRectGetMinY(layout.version) - 8;
   if (showsSOS) {
     layout.sos = CGRectMake(columnX, bottom - 48, MIN(132, columnWidth), 48);

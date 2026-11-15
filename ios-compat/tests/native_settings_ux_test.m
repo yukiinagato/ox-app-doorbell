@@ -799,16 +799,16 @@ static void TestNoticePrecedenceExpiryAndPresets(void) {
 // a purpose an administrator invented keeps whatever glyph they typed, which is
 // the only thing it has.
 static void TestPurposeIconsComeFromTheSharedLibrary(void) {
-  Require([[DBPurposeModel iconNameForPurpose:@"p_visit"] isEqualToString:@"home"],
-           @"the visit purpose uses the home icon");
-  Require([[DBPurposeModel iconNameForPurpose:@"p_delivery"] isEqualToString:@"package"],
-           @"the delivery purpose uses the package icon");
-  Require([[DBPurposeModel iconNameForPurpose:@"p_mail"] isEqualToString:@"mail"],
-           @"the mail purpose uses the mail icon");
-  Require([DBPurposeModel iconNameForPurpose:@"p_other"] == nil,
-           @"a purpose with no icon of ours falls back to the administrator's glyph");
-  Require([DBPurposeModel iconNameForPurpose:@"p_invented_by_the_owner"] == nil,
-           @"an invented purpose has no mapping");
+  Require([[DBPurposeModel iconNameForPurpose:@"p_visit"] isEqualToString:@"f7:house_fill"],
+           @"the visit purpose uses the house icon");
+  Require([[DBPurposeModel iconNameForPurpose:@"p_delivery"] isEqualToString:@"f7:cube_box_fill"],
+           @"the delivery purpose uses the box icon");
+  Require([[DBPurposeModel iconNameForPurpose:@"p_mail"] isEqualToString:@"f7:envelope_fill"],
+           @"the mail purpose uses the envelope icon");
+  Require([[DBPurposeModel iconNameForPurpose:@"p_other"] isEqualToString:
+              @"f7:ellipsis_circle_fill"], @"the other purpose uses the ellipsis icon");
+  Require([[DBPurposeModel iconNameForPurpose:@"p_invented_by_the_owner"] isEqualToString:
+              @"f7:person_fill"], @"an invented purpose falls back to the generic person");
   Require([DBPurposeModel iconNameForPurpose:@""] == nil &&
                [DBPurposeModel iconNameForPurpose:nil] == nil,
            @"an empty or missing purpose id has no icon");

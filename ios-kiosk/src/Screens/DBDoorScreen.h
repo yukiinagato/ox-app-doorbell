@@ -29,4 +29,7 @@
 - (void)suspendMediaForBackground;
 - (void)resumeMediaAfterBackground;
 
+// Debug start screens "visitor:calling|connected|reply|noanswer" put the page in that state.
+- (void)debugShowState:(NSString *)state;
+
 @end
