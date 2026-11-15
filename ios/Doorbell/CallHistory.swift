@@ -176,6 +176,13 @@ extension CallHistory {
         time.sizeToFit()
         cell.accessoryView = time
         cell.accessibilityIdentifier = "history_row_\(row.id)"
+        #if os(tvOS)
+        // A selected row keeps a card of its own instead of losing its background.
+        let selected = UIView()
+        selected.backgroundColor = UIColor(white: 1, alpha: 0.16)
+        selected.layer.cornerRadius = 24
+        cell.selectedBackgroundView = selected
+        #endif
     }
 }
 
@@ -327,12 +334,18 @@ final class CallHistoryListController: UITableViewController {
         filterButton.addTarget(self, action: #selector(chooseFilter),
                                for: .primaryActionTriggered)
         updateFilterButton()
-        let header = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 120))
+        let header = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 310))
+        let heading = SystemStyle.label(.title2, weight: .semibold)
+        heading.text = texts.t("history.title")
+        heading.translatesAutoresizingMaskIntoConstraints = false
+        header.addSubview(heading)
         filterButton.translatesAutoresizingMaskIntoConstraints = false
         header.addSubview(filterButton)
         NSLayoutConstraint.activate([
+            heading.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 100),
+            heading.topAnchor.constraint(equalTo: header.topAnchor, constant: 150),
             filterButton.leadingAnchor.constraint(equalTo: header.leadingAnchor, constant: 100),
-            filterButton.centerYAnchor.constraint(equalTo: header.centerYAnchor),
+            filterButton.topAnchor.constraint(equalTo: heading.bottomAnchor, constant: 24),
         ])
         tableView.tableHeaderView = header
         #endif
@@ -378,6 +391,9 @@ final class CallHistoryListController: UITableViewController {
     /// the unread emphasis they were loaded with, so the user sees which calls were new.
     override func viewWillAppear(_ animated: Bool) {
         super.viewWillAppear(animated)
+        #if os(tvOS)
+        navigationController?.setNavigationBarHidden(true, animated: false)
+        #endif
         core.addHandler(logObserverKey) { [weak self] event in
             if ConfigUtil.evStr(event, "t") == "call_log_changed" { self?.reload(reset: true) }
         }
@@ -568,6 +584,13 @@ final class CallHistoryDetailController: UITableViewController {
 
     required init?(coder: NSCoder) { fatalError("not supported") }
 
+    #if os(tvOS)
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationController?.setNavigationBarHidden(true, animated: false)
+    }
+    #endif
+
     override func viewDidLoad() {
         super.viewDidLoad()
         SystemStyle.style(tableView)
@@ -589,6 +612,18 @@ final class CallHistoryDetailController: UITableViewController {
                                          lang: lang)
         let time = DoorbellClock.timeOfDay(core, wallMs: row.tsMs)
         title = time
+        #if os(tvOS)
+        let head = UIView(frame: CGRect(x: 0, y: 0, width: 0, height: 310))
+        let heading = SystemStyle.label(.title2, weight: .semibold)
+        heading.text = time
+        heading.translatesAutoresizingMaskIntoConstraints = false
+        head.addSubview(heading)
+        NSLayoutConstraint.activate([
+            heading.leadingAnchor.constraint(equalTo: head.leadingAnchor, constant: 60),
+            heading.topAnchor.constraint(equalTo: head.topAnchor, constant: 150),
+        ])
+        tableView.tableHeaderView = head
+        #endif
         let seconds = Int(row.durationMs / 1000)
         let all: [(String, String)] = [
             (texts.t("history.detail_time"), day + " " + time),

@@ -24,7 +24,7 @@ final class TVQrThumbnail: UIControl {
         detail.font = SystemStyle.font(.callout)
         caption.textColor = .white
         detail.textColor = UIColor(white: 1, alpha: 0.85)
-        detail.numberOfLines = 2
+        detail.numberOfLines = 1
         let column = UIStackView(arrangedSubviews: [caption, detail])
         column.axis = .vertical
         column.spacing = 4

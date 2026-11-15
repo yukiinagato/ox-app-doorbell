@@ -923,8 +923,16 @@ final class DoorTileView: UIView {
         noticeChip.onTap = { [weak self] in self?.onNotice?() }
 
         noticeChip.setContentCompressionResistancePriority(.required, for: .horizontal)
+        #if os(tvOS)
+        // Name on the left, state on the right; the notice chip is a label here and only while a
+        // notice is showing, because the Notice action lives on Home.
+        noticeChip.isUserInteractionEnabled = false
+        let captionRow = UIStackView(arrangedSubviews: [nameLabel, UIView(), stateLabel,
+                                                        noticeChip])
+        #else
         let captionRow = UIStackView(arrangedSubviews: [nameLabel, stateLabel, UIView(),
                                                         noticeChip])
+        #endif
         captionRow.axis = .horizontal
         captionRow.spacing = 6
         captionRow.alignment = .center
@@ -981,17 +989,27 @@ final class DoorTileView: UIView {
         if nameLabel.text != label { nameLabel.text = label }
         accessibilityLabel = label
         accessibilityHint = texts.t("door.view")
+        #if os(tvOS)
+        let state = online ? texts.t("tv.door_live") : texts.t("admin.offline")
+        #else
         let state = online ? "" : texts.t("admin.offline")
+        #endif
         if stateLabel.text != state { stateLabel.text = state }
         stateLabel.isHidden = state.isEmpty
         accessibilityValue = state
         let alpha: CGFloat = online ? 1 : 0.35
         if still.alpha != alpha { still.alpha = alpha }
         noticeChip.update(active: noticeActive, overPicture: true)
+        #if os(tvOS)
+        noticeChip.isHidden = !noticeActive
+        #endif
     }
 
     func updateNotice(active: Bool) {
         noticeChip.update(active: active, overPicture: true)
+        #if os(tvOS)
+        noticeChip.isHidden = !active
+        #endif
     }
 
     func setStill(_ image: UIImage?) {

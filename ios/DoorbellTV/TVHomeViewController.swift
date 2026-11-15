@@ -239,9 +239,12 @@ final class TVHomeViewController: UIViewController, UICollectionViewDataSource,
         }
         applyStatusLine(status: status)
         qrSource.reload(status: status)
-        qrThumb.detail.text = DoorbellTheme.versionLine(
-            name: boot.name, coreVersion: DoorbellTheme.coreVersion(), texts: texts,
-            power: (status?["self"] as? [String: Any])?["power"] as? [String: Any])
+        let info = Bundle.main.infoDictionary
+        let app = (info?["CFBundleShortVersionString"] as? String ?? "") + " ("
+            + (info?["CFBundleVersion"] as? String ?? "") + ")"
+        let core = DoorbellTheme.coreVersion().split(separator: "+").first.map(String.init) ?? ""
+        qrThumb.detail.text = [boot.name, "v" + app, "core " + core]
+            .filter { !$0.isEmpty }.joined(separator: " · ")
         refreshMissedBadge()
         refreshStills()
     }
@@ -261,7 +264,7 @@ final class TVHomeViewController: UIViewController, UICollectionViewDataSource,
                 .withTintColor(.systemYellow, renderingMode: .alwaysOriginal)
             text.append(NSAttributedString(string: "   "))
             text.append(NSAttributedString(attachment: attachment))
-            text.append(NSAttributedString(string: " \(offline)"))
+            text.append(NSAttributedString(string: " " + texts.t("admin.offline") + " \(offline)"))
         }
         text.addAttributes([.font: statusLabel.font as Any, .foregroundColor: UIColor.white],
                            range: NSRange(location: 0, length: text.length))
