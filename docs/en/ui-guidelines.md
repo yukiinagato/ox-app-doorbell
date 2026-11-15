@@ -72,9 +72,8 @@ switch live on rotation or window resize.
 - Icons: each platform uses the icon set that feels native there; the shells no
   longer share one set. iOS 13+ and tvOS: SF Symbols. iOS 9 to 12 and the iOS 5
   kiosk (no SF Symbols): Framework7 Icons (MIT, drawn in the SF style), vendored
-  and rasterised by `tools/gen_icons.py`. Android: Material Symbols. Windows:
-  Segoe Fluent Icons / Segoe MDL2 Assets where the system has them, Fluent UI
-  System Icons (MIT) otherwise. Web: the vendored Tabler set. Icons always come
+  and rasterised by `tools/gen_icons.py`. Android: Material Symbols (vendored as `ic_ms_*` drawables). Windows:
+  Fluent UI System Icons (MIT), vendored as geometries and drawn filled. Web: the vendored Tabler set. Icons always come
   from a system or open-source set, tinted as template images; no hand-drawn
   glyphs and no emoji.
 
@@ -82,17 +81,23 @@ switch live on rotation or window resize.
 
 ### Visitor (door station)
 
-- Top bar: building/door name left, clock center (optional), language switch
-  right (flag-free text labels: 日本語 / English / 中文).
-- Notice banner below the top bar when an announcement exists.
-- Center: purpose cards in a grid (2 columns compact, 3–4 expanded), large icon
-  plus label; disabled purposes are hidden.
-- Bottom action zone: one full-width primary "Call" button (or "Call without
-  choosing" in purpose-first mode).
+- One centred column on the home surface, composed as a single block: the
+  building/door title at the left of the top row, the language switch
+  (flag-free text labels: 日本語 / English / 中文) and the clock and date at
+  its right.
+- Notice banner below the top row when an announcement exists.
+- Hero "Call" pill: the primary action, the largest and most central control,
+  with its icon.
+- Below it, the purpose cards in a grid (2 columns compact, 3-4 expanded),
+  large icon plus label; disabled purposes are hidden. In purpose-first mode
+  the grid is the primary choice and the Call pill reads "Call without
+  choosing".
+- Caption line at the very bottom: one quiet line with the app version and the
+  diagnostics summary. It stays visible on purpose.
 - States reuse the same frame: calling (pulsing status + Cancel), connected
   (talk indicator + End), reply shown (large reply text, auto-return countdown),
   unanswered (message + Call again). The SOS control (see SOS below)
-  sits in the action zone's leading edge only where configured.
+  sits at the leading edge of the bottom zone only where configured.
 
 ### Dashboard (indoor panel)
 
@@ -154,6 +159,9 @@ switch live on rotation or window resize.
 - Compact: grouped list → drill-down detail with back navigation.
 - Expanded: master–detail; left grouped category list with icons and search,
   right grouped inset sections. Row = label + secondary text + native control.
+- The QR code for opening the web Admin or a panel link appears only on the
+  device-information page of settings, never on the category list or other
+  pages.
 - Destructive or security actions (rotate cluster key, rebuild cluster, remove
   device, factory reset) sit at the bottom of their section, in `negative`
   color, with a confirmation that names the consequence.
