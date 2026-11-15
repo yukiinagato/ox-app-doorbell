@@ -126,6 +126,18 @@ The door screen shows the wizard Core resolved for its door; see `docs/en/visito
 for the document, the walker and the limits. The web panel is not gated by `visitor_flow_v1`: it
 ships with Core.
 
+### Door page
+
+`/panel/door` walks the resolved document of `GET /api/panel/state` with the shared walker
+`/panel/visitor-flow.js` (the port of `tools/conformance/visitor_flow.py`, tested against the fixture's
+`walk` cases). The start page replaces the classic Call and purpose buttons; the option zone is fixed
+above the action bar, Back and Done sit beside SOS, and the language switch, quick-reply overlay,
+Cancel/End and offline band are unchanged. A notify option posts `door` and `step` to
+`/api/panel/visitor-notify` and shows the step's end page whether the result was throttled or not; a
+failed notify rings with the step's purpose. A call that ends unanswered returns to the call step's
+`on_unanswered` page. The classic screen remains when the document is disabled, when the panel lists
+several doors, or when anything in the flow fails to render.
+
 ### GET /api/panel/visitor-flow?door=<id>
 
 Requires the `view` grant for the door (the node's own door when `door` is omitted). Returns the

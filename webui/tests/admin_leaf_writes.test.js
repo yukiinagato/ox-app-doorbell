@@ -173,4 +173,112 @@ assert.deepStrictEqual(ops(base, [{ key: element, value: { scale: 1.5 } }]),
 // A new entity is created as one object; replacing a scalar or array is one value.
 assert.deepStrictEqual(ops({}, [{ key: "households.h_new", value: { label: { en: "New" } } }]),
   [{ op: "set", key: "households.h_new", value: { label: { en: "New" } } }]);
+
+// ---- Visitor flow: leaves for the top-level keys, one whole object per step, one batch ----
+{
+  const page = { kind: "page", title: { en: "Hello" }, body: { en: "Text" },
+    options: [{ id: "o_call", label: { en: "Call" }, style: "primary", to: "c_any" }] };
+  const cfg = { ui: { languages: ["en"] }, visit_purposes: { p_visit: { label: { en: "Visit" } } },
+    visitor_flow: { enabled: true, start: "s_home", idle_s: 45, require_call: true,
+      steps: { s_home: page, c_any: { kind: "call" }, e_old: { kind: "end" } } },
+    doors: { d_front: { label: { en: "Front" } } } };
+  const stepKey = /^visitor_flow\.steps\.[^.]+$/;
+  const noKeyBelowStep = list => { for (const op of list) assert(!/^visitor_flow\.steps\.[^.]+\./.test(op.key), op.key + " is below a step"); };
+
+  // Editing one step rewrites that step whole; dropped members travel as remove_fields.
+  let draft = L.flowDraftFromConfig(cfg);
+  draft.steps.s_home.title = { en: "Welcome" };
+  delete draft.steps.s_home.body;
+  draft.steps.c_any.purpose = "p_visit";
+  draft.idle_s = 60;
+  delete draft.steps.e_old;
+  draft.door_starts.d_front = "s_home";
+  let plan = L.flowEntries(cfg, draft);
+  list = ops(cfg, plan.entries, plan.dels);
+  noKeyBelowStep(list);
+  assert.deepStrictEqual(byKey(list), byKey([
+    { op: "set", key: "visitor_flow.idle_s", value: 60 },
+    { op: "set", key: "visitor_flow.steps.s_home", value: draft.steps.s_home, remove_fields: ["body"] },
+    { op: "set", key: "visitor_flow.steps.c_any", value: { kind: "call", purpose: "p_visit" } },
+    { op: "delete", key: "visitor_flow.steps.e_old" },
+    { op: "set", key: "doors.d_front.visitor_flow.start", value: "s_home" }]));
+
+  // Changing a step's kind drops the members the new kind does not carry.
+  draft = L.flowDraftFromConfig(cfg);
+  draft.steps.s_home = { kind: "call" };
+  plan = L.flowEntries(cfg, draft);
+  list = ops(cfg, plan.entries, plan.dels);
+  const rewritten = list.filter(op => stepKey.test(op.key));
+  assert.strictEqual(rewritten.length, 1);
+  assert.deepStrictEqual(rewritten[0].value, { kind: "call" });
+  assert.deepStrictEqual(rewritten[0].remove_fields.slice().sort(), ["body", "options", "title"]);
+
+  // Nothing changed, nothing written. A new step is a plain whole object.
+  draft = L.flowDraftFromConfig(cfg);
+  assert.deepStrictEqual(L.flowEntries(cfg, draft), { entries: [], dels: [] });
+  draft.steps.s_new = { kind: "end", return_s: 5 };
+  plan = L.flowEntries(cfg, draft);
+  assert.deepStrictEqual(ops(cfg, plan.entries, plan.dels), [{ op: "set", key: "visitor_flow.steps.s_new", value: { kind: "end", return_s: 5 } }]);
+
+  // Customizing the built-in wizard (nothing stored) writes every leaf and every step, no container.
+  const bare = { doors: {} };
+  const tpl = { enabled: true, start: "s_home", idle_s: 45, require_call: true,
+    steps: { s_home: page, c_any: { kind: "call" } } };
+  draft = L.flowDraftFromTemplate(tpl, bare);
+  plan = L.flowEntries(bare, draft);
+  list = ops(bare, plan.entries, plan.dels);
+  noKeyBelowStep(list);
+  assert.deepStrictEqual(list.map(op => op.key), ["visitor_flow.enabled", "visitor_flow.start", "visitor_flow.idle_s",
+    "visitor_flow.require_call", "visitor_flow.steps.s_home", "visitor_flow.steps.c_any"]);
+  assert(!list.some(op => op.remove_fields), "a new step has nothing to remove");
+
+  // Replacing a flow with a template deletes the steps that go away, in the same batch.
+  draft = L.flowDraftFromTemplate(tpl, cfg);
+  plan = L.flowEntries(cfg, draft);
+  assert.deepStrictEqual(plan.dels, ["visitor_flow.steps.e_old"]);
+
+  // Reset to the built-in wizard is one delete of visitor_flow.
+  assert.deepStrictEqual(ops(cfg, [], ["visitor_flow"]), [{ op: "delete", key: "visitor_flow" }]);
+
+  // A step kept after a revision conflict is still committed whole, with the current members dropped.
+  const changes = L.configIntents(cfg, L.configBatchOps([{ key: "visitor_flow.steps.c_any", value: { kind: "call", purpose: "p_visit" } }]), true);
+  const concurrent = JSON.parse(JSON.stringify(cfg));
+  concurrent.visitor_flow.steps.c_any = { kind: "call" };
+  const merged = L.configRebase(changes, concurrent);
+  assert.strictEqual(merged.conflicts.length, 0);
+  assert.deepStrictEqual(L.configIntentOps(merged.changes), [{ op: "set", key: "visitor_flow.steps.c_any", value: { kind: "call", purpose: "p_visit" } }]);
+  concurrent.visitor_flow.steps.c_any = { kind: "call", on_unanswered: "s_home" };
+  const changed = L.configRebase(changes, concurrent);
+  assert.strictEqual(changed.conflicts.length, 1, "a concurrent edit of the same step is reviewed, not overwritten");
+}
+
+// The editor saves with the plain batch: whole steps, no remove_fields, no containers; a draft is
+// refused when the flow changed under it.
+{
+  const cfg = { visitor_flow: { start: "s", steps: { s: { kind: "page", body: { en: "b" }, options: [{ id: "o", to: "c" }] }, c: { kind: "call" } } },
+    doors: { d: { visitor_flow: { start: "s" } } } };
+  const draft = L.flowDraftFromConfig(cfg);
+  delete draft.steps.s.body;
+  draft.steps.n = { kind: "end" };
+  const plan = L.flowEntries(cfg, draft);
+  assert.deepStrictEqual(L.flowBatchOps(plan), [
+    { op: "set", key: "visitor_flow.steps.s", value: { kind: "page", options: [{ id: "o", to: "c" }] } },
+    { op: "set", key: "visitor_flow.steps.n", value: { kind: "end" } }]);
+  const changed = JSON.parse(JSON.stringify(cfg));
+  assert.strictEqual(L.flowSignature(cfg), L.flowSignature(changed));
+  changed.visitor_flow.steps.c.purpose = "p";
+  assert.notStrictEqual(L.flowSignature(cfg), L.flowSignature(changed));
+  changed.visitor_flow = cfg.visitor_flow; changed.doors.d.visitor_flow.start = "other";
+  assert.notStrictEqual(L.flowSignature(cfg), L.flowSignature(changed));
+}
+
+// Core's refusal names the step and option; the editor shows it next to that field.
+assert.deepStrictEqual(L.flowParseError("visitor_flow.unknown_target: s_x.o"),
+  { code: "unknown_target", key: "visitor_flow.unknown_target", step: "s_x", option: "o", field: "" });
+assert.strictEqual(L.flowParseError("visitor_flow.missing_start").step, "");
+assert.deepStrictEqual(L.flowParseError("visitor_flow.bad_text: s_parcel.o_3.label"),
+  { code: "bad_text", key: "visitor_flow.bad_text", step: "s_parcel", option: "o_3", field: "label" });
+assert.deepStrictEqual(L.flowParseError("visitor_flow.bad_text: s_home.title"),
+  { code: "bad_text", key: "visitor_flow.bad_text", step: "s_home", option: "", field: "title" });
+assert.strictEqual(L.flowParseError("config_conflict"), null);
 console.log("admin leaf-key commits: PASS");

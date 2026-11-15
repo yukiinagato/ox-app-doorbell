@@ -7,6 +7,8 @@ assert.strictEqual(C.flowMode({ mode: "ring_then_purpose" }), "ring_then_purpose
 assert.strictEqual(C.flowMode("unknown"), "purpose_first");
 assert.strictEqual(C.pressForm("d front", "a+b", "delivery"),
                    "door=d%20front&purpose=delivery");
+assert.strictEqual(C.notifyForm("d front", "n_left"), "door=d%20front&step=n_left");
+assert.throws(() => C.notifyForm("front", ""), /step/);
 assert.strictEqual(C.cancelForm("front", "call-2", "tok"),
                    "door=front&call_id=call-2");
 assert.throws(() => C.cancelForm("front", "", "tok"), /call_id/);

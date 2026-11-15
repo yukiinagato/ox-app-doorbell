@@ -389,6 +389,54 @@ tr.offline td:not(.ops) { color:var(--dim); }
                padding:14px 16px calc(14px + env(safe-area-inset-bottom));
                background:rgba(4,8,12,.78); color:#e8edf2; font-size:.875rem; }
 
+/* ---- Visitor flow editor (modal wider than the other editors) ---- */
+#modal.fl-modal .mbox { max-width:1080px; }
+.fl-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:8px 0 0; }
+.fl-tabs { display:flex; gap:4px; margin:0 0 16px; border-bottom:1px solid var(--line); overflow-x:auto; }
+.fl-tab { min-height:var(--tap); padding:8px 16px; border:0; border-bottom:3px solid transparent; background:none;
+          color:var(--dim); font:inherit; font-weight:600; cursor:pointer; white-space:nowrap; }
+.fl-tab[aria-selected="true"] { color:var(--acc-text); border-bottom-color:var(--acc); }
+.fl-split { display:grid; grid-template-columns:minmax(220px, 300px) minmax(0, 1fr); gap:24px; align-items:start; }
+.fl-steps { list-style:none; margin:0 0 12px; padding:0; display:grid; gap:6px; }
+.fl-step { display:flex; flex-wrap:wrap; align-items:center; gap:4px 6px; width:100%; min-height:var(--tap); padding:8px 12px;
+           text-align:left; font:inherit; color:var(--fg); background:var(--card2); border:1px solid var(--line);
+           border-radius:var(--radius-s); cursor:pointer; }
+.fl-step.sel { border-color:var(--acc); background:var(--sel); }
+.fl-stepname { flex:1 1 8rem; min-width:0; overflow-wrap:anywhere; font-weight:600; }
+.fl-stepid { font-size:.75rem; }
+.fl-edit .frow { max-width:none; }
+.fl-edit .fl-back { display:none; margin-bottom:12px; }
+.fl-stephead { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:8px; margin-bottom:16px; }
+.fl-stephead h3 { font-size:1.0625rem; overflow-wrap:anywhere; }
+.fl-lang { display:flex; align-items:flex-start; gap:8px; flex:0 0 100%; }
+.fl-lang .tag { margin-top:10px; flex:none; min-width:2.5rem; justify-content:center; }
+.fl-lang input, .fl-lang textarea { flex:1 1 auto; min-width:0; }
+.fl-option { margin:0 0 16px; padding:12px; border:1px solid var(--line2); border-radius:var(--radius-s); background:var(--card2); }
+.fl-opthead { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:12px; }
+.fl-checks { display:flex; flex-wrap:wrap; gap:8px 20px; margin-top:4px; }
+.fl-image { display:flex; gap:12px; align-items:flex-start; margin:0 0 16px; }
+.fl-thumb { flex:none; width:96px; height:72px; display:flex; align-items:center; justify-content:center; overflow:hidden;
+            border:1px solid var(--line); border-radius:var(--radius-s); background:var(--field); }
+.fl-thumb img { max-width:100%; max-height:100%; display:block; }
+.fl-imgfields { flex:1 1 auto; min-width:0; }
+.fl-upload { cursor:pointer; position:relative; overflow:hidden; }
+.fl-upload input { position:absolute; inset:0; opacity:0; cursor:pointer; }
+.fl-sim { max-width:520px; margin:16px auto 0; padding:20px; border:1px solid var(--line); border-radius:var(--radius);
+          background:var(--card2); text-align:center; }
+.fl-simtitle { font-size:1.375rem; font-weight:700; margin-bottom:12px; overflow-wrap:anywhere; }
+.fl-sim p { text-align:left; margin:0 0 .8em; line-height:1.5; overflow-wrap:anywhere; }
+.fl-simimg img { max-width:100%; max-height:200px; border-radius:var(--radius-s); margin-bottom:8px; }
+.fl-simopts { display:grid; gap:8px; margin:12px 0; }
+.fl-simopts .btn, .fl-simopts .btn2 { width:100%; min-height:56px; }
+.fl-simlog { max-width:520px; margin:12px auto 0; padding-left:20px; color:var(--dim); font-size:.875rem; }
+@media (max-width:700px) {
+  .fl-split { grid-template-columns:minmax(0, 1fr); gap:12px; }
+  .fl-split:not(.edit) .fl-edit { display:none; }
+  .fl-split.edit .fl-list { display:none; }
+  .fl-edit .fl-back { display:inline-flex; }
+  .fl-image { flex-wrap:wrap; }
+}
+
 /* ---- Editor dialog: centered sheet, full screen on phones ---- */
 #modal { display:block; width:100%; height:100%; max-width:none; max-height:none; margin:0; border:0;
          color:var(--fg); background:var(--scrim); overscroll-behavior:contain;

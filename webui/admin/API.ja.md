@@ -185,6 +185,17 @@ override object 単位に復元して batch 送信する。
 - `visitor_flow.require_call`（bool リーフ、既定 true）: true の間は開始ページが通話に到達できないフローを
   拒否する（`visitor_flow.no_reachable_call: start`）。false なら警告 `visitor_flow.no_call` 付きで受理し、
   エディタは `flow_editor.require_call_off_warning` を表示する。
+- ルールタブの **来訪者ウィザード** エディタは、設定と同じ形のドラフトを保持し、プレーンな
+  `POST /api/config/batch` 1 回で保存する。内容は、変更された 4 つのリーフ（`enabled`、`start`、`idle_s`、
+  `require_call`。組み込みウィザードを初めて編集するときは全部）、変更されたステップごとの完全なオブジェクト、
+  削除したステップの `delete`、`doors.<door>.visitor_flow.start` のリーフ。リビジョン付きコミットは拒否された
+  フローに対して `invalid_request` しか返さないが、バッチはステップと選択肢を示す
+  （`visitor_flow.<code>: <step>.<option>`）ため、エディタはそれを該当フィールドの横に表示する。バッチには
+  リビジョンが無いので、エディタは開いたときのフローと最新のスナップショットを比べ、古いドラフトは拒否する。
+  `/api/config/commit` で保存する汎用エディタは `visitor_flow.steps.<id>` を丸ごと（外したメンバーは
+  `remove_fields`）書き、ステップの下のキーは書かない。画像はブラウザ側で長辺 1280 px、約 400 KB に縮小して
+  からアップロードする。シミュレーターは未保存のドラフトを `/panel/visitor-flow.js` で辿る。明示的なステップが
+  有効な間は `ui.call_flow` の選択を無効にする。
 - 競合ジャーナルは `visitor_flow` を 1 つのエンティティとして扱う。分断された 2 ノードが編集した後は、競合を
   競合ビューで解決するまで通常の編集は `unresolved_config_conflict` を返す。エディタは再試行せず表示すること。
 - notify ステップのスナップショットは、`streams.snapshot.url` を持つソースなら

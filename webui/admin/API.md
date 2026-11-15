@@ -520,6 +520,18 @@ Resolved document, notify and the shape of an editor write are specified in
 - `visitor_flow.require_call` (bool leaf, default true): while true, a flow whose entry page cannot
   reach a call is refused (`visitor_flow.no_reachable_call: start`); false accepts it with warning
   `visitor_flow.no_call`, and the editor shows `flow_editor.require_call_off_warning`.
+- The Rules tab's **Visitor wizard** editor keeps a draft in configuration shape and saves it with one
+  plain `POST /api/config/batch`: the four leaves (`enabled`, `start`, `idle_s`, `require_call`) when they
+  changed (all of them while the built-in wizard is first customized), one whole object per changed step,
+  a `delete` per removed step and the `doors.<door>.visitor_flow.start` leaves. The plain batch is used
+  because the revision-checked commit answers a refused flow with a bare `invalid_request`, while the
+  batch names the step and option (`visitor_flow.<code>: <step>.<option>`), which the editor shows next
+  to the field. The batch carries no revision, so the editor compares the flow it opened with a fresh
+  snapshot first and refuses a stale draft. Generic editors that save through `/api/config/commit` write
+  a `visitor_flow.steps.<id>` object whole, with `remove_fields` for dropped members, never a key below it.
+  Images are downscaled in the browser to at most 1280 px and about 400 KB before upload. The simulator
+  walks the unsaved draft with `/panel/visitor-flow.js`. While explicit steps are enabled the
+  `ui.call_flow` selector is disabled.
 - The conflict journal treats `visitor_flow` as one entity. After two partitioned nodes edit it,
   further ordinary edits return `unresolved_config_conflict` until the conflict is resolved in the
   conflicts view; the editor must show it, not retry.

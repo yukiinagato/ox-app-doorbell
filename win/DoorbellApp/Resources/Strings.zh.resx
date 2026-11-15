@@ -916,12 +916,15 @@
   <data name="flow_editor_add_image" xml:space="preserve"><value>添加图片</value></data>
   <data name="flow_editor_add_option" xml:space="preserve"><value>添加选项</value></data>
   <data name="flow_editor_add_step" xml:space="preserve"><value>添加步骤</value></data>
+  <data name="flow_editor_call_flow_superseded" xml:space="preserve"><value>向导开启期间，此设置不再生效。</value></data>
+  <data name="flow_editor_conflict_blocked" xml:space="preserve"><value>向导的另一处编辑正在等待处理。请先处理本页顶部需要确认的编辑，然后再保存。</value></data>
   <data name="flow_editor_customize" xml:space="preserve"><value>基于内置向导编辑</value></data>
   <data name="flow_editor_default_note" xml:space="preserve"><value>当前使用内置向导。编辑后将保存为本住宅的设置。</value></data>
   <data name="flow_editor_delete_step" xml:space="preserve"><value>删除步骤</value></data>
   <data name="flow_editor_door_start" xml:space="preserve"><value>此门的起始页</value></data>
   <data name="flow_editor_door_start_inherit" xml:space="preserve"><value>使用共用起始页</value></data>
   <data name="flow_editor_duplicate_step" xml:space="preserve"><value>复制</value></data>
+  <data name="flow_editor_edit" xml:space="preserve"><value>编辑向导</value></data>
   <data name="flow_editor_enabled" xml:space="preserve"><value>启用向导</value></data>
   <data name="flow_editor_enabled_hint" xml:space="preserve"><value>关闭后恢复为原来的呼叫画面。</value></data>
   <data name="flow_editor_field_body" xml:space="preserve"><value>正文</value></data>
@@ -938,10 +941,16 @@
   <data name="flow_editor_image_above" xml:space="preserve"><value>正文上方</value></data>
   <data name="flow_editor_image_alt" xml:space="preserve"><value>图片说明（用于朗读）</value></data>
   <data name="flow_editor_image_below" xml:space="preserve"><value>正文下方</value></data>
+  <data name="flow_editor_image_pick" xml:space="preserve"><value>从素材库选择</value></data>
+  <data name="flow_editor_image_upload" xml:space="preserve"><value>上传图片</value></data>
+  <data name="flow_editor_image_uploading" xml:space="preserve"><value>正在上传…</value></data>
+  <data name="flow_editor_issues" xml:space="preserve"><value>需要修正</value></data>
+  <data name="flow_editor_kind" xml:space="preserve"><value>步骤类型</value></data>
   <data name="flow_editor_kind_call" xml:space="preserve"><value>呼叫</value></data>
   <data name="flow_editor_kind_end" xml:space="preserve"><value>结束页</value></data>
   <data name="flow_editor_kind_notify" xml:space="preserve"><value>通知（不呼叫）</value></data>
   <data name="flow_editor_kind_page" xml:space="preserve"><value>页面</value></data>
+  <data name="flow_editor_new_step" xml:space="preserve"><value>新建{0}</value></data>
   <data name="flow_editor_on_unanswered_none" xml:space="preserve"><value>返回起始页</value></data>
   <data name="flow_editor_option_enabled" xml:space="preserve"><value>显示</value></data>
   <data name="flow_editor_option_icon" xml:space="preserve"><value>图标（表情符号）</value></data>
@@ -956,15 +965,34 @@
   <data name="flow_editor_require_call_off_warning" xml:space="preserve"><value>关闭后，门口机可能无法呼叫，访客可能联系不到住户。</value></data>
   <data name="flow_editor_reset_default" xml:space="preserve"><value>恢复内置向导</value></data>
   <data name="flow_editor_reset_default_confirm" xml:space="preserve"><value>将删除您创建的所有步骤并恢复内置向导。</value></data>
+  <data name="flow_editor_set_start" xml:space="preserve"><value>设为起始页</value></data>
+  <data name="flow_editor_sim_call_ended" xml:space="preserve"><value>通话结束</value></data>
+  <data name="flow_editor_sim_classic" xml:space="preserve"><value>按此设置，访客看到的是原来的呼叫画面。</value></data>
+  <data name="flow_editor_sim_hint" xml:space="preserve"><value>按访客看到的方式试用向导（使用尚未保存的修改），不会发送任何内容。</value></data>
+  <data name="flow_editor_sim_idle" xml:space="preserve"><value>模拟无操作</value></data>
+  <data name="flow_editor_sim_language" xml:space="preserve"><value>访客语言</value></data>
+  <data name="flow_editor_sim_message" xml:space="preserve"><value>不呼叫，仅发送消息：{0}</value></data>
+  <data name="flow_editor_sim_no_answer" xml:space="preserve"><value>无人应答</value></data>
+  <data name="flow_editor_sim_restart" xml:space="preserve"><value>重新开始</value></data>
+  <data name="flow_editor_sim_return" xml:space="preserve"><value>{0} 秒后返回起始页</value></data>
+  <data name="flow_editor_sim_ring" xml:space="preserve"><value>呼叫住户（目的：{0}）</value></data>
+  <data name="flow_editor_sim_ring_any" xml:space="preserve"><value>呼叫住户</value></data>
   <data name="flow_editor_snapshot_camera" xml:space="preserve"><value>外部摄像头：{0}</value></data>
   <data name="flow_editor_snapshot_door_station" xml:space="preserve"><value>门口机摄像头</value></data>
   <data name="flow_editor_snapshot_no_camera" xml:space="preserve"><value>未配置带快照地址的外部摄像头</value></data>
   <data name="flow_editor_snapshot_none" xml:space="preserve"><value>不附带</value></data>
   <data name="flow_editor_start" xml:space="preserve"><value>起始页</value></data>
+  <data name="flow_editor_status_custom" xml:space="preserve"><value>正在使用自定义向导（{0} 个步骤）。</value></data>
+  <data name="flow_editor_status_legacy" xml:space="preserve"><value>在自定义向导之前，仍使用原来的呼叫流程。</value></data>
+  <data name="flow_editor_status_off" xml:space="preserve"><value>向导已关闭，访客看到的是原来的呼叫画面。</value></data>
   <data name="flow_editor_step_in_use" xml:space="preserve"><value>其他步骤指向此处：{0}</value></data>
+  <data name="flow_editor_step_untitled" xml:space="preserve"><value>（无标题）</value></data>
   <data name="flow_editor_steps" xml:space="preserve"><value>步骤</value></data>
+  <data name="flow_editor_tab_overview" xml:space="preserve"><value>概览</value></data>
+  <data name="flow_editor_target_choose" xml:space="preserve"><value>请选择步骤</value></data>
   <data name="flow_editor_template_confirm" xml:space="preserve"><value>将用模板替换当前步骤。</value></data>
   <data name="flow_editor_template_delivery" xml:space="preserve"><value>快递与放置门口</value></data>
+  <data name="flow_editor_template_loaded" xml:space="preserve"><value>已载入模板，保存后生效。</value></data>
   <data name="flow_editor_template_purposes" xml:space="preserve"><value>根据当前来访目的创建</value></data>
   <data name="flow_editor_templates" xml:space="preserve"><value>模板</value></data>
   <data name="flow_editor_title" xml:space="preserve"><value>访客向导</value></data>

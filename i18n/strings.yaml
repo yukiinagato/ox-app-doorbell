@@ -1456,6 +1456,34 @@ visitor_flow.too_deep: { ja: "ページは 6 階層までです", en: "Pages can
 visitor_flow.no_reachable_call: { ja: "最初のページから呼び出しにたどり着けません", en: "No option leads to a call from the start page", zh: "从起始页无法到达呼叫" }
 visitor_flow.crowded_page: { ja: "本文や画像のあるページは選択肢を 4 つ以内にすると見やすくなります", en: "A page with text or images reads best with four options or fewer", zh: "带正文或图片的页面建议不超过 4 个选项" }
 visitor_flow.no_call: { ja: "このウィザードには呼び出しがありません。来訪者は住人を呼び出せません。", en: "This wizard never rings. Visitors cannot call anyone.", zh: "此向导不包含呼叫，访客无法呼叫住户。" }
+flow_editor.tab_overview: { ja: "概要", en: "Overview", zh: "概览" }
+flow_editor.edit: { ja: "ウィザードを編集", en: "Edit the wizard", zh: "编辑向导" }
+flow_editor.status_custom: { ja: "独自のウィザードを使用中です（{n} ステップ）。", en: "Using your own wizard ({n} steps).", zh: "正在使用自定义向导（{n} 个步骤）。" }
+flow_editor.status_off: { ja: "ウィザードはオフです。来訪者には従来の呼出画面が表示されます。", en: "The wizard is off. Visitors see the classic call screen.", zh: "向导已关闭，访客看到的是原来的呼叫画面。" }
+flow_editor.status_legacy: { ja: "ウィザードを編集するまで、従来の呼出フローを使います。", en: "The classic call flow stays in use until you customize the wizard.", zh: "在自定义向导之前，仍使用原来的呼叫流程。" }
+flow_editor.call_flow_superseded: { ja: "ウィザードがオンの間は、この設定は使われません。", en: "The wizard replaces this setting while it is on.", zh: "向导开启期间，此设置不再生效。" }
+flow_editor.kind: { ja: "ステップの種類", en: "Step type", zh: "步骤类型" }
+flow_editor.step_untitled: { ja: "（タイトルなし）", en: "(no title)", zh: "（无标题）" }
+flow_editor.set_start: { ja: "最初のページにする", en: "Make this the start page", zh: "设为起始页" }
+flow_editor.new_step: { ja: "新しい{kind}", en: "New {kind}", zh: "新建{kind}" }
+flow_editor.target_choose: { ja: "選んでください", en: "Choose a step", zh: "请选择步骤" }
+flow_editor.image_pick: { ja: "アセットから選ぶ", en: "Choose from Assets", zh: "从素材库选择" }
+flow_editor.image_upload: { ja: "画像をアップロード", en: "Upload an image", zh: "上传图片" }
+flow_editor.image_uploading: { ja: "アップロード中…", en: "Uploading…", zh: "正在上传…" }
+flow_editor.issues: { ja: "修正が必要です", en: "Things to fix", zh: "需要修正" }
+flow_editor.conflict_blocked: { ja: "ウィザードの別の編集が確認待ちです。このページ上部の確認が必要な編集を解決してから、もう一度保存してください。", en: "Another edit of the wizard is waiting for review. Resolve it in the edits needing review at the top of this page, then save again.", zh: "向导的另一处编辑正在等待处理。请先处理本页顶部需要确认的编辑，然后再保存。" }
+flow_editor.template_loaded: { ja: "テンプレートを読み込みました。保存すると反映されます。", en: "Template loaded. Save to apply it.", zh: "已载入模板，保存后生效。" }
+flow_editor.sim_hint: { ja: "保存前の内容で、来訪者に見える動作を試せます。何も送信されません。", en: "Walk the wizard as a visitor would, using changes you have not saved yet. Nothing is sent.", zh: "按访客看到的方式试用向导（使用尚未保存的修改），不会发送任何内容。" }
+flow_editor.sim_language: { ja: "来訪者の言語", en: "Visitor language", zh: "访客语言" }
+flow_editor.sim_restart: { ja: "最初から", en: "Start over", zh: "重新开始" }
+flow_editor.sim_idle: { ja: "無操作を再現", en: "Simulate inactivity", zh: "模拟无操作" }
+flow_editor.sim_classic: { ja: "この設定では、来訪者に従来の呼出画面が表示されます。", en: "With these settings visitors see the classic call screen.", zh: "按此设置，访客看到的是原来的呼叫画面。" }
+flow_editor.sim_ring: { ja: "住人を呼び出します（用件: {purpose}）", en: "Rings the residents (purpose: {purpose})", zh: "呼叫住户（目的：{purpose}）" }
+flow_editor.sim_ring_any: { ja: "住人を呼び出します", en: "Rings the residents", zh: "呼叫住户" }
+flow_editor.sim_message: { ja: "呼び出さずに送信するメッセージ: {text}", en: "Sends this message without ringing: {text}", zh: "不呼叫，仅发送消息：{text}" }
+flow_editor.sim_no_answer: { ja: "応答なし", en: "Nobody answers", zh: "无人应答" }
+flow_editor.sim_call_ended: { ja: "通話終了", en: "Call ended", zh: "通话结束" }
+flow_editor.sim_return: { ja: "{s} 秒後に最初のページへ戻ります", en: "Returns to the start after {s} s", zh: "{s} 秒后返回起始页" }
 # ---- Web: panel identities and security protocol v3 (2026-11 review) ----
 panels.tab: { ja: "パネル", en: "Panels", zh: "面板" }
 panels.title: { ja: "パネルの資格情報", en: "Panel credentials", zh: "面板凭据" }

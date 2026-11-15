@@ -18,6 +18,10 @@
   function pressForm(door, token, purpose) {
     return form({ door: door, purpose: purpose || undefined });
   }
+  function notifyForm(door, step) {
+    if (!door || !step) throw new Error("door and step are required");
+    return form({ door: door, step: step });
+  }
   function cancelForm(door, callId, token) {
     if (!door || !callId) throw new Error("door and call_id are required");
     return form({ door: door, call_id: callId });
@@ -91,7 +95,7 @@
                         permitted: unlock.permitted !== false };
     return result;
   }
-  return { flowMode: flowMode, form: form, pressForm: pressForm, cancelForm: cancelForm,
+  return { flowMode: flowMode, form: form, pressForm: pressForm, notifyForm: notifyForm, cancelForm: cancelForm,
            purposeForm: purposeForm, recoveryForm: recoveryForm, lifecycleForm: lifecycleForm,
            mergeState: mergeState, residentDisposition: residentDisposition,
            deadlineDelay: deadlineDelay, projectDoor: projectDoor };

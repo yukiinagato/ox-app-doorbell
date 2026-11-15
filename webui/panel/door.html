@@ -27,6 +27,13 @@
   </div>
   <main id="main">
     <div id="hint"></div>
+    <div id="flowView" data-semantic-id="flow.text" style="display:none">
+      <h2 id="flowTitle" tabindex="-1"></h2>
+      <div id="flowImgAbove" class="flowImgs"></div>
+      <div id="flowBody"></div>
+      <div id="flowImgBelow" class="flowImgs"></div>
+      <div id="flowNotice" role="status"></div>
+    </div>
     <div id="doorList"></div>
     <div id="callingView" style="display:none">
       <div class="door" id="callingDoor"></div>
@@ -36,7 +43,10 @@
     </div>
     <div id="note"></div>
   </main>
+  <div id="flowOptions" style="display:none"></div>
   <div id="visitorActions" class="idle">
+    <button id="flowBack" class="flowNav" data-semantic-id="flow.back" type="button"></button>
+    <button id="flowDone" class="flowNav" data-semantic-id="flow.done" type="button"></button>
     <button id="cancelCall" data-semantic-id="cancel.call" type="button"></button>
   </div>
 </div>
@@ -44,6 +54,7 @@
 <script src="/panel/runtime.js"></script>
 <script src="/panel/panel-common.js"></script>
 <script src="/panel/call-flow.js"></script>
+<script src="/panel/visitor-flow.js"></script>
 <script>
 (function () {
   "use strict";
@@ -108,6 +119,9 @@
     $("visitorLanguage").setAttribute("aria-label", t("idle.language"));
     $("note").innerHTML = esc(t("panel.no_audio_note"));
     $("offlineBand").innerHTML = esc(t("panel.offline"));
+    C.setText($("flowBack"), t("flow.back"));
+    C.setText($("flowDone"), t("flow.done"));
+    flowKey = "";
     $("replyBanner").setAttribute("aria-label", t("ui.close"));
     if (!currentCall) {
       $("callingMsg").innerHTML = esc(t("panel.calling"));
@@ -263,10 +277,13 @@
     $("doorList").style.display = "none"; $("hint").style.display = "none";
     $("callingView").style.display = "block"; $("cancelCall").style.display = "block";
     $("visitorActions").className = ""; $("main").scrollTop = 0; setDoorButtonsDisabled(true);
+    renderFlow();
   }
   function resetCall() {
     cancelCallAction();
+    var endReason = (currentCall && currentCall.endReason) || "ended";
     currentCall = null;
+    if (flowWalker) flowWalker.callEnded(endReason);
     if (callingTimer) { clearTimeout(callingTimer); callingTimer = null; }
     if (deadlineTimer) { clearTimeout(deadlineTimer); deadlineTimer = null; }
     $("callingView").style.display = "none"; $("purposeStep").style.display = "none";
@@ -274,6 +291,7 @@
     $("cancelCall").setAttribute("data-semantic-id", "cancel.call");
     $("doorList").style.display = ""; $("hint").style.display = "";
     setDoorButtonsDisabled(false);
+    renderFlow();
   }
   function scheduleReset(c, delayMs) {
     if (callingTimer) return;
@@ -307,8 +325,10 @@
         $("callStatus").innerHTML = esc(t("panel.press_failed", {
           reason: j && j.err ? ": " + j.err : ""
         }));
+        if (flowWalker) flowWalker.pressResult(false);
         scheduleReset(c, 3500); return;
       }
+      if (flowWalker) flowWalker.pressResult(true);
       c.call_id = j.call_id || "";
       c.stage_revision = Math.max(c.stage_revision, Number(j.stage_revision) || 0);
       c.expires_at_ms = Number(j.expires_at_ms) || 0;
@@ -533,6 +553,211 @@
   }
 
 
+  // ---- Visitor flow (docs/en/visitor-flow-contract.md). The start page is the idle screen; the
+  // classic Call and purpose buttons remain only when Core publishes no flow. ----
+  var VF = window.DoorbellVisitorFlow;
+  var flowWalker = null, flowRevision = "", flowBrokenRevision = "", flowKey = "", flowBusy = false;
+  var idleTimer = null, endTimer = null, flowPageSeen = "";
+
+  function flowClear() {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    if (endTimer) { clearTimeout(endTimer); endTimer = null; }
+  }
+  function flowDrop() {
+    flowWalker = null; flowRevision = ""; flowKey = ""; flowClear();
+  }
+  // Core's document for this door replaces the walker's (keeping the visitor's place when the
+  // contract allows). Several doors on one panel, no flow, or any failure: the classic screen.
+  function syncFlow(state) {
+    var doc = state && state.visitor_flow, doors = (state && state.doors) || [];
+    if (!VF || !doc || doc.enabled !== true || doors.length !== 1 ||
+        (flowBrokenRevision && flowBrokenRevision === doc.revision)) { flowDrop(); return; }
+    try {
+      if (!flowWalker) flowWalker = VF.create(doc, LANG);
+      else if (doc.revision !== flowRevision) flowWalker.replace(doc);
+      if (flowWalker.snapshot().mode === "legacy") { flowDrop(); return; }
+      flowRevision = doc.revision;
+    } catch (e) { flowBrokenRevision = doc.revision; flowDrop(); }
+  }
+  function armIdle() {
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    if (!flowWalker || flowWalker.mode !== "page") return;
+    idleTimer = setTimeout(function () {
+      idleTimer = null;
+      if (!flowWalker || currentCall) return;
+      flowWalker.idleTimeout(); flowKey = ""; renderFlow();
+    }, flowWalker.idleSeconds() * 1000);
+  }
+  function armEnd() {
+    if (endTimer) { clearTimeout(endTimer); endTimer = null; }
+    if (!flowWalker || flowWalker.mode !== "end") return;
+    endTimer = setTimeout(function () {
+      endTimer = null;
+      if (flowWalker) { flowWalker.done(); flowKey = ""; renderFlow(); }
+    }, flowWalker.returnSeconds() * 1000);
+  }
+  function flowImageLimit() {
+    var h = window.innerHeight || document.documentElement.clientHeight || 600;
+    return Math.floor(h * 0.4);
+  }
+  function fillImages(box, images, place) {
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var any = false, limit = flowImageLimit();
+    for (var i = 0; i < images.length; i++) {
+      var im = images[i] || {};
+      if ((im.place === "below" ? "below" : "above") !== place || typeof im.url !== "string" ||
+          im.url.indexOf("/asset/") !== 0) continue;
+      var alt = VF.textIn(im.alt, LANG) || "";
+      var wrap = document.createElement("div"), img = document.createElement("img");
+      wrap.className = "flowImg";
+      img.alt = alt; img.setAttribute("src", im.url);
+      img.style.maxHeight = limit + "px";
+      img.onerror = (function (w, text) {
+        return function () {
+          while (w.firstChild) w.removeChild(w.firstChild);
+          var cap = document.createElement("div"); cap.className = "flowAlt"; C.setText(cap, text);
+          w.appendChild(cap);
+        };
+      })(wrap, alt);
+      wrap.appendChild(img); box.appendChild(wrap); any = true;
+    }
+    box.style.display = any ? "" : "none";
+  }
+  function fillBody(box, text) {
+    while (box.firstChild) box.removeChild(box.firstChild);
+    var paras = VF.paragraphs(text), i, j;
+    for (i = 0; i < paras.length; i++) {
+      var p = document.createElement("p");
+      for (j = 0; j < paras[i].length; j++) {
+        if (j) p.appendChild(document.createElement("br"));
+        p.appendChild(document.createTextNode(paras[i][j]));
+      }
+      box.appendChild(p);
+    }
+    box.style.display = paras.length ? "" : "none";
+  }
+  function fitFlow() {
+    var zone = $("flowOptions");
+    zone.style.maxHeight = Math.floor((window.innerHeight || 600) * 0.5) + "px";
+    zone.className = zone.scrollHeight > zone.clientHeight + 1 ? "scrollable" : "";
+    var imgs = $("flowView").getElementsByTagName("img"), limit = flowImageLimit();
+    for (var i = 0; i < imgs.length; i++) imgs[i].style.maxHeight = limit + "px";
+  }
+  function setFlowOptionsDisabled(disabled) {
+    var bs = $("flowOptions").getElementsByTagName("button");
+    for (var i = 0; i < bs.length; i++) bs[i].disabled = !!disabled;
+  }
+  function optionButton(option) {
+    var primary = option.semantic_id === "call.primary";
+    var b = document.createElement("button");
+    b.type = "button";
+    b.className = (primary ? "doorBtn" : "purposeBtn") + " flowOpt";
+    b.setAttribute("data-semantic-id", primary ? "call.primary" : "purpose.button");
+    b.setAttribute("data-option", String(option.id || ""));
+    if (typeof option.icon === "string" && option.icon) {
+      var icon = document.createElement("span");
+      icon.className = "pIcon"; icon.setAttribute("aria-hidden", "true");
+      C.setText(icon, option.icon); b.appendChild(icon);
+    }
+    var label = document.createElement("span");
+    label.className = "pLabel"; C.setText(label, VF.textIn(option.label, LANG) || "");
+    b.appendChild(label);
+    b.onclick = function () { onFlowOption(String(option.id || "")); };
+    return b;
+  }
+  function renderFlow() {
+    var on = !!flowWalker, shown = on && !currentCall && !!lastState;
+    var cls = document.body.className.replace(/ ?flowOn/, "");
+    if (on) cls += " flowOn";
+    if (cls !== document.body.className) document.body.className = cls;
+    var mode = shown ? flowWalker.mode : "";
+    if (mode !== "page" && mode !== "end") {
+      $("flowView").style.display = "none"; $("flowOptions").style.display = "none";
+      $("flowBack").style.display = "none"; $("flowDone").style.display = "none";
+      if (!shown) { flowKey = ""; flowClear(); }
+      return;
+    }
+    try {
+      flowWalker.setLang(LANG);
+      var snap = flowWalker.snapshot(), step = flowWalker.step(snap.page);
+      var key = [LANG, snap.mode, snap.page, flowRevision, snap.notice || "", snap.back ? 1 : 0].join("|");
+      if (key !== flowKey) {
+        flowKey = key;
+        var changedPage = flowPageSeen !== snap.page;
+        flowPageSeen = snap.page;
+        C.setText($("flowTitle"), VF.textIn(step.title, LANG) || "");
+        $("flowTitle").style.display = $("flowTitle").firstChild ? "" : "none";
+        var images = step.images instanceof Array ? step.images : [];
+        fillImages($("flowImgAbove"), images, "above");
+        fillBody($("flowBody"), VF.textIn(step.body, LANG));
+        fillImages($("flowImgBelow"), images, "below");
+        C.setText($("flowNotice"), snap.notice ? t(snap.notice) : "");
+        var zone = $("flowOptions");
+        while (zone.firstChild) zone.removeChild(zone.firstChild);
+        var options = flowWalker.options(), i;
+        for (i = 0; i < options.length; i++) zone.appendChild(optionButton(options[i]));
+        $("main").scrollTop = 0;
+        if (changedPage && $("flowTitle").focus && $("flowTitle").firstChild) {
+          try { $("flowTitle").focus(); } catch (e0) {}
+        }
+        if (snap.mode === "page") armIdle(); else armEnd();
+      }
+      $("flowView").style.display = "block";
+      $("flowOptions").style.display = snap.mode === "page" ? "" : "none";
+      $("flowBack").style.display = snap.back ? "block" : "none";
+      $("flowDone").style.display = snap.done ? "block" : "none";
+      $("visitorActions").className = "";
+      fitFlow();
+      DoorbellPanelRuntime.applySemanticUi(lastState, { page: "door" });
+    } catch (e) {
+      // A visitor is never stranded: any failure here leaves the classic call screen.
+      flowBrokenRevision = flowRevision; flowDrop();
+      $("flowView").style.display = "none"; $("flowOptions").style.display = "none";
+      $("flowBack").style.display = "none"; $("flowDone").style.display = "none";
+      document.body.className = document.body.className.replace(/ ?flowOn/, "");
+    }
+  }
+  function flowPress(purpose) {
+    var door = lastState && lastState.doors && lastState.doors[0];
+    if (!door || currentCall) return;
+    showCall(door.id, door.label, false);
+    reportVisitorLang(door.id);
+    beginPress(purpose);
+  }
+  function flowAct(act) {
+    if (act.act === "page" || act.act === "end") { flowKey = ""; renderFlow(); return; }
+    if (act.act === "press") { flowPress(act.purpose); return; }
+    if (act.act !== "notify") return;
+    flowBusy = true; setFlowOptionsDisabled(true);
+    var doorId = lastState && lastState.doors && lastState.doors[0] && lastState.doors[0].id;
+    R.panelRequest("POST", "/api/panel/visitor-notify", DoorbellCallFlow.notifyForm(doorId, act.step),
+      function (st, j) {
+        flowBusy = false; setFlowOptionsDisabled(false);
+        if (!flowWalker || currentCall) return;
+        // A throttled result is shown as sent; a failure rings instead.
+        flowAct(flowWalker.notifyResult(st >= 200 && st < 300 && !!j && j.ok === true, act.step));
+      });
+  }
+  function onFlowOption(id) {
+    if (!flowWalker || flowBusy || currentCall) return;
+    try { flowAct(flowWalker.tap(id)); }
+    catch (e) { flowBusy = false; flowBrokenRevision = flowRevision; flowDrop(); renderFlow(); }
+  }
+  $("flowBack").onclick = function () {
+    if (flowWalker) { flowWalker.back(); flowKey = ""; renderFlow(); }
+  };
+  $("flowDone").onclick = function () {
+    if (flowWalker) { flowWalker.done(); flowKey = ""; renderFlow(); }
+  };
+  (function () {
+    function touched() { if (flowWalker && flowWalker.mode === "page") armIdle(); }
+    var names = ["touchstart", "mousedown", "keydown", "scroll"], i;
+    if (document.addEventListener)
+      for (i = 0; i < names.length; i++) document.addEventListener(names[i], touched, true);
+    window.addEventListener("resize", fitFlow, false);
+    window.addEventListener("orientationchange", fitFlow, false);
+  })();
+
   var failCount = 0;
   function render(state) {
     lastState = state;
@@ -545,6 +770,7 @@
     lastCallFlow = DoorbellCallFlow.flowMode(state.call_flow);
     lastPurposes = state.purposes || [];
     renderDoors(state.doors || []);
+    syncFlow(state);
     renderReply(state.reply);
     if (showingReply()) {
       var rd = state.doors || [], k;
@@ -558,7 +784,9 @@
         if (state.doors[i].id === currentCall.door) { match = state.doors[i]; break; }
     } else {
       for (i = 0; i < (state.doors || []).length; i++) if (state.doors[i].calling) {
-        match = state.doors[i]; showCall(match.id, match.label, false); break;
+        match = state.doors[i]; showCall(match.id, match.label, false);
+        if (flowWalker) flowWalker.adoptCall();
+        break;
       }
     }
     if (currentCall && currentCall.preflight) {
@@ -601,9 +829,11 @@
         }
         else if (match.call_state === "cancelled") {
           $("callStatus").innerHTML = esc(t("panel.call_cancelled"));
+          currentCall.endReason = "cancelled";
           $("cancelCall").disabled = true; scheduleReset(currentCall, 3500);
         } else if (match.call_state === "expired" || match.call_state === "ended") {
           $("callStatus").innerHTML = esc(t("panel.call_finished"));
+          currentCall.endReason = match.call_state === "expired" ? "timeout" : "ended";
           $("cancelCall").disabled = true; scheduleReset(currentCall, 3500);
         } else if (match.calling)
           $("callStatus").innerHTML = esc(t("panel.resident_notified"));
@@ -620,6 +850,7 @@
     if (state.display && state.display.theme) C.applyHomeTheme(state.display.theme);
     var pending = currentCall && !currentCall.preflight && !currentCall.inCall && !currentCall.terminal;
     $("callingView").className = pending ? "pending" : "";
+    renderFlow();
     DoorbellPanelRuntime.applySemanticUi(state, { page: "door" });
   }
   function poll() {

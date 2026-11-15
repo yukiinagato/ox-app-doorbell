@@ -687,6 +687,19 @@ var AdminLogic = (function () {
     }
     ops.forEach(function (op) {
       var before = configAt(base, op.key);
+      // A visitor-flow step is one whole object; Core refuses any key below it.
+      if (op.op !== "delete" && /^visitor_flow\.steps\.[^.]+$/.test(op.key) && isObj(op.value)) {
+        if (!sameJson(before, op.value)) {
+          var whole = { key: op.key, path: [], before: cloneJson(before), value: cloneJson(op.value), op: "set", atomic: true };
+          if (isObj(before)) {
+            var dropped = [];
+            for (var member in before) if (own(before, member) && !own(op.value, member)) dropped.push(member);
+            if (dropped.length) whole.remove_fields = dropped;
+          }
+          changes.push(whole);
+        }
+        return;
+      }
       if (op.op === "delete") {
         if (before !== undefined) changes.push({ key: op.key, path: [], before: cloneJson(before), op: "delete" });
       } else diff(op.key, [], before, op.value);
@@ -706,6 +719,14 @@ var AdminLogic = (function () {
       var next = { key: change.key, path: change.path.slice(), op: change.op,
                    before: cloneJson(now), value: cloneJson(change.value),
                    parents: configParents(current, change.key.split(".").concat(change.path)) };
+      if (change.atomic) {
+        next.atomic = true;
+        if (isObj(now)) {
+          var dropped = [];
+          for (var member in now) if (own(now, member) && !own(change.value, member)) dropped.push(member);
+          if (dropped.length) next.remove_fields = dropped;
+        }
+      }
       var structureChanged = (change.parents || []).some(function (parent) {
         var value = configAt(current, parent.path);
         return parent.object !== isObj(value) || (!parent.object && !sameJson(parent.value, value));
@@ -748,6 +769,7 @@ var AdminLogic = (function () {
       if (!patch || !change.path.length) {
         var whole = { op: change.op, key: key };
         if (change.op === "set") whole.value = cloneJson(change.value);
+        if (change.remove_fields) whole.remove_fields = change.remove_fields.slice();
         ops.push(whole); return;
       }
       var value = groupFor(change.key).value;
@@ -3179,6 +3201,329 @@ var AdminLogic = (function () {
     return { sensors: sensors, hosts: hosts, full: Object.keys(defs).length >= AIR_SENSOR_MAX };
   }
 
+  /* ---------------- Visitor flow editor (docs/en/visitor-flow-contract.md section 8) ----------------
+   * The editor works on a draft in configuration shape: {enabled, start, idle_s, require_call,
+   * steps{}, door_starts{}}. A save writes the four leaves, one whole object per changed step and
+   * the per-door start leaves, all in one batch. The validation below mirrors Core's write rules
+   * so mistakes show next to the field as they are made; Core's own refusal is shown the same way.
+   */
+  var FLOW_ID = /^[A-Za-z0-9_-]{1,32}$/;
+  var FLOW_KINDS = ["page", "call", "notify", "end"];
+  var FLOW = { steps: 32, options: 12, depth: 6, images: 2, title: 60, body: 600, paragraphs: 8,
+               label: 40, message: 200, alt: 120, idle_min: 15, idle_max: 300, idle_default: 45,
+               return_min: 3, return_max: 60, return_default: 8, crowded: 4 };
+
+  function flowIdValid(id) { return typeof id === "string" && FLOW_ID.test(id) && id.indexOf("__") !== 0; }
+  function flowText(map) {
+    if (!isObj(map)) return false;
+    for (var k in map) if (own(map, k) && typeof map[k] === "string" && map[k] !== "") return true;
+    return false;
+  }
+  function flowTextIn(map, lang) {
+    if (!isObj(map)) return "";
+    var order = [lang, "ja", "en", "zh"], i, k;
+    for (i = 0; i < order.length; i++) if (typeof map[order[i]] === "string" && map[order[i]]) return map[order[i]];
+    for (k in map) if (own(map, k) && typeof map[k] === "string" && map[k]) return map[k];
+    return "";
+  }
+  function flowCodePoints(s) { return Array.from(String(s)).length; }
+  function flowParagraphs(s) {
+    var n = 0, parts = String(s).replace(/\r\n?/g, "\n").split(/\n{2,}/);
+    for (var i = 0; i < parts.length; i++) if (parts[i] !== "") n++;
+    return n;
+  }
+  function flowKeys(obj) { var out = []; for (var k in obj) if (own(obj, k)) out.push(k); return out; }
+
+  // The configured flow, or null while no step was ever written (Core then serves its built-in
+  // wizard and the editor starts from a template).
+  function flowDraftFromConfig(cfg) {
+    var vf = isObj(cfg && cfg.visitor_flow) ? cfg.visitor_flow : {};
+    if (!isObj(vf.steps) || !flowKeys(vf.steps).length) return null;
+    var starts = {}, doors = (cfg && cfg.doors) || {};
+    for (var d in doors) if (own(doors, d) && isObj(doors[d]) && isObj(doors[d].visitor_flow) &&
+                             typeof doors[d].visitor_flow.start === "string")
+      starts[d] = doors[d].visitor_flow.start;
+    return { enabled: vf.enabled !== false, start: typeof vf.start === "string" ? vf.start : "",
+             idle_s: typeof vf.idle_s === "number" ? vf.idle_s : FLOW.idle_default,
+             require_call: vf.require_call !== false, steps: cloneJson(vf.steps), door_starts: starts };
+  }
+  function flowDraftFromTemplate(template, cfg) {
+    var flow = isObj(template) ? template : {}, starts = {}, doors = (cfg && cfg.doors) || {};
+    var steps = isObj(flow.steps) ? cloneJson(flow.steps) : {};
+    for (var d in doors) if (own(doors, d) && isObj(doors[d]) && isObj(doors[d].visitor_flow) &&
+        steps[doors[d].visitor_flow.start] && steps[doors[d].visitor_flow.start].kind === "page")
+      starts[d] = doors[d].visitor_flow.start;
+    return { enabled: flow.enabled !== false, start: typeof flow.start === "string" ? flow.start : "",
+             idle_s: typeof flow.idle_s === "number" ? flow.idle_s : FLOW.idle_default,
+             require_call: flow.require_call !== false, steps: steps, door_starts: starts };
+  }
+
+  // Steps in reading order: the start page, then everything reached from it, then the rest.
+  function flowStepOrder(draft) {
+    var steps = draft.steps || {}, out = [], seen = {};
+    function visit(id) {
+      if (typeof id !== "string" || seen[id] || !own(steps, id)) return;
+      seen[id] = true; out.push(id);
+      var s = steps[id];
+      if (s.kind === "page") (s.options instanceof Array ? s.options : []).forEach(function (o) { visit(o && o.to); });
+      if (s.kind === "call") visit(s.on_unanswered);
+      if (s.kind === "notify") visit(s.to);
+    }
+    visit(draft.start);
+    flowKeys(draft.door_starts || {}).forEach(function (d) { visit(draft.door_starts[d]); });
+    flowKeys(steps).forEach(visit);
+    return out;
+  }
+
+  // Steps whose options, notify target or unanswered branch lead to id.
+  function flowReferrers(draft, id) {
+    var out = [];
+    flowKeys(draft.steps || {}).forEach(function (sid) {
+      var s = draft.steps[sid], hit = false;
+      if (s.kind === "page") (s.options instanceof Array ? s.options : []).forEach(function (o) { if (o && o.to === id) hit = true; });
+      if (s.kind === "call" && s.on_unanswered === id) hit = true;
+      if (s.kind === "notify" && s.to === id) hit = true;
+      if (hit && sid !== id) out.push(sid);
+    });
+    if (draft.start === id) out.push("start");
+    flowKeys(draft.door_starts || {}).forEach(function (d) { if (draft.door_starts[d] === id) out.push(d); });
+    return out;
+  }
+
+  function flowCameras(cfg) {
+    var out = [], ms = (cfg && cfg.media_sources) || {};
+    for (var id in ms) if (own(ms, id) && isObj(ms[id]) && isObj(ms[id].streams) &&
+        isObj(ms[id].streams.snapshot) && typeof ms[id].streams.snapshot.url === "string" &&
+        ms[id].streams.snapshot.url) out.push({ id: id, name: typeof ms[id].name === "string" && ms[id].name ? ms[id].name : id });
+    out.sort(function (a, b) { return a.id < b.id ? -1 : 1; });
+    return out;
+  }
+
+  function flowReachesCall(steps, entry) {
+    var seen = {}, queue = [entry];
+    while (queue.length) {
+      var id = queue.pop();
+      if (!id || seen[id]) continue;
+      seen[id] = true;
+      var s = steps[id];
+      if (!isObj(s)) continue;
+      if (s.kind === "call") return true;
+      if (s.kind === "notify") queue.push(s.to);
+      if (s.kind === "page") (s.options instanceof Array ? s.options : []).forEach(function (o) {
+        if (o && o.enabled !== false) queue.push(o.to);
+      });
+    }
+    return false;
+  }
+
+  // {errors, warnings}: each {code, key, step, option, field}; key is the i18n key.
+  function flowValidate(draft, cfg) {
+    var errors = [], warnings = [], steps = isObj(draft && draft.steps) ? draft.steps : {};
+    var purposes = (cfg && cfg.visit_purposes) || {}, assets = (cfg && cfg.assets) || {};
+    var cameras = flowCameras(cfg), ids = flowKeys(steps);
+    function err(code, step, option, field) {
+      errors.push({ code: code, key: "visitor_flow." + code, step: step || "", option: option || "", field: field || "" });
+    }
+    function targetOk(from, to, option, wantKind, code) {
+      if (!own(steps, to)) { err("unknown_target", from, option); return false; }
+      if (wantKind && steps[to].kind !== wantKind) { err(code || "bad_target_kind", from, option); return false; }
+      return true;
+    }
+    function textOk(map, max, paragraphs) {
+      if (!isObj(map)) return true;
+      for (var k in map) if (own(map, k) && typeof map[k] === "string") {
+        if (flowCodePoints(map[k]) > max) return false;
+        if (paragraphs && flowParagraphs(map[k]) > paragraphs) return false;
+      }
+      return true;
+    }
+    if (ids.length > FLOW.steps) err("too_many_steps");
+    ids.forEach(function (id) {
+      var s = steps[id];
+      if (!flowIdValid(id)) err("bad_step_id", id);
+      if (!isObj(s) || FLOW_KINDS.indexOf(s.kind) < 0) { err("unknown_kind", id); return; }
+      if (s.kind === "page" || s.kind === "end") {
+        if (!textOk(s.title, FLOW.title)) err("bad_text", id, "", "title");
+        if (!textOk(s.body, FLOW.body, FLOW.paragraphs)) err("bad_text", id, "", "body");
+        var images = s.images instanceof Array ? s.images : [];
+        if (images.length > FLOW.images) err("bad_images", id);
+        images.forEach(function (im, i) {
+          if (!im || !own(assets, im.asset) || String((assets[im.asset] || {}).type || "").indexOf("image/") !== 0)
+            err("unknown_asset", id, "", "image." + i);
+          if (!textOk(im && im.alt, FLOW.alt)) err("bad_text", id, "", "image." + i + ".alt");
+        });
+      }
+      if (s.kind === "page") {
+        var options = s.options instanceof Array ? s.options : [], primaries = 0;
+        if (!options.length) err("no_options", id);
+        if (options.length > FLOW.options) err("too_many_options", id);
+        options.forEach(function (o) {
+          var oid = o && o.id || "";
+          if (!flowIdValid(oid)) err("bad_option_id", id, oid);
+          if (!flowText(o.label) && !o.purpose) err("option_needs_label", id, oid);
+          if (!textOk(o.label, FLOW.label)) err("bad_text", id, oid, "label");
+          if (o.purpose && !own(purposes, o.purpose)) err("unknown_purpose", id, oid);
+          if (o.style === "primary" && ++primaries === 2) err("multiple_primary", id);
+          targetOk(id, o.to, oid);
+        });
+      } else if (s.kind === "call") {
+        if (s.purpose && !own(purposes, s.purpose)) err("unknown_purpose", id);
+        if (s.on_unanswered) targetOk(id, s.on_unanswered, "", "page");
+      } else if (s.kind === "notify") {
+        if (!flowText(s.message) || !textOk(s.message, FLOW.message)) err("bad_text", id, "", "message");
+        if (s.purpose && !own(purposes, s.purpose)) err("unknown_purpose", id);
+        targetOk(id, s.to, "", "end");
+        if (isObj(s.snapshot) && s.snapshot.source === "media_source") {
+          var found = false;
+          cameras.forEach(function (c) { if (c.id === s.snapshot.id) found = true; });
+          if (!found) err("unknown_camera", id);
+        }
+      } else if (s.kind === "end") {
+        if (s.return_s !== undefined && !(s.return_s >= FLOW.return_min && s.return_s <= FLOW.return_max && Math.floor(s.return_s) === s.return_s))
+          err("bad_return_s", id, "", "return_s");
+      }
+    });
+    var entries = [];
+    if (!draft || !draft.start) err("missing_start");
+    else entries.push(["start", draft.start]);
+    flowKeys((draft && draft.door_starts) || {}).forEach(function (d) { if (draft.door_starts[d]) entries.push([d, draft.door_starts[d]]); });
+    entries.forEach(function (e) { targetOk(e[0], e[1], "", "page"); });
+    var memo = {}, loop = false;
+    function depth(id, visiting) {
+      var s = steps[id];
+      if (!isObj(s) || s.kind !== "page") return 0;
+      if (own(memo, id)) return memo[id];
+      if (visiting[id]) { loop = true; return 0; }
+      visiting[id] = true;
+      var deepest = 0;
+      (s.options instanceof Array ? s.options : []).forEach(function (o) { deepest = Math.max(deepest, depth(o && o.to, visiting)); });
+      delete visiting[id];
+      memo[id] = deepest + 1;
+      return deepest + 1;
+    }
+    ids.forEach(function (id) {
+      var d = depth(id, {});
+      if (loop) { err("cycle", id); loop = false; }
+      else if (d > FLOW.depth) err("too_deep", id);
+    });
+    var requireCall = !draft || draft.require_call !== false;
+    for (var i = 0; i < entries.length; i++) {
+      if (steps[entries[i][1]] && flowReachesCall(steps, entries[i][1])) continue;
+      if (!steps[entries[i][1]]) continue;
+      if (requireCall) err("no_reachable_call", entries[i][0]);
+      else { warnings.push({ code: "no_call", key: "visitor_flow.no_call", step: "", option: "", field: "" }); break; }
+    }
+    ids.forEach(function (id) {
+      var s = steps[id];
+      if (isObj(s) && s.kind === "page" && (flowText(s.body) || (s.images && s.images.length)) &&
+          (s.options || []).length > FLOW.crowded)
+        warnings.push({ code: "crowded_page", key: "visitor_flow.crowded_page", step: id, option: "", field: "" });
+    });
+    return { errors: errors, warnings: warnings };
+  }
+
+  // "visitor_flow.<code>[: <step>[.<option>]]" from Core's refusal.
+  function flowParseError(text) {
+    var m = /^visitor_flow\.([a-z_]+)(?:: ?([^.]*)(?:\.([^.]*))?(?:\.(.*))?)?$/.exec(String(text || ""));
+    if (!m) return null;
+    var second = m[3] || "", third = m[4] || "";
+    // "<step>.title" names a field of the step, "<step>.<option>[.label]" an option.
+    if (/^(title|body|message|image|return_s)$/.test(second)) { third = third ? second + "." + third : second; second = ""; }
+    return { code: m[1], key: "visitor_flow." + m[1], step: m[2] || "", option: second, field: third };
+  }
+
+  // Configuration-shaped draft to the resolved document a shell would receive (the simulator's
+  // input): purposes inlined, hidden options removed.
+  function flowResolve(draft, cfg, door) {
+    var steps = {}, purposes = (cfg && cfg.visit_purposes) || {};
+    flowKeys(draft.steps || {}).forEach(function (id) {
+      var s = draft.steps[id], out = { kind: s.kind };
+      if (s.kind === "page" || s.kind === "end") {
+        if (flowText(s.title)) out.title = cloneJson(s.title);
+        if (flowText(s.body)) out.body = cloneJson(s.body);
+        out.images = (s.images instanceof Array ? s.images : []).filter(function (im) { return im && im.asset; }).map(function (im) {
+          return { asset: im.asset, url: "/asset/" + im.asset, alt: cloneJson(im.alt || {}), place: im.place === "below" ? "below" : "above" };
+        });
+      }
+      if (s.kind === "page") {
+        out.options = [];
+        (s.options instanceof Array ? s.options : []).forEach(function (o) {
+          if (!o || o.enabled === false) return;
+          var p = o.purpose ? purposes[o.purpose] : null;
+          if (o.purpose && (!p || p.enabled === false)) return;
+          // An option that would ring or notify for a switched-off purpose is hidden too.
+          var target = (draft.steps || {})[o.to];
+          if (target && (target.kind === "call" || target.kind === "notify") && target.purpose &&
+              (!purposes[target.purpose] || purposes[target.purpose].enabled === false)) return;
+          var primary = o.style === "primary";
+          var label = flowText(o.label) ? o.label : (p && p.label) || {};
+          var item = { id: o.id, semantic_id: primary ? "call.primary" : "purpose.button", label: cloneJson(label),
+                       icon: typeof o.icon === "string" && o.icon ? o.icon : (p && p.icon) || "",
+                       style: primary ? "primary" : "normal", to: o.to };
+          if (o.purpose) item.purpose = o.purpose;
+          out.options.push(item);
+        });
+      } else if (s.kind === "call") {
+        if (s.purpose) out.purpose = s.purpose;
+        if (s.on_unanswered) out.on_unanswered = s.on_unanswered;
+      } else if (s.kind === "notify") {
+        if (s.purpose) out.purpose = s.purpose;
+        out.to = s.to;
+      } else if (s.kind === "end") out.return_s = s.return_s || FLOW.return_default;
+      steps[id] = out;
+    });
+    var start = (door && draft.door_starts && draft.door_starts[door]) || draft.start;
+    return { schema_version: 1, enabled: draft.enabled !== false, door: door || "", source: "config", start: start,
+             idle_s: draft.idle_s || FLOW.idle_default, require_call: draft.require_call !== false,
+             steps: steps, issues: [] };
+  }
+
+  // Everything an editor save can touch, for a stale-draft check before a plain batch (which has
+  // no revision of its own).
+  function flowSignature(cfg) {
+    var starts = {}, doors = (cfg && cfg.doors) || {};
+    for (var d in doors) if (own(doors, d) && isObj(doors[d]) && isObj(doors[d].visitor_flow)) starts[d] = doors[d].visitor_flow;
+    return JSON.stringify([cfg && cfg.visitor_flow || null, starts]);
+  }
+
+  // The batch body for a plan: plain whole-value sets and deletes (Core replaces a whole step).
+  function flowBatchOps(plan) {
+    var ops = [];
+    plan.entries.forEach(function (e) { ops.push({ op: "set", key: e.key, value: e.value }); });
+    plan.dels.forEach(function (k) { ops.push({ op: "delete", key: k }); });
+    return ops;
+  }
+
+  // The config writes that turn the stored flow into the draft. Never a container, never a key
+  // below a step; deleting every step is not expressible here (Reset deletes visitor_flow).
+  function flowEntries(cfg, draft) {
+    var stored = isObj(cfg && cfg.visitor_flow) ? cfg.visitor_flow : {}, entries = [], dels = [];
+    var storedSteps = isObj(stored.steps) ? stored.steps : {};
+    var fresh = !flowKeys(storedSteps).length;
+    function leaf(name, value, current, absent) {
+      if (fresh || !sameJson(current === undefined ? absent : current, value)) entries.push({ key: "visitor_flow." + name, value: value });
+    }
+    leaf("enabled", draft.enabled !== false, stored.enabled, true);
+    leaf("start", draft.start, stored.start, undefined);
+    leaf("idle_s", draft.idle_s, stored.idle_s, FLOW.idle_default);
+    leaf("require_call", draft.require_call !== false, stored.require_call, true);
+    flowStepOrder(draft).forEach(function (id) {
+      if (!sameJson(storedSteps[id], draft.steps[id])) entries.push({ key: "visitor_flow.steps." + id, value: draft.steps[id] });
+    });
+    flowKeys(storedSteps).forEach(function (id) { if (!own(draft.steps, id)) dels.push("visitor_flow.steps." + id); });
+    var doors = (cfg && cfg.doors) || {}, names = {};
+    flowKeys(doors).forEach(function (d) { names[d] = true; });
+    flowKeys(draft.door_starts || {}).forEach(function (d) { names[d] = true; });
+    flowKeys(names).forEach(function (d) {
+      var now = isObj(doors[d]) && isObj(doors[d].visitor_flow) ? doors[d].visitor_flow.start : undefined;
+      var want = draft.door_starts && draft.door_starts[d] ? draft.door_starts[d] : undefined;
+      if (want === now) return;
+      if (want) entries.push({ key: "doors." + d + ".visitor_flow.start", value: want });
+      else dels.push("doors." + d + ".visitor_flow.start");
+    });
+    return { entries: entries, dels: dels };
+  }
+
   return {
     parseList: parseList, parseChatIds: parseChatIds, labelObj: labelObj, labelOf: labelOf,
     buildingEntries: buildingEntries, doorEntries: doorEntries,
@@ -3281,6 +3626,11 @@ var AdminLogic = (function () {
     filterSettings: filterSettings,
     AIR_SENSOR_MAX: AIR_SENSOR_MAX, AIR_SENSOR_KIND: AIR_SENSOR_KIND,
     airSensorName: airSensorName, airSensorId: airSensorId,
+    FLOW: FLOW, flowIdValid: flowIdValid, flowTextIn: flowTextIn, flowDraftFromConfig: flowDraftFromConfig,
+    flowDraftFromTemplate: flowDraftFromTemplate, flowStepOrder: flowStepOrder,
+    flowReferrers: flowReferrers, flowCameras: flowCameras, flowValidate: flowValidate,
+    flowParseError: flowParseError, flowResolve: flowResolve, flowEntries: flowEntries,
+    flowSignature: flowSignature, flowBatchOps: flowBatchOps,
     airSensorAddPlan: airSensorAddPlan, airSensorRemoveEntries: airSensorRemoveEntries,
     airDeviceEntries: airDeviceEntries, airDeviceSettings: airDeviceSettings,
     airDeviceSupport: airDeviceSupport, airLevel: airLevel, airSectionModel: airSectionModel
@@ -3721,6 +4071,11 @@ if (typeof document !== "undefined") (function () {
     return out;
   }
   var mockConfigRevision = 1;
+  var MOCK_FLOW_TEMPLATE = { enabled: true, start: "s_home", idle_s: 45, require_call: true, steps: {
+    s_home: { kind: "page", title: { ja: "ご用件をお選びください", en: "How can we help?", zh: "请选择来访目的" },
+              options: [{ id: "o_call", label: { ja: "呼び出す", en: "Call", zh: "呼叫" }, style: "primary", to: "c_any" },
+                        { id: "o_visit", purpose: "p_visit", to: "c_visit" }] },
+    c_any: { kind: "call" }, c_visit: { kind: "call", purpose: "p_visit" } } };
   function mockApi(method, path, body, cb) {
     var p = path.split("?")[0];
     function ok(j) { setTimeout(function () { cb(200, j); }, 0); }
@@ -3731,6 +4086,8 @@ if (typeof document !== "undefined") (function () {
       if (p === "/api/events") return ok({ events: MOCK_EVENTS });
       if (p === "/api/logs") return ok({ logs: ["I mock: this is a mock log entry"] });
       if (p === "/api/pairing") return ok(mockPairSnapshot());
+      if (p === "/api/visitor-flow") return ok({ schema_version: 1, enabled: true, door: "d_front", source: "default", revision: "mock", start: "s_home", steps: {} });
+      if (p === "/api/visitor-flow/template") return ok({ ok: true, flow: MOCK_FLOW_TEMPLATE });
       return setTimeout(function () { cb(404, null); }, 0);
     }
     if (method === "DELETE" && p.indexOf("/api/assets/") === 0) {
@@ -6756,14 +7113,652 @@ if (typeof document !== "undefined") (function () {
     bindDynamic(m);
   }
 
+  /* ================= Visitor flow editor (Rules tab card + modal editor) =================
+   * The modal edits a draft in configuration shape (L.flowDraftFromConfig). Nothing is written
+   * until Save, which sends the leaves, the changed whole steps and the deleted steps as one
+   * batch (L.flowEntries). The simulator walks the unsaved draft with the same walker the door
+   * page uses (/panel/visitor-flow.js). */
+  var FLOWUI = null;
+  var FLOW_KIND_KEYS = { page: "flow_editor.kind_page", call: "flow_editor.kind_call",
+                         notify: "flow_editor.kind_notify", end: "flow_editor.kind_end" };
+
+  function flowAvailable() { return !!(S.flowProbe && S.flowProbe.support); }
+  function flowStored() { return L.flowDraftFromConfig(S.cfg || {}); }
+  function flowStepName(draft, id) {
+    var s = draft.steps[id] || {};
+    var name = (s.kind === "page" || s.kind === "end") ? L.flowTextIn(s.title, LANG) : "";
+    if (!name && s.kind === "notify") name = L.flowTextIn(s.message, LANG);
+    if (!name && s.kind === "call") name = s.purpose ? L.labelOf((cfgObj("visit_purposes") || {})[s.purpose], LANG, s.purpose) : t("flow_editor.purpose_none");
+    return name;
+  }
+  function flowStepLabel(draft, id) {
+    var s = draft.steps[id] || {}, name = flowStepName(draft, id);
+    return t(FLOW_KIND_KEYS[s.kind] || "flow_editor.kind_page") + (name ? ": " + name : "") + " (" + id + ")";
+  }
+  function flowIssueText(issue, draft) {
+    var where = issue.step ? " " + (draft && draft.steps[issue.step] ? flowStepLabel(draft, issue.step) : issue.step) : "";
+    var known = I18N[issue.key];
+    return known ? known + (issue.step && !FLOWUI_NOWHERE[issue.code] ? " —" + where : "")
+                 : fmt(t("visitor_flow.invalid"), { detail: issue.code + (issue.step ? ": " + issue.step + (issue.option ? "." + issue.option : "") : "") });
+  }
+  var FLOWUI_NOWHERE = { missing_start: 1, too_many_steps: 1, no_call: 1 };
+
+  // ---- Rules tab card ----
+  function flowCardHtml() {
+    var doc = S.flowProbe && S.flowProbe.doc, stored = flowStored();
+    var status;
+    if (stored && stored.enabled === false) status = t("flow_editor.status_off");
+    else if (stored) status = fmt(t("flow_editor.status_custom"), { n: Object.keys(stored.steps).length });
+    else if (doc && doc.enabled === false && doc.reason === "legacy_call_flow") status = t("flow_editor.status_legacy");
+    else if (doc && doc.enabled === false) status = t("flow_editor.status_off");
+    else status = t("flow_editor.default_note");
+    var enabled = stored ? stored.enabled !== false : !(doc && doc.enabled === false && doc.reason === "disabled");
+    return "<div class='card' id='flowCard'><h2>" + esc(t("flow_editor.title")) + "</h2>" +
+      "<label class='frow-check'><span>" + esc(t("flow_editor.enabled")) + "</span><input type='checkbox' id='flowEnabled'" +
+      (enabled ? " checked" : "") + "></label><div class='dim fhint'>" + esc(t("flow_editor.enabled_hint")) + "</div>" +
+      "<div class='fhint' id='flowStatus' role='status'>" + esc(status) + "</div>" +
+      "<div class='actions'><button class='btn small' id='flowEdit'>" + icon("pencil") + " " + esc(t(stored ? "flow_editor.edit" : "flow_editor.customize")) +
+      "</button> <button class='btn2' id='flowTry'>" + icon("player-play") + " " + esc(t("flow_editor.preview")) + "</button>" +
+      (stored ? " <button class='btn2 danger' id='flowReset'>" + esc(t("flow_editor.reset_default")) + "</button>" : "") +
+      "</div></div>";
+  }
+  function flowCardBind(root) {
+    var enabled = root.querySelector("#flowEnabled");
+    if (!enabled) return;
+    enabled.onchange = function () {
+      // One leaf. With no stored steps this only switches the built-in wizard on or off.
+      saveAndRefresh([{ key: "visitor_flow.enabled", value: enabled.checked }], null);
+    };
+    root.querySelector("#flowEdit").onclick = function () { openFlowEditor("steps"); };
+    root.querySelector("#flowTry").onclick = function () { openFlowEditor("try"); };
+    var reset = root.querySelector("#flowReset");
+    if (reset) reset.onclick = function () {
+      if (!window.confirm(t("flow_editor.reset_default_confirm"))) return;
+      saveAndRefresh(null, ["visitor_flow"]);
+    };
+  }
+  function flowProbe(rerender) {
+    api("GET", "/api/visitor-flow", null, function (st, j) {
+      var support = st === 200 && j && j.schema_version === 1;
+      var before = JSON.stringify(S.flowProbe || null);
+      S.flowProbe = { support: !!support, doc: support ? j : null };
+      if (JSON.stringify(S.flowProbe) !== before && S.tab === "rules") rerender();
+    });
+  }
+
+  // ---- Draft access ----
+  function fdGet(path) {
+    var node = FLOWUI.draft;
+    for (var i = 0; i < path.length; i++) { if (node === undefined || node === null) return undefined; node = node[path[i]]; }
+    return node;
+  }
+  var FLOW_TEXT_FIELDS = { title: 1, body: 1, label: 1, alt: 1, message: 1 };
+  function fdSet(path, value) {
+    var node = FLOWUI.draft, i, key;
+    for (i = 0; i < path.length - 1; i++) {
+      key = path[i];
+      if (node[key] === undefined || node[key] === null) node[key] = /^\d+$/.test(path[i + 1]) ? [] : {};
+      node = node[key];
+    }
+    key = path[path.length - 1];
+    if (value === undefined || value === "") {
+      delete node[key];
+      // A text map with no language left is dropped, not stored empty.
+      var parent = fdGet(path.slice(0, -1));
+      if (path.length >= 3 && FLOW_TEXT_FIELDS[path[path.length - 2]] && uiLangs().indexOf(key) >= 0 && parent && !Object.keys(parent).length)
+        delete fdGet(path.slice(0, -2))[path[path.length - 2]];
+    } else node[key] = value;
+  }
+  function fdSteps() { return FLOWUI.draft.steps; }
+  function fdPages() { return L.flowStepOrder(FLOWUI.draft).filter(function (id) { return fdSteps()[id].kind === "page"; }); }
+  function fdNewId(prefix) {
+    var i = 1; while (fdSteps()[prefix + i] !== undefined) i++;
+    return prefix + i;
+  }
+  function fdEnsureCall() {
+    var ids = Object.keys(fdSteps());
+    for (var i = 0; i < ids.length; i++) if (fdSteps()[ids[i]].kind === "call" && !fdSteps()[ids[i]].purpose) return ids[i];
+    var id = fdSteps().c_any === undefined ? "c_any" : fdNewId("c_");
+    fdSteps()[id] = { kind: "call" };
+    return id;
+  }
+  function fdEnsureEnd() {
+    var ids = Object.keys(fdSteps());
+    for (var i = 0; i < ids.length; i++) if (fdSteps()[ids[i]].kind === "end") return ids[i];
+    var id = fdSteps().e_thanks === undefined ? "e_thanks" : fdNewId("e_");
+    fdSteps()[id] = { kind: "end", return_s: L.FLOW.return_default };
+    return id;
+  }
+  function fdNewStep(kind) {
+    var prefix = { page: "s_", call: "c_", notify: "n_", end: "e_" }[kind], id = fdNewId(prefix), step;
+    if (kind === "page") step = { kind: "page", options: [{ id: "o_1", label: {}, style: "primary", to: fdEnsureCall() }] };
+    else if (kind === "call") step = { kind: "call" };
+    else if (kind === "notify") step = { kind: "notify", message: {}, to: fdEnsureEnd() };
+    else step = { kind: "end", return_s: L.FLOW.return_default };
+    fdSteps()[id] = step;
+    return id;
+  }
+  function fdOptionId(page) {
+    var used = {}; (page.options || []).forEach(function (o) { used[o.id] = true; });
+    var i = 1; while (used["o_" + i]) i++;
+    return "o_" + i;
+  }
+  // Moving to another kind keeps what the new kind also carries and drops the rest.
+  function fdChangeKind(id, kind) {
+    var old = fdSteps()[id], next = { kind: kind };
+    if ((kind === "page" || kind === "end") && (old.kind === "page" || old.kind === "end")) {
+      ["title", "body", "images"].forEach(function (f) { if (old[f] !== undefined) next[f] = old[f]; });
+    }
+    if (kind === "page") next.options = [{ id: "o_1", label: {}, style: "primary", to: fdEnsureCall() }];
+    if (kind === "end") next.return_s = L.FLOW.return_default;
+    if (kind === "notify") { next.message = {}; next.to = fdEnsureEnd(); }
+    if ((kind === "call" || kind === "notify") && old.purpose) next.purpose = old.purpose;
+    fdSteps()[id] = next;
+  }
+
+  // ---- Editor markup ----
+  function flSlot(key) { return "<div class='err fhint' data-slot='" + esc(key) + "' role='alert'></div>"; }
+  function flTextInputs(path, map, max, multiline) {
+    var h = "";
+    uiLangs().forEach(function (lg) {
+      var value = isObj(map) && typeof map[lg] === "string" ? map[lg] : "";
+      h += "<label class='fl-lang'><span class='tag'>" + esc(lg) + "</span>" +
+        (multiline ? "<textarea rows='3' maxlength='" + (max * 2) + "'" : "<input type='text' maxlength='" + (max * 2) + "'") +
+        " lang='" + esc(lg) + "' data-fp='" + esc(path.concat([lg]).join(".")) + "' data-ft='text' aria-label='" + esc(lg) + "'" +
+        (multiline ? ">" + esc(value) + "</textarea>" : " value='" + esc(value) + "'>") + "</label>";
+    });
+    return h;
+  }
+  function flSelect(path, current, options, extra) {
+    var h = "<select data-fp='" + esc(path.join(".")) + "' data-ft='sel' " + (extra || "") + ">";
+    options.forEach(function (o) {
+      h += "<option value='" + esc(o.v) + "'" + (o.v === current ? " selected" : "") + ">" + esc(o.label) + "</option>";
+    });
+    return h + "</select>";
+  }
+  function flPurposeOptions(emptyKey) {
+    var ps = cfgObj("visit_purposes"), ids = sortedPurposeIds(), o = [{ v: "", label: t(emptyKey) }];
+    ids.forEach(function (id) { o.push({ v: id, label: L.labelOf(ps[id], LANG, id) + " (" + id + ")" }); });
+    return o;
+  }
+  function flTargetOptions(wantKind, current) {
+    var d = FLOWUI.draft, o = [{ v: "", label: t("flow_editor.target_choose") }];
+    L.flowStepOrder(d).forEach(function (id) {
+      if (!wantKind || d.steps[id].kind === wantKind) o.push({ v: id, label: flowStepLabel(d, id) });
+    });
+    if (current && !d.steps[current]) o.push({ v: current, label: current });
+    (wantKind ? [wantKind] : FLOW_KINDS_ORDER).forEach(function (k) {
+      o.push({ v: "+" + k, label: "+ " + fmt(t("flow_editor.new_step"), { kind: t(FLOW_KIND_KEYS[k]) }) });
+    });
+    return o;
+  }
+  var FLOW_KINDS_ORDER = ["page", "call", "notify", "end"];
+
+  function flImagesHtml(id, step) {
+    var images = step.images instanceof Array ? step.images : [], h = "";
+    h += "<fieldset class='frow'><legend>" + esc(t("flow_editor.field_images")) + "</legend>";
+    var ids = assetIds("image");
+    images.forEach(function (im, i) {
+      var base = ["steps", id, "images", String(i)], opts = [{ v: "", label: t("flow_editor.image_pick") }];
+      ids.forEach(function (h2) { opts.push({ v: h2, label: assetLabel(h2) + " (" + h2.slice(0, 8) + ")" }); });
+      if (im.asset && ids.indexOf(im.asset) < 0) opts.push({ v: im.asset, label: im.asset.slice(0, 12) + "…" });
+      h += "<div class='fl-image'><div class='fl-thumb'>" + (im.asset ? "<img src='/asset/" + esc(im.asset) + "' alt=''>" : icon("photo")) + "</div><div class='fl-imgfields'>" +
+        "<div class='frow'>" + flSelect(base.concat(["asset"]), im.asset || "", opts, "data-fr='1' aria-label='" + esc(t("flow_editor.field_images")) + "'") +
+        flSelect(base.concat(["place"]), im.place === "below" ? "below" : "above",
+          [{ v: "above", label: t("flow_editor.image_above") }, { v: "below", label: t("flow_editor.image_below") }]) + "</div>" +
+        "<div class='flab'>" + esc(t("flow_editor.image_alt")) + "</div>" + flTextInputs(base.concat(["alt"]), im.alt, L.FLOW.alt, false) +
+        flSlot("field:" + id + ".image." + i) + "</div><button type='button' class='btn2 danger reorder' data-fa='rmimage' data-id='" + esc(id) +
+        "' data-i='" + i + "' aria-label='" + esc(t("admin.delete")) + "'>" + icon("x") + "</button></div>";
+    });
+    if (images.length < L.FLOW.images)
+      h += "<div class='fl-actions'><button type='button' class='btn2' data-fa='addimage' data-id='" + esc(id) + "'>" + icon("plus") + " " + esc(t("flow_editor.add_image")) + "</button> " +
+        "<label class='btn2 fl-upload'>" + icon("upload") + " " + esc(t("flow_editor.image_upload")) +
+        "<input type='file' accept='image/jpeg,image/png' data-fa='upload' data-id='" + esc(id) + "'></label></div><div class='dim fhint' data-slot='upload:" + esc(id) + "'></div>";
+    return h + "</fieldset>";
+  }
+
+  function flPageHtml(id, step) {
+    var h = "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_title")) + "</label>" + flTextInputs(["steps", id, "title"], step.title, L.FLOW.title) +
+            flSlot("field:" + id + ".title") + "</div>" +
+            "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_body")) + "</label>" + flTextInputs(["steps", id, "body"], step.body, L.FLOW.body, true) +
+            flSlot("field:" + id + ".body") + "</div>" + flImagesHtml(id, step) +
+            "<fieldset class='frow'><legend>" + esc(t("flow_editor.field_options")) + "</legend>";
+    var options = step.options instanceof Array ? step.options : [];
+    options.forEach(function (o, i) {
+      var base = ["steps", id, "options", String(i)], key = id + "." + o.id;
+      h += "<div class='fl-option' data-opt='" + esc(o.id) + "'><div class='fl-opthead'><strong>" + esc(L.flowTextIn(o.label, LANG) ||
+        (o.purpose ? L.labelOf((cfgObj("visit_purposes") || {})[o.purpose], LANG, o.purpose) : o.id)) + "</strong><span class='ops'>" +
+        reorderButtonHtml("data-fa='optup' data-id='" + esc(id) + "' data-i='" + i + "'", true) +
+        reorderButtonHtml("data-fa='optdown' data-id='" + esc(id) + "' data-i='" + i + "'", false) +
+        "<button type='button' class='btn2 danger reorder' data-fa='rmoption' data-id='" + esc(id) + "' data-i='" + i + "' aria-label='" + esc(t("admin.delete")) + "'>" + icon("x") + "</button></span></div>" +
+        "<div class='frow'><label class='flab'>" + esc(t("flow_editor.option_purpose")) + "</label>" +
+        flSelect(base.concat(["purpose"]), o.purpose || "", flPurposeOptions("flow_editor.option_purpose_none")) + "</div>" +
+        "<div class='frow'><label class='flab'>" + esc(t("flow_editor.option_label")) + "</label>" + flTextInputs(base.concat(["label"]), o.label, L.FLOW.label) + "</div>" +
+        "<div class='frow'><label class='flab'>" + esc(t("flow_editor.option_icon")) + "</label><input type='text' maxlength='8' data-fp='" + esc(base.concat(["icon"]).join(".")) +
+        "' data-ft='text' value='" + esc(o.icon || "") + "'></div>" +
+        "<div class='frow'><label class='flab'>" + esc(t("flow_editor.option_target")) + "</label>" + flSelect(base.concat(["to"]), o.to || "", flTargetOptions("", o.to), "data-fr='1' data-fa-change='target' data-id='" + esc(id) + "'") + "</div>" +
+        "<div class='fl-checks'><label class='mc'><input type='checkbox' data-fp='" + esc(base.concat(["style"]).join(".")) + "' data-ft='primary' data-fr='1'" +
+        (o.style === "primary" ? " checked" : "") + "> " + esc(t("flow_editor.option_primary")) + "</label> " +
+        "<label class='mc'><input type='checkbox' data-fp='" + esc(base.concat(["enabled"]).join(".")) + "' data-ft='enabled'" +
+        (o.enabled === false ? "" : " checked") + "> " + esc(t("flow_editor.option_enabled")) + "</label></div>" + flSlot("opt:" + key) + "</div>";
+    });
+    h += flSlot("step:" + id);
+    if (options.length < L.FLOW.options)
+      h += "<div class='fl-actions'><button type='button' class='btn2' data-fa='addoption' data-id='" + esc(id) + "'>" + icon("plus") + " " + esc(t("flow_editor.add_option")) + "</button></div>";
+    return h + "</fieldset>";
+  }
+  function flEndHtml(id, step) {
+    return "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_title")) + "</label>" + flTextInputs(["steps", id, "title"], step.title, L.FLOW.title) + flSlot("field:" + id + ".title") + "</div>" +
+      "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_body")) + "</label>" + flTextInputs(["steps", id, "body"], step.body, L.FLOW.body, true) + flSlot("field:" + id + ".body") + "</div>" +
+      flImagesHtml(id, step) +
+      "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_return_s")) + "</label><input type='number' min='" + L.FLOW.return_min + "' max='" + L.FLOW.return_max +
+      "' data-fp='steps." + esc(id) + ".return_s' data-ft='num' value='" + esc(step.return_s === undefined ? "" : step.return_s) + "'>" + flSlot("field:" + id + ".return_s") + "</div>";
+  }
+  function flCallHtml(id, step) {
+    var pages = [{ v: "", label: t("flow_editor.on_unanswered_none") }];
+    fdPages().forEach(function (p) { pages.push({ v: p, label: flowStepLabel(FLOWUI.draft, p) }); });
+    pages.push({ v: "+page", label: "+ " + fmt(t("flow_editor.new_step"), { kind: t(FLOW_KIND_KEYS.page) }) });
+    return "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_purpose")) + "</label>" +
+      flSelect(["steps", id, "purpose"], step.purpose || "", flPurposeOptions("flow_editor.purpose_none")) + "</div>" +
+      "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_on_unanswered")) + "</label>" +
+      flSelect(["steps", id, "on_unanswered"], step.on_unanswered || "", pages, "data-fr='1' data-fa-change='target' data-id='" + esc(id) + "'") + flSlot("step:" + id) + "</div>";
+  }
+  function flNotifyHtml(id, step) {
+    var snap = isObj(step.snapshot) ? (step.snapshot.source === "door_station" ? "door_station" : "cam:" + step.snapshot.id) : "";
+    var cams = L.flowCameras(S.cfg || {}), opts = [{ v: "", label: t("flow_editor.snapshot_none") }];
+    cams.forEach(function (c) { opts.push({ v: "cam:" + c.id, label: fmt(t("flow_editor.snapshot_camera"), { name: c.name }) }); });
+    opts.push({ v: "door_station", label: t("flow_editor.snapshot_door_station") });
+    if (snap.indexOf("cam:") === 0 && !cams.some(function (c) { return "cam:" + c.id === snap; })) opts.push({ v: snap, label: snap.slice(4) });
+    var ends = [{ v: "", label: t("flow_editor.target_choose") }];
+    Object.keys(fdSteps()).forEach(function (e) { if (fdSteps()[e].kind === "end") ends.push({ v: e, label: flowStepLabel(FLOWUI.draft, e) }); });
+    if (step.to && !fdSteps()[step.to]) ends.push({ v: step.to, label: step.to });
+    ends.push({ v: "+end", label: "+ " + fmt(t("flow_editor.new_step"), { kind: t(FLOW_KIND_KEYS.end) }) });
+    return "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_message")) + "</label>" + flTextInputs(["steps", id, "message"], step.message, L.FLOW.message, true) + flSlot("field:" + id + ".message") + "</div>" +
+      "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_purpose")) + "</label>" + flSelect(["steps", id, "purpose"], step.purpose || "", flPurposeOptions("flow_editor.purpose_none")) + "</div>" +
+      "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_snapshot")) + "</label>" + flSelect(["steps", id, "snapshot"], snap, opts, "data-ft='snapshot'") +
+      (cams.length ? "" : "<div class='dim fhint'>" + esc(t("flow_editor.snapshot_no_camera")) + "</div>") + "</div>" +
+      "<div class='frow'><label class='flab'>" + esc(t("flow_editor.field_to")) + "</label>" +
+      flSelect(["steps", id, "to"], step.to || "", ends, "data-fr='1' data-fa-change='target' data-id='" + esc(id) + "'") + flSlot("step:" + id) + "</div>";
+  }
+
+  function flStepsPaneHtml() {
+    var d = FLOWUI.draft, order = L.flowStepOrder(d), sel = FLOWUI.sel;
+    if (!d.steps[sel]) sel = FLOWUI.sel = order[0] || "";
+    var issues = FLOWUI.issues, h = "<div class='fl-split" + (FLOWUI.mobileEdit ? " edit" : "") + "'><div class='fl-list'><ul class='fl-steps'>";
+    order.forEach(function (id) {
+      var s = d.steps[id], bad = issues.errors.concat(FLOWUI.core ? [FLOWUI.core] : []).filter(function (e) { return e.step === id; }).length;
+      h += "<li><button type='button' class='fl-step" + (id === sel ? " sel" : "") + "' data-fa='sel' data-id='" + esc(id) + "'" + (id === sel ? " aria-current='true'" : "") + ">" +
+        "<span class='tag'>" + esc(t(FLOW_KIND_KEYS[s.kind] || "flow_editor.kind_page")) + "</span>" +
+        (id === d.start ? "<span class='tag ok'>" + esc(t("flow_editor.start")) + "</span>" : "") +
+        (bad ? "<span class='tag err' aria-label='" + esc(t("flow_editor.issues")) + "'>!</span>" : "") +
+        "<span class='fl-stepname'>" + esc(flowStepName(d, id) || t("flow_editor.step_untitled")) + "</span><span class='dim fl-stepid'>" + esc(id) + "</span></button></li>";
+    });
+    h += "</ul><div class='fl-actions'><select id='flAddKind' aria-label='" + esc(t("flow_editor.add_step")) + "'>";
+    FLOW_KINDS_ORDER.forEach(function (k) { h += "<option value='" + k + "'>" + esc(t(FLOW_KIND_KEYS[k])) + "</option>"; });
+    h += "</select> <button type='button' class='btn2' data-fa='addstep'>" + icon("plus") + " " + esc(t("flow_editor.add_step")) + "</button></div>" + flSlot("global") + "</div>";
+    h += "<div class='fl-edit'>";
+    if (sel) {
+      var step = d.steps[sel], kindOpts = FLOW_KINDS_ORDER.map(function (k) { return { v: k, label: t(FLOW_KIND_KEYS[k]) }; });
+      h += "<button type='button' class='btn2 fl-back' data-fa='listback'>" + icon("chevron-left") + " " + esc(t("flow_editor.steps")) + "</button>" +
+        "<div class='fl-stephead'><h3>" + esc(flowStepLabel(d, sel)) + "</h3><div class='ops'>" +
+        (step.kind === "page" && d.start !== sel ? "<button type='button' class='btn2' data-fa='setstart' data-id='" + esc(sel) + "'>" + esc(t("flow_editor.set_start")) + "</button> " : "") +
+        "<button type='button' class='btn2' data-fa='dupstep' data-id='" + esc(sel) + "'>" + icon("copy") + " " + esc(t("flow_editor.duplicate_step")) + "</button> " +
+        "<button type='button' class='btn2 danger' data-fa='delstep' data-id='" + esc(sel) + "'>" + icon("x") + " " + esc(t("flow_editor.delete_step")) + "</button></div></div>" +
+        "<div class='frow'><label class='flab'>" + esc(t("flow_editor.kind")) + "</label>" + flSelect(["kind:" + sel], step.kind, kindOpts, "data-fr='1' data-fa-change='kind' data-id='" + esc(sel) + "'") + "</div>" +
+        (step.kind === "page" ? flPageHtml(sel, step) : step.kind === "call" ? flCallHtml(sel, step) : step.kind === "notify" ? flNotifyHtml(sel, step) : flEndHtml(sel, step));
+    }
+    return h + "</div></div>";
+  }
+
+  function flOverviewHtml() {
+    var d = FLOWUI.draft, pages = fdPages(), startOpts = [{ v: "", label: t("flow_editor.target_choose") }], doors = cfgObj("doors");
+    pages.forEach(function (p) { startOpts.push({ v: p, label: flowStepLabel(d, p) }); });
+    var h = "<label class='frow-check'><span>" + esc(t("flow_editor.enabled")) + "</span><input type='checkbox' data-fp='enabled' data-ft='bool'" + (d.enabled !== false ? " checked" : "") + "></label>" +
+      "<div class='dim fhint'>" + esc(t("flow_editor.enabled_hint")) + "</div>" +
+      "<div class='frow'><label class='flab'>" + esc(t("flow_editor.start")) + "</label>" + flSelect(["start"], d.start || "", startOpts) + flSlot("field:start") + "</div>" +
+      "<div class='frow'><label class='flab'>" + esc(t("flow_editor.idle_s")) + "</label><input type='number' min='" + L.FLOW.idle_min + "' max='" + L.FLOW.idle_max +
+      "' data-fp='idle_s' data-ft='num' value='" + esc(d.idle_s) + "'>" + flSlot("field:idle_s") + "</div>" +
+      "<label class='frow-check'><span>" + esc(t("flow_editor.require_call")) + "</span><input type='checkbox' data-fp='require_call' data-ft='bool' data-fr='1'" + (d.require_call !== false ? " checked" : "") + "></label>" +
+      (d.require_call === false ? "<div class='warn fhint' role='alert'>" + icon("alert-triangle") + " " + esc(t("flow_editor.require_call_off_warning")) + "</div>" : "");
+    var doorIds = Object.keys(doors);
+    if (doorIds.length) {
+      h += "<fieldset class='frow'><legend>" + esc(t("flow_editor.door_start")) + "</legend>";
+      doorIds.forEach(function (door) {
+        var opts = [{ v: "", label: t("flow_editor.door_start_inherit") }];
+        pages.forEach(function (p) { opts.push({ v: p, label: flowStepLabel(d, p) }); });
+        h += "<div class='frow'><label class='flab'>" + esc(doorLabel(door)) + "</label>" + flSelect(["door_starts", door], (d.door_starts || {})[door] || "", opts) + flSlot("field:" + door) + "</div>";
+      });
+      h += "</fieldset>";
+    }
+    h += "<fieldset class='frow'><legend>" + esc(t("flow_editor.templates")) + "</legend><div class='fl-actions'>" +
+      "<button type='button' class='btn2' data-fa='template' data-name='default'>" + esc(t("flow_editor.customize")) + "</button> " +
+      "<button type='button' class='btn2' data-fa='template' data-name='purposes'>" + esc(t("flow_editor.template_purposes")) + "</button> " +
+      "<button type='button' class='btn2' data-fa='template' data-name='delivery'>" + esc(t("flow_editor.template_delivery")) + "</button></div></fieldset>";
+    return h;
+  }
+
+  // ---- Simulator: the door page's walker over the unsaved draft ----
+  function simStart() {
+    var VF = window.DoorbellVisitorFlow;
+    if (!VF) { FLOWUI.sim = null; return; }
+    var langs = uiLangs();
+    var lang = FLOWUI.simLang && langs.indexOf(FLOWUI.simLang) >= 0 ? FLOWUI.simLang : langs[0];
+    FLOWUI.simLang = lang;
+    try { FLOWUI.sim = { walker: VF.create(L.flowResolve(FLOWUI.draft, S.cfg || {}), lang), log: [] }; }
+    catch (e) { FLOWUI.sim = { walker: null, log: [] }; }
+  }
+  function simHtml() {
+    var VF = window.DoorbellVisitorFlow, h = "<div class='dim fhint'>" + esc(t("flow_editor.sim_hint")) + "</div>";
+    if (!VF || !FLOWUI.sim) return h;
+    var langs = uiLangs(), sim = FLOWUI.sim, w = sim.walker, lang = FLOWUI.simLang;
+    h += "<div class='fl-actions'><label class='flab' for='flSimLang'>" + esc(t("flow_editor.sim_language")) + "</label><select id='flSimLang'>";
+    langs.forEach(function (lg) { h += "<option value='" + esc(lg) + "'" + (lg === lang ? " selected" : "") + ">" + esc(langName(lg)) + "</option>"; });
+    h += "</select> <button type='button' class='btn2' data-fa='simrestart'>" + icon("reload") + " " + esc(t("flow_editor.sim_restart")) + "</button>" +
+      " <button type='button' class='btn2' data-fa='simidle'>" + icon("clock") + " " + esc(t("flow_editor.sim_idle")) + "</button></div>";
+    h += "<div class='fl-sim' aria-live='polite'>";
+    if (!w || w.snapshot().mode === "legacy") return h + "<div class='fl-simbody'>" + esc(t("flow_editor.sim_classic")) + "</div></div>";
+    var snap = w.snapshot(), step = w.step(snap.page);
+    if (snap.mode === "calling") {
+      h += "<div class='fl-simbody'><div class='fl-simtitle'>" + esc(t("calling.title")) + "</div><div class='fl-actions'>" +
+        "<button type='button' class='btn2' data-fa='simend' data-reason='timeout'>" + esc(t("flow_editor.sim_no_answer")) + "</button> " +
+        "<button type='button' class='btn2' data-fa='simend' data-reason='ended'>" + esc(t("flow_editor.sim_call_ended")) + "</button></div></div>";
+    } else {
+      h += "<div class='fl-simbody'><div class='fl-simtitle'>" + esc(snap.title || "") + "</div>";
+      var placed = function (place) {
+        (step.images || []).forEach(function (im) {
+          if ((im.place === "below" ? "below" : "above") !== place) return;
+          h += "<div class='fl-simimg'><img src='" + esc(im.url) + "' alt='" + esc(VF.textIn(im.alt, lang) || "") + "'></div>";
+        });
+      };
+      placed("above");
+      VF.paragraphs(VF.textIn(step.body, lang)).forEach(function (para) { h += "<p>" + para.map(esc).join("<br>") + "</p>"; });
+      placed("below");
+      if (snap.notice) h += "<div class='err fhint'>" + esc(t(snap.notice)) + "</div>";
+      if (snap.mode === "page") {
+        h += "<div class='fl-simopts'>";
+        w.options().forEach(function (o) {
+          h += "<button type='button' class='" + (o.semantic_id === "call.primary" ? "btn" : "btn2") + "' data-fa='simtap' data-id='" + esc(o.id) + "'>" +
+            (o.icon ? esc(o.icon) + " " : "") + esc(VF.textIn(o.label, lang) || "") + "</button>";
+        });
+        h += "</div>";
+      }
+      h += "<div class='fl-actions'>" + (snap.back ? "<button type='button' class='btn2' data-fa='simback'>" + icon("chevron-left") + " " + esc(t("flow.back")) + "</button>" : "") +
+        (snap.done ? "<button type='button' class='btn2' data-fa='simdone'>" + esc(t("flow.done")) + "</button> <span class='dim'>" +
+          esc(fmt(t("flow_editor.sim_return"), { s: w.returnSeconds() })) + "</span>" : "") + "</div></div>";
+    }
+    h += "</div>";
+    if (sim.log.length) h += "<ul class='fl-simlog'>" + sim.log.map(function (line) { return "<li>" + esc(line) + "</li>"; }).join("") + "</ul>";
+    return h;
+  }
+  function simAct(act) {
+    var sim = FLOWUI.sim, w = sim.walker, VF = window.DoorbellVisitorFlow, lang = FLOWUI.simLang;
+    function ring(purpose) {
+      var p = purpose ? L.labelOf((cfgObj("visit_purposes") || {})[purpose], LANG, purpose) : "";
+      sim.log.push(p ? fmt(t("flow_editor.sim_ring"), { purpose: p }) : t("flow_editor.sim_ring_any"));
+      w.pressResult(true);
+    }
+    if (act.act === "press") ring(act.purpose);
+    else if (act.act === "notify") {
+      var step = FLOWUI.draft.steps[act.step] || {};
+      sim.log.push(fmt(t("flow_editor.sim_message"), { text: VF.textIn(step.message, lang) || "" }));
+      var next = w.notifyResult(true, act.step);
+      if (next.act === "press") ring(next.purpose);
+    }
+  }
+
+  // ---- Validation display ----
+  function flRenderIssues() {
+    var root = $("#flRoot"); if (!root) return;
+    var v = L.flowValidate(FLOWUI.draft, S.cfg || {}), core = FLOWUI.core;
+    FLOWUI.issues = v;
+    var all = v.errors.slice();
+    if (core && !all.some(function (e) { return e.key === core.key && e.step === core.step && e.option === core.option; })) all.push(core);
+    var slots = {};
+    function put(key, text) { (slots[key] = slots[key] || []).push(text); }
+    all.forEach(function (e) {
+      var text = flowIssueText(e, FLOWUI.draft);
+      if (e.option) put("opt:" + e.step + "." + e.option, text);
+      else if (e.field) put("field:" + e.step + "." + e.field, text);
+      else if (e.step && !e.field && FLOWUI.draft.steps[e.step]) put("step:" + e.step, text);
+      else if (e.step && FLOWUI.draft.door_starts && e.step in FLOWUI.draft.door_starts) put("field:" + e.step, text);
+      else if (e.code === "missing_start" || e.step === "start") put("field:start", text);
+      else put("global", text);
+    });
+    $all("[data-slot]", root).forEach(function (el) {
+      var key = el.getAttribute("data-slot"), texts = slots[key];
+      if (/^upload:/.test(key)) return;
+      el.textContent = texts ? texts.join(" · ") : "";
+    });
+    var sum = root.querySelector("#flSummary");
+    var warn = v.warnings.map(function (e) { return flowIssueText(e, FLOWUI.draft); });
+    var errs = all.map(function (e) { return flowIssueText(e, FLOWUI.draft); });
+    sum.innerHTML = (errs.length ? "<div class='err fhint' role='alert'><strong>" + esc(t("flow_editor.issues")) + "</strong><ul>" + errs.map(function (x) { return "<li>" + esc(x) + "</li>"; }).join("") + "</ul></div>" : "") +
+      (warn.length ? "<div class='warn fhint'>" + icon("alert-triangle") + " " + esc(warn.join(" · ")) + "</div>" : "");
+    $all(".fl-step", root).forEach(function (btn) {
+      var id = btn.getAttribute("data-id"), bad = all.some(function (e) { return e.step === id; }), mark = btn.querySelector(".tag.err");
+      if (bad && !mark) { var span = document.createElement("span"); span.className = "tag err"; span.textContent = "!"; btn.insertBefore(span, btn.querySelector(".fl-stepname")); }
+      if (!bad && mark) mark.parentNode.removeChild(mark);
+      var name = btn.querySelector(".fl-stepname");
+      if (name && FLOWUI.draft.steps[id]) name.textContent = flowStepName(FLOWUI.draft, id) || t("flow_editor.step_untitled");
+    });
+  }
+
+  function flPaint() {
+    var host = $("#flPane"); if (!host) return;
+    var pane = FLOWUI.pane;
+    $all("[data-flpane]", $("#flRoot")).forEach(function (b) { b.setAttribute("aria-selected", b.getAttribute("data-flpane") === pane ? "true" : "false"); });
+    if (pane === "overview") host.innerHTML = flOverviewHtml();
+    else if (pane === "try") { simStart(); host.innerHTML = simHtml(); }
+    else host.innerHTML = flStepsPaneHtml();
+    flRenderIssues();
+  }
+
+  // ---- Template and upload helpers ----
+  function flowFetchTemplate(name, cb) {
+    api("GET", "/api/visitor-flow/template?name=" + encodeURIComponent(name), null, function (st, j) {
+      if (st === 200 && j && j.ok && isObj(j.flow)) cb(j.flow); else msg(t("admin.save_failed"));
+    });
+  }
+  function flowScaleImage(file, cb) {
+    // Contract: downscale to at most 1280 px on the long edge and roughly 400 KB before upload.
+    if (!window.URL || !document.createElement("canvas").toBlob || !/^image\/(jpeg|png)$/.test(file.type)) { cb(file); return; }
+    var img = new Image(), url = URL.createObjectURL(file);
+    img.onload = function () {
+      URL.revokeObjectURL(url);
+      var scale = Math.min(1, 1280 / Math.max(img.width, img.height)), c = document.createElement("canvas");
+      c.width = Math.max(1, Math.round(img.width * scale)); c.height = Math.max(1, Math.round(img.height * scale));
+      var ctx = c.getContext("2d"); ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, c.width, c.height); ctx.drawImage(img, 0, 0, c.width, c.height);
+      var quality = 0.85;
+      (function attempt() {
+        c.toBlob(function (blob) {
+          if (!blob) { cb(file); return; }
+          if (blob.size > 400 * 1024 && quality > 0.5) { quality -= 0.1; attempt(); return; }
+          var name = String(file.name || "image").replace(/\.[A-Za-z0-9]+$/, "") + ".jpg";
+          try { cb(new File([blob], name, { type: "image/jpeg" })); } catch (e) { cb(file); }
+        }, "image/jpeg", quality);
+      })();
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); cb(file); };
+    img.src = url;
+  }
+
+  // One plain batch: Core validates the flow graph on the configuration the batch would leave and
+  // answers "visitor_flow.<code>: <step>.<option>", which the revision-checked commit does not.
+  // The batch has no revision, so a draft opened before someone else saved is refused here.
+  function flowBatch(plan, cb) {
+    var baseline = FLOWUI.baseline;
+    api("GET", "/api/config/snapshot", null, function (st, snapshot) {
+      if (!(st === 200 && validConfigSnapshot(snapshot))) { cb(false, { unavailable: true }); return; }
+      if (L.flowSignature(snapshot.config) !== baseline) { cb(false, { err: "config_conflict" }); return; }
+      api("POST", "/api/config/batch", { ops: L.flowBatchOps(plan) }, function (status, j) {
+        if (status === 200 && j && j.ok === true) { cb(true, j); return; }
+        cb(false, { status: status, unknown: status === 0 || status === 202 || status >= 500 || status === 200,
+                    err: (j && (j.err || j.error_code)) || ("HTTP " + status) });
+      }, { timeout_ms: 10000 });
+    }, { timeout_ms: 10000 });
+  }
+
+  // ---- The modal ----
+  function openFlowEditor(pane, seedDraft) {
+    if (!S.cfg) return;
+    var existing = seedDraft || flowStored();
+    function start(draft) {
+      FLOWUI = { draft: draft, baseline: L.flowSignature(S.cfg), pane: pane || "steps", sel: "", mobileEdit: false, issues: { errors: [], warnings: [] }, core: null, sim: null, simLang: "" };
+      FLOWUI.sel = L.flowStepOrder(draft)[0] || "";
+      var html = "<div id='flRoot'><div class='fl-tabs' role='tablist'>" +
+        ["overview", "steps", "try"].map(function (p) {
+          return "<button type='button' role='tab' class='fl-tab' data-flpane='" + p + "'>" + esc(t(p === "overview" ? "flow_editor.tab_overview" : p === "steps" ? "flow_editor.steps" : "flow_editor.preview")) + "</button>";
+        }).join("") + "</div><div id='flSummary'></div><div id='flPane'></div></div>";
+      var m = openModal(t("flow_editor.title"), html, function (mm, done) {
+        var plan = L.flowEntries(S.cfg, FLOWUI.draft);
+        if (!plan.entries.length && !plan.dels.length) { done(true); return; }
+        FLOWUI.core = null;
+        flowBatch(plan, function (ok, result) {
+          if (!saveContextCurrent(done)) return;
+          var text = t("admin.save_failed");
+          if (ok) {
+            text = t("admin.saved");
+            var warnings = L.writeWarnings(result);
+            if (warnings.length) text += " — " + warningText(warnings);
+          } else if (result && result.unknown) text = t("admin.save_unknown");
+          else if (result && result.unavailable) text = t("admin.config_cas_unavailable");
+          else if (result && result.err) {
+            var issue = L.flowParseError(result.err);
+            if (issue) {
+              FLOWUI.core = issue;
+              text += ": " + flowIssueText(issue, FLOWUI.draft);
+              if (issue.step && FLOWUI.draft.steps[issue.step]) { FLOWUI.sel = issue.step; FLOWUI.pane = "steps"; }
+            } else if (result.err === "unresolved_config_conflict") { text += ": " + t("flow_editor.conflict_blocked"); refreshConfig(); }
+            else text += ": " + configConflictError(result.err);
+            flPaint();
+          }
+          msg(text);
+          done(ok, text);
+          if (ok) refreshAfterSave(done);
+        });
+      });
+      m.classList.add("fl-modal");
+      m.onclick = flHandle; m.onchange = flChange; m.oninput = flInput;
+      flPaint();
+    }
+    if (existing) start(existing);
+    else flowFetchTemplate("default", function (flow) { start(L.flowDraftFromTemplate(flow, S.cfg)); });
+  }
+
+  function flFind(target, attr) {
+    while (target && target.getAttribute && target.nodeType === 1) {
+      if (target.hasAttribute(attr)) return target;
+      target = target.parentNode;
+    }
+    return null;
+  }
+  function flHandle(event) {
+    if (!FLOWUI || !$("#flRoot")) return;
+    var tab = flFind(event.target, "data-flpane");
+    if (tab) { FLOWUI.pane = tab.getAttribute("data-flpane"); flPaint(); return; }
+    var el = flFind(event.target, "data-fa");
+    if (!el || el.tagName === "INPUT" || el.tagName === "SELECT") return;
+    var act = el.getAttribute("data-fa"), id = el.getAttribute("data-id"), i = Number(el.getAttribute("data-i")), d = FLOWUI.draft, steps = d.steps, step = steps[id];
+    switch (act) {
+      case "sel": FLOWUI.sel = id; FLOWUI.mobileEdit = true; break;
+      case "listback": FLOWUI.mobileEdit = false; break;
+      case "addstep": { var kind = $("#flAddKind").value; FLOWUI.sel = fdNewStep(kind); FLOWUI.mobileEdit = true; break; }
+      case "dupstep": {
+        var copy = fdNewId(({ page: "s_", call: "c_", notify: "n_", end: "e_" })[step.kind]);
+        steps[copy] = JSON.parse(JSON.stringify(step)); FLOWUI.sel = copy; break;
+      }
+      case "delstep": {
+        var refs = L.flowReferrers(d, id);
+        if (refs.length) { msg(fmt(t("flow_editor.step_in_use"), { steps: refs.map(function (r) { return r === "start" ? t("flow_editor.start") : (steps[r] ? flowStepLabel(d, r) : doorLabel(r)); }).join(", ") })); return; }
+        delete steps[id]; FLOWUI.sel = L.flowStepOrder(d)[0] || ""; FLOWUI.mobileEdit = false; break;
+      }
+      case "setstart": d.start = id; break;
+      case "addoption": step.options.push({ id: fdOptionId(step), label: {}, to: fdEnsureCall() }); break;
+      case "rmoption": step.options.splice(i, 1); break;
+      case "optup": if (i > 0) { var up = step.options.splice(i, 1)[0]; step.options.splice(i - 1, 0, up); } break;
+      case "optdown": if (i < step.options.length - 1) { var dn = step.options.splice(i, 1)[0]; step.options.splice(i + 1, 0, dn); } break;
+      case "addimage": step.images = (step.images || []).concat([{ asset: "", place: "above", alt: {} }]); break;
+      case "rmimage": step.images.splice(i, 1); if (!step.images.length) delete step.images; break;
+      case "template":
+        if (!window.confirm(t("flow_editor.template_confirm"))) return;
+        flowFetchTemplate(el.getAttribute("data-name"), function (flow) {
+          FLOWUI.draft = L.flowDraftFromTemplate(flow, S.cfg); FLOWUI.sel = L.flowStepOrder(FLOWUI.draft)[0] || "";
+          FLOWUI.core = null; msg(t("flow_editor.template_loaded")); flPaint();
+        });
+        return;
+      case "simrestart": simStart(); $("#flPane").innerHTML = simHtml(); return;
+      case "simidle": FLOWUI.sim.walker.idleTimeout(); $("#flPane").innerHTML = simHtml(); return;
+      case "simback": FLOWUI.sim.walker.back(); $("#flPane").innerHTML = simHtml(); return;
+      case "simdone": FLOWUI.sim.walker.done(); $("#flPane").innerHTML = simHtml(); return;
+      case "simend": FLOWUI.sim.walker.callEnded(el.getAttribute("data-reason")); $("#flPane").innerHTML = simHtml(); return;
+      case "simtap": simAct(FLOWUI.sim.walker.tap(id)); $("#flPane").innerHTML = simHtml(); return;
+      default: return;
+    }
+    flPaint();
+  }
+  function flSetFromControl(el) {
+    var path = el.getAttribute("data-fp").split("."), type = el.getAttribute("data-ft"), value;
+    if (path[0].indexOf("kind:") === 0) return false;
+    if (type === "bool") value = !!el.checked;
+    else if (type === "num") { value = el.value === "" ? undefined : Number(el.value); if (value !== undefined && isNaN(value)) value = undefined; }
+    else if (type === "enabled") value = el.checked ? undefined : false;
+    else if (type === "primary") {
+      var page = FLOWUI.draft.steps[path[1]];
+      (page.options || []).forEach(function (o) { if (o.style === "primary") delete o.style; });
+      value = el.checked ? "primary" : undefined;
+    } else if (type === "snapshot") {
+      value = el.value === "" ? undefined : el.value === "door_station" ? { source: "door_station" } : { source: "media_source", id: el.value.slice(4) };
+    } else value = el.value;
+    if (type === "text" && path[path.length - 1] === "icon" && value === "") value = undefined;
+    fdSet(path, value);
+    return true;
+  }
+  function flInput(event) {
+    var el = event.target;
+    if (!FLOWUI || !el.getAttribute || !el.hasAttribute("data-fp") || el.getAttribute("data-ft") !== "text") return;
+    flSetFromControl(el); flRenderIssues();
+  }
+  function flChange(event) {
+    var el = event.target;
+    if (!FLOWUI || !el || !el.getAttribute) return;
+    if (el.id === "flSimLang") { FLOWUI.simLang = el.value; simStart(); $("#flPane").innerHTML = simHtml(); return; }
+    if (el.getAttribute("data-fa") === "upload") { flUpload(el); return; }
+    if (!el.hasAttribute("data-fp")) return;
+    var kindChange = el.getAttribute("data-fa-change"), id = el.getAttribute("data-id");
+    if (kindChange === "kind") { fdChangeKind(id, el.value); flPaint(); return; }
+    if (kindChange === "target" && el.value.charAt(0) === "+") {
+      // "+ New ..." creates the step first and then points at it.
+      var created = fdNewStep(el.value.slice(1));
+      el.value = created; var opt = document.createElement("option"); opt.value = created; opt.textContent = created; el.appendChild(opt); el.value = created;
+    }
+    flSetFromControl(el);
+    if (el.hasAttribute("data-fr")) flPaint(); else flRenderIssues();
+  }
+  function flUpload(input) {
+    var id = input.getAttribute("data-id"), file = input.files && input.files[0], slot = $("#flRoot").querySelector("[data-slot='upload:" + id + "']");
+    if (!file) return;
+    if (slot) slot.textContent = t("flow_editor.image_uploading");
+    flowScaleImage(file, function (scaled) {
+      uploadAsset(scaled, file.name, function () {}, function (ok, detail) {
+        if (!ok) { if (slot) slot.textContent = String(detail); return; }
+        refreshConfig(function () {
+          var step = FLOWUI && FLOWUI.draft.steps[id];
+          if (step) { step.images = (step.images || []).concat([{ asset: detail, place: "above", alt: {} }]); flPaint(); }
+        });
+      });
+    });
+  }
+
   function renderRules() {
     var el = $("#tab-rules");
     var rs = cfgObj("trigger_rules");
     var configuredFlow = L.callFlowMode(cfgObj("ui").call_flow);
     var flowSupport = L.callFlowCompatibility(configuredFlow, S.status);
-    var h = "<div class='card'><h2>" + esc(t("admin.call_flow")) +
+    var storedFlow = flowAvailable() ? flowStored() : null;
+    var flowOn = !!storedFlow && storedFlow.enabled !== false;
+    var h = (flowAvailable() ? flowCardHtml() : "") + "<div class='card'><h2>" + esc(t("admin.call_flow")) +
             "</h2><div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap'>" +
-            "<select id='callFlowMode' style='max-width:100%' aria-label='" + esc(t("admin.call_flow")) +
+            "<select id='callFlowMode' style='max-width:100%'" + (flowOn ? " disabled" : "") + " aria-label='" + esc(t("admin.call_flow")) +
             "'><option value='purpose_first'" +
             (configuredFlow === "purpose_first" ? " selected" : "") + ">" +
             esc(t("admin.call_flow_purpose_first_label")) + "</option>" +
@@ -6773,7 +7768,7 @@ if (typeof document !== "undefined") (function () {
             "</option></select></div><div class='dim fhint' id='callFlowHint'>" +
             esc(t(configuredFlow === "ring_then_purpose" ?
                 "admin.call_flow_ring_then_purpose" : "admin.call_flow_purpose_first")) +
-            "</div>";
+            "</div>" + (flowOn ? "<div class='dim fhint'>" + esc(t("flow_editor.call_flow_superseded")) + "</div>" : "");
     if (flowSupport.warning || flowSupport.unknown_fleet) {
       var unsupported = flowSupport.unsupported.map(deviceName).join(", ") || t("admin.call_flow_unknown");
       h += "<div class='warn' role='alert' style='font-weight:600;margin-top:8px'>" + icon("alert-triangle") + " " +
@@ -6784,7 +7779,7 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.call_flow_supported")) +
            "</div>";
     }
-    h += "<div class='actions'><button class='btn small' id='callFlowSave'>" +
+    h += "<div class='actions'><button class='btn small' id='callFlowSave'" + (flowOn ? " disabled" : "") + ">" +
          esc(t("admin.save")) + "</button></div></div>";
 
     var callReturn = L.callReturnSeconds(S.cfg, "");
@@ -6841,6 +7836,8 @@ if (typeof document !== "undefined") (function () {
            esc(t("admin.delete")) + "</button></div></div>";
     }
     el.innerHTML = h;
+    if (flowAvailable()) flowCardBind(el);
+    flowProbe(renderTab);
     $("#callReturnSave").onclick = function () {
       var entries;
       try { entries = L.callReturnEntries($("#callReturn").value); }

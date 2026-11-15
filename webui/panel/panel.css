@@ -249,6 +249,32 @@ body.replyActive #replyBanner { display:-webkit-box !important; -webkit-box-orie
                    border-color:#343f4b; border-color:var(--line); }
 body #visitorActions .dbSosTrigger { position:static; z-index:auto; min-width:72px; min-width:var(--tap-visitor);
               min-height:72px; min-height:var(--tap-visitor); margin:0 12px 0 0; }
+/* Visitor flow: the start page is the idle screen. Content scrolls in #main; the option zone is
+ * fixed above the action bar and never scrolls off screen. */
+body.flowOn #doorList, body.flowOn #hint { display:none !important; }
+#flowView { text-align:center; }
+#flowTitle { font-size:34px; font-size:2.125rem; line-height:1.2; font-weight:bold; padding:8px 0 12px;
+             overflow-wrap:break-word; word-wrap:break-word; }
+#flowTitle:focus { outline:none; }
+#flowBody { font-size:22px; font-size:1.375rem; line-height:1.5; text-align:center; padding:4px 0 12px; max-width:36em; margin:0 auto;
+            overflow-wrap:break-word; word-wrap:break-word; }
+#flowBody p { margin:0 0 .9em; }
+.flowImgs { padding:4px 0 8px; }
+.flowImg img { display:block; max-width:100%; height:auto; margin:0 auto 8px; border-radius:12px; }
+.flowAlt { color:#9aa7b5; color:var(--muted); font-size:18px; font-size:1.125rem; padding:12px; border:1px dashed #343f4b;
+           border:1px dashed var(--line); border-radius:12px; }
+#flowNotice { min-height:0; font-size:20px; font-size:1.25rem; padding:4px 0; color:#ff8e8e; color:var(--negative-text); }
+#flowOptions { padding:8px 16px 4px; overflow:auto; -webkit-overflow-scrolling:touch; text-align:center;
+               background:#101418; background:var(--surface); border-top:1px solid #343f4b; border-top:1px solid var(--line); }
+#flowOptions.scrollable { -webkit-box-shadow:inset 0 -14px 10px -10px rgba(0,0,0,.45); box-shadow:inset 0 -14px 10px -10px rgba(0,0,0,.45); }
+#flowOptions .doorBtn { display:block; width:100%; max-width:none; margin:6px 0; min-height:96px; }
+#flowOptions .doorBtn .pIcon { display:inline-block; font-size:1em; margin-right:.4em; }
+#flowOptions .doorBtn .pLabel { display:inline; }
+#flowOptions .purposeBtn { width:48%; margin:6px 1%; min-height:96px; color:#e8edf2; color:var(--on-surface); }
+.flowNav { display:none; -webkit-box-flex:1; min-width:0; min-height:80px; padding:14px 10px; border-radius:16px;
+           background:#27313b; background:var(--surface-3); color:#e8edf2; color:var(--on-surface);
+           border:1px solid #343f4b; border:1px solid var(--line); font-size:26px; font-size:1.625rem; font-weight:bold; line-height:1.2; }
+@media (max-width:599px) { #flowOptions .purposeBtn { width:100%; margin:6px 0; } }
 body .dbEmergencyOverlay { overflow:auto; }
 body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:auto; left:auto; right:auto; margin:8% 5%; }
 @supports (display:grid) {
@@ -283,6 +309,24 @@ body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:aut
   body #visitorActions .dbSosTrigger { flex:none; margin:0; align-self:center; }
   @media (min-width: 600px) {
     #main #doorList.many { grid-template-columns:repeat(2, minmax(0, 1fr)); max-width:1100px; }
+  }
+  #flowTitle { font-size:clamp(1.75rem, 1.2rem + 2.2vw, 2.75rem); }
+  #flowBody { font-size:clamp(1.125rem, 1rem + .7vw, 1.5rem); }
+  #flowOptions { display:grid; grid-template-columns:minmax(0, 1fr); gap:12px; flex:none; align-content:start;
+                 padding:12px calc(16px + env(safe-area-inset-right)) 4px calc(16px + env(safe-area-inset-left)); }
+  #flowOptions .doorBtn { margin:0; grid-column:1 / -1; font-size:clamp(1.75rem, 1.3rem + 1.8vw, 2.5rem);
+                          min-height:clamp(96px, 12vh, 128px); }
+  #flowOptions .purposeBtn { display:block; width:auto; margin:0; min-height:clamp(80px, 10vh, 112px); }
+  #flowBack, #flowDone { flex:1 1 auto; }
+  @media (min-width: 600px) {
+    #flowOptions { grid-template-columns:repeat(2, minmax(0, 1fr)); }
+  }
+  @media (min-width: 900px) {
+    #flowOptions { padding-left:max(24px, calc(50vw - 480px)); padding-right:max(24px, calc(50vw - 480px)); }
+  }
+  @media (max-height: 500px) {
+    #flowTitle { font-size:1.5rem; padding:0 0 6px; }
+    #flowOptions .doorBtn, #flowOptions .purposeBtn { min-height:var(--tap-visitor); font-size:1.25rem; }
   }
   @media (min-width: 900px) {
     #purposeGrid { grid-template-columns:repeat(3, minmax(0, 1fr)); }
