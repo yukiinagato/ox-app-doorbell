@@ -8,6 +8,7 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
     var window: UIWindow?
     let core = CoreBridge()
     private(set) var boot = BootConfig()
+    private var screenshots: ScreenshotResponder?
     private let effects = SirenPlayer()
     private let launchAudio = SirenPlayer()
     private var soundConfig: [String: Any]?
@@ -42,6 +43,11 @@ final class TVAppDelegate: UIResponder, UIApplicationDelegate {
         _ = core.start(dataDir: BootConfig.dataDir(), bootJson: boot.rawJson)
         runtime = RuntimeSupervisor(core: core, boot: boot)
         runtime?.start()
+        if boot.debugScreenshots {
+            let responder = ScreenshotResponder(dataDir: BootConfig.dataDir())
+            screenshots = responder
+            responder.start()
+        }
         AdaptiveH264MjpegPlayer.prewarm()
         soundConfig = core.config()
         core.addHandler("app") { [weak self] ev in self?.onUiEvent(ev) }

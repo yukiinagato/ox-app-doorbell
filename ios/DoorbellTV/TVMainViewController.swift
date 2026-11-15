@@ -84,6 +84,7 @@ final class TVMainViewController: UIViewController {
     }
 
     private var debugScreenShown = false
+    private var debugScreenObserver: NSObjectProtocol?
     /// The capture hook shows the alarm without Core having one; the next status refresh would
     /// otherwise see no active emergency and take it down again.
     private var debugEmergencyHeld = false
@@ -93,22 +94,35 @@ final class TVMainViewController: UIViewController {
     /// put up after launch. Every one of them is a screen the remote can reach.
     override func viewDidAppear(_ animated: Bool) {
         super.viewDidAppear(animated)
-        guard boot.debugScreenshots, !debugScreenShown,
-              let name = UserDefaults.standard.string(forKey: "debug_screen") else { return }
+        guard boot.debugScreenshots, !debugScreenShown else { return }
         debugScreenShown = true
+        debugScreenObserver = NotificationCenter.default.addObserver(
+            forName: ScreenshotResponder.showScreen, object: nil, queue: .main
+        ) { [weak self] note in
+            guard let self = self, let name = note.object as? String else { return }
+            self.presentedViewController?.dismiss(animated: false)
+            self.showDebugScreen(name)
+        }
+        guard let name = UserDefaults.standard.string(forKey: "debug_screen") else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
             guard let self = self, self.presentedViewController == nil else { return }
-            switch name {
-            case "history": self.tabs?.show(.history)
-            case "settings": self.tabs?.show(.settings)
-            case "monitor": self.openMonitor()
-            case "notice": self.openNotice(door: "")
-            case "sos": self.sosSlider.sendActions(for: .primaryActionTriggered)
-            case "sos_active":
-                self.debugEmergencyHeld = true
-                self.showEmergency(visual: true)
-            default: break
-            }
+            self.showDebugScreen(name)
+        }
+    }
+
+    private func showDebugScreen(_ name: String) {
+        debugEmergencyHeld = false
+        switch name {
+        case "home": tabs?.show(.home)
+        case "history": tabs?.show(.history)
+        case "settings": tabs?.show(.settings)
+        case "monitor": openMonitor()
+        case "notice": openNotice(door: "")
+        case "sos": sosSlider.sendActions(for: .primaryActionTriggered)
+        case "sos_active":
+            debugEmergencyHeld = true
+            showEmergency(visual: true)
+        default: break
         }
     }
 
