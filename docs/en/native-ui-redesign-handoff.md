@@ -1,7 +1,9 @@
-# Native UI redesign: handoff (state after the 2026-11-15 integration)
+# Native UI redesign: handoff (state after the second 2026-11-15 integration)
 
 This file describes `main` after the air-quality work, the Core/CI fixes, the
-per-platform fixes and the kiosk settings audit were brought together. Verification is
+per-platform fixes and the kiosk settings audit were brought together, plus the second
+integration: the Core visitor-flow completion, the full-screen quick-reply overlay on
+every shell, and the language-switch and settings responsiveness work. Verification is
 stated per deliverable; anything under "Not verified" is untested, not passing.
 
 Related documents:
@@ -63,17 +65,22 @@ and `tools/check_icons.py` rejects hand-drawn icons.
 
 ## State per deliverable
 
-### Windows (0.2.1, file version 0.2.1.27)
+### Windows (0.2.1, file version 0.2.1.30)
 
 Done: Fluent redesign, NavigationView home, settings parity list emptied, SOS flow,
 zoom host, conversation fixes, Fluent icons, stepper chevrons sized, a read-only
-air-quality indicator (`MainWindow.AirQuality.cs`, no Bluetooth hosting).
+air-quality indicator (`MainWindow.AirQuality.cs`, no Bluetooth hosting). Quick-reply
+overlay (`ReplyFit.cs`, `ReplyDismissGuard.cs`). Settings responsiveness: writes go
+through one ordered lane (`WriteLane.cs`), steppers and search are debounced, Core is read
+per render. The responsiveness change is unmeasured.
 
 Verified: `win/tests/test_windows_contracts.py` and `win/scripts/typecheck_host.py` on
 this integration. Remote run on the Windows test PC: the suite was green on CI run
 43709454544 (before the air-quality merge and the rule-label change).
 
-Not verified: nothing after that run was compiled on Windows or rendered. Open items from
+Not verified: Windows was not run for this integration (host contract and type checks
+only); nothing after that run was compiled on Windows or rendered, including the reply
+overlay and the write lane. Open items from
 the remote run: the Answer button has low contrast in the test state, navigation and
 dialog title text is small, and the light-theme screenshots were never viewed. The
 air-quality indicator and the Fluent icon sizing in Viewbox/PathIcon are unseen.
@@ -88,7 +95,7 @@ permanent firewall rule (`DoorbellTest SSH (LAN)`), OpenSSH Server, the task
 `DoorbellTest-RunJob` and `C:\DoorbellTest`; `setup_test_host.ps1 -Uninstall` reverts
 them. The session there is Remote Desktop: UI tests need it connected.
 
-### Android (0.5.3, build 50)
+### Android (0.5.6, build 53)
 
 Done: Material 3 (modern) and framework widgets (legacy19) through per-flavor
 `PlatformUi`/`ShellActivity`; home without history; SOS flow; zoom (recentred offset
@@ -96,7 +103,10 @@ fixed: a clamped `-0f` no longer differs from `ZoomState()`); role change; quiet
 playback and secure-store bridge-order fixes; camera close race fix; null-safe household
 extensions; about half of the settings parity list; accent and role-text rules; video
 stage rule with H.264 aspect fit; Material Symbols; PM2.5 indicator, model and BLE
-host (`AirQuality*.kt`, `AirSensor*.kt`, unverified); readable rule titles.
+host (`AirQuality*.kt`, `AirSensor*.kt`, unverified); readable rule titles. Quick-reply overlay (`ReplyFit.kt`, corner countdown, exit hint,
+guarded dismissal). Settings responsiveness (`SettingsRefresh.kt`): Core reads off the main
+thread, ordered writes, coalesced reloads that rebuild only on change, secure-store
+presence cached per snapshot; unmeasured.
 
 Verified on this integration: modern lane `assembleModernDebug` and
 `testModernDebugUnitTest` (see the final check summary in the integration report).
@@ -112,7 +122,7 @@ speech, playback policy, logs, capability override, other devices' local setting
 delete confirmations) until `KNOWN_GAPS` and `DYNAMIC_GAPS` in
 `tools/tests/test_android_settings_parity.py` are empty.
 
-### iOS and tvOS (iOS 0.6.3, build 76; tvOS 0.5.4, build 26)
+### iOS and tvOS (iOS 0.6.6, build 79; tvOS 0.5.7, build 29)
 
 Done: tab bar home, collection view tiles, table-based history and editors, alert admin
 prompt, call action zone, SOS flow, zoom, role change (`RoleChangeController.swift`), a
@@ -121,7 +131,12 @@ Fixed since 0.5.1: tvOS Home header and nav title, SOS overlap, `sos_active` hoo
 accessibility-size incoming QR and History columns, tvOS "answered by" names,
 `storeMediaSecret` writes the leaf, DoorbellIOS9 availability. New: PM2.5 view and
 Bluetooth host (`AirQualityView.swift`, `AirSensorHost.swift`, usage descriptions in
-`Info.plist`), readable rule titles and the visitor-message trigger label.
+`Info.plist`), readable rule titles and the visitor-message trigger label. Since 0.6.3: quick-reply
+overlay (`ReplyFit.swift`), language control styled to its own radius, language switch
+applied on the tap and coalesced (`LangSwitch.swift`), settings change events coalesced
+into one off-main snapshot read with row-level updates and off-main config writes
+(`SettingsPerf.swift`). Measured in the simulator: 10 change events went from 170-200 ms
+to 0.017 ms. No device measurement.
 
 Verified: host-side checks only (string generation, icon checks, English-source check,
 `ios-compat` host tests, conformance). `xcodebuild` was not run on this integration: the
@@ -138,7 +153,7 @@ defaults, other devices' roles, speech, playback policy, raw config, logs, capab
 UI-element overrides, tvOS search). `ios-compat/tests/modern_settings_parity_test.py`
 exists but is not wired into `test_host.sh`.
 
-### iOS 5 kiosk (0.8.4, build 98; iOS 9 profile 0.7.4, build 421)
+### iOS 5 kiosk (0.8.6, build 100; iOS 9 profile 0.7.6, build 423)
 
 Done and seen on devices: stock UIKit redesign, home without history, SOS panel, role
 change, full settings parity, admin retry on writes, video stage rule, Framework7 icons
@@ -148,7 +163,12 @@ diagnostics trace. Settings audit (0.8.3): QR only on the device-information pag
 bitmaps at screen scale, controls rebound instead of reallocated, row layouts cached per
 width. PM2.5 air-quality section in settings and the air strings are in the generated
 `DBGeneratedStrings.m`, now produced from `i18n/strings.yaml`. Rule rows without a name
-show the localized trigger label.
+show the localized trigger label. Since 0.8.4: full-screen fitted quick reply with
+countdown and guarded two-step close, End-button guard after an answer, language switch
+relabelling in place with a debounced Core write, lazy category rows with diffed table
+refresh and asynchronous optimistic control writes (0.8.6). Measured on the iPad mini: the
+language switch went from about 480 ms to about 70 ms, the settings rebuild from 200 ms to
+9 ms, and the first control write from 506 ms to under 1 ms.
 
 Verified: `ios-kiosk/scripts/build_app.sh` builds the merged tree (armv7, iOS 5.1 target,
 zero unresolved symbols); `ios-compat` host tests pass. Earlier versions were installed on
@@ -156,7 +176,7 @@ the iPad 1 (0.7.1) and the three iPad mini 1 devices (0.7.2, `"mic":true`; the p
 and boot.json are at `/var/tmp/Doorbell.app.pre-redesign` and
 `/var/tmp/boot.json.pre-redesign` on each).
 
-Not verified: 0.8.4 was not installed anywhere; portrait and iPad 1 screenshots, the
+Not verified: 0.8.6 was not installed anywhere; portrait and iPad 1 screenshots, the
 calling/connected/reply states on a device, a sweep of every settings sub-page, gestures
 (pinch, pan, SOS slide), rotated door stations, H.264 under zoom and the role change
 restart. The microphone fix has not been confirmed in a real call. The iOS 9 armv7 lane
@@ -166,12 +186,14 @@ Known defects: the door-station home has been seen on the indoor mini in landsca
 phone landscapes under 500 pt still use the old two-column layout; the clock text is hard
 to read over a bright wallpaper; the bottom caption can clip.
 
-Next: install 0.8.4 on the iPad 1 and one mini, review portrait and the remaining states,
+Next: install 0.8.6 on the iPad 1 and one mini, review portrait and the remaining states,
 fix the defects above.
 
 ### Web panel and Admin (ship inside Core)
 
 Done: redesigned door, monitor and call pages; Admin console; SOS flow with countdown;
+full-screen quick-reply overlay on the door page (`reply_fit`, countdown, exit hint,
+guarded dismissal) and the `reply.display_ttl_s` Admin field (5 to 300);
 zoom with stage clipping and rotation; panel state fields `display`, `doors[].online`,
 `doors[].unlock`, `emergency.trigger.countdown_s`; Admin writes leaves; contrast tests;
 air-quality admin section; the rules list shows a localized trigger label (or the rule
@@ -201,20 +223,21 @@ Verified on this integration: Core build and the full `doorbell_tests` suite, Py
 tests, the conformance runner (visitor flow and event conformance). See the integration
 report for the exact results.
 
-Visitor flow Core work is complete: node-level tests (`core/tests/test_visitor_flow_node.cpp`,
+Visitor flow Core work is complete (634 tests in `doorbell_tests`): node-level tests (`core/tests/test_visitor_flow_node.cpp`,
 plus the Home Assistant case in `test_ha_bridge.cpp`) cover notify, rate limit, idempotency,
 capability gating, external-camera snapshots with a fake fetcher, per-step merge and delete, batch
 rejection, `require_call`, the default wizard, and the Telegram and HA mappings. An older Core
 accepts and merges the unknown `visitor_flow` key (pinned by a test; see `config-schema.md`,
 "Mixed versions"). Message snapshots are no longer served from the public `/asset/<sha256>` route:
-they need live-media authorization. Snapshot limits: only
+they need live-media authorization. Concurrent edits to different steps of the flow mark
+the section as an unresolved conflict instead of merging silently. Snapshot limits: only
 `media_sources.<id>.streams.snapshot.url` is supported (no ONVIF discovery, no RTSP still), and web
 panels and Web Push do not present visitor messages.
 
 ### Visitor flow status
 
-Core contract implemented (above). Native shells and the web `door.html` renderer do not
-render the wizard yet; the Admin flow editor and simulator are not written; no shell
+Core is complete (above). Remaining: the Admin flow editor and simulator, the web
+`door.html` renderer, and the renderer and editor on each native shell; no shell
 advertises `visitor_flow_v1`. Remaining work packages are design section 3, WP2 to WP8.
 
 ### PM2.5 air-quality sensors (unverified WIP)
@@ -225,6 +248,19 @@ indicators, a Windows read-only indicator, kiosk settings and strings, web Admin
 `docs/*/air-quality-sensors.md`. The air strings are now in `i18n/strings.yaml`. No
 hardware test was run and the shells that host Bluetooth were not exercised. Treat the
 feature as unreleased until a sensor is paired on each hosting platform.
+
+## Quick-reply overlay and responsiveness (all shells)
+
+- When a resident replies, the door-station screen shows the text full screen at the
+  largest font that fits, a countdown in a corner (from `reply.display_ttl_s`, 5 to 300
+  seconds, default 30), and the exit hint. See `ui-guidelines.md` for the rules. The fit
+  and dismissal logic is shared in spirit but implemented per shell: `ReplyFit.kt`,
+  `ReplyFit.swift`, `ReplyFit.cs` plus `ReplyDismissGuard.cs`, `DBTextFit` and
+  `DBReplyDismissal` on the kiosk, `reply_fit` in the web door page.
+- The setting range is 5 to 300 in Android, iOS and tvOS, the kiosk, Windows and Admin.
+- Language switching and settings pages were made to respond on the tap: coalesced events,
+  work off the main thread, diffed refreshes. Numbers exist only where stated above (kiosk
+  and iOS simulator); Android and Windows are unmeasured and Windows was not run.
 
 ## Repository-wide notes
 

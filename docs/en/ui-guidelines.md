@@ -99,6 +99,22 @@ switch live on rotation or window resize.
   unanswered (message + Call again). The SOS control (see SOS below)
   sits at the leading edge of the bottom zone only where configured.
 
+#### Quick-reply overlay
+
+- When a resident's quick reply arrives, it takes the whole screen: the reply text
+  at the largest size that fits the available area, centred, with no other chrome
+  competing with it.
+- A countdown is shown in a corner and runs for `reply.display_ttl_s` (5 to 300 s,
+  default 30). When it ends the screen returns to the home frame.
+- An exit hint ("Tap the screen twice to close", `reply.exit_hint`) is shown once the
+  lock has ended.
+- Dismissal is guarded so a passing touch cannot close it: for the first 3 s taps
+  are ignored (the lock), after that two taps close it (the second within 3 s, and not
+  as an accidental double-tap). After the first tap the hint changes to "Tap once more
+  to close" (`reply.exit_confirm`).
+- SOS and incoming-call rules are unchanged: an active SOS or a call replaces the
+  overlay and is never hidden by it.
+
 ### Dashboard (indoor panel)
 
 - Header: cluster clock and status chips (offline devices, SOS state, missed
