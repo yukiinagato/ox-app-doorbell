@@ -956,6 +956,14 @@
   <data name="flow_editor_icon_envelope" xml:space="preserve"><value>封筒</value></data>
   <data name="flow_editor_icon_home" xml:space="preserve"><value>家</value></data>
   <data name="flow_editor_icon_house" xml:space="preserve"><value>家</value></data>
+  <data name="flow_editor_icon_inherit" xml:space="preserve"><value>用件のアイコンを使う</value></data>
+  <data name="flow_editor_icon_kind_delivery" xml:space="preserve"><value>宅配</value></data>
+  <data name="flow_editor_icon_kind_mail" xml:space="preserve"><value>郵便</value></data>
+  <data name="flow_editor_icon_kind_other" xml:space="preserve"><value>その他</value></data>
+  <data name="flow_editor_icon_kind_person" xml:space="preserve"><value>人</value></data>
+  <data name="flow_editor_icon_kind_sales" xml:space="preserve"><value>営業・集金</value></data>
+  <data name="flow_editor_icon_kind_visit" xml:space="preserve"><value>訪問</value></data>
+  <data name="flow_editor_icon_kind_work" xml:space="preserve"><value>作業・工事</value></data>
   <data name="flow_editor_icon_mail" xml:space="preserve"><value>封筒</value></data>
   <data name="flow_editor_icon_none" xml:space="preserve"><value>アイコンなし</value></data>
   <data name="flow_editor_icon_other" xml:space="preserve"><value>その他</value></data>
@@ -964,6 +972,7 @@
   <data name="flow_editor_icon_pencil" xml:space="preserve"><value>ペン</value></data>
   <data name="flow_editor_icon_person" xml:space="preserve"><value>人</value></data>
   <data name="flow_editor_icon_sales" xml:space="preserve"><value>かばん</value></data>
+  <data name="flow_editor_icon_title" xml:space="preserve"><value>アイコン</value></data>
   <data name="flow_editor_icon_tool" xml:space="preserve"><value>工具</value></data>
   <data name="flow_editor_icon_user" xml:space="preserve"><value>人</value></data>
   <data name="flow_editor_icon_work" xml:space="preserve"><value>工具</value></data>
@@ -1009,8 +1018,13 @@
   <data name="flow_editor_preview_call_purpose" xml:space="preserve"><value>ここで呼び出しが始まります（用件: {0}）</value></data>
   <data name="flow_editor_preview_close" xml:space="preserve"><value>閉じる</value></data>
   <data name="flow_editor_preview_hint" xml:space="preserve"><value>現在の設定を来訪者と同じ画面で操作できます。呼び出しや通知は実行されません。</value></data>
+  <data name="flow_editor_preview_note" xml:space="preserve"><value>プレビュー: 通知も発信も行いません。</value></data>
   <data name="flow_editor_preview_notify" xml:space="preserve"><value>住人に通知が送られます: {0}</value></data>
   <data name="flow_editor_preview_off" xml:space="preserve"><value>ウィザードは無効か、使える状態ではありません。</value></data>
+  <data name="flow_editor_preview_restart" xml:space="preserve"><value>最初から</value></data>
+  <data name="flow_editor_preview_would_call" xml:space="preserve"><value>呼び出します: {0}</value></data>
+  <data name="flow_editor_preview_would_call_none" xml:space="preserve"><value>呼び出します（用件なし）</value></data>
+  <data name="flow_editor_preview_would_notify" xml:space="preserve"><value>メッセージを送り、次を表示します: {0}</value></data>
   <data name="flow_editor_purpose_none" xml:space="preserve"><value>用件なし</value></data>
   <data name="flow_editor_remove_image" xml:space="preserve"><value>画像を外す</value></data>
   <data name="flow_editor_reorder_hint" xml:space="preserve"><value>「編集」を押し、右端のハンドルをドラッグして並べ替えます。順序は一覧の表示だけに使われ、来訪者の操作には影響しません。</value></data>

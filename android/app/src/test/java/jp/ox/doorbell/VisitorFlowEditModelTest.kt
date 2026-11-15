@@ -176,4 +176,144 @@ class VisitorFlowEditModelTest {
             """{"kind":"page","options":[{"id":"a","purpose":"p","to":"c"}]}""")))
         assertNull(FlowEdit.localProblem(JSONObject("""{"kind":"call"}""")))
     }
+
+    // ---------- step order ----------
+
+    private fun stateWithOrders(orders: Map<String, Int?>): FlowEdit.State {
+        val base = FlowEdit.read(config)
+        val steps = LinkedHashMap<String, JSONObject>()
+        for ((id, step) in base.steps) {
+            val copy = JSONObject(step.toString())
+            orders[id]?.let { copy.put("order", it) }
+            steps[id] = copy
+        }
+        return base.copy(steps = steps)
+    }
+
+    @Test
+    fun anOrderMemberLeadsAndTiesKeepReadingOrder() {
+        val state = stateWithOrders(mapOf("e_thanks" to 0, "s_orphan" to 1, "n_left" to 1))
+        // n_left is read before s_orphan; steps without an order follow in reading order.
+        assertEquals(listOf("e_thanks", "n_left", "s_orphan", "s_home", "c_any", "s_parcel"),
+                     FlowEdit.order(state))
+    }
+
+    @Test
+    fun anUnusableOrderCountsAsNone() {
+        val steps = LinkedHashMap(FlowEdit.read(config).steps)
+        steps["s_orphan"] = JSONObject("""{"kind":"page","order":10000,"options":[]}""")
+        steps["n_left"] = JSONObject("""{"kind":"notify","order":-1,"to":"e_thanks"}""")
+        steps["c_any"] = JSONObject("""{"kind":"call","order":"3"}""")
+        val state = FlowEdit.read(config).copy(steps = steps)
+        assertEquals(listOf("s_home", "c_any", "s_parcel", "n_left", "e_thanks", "s_orphan"),
+                     FlowEdit.order(state))
+    }
+
+    @Test
+    fun theFirstMoveNumbersEveryStepAsWholeSteps() {
+        val state = FlowEdit.read(config)
+        val ops = FlowEdit.moveOps(state, "c_any", -1)
+        // Reading order was s_home, c_any, ...; after the move c_any is first.
+        val written = ops.associate { (it as ConfigOp.Set).key to JSONObject(it.valueJson) }
+        assertEquals(6, written.size)
+        assertEquals(0, written.getValue("visitor_flow.steps.c_any").getInt("order"))
+        assertEquals(1, written.getValue("visitor_flow.steps.s_home").getInt("order"))
+        assertEquals(5, written.getValue("visitor_flow.steps.s_orphan").getInt("order"))
+        // Whole steps: every other member is kept.
+        assertEquals("s_home", written.getValue("visitor_flow.steps.c_any").getString("on_unanswered"))
+        assertEquals("page", written.getValue("visitor_flow.steps.s_home").getString("kind"))
+    }
+
+    @Test
+    fun aLaterMoveRewritesOnlyWhatMoved() {
+        val numbered = LinkedHashMap<String, Int?>()
+        FlowEdit.order(FlowEdit.read(config)).forEachIndexed { i, id -> numbered[id] = i }
+        val state = stateWithOrders(numbered)
+        val ops = FlowEdit.moveOps(state, "s_parcel", 1)
+        assertEquals(setOf("visitor_flow.steps.s_parcel", "visitor_flow.steps.n_left"),
+                     ops.map { it.key }.toSet())
+        val parcel = JSONObject((ops.first { it.key.endsWith("s_parcel") } as ConfigOp.Set).valueJson)
+        val left = JSONObject((ops.first { it.key.endsWith("n_left") } as ConfigOp.Set).valueJson)
+        assertEquals(3, parcel.getInt("order"))
+        assertEquals(2, left.getInt("order"))
+    }
+
+    @Test
+    fun theEndsOfTheListCannotMoveFurther() {
+        val state = FlowEdit.read(config)
+        assertTrue(FlowEdit.moveOps(state, "s_home", -1).isEmpty())
+        assertTrue(FlowEdit.moveOps(state, "s_orphan", 1).isEmpty())
+        assertTrue(FlowEdit.moveOps(state, "missing", 1).isEmpty())
+    }
+
+    @Test
+    fun anotherEditKeepsTheOrderAndANewStepGetsTheNext() {
+        val numbered = LinkedHashMap<String, Int?>()
+        FlowEdit.order(FlowEdit.read(config)).forEachIndexed { i, id -> numbered[id] = i * 2 }
+        val state = stateWithOrders(numbered)
+        val edited = JSONObject(state.steps.getValue("s_parcel").toString())
+        val rewritten = FlowEdit.saveStepOps(mapOf("s_parcel" to edited))
+        assertEquals(4, JSONObject((rewritten.single() as ConfigOp.Set).valueJson).getInt("order"))
+
+        val fresh = linkedMapOf("c_new" to JSONObject("""{"kind":"call"}"""),
+                                "e_new" to JSONObject("""{"kind":"end"}"""))
+        val ordered = FlowEdit.withNextOrders(state.steps, fresh)
+        assertEquals(11, ordered.getValue("c_new").getInt("order"))
+        assertEquals(12, ordered.getValue("e_new").getInt("order"))
+    }
+
+    @Test
+    fun aNewStepStaysUnorderedWhileNoStepHasAnOrder() {
+        val state = FlowEdit.read(config)
+        assertNull(FlowEdit.nextOrder(state.steps))
+        val ordered = FlowEdit.withNextOrders(state.steps, mapOf("c_new" to JSONObject("""{"kind":"call"}""")))
+        assertFalse(ordered.getValue("c_new").has("order"))
+    }
+
+    @Test
+    fun aDuplicateLandsRightAfterTheOriginal() {
+        val state = FlowEdit.read(config)
+        val ops = FlowEdit.duplicateOps(state, "c_any", "c_copy", state.steps.getValue("c_any"))
+        val written = ops.associate { it.key.removePrefix("visitor_flow.steps.") to
+            JSONObject((it as ConfigOp.Set).valueJson).getInt("order") }
+        assertEquals(1, written.getValue("c_any"))
+        assertEquals(2, written.getValue("c_copy"))
+        assertEquals(3, written.getValue("s_parcel"))
+        assertEquals(0, written.getValue("s_home"))
+    }
+
+    // ---------- option icons and preview ----------
+
+    @Test
+    fun optionsNeverShowEmojiButAVendoredGlyph() {
+        fun cp(point: Int) = String(Character.toChars(point))
+        assertEquals(FlowIcons.Glyph.VISIT, FlowIcons.glyph("p_visit", cp(0x1F3E0)))
+        assertEquals(FlowIcons.Glyph.DELIVERY, FlowIcons.glyph("anything", cp(0x1F4E6)))
+        assertEquals(FlowIcons.Glyph.MAIL, FlowIcons.glyph("", cp(0x2709) + cp(0xFE0F)))
+        assertEquals(FlowIcons.Glyph.SALES, FlowIcons.glyph("p_sales", ""))
+        assertEquals(FlowIcons.Glyph.WORK, FlowIcons.glyph("p_utility_work", cp(0x1F9D1)))
+        assertEquals(FlowIcons.Glyph.OTHER, FlowIcons.glyph("p_other", ""))
+        assertEquals(FlowIcons.Glyph.PERSON, FlowIcons.glyph("p_unknown", cp(0x1F984)))
+        assertEquals(FlowIcons.Glyph.PERSON, FlowIcons.glyph("", ""))
+        // What the editor stores maps back to the glyph it was picked for.
+        for (glyph in FlowIcons.Glyph.values()) assertEquals(glyph, FlowIcons.glyph("", glyph.emoji))
+    }
+
+    @Test
+    fun thePreviewDocumentResolvesPurposeLabelsAndWalksLikeTheDoor() {
+        val withPurpose = JSONObject(config.toString()).put("visit_purposes", JSONObject(
+            """{"p_delivery":{"label":{"en":"Delivery"},"icon":"x"}}"""))
+        val document = FlowPreview.document(withPurpose, FlowEdit.read(withPurpose).steps, "s_home")
+        val walker = FlowWalker(document, "en")
+        val options = walker.snapshot().options
+        assertEquals(listOf("Call", "Delivery"), options.map { it.label })
+        assertTrue(options[0].primary && options[0].call)
+        assertFalse(options[1].call)
+        val calls = walker.apply(FlowEvent.Tap("o_d"))
+        assertTrue(calls.isEmpty())
+        assertEquals("s_parcel", walker.currentPageId)
+        val notify = walker.apply(FlowEvent.Tap("o_l"))
+        assertEquals(FlowPreview.Outcome.Message("n_left", "e_thanks"),
+                     FlowPreview.outcome(notify, walker.currentPageId))
+    }
 }

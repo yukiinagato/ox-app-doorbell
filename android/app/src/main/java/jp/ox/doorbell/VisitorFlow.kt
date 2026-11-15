@@ -22,6 +22,9 @@ internal data class FlowOptionView(
     val label: String,
     val icon: String,
     val primary: Boolean,
+    val purpose: String = "",
+    /** True when the option leads straight to a call step: the only kind that rings. */
+    val call: Boolean = false,
 )
 
 internal data class FlowImageView(
@@ -137,6 +140,8 @@ internal class FlowWalker(flow: JSONObject?, var lang: String = "ja") {
                     label = FlowText.textIn(option.optJSONObject("label"), lang).orEmpty(),
                     icon = option.optString("icon"),
                     primary = option.optString("style") == "primary",
+                    purpose = option.optString("purpose"),
+                    call = kind(option.optString("to")) == "call",
                 ))
             }
         }

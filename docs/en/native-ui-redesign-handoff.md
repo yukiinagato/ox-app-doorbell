@@ -6,8 +6,8 @@ integration (the Core visitor-flow completion, the full-screen quick-reply overl
 every shell, the language-switch and settings responsiveness work), and the third
 integration: the visitor flow implemented on Core, the web door page, Admin, the kiosk,
 iOS and tvOS, Android and Windows. Current versions: Windows 0.3.1 (file version
-0.3.1.32), Android 0.6.0 (54), iOS 0.7.1 (81), tvOS 0.6.1 (31), iOS 5 kiosk 0.9.0 (101)
-with the iOS 9 profile 0.8.0 (424). Verification is stated per deliverable; anything
+0.3.1.32), Android 0.6.1 (55), iOS 0.7.1 (81), tvOS 0.6.1 (31), iOS 5 kiosk 0.9.1 (102)
+with the iOS 9 profile 0.8.1 (425). Verification is stated per deliverable; anything
 under "Not verified" is untested, not passing.
 
 Related documents:
@@ -107,15 +107,24 @@ permanent firewall rule (`DoorbellTest SSH (LAN)`), OpenSSH Server, the task
 `DoorbellTest-RunJob` and `C:\DoorbellTest`; `setup_test_host.ps1 -Uninstall` reverts
 them. The session there is Remote Desktop: UI tests need it connected.
 
-### Android (0.6.0, build 54)
+### Android (0.6.1, build 55)
 
-Visitor flow (0.6.0): the flow wizard on the door station and a native flow editor
-(`VisitorFlowEditor.kt`, `VisitorFlowEditModel.kt`). Verified: run on an emulator including
-notify, call and `on_unanswered`; modern and legacy19 `assemble` and unit tests on this
-integration. Known gaps: option icons are emoji taken from the purpose data, the version
-caption sits mid-screen, and the editor has no preview. Step reordering is not
-implemented. Parity scan in `tools/tests/test_android_settings_parity.py` now includes the
-editor sources.
+Visitor flow (0.6.0, polished in 0.6.1): the flow wizard on the door station and a native
+flow editor (`VisitorFlowEditor.kt`, `VisitorFlowEditModel.kt`). 0.6.1: options show vendored
+Material Symbols (`FlowIcons.kt`: known emoji or the purpose id map to home, package, mail,
+briefcase, wrench, ellipsis, person; the editor offers a picker that stores the emoji every
+shell understands); Core's call-button colour is only used for a primary option that leads to
+a call; the clock is a small secondary element in the top row beside the language switch; the
+version caption is the bottom line of the screen; no classic controls show before Core has
+said whether a flow exists; the editor lists steps in Core's `step_order`, moves a step up or
+down from its menu (consecutive `order` values, only changed steps rewritten as whole steps in
+one batch; duplicates land after the original; new steps take the next order) and has a
+preview (`FlowPreview.kt`, same walker and page renderer, terminal actions only described);
+the asset toast no longer shows a raw `%1$s`. Verified: modern and legacy19 `assemble`, unit
+tests and lint, emulator screenshots (see the report of this change). Unverified: legacy19 on
+a device, drag reordering (the menu is the only control), notify and call against a live
+cluster on the new layout. Parity scan in `tools/tests/test_android_settings_parity.py`
+includes the editor sources.
 
 Earlier work: Material 3 (modern) and framework widgets (legacy19) through per-flavor
 `PlatformUi`/`ShellActivity`; home without history; SOS flow; zoom (recentred offset

@@ -149,6 +149,11 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
 
     /** The walker over Core's resolved visitor flow; null shows the classic purpose screen. */
     private var flowWalker: FlowWalker? = null
+
+    /** Set once Core has answered whether a flow exists; until then the home shows no controls. */
+    private var flowResolved = false
+    private var flowGaveUp = false
+    private var layoutCompact = false
     private val flowGate = ReloadGate()
     private var flowEndReason = "ended"
     private var flowBusy = false
@@ -452,6 +457,12 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         }
     }
 
+    /** "0.2.0+<40 hex>" as "0.2.0+<7 hex>": the caption is one quiet line. */
+    private fun shortRevision(version: String): String {
+        val plus = version.indexOf('+')
+        return if (plus < 0 || version.length - plus - 1 <= 7) version else version.substring(0, plus + 8)
+    }
+
     /** Render the membership pill and the pairing banner from an already-read pairing document. */
     private fun renderMembership(pairing: JSONObject?, ready: Boolean) {
         val membershipText = if (!ready) {
@@ -468,8 +479,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             val power = status?.optJSONObject("self")?.optJSONObject("power")
             ShellUi.versionLine(
                 doorLabel(app.boot.door).ifEmpty { app.boot.name },
-                status?.optJSONObject("node")?.optString("version").orEmpty()
-                    .ifEmpty { app.core.version() },
+                shortRevision(status?.optJSONObject("node")?.optString("version").orEmpty()
+                    .ifEmpty { app.core.version() }),
                 appVersionName(),
                 power?.optInt("battery_pct", -1) ?: -1,
                 power?.optBoolean("charging", false) ?: false,
@@ -763,13 +774,17 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         noticeCard.visibility = if (notice != null) View.VISIBLE else View.GONE
         noticeCard.background = ShellUi.rounded(this, palette.noticeBg, 12, palette.noticeLine)
         noticeCard.setTextColor(ShellUi.opaque(palette.noticeInk))
-        clockText.textSize = VisitorLayout.clockTextSizeSp(widthDp, heightDp)
+        val compact = flowHome()
+        layoutCompact = compact
+        clockText.textSize = if (compact) VisitorLayout.COMPACT_CLOCK_SP
+            else VisitorLayout.clockTextSizeSp(widthDp, heightDp)
+        dateText.textSize = if (compact) VisitorLayout.COMPACT_DATE_SP else 15f
         touchHint.textSize = VisitorLayout.hintTextSizeSp(widthDp)
         styleVisitorActions()
         VisitorLayout.apply(
             visitorSplit, visitorColumnA, visitorColumnB,
             idleHeader, noticeCard, langBar,
-            notice != null, widthDp, heightDp,
+            notice != null, widthDp, heightDp, compact,
         )
         applyFooterLayout(widthDp, heightDp)
         scheduleGroupSpacing()
@@ -851,15 +866,22 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             infoParams.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
             infoParams.weight = 0f
             sosParams.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT
-            sosParams.topMargin = dp(6)
+            sosParams.bottomMargin = dp(6)
         } else {
             infoParams.width = 0
             infoParams.weight = 1f
             sosParams.width = android.view.ViewGroup.LayoutParams.WRAP_CONTENT
-            sosParams.topMargin = 0
+            sosParams.bottomMargin = 0
         }
-        nodeInfo.layoutParams = infoParams
-        sosSlot.layoutParams = sosParams
+        // The caption is the bottom edge: the slider sits above it, or beside it when wide.
+        visitorFooter.removeAllViews()
+        if (stacked) {
+            visitorFooter.addView(sosSlot, sosParams)
+            visitorFooter.addView(nodeInfo, infoParams)
+        } else {
+            visitorFooter.addView(nodeInfo, infoParams)
+            visitorFooter.addView(sosSlot, sosParams)
+        }
         // Two lines rather than a cut-off one: the versions and the battery all have to be read.
         nodeInfo.setSingleLine(false)
         nodeInfo.maxLines = 2
@@ -1247,6 +1269,27 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         if (flowWalker != null && ::flowPanel.isInitialized && flowPanel.visible) scheduleFlowTimer()
     }
 
+    /** Whether the home is still waiting for Core to say if a visitor flow exists. */
+    private fun awaitingFlow(): Boolean =
+        app.boot.role == "door_station" && !flowResolved && !flowGaveUp && flowWalker == null
+
+    /** The flow start page is the home, or about to be: the compact top row applies. */
+    private fun flowHome(): Boolean = flowWalker != null || awaitingFlow()
+
+    private var flowGiveUpArmed = false
+
+    /** A Core that never answers must not leave the home blank: the classic screen takes over. */
+    private fun armFlowGiveUp() {
+        if (flowResolved || flowGaveUp || flowGiveUpArmed) return
+        flowGiveUpArmed = true
+        ui.postDelayed(flowGiveUp, FLOW_WAIT_MS)
+    }
+
+    private val flowGiveUp = Runnable {
+        flowGaveUp = true
+        if (!isFinishing && idleShowing()) showIdle()
+    }
+
     private fun idleShowing(): Boolean = !showsDashboard && idleView.visibility == View.VISIBLE &&
         callingView.visibility != View.VISIBLE && offlineView.visibility != View.VISIBLE &&
         !choosingPurpose
@@ -1258,6 +1301,7 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
     }
 
     private fun startFlowFetch() {
+        armFlowGiveUp()
         val worker = homeHandler
         if (worker == null) {
             flowGate.complete()
@@ -1282,8 +1326,13 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         if (document == null || app.boot.role != "door_station") return
         val usable = FlowDocuments.usable(document)
         val current = flowWalker
+        val waiting = awaitingFlow()
+        flowResolved = true
         if (usable == null) {
-            if (current == null) return
+            if (current == null) {
+                if (waiting && idleShowing()) showIdle()
+                return
+            }
             flowWalker = null
             configureCallFlow()
             if (idleShowing()) showIdle()
@@ -1324,7 +1373,10 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
             val shown = snapshot.notice?.let { flowNoticeText(it) }?.takeIf { it.isNotEmpty() } ?: hint
             visitorStatus.text = shown.orEmpty()
             visitorStatus.visibility = if (shown.isNullOrEmpty()) View.GONE else View.VISIBLE
-            flowPanel.render(snapshot, texts, visitorRoles(), if (app.safeMode) null else cfg,
+            if (!layoutCompact) applyVisitorLayout()
+            applyFlowColumn(true)
+            flowPanel.render(snapshot, texts, UiRoles.from(palette), visitorRoles(),
+                             if (app.safeMode) null else cfg,
                              nodeId, app.boot.httpPort, app.safeMode)
             flowPanel.setEnabled(app.coreOk)
             flowPanel.announce(snapshot.title)
@@ -1513,8 +1565,32 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         visitorStatus.text = hint.orEmpty()
         visitorStatus.visibility = if (hint.isNullOrEmpty()) View.GONE else View.VISIBLE
         idleView.scrollTo(0, 0)
-        if (flowWalker != null) showFlowPage(hint) else flowPanel.hide()
+        if (flowWalker != null) {
+            showFlowPage(hint)
+        } else {
+            flowPanel.hide()
+            applyFlowColumn(false)
+            if (layoutCompact != flowHome()) applyVisitorLayout()
+            if (awaitingFlow()) {
+                armFlowGiveUp()
+                // Neither the classic call button nor a purpose grid until Core has said which.
+                callSection.visibility = View.GONE
+                purposeSection.visibility = View.GONE
+                touchHint.visibility = View.GONE
+            }
+        }
         updateCallActionLabel()
+    }
+
+    /** On a wide window the flow page stays one centred column rather than spanning the screen. */
+    private fun applyFlowColumn(flow: Boolean) {
+        val widthPx = resources.displayMetrics.widthPixels
+        val base = dp(16)
+        val side = if (flow) maxOf(base, (widthPx - dp(FLOW_COLUMN_MAX_DP)) / 2) else base
+        val dock = findViewById<View>(R.id.visitor_action_dock)
+        dock.setPadding(side, dock.paddingTop, side, dock.paddingBottom)
+        val content = if (flow) maxOf(dp(12), side - dp(12)) else dp(12)
+        flowContent.setPadding(content, flowContent.paddingTop, content, flowContent.paddingBottom)
     }
 
     private fun showPurposeChooser() {
@@ -2094,6 +2170,8 @@ class MainActivity : ShellActivity(), DoorbellCore.Listener {
         private const val TAG = "doorbell-ui"
 
         private const val PURPOSE_TIMEOUT_MS = 15_000L
+        private const val FLOW_WAIT_MS = 2_500L
+        private const val FLOW_COLUMN_MAX_DP = 640
         private const val AIR_REFRESH_MS = 60_000L
         private const val AIR_PERMISSION_REQUEST = 2
         private const val CANCEL_RECONCILE_MS = 500L

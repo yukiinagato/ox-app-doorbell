@@ -954,6 +954,14 @@ Delete it?</string>
     <string name="flow_editor_icon_envelope">Envelope</string>
     <string name="flow_editor_icon_home">House</string>
     <string name="flow_editor_icon_house">House</string>
+    <string name="flow_editor_icon_inherit">Use the purpose\'s icon</string>
+    <string name="flow_editor_icon_kind_delivery">Delivery</string>
+    <string name="flow_editor_icon_kind_mail">Mail</string>
+    <string name="flow_editor_icon_kind_other">Other</string>
+    <string name="flow_editor_icon_kind_person">Person</string>
+    <string name="flow_editor_icon_kind_sales">Sales</string>
+    <string name="flow_editor_icon_kind_visit">Visit</string>
+    <string name="flow_editor_icon_kind_work">Work</string>
     <string name="flow_editor_icon_mail">Envelope</string>
     <string name="flow_editor_icon_none">No icon</string>
     <string name="flow_editor_icon_other">Ellipsis</string>
@@ -962,6 +970,7 @@ Delete it?</string>
     <string name="flow_editor_icon_pencil">Pen</string>
     <string name="flow_editor_icon_person">Person</string>
     <string name="flow_editor_icon_sales">Bag</string>
+    <string name="flow_editor_icon_title">Icon</string>
     <string name="flow_editor_icon_tool">Tool</string>
     <string name="flow_editor_icon_user">Person</string>
     <string name="flow_editor_icon_work">Tools</string>
@@ -1007,8 +1016,13 @@ Delete it?</string>
     <string name="flow_editor_preview_call_purpose">A call would start here (purpose: %1$s)</string>
     <string name="flow_editor_preview_close">Close</string>
     <string name="flow_editor_preview_hint">Walk the current wizard on the visitor screen. No call is started and no message is sent.</string>
+    <string name="flow_editor_preview_note">Preview: nothing is sent and nobody is called.</string>
     <string name="flow_editor_preview_notify">This message would go to the household: %1$s</string>
     <string name="flow_editor_preview_off">The wizard is off or not usable yet.</string>
+    <string name="flow_editor_preview_restart">Start again</string>
+    <string name="flow_editor_preview_would_call">Would ring: %1$s</string>
+    <string name="flow_editor_preview_would_call_none">Would ring (no purpose)</string>
+    <string name="flow_editor_preview_would_notify">Would send the message, then show: %1$s</string>
     <string name="flow_editor_purpose_none">No purpose</string>
     <string name="flow_editor_remove_image">Remove image</string>
     <string name="flow_editor_reorder_hint">Tap Edit and drag the handles to reorder. The order only arranges this list; it never changes what a visitor sees.</string>

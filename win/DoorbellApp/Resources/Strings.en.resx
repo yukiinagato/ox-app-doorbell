@@ -956,6 +956,14 @@ Delete it?</value></data>
   <data name="flow_editor_icon_envelope" xml:space="preserve"><value>Envelope</value></data>
   <data name="flow_editor_icon_home" xml:space="preserve"><value>House</value></data>
   <data name="flow_editor_icon_house" xml:space="preserve"><value>House</value></data>
+  <data name="flow_editor_icon_inherit" xml:space="preserve"><value>Use the purpose's icon</value></data>
+  <data name="flow_editor_icon_kind_delivery" xml:space="preserve"><value>Delivery</value></data>
+  <data name="flow_editor_icon_kind_mail" xml:space="preserve"><value>Mail</value></data>
+  <data name="flow_editor_icon_kind_other" xml:space="preserve"><value>Other</value></data>
+  <data name="flow_editor_icon_kind_person" xml:space="preserve"><value>Person</value></data>
+  <data name="flow_editor_icon_kind_sales" xml:space="preserve"><value>Sales</value></data>
+  <data name="flow_editor_icon_kind_visit" xml:space="preserve"><value>Visit</value></data>
+  <data name="flow_editor_icon_kind_work" xml:space="preserve"><value>Work</value></data>
   <data name="flow_editor_icon_mail" xml:space="preserve"><value>Envelope</value></data>
   <data name="flow_editor_icon_none" xml:space="preserve"><value>No icon</value></data>
   <data name="flow_editor_icon_other" xml:space="preserve"><value>Ellipsis</value></data>
@@ -964,6 +972,7 @@ Delete it?</value></data>
   <data name="flow_editor_icon_pencil" xml:space="preserve"><value>Pen</value></data>
   <data name="flow_editor_icon_person" xml:space="preserve"><value>Person</value></data>
   <data name="flow_editor_icon_sales" xml:space="preserve"><value>Bag</value></data>
+  <data name="flow_editor_icon_title" xml:space="preserve"><value>Icon</value></data>
   <data name="flow_editor_icon_tool" xml:space="preserve"><value>Tool</value></data>
   <data name="flow_editor_icon_user" xml:space="preserve"><value>Person</value></data>
   <data name="flow_editor_icon_work" xml:space="preserve"><value>Tools</value></data>
@@ -1009,8 +1018,13 @@ Delete it?</value></data>
   <data name="flow_editor_preview_call_purpose" xml:space="preserve"><value>A call would start here (purpose: {0})</value></data>
   <data name="flow_editor_preview_close" xml:space="preserve"><value>Close</value></data>
   <data name="flow_editor_preview_hint" xml:space="preserve"><value>Walk the current wizard on the visitor screen. No call is started and no message is sent.</value></data>
+  <data name="flow_editor_preview_note" xml:space="preserve"><value>Preview: nothing is sent and nobody is called.</value></data>
   <data name="flow_editor_preview_notify" xml:space="preserve"><value>This message would go to the household: {0}</value></data>
   <data name="flow_editor_preview_off" xml:space="preserve"><value>The wizard is off or not usable yet.</value></data>
+  <data name="flow_editor_preview_restart" xml:space="preserve"><value>Start again</value></data>
+  <data name="flow_editor_preview_would_call" xml:space="preserve"><value>Would ring: {0}</value></data>
+  <data name="flow_editor_preview_would_call_none" xml:space="preserve"><value>Would ring (no purpose)</value></data>
+  <data name="flow_editor_preview_would_notify" xml:space="preserve"><value>Would send the message, then show: {0}</value></data>
   <data name="flow_editor_purpose_none" xml:space="preserve"><value>No purpose</value></data>
   <data name="flow_editor_remove_image" xml:space="preserve"><value>Remove image</value></data>
   <data name="flow_editor_reorder_hint" xml:space="preserve"><value>Tap Edit and drag the handles to reorder. The order only arranges this list; it never changes what a visitor sees.</value></data>

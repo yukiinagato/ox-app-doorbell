@@ -954,6 +954,14 @@
     <string name="flow_editor_icon_envelope">封筒</string>
     <string name="flow_editor_icon_home">家</string>
     <string name="flow_editor_icon_house">家</string>
+    <string name="flow_editor_icon_inherit">用件のアイコンを使う</string>
+    <string name="flow_editor_icon_kind_delivery">宅配</string>
+    <string name="flow_editor_icon_kind_mail">郵便</string>
+    <string name="flow_editor_icon_kind_other">その他</string>
+    <string name="flow_editor_icon_kind_person">人</string>
+    <string name="flow_editor_icon_kind_sales">営業・集金</string>
+    <string name="flow_editor_icon_kind_visit">訪問</string>
+    <string name="flow_editor_icon_kind_work">作業・工事</string>
     <string name="flow_editor_icon_mail">封筒</string>
     <string name="flow_editor_icon_none">アイコンなし</string>
     <string name="flow_editor_icon_other">その他</string>
@@ -962,6 +970,7 @@
     <string name="flow_editor_icon_pencil">ペン</string>
     <string name="flow_editor_icon_person">人</string>
     <string name="flow_editor_icon_sales">かばん</string>
+    <string name="flow_editor_icon_title">アイコン</string>
     <string name="flow_editor_icon_tool">工具</string>
     <string name="flow_editor_icon_user">人</string>
     <string name="flow_editor_icon_work">工具</string>
@@ -1007,8 +1016,13 @@
     <string name="flow_editor_preview_call_purpose">ここで呼び出しが始まります（用件: %1$s）</string>
     <string name="flow_editor_preview_close">閉じる</string>
     <string name="flow_editor_preview_hint">現在の設定を来訪者と同じ画面で操作できます。呼び出しや通知は実行されません。</string>
+    <string name="flow_editor_preview_note">プレビュー: 通知も発信も行いません。</string>
     <string name="flow_editor_preview_notify">住人に通知が送られます: %1$s</string>
     <string name="flow_editor_preview_off">ウィザードは無効か、使える状態ではありません。</string>
+    <string name="flow_editor_preview_restart">最初から</string>
+    <string name="flow_editor_preview_would_call">呼び出します: %1$s</string>
+    <string name="flow_editor_preview_would_call_none">呼び出します（用件なし）</string>
+    <string name="flow_editor_preview_would_notify">メッセージを送り、次を表示します: %1$s</string>
     <string name="flow_editor_purpose_none">用件なし</string>
     <string name="flow_editor_remove_image">画像を外す</string>
     <string name="flow_editor_reorder_hint">「編集」を押し、右端のハンドルをドラッグして並べ替えます。順序は一覧の表示だけに使われ、来訪者の操作には影響しません。</string>

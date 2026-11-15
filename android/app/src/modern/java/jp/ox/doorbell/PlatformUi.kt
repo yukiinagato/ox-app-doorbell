@@ -192,7 +192,7 @@ internal object PlatformUi {
         if (stroke > 0) button.strokeColor = ColorStateList.valueOf(argb(context, R.attr.colorOutline))
     }
 
-    fun setButtonIcon(view: TextView, icon: Int) {
+    fun setButtonIcon(view: TextView, icon: Int, sizeDp: Int = 24) {
         val button = view as? MaterialButton ?: return
         if (icon == 0) {
             button.icon = null
@@ -200,7 +200,7 @@ internal object PlatformUi {
         }
         button.setIconResource(icon)
         button.iconGravity = MaterialButton.ICON_GRAVITY_TEXT_START
-        button.iconSize = dp(button.context, 24)
+        button.iconSize = dp(button.context, sizeDp)
         button.iconPadding = dp(button.context, 8)
     }
 

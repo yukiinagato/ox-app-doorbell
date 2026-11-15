@@ -81,6 +81,7 @@ internal class VisitorFlowEditor(
         }
         if (state.steps.size < FlowEdit.MAX_STEPS)
             add(steps, item(L("flow_editor.add_step")) { addStep(state) })
+        add(steps, item(L("flow_editor.preview")) { preview(state.steps, state.start) })
         templates(state)
         add(card, a.destructiveRow(L("flow_editor.reset_default"), L("flow_editor.reset_default_confirm")) {
             confirm(L("flow_editor.reset_default"), L("flow_editor.reset_default_confirm"),
@@ -131,12 +132,20 @@ internal class VisitorFlowEditor(
         options.add("edit" to L("admin.edit"))
         if (step.optString("kind") == "page" && id != state.start)
             options.add("start" to L("flow_editor.set_start"))
+        val sequence = FlowEdit.order(state)
+        val at = sequence.indexOf(id)
+        options.add("preview" to L("flow_editor.preview"))
+        if (at > 0) options.add("up" to L("nset.move_up"))
+        if (at in 0 until sequence.size - 1) options.add("down" to L("nset.move_down"))
         options.add("duplicate" to L("flow_editor.duplicate_step"))
         options.add("delete" to L("flow_editor.delete_step"))
         pickStep(stepName(state, id), options) { pick ->
             when (pick) {
                 "edit" -> editStep(id, false, step)
                 "start" -> a.write("visitor_flow.start", JSONObject.quote(id)) { }
+                "preview" -> preview(state.steps, if (step.optString("kind") == "page") id else state.start)
+                "up" -> writeBatch(FlowEdit.moveOps(state, id, -1))
+                "down" -> writeBatch(FlowEdit.moveOps(state, id, 1))
                 "duplicate" -> duplicate(state, id, step)
                 "delete" -> deleteStep(state, id)
             }
@@ -157,7 +166,7 @@ internal class VisitorFlowEditor(
         }
         val copy = JSONObject(step.toString())
         val target = FlowEdit.newId(FlowEdit.prefixFor(step.optString("kind")), state.steps.keys, random.nextLong())
-        writeBatch(FlowEdit.saveStepOps(mapOf(target to copy)))
+        writeBatch(FlowEdit.duplicateOps(state, id, target, copy))
     }
 
     private fun deleteStep(state: FlowEdit.State, id: String) {
@@ -210,9 +219,13 @@ internal class VisitorFlowEditor(
                 if (problem != null) {
                     fail(errorText(problem))
                 } else {
+                    // New steps take the next order; an edited step keeps the one it has.
+                    val fresh = LinkedHashMap<String, JSONObject>()
+                    if (session.isNew) fresh[session.id] = session.draft
+                    fresh.putAll(session.created)
                     val steps = LinkedHashMap<String, JSONObject>()
-                    steps[session.id] = session.draft
-                    steps.putAll(session.created)
+                    if (!session.isNew) steps[session.id] = session.draft
+                    steps.putAll(FlowEdit.withNextOrders(FlowEdit.read(cfg).steps, fresh))
                     a.writeOpsReporting(FlowEdit.saveStepOps(steps)) { result ->
                         when {
                             result == null -> fail(L("settings.offline"))
@@ -298,6 +311,10 @@ internal class VisitorFlowEditor(
                 }, ShellUi.matchWrap())
             }
         }
+        box.addView(item(L("flow_editor.preview")) {
+            sync()
+            preview(known, if (draft.optString("kind") == "page") session.id else state.start)
+        }, ShellUi.matchWrap())
         return ::sync
     }
 
@@ -466,8 +483,7 @@ internal class VisitorFlowEditor(
         val own = a.localizedLabel(option.optJSONObject("label"), "")
         val purpose = option.optString("purpose")
         val base = own.ifEmpty { if (purpose.isNotEmpty()) a.purposeLabel(purpose) else option.optString("id") }
-        val icon = option.optString("icon").ifEmpty { VisitPurposes.icon(cfg, purpose) }
-        return if (icon.isEmpty()) base else "$icon  $base"
+        return base
     }
 
     private fun optionMenu(session: Session, known: Map<String, JSONObject>, options: MutableList<JSONObject>,
@@ -496,18 +512,23 @@ internal class VisitorFlowEditor(
             build = { box, rebuild ->
                 val label = langFields(box, L("flow_editor.option_label"), option.optJSONObject("label"),
                                        FlowEdit.MAX_LABEL)
-                val icon = field(box, L("flow_editor.option_icon"), option.optString("icon"))
                 val primary = checkbox(box, L("flow_editor.option_primary"), option.optString("style") == "primary")
                 val shown = checkbox(box, L("flow_editor.option_enabled"), option.optBoolean("enabled", true))
                 val sync: () -> Unit = {
                     putText(option, "label", label())
-                    putOrRemove(option, "icon", icon.text.toString().trim())
                     if (primary.isChecked) option.put("style", "primary") else option.remove("style")
                     if (shown.isChecked) option.remove("enabled") else option.put("enabled", false)
                 }
                 box.addView(item(L("flow_editor.option_purpose"), purposeName(option.optString("purpose"))) {
                     sync()
                     pickPurpose { picked -> putOrRemove(option, "purpose", picked); rebuild() }
+                }, ShellUi.matchWrap())
+                val own = option.optString("icon")
+                box.addView(item(L("flow_editor.icon_title"),
+                    if (own.isEmpty()) L("flow_editor.icon_inherit")
+                    else L(FlowIcons.glyph(option.optString("purpose"), own).labelKey)) {
+                    sync()
+                    pickIcon { picked -> putOrRemove(option, "icon", picked); rebuild() }
                 }, ShellUi.matchWrap())
                 val names = FlowEdit.State(true, true, "", 0, true, known)
                 box.addView(item(L("flow_editor.option_target"),
@@ -572,6 +593,131 @@ internal class VisitorFlowEditor(
             if (text.isNotEmpty()) out.put(lang, text)
         }
         return if (out.length() == 0) null else out
+    }
+
+    // ---------- icon picker and preview ----------
+
+    /** The vendored icons by name; the choice is stored as the emoji every shell maps to its own set. */
+    private fun pickIcon(onPick: (String) -> Unit) {
+        val roles = UiRoles.from(a.palette)
+        var dialog: android.content.DialogInterface? = null
+        val column = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = ShellUi.dp(a, 20)
+            setPadding(pad, ShellUi.dp(a, 8), pad, ShellUi.dp(a, 8))
+        }
+        fun entry(label: String, drawable: Int, value: String) {
+            val button = UiKit.actionButton(a, label, roles, ActionRole.SECONDARY, 56) {
+                dialog?.dismiss()
+                onPick(value)
+            }
+            if (drawable != 0) PlatformUi.setButtonIcon(button, drawable)
+            column.addView(button, ShellUi.matchWrap().apply { topMargin = ShellUi.dp(a, 6) })
+        }
+        entry(L("flow_editor.icon_inherit"), 0, "")
+        for (glyph in FlowIcons.Glyph.values()) entry(L(glyph.labelKey), glyph.drawable, glyph.emoji)
+        dialog = ShellDialogBuilder(a).setTitle(L("flow_editor.icon_title"))
+            .setView(ScrollView(a).apply { addView(column) })
+            .setNegativeButton(L("admin.cancel"), null).create()
+        dialog.show()
+    }
+
+    /**
+     * Walks [steps] from the page [start] with the door station's own walker and page renderer.
+     * The terminal action is only described: nobody is called and nothing is sent.
+     */
+    private fun preview(steps: Map<String, JSONObject>, start: String) {
+        val first = if (steps[start]?.optString("kind") == "page") start
+            else FlowEdit.pages(steps).firstOrNull()
+        if (first == null) {
+            failure(errorText("visitor_flow.no_options"))
+            return
+        }
+        val langs = languages
+        val walker = FlowWalker(FlowPreview.document(cfg, steps, first), langs.first())
+        val texts = Texts(a).apply { setLang(langs.first()) }
+        val roles = UiRoles.from(a.palette)
+        val pad = ShellUi.dp(a, 16)
+        val root = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL
+            setBackgroundColor(ShellUi.opaque(a.palette.ground))
+            layoutParams = android.view.ViewGroup.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                (a.resources.displayMetrics.heightPixels * PREVIEW_HEIGHT_SHARE).toInt())
+        }
+        val note = ShellUi.label(a, L("flow_editor.preview_note"), TextRole.LABEL,
+                                 ShellUi.opaque(a.palette.muted)).apply { setPadding(pad, pad / 2, pad, 0) }
+        val action = ShellUi.label(a, "", TextRole.BODY).apply {
+            setPadding(pad, pad / 4, pad, 0)
+            accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
+        }
+        val content = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL
+            gravity = android.view.Gravity.CENTER
+            setPadding(pad, pad / 2, pad, pad / 2)
+        }
+        val dock = LinearLayout(a).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(pad, pad / 2, pad, pad)
+        }
+        var outcome: FlowPreview.Outcome = FlowPreview.Outcome.None
+        lateinit var panel: VisitorFlowPanel
+        fun draw() {
+            val snapshot = walker.snapshot()
+            action.text = when (val o = outcome) {
+                FlowPreview.Outcome.None -> ""
+                is FlowPreview.Outcome.Ring ->
+                    if (o.purpose.isEmpty()) L("flow_editor.preview_would_call_none")
+                    else L("flow_editor.preview_would_call", a.purposeLabel(o.purpose))
+                is FlowPreview.Outcome.Message ->
+                    L("flow_editor.preview_would_notify", snapshot.title ?: o.then.orEmpty())
+            }
+            action.visibility = if (action.text.isEmpty()) View.GONE else View.VISIBLE
+            if (snapshot.mode == FlowWalker.MODE_PAGE || snapshot.mode == FlowWalker.MODE_END) {
+                panel.render(snapshot, texts, roles, roles, null, "", 0, true)
+                return
+            }
+            panel.hide()
+            dock.visibility = View.VISIBLE
+            dock.addView(UiKit.actionButton(a, L("flow_editor.preview_restart"), roles,
+                                            ActionRole.PRIMARY, 56) {
+                walker.apply(FlowEvent.CallEnded("ended"))
+                outcome = FlowPreview.Outcome.None
+                dock.removeAllViews()
+                draw()
+            }, ShellUi.matchWrap())
+        }
+        panel = VisitorFlowPanel(
+            a, content, dock, a.ui, { a.resources.displayMetrics.heightPixels },
+            onOption = { id ->
+                outcome = FlowPreview.outcome(walker.apply(FlowEvent.Tap(id)), walker.currentPageId)
+                draw()
+            },
+            onBack = { walker.apply(FlowEvent.Back); outcome = FlowPreview.Outcome.None; draw() },
+            onDone = { walker.apply(FlowEvent.Done); outcome = FlowPreview.Outcome.None; draw() },
+            maxColumns = 1,
+        )
+        val languageRow = LinearLayout(a).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(pad, pad / 2, pad, 0)
+        }
+        for (lang in langs) languageRow.addView(
+            UiKit.actionButton(a, Texts.langDisplayName(lang), roles, ActionRole.SECONDARY, 40) {
+                texts.setLang(lang)
+                walker.apply(FlowEvent.Language(lang))
+                draw()
+            }, LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply {
+                rightMargin = ShellUi.dp(a, 6)
+            })
+        root.addView(note, ShellUi.matchWrap())
+        if (langs.size > 1) root.addView(languageRow, ShellUi.matchWrap())
+        root.addView(action, ShellUi.matchWrap())
+        root.addView(ScrollView(a).apply { addView(content) },
+                     LinearLayout.LayoutParams(android.view.ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        root.addView(dock, ShellUi.matchWrap())
+        draw()
+        ShellDialogBuilder(a).setTitle(L("flow_editor.preview")).setView(root)
+            .setPositiveButton(L("admin.menu_close"), null).show()
     }
 
     // ---------- shared pieces ----------
@@ -698,5 +844,6 @@ internal class VisitorFlowEditor(
         const val UPLOAD = "\u0000upload"
         const val MAX_EDGE = 1280
         const val TARGET_BYTES = 400 * 1024
+        const val PREVIEW_HEIGHT_SHARE = 0.7f
     }
 }

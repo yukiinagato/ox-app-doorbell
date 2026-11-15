@@ -1544,6 +1544,20 @@ flow_editor.target_new_call: { ja: "新しい呼び出しステップを作る",
 flow_editor.target_new_end: { ja: "新しい完了ページを作る", en: "New end page", zh: "新建结束页" }
 flow_editor.image_place_current: { ja: "画像の位置: {place}", en: "Image placement: {place}", zh: "图片位置：{place}" }
 flow_editor.step_kind: { ja: "ステップの種類", en: "Kind of step", zh: "步骤类型" }
+flow_editor.icon_title: { ja: "アイコン", en: "Icon", zh: "图标" }
+flow_editor.icon_inherit: { ja: "用件のアイコンを使う", en: "Use the purpose's icon", zh: "使用来访目的的图标" }
+flow_editor.icon_kind_visit: { ja: "訪問", en: "Visit", zh: "访客" }
+flow_editor.icon_kind_delivery: { ja: "宅配", en: "Delivery", zh: "快递" }
+flow_editor.icon_kind_mail: { ja: "郵便", en: "Mail", zh: "邮件" }
+flow_editor.icon_kind_sales: { ja: "営業・集金", en: "Sales", zh: "推销/收费" }
+flow_editor.icon_kind_work: { ja: "作業・工事", en: "Work", zh: "施工维修" }
+flow_editor.icon_kind_other: { ja: "その他", en: "Other", zh: "其他" }
+flow_editor.icon_kind_person: { ja: "人", en: "Person", zh: "人员" }
+flow_editor.preview_note: { ja: "プレビュー: 通知も発信も行いません。", en: "Preview: nothing is sent and nobody is called.", zh: "预览：不会发送通知，也不会呼叫。" }
+flow_editor.preview_would_call: { ja: "呼び出します: {purpose}", en: "Would ring: {purpose}", zh: "将呼叫：{purpose}" }
+flow_editor.preview_would_call_none: { ja: "呼び出します（用件なし）", en: "Would ring (no purpose)", zh: "将呼叫（无来访目的）" }
+flow_editor.preview_would_notify: { ja: "メッセージを送り、次を表示します: {step}", en: "Would send the message, then show: {step}", zh: "将发送消息，然后显示：{step}" }
+flow_editor.preview_restart: { ja: "最初から", en: "Start again", zh: "重新开始" }
 settings.cat_flow: { ja: "来訪者ウィザード", en: "Visitor wizard", zh: "访客向导" }
 settings.visitor_flow: { ja: "来訪者ウィザード", en: "Visitor wizard", zh: "访客向导" }
 settings.visitor_flow_native: { ja: "門口機で来訪者が進むページ、文章、画像、選択肢を編集します。オフにすると従来の呼出画面に戻ります。", en: "Edit the pages, texts, images and options a visitor walks through at the door station. Turn it off to return to the classic call screen.", zh: "编辑访客在门口机上经过的页面、文字、图片和选项。关闭后恢复为原来的呼叫画面。" }

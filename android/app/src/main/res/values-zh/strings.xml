@@ -954,6 +954,14 @@
     <string name="flow_editor_icon_envelope">信封</string>
     <string name="flow_editor_icon_home">房屋</string>
     <string name="flow_editor_icon_house">房屋</string>
+    <string name="flow_editor_icon_inherit">使用来访目的的图标</string>
+    <string name="flow_editor_icon_kind_delivery">快递</string>
+    <string name="flow_editor_icon_kind_mail">邮件</string>
+    <string name="flow_editor_icon_kind_other">其他</string>
+    <string name="flow_editor_icon_kind_person">人员</string>
+    <string name="flow_editor_icon_kind_sales">推销/收费</string>
+    <string name="flow_editor_icon_kind_visit">访客</string>
+    <string name="flow_editor_icon_kind_work">施工维修</string>
     <string name="flow_editor_icon_mail">信封</string>
     <string name="flow_editor_icon_none">无图标</string>
     <string name="flow_editor_icon_other">省略号</string>
@@ -962,6 +970,7 @@
     <string name="flow_editor_icon_pencil">笔</string>
     <string name="flow_editor_icon_person">人物</string>
     <string name="flow_editor_icon_sales">公文包</string>
+    <string name="flow_editor_icon_title">图标</string>
     <string name="flow_editor_icon_tool">工具</string>
     <string name="flow_editor_icon_user">人物</string>
     <string name="flow_editor_icon_work">工具</string>
@@ -1007,8 +1016,13 @@
     <string name="flow_editor_preview_call_purpose">此处将发起呼叫（目的：%1$s）</string>
     <string name="flow_editor_preview_close">关闭</string>
     <string name="flow_editor_preview_hint">用访客看到的界面操作当前向导。不会发起呼叫，也不会发送消息。</string>
+    <string name="flow_editor_preview_note">预览：不会发送通知，也不会呼叫。</string>
     <string name="flow_editor_preview_notify">将向住户发送：%1$s</string>
     <string name="flow_editor_preview_off">向导已关闭或暂不可用。</string>
+    <string name="flow_editor_preview_restart">重新开始</string>
+    <string name="flow_editor_preview_would_call">将呼叫：%1$s</string>
+    <string name="flow_editor_preview_would_call_none">将呼叫（无来访目的）</string>
+    <string name="flow_editor_preview_would_notify">将发送消息，然后显示：%1$s</string>
     <string name="flow_editor_purpose_none">无目的</string>
     <string name="flow_editor_remove_image">移除图片</string>
     <string name="flow_editor_reorder_hint">点按“编辑”并拖动右侧手柄调整顺序。顺序仅用于本列表，不影响访客看到的内容。</string>

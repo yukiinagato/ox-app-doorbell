@@ -949,6 +949,14 @@
 "flow_editor.icon_envelope" = "Envelope";
 "flow_editor.icon_home" = "House";
 "flow_editor.icon_house" = "House";
+"flow_editor.icon_inherit" = "Use the purpose's icon";
+"flow_editor.icon_kind_delivery" = "Delivery";
+"flow_editor.icon_kind_mail" = "Mail";
+"flow_editor.icon_kind_other" = "Other";
+"flow_editor.icon_kind_person" = "Person";
+"flow_editor.icon_kind_sales" = "Sales";
+"flow_editor.icon_kind_visit" = "Visit";
+"flow_editor.icon_kind_work" = "Work";
 "flow_editor.icon_mail" = "Envelope";
 "flow_editor.icon_none" = "No icon";
 "flow_editor.icon_other" = "Ellipsis";
@@ -957,6 +965,7 @@
 "flow_editor.icon_pencil" = "Pen";
 "flow_editor.icon_person" = "Person";
 "flow_editor.icon_sales" = "Bag";
+"flow_editor.icon_title" = "Icon";
 "flow_editor.icon_tool" = "Tool";
 "flow_editor.icon_user" = "Person";
 "flow_editor.icon_work" = "Tools";
@@ -1002,8 +1011,13 @@
 "flow_editor.preview_call_purpose" = "A call would start here (purpose: %@)";
 "flow_editor.preview_close" = "Close";
 "flow_editor.preview_hint" = "Walk the current wizard on the visitor screen. No call is started and no message is sent.";
+"flow_editor.preview_note" = "Preview: nothing is sent and nobody is called.";
 "flow_editor.preview_notify" = "This message would go to the household: %@";
 "flow_editor.preview_off" = "The wizard is off or not usable yet.";
+"flow_editor.preview_restart" = "Start again";
+"flow_editor.preview_would_call" = "Would ring: %@";
+"flow_editor.preview_would_call_none" = "Would ring (no purpose)";
+"flow_editor.preview_would_notify" = "Would send the message, then show: %@";
 "flow_editor.purpose_none" = "No purpose";
 "flow_editor.remove_image" = "Remove image";
 "flow_editor.reorder_hint" = "Tap Edit and drag the handles to reorder. The order only arranges this list; it never changes what a visitor sees.";

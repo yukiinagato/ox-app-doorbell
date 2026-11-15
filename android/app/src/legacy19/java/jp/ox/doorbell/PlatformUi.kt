@@ -134,13 +134,13 @@ internal object PlatformUi {
     }
 
     @Suppress("DEPRECATION")
-    fun setButtonIcon(view: TextView, icon: Int) {
+    fun setButtonIcon(view: TextView, icon: Int, sizeDp: Int = 24) {
         if (icon == 0) {
             view.setCompoundDrawables(null, null, null, null)
             return
         }
         val drawable = view.resources.getDrawable(icon).mutate()
-        val size = dp(view.context, 24)
+        val size = dp(view.context, sizeDp)
         drawable.setBounds(0, 0, size, size)
         drawable.setColorFilter(view.currentTextColor, PorterDuff.Mode.SRC_IN)
         view.setCompoundDrawables(drawable, null, null, null)

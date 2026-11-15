@@ -93,6 +93,13 @@ internal object VisitorLayout {
 
     fun hintTextSizeSp(widthDp: Int): Float = if (widthDp >= TABLET_MIN_DP) 20f else 15f
 
+    /** The clock beside the language switch on the flow home: secondary, never a headline. */
+    const val COMPACT_CLOCK_SP = 18f
+    const val COMPACT_DATE_SP = 12f
+
+    /** Below this the language switch leaves no room for the clock beside it. */
+    const val COMPACT_ROW_MIN_DP = 480
+
     fun clockTextSizeSp(widthDp: Int, heightDp: Int): Float = when {
         widthDp >= TABLET_MIN_DP -> 72f
         minOf(widthDp, heightDp) < 360 -> 40f
@@ -115,6 +122,7 @@ internal object VisitorLayout {
         hasNotice: Boolean,
         widthDp: Int,
         heightDp: Int,
+        compact: Boolean = false,
     ) {
         val arrangement = arrangementFor(widthDp, heightDp)
         detach(header)
@@ -122,6 +130,46 @@ internal object VisitorLayout {
         detach(langBar)
         columnA.removeAllViews()
         columnB.removeAllViews()
+        val narrow = compact && widthDp < COMPACT_ROW_MIN_DP
+        (header as? LinearLayout)?.let { box ->
+            box.orientation = if (narrow) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
+            box.gravity = when {
+                narrow -> android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+                compact -> android.view.Gravity.END
+                else -> android.view.Gravity.CENTER
+            }
+            // Clock and date share one line when the language switch takes the rest of the row.
+            (box.getChildAt(1)?.layoutParams as? LinearLayout.LayoutParams)?.leftMargin =
+                if (narrow) (12 * box.resources.displayMetrics.density).toInt() else 0
+        }
+
+        if (compact) {
+            // The flow home: language switch at the start of one quiet top row, clock and date at
+            // its end; the page below owns the rest of the screen.
+            split.orientation = LinearLayout.VERTICAL
+            columnB.visibility = View.GONE
+            columnA.visibility = View.VISIBLE
+            weight(columnA, 1f, vertical = true)
+            if (narrow) {
+                columnA.addView(header, wrap())
+                columnA.addView(noticeCard, wrap())
+                columnA.addView(langBar, wrapCentered())
+                return
+            }
+            val row = LinearLayout(columnA.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                isBaselineAligned = false
+            }
+            row.addView(langBar, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            row.addView(View(row.context), LinearLayout.LayoutParams(0, 1, 1f))
+            row.addView(header, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            columnA.addView(row, wrap())
+            columnA.addView(noticeCard, wrap())
+            return
+        }
 
         if (arrangement == Arrangement.STACKED) {
             split.orientation = LinearLayout.VERTICAL

@@ -41,6 +41,7 @@ internal class VisitorFlowPanel(
     private val onOption: (String) -> Unit,
     private val onBack: () -> Unit,
     private val onDone: () -> Unit,
+    private val maxColumns: Int = Int.MAX_VALUE,
 ) {
     private val optionButtons = ArrayList<Pair<Button, FlowOptionView>>()
     private val imageCache = object : LinkedHashMap<String, Bitmap>(8, 0.75f, true) {
@@ -64,6 +65,7 @@ internal class VisitorFlowPanel(
     /** Disables every control while Core cannot be reached or a call is being placed. */
     fun setEnabled(enabled: Boolean) {
         for (index in 0 until dock.childCount) setTreeEnabled(dock.getChildAt(index), enabled)
+        for ((button, _) in optionButtons) button.isEnabled = enabled
     }
 
     private fun setTreeEnabled(view: View, enabled: Boolean) {
@@ -80,6 +82,7 @@ internal class VisitorFlowPanel(
         snapshot: FlowSnapshot,
         texts: Texts,
         roles: UiRoles,
+        callRoles: UiRoles,
         styleConfig: JSONObject?,
         nodeId: String,
         httpPort: Int,
@@ -130,8 +133,13 @@ internal class VisitorFlowPanel(
             addImage(image, token, maxImageHeight, httpPort, safeMode, roles)
 
         val height = maxOf(UiTokens.VISITOR_TOUCH_MIN_DP, ScreenLayouts.visitorActionHeightDp(window))
+        // A short page is one centred block: the title and its cards together. A long one keeps
+        // the cards in the fixed dock so they never scroll away.
+        val inline = snapshot.images.isEmpty() && window.heightDp >= INLINE_MIN_DP &&
+            (snapshot.body?.length ?: 0) <= INLINE_BODY_MAX &&
+            snapshot.options.size <= INLINE_MAX_OPTIONS
         if (snapshot.mode == FlowWalker.MODE_END) {
-            dock.addView(UiKit.actionButton(
+            (if (inline) content else dock).addView(UiKit.actionButton(
                 activity, texts.t("flow.done", R.string.flow_done), roles, ActionRole.PRIMARY,
                 height, kind = ButtonKind.FILLED,
             ) { onDone() }.apply {
@@ -141,11 +149,13 @@ internal class VisitorFlowPanel(
                 // The text appearance carries a colour of its own; the role's ink goes back on.
                 UiKit.styleAction(this, roles, ActionRole.PRIMARY, height, kind = ButtonKind.FILLED)
             }, LinearLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { if (inline) topMargin = gap * 2 })
+            dock.visibility = if (dock.childCount == 0) View.GONE else View.VISIBLE
             return
         }
 
-        val columns = columnsFor(window, snapshot.options.size)
+        val columns = minOf(maxColumns, columnsFor(window, snapshot.options.size))
         val grid = LinearLayout(activity).apply { orientation = LinearLayout.VERTICAL }
         val cell = ShellUi.dp(activity, UiTokens.SPACE_S)
         snapshot.options.chunked(columns).forEachIndexed { rowIndex, row ->
@@ -154,16 +164,40 @@ internal class VisitorFlowPanel(
                 isBaselineAligned = false
             }
             for ((index, option) in row.withIndex()) {
-                val button = optionButton(option, roles, height)
+                val button = optionButton(option, roles, callRoles, height)
                 optionButtons.add(button to option)
                 line.addView(button, LinearLayout.LayoutParams(
                     0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f,
                 ).apply { if (index > 0) leftMargin = cell })
             }
+            // A short last row keeps its cards the size of the others and sits in the middle.
+            val missing = columns - row.size
+            if (missing > 0) {
+                line.addView(View(activity), 0, LinearLayout.LayoutParams(0, 1, missing / 2f))
+                line.addView(View(activity), LinearLayout.LayoutParams(0, 1, missing / 2f))
+            }
             grid.addView(line, LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             ).apply { if (rowIndex > 0) topMargin = cell })
         }
+        if (inline) {
+            content.addView(grid, LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { topMargin = gap * 2 })
+        } else {
+            addDockedOptions(grid)
+        }
+        if (snapshot.back) dock.addView(UiKit.actionButton(
+            activity, texts.t("flow.back", R.string.flow_back), roles, ActionRole.SECONDARY,
+            ScreenLayouts.touchTargetDp(window, 56),
+        ) { onBack() }, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ).apply { if (!inline) topMargin = cell })
+        dock.visibility = if (dock.childCount == 0) View.GONE else View.VISIBLE
+        applySemantic(styleConfig, nodeId)
+    }
+
+    private fun addDockedOptions(grid: LinearLayout) {
         val scroller = CappedScrollView(activity) { (viewportHeightPx() * OPTION_VIEWPORT_SHARE).toInt() }
         // The fade marks that more options wait; a scroll bar would sit on the buttons.
         scroller.isVerticalScrollBarEnabled = false
@@ -173,13 +207,6 @@ internal class VisitorFlowPanel(
         scroller.addView(grid)
         dock.addView(scroller, LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-        if (snapshot.back) dock.addView(UiKit.actionButton(
-            activity, texts.t("flow.back", R.string.flow_back), roles, ActionRole.SECONDARY,
-            ScreenLayouts.touchTargetDp(window, 56),
-        ) { onBack() }, LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = cell })
-        applySemantic(styleConfig, nodeId)
     }
 
     /** Announces the page title to a screen reader once per page change. */
@@ -193,10 +220,16 @@ internal class VisitorFlowPanel(
         lastTitleAnnounced = null
     }
 
-    private fun optionButton(option: FlowOptionView, roles: UiRoles, heightDp: Int): Button {
-        val label = if (option.icon.isEmpty()) option.label else "${option.icon}  ${option.label}"
+    private fun optionButton(
+        option: FlowOptionView,
+        roles: UiRoles,
+        callRoles: UiRoles,
+        heightDp: Int,
+    ): Button {
+        // Core's call-button colour belongs to a primary option that actually rings.
+        val colours = if (option.primary && option.call) callRoles else roles
         return PlatformUi.button(activity, if (option.primary) ButtonKind.FILLED else ButtonKind.TONAL).apply {
-            text = label
+            text = option.label
             @Suppress("DEPRECATION")
             setTextAppearance(activity, R.style.TextAppearance_Doorbell_Title)
             setSingleLine(false)
@@ -204,17 +237,21 @@ internal class VisitorFlowPanel(
             isFocusable = true
             contentDescription = option.label
             UiKit.styleAction(
-                this, roles, if (option.primary) ActionRole.PRIMARY else ActionRole.SECONDARY,
+                this, colours, if (option.primary) ActionRole.PRIMARY else ActionRole.SECONDARY,
                 heightDp, emphasis = true,
+            )
+            PlatformUi.setButtonIcon(
+                this, FlowIcons.glyph(option.purpose, option.icon).drawable, OPTION_ICON_DP,
             )
             setOnClickListener { onOption(option.id) }
         }
     }
 
-    private fun columnsFor(window: WindowSpec, count: Int): Int {
-        if (count <= 1) return 1
-        val portrait = window.heightDp > window.widthDp
-        return if (window.widthDp < PHONE_MAX_DP || portrait) 1 else 2
+    /** Two columns on a compact window, three on an expanded one; two or four cards pair up. */
+    private fun columnsFor(window: WindowSpec, count: Int): Int = when {
+        count <= 1 || window.widthDp < NARROW_MAX_DP -> 1
+        window.widthDp < PHONE_MAX_DP -> if (count == 2) 1 else 2
+        else -> if (count == 2 || count == 4) 2 else 3
     }
 
     private fun addImage(
@@ -286,6 +323,11 @@ internal class VisitorFlowPanel(
         const val IMAGE_VIEWPORT_SHARE = 0.4f
         const val OPTION_VIEWPORT_SHARE = 0.5f
         const val PHONE_MAX_DP = 600
+        const val NARROW_MAX_DP = 360
+        const val INLINE_MIN_DP = 600
+        const val INLINE_BODY_MAX = 240
+        const val INLINE_MAX_OPTIONS = 6
+        const val OPTION_ICON_DP = 32
         const val MAX_IMAGE_BYTES = 2 * 1024 * 1024
         const val MAX_CACHED_IMAGES = 6
     }

@@ -27,6 +27,7 @@ internal object FlowEdit {
     const val RETURN_MIN = 3
     const val RETURN_MAX = 60
     const val RETURN_DEFAULT = 8
+    const val MAX_ORDER = 9999
 
     val KINDS = listOf("page", "call", "notify", "end")
     const val CONFLICT = "unresolved_config_conflict"
@@ -91,8 +92,87 @@ internal object FlowEdit {
         return out
     }
 
-    /** Start page first, then in the order a visitor reaches them; unreachable steps last. */
+    /** The step's `order` when it is a usable one (an integer 0..9999), otherwise null. */
+    fun orderOf(step: JSONObject?): Int? {
+        val number = when (val value = step?.opt("order")) {
+            is Int -> value.toLong()
+            is Long -> value
+            else -> return null
+        }
+        return if (number in 0..MAX_ORDER.toLong()) number.toInt() else null
+    }
+
+    /**
+     * Core's `step_order`: steps with an `order` by ascending value, ties and steps without one in
+     * reading order.
+     */
     fun order(state: State): List<String> {
+        val reading = readingOrder(state)
+        val ranked = reading.filter { orderOf(state.steps[it]) != null }
+            .sortedBy { orderOf(state.steps.getValue(it)) }
+        return ranked + reading.filter { orderOf(state.steps[it]) == null }
+    }
+
+    /** [sequence] with [id] moved by [delta] places; null when it cannot move that far. */
+    fun moved(sequence: List<String>, id: String, delta: Int): List<String>? {
+        val list = sequence.toMutableList()
+        return if (move(list, list.indexOf(id), delta)) list else null
+    }
+
+    /**
+     * The steps whose `order` must change for [sequence] to become the order: each gets its index
+     * as a whole new object, every other member kept. Steps already carrying their index are left
+     * out, so a move rewrites only what moved.
+     */
+    fun renumbered(steps: Map<String, JSONObject>, sequence: List<String>): Map<String, JSONObject> {
+        val out = LinkedHashMap<String, JSONObject>()
+        sequence.forEachIndexed { index, id ->
+            val step = steps[id] ?: return@forEachIndexed
+            if (orderOf(step) == index) return@forEachIndexed
+            out[id] = JSONObject(step.toString()).put("order", index)
+        }
+        return out
+    }
+
+    /** One batch for moving [id] by [delta] in the listed order; empty when it cannot move. */
+    fun moveOps(state: State, id: String, delta: Int): List<ConfigOp> {
+        val sequence = moved(order(state), id, delta) ?: return emptyList()
+        return saveStepOps(renumbered(state.steps, sequence))
+    }
+
+    /** The `order` a new step takes, or null while no step has one (reading order places it). */
+    fun nextOrder(steps: Map<String, JSONObject>): Int? {
+        val highest = steps.values.mapNotNull { orderOf(it) }.maxOrNull() ?: return null
+        return minOf(highest + 1, MAX_ORDER)
+    }
+
+    /** Gives steps being created the next orders, in the sequence given. */
+    fun withNextOrders(existing: Map<String, JSONObject>, created: Map<String, JSONObject>):
+        Map<String, JSONObject> {
+        var next = nextOrder(existing) ?: return created
+        val out = LinkedHashMap<String, JSONObject>()
+        for ((id, step) in created) {
+            if (orderOf(step) != null) {
+                out[id] = step
+                continue
+            }
+            out[id] = JSONObject(step.toString()).put("order", next)
+            next = minOf(next + 1, MAX_ORDER)
+        }
+        return out
+    }
+
+    /** The ops that add [copy] as [copyId] directly after [id], renumbering what follows. */
+    fun duplicateOps(state: State, id: String, copyId: String, copy: JSONObject): List<ConfigOp> {
+        val sequence = order(state).toMutableList()
+        sequence.add(sequence.indexOf(id) + 1, copyId)
+        val steps = LinkedHashMap(state.steps)
+        steps[copyId] = JSONObject(copy.toString()).apply { remove("order") }
+        return saveStepOps(renumbered(steps, sequence))
+    }
+
+    /** The start page, then breadth-first through the targets, then unreachable steps by id. */
+    fun readingOrder(state: State): List<String> {
         val seen = LinkedHashSet<String>()
         val queue = ArrayDeque<String>()
         if (state.start in state.steps) queue.add(state.start)

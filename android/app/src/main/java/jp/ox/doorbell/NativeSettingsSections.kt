@@ -310,7 +310,7 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         a.coreCall({ a.app.core.assetAdd(bytes, type, label) }) { result ->
             val hash = result?.optString("hash").orEmpty()
             if (result?.optBoolean("ok") == true && hash.isNotEmpty()) {
-                a.toast(L("admin.asset_registered"))
+                a.toast(L("admin.asset_registered", label))
                 done(hash)
             } else {
                 a.toast(when (result?.optString("err")) {
