@@ -193,3 +193,12 @@ Kiosk 0.7.2 (86) is installed on the three iPad mini 1 devices (10.10.38.169, .4
 `/var/tmp/Doorbell.app.pre-redesign` and `/var/tmp/boot.json.pre-redesign` on each.
 The iPad 1 still runs 0.7.1 (85). The microphone fix (permission request, TCC
 entitlements, hardware default) has not been confirmed in a real call.
+
+## Icon policy change (owner, 2026-11-15, mostly not implemented)
+
+The owner dropped the "one icon set everywhere" rule: each platform should use its
+native-feeling set (see `ui-guidelines.md`, Tokens > Icons). Only the kiosk polish
+pass started switching (Framework7 Icons). Android (Material Symbols), modern iOS and
+tvOS (SF Symbols with a Framework7 fallback below iOS 13) and Windows (Segoe Fluent /
+Fluent UI System Icons) still use Tabler; `tools/gen_icons.py`, `tools/check_icons.py`
+and their tests assume Tabler and need extending per platform.
