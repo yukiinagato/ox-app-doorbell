@@ -24,6 +24,8 @@ KIOSK_SOURCES = (
     "ios-kiosk/src/Screens/DBRoleChange.m",
     "ios-kiosk/src/Screens/DBNoticeDialog.m",
     "ios-kiosk/src/Core/DBSettingsLogic.m",
+    "ios-kiosk/src/Screens/DBFlowEditorPages.m",
+    "ios-kiosk/src/Core/DBVisitorFlowModel.m",
 )
 
 # Admin keys the kiosk deliberately has no row for. Keep this empty unless a key truly
@@ -42,16 +44,21 @@ def read(relative_path):
         return handle.read()
 
 
+def i18n_ids():
+    return set(re.findall(r"(?m)^([A-Za-z0-9_.]+):\s*\{", read("i18n/strings.yaml")))
+
+
 def admin_keys():
-    """Dotted key fragments from the Admin's config-key expressions."""
+    """Dotted key fragments from the Admin's config-key expressions (message ids excluded)."""
     keys = set()
+    messages = i18n_ids()
     for match in KEY_CONTEXT.finditer(read("webui/admin/app.js")):
         for pair in LITERAL.findall(match.group(1)):
             literal = pair[0] or pair[1]
             if "." not in literal:
                 continue
             fragment = literal.strip(".")
-            if KEY_SHAPE.fullmatch(fragment):
+            if KEY_SHAPE.fullmatch(fragment) and fragment not in messages:
                 keys.add(fragment)
     return keys
 

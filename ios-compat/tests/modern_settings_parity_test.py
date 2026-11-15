@@ -24,6 +24,8 @@ SWIFT_SOURCES = (
     "ios/Doorbell/SettingsUI.swift",
     "ios/Doorbell/NoticeSupport.swift",
     "ios/Doorbell/RoleChangeController.swift",
+    "ios/Doorbell/VisitorFlowEditor.swift",
+    "ios/Doorbell/VisitorFlowPages.swift",
 )
 
 # Admin keys the Swift shell deliberately has no row for, each with the reason.
@@ -44,16 +46,21 @@ def read(relative_path):
         return handle.read()
 
 
+def i18n_ids():
+    return set(re.findall(r"(?m)^([A-Za-z0-9_.]+):\s*\{", read("i18n/strings.yaml")))
+
+
 def admin_keys():
-    """Dotted key fragments from the Admin's config-key expressions."""
+    """Dotted key fragments from the Admin's config-key expressions (message ids excluded)."""
     keys = set()
+    messages = i18n_ids()
     for match in KEY_CONTEXT.finditer(read("webui/admin/app.js")):
         for pair in LITERAL.findall(match.group(1)):
             literal = pair[0] or pair[1]
             if "." not in literal:
                 continue
             fragment = literal.strip(".")
-            if KEY_SHAPE.fullmatch(fragment):
+            if KEY_SHAPE.fullmatch(fragment) and fragment not in messages:
                 keys.add(fragment)
     return keys
 
