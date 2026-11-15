@@ -290,17 +290,57 @@ assert.deepStrictEqual(ops({}, [{ key: "households.h_new", value: { label: { en:
   assert.strictEqual(L.flowSaveFailureKey("unresolved_config_conflict"), "flow_editor.conflict_blocked");
   assert.strictEqual(L.flowSaveFailureKey("config_conflict"), "admin.partition_changed");
   assert.strictEqual(L.flowSaveFailureKey("stale_config_resolution"), "admin.partition_changed");
-  assert.strictEqual(L.flowSaveFailureKey("visitor_flow.bad_text: s.title"), "");
+  assert.strictEqual(L.flowSaveFailureKey("visitor_flow.text_too_long: s.title.en"), "");
   assert.strictEqual(L.flowParseError("unresolved_config_conflict"), null, "a conflict is not shown as a flow error");
 }
 
 // Core's refusal names the step and option; the editor shows it next to that field.
-assert.deepStrictEqual(L.flowParseError("visitor_flow.unknown_target: s_x.o"),
-  { code: "unknown_target", key: "visitor_flow.unknown_target", step: "s_x", option: "o", field: "" });
-assert.strictEqual(L.flowParseError("visitor_flow.missing_start").step, "");
-assert.deepStrictEqual(L.flowParseError("visitor_flow.bad_text: s_parcel.o_3.label"),
-  { code: "bad_text", key: "visitor_flow.bad_text", step: "s_parcel", option: "o_3", field: "label" });
-assert.deepStrictEqual(L.flowParseError("visitor_flow.bad_text: s_home.title"),
-  { code: "bad_text", key: "visitor_flow.bad_text", step: "s_home", option: "", field: "title" });
-assert.strictEqual(L.flowParseError("config_conflict"), null);
+{
+  const pe = (text, detail) => {
+    const i = L.flowParseError(text, detail);
+    return i && [i.code, i.step, i.option, i.field, i.lang, i.door].join("|");
+  };
+  assert.strictEqual(pe("visitor_flow.unknown_target: s_x.o"), "unknown_target|s_x|o|||");
+  assert.strictEqual(pe("visitor_flow.unknown_target: s_x"), "unknown_target|s_x||||");
+  assert.strictEqual(pe("visitor_flow.missing_start"), "missing_start|||||");
+  assert.strictEqual(pe("visitor_flow.text_too_long: s_home.title.ja", { lang: "ja", limit: 60, value: 70 }), "text_too_long|s_home||title|ja|");
+  assert.strictEqual(pe("visitor_flow.too_many_paragraphs: s_home.body.zh-CN"), "too_many_paragraphs|s_home||body|zh-CN|");
+  assert.strictEqual(pe("visitor_flow.text_too_long: s_parcel.o_3.label.en"), "text_too_long|s_parcel|o_3|label|en|");
+  assert.strictEqual(pe("visitor_flow.text_required: s_parcel.o_3.label"), "text_required|s_parcel|o_3|label||");
+  assert.strictEqual(pe("visitor_flow.text_required: n_1.message"), "text_required|n_1||message||");
+  assert.strictEqual(pe("visitor_flow.text_too_long: n_1.message.en"), "text_too_long|n_1||message|en|");
+  assert.strictEqual(pe("visitor_flow.unknown_asset: s_home.images[1]"), "unknown_asset|s_home||image.1||");
+  assert.strictEqual(pe("visitor_flow.text_too_long: s_home.images[0].alt.en"), "text_too_long|s_home||image.0.alt|en|");
+  assert.strictEqual(pe("visitor_flow.unknown_field: s_home.images[0]"), "unknown_field|s_home||image.0||");
+  assert.strictEqual(pe("visitor_flow.unknown_start: start"), "unknown_start|start||||");
+  assert.strictEqual(pe("visitor_flow.start_not_page: doors.d_front.start"), "start_not_page||||" + "|d_front");
+  assert.strictEqual(pe("visitor_flow.no_reachable_call: start"), "no_reachable_call|start||||");
+  assert.strictEqual(pe("visitor_flow.bad_idle_s", { min: 15, max: 300 }), "bad_idle_s|||idle_s||");
+  assert.deepStrictEqual(L.flowParseError("visitor_flow.bad_idle_s", { min: 15, max: 300 }).detail, { min: 15, max: 300 });
+  assert.strictEqual(L.flowParseError("visitor_flow.brand_new_code: s_x").key, "flow_error.brand_new_code", "an unknown code keeps its code");
+  assert.strictEqual(L.flowParseError("config_conflict"), null);
+
+  // Placeholders come from detail; {lang} is the display name.
+  const issue = L.flowParseError("visitor_flow.text_too_long: s.title.ja", { lang: "ja", limit: 60, value: 71 });
+  assert.strictEqual(L.flowFillMessage("Text is too long ({lang}: limit {limit}, now {value})", issue, "Japanese"), "Text is too long (Japanese: limit 60, now 71)");
+  assert.strictEqual(L.flowFillMessage("Set {min}-{max}", L.flowParseError("visitor_flow.bad_idle_s", { min: 15, max: 300 })), "Set 15-300");
+  assert.strictEqual(L.flowFillMessage("limit {limit}", { detail: {} }), "limit {limit}", "a missing number stays visible");
+
+  // Editing the control a refusal named dismisses it; other controls do not.
+  const draft = { steps: { s: { kind: "page", options: [{ id: "a" }, { id: "b" }] }, n: { kind: "notify" } } };
+  const touches = (text, fp) => L.flowIssueTouches(L.flowParseError(text), draft, fp);
+  assert.strictEqual(touches("visitor_flow.text_too_long: s.title.ja", "steps.s.title.ja"), true);
+  assert.strictEqual(touches("visitor_flow.text_too_long: s.title.ja", "steps.s.title.en"), false);
+  assert.strictEqual(touches("visitor_flow.text_too_long: s.b.label.en", "steps.s.options.1.label.en"), true);
+  assert.strictEqual(touches("visitor_flow.text_too_long: s.b.label.en", "steps.s.options.0.label.en"), false);
+  assert.strictEqual(touches("visitor_flow.unknown_target: s.b", "steps.s.options.1.to"), true);
+  assert.strictEqual(touches("visitor_flow.unknown_target: s.b", "steps.s.options.0.to"), false);
+  assert.strictEqual(touches("visitor_flow.unknown_asset: s.images[1]", "steps.s.images.1.asset"), true);
+  assert.strictEqual(touches("visitor_flow.unknown_asset: s.images[1]", "steps.s.images.0.asset"), false);
+  assert.strictEqual(touches("visitor_flow.no_options: s", "steps.s.title.en"), true);
+  assert.strictEqual(touches("visitor_flow.no_options: s", "steps.n.message.en"), false);
+  assert.strictEqual(touches("visitor_flow.unknown_start: start", "start"), true);
+  assert.strictEqual(touches("visitor_flow.unknown_start: doors.d1.start", "door_starts.d1"), true);
+  assert.strictEqual(touches("visitor_flow.bad_idle_s", "idle_s"), true);
+}
 console.log("admin leaf-key commits: PASS");

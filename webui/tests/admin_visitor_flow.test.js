@@ -70,9 +70,41 @@ assert.deepStrictEqual(codes(d, cfg), ["option_needs_label:s.o"]);
 d = good(); d.steps.s.options[1].purpose = "deleted";
 assert.deepStrictEqual(codes(d, cfg), ["unknown_purpose:s.p"]);
 d = good(); d.steps.p2.title = { en: "x".repeat(61) };
-assert.deepStrictEqual(codes(d, cfg), ["bad_text:p2@title"]);
+assert.deepStrictEqual(codes(d, cfg), ["text_too_long:p2@title"]);
+{
+  const e = L.flowValidate(d, cfg).errors[0];
+  assert.deepStrictEqual([e.lang, e.detail], ["en", { limit: 60, value: 61 }]);
+}
 d = good(); d.steps.p2.body = { en: "a\n\nb\n\nc\n\nd\n\ne\n\nf\n\ng\n\nh\n\ni" };
-assert.deepStrictEqual(codes(d, cfg), ["bad_text:p2@body"]);
+assert.deepStrictEqual(codes(d, cfg), ["too_many_paragraphs:p2@body"]);
+d = good(); d.steps.s.options[0].label = { en: "x".repeat(41) };
+assert.deepStrictEqual(codes(d, cfg), ["text_too_long:s.o@label"]);
+d = good(); d.steps.n.message = {};
+assert.deepStrictEqual(codes(d, cfg), ["text_required:n@message"]);
+d = good(); d.steps.n.message = { en: "x".repeat(201) };
+assert.deepStrictEqual(codes(d, cfg), ["text_too_long:n@message"]);
+d = good(); d.steps.p2.images = [{ asset: "ab".repeat(32) }, { asset: "ab".repeat(32) }, { asset: "ab".repeat(32) }];
+assert.deepStrictEqual(codes(d, cfg), ["too_many_images:p2"]);
+d = good(); d.steps.p2.images = [{ asset: "ab".repeat(32), alt: { en: "x".repeat(121) } }];
+assert.deepStrictEqual(codes(d, cfg), ["text_too_long:p2@image.0.alt"]);
+d = good(); d.steps.p2.images = [{ asset: "cd".repeat(32) }];
+assert.deepStrictEqual(codes(d, { assets: { [("cd").repeat(32)]: { type: "audio/wav" } }, ui: cfg.ui, visit_purposes: cfg.visit_purposes,
+  media_sources: cfg.media_sources }), ["asset_not_image:p2@image.0"]);
+d = good(); d.steps.s.options[1].id = "o";
+assert.deepStrictEqual(codes(d, cfg), ["bad_option_id:s.o"], "a repeated option id");
+d = good(); d.idle_s = 5;
+assert.deepStrictEqual(codes(d, cfg), ["bad_idle_s@idle_s"]);
+d = good(); d.steps.e.return_s = 99;
+assert.deepStrictEqual(L.flowValidate(d, cfg).errors[0].detail, { min: 3, max: 60 });
+// Start problems carry the start codes and the start location.
+d = good(); d.start = "gone"; d.door_starts = { d1: "c", d2: "gone" };
+assert.deepStrictEqual(L.flowValidate(d, cfg).errors.map((e) => [e.code, e.step, e.door]).sort(),
+  [["start_not_page", "", "d1"], ["unknown_start", "", "d2"], ["unknown_start", "start", ""]]);
+// A purpose that is switched off is accepted with a note beside the option.
+d = good();
+const off = { ui: cfg.ui, visit_purposes: { p: { label: { en: "P" }, enabled: false } }, assets: cfg.assets, media_sources: cfg.media_sources };
+assert.deepStrictEqual(codes(d, off), []);
+assert.deepStrictEqual(L.flowValidate(d, off).warnings.map((w) => [w.code, w.step, w.option, w.key]), [["disabled_purpose", "s", "p", "flow_error.disabled_purpose"]]);
 d = good(); d.steps.n.to = "c";
 assert.deepStrictEqual(codes(d, cfg), ["bad_target_kind:n"]);
 d = good(); d.steps.n.snapshot = { source: "media_source", id: "nosnap" };
@@ -84,7 +116,7 @@ assert.deepStrictEqual(codes(d, cfg), ["unknown_asset:p2@image.0"]);
 d = good(); d.start = "";
 assert.deepStrictEqual(codes(d, cfg), ["missing_start"]);
 d = good(); d.start = "c";
-assert.deepStrictEqual(codes(d, cfg), ["bad_target_kind:start"]);
+assert.deepStrictEqual(codes(d, cfg), ["start_not_page:start"]);
 d = good(); d.steps.c.on_unanswered = "e";
 assert.deepStrictEqual(codes(d, cfg), ["bad_target_kind:c"]);
 d = good(); d.steps.p2.options[0] = { id: "o", label: { en: "Back" }, to: "s" };

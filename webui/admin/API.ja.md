@@ -180,8 +180,9 @@ override object 単位に復元して batch 送信する。
   ステップとその参照先は同じバッチで送る。`visitor_flow.steps.<id>` ごとに完全なオブジェクトを 1 つ書き、
   `visitor_flow` や `visitor_flow.steps` をコンテナとして書いたり、ステップの下のキーを書いたりしない。
   組み込みウィザードへの復帰は `visitor_flow` の `delete` 1 回。エラーは
-  `visitor_flow.<code>[: <step>[.<option>]]`、警告（`visitor_flow.crowded_page`、`visitor_flow.no_call`）は
-  成功した書き込みの `warnings[]` に載る。
+  `visitor_flow.<code>[: <location>]` と任意の `detail` オブジェクト（`limit`、`value`、`min`、`max`、`lang`）で、
+  コード表は `docs/en/visitor-flow-contract.md` の 8.1 節。警告（`visitor_flow.crowded_page`、`visitor_flow.no_call`、
+  `visitor_flow.disabled_purpose`）は成功した書き込みの `warnings[]` に載る。
 - `visitor_flow.require_call`（bool リーフ、既定 true）: true の間は開始ページが通話に到達できないフローを
   拒否する（`visitor_flow.no_reachable_call: start`）。false なら警告 `visitor_flow.no_call` 付きで受理し、
   エディタは `flow_editor.require_call_off_warning` を表示する。
@@ -189,8 +190,9 @@ override object 単位に復元して batch 送信する。
   `POST /api/config/batch` 1 回で保存する。内容は、変更された 4 つのリーフ（`enabled`、`start`、`idle_s`、
   `require_call`。組み込みウィザードを初めて編集するときは全部）、変更されたステップごとの完全なオブジェクト、
   削除したステップの `delete`、`doors.<door>.visitor_flow.start` のリーフ。リビジョン付きコミットは拒否された
-  フローに対して `invalid_request` しか返さないが、バッチはステップと選択肢を示す
-  （`visitor_flow.<code>: <step>.<option>`）ため、エディタはそれを該当フィールドの横に表示する。バッチには
+  フローに対して `invalid_request` しか返さないが、バッチは場所を示す
+  （`visitor_flow.<code>: <step>.<option>`、`<step>.title.<lang>`、`<step>.images[n]`、`start` など）ため、
+  エディタは `flow_error.<code>` を該当コントロールの横に表示し、そのコントロールを編集すると消す。バッチには
   リビジョンが無いので、エディタは開いたときのフローと最新のスナップショットを比べ、古いドラフトは拒否する。
   `/api/config/commit` で保存する汎用エディタは `visitor_flow.steps.<id>` を丸ごと（外したメンバーは
   `remove_fields`）書き、ステップの下のキーは書かない。画像はブラウザ側で長辺 1280 px、約 400 KB に縮小して

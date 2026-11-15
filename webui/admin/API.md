@@ -515,8 +515,10 @@ Resolved document, notify and the shape of an editor write are specified in
   to must travel in one batch because the graph is validated on the configuration the batch
   would leave. Write one whole object per `visitor_flow.steps.<id>`; never write `visitor_flow` or
   `visitor_flow.steps` as a container or any key below a step. Resetting to the built-in wizard is
-  one `delete` of `visitor_flow`. Errors are `visitor_flow.<code>[: <step>[.<option>]]`; warnings
-  (`visitor_flow.crowded_page`, `visitor_flow.no_call`) ride in `warnings[]` of a successful write.
+  one `delete` of `visitor_flow`. Errors are `visitor_flow.<code>[: <location>]` with an optional `detail` object
+  (`limit`, `value`, `min`, `max`, `lang`); the code table is section 8.1 of
+  `docs/en/visitor-flow-contract.md`. Warnings (`visitor_flow.crowded_page`, `visitor_flow.no_call`,
+  `visitor_flow.disabled_purpose`) ride in `warnings[]` of a successful write.
 - `visitor_flow.require_call` (bool leaf, default true): while true, a flow whose entry page cannot
   reach a call is refused (`visitor_flow.no_reachable_call: start`); false accepts it with warning
   `visitor_flow.no_call`, and the editor shows `flow_editor.require_call_off_warning`.
@@ -525,8 +527,9 @@ Resolved document, notify and the shape of an editor write are specified in
   changed (all of them while the built-in wizard is first customized), one whole object per changed step,
   a `delete` per removed step and the `doors.<door>.visitor_flow.start` leaves. The plain batch is used
   because the revision-checked commit answers a refused flow with a bare `invalid_request`, while the
-  batch names the step and option (`visitor_flow.<code>: <step>.<option>`), which the editor shows next
-  to the field. The batch carries no revision, so the editor compares the flow it opened with a fresh
+  batch names the location (`visitor_flow.<code>: <step>.<option>`, `<step>.title.<lang>`,
+  `<step>.images[n]`, `start`, ...), which the editor shows as `flow_error.<code>` next to that control
+  and clears when the control is edited. The batch carries no revision, so the editor compares the flow it opened with a fresh
   snapshot first and refuses a stale draft. Generic editors that save through `/api/config/commit` write
   a `visitor_flow.steps.<id>` object whole, with `remove_fields` for dropped members, never a key below it.
   Images are downscaled in the browser to at most 1280 px and about 400 KB before upload. The simulator

@@ -35,6 +35,7 @@
       <div id="flowNotice" role="status"></div>
     </div>
     <div id="flowOptions" style="display:none"></div>
+    <div id="flowStatus" role="status" aria-live="polite"></div>
     <div id="doorList"></div>
     <div id="callingView" style="display:none">
       <div class="door" id="callingDoor"></div>
@@ -556,7 +557,8 @@
   // ---- Visitor flow (docs/en/visitor-flow-contract.md). The start page is the idle screen; the
   // classic Call and purpose buttons remain only when Core publishes no flow. ----
   var VF = window.DoorbellVisitorFlow;
-  var flowWalker = null, flowRevision = "", flowBrokenRevision = "", flowKey = "", flowBusy = false;
+  var flowWalker = null, flowRevision = "", flowBrokenRevision = "", flowKey = "", flowPending = null, flowPendingSeq = 0;
+  var FLOW_PENDING_STATUS_MS = 800, FLOW_PENDING_TIMEOUT_MS = 15000;
   var idleTimer = null, endTimer = null, flowPageSeen = "";
 
   function flowClear() {
@@ -602,10 +604,10 @@
   }
   function armIdle() {
     if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
-    if (!flowWalker || flowWalker.mode !== "page") return;
+    if (!flowWalker || flowWalker.mode !== "page" || flowPending) return;
     idleTimer = setTimeout(function () {
       idleTimer = null;
-      if (!flowWalker || currentCall) return;
+      if (!flowWalker || currentCall || flowPending) return;
       if (selectedDoor) { selectDoor(""); return; }
       flowWalker.idleTimeout(); flowKey = ""; renderFlow();
     }, flowWalker.idleSeconds() * 1000);
@@ -664,9 +666,54 @@
     var imgs = $("flowView").getElementsByTagName("img"), limit = flowImageLimit();
     for (var i = 0; i < imgs.length; i++) imgs[i].style.maxHeight = limit + "px";
   }
-  function setFlowOptionsDisabled(disabled) {
-    var bs = $("flowOptions").getElementsByTagName("button");
-    for (var i = 0; i < bs.length; i++) bs[i].disabled = !!disabled;
+  // One request to Core is outstanding at a time. The tapped option shows a spinner in place of
+  // its icon and stays at full strength, every other control is disabled without moving, and a
+  // status line follows after FLOW_PENDING_STATUS_MS. Every path ends in flowPendingEnd(), including
+  // the timeout, so the page is never left stuck.
+  function flowPendingStart(optionId, kind) {
+    var seq = ++flowPendingSeq, zone = $("flowOptions"), bs = zone.getElementsByTagName("button"), i;
+    var text = t(kind === "notify" ? "flow.pending_notify" : "flow.pending_call");
+    flowPending = { seq: seq, id: optionId, timers: [] };
+    if (idleTimer) { clearTimeout(idleTimer); idleTimer = null; }
+    zone.setAttribute("aria-busy", "true");
+    for (i = 0; i < bs.length; i++) {
+      if (bs[i].getAttribute("data-option") !== optionId) { bs[i].disabled = true; continue; }
+      var spin = document.createElement("span"), old = bs[i].getElementsByTagName("svg")[0];
+      spin.className = "flowSpin"; spin.setAttribute("aria-hidden", "true");
+      if (old) { bs[i].replaceChild(spin, old); flowPending.icon = old; }
+      else bs[i].insertBefore(spin, bs[i].firstChild);
+      flowPending.spin = spin; flowPending.button = bs[i];
+      bs[i].className += " busy"; bs[i].setAttribute("aria-busy", "true");
+    }
+    $("flowBack").disabled = true; $("flowDone").disabled = true;
+    var status = $("flowStatus");
+    C.setText(status, text); status.className = "quiet";
+    flowPending.timers.push(setTimeout(function () {
+      if (flowPending && flowPending.seq === seq) status.className = "on";
+    }, FLOW_PENDING_STATUS_MS));
+    flowPending.timers.push(setTimeout(function () { flowPendingEnd(seq, false); }, FLOW_PENDING_TIMEOUT_MS));
+    return seq;
+  }
+  // Returns false when this request is no longer the current one (a late answer after timeout).
+  function flowPendingEnd(seq, ok) {
+    var p = flowPending, zone = $("flowOptions"), bs = zone.getElementsByTagName("button"), i;
+    if (!p || p.seq !== seq) return false;
+    flowPending = null;
+    for (i = 0; i < p.timers.length; i++) clearTimeout(p.timers[i]);
+    zone.removeAttribute("aria-busy");
+    for (i = 0; i < bs.length; i++) bs[i].disabled = false;
+    if (p.button) {
+      if (p.spin && p.spin.parentNode === p.button) {
+        if (p.icon) p.button.replaceChild(p.icon, p.spin); else p.button.removeChild(p.spin);
+      }
+      p.button.className = p.button.className.replace(/ ?busy/, ""); p.button.removeAttribute("aria-busy");
+    }
+    $("flowBack").disabled = false; $("flowDone").disabled = false;
+    var status = $("flowStatus");
+    if (ok) { C.setText(status, ""); status.className = ""; }
+    else { C.setText(status, t("flow.notify_failed")); status.className = "failed"; }
+    if (flowWalker && flowWalker.mode === "page") armIdle();
+    return true;
   }
   function optionButton(option) {
     var primary = option.semantic_id === "call.primary";
@@ -693,6 +740,7 @@
       $("flowView").style.display = "none"; $("flowOptions").style.display = "none";
       $("flowBack").style.display = "none"; $("flowDone").style.display = "none";
       if (!shown) { flowKey = ""; flowClear(); }
+      if (!flowPending) { C.setText($("flowStatus"), ""); $("flowStatus").className = ""; }
       return;
     }
     try {
@@ -701,6 +749,7 @@
       var key = [LANG, snap.mode, snap.page, flowRevision, snap.notice || "", snap.back ? 1 : 0, selectedDoor].join("|");
       if (key !== flowKey) {
         flowKey = key;
+        if (!flowPending) { C.setText($("flowStatus"), ""); $("flowStatus").className = ""; }
         var changedPage = flowPageSeen !== snap.page;
         flowPageSeen = snap.page;
         C.setText($("flowTitle"), VF.textIn(step.title, LANG) || "");
@@ -752,20 +801,20 @@
     if (act.act === "page" || act.act === "end") { flowKey = ""; renderFlow(); return; }
     if (act.act === "press") { flowPress(act.purpose); return; }
     if (act.act !== "notify") return;
-    flowBusy = true; setFlowOptionsDisabled(true);
+    var seq = flowPendingStart(act.option, "notify");
     var doorId = selectedDoor || (lastState && lastState.doors && lastState.doors[0] && lastState.doors[0].id);
     R.panelRequest("POST", "/api/panel/visitor-notify", DoorbellCallFlow.notifyForm(doorId, act.step),
       function (st, j) {
-        flowBusy = false; setFlowOptionsDisabled(false);
+        var ok = st >= 200 && st < 300 && !!j && j.ok === true;
+        if (!flowPendingEnd(seq, ok) || !ok) return;
         if (!flowWalker || currentCall) return;
-        // A throttled result is shown as sent; a failure rings instead.
-        flowAct(flowWalker.notifyResult(st >= 200 && st < 300 && !!j && j.ok === true, act.step));
+        flowAct(flowWalker.notifyResult(true, act.step));
       });
   }
   function onFlowOption(id) {
-    if (!flowWalker || flowBusy || currentCall) return;
-    try { flowAct(flowWalker.tap(id)); }
-    catch (e) { flowBusy = false; flowBrokenRevision = flowRevision; selectedDoor = ""; flowDrop(); renderFlow(); }
+    if (!flowWalker || flowPending || currentCall) return;
+    try { var act = flowWalker.tap(id); act.option = id; flowAct(act); }
+    catch (e) { if (flowPending) flowPendingEnd(flowPending.seq, true); flowBrokenRevision = flowRevision; selectedDoor = ""; flowDrop(); renderFlow(); }
   }
   $("flowBack").onclick = function () {
     if (!flowWalker) return;

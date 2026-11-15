@@ -133,8 +133,12 @@ ships with Core.
 `walk` cases). The start page replaces the classic Call and purpose buttons; the option zone is fixed
 above the action bar, Back and Done sit beside SOS, and the language switch, quick-reply overlay,
 Cancel/End and offline band are unchanged. A notify option posts `door` and `step` to
-`/api/panel/visitor-notify` and shows the step's end page whether the result was throttled or not; a
-failed notify rings with the step's purpose. A call that ends unanswered returns to the call step's
+`/api/panel/visitor-notify` and shows the step's end page whether the result was throttled or not.
+While the request is outstanding the tapped option swaps its icon for a spinner and keeps its label,
+every other option and Back are disabled, `idle_s` is suspended, and after 0.8 s the line
+`flow.pending_notify` appears under the options (announced at once through a live region). A failure or
+15 s without an answer restores the options and shows `flow.notify_failed`; tapping the option again
+retries. A call that ends unanswered returns to the call step's
 `on_unanswered` page. The classic screen remains when the document is disabled, when the panel lists
 several doors, or when anything in the flow fails to render.
 

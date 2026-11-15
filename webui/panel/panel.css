@@ -274,6 +274,18 @@ body.doorPage:not(.ready) #hint, body.doorPage:not(.ready) #note, body.doorPage:
            background:#27313b; background:var(--surface-3); color:#e8edf2; color:var(--on-surface);
            border:1px solid #343f4b; border:1px solid var(--line); font-size:26px; font-size:1.625rem; font-weight:bold; line-height:1.2; }
 @media (max-width:599px) { #flowOptions .purposeBtn { width:100%; margin:6px 0; } }
+/* While Core answers, the tapped option swaps its icon for a spinner and keeps full strength;
+   the other options and the navigation buttons stay in place, dimmed. */
+.flowSpin { display:inline-block; box-sizing:border-box; width:1em; height:1em; margin-right:.4em; vertical-align:-.15em;
+            border-radius:50%; border:3px solid #343f4b; border:3px solid var(--line);
+            border-top-color:#6db3ff; border-top-color:var(--accent-text);
+            -webkit-animation:dbSpin 1s linear infinite; animation:dbSpin 1s linear infinite; }
+#flowOptions .flowOpt.busy { opacity:1; }
+#flowStatus { min-height:0; font-size:20px; font-size:1.25rem; line-height:1.4; padding:0; text-align:center;
+              color:#9aa7b5; color:var(--muted); }
+#flowStatus.on, #flowStatus.failed { padding:4px 0; }
+#flowStatus.failed { color:#ff8e8e; color:var(--negative-text); }
+#flowStatus.quiet { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); padding:0; }
 body .dbEmergencyOverlay { overflow:auto; }
 body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:auto; left:auto; right:auto; margin:8% 5%; }
 @supports (display:grid) {
@@ -319,8 +331,8 @@ body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:aut
                           min-height:clamp(96px, 12vh, 128px); }
   #flowOptions .purposeBtn { display:flex; flex-direction:column; align-items:center; justify-content:center;
                              width:auto; margin:0; min-height:clamp(96px, 14vh, 136px); }
-  #flowOptions .purposeBtn .ic { display:block; width:36px; height:36px; margin:0 0 8px; color:#6db3ff; color:var(--accent-text); }
-  #flowOptions .doorBtn .ic { width:1em; height:1em; margin-right:.35em; vertical-align:-.1em; }
+  #flowOptions .purposeBtn .ic, #flowOptions .purposeBtn .flowSpin { display:block; width:36px; height:36px; margin:0 0 8px; color:#6db3ff; color:var(--accent-text); }
+  #flowOptions .doorBtn .ic, #flowOptions .doorBtn .flowSpin { width:1em; height:1em; margin-right:.35em; vertical-align:-.1em; }
   #flowOptions .doorBtn .ic:last-child, #flowOptions .purposeBtn .ic:last-child { margin-right:0; }
   #flowBack, #flowDone { flex:1 1 auto; max-width:420px; }
   @media (min-width: 600px) {
@@ -338,7 +350,7 @@ body.doorPage .dbEmergencyOverlay .dbEmergencyInner { position:relative; top:aut
     #flowTitle { font-size:1.5rem; padding:0 0 6px; }
     #flowOptions .doorBtn, #flowOptions .purposeBtn { min-height:var(--tap-visitor); font-size:1.25rem; }
     #flowOptions .purposeBtn { flex-direction:row; gap:8px; }
-    #flowOptions .purposeBtn .ic { width:28px; height:28px; margin:0; }
+    #flowOptions .purposeBtn .ic, #flowOptions .purposeBtn .flowSpin { width:28px; height:28px; margin:0; }
   }
   @media (min-width: 900px) {
     #purposeGrid { grid-template-columns:repeat(3, minmax(0, 1fr)); }
