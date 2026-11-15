@@ -9,7 +9,8 @@
 @synthesize placeholder = _placeholder, keyboard = _keyboard, destructive = _destructive;
 @synthesize confirm = _confirm, checked = _checked, minimum = _minimum, maximum = _maximum;
 @synthesize image = _image, onChange = _onChange, page = _page, action = _action;
-@synthesize confirmMessage = _confirmMessage;
+@synthesize confirmMessage = _confirmMessage, anchor = _anchor, note = _note;
+@synthesize noteIsWarning = _noteIsWarning, busy = _busy;
 
 + (DBEditField *)kind:(DBEditKind)kind title:(NSString *)title value:(id)value {
   DBEditField *field = [[DBEditField alloc] init];
@@ -190,6 +191,10 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   UITableView *_table;
   UISearchBar *_search;
   CGFloat _layoutWidth;
+  NSString *_noteText;
+  NSArray *_noteAnchors;
+  BOOL _noteWarning;
+  BOOL _scrollToNote;
 }
 @synthesize cancelTitle = _cancelTitle, okTitle = _okTitle, confirmTitle = _confirmTitle;
 @synthesize setText = _setText, unsetText = _unsetText, customColorTitle = _customColorTitle;
@@ -281,6 +286,7 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 }
 
 - (void)finishClose {
+  [self clearNote];
   self.hidden = YES;
   _sections = @[];
   _visible = @[];
@@ -374,7 +380,7 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   DBEditPage *page = [self currentPage];
   if (page == nil) return;
   NSArray *built = page.build ? page.build() : @[];
-  _sections = built ?: @[];
+  _sections = [self sectionsWithNote:built ?: @[]];
   _search.placeholder = [page.searchPlaceholder length] > 0 ? page.searchPlaceholder
                                                             : _searchPlaceholder;
   [self applyHeader];
@@ -382,6 +388,58 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   if (_table.editing && ![self hasEditableSection]) [_table setEditing:NO animated:NO];
   [self updateBar];
   [_table reloadData];
+  if (_scrollToNote) {
+    _scrollToNote = NO;
+    for (NSUInteger s = 0; s < [_sections count] && s < [_visible count]; s++) {
+      NSArray *fields = [(DBEditSection *)[_sections objectAtIndex:s] fields];
+      NSArray *indexes = [_visible objectAtIndex:s];
+      for (NSUInteger r = 0; r < [indexes count]; r++) {
+        NSUInteger index = [[indexes objectAtIndex:r] unsignedIntegerValue];
+        if ([[fields objectAtIndex:index] note] == nil) continue;
+        [_table scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:(NSInteger)r inSection:(NSInteger)s]
+                      atScrollPosition:UITableViewScrollPositionMiddle animated:NO];
+        return;
+      }
+    }
+  }
+}
+
+#pragma mark - notes
+
+- (void)showNote:(NSString *)message anchors:(NSArray *)anchors warning:(BOOL)warning {
+  if ([message length] == 0) return;
+  _noteText = [message copy];
+  _noteAnchors = [anchors copy];
+  _noteWarning = warning;
+  _scrollToNote = YES;
+  __weak DBEditorView *weakSelf = self;
+  dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf reloadPage]; });
+}
+
+- (void)clearNote {
+  _noteText = nil;
+  _noteAnchors = nil;
+  _scrollToNote = NO;
+}
+
+// Marks the anchored row, or prepends a banner row when the current page has none.
+- (NSArray *)sectionsWithNote:(NSArray *)sections {
+  if (_noteText == nil) return sections;
+  for (NSString *anchor in _noteAnchors)
+    for (DBEditSection *section in sections)
+      for (DBEditField *field in section.fields)
+        if ([field.anchor isEqualToString:anchor]) {
+          field.note = _noteText;
+          field.noteIsWarning = _noteWarning;
+          return sections;
+        }
+  DBEditField *banner = [DBEditField kind:DBEditKindInfo title:@"" value:nil];
+  banner.note = _noteText;
+  banner.noteIsWarning = _noteWarning;
+  NSMutableArray *withBanner = [NSMutableArray arrayWithObject:
+      [DBEditSection title:nil fields:@[ banner ]]];
+  [withBanner addObjectsFromArray:sections];
+  return withBanner;
 }
 
 - (void)applyFilter {
@@ -459,7 +517,10 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
 
 - (void)apply:(DBEditField *)field value:(id)value {
   if (field.onChange == nil) return;
+  BOOL hadNote = _noteText != nil;
+  [self clearNote];
   if (field.onChange(value)) [self reloadPage];
+  else if (hadNote && _noteText == nil) [self reloadPage];
 }
 
 // Kinds that open a page of their own carry the disclosure indicator.
@@ -480,8 +541,22 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
   CGFloat accessory = field.kind == DBEditKindBool ? kDBEditSwitchAccessoryWidth
       : (([self opensPage:field] || field.checked) ? kDBEditIndicatorAccessoryWidth : 0);
   CGFloat image = field.image ? field.image.size.width + 10 : 0;
+  CGFloat textWidth = DBEditCellTextWidth(tableView, accessory, image);
+  if (field.note != nil) {
+    NSString *own = [self detailFor:field];
+    NSString *shown = [own length] > 0 ? [own stringByAppendingFormat:@"\n%@", field.note] : field.note;
+    CGFloat detailHeight = DBEditWrappedHeight(
+        shown, [UIFont systemFontOfSize:(DBChromeIsFlat() ? 12 : 14)], textWidth);
+    BOOL flat = DBChromeIsFlat();
+    CGFloat titleHeight = DBEditWrappedHeight(
+        field.title, flat ? [UIFont systemFontOfSize:17] : [UIFont boldSystemFontOfSize:17], textWidth);
+    DBEditCellLayout noted;
+    noted.style = UITableViewCellStyleSubtitle;
+    noted.height = MAX(kDBEditMinRowHeight, titleHeight + 2 + detailHeight + 22);
+    return noted;
+  }
   DBEditCellLayout layout = DBEditCellLayoutMake(
-      field.title, [self detailFor:field], DBEditCellTextWidth(tableView, accessory, image));
+      field.title, [self detailFor:field], textWidth);
   if (field.image) layout.height = MAX(layout.height, field.image.size.height + 16);
   return layout;
 }
@@ -519,9 +594,31 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
          cellForRowAtIndexPath:(NSIndexPath *)indexPath {
   DBEditField *field = [self fieldAt:indexPath];
   DBEditCellLayout layout = [self layoutFor:field inTable:tableView];
-  UITableViewCell *cell = DBEditDequeueCell(tableView, layout.style, field.destructive);
-  cell.textLabel.text = field.title;
-  cell.detailTextLabel.text = [self detailFor:field];
+  UITableViewCell *cell = nil;
+  if (field.note != nil) {
+    cell = [tableView dequeueReusableCellWithIdentifier:@"edit.note"];
+    if (cell == nil) {
+      cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleSubtitle
+                                    reuseIdentifier:@"edit.note"];
+      cell.textLabel.numberOfLines = 0;
+      cell.detailTextLabel.numberOfLines = 0;
+    }
+    cell.imageView.image = nil;
+    cell.accessoryView = nil;
+    cell.accessoryType = UITableViewCellAccessoryNone;
+    cell.selectionStyle = UITableViewCellSelectionStyleBlue;
+    cell.detailTextLabel.textColor = field.noteIsWarning
+        ? [UIColor colorWithRed:0.8f green:0.45f blue:0 alpha:1]
+        : [UIColor colorWithRed:0.85f green:0.15f blue:0.12f alpha:1];
+    NSString *own = [self detailFor:field];
+    cell.detailTextLabel.text = [own length] > 0 ? [own stringByAppendingFormat:@"\n%@", field.note]
+                                                 : field.note;
+    cell.textLabel.text = field.title;
+  } else {
+    cell = DBEditDequeueCell(tableView, layout.style, field.destructive);
+    cell.textLabel.text = field.title;
+    cell.detailTextLabel.text = [self detailFor:field];
+  }
   cell.imageView.image = field.image;
   if (field.kind == DBEditKindBool) {
     UISwitch *toggle = (UISwitch *)DBEditSpareAccessory(cell, [UISwitch class]) ?: [[UISwitch alloc] init];
@@ -537,6 +634,13 @@ static NSString *DBChoiceLabel(NSArray *choices, id value) {
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
   }
   if (field.checked) cell.accessoryType = UITableViewCellAccessoryCheckmark;
+  if (field.busy) {
+    UIActivityIndicatorView *spinner = (UIActivityIndicatorView *)DBEditSpareAccessory(
+        cell, [UIActivityIndicatorView class]) ?: [[UIActivityIndicatorView alloc]
+        initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
+    [spinner startAnimating];
+    cell.accessoryView = spinner;
+  }
   return cell;
 }
 

@@ -257,6 +257,13 @@ DB_REPO_ROOT="$REPO_ROOT" "$OUT/visitor_flow_model_test"
   -framework Foundation -o "$OUT/flow_order_test"
 "$OUT/flow_order_test"
 
+"$CC" -fobjc-arc -Wall -Wextra -Werror -O2 -isysroot "$MACOS_SDK" \
+  -I"$REPO_ROOT/ios-kiosk/src/Core" \
+  "$REPO_ROOT/ios-kiosk/src/Core/DBFlowError.m" \
+  "$REPO_ROOT/ios-compat/tests/flow_error_test.m" \
+  -framework Foundation -o "$OUT/flow_error_test"
+"$OUT/flow_error_test"
+
 "$OUT/kiosk_settings_pages_test"
 "$OUT/minisip_uas_loopback"
 bash "$SCRIPT_DIR/test_chime_host.sh"

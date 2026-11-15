@@ -28,6 +28,7 @@
 #import "DBSosPanel.h"
 #import "DBWidgets.h"
 #import <ImageIO/ImageIO.h>
+#import <dlfcn.h>
 #import <QuartzCore/QuartzCore.h>
 #import <math.h>
 
@@ -151,6 +152,9 @@ static const CGFloat kPurposeIconSide = 28;
 static const NSInteger kPurposeIconTag = 7401;
 // The narrowest language segment a visitor can still hit and read.
 static const CGFloat kLanguageSegmentMinimum = 64;
+// A pending flow option gives up after this long; its status line shows after the delay.
+static const NSTimeInterval kFlowPendingTimeout = 15;
+static const NSTimeInterval kFlowPendingStatusDelay = 0.8;
 
 @implementation DBDoorScreen {
   DBCoreBridge *_core;
@@ -236,6 +240,15 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   NSTimeInterval _flowLastInput;
   NSTimeInterval _flowEndSince;
   BOOL _flowBusy;
+  // A tapped option waits on Core: _flowPending covers what the visitor sees; _flowBusy stays
+  // set until the request ends. The token ties a late answer to the tap that asked.
+  BOOL _flowPending;
+  BOOL _flowFailed;
+  BOOL _flowPendingCalling;
+  NSInteger _flowPendingIndex;
+  NSUInteger _flowPendingToken;
+  UIActivityIndicatorView *_flowSpinner;
+  UILabel *_flowStatus;
   BOOL _flowDebugHold;
   // YES once Core has answered the first flow request, with a document or with none. Until then the
   // screen shows neither the classic call button nor the purposes, so a wizard never flashes the
@@ -661,6 +674,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _flowOptionScroll.hidden = !flowOn;
   _flowBackButton.hidden = !(flowOn && [_flow canGoBack]);
   _flowBackPlate.hidden = _flowBackButton.hidden;
+  _flowStatus.hidden = !(flowOn && [_flowStatus.text length] > 0);
   if (!flowOn) _flowFade.hidden = YES;
   _cancelButton.hidden = idle;
   _callPlate.hidden = idle;
@@ -882,6 +896,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _dateLabel.textColor = [UIColor whiteColor];
   [_air applyPalette:_palette region:DBUiRegionDate];
   [_palette applyInkToLabel:_touchHint region:DBUiRegionHint];
+  [_palette applyInkToLabel:_flowStatus region:DBUiRegionHint];
   [_palette applyInkToLabel:_versionLabel region:DBUiRegionStatusLine];
   [_palette applyInkToLabel:_mediaBadge region:DBUiRegionStatusLine];
 }
@@ -2286,6 +2301,18 @@ static const CGFloat kLanguageSegmentMinimum = 64;
     _flowBackPlate.hidden = YES;
     [self addSubview:_flowBackPlate];
   }
+  _flowStatus = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:20]];
+  _flowStatus.numberOfLines = 1;
+  _flowStatus.adjustsFontSizeToFitWidth = YES;
+  _flowStatus.minimumFontSize = 12;
+  _flowStatus.textColor = [UIColor colorWithWhite:1 alpha:0.85f];
+  _flowStatus.hidden = YES;
+  _flowStatus.accessibilityIdentifier = @"flow_status";
+  [self addSubview:_flowStatus];
+  _flowSpinner = [[UIActivityIndicatorView alloc]
+      initWithActivityIndicatorStyle:UIActivityIndicatorViewStyleGray];
+  _flowSpinner.hidesWhenStopped = YES;
+  _flowSpinner.accessibilityIdentifier = @"flow_pending";
   _flowBackButton = DBChromeButton(@"", 20);
   _flowBackButton.accessibilityIdentifier = @"flow_back";
   _flowBackButton.hidden = YES;
@@ -2402,6 +2429,10 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   if (changed) {
     _flowLastInput = DBCallMonotonicTime();
     if ([mode isEqualToString:DBVisitorFlowModeEnd]) _flowEndSince = _flowLastInput;
+    if (!_flowPending && _flowFailed) {
+      _flowFailed = NO;
+      _flowStatus.text = nil;
+    }
   }
   _flowRenderedPage = [page copy];
   _flowRenderedMode = [mode copy];
@@ -2589,6 +2620,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
       DBApplyDoorButtonStyle(button, purposeStyle, [UIColor blackColor], white, 10);
     }
   }
+  [self applyFlowPending];
 }
 
 #pragma mark - visitor flow input
@@ -2601,7 +2633,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 }
 
 - (void)onFlowOption:(UIButton *)sender {
-  if (_flowBusy || ![self flowShowing]) return;
+  if (_flowBusy || _flowPending || ![self flowShowing]) return;
   if (sender.tag < 0 || sender.tag >= (NSInteger)[_flowOptionModels count]) return;
   NSString *optionID = [[_flowOptionModels objectAtIndex:(NSUInteger)sender.tag]
       objectForKey:@"id"];
@@ -2613,30 +2645,169 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   }
   NSDictionary *plan = [_flow planForTap:optionID];
   if (plan == nil) return;
-  if ([[plan objectForKey:@"action"] isEqualToString:@"notify"]) {
-    // Core's loop answers; the visitor sees the next page whatever it says, and a failure rings.
-    _flowBusy = YES;
+  NSString *action = [plan objectForKey:@"action"];
+  __weak DBDoorScreen *weakSelf = self;
+  if ([action isEqualToString:@"notify"]) {
+    // The visitor sees the next page when Core says the message went out; a failure or silence
+    // restores the options with a retry line.
     NSString *stepID = [plan objectForKey:@"step"];
     NSString *door = _boot.door ?: @"";
     DBCoreBridge *core = _core;
-    __weak DBDoorScreen *weakSelf = self;
+    NSUInteger token = [self flowBeginPendingAtIndex:sender.tag calling:NO];
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
       NSDictionary *result = [core visitorNotify:door step:stepID];
       dispatch_async(dispatch_get_main_queue(), ^{
-        DBDoorScreen *screen = weakSelf;
-        if (!screen) return;
-        screen->_flowBusy = NO;
-        NSArray *calls = [screen->_flow applyEvent:@{
-            @"tap" : optionID, @"notify_result" : result ?: @{ @"ok" : @NO } }];
-        [screen flowPerformCalls:calls];
-        [screen flowStateChanged];
+        [weakSelf flowNotifyFinished:result option:optionID token:token];
       });
+    });
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kFlowPendingTimeout * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ [weakSelf flowPendingTimedOut:token]; });
+    return;
+  }
+  if ([action isEqualToString:@"press"]) {
+    // Starting the call blocks on Core: let the pending state reach the screen first.
+    NSUInteger token = [self flowBeginPendingAtIndex:sender.tag calling:YES];
+    [CATransaction flush];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBDoorScreen *screen = weakSelf;
+      if (!screen || token != screen->_flowPendingToken || !screen->_flowPending) return;
+      [screen flowEndPending];
+      NSArray *calls = [screen->_flow applyEvent:@{ @"tap" : optionID }];
+      [screen flowPerformCalls:calls];
+      [screen flowStateChanged];
     });
     return;
   }
   NSArray *calls = [_flow applyEvent:@{ @"tap" : optionID }];
   [self flowPerformCalls:calls];
   [self flowStateChanged];
+}
+
+#pragma mark - visitor flow pending state
+
+static BOOL DBFlowReduceMotion(void) {
+  static bool (*reduce)(void);
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ reduce = (bool (*)(void))dlsym(RTLD_DEFAULT, "UIAccessibilityIsReduceMotionEnabled"); });
+  return reduce != NULL && reduce();
+}
+
+- (NSUInteger)flowBeginPendingAtIndex:(NSInteger)index calling:(BOOL)calling {
+  _flowPending = YES;
+  _flowBusy = YES;
+  _flowFailed = NO;
+  _flowPendingIndex = index;
+  _flowPendingToken++;
+  _flowStatus.text = nil;
+  _flowStatus.accessibilityLabel = nil;
+  NSString *text = [_texts ts:calling ? @"flow.pending_call" : @"flow.pending_notify"];
+  _flowPendingCalling = calling;
+  [self applyFlowPending];
+  [self applyFlowVisibility];
+  [self setNeedsLayout];
+  UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, text);
+  NSUInteger token = _flowPendingToken;
+  __weak DBDoorScreen *weakSelf = self;
+  void (^showStatus)(void) = ^{
+    DBDoorScreen *screen = weakSelf;
+    if (!screen || !screen->_flowPending || token != screen->_flowPendingToken) return;
+    screen->_flowStatus.text = text;
+    [screen applyFlowVisibility];
+    [screen setNeedsLayout];
+  };
+  if (DBFlowReduceMotion() || _safeMode)
+    showStatus();
+  else
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(kFlowPendingStatusDelay * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), showStatus);
+  return token;
+}
+
+// Back to a normal page: options enabled, spinner gone, status line cleared.
+- (void)flowEndPending {
+  _flowPending = NO;
+  _flowBusy = NO;
+  _flowFailed = NO;
+  _flowStatus.text = nil;
+  [self applyFlowPending];
+  [self applyFlowVisibility];
+}
+
+- (void)flowPendingFailed:(BOOL)calling {
+  [self flowEndPending];
+  _flowFailed = YES;
+  _flowLastInput = DBCallMonotonicTime();
+  _flowStatus.text = [_texts ts:calling ? @"flow.call_failed" : @"flow.pending_failed"];
+  [self applyFlowVisibility];
+  [self setNeedsLayout];
+  UIAccessibilityPostNotification(UIAccessibilityAnnouncementNotification, _flowStatus.text);
+}
+
+- (void)flowPendingTimedOut:(NSUInteger)token {
+  if (!_flowPending || token != _flowPendingToken) return;
+  [self flowPendingFailed:NO];
+}
+
+- (void)flowNotifyFinished:(NSDictionary *)result option:(NSString *)optionID token:(NSUInteger)token {
+  if (token != _flowPendingToken) return;
+  if (![self flowShowing]) {
+    [self flowEndPending];
+    return;
+  }
+  if (![[result objectForKey:@"ok"] boolValue]) {
+    if (_flowPending) [self flowPendingFailed:NO];
+    return;
+  }
+  // Also taken after the timeout line: the message did go out.
+  [self flowEndPending];
+  NSArray *calls = [_flow applyEvent:@{ @"tap" : optionID, @"notify_result" : result }];
+  [self flowPerformCalls:calls];
+  [self flowStateChanged];
+}
+
+// Everything the pending state changes on screen, rebuilt from the flags so a re-render keeps it.
+- (void)applyFlowPending {
+  BOOL on = _flowPending;
+  for (NSUInteger i = 0; i < [_flowOptionButtons count]; i++) {
+    UIButton *button = [_flowOptionButtons objectAtIndex:i];
+    BOOL mine = on && (NSInteger)i == _flowPendingIndex;
+    button.enabled = !on || mine;
+    button.selected = mine;
+    button.alpha = (on && !mine) ? 0.4f : 1;
+    button.accessibilityValue = mine ? [_texts ts:_flowPendingCalling ? @"flow.pending_call"
+                                                                            : @"flow.pending_notify"]
+                                     : nil;
+    id plate = i < [_flowOptionPlates count] ? [_flowOptionPlates objectAtIndex:i] : nil;
+    if ([plate isKindOfClass:[UIView class]]) [(UIView *)plate setAlpha:(on && !mine) ? 0.4f : 1];
+    UIView *icon = [button viewWithTag:kPurposeIconTag];
+    icon.hidden = mine && !(DBFlowReduceMotion() || _safeMode);
+    if (mine && !(DBFlowReduceMotion() || _safeMode)) {
+      if (_flowSpinner.superview != button) [button addSubview:_flowSpinner];
+      UIColor *ink = [button titleColorForState:UIControlStateNormal];
+      if ([_flowSpinner respondsToSelector:@selector(setColor:)]) _flowSpinner.color = ink;
+      [_flowSpinner startAnimating];
+    }
+  }
+  if (!on || DBFlowReduceMotion() || _safeMode) {
+    [_flowSpinner stopAnimating];
+    [_flowSpinner removeFromSuperview];
+  }
+  _flowBackButton.enabled = !on;
+  _flowBackButton.alpha = on ? 0.4f : 1;
+  _flowBackPlate.alpha = on ? 0.4f : 1;
+  [self layoutFlowPending];
+}
+
+// The spinner takes the icon's place, or the left edge of an option without an icon.
+- (void)layoutFlowPending {
+  UIView *host = _flowSpinner.superview;
+  if (host == nil) return;
+  UIView *icon = [host viewWithTag:kPurposeIconTag];
+  CGSize side = _flowSpinner.bounds.size;
+  if (icon != nil && !CGRectIsEmpty(icon.frame))
+    _flowSpinner.center = CGPointMake(CGRectGetMidX(icon.frame), CGRectGetMidY(icon.frame));
+  else
+    _flowSpinner.center = CGPointMake(14 + floor(side.width / 2), floor(host.bounds.size.height / 2));
 }
 
 // The notify call is already made; every press goes through the existing call path.
@@ -2675,6 +2846,10 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 - (void)flowTick {
   if (![self flowShowing] || _flowDebugHold || _replyShown) return;
   NSTimeInterval now = DBCallMonotonicTime();
+  if (_flowPending) {
+    _flowLastInput = now;
+    return;
+  }
   if ([_flow.mode isEqualToString:DBVisitorFlowModeEnd]) {
     if (now - _flowEndSince < [_flow returnSeconds]) return;
     [_flow applyEvent:@{ @"end_timeout" : @YES }];
@@ -2885,6 +3060,12 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _flowBackButton.frame = flow.back;
   _flowBackPlate.frame = flow.back;
   _flowBackPlate.layer.cornerRadius = 10;
+  // The status line sits on the back button's row, left of it, so nothing above it moves.
+  CGFloat statusRight = _flowBackButton.hidden ? CGRectGetMaxX(flow.options) : flow.back.origin.x - 8;
+  _flowStatus.font = [UIFont systemFontOfSize:compact ? 15 : 20];
+  _flowStatus.frame = CGRectMake(flow.options.origin.x, flow.back.origin.y,
+                                 MAX(0, statusRight - flow.options.origin.x), flow.back.size.height);
+  [self layoutFlowPending];
 
   // The page card: notice, title, images above, text, images below. It scrolls when it is taller
   // than the room above the options, and sits centred in that room otherwise.

@@ -6,6 +6,7 @@
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBCoreBridge.h"
+#import "../Core/DBFlowError.h"
 #import "../Core/DBFlowOrder.h"
 #import "../Core/DBGeneratedStrings.h"
 #import "../Core/DBIconAsset.h"
@@ -77,6 +78,9 @@ static const NSUInteger kAltLimit = 120;
   DBVisitorFlowModel *_sim;
   NSString *_simLang;
   NSString *_simResult;
+  NSString *_simPending;   // the status line while a simulated request runs
+  NSUInteger _simToken;
+  BOOL _simInstant;        // debug start screens replay taps without the wait
   UIPopoverController *_popover;
   UIImagePickerController *_picker;
   void (^_pickerDone)(NSString *hash);
@@ -245,18 +249,29 @@ static const NSUInteger kAltLimit = 120;
   return @{ @"op" : @"delete", @"key" : key };
 }
 
-// Core's error names the rule and, after ": ", the step or option it concerns. The text before
-// the colon is the i18n key; anything unknown falls back to the generic message.
-- (NSString *)explainError:(NSString *)error {
-  NSRange split = [error rangeOfString:@": "];
-  NSString *code = split.location == NSNotFound ? error : [error substringToIndex:split.location];
-  NSString *detail = split.location == NSNotFound ? @"" : [error substringFromIndex:NSMaxRange(split)];
-  NSString *text = [self t:code];
-  if ([text isEqualToString:code]) {
-    text = [_texts t:@"visitor_flow.invalid", [error length] > 0 ? error : code, nil];
-    return text;
-  }
-  return [detail length] > 0 ? [NSString stringWithFormat:@"%@\n%@", text, detail] : text;
+// The localized text of a refused write. An unknown code falls back to the generic message with
+// the raw error as secondary text.
+- (NSString *)messageForError:(DBFlowError *)error {
+  NSString *template = [self t:[error messageKey]];
+  if ([template isEqualToString:[error messageKey]])
+    return [NSString stringWithFormat:@"%@\n%@", [_texts t:@"visitor_flow.invalid", error.code, nil],
+                                      error.raw];
+  return [error messageFromTemplate:template langName:^NSString *(NSString *lang) {
+    return [DBTexts langDisplayName:lang];
+  }];
+}
+
+// A field error is shown beside the control it names (or as a row at the top of the page) and
+// never as an alert.
+- (void)presentError:(DBFlowError *)error {
+  [_editor showNote:[self messageForError:error] anchors:[error anchors] warning:NO];
+}
+
+- (void)presentCode:(NSString *)code location:(NSString *)location detail:(NSDictionary *)detail {
+  NSString *raw = [location length] > 0
+      ? [NSString stringWithFormat:@"visitor_flow.%@: %@", code, location]
+      : [@"visitor_flow." stringByAppendingString:code];
+  [self presentError:[DBFlowError errorFromString:raw detail:detail]];
 }
 
 // One whole edit as one batch. The graph is validated on the configuration the batch leaves, so a
@@ -277,6 +292,13 @@ static const NSUInteger kAltLimit = 120;
     NSMutableArray *warnings = [NSMutableArray array];
     for (id warning in DBFArray([result objectForKey:@"warnings"])) {
       NSString *key = DBFString([DBFDict(warning) objectForKey:@"message_key"]);
+      if ([key isEqualToString:@"visitor_flow.disabled_purpose"]) {
+        NSString *anchor =
+            [DBFlowError anchorForWarningKey:DBFString([DBFDict(warning) objectForKey:@"key"])];
+        [editor showNote:[self t:@"flow_error.disabled_purpose"]
+                 anchors:anchor ? @[ anchor ] : @[] warning:YES];
+        continue;
+      }
       NSString *text = [self t:key];
       if ([key length] > 0 && ![text isEqualToString:key]) [warnings addObject:text];
     }
@@ -302,8 +324,12 @@ static const NSUInteger kAltLimit = 120;
     [editor showMessage:[self t:@"flow_editor.conflict"]];
     return NO;
   }
-  [editor showMessage:[NSString stringWithFormat:@"%@\n%@", [self t:@"settings.save_failed"],
-                                                 [self explainError:error]]];
+  DBFlowError *flowError = [DBFlowError errorFromResult:result];
+  if (flowError != nil) {
+    [self presentError:flowError];
+    return NO;
+  }
+  [editor showMessage:[NSString stringWithFormat:@"%@\n%@", [self t:@"settings.save_failed"], error]];
   return NO;
 }
 
@@ -386,6 +412,7 @@ static const NSUInteger kAltLimit = 120;
 // One text row per language for the members of a text map.
 - (NSArray *)textFields:(NSDictionary *)map limit:(NSUInteger)limit
                   place:(NSString *)placeholder
+                 anchor:(NSString *)anchor
                     set:(BOOL (^)(NSString *lang, NSString *text))set {
   NSMutableArray *fields = [NSMutableArray array];
   for (NSString *lang in [self languages]) {
@@ -393,10 +420,13 @@ static const NSUInteger kAltLimit = 120;
     DBEditField *field = [DBEditField kind:DBEditKindText title:[DBTexts langDisplayName:lang]
                                      value:current];
     field.placeholder = placeholder;
+    NSString *location = [anchor stringByAppendingFormat:@".%@", lang];
+    field.anchor = location;
     field.onChange = ^BOOL(id raw) {
       NSString *text = DBFTrim(DBFString(raw));
       if ([text length] > limit) {
-        [_editor showMessage:[self t:@"visitor_flow.bad_text"]];
+        [self presentCode:@"text_too_long" location:location
+                   detail:@{ @"lang" : lang, @"limit" : @(limit), @"value" : @([text length]) }];
         return NO;
       }
       return set(lang, text);
@@ -523,8 +553,10 @@ static const NSUInteger kAltLimit = 120;
   NSArray *pages = [self stepChoicesOfKind:@"page"];
   NSString *start = DBFString([[self flow] objectForKey:@"start"]);
   NSMutableArray *fields = [NSMutableArray array];
-  [fields addObject:[self choice:[self t:@"flow_editor.start"] value:start choices:pages
-      change:^BOOL(NSString *value) { return [weakSelf setLeaf:@"start" value:value]; }]];
+  DBEditField *startField = [self choice:[self t:@"flow_editor.start"] value:start choices:pages
+      change:^BOOL(NSString *value) { return [weakSelf setLeaf:@"start" value:value]; }];
+  startField.anchor = @"start";
+  [fields addObject:startField];
   NSDictionary *doors = DBFDict([[self cfg] objectForKey:@"doors"]);
   for (NSString *door in [DBConfigUtil sortedByOrder:doors]) {
     NSString *key = [NSString stringWithFormat:@"doors.%@.visitor_flow.start", door];
@@ -534,13 +566,15 @@ static const NSUInteger kAltLimit = 120;
     [choices addObjectsFromArray:pages];
     NSString *name = [DBConfigUtil labelOf:DBFDict([doors objectForKey:door]) lang:[self lang]
                                   fallback:door];
-    [fields addObject:[self choice:[NSString stringWithFormat:@"%@: %@",
-                                       [self t:@"flow_editor.door_start"], name]
-                             value:current choices:choices
+    DBEditField *doorField = [self choice:[NSString stringWithFormat:@"%@: %@",
+                                              [self t:@"flow_editor.door_start"], name]
+                                    value:current choices:choices
         change:^BOOL(NSString *value) {
           return [value length] == 0 ? [weakSelf commit:@[ [weakSelf deleteOp:key] ]]
                                      : [weakSelf commit:@[ [weakSelf setOp:key value:value] ]];
-        }]];
+        }];
+    doorField.anchor = [NSString stringWithFormat:@"doors.%@.start", door];
+    [fields addObject:doorField];
   }
   return [DBEditSection title:nil fields:fields];
 }
@@ -551,8 +585,10 @@ static const NSUInteger kAltLimit = 120;
   NSArray *ids = [self orderedStepIDs];
   NSMutableArray *fields = [NSMutableArray array];
   for (NSString *stepID in ids) {
-    [fields addObject:[self page:[self stepName:stepID] detail:nil
-                           build:^DBEditPage *{ return [weakSelf stepPage:stepID]; }]];
+    DBEditField *row = [self page:[self stepName:stepID] detail:nil
+                            build:^DBEditPage *{ return [weakSelf stepPage:stepID]; }];
+    row.anchor = stepID;
+    [fields addObject:row];
   }
   DBEditSection *section = [DBEditSection title:[self t:@"flow_editor.steps"] fields:fields];
   section.footer = [self t:@"flow_editor.steps_hint"];
@@ -657,7 +693,7 @@ static const NSUInteger kAltLimit = 120;
 // call, a notify with its closing page. The helpers are reused when they already exist.
 - (NSString *)createStepOfKind:(NSString *)kind {
   if ([[self steps] count] >= 32) {
-    [_editor showMessage:[self t:@"visitor_flow.too_many_steps"]];
+    [self presentCode:@"too_many_steps" location:@"" detail:@{ @"limit" : @32, @"value" : @33 }];
     return nil;
   }
   NSString *prefix = [kind isEqualToString:@"page"] ? @"s_" : [kind isEqualToString:@"call"] ? @"c_"
@@ -714,6 +750,8 @@ static const NSUInteger kAltLimit = 120;
 }
 
 - (void)restartSim {
+  _simPending = nil;
+  _simToken++;
   NSDictionary *document = [_core visitorFlowJson:_boot.door ?: @""];
   _simResult = nil;
   if (![document isKindOfClass:[NSDictionary class]]) {
@@ -733,7 +771,9 @@ static const NSUInteger kAltLimit = 120;
 - (DBEditPage *)previewPageAfterTaps:(NSArray *)optionIDs {
   __weak DBFlowEditorPages *weakSelf = self;
   [self restartSim];
+  _simInstant = YES;
   for (NSString *optionID in optionIDs) [self simTap:optionID];
+  _simInstant = NO;
   return [DBEditPage title:[self t:@"flow_editor.preview"] build:^NSArray *{ return [weakSelf simSections]; }];
 }
 
@@ -747,6 +787,29 @@ static const NSUInteger kAltLimit = 120;
   NSDictionary *plan = [_sim planForTap:optionID];
   if (plan == nil) return;
   NSString *action = DBFString([plan objectForKey:@"action"]);
+  if ([_simPending length] > 0) return;
+  _simResult = nil;
+  if (!_simInstant && ([action isEqualToString:@"press"] || [action isEqualToString:@"notify"])) {
+    // The door shows an indicator while Core answers; here it lasts about a second and nothing
+    // is sent.
+    _simPending = [self t:[action isEqualToString:@"press"] ? @"flow.pending_call" : @"flow.pending_notify"];
+    NSUInteger token = ++_simToken;
+    __weak DBFlowEditorPages *weakSelf = self;
+    [_editor reloadPage];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{
+      DBFlowEditorPages *pages = weakSelf;
+      if (pages && token == pages->_simToken && [pages->_simPending length] > 0)
+        [pages finishSimTap:optionID plan:plan];
+    });
+    return;
+  }
+  [self finishSimTap:optionID plan:plan];
+}
+
+- (void)finishSimTap:(NSString *)optionID plan:(NSDictionary *)plan {
+  NSString *action = DBFString([plan objectForKey:@"action"]);
+  _simPending = nil;
   _simResult = nil;
   if ([action isEqualToString:@"press"]) {
     NSString *purpose = DBFString([plan objectForKey:@"purpose"]);
@@ -791,6 +854,11 @@ static const NSUInteger kAltLimit = 120;
         [self simInfo:[self t:@"flow_editor.sim_classic"] detail:nil] ]]];
     return sections;
   }
+  if ([_simPending length] > 0) {
+    DBEditField *pending = [self simInfo:_simPending detail:nil];
+    pending.busy = YES;
+    [sections addObject:[DBEditSection title:nil fields:@[ pending ]]];
+  }
   if ([_simResult length] > 0)
     [sections addObject:[DBEditSection title:nil fields:@[ [self simInfo:_simResult detail:nil] ]]];
 
@@ -805,7 +873,9 @@ static const NSUInteger kAltLimit = 120;
   if ([mode isEqualToString:DBVisitorFlowModePage]) {
     for (NSDictionary *option in [_sim currentOptions]) {
       NSString *optionID = DBFString([option objectForKey:@"id"]);
-      DBEditField *row = [self action:DBFString([option objectForKey:@"label"]) block:^{
+      DBEditField *row = [_simPending length] > 0
+          ? [self simInfo:DBFString([option objectForKey:@"label"]) detail:nil]
+          : [self action:DBFString([option objectForKey:@"label"]) block:^{
         [weakSelf simTap:optionID];
       }];
       NSString *name = [DBPurposeModel iconNameForOptionPurpose:DBFString([option objectForKey:@"purpose"])
@@ -815,7 +885,7 @@ static const NSUInteger kAltLimit = 120;
                                              size:CGSizeMake(24, 24)];
       [rows addObject:row];
     }
-    if ([_sim canGoBack])
+    if ([_sim canGoBack] && [_simPending length] == 0)
       [rows addObject:[self action:[self t:@"flow.back"] block:^{ [weakSelf simEvent:@{ @"back" : @YES }]; }]];
   } else if ([mode isEqualToString:DBVisitorFlowModeEnd]) {
     [rows addObject:[self action:[self t:@"flow.done"] block:^{ [weakSelf simEvent:@{ @"done" : @YES }]; }]];
@@ -855,12 +925,14 @@ static const NSUInteger kAltLimit = 120;
     if ([kind isEqualToString:@"page"] || [kind isEqualToString:@"end"]) {
       [sections addObject:[DBEditSection title:[pages t:@"flow_editor.field_title"]
           fields:[pages textFields:DBFDict([step objectForKey:@"title"]) limit:kTitleLimit place:nil
+                          anchor:[stepID stringByAppendingString:@".title"]
                                set:^BOOL(NSString *lang, NSString *text) {
         return [weakSelf setText:text lang:lang member:@"title" step:stepID option:nil];
       }]]];
       DBEditField *body = [pages page:[pages t:@"flow_editor.field_body"]
           detail:[pages bodySummary:DBFDict([step objectForKey:@"body"])]
            build:^DBEditPage *{ return [weakSelf bodyLanguagesPage:stepID]; }];
+      body.anchor = [stepID stringByAppendingString:@".body"];
       DBEditSection *bodySection = [DBEditSection title:nil fields:@[ body ]];
       [sections addObject:bodySection];
       [sections addObjectsFromArray:[pages imagesSections:stepID]];
@@ -871,6 +943,7 @@ static const NSUInteger kAltLimit = 120;
       [sections addObject:[DBEditSection title:[pages t:@"flow_editor.field_message"]
           fields:[pages textFields:DBFDict([step objectForKey:@"message"]) limit:kMessageLimit
                              place:nil
+                            anchor:[stepID stringByAppendingString:@".message"]
                                set:^BOOL(NSString *lang, NSString *text) {
         return [weakSelf setText:text lang:lang member:@"message" step:stepID option:nil];
       }]]];
@@ -895,7 +968,8 @@ static const NSUInteger kAltLimit = 120;
     DBEditField *duplicate = [pages action:[pages t:@"flow_editor.duplicate_step"] block:^{
       DBFlowEditorPages *inner = weakSelf;
       if ([[inner steps] count] >= 32) {
-        [editor showMessage:[inner t:@"visitor_flow.too_many_steps"]];
+        [inner presentCode:@"too_many_steps" location:@""
+                    detail:@{ @"limit" : @32, @"value" : @([[inner steps] count] + 1) }];
         return;
       }
       NSString *prefix = [stepID length] > 2 && [stepID characterAtIndex:1] == '_'
@@ -935,8 +1009,11 @@ static const NSUInteger kAltLimit = 120;
     NSMutableArray *fields = [NSMutableArray array];
     for (NSString *lang in [pages languages]) {
       NSString *text = DBFString([body objectForKey:lang]);
-      [fields addObject:[pages page:[DBTexts langDisplayName:lang] detail:[pages bodySummary:@{ lang : text }]
-                              build:^DBEditPage *{ return [weakSelf bodyPage:stepID lang:lang]; }]];
+      DBEditField *row = [pages page:[DBTexts langDisplayName:lang]
+                              detail:[pages bodySummary:@{ lang : text }]
+                               build:^DBEditPage *{ return [weakSelf bodyPage:stepID lang:lang]; }];
+      row.anchor = [NSString stringWithFormat:@"%@.body.%@", stepID, lang];
+      [fields addObject:row];
     }
     DBEditSection *section = [DBEditSection title:nil fields:fields];
     section.footer = [pages t:@"flow_editor.body_hint"];
@@ -954,8 +1031,15 @@ static const NSUInteger kAltLimit = 120;
   for (NSString *paragraph in paragraphs)
     if ([DBFTrim(paragraph) length] > 0) [kept addObject:paragraph];
   NSString *text = [kept componentsJoinedByString:@"\n\n"];
-  if ([text length] > kBodyLimit || [kept count] > 8) {
-    [_editor showMessage:[self t:@"visitor_flow.bad_text"]];
+  NSString *location = [NSString stringWithFormat:@"%@.body.%@", stepID, lang];
+  if ([kept count] > 8) {
+    [self presentCode:@"too_many_paragraphs" location:location
+               detail:@{ @"lang" : lang, @"limit" : @8, @"value" : @([kept count]) }];
+    return NO;
+  }
+  if ([text length] > kBodyLimit) {
+    [self presentCode:@"text_too_long" location:location
+               detail:@{ @"lang" : lang, @"limit" : @(kBodyLimit), @"value" : @([text length]) }];
     return NO;
   }
   return [self setText:text lang:lang member:@"body" step:stepID option:nil];
@@ -976,6 +1060,7 @@ static const NSUInteger kAltLimit = 120;
           title:[NSString stringWithFormat:@"%@ %lu", [pages t:@"flow_editor.paragraph"],
                                            (unsigned long)(i + 1)] value:shown];
       field.detail = shown;
+      field.anchor = [NSString stringWithFormat:@"%@.body.%@", stepID, lang];
       field.onChange = ^BOOL(id raw) {
         NSMutableArray *next = [NSMutableArray arrayWithArray:
             [weakSelf paragraphsOf:DBFString([DBFDict([[weakSelf step:stepID] objectForKey:@"body"])
@@ -1040,8 +1125,10 @@ static const NSUInteger kAltLimit = 120;
     NSString *asset = DBFString([image objectForKey:@"asset"]);
     NSString *place = [DBFString([image objectForKey:@"place"]) isEqualToString:@"below"]
         ? [self t:@"flow_editor.image_below"] : [self t:@"flow_editor.image_above"];
-    [fields addObject:[self page:[self assetLabel:asset] detail:place
-                           build:^DBEditPage *{ return [weakSelf imagePage:stepID index:i]; }]];
+    DBEditField *row = [self page:[self assetLabel:asset] detail:place
+                            build:^DBEditPage *{ return [weakSelf imagePage:stepID index:i]; }];
+    row.anchor = [NSString stringWithFormat:@"%@.images[%lu]", stepID, (unsigned long)i];
+    [fields addObject:row];
   }
   DBEditSection *section = [DBEditSection title:[self t:@"flow_editor.field_images"] fields:fields];
   section.onDelete = ^BOOL(NSInteger index) {
@@ -1132,6 +1219,8 @@ static const NSUInteger kAltLimit = 120;
         value:[pages assetLabel:DBFString([image objectForKey:@"asset"])]];
     DBEditSection *alt = [DBEditSection title:[pages t:@"flow_editor.image_alt"]
         fields:[pages textFields:DBFDict([image objectForKey:@"alt"]) limit:kAltLimit place:nil
+                          anchor:[NSString stringWithFormat:@"%@.images[%lu].alt", stepID,
+                                                            (unsigned long)index]
                              set:^BOOL(NSString *lang, NSString *text) {
       return [weakSelf editStep:stepID block:^(NSMutableDictionary *step) {
         NSMutableArray *list = [step objectForKey:@"images"];
@@ -1295,14 +1384,16 @@ static NSData *DBFJpegForFlow(UIImage *image) {
     NSString *name = [NSString stringWithFormat:@"%@%@", primary ? @"● " : @"",
                                                   [self optionName:option]];
     NSString *detail = enabled ? [self stepName:target] : [self t:@"purpose.disabled"];
-    [fields addObject:[self page:name detail:detail
-        build:^DBEditPage *{ return [weakSelf optionPage:optionID step:stepID]; }]];
+    DBEditField *row = [self page:name detail:detail
+        build:^DBEditPage *{ return [weakSelf optionPage:optionID step:stepID]; }];
+    row.anchor = [NSString stringWithFormat:@"%@.%@", stepID, optionID];
+    [fields addObject:row];
   }
   DBEditSection *section = [DBEditSection title:[self t:@"flow_editor.field_options"] fields:fields];
   section.footer = [self t:@"editor.list_edit_hint"];
   section.onDelete = ^BOOL(NSInteger index) {
     if ([DBFArray([[weakSelf step:stepID] objectForKey:@"options"]) count] <= 1) {
-      [editor showMessage:[weakSelf t:@"visitor_flow.no_options"]];
+      [weakSelf presentCode:@"no_options" location:stepID detail:nil];
       return NO;
     }
     return [weakSelf editStep:stepID block:^(NSMutableDictionary *step) {
@@ -1324,13 +1415,14 @@ static NSData *DBFJpegForFlow(UIImage *image) {
     NSDictionary *step = [pages step:stepID];
     NSArray *current = DBFArray([step objectForKey:@"options"]);
     if ([current count] >= 12) {
-      [editor showMessage:[pages t:@"visitor_flow.too_many_options"]];
+      [pages presentCode:@"too_many_options" location:stepID
+                  detail:@{ @"limit" : @12, @"value" : @([current count] + 1) }];
       return;
     }
     // The new option leads to the first other step that cannot loop back: a call.
     NSString *target = [[[pages stepChoicesOfKind:@"call"] firstObject] firstObject];
     if (target == nil) {
-      [editor showMessage:[pages t:@"visitor_flow.unknown_target"]];
+      [pages presentCode:@"unknown_target" location:stepID detail:nil];
       return;
     }
     NSString *optionID = [NSString stringWithFormat:@"o_%@", DBFRandomHex(3)];
@@ -1394,6 +1486,7 @@ static NSData *DBFJpegForFlow(UIImage *image) {
     if ([purpose length] == 0) {
       [sections addObject:[DBEditSection title:[pages t:@"flow_editor.option_label"]
           fields:[pages textFields:DBFDict([option objectForKey:@"label"]) limit:kLabelLimit place:nil
+                          anchor:[NSString stringWithFormat:@"%@.%@.label", stepID, optionID]
                                set:^BOOL(NSString *lang, NSString *text) {
         return [weakSelf setText:text lang:lang member:@"label" step:stepID option:optionID];
       }]]];
@@ -1461,7 +1554,7 @@ static NSData *DBFJpegForFlow(UIImage *image) {
                                 message:[pages t:@"editor.delete_confirm"] block:^{
       DBFlowEditorPages *inner = weakSelf;
       if ([DBFArray([[inner step:stepID] objectForKey:@"options"]) count] <= 1) {
-        [editor showMessage:[inner t:@"visitor_flow.no_options"]];
+        [inner presentCode:@"no_options" location:stepID detail:nil];
         return;
       }
       if ([inner editOption:optionID step:stepID

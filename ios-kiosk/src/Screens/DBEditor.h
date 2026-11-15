@@ -41,6 +41,13 @@ typedef enum {
 @property(nonatomic, copy) BOOL (^onChange)(id value);
 @property(nonatomic, copy) DBEditPage *(^page)(void);
 @property(nonatomic, copy) void (^action)(void);
+// Names the control for showNote:; set by the page that builds the row.
+@property(nonatomic, copy) NSString *anchor;
+// Set by the editor while a note is shown on this row.
+@property(nonatomic, copy) NSString *note;
+@property(nonatomic, assign) BOOL noteIsWarning;
+// Shows an activity indicator in place of the accessory.
+@property(nonatomic, assign) BOOL busy;
 + (DBEditField *)kind:(DBEditKind)kind title:(NSString *)title value:(id)value;
 @end
 
@@ -105,6 +112,12 @@ typedef enum {
                then:(void (^)(NSString *text))then;
 - (void)confirmTitle:(NSString *)title message:(NSString *)message then:(void (^)(void))then;
 - (void)showMessage:(NSString *)message;
+// Shows `message` under the first row whose anchor equals one of `anchors` (most specific first)
+// and scrolls it into view; without a match it appears as a row at the top of the current page.
+// The note survives page rebuilds and is cleared by the next edit or when the editor closes.
+// Never modal.
+- (void)showNote:(NSString *)message anchors:(NSArray *)anchors warning:(BOOL)warning;
+- (void)clearNote;
 @end
 
 // Stock grouped cells shared by the editor and the settings tables. The cell style follows
