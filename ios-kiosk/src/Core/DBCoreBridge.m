@@ -1440,6 +1440,73 @@ static uint64_t DBMonotonicTimeNs(void) {
   return out;
 }
 
+- (NSDictionary *)airQualityJson {
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:db_core_air_quality_json(self->_core)];
+  });
+  return out;
+}
+
+- (NSDictionary *)airSensorPlan {
+  __block NSDictionary *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) out = [self takeJson:db_core_air_sensor_plan_json(self->_core)];
+  });
+  return out;
+}
+
+- (void)airSensorPacket:(NSData *)data sensorId:(NSString *)sensorId {
+  if ([data length] == 0 || [sensorId length] == 0) return;
+  NSData *bytes = [data copy];
+  NSString *identifier = [sensorId copy];
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core)
+      db_core_air_sensor_packet(self->_core, [identifier UTF8String],
+                                (const uint8_t *)[bytes bytes], [bytes length]);
+  });
+}
+
+- (void)airSensorReport:(NSDictionary *)report {
+  if (![NSJSONSerialization isValidJSONObject:report]) return;
+  NSData *data = [NSJSONSerialization dataWithJSONObject:report options:0 error:NULL];
+  NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
+  if ([json length] == 0) return;
+  dispatch_sync(_coreQueue, ^{
+    if (self->_core) db_core_air_sensor_report_json(self->_core, [json UTF8String]);
+  });
+}
+
+static int DBHexNibble(char c) {
+  if (c >= '0' && c <= '9') return c - '0';
+  if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+  if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+  return -1;
+}
+
+- (NSData *)airSensorConnectCommand {
+  __block NSData *out = nil;
+  dispatch_sync(_coreQueue, ^{
+    if (!self->_core) return;
+    char *hex = db_core_air_sensor_connect_command_hex(self->_core);
+    if (hex == NULL) return;
+    size_t length = strlen(hex);
+    if (length > 0 && length % 2 == 0) {
+      NSMutableData *bytes = [NSMutableData dataWithLength:length / 2];
+      uint8_t *raw = (uint8_t *)[bytes mutableBytes];
+      BOOL valid = YES;
+      for (size_t i = 0; i < length / 2 && valid; i++) {
+        int high = DBHexNibble(hex[2 * i]), low = DBHexNibble(hex[2 * i + 1]);
+        if (high < 0 || low < 0) valid = NO;
+        else raw[i] = (uint8_t)((high << 4) | low);
+      }
+      if (valid) out = bytes;
+    }
+    db_free(hex);
+  });
+  return out;
+}
+
 - (BOOL)setNotice:(NSString *)text forDoor:(NSString *)door expiresMs:(long long)expiresMs {
   if ([door length] == 0 || [text length] == 0) return NO;
   NSString *d = [door copy];

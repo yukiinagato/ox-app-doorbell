@@ -1,5 +1,6 @@
 #import <Foundation/Foundation.h>
 #import <CoreGraphics/CoreGraphics.h>
+#include <string.h>
 
 #import "DBHomeLayout.h"
 #import "DBUiTheme.h"
@@ -27,7 +28,7 @@ static BOOL Overlaps(CGRect a, CGRect b) {
 }
 
 static void CheckSize(CGSize size, BOOL banner, BOOL missed, BOOL pager, BOOL sos,
-                      NSInteger tiles) {
+                      NSInteger tiles, BOOL air) {
   const CGFloat nav = 44, tab = 49;
   BOOL portrait = size.height > size.width;
   NSDictionary *footer = [DBUiTheme footerLayoutForViewWidth:size.width
@@ -35,9 +36,17 @@ static void CheckSize(CGSize size, BOOL banner, BOOL missed, BOOL pager, BOOL so
                                                     portrait:portrait
                                                   sosVisible:NO];
   CGFloat footerHeight = (CGFloat)[footer[@"height"] doubleValue];
-  DBHomeLayout layout = DBHomeLayoutMake(size, nav, tab, footerHeight, banner, missed, pager, sos);
-  NSString *tag = [NSString stringWithFormat:@"%.0fx%.0f banner=%d missed=%d pager=%d sos=%d tiles=%ld",
-      size.width, size.height, banner, missed, pager, sos, (long)tiles];
+  DBHomeLayout plain = DBHomeLayoutMake(size, nav, tab, footerHeight, banner, missed, pager, sos);
+  DBHomeLayout layout = DBHomeLayoutPlaceAir(plain, air ? 30 : 0);
+  NSString *tag = [NSString stringWithFormat:@"%.0fx%.0f banner=%d missed=%d pager=%d sos=%d tiles=%ld air=%d",
+      size.width, size.height, banner, missed, pager, sos, (long)tiles, air];
+  if (!air) Check(memcmp(&plain, &layout, sizeof(layout)) == 0,
+                  [tag stringByAppendingString:@": no air leaves the layout alone"]);
+  // Every iPad orientation has room for the PM2.5 line directly under the date.
+  if (air) Check(!CGRectIsEmpty(layout.air) &&
+                 CGRectGetMinY(layout.air) >= CGRectGetMaxY(layout.date) &&
+                 CGRectGetMinX(layout.air) == CGRectGetMinX(layout.date),
+                 [tag stringByAppendingString:@": air row"]);
   CGRect bounds = CGRectMake(0, 0, size.width, size.height);
 
   NSMutableArray *names = [NSMutableArray array];
@@ -50,13 +59,25 @@ static void CheckSize(CGSize size, BOOL banner, BOOL missed, BOOL pager, BOOL so
   add(@"tabBar", layout.tabBar);
   add(@"clock", layout.clock);
   add(@"date", layout.date);
+  add(@"air", layout.air);
   add(@"counters", layout.counters);
   add(@"banner", layout.banner);
   add(@"missed", layout.missed);
   add(@"pager", layout.pager);
   for (NSInteger i = 0; i < tiles; i++)
     add([NSString stringWithFormat:@"tile%ld", (long)i], DBHomeLayoutTileFrame(layout, i, tiles));
-  add(@"qr", CGRectUnion(RectFromArray(footer[@"qr"]), RectFromArray(footer[@"version"])));
+  CGRect block = CGRectUnion(RectFromArray(footer[@"qr"]), RectFromArray(footer[@"version"]));
+  CGRect plate = DBHomeLayoutFooterPlate(size, tab, block.size.height);
+  add(@"plate", plate);
+  // The plate keeps the 20 pt margin of the tiles and 12 pt of air above it.
+  Check(CGRectGetMinX(plate) == 20 && CGRectGetMaxX(plate) == size.width - 20 &&
+        CGRectGetMaxY(plate) == size.height - tab - 20 &&
+        CGRectGetMinY(plate) - layout.footerTop >= 12,
+        [tag stringByAppendingString:@": plate margins"]);
+  Check(CGRectGetMinX(layout.tiles) == 20 && CGRectGetMaxX(layout.tiles) == size.width - 20,
+        [tag stringByAppendingString:@": tile margins"]);
+  Check(CGRectGetMinX(layout.clock) == 20 && CGRectGetMaxX(layout.counters) == size.width - 20,
+        [tag stringByAppendingString:@": header margins"]);
   add(@"sos", layout.sos);
 
   for (NSUInteger i = 0; i < [rects count]; i++) {
@@ -79,7 +100,7 @@ static void CheckSize(CGSize size, BOOL banner, BOOL missed, BOOL pager, BOOL so
   if (sos) Check(layout.sos.size.height >= 44 && layout.sos.size.width >= 88 &&
                  layout.sos.size.width <= 160, [tag stringByAppendingString:@": sos size"]);
   // The header never touches the tiles.
-  CGFloat headerBottom = MAX(CGRectGetMaxY(layout.date),
+  CGFloat headerBottom = MAX(MAX(CGRectGetMaxY(layout.date), CGRectGetMaxY(layout.air)),
                              MAX(CGRectGetMaxY(layout.pager), CGRectGetMaxY(layout.sos)));
   Check(CGRectGetMinY(layout.tiles) - headerBottom >= 12,
         [tag stringByAppendingString:@": header gap"]);
@@ -104,8 +125,9 @@ int main(void) {
     for (size_t s = 0; s < sizeof(sizes) / sizeof(sizes[0]); s++)
       for (int flags = 0; flags < 16; flags++)
         for (NSInteger tiles = 0; tiles <= 3; tiles++)
-          CheckSize(sizes[s], flags & 1, (flags >> 1) & 1, (flags >> 2) & 1, (flags >> 3) & 1,
-                    tiles);
+          for (int air = 0; air <= 1; air++)
+            CheckSize(sizes[s], flags & 1, (flags >> 1) & 1, (flags >> 2) & 1, (flags >> 3) & 1,
+                      tiles, air);
     // A single door gets most of the content area, not a thumbnail.
     DBHomeLayout wide = DBHomeLayoutMake(CGSizeMake(1024, 768), 44, 49, 104, NO, NO, NO, YES);
     Check(DBHomeLayoutTileFrame(wide, 0, 1).size.width >= 600, @"one landscape tile is large");

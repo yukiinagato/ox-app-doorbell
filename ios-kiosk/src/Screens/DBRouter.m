@@ -669,6 +669,12 @@ static BOOL DBCoreSipBackendCompiled(void) {
   NSLog(@"[doorbell][debug] opening start screen '%@'", screen);
   if ([screen isEqualToString:@"settings"]) {
     [self showSettings];
+  } else if ([screen hasPrefix:@"settings:"]) {
+    [self showSettings];
+    NSInteger index = [[screen substringFromIndex:9] integerValue];
+    DBSettingsScreen *settings = [self settings];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ [settings selectCategory:index]; });
   } else if ([screen isEqualToString:@"history"]) {
     [self showHistory];
   } else if ([screen isEqualToString:@"pairing"]) {
@@ -1374,6 +1380,10 @@ static BOOL DBCoreSipBackendCompiled(void) {
     if (_door) [_door refreshFromCore];
     if (_current == _incoming) [_incoming refreshFromCore];
     if (_current == _settings) [_settings reload];
+  } else if ([t isEqualToString:@"air_quality_changed"]) {
+    // A coalesced hint: each home screen re-reads the document itself.
+    if (_home) [_home refreshAirQuality];
+    if (_door) [_door refreshAirQuality];
   } else if ([t isEqualToString:@"time_changed"]) {
     // The cached clock base is now wrong; the next tick refetches it.
     [_core invalidateCachedLocalTime];

@@ -9,6 +9,8 @@
 
 - (id)initWithRouter:(DBRouter *)router;
 - (void)refreshFromCore;
+// Re-reads the PM2.5 line, for the air_quality_changed hint.
+- (void)refreshAirQuality;
 // The call identity selects a row; state and recovery permission come only from the snapshot.
 - (BOOL)restoreWaitingCall:(NSString *)callID snapshot:(DBCallTimingSnapshot *)snapshot;
 - (void)handleCallEvent:(NSDictionary *)event;

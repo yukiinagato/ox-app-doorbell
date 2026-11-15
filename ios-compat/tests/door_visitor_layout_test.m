@@ -20,10 +20,11 @@ static BOOL overlap(CGRect a, CGRect b) {
   CGRect shared = CGRectIntersection(a, b);
   return !CGRectIsNull(shared) && shared.size.width > 0.01 && shared.size.height > 0.01;
 }
-static void checkLayout(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL language,
+static void checkLegacy(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL language,
                         BOOL notice) {
   BOOL pad = MIN(size.width, size.height) >= 768;
-  CGRect frames[] = {layout.topBar, layout.language, layout.clock, layout.date, layout.notice,
+  CGRect frames[] = {layout.topBar, layout.language, layout.clock, layout.date, layout.air,
+                     layout.notice,
                      layout.purposes, layout.status, layout.action, layout.sos, layout.version};
   NSUInteger count = sizeof(frames) / sizeof(frames[0]);
   for (NSUInteger a = 0; a < count; a++) {
@@ -40,7 +41,7 @@ static void checkLayout(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL 
   CHECK(empty(layout.notice) == !notice);
   CHECK(empty(layout.clock) == empty(layout.date));
   CHECK(inside(layout.content, size) && layout.content.size.height >= 44);
-  CGRect stacked[] = {layout.language, layout.clock, layout.date, layout.notice,
+  CGRect stacked[] = {layout.language, layout.clock, layout.date, layout.air, layout.notice,
                       layout.purposes, layout.headline};
   for (NSUInteger a = 0; a < sizeof(stacked) / sizeof(stacked[0]); a++)
     if (!empty(stacked[a])) CHECK(within(stacked[a], layout.content));
@@ -78,6 +79,7 @@ static void checkLayout(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL 
   for (NSUInteger r = 0; r < sizeof(rows) / sizeof(rows[0]); r++) {
     CGRect previous = CGRectZero;
     for (NSInteger index = 0; index < 9; index++) {
+      if (layout.purposeCount > 0 && index >= layout.purposeCount) break;
       CGRect cell = DBDoorVisitorPurposeFrame(layout, index, rows[r]);
       CGFloat gridHeight = DBDoorVisitorPurposeGridHeight(layout, index + 1, rows[r]);
       CHECK(cell.origin.x >= 0 && cell.origin.y >= 0);
@@ -92,6 +94,119 @@ static void checkLayout(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL 
     CHECK(DBDoorVisitorPurposeGridHeight(layout, 0, rows[r]) == 0);
   }
 }
+static void checkGrid(DBDoorVisitorLayout layout, CGSize size) {
+  CGFloat rows[] = {0, 72, 131.5};
+  for (NSUInteger r = 0; r < sizeof(rows) / sizeof(rows[0]); r++) {
+    CGRect previous = CGRectZero;
+    for (NSInteger index = 0; index < 9; index++) {
+      if (layout.purposeCount > 0 && index >= layout.purposeCount) break;
+      CGRect cell = DBDoorVisitorPurposeFrame(layout, index, rows[r]);
+      CGFloat gridHeight = DBDoorVisitorPurposeGridHeight(layout, index + 1, rows[r]);
+      CHECK(cell.origin.x >= 0 && cell.origin.y >= 0);
+      CHECK(CGRectGetMaxX(cell) <= layout.purposes.size.width + 0.01);
+      CHECK(fabs(CGRectGetMaxY(cell) - gridHeight) < 0.01);
+      CHECK(cell.size.width >= 72 && cell.size.height >= 72 && cell.size.height >= rows[r]);
+      CHECK(!overlap(cell, previous));
+      for (NSInteger other = 0; other < index; other++)
+        CHECK(!overlap(cell, DBDoorVisitorPurposeFrame(layout, other, rows[r])));
+      previous = cell;
+    }
+    CHECK(DBDoorVisitorPurposeGridHeight(layout, 0, rows[r]) == 0);
+  }
+  (void)size;
+}
+// The single centred column used by every screen at least 500 pt tall.
+static void checkColumn(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL language,
+                        BOOL notice, NSInteger purposes) {
+  BOOL pad = MIN(size.width, size.height) >= 768;
+  CGFloat margin = pad ? 32 : 16;
+  CGRect frames[] = {layout.topBar, layout.language, layout.clock, layout.date, layout.air,
+                     layout.notice, layout.purposes, layout.status, layout.action, layout.sos,
+                     layout.version};
+  NSUInteger count = sizeof(frames) / sizeof(frames[0]);
+  for (NSUInteger a = 0; a < count; a++) {
+    if (empty(frames[a])) continue;
+    CHECK(inside(frames[a], size));
+    // The status line is the hint; the stage is a region, not a control.
+    for (NSUInteger b = a + 1; b < count; b++) CHECK(!overlap(frames[a], frames[b]));
+    if (a > 0) CHECK(CGRectGetMinX(frames[a]) >= margin - 0.01 &&
+                     CGRectGetMaxX(frames[a]) <= size.width - margin + 0.01);
+  }
+  // One centred caption line at the very bottom, below everything else.
+  CHECK(!empty(layout.version) && layout.version.size.height >= 14 &&
+        fabs(CGRectGetMidX(layout.version) - size.width / 2) <= 1 &&
+        CGRectGetMaxY(layout.version) <= size.height - 8 + 0.01);
+  CHECK(CGRectGetMaxY(layout.action) <= CGRectGetMinY(layout.version));
+  CHECK(CGRectGetMaxY(layout.purposes) <= CGRectGetMinY(layout.version));
+  CHECK(!empty(layout.topBar) && layout.topBar.origin.y == 0 &&
+        layout.topBar.size.width == size.width);
+  CHECK(!empty(layout.status) && !empty(layout.action));
+  CHECK(empty(layout.sos) == !sos);
+  CHECK(empty(layout.language) == !language);
+  CHECK(empty(layout.notice) == !notice);
+  CHECK(empty(layout.clock) == empty(layout.date));
+  // Centred column, at most 640 pt wide; hint, call button and grid share its axis.
+  CHECK(layout.status.size.width <= 640.01 && layout.purposes.size.width <= 640.01);
+  CHECK(fabs(CGRectGetMidX(layout.action) - size.width / 2) <= 1);
+  CHECK(fabs(CGRectGetMidX(layout.status) - size.width / 2) <= 1);
+  CHECK(fabs(CGRectGetMidX(layout.purposes) - size.width / 2) <= 1);
+  if (notice) CHECK(fabs(CGRectGetMidX(layout.notice) - size.width / 2) <= 1);
+  if (language) CHECK(CGRectGetMaxX(layout.language) == CGRectGetMaxX(layout.status));
+  if (!empty(layout.clock)) CHECK(CGRectGetMinX(layout.clock) == CGRectGetMinX(layout.status));
+  // Hint directly above the call button; the stage reaches down to the hint and no further.
+  CHECK(CGRectGetMaxY(layout.status) <= CGRectGetMinY(layout.action));
+  CHECK(CGRectGetMinY(layout.action) - CGRectGetMaxY(layout.status) <= layout.gap + 0.01);
+  CHECK(layout.status.size.height >= 44);
+  CHECK(inside(layout.content, size) && layout.content.size.height >= 44);
+  CHECK(CGRectEqualToRect(layout.headline, layout.content));
+  CHECK(within(layout.status, layout.content));
+  CHECK(CGRectGetMaxY(layout.content) <= CGRectGetMinY(layout.action));
+  CGRect above[] = {layout.topBar, layout.language, layout.clock, layout.date, layout.air};
+  for (NSUInteger a = 0; a < sizeof(above) / sizeof(above[0]); a++)
+    CHECK(!overlap(layout.content, above[a]));
+  if (notice) CHECK(within(layout.notice, layout.content));
+  CHECK(!overlap(layout.content, layout.purposes) && !overlap(layout.content, layout.sos));
+  CHECK(layout.action.size.width >= 44 && layout.action.size.height >= 44);
+  if (sos) CHECK(layout.sos.size.height >= 44 && layout.sos.size.width <= 132 &&
+                 layout.sos.size.height < layout.action.size.height);
+  CHECK(CGRectGetMinX(layout.sos) == CGRectGetMinX(layout.status) || !sos);
+  CGFloat zoneBottom = sos ? CGRectGetMinY(layout.sos) - layout.gap
+                           : CGRectGetMinY(layout.version) - 8;
+  if (purposes > 0) {
+    CHECK(!empty(layout.purposes) && layout.purposes.size.height >= 44);
+    CHECK(CGRectGetMinY(layout.purposes) > CGRectGetMaxY(layout.action));
+    CHECK(CGRectGetMaxY(layout.purposes) <= zoneBottom + 0.01);
+    CHECK(layout.purposeColumns >= 2 && layout.purposeColumns <= 4);
+  } else {
+    // No purposes: the hero sits at the true centre of the zone below the top rows.
+    CGFloat zoneTop = notice ? CGRectGetMaxY(layout.notice) + layout.gap : layout.content.origin.y;
+    CHECK(fabs((CGRectGetMinY(layout.status) - zoneTop) -
+               (zoneBottom - CGRectGetMaxY(layout.action))) <= 1);
+  }
+  if (pad) {
+    CHECK(layout.action.size.height >= 96 && layout.action.size.width >= 320);
+    CHECK(layout.purposeRowHeight >= 72);
+    if (purposes > 0) CHECK(layout.purposes.size.height >= layout.purposeRowHeight);
+    CHECK(!empty(layout.clock));
+    CHECK(layout.purposeColumns == 4);
+    CHECK(layout.margin == 32);
+  } else {
+    CHECK(layout.purposeColumns == 2);
+  }
+  // Every row of cards is centred on the column axis.
+  for (NSInteger row = 0; row * layout.purposeColumns < purposes; row++) {
+    NSInteger first = row * layout.purposeColumns;
+    NSInteger last = MIN(purposes, first + layout.purposeColumns) - 1;
+    CGRect a = DBDoorVisitorPurposeFrame(layout, first, 0), b = DBDoorVisitorPurposeFrame(layout, last, 0);
+    CHECK(fabs((CGRectGetMinX(a) + CGRectGetMaxX(b)) / 2 - layout.purposes.size.width / 2) <= 1);
+  }
+  checkGrid(layout, size);
+}
+static void checkLayout(DBDoorVisitorLayout layout, CGSize size, BOOL sos, BOOL language,
+                        BOOL notice) {
+  if (size.height >= 500) checkColumn(layout, size, sos, language, notice, layout.purposeCount);
+  else checkLegacy(layout, size, sos, language, notice);
+}
 int main(void) { @autoreleasepool {
   CGSize sizes[] = {{320,480},{480,320},{320,568},{568,320},{375,667},{667,375},
                     {414,736},{736,414},{768,1024},{1024,768}};
@@ -104,16 +219,41 @@ int main(void) { @autoreleasepool {
         checkLayout(fitted, sizes[i], sos, language, notice);
         // Geometry deliberately has no language, announcement, call phase or
         // purpose count input for the action zone; all of those share the same rectangles.
-        CHECK(CGRectEqualToRect(fitted.action, layout.action));
-        CHECK(CGRectEqualToRect(fitted.status, layout.status));
+        BOOL legacy = sizes[i].height < 500;
         CHECK(CGRectEqualToRect(fitted.sos, layout.sos));
         CHECK(CGRectEqualToRect(fitted.version, layout.version));
-        CHECK(CGRectEqualToRect(fitted.content, layout.content));
+        if (legacy) {
+          CHECK(CGRectEqualToRect(fitted.action, layout.action));
+          CHECK(CGRectEqualToRect(fitted.status, layout.status));
+          CHECK(CGRectEqualToRect(fitted.content, layout.content));
+        }
         // A row that is not shown gives its space to the purposes, or to a clock that
         // did not fit before.
-        CHECK(fitted.purposes.size.height >= layout.purposes.size.height ||
+        if (legacy) CHECK(fitted.purposes.size.height >= layout.purposes.size.height ||
               (empty(layout.clock) && !empty(fitted.clock)));
         if (language && notice) CHECK(memcmp(&fitted, &layout, sizeof(layout)) == 0);
+        DBDoorVisitorLayout plain = DBDoorVisitorLayoutFitWithAir(layout, language, notice, NO);
+        CHECK(memcmp(&plain, &fitted, sizeof(fitted)) == 0);
+        CHECK(empty(fitted.air));
+        // The PM2.5 line sits under the date, inside the region the expanded notice covers.
+        DBDoorVisitorLayout air = DBDoorVisitorLayoutFitWithAir(layout, language, notice, YES);
+        checkLayout(air, sizes[i], sos, language, notice);
+        if (legacy) CHECK(CGRectEqualToRect(air.action, layout.action));
+        if (!empty(air.air) && legacy) {
+          CHECK(!empty(air.date) && fabs(CGRectGetMinY(air.air) - CGRectGetMaxY(air.date)) < 0.01);
+          CHECK(air.air.size.height >= 24);
+          CHECK(within(air.air, air.headline));
+          CHECK(!overlap(air.headline, air.purposes));
+        }
+        if (MIN(sizes[i].width, sizes[i].height) >= 768) CHECK(!empty(air.air));
+        if (!legacy) {
+          // Every purpose count, including none: the same column rules hold.
+          for (NSInteger n = 0; n <= 9; n += 3) {
+            DBDoorVisitorLayout counted = DBDoorVisitorLayoutFitContent(layout, language, notice,
+                                                                        YES, n);
+            checkColumn(counted, sizes[i], sos, language, notice, n);
+          }
+        }
       }
       CHECK(CGRectEqualToRect(layout.action, DBDoorVisitorLayoutMake(sizes[i], sos, scale).action));
     }

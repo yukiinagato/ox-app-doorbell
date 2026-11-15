@@ -1,5 +1,6 @@
 #import "DBWidgets.h"
 
+#import "../Core/DBAirQualityModel.h"
 #import "../Core/DBTexts.h"
 #import "../Core/DBUiTheme.h"
 #import "../Media/DBQrCode.h"
@@ -737,6 +738,148 @@ static const CGFloat kFleetGlyphGap = 6;
   CGSize inner = [super sizeThatFits:CGSizeMake(MAX(0, size.width - horizontal),
                                                 MAX(0, size.height - vertical))];
   return CGSizeMake(inner.width + horizontal, inner.height + vertical);
+}
+
+@end
+
+#pragma mark - air quality
+
+@interface DBLevelDot : UIView
+@property(nonatomic, strong) UIColor *fill;
+@property(nonatomic, strong) UIColor *rim;
+@end
+
+@implementation DBLevelDot
+@synthesize fill = _fill, rim = _rim;
+
+- (id)initWithFrame:(CGRect)frame {
+  self = [super initWithFrame:frame];
+  if (self) {
+    self.backgroundColor = [UIColor clearColor];
+    self.opaque = NO;
+    self.userInteractionEnabled = NO;
+    self.contentMode = UIViewContentModeRedraw;
+  }
+  return self;
+}
+
+- (void)setFill:(UIColor *)fill {
+  _fill = fill;
+  [self setNeedsDisplay];
+}
+
+- (void)setRim:(UIColor *)rim {
+  _rim = rim;
+  [self setNeedsDisplay];
+}
+
+// The rim keeps a yellow or maroon dot visible on a light or dark ground alike.
+- (void)drawRect:(CGRect)rect {
+  (void)rect;
+  CGContextRef context = UIGraphicsGetCurrentContext();
+  if (context == NULL || _fill == nil) return;
+  CGRect circle = CGRectInset(self.bounds, 1, 1);
+  CGContextSetFillColorWithColor(context, _fill.CGColor);
+  CGContextFillEllipseInRect(context, circle);
+  if (_rim != nil) {
+    CGContextSetLineWidth(context, 1);
+    CGContextSetStrokeColorWithColor(context, _rim.CGColor);
+    CGContextStrokeEllipseInRect(context, circle);
+  }
+}
+@end
+
+@implementation DBAirQualityIndicator {
+  DBReadableLabel *_label;
+  DBLevelDot *_dot;
+  DBAirQualityModel *_model;
+  BOOL _suppressed;
+}
+
+static const CGFloat kAirDimmedAlpha = 0.55;
+
+- (id)init {
+  self = [super init];
+  if (self) {
+    _label = [[DBReadableLabel alloc] init];
+    _label.backgroundColor = [UIColor clearColor];
+    _label.textColor = [UIColor whiteColor];
+    _label.adjustsFontSizeToFitWidth = YES;
+    _label.minimumFontSize = 11;
+    _label.isAccessibilityElement = YES;
+    _label.accessibilityIdentifier = @"air_quality";
+    _label.hidden = YES;
+    _dot = [[DBLevelDot alloc] initWithFrame:CGRectZero];
+    _dot.isAccessibilityElement = NO;
+    _dot.hidden = YES;
+  }
+  return self;
+}
+
+- (UILabel *)label {
+  return _label;
+}
+
+- (UIView *)dot {
+  return _dot;
+}
+
+- (BOOL)visible {
+  return _model.visible;
+}
+
+- (void)addToView:(UIView *)host {
+  [host addSubview:_dot];
+  [host addSubview:_label];
+}
+
+- (void)applyVisibility {
+  BOOL shown = _model.visible && !_suppressed;
+  _label.hidden = !shown;
+  _dot.hidden = !shown || _model.levelHex == nil;
+}
+
+- (void)applyModel:(DBAirQualityModel *)model {
+  _model = model;
+  _label.text = model.text ?: @"";
+  _label.accessibilityLabel = model.accessibilityLabel;
+  CGFloat alpha = model.dimmed ? kAirDimmedAlpha : 1;
+  _label.alpha = alpha;
+  _dot.alpha = alpha;
+  _dot.fill = DBColorFromHex(model.levelHex, nil);
+  [self applyVisibility];
+}
+
+- (void)setSuppressed:(BOOL)suppressed {
+  _suppressed = suppressed;
+  [self applyVisibility];
+}
+
+- (void)layoutInFrame:(CGRect)frame fontSize:(CGFloat)fontSize centered:(BOOL)centered {
+  if (CGRectIsEmpty(frame)) {
+    _label.frame = CGRectZero;
+    _dot.frame = CGRectZero;
+    return;
+  }
+  _label.font = [UIFont systemFontOfSize:fontSize];
+  CGFloat side = (CGFloat)floor(fontSize * 0.7);
+  CGFloat gap = _model.levelHex != nil ? (CGFloat)floor(fontSize * 0.4) : 0;
+  CGFloat dotWidth = _model.levelHex != nil ? side + gap : 0;
+  CGFloat textWidth = (CGFloat)ceil([_label.text ?: @"" sizeWithFont:_label.font].width);
+  CGFloat available = MAX(0, frame.size.width - dotWidth);
+  textWidth = MIN(textWidth, available);
+  CGFloat x = frame.origin.x;
+  if (centered) x += (CGFloat)floor((frame.size.width - dotWidth - textWidth) / 2);
+  _dot.frame = _model.levelHex != nil
+      ? CGRectMake(x, (CGFloat)floor(CGRectGetMidY(frame) - side / 2), side, side) : CGRectZero;
+  _label.frame = CGRectMake(x + dotWidth, frame.origin.y, textWidth, frame.size.height);
+  _label.textAlignment = NSTextAlignmentLeft;
+}
+
+- (void)applyPalette:(DBUiPalette *)palette region:(NSString *)region {
+  if (palette == nil) return;
+  [palette applyInkToLabel:_label region:region];
+  _dot.rim = [_label.textColor colorWithAlphaComponent:0.6];
 }
 
 @end

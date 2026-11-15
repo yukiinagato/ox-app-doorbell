@@ -185,8 +185,8 @@ one composition and the primary action is not where the eye lands. Redo the layo
 on every shell together with the visitor-flow start page, which replaces this screen:
 title and purpose/first-step options centred as one block, the primary Call option
 largest and central, language switch in the top bar at the trailing edge, clock
-secondary in the top bar, SOS at the leading edge of the bottom zone, no version line
-on the visitor screen. Check it on a real door station before calling it done.
+secondary in the top bar, SOS at the leading edge of the bottom zone, and the version and
+diagnostics line kept as one quiet caption at the very bottom (the owner wants it shown). Check it on a real door station before calling it done.
 
 Kiosk 0.7.2 (86) is installed on the three iPad mini 1 devices (10.10.38.169, .49,
 .154) with `"mic":true`; the previous app and boot.json are at
@@ -202,3 +202,15 @@ pass started switching (Framework7 Icons). Android (Material Symbols), modern iO
 tvOS (SF Symbols with a Framework7 fallback below iOS 13) and Windows (Segoe Fluent /
 Fluent UI System Icons) still use Tabler; `tools/gen_icons.py`, `tools/check_icons.py`
 and their tests assume Tabler and need extending per platform.
+
+## Kiosk polish pass (0.8.0, build 94; 2026-11-15)
+
+Door-station home recomposed (centred column, hero Call pill, purpose grid, caption
+line at the bottom), Settings category tiles and QR section, indoor home spacing.
+Seen on the indoor mini in landscape only. Not done: portrait and iPad 1 screenshots,
+the calling/connected/reply states on a device, a sweep of every settings sub-page,
+phone landscapes under 500 pt (old two-column layout), the Call pill has no icon,
+purpose cards mix icons, emoji and no icon, the clock text is hard to read over a
+bright wallpaper, the bottom caption can clip. Framework7 icons: 17 SVGs and the
+LICENSE are downloaded in `assets/icons/framework7/` (uncommitted) but
+`tools/gen_icons.py` was not extended, so every kiosk icon is still Tabler.

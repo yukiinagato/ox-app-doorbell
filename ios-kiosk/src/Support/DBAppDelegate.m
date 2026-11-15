@@ -1,6 +1,7 @@
 #import "DBAppDelegate.h"
 #import <dlfcn.h>
 #import <AVFoundation/AVFoundation.h>
+#import "../Core/DBBluetoothSupport.h"
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBCompatibilityProfile.h"
 #import "../Core/DBConfigUtil.h"
@@ -17,6 +18,7 @@
 #import "../Screens/DBRouter.h"
 #import "../Screens/DBIncomingScreen.h"
 #import "../Screens/DBDoorScreen.h"
+#import "DBAirSensorHost.h"
 #import "DBWatchdog.h"
 #import "DBRecoveryClient.h"
 #import "DBSafeModeRecovery.h"
@@ -244,6 +246,8 @@ static NSDictionary *DBShellCapabilities(DBBootConfig *boot, BOOL secureStoreAva
     @"call_cancel_v2" : @YES,
     @"call_lifecycle_v2" : @YES,
     @"device_alert_v1" : @YES,
+    @"air_quality_display_v1" : @YES,
+    @"ble_air_sensor_v1" : @(DBDeviceHasBluetoothLE()),
     @"ui_manifest_v1" : @(uiManifest),
     @"runtime_recovery_v1" : @YES,
     @"helper_policy_v1" : @YES,
@@ -656,6 +660,7 @@ static BOOL DBBringAppToForeground(void) {
   DBCoreBridge *_core;
   DBBootConfig *_boot;
   DBRouter *_router;
+  DBAirSensorHost *_airSensorHost;
   DBWatchdog *_watchdog;
   DBRecoveryClient *_recovery;
   DBH264Player *_h264Test;
@@ -771,6 +776,10 @@ static BOOL DBBringAppToForeground(void) {
         addObserver:self selector:@selector(publishUIStyleRuntimeStatus:)
                name:DBSemanticStyleReportDidChangeNotification object:nil];
     [self publishUIStyleRuntimeStatus:nil];
+    if (DBDeviceHasBluetoothLE() && _airSensorHost == nil) {
+      _airSensorHost = [[DBAirSensorHost alloc] initWithCore:_core];
+      [_airSensorHost start];
+    }
   }
 
   DBEffectWindow *win = [[DBEffectWindow alloc] initWithFrame:[UIScreen mainScreen].bounds];

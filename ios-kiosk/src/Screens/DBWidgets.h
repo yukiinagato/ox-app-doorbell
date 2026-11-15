@@ -155,6 +155,24 @@ NSString *DBFleetGlyphIconName(DBFleetGlyph glyph);
 - (CGFloat)widthThatFits;
 @end
 
+@class DBAirQualityModel;
+
+// The home screen's PM2.5 line: a level dot and one wallpaper label. Both views are added to the
+// host screen directly, because the region ink is measured only for a direct child's frame.
+@interface DBAirQualityIndicator : NSObject
+@property(nonatomic, readonly) UILabel *label;
+@property(nonatomic, readonly) UIView *dot;
+// YES when the current model draws anything at all.
+@property(nonatomic, readonly) BOOL visible;
+- (void)addToView:(UIView *)host;
+- (void)applyModel:(DBAirQualityModel *)model;
+// Hides both views without forgetting the model, for a screen phase that covers the row.
+- (void)setSuppressed:(BOOL)suppressed;
+// Lays the dot and the text out inside frame. centered places the pair in the middle.
+- (void)layoutInFrame:(CGRect)frame fontSize:(CGFloat)fontSize centered:(BOOL)centered;
+- (void)applyPalette:(DBUiPalette *)palette region:(NSString *)region;
+@end
+
 // A caption plate over a snapshot or video: 6/12 padding and a radius.
 @interface DBPillLabel : UILabel
 @property(nonatomic, assign) UIEdgeInsets contentInsets;

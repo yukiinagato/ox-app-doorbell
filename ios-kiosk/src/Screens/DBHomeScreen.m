@@ -1,5 +1,6 @@
 #import "DBHomeScreen.h"
 
+#import "../Core/DBAirQualityModel.h"
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBCallHistoryModel.h"
 #import "../Core/DBConfigUtil.h"
@@ -191,6 +192,9 @@ static const NSInteger kMissedScanLimit = 20;
   NSTimer *_replyTimer;
   NSTimer *_snapshotTimer;
   NSTimer *_peersTimer;
+  NSTimer *_airTimer;
+  NSDictionary *_airDocument;
+  NSInteger _airGeneration;
   NSInteger _snapshotGeneration;
   NSInteger _snapshotTick;
   NSInteger _previewPage;
@@ -215,6 +219,7 @@ static const NSInteger kMissedScanLimit = 20;
   UILabel *_clockLabel;
   UILabel *_dateLabel;
   NSArray *_fleetCounters;   // Three DBFleetCounter, left to right.
+  DBAirQualityIndicator *_air;
   UIButton *_pairBanner;
   UIButton *_missedNotice;
   UIButton *_doorsPager;
@@ -283,6 +288,9 @@ static const NSInteger kMissedScanLimit = 20;
   _dateLabel.backgroundColor = [UIColor clearColor];
   _dateLabel.adjustsFontSizeToFitWidth = YES;
   [self addSubview:_dateLabel];
+
+  _air = [[DBAirQualityIndicator alloc] init];
+  [_air addToView:self];
 
   NSMutableArray *counters = [NSMutableArray array];
   DBFleetGlyph glyphs[3] = { DBFleetGlyphCluster, DBFleetGlyphDoorStation,
@@ -453,6 +461,12 @@ static const NSInteger kMissedScanLimit = 20;
                                                  selector:@selector(refreshFromCore)
                                                  userInfo:nil repeats:YES];
   }
+  if (!_airTimer) {
+    // air_quality_changed omits age changes, so a visible line is re-read once a minute.
+    _airTimer = [NSTimer scheduledTimerWithTimeInterval:60.0 target:self
+                                               selector:@selector(refreshAirQuality)
+                                               userInfo:nil repeats:YES];
+  }
   if (!_snapshotTimer) {
     _snapshotTimer = [NSTimer scheduledTimerWithTimeInterval:kSnapshotIntervalS target:self
                                                     selector:@selector(refreshSnapshots)
@@ -460,6 +474,7 @@ static const NSInteger kMissedScanLimit = 20;
   }
   [self updateClock];
   [self refreshFromCore];
+  [self refreshAirQuality];
   [self refreshSnapshots];
 }
 
@@ -471,6 +486,8 @@ static const NSInteger kMissedScanLimit = 20;
   _clockTimer = nil;
   [_peersTimer invalidate];
   _peersTimer = nil;
+  [_airTimer invalidate];
+  _airTimer = nil;
   // Stills are pure decoration: never keep polling five-second JPEGs behind a
   // live call on an A4 device.
   [_snapshotTimer invalidate];
@@ -484,6 +501,7 @@ static const NSInteger kMissedScanLimit = 20;
 
 - (void)dealloc {
   [_peersTimer invalidate];
+  [_airTimer invalidate];
   [_clockTimer invalidate];
   [_replyTimer invalidate];
   [_snapshotTimer invalidate];
@@ -517,6 +535,32 @@ static const NSInteger kMissedScanLimit = 20;
         [NSNumber numberWithInteger:[[parts objectAtIndex:2] integerValue]],
         [_texts ts:[weekdayKeys objectAtIndex:(NSUInteger)weekday]], nil];
   }
+}
+
+#pragma mark - air quality
+
+- (void)refreshAirQuality {
+  if (!_screenVisible) return;
+  NSInteger generation = ++_airGeneration;
+  DBCoreBridge *core = _core;
+  __weak DBHomeScreen *weakSelf = self;
+  dispatch_async(_refreshQueue, ^{
+    NSDictionary *document = [core airQualityJson];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBHomeScreen *screen = weakSelf;
+      if (!screen || generation != screen->_airGeneration || !screen->_screenVisible) return;
+      screen->_airDocument = document;
+      [screen applyAirQuality];
+    });
+  });
+}
+
+// The text width places the dot and the ink is measured behind the new frame, so every change
+// goes through layout.
+- (void)applyAirQuality {
+  BOOL wasVisible = _air.visible;
+  [_air applyModel:[DBAirQualityModel modelWithDocument:_airDocument texts:_texts]];
+  if (wasVisible || _air.visible) [self setNeedsLayout];
 }
 
 #pragma mark - core snapshot
@@ -576,6 +620,8 @@ static const NSInteger kMissedScanLimit = 20;
   [self applyPalette];
   [self applyTheme];
   [self applyStrings];
+  // A language or override change re-renders the PM2.5 line in the new strings.
+  if (cfg) [self applyAirQuality];
   [self rebuildDoorTiles];
   [self updateFooter];
   [self refreshSosVisibility];
@@ -1328,6 +1374,7 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   [_palette setBackgroundSampler:_themeBg.hidden ? nil : _sampler];
   [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
   [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
+  [_air applyPalette:_palette region:DBUiRegionDate];
   [_palette applyInkToLabel:_noDoorsLabel region:DBUiRegionHint];
   // The counters are a status line drawn by hand, so they take the same ink
   // and the same halo decision the labels beside them take.
@@ -1453,11 +1500,15 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   DBHomeLayout layout = DBHomeLayoutMake(size, navHeight, tabHeight, footerHeight,
                                          !_pairBanner.hidden, !_missedNotice.hidden,
                                          !_doorsPager.hidden, !_sosButton.hidden);
+  BOOL compactHeader = layout.clock.size.height < 60;
+  layout = DBHomeLayoutPlaceAir(layout, _air.visible ? (compactHeader ? 22 : 30) : 0);
 
   _clockLabel.font = [UIFont systemFontOfSize:floorf((float)layout.clock.size.height * 0.9f)];
   _dateLabel.font = [UIFont systemFontOfSize:floorf((float)layout.date.size.height * 0.75f)];
   _clockLabel.frame = layout.clock;
   _dateLabel.frame = layout.date;
+  [_air setSuppressed:CGRectIsEmpty(layout.air)];
+  [_air layoutInFrame:layout.air fontSize:compactHeader ? 15 : 20 centered:NO];
   _pairBanner.frame = layout.banner;
   _missedNotice.frame = layout.missed;
   _doorsPager.frame = layout.pager;
@@ -1485,12 +1536,13 @@ static const CGFloat kFooterGlassAlpha = 0.65;
   // takes the width of both rectangles.
   CGRect footerBlock = CGRectUnion(DBRectFromArray([footer objectForKey:@"qr"]),
                                    DBRectFromArray([footer objectForKey:@"version"]));
-  _qr.frame = footerBlock;
+  // One plate spans the content width; the block sits 8 pt inside it.
+  CGRect plate = DBHomeLayoutFooterPlate(size, tabHeight, footerBlock.size.height);
+  _qr.frame = CGRectIsEmpty(footerBlock) ? CGRectZero
+      : CGRectMake(plate.origin.x + 8, plate.origin.y + 8,
+                   MIN(footerBlock.size.width, plate.size.width - 16), footerBlock.size.height);
   _sosButton.frame = layout.sos;
-  // One plate under the footer block.
-  CGFloat footerPad = 8;
-  _footerScrim.frame = CGRectIsEmpty(footerBlock)
-      ? CGRectZero : CGRectInset(footerBlock, -footerPad, -footerPad);
+  _footerScrim.frame = CGRectIsEmpty(footerBlock) ? CGRectZero : plate;
   if ([_footerScrim isKindOfClass:[DBFrostedPlateView class]]) {
     UIColor *tint = [_palette.surface colorWithAlphaComponent:kFooterGlassAlpha];
     UIColor *border = [_palette.ink colorWithAlphaComponent:0.18];

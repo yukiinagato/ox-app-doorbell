@@ -1,5 +1,7 @@
 #import "DBSettingsScreen.h"
 
+#import "../Core/DBAirQualityModel.h"
+#import "../Core/DBBluetoothSupport.h"
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBIconAsset.h"
@@ -17,6 +19,9 @@
 #import "DBRouter.h"
 #import "DBSettingsPages.h"
 #import "DBWidgets.h"
+
+static const NSUInteger kAirSensorMax = 16;
+static NSString *const kAirSectionId = @"admin.air_title";
 
 // One settings row. `action` names what a tap does; "page" opens one of the
 // native editors in DBSettingsPages, named by `argument`.
@@ -139,6 +144,7 @@ static const CGFloat kDBQrSide = 96;
   NSMutableDictionary *_volumeSliders;  // configuration key -> DBVolumeSlider
   NSInteger _loadGeneration;
   NSTimer *_clockTimer;
+  NSInteger _airRefreshTick;
   NSUInteger _clockGeneration;
   BOOL _clockReadPending;
   BOOL _screenVisible;
@@ -166,9 +172,7 @@ static const CGFloat kDBQrSide = 96;
   NSInteger _selectedSection;
   NSDictionary *_pairing;
 
-  UIView *_footer;
-  UIImageView *_qrImage;
-  UILabel *_footerLabel;
+  UIImage *_qrCode;
   NSString *_qrUrl;
 
   // The transient message shown on the navigation item's prompt line.
@@ -212,14 +216,6 @@ static const CGFloat kDBQrSide = 96;
 
   _table = DBChromeGroupedTable(self, self);
   [self addSubview:_table];
-
-  _footer = [[UIView alloc] initWithFrame:CGRectZero];
-  _footer.backgroundColor = [UIColor clearColor];
-  _qrImage = [[UIImageView alloc] initWithFrame:CGRectMake(0, 0, kDBQrSide, kDBQrSide)];
-  _qrImage.isAccessibilityElement = YES;
-  [_footer addSubview:_qrImage];
-  _footerLabel = DBChromeSectionFooterLabel();
-  [_footer addSubview:_footerLabel];
 
   _masterNav = [[DBNavBar alloc] init];
   _masterRoot = [_masterNav setRootTitle:@"" backTitle:nil onBack:nil];
@@ -288,6 +284,14 @@ static const CGFloat kDBQrSide = 96;
 
 - (void)refreshClock:(NSTimer *)timer {
   (void)timer;
+  // Scan results and link states change on their own, so the PM2.5 page re-reads every 5 s
+  // while it is the page on screen and nothing is being edited over it.
+  if (_screenVisible && ++_airRefreshTick >= 5) {
+    _airRefreshTick = 0;
+    if ([_selectedId isEqualToString:kAirSectionId] && _editor.pageCount == 0 &&
+        _pendingChoiceRow == nil)
+      [self reload];
+  }
   if (!_screenVisible || !_clockTimer || _clockReadPending) return;
   _clockReadPending = YES;
   NSUInteger generation = _clockGeneration;
@@ -567,6 +571,281 @@ static const CGFloat kDBQrSide = 96;
   // the root helper relaunch it. A row that cannot do what it says is worse
   // than no row (spec §5.2, no decorative controls).
   return rows;
+}
+
+#pragma mark - PM2.5 sensors
+
+
+- (NSDictionary *)airSensorDefinitions {
+  id root = [DBConfigUtil dig:_cfg path:@"air_sensors"];
+  if (![root isKindOfClass:[NSDictionary class]]) return @{};
+  NSMutableDictionary *out = [NSMutableDictionary dictionary];
+  for (NSString *sensorId in (NSDictionary *)root) {
+    id def = [(NSDictionary *)root objectForKey:sensorId];
+    if ([def isKindOfClass:[NSDictionary class]]) [out setObject:def forKey:sensorId];
+  }
+  return out;
+}
+
+- (NSString *)airSensorName:(NSString *)sensorId definition:(NSDictionary *)def {
+  NSString *name = [DBConfigUtil str:def path:@"name"];
+  return [name length] > 0 ? name : sensorId;
+}
+
+- (NSString *)deviceNameForNode:(NSString *)node {
+  NSString *name = [DBConfigUtil str:_cfg path:[NSString stringWithFormat:@"devices.%@.name",
+                                                                          node]];
+  return [name length] > 0 ? name : node;
+}
+
+- (BOOL)airAddressRegistered:(NSDictionary *)defs host:(NSString *)host
+                     address:(NSString *)address {
+  for (NSDictionary *def in [defs allValues])
+    if ([[DBConfigUtil str:def path:@"host"] isEqualToString:host] &&
+        [[DBConfigUtil str:def path:@"address"] isEqualToString:address])
+      return YES;
+  return NO;
+}
+
+- (NSString *)bleStateLabel:(NSString *)ble {
+  NSArray *known = @[ @"ready", @"off", @"unauthorized", @"unsupported", @"unknown" ];
+  return [_texts ts:[@"admin.air_ble_" stringByAppendingString:
+      [known containsObject:(ble ?: @"")] ? ble : @"unknown"]];
+}
+
+// The web admin's PM2.5 panel for this device: what it shows, whether it hosts sensors, the
+// sensors its scans find, and every registered sensor. Writes follow Core's
+// airQualityConfigValid; the layout follows airSectionModel in webui/admin/app.js.
+- (NSArray *)airSensorRows {
+  NSMutableArray *rows = [NSMutableArray array];
+  if ([_nodeId length] == 0) return rows;
+  NSString *air = [NSString stringWithFormat:@"devices.%@.local.air_quality", _nodeId];
+  NSDictionary *defs = [self airSensorDefinitions];
+
+  DBSettingsRow *show = [self toggleRow:[_texts ts:@"admin.air_show"]
+                                    key:[air stringByAppendingString:@".show"] def:NO];
+  DBGroupStart(show).groupFooter = [_texts ts:@"admin.air_intro"];
+  [rows addObject:show];
+  NSString *noneLabel = [_texts ts:@"admin.air_none"];
+  NSMutableArray *sensors = [NSMutableArray array];
+  for (NSString *sensorId in defs)
+    [sensors addObject:@[ sensorId, [self airSensorName:sensorId
+                                             definition:[defs objectForKey:sensorId]] ]];
+  [sensors sortUsingComparator:^NSComparisonResult(NSArray *a, NSArray *b) {
+    return [[a objectAtIndex:1] localizedCaseInsensitiveCompare:[b objectAtIndex:1]];
+  }];
+  NSMutableArray *choices = [NSMutableArray arrayWithObject:@[ @"", noneLabel ]];
+  [choices addObjectsFromArray:sensors];
+  NSString *sensorKey = [air stringByAppendingString:@".sensor"];
+  NSString *current = [DBConfigUtil str:_cfg path:sensorKey] ?: @"";
+  NSString *label = [current length] > 0 ? current : noneLabel;
+  for (NSArray *choice in choices)
+    if ([[choice objectAtIndex:0] isEqualToString:current]) label = [choice objectAtIndex:1];
+  // Always a sheet: "(none)" writes null, which the segmented and plain choice paths cannot.
+  DBSettingsRow *sensor = DBRow([_texts ts:@"admin.air_sensor_pick"], label, @"air_sensor",
+                                [NSString stringWithFormat:@"%@|%@", sensorKey, current]);
+  sensor.choices = choices;
+  [rows addObject:sensor];
+
+  // Hosting is offered only where this app advertises ble_air_sensor_v1.
+  BOOL canHost = [DBConfigUtil boolVal:_status path:@"features.ble_air_sensor_v1"
+                                   def:DBDeviceHasBluetoothLE()];
+  DBSettingsRow *host = canHost
+      ? [self toggleRow:[_texts ts:@"admin.air_host"]
+                    key:[air stringByAppendingString:@".host"] def:NO]
+      : DBRow([_texts ts:@"admin.air_host_unsupported"], @"", nil, nil);
+  [rows addObject:DBGroupStart(host)];
+
+  [rows addObjectsFromArray:[self airDiscoveredRows:defs]];
+  [rows addObjectsFromArray:[self airRegisteredRows:defs]];
+  return rows;
+}
+
+- (NSArray *)airDiscoveredRows:(NSDictionary *)defs {
+  NSMutableArray *rows = [NSMutableArray array];
+  id hosts = [DBConfigUtil dig:_status path:@"air_quality.hosts"];
+  NSMutableSet *seenHosts = [NSMutableSet set];
+  BOOL full = [defs count] >= kAirSensorMax;
+  if ([hosts isKindOfClass:[NSArray class]]) {
+    for (id entry in (NSArray *)hosts) {
+      if (![entry isKindOfClass:[NSDictionary class]]) continue;
+      NSString *device = [DBConfigUtil str:entry path:@"device"];
+      if ([device length] == 0 || [seenHosts containsObject:device]) continue;
+      [seenHosts addObject:device];
+      NSString *deviceName = [self deviceNameForNode:device];
+      NSMutableArray *found = [NSMutableArray array];
+      NSMutableSet *addresses = [NSMutableSet set];
+      id list = [entry objectForKey:@"discovered"];
+      if ([list isKindOfClass:[NSArray class]]) {
+        for (id item in (NSArray *)list) {
+          if (![item isKindOfClass:[NSDictionary class]]) continue;
+          NSString *address = [DBConfigUtil str:item path:@"address"];
+          if ([address length] == 0 || [addresses containsObject:address]) continue;
+          [addresses addObject:address];
+          if ([self airAddressRegistered:defs host:device address:address]) continue;
+          [found addObject:item];
+        }
+      }
+      [found sortUsingComparator:^NSComparisonResult(NSDictionary *a, NSDictionary *b) {
+        id ra = [a objectForKey:@"rssi"], rb = [b objectForKey:@"rssi"];
+        NSInteger va = [ra isKindOfClass:[NSNumber class]] ? [ra integerValue] : -999;
+        NSInteger vb = [rb isKindOfClass:[NSNumber class]] ? [rb integerValue] : -999;
+        return va > vb ? NSOrderedAscending : (va < vb ? NSOrderedDescending : NSOrderedSame);
+      }];
+      NSString *ble = [DBConfigUtil str:entry path:@"ble"];
+      if ([found count] == 0) {
+        NSString *empty = [_texts t:@"admin.air_nothing_found", deviceName, nil];
+        if (![ble isEqualToString:@"ready"])
+          empty = [NSString stringWithFormat:@"%@ (%@)", empty, [self bleStateLabel:ble]];
+        [rows addObject:DBRow(empty, @"", nil, nil)];
+        continue;
+      }
+      for (NSDictionary *item in found) {
+        NSString *address = [DBConfigUtil str:item path:@"address"];
+        NSString *name = [DBConfigUtil str:item path:@"name"];
+        id rssi = [item objectForKey:@"rssi"];
+        NSString *detail = [rssi isKindOfClass:[NSNumber class]]
+            ? [NSString stringWithFormat:@"%@  ·  %@", deviceName,
+                  [_texts t:@"admin.air_signal", rssi, nil]]
+            : deviceName;
+        DBSettingsRow *row = DBRow([name length] > 0 ? name : address, detail,
+                                   full ? nil : @"air_add",
+                                   [NSString stringWithFormat:@"%@|%@", device, address]);
+        [rows addObject:row];
+      }
+    }
+  }
+  if ([rows count] == 0) [rows addObject:DBRow([_texts ts:@"admin.air_no_hosts"], @"", nil, nil)];
+  DBGroupStart([rows objectAtIndex:0]).groupHeader = [_texts ts:@"admin.air_discovered"];
+  return rows;
+}
+
+- (NSArray *)airRegisteredRows:(NSDictionary *)defs {
+  NSMutableDictionary *reported = [NSMutableDictionary dictionary];
+  id list = [DBConfigUtil dig:_status path:@"air_quality.sensors"];
+  if ([list isKindOfClass:[NSArray class]])
+    for (id entry in (NSArray *)list)
+      if ([entry isKindOfClass:[NSDictionary class]] &&
+          [[entry objectForKey:@"id"] isKindOfClass:[NSString class]])
+        [reported setObject:entry forKey:[entry objectForKey:@"id"]];
+
+  NSArray *ids = [[defs allKeys] sortedArrayUsingComparator:^NSComparisonResult(id a, id b) {
+    NSString *na = [self airSensorName:a definition:[defs objectForKey:a]];
+    NSString *nb = [self airSensorName:b definition:[defs objectForKey:b]];
+    NSComparisonResult byName = [na compare:nb];
+    return byName != NSOrderedSame ? byName : [(NSString *)a compare:b];
+  }];
+  NSMutableArray *rows = [NSMutableArray array];
+  NSArray *links = @[ @"connected", @"connecting", @"disconnected", @"not_found" ];
+  for (NSString *sensorId in ids) {
+    NSDictionary *def = [defs objectForKey:sensorId];
+    NSDictionary *state = [reported objectForKey:sensorId];
+    NSDictionary *reading = [state objectForKey:@"reading"];
+    if (![reading isKindOfClass:[NSDictionary class]]) reading = nil;
+    NSMutableArray *parts = [NSMutableArray array];
+    NSString *hostNode = [DBConfigUtil str:def path:@"host"] ?: @"";
+    [parts addObject:[self deviceNameForNode:hostNode]];
+    NSString *link = [DBConfigUtil str:reading path:@"link"];
+    if (![DBConfigUtil boolVal:state path:@"host_alive" def:NO])
+      [parts addObject:[_texts ts:@"admin.air_host_offline"]];
+    else if ([links containsObject:(link ?: @"")])
+      [parts addObject:[_texts ts:[@"admin.air_link_" stringByAppendingString:link]]];
+    NSString *value = [DBAirQualityModel valueString:[reading objectForKey:@"pm25"]];
+    if (value != nil) {
+      NSString *level = [DBConfigUtil str:state path:@"level"];
+      NSString *reading25 = [NSString stringWithFormat:@"%@ %@ %@", [_texts ts:@"air.pm25_label"],
+                                                       value, [_texts ts:@"air.unit"]];
+      if ([DBAirQualityModel hexForLevel:level] != nil)
+        reading25 = [NSString stringWithFormat:@"%@ %@", reading25,
+            [_texts ts:[@"air.level_" stringByAppendingString:level]]];
+      [parts addObject:reading25];
+    }
+    id battery = [reading objectForKey:@"battery_pct"];
+    if ([battery isKindOfClass:[NSNumber class]] && [battery integerValue] >= 0 &&
+        [battery integerValue] <= 100)
+      [parts addObject:[_texts t:@"admin.air_battery", battery, nil]];
+    DBSettingsRow *row = DBRow([self airSensorName:sensorId definition:def],
+                               [parts componentsJoinedByString:@"  ·  "], @"air_remove",
+                               sensorId);
+    [rows addObject:row];
+  }
+  if ([rows count] == 0) [rows addObject:DBRow([_texts ts:@"admin.air_no_sensors"], @"", nil, nil)];
+  DBSettingsRow *first = DBGroupStart([rows objectAtIndex:0]);
+  first.groupHeader = [_texts ts:@"admin.air_sensors"];
+  return rows;
+}
+
+- (void)addAirSensorForRow:(DBSettingsRow *)row {
+  NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
+  if ([parts count] != 2) return;
+  NSString *host = [parts objectAtIndex:0];
+  NSString *address = [parts objectAtIndex:1];
+  NSString *suggested = [row.title isEqualToString:address] ? @"" : row.title;
+  __weak DBSettingsScreen *weakSelf = self;
+  [_editor promptTitle:[_texts ts:@"admin.air_name_prompt"] value:suggested
+           placeholder:[_texts ts:@"admin.air_name"] keyboard:UIKeyboardTypeDefault secure:NO
+                  then:^(NSString *text) {
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return;
+    NSString *name = [text stringByTrimmingCharactersInSet:
+        [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+    __block NSUInteger characters = 0;
+    [name enumerateSubstringsInRange:NSMakeRange(0, [name length])
+                             options:NSStringEnumerationByComposedCharacterSequences
+                          usingBlock:^(NSString *s, NSRange r, NSRange e, BOOL *stop) {
+      (void)s; (void)r; (void)e; (void)stop;
+      characters++;
+    }];
+    NSDictionary *defs = [screen airSensorDefinitions];
+    if (characters < 1 || characters > 40 || [address length] > 64 || [host length] > 128 ||
+        [defs count] >= kAirSensorMax || [screen airAddressRegistered:defs host:host
+                                                              address:address]) {
+      [screen showToast:[screen->_texts ts:@"settings.save_failed"]];
+      return;
+    }
+    NSString *sensorId = nil;
+    for (NSInteger attempt = 0; attempt < 64 && sensorId == nil; attempt++) {
+      NSString *candidate = [NSString stringWithFormat:@"s_%08x", arc4random()];
+      if ([defs objectForKey:candidate] == nil) sensorId = candidate;
+    }
+    if (sensorId == nil) return;
+    [screen writeKey:[@"air_sensors." stringByAppendingString:sensorId] object:@{
+      @"name" : name, @"host" : host, @"address" : address, @"kind" : @"mops_vida_pm25",
+      @"enabled" : @YES }];
+    [screen reload];
+  }];
+}
+
+// Removing a sensor also clears every device that was showing it, so no display keeps
+// pointing at an id that no longer exists.
+- (void)removeAirSensorForRow:(DBSettingsRow *)row {
+  NSString *sensorId = row.argument;
+  if ([sensorId length] == 0) return;
+  NSString *message = [_texts t:@"admin.air_remove_confirm", row.title, nil];
+  __weak DBSettingsScreen *weakSelf = self;
+  [_editor confirmTitle:[_texts ts:@"admin.air_remove"] message:message then:^{
+    DBSettingsScreen *screen = weakSelf;
+    if (!screen) return;
+    NSMutableArray *keys = [NSMutableArray arrayWithObject:
+        [@"air_sensors." stringByAppendingString:sensorId]];
+    id devices = [DBConfigUtil dig:screen->_cfg path:@"devices"];
+    if ([devices isKindOfClass:[NSDictionary class]]) {
+      for (NSString *device in (NSDictionary *)devices) {
+        NSString *path = [NSString stringWithFormat:@"devices.%@.local.air_quality.sensor", device];
+        if ([[DBConfigUtil str:screen->_cfg path:path] isEqualToString:sensorId])
+          [keys addObject:path];
+      }
+    }
+    DBCoreBridge *core = screen->_core;
+    [screen write:^int{
+      for (NSString *key in keys) {
+        int status = [core setConfigKey:key valueJson:@"null"];
+        if (status != 0) return status;
+      }
+      return 0;
+    }];
+    [screen reload];
+  }];
 }
 
 - (DBSettingsRow *)textRow:(NSString *)title key:(NSString *)key def:(NSString *)def {
@@ -1120,6 +1399,9 @@ static const CGFloat kDBQrSide = 96;
     [sections addObject:[self section:@"settings.section_purposes" rows:purposes
                                  icon:@"message-reply"]];
   [sections addObject:[self section:@"prefs.sos" rows:[self sosRows] icon:@"shield-lock"]];
+  NSArray *air = [self airSensorRows];
+  if ([air count] > 0)
+    [sections addObject:[self section:kAirSectionId rows:air icon:@"link"]];
   [sections addObject:[self section:@"settings.section_time" rows:[self timeRows]
                                icon:@"clock"]];
   [sections addObject:[self section:@"settings.section_rules" rows:[self ruleRows]
@@ -1272,6 +1554,7 @@ static const CGFloat kDBQrSide = 96;
   [self applyPrompt];
   [_table reloadData];
   [_table setContentOffset:CGPointZero animated:NO];
+  [self syncCategorySelection];
 }
 
 #pragma mark - footer
@@ -1286,45 +1569,62 @@ static const CGFloat kDBQrSide = 96;
                            appVersion:appVersion batteryPct:battery charging:charging];
 }
 
-// The admin page's QR code, its address, and the version line close every category.
+// The admin page's QR code, its address, and the version line close every category as the last
+// grouped section of the detail table.
 - (void)updateFooter {
   NSString *url = [self adminUrl];
-  NSString *caption = [_texts ts:@"web_admin.scan"];
-  _qrImage.accessibilityLabel = caption;
-  _footerLabel.text = [NSString stringWithFormat:@"%@\n%@\n%@", caption, url,
-                                                 [self versionLine] ?: @""];
   if (![url isEqualToString:_qrUrl]) {
     _qrUrl = [url copy];
+    _qrCode = nil;
     __weak DBSettingsScreen *weakSelf = self;
     // QR generation is pure CPU work and stays off the main thread of an A4 device.
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_LOW, 0), ^{
       UIImage *code = [DBQrCode imageForString:url targetPx:kDBQrSide * 2];
       dispatch_async(dispatch_get_main_queue(), ^{
         DBSettingsScreen *screen = weakSelf;
-        if (screen && [screen->_qrUrl isEqualToString:url]) screen->_qrImage.image = code;
+        if (screen && [screen->_qrUrl isEqualToString:url]) {
+          screen->_qrCode = code;
+          [screen reloadAdminSection];
+        }
       });
     });
   }
-  [self layoutFooter];
 }
 
-- (void)layoutFooter {
-  CGFloat width = CGRectGetWidth(_table.bounds);
-  if (width <= 0) return;
-  CGFloat inset = DBChromeIsFlat() ? 15 : 20;
-  CGFloat labelWidth = MAX(80, width - inset * 2);
-  CGFloat labelHeight = ceil([_footerLabel.text ?: @"" sizeWithFont:_footerLabel.font
-      constrainedToSize:CGSizeMake(labelWidth, 400)
-          lineBreakMode:NSLineBreakByWordWrapping].height);
-  // The footer label is centred before iOS 7 and leading on the flat look; the code follows.
-  CGFloat qrX = DBChromeIsFlat() ? inset : floor((width - kDBQrSide) / 2);
-  _qrImage.frame = CGRectMake(qrX, 8, kDBQrSide, kDBQrSide);
-  _footerLabel.frame = CGRectMake(inset, 8 + kDBQrSide + 8, labelWidth, labelHeight);
-  CGRect frame = CGRectMake(0, 0, width, CGRectGetMaxY(_footerLabel.frame) + 20);
-  if (_table.tableFooterView != _footer || !CGRectEqualToRect(_footer.frame, frame)) {
-    _footer.frame = frame;
-    _table.tableFooterView = _footer;
+- (void)reloadAdminSection {
+  NSInteger section = (NSInteger)[_groups count];
+  if ([_table numberOfSections] != section + 1 || [self volumeBeingDragged]) return;
+  [_table reloadSections:[NSIndexSet indexSetWithIndex:(NSUInteger)section]
+        withRowAnimation:UITableViewRowAnimationNone];
+}
+
+- (BOOL)isAdminSection:(NSInteger)section {
+  return section == (NSInteger)[_groups count];
+}
+
+- (UITableViewCell *)adminCell {
+  static NSString *identifier = @"admin";
+  UITableViewCell *cell = [_table dequeueReusableCellWithIdentifier:identifier];
+  if (cell == nil) {
+    cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault
+                                  reuseIdentifier:identifier];
+    cell.selectionStyle = UITableViewCellSelectionStyleNone;
+    cell.textLabel.numberOfLines = 0;
+    cell.textLabel.font = [UIFont systemFontOfSize:15];
+    cell.textLabel.textColor = [UIColor grayColor];
+    cell.imageView.isAccessibilityElement = YES;
   }
+  UIImage *code = _qrCode;
+  if (code == nil) {
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(kDBQrSide, kDBQrSide), NO, 0);
+    code = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+  }
+  cell.imageView.image = code;
+  cell.imageView.accessibilityLabel = [_texts ts:@"web_admin.scan"];
+  cell.textLabel.text = [NSString stringWithFormat:@"%@\n%@", [self adminUrl] ?: @"",
+                                                   [self versionLine] ?: @""];
+  return cell;
 }
 
 #pragma mark - messages
@@ -1460,6 +1760,12 @@ static const CGFloat kDBQrSide = 96;
   NSData *data = [NSJSONSerialization dataWithJSONObject:value options:0 error:NULL];
   NSString *json = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding] : nil;
   if ([json length] == 0) return NO;
+  DBCoreBridge *core = _core;
+  return [self write:^int{ return [core setConfigKey:key valueJson:json]; }];
+}
+
+// A literal JSON value; NSJSONSerialization on iOS 5 refuses a bare null at the top level.
+- (BOOL)writeKey:(NSString *)key json:(NSString *)json {
   DBCoreBridge *core = _core;
   return [self write:^int{ return [core setConfigKey:key valueJson:json]; }];
 }
@@ -1853,8 +2159,12 @@ static const CGFloat kDBQrSide = 96;
     // The segmented control handles taps itself; without one the row offers the sheet.
     if ([self segmentWidthForRow:row] <= 0) [self presentChoicesForRow:row];
   } else if ([action isEqualToString:@"choose"] || [action isEqualToString:@"local_choice"] ||
-             [action isEqualToString:@"unlock_mode"]) {
+             [action isEqualToString:@"unlock_mode"] || [action isEqualToString:@"air_sensor"]) {
     [self presentChoicesForRow:row];
+  } else if ([action isEqualToString:@"air_add"]) {
+    [self addAirSensorForRow:row];
+  } else if ([action isEqualToString:@"air_remove"]) {
+    [self removeAirSensorForRow:row];
   } else if ([action isEqualToString:@"role"]) {
     [self openRoleChange];
   } else if ([action isEqualToString:@"text"]) {
@@ -1959,6 +2269,8 @@ static const CGFloat kDBQrSide = 96;
     // "auto" is the absence of the key: Core then shows the button only for a bound door.
     if ([value isEqualToString:@"auto"]) [self deleteKey:key];
     else [self writeKey:key flag:[value isEqualToString:@"show"]];
+  } else if ([row.action isEqualToString:@"air_sensor"] && [value length] == 0) {
+    [self writeKey:key json:@"null"];
   } else {
     [self writeKey:key string:value];
   }
@@ -2142,16 +2454,19 @@ static const CGFloat kDBQrSide = 96;
 }
 
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView {
-  return tableView == _categoryTable ? 1 : (NSInteger)[_groups count];
+  return tableView == _categoryTable ? 1 : (NSInteger)[_groups count] + 1;
 }
 
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
   if (tableView == _categoryTable) return (NSInteger)[_sections count];
+  if ([self isAdminSection:section]) return 1;
   return section < (NSInteger)[_groups count]
       ? (NSInteger)[[_groups objectAtIndex:(NSUInteger)section] count] : 0;
 }
 
 - (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section {
+  if (tableView != _categoryTable && [self isAdminSection:section])
+    return [_texts ts:@"web_admin.scan"];
   if (tableView == _categoryTable || section >= (NSInteger)[_groups count]) return nil;
   NSString *header = [(DBSettingsRow *)[[_groups objectAtIndex:(NSUInteger)section]
       objectAtIndex:0] groupHeader];
@@ -2167,7 +2482,45 @@ static const CGFloat kDBQrSide = 96;
 
 - (CGFloat)tableView:(UITableView *)tableView heightForRowAtIndexPath:(NSIndexPath *)indexPath {
   if (tableView == _categoryTable) return 44;
+  if ([self isAdminSection:indexPath.section]) return kDBQrSide + 16;
   return [self layoutForRow:[self rowAt:indexPath]].height;
+}
+
+// A white glyph on a 29 pt rounded tile, the way the system Settings app draws its categories.
+// Each tile is composited once; there are a dozen categories.
+- (UIImage *)categoryTile:(NSString *)icon {
+  static NSMutableDictionary *tiles;
+  static NSDictionary *palette;
+  if (tiles == nil) {
+    tiles = [NSMutableDictionary dictionary];
+    palette = @{
+      @"device-tablet": @[ @142, @142, @147 ], @"volume": @[ @255, @45, @85 ],
+      @"palette": @[ @0, @122, @255 ], @"phone": @[ @52, @199, @89 ],
+      @"door": @[ @255, @149, @0 ], @"message-reply": @[ @50, @173, @230 ],
+      @"shield-lock": @[ @255, @59, @48 ], @"link": @[ @175, @82, @222 ],
+      @"clock": @[ @88, @86, @214 ], @"bell": @[ @162, @132, @94 ],
+      @"topology-star-3": @[ @48, @176, @199 ], @"list": @[ @99, @99, @102 ],
+      @"info-circle": @[ @142, @142, @147 ] };
+  }
+  UIImage *tile = [tiles objectForKey:icon ?: @""];
+  if (tile != nil) return tile;
+  UIImage *glyph = [DBIconAsset tintedImageNamed:icon color:[UIColor whiteColor]
+                                            size:CGSizeMake(18, 18)];
+  if (glyph == nil) return nil;
+  NSArray *rgb = [palette objectForKey:icon] ?: @[ @142, @142, @147 ];
+  CGSize size = CGSizeMake(29, 29);
+  UIGraphicsBeginImageContextWithOptions(size, NO, 0);
+  UIColor *fill = [UIColor colorWithRed:[[rgb objectAtIndex:0] floatValue] / 255
+                                  green:[[rgb objectAtIndex:1] floatValue] / 255
+                                   blue:[[rgb objectAtIndex:2] floatValue] / 255 alpha:1];
+  [fill setFill];
+  [[UIBezierPath bezierPathWithRoundedRect:CGRectMake(0, 0, size.width, size.height)
+                              cornerRadius:6.5f] fill];
+  [glyph drawInRect:CGRectMake(5.5f, 5.5f, 18, 18)];
+  tile = UIGraphicsGetImageFromCurrentImageContext();
+  UIGraphicsEndImageContext();
+  if (tile != nil) [tiles setObject:tile forKey:icon];
+  return tile;
 }
 
 - (UITableViewCell *)categoryCellForRow:(NSInteger)index {
@@ -2183,7 +2536,7 @@ static const CGFloat kDBQrSide = 96;
   }
   NSDictionary *section = [_sections objectAtIndex:(NSUInteger)index];
   cell.textLabel.text = [section objectForKey:@"title"];
-  cell.imageView.image = [DBIconAsset imageNamed:[section objectForKey:@"icon"]];
+  cell.imageView.image = [self categoryTile:[section objectForKey:@"icon"]];
   cell.accessoryType = _twoPane ? UITableViewCellAccessoryNone
                                 : UITableViewCellAccessoryDisclosureIndicator;
   return cell;
@@ -2192,6 +2545,7 @@ static const CGFloat kDBQrSide = 96;
 - (UITableViewCell *)tableView:(UITableView *)tableView
          cellForRowAtIndexPath:(NSIndexPath *)indexPath {
   if (tableView == _categoryTable) return [self categoryCellForRow:indexPath.row];
+  if ([self isAdminSection:indexPath.section]) return [self adminCell];
   DBSettingsRow *row = [self rowAt:indexPath];
   UITableViewCell *cell = DBEditDequeueCell(tableView, [self layoutForRow:row].style,
                                             row.destructive);
@@ -2272,6 +2626,7 @@ static const CGFloat kDBQrSide = 96;
     return;
   }
   [tableView deselectRowAtIndexPath:indexPath animated:YES];
+  if ([self isAdminSection:indexPath.section]) return;
   [self performAction:[self rowAt:indexPath]];
 }
 
@@ -2315,7 +2670,6 @@ static const CGFloat kDBQrSide = 96;
   }
   if (CGRectGetWidth(detail) != _tableWidth) {
     _tableWidth = CGRectGetWidth(detail);
-    [self layoutFooter];
     if (![self volumeBeingDragged]) [_table reloadData];
   }
 }

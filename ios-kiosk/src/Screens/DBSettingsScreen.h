@@ -8,4 +8,7 @@
 - (id)initWithRouter:(DBRouter *)router;
 - (void)reload;
 
+// Opens one category by position; the debug start screen "settings:N" uses it.
+- (void)selectCategory:(NSInteger)index;
+
 @end

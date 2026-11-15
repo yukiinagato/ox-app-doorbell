@@ -3,6 +3,8 @@
 #include <math.h>
 #include <string.h>
 
+static const CGFloat kFooterPlatePad = 8;
+
 DBHomeLayout DBHomeLayoutMake(CGSize size, CGFloat navHeight, CGFloat tabHeight,
                               CGFloat footerHeight, BOOL showsBanner, BOOL showsMissed,
                               BOOL showsPager, BOOL showsSOS) {
@@ -17,21 +19,21 @@ DBHomeLayout DBHomeLayoutMake(CGSize size, CGFloat navHeight, CGFloat tabHeight,
   BOOL compact = size.width < 600 || size.height < 600;
   CGFloat clockHeight = compact ? 44 : 80;
   CGFloat dateHeight = compact ? 22 : 32;
-  CGFloat top = navHeight + 8;
+  CGFloat top = navHeight + 12;
   CGFloat leftWidth = (CGFloat)floor(size.width * 0.55) - pad;
   layout.clock = CGRectMake(pad, top, leftWidth, clockHeight);
   layout.date = CGRectMake(pad, CGRectGetMaxY(layout.clock), leftWidth, dateHeight);
   CGFloat rightX = pad + leftWidth + pad;
   CGFloat rightWidth = MAX(0, size.width - pad - rightX);
-  layout.counters = CGRectMake(rightX, top + 8, rightWidth, 34);
+  layout.counters = CGRectMake(rightX, top + 8, rightWidth, 32);
   // Secondary controls share one row under the counters: SOS at the trailing edge, the door
   // pager beside it.
-  CGFloat rowY = CGRectGetMaxY(layout.counters) + 10;
+  CGFloat rowY = CGRectGetMaxY(layout.counters) + 8;
   CGFloat rowRight = size.width - pad;
   if (showsSOS) {
     CGFloat sosWidth = MIN(rightWidth, 120);
     layout.sos = CGRectMake(rowRight - sosWidth, rowY, sosWidth, 44);
-    rowRight = CGRectGetMinX(layout.sos) - 10;
+    rowRight = CGRectGetMinX(layout.sos) - 12;
   }
   if (showsPager) {
     CGFloat pagerWidth = MAX(0, MIN(rowRight - rightX, 220));
@@ -60,8 +62,26 @@ DBHomeLayout DBHomeLayoutMake(CGSize size, CGFloat navHeight, CGFloat tabHeight,
     }
   }
 
-  layout.footerTop = size.height - tabHeight - footerHeight;
+  layout.footerTop = size.height - tabHeight - footerHeight - kFooterPlatePad * 2;
   layout.tiles = CGRectMake(pad, y, size.width - 2 * pad, MAX(0, layout.footerTop - y));
+  return layout;
+}
+
+DBHomeLayout DBHomeLayoutPlaceAir(DBHomeLayout layout, CGFloat height) {
+  layout.air = CGRectZero;
+  if (!(height > 0) || CGRectIsEmpty(layout.date)) return layout;
+  CGRect air = CGRectMake(layout.date.origin.x, CGRectGetMaxY(layout.date) + 2,
+                          layout.date.size.width, (CGFloat)floor(height));
+  CGFloat header = MAX(CGRectGetMaxY(layout.date),
+                       MAX(CGRectGetMaxY(layout.pager), CGRectGetMaxY(layout.sos)));
+  CGFloat shift = MAX(0, CGRectGetMaxY(air) - header);
+  // The tiles keep at least a usable band; a screen that has no room for the line skips it.
+  if (layout.tiles.size.height - shift < 120) return layout;
+  layout.air = air;
+  if (!CGRectIsEmpty(layout.banner)) layout.banner = CGRectOffset(layout.banner, 0, shift);
+  if (!CGRectIsEmpty(layout.missed)) layout.missed = CGRectOffset(layout.missed, 0, shift);
+  layout.tiles.origin.y += shift;
+  layout.tiles.size.height = MAX(0, layout.footerTop - layout.tiles.origin.y);
   return layout;
 }
 
@@ -96,4 +116,10 @@ CGRect DBHomeLayoutTileFrame(DBHomeLayout layout, NSInteger index, NSInteger cou
   CGFloat originY = area.origin.y + (CGFloat)floor((area.size.height - gridHeight) / 2);
   return CGRectMake(originX + (index % columns) * (best.width + gap),
                     originY + (index / columns) * (best.height + gap), best.width, best.height);
+}
+
+CGRect DBHomeLayoutFooterPlate(CGSize size, CGFloat tabHeight, CGFloat blockHeight) {
+  if (size.width <= 0 || blockHeight <= 0) return CGRectZero;
+  CGFloat height = blockHeight + kFooterPlatePad * 2;
+  return CGRectMake(20, size.height - tabHeight - 20 - height, size.width - 40, height);
 }

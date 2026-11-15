@@ -1,5 +1,6 @@
 #import "DBDoorScreen.h"
 
+#import "../Core/DBAirQualityModel.h"
 #import "../Core/DBBootConfig.h"
 #import "../Core/DBConfigUtil.h"
 #import "../Core/DBPairingModel.h"
@@ -213,6 +214,10 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 
   UILabel *_clockLabel;
   UILabel *_dateLabel;
+  DBAirQualityIndicator *_air;
+  NSDictionary *_airDocument;
+  NSInteger _airGeneration;
+  NSTimer *_airTimer;
   UIView *_noticeCard;
   UILabel *_noticeLabel;
   UIButton *_noticeExpand;
@@ -258,6 +263,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 - (void)dealloc {
   // Never leave a repeating run-loop timer behind a released screen.
   [_clockTimer invalidate];
+  [_airTimer invalidate];
   [_keyframeTimer invalidate];
   [_callTimer invalidate];
   [_replyTimer invalidate];
@@ -333,13 +339,18 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   // is keyed to the screen's size, so only a direct child gets ink measured behind its frame.
   _clockLabel = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:72]];
   _clockLabel.adjustsFontSizeToFitWidth = YES;
-  _clockLabel.minimumFontSize = 20;
+  _clockLabel.minimumFontSize = 14;
+  _clockLabel.textAlignment = NSTextAlignmentLeft;
   [self addSubview:_clockLabel];
 
   _dateLabel = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:22]];
   _dateLabel.adjustsFontSizeToFitWidth = YES;
   _dateLabel.minimumFontSize = 12;
+  _dateLabel.textAlignment = NSTextAlignmentLeft;
   [self addSubview:_dateLabel];
+
+  _air = [[DBAirQualityIndicator alloc] init];
+  [_air addToView:self];
 
   _touchHint = [self wallpaperLabelWithFont:[UIFont systemFontOfSize:24]];
   _touchHint.numberOfLines = 2;
@@ -522,6 +533,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _noticeCard.hidden = !notice;
   _clockLabel.hidden = !idle || covered;
   _dateLabel.hidden = !idle || covered;
+  [_air setSuppressed:!idle || covered || CGRectIsEmpty(_air.label.frame)];
   _purposeScroll.hidden = !idle;
   _touchHint.hidden = !idle;
   _callButton.hidden = !idle;
@@ -546,8 +558,15 @@ static const CGFloat kLanguageSegmentMinimum = 64;
                                                     selector:@selector(pollKeyframeRequest:)
                                                     userInfo:nil repeats:YES];
   }
+  if (!_airTimer) {
+    // air_quality_changed omits age changes, so a visible line is re-read once a minute.
+    _airTimer = [NSTimer scheduledTimerWithTimeInterval:60.0 target:self
+                                               selector:@selector(refreshAirQuality)
+                                               userInfo:nil repeats:YES];
+  }
   [self updateClock];
   [self refreshFromCore];
+  [self refreshAirQuality];
   [self applyStrings];
 }
 
@@ -732,6 +751,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   if (_palette == nil) return;
   [_palette applyInkToLabel:_clockLabel region:DBUiRegionClock];
   [_palette applyInkToLabel:_dateLabel region:DBUiRegionDate];
+  [_air applyPalette:_palette region:DBUiRegionDate];
   [_palette applyInkToLabel:_touchHint region:DBUiRegionHint];
   [_palette applyInkToLabel:_versionLabel region:DBUiRegionStatusLine];
   [_palette applyInkToLabel:_mediaBadge region:DBUiRegionStatusLine];
@@ -757,6 +777,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   // only drawn here, so it stops until the screen appears again.
   [_clockTimer invalidate];
   _clockTimer = nil;
+  [_airTimer invalidate];
+  _airTimer = nil;
   _onScreen = NO;
   [_callSpinner stopAnimating];
   [self dismissLanguageSheet];
@@ -819,10 +841,35 @@ static const CGFloat kLanguageSegmentMinimum = 64;
       if (waitingCall) [screen restoreWaitingCall:[DBConfigUtil evStr:waitingCall key:@"call_id"]
                                         snapshot:timingSnapshot];
       [screen applyStrings];
+      [screen applyAirQuality];
       [screen applySemanticStyles];
       [screen setNeedsLayout];
     });
   });
+}
+
+- (void)refreshAirQuality {
+  if (!_onScreen) return;
+  NSInteger generation = ++_airGeneration;
+  DBCoreBridge *core = _core;
+  __weak DBDoorScreen *weakSelf = self;
+  dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    NSDictionary *document = [core airQualityJson];
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBDoorScreen *screen = weakSelf;
+      if (!screen || generation != screen->_airGeneration || !screen->_onScreen) return;
+      screen->_airDocument = document;
+      [screen applyAirQuality];
+    });
+  });
+}
+
+// The row moves the notice and the purposes, and the text width places the dot, so every change
+// goes through layout.
+- (void)applyAirQuality {
+  BOOL wasVisible = _air.visible;
+  [_air applyModel:[DBAirQualityModel modelWithDocument:_airDocument texts:_texts]];
+  if (wasVisible || _air.visible) [self setNeedsLayout];
 }
 
 - (void)applyPairingSnapshot:(NSDictionary *)pairing {
@@ -1894,7 +1941,10 @@ static const CGFloat kLanguageSegmentMinimum = 64;
           DBDoorStyleNumber(endStyle, @"scale", 1, 1, 2)));
   DBDoorVisitorLayout layout = DBDoorVisitorLayoutMake(size, !_sosButton.hidden, actionScale);
   NSInteger languageCount = (NSInteger)[_languages count];
-  layout = DBDoorVisitorLayoutFit(layout, languageCount >= 2, !_noticeLabel.hidden);
+  layout = DBDoorVisitorLayoutFitContent(layout, languageCount >= 2, !_noticeLabel.hidden,
+                                         _air.visible,
+                                         [self showsHomePurposes]
+                                             ? (NSInteger)[_purposeButtons count] : 0);
   BOOL compact = layout.compact;
   CGFloat margin = layout.margin;
   CGFloat gap = layout.gap;
@@ -1904,7 +1954,8 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _callButton.frame = layout.action;
   _cancelButton.frame = layout.action;
   _touchHint.frame = layout.status;
-  _touchHint.font = [UIFont systemFontOfSize:compact ? 15 : (layout.sideBySide ? 20 : 24)];
+  _touchHint.font = [UIFont systemFontOfSize:compact ? 17 : 24];
+  _versionLabel.font = [UIFont systemFontOfSize:13];
   _versionLabel.frame = layout.version;
   _sosButton.frame = layout.sos;
 
@@ -1917,10 +1968,12 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _languagePlate.frame = layout.language;
   [self applyFlowVisibility];
 
-  _clockLabel.font = [UIFont systemFontOfSize:compact ? 36 : 72];
+  _clockLabel.font = [UIFont systemFontOfSize:22];
   _clockLabel.frame = layout.clock;
-  _dateLabel.font = [UIFont systemFontOfSize:compact ? 15 : 22];
+  _dateLabel.font = [UIFont systemFontOfSize:15];
   _dateLabel.frame = layout.date;
+  [_air layoutInFrame:layout.air fontSize:compact ? 14 : 16 centered:NO];
+  [self applyFlowVisibility];
 
   // Collapsed, the announcement shows two lines in its own row. Expanded, it grows over the
   // clock and the date, and never over a purpose or an action.
@@ -2009,8 +2062,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   // rectangle that now holds Cancel or End.
   CGFloat plateHeight = MIN(layout.content.size.height, compact ? 140 : 240);
   _callPlate.frame = CGRectMake(layout.content.origin.x,
-      floor(layout.content.origin.y + (layout.content.size.height - plateHeight) / 2),
-      layout.content.size.width, plateHeight);
+      CGRectGetMaxY(layout.content) - plateHeight, layout.content.size.width, plateHeight);
   CGSize spinnerSize = _callSpinner.bounds.size;
   _callSpinner.center = CGPointMake(floor(_callPlate.bounds.size.width / 2),
                                     12 + floor(spinnerSize.height / 2));

@@ -89,6 +89,16 @@ NSString *DBLocalMediaHeaderLine(NSURL *url);
 - (BOOL)timeSyncNow;
 // Effective call/sos/idle volumes for one device (nil or empty = this node).
 - (NSDictionary *)audioJsonForDevice:(NSString *)deviceId;
+// The PM2.5 reading this node shows on its home screen (db_core_air_quality_json), or nil
+// while Core is not running.
+- (NSDictionary *)airQualityJson;
+// Bluetooth sensor hosting (db_core_air_sensor_*). Each one waits on Core's loop, so call them off
+// the main thread.
+- (NSDictionary *)airSensorPlan;
+- (void)airSensorPacket:(NSData *)data sensorId:(NSString *)sensorId;
+- (void)airSensorReport:(NSDictionary *)report;
+// The bytes written once to a sensor's RX characteristic after subscribing, or nil.
+- (NSData *)airSensorConnectCommand;
 // Announcements. door of nil or empty is rejected by Core, so callers resolve
 // the global target into the concrete door list first.
 - (BOOL)setNotice:(NSString *)text forDoor:(NSString *)door expiresMs:(long long)expiresMs;
