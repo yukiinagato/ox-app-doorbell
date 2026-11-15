@@ -194,14 +194,23 @@ Kiosk 0.7.2 (86) is installed on the three iPad mini 1 devices (10.10.38.169, .4
 The iPad 1 still runs 0.7.1 (85). The microphone fix (permission request, TCC
 entitlements, hardware default) has not been confirmed in a real call.
 
-## Icon policy change (owner, 2026-11-15, mostly not implemented)
+## Icon policy: per-platform native sets (owner, 2026-11-15)
 
-The owner dropped the "one icon set everywhere" rule: each platform should use its
-native-feeling set (see `ui-guidelines.md`, Tokens > Icons). Only the kiosk polish
-pass started switching (Framework7 Icons). Android (Material Symbols), modern iOS and
-tvOS (SF Symbols with a Framework7 fallback below iOS 13) and Windows (Segoe Fluent /
-Fluent UI System Icons) still use Tabler; `tools/gen_icons.py`, `tools/check_icons.py`
-and their tests assume Tabler and need extending per platform.
+The owner dropped the "one icon set everywhere" rule (see `ui-guidelines.md`, Tokens >
+Icons). Status per platform:
+
+- Kiosk: Framework7 Icons, 0.8.2; seen on devices.
+- iOS and tvOS: SF Symbols with bundled Framework7 fallback imagesets (`F7*.imageset`),
+  0.5.2. Simulator builds only; the DoorbellIOS9 target was not built. The `door` and
+  `videoOff` fallbacks use lock and wifi-slash for lack of a match.
+- Android: Material Symbols (`ic_ms_*.xml`), 0.4.4. Both lanes assemble. One unit test
+  fails in each lane, `VideoZoomMathTest.pinchingBackInRecentresThePicture` at line 154;
+  it is unrelated to icons and not yet investigated. The legacy lint report is unread.
+- Windows: Fluent UI System Icons, 0.2.1. Host checks only, never rendered; glyph sizing
+  in Viewbox/PathIcon is unchecked; there are no filled variants for selected navigation.
+- Web: Tabler.
+
+The kiosk and iOS share `assets/icons/framework7/` and its one manifest.
 
 ## Kiosk polish pass (0.8.0, build 94; 2026-11-15)
 
