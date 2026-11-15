@@ -25,6 +25,10 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
     var onOpenDeviceInfo: (() -> Void)?
 
     private let screens = NSHashTable<AnyObject>.weakObjects()
+    private var cachedCatalog: SettingsCatalog?
+    private var refreshCoalescer = SettingsRefreshCoalescer()
+    private var pendingWrites = SettingsPendingWrites()
+    private let refreshQueue = DispatchQueue(label: "doorbell.settings-refresh", qos: .userInitiated)
     private var categoryList: SettingsCategoryListController?
     private let toast = UILabel()
     private var toastTimer: Timer?
@@ -169,10 +173,19 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         return ConfigUtil.evStr((core.status()?["node"] as? [String: Any]) ?? [:], "id")
     }
 
+    /// The catalog of the last snapshot. Opening a page reads nothing from Core; Core change
+    /// events refresh the snapshot off the main thread.
     func catalog() -> SettingsCatalog {
+        if let cached = cachedCatalog { return cached }
+        let fresh = SettingsCatalog(makeContext(name: pendingName), texts: texts)
+        cachedCatalog = fresh
+        return fresh
+    }
+
+    private func makeContext(name: String) -> SettingsContext {
         let status = core.status()
         var ctx = SettingsContext(config: core.config(), status: status, nodeId: nodeId(),
-                                  name: pendingName, role: boot.role, door: boot.door,
+                                  name: name, role: boot.role, door: boot.door,
                                   uiLang: boot.uiLang, isTV: SettingsStyle.isTV)
         ctx.supportsPasswordChange = core.supportsAdminPasswordChange
         ctx.sipBackend = core.sipBackend
@@ -194,13 +207,33 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
         ctx.pskId = snapshot.security.pskId
         ctx.staleMembers = snapshot.security.legacyPeers.count + snapshot.security.rekeyRequired.count
         ctx.canRotateKey = core.supportsKeyRotation && snapshot.state == .ready
-        return SettingsCatalog(ctx, texts: texts)
+        return ctx
     }
 
     func register(_ screen: SettingsRefreshable) { screens.add(screen) }
 
-    func refreshAll() {
-        for case let screen as SettingsRefreshable in screens.allObjects { screen.refreshFromHost() }
+    var pendingItemIds: Set<String> { return pendingWrites.ids }
+
+    /// Bursts of requests become one snapshot read on a background queue and one pass over the
+    /// open pages, which update only the rows whose value changed.
+    func refreshAll(force: Bool = false) {
+        guard refreshCoalescer.request(force: force) else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + SettingsRefreshCoalescer.delay) {
+            [weak self] in
+            guard let self = self else { return }
+            let forced = self.refreshCoalescer.fire()
+            let name = self.pendingName
+            self.refreshQueue.async { [weak self] in
+                guard let self = self else { return }
+                let context = self.makeContext(name: name)
+                DispatchQueue.main.async {
+                    self.cachedCatalog = SettingsCatalog(context, texts: self.texts)
+                    for case let screen as SettingsRefreshable in self.screens.allObjects {
+                        screen.refreshFromHost(force: forced)
+                    }
+                }
+            }
+        }
     }
 
     func show(_ controller: UIViewController, from: UIViewController) {
@@ -245,15 +278,18 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
                  from: UIViewController, completion: ((Bool) -> Void)?) {
         switch effect {
         case .write(let operations):
+            let pendingId = item?.id
+            if let id = pendingId { pendingWrites.begin(id) }
             writer.apply(operations) { [weak self] result in
                 guard let self = self else { return }
+                if let id = pendingId { self.pendingWrites.finish(id) }
                 self.setStatus(ConfigWriter.message(self.texts, result))
-                self.refreshAll()
+                self.refreshAll(force: !result.isOk)
                 completion?(result.isOk)
             }
         case .invalid(let key):
             setStatus(texts.t(key))
-            refreshAll()
+            refreshAll(force: true)
             completion?(false)
         case .local(let id):
             completion?(performLocal(id, value: value, from: from))

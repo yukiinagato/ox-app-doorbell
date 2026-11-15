@@ -187,11 +187,15 @@
 		FB0000000000000000000501 /* LangSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000501 /* LangSwitch.swift */; };
 		FB0000000000000000000502 /* LangSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000501 /* LangSwitch.swift */; };
 		F90000000000000000000501 /* LangSwitch.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000501 /* LangSwitch.swift */; };
+		FB0000000000000000000601 /* SettingsPerf.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000601 /* SettingsPerf.swift */; };
+		FB0000000000000000000602 /* SettingsPerf.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000601 /* SettingsPerf.swift */; };
+		F90000000000000000000601 /* SettingsPerf.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000601 /* SettingsPerf.swift */; };
 		FB0000000000000000000303 /* AirSensorHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000302 /* AirSensorHost.swift */; };
 		F90000000000000000000303 /* AirSensorHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000302 /* AirSensorHost.swift */; };
 		AC0000000000000000000302 /* AirQualityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000301 /* AirQualityTests.swift */; };
 		AC0000000000000000000402 /* ReplyFitTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000401 /* ReplyFitTests.swift */; };
 		AC0000000000000000000502 /* LangSwitchTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000501 /* LangSwitchTests.swift */; };
+		AC0000000000000000000602 /* SettingsPerfTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AC0000000000000000000601 /* SettingsPerfTests.swift */; };
 		FB0000000000000000000075 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
 		FB0000000000000000000095 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
 		F90000000000000000000075 /* CallHistory.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000035 /* CallHistory.swift */; };
@@ -307,10 +311,12 @@
 		FA0000000000000000000301 /* AirQualityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirQualityView.swift; sourceTree = "<group>"; };
 		FA0000000000000000000401 /* ReplyFit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyFit.swift; sourceTree = "<group>"; };
 		FA0000000000000000000501 /* LangSwitch.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LangSwitch.swift; sourceTree = "<group>"; };
+		FA0000000000000000000601 /* SettingsPerf.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPerf.swift; sourceTree = "<group>"; };
 		FA0000000000000000000302 /* AirSensorHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirSensorHost.swift; sourceTree = "<group>"; };
 		AC0000000000000000000301 /* AirQualityTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirQualityTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000401 /* ReplyFitTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyFitTests.swift; sourceTree = "<group>"; };
 		AC0000000000000000000501 /* LangSwitchTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LangSwitchTests.swift; sourceTree = "<group>"; };
+		AC0000000000000000000601 /* SettingsPerfTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsPerfTests.swift; sourceTree = "<group>"; };
 		FA0000000000000000000035 /* CallHistory.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CallHistory.swift; sourceTree = "<group>"; };
 		FA0000000000000000000037 /* SettingsViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsViewController.swift; sourceTree = "<group>"; };
 		FA0000000000000000000038 /* AdminQrView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdminQrView.swift; sourceTree = "<group>"; };
@@ -393,6 +399,7 @@
 				FA0000000000000000000301 /* AirQualityView.swift */,
 				FA0000000000000000000401 /* ReplyFit.swift */,
 				FA0000000000000000000501 /* LangSwitch.swift */,
+				FA0000000000000000000601 /* SettingsPerf.swift */,
 				FA0000000000000000000302 /* AirSensorHost.swift */,
 				FA0000000000000000000035 /* CallHistory.swift */,
 				FA0000000000000000000037 /* SettingsViewController.swift */,
@@ -470,6 +477,7 @@
 				AC0000000000000000000301 /* AirQualityTests.swift */,
 				AC0000000000000000000401 /* ReplyFitTests.swift */,
 				AC0000000000000000000501 /* LangSwitchTests.swift */,
+				AC0000000000000000000601 /* SettingsPerfTests.swift */,
 				AC0000000000000000000019 /* ClusterAndClockTests.swift */,
 				EDAD294A1E4281CAE8E43DAE /* SettingsCatalogTests.swift */,
 				AC000000000000000000001B /* CoreBridgeLifecycleTests.swift */,
@@ -796,6 +804,7 @@
 				AC0000000000000000000302 /* AirQualityTests.swift in Sources */,
 				AC0000000000000000000402 /* ReplyFitTests.swift in Sources */,
 				AC0000000000000000000502 /* LangSwitchTests.swift in Sources */,
+				AC0000000000000000000602 /* SettingsPerfTests.swift in Sources */,
 				AC000000000000000000001A /* ClusterAndClockTests.swift in Sources */,
 				E39CD4A21B90E5412DE8E9D1 /* SettingsCatalogTests.swift in Sources */,
 				AC000000000000000000001C /* CoreBridgeLifecycleTests.swift in Sources */,
@@ -822,6 +831,7 @@
 				FB0000000000000000000301 /* AirQualityView.swift in Sources */,
 				FB0000000000000000000401 /* ReplyFit.swift in Sources */,
 				FB0000000000000000000501 /* LangSwitch.swift in Sources */,
+				FB0000000000000000000601 /* SettingsPerf.swift in Sources */,
 				FB0000000000000000000303 /* AirSensorHost.swift in Sources */,
 				FB0000000000000000000075 /* CallHistory.swift in Sources */,
 				FB0000000000000000000077 /* SettingsViewController.swift in Sources */,
@@ -884,6 +894,7 @@
 				FB0000000000000000000302 /* AirQualityView.swift in Sources */,
 				FB0000000000000000000402 /* ReplyFit.swift in Sources */,
 				FB0000000000000000000502 /* LangSwitch.swift in Sources */,
+				FB0000000000000000000602 /* SettingsPerf.swift in Sources */,
 				FB0000000000000000000095 /* CallHistory.swift in Sources */,
 				FB0000000000000000000097 /* SettingsViewController.swift in Sources */,
 				FB0000000000000000000098 /* AdminQrView.swift in Sources */,
@@ -939,6 +950,7 @@
 				F90000000000000000000301 /* AirQualityView.swift in Sources */,
 				F90000000000000000000401 /* ReplyFit.swift in Sources */,
 				F90000000000000000000501 /* LangSwitch.swift in Sources */,
+				F90000000000000000000601 /* SettingsPerf.swift in Sources */,
 				F90000000000000000000303 /* AirSensorHost.swift in Sources */,
 				F90000000000000000000075 /* CallHistory.swift in Sources */,
 				F90000000000000000000077 /* SettingsViewController.swift in Sources */,

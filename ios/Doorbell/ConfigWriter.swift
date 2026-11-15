@@ -36,6 +36,7 @@ final class ConfigWriter {
     private let core: CoreBridge?
     private let httpPort: Int
     private let session: URLSession
+    private let writeQueue = DispatchQueue(label: "doorbell.config-write", qos: .userInitiated)
 
     init(core: CoreBridge? = nil, httpPort: Int) {
         self.core = core
@@ -95,7 +96,13 @@ final class ConfigWriter {
                 }
                 return (operation.key, encoded)
             }
-            if let outcome = core.applyConfigBatch(opsJson, operations: pairs) {
+            // Core's write path waits on its loop, so it runs off the main thread; the serial
+            // queue keeps writes in the order they were made.
+            writeQueue.async { [weak self] in
+                guard let outcome = core.applyConfigBatch(opsJson, operations: pairs) else {
+                    self?.post(url: url, body: data, completion: completion)
+                    return
+                }
                 let contrasts = ConfigWriter.contrasts(outcome.warnings)
                 DispatchQueue.main.async {
                     guard outcome.ok else {
@@ -105,9 +112,13 @@ final class ConfigWriter {
                     }
                     completion(.ok(contrasts: contrasts))
                 }
-                return
             }
+            return
         }
+        post(url: url, body: data, completion: completion)
+    }
+
+    private func post(url: URL, body data: Data, completion: @escaping (Result) -> Void) {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")

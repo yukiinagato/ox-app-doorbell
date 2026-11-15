@@ -2498,6 +2498,10 @@ final class MainViewController: UIViewController {
         let door = ConfigUtil.doorsWithCamera(config: cfg, status: core.status()).first
             ?? ((ConfigUtil.dig(cfg, "doors") as? [String: Any])?.keys.sorted().first ?? "front")
         #if DEBUG
+        if name == "settingsperf" {
+            runSettingsPerfProbe()
+            return
+        }
         if name.hasPrefix("langtap:") {
             runLanguageTimingProbe(String(name.dropFirst("langtap:".count)))
             return
@@ -2541,6 +2545,33 @@ final class MainViewController: UIViewController {
     }
 
     #if DEBUG
+    /// Main-thread cost of opening settings, opening each category page, and a burst of ten
+    /// refresh requests (what ten Core change events cost).
+    private func runSettingsPerfProbe() {
+        func ms(_ body: () -> Void) -> Int {
+            let start = CACurrentMediaTime()
+            body()
+            return Int((CACurrentMediaTime() - start) * 1_000_000)
+        }
+        let settings = SettingsViewController(core: core, boot: boot, texts: texts)
+        var lines: [String] = []
+        lines.append("open_us \(ms { settings.loadViewIfNeeded() })")
+        let ids = settings.catalog().categories().map { $0.id }
+        var pageCosts: [Int] = []
+        var pages: [SettingsPageController] = []
+        for id in ids {
+            let page = SettingsPageController(host: settings, path: [id])
+            pageCosts.append(ms { page.loadViewIfNeeded() })
+            pages.append(page)
+        }
+        lines.append("category_open_us " + pageCosts.map(String.init).joined(separator: ","))
+        lines.append("refresh_burst10_us \(ms { for _ in 0..<10 { settings.refreshAll() } })")
+        lines.append("catalog_us \(ms { _ = settings.catalog() })")
+        lines.append("pages_alive \(pages.count)")
+        let path = (BootConfig.dataDir() as NSString).appendingPathComponent("settings-perf.txt")
+        try? lines.joined(separator: "\n").write(toFile: path, atomically: true, encoding: .utf8)
+    }
+
     /// Taps each listed language in turn without yielding to the run loop and records the time
     /// from the handler's start to the end of the layout pass that follows it.
     private func runLanguageTimingProbe(_ list: String) {

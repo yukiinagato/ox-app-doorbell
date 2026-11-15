@@ -17,11 +17,23 @@ protocol SettingsHosting: AnyObject {
     func openShell(_ id: String, title: String, from: UIViewController)
     func openWeb(title: String, reason: String, from: UIViewController)
     func register(_ screen: SettingsRefreshable)
+    var pendingItemIds: Set<String> { get }
     func show(_ controller: UIViewController, from: UIViewController)
 }
 
 protocol SettingsRefreshable: AnyObject {
-    func refreshFromHost()
+    /// `force` reloads every row, to put a control back after a refused write.
+    func refreshFromHost(force: Bool)
+}
+
+extension UITableView {
+    /// True while the user is scrolling or typing in a row; a refresh waits for it to end.
+    var isBusyForRefresh: Bool {
+        if isTracking || isDragging || isDecelerating { return true }
+        return visibleCells.contains { cell in
+            cell.contentView.subviews.contains { $0.isFirstResponder }
+        }
+    }
 }
 
 // MARK: - Styling shared by every settings screen
@@ -151,7 +163,7 @@ final class SettingsCategoryListController: UITableViewController, SettingsRefre
         tableView.tableHeaderView = search
         #endif
         host.register(self)
-        refreshFromHost()
+        refreshFromHost(force: true)
     }
 
     /// A category matches when its title, its summary or any item title on its page does.
@@ -179,9 +191,12 @@ final class SettingsCategoryListController: UITableViewController, SettingsRefre
         }
     }
 
-    func refreshFromHost() {
+    func refreshFromHost(force: Bool) {
         guard let host = host else { return }
-        allCategories = host.catalog().categories()
+        let fresh = host.catalog().categories()
+        let shown = { (list: [SettingsCategory]) in list.map { "\($0.id)|\($0.title)|\($0.summary)" } }
+        if !force, !allCategories.isEmpty, shown(fresh) == shown(allCategories) { return }
+        allCategories = fresh
         applyFilter()
         tableView.reloadData()
         if host.usesSplit, let id = selectedId { select(id) }
@@ -273,14 +288,34 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
         SettingsStyle.apply(host.palette, to: tableView)
         tableView.accessibilityIdentifier = "settings_page_\(path.last ?? "")"
         host.register(self)
-        refreshFromHost()
+        refreshFromHost(force: true)
     }
 
-    func refreshFromHost() {
+    func refreshFromHost(force: Bool) {
         guard let host = host, let fresh = host.catalog().page(path: path) else { return }
-        page = fresh
         title = fresh.title
-        tableView.reloadData()
+        if force || page.sections.isEmpty {
+            page = fresh
+            tableView.reloadData()
+            return
+        }
+        if tableView.isBusyForRefresh {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.refreshFromHost(force: false)
+            }
+            return
+        }
+        switch SettingsRowDiff.compare(old: page.rowPrints, new: fresh.rowPrints,
+                                       skip: host.pendingItemIds) {
+        case .same:
+            page = fresh
+        case .rows(let paths):
+            page = fresh
+            UIView.performWithoutAnimation { tableView.reloadRows(at: paths, with: .none) }
+        case .structure:
+            page = fresh
+            tableView.reloadData()
+        }
     }
 
     private func item(at indexPath: IndexPath) -> SettingItem {
@@ -451,7 +486,7 @@ final class SettingsPageController: UITableViewController, SettingsRefreshable {
             self.host?.commit(item, .int(value), from: self)
         }
         pendingStepper = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6, execute: work)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3, execute: work)
     }
 
     #endif
@@ -1110,7 +1145,7 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
         SettingsStyle.apply(host.palette, to: tableView)
         tableView.allowsSelectionDuringEditing = false
         host.register(self)
-        refreshFromHost()
+        refreshFromHost(force: true)
         #if os(iOS)
         if model.reorder != nil || model.delete != nil {
             navigationItem.rightBarButtonItem = editButtonItem
@@ -1126,8 +1161,20 @@ final class SettingsListController: UITableViewController, SettingsRefreshable {
         #endif
     }
 
-    func refreshFromHost() {
+    func refreshFromHost(force: Bool) {
         guard let host = host, let fresh = host.catalog().list(path: path) else { return }
+        let prints = { (list: SettingsListModel) in
+            list.rows.map { "\($0.id)|\($0.title)|\($0.detail)|\(String(describing: $0.enabled))" }
+        }
+        let unchanged = !model.rows.isEmpty && prints(fresh) == prints(model)
+            && fresh.title == model.title && fresh.footer == model.footer
+        if !force, unchanged { model = fresh; return }
+        if !force, tableView.isBusyForRefresh || isEditing {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                self?.refreshFromHost(force: false)
+            }
+            return
+        }
         model = fresh
         title = fresh.title
         tableView.reloadData()
