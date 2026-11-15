@@ -41,8 +41,8 @@ internal class SosSlideView(
      * guillemet and multiplication sign are whatever the platform's font happens to draw, and on
      * the older panels that is not the same shape twice.
      */
-    private val slideIcon: Drawable? by lazy { icon(R.drawable.ic_tabler_chevron_right) }
-    private val cancelIcon: Drawable? by lazy { icon(R.drawable.ic_tabler_x) }
+    private val slideIcon: Drawable? by lazy { icon(R.drawable.ic_ms_chevron_right) }
+    private val cancelIcon: Drawable? by lazy { icon(R.drawable.ic_ms_close) }
 
     @Suppress("DEPRECATION")
     private fun icon(resource: Int): Drawable? =

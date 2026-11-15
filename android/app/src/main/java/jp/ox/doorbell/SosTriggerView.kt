@@ -171,7 +171,7 @@ internal class SosTriggerView(
     private fun restyle() {
         UiKit.styleAction(button, UiRoles.from(palette), ActionRole.NEGATIVE,
                           kind = ButtonKind.OUTLINED)
-        PlatformUi.setButtonIcon(button, R.drawable.ic_tabler_alert_triangle)
+        PlatformUi.setButtonIcon(button, R.drawable.ic_ms_warning)
     }
 
     /**

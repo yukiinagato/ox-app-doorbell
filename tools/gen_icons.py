@@ -7,7 +7,6 @@ from those files, so a glyph cannot drift between the Android drawable, the iOS 
 Windows geometry and the web sprite.
 
 Outputs:
-  android/app/src/main/res/drawable/ic_tabler_<name>.xml   VectorDrawable, stroked
   ios/Doorbell/Assets.xcassets/Tabler<Name>.imageset/      single-scale vector PDF
   ios-kiosk/resources/icons/f7_<name>[@2x].png             kiosk raster from Framework7 (Pillow)
   win/DoorbellApp/Resources/Icons.xaml                     Geometry dictionary, Fluent (below)
@@ -465,9 +464,6 @@ def main():
     act = stale if args.check else write
 
     for name, data in icons:
-        act(os.path.join(ROOT, "android/app/src/main/res/drawable",
-                         "ic_tabler_" + name.replace("-", "_") + ".xml"),
-            android_xml(name, data), results)
         imageset = os.path.join(ROOT, "ios/Doorbell/Assets.xcassets",
                                 "Tabler" + camel(name) + ".imageset")
         act(os.path.join(imageset, "Contents.json"), imageset_contents(), results)

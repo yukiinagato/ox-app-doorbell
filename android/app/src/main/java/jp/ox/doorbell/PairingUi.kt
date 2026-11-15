@@ -122,7 +122,7 @@ internal object PairingUi {
                     when (key) {
                         // The fleet's Tabler backspace rather than a font glyph.
                         KEY_BACK -> {
-                            PlatformUi.setButtonIcon(this, R.drawable.ic_tabler_backspace)
+                            PlatformUi.setButtonIcon(this, R.drawable.ic_ms_backspace)
                             contentDescription = context.getString(R.string.pair_key_delete)
                         }
                         KEY_OK -> text = context.getString(android.R.string.ok)

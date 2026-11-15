@@ -136,15 +136,15 @@ internal class DashboardView(
         orientation = LinearLayout.HORIZONTAL
         gravity = Gravity.CENTER_VERTICAL
     }
-    private val deviceCount = counter(R.drawable.ic_tabler_topology_star_3)
-    private val doorCount = counter(R.drawable.ic_tabler_door)
-    private val panelCount = counter(R.drawable.ic_tabler_device_tablet)
+    private val deviceCount = counter(R.drawable.ic_ms_hub)
+    private val doorCount = counter(R.drawable.ic_ms_door_front)
+    private val panelCount = counter(R.drawable.ic_ms_tablet_android)
     /** The one notice for unread missed calls; tapping it opens History. */
     private val missedNotice = PlatformUi.card(activity)
     private var missedText: TextView? = null
-    private val sosChip = PlatformUi.chip(activity, "", ChipKind.STATUS, R.drawable.ic_tabler_alert_triangle,
+    private val sosChip = PlatformUi.chip(activity, "", ChipKind.STATUS, R.drawable.ic_ms_warning,
                                           palette.danger, palette.onNegative)
-    private val offlineChip = PlatformUi.chip(activity, "", ChipKind.ACTION, R.drawable.ic_tabler_video_off,
+    private val offlineChip = PlatformUi.chip(activity, "", ChipKind.ACTION, R.drawable.ic_ms_videocam_off,
                                               palette.warning, palette.onWarning)
     private lateinit var header: LinearLayout
     private lateinit var clockBox: LinearLayout
@@ -370,13 +370,13 @@ internal class DashboardView(
         header.addView(headerActions)
         column.addView(header, ShellUi.matchWrap())
 
-        val missedRow = ShellUi.row(activity, palette, "", icon = R.drawable.ic_tabler_phone_off) {
+        val missedRow = ShellUi.row(activity, palette, "", icon = R.drawable.ic_ms_phone_disabled) {
             HistoryActivity.launch(activity)
         }
         (missedRow.getChildAt(0) as? ImageView)?.setColorFilter(ShellUi.opaque(ShellUi.roleInk(palette.danger, palette)))
         missedText = (missedRow.getChildAt(1) as? LinearLayout)?.getChildAt(0) as? TextView
         missedRow.addView(ImageView(activity).apply {
-            setImageResource(R.drawable.ic_tabler_chevron_right)
+            setImageResource(R.drawable.ic_ms_chevron_right)
             setColorFilter(ShellUi.opaque(palette.muted))
             importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
         }, LinearLayout.LayoutParams(ShellUi.dp(activity, 24), ShellUi.dp(activity, 24)))
@@ -429,11 +429,11 @@ internal class DashboardView(
     /** The app bar's trailing actions; rebuilt with the language. */
     private fun buildActions() {
         appBar.clearActions()
-        appBar.addAction(R.drawable.ic_tabler_note,
+        appBar.addAction(R.drawable.ic_ms_sticky_note_2,
                          texts.t("notice.global_button", R.string.notice_global_button)) {
             openNoticeDialog("")
         }
-        appBar.addAction(R.drawable.ic_tabler_plus,
+        appBar.addAction(R.drawable.ic_ms_add,
                          texts.t("admin.menu_add_device", R.string.admin_menu_add_device)) {
             AdminGate.unlock(activity, app.boot.httpPort, texts) {
                 if (app.pairingReady()) AddDeviceActivity.launch(activity)
@@ -443,7 +443,7 @@ internal class DashboardView(
                 }
             }
         }
-        appBar.addAction(R.drawable.ic_tabler_info_circle,
+        appBar.addAction(R.drawable.ic_ms_info,
                          texts.t("admin.menu_info", R.string.admin_menu_info)) {
             AdminGate.unlock(activity, app.boot.httpPort, texts) {
                 DeviceInfoActivity.launch(activity)
@@ -854,10 +854,10 @@ internal class DashboardView(
         navKey = key
         nav?.let { shell.removeView(it) }
         val items = listOf(
-            NavItem(Destination.HOME.id, texts.t("nav.home", R.string.nav_home), R.drawable.ic_tabler_home),
-            NavItem(Destination.HISTORY.id, texts.t("nav.history", R.string.nav_history), R.drawable.ic_tabler_history),
-            NavItem(Destination.MONITOR.id, texts.t("nav.monitor", R.string.nav_monitor), R.drawable.ic_tabler_eye),
-            NavItem(Destination.SETTINGS.id, texts.t("nav.settings", R.string.nav_settings), R.drawable.ic_tabler_settings),
+            NavItem(Destination.HOME.id, texts.t("nav.home", R.string.nav_home), R.drawable.ic_ms_home),
+            NavItem(Destination.HISTORY.id, texts.t("nav.history", R.string.nav_history), R.drawable.ic_ms_history),
+            NavItem(Destination.MONITOR.id, texts.t("nav.monitor", R.string.nav_monitor), R.drawable.ic_ms_visibility),
+            NavItem(Destination.SETTINGS.id, texts.t("nav.settings", R.string.nav_settings), R.drawable.ic_ms_settings),
         )
         val badges = if (unreadMissed > 0) mapOf(Destination.HISTORY.id to unreadMissed) else emptyMap()
         val view = UiKit.navigation(activity, style, items, Destination.HOME.id, badges) { item ->

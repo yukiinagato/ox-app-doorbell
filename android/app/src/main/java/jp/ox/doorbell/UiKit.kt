@@ -121,10 +121,10 @@ internal object UiKit {
 
     /** The icon for a recorded call's outcome, shared by the dashboard and the history. */
     fun outcomeIcon(outcome: CallOutcome): Int = when (outcome) {
-        CallOutcome.ANSWERED -> R.drawable.ic_tabler_phone
-        CallOutcome.MISSED -> R.drawable.ic_tabler_phone_off
-        CallOutcome.REPLIED -> R.drawable.ic_tabler_message_reply
-        CallOutcome.CANCELLED -> R.drawable.ic_tabler_x
+        CallOutcome.ANSWERED -> R.drawable.ic_ms_call
+        CallOutcome.MISSED -> R.drawable.ic_ms_phone_disabled
+        CallOutcome.REPLIED -> R.drawable.ic_ms_reply
+        CallOutcome.CANCELLED -> R.drawable.ic_ms_close
     }
 
     fun outcomeLabel(texts: Texts, outcome: CallOutcome): String = when (outcome) {

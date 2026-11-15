@@ -221,7 +221,7 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         categoryPane = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         val searchEntry = PlatformUi.field(
             this, texts.t("settings.search_hint", R.string.settings_search_hint), query,
-            icon = R.drawable.ic_tabler_search,
+            icon = R.drawable.ic_ms_search,
         )
         val search = searchEntry.view
         searchEntry.input.addTextChangedListener(object : TextWatcher {
@@ -399,18 +399,18 @@ class SettingsActivity : ShellActivity(), DoorbellCore.Listener {
         }
 
     private fun categoryIcon(category: SettingsCategory): Int = when (category) {
-        SettingsCategory.DEVICE -> R.drawable.ic_tabler_device_tablet
-        SettingsCategory.SOUND -> R.drawable.ic_tabler_volume
-        SettingsCategory.DISPLAY -> R.drawable.ic_tabler_palette
-        SettingsCategory.CALLS -> R.drawable.ic_tabler_phone
-        SettingsCategory.DOORS -> R.drawable.ic_tabler_door
-        SettingsCategory.EMERGENCY -> R.drawable.ic_tabler_bell
-        SettingsCategory.NOTIFICATIONS -> R.drawable.ic_tabler_mail
-        SettingsCategory.TIME -> R.drawable.ic_tabler_clock
-        SettingsCategory.SIP -> R.drawable.ic_tabler_link
-        SettingsCategory.NETWORK -> R.drawable.ic_tabler_world
-        SettingsCategory.CLUSTER -> R.drawable.ic_tabler_topology_star_3
-        SettingsCategory.ABOUT -> R.drawable.ic_tabler_info_circle
+        SettingsCategory.DEVICE -> R.drawable.ic_ms_tablet_android
+        SettingsCategory.SOUND -> R.drawable.ic_ms_volume_up
+        SettingsCategory.DISPLAY -> R.drawable.ic_ms_palette
+        SettingsCategory.CALLS -> R.drawable.ic_ms_call
+        SettingsCategory.DOORS -> R.drawable.ic_ms_door_front
+        SettingsCategory.EMERGENCY -> R.drawable.ic_ms_notifications
+        SettingsCategory.NOTIFICATIONS -> R.drawable.ic_ms_mail
+        SettingsCategory.TIME -> R.drawable.ic_ms_schedule
+        SettingsCategory.SIP -> R.drawable.ic_ms_link
+        SettingsCategory.NETWORK -> R.drawable.ic_ms_language
+        SettingsCategory.CLUSTER -> R.drawable.ic_ms_hub
+        SettingsCategory.ABOUT -> R.drawable.ic_ms_info
     }
 
     /**

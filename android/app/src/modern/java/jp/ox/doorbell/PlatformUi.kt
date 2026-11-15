@@ -455,7 +455,7 @@ internal object PlatformUi {
             // The reveal toggle uses the fleet's Tabler eye rather than the library's own glyph.
             var revealed = false
             layout.endIconMode = TextInputLayout.END_ICON_CUSTOM
-            layout.setEndIconDrawable(R.drawable.ic_tabler_eye)
+            layout.setEndIconDrawable(R.drawable.ic_ms_visibility)
             layout.endIconContentDescription = context.getString(R.string.password_show)
             layout.setEndIconOnClickListener {
                 revealed = !revealed
@@ -464,7 +464,7 @@ internal object PlatformUi {
                     if (revealed) null else PasswordTransformationMethod.getInstance()
                 input.setSelection(cursor.coerceIn(0, input.text?.length ?: 0))
                 layout.setEndIconDrawable(
-                    if (revealed) R.drawable.ic_tabler_eye_off else R.drawable.ic_tabler_eye,
+                    if (revealed) R.drawable.ic_ms_visibility_off else R.drawable.ic_ms_visibility,
                 )
                 layout.endIconContentDescription = context.getString(
                     if (revealed) R.string.password_hide else R.string.password_show,
@@ -509,7 +509,7 @@ internal object PlatformUi {
                     bar.setNavigationOnClickListener(null)
                     return
                 }
-                bar.setNavigationIcon(R.drawable.ic_tabler_chevron_left)
+                bar.setNavigationIcon(R.drawable.ic_ms_chevron_left)
                 bar.setNavigationIconTint(ink ?: argb(context, R.attr.colorOnSurface))
                 bar.navigationContentDescription = label
                 bar.setNavigationOnClickListener { onBack() }

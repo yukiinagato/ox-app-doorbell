@@ -90,8 +90,6 @@ class GenIconsTest(unittest.TestCase):
     def test_every_platform_gets_every_icon(self):
         for name in self.names:
             flat = name.replace("-", "_")
-            self.assertTrue(os.path.exists(os.path.join(
-                ROOT, "android/app/src/main/res/drawable", "ic_tabler_" + flat + ".xml")))
             imageset = os.path.join(ROOT, "ios/Doorbell/Assets.xcassets",
                                     "Tabler" + gen_icons.camel(name) + ".imageset")
             self.assertTrue(os.path.exists(os.path.join(imageset, "icon.pdf")))
@@ -118,27 +116,35 @@ class GenIconsTest(unittest.TestCase):
         self.assertGreater(alpha.getpixel((30, 8)), 200, "the disc is filled")
         self.assertLess(alpha.getpixel((30, 20)), 60, "the glyph strokes are cut out of it")
 
-    def test_android_drawables_reference_no_theme_attribute(self):
-        """A generated drawable resolves on its own or it does not link.
+    def test_android_icons_are_the_vendored_material_symbols(self):
+        """Android draws Material Symbols, vendored as literal-colour vectors.
 
-        The emitted vectors carried android:tint="?attr/colorControlNormal", which needs an
-        AppCompat or Material theme this project does not have -- its views are framework views.
-        The legacy19 tier is stricter still: it rasterises vectors at build time, where there is
-        no theme to read at all, so even ?android:attr/ is unusable. Colour is a literal and the
-        shells tint at runtime.
+        A drawable resolves on its own or it does not link: framework views have no AppCompat
+        theme for ?attr/, and the legacy19 tier rasterises vectors at build time with no theme
+        at all. Colour is a literal and the shells tint at runtime.
         """
-        for name in self.names:
-            path = os.path.join(ROOT, "android/app/src/main/res/drawable",
-                                "ic_tabler_" + name.replace("-", "_") + ".xml")
+        source_dir = os.path.join(ROOT, "assets/icons/material-symbols/xml")
+        self.assertTrue(os.path.exists(os.path.join(ROOT, "assets/icons/material-symbols/LICENSE")))
+        sources = sorted(os.listdir(source_dir))
+        self.assertTrue(sources)
+        drawable_dir = os.path.join(ROOT, "android/app/src/main/res/drawable")
+        self.assertEqual([], [n for n in os.listdir(drawable_dir) if n.startswith("ic_tabler_")])
+        leading_dot = re.compile(r"[\s,\-A-Za-z]\.\d")
+        for source in sources:
+            name = source[:-len("_24px.xml")]
+            with open(os.path.join(source_dir, source), "r", encoding="utf-8") as handle:
+                upstream = re.search(r'android:pathData="([^"]*)"', handle.read()).group(1)
+            path = os.path.join(drawable_dir, "ic_ms_" + name + ".xml")
             with open(path, "r", encoding="utf-8") as handle:
                 text = handle.read()
+            self.assertIn('android:pathData="' + upstream + '"', text, path)
+            self.assertIn('android:fillColor="#FF000000"', text, path)
             self.assertNotIn("?attr/", text, path)
             self.assertNotIn("?android:attr/", text, path)
-            self.assertIn('android:strokeColor="#FF000000"', text, path)
-            self.assertIn('android:strokeWidth="2"', text, path)
-            self.assertIn('android:strokeLineCap="round"', text, path)
-            self.assertIn('android:strokeLineJoin="round"', text, path)
             self.assertNotIn("android:tint", text, path)
+            self.assertIsNone(leading_dot.search(upstream), path + " has a leading-dot number")
+            self.assertEqual([], check_icons.violations_in(
+                "android/app/src/main/res/drawable/ic_ms_" + name + ".xml"), path)
 
     def test_the_generator_emits_no_theme_attribute(self):
         # The same rule at the source, so a future edit to the template is caught here and not
@@ -149,8 +155,7 @@ class GenIconsTest(unittest.TestCase):
         self.assertIn('android:strokeColor="#FF000000"', emitted)
 
     def test_outputs_carry_the_generated_banner(self):
-        for path in ("android/app/src/main/res/drawable/ic_tabler_door.xml",
-                     "webui/icons/tabler-sprite.svg",
+        for path in ("webui/icons/tabler-sprite.svg",
                      "webui/panel/icons/tabler-sprite.svg"):
             with open(os.path.join(ROOT, path), "r", encoding="utf-8") as handle:
                 self.assertIn(gen_icons.BANNER, handle.read(), path)
@@ -218,23 +223,6 @@ class GenIconsTest(unittest.TestCase):
                     self.assertAlmostEqual(x1, x2, places=9, msg=name)
                     self.assertAlmostEqual(y1, y2, places=9, msg=name)
 
-    def test_the_android_drawable_carries_the_respelled_geometry(self):
-        data = gen_icons.android_path_data(gen_icons.path_data(gen_icons.read_source("door")))
-        with open(os.path.join(ROOT, "android/app/src/main/res/drawable/ic_tabler_door.xml"),
-                  "r", encoding="utf-8") as handle:
-            self.assertIn(data, handle.read())
-
-    def test_no_leading_dot_numbers_reach_android(self):
-        # The exact spelling Android lint rejects: "v.01" for a dot, which Tabler uses a lot.
-        pattern = re.compile(r"[\s,\-A-Za-z]\.\d")
-        for name in self.names:
-            path = os.path.join(ROOT, "android/app/src/main/res/drawable",
-                                "ic_tabler_" + name.replace("-", "_") + ".xml")
-            with open(path, "r", encoding="utf-8") as handle:
-                data = re.search(r'android:pathData="([^"]*)"', handle.read()).group(1)
-            self.assertIsNone(pattern.search(data), path + " has a leading-dot number")
-            self.assertFalse(data.startswith("."), path)
-
     def test_the_admin_sprite_resolves_every_reference(self):
         with open(os.path.join(ROOT, "webui/admin/index.html"), "r", encoding="utf-8") as handle:
             html = handle.read()
@@ -283,6 +271,17 @@ class CheckIconsTest(unittest.TestCase):
         with open(path, "w", encoding="utf-8") as handle:
             handle.write(text)
         return rel
+
+    def test_an_edited_material_drawable_is_flagged(self):
+        self.fixture("assets/icons/material-symbols/xml/door_front_24px.xml",
+                     '<path android:pathData="M1,1L2,2Z"/>\n')
+        good = '<vector><path android:pathData="M1,1L2,2Z"/></vector>\n'
+        bad = '<vector><path android:pathData="M1,1L9,9Z"/></vector>\n'
+        rel = "android/app/src/main/res/drawable/ic_ms_door_front.xml"
+        self.fixture(rel, good)
+        self.assertEqual(check_icons.violations_in(rel), [])
+        self.fixture(rel, bad)
+        self.assertTrue(check_icons.violations_in(rel))
 
     def test_a_hand_drawn_drawable_is_flagged(self):
         rel = self.fixture(
@@ -352,7 +351,7 @@ class CheckIconsTest(unittest.TestCase):
 
     def test_generated_outputs_are_not_flagged(self):
         check_icons.ROOT = self.real_root
-        for path in ("android/app/src/main/res/drawable/ic_tabler_door.xml",
+        for path in ("android/app/src/main/res/drawable/ic_ms_door_front.xml",
                      "win/DoorbellApp/Resources/Icons.xaml",
                      "webui/icons/tabler-sprite.svg",
                      "webui/admin/index.html"):

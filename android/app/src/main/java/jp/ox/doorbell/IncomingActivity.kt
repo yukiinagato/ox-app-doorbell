@@ -1036,7 +1036,7 @@ class IncomingActivity : ShellActivity() {
             setTextColor(ShellUi.opaque(palette.ink))
         }
         @Suppress("DEPRECATION")
-        resources.getDrawable(R.drawable.ic_tabler_world).mutate().let { icon ->
+        resources.getDrawable(R.drawable.ic_ms_language).mutate().let { icon ->
             val size = dp(18)
             icon.setBounds(0, 0, size, size)
             icon.setColorFilter(ShellUi.opaque(palette.ink), android.graphics.PorterDuff.Mode.SRC_IN)
@@ -1075,16 +1075,16 @@ class IncomingActivity : ShellActivity() {
             text = if (monitorOn) texts.t("ring.monitor_on", R.string.ring_monitor_on)
             else texts.t("ring.monitor_off", R.string.ring_monitor_off)
             isSelected = monitorOn
-            PlatformUi.setButtonIcon(this, if (monitorOn) R.drawable.ic_tabler_volume
-                                           else R.drawable.ic_tabler_eye_off)
+            PlatformUi.setButtonIcon(this, if (monitorOn) R.drawable.ic_ms_volume_up
+                                           else R.drawable.ic_ms_visibility_off)
         }
         findViewById<Button>(R.id.mic_button).apply {
             text = if (micMuted) texts.t("ring.mic_off", R.string.ring_mic_off)
             else texts.t("ring.mic_on", R.string.ring_mic_on)
             isSelected = !micMuted
             isEnabled = inCall
-            PlatformUi.setButtonIcon(this, if (micMuted) R.drawable.ic_tabler_microphone_off
-                                           else R.drawable.ic_tabler_microphone)
+            PlatformUi.setButtonIcon(this, if (micMuted) R.drawable.ic_ms_mic_off
+                                           else R.drawable.ic_ms_mic)
         }
         findViewById<TextView>(R.id.audio_hint).visibility =
             if (sipCalling && monitorOn && !inCall) View.VISIBLE else View.GONE

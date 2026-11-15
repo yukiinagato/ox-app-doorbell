@@ -205,11 +205,11 @@ internal class IncomingScreen(private val activity: Activity) {
                           kind = ButtonKind.OUTLINED)
         for (button in listOf(monitor, unlock, mic))
             UiKit.styleAction(button, roles, ActionRole.SECONDARY, secondaryHeight)
-        PlatformUi.setButtonIcon(answer, if (inCall) R.drawable.ic_tabler_phone_off
-                                         else R.drawable.ic_tabler_phone)
-        PlatformUi.setButtonIcon(reply, R.drawable.ic_tabler_message_reply)
-        PlatformUi.setButtonIcon(ignore, R.drawable.ic_tabler_bell_off)
-        PlatformUi.setButtonIcon(unlock, R.drawable.ic_tabler_lock_open)
+        PlatformUi.setButtonIcon(answer, if (inCall) R.drawable.ic_ms_phone_disabled
+                                         else R.drawable.ic_ms_call)
+        PlatformUi.setButtonIcon(reply, R.drawable.ic_ms_reply)
+        PlatformUi.setButtonIcon(ignore, R.drawable.ic_ms_notifications_off)
+        PlatformUi.setButtonIcon(unlock, R.drawable.ic_ms_lock_open)
     }
 
     /** Door chips for the live view; tapping one opens that door's live view. */

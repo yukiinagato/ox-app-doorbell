@@ -132,7 +132,7 @@ internal class DoorTilesPanel(
             offlineDoorsButton = PlatformUi.button(activity, ButtonKind.TONAL)
                 .also { button ->
                     button.setOnClickListener { host.showOfflineDoors() }
-                    PlatformUi.setButtonIcon(button, R.drawable.ic_tabler_video_off)
+                    PlatformUi.setButtonIcon(button, R.drawable.ic_ms_videocam_off)
                     button.visibility = View.GONE
                     column.addView(button, ShellUi.matchWrap())
                 }
@@ -297,7 +297,7 @@ internal class DoorTilesPanel(
             // A chip while an announcement is showing (§5.2); tapping it opens the editor.
             val chip = PlatformUi.chip(
                 activity, texts.t("notice.active", R.string.notice_active), ChipKind.ACTION,
-                R.drawable.ic_tabler_note, palette.noticeBg, palette.noticeInk,
+                R.drawable.ic_ms_sticky_note_2, palette.noticeBg, palette.noticeInk,
             )
             chip.setOnClickListener { host.openNotice(door) }
             tile.chips.addView(chip, LinearLayout.LayoutParams(

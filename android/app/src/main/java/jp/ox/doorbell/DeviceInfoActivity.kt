@@ -299,7 +299,7 @@ class DeviceInfoActivity : ShellActivity() {
         }
         val bar = PlatformUi.appBar(this, texts.t("info.title", R.string.info_title))
         bar.setBack(texts.t("panel.back", R.string.panel_back)) { finish() }
-        bar.addAction(R.drawable.ic_tabler_reload, texts.t("info.refresh", R.string.info_refresh)) {
+        bar.addAction(R.drawable.ic_ms_refresh, texts.t("info.refresh", R.string.info_refresh)) {
             refresh()
         }
         frame.addView(bar.view, PairingUi.matchWrap())

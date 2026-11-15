@@ -392,7 +392,7 @@ internal object PlatformUi {
             minimumHeight = height
         }
         val back = ImageButton(context).apply {
-            setImageResource(R.drawable.ic_tabler_chevron_left)
+            setImageResource(R.drawable.ic_ms_chevron_left)
             setBackgroundResource(selectable(context))
             setColorFilter(opaque(tokens.ink))
             visibility = View.GONE
