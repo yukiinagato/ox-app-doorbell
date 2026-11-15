@@ -49,7 +49,7 @@ class EventConformanceTests(unittest.TestCase):
 
     def test_platform_source_contracts(self):
         self.assertEqual(
-            run_source_contracts(FIXTURES / "platform-source-contracts.json"), 16)
+            run_source_contracts(FIXTURES / "platform-source-contracts.json"), 17)
 
     def test_trace_length_is_bounded(self):
         case = {"events": [{"t": "tick", "advance_ms": 0}] * (MAX_TRACE_EVENTS + 1)}

@@ -14,8 +14,15 @@
       "path": "android/app/src/main/java/jp/ox/doorbell/App.kt",
       "ordered_literals": [
         "if (eventType == \"event\") handleLifecycleEvent(ev)",
-        "if (eventType == \"chime\" && boot.role != \"door_station\")",
-        "IncomingActivity.launch"
+        "incomingAlerts.onChime(ev, visitorCall, openIncomingUi = boot.role != \"door_station\")"
+      ]
+    },
+    {
+      "id": "android-incoming-ui-gated-by-role-flag",
+      "path": "android/app/src/main/java/jp/ox/doorbell/IncomingCallAlerts.kt",
+      "ordered_literals": [
+        "if (!openIncomingUi) return@post",
+        "IncomingActivity.launch(app, call)"
       ]
     },
     {
@@ -129,7 +136,7 @@
     },
     {
       "id": "windows-targeted-chime-routing",
-      "path": "win/DoorbellApp/MainWindow.xaml.cs",
+      "path": "win/DoorbellApp/MainWindow.CallFlow.cs",
       "ordered_literals": [
         "if (eventType == \"press\")",
         "case \"chime\":",
@@ -138,7 +145,7 @@
     },
     {
       "id": "windows-sos-channel-and-ttl-projection",
-      "path": "win/DoorbellApp/MainWindow.xaml.cs",
+      "path": "win/DoorbellApp/MainWindow.Emergency.cs",
       "ordered_literals": [
         "bool inApp = EventHasChannel(ev, \"in_app\")",
         "bool systemNotification = EventHasChannel(ev, \"system_notification\")",

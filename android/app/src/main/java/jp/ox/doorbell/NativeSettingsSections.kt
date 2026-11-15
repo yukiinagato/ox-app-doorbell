@@ -922,8 +922,9 @@ internal class NativeSettingsSections(private val a: SettingsActivity) {
         for (id in ConfigIds.keysOf(map).sorted()) {
             val h = map?.optJSONObject(id) ?: continue
             val chats = h.optJSONArray("telegram_chat_ids")?.length() ?: 0
-            val exts = (0 until (h.optJSONArray("sip_extensions")?.length() ?: 0))
-                .joinToString(", ") { h.optJSONArray("sip_extensions").optString(it) }
+            val extensions = h.optJSONArray("sip_extensions")
+            val exts = (0 until (extensions?.length() ?: 0))
+                .joinToString(", ") { extensions?.optString(it).orEmpty() }
             add(card, item(local(h.optJSONObject("label"), id),
                            L("nset.household_summary", chats.toString(), exts.ifEmpty { "-" })) {
                 editHousehold(id, h)

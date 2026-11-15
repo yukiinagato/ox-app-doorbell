@@ -72,7 +72,7 @@ Server, the task `DoorbellTest-RunJob` and `C:\DoorbellTest`;
 `setup_test_host.ps1 -Uninstall` reverts them. The session there is Remote Desktop:
 UI tests need it connected.
 
-### Android (0.4.3, build 46)
+### Android (0.4.5, build 48)
 
 Done: Material 3 (modern) and framework widgets (legacy19) through per-flavor
 `PlatformUi`/`ShellActivity`; home without history; SOS flow; zoom; role change;
@@ -81,14 +81,15 @@ about half of the settings parity list; accent and role-text rules; video stage 
 with H.264 aspect fit; Answer on its own row in narrow action zones; debug-only
 `-PdoorbellTier=legacy19 -PdoorbellLegacyAbi=arm64-v8a` lane.
 
-Not verified: nothing was built after the last `assembleModernDebug`; the rewritten
-`VideoZoomMathTest`, the new layout test and instrumentation case T35-06 were never
-compiled; the legacy arm64 lane was never built (remove it if it fails rather than
-debugging it); in-call was never reached on the emulator (SIP needs two devices on a
+Verified: both Gradle lanes (assemble, unit tests, lint) and the legacy arm64 debug
+lane build; `VideoZoomMathTest` passes (a clamped `-0f` offset made a recentred picture
+unequal to `ZoomState()`).
+
+Not verified: instrumentation case T35-06 was never compiled or run; in-call was never reached on the emulator (SIP needs two devices on a
 real network); legacy19 never ran anywhere; door-to-indoor role change never ran end
 to end.
 
-Next: build and test both lanes; re-check the call screen with real video at 1x and
+Next: re-check the call screen with real video at 1x and
 zoomed; role change end to end; walk legacy19; finish parity (custom sound assets and
 asset list, device_alert details, speech, playback policy, logs, capability override,
 other devices' local settings, delete confirmations) until `KNOWN_GAPS` and

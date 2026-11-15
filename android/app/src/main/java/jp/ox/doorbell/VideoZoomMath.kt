@@ -56,8 +56,9 @@ internal object VideoZoomMath {
         val scale = if (state.scale.isNaN()) MIN_SCALE else state.scale.coerceIn(MIN_SCALE, MAX_SCALE)
         val maxX = maxOf(0f, (picture.width * scale - stage.width) / 2f)
         val maxY = maxOf(0f, (picture.height * scale - stage.height) / 2f)
-        return ZoomState(scale, finite(state.dx).coerceIn(-maxX, maxX),
-                         finite(state.dy).coerceIn(-maxY, maxY))
+        // "+ 0f" turns a clamped -0f into 0f, so a recentred picture equals ZoomState().
+        return ZoomState(scale, finite(state.dx).coerceIn(-maxX, maxX) + 0f,
+                         finite(state.dy).coerceIn(-maxY, maxY) + 0f)
     }
 
     /**
