@@ -52,7 +52,7 @@ final class DebugInfoViewController: PairingTableScreen {
         [weak self] in self?.openMonitor()
     })
     private lazy var refreshItem = SystemStyle.barItem(
-        icon: "TablerReload", label: texts.t("info.refresh"), target: self,
+        icon: .reload, label: texts.t("info.refresh"), target: self,
         action: #selector(refresh), identifier: "debug_info_refresh")
 
     private var summary: [PairingSection] = []

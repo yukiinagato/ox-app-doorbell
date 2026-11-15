@@ -364,7 +364,7 @@ final class PairingViewController: PairingTableScreen {
         PairingCells.setBusy(busy, statusRow, spinner: spinner)
         let accessory: UITableViewCell.AccessoryType = done ? .checkmark : .none
         if cell.accessoryType != accessory { cell.accessoryType = accessory }
-        let icon = notice == nil ? nil : TablerIcon.image("TablerAlertTriangle")
+        let icon = notice == nil ? nil : AppIcon.image(.warning)
         if (cell.imageView?.image == nil) != (icon == nil) { cell.imageView?.image = icon }
         cell.imageView?.tintColor = notice?.color
     }

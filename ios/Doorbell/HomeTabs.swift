@@ -84,7 +84,7 @@ final class SettingsGateViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = SystemStyle.groupedBackground
-        let icon = UIImageView(image: TablerIcon.image("TablerShieldLock"))
+        let icon = UIImageView(image: AppIcon.image(.shield))
         icon.tintColor = SystemStyle.secondaryLabel
         icon.contentMode = .scaleAspectFit
         let heading = SystemStyle.label(.title2, weight: .semibold)
@@ -163,13 +163,13 @@ final class PanelTabBarController: UITabBarController, UITabBarControllerDelegat
         super.init(nibName: nil, bundle: nil)
         let homeNav = SystemStyle.navigation(home)
         homeNav.view.backgroundColor = .clear
-        let pages: [(UIViewController, String, String, String)] = [
-            (homeNav, texts.t("nav.home"), "TablerHome", "tab_home"),
-            (history, texts.t("nav.history"), "TablerClock", "tab_history"),
-            (settingsGate, texts.t("nav.settings"), "TablerSettings", "tab_settings"),
+        let pages: [(UIViewController, String, AppIconName, String)] = [
+            (homeNav, texts.t("nav.home"), .home, "tab_home"),
+            (history, texts.t("nav.history"), .clock, "tab_history"),
+            (settingsGate, texts.t("nav.settings"), .settings, "tab_settings"),
         ]
         for (index, page) in pages.enumerated() {
-            let item = UITabBarItem(title: page.1, image: TablerIcon.image(page.2), tag: index)
+            let item = UITabBarItem(title: page.1, image: AppIcon.image(page.2), tag: index)
             item.accessibilityIdentifier = page.3
             page.0.tabBarItem = item
         }

@@ -103,7 +103,7 @@ final class VisitorScreenView: UIView {
         cameraWarning.textAlignment = .center
         cameraWarning.accessibilityIdentifier = "visitor_camera_warning"
         cameraWarning.isHidden = true
-        noticeExpand.setImage(TablerIcon.image("TablerChevronDown"), for: .normal)
+        noticeExpand.setImage(AppIcon.image(.chevronDown), for: .normal)
         noticeExpand.accessibilityIdentifier = "visitor_notice_expand"
         noticeExpand.addTarget(self, action: #selector(toggleNotice), for: .primaryActionTriggered)
         noticeExpand.heightAnchor.constraint(greaterThanOrEqualToConstant: 44).isActive = true

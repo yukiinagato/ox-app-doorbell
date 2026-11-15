@@ -260,17 +260,17 @@ final class TVMainViewController: UIViewController {
     /// The home actions, as the row of cards the dashboard shows above the door tiles.
     private func refreshQuickActions() {
         dashboard.quickActions = [
-            DashboardView.QuickAction(title: texts.t("monitor.open"), icon: "TablerEye",
+            DashboardView.QuickAction(title: texts.t("monitor.open"), icon: .eye,
                                       identifier: "home_monitor") { [weak self] in
                 self?.openMonitor()
             },
-            DashboardView.QuickAction(title: texts.t("notice.global_button"), icon: "TablerNote",
+            DashboardView.QuickAction(title: texts.t("notice.global_button"), icon: .note,
                                       identifier: "dashboard_notice_global") { [weak self] in
                 self?.openNotice(door: "")
             },
             DashboardView.QuickAction(title: membershipTitle.isEmpty
                                           ? texts.t("pair.panel_title") : membershipTitle,
-                                      icon: "TablerPlus",
+                                      icon: .plus,
                                       identifier: "membership_status") { [weak self] in
                 self?.openPairing()
             },

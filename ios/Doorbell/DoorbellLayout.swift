@@ -129,8 +129,8 @@ final class CallActionButton: UIButton {
         didSet { invalidateIntrinsicContentSize(); setNeedsLayout() }
     }
 
-    var icon: String = "" {
-        didSet { if icon != oldValue { glyph.image = TablerIcon.image(icon) } }
+    var icon: AppIconName? = nil {
+        didSet { if icon != oldValue { glyph.image = icon.flatMap { AppIcon.image($0) } } }
     }
 
     /// The icon's colour on the disc.

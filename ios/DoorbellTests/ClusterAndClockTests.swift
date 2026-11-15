@@ -505,50 +505,49 @@ final class CameraCapabilityTests: XCTestCase {
     }
 }
 
-/// The icon set is vendored, not drawn.
-final class TablerIconTests: XCTestCase {
+/// Every icon resolves to an SF Symbol or to its bundled Framework7 fallback, never to nothing.
+final class AppIconTests: XCTestCase {
 
-    private let everyIcon = ["TablerTopologyStar3", "TablerDoor", "TablerDeviceTablet",
-                             "TablerChevronRight", "TablerChevronsRight", "TablerHome",
-                             "TablerPackage", "TablerMail", "TablerBackspace", "TablerWorld"]
+    func testEveryIconHasABundledTemplateFallback() {
+        for name in AppIconName.allCases {
+            guard let image = UIImage(named: name.fallback) else {
+                XCTFail("\(name.fallback) is missing from Assets.xcassets")
+                continue
+            }
+            XCTAssertGreaterThan(image.size.width, 0, name.fallback)
+        }
+    }
 
-    func testEveryVendoredIconIsInTheCatalogAndIsATemplate() {
-        for name in everyIcon {
-            guard let image = TablerIcon.image(name) else {
-                XCTFail("\(name) is missing from Assets.xcassets")
+    func testEveryIconResolvesToATemplateImage() {
+        for name in AppIconName.allCases {
+            guard let image = AppIcon.image(name) else {
+                XCTFail("\(name) resolved to nothing")
                 continue
             }
             XCTAssertEqual(image.renderingMode, .alwaysTemplate,
                            "\(name) must take the ink of the region it sits in")
-            XCTAssertGreaterThan(image.size.width, 0, name)
         }
-    }
-
-    func testAnIconNobodyVendoredDrawsNothingRatherThanSomethingWrong() {
-        XCTAssertNil(TablerIcon.image("TablerNoSuchGlyph"))
     }
 
     /// Core's seeded purposes wear a glyph; one an administrator invented keeps their own text.
     func testOnlyTheSeededPurposesHaveAnIcon() {
-        XCTAssertNotNil(TablerIcon.purpose("p_visit"))
-        XCTAssertNotNil(TablerIcon.purpose("p_delivery"))
-        XCTAssertNotNil(TablerIcon.purpose("p_mail"))
-        XCTAssertNil(TablerIcon.purpose("p_gardener"))
-        XCTAssertNil(TablerIcon.purpose(""))
-        XCTAssertEqual(TablerIcon.purposeIcons["p_visit"], "TablerHome")
-        XCTAssertEqual(TablerIcon.purposeIcons["p_delivery"], "TablerPackage")
-        XCTAssertEqual(TablerIcon.purposeIcons["p_mail"], "TablerMail")
+        XCTAssertNotNil(AppIcon.purpose("p_visit"))
+        XCTAssertNotNil(AppIcon.purpose("p_delivery"))
+        XCTAssertNotNil(AppIcon.purpose("p_mail"))
+        XCTAssertNil(AppIcon.purpose("p_gardener"))
+        XCTAssertNil(AppIcon.purpose(""))
+        XCTAssertEqual(AppIcon.purposeIcons["p_visit"], .home)
+        XCTAssertEqual(AppIcon.purposeIcons["p_delivery"], .parcel)
+        XCTAssertEqual(AppIcon.purposeIcons["p_mail"], .mail)
     }
 
-    /// The three counter marks come from the catalog, and each is one of the vendored icons.
-    func testTheCounterMarksAreVendoredIcons() {
+    func testTheCounterMarksAreAppIcons() {
         for kind in [ClusterIconView.Kind.cluster, .doorStation, .indoorPanel] {
-            XCTAssertTrue(everyIcon.contains(kind.iconName), kind.iconName)
-            XCTAssertNotNil(TablerIcon.image(kind.iconName), kind.iconName)
+            XCTAssertNotNil(AppIcon.image(kind.iconName), "\(kind.iconName)")
         }
-        XCTAssertEqual(ClusterIconView.Kind.cluster.iconName, "TablerTopologyStar3")
-        XCTAssertEqual(ClusterIconView.Kind.doorStation.iconName, "TablerDoor")
-        XCTAssertEqual(ClusterIconView.Kind.indoorPanel.iconName, "TablerDeviceTablet")
+        XCTAssertEqual(ClusterIconView.Kind.cluster.iconName, .cluster)
+        XCTAssertEqual(ClusterIconView.Kind.doorStation.iconName, .door)
+        XCTAssertEqual(ClusterIconView.Kind.indoorPanel.iconName, .tablet)
     }
 }
 

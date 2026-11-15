@@ -1,5 +1,6 @@
 """The icon pipeline: the path parser, the generator's outputs, and the hand-drawn-icon check."""
 
+import json
 import os
 import re
 import shutil
@@ -51,8 +52,9 @@ class SvgPathTest(unittest.TestCase):
             _closed, points = svg_path.flatten(path)[0]
             self.assertEqual(points[-1], (2.0, 0.0))
             self.assertEqual(points.count((2.0, 0.0)), 1)
-            emitted = gen_icons.pdf_bytes("endpoint", path)
-            self.assertEqual(emitted.count(b"2.0000 24.0000 l"), 1)
+            emitted = gen_icons.f7_pdf_bytes(
+                '<svg viewBox="0 0 28 28"><path d="' + path + '"/></svg>')
+            self.assertEqual(emitted.count(b"2.0000 28.0000 l"), 1)
 
     def test_degenerate_arc_and_closed_path_keep_their_endpoints(self):
         _closed, line_points = svg_path.flatten("M0 0 A0 2 0 0 1 2 0")[0]
@@ -87,13 +89,6 @@ class GenIconsTest(unittest.TestCase):
                                  "--check"], cwd=ROOT, capture_output=True)
         self.assertEqual(result.returncode, 0, result.stdout.decode() + result.stderr.decode())
 
-    def test_every_platform_gets_every_icon(self):
-        for name in self.names:
-            flat = name.replace("-", "_")
-            imageset = os.path.join(ROOT, "ios/Doorbell/Assets.xcassets",
-                                    "Tabler" + gen_icons.camel(name) + ".imageset")
-            self.assertTrue(os.path.exists(os.path.join(imageset, "icon.pdf")))
-            self.assertTrue(os.path.exists(os.path.join(imageset, "Contents.json")))
     def test_the_kiosk_gets_framework7_only(self):
         names = gen_icons.f7_names()
         self.assertTrue(os.path.exists(os.path.join(gen_icons.F7_DIR, "LICENSE")))
@@ -115,6 +110,35 @@ class GenIconsTest(unittest.TestCase):
         alpha = image.split()[3]
         self.assertGreater(alpha.getpixel((30, 8)), 200, "the disc is filled")
         self.assertLess(alpha.getpixel((30, 20)), 60, "the glyph strokes are cut out of it")
+
+    def test_ios_fallbacks_are_framework7_template_pdfs(self):
+        """Every F7 icon the Swift shell names is generated, and no Tabler imageset remains."""
+        catalog = os.path.join(ROOT, "ios/Doorbell/Assets.xcassets")
+        with open(os.path.join(ROOT, "ios/Doorbell/AppIcon.swift"), "r", encoding="utf-8") as handle:
+            named = set(re.findall(r'"(F7[A-Za-z0-9]+)"', handle.read()))
+        generated = {"F7" + gen_icons.camel(name) for name in gen_icons.F7_ICONS}
+        self.assertEqual(named, generated)
+        for imageset in sorted(generated):
+            directory = os.path.join(catalog, imageset + ".imageset")
+            with open(os.path.join(directory, "icon.pdf"), "rb") as handle:
+                self.assertTrue(handle.read().startswith(b"%PDF-"), imageset)
+            with open(os.path.join(directory, "Contents.json"), "r", encoding="utf-8") as handle:
+                contents = handle.read()
+            self.assertIn('"template-rendering-intent": "template"', contents)
+        for entry in os.listdir(catalog):
+            self.assertFalse(entry.startswith("Tabler"), entry)
+        for name in gen_icons.F7_ICONS:
+            self.assertTrue(os.path.exists(os.path.join(gen_icons.F7_DIR, name + ".svg")))
+        self.assertTrue(os.path.exists(os.path.join(gen_icons.F7_DIR, "LICENSE")))
+
+    def test_one_framework7_directory_and_manifest_serve_kiosk_and_ios(self):
+        self.assertEqual(set(gen_icons.f7_source_names()),
+                         set(gen_icons.KIOSK_ICONS) | set(gen_icons.F7_ICONS))
+        with open(gen_icons.F7_MANIFEST, "r", encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        self.assertEqual(sorted(manifest["source"]), gen_icons.f7_source_names())
+        self.assertEqual(len(manifest["png"]), 2 * len(gen_icons.KIOSK_ICONS))
+        self.assertEqual(len(manifest["pdf"]), len(gen_icons.F7_ICONS))
 
     def test_android_icons_are_the_vendored_material_symbols(self):
         """Android draws Material Symbols, vendored as literal-colour vectors.
@@ -237,9 +261,12 @@ class GenIconsTest(unittest.TestCase):
             self.assertIn('id="' + symbol + '"', html, symbol + " has no symbol in the sprite")
 
     def test_pdf_is_a_readable_single_page(self):
-        blob = gen_icons.pdf_bytes("door", gen_icons.path_data(gen_icons.read_source("door")))
+        with open(os.path.join(gen_icons.F7_DIR, "house_fill.svg"), "r",
+                  encoding="utf-8") as handle:
+            blob = gen_icons.f7_pdf_bytes(handle.read())
         self.assertTrue(blob.startswith(b"%PDF-1.4"))
-        self.assertIn(b"/MediaBox [0 0 24 24]", blob)
+        self.assertIn(b"/MediaBox [0 0 28.0000 28.0000]", blob)
+        self.assertIn(b"\nf\n", blob)
         self.assertIn(b"startxref", blob)
         self.assertTrue(blob.rstrip().endswith(b"%%EOF"))
 

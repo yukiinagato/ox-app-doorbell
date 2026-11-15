@@ -317,11 +317,11 @@ enum SystemStyle {
         #endif
     }
 
-    /// A bar button that carries a vendored Tabler icon, with the label for assistive use.
-    static func barItem(icon: String, label: String, target: Any?, action: Selector,
+    /// A bar button that carries an app icon, with the label for assistive use.
+    static func barItem(icon: AppIconName, label: String, target: Any?, action: Selector,
                         identifier: String) -> UIBarButtonItem {
         let item: UIBarButtonItem
-        if let image = TablerIcon.image(icon) {
+        if let image = AppIcon.image(icon) {
             item = UIBarButtonItem(image: image, style: .plain, target: target, action: action)
         } else {
             item = UIBarButtonItem(title: label, style: .plain, target: target, action: action)
@@ -350,7 +350,7 @@ enum SystemStyle {
     /// same shapes from a plain system button. `classic` keeps the plain path on every OS for the
     /// controls an administrator may restyle by semantic ID, because that contract is applied
     /// through the button's own colours, radius and title font.
-    static func button(_ kind: ButtonKind, title: String = "", icon: String? = nil,
+    static func button(_ kind: ButtonKind, title: String = "", icon: AppIconName? = nil,
                        large: Bool = false, classic: Bool = false) -> UIButton {
         let button = UIButton(type: .system)
         style(button, kind: kind, title: title, icon: icon, large: large, classic: classic)
@@ -358,8 +358,8 @@ enum SystemStyle {
     }
 
     static func style(_ button: UIButton, kind: ButtonKind, title: String? = nil,
-                      icon: String? = nil, large: Bool = false, classic: Bool = false) {
-        let image = icon.flatMap { TablerIcon.image($0) }
+                      icon: AppIconName? = nil, large: Bool = false, classic: Bool = false) {
+        let image = icon.flatMap { AppIcon.image($0) }
         #if os(tvOS)
         if let title = title { button.setTitle(title, for: .normal) }
         if let image = image { button.setImage(image, for: .normal) }

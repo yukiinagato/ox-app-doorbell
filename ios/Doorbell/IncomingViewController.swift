@@ -809,12 +809,12 @@ final class IncomingViewController: UIViewController {
             button.invalidateIntrinsicContentSize()
         }
         // The same vendored icons on every shell: handset, crossed handset, reply bubble.
-        answerButton.icon = inCall ? "TablerPhoneOff" : "TablerPhone"
-        quickReplyButton.icon = "TablerMessageReply"
-        ignoreButton.icon = "TablerBellOff"
-        monitorButton.icon = "TablerVolume"
-        unlockButton.icon = "TablerLockOpen"
-        micButton.icon = micMuted ? "TablerMicrophoneOff" : "TablerMicrophone"
+        answerButton.icon = inCall ? .hangUp : .phone
+        quickReplyButton.icon = .reply
+        ignoreButton.icon = .bellOff
+        monitorButton.icon = .volume
+        unlockButton.icon = .unlock
+        micButton.icon = micMuted ? .micOff : .mic
         // A toggle that is on wears the control colour, so its state reads without the caption.
         answerButton.backgroundColor = inCall ? SystemStyle.negative : ColorRole.positive
         monitorButton.backgroundColor = monitorOn ? SystemStyle.tint : SystemStyle.fill

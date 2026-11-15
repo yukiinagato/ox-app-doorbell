@@ -400,7 +400,7 @@ extension MonitorViewController: UITableViewDataSource, UITableViewDelegate {
         let id = ConfigUtil.evStr(peer, "id")
         let name = ConfigUtil.evStr(peer, "name")
         cell.textLabel?.text = name.isEmpty ? id : name
-        cell.imageView?.image = TablerIcon.image("TablerDoor")
+        cell.imageView?.image = AppIcon.image(.door)
         cell.accessoryType = id == selectedPeerId ? .checkmark : .none
         cell.accessibilityIdentifier = id
         return cell

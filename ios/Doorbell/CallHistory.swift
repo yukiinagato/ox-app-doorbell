@@ -110,13 +110,13 @@ enum CallHistory {
 }
 
 extension CallHistory {
-    /// The vendored icon and the colour role for one outcome.
-    static func outcomeIcon(_ outcome: String) -> (name: String, color: UIColor) {
+    /// The app icon and the colour role for one outcome.
+    static func outcomeIcon(_ outcome: String) -> (name: AppIconName, color: UIColor) {
         switch outcome {
-        case "answered": return ("TablerPhone", SystemStyle.positive)
-        case "replied": return ("TablerMessageReply", SystemStyle.tint)
-        case "cancelled": return ("TablerX", SystemStyle.secondaryLabel)
-        default: return ("TablerPhoneOff", SystemStyle.negative)
+        case "answered": return (.phone, SystemStyle.positive)
+        case "replied": return (.reply, SystemStyle.tint)
+        case "cancelled": return (.close, SystemStyle.secondaryLabel)
+        default: return (.hangUp, SystemStyle.negative)
         }
     }
 
@@ -134,7 +134,7 @@ extension CallHistory {
         cell.detailTextLabel?.textColor = row.outcome == "missed" ? SystemStyle.negative
             : SystemStyle.secondaryLabel
         let icon = outcomeIcon(row.outcome)
-        cell.imageView?.image = TablerIcon.image(icon.name)
+        cell.imageView?.image = AppIcon.image(icon.name)
         cell.imageView?.tintColor = icon.color
         let time = (cell.accessoryView as? UILabel) ?? UILabel()
         time.font = SystemStyle.digits(size: 15, weight: .regular)
@@ -265,7 +265,7 @@ final class CallHistoryListController: UITableViewController {
             navigationItem.leftBarButtonItem?.accessibilityIdentifier = "history_close"
         }
         navigationItem.rightBarButtonItem = SystemStyle.barItem(
-            icon: "TablerCheck", label: texts.t("history.mark_seen"), target: self,
+            icon: .check, label: texts.t("history.mark_seen"), target: self,
             action: #selector(markAllSeen), identifier: "history_mark_seen")
         #else
         filterControl.sizeToFit()
@@ -498,7 +498,7 @@ final class CallHistoryDetailController: UITableViewController {
         cell.detailTextLabel?.text = fields[indexPath.row].value
         if fields[indexPath.row].title == texts.t("history.detail_outcome"), let row = row {
             let icon = CallHistory.outcomeIcon(row.outcome)
-            cell.imageView?.image = TablerIcon.image(icon.name)
+            cell.imageView?.image = AppIcon.image(icon.name)
             cell.imageView?.tintColor = icon.color
         }
         return cell

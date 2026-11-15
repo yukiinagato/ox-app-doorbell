@@ -30,7 +30,7 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
 
     struct QuickAction {
         let title: String
-        let icon: String
+        let icon: AppIconName
         let identifier: String
         let handler: () -> Void
     }
@@ -111,17 +111,17 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
 
         counters.accessibilityIdentifier = "cluster_counters"
 
-        statusRow(missedButton, icon: "TablerBell", identifier: "missed_badge",
+        statusRow(missedButton, icon: .bell, identifier: "missed_badge",
                   action: #selector(openHistory))
         missedButton.isHidden = true
-        statusRow(offlineDoorButton, icon: "TablerVideoOff", identifier: "dashboard_offline_doors",
+        statusRow(offlineDoorButton, icon: .videoOff, identifier: "dashboard_offline_doors",
                   action: #selector(openOfflineDoors))
         offlineDoorButton.isHidden = true
-        statusRow(doorPageButton, icon: "TablerDoor", identifier: "dashboard_door_page",
+        statusRow(doorPageButton, icon: .door, identifier: "dashboard_door_page",
                   action: #selector(nextDoorPage))
         doorPageButton.isHidden = true
 
-        statusRow(pairingButton, icon: "TablerAlertTriangle", identifier: "pairing_banner",
+        statusRow(pairingButton, icon: .warning, identifier: "pairing_banner",
                   action: #selector(openPairing))
         pairingButton.isHidden = true
 
@@ -194,9 +194,9 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
     }
 
     /// One tappable line of the status card: an icon, a sentence and a chevron, like a table row.
-    private func statusRow(_ button: UIButton, icon: String, identifier: String,
+    private func statusRow(_ button: UIButton, icon: AppIconName, identifier: String,
                            action: Selector) {
-        button.setImage(TablerIcon.image(icon), for: .normal)
+        button.setImage(AppIcon.image(icon), for: .normal)
         button.titleLabel?.font = SystemStyle.font(.body)
         button.titleLabel?.numberOfLines = 0
         SystemStyle.followContentSize(button.titleLabel)
@@ -734,7 +734,7 @@ private final class QuickActionCell: UICollectionViewCell {
     required init?(coder: NSCoder) { fatalError("not supported") }
 
     func apply(_ action: DashboardView.QuickAction) {
-        icon.image = TablerIcon.image(action.icon)
+        icon.image = AppIcon.image(action.icon)
         title.text = action.title
         accessibilityLabel = action.title
         accessibilityIdentifier = action.identifier
@@ -801,7 +801,7 @@ final class OfflineDoorStationsViewController: UITableViewController {
         SystemStyle.style(cell)
         cell.textLabel?.text = rows[indexPath.row].title
         cell.detailTextLabel?.text = rows[indexPath.row].detail
-        cell.imageView?.image = TablerIcon.image("TablerVideoOff")
+        cell.imageView?.image = AppIcon.image(.videoOff)
         cell.imageView?.tintColor = SystemStyle.secondaryLabel
         return cell
     }

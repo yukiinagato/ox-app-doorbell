@@ -593,13 +593,13 @@ final class MainViewController: UIViewController {
         let home = HomeViewController(dashboard: board,
                                       title: boot.name.isEmpty ? texts.t("nav.home") : boot.name)
         home.navigationItem.rightBarButtonItems = [
-            SystemStyle.barItem(icon: "TablerPlus", label: texts.t("pair.panel_title"),
+            SystemStyle.barItem(icon: .plus, label: texts.t("pair.panel_title"),
                                 target: self, action: #selector(onMembershipTap),
                                 identifier: "home_add_device"),
-            SystemStyle.barItem(icon: "TablerEye", label: texts.t("monitor.open"),
+            SystemStyle.barItem(icon: .eye, label: texts.t("monitor.open"),
                                 target: self, action: #selector(onMonitorOpen),
                                 identifier: "home_monitor"),
-            SystemStyle.barItem(icon: "TablerNote", label: texts.t("notice.global_button"),
+            SystemStyle.barItem(icon: .note, label: texts.t("notice.global_button"),
                                 target: self, action: #selector(onGlobalNotice),
                                 identifier: "dashboard_notice_global"),
         ]
@@ -644,7 +644,7 @@ final class MainViewController: UIViewController {
         pulse.backgroundColor = MainViewController.accentColor
         pulse.layer.cornerRadius = 40
         pulse.translatesAutoresizingMaskIntoConstraints = false
-        let bell = UIImageView(image: TablerIcon.image("TablerBell"))
+        let bell = UIImageView(image: AppIcon.image(.bell))
         bell.tintColor = .white
         bell.contentMode = .scaleAspectFit
         bell.translatesAutoresizingMaskIntoConstraints = false
@@ -1264,11 +1264,11 @@ final class MainViewController: UIViewController {
             let label = ConfigUtil.labelOf(entry, texts.lang, id)
             let icon = entry?["icon"] as? String ?? ""
             let b = PurposeButton(type: .system)
-            let glyph = TablerIcon.purpose(id) ?? TablerIcon.image("TablerNote")
+            let glyph = AppIcon.purpose(id) ?? AppIcon.image(.note)
             b.setImage(glyph, for: .normal)
             b.tintColor = idleSkin.cardInk("tile_label")
             b.imageView?.contentMode = .scaleAspectFit
-            b.setTitle(TablerIcon.purpose(id) != nil || icon.isEmpty ? label : "\(icon) \(label)",
+            b.setTitle(AppIcon.purpose(id) != nil || icon.isEmpty ? label : "\(icon) \(label)",
                        for: .normal)
             b.titleLabel?.font = IOSAvailability.visitorFont(size: 16, weight: .medium,
                                                             traits: traitCollection)
@@ -2128,7 +2128,7 @@ final class MainViewController: UIViewController {
         let items = availablePurposeIds().map { id in
             PurposeChoiceViewController.Item(id: id,
                 title: ConfigUtil.labelOf(purposes[id] as? [String: Any], texts.lang, id),
-                image: TablerIcon.purpose(id) ?? TablerIcon.image("TablerNote"))
+                image: AppIcon.purpose(id) ?? AppIcon.image(.note))
         }
         let screen = PurposeChoiceViewController(items: items, palette: idleSkin.palette,
                                                 afterRing: afterRing, texts: texts)

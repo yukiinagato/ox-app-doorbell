@@ -45,7 +45,7 @@ struct ClusterCounts: Equatable {
     }
 }
 
-/// The three small marks beside the counts, from the vendored Tabler set.
+/// The three small marks beside the counts, from the app icon set.
 ///
 /// They used to be stroked here by hand, which meant three glyphs nobody had reviewed, drifting
 /// from the same three marks on every other shell. They are generated template images now, so
@@ -57,11 +57,11 @@ final class ClusterIconView: UIView {
         case doorStation
         case indoorPanel
 
-        var iconName: String {
+        var iconName: AppIconName {
             switch self {
-            case .cluster: return "TablerTopologyStar3"
-            case .doorStation: return "TablerDoor"
-            case .indoorPanel: return "TablerDeviceTablet"
+            case .cluster: return .cluster
+            case .doorStation: return .door
+            case .indoorPanel: return .tablet
             }
         }
     }
@@ -79,7 +79,7 @@ final class ClusterIconView: UIView {
         heightAnchor.constraint(equalToConstant: ClusterIconView.side).isActive = true
         isAccessibilityElement = false
 
-        glyph.image = TablerIcon.image(kind.iconName)
+        glyph.image = AppIcon.image(kind.iconName)
         glyph.contentMode = .scaleAspectFit
         glyph.translatesAutoresizingMaskIntoConstraints = false
         addSubview(glyph)

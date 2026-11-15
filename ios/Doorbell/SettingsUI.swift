@@ -53,8 +53,8 @@ enum SettingsStyle {
 
     private static var iconCache: [String: UIImage] = [:]
 
-    /// The coloured rounded tile beside a category, as in the system Settings app: the vendored
-    /// Tabler icon in white on the category's colour. Composed from views and rendered once per
+    /// The coloured rounded tile beside a category, as in the system Settings app: the app
+    /// icon in white on the category's colour. Composed from views and rendered once per
     /// icon, so no glyph is drawn by hand.
     static func icon(_ icon: SettingIcon) -> UIImage? {
         let key = "\(icon.glyph)#\(icon.tint)"
@@ -66,7 +66,7 @@ enum SettingsStyle {
                                        blue: CGFloat(icon.tint & 0xFF) / 255, alpha: 1)
         tile.layer.cornerRadius = side * 0.23
         tile.layer.masksToBounds = true
-        let glyph = UIImageView(image: TablerIcon.image(icon.glyph))
+        let glyph = UIImageView(image: AppIcon.image(icon.glyph))
         glyph.tintColor = .white
         glyph.contentMode = .scaleAspectFit
         glyph.frame = tile.bounds.insetBy(dx: side * 0.17, dy: side * 0.17)

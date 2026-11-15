@@ -1124,7 +1124,7 @@ final class PairingCodeRows {
 #if os(iOS)
     private func copyButton(_ identifier: String, _ action: Selector) -> UIButton {
         let button = UIButton(type: .system)
-        if let icon = TablerIcon.image("TablerCopy") {
+        if let icon = AppIcon.image(.copy) {
             button.setImage(icon, for: .normal)
         } else {
             button.setTitle(texts.t("pair.copy"), for: .normal)

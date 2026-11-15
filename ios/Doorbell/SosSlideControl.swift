@@ -77,12 +77,12 @@ final class SosSlideControl: UIControl {
         label.translatesAutoresizingMaskIntoConstraints = false
         track.addSubview(label)
 
-        // The double chevron is the vendored Tabler glyph, not the "\u{00BB}" character: a text
+        // The double chevron is an app icon, not the "\u{00BB}" character: a text
         // guillemet is a different shape in every font the fleet's devices ship with, and on the
         // older ones it is not the arrow this control means at all.
         thumb.backgroundColor = .white
         thumb.isUserInteractionEnabled = false
-        let mark = UIImageView(image: TablerIcon.image("TablerChevronsRight"))
+        let mark = UIImageView(image: AppIcon.image(.chevronsRight))
         mark.tintColor = SystemStyle.negative
         mark.contentMode = .scaleAspectFit
         mark.translatesAutoresizingMaskIntoConstraints = false
@@ -418,7 +418,7 @@ final class SosTriggerButton: UIButton {
         widthAnchor.constraint(greaterThanOrEqualToConstant: 220).isActive = true
         heightAnchor.constraint(greaterThanOrEqualToConstant: 66).isActive = true
         #else
-        setImage(TablerIcon.image("TablerAlertTriangle"), for: .normal)
+        setImage(AppIcon.image(.warning), for: .normal)
         titleLabel?.font = SystemStyle.font(.subheadline, weight: .semibold)
         #endif
         SystemStyle.followContentSize(titleLabel)
@@ -606,7 +606,7 @@ final class SosConfirmViewController: UIViewController {
         super.viewDidLoad()
         view.backgroundColor = SystemStyle.background
         view.accessibilityIdentifier = "sos_confirm"
-        let icon = UIImageView(image: TablerIcon.image("TablerAlertTriangle"))
+        let icon = UIImageView(image: AppIcon.image(.warning))
         icon.tintColor = SystemStyle.negative
         icon.contentMode = .scaleAspectFit
         let heading = SystemStyle.label(.title2, weight: .bold)

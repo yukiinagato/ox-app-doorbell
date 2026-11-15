@@ -63,7 +63,7 @@ final class VisitorScreenLayoutTests: XCTestCase {
             }
             let button = PurposeButton(type: .system)
             button.setTitle(purposeNames[index], for: .normal)
-            button.setImage(TablerIcon.purpose(purposeIDs[index]), for: .normal)
+            button.setImage(AppIcon.purpose(purposeIDs[index]), for: .normal)
             button.tintColor = UIColor(white: 0.94, alpha: 1)
             button.setTitleColor(UIColor(white: 0.94, alpha: 1), for: .normal)
             button.titleLabel?.font = .systemFont(ofSize: 16)
@@ -355,7 +355,7 @@ final class PurposeChoiceLayoutTests: XCTestCase {
         let labels = ["Visit resident", "Parcel delivery", "Mail", "Business visit", "Maintenance", "Other purpose"]
         let items = (0..<count).map {
             PurposeChoiceViewController.Item(id: "item\($0)", title: labels[$0 % labels.count],
-                                             image: TablerIcon.purpose(["p_visit", "p_delivery", "p_mail", "p_sales", "p_work", "p_other"][$0 % 6]))
+                                             image: AppIcon.purpose(["p_visit", "p_delivery", "p_mail", "p_sales", "p_work", "p_other"][$0 % 6]))
         }
         XCTAssertTrue(items.allSatisfy { $0.image != nil })
         let screen = PurposeChoiceViewController(items: items, palette: .light,
