@@ -949,6 +949,8 @@
   <data name="flow_editor_icon_box" xml:space="preserve"><value>包裹</value></data>
   <data name="flow_editor_icon_briefcase" xml:space="preserve"><value>公文包</value></data>
   <data name="flow_editor_icon_current" xml:space="preserve"><value>当前设置</value></data>
+  <data name="flow_editor_icon_custom" xml:space="preserve"><value>其他（当前值）</value></data>
+  <data name="flow_editor_icon_default" xml:space="preserve"><value>跟随来访目的的图标</value></data>
   <data name="flow_editor_icon_dots" xml:space="preserve"><value>更多</value></data>
   <data name="flow_editor_icon_ellipsis" xml:space="preserve"><value>更多</value></data>
   <data name="flow_editor_icon_envelope" xml:space="preserve"><value>信封</value></data>
@@ -956,11 +958,15 @@
   <data name="flow_editor_icon_house" xml:space="preserve"><value>房屋</value></data>
   <data name="flow_editor_icon_mail" xml:space="preserve"><value>信封</value></data>
   <data name="flow_editor_icon_none" xml:space="preserve"><value>无图标</value></data>
+  <data name="flow_editor_icon_other" xml:space="preserve"><value>省略号</value></data>
   <data name="flow_editor_icon_package" xml:space="preserve"><value>包裹</value></data>
+  <data name="flow_editor_icon_parcel" xml:space="preserve"><value>包裹</value></data>
   <data name="flow_editor_icon_pencil" xml:space="preserve"><value>笔</value></data>
   <data name="flow_editor_icon_person" xml:space="preserve"><value>人物</value></data>
+  <data name="flow_editor_icon_sales" xml:space="preserve"><value>公文包</value></data>
   <data name="flow_editor_icon_tool" xml:space="preserve"><value>工具</value></data>
   <data name="flow_editor_icon_user" xml:space="preserve"><value>人物</value></data>
+  <data name="flow_editor_icon_work" xml:space="preserve"><value>工具</value></data>
   <data name="flow_editor_idle_s" xml:space="preserve"><value>无操作返回起始页（秒）</value></data>
   <data name="flow_editor_idle_short" xml:space="preserve"><value>返回起始页前等待</value></data>
   <data name="flow_editor_image_above" xml:space="preserve"><value>正文上方</value></data>
@@ -998,8 +1004,17 @@
   <data name="flow_editor_paragraph" xml:space="preserve"><value>段落</value></data>
   <data name="flow_editor_paragraph_add" xml:space="preserve"><value>添加段落</value></data>
   <data name="flow_editor_preview" xml:space="preserve"><value>试用</value></data>
+  <data name="flow_editor_preview_banner" xml:space="preserve"><value>试用中：不会呼叫也不会发送</value></data>
+  <data name="flow_editor_preview_call" xml:space="preserve"><value>此处将发起呼叫</value></data>
+  <data name="flow_editor_preview_call_purpose" xml:space="preserve"><value>此处将发起呼叫（目的：{0}）</value></data>
+  <data name="flow_editor_preview_close" xml:space="preserve"><value>关闭</value></data>
+  <data name="flow_editor_preview_hint" xml:space="preserve"><value>用访客看到的界面操作当前向导。不会发起呼叫，也不会发送消息。</value></data>
+  <data name="flow_editor_preview_notify" xml:space="preserve"><value>将向住户发送：{0}</value></data>
+  <data name="flow_editor_preview_off" xml:space="preserve"><value>向导已关闭或暂不可用。</value></data>
   <data name="flow_editor_purpose_none" xml:space="preserve"><value>无目的</value></data>
   <data name="flow_editor_remove_image" xml:space="preserve"><value>移除图片</value></data>
+  <data name="flow_editor_reorder_hint" xml:space="preserve"><value>点按“编辑”并拖动右侧手柄调整顺序。顺序仅用于本列表，不影响访客看到的内容。</value></data>
+  <data name="flow_editor_reorder_steps" xml:space="preserve"><value>步骤顺序</value></data>
   <data name="flow_editor_require_call" xml:space="preserve"><value>始终保留呼叫途径</value></data>
   <data name="flow_editor_require_call_off_warning" xml:space="preserve"><value>关闭后，门口机可能无法呼叫，访客可能联系不到住户。</value></data>
   <data name="flow_editor_reset_default" xml:space="preserve"><value>恢复内置向导</value></data>

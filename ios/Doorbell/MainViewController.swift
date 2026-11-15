@@ -176,6 +176,8 @@ final class MainViewController: UIViewController {
     private var flowRevision: String?
     private var flowFetching = false
     private var flowFetchAgain = false
+    private var flowAwaitingSince = Date()
+    private static let flowAwaitLimit: TimeInterval = 5
     private var flowEndShownAt: Date?
     private let flowQueue = DispatchQueue(label: "doorbell.visitor-flow", qos: .userInitiated)
     private var airQualityTimer: Timer?
@@ -583,6 +585,8 @@ final class MainViewController: UIViewController {
         let screen = VisitorScreenView(texts: texts, callButton: callButton, langBar: langBar,
                                        purposeSection: purposeSection, sosControl: sosSlider)
         visitorScreen = screen
+        screen.setAwaitingFlow(true)
+        flowAwaitingSince = Date()
         screen.flowView.onOption = { [weak self] id in self?.onFlowOption(id) }
         screen.flowView.onBack = { [weak self] in self?.onFlowBack() }
         screen.flowView.onDone = { [weak self] in self?.onFlowDone() }
@@ -2287,7 +2291,11 @@ final class MainViewController: UIViewController {
             DispatchQueue.main.async {
                 guard let self = self else { return }
                 self.flowFetching = false
-                if let document = document { self.applyFlowDocument(document) }
+                if let document = document {
+                    self.applyFlowDocument(document)
+                } else if core.isRunning {
+                    self.visitorScreen?.setAwaitingFlow(false)
+                }
                 if self.flowFetchAgain {
                     self.flowFetchAgain = false
                     self.fetchVisitorFlow()
@@ -2297,6 +2305,7 @@ final class MainViewController: UIViewController {
     }
 
     private func applyFlowDocument(_ document: [String: Any]) {
+        visitorScreen?.setAwaitingFlow(false)
         if boot.debugScreenshots, let data = try? JSONSerialization.data(withJSONObject: document) {
             try? data.write(to: URL(fileURLWithPath: BootConfig.dataDir() + "/visitor-flow.json"))
             if let caps = core.capabilities(), let c = try? JSONSerialization.data(withJSONObject: caps) {
@@ -2377,6 +2386,10 @@ final class MainViewController: UIViewController {
 
     /// Idle return and the end page's own timer, from the one-second clock tick.
     private func flowTick() {
+        if visitorScreen?.awaitingFlow == true,
+           Date().timeIntervalSince(flowAwaitingSince) >= MainViewController.flowAwaitLimit {
+            visitorScreen?.setAwaitingFlow(false)
+        }
         guard let walker = flowWalker, walker.isEnabled, callingView.isHidden, inCallView.isHidden,
               !walker.pendingCall else { return }
         switch walker.mode {
@@ -2726,6 +2739,16 @@ final class MainViewController: UIViewController {
             if let flow = core.visitorFlowTemplate(name)?["flow"] as? [String: Any] {
                 ConfigWriter(core: core, httpPort: boot.httpPort)
                     .apply(editor.templateOperations(flow)) { _ in }
+            }
+        case let image where image.hasPrefix("flow_test_image:"):
+            let step = String(image.dropFirst("flow_test_image:".count))
+            let editor = VisitorFlowEditor(config: core.config(), languages: [])
+            let file = BootConfig.dataDir() + "/test-asset.png"
+            if var page = editor.steps[step], let data = FileManager.default.contents(atPath: file),
+               let hash = core.addAsset(data, type: "image/png", label: "flow test")?["hash"] as? String {
+                page["images"] = [["asset": hash, "place": "above", "alt": ["ja": "test picture", "en": "test picture"]]]
+                ConfigWriter(core: core, httpPort: boot.httpPort)
+                    .apply([VisitorFlowEditor.write(step, page)]) { _ in }
             }
         case "create_cluster":
             _ = core.createCluster()

@@ -6,7 +6,7 @@ integration (the Core visitor-flow completion, the full-screen quick-reply overl
 every shell, the language-switch and settings responsiveness work), and the third
 integration: the visitor flow implemented on Core, the web door page, Admin, the kiosk,
 iOS and tvOS, Android and Windows. Current versions: Windows 0.3.1 (file version
-0.3.1.32), Android 0.6.0 (54), iOS 0.7.0 (80), tvOS 0.6.0 (30), iOS 5 kiosk 0.9.0 (101)
+0.3.1.32), Android 0.6.0 (54), iOS 0.7.1 (81), tvOS 0.6.1 (31), iOS 5 kiosk 0.9.0 (101)
 with the iOS 9 profile 0.8.0 (424). Verification is stated per deliverable; anything
 under "Not verified" is untested, not passing.
 
@@ -142,7 +142,7 @@ speech, playback policy, logs, capability override, other devices' local setting
 delete confirmations) until `KNOWN_GAPS` and `DYNAMIC_GAPS` in
 `tools/tests/test_android_settings_parity.py` are empty.
 
-### iOS and tvOS (iOS 0.7.0, build 80; tvOS 0.6.0, build 30)
+### iOS and tvOS (iOS 0.7.1, build 81; tvOS 0.6.1, build 31)
 
 Visitor flow: the wizard on the door-station home (`VisitorFlowView.swift`,
 `VisitorFlowPages.swift`) and a full flow editor in Settings (`VisitorFlowEditor.swift`);
@@ -150,8 +150,17 @@ the UI manifest is published again when Core starts after the supervisor so a fr
 gets the wizard. Verified on this integration: the Doorbell scheme builds for the iOS
 simulator (arm64, deployment target 14.0), DoorbellTests pass (271 tests) on an iPhone
 simulator, DoorbellIOS9 builds (device, unsigned) and DoorbellTV builds (tvOS simulator).
-Simulator screenshots were taken through debug hooks only: no taps were made, no images
-were rendered, and editor saves were never run against a live Core.
+Polish round (0.7.1): steps listed in Core `step_order` with the stock reorder control
+(consecutive `order` writes, new step at the end, duplicate right after the original);
+option icons mapped from purpose id or emoji to SF Symbols (unknown = person) with an icon
+picker in the editor; start page composed as one centred block (equal cards, two columns, three
+when wide), small clock beside the language switch, caption at the bottom edge; "Try it" preview
+that walks the live document and reports the call or message that would run; no classic-screen
+flash before the first flow answer. Fixed: `.local` settings actions never ran when no completion
+handler was passed (the template, reset and preview rows). Verified on an isolated single-node
+simulator: XCUITest taps (option, Back, notify path to the end page, Done; iPhone and iPad),
+a page with a registered test image, a reorder and an invalid editor save (Core `bad_text` shown under
+the field). Not verified: real devices; the notify takes about 4 s with no pending indicator.
 `ios-compat/tests/modern_settings_parity_test.py` now scans the flow editor sources and
 ignores message ids; it is still not wired into `test_host.sh`.
 

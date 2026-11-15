@@ -318,7 +318,8 @@ final class SettingsViewController: UIViewController, SettingsHosting, UISplitVi
             refreshAll(force: true)
             completion?(false)
         case .local(let id):
-            completion?(performLocal(id, value: value, from: from))
+            let performed = performLocal(id, value: value, from: from)
+            completion?(performed)
         case .none:
             completion?(true)
         }
@@ -615,6 +616,9 @@ final class SettingsEditorActions: NSObject {
         case "flow.reset":
             write(VisitorFlowEditor.resetOperations, from: from)
             return true
+        case "flow.preview":
+            previewFlow(from: from)
+            return true
         case "device.remove":
             guard parts.count == 2 else { return false }
             removeDevice(parts[1], from: from)
@@ -731,6 +735,27 @@ final class SettingsEditorActions: NSObject {
                 }
                 let editor = VisitorFlowEditor(config: core.config(), languages: [])
                 self.write(editor.templateOperations(flow), from: from)
+            }
+        }
+    }
+
+    /// Walks the flow Core currently publishes on a visitor screen that calls nothing.
+    private func previewFlow(from: UIViewController) {
+        guard let core = core, let host = host else { return }
+        let door = host.boot.role == "door_station" ? host.boot.door : ""
+        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+            let document = core.visitorFlow(door: door) ?? [:]
+            let config = core.config()
+            DispatchQueue.main.async {
+                guard let self = self, let host = self.host else { return }
+                let editor = VisitorFlowEditor(config: config, languages: [])
+                let purposes = ConfigUtil.dig(config, "visit_purposes") as? [String: Any] ?? [:]
+                let lang = host.texts.lang
+                let session = FlowPreviewSession(document: document, editor: editor, texts: host.texts, lang: lang) {
+                    ConfigUtil.labelOf(purposes[$0] as? [String: Any], lang, $0)
+                }
+                host.show(FlowPreviewViewController(session: session, texts: host.texts, palette: host.palette),
+                          from: from)
             }
         }
     }

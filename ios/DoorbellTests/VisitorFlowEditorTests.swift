@@ -67,6 +67,128 @@ final class VisitorFlowEditorTests: XCTestCase {
         XCTAssertTrue(VisitorFlowEditor(config: [:], languages: []).isBuiltIn)
     }
 
+    // MARK: Order
+
+    private func orderedConfig(_ orders: [String: Int]) -> [String: Any] {
+        var config = flowConfig()
+        var flow = config["visitor_flow"] as! [String: Any]
+        var steps = flow["steps"] as! [String: Any]
+        for (id, order) in orders {
+            var step = steps[id] as! [String: Any]
+            step["order"] = order
+            steps[id] = step
+        }
+        flow["steps"] = steps
+        config["visitor_flow"] = flow
+        return config
+    }
+
+    func testListFollowsCoresStepOrderRules() {
+        let all = Dictionary(uniqueKeysWithValues: ["s_home", "c_any", "s_parcel", "n_left", "e_thanks"].map { ($0, [String: Any]()) })
+        var steps = all
+        steps["e_thanks"] = ["order": 0]
+        steps["c_any"] = ["order": 1]
+        steps["n_left"] = ["order": 1]
+        steps["s_parcel"] = ["order": 10000]
+        steps["s_home"] = ["order": -3]
+        let reading = ["s_home", "c_any", "s_parcel", "n_left", "e_thanks"]
+        XCTAssertEqual(VisitorFlowEditor.listOrder(reading: reading, steps: steps),
+                       ["e_thanks", "c_any", "n_left", "s_home", "s_parcel"],
+                       "orders first, ties in reading order, unusable values after")
+        let editor = VisitorFlowEditor(config: orderedConfig(["e_thanks": 0, "s_home": 1, "c_any": 2]), languages: ["en"])
+        XCTAssertEqual(editor.orderedStepIds(), ["e_thanks", "s_home", "c_any", "s_parcel", "n_left"])
+    }
+
+    func testMovingAStepRewritesOnlyTheStepsWhoseOrderChanged() throws {
+        let config = orderedConfig(["s_home": 0, "c_any": 1, "s_parcel": 2, "n_left": 3, "e_thanks": 4])
+        let editor = VisitorFlowEditor(config: config, languages: ["en"])
+        let sequence = VisitorFlowEditor.moving(editor.orderedStepIds(), "s_parcel", by: -1)
+        XCTAssertEqual(sequence, ["s_home", "s_parcel", "c_any", "n_left", "e_thanks"])
+        let written = editor.reorderOperations(sequence)
+        XCTAssertEqual(written.map { $0.key }, ["visitor_flow.steps.s_parcel", "visitor_flow.steps.c_any"])
+        let parcel = try XCTUnwrap(written[0].value as? [String: Any])
+        XCTAssertEqual(parcel["order"] as? Int, 1)
+        XCTAssertEqual(parcel["kind"] as? String, "page", "a whole step, not a leaf below it")
+        XCTAssertNotNil(parcel["options"])
+        XCTAssertEqual((written[1].value as? [String: Any])?["order"] as? Int, 2)
+        XCTAssertTrue(editor.reorderOperations(editor.orderedStepIds()).isEmpty, "no change, no writes")
+    }
+
+    func testReorderingAnUnorderedFlowNumbersEveryStep() {
+        let editor = VisitorFlowEditor(config: flowConfig(), languages: ["en"])
+        let written = editor.reorderOperations(VisitorFlowEditor.moving(editor.orderedStepIds(), "e_thanks", by: -4))
+        XCTAssertEqual(written.count, 5)
+        XCTAssertEqual(written.map { ($0.value as? [String: Any])?["order"] as? Int }, [0, 1, 2, 3, 4])
+        XCTAssertEqual(written.first?.key, "visitor_flow.steps.e_thanks")
+    }
+
+    func testEditsKeepTheStepsOrder() throws {
+        let item = try XCTUnwrap(pages(orderedConfig(["s_parcel": 7])).stepPage("s_parcel").item("s_parcel_title_en"))
+        let step = try XCTUnwrap(ops(item.commit?(.string("New title"))).first?.value as? [String: Any])
+        XCTAssertEqual(step["order"] as? Int, 7)
+    }
+
+    func testStepOrderListUsesTheReorderControl() throws {
+        let page = pages(orderedConfig(["e_thanks": 0])).stepsPage()
+        guard case .list(let build)? = page.item("flow_step_order")?.control else { return XCTFail("list expected") }
+        let model = build()
+        XCTAssertEqual(model.rows.first?.id, "e_thanks")
+        let written = ops(model.reorder?(["s_home", "e_thanks", "c_any", "s_parcel", "n_left"]))
+        XCTAssertEqual(written.count, 5)
+        XCTAssertTrue(written.allSatisfy { $0.key.split(separator: ".").count == 3 })
+    }
+
+    func testAddOptionCreatesCallWithTheNextOrderInTheSameBatch() throws {
+        var config = orderedConfig(["s_home": 0, "s_parcel": 1, "n_left": 2, "e_thanks": 3])
+        var flow = config["visitor_flow"] as! [String: Any]
+        var steps = flow["steps"] as! [String: Any]
+        steps.removeValue(forKey: "c_any")
+        for id in ["s_home", "s_parcel"] {
+            var step = steps[id] as! [String: Any]
+            step["options"] = (step["options"] as! [[String: Any]]).map { option -> [String: Any] in
+                var option = option
+                if option["to"] as? String == "c_any" { option["to"] = "n_left" }
+                return option
+            }
+            steps[id] = step
+        }
+        flow["steps"] = steps
+        config["visitor_flow"] = flow
+        let item = try XCTUnwrap(pages(config).stepPage("s_parcel").item("s_parcel_add_option"))
+        let batch = ops(item.commit?(.string("")))
+        XCTAssertEqual(Set(batch.map { $0.key }).count, batch.count, "one write per step")
+        let call = try XCTUnwrap(batch.first { ($0.value as? [String: Any])?["kind"] as? String == "call" }?.value as? [String: Any])
+        XCTAssertEqual(call["order"] as? Int, 4, "the new call step goes to the end")
+        let parcel = try XCTUnwrap(batch.first { $0.key.hasSuffix("s_parcel") }?.value as? [String: Any])
+        XCTAssertEqual(parcel["order"] as? Int, 1, "the rewritten page keeps its order")
+        XCTAssertEqual((parcel["options"] as? [[String: Any]])?.count, 3)
+    }
+
+    func testIconPickerOffersTheVendoredSetAndKeepsAnUnknownValue() throws {
+        var config = flowConfig()
+        var flow = config["visitor_flow"] as! [String: Any]
+        var steps = flow["steps"] as! [String: Any]
+        var parcel = steps["s_parcel"] as! [String: Any]
+        var options = parcel["options"] as! [[String: Any]]
+        options[0]["icon"] = "\u{1F9FF}"
+        parcel["options"] = options
+        steps["s_parcel"] = parcel
+        flow["steps"] = steps
+        config["visitor_flow"] = flow
+        guard case .page(let buildOption)? = pages(config).stepPage("s_parcel").item("s_parcel_opt_o_leave")?.control else {
+            return XCTFail("option page expected")
+        }
+        let item = try XCTUnwrap(buildOption().item("s_parcel_o_leave_icon"))
+        guard case .choice(let value, let choices, _) = item.control else { return XCTFail("choice expected") }
+        XCTAssertEqual(value, "\u{1F9FF}")
+        XCTAssertEqual(choices.count, 1 + AppIcon.flowChoices.count + 1)
+        let picked = ops(item.commit?(.string(AppIcon.flowChoices[1].emoji)))
+        let written = try XCTUnwrap(picked.first?.value as? [String: Any])
+        XCTAssertEqual((written["options"] as? [[String: Any]])?.first?["icon"] as? String, "\u{1F4E6}")
+        let cleared = ops(item.commit?(.string("")))
+        XCTAssertNil(((cleared.first?.value as? [String: Any])?["options"] as? [[String: Any]])?.first?["icon"])
+    }
+
     // MARK: Whole-step writes
 
     func testTextEditWritesTheWholeStepNotALeafBelowIt() throws {
@@ -163,8 +285,9 @@ final class VisitorFlowEditorTests: XCTestCase {
     func testNewNotifyReusesAnExistingEndPage() throws {
         let editor = VisitorFlowEditor(config: flowConfig(), languages: ["en"])
         let made = editor.newStep(kind: "notify") { _ in ["en": "x"] }
-        XCTAssertEqual(made.ops.count, 1)
-        XCTAssertEqual((made.ops[0].value as? [String: Any])?["to"] as? String, "e_thanks")
+        let notify = try XCTUnwrap(made.ops.first { $0.key == "visitor_flow.steps." + made.id }?.value as? [String: Any])
+        XCTAssertEqual(notify["to"] as? String, "e_thanks")
+        XCTAssertEqual(notify["order"] as? Int, 5, "the new step goes to the end of the list")
     }
 
     func testStepInUseCannotBeDeletedAndAFreeOneIsASingleDelete() {
@@ -186,8 +309,10 @@ final class VisitorFlowEditorTests: XCTestCase {
         let editor = VisitorFlowEditor(config: flowConfig(), languages: ["en"])
         let copy = try XCTUnwrap(editor.duplicate("s_parcel"))
         XCTAssertNotEqual(copy.id, "s_parcel")
-        XCTAssertEqual(copy.ops.map { $0.key }, ["visitor_flow.steps." + copy.id])
-        XCTAssertEqual((copy.ops.first?.value as? [String: Any])?["kind"] as? String, "page")
+        XCTAssertTrue(copy.ops.contains { $0.key == "visitor_flow.steps." + copy.id })
+        let written = try XCTUnwrap(copy.ops.first { $0.key == "visitor_flow.steps." + copy.id }?.value as? [String: Any])
+        XCTAssertEqual(written["kind"] as? String, "page")
+        XCTAssertEqual(written["order"] as? Int, 3, "right after the original")
     }
 
     func testStartPageDoorStartAndSwitchesAreLeaves() throws {

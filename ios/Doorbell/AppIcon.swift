@@ -7,6 +7,7 @@ enum AppIconName: String, CaseIterable {
     case home, parcel, mail, sales, work, settings, info, bell, bellOff, videoOff, door, warning
     case shield, clock, copy, phone, hangUp, reply, volume, unlock, mic, micOff, tablet, palette
     case note, cluster, link, close, check, reload, chevronDown, chevronsRight, plus, eye
+    case person, ellipsis
 
     /// The SF Symbol name, and the bundled imageset that stands in where the symbol is missing.
     var names: (symbol: String, fallback: String) {
@@ -45,6 +46,8 @@ enum AppIconName: String, CaseIterable {
         case .chevronsRight: return ("chevron.right.2", "F7ChevronRight2")
         case .plus: return ("plus", "F7Plus")
         case .eye: return ("eye.fill", "F7EyeFill")
+        case .person: return ("person.fill", "F7PersonFill")
+        case .ellipsis: return ("ellipsis.circle.fill", "F7EllipsisCircleFill")
         }
     }
 
@@ -60,11 +63,59 @@ enum AppIcon {
     /// has no icon of its own; the shell falls back to whatever text they configured.
     static let purposeIcons: [String: AppIconName] = [
         "p_visit": .home, "p_delivery": .parcel, "p_mail": .mail,
-        "p_sales": .sales, "p_work": .work, "p_other": .info]
+        "p_sales": .sales, "p_work": .work, "p_other": .ellipsis]
 
     static func purpose(_ id: String) -> UIImage? {
         guard let name = purposeIcons[id] else { return nil }
         return image(name)
+    }
+
+    /// What the visitor flow's picker offers and stores: one canonical emoji per icon, the value
+    /// every shell and Core already understand. The emoji is configuration data and is never drawn.
+    static let flowChoices: [(icon: AppIconName, emoji: String, titleKey: String)] = [
+        (.home, "\u{1F3E0}", "flow_editor.icon_home"),
+        (.parcel, "\u{1F4E6}", "flow_editor.icon_parcel"),
+        (.mail, "\u{2709}\u{FE0F}", "flow_editor.icon_mail"),
+        (.sales, "\u{1F4BC}", "flow_editor.icon_sales"),
+        (.work, "\u{1F527}", "flow_editor.icon_work"),
+        (.ellipsis, "\u{2753}", "flow_editor.icon_other"),
+        (.person, "\u{1F464}", "flow_editor.icon_person"),
+    ]
+
+    private static let flowEmoji: [String: AppIconName] = [
+        "\u{1F3E0}": .home, "\u{1F3E1}": .home, "\u{1F3E2}": .home,
+        "\u{1F4E6}": .parcel, "\u{1F69A}": .parcel, "\u{1F4EB}": .parcel,
+        "\u{2709}": .mail, "\u{1F4E7}": .mail, "\u{1F4E8}": .mail, "\u{1F4EE}": .mail,
+        "\u{1F48C}": .mail,
+        "\u{1F4BC}": .sales, "\u{1F6CD}": .sales, "\u{1F6D2}": .sales, "\u{1F4B0}": .sales,
+        "\u{1F454}": .sales,
+        "\u{1F527}": .work, "\u{1F528}": .work, "\u{1F6E0}": .work, "\u{2692}": .work,
+        "\u{1F9F0}": .work, "\u{26A1}": .work,
+        "\u{2753}": .ellipsis, "\u{2754}": .ellipsis, "\u{2026}": .ellipsis, "\u{22EF}": .ellipsis,
+        "\u{2795}": .ellipsis,
+        "\u{270D}": .note, "\u{1F4DD}": .note,
+        "\u{1F464}": .person, "\u{1F9D1}": .person, "\u{1F642}": .person,
+    ]
+
+    /// The glyph for a flow option: its purpose first (the seeded ids and their plain names), then
+    /// the emoji Core inlined from the purpose or the administrator typed, then the person glyph
+    /// for anything unknown. Variation selectors are ignored.
+    static func flowGlyph(purpose: String, icon: String) -> AppIconName {
+        if let known = purposeIcons[purpose] { return known }
+        let plain = ["visit": AppIconName.home, "delivery": .parcel, "mail": .mail, "sales": .sales,
+                     "work": .work, "utility": .work, "other": .ellipsis]
+        if let known = plain[purpose.hasPrefix("p_") ? String(purpose.dropFirst(2)) : purpose] { return known }
+        let stripped = String(String.UnicodeScalarView(icon.unicodeScalars.filter { $0.value != 0xFE0F }))
+        if let known = flowEmoji[stripped] { return known }
+        return .person
+    }
+
+    /// The picker value that selects the glyph `icon` maps to, or nil for something unknown.
+    static func flowChoiceValue(for icon: String) -> String? {
+        guard !icon.isEmpty else { return nil }
+        let stripped = String(String.UnicodeScalarView(icon.unicodeScalars.filter { $0.value != 0xFE0F }))
+        guard let glyph = flowEmoji[stripped] else { return nil }
+        return flowChoices.first { $0.icon == glyph }?.emoji
     }
 
     /// A template image. A symbol this OS release does not ship (some are newer than iOS 13)

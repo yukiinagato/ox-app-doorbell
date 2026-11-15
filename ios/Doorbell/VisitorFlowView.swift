@@ -1,8 +1,10 @@
 import UIKit
 
-/// One option of the visitor flow. A purpose icon sits above the label; an option without an icon
-/// centres its label. The height follows the wrapped label, never below the visitor touch minimum.
+/// One option of the visitor flow. The icon sits above the label at one size on every option; an
+/// option without an icon centres its label. The height follows the wrapped label, never below the
+/// visitor touch minimum.
 final class FlowOptionButton: UIButton {
+    static let iconSize: CGFloat = 30
     var contentHeight: NSLayoutConstraint?
     var minimumHeight: CGFloat = TouchTarget.visitor
 
@@ -12,24 +14,26 @@ final class FlowOptionButton: UIButton {
         let hasIcon = image(for: .normal) != nil
         let textHeight = ceil(label.sizeThatFits(
             CGSize(width: bounds.width - 24, height: .greatestFiniteMagnitude)).height)
-        let required = max(minimumHeight, textHeight + (hasIcon ? 64 : 32))
+        let required = max(minimumHeight, textHeight + (hasIcon ? 70 : 32))
         if let height = contentHeight, height.constant != required { height.constant = required }
         if hasIcon {
-            let iconSize: CGFloat = 26
-            imageView?.frame = CGRect(x: (bounds.width - iconSize) / 2, y: 14,
+            let iconSize = FlowOptionButton.iconSize
+            imageView?.frame = CGRect(x: (bounds.width - iconSize) / 2, y: 16,
                                       width: iconSize, height: iconSize)
-            label.frame = CGRect(x: 12, y: 46, width: bounds.width - 24,
-                                 height: max(0, bounds.height - 52))
+            label.frame = CGRect(x: 12, y: 16 + iconSize + 8, width: bounds.width - 24,
+                                 height: max(0, bounds.height - (16 + iconSize + 8) - 12))
         } else {
             label.frame = CGRect(x: 12, y: 0, width: bounds.width - 24, height: bounds.height)
         }
     }
 }
 
-/// Renders one page or end step of the visitor flow: a content zone (title, images, body) that
-/// scrolls, and an option zone fixed to the bottom that scrolls internally only when it would
-/// exceed half the viewport. It holds no flow state; the owner hands it the page to show.
-final class VisitorFlowView: UIView, UIScrollViewDelegate {
+/// Renders one page or end step of the visitor flow as one centred block: title, images and body,
+/// then the options as equal cards (two columns, three on a wide column; a primary option and a
+/// lone last card take the full row). The block scrolls as a whole only when it is taller than the
+/// screen; notice, Done and Back stay fixed at the bottom. It holds no flow state; the owner hands
+/// it the page to show.
+final class VisitorFlowView: UIView {
 
     static let maxColumnWidth: CGFloat = 760
 
@@ -54,12 +58,10 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
     private let titleLabel = HaloLabel()
     private let bodyLabel = HaloLabel()
     private let noticeLabel = HaloLabel()
-    private let optionScroll = UIScrollView()
     private let optionStack = UIStackView()
     private let backButton = UIButton(type: .system)
     private let doneButton = FlowOptionButton(type: .custom)
     private let bottomZone = UIStackView()
-    private var optionHeight: NSLayoutConstraint!
     private var imageLimits: [NSLayoutConstraint] = []
     private var page: VisitorFlowPage?
     private var columns = 1
@@ -115,9 +117,10 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
         contentStack.spacing = 16
         contentStack.alignment = .fill
         contentStack.translatesAutoresizingMaskIntoConstraints = false
-        for view in [titleLabel, aboveStack, bodyLabel, belowStack] {
+        for view in [titleLabel, aboveStack, bodyLabel, belowStack, optionStack] {
             contentStack.addArrangedSubview(view)
         }
+        if #available(iOS 11.0, tvOS 11.0, *) { contentStack.setCustomSpacing(24, after: belowStack) }
 
         contentScroll.translatesAutoresizingMaskIntoConstraints = false
         contentScroll.alwaysBounceVertical = false
@@ -129,12 +132,6 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
         optionStack.axis = .vertical
         optionStack.spacing = 12
         optionStack.alignment = .fill
-        optionStack.translatesAutoresizingMaskIntoConstraints = false
-        optionScroll.translatesAutoresizingMaskIntoConstraints = false
-        optionScroll.alwaysBounceVertical = false
-        optionScroll.delegate = self
-        optionScroll.addSubview(optionStack)
-        optionHeight = optionScroll.heightAnchor.constraint(equalToConstant: TouchTarget.visitor)
 
         backButton.setTitle(texts.t("flow.back"), for: .normal)
         backButton.titleLabel?.font = IOSAvailability.visitorFont(size: 20, weight: .semibold,
@@ -159,7 +156,7 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
         bottomZone.spacing = 10
         bottomZone.alignment = .fill
         bottomZone.translatesAutoresizingMaskIntoConstraints = false
-        for view in [noticeLabel, optionScroll, doneButton, backButton] {
+        for view in [noticeLabel, doneButton, backButton] {
             bottomZone.addArrangedSubview(view)
         }
         column.addSubview(bottomZone)
@@ -188,18 +185,9 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
             bottomZone.leadingAnchor.constraint(equalTo: column.leadingAnchor),
             bottomZone.trailingAnchor.constraint(equalTo: column.trailingAnchor),
             bottomZone.bottomAnchor.constraint(equalTo: column.bottomAnchor),
-            optionStack.topAnchor.constraint(equalTo: optionScroll.topAnchor),
-            optionStack.bottomAnchor.constraint(equalTo: optionScroll.bottomAnchor),
-            optionStack.leadingAnchor.constraint(equalTo: optionScroll.leadingAnchor),
-            optionStack.trailingAnchor.constraint(equalTo: optionScroll.trailingAnchor),
-            optionStack.widthAnchor.constraint(equalTo: optionScroll.widthAnchor),
-            optionHeight,
         ])
-        // The text may be taller than the zone: it then scrolls rather than push the options out.
-        let stackHeight = contentStack.heightAnchor.constraint(
-            equalTo: contentHolder.heightAnchor)
-        stackHeight.priority = UILayoutPriority(1)
-        stackHeight.isActive = true
+        // The block is as tall as its content, centred in the zone; taller than the zone, it scrolls.
+        contentHolder.heightAnchor.constraint(greaterThanOrEqualTo: contentStack.heightAnchor).isActive = true
     }
 
     // MARK: - Content
@@ -223,13 +211,12 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
         doneButton.setTitle(texts.t("flow.done"), for: .normal)
         backButton.isHidden = !page.canGoBack
         doneButton.isHidden = !page.showsDone
-        optionScroll.isHidden = page.options.isEmpty
+        optionStack.isHidden = page.options.isEmpty
         rebuildImages(page.images)
         rebuildOptions(page.options)
         applyColors()
         if previous?.id != page.id {
             contentScroll.setContentOffset(.zero, animated: false)
-            optionScroll.setContentOffset(.zero, animated: false)
             UIAccessibility.post(notification: .screenChanged,
                                  argument: titleLabel.isHidden ? nil : titleLabel)
         }
@@ -287,25 +274,27 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
         return loaded
     }
 
+    /// Two columns, three once the column is wide. A page of one option uses the full row.
+    private func columnCount(for options: [VisitorFlowOption]) -> Int {
+        let width = min(bounds.width, VisitorFlowView.maxColumnWidth)
+        let wanted = width >= 640 ? 3 : 2
+        return max(1, min(wanted, options.filter { !$0.isPrimary }.count))
+    }
+
     private func rebuildOptions(_ options: [VisitorFlowOption]) {
         for view in optionStack.arrangedSubviews {
             optionStack.removeArrangedSubview(view)
             view.removeFromSuperview()
         }
         optionButtons = []
-        columns = bounds.width >= 600 ? 2 : 1
+        columns = columnCount(for: options)
+        let showIcons = options.contains { !$0.isPrimary && (!$0.purpose.isEmpty || !$0.icon.isEmpty) }
         var row: UIStackView?
-        func closeRow() {
-            if let open = row, open.arrangedSubviews.count < columns {
-                for _ in open.arrangedSubviews.count..<columns { open.addArrangedSubview(UIView()) }
-            }
-            row = nil
-        }
         for option in options {
-            let button = makeButton(option)
+            let button = makeButton(option, withIcon: showIcons && !option.isPrimary)
             optionButtons.append((option, button))
             if option.isPrimary || columns == 1 {
-                closeRow()
+                row = nil
                 let single = makeRow()
                 single.addArrangedSubview(button)
                 optionStack.addArrangedSubview(single)
@@ -318,7 +307,6 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
             row!.addArrangedSubview(button)
             if row!.arrangedSubviews.count == columns { row = nil }
         }
-        closeRow()
     }
 
     private func makeRow() -> UIStackView {
@@ -329,12 +317,11 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
         return row
     }
 
-    private func makeButton(_ option: VisitorFlowOption) -> FlowOptionButton {
+    private func makeButton(_ option: VisitorFlowOption, withIcon: Bool) -> FlowOptionButton {
         let button = FlowOptionButton(type: .custom)
-        let glyph = option.isPrimary ? nil : AppIcon.purpose(option.purpose)
-        var title = option.label
-        if glyph == nil, !option.icon.isEmpty, !option.isPrimary { title = option.icon + " " + title }
-        button.setTitle(title, for: .normal)
+        let glyph = withIcon
+            ? AppIcon.image(AppIcon.flowGlyph(purpose: option.purpose, icon: option.icon)) : nil
+        button.setTitle(option.label, for: .normal)
         button.setImage(glyph, for: .normal)
         button.imageView?.contentMode = .scaleAspectFit
         button.titleLabel?.numberOfLines = 0
@@ -407,8 +394,9 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
     }
 
     #if DEBUG
-    var optionZoneForTesting: UIScrollView { return optionScroll }
     var contentZoneForTesting: UIScrollView { return contentScroll }
+    var optionGridForTesting: UIView { return optionStack }
+    var titleForTesting: UIView { return titleLabel }
     var optionButtonsForTesting: [UIButton] { return optionButtons.map { $0.button } }
     var columnsForTesting: Int { return columns }
     #endif
@@ -416,51 +404,10 @@ final class VisitorFlowView: UIView, UIScrollViewDelegate {
     // MARK: - Layout
 
     override func layoutSubviews() {
-        let wanted = bounds.width >= 600 ? 2 : 1
-        if let page = page, wanted != columns, bounds.width > 0 {
-            columns = wanted
+        if let page = page, bounds.width > 0, columnCount(for: page.options) != columns {
             rebuildOptions(page.options)
             applyColors()
         }
         super.layoutSubviews()
-        updateOptionZone()
-    }
-
-    private func updateOptionZone() {
-        guard !optionScroll.isHidden, optionScroll.bounds.width > 0 else { return }
-        let fit = optionStack.systemLayoutSizeFitting(
-            CGSize(width: optionScroll.bounds.width, height: UIView.layoutFittingCompressedSize.height),
-            withHorizontalFittingPriority: .required,
-            verticalFittingPriority: .fittingSizeLevel).height
-        let viewport = viewportHeight > 0 ? viewportHeight : bounds.height
-        let cap = max(TouchTarget.visitor * 2, floor(viewport * 0.5))
-        let height = min(fit, cap)
-        if abs(optionHeight.constant - height) > 0.5 {
-            optionHeight.constant = height
-            setNeedsLayout()
-        }
-        optionScroll.isScrollEnabled = fit > cap + 0.5
-        updateFade()
-    }
-
-    func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        if scrollView === optionScroll { updateFade() }
-    }
-
-    /// A scrollable option zone fades out at the bottom edge while more options lie below.
-    private func updateFade() {
-        let scrollable = optionScroll.contentSize.height > optionScroll.bounds.height + 1
-        let atEnd = optionScroll.contentOffset.y + optionScroll.bounds.height >=
-            optionScroll.contentSize.height - 2
-        guard scrollable, !atEnd, optionScroll.bounds.height > 0 else {
-            optionScroll.layer.mask = nil
-            return
-        }
-        let mask = (optionScroll.layer.mask as? CAGradientLayer) ?? CAGradientLayer()
-        mask.frame = optionScroll.bounds
-        mask.colors = [UIColor.black.cgColor, UIColor.black.cgColor, UIColor.clear.cgColor]
-        let fade = min(0.3, 40 / optionScroll.bounds.height)
-        mask.locations = [0, NSNumber(value: Double(1 - fade)), 1]
-        optionScroll.layer.mask = mask
     }
 }

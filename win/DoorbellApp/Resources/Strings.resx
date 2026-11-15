@@ -949,18 +949,24 @@
   <data name="flow_editor_icon_box" xml:space="preserve"><value>荷物</value></data>
   <data name="flow_editor_icon_briefcase" xml:space="preserve"><value>ビジネス</value></data>
   <data name="flow_editor_icon_current" xml:space="preserve"><value>現在の設定</value></data>
+  <data name="flow_editor_icon_custom" xml:space="preserve"><value>その他（現在の設定）</value></data>
+  <data name="flow_editor_icon_default" xml:space="preserve"><value>用件のアイコンに従う</value></data>
   <data name="flow_editor_icon_dots" xml:space="preserve"><value>その他</value></data>
   <data name="flow_editor_icon_ellipsis" xml:space="preserve"><value>その他</value></data>
   <data name="flow_editor_icon_envelope" xml:space="preserve"><value>封筒</value></data>
   <data name="flow_editor_icon_home" xml:space="preserve"><value>家</value></data>
   <data name="flow_editor_icon_house" xml:space="preserve"><value>家</value></data>
-  <data name="flow_editor_icon_mail" xml:space="preserve"><value>郵便</value></data>
+  <data name="flow_editor_icon_mail" xml:space="preserve"><value>封筒</value></data>
   <data name="flow_editor_icon_none" xml:space="preserve"><value>アイコンなし</value></data>
+  <data name="flow_editor_icon_other" xml:space="preserve"><value>その他</value></data>
   <data name="flow_editor_icon_package" xml:space="preserve"><value>荷物</value></data>
+  <data name="flow_editor_icon_parcel" xml:space="preserve"><value>荷物</value></data>
   <data name="flow_editor_icon_pencil" xml:space="preserve"><value>ペン</value></data>
   <data name="flow_editor_icon_person" xml:space="preserve"><value>人</value></data>
+  <data name="flow_editor_icon_sales" xml:space="preserve"><value>かばん</value></data>
   <data name="flow_editor_icon_tool" xml:space="preserve"><value>工具</value></data>
   <data name="flow_editor_icon_user" xml:space="preserve"><value>人</value></data>
+  <data name="flow_editor_icon_work" xml:space="preserve"><value>工具</value></data>
   <data name="flow_editor_idle_s" xml:space="preserve"><value>無操作で最初に戻るまで（秒）</value></data>
   <data name="flow_editor_idle_short" xml:space="preserve"><value>最初に戻るまで</value></data>
   <data name="flow_editor_image_above" xml:space="preserve"><value>本文の上</value></data>
@@ -998,8 +1004,17 @@
   <data name="flow_editor_paragraph" xml:space="preserve"><value>段落</value></data>
   <data name="flow_editor_paragraph_add" xml:space="preserve"><value>段落を追加</value></data>
   <data name="flow_editor_preview" xml:space="preserve"><value>試す</value></data>
+  <data name="flow_editor_preview_banner" xml:space="preserve"><value>試用中: 呼び出しも通知も実行されません</value></data>
+  <data name="flow_editor_preview_call" xml:space="preserve"><value>ここで呼び出しが始まります</value></data>
+  <data name="flow_editor_preview_call_purpose" xml:space="preserve"><value>ここで呼び出しが始まります（用件: {0}）</value></data>
+  <data name="flow_editor_preview_close" xml:space="preserve"><value>閉じる</value></data>
+  <data name="flow_editor_preview_hint" xml:space="preserve"><value>現在の設定を来訪者と同じ画面で操作できます。呼び出しや通知は実行されません。</value></data>
+  <data name="flow_editor_preview_notify" xml:space="preserve"><value>住人に通知が送られます: {0}</value></data>
+  <data name="flow_editor_preview_off" xml:space="preserve"><value>ウィザードは無効か、使える状態ではありません。</value></data>
   <data name="flow_editor_purpose_none" xml:space="preserve"><value>用件なし</value></data>
   <data name="flow_editor_remove_image" xml:space="preserve"><value>画像を外す</value></data>
+  <data name="flow_editor_reorder_hint" xml:space="preserve"><value>「編集」を押し、右端のハンドルをドラッグして並べ替えます。順序は一覧の表示だけに使われ、来訪者の操作には影響しません。</value></data>
+  <data name="flow_editor_reorder_steps" xml:space="preserve"><value>ステップの並べ替え</value></data>
   <data name="flow_editor_require_call" xml:space="preserve"><value>必ず呼び出しにたどり着けるようにする</value></data>
   <data name="flow_editor_require_call_off_warning" xml:space="preserve"><value>オフにすると、呼び出しのできないドアを作れます。来訪者が住人を呼べなくなることがあります。</value></data>
   <data name="flow_editor_reset_default" xml:space="preserve"><value>標準に戻す</value></data>

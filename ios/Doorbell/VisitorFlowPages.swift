@@ -97,6 +97,12 @@ struct VisitorFlowPages {
                                            + (editor.requireCall ? "" : "\n" + t("flow_editor.require_call_off_warning")),
                                        wizard))
 
+        sections.append(SettingSection(footer: t("flow_editor.preview_hint"), [
+            SettingItem("flow_preview", t("flow_editor.preview"), .action(destructive: false)) { _ in
+                .local("flow.preview")
+            },
+        ]))
+
         if !editor.isBuiltIn {
             sections.append(SettingSection(t("flow_editor.steps"), [
                 SettingItem("flow_steps", t("flow_editor.steps"), detail: "\(editor.steps.count)",
@@ -150,9 +156,25 @@ struct VisitorFlowPages {
                 return .write(self.editor.newStep(kind: kind, defaults: self.defaults).ops)
             }
         }
+        let order = SettingItem("flow_step_order", t("flow_editor.reorder_steps"), detail: "\(editor.steps.count)",
+                                .list({ self.stepOrderList() }))
         return SettingsPage(id: "flow_steps", title: t("flow_editor.steps"), sections: [
-            SettingSection(rows), SettingSection(adds),
+            SettingSection(footer: t("flow_editor.reorder_hint"), [order]), SettingSection(rows), SettingSection(adds),
         ])
+    }
+
+    /// The steps in Core's `step_order` with the stock reorder control: a drop writes consecutive
+    /// `order` values for the new sequence, one whole-step write per changed step, in one batch.
+    func stepOrderList() -> SettingsListModel {
+        let ids = editor.orderedStepIds()
+        let rows = ids.map { id in
+            SettingsListRow(id: id, title: stepTitle(id), detail: id == editor.start ? t("flow_editor.start") : "",
+                            enabled: nil, toggle: nil, edit: nil)
+        }
+        return SettingsListModel(id: "flow_step_order", title: t("flow_editor.reorder_steps"),
+                                 footer: t("flow_editor.reorder_hint"), rows: rows,
+                                 reorder: { sequence in .write(self.editor.reorderOperations(sequence)) },
+                                 delete: nil)
     }
 
     func stepPage(_ id: String) -> SettingsPage {
@@ -194,7 +216,9 @@ struct VisitorFlowPages {
         let control: SettingControl = multiline
             ? .longText(value: current, placeholder: "")
             : .text(value: current, placeholder: "", numeric: false)
-        return SettingItem(itemId, title, detail: current.replacingOccurrences(of: "\n", with: " "), control) { value in
+        let oneLine = current.replacingOccurrences(of: "\n", with: " ")
+        let shown = oneLine.count > 18 ? String(oneLine.prefix(18)) + "\u{2026}" : oneLine
+        return SettingItem(itemId, title, detail: shown, control) { value in
             let text = multiline ? (value.stringValue ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
                                  : (value.stringValue ?? "").trimmingCharacters(in: .whitespaces)
             guard text.count <= limit else { return .invalid("visitor_flow.bad_text") }
@@ -313,6 +337,27 @@ struct VisitorFlowPages {
 
     // MARK: Options
 
+    /// The picker offers the shell's own icon set by name. A stored value that is not one of them
+    /// stays selectable as "Custom" so opening the page never loses it.
+    private func iconValue(_ icon: String) -> String {
+        return icon.isEmpty ? "" : (AppIcon.flowChoiceValue(for: icon) ?? icon)
+    }
+
+    private func iconTitle(_ icon: String) -> String {
+        if icon.isEmpty { return t("flow_editor.icon_default") }
+        let value = iconValue(icon)
+        return AppIcon.flowChoices.first { $0.emoji == value }.map { t($0.titleKey) } ?? t("flow_editor.icon_custom")
+    }
+
+    private func iconOptions(_ icon: String) -> [SettingOption] {
+        var options = [SettingOption(value: "", title: t("flow_editor.icon_default"))]
+        options += AppIcon.flowChoices.map { SettingOption(value: $0.emoji, title: t($0.titleKey)) }
+        if !icon.isEmpty, !options.contains(where: { $0.value == iconValue(icon) }) {
+            options.append(SettingOption(value: icon, title: t("flow_editor.icon_custom")))
+        }
+        return options
+    }
+
     private func optionTitle(_ option: [String: Any]) -> String {
         if let label = VisitorFlowText.text(option["label"], lang: ctx.uiLang) { return label }
         let purpose = option["purpose"] as? String ?? ""
@@ -336,18 +381,17 @@ struct VisitorFlowPages {
             items.append(SettingItem("\(id)_add_option", t("flow_editor.add_option"), .action(destructive: false)) { _ in
                 let optionId = VisitorFlowEditor.newOptionId(in: options)
                 let call = self.editor.ids(ofKind: "call").first
-                var ops: [ConfigWriter.Operation] = []
+                var created: [(id: String, step: [String: Any])] = []
                 var target = call ?? ""
                 if call == nil {
                     target = SettingValidation.newId("c")
-                    ops.append(VisitorFlowEditor.write(target, ["kind": "call"]))
+                    created.append((target, ["kind": "call"]))
                 }
-                ops.append(contentsOf: self.editor.update(id) { step in
-                    var list = step["options"] as? [[String: Any]] ?? []
-                    list.append(["id": optionId, "label": self.defaults("flow_editor.new_option_label"), "to": target])
-                    step["options"] = list
-                })
-                return .write(ops)
+                var changed = step
+                var list = changed["options"] as? [[String: Any]] ?? []
+                list.append(["id": optionId, "label": self.defaults("flow_editor.new_option_label"), "to": target])
+                changed["options"] = list
+                return .write(self.editor.writes(creating: created, modifying: [(id, changed)]))
             })
         }
         let crowded = options.count > 4 && (step["body"] != nil || step["images"] != nil)
@@ -421,12 +465,11 @@ struct VisitorFlowPages {
                         if chosen.isEmpty { option.removeValue(forKey: "purpose") } else { option["purpose"] = chosen }
                     })
                 },
-                SettingItem("\(id)_\(optionId)_icon", t("flow_editor.option_icon"), detail: icon,
-                            .text(value: icon, placeholder: "", numeric: false)) { value in
-                    let text = (value.stringValue ?? "").trimmingCharacters(in: .whitespaces)
-                    guard text.count <= 8 else { return .invalid("visitor_flow.bad_text") }
+                SettingItem("\(id)_\(optionId)_icon", t("flow_editor.option_icon"), detail: iconTitle(icon),
+                            .choice(value: iconValue(icon), options: iconOptions(icon), searchable: false)) { value in
+                    let chosen = value.stringValue ?? ""
                     return .write(self.editor.updateOption(id, option: optionId) { option in
-                        if text.isEmpty { option.removeValue(forKey: "icon") } else { option["icon"] = text }
+                        if chosen.isEmpty { option.removeValue(forKey: "icon") } else { option["icon"] = chosen }
                     })
                 },
             ]),

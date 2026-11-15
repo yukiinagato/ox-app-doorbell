@@ -33,6 +33,10 @@ final class VisitorScreenView: UIView {
     let flowView: VisitorFlowView
     private let flowStack = UIStackView()
     private(set) var flowActive = false
+    /// True from launch until the first flow document, or the answer that there is none, is known:
+    /// neither the classic screen nor a page is drawn, so the classic home never flashes before a
+    /// wizard.
+    private(set) var awaitingFlow = false
     private let footer = UIStackView()
     private let noticeColumn = UIStackView()
     private let actionColumn = UIStackView()
@@ -226,8 +230,8 @@ final class VisitorScreenView: UIView {
         }
         if sosVisible { footer.addArrangedSubview(sosControl) }
         footer.addArrangedSubview(footerLabel)
-        scroll.isHidden = flowActive
-        flowStack.isHidden = !flowActive
+        scroll.isHidden = flowActive || awaitingFlow
+        flowStack.isHidden = !flowActive || awaitingFlow
         clockLabel.textAlignment = .center
         dateLabel.textAlignment = .center
         flowView.viewportHeight = size.height
@@ -324,16 +328,21 @@ final class VisitorScreenView: UIView {
         root.addArrangedSubview(UIView())
     }
 
-    /// Flow mode: language switch and clock in a header, then the notice, then the page.
+    /// Flow mode: one quiet top row with the language switch at the leading edge and the small clock
+    /// at the trailing edge, then the notice, then the page. The caption line is the footer at the
+    /// very bottom of the screen.
     private func layoutFlow(wide: Bool, compact: Bool) {
         let clockColumn = UIStackView(arrangedSubviews: [clockLabel, dateLabel, airQuality])
         clockColumn.axis = .vertical
-        clockColumn.spacing = 4
-        clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: wide ? 56 : 40, weight: .light)
-        dateLabel.font = IOSAvailability.visitorFont(size: wide ? 20 : 15, weight: .medium,
+        clockColumn.spacing = 2
+        clockColumn.alignment = .trailing
+        clockLabel.font = UIFont.monospacedDigitSystemFont(ofSize: wide ? 24 : 18, weight: .medium)
+        dateLabel.font = IOSAvailability.visitorFont(size: wide ? 15 : 12, weight: .regular,
                                                      traits: traitCollection)
-        airQuality.font = IOSAvailability.visitorFont(size: wide ? 18 : 14, weight: .medium,
+        airQuality.font = IOSAvailability.visitorFont(size: wide ? 14 : 12, weight: .regular,
                                                       traits: traitCollection)
+        clockLabel.textAlignment = .right
+        dateLabel.textAlignment = .right
         noticeLabel.font = IOSAvailability.visitorFont(size: wide ? 22 : 18, traits: traitCollection)
         let noticeRow = UIStackView(arrangedSubviews: [noticeLabel, noticeExpand])
         noticeRow.axis = .horizontal
@@ -343,27 +352,31 @@ final class VisitorScreenView: UIView {
         noticeColumn.addArrangedSubview(cameraWarning)
         noticeColumn.isHidden = noticeText.isEmpty && cameraWarning.isHidden
         noticeRow.isHidden = noticeText.isEmpty
-        let header: UIStackView
-        if wide {
-            clockLabel.textAlignment = .right
-            dateLabel.textAlignment = .right
-            clockColumn.alignment = .trailing
-            let cap = langBar.widthAnchor.constraint(lessThanOrEqualToConstant: 360)
-            cap.priority = UILayoutPriority(999)
-            cap.isActive = true
-            langWidth = cap
-            header = UIStackView(arrangedSubviews: [langBar, UIView(), clockColumn])
-            header.alignment = .center
-        } else {
-            clockColumn.alignment = .fill
-            header = UIStackView(arrangedSubviews: [clockColumn, langBar])
-            header.axis = .vertical
-            header.spacing = 8
-        }
-        header.spacing = wide ? 16 : 8
+        let cap = langBar.widthAnchor.constraint(lessThanOrEqualToConstant: wide ? 360 : 250)
+        cap.priority = UILayoutPriority(999)
+        cap.isActive = true
+        langWidth = cap
+        clockColumn.setContentHuggingPriority(.required, for: .horizontal)
+        clockColumn.setContentCompressionResistancePriority(.defaultHigh, for: .horizontal)
+        let spacer = UIView()
+        spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let header = UIStackView(arrangedSubviews: [langBar, spacer, clockColumn])
+        header.axis = .horizontal
+        header.alignment = .center
+        header.spacing = 12
+        header.setContentHuggingPriority(.required, for: .vertical)
+        noticeColumn.setContentHuggingPriority(.required, for: .vertical)
+        flowView.setContentHuggingPriority(UILayoutPriority(1), for: .vertical)
         flowStack.addArrangedSubview(header)
         flowStack.addArrangedSubview(noticeColumn)
         flowStack.addArrangedSubview(flowView)
+    }
+
+    func setAwaitingFlow(_ waiting: Bool) {
+        guard waiting != awaitingFlow else { return }
+        awaitingFlow = waiting
+        scroll.isHidden = flowActive || awaitingFlow
+        flowStack.isHidden = !flowActive || awaitingFlow
     }
 
     func setFlowActive(_ active: Bool) {

@@ -51,9 +51,31 @@ struct VisitorFlowEditor {
         return orderedStepIds().filter { self.kind($0) == kind }
     }
 
-    /// Steps are an unordered pool. They are listed start page first, then in the order they are
-    /// reached, then whatever is left by id.
+    /// The administrator's list, the same order as Core's `step_order`: steps with a usable
+    /// `order` first by ascending value, then ties and the rest in reading order.
     func orderedStepIds() -> [String] {
+        return VisitorFlowEditor.listOrder(reading: readingOrder(), steps: steps)
+    }
+
+    static let maxOrder = 9999
+
+    static func usableOrder(_ step: [String: Any]?) -> Int? {
+        guard let number = step?["order"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() else { return nil }
+        let value = number.doubleValue
+        guard value == value.rounded(), value >= 0, value <= Double(maxOrder) else { return nil }
+        return Int(value)
+    }
+
+    static func listOrder(reading: [String], steps: [String: [String: Any]]) -> [String] {
+        let ranked = reading.enumerated().map { rank, id in
+            (id: id, order: usableOrder(steps[id]) ?? maxOrder + 1, rank: rank)
+        }
+        return ranked.sorted { ($0.order, $0.rank) < ($1.order, $1.rank) }.map { $0.id }
+    }
+
+    /// The start page, then breadth-first through option targets, notify `to` and `on_unanswered`,
+    /// then whatever is unreachable by id.
+    func readingOrder() -> [String] {
         let all = steps
         var seen: [String] = []
         var queue = [start].filter { all[$0] != nil }
@@ -66,6 +88,57 @@ struct VisitorFlowEditor {
             })
         }
         return seen + all.keys.filter { !seen.contains($0) }.sorted()
+    }
+
+    /// `sequence` with `id` moved `offset` places, clamped to the list.
+    static func moving(_ sequence: [String], _ id: String, by offset: Int) -> [String] {
+        guard let index = sequence.firstIndex(of: id) else { return sequence }
+        var result = sequence
+        result.remove(at: index)
+        result.insert(id, at: max(0, min(result.count, index + offset)))
+        return result
+    }
+
+    /// Consecutive `order` values 0, 1, 2, ... for `sequence`, as whole-step writes for every step
+    /// whose value changes and for every id in `forced` (a step that is being written anyway).
+    /// `steps` already holds the new and modified steps; members other than `order` are untouched.
+    static func sequenceOperations(_ sequence: [String], steps: [String: [String: Any]],
+                                   forced: Set<String> = []) -> [ConfigWriter.Operation] {
+        var ops: [ConfigWriter.Operation] = []
+        for (index, id) in sequence.enumerated() {
+            guard var step = steps[id] else { continue }
+            guard usableOrder(step) != index || forced.contains(id) else { continue }
+            step["order"] = index
+            ops.append(write(id, step))
+        }
+        return ops
+    }
+
+    /// The writes for a new sequence of all steps after the administrator moved one.
+    func reorderOperations(_ sequence: [String]) -> [ConfigWriter.Operation] {
+        let known = Set(steps.keys)
+        let all = sequence.filter { known.contains($0) }
+        let missing = orderedStepIds().filter { !all.contains($0) }
+        return VisitorFlowEditor.sequenceOperations(all + missing, steps: steps)
+    }
+
+    /// Writes that add `created` steps (each at the end of the list, or right after `anchor`) and
+    /// rewrite `modified` steps, with every changed `order` in the same batch. A modified step
+    /// keeps its order unless the new sequence moves it.
+    func writes(creating created: [(id: String, step: [String: Any])],
+                modifying modified: [(id: String, step: [String: Any])] = [],
+                after anchor: String? = nil) -> [ConfigWriter.Operation] {
+        var sequence = orderedStepIds()
+        let newIds = created.map { $0.id }
+        if let anchor = anchor, let index = sequence.firstIndex(of: anchor) {
+            sequence.insert(contentsOf: newIds, at: index + 1)
+        } else {
+            sequence.append(contentsOf: newIds)
+        }
+        var all = steps
+        for entry in created + modified { all[entry.id] = entry.step }
+        return VisitorFlowEditor.sequenceOperations(sequence, steps: all,
+                                                    forced: Set(newIds + modified.map { $0.id }))
     }
 
     static func targets(of step: [String: Any]) -> [String] {
@@ -198,46 +271,45 @@ struct VisitorFlowEditor {
     }
 
     /// Writes for a new step of `kind`. A page arrives with one option leading to a call step, and
-    /// a notify with the end step it needs, so the batch is valid on its own.
+    /// a notify with the end step it needs, so the batch is valid on its own. The new steps go to
+    /// the end of the list.
     func newStep(kind: String, defaults: (_ key: String) -> [String: Any]) -> (id: String, ops: [ConfigWriter.Operation]) {
         let id = newStepId()
-        var ops: [ConfigWriter.Operation] = []
+        var created: [(id: String, step: [String: Any])] = []
         let existingCall = ids(ofKind: "call").first
         let existingEnd = ids(ofKind: "end").first
         func companion(_ kind: String, _ existing: String?, _ make: () -> [String: Any]) -> String {
             if let existing = existing { return existing }
             let extra = SettingValidation.newId(kind == "call" ? "c" : "e")
-            ops.append(VisitorFlowEditor.write(extra, make()))
+            created.append((extra, make()))
             return extra
         }
+        var main: [String: Any]
         switch kind {
         case "page":
             let call = companion("call", existingCall) { ["kind": "call"] }
-            ops.insert(VisitorFlowEditor.write(id, [
-                "kind": "page", "title": defaults("flow_editor.new_page_title"),
-                "options": [["id": SettingValidation.newId("o"), "label": defaults("flow_editor.new_option_label"),
-                             "style": "primary", "to": call]],
-            ]), at: 0)
+            main = ["kind": "page", "title": defaults("flow_editor.new_page_title"),
+                    "options": [["id": SettingValidation.newId("o"), "label": defaults("flow_editor.new_option_label"),
+                                 "style": "primary", "to": call]]]
         case "call":
-            ops.append(VisitorFlowEditor.write(id, ["kind": "call"]))
+            main = ["kind": "call"]
         case "notify":
             let end = companion("end", existingEnd) {
                 ["kind": "end", "title": defaults("core.flow.thanks_title"), "return_s": 8]
             }
-            ops.insert(VisitorFlowEditor.write(id, ["kind": "notify",
-                                                   "message": defaults("flow_editor.new_message"),
-                                                   "to": end]), at: 0)
+            main = ["kind": "notify", "message": defaults("flow_editor.new_message"), "to": end]
         default:
-            ops.append(VisitorFlowEditor.write(id, ["kind": "end", "title": defaults("core.flow.thanks_title"),
-                                                   "return_s": 8]))
+            main = ["kind": "end", "title": defaults("core.flow.thanks_title"), "return_s": 8]
         }
-        return (id, ops)
+        created.insert((id, main), at: 0)
+        return (id, writes(creating: created))
     }
 
+    /// The copy goes right after the original and the sequence is renumbered in the same batch.
     func duplicate(_ id: String) -> (id: String, ops: [ConfigWriter.Operation])? {
         guard let step = steps[id], steps.count < VisitorFlowEditor.maxSteps else { return nil }
         let copy = newStepId()
-        return (copy, [VisitorFlowEditor.write(copy, step)])
+        return (copy, writes(creating: [(copy, step)], after: id))
     }
 
     /// Nil while another step, the start page or a door still points here: the batch would not

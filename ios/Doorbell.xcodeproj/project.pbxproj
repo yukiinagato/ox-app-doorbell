@@ -187,6 +187,9 @@
 		F90000000000000000000704 /* VisitorFlowPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000704 /* VisitorFlowPages.swift */; };
 		FB0000000000000000000804 /* VisitorFlowPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000704 /* VisitorFlowPages.swift */; };
 		FB0000000000000000000704 /* VisitorFlowPages.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000704 /* VisitorFlowPages.swift */; };
+		F90000000000000000000705 /* VisitorFlowPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000705 /* VisitorFlowPreview.swift */; };
+		FB0000000000000000000805 /* VisitorFlowPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000705 /* VisitorFlowPreview.swift */; };
+		FB0000000000000000000705 /* VisitorFlowPreview.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000705 /* VisitorFlowPreview.swift */; };
 		F90000000000000000000703 /* VisitorFlowEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000703 /* VisitorFlowEditor.swift */; };
 		FB0000000000000000000803 /* VisitorFlowEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000703 /* VisitorFlowEditor.swift */; };
 		FB0000000000000000000703 /* VisitorFlowEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA0000000000000000000703 /* VisitorFlowEditor.swift */; };
@@ -226,6 +229,7 @@
 		FB000000000000000000009A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
 		F9000000000000000000007A /* VisitorScreenView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA000000000000000000003A /* VisitorScreenView.swift */; };
 		A70000000000000000000010 /* GestureUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7000000000000000000000F /* GestureUITests.swift */; };
+		A70000000000000000000012 /* FlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A70000000000000000000011 /* FlowUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -325,6 +329,7 @@
 		FA0000000000000000000301 /* AirQualityView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AirQualityView.swift; sourceTree = "<group>"; };
 		FA0000000000000000000401 /* ReplyFit.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ReplyFit.swift; sourceTree = "<group>"; };
 		FA0000000000000000000704 /* VisitorFlowPages.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorFlowPages.swift; sourceTree = "<group>"; };
+		FA0000000000000000000705 /* VisitorFlowPreview.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorFlowPreview.swift; sourceTree = "<group>"; };
 		FA0000000000000000000703 /* VisitorFlowEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorFlowEditor.swift; sourceTree = "<group>"; };
 		FA0000000000000000000702 /* VisitorFlowView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorFlowView.swift; sourceTree = "<group>"; };
 		FA0000000000000000000701 /* VisitorFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorFlow.swift; sourceTree = "<group>"; };
@@ -344,6 +349,7 @@
 		FA000000000000000000003A /* VisitorScreenView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisitorScreenView.swift; sourceTree = "<group>"; };
 		A70000000000000000000002 /* DoorbellUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DoorbellUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A7000000000000000000000F /* GestureUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GestureUITests.swift; sourceTree = "<group>"; };
+		A70000000000000000000011 /* FlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FlowUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -419,6 +425,7 @@
 				FA0000000000000000000301 /* AirQualityView.swift */,
 				FA0000000000000000000401 /* ReplyFit.swift */,
 				FA0000000000000000000704 /* VisitorFlowPages.swift */,
+				FA0000000000000000000705 /* VisitorFlowPreview.swift */,
 				FA0000000000000000000703 /* VisitorFlowEditor.swift */,
 				FA0000000000000000000702 /* VisitorFlowView.swift */,
 				FA0000000000000000000701 /* VisitorFlow.swift */,
@@ -483,6 +490,7 @@
 			isa = PBXGroup;
 			children = (
 				A7000000000000000000000F /* GestureUITests.swift */,
+				A70000000000000000000011 /* FlowUITests.swift */,
 			);
 			path = DoorbellUITests;
 			sourceTree = "<group>";
@@ -812,6 +820,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				A70000000000000000000010 /* GestureUITests.swift in Sources */,
+				A70000000000000000000012 /* FlowUITests.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -859,6 +868,7 @@
 				FB0000000000000000000301 /* AirQualityView.swift in Sources */,
 				FB0000000000000000000401 /* ReplyFit.swift in Sources */,
 				FB0000000000000000000704 /* VisitorFlowPages.swift in Sources */,
+				FB0000000000000000000705 /* VisitorFlowPreview.swift in Sources */,
 				FB0000000000000000000703 /* VisitorFlowEditor.swift in Sources */,
 				FB0000000000000000000702 /* VisitorFlowView.swift in Sources */,
 				FB0000000000000000000701 /* VisitorFlow.swift in Sources */,
@@ -926,6 +936,7 @@
 				FB0000000000000000000302 /* AirQualityView.swift in Sources */,
 				FB0000000000000000000402 /* ReplyFit.swift in Sources */,
 				FB0000000000000000000804 /* VisitorFlowPages.swift in Sources */,
+				FB0000000000000000000805 /* VisitorFlowPreview.swift in Sources */,
 				FB0000000000000000000803 /* VisitorFlowEditor.swift in Sources */,
 				FB0000000000000000000802 /* VisitorFlowView.swift in Sources */,
 				FB0000000000000000000801 /* VisitorFlow.swift in Sources */,
@@ -986,6 +997,7 @@
 				F90000000000000000000301 /* AirQualityView.swift in Sources */,
 				F90000000000000000000401 /* ReplyFit.swift in Sources */,
 				F90000000000000000000704 /* VisitorFlowPages.swift in Sources */,
+				F90000000000000000000705 /* VisitorFlowPreview.swift in Sources */,
 				F90000000000000000000703 /* VisitorFlowEditor.swift in Sources */,
 				F90000000000000000000702 /* VisitorFlowView.swift in Sources */,
 				F90000000000000000000701 /* VisitorFlow.swift in Sources */,

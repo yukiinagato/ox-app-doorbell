@@ -154,10 +154,12 @@ final class VisitorFlowTests: XCTestCase {
 
     // MARK: Layout of the page renderer
 
-    private func page(options: Int, body: String = "") -> VisitorFlowPage {
+    private func page(options: Int, body: String = "", primary: Bool = true, purposes: Bool = false,
+                      icon: String = "") -> VisitorFlowPage {
         let list = (0..<options).map { index in
-            VisitorFlowOption(id: "o\(index)", semanticId: index == 0 ? "call.primary" : "purpose.button",
-                              label: "Option number \(index)", icon: "", isPrimary: index == 0, purpose: "")
+            VisitorFlowOption(id: "o\(index)", semanticId: primary && index == 0 ? "call.primary" : "purpose.button",
+                              label: "Option number \(index)", icon: icon, isPrimary: primary && index == 0,
+                              purpose: purposes ? ["p_visit", "p_delivery", "p_mail", "p_sales", "p_work", "p_other"][index % 6] : "")
         }
         return VisitorFlowPage(id: "s", kind: "page", title: "Title", body: body, images: [],
                                options: list, canGoBack: true, showsDone: false)
@@ -176,15 +178,26 @@ final class VisitorFlowTests: XCTestCase {
         return view
     }
 
-    func testOptionsUseOneColumnOnAPhoneAndTwoOnAWideScreen() {
-        let phone = laidOut(width: 390, height: 700, page: page(options: 3))
-        XCTAssertEqual(phone.columnsForTesting, 1)
-        let buttons = phone.optionButtonsForTesting
-        XCTAssertEqual(Set(buttons.map { $0.convert($0.bounds, to: phone).minX }).count, 1)
-        let wide = laidOut(width: 820, height: 1000, page: page(options: 3))
-        XCTAssertEqual(wide.columnsForTesting, 2)
-        let secondRow = wide.optionButtonsForTesting.dropFirst().map { $0.convert($0.bounds, to: wide).minY }
-        XCTAssertEqual(Set(secondRow).count, 1, "the two normal options share a row")
+    private func frame(_ child: UIView, in view: UIView) -> CGRect {
+        return child.convert(child.bounds, to: view)
+    }
+
+    func testOptionsAreEqualCardsInTwoColumnsOnAPhoneAndThreeOnAWideScreen() {
+        let phone = laidOut(width: 390, height: 800, page: page(options: 6, primary: false, purposes: true))
+        XCTAssertEqual(phone.columnsForTesting, 2)
+        let phoneButtons = phone.optionButtonsForTesting
+        XCTAssertEqual(Set(phoneButtons.map { frame($0, in: phone).minX }).count, 2)
+        XCTAssertEqual(Set(phoneButtons.map { frame($0, in: phone).width.rounded() }).count, 1, "equal cards")
+        let wide = laidOut(width: 820, height: 1000, page: page(options: 6, primary: false, purposes: true))
+        XCTAssertEqual(wide.columnsForTesting, 3)
+        XCTAssertEqual(Set(wide.optionButtonsForTesting.map { frame($0, in: wide).minY.rounded() }).count, 2)
+    }
+
+    func testAPrimaryOptionTakesTheFullRowAndTheRestShareRows() {
+        let view = laidOut(width: 390, height: 800, page: page(options: 3))
+        let buttons = view.optionButtonsForTesting
+        XCTAssertGreaterThan(frame(buttons[0], in: view).width, frame(buttons[1], in: view).width * 1.8)
+        XCTAssertEqual(frame(buttons[1], in: view).minY.rounded(), frame(buttons[2], in: view).minY.rounded())
     }
 
     func testEveryOptionIsAtLeastTheVisitorTouchMinimum() {
@@ -194,25 +207,42 @@ final class VisitorFlowTests: XCTestCase {
         }
     }
 
-    func testOptionZoneNeverExceedsHalfTheViewportAndScrollsInternally() {
-        let view = laidOut(width: 390, height: 700, page: page(options: 12))
-        let zone = view.optionZoneForTesting
-        XCTAssertLessThanOrEqual(zone.bounds.height, 350.5)
-        XCTAssertTrue(zone.isScrollEnabled)
-        XCTAssertGreaterThan(zone.contentSize.height, zone.bounds.height)
-        let frame = zone.convert(zone.bounds, to: view)
-        XCTAssertLessThanOrEqual(frame.maxY, view.bounds.height + 0.5)
+    func testTitleAndGridFormOneCentredBlockWithoutAFloatingTitle() {
+        let view = laidOut(width: 390, height: 800, page: page(options: 4, primary: false, purposes: true))
+        let title = frame(view.titleForTesting, in: view)
+        let grid = frame(view.optionGridForTesting, in: view)
+        XCTAssertLessThan(grid.minY - title.maxY, 40, "the options follow the title directly")
+        let zone = frame(view.contentZoneForTesting, in: view)
+        let top = title.minY - zone.minY, bottom = zone.maxY - grid.maxY
+        XCTAssertEqual(top, bottom, accuracy: 24, "the block is centred above the fixed bottom zone")
+        XCTAssertGreaterThan(top, 40, "and does not hug the top edge")
     }
 
-    func testOptionZoneStaysAtTheBottomWhileTheContentScrolls() {
+    func testEveryNonPrimaryOptionOfAnIconPageGetsTheSameIconSize() {
+        let view = laidOut(width: 390, height: 800, page: page(options: 4, primary: false, purposes: true))
+        let sizes = view.optionButtonsForTesting.map { $0.imageView?.frame.size ?? .zero }
+        XCTAssertEqual(Set(sizes.map { "\($0.width)x\($0.height)" }).count, 1)
+        XCTAssertEqual(sizes[0].width, FlowOptionButton.iconSize)
+        let unknown = laidOut(width: 390, height: 800, page: page(options: 2, primary: false, icon: "\u{1F9FF}"))
+        XCTAssertTrue(unknown.optionButtonsForTesting.allSatisfy { $0.image(for: .normal) != nil },
+                      "an unknown icon falls back to the person glyph")
+        let plain = laidOut(width: 390, height: 800, page: page(options: 2, primary: false))
+        XCTAssertTrue(plain.optionButtonsForTesting.allSatisfy { $0.image(for: .normal) == nil },
+                      "an option with neither purpose nor icon stays text only")
+    }
+
+    func testLongPagesScrollAsAWholeWhileBackStaysFixed() {
         let long = (0..<60).map { "Line \($0)" }.joined(separator: "\n")
         let view = laidOut(width: 390, height: 700, page: page(options: 2, body: long))
-        let zone = view.optionZoneForTesting
         let content = view.contentZoneForTesting
         XCTAssertGreaterThan(content.contentSize.height, content.bounds.height)
-        XCTAssertFalse(zone.isScrollEnabled)
-        XCTAssertLessThanOrEqual(zone.convert(zone.bounds, to: view).maxY, view.bounds.height + 0.5)
-        XCTAssertGreaterThan(zone.convert(zone.bounds, to: view).minY, content.convert(content.bounds, to: view).minY)
+        XCTAssertLessThanOrEqual(frame(content, in: view).maxY, view.bounds.height)
+    }
+
+    func testManyOptionsScrollInsideTheOneContentZone() {
+        let view = laidOut(width: 390, height: 600, page: page(options: 12, primary: false, purposes: true))
+        let content = view.contentZoneForTesting
+        XCTAssertGreaterThan(content.contentSize.height, content.bounds.height)
     }
 
     func testTapOnAnOptionReportsItsId() {
@@ -221,5 +251,52 @@ final class VisitorFlowTests: XCTestCase {
         view.onOption = { tapped = $0 }
         view.optionButtonsForTesting[1].sendActions(for: .touchUpInside)
         XCTAssertEqual(tapped, "o1")
+    }
+
+    // MARK: Icons and preview
+
+    func testPurposeIdsAndEmojiMapToTheVendoredSet() {
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_visit", icon: ""), .home)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_delivery", icon: "\u{1F4E6}"), .parcel)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_mail", icon: ""), .mail)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_sales", icon: ""), .sales)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_work", icon: ""), .work)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_other", icon: ""), .ellipsis)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_custom", icon: "\u{2709}\u{FE0F}"), .mail)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_custom", icon: "\u{1F527}"), .work)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_custom", icon: "\u{2753}"), .ellipsis)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "", icon: "\u{1F9FF}"), .person)
+        XCTAssertEqual(AppIcon.flowGlyph(purpose: "p_gardener", icon: ""), .person)
+        for choice in AppIcon.flowChoices {
+            XCTAssertEqual(AppIcon.flowGlyph(purpose: "", icon: choice.emoji), choice.icon)
+            XCTAssertNotNil(AppIcon.image(choice.icon))
+        }
+    }
+
+    func testPreviewReportsTheTerminalActionWithoutCallingAnything() {
+        let doc: [String: Any] = [
+            "enabled": true, "start": "s",
+            "steps": [
+                "s": ["kind": "page", "options": [
+                    ["id": "o1", "semantic_id": "purpose.button", "label": ["en": "Parcel"], "to": "n"],
+                    ["id": "o2", "semantic_id": "purpose.button", "label": ["en": "Ring"], "to": "c"]]],
+                "n": ["kind": "notify", "to": "e"],
+                "c": ["kind": "call", "purpose": "p_visit"],
+                "e": ["kind": "end", "title": ["en": "Thanks"]],
+            ],
+        ]
+        let config: [String: Any] = ["visitor_flow": ["steps": ["n": ["kind": "notify",
+            "message": ["en": "Left at the door"], "to": "e"]]]]
+        let editor = VisitorFlowEditor(config: config, languages: ["en"])
+        let session = FlowPreviewSession(document: doc, editor: editor, texts: Texts(), lang: "en") { _ in "Visit" }
+        session.tap("o1")
+        XCTAssertEqual(session.walker.mode, .end)
+        XCTAssertTrue(session.banner.contains("Left at the door") || session.banner.contains("住人"), session.banner)
+        session.done()
+        XCTAssertEqual(session.walker.mode, .page)
+        session.tap("o2")
+        XCTAssertEqual(session.walker.mode, .page, "a press stays on the page")
+        XCTAssertFalse(session.banner.isEmpty)
+        XCTAssertFalse(session.walker.pendingCall)
     }
 }
