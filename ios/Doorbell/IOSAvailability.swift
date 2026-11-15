@@ -87,6 +87,24 @@ enum IOSAvailability {
 #endif
     }
 
+    /// Whether the user's text size is one of the accessibility sizes; always false before iOS 11.
+    static func usesAccessibilityTextSize(_ traits: UITraitCollection) -> Bool {
+        if #available(iOS 11.0, tvOS 11.0, *) {
+            return traits.preferredContentSizeCategory.isAccessibilityCategory
+        }
+        return false
+    }
+
+    /// `font` scaled for the user's text size and stopped at `maximum`; unscaled before iOS 11.
+    static func scaledFont(_ font: UIFont, style: UIFont.TextStyle, maximum: CGFloat,
+                           traits: UITraitCollection) -> UIFont {
+        if #available(iOS 11.0, tvOS 11.0, *) {
+            return UIFontMetrics(forTextStyle: style).scaledFont(
+                for: font, maximumPointSize: maximum, compatibleWith: traits)
+        }
+        return font
+    }
+
     static func safeAreaLayoutGuide(for view: UIView) -> UILayoutGuide {
         if #available(iOS 11.0, tvOS 11.0, *) {
             return view.safeAreaLayoutGuide

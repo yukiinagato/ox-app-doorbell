@@ -47,6 +47,8 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
     private let pairingButton = UIButton(type: .system)
     private let offlineDoorButton = UIButton(type: .system)
     private let doorPageButton = UIButton(type: .system)
+    private lazy var clockHeight = clockLabel.heightAnchor.constraint(greaterThanOrEqualToConstant: 1)
+    private lazy var dateHeight = dateLabel.heightAnchor.constraint(greaterThanOrEqualToConstant: 1)
     private let statusCard = MaterialCardView()
     private let headerView = UIStackView()
     private let footerCard = MaterialCardView()
@@ -102,6 +104,13 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
         translatesAutoresizingMaskIntoConstraints = false
 
         clockLabel.accessibilityIdentifier = "dashboard_clock"
+        // The header is measured before the first reading arrives and then hosted in a cell of
+        // that fixed height. An empty label measures to nothing and, at the default priority,
+        // stayed squeezed to nothing once text arrived, so each line holds its own height.
+        clockLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        dateLabel.setContentCompressionResistancePriority(.required, for: .vertical)
+        clockHeight.isActive = true
+        dateHeight.isActive = true
         clockLabel.adjustsFontSizeToFitWidth = true
         clockLabel.minimumScaleFactor = 0.5
         dateLabel.font = SystemStyle.font(.title3, weight: .semibold)
@@ -173,7 +182,9 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
         collection.register(HostCell.self, forCellWithReuseIdentifier: HostCell.reuse)
         collection.register(QuickActionCell.self, forCellWithReuseIdentifier: QuickActionCell.reuse)
         #if os(tvOS)
-        collection.clipsToBounds = false
+        // Tiles that scroll past the bottom must not draw over the SOS control. The focus scale
+        // overflows sideways instead, which `focusInset` leaves room for.
+        collection.clipsToBounds = true
         collection.remembersLastFocusedIndexPath = true
         #endif
 
@@ -229,6 +240,8 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
     private func applyClockFont(for size: CGSize) {
         let compact = LayoutClass.of(width: size.width) == .compact || size.height < 500
         clockLabel.font = SystemStyle.digits(size: compact ? 52 : 72, traits: traitCollection)
+        clockHeight.constant = ceil(clockLabel.font.lineHeight)
+        dateHeight.constant = ceil(dateLabel.font.lineHeight)
     }
 
     override func layoutSubviews() {
@@ -305,7 +318,7 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
     func collectionView(_ collectionView: UICollectionView,
                         layout collectionViewLayout: UICollectionViewLayout,
                         sizeForItemAt indexPath: IndexPath) -> CGSize {
-        let width = contentWidth
+        let width = contentWidth - 2 * focusInset(Section(rawValue: indexPath.section))
         switch Section(rawValue: indexPath.section) {
         case .doors?:
             // Fewer doors than columns: the tiles share the whole row instead of leaving it empty.
@@ -323,6 +336,15 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
         }
     }
 
+    /// Room beside the focusable cells for the focus scale on tvOS, where the collection clips.
+    private func focusInset(_ section: Section?) -> CGFloat {
+        #if os(tvOS)
+        return section == .doors || section == .actions ? 24 : 0
+        #else
+        return 0
+        #endif
+    }
+
     private func fittingHeight(_ view: UIView, width: CGFloat) -> CGFloat {
         let size = view.systemLayoutSizeFitting(
             CGSize(width: width, height: UIView.layoutFittingCompressedSize.height),
@@ -334,7 +356,8 @@ final class DashboardView: UIView, UICollectionViewDataSource, UICollectionViewD
                         layout collectionViewLayout: UICollectionViewLayout,
                         insetForSectionAt section: Int) -> UIEdgeInsets {
         let empty = self.collectionView(collectionView, numberOfItemsInSection: section) == 0
-        return UIEdgeInsets(top: 0, left: 0, bottom: empty ? 0 : Space.m, right: 0)
+        let side = focusInset(Section(rawValue: section))
+        return UIEdgeInsets(top: 0, left: side, bottom: empty ? 0 : Space.m, right: side)
     }
 
     func collectionView(_ collectionView: UICollectionView,

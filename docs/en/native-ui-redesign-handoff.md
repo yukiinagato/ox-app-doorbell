@@ -101,12 +101,13 @@ Done: tab bar home, collection view tiles, table-based history and editors, aler
 admin prompt, call action zone, SOS flow, zoom, role change
 (`RoleChangeController.swift`), a first group of settings, UI gesture tests target.
 
-Known broken: tvOS Home shows no clock or date (`DashboardView.fittingHeight` returns
-101 pt with collapsed labels) and the SOS trigger overlaps the door tile when the
-missed-call row shows; tvOS debug hook `sos_active` shows nothing; at the largest
-Dynamic Type the incoming screen's admin QR text overlaps the countdown row and the
-History primary column is too narrow; tvOS History shows a raw node id for "answered
-by"; `storeMediaSecret` still writes the whole object `media_sources.<id>`.
+Fixed in 0.5.3 (builds 74 and 25): tvOS Home header sizing and nav title, SOS overlap
+(collection clips; focus scale has a 24 pt side inset), `sos_active` hook, accessibility-size
+incoming QR and History columns, tvOS "answered by" names, `storeMediaSecret` writes the
+leaf, DoorbellIOS9 builds (arm64, 9.0), `door` fallback still lock (Framework7 has no door
+glyph), `videoOff` fallback is now `eye_slash_fill`. Seen on the tvOS simulator by
+screenshot: Home header and the `sos_active` screen; the SOS overlap with a door tile and the
+accessibility-size layouts were not seen (no door in the simulator cluster, no tvOS gesture).
 
 Not verified: the role change was never exercised live; the device builds and all
 checks were not rerun after the last edits.

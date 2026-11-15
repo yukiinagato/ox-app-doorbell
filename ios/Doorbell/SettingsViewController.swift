@@ -597,16 +597,15 @@ final class SettingsEditorActions: NSObject {
     private func storeMediaSecret(_ secret: String, source: String, from: UIViewController) -> Bool {
         let suffix = SettingsEditorActions.randomHex(4)
         guard let core = core, !suffix.isEmpty,
-              var entry = ConfigUtil.dig(core.config(), "media_sources.\(source)") as? [String: Any]
+              ConfigUtil.dig(core.config(), "media_sources.\(source)") is [String: Any]
         else { return false }
         let name = "media.\(source).\(suffix)"
         guard core.storeSecret(name, secret) else {
             status("editor.secret_store_failed")
             return false
         }
-        // A media source is always replaced as one complete definition.
-        entry["secret_ref"] = "secret:\(name)"
-        write([.set("media_sources.\(source)", entry)], from: from)
+        // Config writes are leaves: a leaf written on its own cannot mask the object's members.
+        write([.set("media_sources.\(source).secret_ref", "secret:\(name)")], from: from)
         return true
     }
 

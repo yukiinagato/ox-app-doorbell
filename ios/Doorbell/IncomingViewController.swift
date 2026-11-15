@@ -181,6 +181,15 @@ final class IncomingViewController: UIViewController {
         updateReturnCountdown()
     }
 
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        if IOSAvailability.usesAccessibilityTextSize(traitCollection)
+            != IOSAvailability.usesAccessibilityTextSize(previousTraitCollection ?? UITraitCollection()),
+            isViewLoaded {
+            updateDoorStationAdminEntry(status: core.status())
+        }
+    }
+
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         videoPlayer?.layout()
@@ -879,7 +888,10 @@ final class IncomingViewController: UIViewController {
         let adminUrl = ConfigUtil.peerAdminURL(peer)
         // The door station's admin code is a convenience. With no address there is nothing to
         // scan, and on a short screen the call itself needs the room.
-        adminQr.isHidden = (adminUrl ?? "").isEmpty || view.bounds.height < 600
+        // At the accessibility text sizes the caption outgrows the fixed QR row and ran into the
+        // return countdown; the code is a convenience, so it gives way to the call.
+        let largeText = IOSAvailability.usesAccessibilityTextSize(traitCollection)
+        adminQr.isHidden = (adminUrl ?? "").isEmpty || view.bounds.height < 600 || largeText
         adminQr.setTargetURL(adminUrl)
         // The caption describes the device the code opens: the door station, not this panel.
         adminQr.setDetailText(DoorbellTheme.peerVersionLine(peer: peer, texts: texts))

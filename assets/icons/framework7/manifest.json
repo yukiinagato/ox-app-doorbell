@@ -16,6 +16,7 @@
     "ios/Doorbell/Assets.xcassets/F7EnvelopeFill.imageset/icon.pdf": "4c278f6e465c84ec0f82df243f67c46a75987a5326d9ef12a9e7eb84d781d7a1",
     "ios/Doorbell/Assets.xcassets/F7ExclamationmarkTriangleFill.imageset/icon.pdf": "42372176d913b25ad799ab1cd0f46b7d03ef88615c9064e81269427ce0752572",
     "ios/Doorbell/Assets.xcassets/F7EyeFill.imageset/icon.pdf": "a1c8a36702b55847ec476e738785daaac66b6e8176e345460dc7cceea6d12623",
+    "ios/Doorbell/Assets.xcassets/F7EyeSlashFill.imageset/icon.pdf": "f30ce54bb0c0eff964fcf831fbeaba74b0e0d170be76b59972b423204fd63298",
     "ios/Doorbell/Assets.xcassets/F7GearAltFill.imageset/icon.pdf": "17605b85019f046e311be96e6204f583b1dd021b8339a2cd51ba4248f2d03946",
     "ios/Doorbell/Assets.xcassets/F7HammerFill.imageset/icon.pdf": "b01edb515fdecda8ed69a4ef7dbf61f6cc8c1633f7fe8537d934f542875e2e5d",
     "ios/Doorbell/Assets.xcassets/F7HouseFill.imageset/icon.pdf": "de071f02300d18430b58d7354c22f2bfdc0d2b7d1e308f5639dc35cafac7ed8f",
@@ -32,7 +33,6 @@
     "ios/Doorbell/Assets.xcassets/F7Plus.imageset/icon.pdf": "e46a98338e9ebbfafa9568c6a6de9a1d4b6bfdc919e603a6988452269d8a9b44",
     "ios/Doorbell/Assets.xcassets/F7ShippingboxFill.imageset/icon.pdf": "247ff446d749f0076e5c1f5ca5b3d56b081ab53ad5b735274d23e2c54f425d91",
     "ios/Doorbell/Assets.xcassets/F7Speaker2Fill.imageset/icon.pdf": "adaa39c49f5250817f1265e9c747bcff3818164314cc0b8a7f99cfa1c341fd09",
-    "ios/Doorbell/Assets.xcassets/F7WifiSlash.imageset/icon.pdf": "ce0b60b79a910be90f11e146252a345cfeeaf4856e1eabe431141c395febe51c",
     "ios/Doorbell/Assets.xcassets/F7Xmark.imageset/icon.pdf": "099bbec06a2a2a1f80a9d9df89e04245a05df6eaf2dbb5b9a24a552eea7ced94"
   },
   "png": {
@@ -118,6 +118,7 @@
     "envelope_fill": "2d432f0e4519517f6c99d544751aa8ea97367114c13960469dbe82ab912059ff",
     "exclamationmark_triangle_fill": "5c2fc3dd7a1c65fca7b6d882d492537b582e6e00624a2fd021232db2d6b76b21",
     "eye_fill": "2f7d1c74a7822ae68e8671dff2584cb47e0bf44e59cba84ad04bf645209202a5",
+    "eye_slash_fill": "63fa3d132bc46698e1004ee292ee8ba81c673c36923522f4cbe4f351d1e77110",
     "gear_alt_fill": "fdf90b4e0280ae3b35e43a2684eab24a2fd6f7ef64fc644b952d4c8ac3ba2b3f",
     "hammer_fill": "ccebe1fec9fedbc5c8d330544b16f03523a570bfff7f5af04d2ffe4e425ff14e",
     "house_fill": "1fdd96ab5852100f86ce4cb18c89f0fafe1c5531e77dddfe90d9d0c07c33fac1",
@@ -139,7 +140,6 @@
     "speaker_2_fill": "d9edf3eac8cbbccd674bd38245e798db50e085550cb1760b2249e16b308fe237",
     "tv_fill": "00d7bb5862119bc8401f706a5d042580109c58e26064297fa53e6de03032e7d5",
     "videocam_fill": "b02ae8e0fd13ce904a9928f0b857f27a61f7b6029f61c6e678bded5f8aad3e30",
-    "wifi_slash": "9aff8867a6aeea4f14ba4400891c802bb0ec9abe87ab7efdd932d0fd626eef9d",
     "wrench_fill": "9d95411042ba0ac765a9f8bcfaa695ad4af8c437f9b1a43eba228eee4dd4ed83",
     "xmark": "1ba304f3d611e7362cf39fa26e1df5a89a3967274a9d20b549adc5202ab92967"
   }

@@ -84,6 +84,9 @@ final class TVMainViewController: UIViewController {
     }
 
     private var debugScreenShown = false
+    /// The capture hook shows the alarm without Core having one; the next status refresh would
+    /// otherwise see no active emergency and take it down again.
+    private var debugEmergencyHeld = false
 
     /// Verification captures on a simulator that takes no remote input: with
     /// `debug_screenshots` in the boot profile, the `debug_screen` default names one screen to
@@ -101,7 +104,9 @@ final class TVMainViewController: UIViewController {
             case "monitor": self.openMonitor()
             case "notice": self.openNotice(door: "")
             case "sos": self.sosSlider.sendActions(for: .primaryActionTriggered)
-            case "sos_active": self.showEmergency(visual: true)
+            case "sos_active":
+                self.debugEmergencyHeld = true
+                self.showEmergency(visual: true)
             default: break
             }
         }
@@ -303,7 +308,7 @@ final class TVMainViewController: UIViewController {
                 nodeId = ConfigUtil.evStr(node, "id")
             }
             if let em = st["emergency"] as? [String: Any] {
-                if !ConfigUtil.evBool(em, "active") { hideEmergency() }
+                if !ConfigUtil.evBool(em, "active") && !debugEmergencyHeld { hideEmergency() }
             }
         }
         let display = core.status()?["display"] as? [String: Any]

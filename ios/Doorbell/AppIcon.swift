@@ -20,7 +20,7 @@ enum AppIconName: String, CaseIterable {
         case .info: return ("info.circle.fill", "F7InfoCircleFill")
         case .bell: return ("bell.fill", "F7BellFill")
         case .bellOff: return ("bell.slash.fill", "F7BellSlashFill")
-        case .videoOff: return ("video.slash.fill", "F7WifiSlash")
+        case .videoOff: return ("video.slash.fill", "F7EyeSlashFill")
         case .door: return ("door.left.hand.closed", "F7LockFill")
         case .warning: return ("exclamationmark.triangle.fill", "F7ExclamationmarkTriangleFill")
         case .shield: return ("lock.shield.fill", "F7LockShieldFill")

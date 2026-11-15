@@ -89,11 +89,25 @@ enum CallHistory {
         return texts.t("history.duration", String(format: "%d:%02d", seconds / 60, seconds % 60))
     }
 
+    /// The device that answered, by the name its record carries. A node that left the cluster has
+    /// no record; a value that looks like a raw node id is then cut to its first characters.
+    static func answeredByLabel(_ config: [String: Any]?, _ value: String) -> String {
+        guard !value.isEmpty else { return "" }
+        let entry = (ConfigUtil.dig(config, "devices") as? [String: Any])?[value] as? [String: Any]
+        let name = ConfigUtil.labelOf(entry, "", "")
+        if !name.isEmpty { return name }
+        let looksLikeId = value.count > 8 && value.allSatisfy {
+            $0.isASCII && ($0.isLetter || $0.isNumber || $0 == "-" || $0 == "_")
+        }
+        return looksLikeId ? String(value.prefix(6)) : value
+    }
+
     /// "玄関 · 配達" then "応答 · iPad · 0:42", matching the reviewed layout.
     static func subtitle(_ texts: Texts, config: [String: Any]?, row: CallLogRow,
                          lang: String) -> String {
         var parts = [outcomeText(texts, row.outcome)]
-        if !row.answeredBy.isEmpty { parts.append(row.answeredBy) }
+        let answeredBy = answeredByLabel(config, row.answeredBy)
+        if !answeredBy.isEmpty { parts.append(answeredBy) }
         let duration = durationText(texts, row.durationMs)
         if !duration.isEmpty { parts.append(duration) }
         return parts.joined(separator: " · ")
@@ -196,10 +210,9 @@ final class CallHistoryViewController: UIViewController, UISplitViewControllerDe
                                                                     largeTitles: false)]
             split.delegate = self
             split.preferredDisplayMode = .allVisible
-            split.preferredPrimaryColumnWidthFraction = 0.42
-            split.maximumPrimaryColumnWidth = 460
             list.showsDetailInSplit = true
             self.split = split
+            applySplitWidths()
             root = split
         } else {
             root = master
@@ -209,6 +222,26 @@ final class CallHistoryViewController: UIViewController, UISplitViewControllerDe
         root.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(root.view)
         root.didMove(toParent: self)
+    }
+
+    /// The list column is a third of a television and 42 percent of an iPad, but at the
+    /// accessibility text sizes it takes over half the width: a row is a sentence there, and a
+    /// 460 pt column wrapped every word.
+    private func applySplitWidths() {
+        guard let split = split else { return }
+        let large = IOSAvailability.usesAccessibilityTextSize(traitCollection)
+        #if os(tvOS)
+        split.preferredPrimaryColumnWidthFraction = large ? 0.6 : 0.5
+        split.maximumPrimaryColumnWidth = 1200
+        #else
+        split.preferredPrimaryColumnWidthFraction = large ? 0.58 : 0.42
+        split.maximumPrimaryColumnWidth = large ? 720 : 460
+        #endif
+    }
+
+    override func traitCollectionDidChange(_ previousTraitCollection: UITraitCollection?) {
+        super.traitCollectionDidChange(previousTraitCollection)
+        applySplitWidths()
     }
 
     /// A compact window shows the list first, never an empty detail.
@@ -289,6 +322,14 @@ final class CallHistoryListController: UITableViewController {
                 withTitle: CallHistory.doorLabel(config, door, lang: lang), at: index + 2,
                 animated: false)
         }
+        // Segments share the width by title length, and the title face stops growing at the first
+        // accessibility size: a control cannot wrap, so a larger face only truncates.
+        filterControl.apportionsSegmentWidthsByContent = true
+        let face = IOSAvailability.scaledFont(.systemFont(ofSize: 15, weight: .medium),
+                                              style: .subheadline, maximum: 24,
+                                              traits: traitCollection)
+        filterControl.setTitleTextAttributes([.font: face], for: .normal)
+        filterControl.setTitleTextAttributes([.font: face], for: .selected)
         filterControl.selectedSegmentIndex = 0
         filterControl.accessibilityIdentifier = "history_filter"
         filterControl.addTarget(self, action: #selector(filterChanged), for: .valueChanged)
@@ -474,7 +515,8 @@ final class CallHistoryDetailController: UITableViewController {
             (texts.t("history.detail_purpose"),
              CallHistory.purposeLabel(config, row.purpose, lang: lang)),
             (texts.t("history.detail_outcome"), CallHistory.outcomeText(texts, row.outcome)),
-            (texts.t("history.detail_answered_by"), row.answeredBy),
+            (texts.t("history.detail_answered_by"),
+             CallHistory.answeredByLabel(config, row.answeredBy)),
             (texts.t("history.detail_duration"),
              row.durationMs > 0 ? String(format: "%d:%02d", seconds / 60, seconds % 60) : ""),
         ]

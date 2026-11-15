@@ -755,3 +755,15 @@ final class CallTimingSnapshotTests: XCTestCase {
         else { return XCTFail("A complete empty active-call snapshot must retire the display") }
     }
 }
+
+final class AnsweredByLabelTests: XCTestCase {
+    func testAnsweredByUsesTheDeviceNameThenAShortId() {
+        let config: [String: Any] = ["devices": ["75cd2ca1a972de0d6672cd2730f284b5": ["name": "Hallway iPad"]]]
+        XCTAssertEqual(CallHistory.answeredByLabel(config, "75cd2ca1a972de0d6672cd2730f284b5"),
+                       "Hallway iPad")
+        XCTAssertEqual(CallHistory.answeredByLabel(config, "0123456789abcdef0123456789abcdef"),
+                       "012345")
+        XCTAssertEqual(CallHistory.answeredByLabel(nil, "Kitchen"), "Kitchen")
+        XCTAssertEqual(CallHistory.answeredByLabel(nil, ""), "")
+    }
+}

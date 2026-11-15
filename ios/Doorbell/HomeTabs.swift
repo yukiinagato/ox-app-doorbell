@@ -35,6 +35,15 @@ final class HomeViewController: UIViewController {
         ])
     }
 
+    #if os(tvOS)
+    /// The tab bar already names the screen and the clock owns the top of Home, so the
+    /// navigation title only drew in the gap above it.
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationController?.setNavigationBarHidden(true, animated: false)
+    }
+    #endif
+
     /// Paints the bar for the wallpaper behind it.
     func apply(skin: DoorbellSkin) {
         #if os(iOS)
