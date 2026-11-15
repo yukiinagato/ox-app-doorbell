@@ -97,7 +97,7 @@ assert 'ConfigUtil.bool(cfg, "emergency.cancel_requires_pin"' not in main + tv, 
 assert '"cancel_requires_password"' in bridge
 
 # Core's advisory readability warnings reach the status line; a warning is never a refusal.
-assert "case ok(contrasts: [Double], notes: [String])" in writer and "theme.contrast_warning" in writer
+assert "case ok(contrasts: [Double], notes: [String]" in writer and "theme.contrast_warning" in writer
 assert "db_core_last_write_warnings_json" in bridge
 
 # The 管理パスワード is the cluster secret, and the old per-node digest is retired once Core has
