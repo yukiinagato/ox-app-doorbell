@@ -669,6 +669,11 @@ static BOOL DBCoreSipBackendCompiled(void) {
   NSLog(@"[doorbell][debug] opening start screen '%@'", screen);
   if ([screen isEqualToString:@"settings"]) {
     [self showSettings];
+  } else if ([screen isEqualToString:@"settings:perf"]) {
+    [self showSettings];
+    DBSettingsScreen *settings = [self settings];
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ [settings debugPerfProbe]; });
   } else if ([screen hasPrefix:@"settings:"]) {
     [self showSettings];
     NSInteger index = [[screen substringFromIndex:9] integerValue];

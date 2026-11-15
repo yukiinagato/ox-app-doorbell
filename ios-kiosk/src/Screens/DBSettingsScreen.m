@@ -1,4 +1,5 @@
 #import "DBSettingsScreen.h"
+#import "../Core/DBLatestWins.h"
 
 #import "../Core/DBAirQualityModel.h"
 #import "../Core/DBBluetoothSupport.h"
@@ -25,6 +26,19 @@ static NSString *const kAirSectionId = @"admin.air_title";
 
 // One settings row. `action` names what a tap does; "page" opens one of the
 // native editors in DBSettingsPages, named by `argument`.
+static void DBPerfLine(NSString *line) {
+  NSString *path = [NSHomeDirectory() stringByAppendingPathComponent:@"Documents/settingsperf.txt"];
+  NSFileHandle *handle = [NSFileHandle fileHandleForWritingAtPath:path];
+  NSData *data = [[line stringByAppendingString:@"\n"] dataUsingEncoding:NSUTF8StringEncoding];
+  if (!handle) {
+    [data writeToFile:path atomically:NO];
+    return;
+  }
+  [handle seekToEndOfFile];
+  [handle writeData:data];
+  [handle closeFile];
+}
+
 @interface DBSettingsRow : NSObject
 @property(nonatomic, copy) NSString *title;
 @property(nonatomic, copy) NSString *value;
@@ -157,6 +171,11 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
   NSMutableDictionary *_pendingVolumeValues;
   NSMutableDictionary *_volumeSliders;  // configuration key -> DBVolumeSlider
   NSInteger _loadGeneration;
+  dispatch_queue_t _writeQueue;
+  NSInteger _prewarmGeneration;
+  NSInteger _writesInFlight;
+  NSString *_rowSignature;
+  NSString *_categorySignature;
   NSTimer *_clockTimer;
   NSInteger _airRefreshTick;
   NSUInteger _clockGeneration;
@@ -385,7 +404,13 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
       screen->_palette = [DBUiPalette paletteForConfig:cfg deviceId:nodeId
                                                display:[DBConfigUtil dig:status path:@"display"]
                                          backgroundHex:nil minuteOfDay:[screen minuteOfDay]];
+      CFTimeInterval applyStart = CACurrentMediaTime();
       [screen rebuildSections];
+      if (screen->_boot.debugScreenshots) {
+        [screen layoutIfNeeded];
+        DBPerfLine([NSString stringWithFormat:@"reload apply on main %.1f",
+                    (CACurrentMediaTime() - applyStart) * 1000]);
+      }
     });
   });
 }
@@ -413,6 +438,14 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
 }
 
 #pragma mark - sections
+
+// The rows of a category are built when it is first shown; only the titles are needed to list
+// the categories.
+- (NSMutableDictionary *)section:(NSString *)titleKey lazyRows:(NSArray *(^)(DBSettingsScreen *))build
+                            icon:(NSString *)icon {
+  return [NSMutableDictionary dictionaryWithObjectsAndKeys:
+      [_texts ts:titleKey], @"title", [build copy], @"build", titleKey, @"id", icon, @"icon", nil];
+}
 
 - (NSDictionary *)section:(NSString *)titleKey rows:(NSArray *)rows icon:(NSString *)icon {
   return [NSDictionary dictionaryWithObjectsAndKeys:
@@ -1398,37 +1431,39 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
 - (void)rebuildSections {
   if ([self volumeBeingDragged]) return;
   NSMutableArray *sections = [NSMutableArray array];
-  [sections addObject:[self section:@"settings.section_device" rows:[self deviceRows]
+  [sections addObject:[self section:@"settings.section_device" lazyRows:^NSArray *(DBSettingsScreen *screen) { return [screen deviceRows]; }
                                icon:@"f7:gear_alt_fill"]];
-  NSMutableArray *sound = [NSMutableArray arrayWithArray:[self volumeRows]];
-  NSArray *soundRows = [self soundRows];
-  if ([sound count] > 0 && [soundRows count] > 0) DBGroupStart([soundRows objectAtIndex:0]);
-  [sound addObjectsFromArray:soundRows];
-  [sections addObject:[self section:@"prefs.sounds" rows:sound icon:@"f7:speaker_2_fill"]];
-  [sections addObject:[self section:@"prefs.display" rows:[self displayRows] icon:@"f7:paintbrush_fill"]];
-  [sections addObject:[self section:@"prefs.calls" rows:[self callRows] icon:@"f7:phone_fill"]];
-  [sections addObject:[self section:@"settings.section_doors" rows:[self doorRows]
+  [sections addObject:[self section:@"prefs.sounds" lazyRows:^NSArray *(DBSettingsScreen *screen) {
+    NSMutableArray *sound = [NSMutableArray arrayWithArray:[screen volumeRows]];
+    NSArray *soundRows = [screen soundRows];
+    if ([sound count] > 0 && [soundRows count] > 0) DBGroupStart([soundRows objectAtIndex:0]);
+    [sound addObjectsFromArray:soundRows];
+    return sound;
+  } icon:@"f7:speaker_2_fill"]];
+  [sections addObject:[self section:@"prefs.display" lazyRows:^NSArray *(DBSettingsScreen *screen) { return [screen displayRows]; } icon:@"f7:paintbrush_fill"]];
+  [sections addObject:[self section:@"prefs.calls" lazyRows:^NSArray *(DBSettingsScreen *screen) { return [screen callRows]; } icon:@"f7:phone_fill"]];
+  [sections addObject:[self section:@"settings.section_doors" lazyRows:^NSArray *(DBSettingsScreen *screen) { return [screen doorRows]; }
                                icon:@"f7:videocam_fill"]];
   NSArray *purposes = [self purposeRows];
   if ([purposes count] > 0)
     [sections addObject:[self section:@"settings.section_purposes" rows:purposes
                                  icon:@"f7:bubble_left_fill"]];
-  [sections addObject:[self section:@"prefs.sos" rows:[self sosRows] icon:@"f7:lock_shield_fill"]];
+  [sections addObject:[self section:@"prefs.sos" lazyRows:^NSArray *(DBSettingsScreen *screen) { return [screen sosRows]; } icon:@"f7:lock_shield_fill"]];
   NSArray *air = [self airSensorRows];
   if ([air count] > 0)
     [sections addObject:[self section:kAirSectionId rows:air icon:@"f7:link"]];
-  [sections addObject:[self section:@"settings.section_time" rows:[self timeRows]
+  [sections addObject:[self section:@"settings.section_time" lazyRows:^NSArray *(DBSettingsScreen *screen) { return [screen timeRows]; }
                                icon:@"f7:clock_fill"]];
-  [sections addObject:[self section:@"settings.section_rules" rows:[self ruleRows]
+  [sections addObject:[self section:@"settings.section_rules" lazyRows:^NSArray *(DBSettingsScreen *screen) { return [screen ruleRows]; }
                                icon:@"f7:bell_fill"]];
-  [sections addObject:[self section:@"settings.section_cluster" rows:[self clusterRows]
+  [sections addObject:[self section:@"settings.section_cluster" lazyRows:^NSArray *(DBSettingsScreen *screen) { return [screen clusterRows]; }
                                icon:@"f7:rectangle_3_offgrid_fill"]];
   [sections addObject:[self section:@"settings.section_history"
                                rows:[NSArray arrayWithObject:
                                         DBRow([_texts ts:@"history.title"], @"",
                                               @"history", nil)]
                                icon:@"f7:list_bullet"]];
-  [sections addObject:[self section:@"settings.section_info" rows:[self infoRows]
+  [sections addObject:[self section:@"settings.section_info" lazyRows:^NSArray *(DBSettingsScreen *screen) { return [screen infoRows]; }
                                icon:@"f7:info_circle_fill"]];
   _sections = sections;
   _selectedSection = 0;
@@ -1436,23 +1471,111 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
     if ([[[sections objectAtIndex:i] objectForKey:@"id"] isEqualToString:_selectedId])
       _selectedSection = (NSInteger)i;
   _selectedId = [[sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"id"];
+  NSDictionary *keptLayout = [_layoutCache copy];
+  NSArray *previousGroups = _groups;
+  [_layoutCache removeAllObjects];
   [self regroup];
 
   [_tabs applyTexts:_texts];
   [self applyEditorTexts];
   [self refreshChrome];
   [self updateFooter];
-  [_categoryTable reloadData];
-  [self syncCategorySelection];
-  [_table reloadData];
+  // Reload only what changed: the category list when a title did, the detail table when a row
+  // did (by index path when the layout of the groups is the same).
+  NSMutableString *categories = [NSMutableString string];
+  for (NSDictionary *section in sections)
+    [categories appendFormat:@"%@|%@\n", [section objectForKey:@"id"], [section objectForKey:@"title"]];
+  if (![categories isEqualToString:_categorySignature ?: @""]) {
+    _categorySignature = categories;
+    [_categoryTable reloadData];
+    [self syncCategorySelection];
+  }
+  [self refreshDetailTableFrom:previousGroups keptLayout:keptLayout];
   [self setNeedsLayout];
+  [self schedulePrewarm];
+}
+
+// While the screen is idle, the other categories are built and measured one per turn, so that
+// choosing one later finds its rows and heights ready.
+- (void)schedulePrewarm {
+  NSInteger generation = ++_prewarmGeneration;
+  __weak DBSettingsScreen *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.6 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{ [weakSelf prewarmSection:0 generation:generation]; });
+}
+
+- (void)prewarmSection:(NSInteger)index generation:(NSInteger)generation {
+  if (generation != _prewarmGeneration || !_screenVisible || index >= (NSInteger)[_sections count] ||
+      _tableWidth <= 0) return;
+  if (index != _selectedSection && ![self volumeBeingDragged] && _editor.pageCount == 0 &&
+      !_table.dragging && !_table.decelerating) {
+    for (DBSettingsRow *row in [self rowsForSectionAtIndex:index]) [self layoutForRow:row];
+  }
+  __weak DBSettingsScreen *weakSelf = self;
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{
+    [weakSelf prewarmSection:index + 1 generation:generation];
+  });
+}
+
+static NSString *DBRowSignature(DBSettingsRow *row) {
+  return [NSString stringWithFormat:@"%@|%@|%@|%@|%d|%@|%d|%@|%@", row.title, row.value, row.action,
+          row.argument, row.destructive, row.choices, row.startsGroup, row.groupHeader,
+          row.groupFooter];
+}
+
+- (void)refreshDetailTableFrom:(NSArray *)previous keptLayout:(NSDictionary *)keptLayout {
+  BOOL sameShape = [previous count] == [_groups count] && _table.window != nil;
+  NSMutableArray *changed = [NSMutableArray array];
+  if (sameShape) {
+    for (NSUInteger g = 0; g < [_groups count] && sameShape; g++) {
+      NSArray *old = [previous objectAtIndex:g], *now = [_groups objectAtIndex:g];
+      if ([old count] != [now count]) { sameShape = NO; break; }
+      for (NSUInteger r = 0; r < [now count]; r++) {
+        DBSettingsRow *a = [old objectAtIndex:r], *b = [now objectAtIndex:r];
+        if (a.startsGroup != b.startsGroup || ![a.groupHeader ?: @"" isEqualToString:b.groupHeader ?: @""] ||
+            ![a.groupFooter ?: @"" isEqualToString:b.groupFooter ?: @""]) { sameShape = NO; break; }
+        if (![DBRowSignature(a) isEqualToString:DBRowSignature(b)])
+          [changed addObject:[NSIndexPath indexPathForRow:(NSInteger)r inSection:(NSInteger)g]];
+      }
+    }
+  }
+  if (!sameShape || [self volumeBeingDragged] || [changed count] > 6) {
+    [_table reloadData];
+    return;
+  }
+  // Rows that did not change keep their measured layout under their new object.
+  for (NSUInteger g = 0; g < [_groups count]; g++) {
+    NSArray *old = [previous objectAtIndex:g], *now = [_groups objectAtIndex:g];
+    for (NSUInteger r = 0; r < [now count]; r++) {
+      if ([changed containsObject:[NSIndexPath indexPathForRow:(NSInteger)r inSection:(NSInteger)g]])
+        continue;
+      NSValue *kept = [keptLayout objectForKey:[NSNumber numberWithUnsignedInteger:
+          (NSUInteger)[old objectAtIndex:r]]];
+      if (kept) [_layoutCache setObject:kept forKey:[NSNumber numberWithUnsignedInteger:
+          (NSUInteger)[now objectAtIndex:r]]];
+    }
+  }
+  if ([changed count] > 0)
+    [_table reloadRowsAtIndexPaths:changed withRowAnimation:UITableViewRowAnimationNone];
 }
 
 #pragma mark - panes
 
 - (NSArray *)selectedRows {
-  if (_selectedSection < 0 || _selectedSection >= (NSInteger)[_sections count]) return nil;
-  return [[_sections objectAtIndex:(NSUInteger)_selectedSection] objectForKey:@"rows"];
+  return [self rowsForSectionAtIndex:_selectedSection];
+}
+
+- (NSArray *)rowsForSectionAtIndex:(NSInteger)index {
+  if (index < 0 || index >= (NSInteger)[_sections count]) return nil;
+  NSDictionary *section = [_sections objectAtIndex:(NSUInteger)index];
+  NSArray *rows = [section objectForKey:@"rows"];
+  NSArray *(^build)(DBSettingsScreen *) = [section objectForKey:@"build"];
+  if (rows == nil && build != nil && [section isKindOfClass:[NSMutableDictionary class]]) {
+    rows = build(self);
+    [(NSMutableDictionary *)section setObject:rows ?: @[] forKey:@"rows"];
+  }
+  return rows;
 }
 
 - (NSString *)detailTitle {
@@ -1471,7 +1594,6 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
     [current addObject:row];
   }
   _groups = groups;
-  [_layoutCache removeAllObjects];
 }
 
 - (DBSettingsRow *)rowAt:(NSIndexPath *)indexPath {
@@ -1544,6 +1666,71 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
     return;
   [_categoryTable selectRowAtIndexPath:[NSIndexPath indexPathForRow:_selectedSection inSection:0]
                               animated:NO scrollPosition:UITableViewScrollPositionNone];
+}
+
+
+- (void)debugPerfProbe {
+  if (!_boot.debugScreenshots) return;
+  for (int i = 0; i < 3; i++) {
+    CFTimeInterval t = CACurrentMediaTime();
+    [self rebuildSections];
+    [self layoutIfNeeded];
+    DBPerfLine([NSString stringWithFormat:@"rebuild+reload %.1f", (CACurrentMediaTime() - t) * 1000]);
+  }
+  // Let the idle prewarm of the other categories finish, as it does for a person who waits.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{ [self debugPerfProbeRest]; });
+}
+
+- (void)debugPerfProbeRest {
+  NSMutableString *buildLine = [NSMutableString stringWithString:@"row model build ms:"];
+  NSInteger count = (NSInteger)[_sections count];
+  for (NSInteger i = 0; i < count; i++) {
+    NSArray *(^build)(DBSettingsScreen *) = [[_sections objectAtIndex:(NSUInteger)i] objectForKey:@"build"];
+    CFTimeInterval t = CACurrentMediaTime();
+    if (build) build(self);
+    [buildLine appendFormat:@" %.0f", (CACurrentMediaTime() - t) * 1000];
+  }
+  DBPerfLine(buildLine);
+  NSMutableString *line = [NSMutableString stringWithString:@"category switch ms:"];
+  for (NSInteger i = 0; i < count; i++) {
+    CFTimeInterval t = CACurrentMediaTime();
+    [self selectCategory:i];
+    [self layoutIfNeeded];
+    [line appendFormat:@" %.0f", (CACurrentMediaTime() - t) * 1000];
+  }
+  DBPerfLine(line);
+  NSMutableString *parts = [NSMutableString stringWithString:@"parts regroup/footer/chrome+prompt/reloadData/layout ms:"];
+  for (NSInteger i = 1; i < 5; i++) {
+    _selectedSection = i;
+    _selectedId = [[_sections objectAtIndex:(NSUInteger)i] objectForKey:@"id"];
+    CFTimeInterval t0 = CACurrentMediaTime();
+    [self regroup];
+    CFTimeInterval t1 = CACurrentMediaTime();
+    [self updateFooter];
+    CFTimeInterval t2 = CACurrentMediaTime();
+    [self refreshChrome];
+    [self applyPrompt];
+    CFTimeInterval t3 = CACurrentMediaTime();
+    [_table reloadData];
+    CFTimeInterval t4 = CACurrentMediaTime();
+    [self layoutIfNeeded];
+    CFTimeInterval t5 = CACurrentMediaTime();
+    [parts appendFormat:@" [%.0f %.0f %.0f %.0f %.0f]", (t1 - t0) * 1000, (t2 - t1) * 1000,
+        (t3 - t2) * 1000, (t4 - t3) * 1000, (t5 - t4) * 1000];
+  }
+  DBPerfLine(parts);
+  [self selectCategory:0];
+  for (int i = 0; i < 3; i++) {
+    CFTimeInterval t = CACurrentMediaTime();
+    DBCoreBridge *core = _core;
+    [self writeAsync:^int{ return [core setConfigKey:@"reply.display_ttl_s" numberValue:30]; } revert:nil];
+    CFTimeInterval handler = CACurrentMediaTime();
+    DBPerfLine([NSString stringWithFormat:@"async write handler %.1f", (handler - t) * 1000]);
+  }
+  // The reload that follows a write lands about 0.3 s later; time what it costs the main thread.
+  dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.5 * NSEC_PER_SEC)),
+                 dispatch_get_main_queue(), ^{ DBPerfLine(@"done"); });
 }
 
 - (void)selectCategory:(NSInteger)index {
@@ -1768,6 +1955,33 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
   return NO;
 }
 
+// The control already shows the new value. The write runs on its own queue so a busy Core never
+// stalls the tap; a refused write puts the control back and says why. Writes run in order, and
+// the reload that follows waits for the last one.
+- (void)writeAsync:(int (^)(void))write revert:(void (^)(void))revert {
+  if (!_writeQueue) _writeQueue = dispatch_queue_create("doorbell.settings-writes", DISPATCH_QUEUE_SERIAL);
+  DBPendingWriteBegin(&_writesInFlight);
+  DBCoreBridge *core = _core;
+  __weak DBSettingsScreen *weakSelf = self;
+  dispatch_async(_writeQueue, ^{
+    int status = write();
+    NSArray *warnings = status == 0 ? [core lastWriteWarnings] : nil;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      DBSettingsScreen *screen = weakSelf;
+      if (!screen) return;
+      DBPendingWriteEnd(&screen->_writesInFlight);
+      if (status != 0 && revert) revert();
+      if (status == DBAdminRequiredResult) {
+        [screen->_router requestPinThen:^{
+          [weakSelf writeAsync:write revert:revert];
+        }];
+        return;
+      }
+      [screen reportWriteStatus:status warnings:warnings];
+    });
+  });
+}
+
 - (BOOL)writeKey:(NSString *)key string:(NSString *)value {
   DBCoreBridge *core = _core;
   return [self write:^int{ return [core setConfigKey:key stringValue:value]; }];
@@ -1807,6 +2021,10 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
 // that predates the export answers -100 and the row says so rather than
 // pretending the value was saved.
 - (BOOL)reportWriteStatus:(int)status {
+  return [self reportWriteStatus:status warnings:status == 0 ? [_core lastWriteWarnings] : nil];
+}
+
+- (BOOL)reportWriteStatus:(int)status warnings:(NSArray *)warnings {
   if (status != 0) {
     [self showToast:[_texts ts:(status == -100 ? @"editor.core_too_old"
                                                : @"settings.save_failed")]];
@@ -1815,7 +2033,7 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
   // A readability warning means the value was saved and may be hard to read;
   // custom colours are never rejected (spec §5.2).
   NSString *message = [_texts ts:@"settings.saved"];
-  for (id entry in [_core lastWriteWarnings]) {
+  for (id entry in warnings) {
     if (![entry isKindOfClass:[NSDictionary class]]) continue;
     id ratio = [(NSDictionary *)entry objectForKey:@"contrast"];
     NSString *key = [DBConfigUtil evStr:entry key:@"message_key"];
@@ -1829,7 +2047,10 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
   // Core publishes read snapshots after the mutation event; do not restore an older slider value.
   __weak DBSettingsScreen *weakSelf = self;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.3 * NSEC_PER_SEC)),
-      dispatch_get_main_queue(), ^{ [weakSelf reload]; });
+      dispatch_get_main_queue(), ^{
+        DBSettingsScreen *screen = weakSelf;
+        if (screen && DBPendingWritesIdle(screen->_writesInFlight)) [screen reload];
+      });
   return YES;
 }
 
@@ -2228,8 +2449,12 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
     [self setRole:[parts objectAtIndex:0] enabled:sender.on];
     return;
   }
-  if (![self writeKey:[parts objectAtIndex:0] flag:sender.on])
-    [sender setOn:!sender.on animated:YES];
+  DBCoreBridge *core = _core;
+  NSString *key = [parts objectAtIndex:0];
+  BOOL on = sender.on;
+  __weak UISwitch *weakSwitch = sender;
+  [self writeAsync:^int{ return [core setConfigKey:key boolValue:on]; }
+            revert:^{ [weakSwitch setOn:!on animated:YES]; }];
 }
 
 - (void)onStepper:(UIStepper *)sender {
@@ -2237,7 +2462,10 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
   NSArray *parts = [row.argument componentsSeparatedByString:@"|"];
   if ([parts count] != 5) return;
   // Writes on release only: each change is a replicated config write.
-  [self writeKey:[parts objectAtIndex:0] number:(NSInteger)sender.value];
+  DBCoreBridge *core = _core;
+  NSString *key = [parts objectAtIndex:0];
+  NSInteger value = (NSInteger)sender.value;
+  [self writeAsync:^int{ return [core setConfigKey:key numberValue:value]; } revert:nil];
 }
 
 - (UITableViewCell *)cellContaining:(UIView *)view {
@@ -2265,7 +2493,9 @@ static NSString *const kDBInfoSectionId = @"settings.section_info";
   NSInteger index = sender.selectedSegmentIndex;
   if (row == nil || index < 0 || index >= (NSInteger)[row.choices count]) return;
   NSString *key = [[row.argument componentsSeparatedByString:@"|"] objectAtIndex:0];
-  [self writeKey:key string:[[row.choices objectAtIndex:(NSUInteger)index] objectAtIndex:0]];
+  DBCoreBridge *core = _core;
+  NSString *value = [[row.choices objectAtIndex:(NSUInteger)index] objectAtIndex:0];
+  [self writeAsync:^int{ return [core setConfigKey:key stringValue:value]; } revert:nil];
 }
 
 - (void)presentChoicesForRow:(DBSettingsRow *)row {

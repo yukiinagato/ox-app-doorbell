@@ -21,6 +21,15 @@ int main(void) {
     NSUInteger later = DBLatestWinsBegin(&generation);
     require(!DBLatestWinsIsCurrent(generation, zh), @"a later tap supersedes an applied one");
     require(DBLatestWinsIsCurrent(generation, later), @"and is current itself");
+    NSInteger inFlight = 0;
+    DBPendingWriteBegin(&inFlight);
+    DBPendingWriteBegin(&inFlight);
+    require(!DBPendingWritesIdle(inFlight), @"refresh waits while writes are in flight");
+    DBPendingWriteEnd(&inFlight);
+    require(!DBPendingWritesIdle(inFlight), @"and until the last one completes");
+    DBPendingWriteEnd(&inFlight);
+    DBPendingWriteEnd(&inFlight);
+    require(DBPendingWritesIdle(inFlight), @"idle once all are done, never negative");
     NSLog(@"latest_wins_test ok");
   }
   return 0;

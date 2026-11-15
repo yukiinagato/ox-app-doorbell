@@ -206,7 +206,6 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   NSTimeInterval _replyDeadline;
   NSUInteger _langGeneration;
   BOOL _langWritePending;
-  BOOL _debugForceRebuild;
   UIScrollView *_replyScroll;
   UILabel *_replyText;
   NSString *_replyFitKey;
@@ -1445,7 +1444,7 @@ static const CGFloat kLanguageSegmentMinimum = 64;
   _visitorLang = value;
   [_texts setLang:value];
   // The cards keep their views and icons; only their labels change with the language.
-  if (_debugForceRebuild || ![self retitlePurposesInPlace]) [self rebuildPurposes];
+  if (![self retitlePurposesInPlace]) [self rebuildPurposes];
   [self updateLanguageSelection];
   [self applyStrings];
   [self applySemanticStyles];
@@ -1707,12 +1706,9 @@ static const CGFloat kLanguageSegmentMinimum = 64;
 // Debug builds only: rapid switching as a finger would do it.
 - (void)debugLanguageBurst {
   if ([_languages count] < 2) return;
-  // Two bursts: first rebuilding every card per switch (the old path), then in place.
-  for (NSInteger i = 0; i < 24; i++) {
+  for (NSInteger i = 0; i < 12; i++) {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(i * 0.3 * NSEC_PER_SEC)),
                    dispatch_get_main_queue(), ^{
-      _debugForceRebuild = i < 12;
-      if (i == 0 || i == 12) [self traceLanguageMilliseconds:0 applied:i == 0 ? -1 : -2];
       _languageControl.selectedSegmentIndex = i % (NSInteger)[_languages count];
       [self onLanguageChanged:_languageControl];
     });
